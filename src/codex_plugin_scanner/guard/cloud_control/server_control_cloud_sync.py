@@ -29,12 +29,12 @@ from ..runtime.runner import (
     repair_guard_cloud_connect_storage,
     sync_local_guard_cloud_proof,
 )
-from ..store import GuardStore
-from .first_cloud_sync import maybe_queue_first_cloud_sync, queue_sync_with_optional_publish
-from .server_common import (
+from ..runtime_health.server_common import (
     _NATIVE_HANDLER_UNAVAILABLE,
     _now,
 )
+from ..store import GuardStore
+from .first_cloud_sync import maybe_queue_first_cloud_sync, queue_sync_with_optional_publish
 
 _HEADLESS_CLOUD_SYNC_STATE_LOCK = threading.Lock()
 

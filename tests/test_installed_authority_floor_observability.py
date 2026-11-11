@@ -15,11 +15,11 @@ from types import SimpleNamespace
 
 import pytest
 
-from codex_plugin_scanner.guard.daemon import background_diagnostics
 from codex_plugin_scanner.guard.extension_control_host import (
     ExtensionControlHost,
     _InstalledAuthorityMigrationError,
 )
+from codex_plugin_scanner.guard.runtime_health import background_diagnostics
 from codex_plugin_scanner.guard.store import GuardStore
 
 

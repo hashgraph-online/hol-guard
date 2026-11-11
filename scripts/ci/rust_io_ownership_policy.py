@@ -43,9 +43,9 @@ _TRANSPORT_IDENTITY_PATHS: Final = frozenset(
         "src/codex_plugin_scanner/guard/native_restricted_pytest.py",
         # Resolves the session directory a launch is bound to; the native
         # runtime decides what the program found from it may reach.
-        "src/codex_plugin_scanner/guard/daemon/hook_native_exact_action.py",
+        "src/codex_plugin_scanner/guard/hook_review/hook_native_exact_action.py",
         # Payload-reference metadata validation; the native edge reads bytes.
-        "src/codex_plugin_scanner/guard/daemon/hook_request_parsing.py",
+        "src/codex_plugin_scanner/guard/hook_review/hook_request_parsing.py",
         # Archive-inspection transport: lease, request binding, and the
         # bounded native worker invocation; all archive semantics are Rust.
         "src/codex_plugin_scanner/guard/native_archive_inspection.py",
@@ -86,7 +86,7 @@ _TRANSPORT_INTEGRITY_PATHS: Final = frozenset(
         # the environment values themselves.
         "src/codex_plugin_scanner/guard/hook_execution_environment.py",
         "src/codex_plugin_scanner/guard/native_hook_edge.py",
-        "src/codex_plugin_scanner/guard/daemon/hook_native_review_approval.py",
+        "src/codex_plugin_scanner/guard/hook_review/hook_native_review_approval.py",
         # The request digest correlates resident framing; it never owns a
         # semantic approval, policy, or context identity or decision.
         "src/codex_plugin_scanner/guard/native_approval_reuse.py",
@@ -271,7 +271,7 @@ _ASYNC_POLICY_PATHS: Final = frozenset(
     }
 )
 _PERSISTENCE_PATH_PREFIXES: Final = (
-    "src/codex_plugin_scanner/guard/daemon/hook_metrics.py",
+    "src/codex_plugin_scanner/guard/hook_review/hook_metrics.py",
     "src/codex_plugin_scanner/guard/private_file_io.py",
     "src/codex_plugin_scanner/guard/local_dashboard_session.py",
     "src/codex_plugin_scanner/guard/store_base.py",
@@ -289,7 +289,7 @@ _PRESENTATION_PATHS: Final = frozenset(
         "src/codex_plugin_scanner/guard/approvals.py",
         "src/codex_plugin_scanner/guard/codex_app_server.py",
         "src/codex_plugin_scanner/guard/continuation_runtime.py",
-        "src/codex_plugin_scanner/guard/daemon/cursor_shell_route.py",
+        "src/codex_plugin_scanner/guard/hook_review/cursor_shell_route.py",
         "src/codex_plugin_scanner/guard/edge_events.py",
         "src/codex_plugin_scanner/guard/local_authority_integrity.py",
         "src/codex_plugin_scanner/guard/mcp_tool_calls.py",

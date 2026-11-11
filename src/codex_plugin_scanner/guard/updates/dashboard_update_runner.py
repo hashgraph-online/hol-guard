@@ -11,11 +11,6 @@ from pathlib import Path
 
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.cli import update_commands
-from codex_plugin_scanner.guard.daemon.dashboard_update import (
-    claim_dashboard_update_lock,
-    clear_dashboard_update_lock,
-    write_dashboard_update_outcome,
-)
 from codex_plugin_scanner.guard.native_daemon_manage import (
     _guard_daemon_pid_identity_for_retirement,
     _retire_guard_daemon_pid,
@@ -25,6 +20,11 @@ from codex_plugin_scanner.guard.native_daemon_manage import (
 )
 from codex_plugin_scanner.guard.native_daemon_peer import daemon_refresh_outcome_succeeded
 from codex_plugin_scanner.guard.store import GuardStore
+from codex_plugin_scanner.guard.updates.dashboard_update import (
+    claim_dashboard_update_lock,
+    clear_dashboard_update_lock,
+    write_dashboard_update_outcome,
+)
 
 _DASHBOARD_UPDATE_DAEMON_SETTLE_SECONDS = 1.5
 _DASHBOARD_UPDATE_FAILURE_STDERR = "Guard update failed. Review the dashboard update status for details."

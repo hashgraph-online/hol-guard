@@ -23,7 +23,7 @@ from codex_plugin_scanner.guard import supply_chain_cloud_audit as cloud_audit_m
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.approval_gate import update_settings as update_approval_gate_settings
 from codex_plugin_scanner.guard.cli.connect_flow import GuardOAuthTokenExchangeResult
-from codex_plugin_scanner.guard.daemon import server_control_connect_state as _ctl_connect_state
+from codex_plugin_scanner.guard.cloud_control import server_control_connect_state as _ctl_connect_state
 from codex_plugin_scanner.guard.local_dashboard_session import LOCAL_DASHBOARD_SESSION_AUDIENCE
 from codex_plugin_scanner.guard.models import PolicyDecision
 from codex_plugin_scanner.guard.native_daemon_handler import native_headless_action_error

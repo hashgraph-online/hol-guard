@@ -15,8 +15,8 @@ from typing import cast
 
 import pytest
 
-from codex_plugin_scanner.guard.daemon.extension_control_api import ExtensionControlApiService
 from codex_plugin_scanner.guard.extension_control_host import ExtensionControlHost
+from codex_plugin_scanner.guard.extension_controls.extension_control_api import ExtensionControlApiService
 from codex_plugin_scanner.guard.runtime.command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
 from codex_plugin_scanner.guard.runtime.extension_control_authority import (
     AuthorityHealth,
@@ -166,8 +166,8 @@ def test_the_refresh_route_still_answers_when_the_daemon_refresh_fails() -> None
     against.
     """
 
-    from codex_plugin_scanner.guard.daemon import background_diagnostics
     from codex_plugin_scanner.guard.extension_control_host import REFRESH_PATH, ExtensionControlHost
+    from codex_plugin_scanner.guard.runtime_health import background_diagnostics
 
     def unavailable() -> None:
         raise ValueError("native command control authority is unavailable")

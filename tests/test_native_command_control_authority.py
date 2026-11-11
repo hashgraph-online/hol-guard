@@ -531,8 +531,8 @@ def test_acknowledging_degraded_mode_refuses_an_unread_authority() -> None:
 
     import pytest
 
-    from codex_plugin_scanner.guard.daemon.extension_control_api import ExtensionControlApiService
-    from codex_plugin_scanner.guard.daemon.extension_control_errors import ExtensionControlApiError
+    from codex_plugin_scanner.guard.extension_controls.extension_control_api import ExtensionControlApiService
+    from codex_plugin_scanner.guard.extension_controls.extension_control_errors import ExtensionControlApiError
     from codex_plugin_scanner.guard.runtime.extension_control_authority import (
         AuthorityHealth,
         ExtensionControlAuthorityView,
@@ -567,7 +567,7 @@ def test_acknowledging_degraded_mode_refuses_an_unread_authority() -> None:
 def test_refresh_serves_the_held_snapshot_when_the_lease_is_busy(monkeypatch: pytest.MonkeyPatch) -> None:
     """A busy lease leaves the refresh without a reading; the route still answers."""
 
-    from codex_plugin_scanner.guard.daemon import extension_control_api as api_module
+    from codex_plugin_scanner.guard.extension_controls import extension_control_api as api_module
     from codex_plugin_scanner.guard.runtime.extension_control_authority import (
         AuthorityHealth,
         ExtensionControlAuthorityView,

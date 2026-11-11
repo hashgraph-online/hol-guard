@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.daemon.diagnostics import DaemonDiagnostics, cleanup_expired_daemon_logs
+from codex_plugin_scanner.guard.runtime_health.diagnostics import DaemonDiagnostics, cleanup_expired_daemon_logs
 from tests.coverage_ci import under_coverage_scale
 
 
@@ -200,7 +200,7 @@ def test_daemon_diagnostics_rotates_daily_with_seven_backups(tmp_path: Path) -> 
 
 @pytest.fixture
 def clean_startup_phases():
-    from codex_plugin_scanner.guard.daemon import startup_phase
+    from codex_plugin_scanner.guard.runtime_health import startup_phase
 
     startup_phase._pending.clear()  # pyright: ignore[reportPrivateUsage]
     startup_phase._default_sink = None  # pyright: ignore[reportPrivateUsage]

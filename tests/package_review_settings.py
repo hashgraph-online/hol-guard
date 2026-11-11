@@ -50,7 +50,7 @@ def prove_npm_install(monkeypatch: pytest.MonkeyPatch, version: str = "11.9.0") 
     of the resident's plan runs as shipped.
     """
 
-    from codex_plugin_scanner.guard.daemon import hook_native_package_review
+    from codex_plugin_scanner.guard.hook_review import hook_native_package_review
 
     planned = hook_native_package_review.package_review_plan
 

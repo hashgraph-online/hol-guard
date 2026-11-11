@@ -17,8 +17,11 @@ from codex_plugin_scanner.guard import (
     store_extension_control_authority_commit,
     store_extension_control_authority_reads,
 )
-from codex_plugin_scanner.guard.daemon.extension_control_api import ExtensionControlApiError, ExtensionControlApiService
-from codex_plugin_scanner.guard.daemon.extension_control_semantic_preview import (
+from codex_plugin_scanner.guard.extension_controls.extension_control_api import (
+    ExtensionControlApiError,
+    ExtensionControlApiService,
+)
+from codex_plugin_scanner.guard.extension_controls.extension_control_semantic_preview import (
     SEMANTIC_PREVIEW_SCHEMA,
     _render,
 )

@@ -18,9 +18,9 @@ from typing import Any
 from ..browser_opener import open_browser_url
 from ..cli.connect_flow import start_guard_browser_session
 from ..cli.connect_sync_result import failed_browser_connect_flow_state
-from ..daemon.server_control_cloud_sync import _managed_controls_publish_for
-from ..daemon.server_control_connect_flow import _complete_browser_oauth_connect
-from ..daemon.server_control_connect_state import (
+from ..cloud_control.server_control_cloud_sync import _managed_controls_publish_for
+from ..cloud_control.server_control_connect_flow import _complete_browser_oauth_connect
+from ..cloud_control.server_control_connect_state import (
     _begin_guard_cloud_connect_state,
     _begin_package_firewall_connect_state,
     _copy_guard_cloud_connect_state,

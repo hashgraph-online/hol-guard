@@ -260,7 +260,7 @@
       "note": "Blocks a continuation it cannot settle."
     },
     {
-      "file": "src/codex_plugin_scanner/guard/daemon/cursor_shell_route.py",
+      "file": "src/codex_plugin_scanner/guard/hook_review/cursor_shell_route.py",
       "func": "cursor_shell_route_response",
       "root": "hook",
       "reading": "routes-guard-own-sink",
@@ -270,7 +270,7 @@
       "note": "Same route: an argv shape that matches Guard's own sink is passed through to it, and the sink does the authorizing."
     },
     {
-      "file": "src/codex_plugin_scanner/guard/daemon/cursor_shell_route.py",
+      "file": "src/codex_plugin_scanner/guard/hook_review/cursor_shell_route.py",
       "func": "_probe_response",
       "root": "hook",
       "reading": "renders-native",
@@ -280,7 +280,7 @@
       "note": "The edge's own route: a probe the native edge does not route to the sink gets the plain allow the resident would have answered, and the shell call itself is still judged at execution."
     },
     {
-      "file": "src/codex_plugin_scanner/guard/daemon/hook_fail_closed.py",
+      "file": "src/codex_plugin_scanner/guard/hook_review/hook_fail_closed.py",
       "func": "render_silent_review_block",
       "root": "hook",
       "reading": "fails-closed",
@@ -290,7 +290,7 @@
       "note": "The fixed deny render_pre_tool falls back to when the resident cannot compose the silent block."
     },
     {
-      "file": "src/codex_plugin_scanner/guard/daemon/hook_native_package_review.py",
+      "file": "src/codex_plugin_scanner/guard/hook_review/hook_native_package_review.py",
       "func": "_blocked",
       "root": "hook",
       "reading": "fails-closed",
@@ -300,7 +300,7 @@
       "note": "Renders the block response."
     },
     {
-      "file": "src/codex_plugin_scanner/guard/daemon/hook_native_package_review.py",
+      "file": "src/codex_plugin_scanner/guard/hook_review/hook_native_package_review.py",
       "func": "native_package_review_response",
       "root": "hook",
       "reading": "renders-native",
@@ -310,7 +310,7 @@
       "note": "Renders the resident's review_settlement: an allow only where the resident settled the review as allow and the package review plan's may_allow still holds. Closed MAJ-AC-01 finding: the script-free watch widening now lives in the resident."
     },
     {
-      "file": "src/codex_plugin_scanner/guard/daemon/hook_native_review_approval.py",
+      "file": "src/codex_plugin_scanner/guard/hook_review/hook_native_review_approval.py",
       "func": "_policy_binding_failed",
       "root": "hook",
       "reading": "fails-closed",
@@ -320,7 +320,7 @@
       "note": "Renders a block when a review cannot be bound to its native policy."
     },
     {
-      "file": "src/codex_plugin_scanner/guard/daemon/hook_native_review_approval.py",
+      "file": "src/codex_plugin_scanner/guard/hook_review/hook_native_review_approval.py",
       "func": "_policy_binding_failed",
       "root": "hook",
       "reading": "fails-closed",
@@ -330,7 +330,7 @@
       "note": "Renders a block when a review cannot be bound to its native policy."
     },
     {
-      "file": "src/codex_plugin_scanner/guard/daemon/hook_native_review_approval.py",
+      "file": "src/codex_plugin_scanner/guard/hook_review/hook_native_review_approval.py",
       "func": "_policy_binding_failed",
       "root": "hook",
       "reading": "fails-closed",
@@ -340,7 +340,7 @@
       "note": "Blocks when a native review cannot be bound to its native policy."
     },
     {
-      "file": "src/codex_plugin_scanner/guard/daemon/hook_native_review_approval.py",
+      "file": "src/codex_plugin_scanner/guard/hook_review/hook_native_review_approval.py",
       "func": "pause_native_pre_tool_for_approval",
       "root": "hook",
       "reading": "records-approval",
@@ -351,7 +351,7 @@
       "note": "Blocks while the review is pending, and allows only on the two saved-approval matches native_review_settle finds in the store."
     },
     {
-      "file": "src/codex_plugin_scanner/guard/daemon/hook_native_saved_approval.py",
+      "file": "src/codex_plugin_scanner/guard/hook_review/hook_native_saved_approval.py",
       "func": "_saved_block_response",
       "root": "hook",
       "reading": "fails-closed",
@@ -361,7 +361,7 @@
       "note": "Renders the saved block."
     },
     {
-      "file": "src/codex_plugin_scanner/guard/daemon/hook_native_saved_approval.py",
+      "file": "src/codex_plugin_scanner/guard/hook_review/hook_native_saved_approval.py",
       "func": "native_saved_decision_response",
       "root": "hook",
       "reading": "records-approval",
@@ -371,7 +371,7 @@
       "note": "Replays the user's saved exact-action decision, bound to the artifact hash and gated on the resident having marked the review approvable."
     },
     {
-      "file": "src/codex_plugin_scanner/guard/daemon/local_cli_connector_group.py",
+      "file": "src/codex_plugin_scanner/guard/local_clis/local_cli_connector_group.py",
       "func": "_continuation",
       "root": "hook",
       "reading": "records-approval",
@@ -381,7 +381,7 @@
       "note": "Builds the retry copy for an approval the user already allowed."
     },
     {
-      "file": "src/codex_plugin_scanner/guard/daemon/server_control_connect_flow.py",
+      "file": "src/codex_plugin_scanner/guard/cloud_control/server_control_connect_flow.py",
       "func": "_repair_command_activity_persistence_health",
       "root": "guard-run",
       "reading": "health-probe",

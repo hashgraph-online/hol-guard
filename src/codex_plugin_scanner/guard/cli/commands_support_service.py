@@ -8,7 +8,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, TextIO
 
 if TYPE_CHECKING:
-    from ..daemon import GuardDaemonHookFailureKind
+    from ..native_daemon_manage import GuardDaemonHookFailureKind
     from ..native_daemon_manage import _guard_daemon_pid_is_running, _guard_daemon_pid_matches_command
     from ._commands_shared import _now
     from .commands_support_connect import _guard_service_runtime_profile
@@ -285,7 +285,7 @@ def _handle_daemon_recover(
     home_dir: Path | None,
     failure_kind: GuardDaemonHookFailureKind,
 ) -> int:
-    from codex_plugin_scanner.guard.daemon import recover_guard_daemon_after_hook_failure
+    from codex_plugin_scanner.guard.native_daemon_manage import recover_guard_daemon_after_hook_failure
 
     try:
         _ = recover_guard_daemon_after_hook_failure(

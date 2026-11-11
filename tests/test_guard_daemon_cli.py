@@ -150,7 +150,7 @@ class TestDaemonRepairCommand:
 
 
 def test_daemon_recover_dispatches_failure_aware_recovery(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    from codex_plugin_scanner.guard import daemon
+    from codex_plugin_scanner.guard import native_daemon_manage as daemon
     from codex_plugin_scanner.guard.cli.commands_dispatch_cloud import _run_guard_daemon_command
 
     calls: list[tuple[Path, str]] = []
@@ -176,7 +176,7 @@ def test_daemon_recover_returns_structured_error_without_traceback(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    from codex_plugin_scanner.guard import daemon
+    from codex_plugin_scanner.guard import native_daemon_manage as daemon
     from codex_plugin_scanner.guard.cli.commands_dispatch_cloud import _run_guard_daemon_command
 
     def recover(guard_home: Path, *, home_dir: Path | None, failure_kind: str) -> str:

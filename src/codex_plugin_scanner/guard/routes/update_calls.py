@@ -13,12 +13,12 @@ from collections.abc import Mapping
 from typing import Any
 
 from ..cli.update_commands import build_guard_update_status_payload
-from ..daemon.dashboard_update import (
+from ..store import GuardStore
+from ..updates.dashboard_update import (
     merge_dashboard_update_progress,
     schedule_guard_dashboard_update,
     write_desktop_update_request,
 )
-from ..store import GuardStore
 
 _LOGGER = logging.getLogger(__name__)
 

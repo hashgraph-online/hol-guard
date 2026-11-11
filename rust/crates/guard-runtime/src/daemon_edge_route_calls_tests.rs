@@ -34,7 +34,16 @@ fn routes_name_their_library_calls() {
     }
     let (name, args) = resident_route("/v1/local-clis/preview").unwrap_or_else(|| unreachable!());
     assert_eq!(name, "route.local_cli_post");
-    assert_eq!(args["path"], "/v1/local-clis/preview");
+    assert_eq!(args["op"], "preview");
+    for (path, op) in [
+        ("/v1/local-clis/discover", "discover_items"),
+        ("/v1/local-clis/mcp-skills", "mcp_skills"),
+        ("/v1/local-clis/skills", "skills"),
+        ("/v1/local-clis/apply", "apply"),
+    ] {
+        let (_, args) = resident_route(path).unwrap_or_else(|| unreachable!());
+        assert_eq!(args["op"], op, "{path}");
+    }
     assert_eq!(resident_route("/v1/extension-controls/preview"), None);
     let (name, args) = route("/v1/requests/r-1/resume").unwrap_or_else(|| unreachable!());
     assert_eq!(name, "route.request_resume_retry");

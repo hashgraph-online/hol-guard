@@ -220,7 +220,7 @@ _HELP_PATH_FORBIDDEN_MODULES = (
     "codex_plugin_scanner.guard.cli._commands_shared",
     "codex_plugin_scanner.guard.store",
     "codex_plugin_scanner.guard.native_context",
-    "codex_plugin_scanner.guard.daemon",
+    "codex_plugin_scanner.guard.hook_review.hook_worker",
     "codex_plugin_scanner.guard.proxy",
     "codex_plugin_scanner.guard.runtime.command_extensions",
 )

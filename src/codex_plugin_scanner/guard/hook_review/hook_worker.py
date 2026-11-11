@@ -34,6 +34,7 @@ from typing import TYPE_CHECKING, Protocol, cast, final
 
 from ..codex_hook_launch_runtime import hook_processes_contained
 from ..config import load_guard_config
+from ..evidence_drains.hook_evidence_dispatch import HookEvidenceDispatch, run_hook_evidence
 from ..hook_execution_environment import HOOK_EXECUTION_ENVIRONMENT_KEY
 from ..native_codex_binding_capture import CodexBindingCaptureWriter
 from ..native_hook_adapter import hook_adapter_memo
@@ -45,7 +46,6 @@ from ..native_runtime import NativeRuntimeStatus, native_runtime_status
 from ..native_runtime_status_share import share_verified_runtime_status
 from ..runtime.extension_control_runtime import current_extension_control_binding_digest
 from .hook_direct_counters import HookCounterLog
-from .hook_evidence_dispatch import HookEvidenceDispatch, run_hook_evidence
 from .hook_request_parsing import (
     runtime_hook_event_name,
 )
@@ -54,8 +54,8 @@ from .hook_worker_readiness import prepare_workspace_policy
 
 if TYPE_CHECKING:
     from ..config import GuardConfig
+    from ..evidence_drains.hook_direct_evidence_drain import DirectHookEvidenceDrain
     from ..store import GuardStore
-    from .hook_direct_evidence_drain import DirectHookEvidenceDrain
 
 
 class CommandActivityWriter(Protocol):
@@ -227,7 +227,7 @@ class HookWorker(HookWorkerNativeMixin):
         enable = getattr(self.policy_snapshot_publisher, "enable_direct_evidence_drain", None)
         if self.activity_writer is None or not callable(enable):
             return
-        from .hook_direct_evidence_drain import DirectHookEvidenceDrain
+        from ..evidence_drains.hook_direct_evidence_drain import DirectHookEvidenceDrain
 
         self._direct_evidence_drain = DirectHookEvidenceDrain(self)
         enable(True)

@@ -8,8 +8,8 @@ from pathlib import Path
 import pytest
 
 from ci.guard_daemon_harness import GuardDaemonServer
-from codex_plugin_scanner.guard.daemon import extension_control_api as api_module
-from codex_plugin_scanner.guard.daemon.extension_control_api import (
+from codex_plugin_scanner.guard.extension_controls import extension_control_api as api_module
+from codex_plugin_scanner.guard.extension_controls.extension_control_api import (
     ExtensionControlApiError,
     ExtensionControlApiService,
 )

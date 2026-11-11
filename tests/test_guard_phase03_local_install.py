@@ -21,7 +21,6 @@ from codex_plugin_scanner.guard.cli import update_artifact as update_artifact_mo
 from codex_plugin_scanner.guard.cli import update_commands
 from codex_plugin_scanner.guard.cli.approval_commands import run_approval_open_command
 from codex_plugin_scanner.guard.cli.install_commands import apply_managed_install
-from codex_plugin_scanner.guard.daemon import update_refresh_program
 from codex_plugin_scanner.guard.models import GuardApprovalRequest
 from codex_plugin_scanner.guard.runtime.command_extensions import CommandSafetyExtensionRegistry
 from codex_plugin_scanner.guard.runtime.extension_control_authority import (
@@ -30,6 +29,7 @@ from codex_plugin_scanner.guard.runtime.extension_control_authority import (
 )
 from codex_plugin_scanner.guard.shims import _trusted_import_root, _trusted_python_flags
 from codex_plugin_scanner.guard.store import GuardStore
+from codex_plugin_scanner.guard.updates import update_refresh_program
 from tests.update_context_test_support import (
     build_legacy_status_distribution,
     build_legacy_update_context,

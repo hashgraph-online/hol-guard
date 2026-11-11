@@ -24,7 +24,7 @@ def cloud_sync(store: GuardStore, args: Mapping[str, Any]) -> dict[str, object]:
     """Syncs receipts and supply-chain state with Guard Cloud."""
 
     del args
-    from ..daemon.server_control_cloud_sync import _run_headless_cloud_sync
+    from ..cloud_control.server_control_cloud_sync import _run_headless_cloud_sync
 
     summary = _run_headless_cloud_sync(store=store)
     status = str(summary.get("status") or "")
@@ -135,8 +135,8 @@ def _refresh_extension_controls(store: GuardStore) -> None:
     builds none here.
     """
 
-    from ..daemon.background_diagnostics import failure_detail, record_background_event
     from ..extension_control_host import existing_host
+    from ..runtime_health.background_diagnostics import failure_detail, record_background_event
 
     host = existing_host(store)
     if host is None:

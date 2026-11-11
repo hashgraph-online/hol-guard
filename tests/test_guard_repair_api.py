@@ -10,7 +10,7 @@ import pytest
 from ci.guard_daemon_harness import GuardDaemonServer
 from codex_plugin_scanner.guard import repair_api
 from codex_plugin_scanner.guard.approval_gate import ApprovalGateError
-from codex_plugin_scanner.guard.daemon import repair_self_check
+from codex_plugin_scanner.guard.runtime_health import repair_self_check
 from codex_plugin_scanner.guard.store import GuardStore
 
 GUARD_COMMAND = "hol-guard hook --harness claude-code --event PreToolUse"

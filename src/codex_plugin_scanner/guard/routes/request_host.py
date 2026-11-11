@@ -79,8 +79,8 @@ def _republish_trust_status(guard_home: Path) -> Callable[[dict[str, object]], N
 
 
 def _replay_server_class() -> type:
-    from ..daemon.diagnostics import DaemonDiagnostics
     from ..runtime.surface_server import GuardSurfaceRuntime
+    from ..runtime_health.diagnostics import DaemonDiagnostics
     from . import request_handler as daemon_server
 
     base = daemon_server._GuardDaemonHTTPServer
@@ -219,7 +219,7 @@ def _replay_server_class() -> type:
 
         @cached_property
         def local_cli_api(self) -> Any:
-            from ..daemon.local_cli_api import LocalCliApiService
+            from ..local_clis.local_cli_api import LocalCliApiService
 
             service = LocalCliApiService(store=self.store, record_exception=self.diagnostics.record_exception)
             service._discovery_jobs = _ReplayDiscoveryJobs(self._replay_state)
@@ -235,9 +235,9 @@ def _replay_server_class() -> type:
 
         @cached_property
         def hook_worker(self) -> Any:
-            from ..daemon.hook_direct_counters import bind_hook_counter_sink
-            from ..daemon.hook_evidence_dispatch import HookEvidenceDispatch
-            from ..daemon.hook_worker import HookWorker
+            from ..evidence_drains.hook_evidence_dispatch import HookEvidenceDispatch
+            from ..hook_review.hook_direct_counters import bind_hook_counter_sink
+            from ..hook_review.hook_worker import HookWorker
             from ..native_hook_evidence_writer import NativeHookEvidenceWriter
 
             self.runtime_hook_evidence_writer = NativeHookEvidenceWriter(store=self.store)

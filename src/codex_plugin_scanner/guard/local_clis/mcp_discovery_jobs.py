@@ -11,7 +11,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from uuid import uuid4
 
-from .background_diagnostics import record_background_event
+from ..runtime_health.background_diagnostics import record_background_event
 
 _LOG = logging.getLogger(__name__)
 # Named here so a support bundle can be searched for a discovery job that died

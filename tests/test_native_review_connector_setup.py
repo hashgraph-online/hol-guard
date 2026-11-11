@@ -16,8 +16,8 @@ import pytest
 
 from codex_plugin_scanner.guard import config as guard_config
 from codex_plugin_scanner.guard.blocked_request_mode import SAFE_ALTERNATIVE_GUIDANCE, connector_setup_reason
-from codex_plugin_scanner.guard.daemon import hook_native_review_approval as review
-from codex_plugin_scanner.guard.daemon import native_review_connector
+from codex_plugin_scanner.guard.hook_review import hook_native_review_approval as review
+from codex_plugin_scanner.guard.hook_review import native_review_connector
 
 _URL = "http://127.0.0.1:4781/requests/abc"
 _SETUP = {

@@ -76,7 +76,7 @@ def _managed_action(
 
 
 def _now() -> str:
-    from ..daemon.server_common import _now as now
+    from ..runtime_health.server_common import _now as now
 
     return now()
 
@@ -104,7 +104,7 @@ def _reconnect_facts(store: GuardStore) -> dict[str, object]:
 def run_app_action(store: GuardStore, args: Mapping[str, Any]) -> dict[str, object]:
     """Runs one app action, records its receipt and queues the Cloud sync."""
 
-    from ..daemon.server_control_cloud_sync import (
+    from ..cloud_control.server_control_cloud_sync import (
         _managed_controls_publish_for,
         _queue_headless_cloud_sync_with_optional_publish,
     )
@@ -166,9 +166,9 @@ def runtime_snapshot(store: GuardStore, args: Mapping[str, Any]) -> dict[str, ob
     """The runtime snapshot and the facts the operator health verdict reads."""
 
     from ..approvals import build_runtime_snapshot
+    from ..cloud_control.command_activity_health_repair import auto_repair_command_activity_health_if_degraded
+    from ..cloud_control.server_control_cloud_sync import _managed_controls_publish_for, _maybe_queue_first_cloud_sync
     from ..config import load_guard_config
-    from ..daemon.command_activity_health_repair import auto_repair_command_activity_health_if_degraded
-    from ..daemon.server_control_cloud_sync import _managed_controls_publish_for, _maybe_queue_first_cloud_sync
     from ..models import format_local_http_origin
     from ..native_daemon_manage import current_guard_daemon_runtime_fingerprint
     from ..runtime.containment_health import probe_containment_health

@@ -8643,7 +8643,7 @@
    "parity_fixture": "rust/crates/guard-command/tests/fixtures/shell_request_authority.json"
   },
   {
-   "path": "src/codex_plugin_scanner/guard/daemon/hook_native_package_review.py",
+   "path": "src/codex_plugin_scanner/guard/hook_review/hook_native_package_review.py",
    "source_sha256": "936e48c96db7536f8915512d4df015b783a63b2889b23b831fbb29a2f49631c1",
    "forbidden_symbols": [
     "verified_npm_version",
@@ -8667,7 +8667,7 @@
    "remaining_role": "Settles the review from the package evaluator's verdict; the npm proof and the output-filter resolution run in the resident and are applied without being re-derived."
   },
   {
-   "path": "src/codex_plugin_scanner/guard/daemon/hook_native_package_review.py",
+   "path": "src/codex_plugin_scanner/guard/hook_review/hook_native_package_review.py",
    "source_sha256": "edd6b9c6ff38e77c8b2c7ef7314027838bbb5122ed702b74bc1a63fff1978d69",
    "forbidden_symbols": [
     "_FILTERED_COMMAND",
@@ -8685,7 +8685,7 @@
    "remaining_role": "Evaluates the request artifact the resident's package_review_plan op builds and applies the verdict: a block always, an allow only when the resident proved the npm that runs. The command lookup (Copilot toolArgs included), shape check, intent parse and artifact build run in the resident."
   },
   {
-   "path": "src/codex_plugin_scanner/guard/daemon/hook_native_package_review.py",
+   "path": "src/codex_plugin_scanner/guard/hook_review/hook_native_package_review.py",
    "source_sha256": "9b6c33d181442a4681ea6522448ff8d0c154ac6690d1284313a6c911f9032040",
    "forbidden_symbols": [
     "_script_free_watch",

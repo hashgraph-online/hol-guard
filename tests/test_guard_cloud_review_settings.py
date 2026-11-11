@@ -11,12 +11,14 @@ import pytest
 
 from ci.native_daemon_harness import NativeGuardDaemon
 from codex_plugin_scanner.guard.approval_gate import ApprovalGateError, update_settings
-from codex_plugin_scanner.guard.daemon.cloud_review_settings import (
+from codex_plugin_scanner.guard.cloud_control.cloud_review_settings import (
     CloudReviewSettingsError,
     change_cloud_review_settings,
     cloud_review_settings_status,
 )
-from codex_plugin_scanner.guard.daemon.server_control_connect_state import _guard_cloud_connect_required_for_insights
+from codex_plugin_scanner.guard.cloud_control.server_control_connect_state import (
+    _guard_cloud_connect_required_for_insights,
+)
 from codex_plugin_scanner.guard.review_contracts import build_local_review_request_claim
 from codex_plugin_scanner.guard.runtime.exact_cloud_review import _oauth_metadata
 from codex_plugin_scanner.guard.store import GuardStore

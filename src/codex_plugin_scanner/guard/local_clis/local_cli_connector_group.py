@@ -15,9 +15,9 @@ import sqlite3
 from collections.abc import Mapping
 
 from ..approval_gate_types import ApprovalGateError, ApprovalGateInput
+from ..hook_review.approval_connector_recommendation import pending_connector_group_rows
 from ..runtime.extension_allow_hint import validated_connector_setup_hint
 from ..store import GuardStore
-from .approval_connector_recommendation import pending_connector_group_rows
 from .local_cli_api_contract import LocalCliApiError
 
 _MAX_REQUEST_ID = 128

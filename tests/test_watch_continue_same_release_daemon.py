@@ -10,11 +10,11 @@ from unittest.mock import MagicMock
 import pytest
 
 from codex_plugin_scanner.guard import native_daemon_manage as daemon_manager_module
-from codex_plugin_scanner.guard.daemon.hook_availability_policy import (
+from codex_plugin_scanner.guard.hook_review.hook_availability_policy import (
     availability_harness_response,
     cursor_fallback_permission,
 )
-from codex_plugin_scanner.guard.daemon.hook_worker import HookWorker
+from codex_plugin_scanner.guard.hook_review.hook_worker import HookWorker
 from codex_plugin_scanner.guard.store import GuardStore
 from codex_plugin_scanner.version import __version__
 
@@ -247,7 +247,7 @@ def test_watch_unavailable_pretool_records_command_activity(
         encoding="utf-8",
     )
     monkeypatch.setattr(
-        "codex_plugin_scanner.guard.daemon.hook_worker.review_raw_hook_native",
+        "codex_plugin_scanner.guard.hook_review.hook_worker.review_raw_hook_native",
         lambda *_args, **_kwargs: None,
     )
     writer = MagicMock()

@@ -15,7 +15,7 @@ from codex_plugin_scanner.guard.cli.commands_support_hook_payload import (
     _hook_action_envelope,
 )
 from codex_plugin_scanner.guard.codex_live_decision_revalidation import revalidate_codex_live_allow
-from codex_plugin_scanner.guard.daemon.hook_worker import HookWorker
+from codex_plugin_scanner.guard.hook_review.hook_worker import HookWorker
 from codex_plugin_scanner.guard.native_hook_adapter import NativeHookAdapterError
 from codex_plugin_scanner.guard.store import GuardStore
 

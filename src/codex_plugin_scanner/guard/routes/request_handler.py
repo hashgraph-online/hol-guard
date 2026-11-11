@@ -17,9 +17,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, TypeAlias, TypedDict
 
-from ..daemon.audit_persistence import AuditPersistence
-from ..daemon.diagnostics import DaemonDiagnostics
-from ..daemon.hook_evidence_dispatch import HookEvidenceDispatch
+from ..evidence_drains.audit_persistence import AuditPersistence
+from ..evidence_drains.hook_evidence_dispatch import HookEvidenceDispatch
 from ..native_daemon_manage import (
     write_guard_daemon_state,
 )
@@ -27,6 +26,7 @@ from ..native_hook_evidence_writer import NativeHookEvidenceWriter
 from ..runtime.approval_attention import ApprovalAttentionCoordinator
 from ..runtime.network_supervisor import NetworkSupervisor
 from ..runtime.surface_server import GuardSurfaceRuntime
+from ..runtime_health.diagnostics import DaemonDiagnostics
 from ..store import GuardStore
 
 _LOCAL_DASHBOARD_SESSION_REFRESH_GRACE_SECONDS = 7 * 24 * 60 * 60

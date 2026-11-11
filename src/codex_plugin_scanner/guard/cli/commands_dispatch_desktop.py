@@ -639,7 +639,7 @@ def _run_guard_desktop_command(
             return 2
         return run_worker_host(_Path(resolved_home))
     if getattr(args, "desktop_command", None) == "dashboard-update":
-        from ..daemon.dashboard_update_runner import main as dashboard_update_main
+        from ..updates.dashboard_update_runner import main as dashboard_update_main
 
         resolved_home = getattr(args, "guard_home", None) or guard_home
         if resolved_home is None:

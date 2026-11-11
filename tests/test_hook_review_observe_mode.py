@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Protocol
 
-from codex_plugin_scanner.guard.daemon.hook_worker import HookWorker
+from codex_plugin_scanner.guard.hook_review.hook_worker import HookWorker
 
 
 class _Metrics:

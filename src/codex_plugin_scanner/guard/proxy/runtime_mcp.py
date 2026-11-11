@@ -23,7 +23,6 @@ from ..approvals import approval_prompt_flow, build_approval_browser_url, first_
 from ..blocked_request_mode import asks_for_approval, safe_alternative_reason
 from ..browser_opener import open_browser_url
 from ..config import GuardConfig
-from ..daemon import ensure_guard_daemon
 from ..harness_posture import config_for_harness
 from ..local_supply_chain import (
     _cleanup_external_archive_downloads,
@@ -48,7 +47,7 @@ from ..native_approval_proof import (
     claimed_approval_authorizes_postclaim_review,
     fresh_claim_allows_reapproval,
 )
-from ..native_daemon_manage import load_guard_daemon_auth_token
+from ..native_daemon_manage import ensure_guard_daemon, load_guard_daemon_auth_token
 from ..native_decisions import NativeDecisionAuthorityError, NativeDecisionUnavailableError
 from ..native_execution import (
     mcp_stdio_session_close_native,

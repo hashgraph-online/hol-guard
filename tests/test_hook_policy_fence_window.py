@@ -14,10 +14,10 @@ import pytest
 
 from codex_plugin_scanner.guard import hook_deadline
 from codex_plugin_scanner.guard.adapters import zcode
-from codex_plugin_scanner.guard.daemon import hook_policy_fence_window as fence
-from codex_plugin_scanner.guard.daemon import hook_worker_native_review as review
-from codex_plugin_scanner.guard.daemon.hook_policy_admission import _native_policy_not_ready_reason
-from codex_plugin_scanner.guard.daemon.hook_worker import HookWorker
+from codex_plugin_scanner.guard.hook_review import hook_policy_fence_window as fence
+from codex_plugin_scanner.guard.hook_review import hook_worker_native_review as review
+from codex_plugin_scanner.guard.hook_review.hook_policy_admission import _native_policy_not_ready_reason
+from codex_plugin_scanner.guard.hook_review.hook_worker import HookWorker
 from codex_plugin_scanner.guard.store import GuardStore
 
 FENCE_CODE = "native_business_source_mutation_in_progress"

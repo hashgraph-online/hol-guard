@@ -14,11 +14,11 @@ import pytest
 
 _MODULES = (
     "codex_plugin_scanner.guard.routes.request_handler",
-    "codex_plugin_scanner.guard.daemon.server_common",
+    "codex_plugin_scanner.guard.runtime_health.server_common",
     "codex_plugin_scanner.guard.routes.connect_calls",
-    "codex_plugin_scanner.guard.daemon.server_control_cloud_sync",
-    "codex_plugin_scanner.guard.daemon.server_control_connect_flow",
-    "codex_plugin_scanner.guard.daemon.server_control_connect_state",
+    "codex_plugin_scanner.guard.cloud_control.server_control_cloud_sync",
+    "codex_plugin_scanner.guard.cloud_control.server_control_connect_flow",
+    "codex_plugin_scanner.guard.cloud_control.server_control_connect_state",
     "codex_plugin_scanner.guard.routes.repair_calls",
     "codex_plugin_scanner.guard.routes.supply_chain_calls",
     "codex_plugin_scanner.guard.routes.update_calls",

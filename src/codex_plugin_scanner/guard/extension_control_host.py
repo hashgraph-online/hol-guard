@@ -21,11 +21,11 @@ from contextlib import suppress
 from pathlib import Path
 from typing import Any
 
-from .daemon.background_diagnostics import failure_detail, record_background_event
 from .native_policy_snapshot_constants import NativePolicySnapshotError
 from .runtime.command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY, CommandSafetyExtensionRegistry
 from .runtime.extension_control_authority import AuthorityHealth, ExtensionControlAuthorityView
 from .runtime.extension_control_runtime import ExtensionControlRuntime, ExtensionControlRuntimeSnapshot
+from .runtime_health.background_diagnostics import failure_detail, record_background_event
 from .store import GuardStore
 
 _LOGGER = logging.getLogger(__name__)
@@ -54,7 +54,7 @@ class ExtensionControlHost:
     """One Guard home's extension-control API, its runtime and its refresh."""
 
     def __init__(self, store: GuardStore) -> None:
-        from .daemon.extension_control_api import ExtensionControlApiService
+        from .extension_controls.extension_control_api import ExtensionControlApiService
 
         self.store = store
         self._installed_authority_pending = False
@@ -181,7 +181,7 @@ class ExtensionControlHost:
     def respond(self, method: str, path: str, payload: dict[str, object]) -> dict[str, object]:
         """The whole reply for one extension-control request."""
 
-        from .daemon.extension_control_api import ExtensionControlApiError
+        from .extension_controls.extension_control_api import ExtensionControlApiError
 
         try:
             if method == "GET" and path in _READS:

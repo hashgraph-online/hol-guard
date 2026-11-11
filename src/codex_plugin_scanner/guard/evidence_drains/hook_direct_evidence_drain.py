@@ -34,8 +34,8 @@ from contextlib import suppress
 from pathlib import Path
 from typing import Protocol, cast
 
-from .hook_direct_counters import HookCounterLog
-from .hook_policy_fence_window import record_direct_fence_wait
+from ..hook_review.hook_direct_counters import HookCounterLog
+from ..hook_review.hook_policy_fence_window import record_direct_fence_wait
 
 _DRAIN_SCHEMA = "guard-hook-direct-evidence.v1"
 _DRAIN_INTERVAL_SECONDS = 0.25
@@ -84,8 +84,8 @@ def record_direct_hook_evidence(host: _DrainHost, record: object) -> bool:
     """Record one drained answer the way the daemon records its own."""
 
     from ..cli.commands_support_command_activity import hook_post_succeeded
-    from .hook_managed_install_state import _hook_harness_is_unmanaged
-    from .hook_worker_native import _record_native_pre_activity
+    from ..hook_review.hook_managed_install_state import _hook_harness_is_unmanaged
+    from ..hook_review.hook_worker_native import _record_native_pre_activity
     from .mcp_relay_evidence_drain import is_mcp_relay_evidence, record_mcp_relay_evidence
     from .mcp_relay_package_evidence_drain import (
         is_mcp_relay_package_evidence,

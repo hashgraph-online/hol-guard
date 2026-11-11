@@ -7,7 +7,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from codex_plugin_scanner.guard.daemon import hook_managed_install_state as state
+from codex_plugin_scanner.guard.hook_review import hook_managed_install_state as state
 from codex_plugin_scanner.guard.managed_install_revision import bump_managed_install_revision
 
 

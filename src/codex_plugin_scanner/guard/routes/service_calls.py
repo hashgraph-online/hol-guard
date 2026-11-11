@@ -10,7 +10,6 @@ from __future__ import annotations
 import threading
 from collections.abc import Mapping
 from pathlib import Path
-from types import SimpleNamespace
 from typing import Any
 
 from ..store import GuardStore
@@ -53,7 +52,7 @@ def desktop_bootstrap(store: GuardStore, args: Mapping[str, Any]) -> dict[str, o
 def cloud_review_update(store: GuardStore, args: Mapping[str, Any]) -> dict[str, object]:
     """``POST /v1/cloud-review``: change Cloud Review and refresh the workers."""
 
-    from ..daemon.cloud_review_settings_route import handle_cloud_review_settings
+    from ..cloud_control.cloud_review_settings_route import handle_cloud_review_settings
     from ..workers.host import DurableWorkerRefresh
 
     recorder = _Recorder(store)
@@ -79,7 +78,7 @@ def command_queue_refresh(store: GuardStore, args: Mapping[str, Any]) -> dict[st
 def cloud_actions_check(store: GuardStore, args: Mapping[str, Any]) -> dict[str, object]:
     """``POST /v1/cloud-actions/status``: ask Guard Cloud and save the answer."""
 
-    from ..daemon.cloud_actions_status_http import handle_cloud_actions_check
+    from ..cloud_control.cloud_actions_status_http import handle_cloud_actions_check
 
     recorder = _RetryAfterRecorder(store)
     handle_cloud_actions_check(recorder, _payload(args))
@@ -97,8 +96,8 @@ def _local_cli_api(store: GuardStore) -> Any:
     recorded in the Guard home so a restarted resident reports them.
     """
 
-    from ..daemon.background_diagnostics import record_background_event
-    from ..daemon.local_cli_api import LocalCliApiService
+    from ..local_clis.local_cli_api import LocalCliApiService
+    from ..runtime_health.background_diagnostics import record_background_event
     from .request_state import _ReplayDiscoveryJobs, _ReplayState
 
     key = str(store.guard_home)
@@ -115,30 +114,53 @@ def _local_cli_api(store: GuardStore) -> Any:
         return service
 
 
+_LOCAL_CLI_OPS = frozenset(
+    {
+        "apply",
+        "discover_items",
+        "forget",
+        "mcp_skills",
+        "preview",
+        "provider_actions",
+        "provider_workflows",
+        "recognize",
+        "refresh_job",
+        "registry_search",
+        "registry_setup",
+        "skills",
+    }
+)
+_LOCAL_CLI_UNAVAILABLE = {
+    "status": 500,
+    "body": {"error": "local_cli_unavailable", "message": "Guard could not load custom extensions."},
+    "no_store": True,
+}
+
+
 def local_cli_post(store: GuardStore, args: Mapping[str, Any]) -> dict[str, object]:
-    """``POST /v1/local-clis/*``: preview, apply, discover and manage custom extensions."""
+    """``POST /v1/local-clis/*``: run the service method the daemon picked for the path."""
 
-    from ..daemon.local_cli_http import handle_local_cli_post
     from ..library_calls import LibraryCallError
+    from ..local_clis.local_cli_api_contract import LocalCliApiError
+    from ..runtime_health.background_diagnostics import failure_detail, record_background_event
 
-    path = args.get("path")
-    if not isinstance(path, str) or not path.startswith("/v1/local-clis/"):
+    op = args.get("op")
+    if op not in _LOCAL_CLI_OPS:
         raise LibraryCallError("invalid_arguments")
-    api = _local_cli_api(store)
-    recorder = _LocalCliRecorder(store, api)
-    handle_local_cli_post(recorder, path, _payload(args))
-    return recorder.reply()
-
-
-class _LocalCliRecorder(_Recorder):
-    """Keeps the reply, and hands the local CLI handlers this home's API."""
-
-    def __init__(self, store: GuardStore, api: Any) -> None:
-        super().__init__(store)
-        self._api = api
-
-    def _daemon_server(self) -> Any:
-        return SimpleNamespace(local_cli_api=self._api)
+    payload = _payload(args)
+    method = getattr(_local_cli_api(store), op)
+    try:
+        response = method() if op == "discover_items" else method(payload)
+    except LocalCliApiError as error:
+        return {"status": error.status, "body": error.to_payload(), "no_store": False}
+    except Exception as error:
+        # Name the method and the exception class, so daemon.log says which
+        # request failed, then answer a reply the page can explain.
+        record_background_event("local_cli_post_failed", f"route={op} {failure_detail(error)}")
+        return dict(_LOCAL_CLI_UNAVAILABLE)
+    if not isinstance(response, dict):
+        return dict(_LOCAL_CLI_UNAVAILABLE)
+    return {"status": 200, "body": response, "no_store": True}
 
 
 class _RetryAfterRecorder(_Recorder):

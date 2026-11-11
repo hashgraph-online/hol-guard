@@ -10,8 +10,8 @@ from types import SimpleNamespace
 
 import pytest
 
-from codex_plugin_scanner.guard.daemon import command_activity_health_repair
-from codex_plugin_scanner.guard.daemon.command_activity_health_repair import (
+from codex_plugin_scanner.guard.cloud_control import command_activity_health_repair
+from codex_plugin_scanner.guard.cloud_control.command_activity_health_repair import (
     COMMAND_ACTIVITY_AUTO_REPAIR_INTERVAL_SECONDS,
     COMMAND_ACTIVITY_REPAIR_QUIET_SECONDS,
     auto_repair_command_activity_health,

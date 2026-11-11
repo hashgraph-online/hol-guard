@@ -15,8 +15,8 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.guard.adapters import zcode_contained_tests
-from codex_plugin_scanner.guard.daemon import hook_worker_native
-from codex_plugin_scanner.guard.daemon.hook_worker_native import HookWorkerNativeMixin
+from codex_plugin_scanner.guard.hook_review import hook_worker_native
+from codex_plugin_scanner.guard.hook_review.hook_worker_native import HookWorkerNativeMixin
 from codex_plugin_scanner.guard.native_hook_edge import (
     _decode_edge,
     review_raw_hook_native,

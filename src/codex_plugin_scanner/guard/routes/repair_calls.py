@@ -13,8 +13,8 @@ from collections.abc import Mapping
 from datetime import datetime, timezone
 from typing import Any
 
+from ..cloud_control.server_control_connect_flow import _repair_command_activity_persistence_health
 from ..config import load_guard_config
-from ..daemon.server_control_connect_flow import _repair_command_activity_persistence_health
 from ..models import GuardRuntimeRegistration
 from ..native_daemon_manage import current_guard_daemon_runtime_fingerprint
 from ..runtime.containment_health import containment_health_signals, probe_containment_health

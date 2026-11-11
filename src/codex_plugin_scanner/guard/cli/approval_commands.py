@@ -22,8 +22,8 @@ from ..approvals import (
 from ..browser_opener import open_app_url, open_browser_url
 from ..codex_resume import retry_request_resume
 from ..config import load_guard_config
-from ..daemon import load_guard_daemon_url
 from ..desktop_review_link import desktop_review_url
+from ..native_daemon_manage import load_guard_daemon_url
 from ..runtime.decisions import AUTHORITATIVE_DECISION_INCONSISTENT
 from ..runtime.self_approval import SELF_APPROVAL_REASON, approval_resolution_invoked_from_agent
 from ..runtime.surface_server import GuardSurfaceRuntime

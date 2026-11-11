@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.guard.approval_gate import update_settings
-from codex_plugin_scanner.guard.daemon.local_cli_api import LocalCliApiError, LocalCliApiService
+from codex_plugin_scanner.guard.local_clis.local_cli_api import LocalCliApiError, LocalCliApiService
 from codex_plugin_scanner.guard.runtime import mcp_registry_setup
 from codex_plugin_scanner.guard.runtime.codex_mcp_setup import CodexMcpSetupReceipt
 from codex_plugin_scanner.guard.store import GuardStore

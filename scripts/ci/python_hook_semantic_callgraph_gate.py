@@ -20,7 +20,7 @@ _SRC_PACKAGE = "codex_plugin_scanner.guard"
 _PRODUCTION_FILES: Final = (
     "src/codex_plugin_scanner/guard/cli/commands_hook.py",
     "src/codex_plugin_scanner/guard/cli/commands_hook_native_authority.py",
-    "src/codex_plugin_scanner/guard/daemon/hook_worker.py",
+    "src/codex_plugin_scanner/guard/hook_review/hook_worker.py",
     "src/codex_plugin_scanner/guard/routes/hook_calls.py",
     "src/codex_plugin_scanner/guard/routes/request_handler.py",
     "src/codex_plugin_scanner/guard/native_pretool.py",
@@ -30,7 +30,7 @@ _ROOTS: Final = (
     ("src/codex_plugin_scanner/guard/cli/commands_hook.py", None, "_run_guard_hook_command"),
     ("src/codex_plugin_scanner/guard/cli/commands_hook_native_authority.py", None, "try_native_hook_authority"),
     ("src/codex_plugin_scanner/guard/cli/commands_hook_native_authority.py", None, "route_native_hook"),
-    ("src/codex_plugin_scanner/guard/daemon/hook_worker.py", "HookWorker", "review_http_payload"),
+    ("src/codex_plugin_scanner/guard/hook_review/hook_worker.py", "HookWorker", "review_http_payload"),
     ("src/codex_plugin_scanner/guard/routes/hook_calls.py", None, "hook_begin"),
     ("src/codex_plugin_scanner/guard/routes/hook_calls.py", None, "hook_prepare"),
     ("src/codex_plugin_scanner/guard/routes/hook_calls.py", None, "hook_review"),

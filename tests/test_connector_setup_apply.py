@@ -10,13 +10,13 @@ import pytest
 from codex_plugin_scanner.guard import approvals
 from codex_plugin_scanner.guard import continuation_runtime_local as local_approval_continuation
 from codex_plugin_scanner.guard.approval_gate_types import ApprovalGateError
-from codex_plugin_scanner.guard.daemon import local_cli_api
-from codex_plugin_scanner.guard.daemon import local_cli_connector_group as group
-from codex_plugin_scanner.guard.daemon.approval_connector_recommendation import (
+from codex_plugin_scanner.guard.hook_review.approval_connector_recommendation import (
     build_approval_connector_recommendation,
 )
-from codex_plugin_scanner.guard.daemon.local_cli_api import LocalCliApiService
-from codex_plugin_scanner.guard.daemon.local_cli_api_contract import LocalCliApiError
+from codex_plugin_scanner.guard.local_clis import local_cli_api
+from codex_plugin_scanner.guard.local_clis import local_cli_connector_group as group
+from codex_plugin_scanner.guard.local_clis.local_cli_api import LocalCliApiService
+from codex_plugin_scanner.guard.local_clis.local_cli_api_contract import LocalCliApiError
 from codex_plugin_scanner.guard.models import GuardApprovalRequest
 from codex_plugin_scanner.guard.runtime.command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
 from codex_plugin_scanner.guard.runtime.extension_allow_hint import (
@@ -295,7 +295,7 @@ def test_group_resolves_only_after_the_proof_bound_write(store: GuardStore, monk
 
 
 def test_recommended_setup_is_a_body_for_the_same_endpoint(monkeypatch: pytest.MonkeyPatch) -> None:
-    from codex_plugin_scanner.guard.daemon import approval_connector_recommendation as recommendation
+    from codex_plugin_scanner.guard.hook_review import approval_connector_recommendation as recommendation
 
     item = {
         "cli_id": _CLI_ID,

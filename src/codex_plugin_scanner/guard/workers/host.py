@@ -127,7 +127,7 @@ class WorkerHost:
         _LOGGER.warning("Guard worker host error: %s", code)
 
     def _start_command_queue_after_authority(self) -> bool:
-        from ..daemon.command_queue_worker import start_command_queue_worker
+        from ..cloud_control.command_queue_worker import start_command_queue_worker
 
         if self.stop.is_set():
             return False
@@ -138,7 +138,7 @@ class WorkerHost:
     def refresh_queues(self) -> tuple[bool, bool]:
         """Applies changed Cloud connectivity and consent, as the daemon's refresh route did."""
 
-        from ..daemon.command_queue_worker import refresh_command_queue_worker
+        from ..cloud_control.command_queue_worker import refresh_command_queue_worker
         from ..runtime.cloud_review_sync_worker import refresh_cloud_review_sync_worker
 
         with self._lock:
@@ -183,12 +183,12 @@ class WorkerHost:
 
     def start(self) -> None:
         from ..browser_opener import open_browser_url
-        from ..daemon import repair_self_check
-        from ..daemon.command_queue_worker import start_command_queue_worker
+        from ..cloud_control.command_queue_worker import start_command_queue_worker
         from ..native_resident_watchdog import start_native_resident_watchdog
         from ..runtime.approval_attention import ApprovalAttentionCoordinator
         from ..runtime.cloud_review_sync import start_cloud_sync_sync_worker
         from ..runtime.surface_server import GuardSurfaceRuntime
+        from ..runtime_health import repair_self_check
         from ..workspace_assessment_worker import start_workspace_assessment_worker
 
         self._start_policy_publication()
@@ -233,8 +233,8 @@ class WorkerHost:
         ends with its request, so this host owns it now.
         """
 
-        from ..daemon.hook_evidence_dispatch import HookEvidenceDispatch
-        from ..daemon.hook_worker import HookWorker
+        from ..evidence_drains.hook_evidence_dispatch import HookEvidenceDispatch
+        from ..hook_review.hook_worker import HookWorker
         from ..native_hook_evidence_writer import NativeHookEvidenceWriter
 
         try:
@@ -255,7 +255,7 @@ class WorkerHost:
     def wait_for_policy_publication(self) -> None:
         """Waits, bounded, for the first native policy publication."""
 
-        from ..daemon.hook_worker import _NATIVE_POLICY_STARTUP_READY_TIMEOUT_SECONDS
+        from ..hook_review.hook_worker import _NATIVE_POLICY_STARTUP_READY_TIMEOUT_SECONDS
 
         hook_worker = getattr(self, "_hook_worker", None)
         publisher = getattr(hook_worker, "policy_snapshot_publisher", None)
@@ -289,7 +289,7 @@ class WorkerHost:
                 attention.schedule(operation_id=operation_id, requests=typed, browser_url=browser_url)
 
     def shutdown(self) -> None:
-        from ..daemon.command_queue_worker import stop_command_queue_worker
+        from ..cloud_control.command_queue_worker import stop_command_queue_worker
         from ..runtime.cloud_review_sync import stop_cloud_sync_sync_worker
 
         self.stop.set()

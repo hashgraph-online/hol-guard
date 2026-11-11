@@ -32,7 +32,7 @@ from codex_plugin_scanner.guard.approval_gate import (
 )
 from codex_plugin_scanner.guard.cli.desktop_runtime_transition import run_desktop_runtime_transition
 from codex_plugin_scanner.guard.codex_install_transaction import codex_install_transaction
-from codex_plugin_scanner.guard.daemon.hook_worker import HookWorker
+from codex_plugin_scanner.guard.hook_review.hook_worker import HookWorker
 from codex_plugin_scanner.guard.live_process_identity import process_start_token
 from codex_plugin_scanner.guard.native_daemon_manage import (
     _guard_daemon_pid_is_proven_dead,
@@ -91,7 +91,7 @@ guard.mkdir(mode=0o700, exist_ok=True)
 from codex_plugin_scanner.guard.cli import commands_lifecycle_gate
 commands_lifecycle_gate.canonical_lifecycle_home = lambda: guard
 from codex_plugin_scanner.guard.codex_install_transaction import codex_install_transaction
-from codex_plugin_scanner.guard.daemon.hook_worker import HookWorker
+from codex_plugin_scanner.guard.hook_review.hook_worker import HookWorker
 from codex_plugin_scanner.guard.native_resident_client import close_native_residents
 from codex_plugin_scanner.guard.native_runtime import native_runtime_status
 from codex_plugin_scanner.guard.runtime_transition import (

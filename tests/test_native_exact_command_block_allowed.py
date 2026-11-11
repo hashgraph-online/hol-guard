@@ -11,7 +11,7 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.daemon.hook_worker import HookWorker
+from codex_plugin_scanner.guard.hook_review.hook_worker import HookWorker
 from codex_plugin_scanner.guard.models import PolicyDecision
 from codex_plugin_scanner.guard.store import GuardStore
 from tests.native_pretool_edge_fixtures import _edge, _sync_receipt
@@ -34,7 +34,7 @@ def _allowing_worker(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> tuple[H
     edge["harness_response"] = {}
     _sync_receipt(edge)
     monkeypatch.setattr(
-        "codex_plugin_scanner.guard.daemon.hook_worker.review_raw_hook_native",
+        "codex_plugin_scanner.guard.hook_review.hook_worker.review_raw_hook_native",
         lambda *_args, **kwargs: with_review_evidence(edge, **kwargs),
     )
     store = GuardStore(tmp_path / "guard-home")

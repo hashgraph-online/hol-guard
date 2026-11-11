@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from codex_plugin_scanner.guard.daemon.local_cli_api import LocalCliApiError, LocalCliApiService
 from codex_plugin_scanner.guard.local_cli_trust import utc_now
+from codex_plugin_scanner.guard.local_clis.local_cli_api import LocalCliApiError, LocalCliApiService
 from codex_plugin_scanner.guard.runtime.local_cli_identity import UnlistedCliIdentity
 from codex_plugin_scanner.guard.store import GuardStore
 
@@ -14,11 +14,11 @@ def test_recognize_cli_id_survives_discovery_failure(tmp_path: Path, monkeypatch
     home = tmp_path / "home"
     home.mkdir()
     monkeypatch.setattr(
-        "codex_plugin_scanner.guard.daemon.local_cli_api.Path.home",
+        "codex_plugin_scanner.guard.local_clis.local_cli_api.Path.home",
         staticmethod(lambda: home),
     )
     monkeypatch.setattr(
-        "codex_plugin_scanner.guard.daemon.local_cli_api.discover_harness_mcp_servers",
+        "codex_plugin_scanner.guard.local_clis.local_cli_api.discover_harness_mcp_servers",
         lambda **_kwargs: (_ for _ in ()).throw(RuntimeError("detect failed")),
     )
     service = LocalCliApiService(store=GuardStore(home))
@@ -34,11 +34,11 @@ def test_list_items_survives_discovery_failure(tmp_path: Path, monkeypatch) -> N
     home = tmp_path / "home"
     home.mkdir()
     monkeypatch.setattr(
-        "codex_plugin_scanner.guard.daemon.local_cli_api.Path.home",
+        "codex_plugin_scanner.guard.local_clis.local_cli_api.Path.home",
         staticmethod(lambda: home),
     )
     monkeypatch.setattr(
-        "codex_plugin_scanner.guard.daemon.local_cli_api.discover_harness_mcp_servers",
+        "codex_plugin_scanner.guard.local_clis.local_cli_api.discover_harness_mcp_servers",
         lambda **_kwargs: (_ for _ in ()).throw(RuntimeError("detect failed")),
     )
     service = LocalCliApiService(store=GuardStore(home))
@@ -102,9 +102,9 @@ def test_observed_discovery_failure_reaches_the_daemon_log(tmp_path: Path, monke
     # reach the daemon.log recorder, naming the exception it raised.
     home = tmp_path / "home"
     home.mkdir()
-    monkeypatch.setattr("codex_plugin_scanner.guard.daemon.local_cli_api.Path.home", staticmethod(lambda: home))
+    monkeypatch.setattr("codex_plugin_scanner.guard.local_clis.local_cli_api.Path.home", staticmethod(lambda: home))
     monkeypatch.setattr(
-        "codex_plugin_scanner.guard.daemon.local_cli_api.discover_observed_mcp_tools",
+        "codex_plugin_scanner.guard.local_clis.local_cli_api.discover_observed_mcp_tools",
         lambda *_args, **_kwargs: (_ for _ in ()).throw(ValueError("native_local_mcp_observation_invalid")),
     )
     service, recorded = _recording_service(home)
@@ -116,9 +116,9 @@ def test_observed_discovery_failure_reaches_the_daemon_log(tmp_path: Path, monke
 def test_configured_discovery_failure_reaches_the_daemon_log(tmp_path: Path, monkeypatch) -> None:
     home = tmp_path / "home"
     home.mkdir()
-    monkeypatch.setattr("codex_plugin_scanner.guard.daemon.local_cli_api.Path.home", staticmethod(lambda: home))
+    monkeypatch.setattr("codex_plugin_scanner.guard.local_clis.local_cli_api.Path.home", staticmethod(lambda: home))
     monkeypatch.setattr(
-        "codex_plugin_scanner.guard.daemon.local_cli_api.discover_harness_mcp_servers",
+        "codex_plugin_scanner.guard.local_clis.local_cli_api.discover_harness_mcp_servers",
         lambda **_kwargs: (_ for _ in ()).throw(RuntimeError("detect failed")),
     )
     service, recorded = _recording_service(home)

@@ -34,7 +34,6 @@ from ..adapters.pi import OmpHarnessAdapter, PiHarnessAdapter, legacy_omp_manage
 from ..adapters.pi_extension_source import managed_extension_source
 from ..adapters.pi_support import json_payload
 from ..config import load_guard_config, resolve_guard_home
-from ..daemon.update_refresh_program import DAEMON_REFRESH_SCRIPT
 from ..mdm.contracts import ManagedNetworkPolicy, ManagedPolicy
 from ..mdm.network import ManagedNetworkError, managed_urlopen
 from ..mdm.policy import load_managed_policy
@@ -53,6 +52,7 @@ from ..redaction import redact_sensitive_text
 from ..runtime.command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
 from ..runtime.extension_control_authority import AuthorityHealth
 from ..store import GuardStore
+from ..updates.update_refresh_program import DAEMON_REFRESH_SCRIPT
 from .install_commands import apply_managed_install
 from .managed_install_context import managed_install_context as _repair_context_from_managed_install
 from .native_wheel_sources import NativeWheelError, is_alpha_version
@@ -244,7 +244,7 @@ _DAEMON_REFRESH_TIMEOUT_SECONDS = 150.0
 _DAEMON_REFRESH_CLEANUP_TIMEOUT_SECONDS = 15.0
 _DAEMON_REFRESH_SCRIPT = DAEMON_REFRESH_SCRIPT
 _DAEMON_REFRESH_BOOTSTRAP_SCRIPT = """
-from codex_plugin_scanner.guard.daemon.update_refresh_program import DAEMON_REFRESH_SCRIPT
+from codex_plugin_scanner.guard.updates.update_refresh_program import DAEMON_REFRESH_SCRIPT
 
 exec(DAEMON_REFRESH_SCRIPT, {})
 """.strip()

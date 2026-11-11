@@ -81,7 +81,7 @@ def supply_chain_context(
 def supply_chain_entitlement(server: Any) -> dict[str, object]:
     """The entitlement, read without a refresh while a connect is in flight."""
 
-    from ..daemon.server_control_connect_state import (
+    from ..cloud_control.server_control_connect_state import (
         _copy_guard_cloud_connect_state,
         _copy_package_firewall_connect_state,
         _guard_cloud_connect_state_is_in_flight,
@@ -127,7 +127,7 @@ def entitlement(store: GuardStore, args: Mapping[str, Any]) -> dict[str, object]
 def status(store: GuardStore, args: Mapping[str, Any]) -> dict[str, object]:
     """What the package-protection status view shows."""
 
-    from ..daemon.server_control_connect_state import _resolve_package_firewall_connect_flow
+    from ..cloud_control.server_control_connect_state import _resolve_package_firewall_connect_flow
 
     with control_server(store, args) as server:
         current = supply_chain_entitlement(server)
@@ -188,7 +188,7 @@ def _managers(args: Mapping[str, Any]) -> tuple[str, ...] | None:
 def _run(
     store: GuardStore, operation: str, context: HarnessContext, managers: tuple[str, ...] | None
 ) -> dict[str, object]:
-    from ..daemon.server_control_cloud_sync import _sync_supply_chain_cloud_state_with_optional_auth_context
+    from ..cloud_control.server_control_cloud_sync import _sync_supply_chain_cloud_state_with_optional_auth_context
 
     if operation == "install":
         return activate_package_shims(context, managers=managers)
@@ -228,11 +228,11 @@ def _run(
 def run(store: GuardStore, args: Mapping[str, Any]) -> dict[str, object]:
     """Runs one package-protection action and records its receipt."""
 
-    from ..daemon.server_control_cloud_sync import (
+    from ..cloud_control.server_control_cloud_sync import (
         _managed_controls_publish_for,
         _queue_headless_cloud_sync_with_optional_publish,
     )
-    from ..daemon.server_control_connect_state import _activate_package_firewall_runtime
+    from ..cloud_control.server_control_connect_state import _activate_package_firewall_runtime
 
     operation = args.get("operation")
     if not isinstance(operation, str):
@@ -285,7 +285,7 @@ def run(store: GuardStore, args: Mapping[str, Any]) -> dict[str, object]:
 def repair_all(store: GuardStore, args: Mapping[str, Any]) -> dict[str, object]:
     """Repairs package shims, the runtime and intelligence, then records the receipt."""
 
-    from ..daemon.server_control_connect_state import (
+    from ..cloud_control.server_control_connect_state import (
         _activate_package_firewall_runtime,
         _repair_detected_package_shims,
     )

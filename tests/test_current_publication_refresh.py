@@ -139,7 +139,7 @@ def test_periodic_publisher_advances_complete_readiness_and_enable_without_packa
     ) == before
     # Existing automatic enable preparation retries unavailable installed data
     # with the authenticated current publisher, then stages native policy IR.
-    from codex_plugin_scanner.guard.daemon import extension_control_prepared as candidates
+    from codex_plugin_scanner.guard.extension_controls import extension_control_prepared as candidates
     from codex_plugin_scanner.guard.runtime.extension_control_contract import (
         ControlLayerKind,
         ControlState,

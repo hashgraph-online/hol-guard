@@ -17,7 +17,7 @@ from codex_plugin_scanner.guard import native_daemon_manage as daemon_manager
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.cli import update_commands, update_desktop_core
 from codex_plugin_scanner.guard.cli.update_commands import build_guard_update_status_payload
-from codex_plugin_scanner.guard.daemon.dashboard_update import (
+from codex_plugin_scanner.guard.updates.dashboard_update import (
     build_dashboard_update_runner_command,
     build_dashboard_update_runner_popen_kwargs,
 )
@@ -732,7 +732,7 @@ def test_dashboard_runner_and_daemon_env_preserve_desktop_version(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from codex_plugin_scanner.guard.daemon import dashboard_update as dashboard_update_module
+    from codex_plugin_scanner.guard.updates import dashboard_update as dashboard_update_module
 
     monkeypatch.setenv("HOL_GUARD_DESKTOP", "1")
     monkeypatch.setenv("HOL_GUARD_DESKTOP_VERSION", "0.2.0")

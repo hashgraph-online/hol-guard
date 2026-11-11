@@ -30,7 +30,7 @@ ABSENT = object()
 
 
 def _oracle(cases: list[dict]) -> list[dict]:
-    from codex_plugin_scanner.guard.daemon import server as srv
+    from codex_plugin_scanner.guard.native_daemon_manage import server as srv
 
     calls: dict = {}
     srv.require_high_risk = lambda *_a, **_k: None

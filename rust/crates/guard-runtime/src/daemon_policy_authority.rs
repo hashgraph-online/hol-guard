@@ -1,7 +1,7 @@
 //! Resident daemon policy-authority client (RTM-030).
 //!
 //! Rust port of
-//! `src/codex_plugin_scanner/guard/daemon/policy_authority_client.py`
+//! `src/codex_plugin_scanner/guard/hook_review/policy_authority_client.py`
 //! (:17-:57), `src/codex_plugin_scanner/guard/native_daemon_client.py`
 //! (`GuardSurfaceDaemonClient` :184-:343, `_post` :434-:455,
 //! `resolve_policy_decision` :337, `claim_policy_decision` :340,

@@ -13,7 +13,7 @@ from codex_plugin_scanner.guard.catalog_delivery import cache_io
 
 def test_expired_previews_release_only_native_selected_leases(monkeypatch, tmp_path):
     from codex_plugin_scanner.guard.catalog_delivery import lifecycle
-    from codex_plugin_scanner.guard.daemon.extension_control_api import ExtensionControlApiService
+    from codex_plugin_scanner.guard.extension_controls.extension_control_api import ExtensionControlApiService
     from tests.native_activation_support import native
 
     monkeypatch.setattr(lifecycle, "invoke", native)
@@ -39,7 +39,7 @@ def test_expired_previews_release_only_native_selected_leases(monkeypatch, tmp_p
 
 
 def test_a_stopping_daemon_releases_every_prepared_lease(tmp_path):
-    from codex_plugin_scanner.guard.daemon.extension_control_api import ExtensionControlApiService
+    from codex_plugin_scanner.guard.extension_controls.extension_control_api import ExtensionControlApiService
 
     previewed = cache_io.Lease(tmp_path / "previewed")
     proved = cache_io.Lease(tmp_path / "proved")
@@ -68,7 +68,7 @@ def test_a_stopping_daemon_releases_every_prepared_lease(tmp_path):
 
 
 def test_a_daemon_stop_does_not_wait_forever_on_a_held_preview(tmp_path):
-    from codex_plugin_scanner.guard.daemon.extension_control_prepared import release_all_leases
+    from codex_plugin_scanner.guard.extension_controls.extension_control_prepared import release_all_leases
 
     lease = cache_io.Lease(tmp_path / "held")
     preview_lock = threading.Lock()
@@ -89,8 +89,8 @@ def test_a_daemon_stop_does_not_wait_forever_on_a_held_preview(tmp_path):
 
 
 def test_a_preview_that_arrives_after_the_final_release_prepares_nothing(tmp_path):
-    from codex_plugin_scanner.guard.daemon.extension_control_api import ExtensionControlApiError
-    from codex_plugin_scanner.guard.daemon.extension_control_prepared import (
+    from codex_plugin_scanner.guard.extension_controls.extension_control_api import ExtensionControlApiError
+    from codex_plugin_scanner.guard.extension_controls.extension_control_prepared import (
         PreparedControlCandidates,
         release_all_leases,
     )

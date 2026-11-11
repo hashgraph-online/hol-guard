@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.guard import approvals
-from codex_plugin_scanner.guard.daemon.hook_direct_evidence_drain import record_direct_hook_evidence
+from codex_plugin_scanner.guard.evidence_drains.hook_direct_evidence_drain import record_direct_hook_evidence
 from tests.test_hook_direct_evidence_drain import _Host, _record
 
 QUEUED = {

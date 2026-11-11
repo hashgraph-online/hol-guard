@@ -11,7 +11,7 @@ import pytest
 
 from codex_plugin_scanner.guard import native_guard_store, store_review_event_outbox
 from codex_plugin_scanner.guard.cli.connect_flow import build_connect_status_payload
-from codex_plugin_scanner.guard.daemon.cloud_review_settings import cloud_review_settings_status
+from codex_plugin_scanner.guard.cloud_control.cloud_review_settings import cloud_review_settings_status
 from codex_plugin_scanner.guard.native_guard_store import NativeGuardStoreUnavailable
 from codex_plugin_scanner.guard.store import GuardStore
 from tests.native_store_shims import refresh_review_event_outbox_binding

@@ -10,7 +10,7 @@ from unittest.mock import Mock
 import pytest
 
 from ci.guard_daemon_harness import GuardDaemonServer
-from codex_plugin_scanner.guard.daemon.extension_control_errors import ExtensionControlApiError
+from codex_plugin_scanner.guard.extension_controls.extension_control_errors import ExtensionControlApiError
 from codex_plugin_scanner.guard.native_daemon_client import GuardDaemonRequestError, GuardSurfaceDaemonClient
 from codex_plugin_scanner.guard.native_daemon_manage import load_guard_daemon_auth_token
 from codex_plugin_scanner.guard.runtime.command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY

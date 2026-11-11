@@ -72,7 +72,7 @@ def _record_path_rejection(server: Any, args: Mapping[str, Any]) -> None:
     rejection = args.get("rejection")
     if not isinstance(rejection, dict):
         return
-    from ..daemon.server_common import _now
+    from ..runtime_health.server_common import _now
 
     with server.denial_audit_lock:
         _ = server.audit_persistence.persist(
@@ -91,7 +91,7 @@ def hook_begin(store: GuardStore, args: Mapping[str, Any]) -> dict[str, object]:
     """Counts the hook the daemon received and names the harness its capacity counts under."""
 
     from ..adapters import get_adapter
-    from ..daemon.hook_direct_counters import note_hook_received
+    from ..hook_review.hook_direct_counters import note_hook_received
 
     server = _server(store, args)
     harness = _text(args.get("harness")) or ""
@@ -125,7 +125,7 @@ def hook_path_rejected(store: GuardStore, args: Mapping[str, Any]) -> dict[str, 
 def hook_prepare(store: GuardStore, args: Mapping[str, Any]) -> dict[str, object]:
     """Applies the native-policy barrier before the daemon admits the hook."""
 
-    from ..daemon.hook_policy_admission import _native_policy_not_ready_reason
+    from ..hook_review.hook_policy_admission import _native_policy_not_ready_reason
 
     server = _server(store, args)
     workspace = _text(args.get("workspace"))
@@ -145,7 +145,7 @@ def hook_prepare(store: GuardStore, args: Mapping[str, Any]) -> dict[str, object
 def hook_ready(store: GuardStore, args: Mapping[str, Any]) -> dict[str, object]:
     """Readiness: whether the workspace's policy is published within the readiness window."""
 
-    from ..daemon.hook_worker import WORKSPACE_POLICY_READINESS_TIMEOUT_SECONDS
+    from ..hook_review.hook_worker import WORKSPACE_POLICY_READINESS_TIMEOUT_SECONDS
 
     server = _server(store, args)
     workspace = _text(args.get("workspace"))

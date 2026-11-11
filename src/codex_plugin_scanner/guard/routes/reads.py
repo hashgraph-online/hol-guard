@@ -33,7 +33,7 @@ def harness_setup(store: GuardStore, args: Mapping[str, Any]) -> dict[str, objec
 def managed_policy_rows(store: GuardStore, args: Mapping[str, Any]) -> list[dict[str, object]]:
     """The policy rows ``GET /v1/policy`` lists, annotated from managed state."""
 
-    from ..daemon.managed_controls_api import managed_policy_rows as rows
+    from ..extension_controls.managed_controls_api import managed_policy_rows as rows
 
     harness = args.get("harness")
     return rows(store, harness if isinstance(harness, str) else None)
@@ -41,14 +41,14 @@ def managed_policy_rows(store: GuardStore, args: Mapping[str, Any]) -> list[dict
 
 def cloud_review_status(store: GuardStore, args: Mapping[str, Any]) -> dict[str, object]:
     del args
-    from ..daemon.cloud_review_settings import cloud_review_settings_status
+    from ..cloud_control.cloud_review_settings import cloud_review_settings_status
 
     return {"status": 200, "body": cloud_review_settings_status(store), "no_store": True}
 
 
 def cloud_actions_status(store: GuardStore, args: Mapping[str, Any]) -> dict[str, object]:
     del args
-    from ..daemon.cloud_actions_status import CloudActionsStatusUnavailableError, cloud_actions_local_status
+    from ..cloud_control.cloud_actions_status import CloudActionsStatusUnavailableError, cloud_actions_local_status
 
     try:
         status = cloud_actions_local_status(store)

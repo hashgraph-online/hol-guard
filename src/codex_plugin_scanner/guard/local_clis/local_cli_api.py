@@ -84,8 +84,8 @@ from ..runtime.package_json_script_memory import (
     refresh_package_script_catalogs,
 )
 from ..runtime.package_json_scripts import looks_like_package_script_paste
+from ..runtime_health.background_diagnostics import failure_detail, record_background_event
 from ..store_local_cli_capabilities import LocalCliCapabilityError
-from .background_diagnostics import failure_detail, record_background_event
 from .local_cli_api_contract import LOCAL_CLI_API_SCHEMA as _LOCAL_CLI_API_SCHEMA
 from .local_cli_api_contract import LocalCliApiError
 from .local_cli_capability_api import (

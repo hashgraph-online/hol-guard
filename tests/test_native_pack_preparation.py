@@ -436,8 +436,8 @@ def test_missing_corrupt_and_related_metadata_admission(delivery, monkeypatch, t
 
 def test_prepared_dataclass_through_real_daemon_control_commit(delivery, tmp_path, monkeypatch):
     from codex_plugin_scanner.guard.catalog_delivery import activation_store, preparation_authority, projection
-    from codex_plugin_scanner.guard.daemon import extension_control_prepared as candidates
-    from codex_plugin_scanner.guard.daemon.extension_control_api import ExtensionControlApiService
+    from codex_plugin_scanner.guard.extension_controls import extension_control_prepared as candidates
+    from codex_plugin_scanner.guard.extension_controls.extension_control_api import ExtensionControlApiService
     from codex_plugin_scanner.guard.runtime.command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
     from codex_plugin_scanner.guard.runtime.extension_control_runtime import ExtensionControlRuntime
     from tests.guard_extension_control_authority_fixtures import _PASSWORD

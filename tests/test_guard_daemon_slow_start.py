@@ -92,7 +92,7 @@ def test_the_update_refresh_outlasts_the_start_it_waits_on(native_hook_force: Pa
     """The subprocess that restarts the daemon after an update gets to finish."""
 
     from codex_plugin_scanner.guard.cli import update_commands
-    from codex_plugin_scanner.guard.daemon.update_refresh_program import DAEMON_REFRESH_SCRIPT
+    from codex_plugin_scanner.guard.updates.update_refresh_program import DAEMON_REFRESH_SCRIPT
 
     query = {"desktop": True, "worker_ready_floor": 14.0}
     windows = native_daemon_lifecycle("start_timeouts", query, platform="nt", guard_home=tmp_path)

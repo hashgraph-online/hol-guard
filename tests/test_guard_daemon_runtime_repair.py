@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.guard import native_daemon_manage as manager
-from codex_plugin_scanner.guard.daemon import runtime_repair
+from codex_plugin_scanner.guard.runtime_health import runtime_repair
 
 
 def test_repair_restarts_authenticated_older_runtime(

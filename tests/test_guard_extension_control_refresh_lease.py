@@ -12,11 +12,11 @@ from typing import cast
 
 import pytest
 
-from codex_plugin_scanner.guard.daemon.extension_control_api import (
+from codex_plugin_scanner.guard.extension_control_host import ExtensionControlHost
+from codex_plugin_scanner.guard.extension_controls.extension_control_api import (
     EFFECTIVE_LOCK_WAIT_SECONDS,
     ExtensionControlApiService,
 )
-from codex_plugin_scanner.guard.extension_control_host import ExtensionControlHost
 from codex_plugin_scanner.guard.native_command_control_authority_io import (
     hold_command_control_authority_lock,
     require_command_control_mutation_lease,

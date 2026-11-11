@@ -328,8 +328,8 @@ def _bridge_failures(root: Path) -> list[str]:
 
 def _worker_failures(root: Path) -> list[str]:
     failures: list[str] = []
-    hook_worker = root / "src/codex_plugin_scanner/guard/daemon/hook_worker.py"
-    native_hook = root / "src/codex_plugin_scanner/guard/daemon/hook_worker_native.py"
+    hook_worker = root / "src/codex_plugin_scanner/guard/hook_review/hook_worker.py"
+    native_hook = root / "src/codex_plugin_scanner/guard/hook_review/hook_worker_native.py"
     failures.extend(
         required_tokens(
             hook_worker,
@@ -337,7 +337,7 @@ def _worker_failures(root: Path) -> list[str]:
         )
     )
     failures.extend(required_tokens(native_hook, ("native_pre_tool_unavailable",)))
-    native_review = root / "src/codex_plugin_scanner/guard/daemon/hook_worker_native_review.py"
+    native_review = root / "src/codex_plugin_scanner/guard/hook_review/hook_worker_native_review.py"
     review_chain = (
         (native_hook, "_review_native_edge", "HookWorkerNativeMixin", "review_native_edge"),
         (native_review, "review_native_edge", None, "_review_native_edge_once"),

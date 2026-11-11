@@ -55,8 +55,30 @@ pub(in crate::daemon_edge) fn resident_route(
         return None;
     }
     let mut args = Map::new();
-    args.insert("path".to_owned(), Value::String(path.to_owned()));
+    args.insert(
+        "op".to_owned(),
+        Value::String(local_cli_op(path).to_owned()),
+    );
     Some(("route.local_cli_post", args))
+}
+
+/// The custom-extension service method that answers `POST
+/// /v1/local-clis/<action>`; `apply` answers any other local-CLI path.
+fn local_cli_op(path: &str) -> &'static str {
+    match path.rsplit('/').next().unwrap_or_default() {
+        "preview" => "preview",
+        "recognize" => "recognize",
+        "discover" => "discover_items",
+        "forget" => "forget",
+        "provider-actions" => "provider_actions",
+        "provider-workflows" => "provider_workflows",
+        "registry-search" => "registry_search",
+        "registry-setup" => "registry_setup",
+        "refresh-job" => "refresh_job",
+        "mcp-skills" => "mcp_skills",
+        "skills" => "skills",
+        _ => "apply",
+    }
 }
 
 /// Runs `name` with its arguments in the resident library process.

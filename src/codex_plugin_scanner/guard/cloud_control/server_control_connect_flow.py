@@ -41,10 +41,10 @@ from ..runtime.runner import (
     GuardSyncNotAvailableError,
     GuardSyncNotConfiguredError,
 )
-from ..store import GuardStore
-from .server_common import (
+from ..runtime_health.server_common import (
     _now,
 )
+from ..store import GuardStore
 from .server_control_cloud_sync import (
     _sync_local_guard_cloud_proof_with_optional_auth_context,
     _sync_supply_chain_cloud_state_with_optional_auth_context,

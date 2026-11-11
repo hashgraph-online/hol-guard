@@ -15,7 +15,7 @@ import pytest
 
 from codex_plugin_scanner.cli import _build_parser
 from codex_plugin_scanner.guard import codex_hook_runtime_trust, frozen_codex_runtime
-from codex_plugin_scanner.guard import daemon as daemon_api
+from codex_plugin_scanner.guard import native_daemon_manage as daemon_api
 from codex_plugin_scanner.guard.adapters import codex as codex_adapter
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.adapters.codex import CodexHarnessAdapter

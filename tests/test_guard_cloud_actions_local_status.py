@@ -24,8 +24,8 @@ from ci.guard_daemon_harness import GuardDaemonServer
 from codex_plugin_scanner.guard.cli import cloud_actions_access
 from codex_plugin_scanner.guard.cli.cloud_actions_access import CloudActionsAccessError, CloudActionsPairing
 from codex_plugin_scanner.guard.cli.connect_cloud_actions import record_cloud_actions_connect_report
-from codex_plugin_scanner.guard.daemon import cloud_actions_status as status_module
-from codex_plugin_scanner.guard.daemon.cloud_actions_status import (
+from codex_plugin_scanner.guard.cloud_control import cloud_actions_status as status_module
+from codex_plugin_scanner.guard.cloud_control.cloud_actions_status import (
     CheckResult,
     CloudActionsCheckedRecentlyError,
     CloudActionsNotPairedError,

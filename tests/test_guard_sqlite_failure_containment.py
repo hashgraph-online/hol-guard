@@ -12,7 +12,7 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.guard import store_connection_schema
-from codex_plugin_scanner.guard.daemon import server_control_cloud_sync as _ctl_cloud_sync
+from codex_plugin_scanner.guard.cloud_control import server_control_cloud_sync as _ctl_cloud_sync
 from codex_plugin_scanner.guard.local_cli_trust import utc_now
 from codex_plugin_scanner.guard.runtime.local_cli_identity import UnlistedCliIdentity
 from codex_plugin_scanner.guard.store import GuardStore

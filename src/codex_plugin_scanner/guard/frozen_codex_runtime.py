@@ -210,7 +210,7 @@ def _schedule_frozen_daemon_recovery(raw_payload: str) -> int:
         raise ValueError("Codex daemon recovery payload has unexpected fields")
     guard_home, home_dir = _frozen_recovery_paths(payload)
 
-    from .daemon import schedule_guard_daemon_recovery
+    from .native_daemon_manage import schedule_guard_daemon_recovery
 
     schedule_guard_daemon_recovery(
         guard_home,

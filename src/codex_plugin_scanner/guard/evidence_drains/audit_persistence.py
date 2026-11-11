@@ -30,8 +30,8 @@ from typing import TYPE_CHECKING, Final
 from ..sqlite_tuning import sqlite_connect_timeout_override
 
 if TYPE_CHECKING:
+    from ..runtime_health.diagnostics import DaemonDiagnostics
     from ..store import GuardStore
-    from .diagnostics import DaemonDiagnostics
 
 FAILED_EVENT: Final = "auth_audit_persistence_failed"
 DROPPED_EVENT: Final = "auth_audit_persistence_dropped"

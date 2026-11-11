@@ -234,7 +234,7 @@ def isolated_daemon_start_command(
         "import os,sys;"
         f"sys.path.insert(0, {str(package_root.resolve())!r});"
         "from pathlib import Path;"
-        "from codex_plugin_scanner.guard.daemon import schedule_guard_daemon_recovery;"
+        "from codex_plugin_scanner.guard.native_daemon_manage import schedule_guard_daemon_recovery;"
         "failure_kind=os.environ.get('HOL_GUARD_HOOK_FAILURE_KIND','transport-failure');"
         "failure_kind=failure_kind if failure_kind in"
         " {'overload','transport-failure','authenticated-control-plane-failure'}"

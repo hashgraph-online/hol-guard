@@ -256,10 +256,10 @@ def _load_lazy_export(module_name: str, attribute_name: str):
     return getattr(importlib.import_module(module_name, __package__), attribute_name)
 
 
-ensure_guard_daemon = _load_lazy_export("..daemon", "ensure_guard_daemon")
-load_guard_surface_daemon_client = _load_lazy_export("..daemon", "load_guard_surface_daemon_client")
-repair_approval_center_locator = _load_lazy_export("..daemon", "repair_approval_center_locator")
-repair_guard_daemon_runtime = _load_lazy_export("..daemon", "repair_guard_daemon_runtime")
+ensure_guard_daemon = _load_lazy_export("..native_daemon_manage", "ensure_guard_daemon")
+load_guard_surface_daemon_client = _load_lazy_export("..native_daemon_client", "load_guard_surface_daemon_client")
+repair_approval_center_locator = _load_lazy_export("..native_daemon_manage", "repair_approval_center_locator")
+repair_guard_daemon_runtime = _load_lazy_export("..runtime_health.runtime_repair", "repair_guard_daemon_runtime")
 CodexMcpGuardProxy = _load_lazy_export("..proxy", "CodexMcpGuardProxy")
 CopilotMcpGuardProxy = _load_lazy_export("..proxy", "CopilotMcpGuardProxy")
 CursorMcpGuardProxy = _load_lazy_export("..proxy", "CursorMcpGuardProxy")

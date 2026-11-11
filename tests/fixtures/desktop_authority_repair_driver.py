@@ -16,7 +16,7 @@ from contextlib import redirect_stdout
 from pathlib import Path
 
 from ci.guard_daemon_harness import GuardDaemonServer
-from codex_plugin_scanner.guard.daemon import server_control_cloud_sync as _ctl_cloud_sync
+from codex_plugin_scanner.guard.cloud_control import server_control_cloud_sync as _ctl_cloud_sync
 
 
 def fixture_home() -> Path:

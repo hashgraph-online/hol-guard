@@ -22,7 +22,7 @@ import ssl
 import urllib.error
 from collections.abc import Iterator
 
-from .background_diagnostics import failure_detail, record_background_event
+from ..runtime_health.background_diagnostics import failure_detail, record_background_event
 from .extension_control_errors import ExtensionControlApiError
 
 _LOGGER = logging.getLogger(__name__)

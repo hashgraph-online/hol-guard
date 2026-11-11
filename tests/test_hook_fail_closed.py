@@ -4,8 +4,8 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.daemon import hook_fail_closed
-from codex_plugin_scanner.guard.daemon.hook_fail_closed import (
+from codex_plugin_scanner.guard.hook_review import hook_fail_closed
+from codex_plugin_scanner.guard.hook_review.hook_fail_closed import (
     fail_closed_pre_tool,
     render_accepted_allow,
     render_pre_tool,
