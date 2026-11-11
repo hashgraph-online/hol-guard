@@ -56,7 +56,7 @@
     },
     {
       "name": "get_invitations",
-      "state": "allow"
+      "state": "review"
     },
     {
       "name": "get_jobs",
@@ -64,7 +64,7 @@
     },
     {
       "name": "get_analytics",
-      "state": "allow"
+      "state": "review"
     },
     {
       "name": "get_voice_profile",
@@ -88,11 +88,11 @@
     },
     {
       "name": "get_conversations",
-      "state": "inherit"
+      "state": "review"
     },
     {
       "name": "get_conversation_history",
-      "state": "inherit"
+      "state": "review"
     },
     {
       "name": "show_artifact",
