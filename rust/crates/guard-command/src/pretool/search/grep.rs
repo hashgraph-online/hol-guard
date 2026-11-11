@@ -136,6 +136,7 @@ fn safe_arguments(
 }
 
 mod includes;
+mod late_exclusion;
 mod reach;
 pub(in crate::pretool) use reach::sensitive_reach_reason;
 
@@ -225,6 +226,7 @@ fn scan_into(
     let mut includes_present = false;
     let mut includes = includes::Includes::default();
     let mut positional_started = false;
+    let mut late_file_exclusion = false;
     for argument in arguments {
         if let Some(directory) = pending_exclusion.take() {
             if argument.is_empty() {
@@ -272,7 +274,11 @@ fn scan_into(
             let (name, attached) = argument.split_once('=').unwrap_or((argument.as_str(), ""));
             if matches!(name, "--exclude" | "--exclude-dir") {
                 if positional_started {
-                    return false;
+                    if !late_exclusion::inert(argument, context, absent.plain) {
+                        return false;
+                    }
+                    late_file_exclusion |= name == "--exclude";
+                    continue;
                 }
                 let directory = name == "--exclude-dir";
                 if attached.is_empty() {
@@ -426,7 +432,12 @@ fn scan_into(
         && pending_exclusion.is_none()
         // Include/exclude precedence differs across grep implementations. Do not
         // use exclusions as proof when an include could re-enable a file.
-        && (!includes_present || (excluded_files.is_empty() && excluded_directories.is_empty()))
+        // GNU grep also widens an include list whose first entry is an
+        // exclude, so a late `--exclude` beside an include keeps review too.
+        && (!includes_present
+            || (excluded_files.is_empty()
+                && excluded_directories.is_empty()
+                && !late_file_exclusion))
         && includes.scope_proven(&targets, context)
         && (!stdin_only || (pattern_supplied && !recursive))
         && (!recursive || {
