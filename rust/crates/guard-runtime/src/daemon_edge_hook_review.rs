@@ -28,6 +28,8 @@ use admission::{
 mod admission;
 #[path = "daemon_edge_hook_counters.rs"]
 mod counters;
+#[path = "daemon_edge_hook_lifecycle.rs"]
+mod lifecycle;
 
 /// The daemon's fixed hook replies, declared once for every harness.
 const ENVELOPES: &str = include_str!(
@@ -506,6 +508,10 @@ impl Hook<'_> {
                 return fail(capacity_reason(code), code);
             }
         };
+        if let Some(answer) = self.lifecycle(&reply_harness, &event, &payload, expires) {
+            permit.release();
+            return answer;
+        }
         let review = self.call_by(
             "hook.review",
             json!({

@@ -150,7 +150,20 @@ def hook_review(store: GuardStore, args: Mapping[str, Any]) -> dict[str, object]
     return {"answer": answer if isinstance(answer, dict) else None}
 
 
+def hook_integrity_key(store: GuardStore, args: Mapping[str, Any]) -> dict[str, object]:
+    """The policy-integrity key the daemon signs Claude lifecycle state with.
+
+    The secret store stays in Python; the daemon runs the lifecycle ops
+    itself and only reads the existing key here. ``{}`` when there is none.
+    """
+
+    from ..native_hook_authority_state import hook_authority_integrity_key
+
+    return hook_authority_integrity_key(store) or {}
+
+
 HOOK_CALLS = {
+    "hook.integrity_key": hook_integrity_key,
     "hook.prepare": hook_prepare,
     "hook.ready": hook_ready,
     "hook.warm": hook_warm,
