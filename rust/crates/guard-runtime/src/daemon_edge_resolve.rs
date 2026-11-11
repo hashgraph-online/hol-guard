@@ -239,7 +239,8 @@ fn extend(body: &mut Map<String, Value>, extra: Option<Value>) {
     }
 }
 
-/// Answers a decision on a request that is no longer pending from the store.
+/// Answers a decision on an unknown request, or on one that is no longer
+/// pending, from the store.
 pub(in crate::daemon_edge) fn replay_stored<'a>(
     config: &'a super::super::ReadConfig,
     reads: &'a super::super::NativeReads,
@@ -251,6 +252,9 @@ pub(in crate::daemon_edge) fn replay_stored<'a>(
             "get_approval_request",
             json!({"request_id": request_id, "derive_scope": true, "cwd": cwd}),
         )?;
+        if stored.is_null() {
+            return Some(Err(replay::not_found(request_id)));
+        }
         replay::replay(stored.as_object()?, decision, Some(cwd))
     }
 }

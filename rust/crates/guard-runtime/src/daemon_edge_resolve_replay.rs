@@ -185,6 +185,17 @@ fn error<const N: usize>(
     error
 }
 
+/// `ApprovalRequestNotFoundError`, which resolving an unknown request raised
+/// before anything else.
+pub(super) fn not_found(request_id: &str) -> Map<String, Value> {
+    error(
+        "ApprovalRequestNotFoundError",
+        "not_found",
+        &format!("Unknown approval request: {request_id}"),
+        [],
+    )
+}
+
 fn value_error(message: String) -> Map<String, Value> {
     error("ValueError", "value", &message, [])
 }

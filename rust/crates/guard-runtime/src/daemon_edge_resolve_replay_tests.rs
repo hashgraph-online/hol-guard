@@ -1,6 +1,6 @@
 use serde_json::{json, Map, Value};
 
-use super::{replay, Decision};
+use super::{not_found, replay, Decision};
 
 /// A native review with a retry binding, already allowed at the artifact.
 fn resolved(action: &str, scope: &str) -> Map<String, Value> {
@@ -117,4 +117,11 @@ fn a_block_at_a_scope_not_offered_is_ineligible() {
     assert_eq!(error["message"], json!("ineligible_request_scope"));
     assert_eq!(error["action"], json!("block"));
     assert_eq!(error["requested_scope"], json!("global"));
+}
+
+#[test]
+fn an_unknown_request_is_not_found() {
+    let error = not_found("r9");
+    assert_eq!(error["kind"], json!("not_found"));
+    assert_eq!(error["message"], json!("Unknown approval request: r9"));
 }
