@@ -42,11 +42,12 @@ impl Process {
             use std::os::windows::process::CommandExt;
             command.creation_flags(guard_runtime_windows_process::CHILD_TREE_CREATION_FLAGS);
         }
-        let mut child = command.spawn()?;
+        let child = command.spawn()?;
         #[cfg(target_os = "macos")]
         let exit = match MacExit::new(child.id()) {
             Ok(exit) => exit,
             Err(error) => {
+                let mut child = child;
                 let _ = nix::sys::signal::killpg(
                     nix::unistd::Pid::from_raw(child.id() as i32),
                     nix::sys::signal::Signal::SIGKILL,
@@ -60,6 +61,7 @@ impl Process {
         let tree = match guard_runtime_windows_process::ChildTree::adopt_suspended(&child) {
             Ok(tree) => tree,
             Err(error) => {
+                let mut child = child;
                 let _ = child.kill();
                 let _ = child.wait();
                 return Err(error);
