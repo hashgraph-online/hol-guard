@@ -411,11 +411,12 @@ impl NativeReads {
         let _gate =
             crate::hook_evidence_store_gate::hold_storage_gate(Path::new(&config.guard_home), wait)
                 .map_err(|_| false)?;
-        let busy_timeout_ms =
-            u64::try_from(wait.saturating_sub(started.elapsed()).as_millis()).unwrap_or(u64::MAX);
-        if busy_timeout_ms == 0 {
+        let left = wait.saturating_sub(started.elapsed());
+        if left.is_zero() {
             return Err(false);
         }
+        // A positive remainder under a millisecond still reaches SQLite.
+        let busy_timeout_ms = u64::try_from(left.as_micros().div_ceil(1_000)).unwrap_or(u64::MAX);
         let request = GuardStoreRequestV1 {
             schema: GUARD_STORE_REQUEST_SCHEMA.to_owned(),
             request_id: format!(

@@ -123,10 +123,15 @@ pub(super) fn maintain(reads: &NativeReads, config: &ReadConfig) -> bool {
     let Some(args) = activity_args(now, retain_days) else {
         return false;
     };
-    if reads
-        .store_write(config, "maintain_command_activity", args)
-        .is_err()
-    {
+    // A command-activity backlog keeps the pass on its short retry, as an
+    // unfinished storage batch does.
+    let activity = reads.store_write(config, "maintain_command_activity", args);
+    let activity_done = activity
+        .as_ref()
+        .ok()
+        .and_then(|result| result.get(1).and_then(Value::as_bool))
+        .unwrap_or(false);
+    if activity.is_err() {
         if let Some(occurred_at) = isoformat(now) {
             let _ = reads.store_write(
                 config,
@@ -153,7 +158,7 @@ pub(super) fn maintain(reads: &NativeReads, config: &ReadConfig) -> bool {
         );
         crate::storage_retention::sweep_after_maintenance(config.guard_home());
     }
-    completed
+    completed && activity_done
 }
 
 /// `maintain_command_activity`'s instants and calendar boundaries for `now`.

@@ -256,7 +256,9 @@ impl Hook<'_> {
                 save.insert("session_id".to_owned(), session_id.into());
                 // A plan the library refuses leaves the hook to the review,
                 // as the refused plan did in Python.
-                self.call_by("hook.claude_question_save", Value::Object(save), expires)?
+                // The save shares the grace the op above may have used.
+                let wait = super::budget_left(expires);
+                self.call_within("hook.claude_question_save", Value::Object(save), wait)?
                     .get("valid")
                     .and_then(Value::as_bool)
                     .filter(|valid| *valid)
