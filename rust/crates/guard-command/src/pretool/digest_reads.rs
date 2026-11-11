@@ -65,6 +65,11 @@ pub(in crate::pretool) fn safe_openssl_digest_arguments(
     piped_input: bool,
     context: super::PathContext<'_>,
 ) -> bool {
+    // An inherited OpenSSL configuration can load a provider or engine
+    // library before the digest runs, whatever the arguments say.
+    if !context.openssl_config_absent {
+        return false;
+    }
     let Some((command, rest)) = arguments.split_first() else {
         return false;
     };

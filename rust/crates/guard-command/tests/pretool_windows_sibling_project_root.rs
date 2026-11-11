@@ -127,6 +127,7 @@ fn tests_in_a_sibling_checkout_under_the_profile_are_contained_on_windows() {
                 ripgrep_config_absent: false,
                 gem_config_absent: false,
                 http_config_absent: false,
+                openssl_config_absent: false,
                 psql_environment: Default::default(),
                 creates_nothing: false,
             },

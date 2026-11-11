@@ -33,6 +33,26 @@ fn home() -> PathBuf {
 
 /// The decision both shell harnesses reach, or "mixed" when they differ.
 fn shell(home: &Path, command: &str) -> String {
+    shell_in_environment(home, command, None)
+}
+
+/// The same decision under a stamped environment that carries `names`.
+fn shell_with_names(home: &Path, command: &str, names: &[&str]) -> String {
+    let environment = guard_contracts::GuardExecutionEnvironmentV1 {
+        path: std::env::var("PATH").unwrap_or_default(),
+        environment_names: names.iter().map(|name| (*name).to_owned()).collect(),
+        environment_digest: "0".repeat(64),
+        home: Some(home.to_str().unwrap().to_owned()),
+        ..Default::default()
+    };
+    shell_in_environment(home, command, Some(&environment))
+}
+
+fn shell_in_environment(
+    home: &Path,
+    command: &str,
+    environment: Option<&guard_contracts::GuardExecutionEnvironmentV1>,
+) -> String {
     let project = home.join("project");
     let [omp, zcode] = ["omp", "zcode"].map(|harness| {
         evaluate_pre_tool_envelope_with_execution_context(
@@ -53,10 +73,11 @@ fn shell(home: &Path, command: &str) -> String {
                 ripgrep_config_absent: false,
                 gem_config_absent: false,
                 http_config_absent: false,
+                openssl_config_absent: false,
                 psql_environment: Default::default(),
                 creates_nothing: false,
             },
-            None,
+            environment,
         )
         .minimum_action
     });
@@ -137,5 +158,43 @@ fn digests_of_a_private_key_do_not_proceed() {
         "openssl dgst -sha256 ~/.ssh/id_ed25519",
     ] {
         assert_ne!(shell(&home, command), "allow", "{command}");
+    }
+}
+
+#[test]
+fn an_inherited_openssl_configuration_keeps_the_digest_reviewed() {
+    let home = home();
+    let commands = [
+        "openssl dgst -sha256 dist/app.whl",
+        "openssl sha256 dist/app.whl",
+        "cat dist/app.whl | openssl dgst -sha256",
+    ];
+    for command in commands {
+        assert_eq!(
+            shell_with_names(&home, command, &["PATH"]),
+            "allow",
+            "{command}"
+        );
+    }
+    for name in [
+        "OPENSSL_CONF",
+        "OPENSSL_CONF_INCLUDE",
+        "OPENSSL_MODULES",
+        "OPENSSL_ENGINES",
+    ] {
+        for command in commands {
+            assert_ne!(
+                shell_with_names(&home, command, &["PATH", name]),
+                "allow",
+                "{name}: {command}"
+            );
+        }
+        // The configuration only reaches `openssl`; other digest programs
+        // keep their verdict.
+        assert_eq!(
+            shell_with_names(&home, "sha256sum dist/app.whl", &["PATH", name]),
+            "allow",
+            "{name}"
+        );
     }
 }
