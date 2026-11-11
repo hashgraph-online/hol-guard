@@ -66,7 +66,10 @@ fn serves_the_stamped_shell_with_its_policy() {
 fn without_desktop_the_shell_carries_no_desktop_marker() {
     let dir = tempfile::tempdir().unwrap();
     bundle(dir.path());
-    let answer = get(Some(dir.path()), "/requests/0123456789abcdef0123456789abcdef");
+    let answer = get(
+        Some(dir.path()),
+        "/requests/0123456789abcdef0123456789abcdef",
+    );
     assert!(!answer.contains("guard-desktop-requests"), "{answer}");
 }
 
