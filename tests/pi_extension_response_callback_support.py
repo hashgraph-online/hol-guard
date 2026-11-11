@@ -138,6 +138,9 @@ function cleanupContainedTestRequest() {{}}
 function boundBashPostObservation() {{ return undefined; }}
 function markBoundBashResultDelivery() {{ return undefined; }}
 function toolCallIdKey(value) {{ return typeof value === "string" && value.trim() ? value.trim() : null; }}
+// The extracted handler reads the local posture itself; the fixture has no
+// config, so it defaults to enforcement (fail closed), matching Protected.
+function guardWatchPostureActive() {{ return false; }}
 {blocked_reason}
 function blockedToolResult(reason, details) {{
   return {{ content: [{{ type: "text", text: reason }}], details, isError: true }};
