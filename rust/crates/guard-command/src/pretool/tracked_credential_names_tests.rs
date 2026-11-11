@@ -210,6 +210,30 @@ fn a_tracked_document_under_a_feature_directory_is_proven() {
     }
 }
 
+/// A recursive search reaches tracked files through the walk's own proof,
+/// not through [`committed_document`], so that proof refuses a `Secret`
+/// manifest and a repository kept inside a store directory on its own.
+#[test]
+fn the_walk_proof_refuses_secret_manifests_and_store_repositories() {
+    let (home, project) = fixture();
+    let feature = "docs/auth-evidence/phase-e-auth-schema.md";
+    let manifest = "docs/auth-evidence/app-secrets.yaml";
+    write(&project.join(feature), "# Phase E schema\n");
+    write(
+        &project.join(manifest),
+        "apiVersion: v1\nkind: Secret\nmetadata:\n  name: app\n",
+    );
+    write_index(&project.join(".git"), &[feature, manifest]);
+    assert!(TrackedFiles::default().non_secret(&project.join(feature)));
+    assert!(!TrackedFiles::default().non_secret(&project.join(manifest)));
+    // The same tracked document in a checkout below `.config`.
+    let dotfiles = home.join(".config/tools");
+    std::fs::create_dir_all(dotfiles.join(".git")).unwrap();
+    write(&dotfiles.join(feature), "# Phase E schema\n");
+    write_index(&dotfiles.join(".git"), &[feature]);
+    assert!(!TrackedFiles::default().non_secret(&dotfiles.join(feature)));
+}
+
 #[test]
 fn another_repository_beside_the_workspace_is_not_proven() {
     let (home, project) = fixture();

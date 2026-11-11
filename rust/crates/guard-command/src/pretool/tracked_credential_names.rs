@@ -98,7 +98,6 @@ pub(in crate::pretool) fn committed_document(path: &Path) -> bool {
             Some(tracked) => tracked.non_secret(path),
             None => TrackedFiles::default().non_secret(path),
         })
-        && std::fs::read(path).is_ok_and(|bytes| !secret_object(&String::from_utf8_lossy(&bytes)))
 }
 
 /// Whether `value`, a path as a command or tool spelled it, resolves to a

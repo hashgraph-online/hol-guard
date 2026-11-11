@@ -69,14 +69,22 @@ impl TrackedFiles {
         // The directories are judged by the directory rule, not the file-name
         // rule: `auth-evidence/` names a feature, while `secrets/` and
         // `api-tokens/` name a store and keep the review.
-        let in_store = relative.parent().is_some_and(|parent| {
-            parent.components().any(|part| {
+        // A repository kept inside a store, such as a dotfiles checkout under
+        // `.config`, is a store too.
+        let store_part = |directory: &Path| {
+            directory.components().any(|part| {
                 part.as_os_str().to_str().is_none_or(|part| {
                     STORE_DIRECTORIES.contains(&part.to_ascii_lowercase().as_str())
                 })
-            }) || guard_secure_fs::credential_directory_path(parent)
+            })
+        };
+        let in_store = relative.parent().is_some_and(|parent| {
+            store_part(parent) || guard_secure_fs::credential_directory_path(parent)
         });
-        if in_store || guard_secure_fs::credential_directory_path(repository) {
+        if in_store
+            || store_part(repository)
+            || guard_secure_fs::credential_directory_path(repository)
+        {
             return false;
         }
         let Some(rendered) = relative
@@ -105,6 +113,12 @@ impl TrackedFiles {
             return false;
         };
         let text = String::from_utf8_lossy(&bytes);
+        // A Kubernetes `Secret` holds base64 values the detector does not
+        // flag, so a manifest that declares one is never a fixture, whether
+        // a tool names it or a recursive search walks into it.
+        if names::secret_object(&text) {
+            return false;
+        }
         // The real name can make the detector stricter (`.env`) but also more
         // lenient (tests/, docs/); both readings must be clean.
         let name = String::from_utf8_lossy(&rendered);
