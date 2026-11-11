@@ -132,6 +132,17 @@ fn wildcard_directories_keep_review_when_a_match_is_not_a_plain_read() {
         vec![false; 3]
     );
 
+    // A bare word that starts with a directory named `~` is opened in the
+    // working directory, since the shell never tilde-expands a glob match,
+    // while a tilde proof would read the same name under the home directory.
+    let (_guard, home, project) = fixture("tilde");
+    write(&home, "guard-core/Cargo.toml", "ordinary\n");
+    write(&project, "~/guard-core/Cargo.toml", "ordinary\n");
+    assert_eq!(
+        allowed("cat */guard-core/Cargo.toml", &home, &project),
+        vec![false; 3]
+    );
+
     // A matched directory that links into a directory the literal read
     // proof refuses.
     let (_guard, home, project) = fixture("linked");

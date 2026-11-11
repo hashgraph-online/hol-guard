@@ -119,8 +119,10 @@ pub(super) fn directory_glob_matches(
             };
             // A bare word starts with the first matched directory, so a
             // directory named `-n` or `FS=x` would reach the reader as an
-            // option or an `awk` assignment.
-            (!(bare && (word.starts_with('-') || word.contains('=')))
+            // option or an `awk` assignment. One named `~` is opened in the
+            // working directory, since the shell never tilde-expands a match,
+            // but the read proof would resolve it under the home directory.
+            (!(bare && (word.starts_with(['-', '~']) || word.contains('=')))
                 && super::readable_name(name, base)
                 && literal_read(&word, context))
             .then_some(word)
