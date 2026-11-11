@@ -996,6 +996,9 @@ def _render_doctor(console: Console, payload: dict[str, object]) -> None:
                 border_style="red" if protection_off else "cyan",
             )
         )
+        health_note = payload.get("protection_health_note")
+        if isinstance(health_note, str) and health_note.strip():
+            console.print(f"Live health: {health_note}")
         console.print(build_doctor_harness_table(adapters))
         print_approval_gate_nudge(console, payload)
         print_connector_setup_line(console, payload)
@@ -1062,6 +1065,9 @@ def _render_doctor(console: Console, payload: dict[str, object]) -> None:
             else:
                 value = name
             summary.add_row("Protection", value)
+            health_note = payload.get("protection_health_note")
+            if isinstance(health_note, str) and health_note.strip():
+                summary.add_row("Live health", health_note)
             per_app = harness_posture_line(payload).strip()
             if per_app:
                 summary.add_row("Per app", per_app.removeprefix("per app: "))

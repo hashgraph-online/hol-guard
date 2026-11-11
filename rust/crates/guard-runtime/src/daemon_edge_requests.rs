@@ -252,7 +252,7 @@ pub(super) fn detail(
 
 /// `_with_approval_hints` asks the resident about a filed browser intent, or
 /// about scanner evidence that names the local-tool scanner.
-fn may_carry_grant_offer(approval: &Map<String, Value>) -> bool {
+pub(in crate::daemon_edge) fn may_carry_grant_offer(approval: &Map<String, Value>) -> bool {
     approval.get("browser_intent").is_some_and(Value::is_object)
         || approval
             .get("scanner_evidence")

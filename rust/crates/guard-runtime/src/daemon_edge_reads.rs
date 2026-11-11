@@ -79,6 +79,11 @@ struct Handshake {
 }
 
 impl ReadConfig {
+    /// The Guard home the daemon serves.
+    pub(super) fn guard_home(&self) -> &Path {
+        Path::new(&self.guard_home)
+    }
+
     /// What the edge needs to run the daemon's Guard CLI: its argv prefix,
     /// the Guard home and the daemon's working directory.
     /// The dashboard bundle every response names.
@@ -363,7 +368,12 @@ impl NativeReads {
 
     /// `store_call` for a write: `Err(true)` when the call failed after its
     /// write committed, which the daemon must not repeat.
-    fn store_write(&self, config: &ReadConfig, method: &str, args: Value) -> Result<Value, bool> {
+    pub(in crate::daemon_edge) fn store_write(
+        &self,
+        config: &ReadConfig,
+        method: &str,
+        args: Value,
+    ) -> Result<Value, bool> {
         self.store_within(config, method, args, config.busy_timeout_ms)
     }
 
@@ -385,7 +395,7 @@ impl NativeReads {
         .ok()
     }
 
-    fn store_within(
+    pub(in crate::daemon_edge) fn store_within(
         &self,
         config: &ReadConfig,
         method: &str,
@@ -395,10 +405,18 @@ impl NativeReads {
         let Value::Object(args) = args else {
             return Err(false);
         };
+        // One budget covers the storage gate and SQLite's busy wait together.
+        let started = Instant::now();
         let wait = Duration::from_millis(busy_timeout_ms);
         let _gate =
             crate::hook_evidence_store_gate::hold_storage_gate(Path::new(&config.guard_home), wait)
                 .map_err(|_| false)?;
+        let left = wait.saturating_sub(started.elapsed());
+        if left.is_zero() {
+            return Err(false);
+        }
+        // A positive remainder under a millisecond still reaches SQLite.
+        let busy_timeout_ms = u64::try_from(left.as_micros().div_ceil(1_000)).unwrap_or(u64::MAX);
         let request = GuardStoreRequestV1 {
             schema: GUARD_STORE_REQUEST_SCHEMA.to_owned(),
             request_id: format!(
