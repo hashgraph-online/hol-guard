@@ -51,7 +51,7 @@ def add_approval_parser(
         decision_parser.add_argument(
             "--remember",
             action="store_true",
-            help="Save an exact-action remembered rule for artifact scope instead of resolving only this request.",
+            help="Save a remembered rule at the selected scope instead of resolving only this request.",
         )
         if action == "allow":
             decision_parser.add_argument(
