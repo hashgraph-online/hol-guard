@@ -12,7 +12,7 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.daemon import GuardDaemonServer
+from ci.guard_daemon_harness import GuardDaemonServer
 from codex_plugin_scanner.guard.harness_versions import service
 from codex_plugin_scanner.guard.harness_versions.discovery import current_platform
 from codex_plugin_scanner.guard.local_dashboard_session import build_local_dashboard_session_token

@@ -4,8 +4,8 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.daemon.local_cli_api import LocalCliApiService
 from codex_plugin_scanner.guard.local_cli_trust import utc_now
+from codex_plugin_scanner.guard.local_clis.local_cli_api import LocalCliApiService
 from codex_plugin_scanner.guard.runtime.package_json_script_memory import (
     refresh_package_script_catalogs,
 )
@@ -135,7 +135,7 @@ def test_dotted_script_live_tokens_match_catalog(tmp_path: Path) -> None:
 
 
 def test_recognize_explains_missing_package_json(tmp_path: Path) -> None:
-    from codex_plugin_scanner.guard.daemon.local_cli_api import LocalCliApiError
+    from codex_plugin_scanner.guard.local_clis.local_cli_api import LocalCliApiError
 
     empty = tmp_path / "empty"
     empty.mkdir()
@@ -276,7 +276,7 @@ def test_list_items_does_not_scan_cwd_as_a_package_project(
     home.mkdir()
     monkeypatch.chdir(project)
     monkeypatch.setattr(
-        "codex_plugin_scanner.guard.daemon.local_cli_api.Path.home",
+        "codex_plugin_scanner.guard.local_clis.local_cli_api.Path.home",
         staticmethod(lambda: home),
     )
     payload = LocalCliApiService(store=GuardStore(home)).list_items()
@@ -355,7 +355,7 @@ def test_refresh_includes_workspace_packages(tmp_path: Path) -> None:
 
 
 def test_remembered_script_requires_a_unique_project(tmp_path: Path) -> None:
-    from codex_plugin_scanner.guard.daemon.local_cli_api import LocalCliApiError
+    from codex_plugin_scanner.guard.local_clis.local_cli_api import LocalCliApiError
 
     first = _write_package(tmp_path / "one", scripts={"build": "echo one"}, name="one")
     second = _write_package(tmp_path / "two", scripts={"build": "echo two"}, name="two")

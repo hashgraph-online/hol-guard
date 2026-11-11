@@ -14,19 +14,19 @@ from typing import Any, TextIO
 from ..adapters.base import HarnessContext
 from ..adapters.bounded_cli_hook_failure import failure_payload
 from ..adapters.hermes_runtime_hooks import hermes_bridge_response
-from ..daemon.diagnostics import DaemonDiagnostics
-from ..daemon.hook_availability_policy import (
+from ..hook_deadline import RuntimeHookDeadline
+from ..hook_execution_environment import HOOK_EXECUTION_ENVIRONMENT_KEY, collect_hook_execution_environment
+from ..hook_review.hook_availability_policy import (
     availability_harness_response,
     hook_event_pauses_when_unavailable,
 )
-from ..daemon.hook_fail_closed import fail_closed_response
-from ..daemon.hook_request_parsing import runtime_hook_event_name
-from ..daemon.hook_worker import HookWorker
-from ..daemon.hook_worker_structured import withhold_structured_destination, withholds_structured_destination
-from ..daemon.runtime_hook_deadline import RuntimeHookDeadline
-from ..hook_execution_environment import HOOK_EXECUTION_ENVIRONMENT_KEY, collect_hook_execution_environment
+from ..hook_review.hook_fail_closed import fail_closed_response
+from ..hook_review.hook_request_parsing import runtime_hook_event_name
+from ..hook_review.hook_worker import HookWorker
+from ..hook_review.hook_worker_structured import withhold_structured_destination, withholds_structured_destination
 from ..native_hook_evidence_writer import NativeHookEvidenceWriter
 from ..native_hook_render import native_cli_hook_emit
+from ..runtime_health.diagnostics import DaemonDiagnostics
 from ..store import GuardStore
 from .commands_support_runtime_resolution import _canonical_harness_name
 from .native_hook_exit_code import native_hook_verdict_exit_code

@@ -14,7 +14,7 @@ from collections.abc import Sequence
 from pathlib import Path
 
 from ..codex_hook_launch_runtime import isolated_hook_environment, run_isolated_hook_process
-from ..daemon.auth_token import load_guard_daemon_auth_token
+from ..native_daemon_manage import load_guard_daemon_auth_token
 from ..private_file_io import read_private_regular_text
 
 # The native bridge's START_TIMEOUT, MINIMUM_START, RETRY_RESERVE,

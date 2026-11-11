@@ -256,9 +256,9 @@ def test_original_deadlines_are_unchanged_and_a_slow_child_still_times_out(tmp_p
         for kw in n.keywords
         if kw.arg == "timeout" and isinstance(kw.value, ast.Constant)
     ]
-    assert timeouts == [5]
+    assert timeouts == [30]
     # Exercise the same real containment primitive with a short injected
-    # deadline; the source contracts above retain the actual 30s/5s budgets.
+    # deadline; the source contracts above retain the actual 30s budgets.
     result = run_isolated_hook_process(
         [sys.executable, "-c", "import time; time.sleep(2)"],
         input_text="",

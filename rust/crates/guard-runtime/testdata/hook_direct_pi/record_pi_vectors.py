@@ -31,9 +31,9 @@ from contextlib import suppress
 from pathlib import Path
 from types import SimpleNamespace
 
-from codex_plugin_scanner.guard.daemon.hook_availability_policy import availability_harness_response
-from codex_plugin_scanner.guard.daemon.hook_worker_native import HookWorkerNativeMixin
-from codex_plugin_scanner.guard.daemon.hook_worker_structured import (
+from codex_plugin_scanner.guard.hook_review.hook_availability_policy import availability_harness_response
+from codex_plugin_scanner.guard.hook_review.hook_worker_native import HookWorkerNativeMixin
+from codex_plugin_scanner.guard.hook_review.hook_worker_structured import (
     read_structured_view,
     structured_destination_required,
     withholds_structured_destination,

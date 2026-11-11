@@ -14,8 +14,8 @@ from typing import Any
 
 import pytest
 
-from codex_plugin_scanner.guard.daemon import hook_native_saved_approval
-from codex_plugin_scanner.guard.daemon.hook_native_saved_approval import native_exact_command_block_response
+from codex_plugin_scanner.guard.hook_review import hook_native_saved_approval
+from codex_plugin_scanner.guard.hook_review.hook_native_saved_approval import native_exact_command_block_response
 
 _COMMAND = "npm publish"
 _EXACT_ID = "memory:exact-shell-command:" + hashlib.sha256(_COMMAND.encode()).hexdigest()

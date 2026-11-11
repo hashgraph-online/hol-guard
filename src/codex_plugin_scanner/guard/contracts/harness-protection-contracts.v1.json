@@ -907,7 +907,7 @@
           "known_blind_spots": [
             "Auto-wake and subagent prompts are passive; Grok fails open if the hook process crashes or times out."
           ],
-          "source_reference": "src/codex_plugin_scanner/guard/daemon/hook_fail_closed.py:fail_closed_response"
+          "source_reference": "src/codex_plugin_scanner/guard/hook_review/hook_fail_closed.py:fail_closed_response"
         },
         {
           "event": "PostToolUse",

@@ -27,10 +27,10 @@ for _import_root in (_REPO_ROOT, _REPO_ROOT / "src"):
     if str(_import_root) not in sys.path:
         sys.path.insert(0, str(_import_root))
 
-from codex_plugin_scanner.guard.daemon.hook_worker import HookWorker  # noqa: E402
 from codex_plugin_scanner.guard.hook_execution_environment import (  # noqa: E402
     HOOK_EXECUTION_ENVIRONMENT_KEY,
 )
+from codex_plugin_scanner.guard.hook_review.hook_worker import HookWorker  # noqa: E402
 from codex_plugin_scanner.guard.native_bash_protocol import (  # noqa: E402
     observe_host,
     prepare,

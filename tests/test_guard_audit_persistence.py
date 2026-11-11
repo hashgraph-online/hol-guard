@@ -7,7 +7,7 @@ import threading
 import time
 from pathlib import Path
 
-from codex_plugin_scanner.guard.daemon.audit_persistence import (
+from codex_plugin_scanner.guard.evidence_drains.audit_persistence import (
     FAILED_EVENT,
     NOT_PERSISTED,
     QUEUED,

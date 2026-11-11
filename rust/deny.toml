@@ -31,6 +31,7 @@ unmaintained = "all"
 # reach us.
 ignore = [
     { id = "RUSTSEC-2023-0071", reason = "the Marvin attack recovers a key from the timing of RSA private-key operations; Guard only ever verifies signatures with rsa, so no private key and no decryption reaches the crate outside its own tests, and the advisory has no fixed release" },
+    { id = "RUSTSEC-2026-0459", reason = "the stale-page read needs a crafted -wal file planted beside a database the victim opens; every database Guard opens is its own store inside the Guard home, so planting one needs write access to the Guard home, which already lets the writer change the store directly. The fixed libsqlite3-sys 0.39 ships with rusqlite 0.41, which needs rustc 1.89, above the workspace's 1.88 toolchain" },
 ]
 
 [licenses]

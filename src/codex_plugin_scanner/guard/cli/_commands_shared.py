@@ -96,14 +96,6 @@ from ..consumer import (
     record_policy,
     run_consumer_scan,
 )
-from ..daemon.manager import (
-    _guard_daemon_pid_is_running,
-    _guard_daemon_pid_matches_command,
-    clear_guard_daemon_wake_reservation,
-    load_guard_daemon_auth_token,
-    load_guard_daemon_url,
-    schedule_guard_daemon_ensure,
-)
 from ..desktop_notifications import (
     desktop_notification_setup_payload,
     desktop_notification_setup_supported,
@@ -132,6 +124,14 @@ from ..native_cisco_preflight import (
     build_cisco_deep_scan_payload,
     policy_action_for_cisco_signals,
     scan_action_for_cisco_evidence,
+)
+from ..native_daemon_manage import (
+    _guard_daemon_pid_is_running,
+    _guard_daemon_pid_matches_command,
+    clear_guard_daemon_wake_reservation,
+    load_guard_daemon_auth_token,
+    load_guard_daemon_url,
+    schedule_guard_daemon_ensure,
 )
 from ..native_hook_artifact_compose import NativeHookComposeError
 from ..native_prompt import extract_prompt_requests
@@ -256,11 +256,10 @@ def _load_lazy_export(module_name: str, attribute_name: str):
     return getattr(importlib.import_module(module_name, __package__), attribute_name)
 
 
-GuardDaemonServer = _load_lazy_export("..daemon", "GuardDaemonServer")
-ensure_guard_daemon = _load_lazy_export("..daemon", "ensure_guard_daemon")
-load_guard_surface_daemon_client = _load_lazy_export("..daemon", "load_guard_surface_daemon_client")
-repair_approval_center_locator = _load_lazy_export("..daemon", "repair_approval_center_locator")
-repair_guard_daemon_runtime = _load_lazy_export("..daemon", "repair_guard_daemon_runtime")
+ensure_guard_daemon = _load_lazy_export("..native_daemon_manage", "ensure_guard_daemon")
+load_guard_surface_daemon_client = _load_lazy_export("..native_daemon_client", "load_guard_surface_daemon_client")
+repair_approval_center_locator = _load_lazy_export("..native_daemon_manage", "repair_approval_center_locator")
+repair_guard_daemon_runtime = _load_lazy_export("..runtime_health.runtime_repair", "repair_guard_daemon_runtime")
 CodexMcpGuardProxy = _load_lazy_export("..proxy", "CodexMcpGuardProxy")
 CopilotMcpGuardProxy = _load_lazy_export("..proxy", "CopilotMcpGuardProxy")
 CursorMcpGuardProxy = _load_lazy_export("..proxy", "CursorMcpGuardProxy")

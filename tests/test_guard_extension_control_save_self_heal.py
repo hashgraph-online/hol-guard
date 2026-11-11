@@ -8,9 +8,9 @@ from typing import NoReturn, cast
 
 import pytest
 
-from codex_plugin_scanner.guard.daemon import extension_control_targets
-from codex_plugin_scanner.guard.daemon.extension_control_api import ExtensionControlApiService
-from codex_plugin_scanner.guard.daemon.server import _GuardDaemonHttpServer
+from codex_plugin_scanner.guard.extension_control_host import ExtensionControlHost
+from codex_plugin_scanner.guard.extension_controls import extension_control_targets
+from codex_plugin_scanner.guard.extension_controls.extension_control_api import ExtensionControlApiService
 from codex_plugin_scanner.guard.runtime.command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
 from codex_plugin_scanner.guard.runtime.extension_control_authority import (
     AuthorityHealth,
@@ -101,15 +101,15 @@ def test_daemon_refresh_reads_as_the_writer_when_a_shared_read_needs_recovery(
     protected = _view(AuthorityHealth.PROTECTED, 0)
     runtime = ExtensionControlRuntime(_view(AuthorityHealth.RECOVERY_REQUIRED, 0))
     server = cast(
-        _GuardDaemonHttpServer,
+        ExtensionControlHost,
         cast(
             object,
             SimpleNamespace(
                 store=store,
-                extension_control_runtime=runtime,
-                extension_control_api=SimpleNamespace(catalog_digest=_CATALOG),
+                runtime=runtime,
+                api=SimpleNamespace(catalog_digest=_CATALOG),
                 _installed_authority_pending=False,
-                _extension_control_on_core_registry=False,
+                _on_core_registry=False,
             ),
         ),
     )
@@ -121,7 +121,7 @@ def test_daemon_refresh_reads_as_the_writer_when_a_shared_read_needs_recovery(
 
     monkeypatch.setattr(store, "read_extension_control_authority_for_registry", read)
 
-    snapshot = _GuardDaemonHttpServer.refresh_extension_control_runtime(server)
+    snapshot = ExtensionControlHost.refresh(server)
 
     assert reads == [True, False]
     assert snapshot.health is AuthorityHealth.PROTECTED

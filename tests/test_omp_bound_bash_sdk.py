@@ -15,11 +15,11 @@ import pytest
 
 from codex_plugin_scanner.guard.approvals import ApprovalRequestAlreadyResolvedError, apply_approval_resolution
 from codex_plugin_scanner.guard.config import update_guard_settings
-from codex_plugin_scanner.guard.daemon.hook_worker import HookWorker
 from codex_plugin_scanner.guard.hook_execution_environment import (
     HOOK_EXECUTION_ENVIRONMENT_KEY,
     collect_hook_execution_environment,
 )
+from codex_plugin_scanner.guard.hook_review.hook_worker import HookWorker
 from codex_plugin_scanner.guard.native_bash_protocol import runtime_status
 from codex_plugin_scanner.guard.native_resident_client import (
     close_native_residents,

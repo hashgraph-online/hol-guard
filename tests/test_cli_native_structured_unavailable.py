@@ -11,7 +11,7 @@ import pytest
 
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.cli import commands_hook_native_authority as authority
-from codex_plugin_scanner.guard.daemon.hook_worker_native import HookWorkerNativeMixin
+from codex_plugin_scanner.guard.hook_review.hook_worker_native import HookWorkerNativeMixin
 from codex_plugin_scanner.guard.store import GuardStore
 
 STRUCTURED_OUTPUT_SETTING_PATH = "data_control.structured_output"

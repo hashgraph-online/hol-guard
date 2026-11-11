@@ -10,11 +10,11 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.guard.config import update_guard_settings
-from codex_plugin_scanner.guard.daemon.hook_worker import HookWorker
 from codex_plugin_scanner.guard.hook_execution_environment import (
     HOOK_EXECUTION_ENVIRONMENT_KEY,
     collect_hook_execution_environment,
 )
+from codex_plugin_scanner.guard.hook_review.hook_worker import HookWorker
 from codex_plugin_scanner.guard.native_resident_client import close_native_residents
 from codex_plugin_scanner.guard.store import GuardStore
 from tests.pi_extension_template import ENVIRONMENT_NAMES

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from codex_plugin_scanner.guard.daemon.extension_control_projection import (
+from codex_plugin_scanner.guard.extension_controls.extension_control_projection import (
     EFFECTIVE_PROJECTION_SCHEMA,
     build_effective_extension_control_projection,
 )

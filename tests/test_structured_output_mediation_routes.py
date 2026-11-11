@@ -17,8 +17,8 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.guard.config import load_guard_config
-from codex_plugin_scanner.guard.daemon import hook_worker_structured
-from codex_plugin_scanner.guard.daemon.hook_worker_structured import (
+from codex_plugin_scanner.guard.hook_review import hook_worker_structured
+from codex_plugin_scanner.guard.hook_review.hook_worker_structured import (
     read_structured_view,
     structured_destination_required,
 )
