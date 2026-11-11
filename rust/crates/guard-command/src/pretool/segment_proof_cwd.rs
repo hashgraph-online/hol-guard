@@ -399,7 +399,7 @@ pub(in crate::pretool) fn exact_safe_cwd_compound(
                     http_config_absent: context.http_config_absent,
                     psql_environment: context.psql_environment,
                     cwd: Some(&cwd),
-                    creates_nothing: false,
+                    creates_nothing: context.creates_nothing,
                 },
             )
     })

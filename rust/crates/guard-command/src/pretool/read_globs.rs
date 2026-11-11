@@ -27,8 +27,11 @@
 //! `failglob` stop the command before it runs, and `nullglob` drops the word,
 //! leaving a reader that has no other operand to read standard input, which
 //! is proven wherever it comes from. A bare pattern that starts with `-`
-//! would reach the reader as an option, so it keeps its review. A copy needs
-//! a source to copy, so `glob_file_matches` still refuses an empty match.
+//! would reach the reader as an option, so it keeps its review. The listing
+//! holds only when no step of the command can create an entry before the
+//! shell expands the pattern: `ln -s ~/.ssh/id_rsa k.txt; cat k*.txt` would
+//! read the key. A copy needs a source to copy, so `glob_file_matches` still
+//! refuses an empty match.
 
 use std::path::{Path, PathBuf};
 
@@ -46,7 +49,9 @@ pub(super) fn bounded_glob_file_read_target(
     value: &str,
     context: super::super::PathContext<'_>,
 ) -> bool {
-    glob_words(value, context).is_some_and(|words| !words.is_empty() || !value.starts_with('-'))
+    glob_words(value, context).is_some_and(|words| {
+        !words.is_empty() || (context.creates_nothing && !value.starts_with('-'))
+    })
 }
 
 /// The words the shell passes on for `value` -- `<directory>/<name>`, or a

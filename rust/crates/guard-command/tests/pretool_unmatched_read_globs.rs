@@ -108,3 +108,18 @@ fn a_glob_that_could_reach_a_hidden_file_keeps_the_review() {
     let result = shell(&f, "cat *.bak");
     assert_ne!(result.minimum_action, "allow", "cat *.bak");
 }
+
+#[test]
+fn a_step_that_could_plant_a_match_keeps_the_review() {
+    let f = fixture("planted");
+    for command in [
+        "ln -s ~/.ssh/id_rsa k.txt; cat k*.txt",
+        "cat k*.txt; ln -s ~/.ssh/id_rsa k.txt",
+        "cp .env.bak src/policy_cache.py; head -3 src/policy_cache*.py",
+        "touch notes.txt && wc -l note*.txt",
+        "cd src && wc -l policy_cache*.py > policy_cache.txt",
+    ] {
+        let result = shell(&f, command);
+        assert_ne!(result.minimum_action, "allow", "{command}");
+    }
+}

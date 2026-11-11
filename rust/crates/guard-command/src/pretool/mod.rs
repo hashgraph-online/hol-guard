@@ -860,6 +860,12 @@ fn exact_safe_command_with_context(
     {
         return false;
     }
+    // A read may name a path that is missing now. It stays missing only when
+    // no step of the whole command can create an entry.
+    let context = PathContext {
+        creates_nothing: search::command_creates_nothing(model),
+        ..context
+    };
     if segment_proof::exact_safe_cwd_compound(model, allow_git_helper_context, context)
         || segment_proof::exact_safe_absolute_cd_chain(model, allow_git_helper_context, context)
         || safe_reads::exact_safe_sequence(model, allow_git_helper_context, context)

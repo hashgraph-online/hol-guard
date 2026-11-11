@@ -220,7 +220,14 @@ fn a_pattern_that_matches_nothing_reads_nothing() {
     let context = super::super::super::PathContext {
         home_dir: home.to_str(),
         cwd: workspace.to_str(),
+        creates_nothing: true,
         ..Default::default()
+    };
+    // A step that could create a file can plant a match before the shell
+    // expands the pattern.
+    let planted = super::super::super::PathContext {
+        creates_nothing: false,
+        ..context
     };
 
     for value in ["snapshot*.py", "src/snapshot*.py", "./src/v?.md"] {
@@ -228,8 +235,13 @@ fn a_pattern_that_matches_nothing_reads_nothing() {
             super::bounded_glob_file_read_target(value, context),
             "{value}"
         );
+        assert!(
+            !super::bounded_glob_file_read_target(value, planted),
+            "{value}"
+        );
         assert_eq!(super::glob_file_matches(value, context), None, "{value}");
     }
+    assert!(super::bounded_glob_file_read_target("src/*.rs", planted));
     let absolute = format!("{}/src/snapshot*.py", workspace.display());
     assert!(super::bounded_glob_file_read_target(&absolute, context));
 
