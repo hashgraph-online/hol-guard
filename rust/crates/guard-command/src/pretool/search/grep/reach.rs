@@ -42,7 +42,7 @@ pub(in crate::pretool) fn sensitive_reach_reason(
     if proven || !scan.recursive {
         return None;
     }
-    // Any exclusion next to `--include` keeps the review, so advice to
+    // Any `--exclude` next to `--include` keeps the review, so advice to
     // exclude a file would not release the search.
     if scan.include_beside_exclusion {
         return None;

@@ -436,3 +436,76 @@ fn an_include_narrows_the_recursive_walk_below_the_root() {
     }
     std::fs::remove_dir_all(root).unwrap();
 }
+
+/// `--exclude-dir` skips a directory whatever the includes say: GNU and BSD
+/// grep match an include against files, never against a directory, so the
+/// walk does not go back into one. The proof dropped every exclusion once an
+/// include appeared, and `grep -rln --include='*.ts' --exclude-dir=fixtures
+/// KEY tests` stayed under review while the same search without the include
+/// passed. A file exclusion keeps the review wherever it stands: a later
+/// include can re-enable the file it names, and when an `--exclude` comes
+/// first GNU grep opens every file neither glob matches.
+#[test]
+fn a_directory_exclusion_holds_beside_an_include() {
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../target/grep-include-exclude-dir")
+        .join(std::process::id().to_string());
+    let home = root.join("home");
+    let repo = home.join("work/app");
+    std::fs::create_dir_all(repo.join("tests/fixtures")).unwrap();
+    std::fs::create_dir_all(repo.join("lib")).unwrap();
+    std::fs::write(repo.join("tests/app.test.ts"), "export {};\n").unwrap();
+    std::fs::write(repo.join("tests/fixtures/server.key"), "key\n").unwrap();
+    std::fs::write(repo.join("tests/fixtures/token.ts"), "export {};\n").unwrap();
+    std::fs::write(
+        repo.join("tests/fixtures/.env.ts"),
+        "export const KEY = 1;
+",
+    )
+    .unwrap();
+    std::fs::write(repo.join("lib/index.ts"), "export {};\n").unwrap();
+    std::fs::write(repo.join("lib/.env"), "KEY=value\n").unwrap();
+    let (home, repo) = (
+        crate::runtime_read_paths::canonicalize_text(&home).unwrap(),
+        crate::runtime_read_paths::canonicalize_text(&repo).unwrap(),
+    );
+    let context = crate::pretool::PathContext {
+        home_dir: home.to_str(),
+        cwd: repo.to_str(),
+        ..Default::default()
+    };
+    for (command, allowed) in [
+        ("-rln --exclude-dir=fixtures KEY tests", true),
+        // `*.ts` selects `fixtures/.env.ts`, so only the directory exclusion
+        // clears the walk.
+        ("-rln --include=*.ts KEY tests", false),
+        ("-rln --include=*.ts --exclude-dir=fixtures KEY tests", true),
+        ("-rln --exclude-dir=fixtures --include=*.ts KEY tests", true),
+        ("-rln --include *.ts --exclude-dir fixtures KEY tests", true),
+        // A file exclusion does not stand in for one: a later include can
+        // re-enable the file it names.
+        ("-rln --include=*.ts --exclude=.env.ts KEY tests", false),
+        // An `--exclude` before the include makes GNU grep open `lib/.env`,
+        // which neither glob matches.
+        ("-rln --exclude=*.md --include=*.ts KEY lib", false),
+        ("-rln --exclude=.env --include=*.ts KEY lib", false),
+        ("-rln --include=*.ts --exclude=*.md KEY lib", false),
+        (
+            "-rln --exclude-dir=fixtures --include=*.ts --exclude=*.md KEY lib",
+            false,
+        ),
+        // A directory exclusion alone leaves the include narrowing the walk.
+        ("-rln --include=*.ts --exclude-dir=fixtures KEY lib", true),
+        // Without any include the walk reads whatever it reaches.
+        ("-rln KEY tests", false),
+        ("-rln KEY lib", false),
+    ] {
+        let arguments: Vec<String> = command.split(' ').map(str::to_owned).collect();
+        assert_eq!(
+            super::safe_grep_arguments(&arguments, context),
+            allowed,
+            "{command}"
+        );
+    }
+    std::fs::remove_dir_all(root).unwrap();
+}
