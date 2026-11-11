@@ -447,33 +447,68 @@ fn safe_byte_dump_with_targets(
 fn byte_dump_option_value(option: char, value: &str) -> bool {
     match option {
         'A' => matches!(value, "n" | "d" | "o" | "x"),
-        'j' | 'N' => {
-            let digits = value
-                .strip_prefix("0x")
-                .or_else(|| value.strip_prefix("0X"))
-                .map_or((value, false), |hex| (hex, true));
-            !digits.0.is_empty()
-                && digits.0.len() <= 20
-                && digits.0.bytes().all(|byte| {
-                    if digits.1 {
-                        byte.is_ascii_hexdigit()
-                    } else {
-                        byte.is_ascii_digit()
-                    }
-                })
-        }
-        't' => {
-            !value.is_empty()
-                && value.len() <= 16
-                && value
-                    .bytes()
-                    .all(|byte| byte.is_ascii_digit() || b"acdfouxzCSILD".contains(&byte))
-        }
+        'j' | 'N' => byte_dump_count(value),
+        't' => value.len() <= 16 && byte_dump_types(value),
         'w' => {
             !value.is_empty() && value.len() <= 6 && value.bytes().all(|byte| byte.is_ascii_digit())
         }
         _ => false,
     }
+}
+
+/// A byte count or offset as `od` parses it: decimal, `0x` hexadecimal, or
+/// octal after a leading zero. `08` is not a number to `od`, so it is not
+/// one here either.
+fn byte_dump_count(value: &str) -> bool {
+    let (digits, radix) = if let Some(hex) = value
+        .strip_prefix("0x")
+        .or_else(|| value.strip_prefix("0X"))
+    {
+        (hex, 16)
+    } else if value.len() > 1 && value.starts_with('0') {
+        (&value[1..], 8)
+    } else {
+        (value, 10)
+    };
+    !digits.is_empty() && digits.len() <= 20 && digits.chars().all(|digit| digit.is_digit(radix))
+}
+
+/// An `od -t` type list: `a` and `c` stand alone, `d`, `o`, `u` and `x` take
+/// an optional byte size or one of `C`, `S`, `I`, `L`, and `f` an optional
+/// size or one of `F`, `D`, `L`. Each type may end in `z`.
+fn byte_dump_types(value: &str) -> bool {
+    let bytes = value.as_bytes();
+    let mut index = 0;
+    while index < bytes.len() {
+        let size_letters: &[u8] = match bytes[index] {
+            b'a' | b'c' => b"",
+            b'd' | b'o' | b'u' | b'x' => b"CSIL",
+            b'f' => b"FDL",
+            _ => return false,
+        };
+        let kind = bytes[index];
+        index += 1;
+        if kind != b'a' && kind != b'c' {
+            if bytes
+                .get(index)
+                .is_some_and(|byte| size_letters.contains(byte))
+            {
+                index += 1;
+            } else {
+                let start = index;
+                while bytes.get(index).is_some_and(u8::is_ascii_digit) {
+                    index += 1;
+                }
+                if index - start > 2 {
+                    return false;
+                }
+            }
+        }
+        if bytes.get(index) == Some(&b'z') {
+            index += 1;
+        }
+    }
+    !bytes.is_empty()
 }
 
 fn safe_word_count_with_targets(
