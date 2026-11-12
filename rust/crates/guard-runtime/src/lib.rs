@@ -189,6 +189,7 @@ mod codex_app_server_socket;
 #[path = "adapters/detection/codex_detect.rs"]
 mod codex_detect;
 mod codex_hook_artifacts;
+mod codex_hook_authority_record;
 mod codex_hook_bridge;
 mod codex_hook_bridge_direct;
 mod codex_hook_bridge_direct_resident;
@@ -333,6 +334,11 @@ mod cursor_hook_config;
 #[cfg(test)]
 #[path = "adapters/cursor_hook_config_tests.rs"]
 mod cursor_hook_config_tests;
+#[path = "adapters/cursor_hook_rebind.rs"]
+mod cursor_hook_rebind;
+#[cfg(test)]
+#[path = "adapters/cursor_hook_rebind_tests.rs"]
+mod cursor_hook_rebind_tests;
 #[path = "adapters/cursor_hook_script.rs"]
 mod cursor_hook_script;
 #[path = "adapters/cursor_hook_state.rs"]
@@ -647,6 +653,11 @@ mod guard_store_wfcap_wire;
 mod guard_store_workflow_capability_vectors_tests;
 mod guard_store_write_cache;
 mod hardening;
+#[path = "adapters/harness_backup_restore.rs"]
+mod harness_backup_restore;
+#[cfg(test)]
+#[path = "adapters/harness_backup_restore_tests.rs"]
+mod harness_backup_restore_tests;
 mod harness_coverage;
 mod harness_coverage_command;
 mod harness_diagnostics;
@@ -662,6 +673,8 @@ mod harness_mcp_discovery;
 mod harness_mcp_discovery_tests;
 #[path = "adapters/harness_settings_file.rs"]
 mod harness_settings_file;
+#[path = "adapters/harness_shim_refresh.rs"]
+mod harness_shim_refresh;
 mod harness_version_compat;
 mod health_lease_contract;
 mod health_lease_state;
@@ -675,6 +688,8 @@ mod hermes_hook_config;
 #[path = "adapters/hermes_hook_config_tests.rs"]
 mod hermes_hook_config_tests;
 mod hermes_inspect;
+#[path = "adapters/hermes_install_plan.rs"]
+mod hermes_install_plan;
 mod hermes_printable;
 mod hermes_skills;
 mod hermes_text;

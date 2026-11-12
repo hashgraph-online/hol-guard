@@ -40,6 +40,11 @@ pub struct PathContext<'a> {
     /// `config.json` whose `default_options` HTTPie and `xh` prepend to
     /// every request. Literal contexts leave this false.
     pub http_config_absent: bool,
+    /// No inherited `OPENSSL_CONF`, `OPENSSL_CONF_INCLUDE`, `OPENSSL_MODULES`
+    /// or `OPENSSL_ENGINES` can point the `openssl` command at a
+    /// configuration that loads a provider or engine library before it
+    /// hashes a file. Literal contexts leave this false.
+    pub openssl_config_absent: bool,
     /// No step of this command creates a filesystem entry, so a path with
     /// nothing at it now still has nothing at it when a read runs and cannot
     /// be a link a peer step planted. Literal contexts leave this false.
@@ -138,6 +143,7 @@ pub(crate) mod git_side_record_reads;
 pub(crate) mod git_stash_reads;
 pub(crate) mod git_submodule_reads;
 pub(crate) mod git_tag_listing;
+mod inplace_edit_reason;
 pub(crate) mod recoverable_removal;
 mod repo_create_reason;
 mod root_removal;
@@ -246,6 +252,9 @@ mod workspace_contained_effects_tests;
 #[cfg(test)]
 #[path = "workspace_contained_git_tests.rs"]
 mod workspace_contained_git_tests;
+#[cfg(test)]
+#[path = "workspace_contained_name_pattern_tests.rs"]
+mod workspace_contained_name_pattern_tests;
 #[cfg(test)]
 #[path = "workspace_contained_package_tests.rs"]
 mod workspace_contained_package_tests;
@@ -860,6 +869,12 @@ fn exact_safe_command_with_context(
     {
         return false;
     }
+    // A read may name a path that is missing now. It stays missing only when
+    // no step of the whole command can create an entry.
+    let context = PathContext {
+        creates_nothing: search::command_creates_nothing(model),
+        ..context
+    };
     if segment_proof::exact_safe_cwd_compound(model, allow_git_helper_context, context)
         || segment_proof::exact_safe_absolute_cd_chain(model, allow_git_helper_context, context)
         || safe_reads::exact_safe_sequence(model, allow_git_helper_context, context)
@@ -1394,6 +1409,7 @@ fn evaluate_single_command(
         .or_else(|| fanout_reads::whitespace_split_reason(&model))
         .or_else(|| search::rg_hidden_whitelist_reason(&model, context))
         .or_else(|| search::grep::sensitive_reach_reason(&model, context))
+        .or_else(|| inplace_edit_reason::inplace_edit_reason(&model))
         .or_else(|| compound_reason::unproven_steps_reason(&model, context))
         .or_else(|| worktree_add::outside_home_reason(&model, context));
     // `;2>&1 python3 evil.py` is an unread script. A glued redirect keeps the

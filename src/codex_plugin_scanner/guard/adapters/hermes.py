@@ -25,7 +25,7 @@ from ..skill_directory_identity import (
     skill_directory_identity_metadata,
 )
 from ..stable_guard_cli import guard_cli_launcher
-from . import hermes_runtime_hooks
+from . import hermes_install_plan, hermes_runtime_hooks
 from .adapter_safe_output import write_text_at_authorized_path
 from .adapter_state_integrity import authenticate_adapter_state, require_adapter_state_runtime
 from .base import HarnessAdapter, HarnessContext, _command_available, _json_payload, _run_command_probe
@@ -488,9 +488,8 @@ def _overlay_servers(
     source_configs: dict[str, dict[str, object]],
 ) -> dict[str, dict[str, object]]:
     overlay: dict[str, dict[str, object]] = {}
-    names_in_use: set[str] = set()
-    for server_key, server in source_configs.items():
-        overlay_name = _overlay_name(server_key, server, names_in_use)
+    names = hermes_install_plan.overlay_names(source_configs)
+    for overlay_name, (server_key, server) in zip(names, source_configs.items(), strict=True):
         launcher = _stdio_launcher_entry(context=context, server_key=server_key, server=server) or {
             "command": str(Path(guard_cli_launcher())),
             "args": _mcp_proxy_command(context=context, server_key=server_key),
@@ -534,22 +533,6 @@ def _stdio_launcher_entry(
         enabled=True,
     )
     return proxy_launcher_entry(proxy_command="hermes-mcp-proxy", context=context, server=managed)
-
-
-def _overlay_name(server_key: str, server: dict[str, object], names_in_use: set[str]) -> str:
-    raw_name = server.get("name")
-    candidate = str(raw_name) if isinstance(raw_name, str) and raw_name else server_key
-    if candidate not in names_in_use:
-        names_in_use.add(candidate)
-        return candidate
-    base_candidate = server_key.replace(":", "-")
-    scoped_candidate = base_candidate
-    suffix = 2
-    while scoped_candidate in names_in_use:
-        scoped_candidate = f"{base_candidate}-{suffix}"
-        suffix += 1
-    names_in_use.add(scoped_candidate)
-    return scoped_candidate
 
 
 def _mcp_proxy_command(*, context: HarnessContext, server_key: str) -> list[str]:
@@ -688,17 +671,8 @@ def _resolve_guard_consumer_base_url(context: HarnessContext) -> str:
     except (json.JSONDecodeError, TypeError):
         return _DEFAULT_GUARD_CONSUMER_BASE_URL
     issuer = payload.get("issuer") if isinstance(payload, dict) else None
-    if not isinstance(issuer, str) or not issuer.strip():
-        return _DEFAULT_GUARD_CONSUMER_BASE_URL
-    # Derive the consumer API base URL from the issuer origin.
-    # The issuer is a full URL like https://hol.org — the consumer API is at
-    # {origin}/api/v1/consumer.
-    from urllib.parse import urlsplit
-
-    parsed = urlsplit(issuer.strip())
-    if not parsed.scheme or not parsed.netloc:
-        return _DEFAULT_GUARD_CONSUMER_BASE_URL
-    return f"{parsed.scheme}://{parsed.netloc}/api/v1/consumer"
+    # The consumer API sits at {issuer origin}/api/v1/consumer.
+    return hermes_install_plan.consumer_base_url(issuer)
 
 
 # Filename under the managed root that records which config.yaml mcp_servers
@@ -766,32 +740,16 @@ def _write_guard_to_hermes_config_yaml(
     # Build the new mcp_servers dict: keep user servers, remove old Guard entries
     # (identified by the manifest, not by prefix — avoids deleting user servers
     # that happen to start with the same prefix).
-    managed_set = set(managed_names)
     mcp_servers = existing.get("mcp_servers")
-    if not isinstance(mcp_servers, dict):
-        mcp_servers = {}
-    cleaned: dict[str, Any] = {
-        name: cfg for name, cfg in mcp_servers.items() if isinstance(name, str) and name not in managed_set
-    }
-    # Add current overlay servers with Guard prefix.
-    new_managed: list[str] = []
-    for overlay_name, overlay_config in overlay_servers.items():
-        key = f"{_GUARD_MCP_SERVER_PREFIX}{overlay_name}"
-        cleaned[key] = overlay_config
-        new_managed.append(key)
-    existing["mcp_servers"] = cleaned
+    existing["mcp_servers"], new_managed = hermes_install_plan.kept_servers(
+        mcp_servers if isinstance(mcp_servers, dict) else {}, managed_names, overlay_servers
+    )
 
     # Write the guard section so Hermes's guard_runtime_policy.py activates.
-    existing[_GUARD_CONFIG_KEY] = {
-        "enabled": True,
-        "base_url": _resolve_guard_consumer_base_url(context),
-        "timeout_seconds": _GUARD_PRETOOL_HOST_TIMEOUT_SECONDS,
-        "cache_ttl_seconds": 60,
-        "fail_open": False,
-        "token_env_var": "HERMES_GUARD_TOKEN",
-        "enforce_mcp_tools": True,
-        "pain_signals_enabled": True,
-    }
+    existing[_GUARD_CONFIG_KEY] = hermes_install_plan.guard_section(
+        base_url=_resolve_guard_consumer_base_url(context),
+        timeout_seconds=_GUARD_PRETOOL_HOST_TIMEOUT_SECONDS,
+    )
 
     hermes_runtime_hooks.sync_guard_runtime_hooks(
         existing,
@@ -818,11 +776,9 @@ def _remove_guard_from_hermes_config_yaml(
         return
     raw = inspection.payload
 
-    managed_set = set(managed_names)
     mcp_servers = raw.get("mcp_servers")
     if isinstance(mcp_servers, dict):
-        cleaned = {name: cfg for name, cfg in mcp_servers.items() if isinstance(name, str) and name not in managed_set}
-        raw["mcp_servers"] = cleaned
+        raw["mcp_servers"], _ = hermes_install_plan.kept_servers(mcp_servers, managed_names, {})
 
     hermes_runtime_hooks.unsync_guard_runtime_hooks(raw, hermes_home=config_yaml_path.parent)
 
@@ -841,10 +797,8 @@ def _install_state(
     overlay_path: Path,
     pretool_path: Path,
 ) -> str:
-    if len(existing_manifest) == 0:
-        return "installed"
-    overlay_exists = overlay_path.exists()
-    pretool_exists = pretool_path.exists()
-    if overlay_exists and pretool_exists:
-        return "already_managed"
-    return "repaired_managed_install"
+    return hermes_install_plan.install_state(
+        manifest_empty=len(existing_manifest) == 0,
+        overlay_exists=overlay_path.exists(),
+        pretool_exists=pretool_path.exists(),
+    )

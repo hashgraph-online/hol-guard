@@ -61,6 +61,7 @@ pub(super) fn exact_safe_command(
         ripgrep_config_absent: context.ripgrep_config_absent,
         gem_config_absent: context.gem_config_absent,
         http_config_absent: context.http_config_absent,
+        openssl_config_absent: context.openssl_config_absent,
         psql_environment: context.psql_environment,
         cwd: cwd_proof
             .as_ref()

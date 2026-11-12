@@ -771,6 +771,7 @@
           "src/codex_plugin_scanner/guard/adapters/gemini.py",
           "src/codex_plugin_scanner/guard/adapters/harness_hook_settings.py",
           "src/codex_plugin_scanner/guard/adapters/hermes.py",
+          "src/codex_plugin_scanner/guard/adapters/hermes_install_plan.py",
           "src/codex_plugin_scanner/guard/adapters/hermes_state_paths.py",
           "src/codex_plugin_scanner/guard/adapters/kimi.py",
           "src/codex_plugin_scanner/guard/adapters/muse.py",
@@ -787,6 +788,7 @@
           "src/codex_plugin_scanner/guard/adapters/pi.py",
           "src/codex_plugin_scanner/guard/adapters/pi_extension_pinned_core.py",
           "src/codex_plugin_scanner/guard/adapters/pi_support.py",
+          "src/codex_plugin_scanner/guard/adapters/state_files.py",
           "src/codex_plugin_scanner/guard/adapters/zcode.py",
           "src/codex_plugin_scanner/json_comment_stripping.py"
         ],
