@@ -146,3 +146,51 @@ fn wide_sibling_globs_are_proven_by_their_directory() {
         assert_decision(&cwd, &layout.home, &command, false);
     }
 }
+
+/// The directory proof stands in only for an expansion that ran out of room.
+/// A glob that steps back out of the directory, or that the shell would
+/// expand to a link the search then follows, stays reviewed whether or not
+/// it is wide.
+#[test]
+fn wide_globs_refuse_parent_steps_and_links() {
+    let layout = layout("sibling-glob-search-wide-escape");
+    let cwd = layout.org.join("app-portal");
+    let sibling = format!("{}/service-api", layout.org.display());
+    for index in 0..300 {
+        write(
+            layout
+                .org
+                .join(format!("service-api/src/m{index}/index.ts")),
+            "export {};\n",
+        );
+    }
+    write(
+        layout.org.join("service-api/private/key.pem"),
+        "-----BEGIN PRIVATE KEY-----\n",
+    );
+    write(layout.org.join("service-api/lib/a.ts"), "export {};\n");
+    write(layout.org.join("service-api/lib/b.ts"), "export {};\n");
+    assert_decision(
+        &cwd,
+        &layout.home,
+        &format!("rg -n export {sibling}/src/*/index.ts"),
+        true,
+    );
+    assert_decision(
+        &cwd,
+        &layout.home,
+        &format!("grep -n KEY {sibling}/src/*/../../private/*.pem"),
+        false,
+    );
+    let secret = layout.home.join("notes/secret.txt");
+    write(secret.clone(), "TOKEN=fixture\n");
+    std::os::unix::fs::symlink(&secret, layout.org.join("service-api/lib/link.ts")).unwrap();
+    std::os::unix::fs::symlink(&secret, layout.org.join("service-api/src/m7/link.ts")).unwrap();
+    for command in [
+        format!("grep -n TOKEN {sibling}/lib/*.ts"),
+        format!("rg -n TOKEN {sibling}/src/*/*.ts"),
+        format!("rg -n TOKEN {sibling}/src/**/*.ts"),
+    ] {
+        assert_decision(&cwd, &layout.home, &command, false);
+    }
+}
