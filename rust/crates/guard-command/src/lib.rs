@@ -50,6 +50,8 @@ pub mod cloud_action_policy;
 pub mod cloud_action_serve;
 #[cfg(test)]
 mod cloud_action_tests;
+pub mod cloud_action_v2;
+pub mod cloud_action_v2_consent;
 pub mod cloud_catalog;
 pub mod cloud_scrub;
 mod cloud_scrub_shell;
