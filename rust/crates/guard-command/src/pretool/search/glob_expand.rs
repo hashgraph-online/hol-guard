@@ -9,41 +9,24 @@ mod glob_scope;
 
 use super::{
     hidden_allowed, ReadContext, HAZARDS, MAX_GLOB_ENTRIES, MAX_GLOB_MATCHES, MAX_WALK_DEPTH,
-    SECRET_EXTENSIONS,
+    MAX_WALK_ENTRIES, SECRET_EXTENSIONS,
 };
 use crate::pretool::search::glob_matches;
 use std::path::{Path, PathBuf};
 
 const GLOB_CHARACTERS: [char; 3] = ['*', '?', '['];
 
-/// A glob expansion either has all of its matches, was stopped only by the
-/// match-count cap, or could not be proven safe for another reason. A pattern
-/// matching nothing is an empty list, distinct from either refusal case.
-pub(super) enum Expansion {
-    Matches(Vec<PathBuf>),
-    Truncated,
-    Refused,
-}
-
+/// Expand a glob. `None` when any step is ambiguous: dot components, `..`,
+/// links to directories, an absolute or `~` prefix outside a repository below
+/// home, or too many matches. A pattern matching nothing is an empty list, so
+/// a caller can tell it apart from an unsafe match.
+///
 /// A component made only of `*` (such as `**`) is expanded as the union of
 /// what shells do with it: zero or more nested directories with `globstar`,
 /// and a single `*` without it. A wildcard before the last component only
 /// descends into directories, as the shell does.
 pub(super) fn expand_glob_matches(value: &str, context: ReadContext<'_>) -> Option<Vec<PathBuf>> {
-    matches(expand(value, context, Mode::SHELL, Screen::Contents))
-}
-
-/// [`expand_glob_matches`] while retaining the reason an expansion stopped,
-/// so only a proven match-count overflow can use the conservative walk proof.
-pub(super) fn expand_glob_search(value: &str, context: ReadContext<'_>) -> Expansion {
     expand(value, context, Mode::SHELL, Screen::Contents)
-}
-
-fn matches(expansion: Expansion) -> Option<Vec<PathBuf>> {
-    match expansion {
-        Expansion::Matches(matches) => Some(matches),
-        Expansion::Truncated | Expansion::Refused => None,
-    }
 }
 
 /// [`expand_glob_matches`] under the strict superset model, so an empty list
@@ -52,7 +35,7 @@ pub(super) fn expand_glob_matches_strict(
     value: &str,
     context: ReadContext<'_>,
 ) -> Option<Vec<PathBuf>> {
-    matches(expand(value, context, Mode::STRICT, Screen::Contents))
+    expand(value, context, Mode::STRICT, Screen::Contents)
 }
 
 /// [`expand_glob_matches`] with the strict model's case folding but without
@@ -63,7 +46,7 @@ pub(super) fn expand_glob_matches_folded(
     value: &str,
     context: ReadContext<'_>,
 ) -> Option<Vec<PathBuf>> {
-    matches(expand(value, context, Mode::FOLDED, Screen::Contents))
+    expand(value, context, Mode::FOLDED, Screen::Contents)
 }
 
 /// [`expand_glob_matches`] for a command that prints the matched names and
@@ -82,29 +65,47 @@ pub(super) fn expand_glob_matches_listing(
     value: &str,
     context: ReadContext<'_>,
 ) -> Option<Vec<PathBuf>> {
-    matches(expand(value, context, Mode::SHELL, Screen::Names))
+    expand(value, context, Mode::SHELL, Screen::Names)
 }
 
-/// The literal directory a content-search glob expands below, for a caller
-/// whose expansion was truncated at the match-count cap. Every match of
-/// `dir/*.ts` or `dir/**/*.ts` lies inside `dir`, so a walk that proves the
-/// whole tree below `dir` proves every file the shell could hand the search,
-/// however many there are and whichever shell options pick them.
-///
-/// The directory comes from the same scope as the expansion and clears the
-/// same match screens. A component after it that starts with `.` refuses:
-/// `.*` can expand to `..` and leave the directory. A sibling-repository
-/// scope refuses too, since its base is the parent of every repository.
-pub(super) fn search_glob_directory(value: &str, context: ReadContext<'_>) -> Option<PathBuf> {
-    if value.is_empty()
-        || value.len() > 4096
-        || value.contains(HAZARDS)
-        || value.contains(['{', '}', '#', '^', '(', ')'])
-        || value.starts_with('-')
-        || !crate::pretool::safe_reads::verified_path_context(context.home_dir, context.cwd)
-    {
-        return None;
+/// How a content-search glob was proven.
+pub(super) enum GlobSearch {
+    /// Every match, each screened.
+    Matches(Vec<PathBuf>),
+    /// The expansion stopped at its match or entry cap. The literal
+    /// directory it expands below holds every match and no link, so a walk
+    /// of that directory proves what the shell could hand the search.
+    Capped(PathBuf),
+    /// The glob reached something unsafe or ambiguous.
+    Refused,
+}
+
+/// [`expand_glob_matches`] for a content search, falling back to the
+/// literal directory only when the expansion ran out of room. Every other
+/// refusal, such as a link, a non-UTF-8 name or `..`, stays a refusal.
+pub(super) fn expand_glob_search(value: &str, context: ReadContext<'_>) -> GlobSearch {
+    let mut capped = false;
+    match expand_bounded(value, context, Mode::SHELL, Screen::Contents, &mut capped) {
+        Some(matches) => GlobSearch::Matches(matches),
+        None if capped => {
+            search_glob_directory(value, context).map_or(GlobSearch::Refused, GlobSearch::Capped)
+        }
+        None => GlobSearch::Refused,
     }
+}
+
+/// The literal directory a content-search glob expands below. Every match of
+/// `dir/*.ts` or `dir/**/*.ts` lies inside `dir`, whichever shell options
+/// pick them, unless a component steps out of it.
+///
+/// Every component is checked, not only those before the first wildcard: a
+/// `..` or a dot-leading component anywhere refuses, since `src/*/../..`
+/// leaves the directory and `.*` can expand to `..`. A sibling-repository
+/// scope refuses, since its base is the parent of every repository. A link
+/// anywhere below the directory refuses as well: the walk that proves a
+/// recursive search skips links, but the shell hands a matching link to the
+/// search as an operand, and the search follows it.
+fn search_glob_directory(value: &str, context: ReadContext<'_>) -> Option<PathBuf> {
     let scope = glob_scope::glob_base(value, context)?;
     if scope.siblings {
         return None;
@@ -114,26 +115,53 @@ pub(super) fn search_glob_directory(value: &str, context: ReadContext<'_>) -> Op
         .split('/')
         .filter(|part| !part.is_empty() && *part != ".")
         .collect();
+    if components
+        .iter()
+        .any(|component| component.starts_with('.'))
+    {
+        return None;
+    }
+    let literal = components
+        .iter()
+        .take_while(|component| !component.contains(GLOB_CHARACTERS))
+        .count();
+    if literal == components.len() {
+        return None;
+    }
     let mut directory = scope.base.clone();
-    for (index, component) in components.iter().enumerate() {
-        if component.starts_with('.') {
+    directory.extend(&components[..literal]);
+    if !screened_match(&directory, &scope.root, context, Screen::Contents)? {
+        return None;
+    }
+    no_links_below(&directory)?;
+    Some(directory)
+}
+
+/// `Some` when nothing below `directory`, hidden names included, is a link,
+/// within the walk's depth and entry bounds.
+fn no_links_below(directory: &Path) -> Option<()> {
+    let mut pending = vec![(directory.to_path_buf(), 0_usize)];
+    let mut inspected = 0_usize;
+    while let Some((path, depth)) = pending.pop() {
+        if depth > MAX_WALK_DEPTH {
             return None;
         }
-        if component.contains(GLOB_CHARACTERS) {
-            // The walk only proves paths below `directory`; a later parent
-            // component would let the shell's explicit operands escape it.
-            if components[index + 1..]
-                .iter()
-                .any(|part| *part == ".." || part.starts_with('.'))
-            {
+        for entry in std::fs::read_dir(&path).ok()? {
+            inspected += 1;
+            if inspected > MAX_WALK_ENTRIES {
                 return None;
             }
-            return screened_match(&directory, &scope.root, context, Screen::Contents)?
-                .then_some(directory);
+            let entry = entry.ok()?;
+            let kind = entry.file_type().ok()?;
+            if kind.is_symlink() {
+                return None;
+            }
+            if kind.is_dir() {
+                pending.push((entry.path(), depth + 1));
+            }
         }
-        directory.push(component);
     }
-    None
+    Some(())
 }
 
 /// What the command does with a match: read its bytes, or print its name.
@@ -172,19 +200,24 @@ impl Mode {
     };
 }
 
-fn expand(value: &str, context: ReadContext<'_>, mode: Mode, screen: Screen) -> Expansion {
-    match expand_complete(value, context, mode, screen) {
-        Ok(matches) => Expansion::Matches(matches),
-        Err(reason) => reason,
-    }
-}
-
-fn expand_complete(
+fn expand(
     value: &str,
     context: ReadContext<'_>,
     mode: Mode,
     screen: Screen,
-) -> Result<Vec<PathBuf>, Expansion> {
+) -> Option<Vec<PathBuf>> {
+    expand_bounded(value, context, mode, screen, &mut false)
+}
+
+/// [`expand`], setting `capped` when it stops only because the pattern
+/// matched or listed more than it screens one at a time.
+fn expand_bounded(
+    value: &str,
+    context: ReadContext<'_>,
+    mode: Mode,
+    screen: Screen,
+    capped: &mut bool,
+) -> Option<Vec<PathBuf>> {
     if value.is_empty()
         || value.len() > 4096
         || value.contains(HAZARDS)
@@ -192,9 +225,9 @@ fn expand_complete(
         || value.starts_with('-')
         || !crate::pretool::safe_reads::verified_path_context(context.home_dir, context.cwd)
     {
-        return Err(Expansion::Refused);
+        return None;
     }
-    let scope = glob_scope::glob_base(value, context).ok_or(Expansion::Refused)?;
+    let scope = glob_scope::glob_base(value, context)?;
     let mode = if scope.strict { Mode::STRICT } else { mode };
     let components: Vec<&str> = scope
         .pattern
@@ -230,7 +263,7 @@ fn expand_complete(
                 && is_pattern
                 && (component.contains('[') || component.contains("**")))
         {
-            return Err(Expansion::Refused);
+            return None;
         }
         let mut next = Vec::new();
         for directory in &current {
@@ -238,56 +271,48 @@ fn expand_complete(
                 // The shell keeps only literal continuations that exist.
                 let path = directory.join(component);
                 let exists = std::fs::symlink_metadata(&path).is_ok();
-                if (last && exists)
-                    || traversable(&path).ok_or(Expansion::Refused)?
-                {
+                if (last && exists) || traversable(&path)? {
                     next.push(path);
                 }
                 continue;
             }
             if !keeps_files && component.len() > 1 && component.bytes().all(|byte| byte == b'*') {
-                nested_directories(directory, &mut next, &mut inspected)?;
+                nested_directories(directory, &mut next, &mut inspected, capped)?;
                 continue;
             }
-            let entries = std::fs::read_dir(directory).map_err(|_| Expansion::Refused)?;
-            for entry in entries {
+            for entry in std::fs::read_dir(directory).ok()? {
                 inspected += 1;
                 if inspected > MAX_GLOB_ENTRIES {
-                    return Err(Expansion::Refused);
+                    *capped = true;
+                    return None;
                 }
-                let name = entry
-                    .map_err(|_| Expansion::Refused)?
-                    .file_name();
-                let name = name.to_str().ok_or(Expansion::Refused)?;
-                if !component_matches(component, name, mode.fold_case, hidden_listing)
-                    .ok_or(Expansion::Refused)?
-                {
+                let name = entry.ok()?.file_name();
+                let name = name.to_str()?;
+                if !component_matches(component, name, mode.fold_case, hidden_listing)? {
                     continue;
                 }
                 let path = directory.join(name);
-                if keeps_files || traversable(&path).ok_or(Expansion::Refused)? {
+                if keeps_files || traversable(&path)? {
                     next.push(path);
                 }
             }
         }
         if next.len() > MAX_GLOB_MATCHES {
-            return Err(Expansion::Truncated);
+            *capped = true;
+            return None;
         }
         current = next;
     }
     let mut matches = Vec::new();
     for path in current {
-        let sibling = !scope.siblings
-            || glob_scope::in_sibling_repository(&path, &scope.root, context)
-                .ok_or(Expansion::Refused)?;
-        if !sibling
-            || !screened_match(&path, &scope.root, context, screen).ok_or(Expansion::Refused)?
-        {
-            return Err(Expansion::Refused);
+        let sibling =
+            !scope.siblings || glob_scope::in_sibling_repository(&path, &scope.root, context)?;
+        if !sibling || !screened_match(&path, &scope.root, context, screen)? {
+            return None;
         }
         matches.push(path);
     }
-    Ok(matches)
+    Some(matches)
 }
 
 /// Whether one directory entry matches one pattern component. A hidden entry
@@ -399,32 +424,34 @@ fn nested_directories(
     directory: &Path,
     found: &mut Vec<PathBuf>,
     inspected: &mut usize,
-) -> Result<(), Expansion> {
+    capped: &mut bool,
+) -> Option<()> {
     let mut pending = vec![(directory.to_path_buf(), 0_usize)];
     while let Some((path, depth)) = pending.pop() {
         if depth > MAX_WALK_DEPTH {
-            return Err(Expansion::Refused);
+            return None;
         }
         if found.len() >= MAX_GLOB_MATCHES {
-            return Err(Expansion::Truncated);
+            *capped = true;
+            return None;
         }
-        let entries = std::fs::read_dir(&path).map_err(|_| Expansion::Refused)?;
-        for entry in entries {
+        for entry in std::fs::read_dir(&path).ok()? {
             *inspected += 1;
             if *inspected > MAX_GLOB_ENTRIES {
-                return Err(Expansion::Refused);
+                *capped = true;
+                return None;
             }
-            let entry = entry.map_err(|_| Expansion::Refused)?;
+            let entry = entry.ok()?;
             let name = entry.file_name();
-            if name.to_str().ok_or(Expansion::Refused)?.starts_with('.') {
+            if name.to_str()?.starts_with('.') {
                 continue;
             }
             let child = entry.path();
-            if traversable(&child).ok_or(Expansion::Refused)? {
+            if traversable(&child)? {
                 pending.push((child, depth + 1));
             }
         }
         found.push(path);
     }
-    Ok(())
+    Some(())
 }
