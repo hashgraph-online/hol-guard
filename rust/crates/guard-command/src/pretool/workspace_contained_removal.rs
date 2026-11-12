@@ -404,12 +404,76 @@ pub(super) fn destroys_workspace(
         .any(|index| {
             model.segments.get(index).is_none_or(|segment| {
                 let below = below.get(index).copied().unwrap_or(0);
+                let scripts = edit_scripts(segment);
                 segment
                     .arguments
                     .iter()
-                    .any(|argument| broad_target(argument, workspace, below))
+                    .enumerate()
+                    .filter(|(position, _)| !scripts.contains(position))
+                    .any(|(_, argument)| broad_target(argument, workspace, below))
             })
         })
+}
+
+/// The positions of the script words of an in-place `sed` or `perl` edit.
+/// A script such as `s|href={a}|href={b}|g` is not a path, so reading it as
+/// one would take its braces for a glob at the workspace root. Every other
+/// word is still read as a target.
+fn edit_scripts(segment: &crate::CommandSegmentV1) -> Vec<usize> {
+    let program = segment
+        .executable
+        .as_deref()
+        .map(super::super::executable_basename);
+    let arguments = &segment.arguments;
+    let mut scripts = Vec::new();
+    if program == Some("perl") {
+        // `-e` or `-E` at the end of a cluster of value-less switches takes
+        // the next word as the program. After `-i` the rest is a suffix.
+        let loop_flags = |flags: &str| flags.bytes().all(|byte| b"pnlaw".contains(&byte));
+        for (position, word) in arguments.iter().enumerate() {
+            let flags = word.strip_prefix('-').unwrap_or_default();
+            if flags.strip_suffix(['e', 'E']).is_some_and(loop_flags) {
+                scripts.push(position + 1);
+            }
+        }
+    } else if program == Some("sed") {
+        // GNU sed reads options anywhere before `--`, and a positional
+        // script only when no `-e` or `-f` names one.
+        let mut named = false;
+        let mut positional = None;
+        let mut words = arguments.iter().enumerate();
+        while let Some((position, word)) = words.next() {
+            if word == "--" {
+                positional = positional.or(words.next().map(|(next, _)| next));
+                break;
+            }
+            if let Some(long) = word.strip_prefix("--") {
+                if matches!(long, "expression" | "file") {
+                    named = true;
+                    scripts.push(position + 1);
+                    words.next();
+                }
+                named |= long.starts_with("expression=") || long.starts_with("file=");
+                continue;
+            }
+            let Some(flags) = word.strip_prefix('-').filter(|flags| !flags.is_empty()) else {
+                positional = positional.or(Some(position));
+                continue;
+            };
+            let Some(at) = flags.find(['e', 'f', 'i']) else {
+                continue;
+            };
+            if flags[at..].starts_with(['e', 'f']) {
+                named = true;
+                if at + 1 == flags.len() {
+                    scripts.push(position + 1);
+                    words.next();
+                }
+            }
+        }
+        scripts.extend(positional.filter(|_| !named));
+    }
+    scripts
 }
 
 #[cfg(test)]

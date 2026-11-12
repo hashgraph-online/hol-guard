@@ -272,3 +272,37 @@ fn a_perl_in_place_edit_runs_in_the_workspace_sandbox() {
     }
     let _ = std::fs::remove_dir_all(&ws);
 }
+
+/// The script of an in-place edit is not a target, so braces in it are not a
+/// glob at the workspace root. A real root glob is still refused.
+#[test]
+fn braces_in_an_in_place_edit_script_are_not_a_root_glob() {
+    let ws = workspace("edit-script-braces", true);
+    std::fs::create_dir_all(ws.join("src")).unwrap();
+    std::fs::write(ws.join("src/a.tsx"), "href={OLD}\n").unwrap();
+    for command in [
+        "perl -i -pe 's|href={OLD}|href={NEW}|g' src/a.tsx",
+        "perl -pi -e 's/a{2}/b/' src/a.tsx",
+        "perl -pe 's|{OLD}|{NEW}|' -i src/a.tsx",
+        "sed -i 's|href={OLD}|href={NEW}|g' src/a.tsx",
+        "sed -i -e 's|{OLD}|{NEW}|' src/a.tsx",
+        "sed -i.bak --expression 's|{OLD}|{NEW}|' src/a.tsx",
+    ] {
+        let got = reason("omp", command, &ws, true);
+        if host() {
+            assert_eq!(got, CONTAINED, "{command}");
+        } else {
+            assert_ne!(got, CONTAINED, "{command}");
+        }
+    }
+    for command in [
+        "perl -i -pe 's|{OLD}|{NEW}|' *",
+        "perl -i -pe 's|{OLD}|{NEW}|' -- *",
+        "sed -i 's|{OLD}|{NEW}|' *",
+        "sed -i * -e 's|{OLD}|{NEW}|'",
+        "sed -i -- 's|{OLD}|{NEW}|' {a,b}",
+    ] {
+        assert_ne!(reason("omp", command, &ws, true), CONTAINED, "{command}");
+    }
+    let _ = std::fs::remove_dir_all(&ws);
+}
