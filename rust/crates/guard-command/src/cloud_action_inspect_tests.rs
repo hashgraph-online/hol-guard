@@ -89,6 +89,45 @@ fn a_base64_payload_is_redacted_whole() {
 }
 
 #[test]
+fn a_value_holding_a_secret_clear_and_encoded_loses_both() {
+    use base64ct::{Base64, Encoding};
+    let token = aws_key();
+    let payload = Base64::encode_string(format!("AWS_ACCESS_KEY_ID={token}").as_bytes());
+    let text = format!("key {token} copy {payload}");
+    let output = run(Value::Null, json!({"content": text}));
+    let spans: Vec<&Value> = output["redactions"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|redaction| &redaction["span"]["utf8"])
+        .collect();
+    let encoded_at = text.find(&payload).unwrap();
+    assert_eq!(
+        spans,
+        [
+            &json!([4, 4 + token.len()]),
+            &json!([encoded_at, encoded_at + payload.len()])
+        ]
+    );
+    assert_eq!(output["complete"], true);
+    assert_no_canary(&output, &[&token, &payload]);
+}
+
+#[test]
+fn a_spent_decoding_budget_marks_the_report_incomplete() {
+    use base64ct::{Base64, Encoding};
+    let filler = Base64::encode_string("harmless text ".repeat(300).as_bytes());
+    let mut values: Vec<Value> = (0..70).map(|_| json!(filler)).collect();
+    let token = aws_key();
+    values.push(json!(Base64::encode_string(
+        format!("AWS_ACCESS_KEY_ID={token}").as_bytes()
+    )));
+    let output = run(Value::Null, json!({"files": values}));
+    assert_eq!(output["complete"], false);
+    assert_no_canary(&output, &[&token]);
+}
+
+#[test]
 fn a_secret_inside_a_nested_json_string_is_found() {
     let token = github_token();
     let nested = serde_json::to_string(&json!({"auth": {"token": token}})).unwrap();
@@ -222,6 +261,9 @@ fn pii_vectors() {
         ("ssn 900-12-3456", &[]),
         ("nino AB 12 34 56 C", &[NationalId]),
         ("version 1.2.3 build 456789012", &[]),
+        // A rejected candidate does not hide the one after its separator.
+        ("000-00-0000 123-45-6789", &[NationalId]),
+        ("4111111111111112,4111111111111111", &[PaymentCard]),
     ];
     for (text, expected) in cases {
         let got: Vec<_> = pii_kinds(text).into_iter().collect();

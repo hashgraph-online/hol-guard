@@ -18,7 +18,7 @@ use std::sync::LazyLock;
 use std::time::{Duration, Instant};
 
 use guard_contracts::{FindingV2, PiiKindV2, SensitivityV2};
-use guard_scanner::secret_detection::{encoded_payload_spans, scan_secret_text, ENCODED_REASON};
+use guard_scanner::secret_detection::{decoded_payloads, scan_secret_text, DecodedPayloads};
 use regex::Regex;
 use serde_json::{json, Value};
 
@@ -142,8 +142,8 @@ pub fn inspect_until(line: &[u8], deadline: Instant) -> Value {
         (Source::Arguments, &object["arguments"]),
         (Source::Result, &object["result"]),
     ] {
-        if collect(source, value, &mut leaves).is_err() {
-            return inspect_error(id, "limit");
+        if let Err(code) = collect(source, value, &mut leaves, deadline) {
+            return inspect_error(id, code);
         }
     }
     let mut report = Report {
@@ -154,7 +154,9 @@ pub fn inspect_until(line: &[u8], deadline: Instant) -> Value {
         if Instant::now() >= deadline {
             return inspect_error(id, "deadline");
         }
-        inspect_source(source, &leaves, &mut report);
+        if !inspect_source(source, &leaves, &mut report, deadline) {
+            return inspect_error(id, "deadline");
+        }
     }
     for leaf in leaves.iter().filter(|leaf| leaf.source == Source::Result) {
         if Instant::now() >= deadline {
@@ -222,7 +224,14 @@ fn provenance() -> Value {
     })
 }
 
-fn collect<'a>(source: Source, root: &'a Value, leaves: &mut Vec<Leaf<'a>>) -> Result<(), ()> {
+/// Gather the values to inspect. Refuses with `limit` past
+/// [`MAX_INSPECT_VALUES`] and with `deadline` once the deadline passes.
+fn collect<'a>(
+    source: Source,
+    root: &'a Value,
+    leaves: &mut Vec<Leaf<'a>>,
+    deadline: Instant,
+) -> Result<(), &'static str> {
     let mut stack: Vec<(String, &'a Value)> = vec![(String::new(), root)];
     while let Some((pointer, value)) = stack.pop() {
         let text = match value {
@@ -236,6 +245,9 @@ fn collect<'a>(source: Source, root: &'a Value, leaves: &mut Vec<Leaf<'a>>) -> R
             }
             Value::Object(map) => {
                 for (key, item) in map.iter().rev() {
+                    if key.len() >= MIN_SECRET_KEY_CHARS && Instant::now() >= deadline {
+                        return Err("deadline");
+                    }
                     if holds_secret(key) {
                         // Never echo the key; the parent value goes whole.
                         push(leaves, source, pointer.clone(), "".into(), true)?;
@@ -258,9 +270,9 @@ fn push<'a>(
     pointer: String,
     text: std::borrow::Cow<'a, str>,
     key: bool,
-) -> Result<(), ()> {
+) -> Result<(), &'static str> {
     if leaves.len() >= MAX_INSPECT_VALUES {
-        return Err(());
+        return Err("limit");
     }
     leaves.push(Leaf {
         source,
@@ -302,8 +314,14 @@ const MAX_SECRETS_PER_SOURCE: usize = 256;
 
 /// Credentials and personal data for one source. The detectors read every
 /// value of the source at once, joined, and each credential found is then
-/// located in the values that hold it.
-fn inspect_source(source: Source, leaves: &[Leaf<'_>], report: &mut Report) {
+/// located in the values that hold it. Returns `false` when the deadline
+/// passes first.
+fn inspect_source(
+    source: Source,
+    leaves: &[Leaf<'_>],
+    report: &mut Report,
+    deadline: Instant,
+) -> bool {
     let secret_fact = match source {
         Source::Arguments => FindingV2::SecretInArguments,
         Source::Result => FindingV2::SecretInResult,
@@ -322,7 +340,7 @@ fn inspect_source(source: Source, leaves: &[Leaf<'_>], report: &mut Report) {
     }
     let texts: Vec<&Leaf<'_>> = values.into_iter().filter(|leaf| !leaf.key).collect();
     if texts.is_empty() {
-        return;
+        return true;
     }
     let joined = texts
         .iter()
@@ -331,19 +349,32 @@ fn inspect_source(source: Source, leaves: &[Leaf<'_>], report: &mut Report) {
         .join(VALUE_SEPARATOR);
     report.pii.extend(pii_kinds(&joined));
     let mut summary = scan_secret_text(&joined, "", "cloud_action", None, MAX_SECRETS_PER_SOURCE);
+    // A scan that ran out of decoding budget skipped payloads, so its
+    // findings are not the whole answer.
+    let exhausted = decoded_payloads(&joined).exhausted;
     drop(joined);
-    if summary.findings.len() >= MAX_SECRETS_PER_SOURCE {
+    if summary.findings.len() >= MAX_SECRETS_PER_SOURCE || exhausted {
         report.complete = false;
     }
     summary
         .findings
         .retain(|finding| finding.confidence != "low");
     let mut spans: Vec<Vec<(usize, usize)>> = vec![Vec::new(); texts.len()];
+    // Each value's payloads are decoded once, on first need. Every credential
+    // is placed both where it stands and inside any payload that carries it,
+    // so a value holding a credential in the clear and encoded loses both.
+    let mut decoded: Vec<Option<DecodedPayloads>> = texts.iter().map(|_| None).collect();
     let mut seen = BTreeSet::new();
+    let mut expired = false;
     for mut finding in summary.findings {
+        // Past the deadline the rest are only scrubbed, never placed.
+        expired = expired || Instant::now() >= deadline;
+        if expired {
+            finding.scrub_candidate();
+            continue;
+        }
         report.facts.insert(secret_fact);
         let candidate = finding.candidate.as_str();
-        let encoded = finding.context_reasons.contains(&ENCODED_REASON);
         let mut located = false;
         for (index, leaf) in texts.iter().enumerate() {
             let text = leaf.text.as_ref();
@@ -352,9 +383,8 @@ fn inspect_source(source: Source, leaves: &[Leaf<'_>], report: &mut Report) {
                 text.match_indices(candidate)
                     .map(|(start, matched)| (start, start + matched.len())),
             );
-            if encoded && spans[index].len() == before {
-                spans[index].extend(encoded_payload_spans(text, candidate));
-            }
+            let payloads = decoded[index].get_or_insert_with(|| decoded_payloads(text));
+            spans[index].extend(payloads.spans_holding(candidate));
             if spans[index].len() > before {
                 located = true;
                 if seen.insert((index, finding.rule_id)) {
@@ -374,11 +404,15 @@ fn inspect_source(source: Source, leaves: &[Leaf<'_>], report: &mut Report) {
         }
         finding.scrub_candidate();
     }
+    if expired {
+        return false;
+    }
     for (leaf, leaf_spans) in texts.iter().zip(spans) {
         for span in merge(leaf_spans) {
             report.redact(leaf, Some(span));
         }
     }
+    true
 }
 
 fn secret_finding(

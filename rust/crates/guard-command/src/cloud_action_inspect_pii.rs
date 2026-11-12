@@ -10,7 +10,7 @@ use std::collections::BTreeSet;
 use std::sync::LazyLock;
 
 use guard_contracts::PiiKindV2;
-use regex::Regex;
+use regex::{Captures, Regex};
 
 static EMAIL: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r"(?i)(?:^|[^a-z0-9._%+-])[a-z0-9][a-z0-9._%+-]{0,63}@[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)*\.[a-z]{2,24}(?:$|[^a-z0-9.-])")
@@ -49,13 +49,10 @@ pub fn pii_kinds(text: &str) -> BTreeSet<PiiKindV2> {
     if PHONE.is_match(text) {
         kinds.insert(PiiKindV2::PhoneNumber);
     }
-    if CARD
-        .captures_iter(text)
-        .any(|captures| luhn_card(&captures[1]))
-    {
+    if any_capture(&CARD, text, 1, |captures| luhn_card(&captures[1])) {
         kinds.insert(PiiKindV2::PaymentCard);
     }
-    if SSN.captures_iter(text).any(|captures| {
+    if any_capture(&SSN, text, 3, |captures| {
         let area = &captures[1];
         area != "000"
             && area != "666"
@@ -66,6 +63,28 @@ pub fn pii_kinds(text: &str) -> BTreeSet<PiiKindV2> {
         kinds.insert(PiiKindV2::NationalId);
     }
     kinds
+}
+
+/// Whether any match satisfies `accept`. Each search resumes where the last
+/// match's `last_group` ended, not after the boundary character it consumed,
+/// so a rejected candidate never hides one that shares its separator.
+fn any_capture(
+    pattern: &Regex,
+    text: &str,
+    last_group: usize,
+    mut accept: impl FnMut(&Captures<'_>) -> bool,
+) -> bool {
+    let mut start = 0;
+    while let Some(captures) = pattern.captures_at(text, start) {
+        if accept(&captures) {
+            return true;
+        }
+        let Some(end) = captures.get(last_group).map(|group| group.end()) else {
+            return false;
+        };
+        start = end;
+    }
+    false
 }
 
 /// A 13-19 digit number with a valid Luhn check digit and not one repeated digit.

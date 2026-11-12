@@ -41,6 +41,7 @@ use shell::{
 };
 pub use shell::{AUTHORIZATION_HEADER_REASON, CREDENTIAL_OPTION_REASON};
 
+pub use encoded::payloads::{decoded_payloads, DecodedPayload, DecodedPayloads};
 pub use encoded::{encoded_payload_spans, ENCODED_REASON};
 
 /// How the scan tells two candidates apart without keeping either one.
