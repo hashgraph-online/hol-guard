@@ -123,7 +123,6 @@ from .codex_remote_control import (
 from .mcp_relay_native import mcp_proxy_launch, python_proxy_launch
 from .mcp_servers import (
     ManagedMcpServer,
-    is_guard_proxy_command,
     managed_stdio_servers,
     proxy_launcher_entry,
     skipped_stdio_server_names,
@@ -966,18 +965,18 @@ def render_codex_alternate_cleanup(
     servers = rendered.get("mcp_servers")
     if isinstance(servers, dict):
         removed_server = False
+        candidates: dict[object, object] = {}
         for name in managed_server_names:
             server = servers.get(name)
             if not isinstance(server, dict):
                 continue
-            args = server.get("args", [])
             # Malformed entries cannot be identified as an original managed server.
-            if not isinstance(args, list):
+            if not isinstance(server.get("args", []), list):
                 continue
-            command = server.get("command")
-            if not is_guard_proxy_command(
-                command if isinstance(command, str) else None, tuple(value for value in args if isinstance(value, str))
-            ):
+            candidates[name] = {**server, "args": server.get("args", [])}
+        proxies = _guard_proxy_server_names(candidates)
+        for name in candidates:
+            if name not in proxies:
                 servers.pop(name)
                 removed_server = True
         if removed_server and not servers:
@@ -1078,54 +1077,70 @@ def _payload_has_hooks_feature_enabled(config_payload: Mapping[str, object]) -> 
     return features.get("hooks") is not False
 
 
-def _line_marker_at(content: bytes, index: int, marker: bytes) -> bool:
-    if index < 0 or content[index : index + len(marker)] != marker:
-        return False
-    before_is_boundary = index == 0 or content[index - 1 : index] == b"\n"
-    after_index = index + len(marker)
-    after_is_boundary = after_index == len(content) or content[after_index : after_index + 1] in {b"\r", b"\n"}
-    return before_is_boundary and after_is_boundary
+def _install_plan(op: str, **fields: object) -> dict[str, object]:
+    from ..native_runner_authority import native_runner_authority
+
+    return native_runner_authority("codex_install_plan", {"op": op, **fields})
 
 
-def _find_line_marker(content: bytes, marker: bytes, start: int) -> int:
-    index = content.find(marker, start)
-    while index >= 0 and not _line_marker_at(content, index, marker):
-        index = content.find(marker, index + len(marker))
-    return index
+def _malformed_install_plan() -> Exception:
+    from ..native_runner_authority import NativeRunnerAuthorityError
 
-
-def _trailing_line_break_length(content: bytes) -> int:
-    if content.endswith(b"\r\n"):
-        return 2
-    if content.endswith(b"\n"):
-        return 1
-    return 0
+    return NativeRunnerAuthorityError("Codex install plan answer is malformed")
 
 
 def _remove_managed_shell_guard_blocks(content: bytes) -> bytes:
-    """Remove only legacy Guard marker blocks while preserving every other byte."""
+    """Remove only legacy Guard marker blocks while preserving every other byte.
 
-    begin = _SHELL_GUARD_BEGIN.encode("utf-8")
-    end = _SHELL_GUARD_END.encode("utf-8")
-    search_from = 0
-    while (block_start := _find_line_marker(content, begin, search_from)) >= 0:
-        block_end_start = _find_line_marker(content, end, block_start + len(begin))
-        if block_end_start < 0:
-            break
-        removal_start = block_start
-        prefix = content[:block_start]
-        last_break_length = _trailing_line_break_length(prefix)
-        if last_break_length and _trailing_line_break_length(prefix[:-last_break_length]):
-            # Legacy installation inserted one blank separator before its block.
-            removal_start -= last_break_length
-        removal_end = block_end_start + len(end)
-        if content[removal_end : removal_end + 2] == b"\r\n":
-            removal_end += 2
-        elif content[removal_end : removal_end + 1] == b"\n":
-            removal_end += 1
-        content = content[:removal_start] + content[removal_end:]
-        search_from = removal_start
-    return content
+    The native runtime names the byte ranges the blocks occupy. A file without
+    the begin marker holds no block, so it is not sent.
+    """
+
+    if _SHELL_GUARD_BEGIN.encode("utf-8") not in content:
+        return content
+    ranges = _install_plan("shell_blocks", content=content.decode("latin-1")).get("ranges")
+    if not isinstance(ranges, list):
+        raise _malformed_install_plan()
+    kept = bytearray()
+    position = 0
+    for item in ranges:
+        if (
+            not isinstance(item, list)
+            or len(item) != 2
+            or not all(isinstance(value, int) and not isinstance(value, bool) for value in item)
+            or not position <= item[0] < item[1] <= len(content)
+        ):
+            raise _malformed_install_plan()
+        kept += content[position : item[0]]
+        position = item[1]
+    kept += content[position:]
+    return bytes(kept)
+
+
+def _guard_proxy_server_names(servers: Mapping[object, object]) -> frozenset[str]:
+    """The servers whose launch is a Guard MCP proxy, as the native runtime reads it.
+
+    Only an entry with an argument list is a launch the test applies to.
+    """
+
+    launches: dict[str, dict[str, object]] = {}
+    for name, server in servers.items():
+        if not isinstance(name, str) or not isinstance(server, dict):
+            continue
+        args = server.get("args")
+        if not isinstance(args, list):
+            continue
+        command = server.get("command")
+        launches[name] = {
+            "command": command if isinstance(command, str) else None,
+            "args": [value for value in args if isinstance(value, str)],
+        }
+    if not launches:
+        return frozenset()
+    names = _install_plan("guard_proxies", servers=launches).get("names")
+    if not isinstance(names, list) or not all(isinstance(name, str) and name in launches for name in names):
+        raise _malformed_install_plan()
+    return frozenset(names)
 
 
 def _prepare_codex_shell_cleanup_file(path: Path, *, remove_entire_file: bool = False) -> TransitionFile:
@@ -1857,16 +1872,12 @@ class CodexHarnessAdapter(HarnessAdapter):
     def _refresh_managed_proxy_interpreters(mcp_servers: dict[str, object]) -> tuple[str, ...]:
         current_interpreter = _guard_python_executable()
         migrated: list[str] = []
+        proxies = _guard_proxy_server_names(mcp_servers)
         for name, server_config in mcp_servers.items():
-            if not isinstance(server_config, dict):
+            if name not in proxies or not isinstance(server_config, dict):
                 continue
             command = server_config.get("command")
-            raw_args = server_config.get("args")
-            if not isinstance(raw_args, list):
-                continue
-            args = tuple(str(value) for value in raw_args if isinstance(value, str))
-            if not is_guard_proxy_command(command if isinstance(command, str) else None, args):
-                continue
+            args = tuple(value for value in server_config["args"] if isinstance(value, str))
             _, python_args = python_proxy_launch(None, args)
             launcher, launch_args = mcp_proxy_launch(current_interpreter, python_args)
             if command == launcher and list(args) == launch_args:

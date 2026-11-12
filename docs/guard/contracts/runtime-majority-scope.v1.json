@@ -1197,10 +1197,10 @@
           "prepare_codex_alternate_cleanup",
           "_publish_codex_alternate_cleanup",
           "_require_complete_preactivation_inventory",
-          "_line_marker_at",
-          "_find_line_marker",
-          "_trailing_line_break_length",
+          "_install_plan",
+          "_malformed_install_plan",
           "_remove_managed_shell_guard_blocks",
+          "_guard_proxy_server_names",
           "_prepare_codex_shell_cleanup_file",
           "prepare_codex_shell_cleanup",
           "CodexHarnessAdapter._all_hook_paths",
@@ -1226,7 +1226,7 @@
           "CodexHarnessAdapter._remove_hooks"
         ],
         "entry_points": [],
-        "reason": "Codex config.toml and hooks.json install, uninstall, migration, alternate-config cleanup and shell-guard cleanup, plus the helpers only they use.",
+        "reason": "Codex config.toml and hooks.json install, uninstall, migration, alternate-config cleanup and shell-guard cleanup, plus the helpers only they use; the shell-guard block ranges and the Guard proxy recognition they act on run in the native codex_install_plan runner-authority kind.",
         "evidence": "install, prepare_install, uninstall and prepare_codex_hook_migration have no caller in any in-scope module; they are invoked by the excluded install, uninstall and repair dispatchers. Launch, detect, diagnostics and the runtime hook-state readers stay in scope. The report validates that no retained symbol or in-scope module references the excluded names."
       },
       {
