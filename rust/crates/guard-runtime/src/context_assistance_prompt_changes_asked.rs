@@ -30,12 +30,20 @@ pub(super) fn about_others(prompt: &str) -> bool {
     }) || last_push(&words)
 }
 
+/// Words that lead into a last-push phrase, so a "not" before them still
+/// rules it out: "not since the last push".
+const LEAD: [&str; 5] = ["the", "since", "after", "from", "before"];
+
 /// "since the last push" names what was pushed, as "pushed" does; a bare
 /// "push" ("push this when it passes") names nothing that changed, and
-/// "not the last push" rules it out.
+/// "not the last push" or "not since the last push" rules it out.
 fn last_push(words: &[&str]) -> bool {
     (words.windows(2).enumerate()).any(|(at, pair)| {
-        matches!(pair, ["last" | "latest" | "recent", "push"]) && !denied(words, at)
+        let mut start = at;
+        while start > 0 && LEAD.contains(&words[start - 1]) {
+            start -= 1;
+        }
+        matches!(pair, ["last" | "latest" | "recent", "push"]) && !denied(words, start)
     })
 }
 
