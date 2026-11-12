@@ -5,6 +5,8 @@ import { launchAgent, RejectedAction } from "./api";
 import { isLive, projectsFor } from "./model";
 import type { Agent, LaunchDraft, SwarmSnapshot } from "./types";
 
+const pendingLaunches = new Map<string, LaunchDraft>();
+
 export function AgentComposer({ snapshot, stale, initialProject, onClose, onLaunched, onNavigate }: {
   snapshot: SwarmSnapshot; stale: boolean; initialProject: string; onClose: () => void;
   onLaunched: (agent: Agent) => void; onNavigate: (path: string) => void;
@@ -17,7 +19,8 @@ export function AgentComposer({ snapshot, stale, initialProject, onClose, onLaun
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [uncertain, setUncertain] = useState(false);
-  const pending = useRef<LaunchDraft | null>(null);
+  const pendingKey = `${snapshot.epoch}:${initialProject}:${available[0]?.id ?? ""}`;
+  const pending = useRef<LaunchDraft | null>(pendingLaunches.get(pendingKey) ?? null);
   const peers = snapshot.agents.filter((a) => a.workspace === workspace && isLive(a));
   let launchLabel = "Start agent";
   if (busy) launchLabel = "Starting…";
@@ -26,10 +29,11 @@ export function AgentComposer({ snapshot, stale, initialProject, onClose, onLaun
     if (busy || stale) return;
     const draft = pending.current ?? { request_id: crypto.randomUUID(), epoch: snapshot.epoch, harness, workspace: workspace.trim(), task, model: model.trim() || null };
     pending.current = draft;
+    pendingLaunches.set(pendingKey, draft);
     setBusy(true); setError(null);
-    try { onLaunched(await launchAgent(draft)); }
+    try { const agent = await launchAgent(draft); pendingLaunches.delete(pendingKey); onLaunched(agent); }
     catch (e) {
-      if (e instanceof RejectedAction) { pending.current = null; setUncertain(false); }
+      if (e instanceof RejectedAction) { pending.current = null; pendingLaunches.delete(pendingKey); setUncertain(false); }
       else setUncertain(true);
       setError(e instanceof Error ? e.message : "Launch could not be confirmed.");
     } finally { setBusy(false); }

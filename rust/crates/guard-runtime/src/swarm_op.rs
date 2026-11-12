@@ -67,14 +67,19 @@ pub(crate) fn evaluate(request: &Request, store: &PolicySnapshotStore) -> Result
         }
         store.require_guard_home(&request.query.guard_home)?;
         let swarm = store.swarm();
-        swarm
-            .service
-            .configure_cli_path(&request.query.cli_path)
-            .map_err(str::to_owned)?;
-        let mut checkpoint = swarm.checkpoint.lock().map_err(|_| "swarm_unavailable")?;
+        let _ = swarm.service.configure_cli_path(&request.query.cli_path);
         let home = std::path::Path::new(&request.query.guard_home);
         let history_path = home.join("swarm-history.v1.json");
-        if !checkpoint.initialized {
+        let initialize_history = {
+            let mut checkpoint = swarm.checkpoint.lock().map_err(|_| "swarm_unavailable")?;
+            if checkpoint.initialized {
+                false
+            } else {
+                checkpoint.initialized = true;
+                true
+            }
+        };
+        if initialize_history {
             // History is inert best-effort state; a bad file must not disable Swarm.
             if let Ok(Some(bytes)) = crate::policy_store::read_private_file(
                 &history_path,
@@ -86,7 +91,6 @@ pub(crate) fn evaluate(request: &Request, store: &PolicySnapshotStore) -> Result
                     let _ = swarm.service.restore_history(history);
                 }
             }
-            checkpoint.initialized = true;
         }
         let payload = match &request.query.input {
             Input::Snapshot {} => {
@@ -105,7 +109,11 @@ pub(crate) fn evaluate(request: &Request, store: &PolicySnapshotStore) -> Result
         if let Ok(history) = swarm.service.history() {
             if let Ok(bytes) = serde_json::to_vec(&history) {
                 if !history.is_empty()
-                    && bytes != checkpoint.bytes
+                    && {
+                        let checkpoint =
+                            swarm.checkpoint.lock().map_err(|_| "swarm_unavailable")?;
+                        bytes != checkpoint.bytes
+                    }
                     && crate::policy_store::persist_private_bytes(
                         &history_path,
                         &bytes,
@@ -115,7 +123,11 @@ pub(crate) fn evaluate(request: &Request, store: &PolicySnapshotStore) -> Result
                     )
                     .is_ok()
                 {
-                    checkpoint.bytes = bytes;
+                    swarm
+                        .checkpoint
+                        .lock()
+                        .map_err(|_| "swarm_unavailable")?
+                        .bytes = bytes;
                 }
             }
         }

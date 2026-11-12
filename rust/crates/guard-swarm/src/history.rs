@@ -78,10 +78,12 @@ impl Service {
                 active: false,
                 cancel: 2,
             };
+            let saved_updated_at_ms = run.agent.updated_at_ms;
             run.event(
                 "lifecycle",
                 "Recovered a previous session summary. Activity and control are not restored.",
             );
+            run.agent.updated_at_ms = saved_updated_at_ms;
             registry.runs.insert(run.agent.id.clone(), run);
         }
         Ok(())

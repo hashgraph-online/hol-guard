@@ -11,7 +11,7 @@ const snapshot = () => target;
 export function setSwarmContextTarget(value: SwarmContextTarget | null) {
   // Keep project paths in this tab's memory, outside URLs and persistent storage.
   if (value?.workspace) workspaceByAgent.set(value.id, value.workspace);
-  target = value ? { id: value.id, label: value.label, harness: value.harness, workspace: value.workspace } : null;
+  target = value ? { id: value.id, label: value.label, harness: value.harness, workspace: workspaceForSwarmAgent(value.id, value.workspace) } : null;
   listeners.forEach((listener) => listener());
 }
 export function useSwarmContextTarget() { return useSyncExternalStore(subscribe, snapshot, snapshot); }

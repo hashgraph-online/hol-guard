@@ -5,13 +5,14 @@ const object = (v: unknown): v is Record<string, unknown> => v !== null && typeo
 const text = (v: unknown, max = 4096): v is string => typeof v === "string" && v.length <= max;
 const optionalText = (v: unknown) => v === null || text(v, 16_384);
 const count = (v: unknown) => Number.isSafeInteger(v) && (v as number) >= 0;
+const timestamp = (v: unknown) => count(v) && (v as number) <= 8_640_000_000_000_000;
 const failure = () => new Error("Guard returned agent information this version of Swarm cannot read. Update Guard and try again.");
 
 export function parseAgent(value: unknown): Agent {
   if (!object(value) || !text(value.id, 128) || !value.id || !text(value.harness, 128) || !text(value.label, 160)
     || !["managed", "observed"].includes(String(value.origin)) || !AGENT_STATES.includes(value.state as Agent["state"])
     || !optionalText(value.workspace) || !optionalText(value.task) || !optionalText(value.model) || !optionalText(value.activity)
-    || !(value.pid === null || count(value.pid)) || !count(value.started_at_ms) || !count(value.updated_at_ms)
+    || !(value.pid === null || count(value.pid)) || !timestamp(value.started_at_ms) || !timestamp(value.updated_at_ms)
     || !text(value.detail) || !object(value.controls) || ![value.revision, value.queued, value.context_calls, value.input_tokens, value.output_tokens].every(count)
     || !["message", "steer", "interrupt", "stop"].every((key) => typeof (value.controls as Record<string, unknown>)[key] === "boolean")) throw failure();
   if (value.origin === "observed" && Object.values(value.controls).some(Boolean)) throw failure();
@@ -76,6 +77,6 @@ export async function directAgent(agent: Agent, epoch: string, action: AgentActi
 export async function readEvents(id: string, signal?: AbortSignal): Promise<SwarmEvent[]> {
   const body = await request("/v1/swarm/events", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ run_id: id }) }, signal);
   if (!object(body) || !Array.isArray(body.events) || body.events.length > 200
-    || !body.events.every((e) => object(e) && count(e.sequence) && count(e.at_ms) && text(e.kind, 128) && text(e.text, 16384))) throw failure();
+    || !body.events.every((e) => object(e) && count(e.sequence) && timestamp(e.at_ms) && text(e.kind, 128) && text(e.text, 16384))) throw failure();
   return body.events as SwarmEvent[];
 }

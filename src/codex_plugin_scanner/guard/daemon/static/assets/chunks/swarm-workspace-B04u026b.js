@@ -1,6 +1,6 @@
-const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/chunks/agent-map-C09p6Yow.js","assets/guard-dashboard.js","assets/index.css","assets/chunks/swarm-handoff-CPWKavP3.js","assets/chunks/composer-DW8UFbQG.js","assets/chunks/inspector-7BblDByV.js"])))=>i.map(i=>d[i]);
+const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/chunks/agent-map-BTTSXQR-.js","assets/guard-dashboard.js","assets/index.css","assets/chunks/swarm-handoff-BIqKreGh.js","assets/chunks/composer-BAvMpZLM.js","assets/chunks/inspector-DiwCAzp8.js"])))=>i.map(i=>d[i]);
 import { f as fetchWithGuardAuth, r as reactExports, a as fetchContextAssistance, l as listContextWorkspaces, j as jsxRuntimeExports, H as HiMiniPlus, b as HiMiniCommandLine, c as HiMiniFolder, d as HiMiniCircleStack, e as HiMiniSquares2X2, g as HiMiniComputerDesktop, h as HiMiniMagnifyingGlass, i as HiMiniListBullet, k as HiMiniArrowPath, m as loadWorkspaceModule, n as browserSessionStorage, _ as __vitePreload } from "../guard-dashboard.js";
-import { w as workspaceForSwarmAgent, u as usesPromptContext } from "./swarm-handoff-CPWKavP3.js";
+import { w as workspaceForSwarmAgent, u as usesPromptContext } from "./swarm-handoff-BIqKreGh.js";
 const UNKNOWN_PROJECT = "@unknown";
 const stateLabel = {
   starting: "Starting",
@@ -55,9 +55,10 @@ const object = (v) => v !== null && typeof v === "object" && !Array.isArray(v);
 const text = (v, max = 4096) => typeof v === "string" && v.length <= max;
 const optionalText = (v) => v === null || text(v, 16384);
 const count = (v) => Number.isSafeInteger(v) && v >= 0;
+const timestamp = (v) => count(v) && v <= 864e13;
 const failure = () => new Error("Guard returned agent information this version of Swarm cannot read. Update Guard and try again.");
 function parseAgent(value) {
-  if (!object(value) || !text(value.id, 128) || !value.id || !text(value.harness, 128) || !text(value.label, 160) || !["managed", "observed"].includes(String(value.origin)) || !AGENT_STATES.includes(value.state) || !optionalText(value.workspace) || !optionalText(value.task) || !optionalText(value.model) || !optionalText(value.activity) || !(value.pid === null || count(value.pid)) || !count(value.started_at_ms) || !count(value.updated_at_ms) || !text(value.detail) || !object(value.controls) || ![value.revision, value.queued, value.context_calls, value.input_tokens, value.output_tokens].every(count) || !["message", "steer", "interrupt", "stop"].every((key) => typeof value.controls[key] === "boolean")) throw failure();
+  if (!object(value) || !text(value.id, 128) || !value.id || !text(value.harness, 128) || !text(value.label, 160) || !["managed", "observed"].includes(String(value.origin)) || !AGENT_STATES.includes(value.state) || !optionalText(value.workspace) || !optionalText(value.task) || !optionalText(value.model) || !optionalText(value.activity) || !(value.pid === null || count(value.pid)) || !timestamp(value.started_at_ms) || !timestamp(value.updated_at_ms) || !text(value.detail) || !object(value.controls) || ![value.revision, value.queued, value.context_calls, value.input_tokens, value.output_tokens].every(count) || !["message", "steer", "interrupt", "stop"].every((key) => typeof value.controls[key] === "boolean")) throw failure();
   if (value.origin === "observed" && Object.values(value.controls).some(Boolean)) throw failure();
   return value;
 }
@@ -115,7 +116,7 @@ async function directAgent(agent, epoch, action, text2, requestId, signal) {
 }
 async function readEvents(id, signal) {
   const body = await request("/v1/swarm/events", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ run_id: id }) }, signal);
-  if (!object(body) || !Array.isArray(body.events) || body.events.length > 200 || !body.events.every((e) => object(e) && count(e.sequence) && count(e.at_ms) && text(e.kind, 128) && text(e.text, 16384))) throw failure();
+  if (!object(body) || !Array.isArray(body.events) || body.events.length > 200 || !body.events.every((e) => object(e) && count(e.sequence) && timestamp(e.at_ms) && text(e.kind, 128) && text(e.text, 16384))) throw failure();
   return body.events;
 }
 function useSwarm() {
@@ -195,9 +196,9 @@ function useSwarm() {
   return { snapshot, loading, error, stale: error !== null, context, refresh: refreshNow, acceptAgent };
 }
 const load = (id, loader) => loadWorkspaceModule(loader, { moduleId: id, storage: browserSessionStorage() });
-const AgentMap = reactExports.lazy(() => load("swarm-agent-map", () => __vitePreload(() => import("./agent-map-C09p6Yow.js"), true ? __vite__mapDeps([0,1,2,3]) : void 0)).then((module) => ({ default: module.AgentMap })));
-const AgentComposer = reactExports.lazy(() => load("swarm-composer", () => __vitePreload(() => import("./composer-DW8UFbQG.js"), true ? __vite__mapDeps([4,1,2,3]) : void 0)).then((module) => ({ default: module.AgentComposer })));
-const AgentInspector = reactExports.lazy(() => load("swarm-inspector", () => __vitePreload(() => import("./inspector-7BblDByV.js"), true ? __vite__mapDeps([5,1,2,3]) : void 0)).then((module) => ({ default: module.AgentInspector })));
+const AgentMap = reactExports.lazy(() => load("swarm-agent-map", () => __vitePreload(() => import("./agent-map-BTTSXQR-.js"), true ? __vite__mapDeps([0,1,2,3]) : void 0)).then((module) => ({ default: module.AgentMap })));
+const AgentComposer = reactExports.lazy(() => load("swarm-composer", () => __vitePreload(() => import("./composer-BAvMpZLM.js"), true ? __vite__mapDeps([4,1,2,3]) : void 0)).then((module) => ({ default: module.AgentComposer })));
+const AgentInspector = reactExports.lazy(() => load("swarm-inspector", () => __vitePreload(() => import("./inspector-DiwCAzp8.js"), true ? __vite__mapDeps([5,1,2,3]) : void 0)).then((module) => ({ default: module.AgentInspector })));
 function SwarmWorkspace({ onNavigate, reviews = null, onOpenRequest }) {
   const { snapshot, loading, error, stale, context, refresh, acceptAgent } = useSwarm();
   const [selected, setSelected] = reactExports.useState(() => new URLSearchParams(window.location.search).get("agent"));

@@ -35,7 +35,27 @@ fn basename(path: &Path) -> Option<String> {
 
 fn identify(process: &Process) -> Option<(&'static str, &'static str)> {
     let binary = basename(&process.executable)?;
-    let direct = HARNESSES.iter().find(|(_, _, name)| *name == binary);
+    let in_claude_versions = process
+        .executable
+        .parent()
+        .and_then(Path::file_name)
+        .and_then(|n| n.to_str())
+        == Some("versions")
+        && process
+            .executable
+            .parent()
+            .and_then(Path::parent)
+            .and_then(Path::file_name)
+            .and_then(|n| n.to_str())
+            == Some("claude");
+    let name = if in_claude_versions {
+        "claude"
+    } else {
+        binary.as_str()
+    };
+    let direct = HARNESSES
+        .iter()
+        .find(|(_, _, candidate)| *candidate == name);
     if let Some((id, label, _)) = direct {
         // Configuration and diagnostic commands are not agent runs.
         if process.arguments.get(1).is_some_and(|arg| {

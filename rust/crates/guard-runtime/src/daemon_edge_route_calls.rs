@@ -155,11 +155,7 @@ const WORKSPACE_ASSESSMENT_WRITES: [&str; 7] = [
     "/v1/supply-chain/workspace-assessments/resume",
 ];
 const FIX_PROPOSALS_PREFIX: &str = "/v1/supply-chain/workspace-fix-proposals/";
-const SWARM_WRITES: [&str; 3] = [
-    "/v1/swarm/launch",
-    "/v1/swarm/action",
-    "/v1/swarm/events",
-];
+const SWARM_WRITES: [&str; 3] = ["/v1/swarm/launch", "/v1/swarm/action", "/v1/swarm/events"];
 
 /// Whether `route.handler_post` runs the daemon's own handler for `path`
 /// (`routes/calls.py`).

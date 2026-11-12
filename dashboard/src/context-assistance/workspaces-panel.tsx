@@ -28,6 +28,7 @@ type Props = { ready: boolean; waking?: boolean; generation: string | null; dirt
 
 export function ContextWorkspacesPanel({ ready, waking = false, generation, dirty, documentsAllowed, agentsAllowed, sharingAllowed = false, executionAllowed = false, gate, allowFiles }: Props) {
   const target = useSwarmContextTarget();
+  const targetRef = useRef(target);
   const [scopes, setScopes] = useState<ContextWorkspaceScope[]>([]);
   const [loaded, setLoaded] = useState(false);
   const listable = ready || waking;
@@ -45,6 +46,7 @@ export function ContextWorkspacesPanel({ ready, waking = false, generation, dirt
   const failed = useRef(false);
   const id = useId();
   useEffect(() => { if (brief) { briefPanel.current?.focus({ preventScroll: true }); briefPanel.current?.scrollIntoView({ block: "start" }); } }, [brief]);
+  useEffect(() => { targetRef.current = target; }, [target]);
 
   useEffect(() => {
     const generation = ++revision.current;
@@ -96,7 +98,8 @@ export function ContextWorkspacesPanel({ ready, waking = false, generation, dirt
       const scope = await grantContextWorkspace(input.workspace, input.files, credentials, signal);
       if (signal.aborted) return;
       setScopes((values) => [...values, scope]); granted = true;
-      if (target) setSwarmContextTarget({ ...target, workspace: scope.workspace });
+      const activeTarget = targetRef.current;
+      if (activeTarget) setSwarmContextTarget({ ...activeTarget, workspace: scope.workspace });
     });
     return granted;
   }

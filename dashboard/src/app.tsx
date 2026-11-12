@@ -372,7 +372,7 @@ export function App() {
     let pollId: number | undefined;
     let refreshInFlight = false;
     let clearedQueue = false;
-    const needsFullQueue = view === "inbox" && requestId === null;
+    const needsFullQueue = (view === "inbox" || view === "swarm") && requestId === null;
     const needsQueuePage = view === "inbox" || view === "swarm" || requestId !== null;
     const needsHomePreview = view === "home" && requestId === null;
     const needsRuntimeReceipts =

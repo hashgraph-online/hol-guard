@@ -26,9 +26,11 @@ pub(crate) fn run(registry: Arc<Mutex<Registry>>, id: String) {
         };
         update(&registry, &id, |run| {
             run.agent.pid = Some(process.id());
-            run.agent.state = AgentState::Running;
-            run.agent.detail =
-                "Working on the current turn. New instructions run after this turn.".into();
+            if run.cancel == 0 {
+                run.agent.state = AgentState::Running;
+                run.agent.detail =
+                    "Working on the current turn. New instructions run after this turn.".into();
+            }
             run.agent.revision += 1;
             run.event("lifecycle", "CLI started.");
             run.controls();

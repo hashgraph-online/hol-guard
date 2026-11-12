@@ -8,6 +8,8 @@ import { Activity } from "./activity";
 import { contextFor, stateLabel } from "./model";
 import type { Agent, AgentAction } from "./types";
 
+const pendingActions = new Map<string, { agent: Agent; epoch: string; action: AgentAction; text: string | null; id: string }>();
+
 type Props = { agent: Agent; epoch: string; stale: boolean; onClose: () => void; onRefresh: () => void; onNavigate: (path: string) => void;
   reviews: GuardApprovalRequest[]; onOpenRequest: (id: string) => void;
   context: { enabled: boolean | null; scopes: ContextWorkspaceScope[] | null } };
@@ -21,7 +23,8 @@ export function AgentInspector({ agent, epoch, stale, onClose, onRefresh, onNavi
   const [tab, setTab] = useState(() => new URLSearchParams(window.location.search).get("panel") === "context" ? "Context" : "Activity");
   const panel = useRef<HTMLElement>(null);
   const alive = useRef(true);
-  const pending = useRef<{ agent: Agent; epoch: string; action: AgentAction; text: string | null; id: string } | null>(null);
+  const pendingKey = `${epoch}:${agent.id}`;
+  const pending = useRef(pendingActions.get(pendingKey) ?? null);
   useEffect(() => { alive.current = true; return () => { alive.current = false; }; }, []);
   useEffect(() => {
     if (window.matchMedia("(max-width: 1050px)").matches) panel.current?.scrollIntoView({ block: "start", behavior: "instant" });
@@ -34,17 +37,19 @@ export function AgentInspector({ agent, epoch, stale, onClose, onRefresh, onNavi
     setBusy(true); setError(null); setNotice(null);
     const request = pending.current ?? { agent, epoch, action, text: action === "message" ? draft : null, id: crypto.randomUUID() };
     pending.current = request;
+    pendingActions.set(pendingKey, request);
     try {
       await directAgent(request.agent, request.epoch, request.action, request.text, request.id);
       if (!alive.current) return;
       pending.current = null;
+      pendingActions.delete(pendingKey);
       if (action === "message") setDraft("");
       let message = "Instruction accepted by the agent service.";
       if (action === "stop") message = "Stop requested. Waiting for the process to exit.";
       else if (action === "interrupt") message = "Interruption requested.";
       setNotice(message);
       setConfirmStop(false); onRefresh();
-    } catch (e) { if (alive.current) { if (e instanceof RejectedAction) pending.current = null; setError(e instanceof Error ? e.message : "The action could not be confirmed."); onRefresh(); } }
+    } catch (e) { if (alive.current) { if (e instanceof RejectedAction) { pending.current = null; pendingActions.delete(pendingKey); } setError(e instanceof Error ? e.message : "The action could not be confirmed."); onRefresh(); } }
     finally { if (alive.current) setBusy(false); }
   }
   return <aside ref={panel} className="swarm-inspector" aria-label="Agent details">

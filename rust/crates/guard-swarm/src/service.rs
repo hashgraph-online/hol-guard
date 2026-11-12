@@ -175,7 +175,9 @@ impl Service {
         snapshot.agents.retain(|observed| {
             !registry.runs.values().any(|run| {
                 run.active
-                    && (run.agent.pid == observed.pid || run.agent.pid == observed.parent_pid)
+                    && run.agent.pid.is_some_and(|pid| {
+                        observed.pid == Some(pid) || observed.parent_pid == Some(pid)
+                    })
             })
         });
         snapshot
@@ -314,7 +316,7 @@ impl Service {
                 }
             }
             "interrupt" if run.agent.controls.interrupt => {
-                run.cancel = 1;
+                run.cancel = run.cancel.max(1);
                 run.pending.clear();
                 run.agent.state = AgentState::Stopping;
                 run.event(
@@ -349,14 +351,18 @@ impl Service {
 
     pub fn events(&self, id: &str) -> Result<Vec<Event>, &'static str> {
         let registry = self.registry.lock().map_err(|_| "swarm_unavailable")?;
-        Ok(registry
+        let mut events: Vec<Event> = registry
             .runs
             .get(id)
             .ok_or("swarm_unknown_run")?
             .events
             .iter()
             .cloned()
-            .collect())
+            .collect();
+        while serde_json::to_vec(&events).is_ok_and(|bytes| bytes.len() > 1_500_000) {
+            events.remove(0);
+        }
+        Ok(events)
     }
 
     fn check_epoch(&self, epoch: &str) -> Result<(), &'static str> {

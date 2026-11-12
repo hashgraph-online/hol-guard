@@ -3,7 +3,7 @@ import { p as planGuardHookRemoval, r as removeAllGuardHooks, a as GuardRepairRe
 import { f as filterSettingsBySearch, R as RISK_CONTROL_CONSEQUENCES } from "./app-catalog-Ca_M7GbC.js";
 import { C as ConfirmDialog, u as useConfirmDialog } from "./confirm-dialog-DtkaKpkO.js";
 import { C as ConnectGuardCloudButton } from "./connect-guard-cloud-button-Czo3CxJZ.js";
-import { u as usesPromptContext, s as setSwarmContextTarget, a as useSwarmContextTarget } from "./swarm-handoff-CPWKavP3.js";
+import { u as usesPromptContext, s as setSwarmContextTarget, a as useSwarmContextTarget } from "./swarm-handoff-BIqKreGh.js";
 import { C as CIGAR_TABS, a as cigarWaking, b as canStartCigar, c as cigarHomeCopy, d as cigarTabFromSearch } from "./workspace-model-hR3eI7UO.js";
 function describeAffectedHarness(item) {
   const count2 = item.hook_count ?? item.swept_hook_count;
@@ -5038,6 +5038,7 @@ function projectCardClass(revoked, selected) {
 }
 function ContextWorkspacesPanel({ ready, waking = false, generation, dirty, documentsAllowed, agentsAllowed, sharingAllowed = false, executionAllowed = false, gate, allowFiles }) {
   const target = useSwarmContextTarget();
+  const targetRef = reactExports.useRef(target);
   const [scopes, setScopes] = reactExports.useState([]);
   const [loaded, setLoaded] = reactExports.useState(false);
   const listable = ready || waking;
@@ -5058,6 +5059,9 @@ function ContextWorkspacesPanel({ ready, waking = false, generation, dirty, docu
       briefPanel.current?.scrollIntoView({ block: "start" });
     }
   }, [brief]);
+  reactExports.useEffect(() => {
+    targetRef.current = target;
+  }, [target]);
   reactExports.useEffect(() => {
     const generation2 = ++revision.current;
     request.current?.abort();
@@ -5124,7 +5128,8 @@ function ContextWorkspacesPanel({ ready, waking = false, generation, dirty, docu
       if (signal.aborted) return;
       setScopes((values) => [...values, scope]);
       granted = true;
-      if (target) setSwarmContextTarget({ ...target, workspace: scope.workspace });
+      const activeTarget = targetRef.current;
+      if (activeTarget && activeTarget.id === target?.id) setSwarmContextTarget({ ...activeTarget, workspace: scope.workspace });
     });
     return granted;
   }

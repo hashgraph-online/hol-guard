@@ -1,6 +1,6 @@
 import { r as reactExports, j as jsxRuntimeExports, ak as HiMiniXMark, b as HiMiniCommandLine, d as HiMiniCircleStack, fp as HiMiniArrowUp } from "../guard-dashboard.js";
-import { s as setSwarmContextTarget } from "./swarm-handoff-CPWKavP3.js";
-import { r as relativeTime, a as readEvents, c as contextFor, s as stateLabel, d as directAgent, R as RejectedAction } from "./swarm-workspace-bB_fFIag.js";
+import { s as setSwarmContextTarget } from "./swarm-handoff-BIqKreGh.js";
+import { r as relativeTime, a as readEvents, c as contextFor, s as stateLabel, d as directAgent, R as RejectedAction } from "./swarm-workspace-B04u026b.js";
 function Activity({ agent, stale }) {
   const [events, setEvents] = reactExports.useState([]);
   const [error, setError] = reactExports.useState(false);
@@ -51,6 +51,7 @@ function Activity({ agent, stale }) {
     agent.origin === "observed" ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "swarm-muted", children: "Task output stays in this agent’s app. Start an agent here to follow its activity." }) : /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "swarm-muted", children: "Latest 200 events; long output is shortened for this view. CLI transcripts stay in the harness." })
   ] });
 }
+const pendingActions = /* @__PURE__ */ new Map();
 function AgentInspector({ agent, epoch, stale, onClose, onRefresh, onNavigate, context, reviews, onOpenRequest }) {
   const [draft, setDraft] = reactExports.useState("");
   const [busy, setBusy] = reactExports.useState(false);
@@ -60,7 +61,8 @@ function AgentInspector({ agent, epoch, stale, onClose, onRefresh, onNavigate, c
   const [tab, setTab] = reactExports.useState(() => new URLSearchParams(window.location.search).get("panel") === "context" ? "Context" : "Activity");
   const panel = reactExports.useRef(null);
   const alive = reactExports.useRef(true);
-  const pending = reactExports.useRef(null);
+  const pendingKey = `${epoch}:${agent.id}`;
+  const pending = reactExports.useRef(pendingActions.get(pendingKey) ?? null);
   reactExports.useEffect(() => {
     alive.current = true;
     return () => {
@@ -85,10 +87,12 @@ function AgentInspector({ agent, epoch, stale, onClose, onRefresh, onNavigate, c
     setNotice(null);
     const request = pending.current ?? { agent, epoch, action, text: action === "message" ? draft : null, id: crypto.randomUUID() };
     pending.current = request;
+    pendingActions.set(pendingKey, request);
     try {
       await directAgent(request.agent, request.epoch, request.action, request.text, request.id);
       if (!alive.current) return;
       pending.current = null;
+      pendingActions.delete(pendingKey);
       if (action === "message") setDraft("");
       let message = "Instruction accepted by the agent service.";
       if (action === "stop") message = "Stop requested. Waiting for the process to exit.";
@@ -98,7 +102,10 @@ function AgentInspector({ agent, epoch, stale, onClose, onRefresh, onNavigate, c
       onRefresh();
     } catch (e) {
       if (alive.current) {
-        if (e instanceof RejectedAction) pending.current = null;
+        if (e instanceof RejectedAction) {
+          pending.current = null;
+          pendingActions.delete(pendingKey);
+        }
         setError(e instanceof Error ? e.message : "The action could not be confirmed.");
         onRefresh();
       }

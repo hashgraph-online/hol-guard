@@ -1,6 +1,7 @@
 import { r as reactExports, j as jsxRuntimeExports, ed as GuardModalLayer, ak as HiMiniXMark, b as HiMiniCommandLine, I as HiMiniArrowRight, c as HiMiniFolder } from "../guard-dashboard.js";
-import { i as isLive, p as projectsFor, l as launchAgent, R as RejectedAction } from "./swarm-workspace-bB_fFIag.js";
-import "./swarm-handoff-CPWKavP3.js";
+import { i as isLive, p as projectsFor, l as launchAgent, R as RejectedAction } from "./swarm-workspace-B04u026b.js";
+import "./swarm-handoff-BIqKreGh.js";
+const pendingLaunches = /* @__PURE__ */ new Map();
 function AgentComposer({ snapshot, stale, initialProject, onClose, onLaunched, onNavigate }) {
   const available = snapshot.adapters.filter((a) => a.installed && a.launch_supported);
   const [harness, setHarness] = reactExports.useState(available[0]?.id ?? "");
@@ -10,7 +11,8 @@ function AgentComposer({ snapshot, stale, initialProject, onClose, onLaunched, o
   const [busy, setBusy] = reactExports.useState(false);
   const [error, setError] = reactExports.useState(null);
   const [uncertain, setUncertain] = reactExports.useState(false);
-  const pending = reactExports.useRef(null);
+  const pendingKey = `${snapshot.epoch}:${initialProject}:${available[0]?.id ?? ""}`;
+  const pending = reactExports.useRef(pendingLaunches.get(pendingKey) ?? null);
   const peers = snapshot.agents.filter((a) => a.workspace === workspace && isLive(a));
   let launchLabel = "Start agent";
   if (busy) launchLabel = "Starting…";
@@ -19,13 +21,17 @@ function AgentComposer({ snapshot, stale, initialProject, onClose, onLaunched, o
     if (busy || stale) return;
     const draft = pending.current ?? { request_id: crypto.randomUUID(), epoch: snapshot.epoch, harness, workspace: workspace.trim(), task, model: model.trim() || null };
     pending.current = draft;
+    pendingLaunches.set(pendingKey, draft);
     setBusy(true);
     setError(null);
     try {
-      onLaunched(await launchAgent(draft));
+      const agent = await launchAgent(draft);
+      pendingLaunches.delete(pendingKey);
+      onLaunched(agent);
     } catch (e) {
       if (e instanceof RejectedAction) {
         pending.current = null;
+        pendingLaunches.delete(pendingKey);
         setUncertain(false);
       } else setUncertain(true);
       setError(e instanceof Error ? e.message : "Launch could not be confirmed.");
