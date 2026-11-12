@@ -95,17 +95,24 @@ pub(super) fn mask_credential_categories(value: &str) -> String {
 /// `kill -0`, `kill -s 0`, `kill -n 0` and `kill --signal 0` send no signal:
 /// they ask the kernel whether a process exists and leave it running. The
 /// option is masked so the probe does not read as a request to stop a
-/// process; a real signal later in the text (`kill -0 4821 && kill 4821`)
-/// still names `kill` for the guarded reading.
+/// process. When the text names any other `kill`, `pkill` or `killall`
+/// (`kill -0 "$pid" && kill "$target"`), nothing is masked: the probe is then
+/// the only spelling the action scan can recognise the real signal by.
 pub(super) fn mask_liveness_probes(value: &str) -> String {
     static PROBE: OnceLock<Regex> = OnceLock::new();
-    PROBE
+    static OTHER_KILL: OnceLock<Regex> = OnceLock::new();
+    let masked = PROBE
         .get_or_init(|| {
             Regex::new(r"(?i)\bkill\s+(?:-0|-[sn]\s+0|--signal(?:=|\s+)0)\b")
                 .expect("bounded liveness probe")
         })
-        .replace_all(value, "liveness-probe")
-        .into_owned()
+        .replace_all(value, "liveness-probe");
+    let other_kill = OTHER_KILL
+        .get_or_init(|| Regex::new(r"(?i)\b(?:kill|pkill|killall)\b").expect("bounded kill word"));
+    if other_kill.is_match(&masked) {
+        return value.to_owned();
+    }
+    masked.into_owned()
 }
 
 /// `then read it again` re-reads what the prompt already named, so it adds

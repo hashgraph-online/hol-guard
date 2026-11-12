@@ -135,6 +135,8 @@ fn a_signal_zero_liveness_check_stays_benign() {
         "kill -s 9 4821",
         "kill -05 4821",
         "kill -0 4821 then pkill node",
+        // A later kill with no PID or option is recognised by the probe.
+        "kill -0 \"$pid\" && kill \"$target\"",
     ] {
         assert_not_benign(text);
     }
@@ -153,6 +155,9 @@ fn reading_the_named_file_again_stays_benign() {
         // A negated sensitive read stays refused when the text then reads it.
         "Never read .env files. Then read them again.",
         "Do not read .env. Then open it again.",
+        // A reread that points back at a named credential is a request for it.
+        "The deploy password is in the team vault. Then print it again.",
+        "That file has my password. Then read it again.",
     ] {
         assert_not_benign(text);
     }
