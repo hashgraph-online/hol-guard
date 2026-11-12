@@ -240,6 +240,7 @@
       "src/native_command_unmodeled_ansi_c_tests.rs",
       "src/native_command_unmodeled_case.rs",
       "src/native_command_unmodeled_compound.rs",
+      "src/native_command_unmodeled_disabled_reach.rs",
       "src/native_command_unmodeled_expansion.rs",
       "src/native_command_unmodeled_fd_exec.rs",
       "src/native_command_unmodeled_find_exec.rs",
