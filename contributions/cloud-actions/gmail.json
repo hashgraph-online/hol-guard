@@ -351,6 +351,68 @@
                       "from": "body.data"
                     },
                     "untrusted": true
+                  },
+                  {
+                    "name": "parts",
+                    "value": {
+                      "list": {
+                        "from": "parts",
+                        "maxItems": 20,
+                        "fields": [
+                          {
+                            "name": "mime_type",
+                            "value": {
+                              "from": "mimeType"
+                            }
+                          },
+                          {
+                            "name": "filename",
+                            "value": {
+                              "from": "filename"
+                            },
+                            "untrusted": true
+                          },
+                          {
+                            "name": "body",
+                            "value": {
+                              "from": "body.data"
+                            },
+                            "untrusted": true
+                          },
+                          {
+                            "name": "parts",
+                            "value": {
+                              "list": {
+                                "from": "parts",
+                                "maxItems": 20,
+                                "fields": [
+                                  {
+                                    "name": "mime_type",
+                                    "value": {
+                                      "from": "mimeType"
+                                    }
+                                  },
+                                  {
+                                    "name": "filename",
+                                    "value": {
+                                      "from": "filename"
+                                    },
+                                    "untrusted": true
+                                  },
+                                  {
+                                    "name": "body",
+                                    "value": {
+                                      "from": "body.data"
+                                    },
+                                    "untrusted": true
+                                  }
+                                ]
+                              }
+                            }
+                          }
+                        ]
+                      }
+                    }
                   }
                 ]
               }
@@ -399,6 +461,62 @@
                 }
               ],
               "body": "SGk"
+            },
+            "request": {
+              "body": null,
+              "headers": [
+                [
+                  "accept",
+                  "application/json"
+                ]
+              ],
+              "maxPages": 1,
+              "method": "GET",
+              "url": "https://gmail.googleapis.com/gmail/v1/users/me/messages/18c2f0a1b2c3d4e5?format=full"
+            },
+            "decisions": {
+              "relaxed": "allow",
+              "balanced": "allow",
+              "strict": "allow"
+            }
+          }
+        },
+        {
+          "name": "keeps the text of a message with an attachment",
+          "kind": "safe",
+          "arguments": {
+            "id": "18c2f0a1b2c3d4e5"
+          },
+          "expect": {
+            "facts": {
+              "class": "read"
+            },
+            "response": "{\"id\":\"18c2f0a1b2c3d4e5\",\"threadId\":\"18c2f0a1b2c3d4e5\",\"payload\":{\"mimeType\":\"multipart/mixed\",\"parts\":[{\"mimeType\":\"multipart/alternative\",\"filename\":\"\",\"body\":{},\"parts\":[{\"mimeType\":\"text/plain\",\"filename\":\"\",\"body\":{\"data\":\"SGVsbG8\"}},{\"mimeType\":\"text/html\",\"filename\":\"\",\"body\":{\"data\":\"PHA-SGVsbG88L3A-\"}}]},{\"mimeType\":\"application/pdf\",\"filename\":\"plan.pdf\",\"body\":{\"attachmentId\":\"ANGjdJ8\"}}]}}",
+            "projection": {
+              "id": "18c2f0a1b2c3d4e5",
+              "thread_id": "18c2f0a1b2c3d4e5",
+              "parts": [
+                {
+                  "mime_type": "multipart/alternative",
+                  "filename": "",
+                  "parts": [
+                    {
+                      "mime_type": "text/plain",
+                      "filename": "",
+                      "body": "SGVsbG8"
+                    },
+                    {
+                      "mime_type": "text/html",
+                      "filename": "",
+                      "body": "PHA-SGVsbG88L3A-"
+                    }
+                  ]
+                },
+                {
+                  "mime_type": "application/pdf",
+                  "filename": "plan.pdf"
+                }
+              ]
             },
             "request": {
               "body": null,
@@ -919,7 +1037,7 @@
               }
             },
             "request": {
-              "body": "{\"raw\":\"VG86IHVzZXIxQGV4YW1wbGUuY29tLCB1c2VyMkBleGFtcGxlLmNvbSwgdXNlcjNAZXhhbXBsZS5jb20sIHVzZXI0QGV4YW1wbGUuY29tLCB1c2VyNUBleGFtcGxlLmNvbSwgdXNlcjZAZXhhbXBsZS5jb20sIHVzZXI3QGV4YW1wbGUuY29tLCB1c2VyOEBleGFtcGxlLmNvbSwgdXNlcjlAZXhhbXBsZS5jb20sIHVzZXIxMEBleGFtcGxlLmNvbSwgdXNlcjExQGV4YW1wbGUuY29tLCB1c2VyMTJAZXhhbXBsZS5jb20sIHVzZXIxM0BleGFtcGxlLmNvbSwgdXNlcjE0QGV4YW1wbGUuY29tLCB1c2VyMTVAZXhhbXBsZS5jb20sIHVzZXIxNkBleGFtcGxlLmNvbSwgdXNlcjE3QGV4YW1wbGUuY29tLCB1c2VyMThAZXhhbXBsZS5jb20sIHVzZXIxOUBleGFtcGxlLmNvbSwgdXNlcjIwQGV4YW1wbGUuY29tLCB1c2VyMjFAZXhhbXBsZS5jb20sIHVzZXIyMkBleGFtcGxlLmNvbSwgdXNlcjIzQGV4YW1wbGUuY29tLCB1c2VyMjRAZXhhbXBsZS5jb20sIHVzZXIyNUBleGFtcGxlLmNvbQ0KU3ViamVjdDogPT9VVEYtOD9CP1FXeHNJR2hoYm1Sej89DQpNSU1FLVZlcnNpb246IDEuMA0KQ29udGVudC1UeXBlOiB0ZXh0L3BsYWluOyBjaGFyc2V0PSJVVEYtOCINCkNvbnRlbnQtVHJhbnNmZXItRW5jb2Rpbmc6IGJhc2U2NA0KDQpRV2RsYm1SaElHSmxiRzkzTGc9PQ0K\"}",
+              "body": "{\"raw\":\"VG86IHVzZXIxQGV4YW1wbGUuY29tLA0KIHVzZXIyQGV4YW1wbGUuY29tLA0KIHVzZXIzQGV4YW1wbGUuY29tLA0KIHVzZXI0QGV4YW1wbGUuY29tLA0KIHVzZXI1QGV4YW1wbGUuY29tLA0KIHVzZXI2QGV4YW1wbGUuY29tLA0KIHVzZXI3QGV4YW1wbGUuY29tLA0KIHVzZXI4QGV4YW1wbGUuY29tLA0KIHVzZXI5QGV4YW1wbGUuY29tLA0KIHVzZXIxMEBleGFtcGxlLmNvbSwNCiB1c2VyMTFAZXhhbXBsZS5jb20sDQogdXNlcjEyQGV4YW1wbGUuY29tLA0KIHVzZXIxM0BleGFtcGxlLmNvbSwNCiB1c2VyMTRAZXhhbXBsZS5jb20sDQogdXNlcjE1QGV4YW1wbGUuY29tLA0KIHVzZXIxNkBleGFtcGxlLmNvbSwNCiB1c2VyMTdAZXhhbXBsZS5jb20sDQogdXNlcjE4QGV4YW1wbGUuY29tLA0KIHVzZXIxOUBleGFtcGxlLmNvbSwNCiB1c2VyMjBAZXhhbXBsZS5jb20sDQogdXNlcjIxQGV4YW1wbGUuY29tLA0KIHVzZXIyMkBleGFtcGxlLmNvbSwNCiB1c2VyMjNAZXhhbXBsZS5jb20sDQogdXNlcjI0QGV4YW1wbGUuY29tLA0KIHVzZXIyNUBleGFtcGxlLmNvbQ0KU3ViamVjdDogPT9VVEYtOD9CP1FXeHNJR2hoYm1Sej89DQpNSU1FLVZlcnNpb246IDEuMA0KQ29udGVudC1UeXBlOiB0ZXh0L3BsYWluOyBjaGFyc2V0PSJVVEYtOCINCkNvbnRlbnQtVHJhbnNmZXItRW5jb2Rpbmc6IGJhc2U2NA0KDQpRV2RsYm1SaElHSmxiRzkzTGc9PQ0K\"}",
               "headers": [
                 [
                   "accept",
@@ -1067,7 +1185,7 @@
           "maxItems": 20,
           "items": {
             "maxLength": 64,
-            "pattern": "^[A-Za-z0-9_-]{1,64}$"
+            "pattern": "^(?:Label_[A-Za-z0-9_]+|STARRED|IMPORTANT|UNREAD)$"
           }
         },
         "remove_label_ids": {
@@ -1077,7 +1195,7 @@
           "maxItems": 20,
           "items": {
             "maxLength": 64,
-            "pattern": "^[A-Za-z0-9_-]{1,64}$"
+            "pattern": "^(?:Label_[A-Za-z0-9_]+|STARRED|IMPORTANT|UNREAD)$"
           }
         }
       },
@@ -1171,6 +1289,45 @@
             "id": "18c2f0a1b2c3d4e5",
             "add_label_ids": [
               "My label"
+            ]
+          },
+          "expect": {
+            "error": "invalid_argument"
+          }
+        },
+        {
+          "name": "refuses archiving through a label change",
+          "kind": "risky",
+          "arguments": {
+            "id": "18c2f0a1b2c3d4e5",
+            "remove_label_ids": [
+              "INBOX"
+            ]
+          },
+          "expect": {
+            "error": "invalid_argument"
+          }
+        },
+        {
+          "name": "refuses trashing through a label change",
+          "kind": "risky",
+          "arguments": {
+            "id": "18c2f0a1b2c3d4e5",
+            "add_label_ids": [
+              "TRASH"
+            ]
+          },
+          "expect": {
+            "error": "invalid_argument"
+          }
+        },
+        {
+          "name": "refuses marking as spam through a label change",
+          "kind": "risky",
+          "arguments": {
+            "id": "18c2f0a1b2c3d4e5",
+            "add_label_ids": [
+              "SPAM"
             ]
           },
           "expect": {

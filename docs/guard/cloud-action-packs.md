@@ -138,5 +138,14 @@ hand-written adapters:
 - Paging values that a provider returns in a response header (such as a `Link` header) cannot be projected.
 - A list longer than its `maxItems` is refused rather than truncated.
 - Responses are projected from JSON only. Drive export therefore uses the `files/{id}/download` operation, whose
-  JSON result carries a download link, rather than `files/{id}/export`, which returns the file bytes.
+  JSON result carries a download link, rather than `files/{id}/export`, which returns the file bytes. When the
+  export is still running, `drive.operations.get` reads the same operation until it carries the link.
+- A Drive file id does not say whether it names a folder, and trashing or deleting a folder takes everything
+  inside it. Drive trash, restore and delete therefore leave the scope and record count unknown, and Guard
+  treats them as it treats any action of unknown size.
+- A Calendar event delete is permanent whether or not guests are told: the quiet delete and the cancellation
+  differ only in the notice. A rename and a reschedule are separate actions because an object field is always
+  written, so one action cannot leave the event times unchanged when only the title changes.
+- `gmail.messages.modify` changes user labels and the star, importance and unread marks only. Archive, trash
+  and spam have their own actions with their own facts.
 - A secret pasted into an argument is not a fact. Guard's inspection finds it at call time, not the pack.

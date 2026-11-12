@@ -33,7 +33,7 @@ pub(crate) fn validate_facts(
         None => {}
         Some(Extractor::Const(value)) => typed::<Vec<String>>(value)?,
         Some(Extractor::Domains { arguments }) => {
-            if arguments.is_empty()
+            if !distinct(arguments)
                 || !arguments.iter().all(|name| {
                     matches!(
                         args.get(name),
@@ -83,8 +83,9 @@ fn mail_recipients_bound(action: &PackAction) -> Result<(), &'static str> {
         let wanted: std::collections::BTreeSet<&str> =
             mail.recipient_arguments().into_iter().collect();
         let same = |arguments: &Vec<String>| {
-            arguments.len() == wanted.len()
-                && arguments.iter().all(|name| wanted.contains(name.as_str()))
+            distinct(arguments)
+                && arguments.iter().map(String::as_str).collect::<std::collections::BTreeSet<_>>()
+                    == wanted
         };
         let domains = matches!(
             &action.facts.recipient_domains,
@@ -99,6 +100,13 @@ fn mail_recipients_bound(action: &PackAction) -> Result<(), &'static str> {
         }
     }
     Ok(())
+}
+
+/// An extractor that lists an argument twice would count it twice and could stand in for
+/// an argument it leaves out, so every list must name each argument once.
+fn distinct(arguments: &[String]) -> bool {
+    let unique: std::collections::BTreeSet<&str> = arguments.iter().map(String::as_str).collect();
+    !arguments.is_empty() && unique.len() == arguments.len()
 }
 
 fn typed<T: DeserializeOwned>(value: &Value) -> Result<(), &'static str> {
@@ -139,7 +147,7 @@ fn count_fact(
         None => Ok(()),
         Some(Extractor::Const(value)) => typed::<u64>(value),
         Some(Extractor::Count { arguments }) => {
-            if arguments.is_empty()
+            if !distinct(arguments)
                 || !arguments
                     .iter()
                     .all(|name| matches!(args.get(name), Some(ArgumentSpec::Array { .. })))

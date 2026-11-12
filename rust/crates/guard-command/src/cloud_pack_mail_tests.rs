@@ -155,3 +155,53 @@ fn a_message_cannot_be_built_per_element() {
     });
     assert_eq!(code, "cloud_pack_template_mail_invalid");
 }
+
+#[test]
+fn a_recipient_argument_named_twice_cannot_stand_in_for_another() {
+    for fact in ["recipientDomains", "recipientCount"] {
+        let key = if fact == "recipientDomains" { "domains" } else { "count" };
+        let code = edited(|action| {
+            action["facts"][fact][key]["arguments"] = json!(["to", "to", "cc"]);
+        });
+        assert_eq!(code, "cloud_pack_extractor_argument_invalid", "{fact}");
+    }
+}
+
+#[test]
+fn a_long_subject_is_split_into_short_encoded_words() {
+    let subject = "Zusammenfassung für das Quartal: ".repeat(30);
+    let raw = render(
+        &mail(),
+        &args(json!({"to": ["pat@example.org"], "subject": subject, "text": "t"})),
+    )
+    .unwrap();
+    let message = decode(&raw);
+    let head = message.split_once("\r\n\r\n").unwrap().0;
+    let unfolded = head.replace("\r\n ", " ");
+    let line = unfolded
+        .split("\r\n")
+        .find(|line| line.starts_with("Subject: "))
+        .unwrap();
+    let mut decoded = Vec::new();
+    for word in line["Subject: ".len()..].split(' ') {
+        assert!(word.len() <= 75, "{word}");
+        let inner = word.strip_prefix("=?UTF-8?B?").unwrap().strip_suffix("?=").unwrap();
+        let piece = STANDARD.decode(inner).unwrap();
+        assert!(std::str::from_utf8(&piece).is_ok(), "a word splits a character");
+        decoded.extend(piece);
+    }
+    assert_eq!(String::from_utf8(decoded).unwrap(), subject);
+    assert!(head.split("\r\n").all(|line| line.len() <= 78), "{head}");
+}
+
+#[test]
+fn a_long_recipient_list_is_folded_one_address_per_line() {
+    let to: Vec<String> = (0..50).map(|n| format!("person{n}@example.org")).collect();
+    let raw = render(&mail(), &args(json!({"to": to, "subject": "s", "text": "t"}))).unwrap();
+    let message = decode(&raw);
+    let head = message.split_once("\r\n\r\n").unwrap().0;
+    assert!(head.split("\r\n").all(|line| line.len() <= 78), "{head}");
+    let unfolded = head.replace("\r\n ", " ");
+    let line = unfolded.split("\r\n").next().unwrap();
+    assert_eq!(line, format!("To: {}", to.join(", ")));
+}

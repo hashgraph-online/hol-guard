@@ -37,6 +37,10 @@ impl MailTemplate {
 }
 
 const LINE: usize = 76;
+/// Raw subject bytes per encoded word: 39 bytes encode to 52 base64 characters, so a word with
+/// its 12-character `=?UTF-8?B?...?=` wrapper is 64 characters, within RFC 2047's 75, and the
+/// first line, `Subject: ` and one word, stays within the 78 characters RFC 5322 recommends.
+const WORD_BYTES: usize = 39;
 
 /// Check that `mail` reads a required recipient list, optional copy lists and text arguments.
 pub(crate) fn validate(
@@ -106,7 +110,7 @@ pub(crate) fn render(mail: &MailTemplate, args: &Map<String, Value>) -> Option<S
         if addresses.is_empty() {
             continue;
         }
-        message.push_str(&format!("{header}: {}\r\n", addresses.join(", ")));
+        message.push_str(&format!("{header}: {}\r\n", addresses.join(",\r\n ")));
     }
     if !message.starts_with("To: ") {
         return None;
@@ -116,10 +120,11 @@ pub(crate) fn render(mail: &MailTemplate, args: &Map<String, Value>) -> Option<S
         .and_then(Value::as_str)
         .unwrap_or("");
     let text = args.get(&mail.text).and_then(Value::as_str).unwrap_or("");
-    message.push_str(&format!(
-        "Subject: =?UTF-8?B?{}?=\r\n",
-        STANDARD.encode(subject.as_bytes())
-    ));
+    let words = subject_words(subject)
+        .iter()
+        .map(|word| format!("=?UTF-8?B?{}?=", STANDARD.encode(word.as_bytes())))
+        .collect::<Vec<_>>();
+    message.push_str(&format!("Subject: {}\r\n", words.join("\r\n ")));
     message.push_str("MIME-Version: 1.0\r\n");
     message.push_str("Content-Type: text/plain; charset=\"UTF-8\"\r\n");
     message.push_str("Content-Transfer-Encoding: base64\r\n\r\n");
@@ -129,6 +134,24 @@ pub(crate) fn render(mail: &MailTemplate, args: &Map<String, Value>) -> Option<S
         message.push_str("\r\n");
     }
     Some(URL_SAFE.encode(message.as_bytes()))
+}
+
+/// The subject cut into pieces of at most [`WORD_BYTES`] bytes on character boundaries, so
+/// each encoded word stays within RFC 2047's 75 characters and every folded line stays short.
+fn subject_words(subject: &str) -> Vec<&str> {
+    let mut words = Vec::new();
+    let mut rest = subject;
+    while rest.len() > WORD_BYTES {
+        let mut cut = WORD_BYTES;
+        while !rest.is_char_boundary(cut) {
+            cut -= 1;
+        }
+        let (word, tail) = rest.split_at(cut);
+        words.push(word);
+        rest = tail;
+    }
+    words.push(rest);
+    words
 }
 
 /// `local@domain` with an atom-text local part and a DNS domain: no names, brackets, spaces or separators.

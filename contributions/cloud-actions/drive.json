@@ -524,6 +524,164 @@
       ]
     },
     {
+      "actionId": "drive.operations.get",
+      "title": "Check an export that is still running",
+      "executor": {
+        "kind": "declarative-http",
+        "request": {
+          "method": "GET",
+          "host": "www.googleapis.com",
+          "path": "/drive/v3/operations/{name}",
+          "headers": [
+            {
+              "name": "accept",
+              "value": "application/json"
+            }
+          ],
+          "maxPages": 1
+        }
+      },
+      "arguments": {
+        "name": {
+          "type": "string",
+          "required": true,
+          "maxLength": 256,
+          "pattern": "^[A-Za-z0-9_-]+$"
+        }
+      },
+      "facts": {
+        "class": "read",
+        "object": {
+          "const": "file"
+        },
+        "scope": {
+          "const": "single"
+        },
+        "recordCount": {
+          "const": 1
+        }
+      },
+      "response": {
+        "maxBytes": 16384,
+        "fields": [
+          {
+            "name": "name",
+            "value": {
+              "from": "name"
+            }
+          },
+          {
+            "name": "done",
+            "value": {
+              "from": "done"
+            }
+          },
+          {
+            "name": "download_uri",
+            "value": {
+              "from": "response.downloadUri"
+            },
+            "sensitivity": "confidential"
+          }
+        ]
+      },
+      "safety": {
+        "effect": "read",
+        "requiredCapabilities": [
+          "bounded-output",
+          "egress-pinned"
+        ],
+        "idempotency": "safe-read",
+        "scopes": [
+          "https://www.googleapis.com/auth/drive.readonly"
+        ],
+        "maxItems": 1,
+        "minIntervalMs": 2000,
+        "timeoutMs": 10000
+      },
+      "fixtures": [
+        {
+          "name": "reads a pending export",
+          "kind": "safe",
+          "arguments": {
+            "name": "op_7f3a9c"
+          },
+          "expect": {
+            "facts": {
+              "class": "read"
+            },
+            "response": "{\"name\":\"op_7f3a9c\",\"done\":false}",
+            "projection": {
+              "name": "op_7f3a9c",
+              "done": false
+            },
+            "request": {
+              "body": null,
+              "headers": [
+                [
+                  "accept",
+                  "application/json"
+                ]
+              ],
+              "maxPages": 1,
+              "method": "GET",
+              "url": "https://www.googleapis.com/drive/v3/operations/op_7f3a9c"
+            },
+            "decisions": {
+              "relaxed": "allow",
+              "balanced": "allow",
+              "strict": "allow"
+            }
+          }
+        },
+        {
+          "name": "reads a finished export",
+          "kind": "safe",
+          "arguments": {
+            "name": "op_7f3a9c"
+          },
+          "expect": {
+            "facts": {
+              "class": "read"
+            },
+            "response": "{\"name\":\"op_7f3a9c\",\"done\":true,\"response\":{\"@type\":\"type.googleapis.com/google.apps.drive.v3.DownloadFileResponse\",\"downloadUri\":\"https://www.googleapis.com/download/drive/v3/files/x\"}}",
+            "projection": {
+              "name": "op_7f3a9c",
+              "done": true,
+              "download_uri": "https://www.googleapis.com/download/drive/v3/files/x"
+            },
+            "request": {
+              "body": null,
+              "headers": [
+                [
+                  "accept",
+                  "application/json"
+                ]
+              ],
+              "maxPages": 1,
+              "method": "GET",
+              "url": "https://www.googleapis.com/drive/v3/operations/op_7f3a9c"
+            },
+            "decisions": {
+              "relaxed": "allow",
+              "balanced": "allow",
+              "strict": "allow"
+            }
+          }
+        },
+        {
+          "name": "refuses an operation name with a path",
+          "kind": "risky",
+          "arguments": {
+            "name": "op/../../files"
+          },
+          "expect": {
+            "error": "invalid_argument"
+          }
+        }
+      ]
+    },
+    {
       "actionId": "drive.files.create",
       "title": "Create a file or folder",
       "executor": {
@@ -1122,14 +1280,8 @@
         "object": {
           "const": "file"
         },
-        "scope": {
-          "const": "single"
-        },
         "reversibility": {
           "const": "recoverable"
-        },
-        "recordCount": {
-          "const": 1
         }
       },
       "response": {
@@ -1178,7 +1330,7 @@
       },
       "fixtures": [
         {
-          "name": "trashes one file",
+          "name": "trashes one file or folder",
           "kind": "safe",
           "arguments": {
             "file_id": "a1B2c3D4e5F6g7H8i9J0"
@@ -1209,7 +1361,7 @@
             },
             "decisions": {
               "relaxed": "allow",
-              "balanced": "allow",
+              "balanced": "require-reapproval",
               "strict": "review"
             }
           }
@@ -1279,14 +1431,8 @@
         "object": {
           "const": "file"
         },
-        "scope": {
-          "const": "single"
-        },
         "reversibility": {
           "const": "reversible"
-        },
-        "recordCount": {
-          "const": 1
         }
       },
       "response": {
@@ -1335,7 +1481,7 @@
       },
       "fixtures": [
         {
-          "name": "restores one file",
+          "name": "restores one file or folder",
           "kind": "safe",
           "arguments": {
             "file_id": "a1B2c3D4e5F6g7H8i9J0"
@@ -1362,7 +1508,7 @@
             },
             "decisions": {
               "relaxed": "allow",
-              "balanced": "allow",
+              "balanced": "review",
               "strict": "review"
             }
           }
@@ -1422,14 +1568,8 @@
         "object": {
           "const": "file"
         },
-        "scope": {
-          "const": "single"
-        },
         "reversibility": {
           "const": "permanent"
-        },
-        "recordCount": {
-          "const": 1
         }
       },
       "response": {
@@ -1459,7 +1599,7 @@
       },
       "fixtures": [
         {
-          "name": "permanently deletes one file",
+          "name": "permanently deletes one file or folder",
           "kind": "safe",
           "arguments": {
             "file_id": "a1B2c3D4e5F6g7H8i9J0"
@@ -1486,7 +1626,7 @@
             },
             "decisions": {
               "relaxed": "review",
-              "balanced": "review",
+              "balanced": "require-reapproval",
               "strict": "block"
             }
           }
