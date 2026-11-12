@@ -39,6 +39,16 @@ fn an_absolute_path_gives_no_search_words() {
         assert!(!found.contains(&word.to_owned()), "{word}: {found:?}");
     }
     assert!(found.contains(&"outputfile".to_owned()), "{found:?}");
+    // A path inside a tag, as a harness writes a background task's output
+    // file, is still a path; the words around the tags stay.
+    let found = terms(
+        "<task-notification><output-file>/private/tmp/claude-501/-Users-alice-work/tasks/b5k.output\
+         </output-file><summary>Watch render CI</summary></task-notification>",
+    );
+    for word in ["private", "tmp", "claude", "user", "alice", "work", "b5k"] {
+        assert!(!found.contains(&word.to_owned()), "{word}: {found:?}");
+    }
+    assert!(found.contains(&"render".to_owned()), "{found:?}");
 }
 
 /// Only the path is left out: a name written right after it stays, a path
