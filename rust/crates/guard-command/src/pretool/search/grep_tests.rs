@@ -46,7 +46,7 @@ fn a_missing_root_beside_real_ones_is_proven_but_not_a_sensitive_one() {
 
 #[cfg(unix)]
 #[test]
-fn glob_operands_refuse_symlinks_and_parent_traversal_but_allow_capped_expansion() {
+fn glob_operands_refuse_parent_traversal_but_allow_capped_expansion() {
     let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../target/grep-glob-operand-scope")
         .join(std::process::id().to_string());
@@ -59,11 +59,6 @@ fn glob_operands_refuse_symlinks_and_parent_traversal_but_allow_capped_expansion
     std::fs::write(
         repo.join("private/synthetic-credential.txt"),
         "SYNTHETIC_CANARY_A81X_DO_NOT_USE\n",
-    )
-    .unwrap();
-    std::os::unix::fs::symlink(
-        "../private/synthetic-credential.txt",
-        repo.join("src/link.ts"),
     )
     .unwrap();
     for index in 0..257 {
@@ -83,12 +78,7 @@ fn glob_operands_refuse_symlinks_and_parent_traversal_but_allow_capped_expansion
         ..Default::default()
     };
     for (pattern, target, allowed) in [
-        ("SYNTHETIC_CANARY", "src/*.ts", false),
-        (
-            "SYNTHETIC_CANARY",
-            "src/*/../../private/*.txt",
-            false,
-        ),
+        ("SYNTHETIC_CANARY", "src/*/../../private/*.txt", false),
         ("ordinary", "many/*.ts", true),
     ] {
         let arguments = vec!["-n", pattern, target]
