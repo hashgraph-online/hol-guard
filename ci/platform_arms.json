@@ -1,6 +1,6 @@
 {
  "schema_version": 1,
- "comment": "Every non-Unix behaviour arm in rust/crates/*/src — `#[cfg(..)]` attribute or `cfg!(..)` expression — with the verdict a reviewer gave it. scripts/ci/platform_arm_inventory.py keeps this list honest.",
+ "comment": "Every non-Unix behaviour arm in rust/crates/*/src \u2014 `#[cfg(..)]` attribute or `cfg!(..)` expression \u2014 with the verdict a reviewer gave it. scripts/ci/platform_arm_inventory.py keeps this list honest.",
  "arms": [
   {
    "file": "rust/crates/guard-command/src/adapters/hook/hook_adapter_paths.rs",
@@ -2361,6 +2361,14 @@
    "item": "pub(crate) fn secure_open(_path: &Path, _canonical_path: &Path) -> Result<File, SecureOpenError>",
    "cfg": "not(any(unix, windows))",
    "body": "6b310cc8c25c"
+  },
+  {
+   "verdict": "other-platform",
+   "note": "HOL Guard ships Windows and Unix process containment paths; this fallback only applies to unsupported targets outside both families and polls the owned child without process-tree containment.",
+   "file": "rust/crates/guard-swarm/src/process.rs",
+   "item": "fn finished -- non-Unix block",
+   "cfg": "not(any(unix, windows))",
+   "body": "4d0f5762038f"
   }
  ]
 }

@@ -350,18 +350,28 @@ impl Service {
     }
 
     pub fn events(&self, id: &str) -> Result<Vec<Event>, &'static str> {
-        let registry = self.registry.lock().map_err(|_| "swarm_unavailable")?;
-        let mut events: Vec<Event> = registry
-            .runs
-            .get(id)
-            .ok_or("swarm_unknown_run")?
-            .events
+        let mut events: Vec<Event> = {
+            let registry = self.registry.lock().map_err(|_| "swarm_unavailable")?;
+            registry
+                .runs
+                .get(id)
+                .ok_or("swarm_unknown_run")?
+                .events
+                .iter()
+                .cloned()
+                .collect()
+        };
+        let sizes: Vec<usize> = events
             .iter()
-            .cloned()
+            .map(|event| serde_json::to_vec(event).map_or(0, |bytes| bytes.len() + 1))
             .collect();
-        while serde_json::to_vec(&events).is_ok_and(|bytes| bytes.len() > 1_500_000) {
-            events.remove(0);
+        let mut total = sizes.iter().sum::<usize>() + 2;
+        let mut skip = 0;
+        while total > 1_500_000 && skip < sizes.len() {
+            total -= sizes[skip];
+            skip += 1;
         }
+        events.drain(..skip);
         Ok(events)
     }
 
