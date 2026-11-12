@@ -181,8 +181,8 @@ function AgentComposer({ snapshot, stale, initialProject, onClose, onLaunched, o
   const pending = reactExports.useRef(null);
   const peers = snapshot.agents.filter((a) => a.workspace === workspace && isLive(a));
   let launchLabel = "Start agent";
-  if (uncertain) launchLabel = "Check launch";
-  else if (busy) launchLabel = "Starting…";
+  if (busy) launchLabel = "Starting…";
+  else if (uncertain) launchLabel = "Check launch";
   async function launch() {
     if (busy || stale) return;
     const draft = pending.current ?? { request_id: crypto.randomUUID(), epoch: snapshot.epoch, harness, workspace: workspace.trim(), task, model: model.trim() || null };

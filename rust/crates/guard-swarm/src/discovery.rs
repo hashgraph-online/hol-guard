@@ -93,19 +93,11 @@ fn project(processes: Vec<Process>, now: u64) -> (Vec<Agent>, bool) {
             .parent
             .and_then(|parent| by_pid.get(&parent))
             .is_some_and(|parent| {
-                let same_harness_wrapper = identified
+                identified
                     .get(&parent.pid)
                     .is_some_and(|(_, h, _)| h == harness)
                     && basename(&parent.executable)
-                        .is_some_and(|n| matches!(n.as_str(), "node" | "bun"));
-                let windows_cmd_wrapper = cfg!(windows)
-                    && basename(&parent.executable).as_deref() == Some("cmd")
-                    && parent.arguments.iter().any(|argument| {
-                        argument
-                            .to_ascii_lowercase()
-                            .contains(&format!("{harness}.cmd"))
-                    });
-                same_harness_wrapper || windows_cmd_wrapper
+                        .is_some_and(|n| matches!(n.as_str(), "node" | "bun"))
             });
         if wrapper_parent {
             continue;
@@ -130,6 +122,7 @@ fn project(processes: Vec<Process>, now: u64) -> (Vec<Agent>, bool) {
             context_calls: 0,
             input_tokens: 0,
             output_tokens: 0,
+            parent_pid: process.parent,
         });
     }
     let limited = agents.len() > MAX_AGENTS;

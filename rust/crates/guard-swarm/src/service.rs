@@ -173,10 +173,10 @@ impl Service {
         let mut snapshot = inventory.as_ref().ok_or("swarm_unavailable")?.1.clone();
         let registry = self.registry.lock().map_err(|_| "swarm_unavailable")?;
         snapshot.agents.retain(|observed| {
-            !registry
-                .runs
-                .values()
-                .any(|run| run.active && run.agent.pid == observed.pid)
+            !registry.runs.values().any(|run| {
+                run.active
+                    && (run.agent.pid == observed.pid || run.agent.pid == observed.parent_pid)
+            })
         });
         snapshot
             .agents
@@ -246,6 +246,7 @@ impl Service {
             context_calls: 0,
             input_tokens: 0,
             output_tokens: 0,
+            parent_pid: None,
             detail: "Starting a task with the CLI's existing configuration and permissions.".into(),
             activity: None,
         };

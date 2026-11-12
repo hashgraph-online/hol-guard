@@ -63,6 +63,8 @@ pub struct Agent {
     pub input_tokens: u64,
     #[serde(default)]
     pub output_tokens: u64,
+    #[serde(skip)]
+    pub parent_pid: Option<u32>,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
