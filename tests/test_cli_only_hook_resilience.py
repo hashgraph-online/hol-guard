@@ -13,7 +13,6 @@ from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.adapters.copilot import (
     _hook_command_parts as copilot_hook_command_parts,  # pyright: ignore[reportPrivateUsage]
 )
-from codex_plugin_scanner.guard.adapters.cursor_hook_config import isolated_cursor_hook_python
 from codex_plugin_scanner.guard.adapters.grok import GrokHarnessAdapter
 from codex_plugin_scanner.guard.adapters.hermes import (
     _pretool_payload as hermes_pretool_payload,  # pyright: ignore[reportPrivateUsage]
@@ -61,18 +60,9 @@ def test_managed_cli_hooks_use_bounded_process_bridge(
     context = _context(tmp_path)
     command = factory(context)
 
-    if harness == "grok" and isolated_cursor_hook_python() is not None:
-        assert command[1] == "-I"
-        script_path = Path(command[2])
-        assert "managed/bounded-hooks" in script_path.as_posix()
-        assert script_path.name == "grok.py"
-        script = script_path.read_text(encoding="utf-8")
-        assert 'HARNESS = "grok"' in script
-        assert f"TIMEOUT_SECONDS = {timeout_seconds}" in script
-        assert f"GUARD_HOME = {json.dumps(str(context.guard_home.resolve()))}" in script
-    else:
-        assert command[1:3] == ("-I", "-c")
-        assert "bounded_cli_hook_bridge" in command[3]
+    # Without a runtime to wrap it, Grok registers the bridge like the others.
+    assert command[1:3] == ("-I", "-c")
+    assert "bounded_cli_hook_bridge" in command[3]
     config = cast(dict[str, object], json.loads(command[-1]))
     assert config["harness"] == harness
     assert config["timeout_seconds"] == timeout_seconds
@@ -109,10 +99,12 @@ def test_frozen_managed_cli_hooks_hand_off_to_the_runtime_not_a_stdlib_client(
     assert config["harness"] == harness
 
 
-def test_frozen_grok_hook_keeps_its_isolated_constants_client(
+def test_frozen_grok_hook_without_a_runtime_registers_the_bridge_not_the_client(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    # The bare client fails closed on every deciding hook. The bridge form looks
+    # the runtime up on each hook, so the install recovers once one appears.
     monkeypatch.setattr("sys.frozen", True, raising=False)
     monkeypatch.setattr(
         "codex_plugin_scanner.guard.adapters.bounded_cli_hook_bridge.isolated_cursor_hook_python",
@@ -125,9 +117,32 @@ def test_frozen_grok_hook_keeps_its_isolated_constants_client(
 
     command = GrokHarnessAdapter._hook_command_parts(_context(tmp_path))  # pyright: ignore[reportPrivateUsage]
 
-    assert command[:2] == ("/usr/bin/python3", "-I")
-    assert Path(command[2]).name == "grok.py"
-    source = Path(command[2]).read_text(encoding="utf-8")
+    assert command[0] != "/usr/bin/python3"
+    assert command[1] == "__guard-bounded-hook"
+    config = cast(dict[str, object], json.loads(command[-1]))
+    assert config["harness"] == "grok"
+
+
+def test_frozen_grok_hook_with_a_runtime_wraps_its_isolated_constants_client(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    runtime = tmp_path / "hol-guard-runtime"
+    monkeypatch.setattr("sys.frozen", True, raising=False)
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.adapters.bounded_cli_hook_bridge.isolated_cursor_hook_python",
+        lambda: "/usr/bin/python3",
+    )
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.adapters.bounded_cli_hook_bridge.native_bridge_executable",
+        lambda *_args, **_kwargs: runtime,
+    )
+
+    command = GrokHarnessAdapter._hook_command_parts(_context(tmp_path))  # pyright: ignore[reportPrivateUsage]
+
+    assert command[:4] == (str(runtime), "bounded-hook-bridge", "/usr/bin/python3", "-I")
+    assert Path(command[4]).name == "grok.py"
+    source = Path(command[4]).read_text(encoding="utf-8")
     assert 'HARNESS = "grok"' in source
     assert "daemon --serve" not in source
 

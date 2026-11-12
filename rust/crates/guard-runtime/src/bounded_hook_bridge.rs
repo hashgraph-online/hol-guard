@@ -81,8 +81,8 @@ mod config;
 #[cfg(unix)]
 #[path = "bounded_hook_bridge_successor.rs"]
 mod successor;
-use config::frozen_launch;
 pub(crate) use config::{config_argument, parse_launch_config, positive_seconds, BridgeConfig};
+use config::{frozen_launch, refuse_config};
 #[cfg(unix)]
 use successor::successor_route;
 
@@ -480,37 +480,6 @@ pub(crate) fn run(python_argv: &[String]) -> i32 {
         &config.harness,
         route_hook_from(&config, &raw, deadline, Some(python_argv)),
     )
-}
-
-/// `main_from_argv` for a config the native bridge does not serve: the
-/// `_emit_failure` answer Python gives a config it refuses. Python fails
-/// one without a usable timeout before reading the hook, and any other
-/// for the event the hook names. No install writes such a config for the
-/// native bridge, so the hook fails closed rather than running Python.
-fn refuse_config(argument: Option<&str>, started: Instant) -> i32 {
-    let payload = argument
-        .and_then(|text| pyjson::parse_mapping_lone_surrogates(text).ok())
-        .map(|parsed| parsed.value)
-        .filter(|value| value.as_dict().is_some());
-    let harness = payload
-        .as_ref()
-        .and_then(|value| value.get("harness")?.as_str().map(str::to_owned))
-        .unwrap_or_else(|| "unknown".to_owned());
-    let deadline = payload
-        .as_ref()
-        .and_then(|value| positive_seconds(value.get("timeout_seconds")))
-        .and_then(|timeout| started.checked_add(timeout));
-    let Some(deadline) = deadline else {
-        return fail(&harness, DEFAULT_EVENT, false);
-    };
-    let Input::Read(raw) = read_hook_input(deadline) else {
-        return fail(&harness, DEFAULT_EVENT, false);
-    };
-    let route = match prepare(&raw) {
-        Ok(prepared) => prepared.failed(),
-        Err(refused) => refused,
-    };
-    emit(&harness, route)
 }
 
 #[cfg(all(test, unix))]

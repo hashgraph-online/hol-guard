@@ -521,6 +521,17 @@
         "allow"
       ],
       "note": "Files the receipt for an app action the user already ran from the dashboard; the stored decision labels history and no hook reads it."
+    },
+    {
+      "file": "src/codex_plugin_scanner/guard/adapters/bounded_cli_hook_script_template.py",
+      "func": "BOUNDED_HOOK_SCRIPT_TEMPLATE:_decide",
+      "root": "hook",
+      "reading": "acknowledges-observation",
+      "actions": [
+        "allow",
+        "block"
+      ],
+      "note": "The standalone Grok client's own fail-safe when no native runtime answers: a prompt blocks, a tool or permission event denies, and a lifecycle or completed-tool event is acknowledged, matching the shared failure_payload contract. The allow is only ever the acknowledgement branch."
     }
   ]
 }

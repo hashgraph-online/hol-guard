@@ -112,7 +112,12 @@ def test_native_grok_hook_needs_the_native_runtime(tmp_path: Path, monkeypatch: 
     assert is_grok_hook_command(command, context) is False
 
 
-def test_frozen_grok_hook_keeps_the_client(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_frozen_grok_hook_without_a_durable_runtime_uses_the_bridge(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # A frozen Guard wraps the client only in its runtime's durable copy. With
+    # none, the bridge looks the runtime up on each hook instead of the client
+    # failing every deciding hook closed.
     _offer_native(monkeypatch, tmp_path / "hol-guard-runtime")
     _isolated_python(monkeypatch)
     monkeypatch.setattr(sys, "frozen", True, raising=False)
@@ -120,7 +125,8 @@ def test_frozen_grok_hook_keeps_the_client(tmp_path: Path, monkeypatch: pytest.M
 
     command = GrokHarnessAdapter._hook_command_parts(_context(tmp_path))
 
-    assert command[:2] == (_PYTHON, "-I")
+    assert command[0] != _PYTHON
+    assert command[1] == "__guard-bounded-hook"
 
 
 def _native_digest() -> str:

@@ -40,3 +40,41 @@ fn only_a_grok_config_takes_the_grok_route() {
     assert!(!names_grok(r#"{"harness":"kimi","timeout_seconds":30}"#));
     assert!(!names_grok("not json"));
 }
+
+#[test]
+fn path_options_accept_this_platforms_absolute_paths() {
+    use crate::bounded_hook_bridge_grok_script::native_absolute_on;
+
+    for windows_absolute in [
+        r"C:\Users\me\.hol-guard",
+        "c:/Users/me",
+        r"\\server\share\home",
+    ] {
+        assert!(
+            native_absolute_on(true, windows_absolute),
+            "{windows_absolute}"
+        );
+        assert!(
+            !native_absolute_on(false, windows_absolute),
+            "{windows_absolute}"
+        );
+    }
+    for relative in ["C:relative", "relative", r"\rooted-no-drive", ""] {
+        assert!(!native_absolute_on(true, relative), "{relative}");
+    }
+    assert!(native_absolute_on(false, "/home/me"));
+}
+
+#[test]
+fn windows_paths_print_as_python_prints_them() {
+    use crate::bounded_hook_bridge_grok_script::python_path_on;
+
+    assert_eq!(
+        python_path_on(true, "C:/Users//me/./.hol-guard/").as_deref(),
+        Some(r"C:\Users\me\.hol-guard")
+    );
+    assert_eq!(python_path_on(true, r"d:\").as_deref(), Some(r"d:\"));
+    assert_eq!(python_path_on(true, r"\\server\share"), None);
+    assert_eq!(python_path_on(true, "relative"), None);
+    assert_eq!(python_path_on(false, "C:/Users"), None);
+}

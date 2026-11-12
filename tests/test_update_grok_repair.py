@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import shlex
 import sys
 from pathlib import Path
 
@@ -124,6 +125,15 @@ def test_grok_repair_migrates_to_current_lightweight_client(tmp_path: Path, monk
     monkeypatch.setattr(
         "codex_plugin_scanner.guard.adapters.cursor_hook_config.isolated_cursor_hook_python", lambda: sys.executable
     )
+    runtime = tmp_path / "hol-guard-runtime"
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.adapters.bounded_cli_hook_bridge.native_bridge_executable",
+        lambda *_args, **_kwargs: runtime,
+    )
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.adapters.bounded_cli_hook_native.native_bridge_executable",
+        lambda *_args, **_kwargs: runtime,
+    )
     if stale_kind == "frozen":
         with monkeypatch.context() as frozen:
             _force_frozen_hook_commands(frozen)
@@ -140,8 +150,51 @@ def test_grok_repair_migrates_to_current_lightweight_client(tmp_path: Path, monk
         guard_home=context.guard_home, harness="grok", timeout_seconds=85
     )
     command = json.loads(hook_path.read_text())["hooks"]["PreToolUse"][0]["hooks"][0]["command"]
+    assert command.startswith(str(runtime))
     assert " -I " in command
     assert "__guard-bounded-hook" not in command
+
+
+def test_grok_repair_hands_a_bare_client_back_to_the_bridge(tmp_path: Path, monkeypatch) -> None:
+    from codex_plugin_scanner.guard.adapters.bounded_cli_hook_bridge import bounded_hook_script_path
+
+    # A client registered without a runtime fails every deciding hook closed
+    # and never looks for one; the bridge form looks it up on every hook.
+    context = _context(tmp_path)
+    store = GuardStore(context.guard_home)
+    now = "2026-10-04T00:00:00+00:00"
+    monkeypatch.setattr("codex_plugin_scanner.guard.adapters.bounded_cli_hook_bridge.sys.frozen", True, raising=False)
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.adapters.bounded_cli_hook_bridge._trusted_desktop_hook_proxy_command",
+        lambda *_: None,
+    )
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.adapters.bounded_cli_hook_bridge.isolated_cursor_hook_python",
+        lambda: sys.executable,
+    )
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.adapters.cursor_hook_config.isolated_cursor_hook_python", lambda: sys.executable
+    )
+    for module in ("bounded_cli_hook_bridge", "bounded_cli_hook_native"):
+        monkeypatch.setattr(
+            f"codex_plugin_scanner.guard.adapters.{module}.native_bridge_executable",
+            lambda *_args, **_kwargs: None,
+        )
+    hook_path = _seed_grok_install(context, store, now)
+    payload = json.loads(hook_path.read_text())
+    entry = payload["hooks"]["PreToolUse"][0]["hooks"][0]
+    script = bounded_hook_script_path(context.guard_home, "grok")
+    assert script is not None and script.is_file()
+    entry["command"] = shlex.join([sys.executable, "-I", str(script), shlex.split(entry["command"])[-1]])
+    hook_path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+
+    repaired, warning = repair_grok_install(context=context, store=store, workspace=None, now=now)
+
+    assert warning is None
+    assert repaired is not None
+    command = json.loads(hook_path.read_text())["hooks"]["PreToolUse"][0]["hooks"][0]["command"]
+    assert "__guard-bounded-hook" in command
+    assert repair_grok_install(context=context, store=store, workspace=None, now=now) == (None, None)
 
 
 def test_grok_repair_rewrites_stale_pretool_timeout(tmp_path: Path) -> None:

@@ -199,13 +199,14 @@ def bounded_cli_hook_command(  # NOSONAR(S8495) an argv whose length depends on 
             timeout_seconds=timeout_seconds,
             prepared_files=prepared_files,
         )
-        if isolated_command is not None:
+        native_executable = native_bridge_executable("grok", guard_home=guard_home)
+        if isolated_command is not None and native_executable is not None:
             # The native runtime reads the generated Grok client's constants
             # and answers the hook itself; the client never runs.
-            native_executable = native_bridge_executable("grok", guard_home=guard_home)
-            if native_executable is not None:
-                return (str(native_executable), NATIVE_BOUNDED_HOOK_COMMAND, *isolated_command, config_json)
-            return (*isolated_command, config_json)
+            return (str(native_executable), NATIVE_BOUNDED_HOOK_COMMAND, *isolated_command, config_json)
+        # Without a runtime to wrap the client, register the bridge form: it
+        # looks the runtime up on every hook, so the hook recovers once one
+        # is installed instead of running the fail-closed client forever.
     if frozen_launcher:
         # The frozen Guard hands the hook to its runtime's durable copy when
         # it runs, and fails it closed when there is none.
@@ -311,16 +312,18 @@ def run_bounded_cli_hook(
     remaining = deadline - time.monotonic()
     if native is None or remaining <= 0:
         return _emit_failure(harness=harness, input_text=input_text)
-    config_json = json.dumps(dict(config), ensure_ascii=True, separators=(",", ":"))
     try:
         completed = subprocess.run(
-            _native_argv(native, package_root, [config_json]),
+            _native_argv(native, package_root, [_config_with_budget(config, remaining)]),
             input=input_text.encode("utf-8", "surrogatepass"),
             capture_output=True,
             timeout=remaining + _NATIVE_EXIT_GRACE_SECONDS,
             check=False,
         )
     except (OSError, subprocess.SubprocessError):
+        return _emit_failure(harness=harness, input_text=input_text)
+    if time.monotonic() > deadline:
+        # An answer that arrives after the hook's deadline is not forwarded.
         return _emit_failure(harness=harness, input_text=input_text)
     if completed.stdout:
         _ = sys.stdout.write(completed.stdout.decode("utf-8", "replace"))
@@ -354,16 +357,26 @@ def main_from_argv(argv: Sequence[str]) -> int:
     remaining = deadline - time.monotonic()
     if native is None or remaining <= 0:
         return _fail_without_runtime(harness=harness, deadline=deadline)
+    config = cast(dict[str, object], config)
     sys.stdout.flush()
     try:
         completed = subprocess.run(
-            _native_argv(native, package_root, argv),
+            _native_argv(native, package_root, [_config_with_budget(config, remaining), *argv[1:]]),
             timeout=remaining + _NATIVE_EXIT_GRACE_SECONDS,
             check=False,
         )
-    except (OSError, subprocess.SubprocessError):
+    except OSError:
+        # The runtime never started, so the hook input is still unread.
+        return _fail_without_runtime(harness=harness, deadline=deadline)
+    except subprocess.SubprocessError:
+        # The runtime may have consumed the input before it timed out.
         return _emit_failure(harness=harness, input_text="{}")
     return completed.returncode
+
+
+def _config_with_budget(config: Mapping[str, object], remaining: float) -> str:
+    """The config with the hook's remaining time, so the runtime keeps its deadline."""
+    return json.dumps({**config, "timeout_seconds": remaining}, ensure_ascii=True, separators=(",", ":"))
 
 
 def _fail_without_runtime(*, harness: str, deadline: float) -> int:

@@ -5,6 +5,7 @@ from __future__ import annotations
 import io
 import json
 import subprocess
+import time
 from contextlib import redirect_stdout
 from pathlib import Path
 from typing import cast
@@ -144,12 +145,68 @@ def test_the_native_bridge_names_the_launcher_and_the_config(
 
     [argv] = calls
     assert argv[:3] == [str(native), "bounded-hook-bridge", bounded_cli_hook_bridge.sys.executable]
-    assert argv[-1] == config_json
+    sent = _json_object(argv[-1])
+    timeout = cast(float, sent.pop("timeout_seconds"))
+    expected = _json_object(config_json)
+    assert 0 < timeout <= cast(float, expected.pop("timeout_seconds"))
+    assert sent == expected
     if frozen:
         assert argv[3:-1] == ["__guard-bounded-hook"]
     else:
         assert argv[3:5] == ["-I", "-c"]
         assert "main_from_argv" in argv[5]
+
+
+def test_the_runtime_gets_the_time_left_not_the_full_budget(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    sent: list[float] = []
+
+    def fake_run(argv: list[str], **_kwargs: object) -> subprocess.CompletedProcess[bytes]:
+        sent.append(cast(float, _json_object(argv[-1])["timeout_seconds"]))
+        return subprocess.CompletedProcess(argv, 0, b"{}", b"")
+
+    monkeypatch.setattr(bounded_cli_hook_bridge, "_native_runtime", lambda *_args: tmp_path / "hol-guard-runtime")
+    monkeypatch.setattr(bounded_cli_hook_bridge.subprocess, "run", fake_run)
+    with redirect_stdout(io.StringIO()):
+        bounded_cli_hook_bridge.run_bounded_cli_hook(
+            _config(tmp_path, harness="copilot"),
+            input_text="{}",
+            deadline_monotonic=time.monotonic() + 1,
+        )
+
+    [timeout] = sent
+    assert 0 < timeout <= 1
+
+
+def test_an_answer_after_the_deadline_is_not_forwarded(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    def late_allow(argv: list[str], **_kwargs: object) -> subprocess.CompletedProcess[bytes]:
+        time.sleep(0.2)
+        return subprocess.CompletedProcess(argv, 0, b'{"permissionDecision":"allow"}', b"")
+
+    monkeypatch.setattr(bounded_cli_hook_bridge, "_native_runtime", lambda *_args: tmp_path / "hol-guard-runtime")
+    monkeypatch.setattr(bounded_cli_hook_bridge.subprocess, "run", late_allow)
+    output = io.StringIO()
+    with redirect_stdout(output):
+        bounded_cli_hook_bridge.run_bounded_cli_hook(
+            _config(tmp_path, harness="copilot"),
+            input_text=json.dumps({"hook_event_name": "PreToolUse"}),
+            deadline_monotonic=time.monotonic() + 0.05,
+        )
+
+    assert _json_object(output.getvalue())["permissionDecision"] == "deny"
+
+
+def test_a_runtime_that_cannot_start_answers_the_event_the_hook_names(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.setattr(bounded_cli_hook_bridge, "_native_runtime", lambda *_args: tmp_path / "missing-runtime")
+    prompt = json.dumps({"hook_event_name": "UserPromptSubmit", "prompt": "hi"})
+    monkeypatch.setattr(bounded_cli_hook_bridge, "_read_bounded_stdin", lambda _deadline: (prompt, prompt))
+    output = io.StringIO()
+    with redirect_stdout(output):
+        returncode = bounded_cli_hook_bridge.main_from_argv([json.dumps(_config(tmp_path, harness="grok"))])
+
+    assert returncode == 0
+    assert _json_object(output.getvalue())["decision"] == "block"
 
 
 @pytest.mark.parametrize(
