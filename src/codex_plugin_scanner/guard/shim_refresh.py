@@ -51,13 +51,13 @@ class _RefreshContext:
         self.home_override_explicit = home_override_explicit
 
 
-def _ask(request: dict[str, object]) -> dict[str, object]:
-    """Ask the native ``harness_shim_refresh`` kind; raise RuntimeError on failure."""
+def _ask(request: dict[str, object], guard_home: Path) -> dict[str, object]:
+    """Ask the native ``harness_shim_refresh`` kind for *guard_home*; raise RuntimeError on failure."""
 
     from .native_runner_authority import NativeRunnerAuthorityError, native_runner_authority
 
     try:
-        answer = native_runner_authority("harness_shim_refresh", request)
+        answer = native_runner_authority("harness_shim_refresh", request, guard_home=guard_home)
     except NativeRunnerAuthorityError as error:
         raise RuntimeError(f"shim refresh request failed: {error}") from error
     if not isinstance(answer, dict):
@@ -92,10 +92,10 @@ def _shim_entries(shim_dir: Path) -> list[str]:
     return [entry.name for entry in shim_dir.iterdir() if entry.is_file()]
 
 
-def _refresh_plan(entries: list[str]) -> list[dict[str, object]]:
+def _refresh_plan(entries: list[str], guard_home: Path) -> list[dict[str, object]]:
     """The native plan: which shims to leave, drop as legacy duplicates or check."""
 
-    steps = _ask({"op": "plan", "entries": entries, "adapters": _adapter_launchers()}).get("steps")
+    steps = _ask({"op": "plan", "entries": entries, "adapters": _adapter_launchers()}, guard_home).get("steps")
     if not isinstance(steps, list) or not all(_valid_step(step) for step in steps):
         raise RuntimeError("shim refresh plan is malformed")
     return steps
@@ -114,7 +114,9 @@ def _valid_step(step: object) -> bool:
     )
 
 
-def _installed_context(shim_body: str, install: Mapping[str, object] | None) -> tuple[str | None, str | None] | None:
+def _installed_context(
+    shim_body: str, install: Mapping[str, object] | None, guard_home: Path
+) -> tuple[str | None, str | None] | None:
     """``(home, workspace)`` the installed shim was generated for, or None if unrecognized."""
 
     recorded = install.get("workspace") if install is not None else None
@@ -123,7 +125,8 @@ def _installed_context(shim_body: str, install: Mapping[str, object] | None) -> 
             "op": "context",
             "body": shim_body,
             "install_workspace": recorded if isinstance(recorded, str) else None,
-        }
+        },
+        guard_home,
     )
     recognized, home, workspace = answer.get("recognized"), answer.get("home"), answer.get("workspace")
     if not isinstance(recognized, bool) or not isinstance(home, str | None) or not isinstance(workspace, str | None):
@@ -160,7 +163,7 @@ def refresh_stale_harness_shims(
     if not entries:
         return ShimRefreshResult(refreshed=(), unchanged=(), errors=())
     try:
-        steps = _refresh_plan(entries)
+        steps = _refresh_plan(entries, guard_home)
     except RuntimeError as error:
         return ShimRefreshResult(refreshed=(), unchanged=(), errors=(str(error),))
     # managed_installs has a primary key on harness, so duplicates cannot
@@ -198,7 +201,7 @@ def refresh_stale_harness_shims(
             # itself: --home and --workspace are embedded in base_command, so
             # custom-home installs refresh faithfully instead of being skipped
             # or rewritten with default paths.
-            installed = _installed_context(current, installs_by_harness.get(harness))
+            installed = _installed_context(current, installs_by_harness.get(harness), guard_home)
             if installed is None:
                 errors.append(f"{shim_name}: unrecognized shim body")
                 continue

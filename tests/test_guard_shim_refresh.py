@@ -47,7 +47,9 @@ class ShimRefreshTest(unittest.TestCase):
     def test_plan_resolves_legacy_names(self) -> None:
         steps = {
             step["name"]: (step["action"], step.get("harness"), step.get("canonical"))
-            for step in _refresh_plan(["guard-claude", "guard-claude-code", "guard-cursor", "guard-kimi"])
+            for step in _refresh_plan(
+                ["guard-claude", "guard-claude-code", "guard-cursor", "guard-kimi"], self.guard_home
+            )
         }
         self.assertEqual(steps["claude"], ("check", "claude-code", "claude"))
         self.assertEqual(steps["claude-code"], ("drop_legacy", "claude-code", "claude"))
@@ -61,7 +63,7 @@ class ShimRefreshTest(unittest.TestCase):
         (shim_dir / "guard-kimi.cmd").write_text("x", encoding="utf-8")
         (shim_dir / "other").write_text("x", encoding="utf-8")
         (shim_dir / "guard-dir").mkdir()
-        self.assertEqual([step["name"] for step in _refresh_plan(_shim_entries(shim_dir))], ["kimi"])
+        self.assertEqual([step["name"] for step in _refresh_plan(_shim_entries(shim_dir), self.guard_home)], ["kimi"])
 
     def test_current_shim_is_left_unchanged(self) -> None:
         self._install("kimi")

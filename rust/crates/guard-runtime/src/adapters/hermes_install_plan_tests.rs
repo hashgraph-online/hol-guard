@@ -96,6 +96,23 @@ fn the_consumer_url_follows_the_issuer_origin() {
         ),
         (Some("http://[::1]:9/"), "http://[::1]:9/api/v1/consumer"),
         (Some("http://[::1/"), "https://hol.org/api/v1/consumer"),
+        (
+            Some("http://u@[fe80::1%en0]/"),
+            "http://u@[fe80::1%en0]/api/v1/consumer",
+        ),
+        (Some("http://[v1.x]:9"), "http://[v1.x]:9/api/v1/consumer"),
+        (Some("https://[not-ip]/"), "https://hol.org/api/v1/consumer"),
+        (
+            Some("https://[127.0.0.1]/"),
+            "https://hol.org/api/v1/consumer",
+        ),
+        (Some("https://[::1]x/"), "https://hol.org/api/v1/consumer"),
+        (Some("https://h[::1]/"), "https://hol.org/api/v1/consumer"),
+        (
+            Some("https://[fe80::1%]/"),
+            "https://hol.org/api/v1/consumer",
+        ),
+        (Some("https://[v.x]/"), "https://hol.org/api/v1/consumer"),
         (Some("host.example"), "https://hol.org/api/v1/consumer"),
         (Some("https:/host"), "https://hol.org/api/v1/consumer"),
         (Some("1http://host"), "https://hol.org/api/v1/consumer"),

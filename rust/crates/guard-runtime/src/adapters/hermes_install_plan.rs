@@ -157,10 +157,45 @@ pub(crate) fn consumer_base_url(issuer: Option<&str>) -> String {
         return DEFAULT_CONSUMER_BASE_URL.to_owned();
     };
     let netloc = &after[..after.find(['/', '?', '#']).unwrap_or(after.len())];
-    if netloc.is_empty() || netloc.contains('[') != netloc.contains(']') {
+    let bracketed = netloc.contains('[');
+    if netloc.is_empty()
+        || bracketed != netloc.contains(']')
+        || (bracketed && !bracketed_netloc_valid(netloc))
+    {
         return DEFAULT_CONSUMER_BASE_URL.to_owned();
     }
     format!("{scheme}://{netloc}/api/v1/consumer")
+}
+
+/// `urlsplit`'s `_check_bracketed_netloc`: the host after the last `@` must
+/// be a bracketed IPv6 (optionally scoped) or IPvFuture address.
+fn bracketed_netloc_valid(netloc: &str) -> bool {
+    let host_port = netloc.rsplit_once('@').map_or(netloc, |(_, tail)| tail);
+    let hostname = match host_port.split_once('[') {
+        Some(("", inner)) => {
+            let (hostname, port) = inner.split_once(']').unwrap_or((inner, ""));
+            if !port.is_empty() && !port.starts_with(':') {
+                return false;
+            }
+            hostname
+        }
+        Some(_) => return false,
+        None => host_port
+            .split_once(':')
+            .map_or(host_port, |(host, _)| host),
+    };
+    if let Some(future) = hostname.strip_prefix('v') {
+        return future.split_once('.').is_some_and(|(version, rest)| {
+            !version.is_empty()
+                && version.chars().all(|ch| ch.is_ascii_hexdigit())
+                && !rest.is_empty()
+        });
+    }
+    let (address, scope) = hostname
+        .split_once('%')
+        .map_or((hostname, None), |(a, s)| (a, Some(s)));
+    scope.is_none_or(|scope| !scope.is_empty() && !scope.contains('%'))
+        && address.parse::<std::net::Ipv6Addr>().is_ok()
 }
 
 fn install_state(fields: &Map<String, Value>) -> KindResult {
