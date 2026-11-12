@@ -61,7 +61,7 @@
     },
     {
       "name": "web_rerank",
-      "state": "inherit"
+      "state": "review"
     },
     {
       "name": "web_monitor",
@@ -82,10 +82,10 @@
     "https://webcrawl.app"
   ],
   "saferAlternatives": [
-    "Prefer search_categories, web_parse_status, and web_rerank; they do not start a new web fetch.",
+    "Prefer search_categories and web_parse_status for status and category reads; review web_rerank because cloud mode can send documents to the cloud API.",
     "Review every URL and query in web_search, web_read, web_parse, web_map, web_crawl, web_extract, and web_monitor before approving. Those tools fetch remote content or start network work.",
     "web_monitor can create, change, or delete scheduled watches and send email or webhook alerts. Review the action, URLs, and notify targets before approving.",
-    "Leave the cloud API key unset to keep the server on the local engine and avoid calling webcrawl.app.",
+    "Set WEBCRAWL_MODE=local so the server stays on the local engine instead of calling webcrawl.app.",
     "Pin the npm package to a reviewed version such as @webcrawl/mcp@1.4.5."
   ]
 }
