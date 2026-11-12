@@ -13,10 +13,9 @@
 //! `combinations`) appear in no list here. `range` is admitted only over
 //! small literal bounds or the input's `length`, and only one call may appear
 //! in the fully inlined filter so separate per-call bounds cannot multiply.
-//! These bounds keep one call from running without end. They do not bound
-//! the total output: iterating and binding the value read can multiply it
-//! (`.[] as $x | .[]`), with or without `range`. That costs time and output,
-//! never a read or write past the value jq was given.
+//! That keeps one call from running without end. Iterating and binding a
+//! value can still multiply output (`.[] as $x | .[]`), with or without
+//! `range`: that costs time, never a read or write past jq's input.
 
 use super::program::{bounded_range, closing, identifier_byte, keyword, literal, top_level};
 use super::{
