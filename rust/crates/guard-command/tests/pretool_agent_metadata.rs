@@ -1,4 +1,4 @@
-use guard_command::pretool::evaluate_pre_tool_envelope;
+use guard_command::pretool::{bounded_task_metadata_output, evaluate_pre_tool_envelope};
 use serde_json::{json, Value};
 
 fn evaluate(payload: Value) -> guard_contracts::PreToolResultV1 {
@@ -188,4 +188,51 @@ fn current_claude_code_turn_fields_keep_task_metadata_proven() {
         assert_eq!(result.minimum_action, "allow", "{tool}");
         assert_eq!(result.reason_code, "native_agent_task_metadata", "{tool}");
     }
+}
+
+#[test]
+fn claude_code_post_tool_run_time_keeps_task_metadata_proven() {
+    // Claude Code's PostToolUse input, as its hooks reference shows it: the
+    // tool's result and `duration_ms`, its run time, beside the host fields.
+    let post = |tool: &str, input: &Value, duration: Value| {
+        json!({
+            "session_id":"session", "prompt_id":"prompt", "cwd":"/project",
+            "transcript_path":"/project/transcript.jsonl", "permission_mode":"default",
+            "scratchpad_dir":"/tmp/session/scratchpad", "effort":{"level":"high"},
+            "hook_event_name":"PostToolUse", "tool_name":tool, "tool_input":input,
+            "tool_response":{"answers":{"Which option?":"A"}}, "tool_use_id":"call",
+            "duration_ms":duration
+        })
+    };
+    let question = json!({"question":"Which option?", "header":"Choice",
+        "options":[{"label":"A", "description":"First"}, {"label":"B", "description":"Second"}],
+        "multiSelect":false});
+    let answered = json!({"questions":[question], "answers":{"Which option?":"A"}});
+    let todos = json!({"todos":[{"content":"Task", "status":"pending"}]});
+    for (tool, input) in [("TodoWrite", &todos), ("AskUserQuestion", &answered)] {
+        let mut without = post(tool, input, json!(12));
+        without.as_object_mut().unwrap().remove("duration_ms");
+        assert!(output_proven(&without), "{tool} without a run time");
+        assert!(output_proven(&post(tool, input, json!(12))), "{tool}");
+    }
+    // Only a plain run time is set aside; anything else there, or beside it, is not.
+    for duration in [json!("12"), json!(-1), json!({"ms": 12}), json!(null)] {
+        let payload = post("AskUserQuestion", &answered, duration.clone());
+        assert!(!output_proven(&payload), "{duration}");
+    }
+    let mut stray = post("AskUserQuestion", &answered, json!(12));
+    stray["command"] = json!("echo unsafe");
+    assert!(!output_proven(&stray));
+    let guard_prompt = json!({"questions":[{"header":"HOL Guard",
+        "question":"HOL Guard intercepted this sensitive action. What should Claude do?",
+        "options":[{"label":"Allow once"}, {"label":"Keep blocked"}]}]});
+    assert!(!output_proven(&post(
+        "AskUserQuestion",
+        &guard_prompt,
+        json!(12)
+    )));
+}
+
+fn output_proven(payload: &Value) -> bool {
+    bounded_task_metadata_output(payload, "claude-code")
 }

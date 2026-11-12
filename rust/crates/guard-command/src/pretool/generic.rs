@@ -198,11 +198,11 @@ pub fn bounded_task_metadata_output(payload: &serde_json::Value, harness: &str) 
     }
     let input = root
         .iter()
-        .filter(|(key, _)| {
-            !matches!(
-                key.as_str(),
-                "tool_response" | "toolResponse" | "toolResultPreview"
-            )
+        // The result, and Claude Code's `duration_ms` run time when it is a plain number.
+        .filter(|(key, value)| match key.as_str() {
+            "tool_response" | "toolResponse" | "toolResultPreview" => false,
+            "duration_ms" => !value.as_f64().is_some_and(|ms| ms >= 0.0),
+            _ => true,
         })
         .map(|(key, value)| (key.clone(), value.clone()))
         .collect();
