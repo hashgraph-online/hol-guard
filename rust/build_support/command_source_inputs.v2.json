@@ -649,6 +649,7 @@
       "src/pretool/workspace_contained_launch.rs",
       "src/pretool/workspace_contained_launch_tests.rs",
       "src/pretool/workspace_contained_links.rs",
+      "src/pretool/workspace_contained_name_patterns.rs",
       "src/pretool/workspace_contained_package.rs",
       "src/pretool/workspace_contained_package_groups.rs",
       "src/pretool/workspace_contained_package_options.rs",
