@@ -8,7 +8,10 @@ use crate::cloud_pack_request::{check_arguments, render};
 use crate::cloud_pack_response::project;
 use serde_json::{json, Value};
 
+const CALENDAR: &str = include_str!("../../../../contributions/cloud-actions/calendar.json");
+const DRIVE: &str = include_str!("../../../../contributions/cloud-actions/drive.json");
 const GITHUB: &str = include_str!("../../../../contributions/cloud-actions/github.json");
+const GMAIL: &str = include_str!("../../../../contributions/cloud-actions/gmail.json");
 const NOTION: &str = include_str!("../../../../contributions/cloud-actions/notion.json");
 const SLACK: &str = include_str!("../../../../contributions/cloud-actions/slack.json");
 
@@ -39,7 +42,7 @@ fn edit_action(id: &str, change: impl FnOnce(&mut Value)) -> Value {
 
 #[test]
 fn shipped_packs_validate_pass_their_fixtures_and_compile() {
-    for text in [GITHUB, NOTION, SLACK] {
+    for text in [CALENDAR, DRIVE, GITHUB, GMAIL, NOTION, SLACK] {
         let pack = parse_pack(text.as_bytes()).unwrap();
         let report = run(&pack);
         assert!(report.passed, "{report:?}");

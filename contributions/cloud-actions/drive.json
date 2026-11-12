@@ -1,0 +1,2485 @@
+{
+  "schema": "guard.cloud-action-pack.v1",
+  "provider": {
+    "id": "drive",
+    "name": "Google Drive",
+    "publisher": {
+      "name": "HOL",
+      "verified": true
+    }
+  },
+  "hosts": [
+    "www.googleapis.com"
+  ],
+  "auth": {
+    "mode": "oauth2",
+    "scopes": [
+      "https://www.googleapis.com/auth/drive",
+      "https://www.googleapis.com/auth/drive.file",
+      "https://www.googleapis.com/auth/drive.metadata.readonly",
+      "https://www.googleapis.com/auth/drive.readonly"
+    ]
+  },
+  "actions": [
+    {
+      "actionId": "drive.files.list",
+      "title": "Search files",
+      "executor": {
+        "kind": "declarative-http",
+        "request": {
+          "method": "GET",
+          "host": "www.googleapis.com",
+          "path": "/drive/v3/files",
+          "query": [
+            {
+              "name": "q",
+              "value": {
+                "arg": {
+                  "name": "query"
+                }
+              }
+            },
+            {
+              "name": "pageSize",
+              "value": {
+                "arg": {
+                  "name": "page_size",
+                  "default": 50
+                }
+              }
+            },
+            {
+              "name": "pageToken",
+              "value": {
+                "arg": {
+                  "name": "page_token"
+                }
+              }
+            },
+            {
+              "name": "fields",
+              "value": {
+                "const": "nextPageToken,files(id,name,mimeType,trashed)"
+              }
+            },
+            {
+              "name": "supportsAllDrives",
+              "value": {
+                "const": true
+              }
+            },
+            {
+              "name": "includeItemsFromAllDrives",
+              "value": {
+                "const": true
+              }
+            }
+          ],
+          "headers": [
+            {
+              "name": "accept",
+              "value": "application/json"
+            }
+          ],
+          "maxPages": 1
+        }
+      },
+      "arguments": {
+        "query": {
+          "type": "string",
+          "required": false,
+          "maxLength": 512,
+          "pattern": "^[^\\x00-\\x1f\\x7f]{1,512}$"
+        },
+        "page_size": {
+          "type": "integer",
+          "required": false,
+          "minimum": 1,
+          "maximum": 100
+        },
+        "page_token": {
+          "type": "string",
+          "required": false,
+          "maxLength": 512,
+          "pattern": "^[A-Za-z0-9_.~-]{1,512}$"
+        }
+      },
+      "facts": {
+        "class": "read",
+        "object": {
+          "const": "file"
+        },
+        "scope": {
+          "const": "query_selected"
+        },
+        "recordCount": {
+          "argument": {
+            "name": "page_size",
+            "max": 100,
+            "default": 50
+          }
+        }
+      },
+      "response": {
+        "maxBytes": 262144,
+        "fields": [
+          {
+            "name": "files",
+            "value": {
+              "list": {
+                "from": "files",
+                "maxItems": 100,
+                "fields": [
+                  {
+                    "name": "id",
+                    "value": {
+                      "from": "id"
+                    }
+                  },
+                  {
+                    "name": "name",
+                    "value": {
+                      "from": "name"
+                    },
+                    "untrusted": true
+                  },
+                  {
+                    "name": "mime_type",
+                    "value": {
+                      "from": "mimeType"
+                    }
+                  },
+                  {
+                    "name": "trashed",
+                    "value": {
+                      "from": "trashed"
+                    }
+                  }
+                ]
+              }
+            }
+          },
+          {
+            "name": "next_page_token",
+            "value": {
+              "from": "nextPageToken"
+            }
+          }
+        ]
+      },
+      "safety": {
+        "effect": "read",
+        "requiredCapabilities": [
+          "bounded-output",
+          "egress-pinned"
+        ],
+        "idempotency": "safe-read",
+        "scopes": [
+          "https://www.googleapis.com/auth/drive.metadata.readonly"
+        ],
+        "maxItems": 100,
+        "minIntervalMs": 500,
+        "timeoutMs": 10000
+      },
+      "fixtures": [
+        {
+          "name": "finds spreadsheets",
+          "kind": "safe",
+          "arguments": {
+            "query": "mimeType='application/vnd.google-apps.spreadsheet'",
+            "page_size": 20
+          },
+          "expect": {
+            "facts": {
+              "class": "read",
+              "record_count": {
+                "state": "known",
+                "value": 20
+              }
+            },
+            "response": "{\"files\":[{\"id\":\"a1B2c3D4e5F6g7H8i9J0\",\"name\":\"Budget\",\"mimeType\":\"application/vnd.google-apps.spreadsheet\",\"trashed\":false,\"owners\":[{\"emailAddress\":\"x@example.com\"}]}]}",
+            "projection": {
+              "files": [
+                {
+                  "id": "a1B2c3D4e5F6g7H8i9J0",
+                  "name": "Budget",
+                  "mime_type": "application/vnd.google-apps.spreadsheet",
+                  "trashed": false
+                }
+              ]
+            },
+            "request": {
+              "body": null,
+              "headers": [
+                [
+                  "accept",
+                  "application/json"
+                ]
+              ],
+              "maxPages": 1,
+              "method": "GET",
+              "url": "https://www.googleapis.com/drive/v3/files?q=mimeType%3D%27application%2Fvnd.google-apps.spreadsheet%27&pageSize=20&fields=nextPageToken%2Cfiles%28id%2Cname%2CmimeType%2Ctrashed%29&supportsAllDrives=true&includeItemsFromAllDrives=true"
+            },
+            "decisions": {
+              "relaxed": "allow",
+              "balanced": "allow",
+              "strict": "allow"
+            }
+          }
+        },
+        {
+          "name": "refuses a page over 100",
+          "kind": "risky",
+          "arguments": {
+            "page_size": 1000
+          },
+          "expect": {
+            "error": "invalid_argument"
+          }
+        }
+      ]
+    },
+    {
+      "actionId": "drive.files.get",
+      "title": "Read file details",
+      "executor": {
+        "kind": "declarative-http",
+        "request": {
+          "method": "GET",
+          "host": "www.googleapis.com",
+          "path": "/drive/v3/files/{file_id}",
+          "query": [
+            {
+              "name": "fields",
+              "value": {
+                "const": "id,name,mimeType,trashed"
+              }
+            },
+            {
+              "name": "supportsAllDrives",
+              "value": {
+                "const": true
+              }
+            }
+          ],
+          "headers": [
+            {
+              "name": "accept",
+              "value": "application/json"
+            }
+          ],
+          "maxPages": 1
+        }
+      },
+      "arguments": {
+        "file_id": {
+          "type": "string",
+          "required": true,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9_-]{10,128}$"
+        }
+      },
+      "facts": {
+        "class": "read",
+        "object": {
+          "const": "file"
+        },
+        "scope": {
+          "const": "single"
+        },
+        "recordCount": {
+          "const": 1
+        }
+      },
+      "response": {
+        "maxBytes": 65536,
+        "fields": [
+          {
+            "name": "id",
+            "value": {
+              "from": "id"
+            }
+          },
+          {
+            "name": "name",
+            "value": {
+              "from": "name"
+            },
+            "untrusted": true
+          },
+          {
+            "name": "mime_type",
+            "value": {
+              "from": "mimeType"
+            }
+          },
+          {
+            "name": "trashed",
+            "value": {
+              "from": "trashed"
+            }
+          }
+        ]
+      },
+      "safety": {
+        "effect": "read",
+        "requiredCapabilities": [
+          "bounded-output",
+          "egress-pinned"
+        ],
+        "idempotency": "safe-read",
+        "scopes": [
+          "https://www.googleapis.com/auth/drive.metadata.readonly"
+        ],
+        "maxItems": 1,
+        "minIntervalMs": 200,
+        "timeoutMs": 10000
+      },
+      "fixtures": [
+        {
+          "name": "reads one file's details",
+          "kind": "safe",
+          "arguments": {
+            "file_id": "a1B2c3D4e5F6g7H8i9J0"
+          },
+          "expect": {
+            "facts": {
+              "class": "read"
+            },
+            "request": {
+              "body": null,
+              "headers": [
+                [
+                  "accept",
+                  "application/json"
+                ]
+              ],
+              "maxPages": 1,
+              "method": "GET",
+              "url": "https://www.googleapis.com/drive/v3/files/a1B2c3D4e5F6g7H8i9J0?fields=id%2Cname%2CmimeType%2Ctrashed&supportsAllDrives=true"
+            },
+            "decisions": {
+              "relaxed": "allow",
+              "balanced": "allow",
+              "strict": "allow"
+            }
+          }
+        },
+        {
+          "name": "refuses a path in the file id",
+          "kind": "risky",
+          "arguments": {
+            "file_id": "../../about?fields=user"
+          },
+          "expect": {
+            "error": "invalid_argument"
+          }
+        }
+      ]
+    },
+    {
+      "actionId": "drive.files.download",
+      "title": "Export a file",
+      "link": {
+        "permissionId": "command.google-workspace.gog.permission.export"
+      },
+      "executor": {
+        "kind": "declarative-http",
+        "request": {
+          "method": "POST",
+          "host": "www.googleapis.com",
+          "path": "/drive/v3/files/{file_id}/download",
+          "query": [
+            {
+              "name": "mimeType",
+              "value": {
+                "arg": {
+                  "name": "mime_type"
+                }
+              }
+            }
+          ],
+          "headers": [
+            {
+              "name": "accept",
+              "value": "application/json"
+            }
+          ],
+          "body": {
+            "object": []
+          },
+          "maxPages": 1
+        }
+      },
+      "arguments": {
+        "file_id": {
+          "type": "string",
+          "required": true,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9_-]{10,128}$"
+        },
+        "mime_type": {
+          "type": "string",
+          "required": false,
+          "maxLength": 128,
+          "pattern": "^(?:application/pdf|text/plain|text/csv|text/markdown|application/vnd\\.openxmlformats-officedocument\\.(?:wordprocessingml\\.document|spreadsheetml\\.sheet|presentationml\\.presentation))$"
+        }
+      },
+      "facts": {
+        "class": "export",
+        "object": {
+          "const": "file"
+        },
+        "scope": {
+          "const": "single"
+        },
+        "recordCount": {
+          "const": 1
+        }
+      },
+      "response": {
+        "maxBytes": 16384,
+        "fields": [
+          {
+            "name": "name",
+            "value": {
+              "from": "name"
+            }
+          },
+          {
+            "name": "done",
+            "value": {
+              "from": "done"
+            }
+          },
+          {
+            "name": "download_uri",
+            "value": {
+              "from": "response.downloadUri"
+            },
+            "sensitivity": "confidential"
+          }
+        ]
+      },
+      "safety": {
+        "effect": "write",
+        "requiredCapabilities": [
+          "bounded-output",
+          "egress-pinned"
+        ],
+        "idempotency": "none",
+        "scopes": [
+          "https://www.googleapis.com/auth/drive.readonly"
+        ],
+        "maxItems": 1,
+        "minIntervalMs": 2000,
+        "timeoutMs": 10000
+      },
+      "fixtures": [
+        {
+          "name": "exports a document as PDF",
+          "kind": "safe",
+          "arguments": {
+            "file_id": "a1B2c3D4e5F6g7H8i9J0",
+            "mime_type": "application/pdf"
+          },
+          "expect": {
+            "facts": {
+              "class": "export"
+            },
+            "request": {
+              "body": "{}",
+              "headers": [
+                [
+                  "accept",
+                  "application/json"
+                ],
+                [
+                  "content-type",
+                  "application/json; charset=utf-8"
+                ]
+              ],
+              "maxPages": 1,
+              "method": "POST",
+              "url": "https://www.googleapis.com/drive/v3/files/a1B2c3D4e5F6g7H8i9J0/download?mimeType=application%2Fpdf"
+            },
+            "decisions": {
+              "relaxed": "allow",
+              "balanced": "review",
+              "strict": "review"
+            }
+          }
+        },
+        {
+          "name": "refuses an unlisted format",
+          "kind": "risky",
+          "arguments": {
+            "file_id": "a1B2c3D4e5F6g7H8i9J0",
+            "mime_type": "application/zip"
+          },
+          "expect": {
+            "error": "invalid_argument"
+          }
+        }
+      ]
+    },
+    {
+      "actionId": "drive.operations.get",
+      "title": "Check an export that is still running",
+      "executor": {
+        "kind": "declarative-http",
+        "request": {
+          "method": "GET",
+          "host": "www.googleapis.com",
+          "path": "/drive/v3/operations/{name}",
+          "headers": [
+            {
+              "name": "accept",
+              "value": "application/json"
+            }
+          ],
+          "maxPages": 1
+        }
+      },
+      "arguments": {
+        "name": {
+          "type": "string",
+          "required": true,
+          "maxLength": 256,
+          "pattern": "^[A-Za-z0-9_-]+$"
+        }
+      },
+      "facts": {
+        "class": "read",
+        "object": {
+          "const": "file"
+        },
+        "scope": {
+          "const": "single"
+        },
+        "recordCount": {
+          "const": 1
+        }
+      },
+      "response": {
+        "maxBytes": 16384,
+        "fields": [
+          {
+            "name": "name",
+            "value": {
+              "from": "name"
+            }
+          },
+          {
+            "name": "done",
+            "value": {
+              "from": "done"
+            }
+          },
+          {
+            "name": "download_uri",
+            "value": {
+              "from": "response.downloadUri"
+            },
+            "sensitivity": "confidential"
+          }
+        ]
+      },
+      "safety": {
+        "effect": "read",
+        "requiredCapabilities": [
+          "bounded-output",
+          "egress-pinned"
+        ],
+        "idempotency": "safe-read",
+        "scopes": [
+          "https://www.googleapis.com/auth/drive.readonly"
+        ],
+        "maxItems": 1,
+        "minIntervalMs": 2000,
+        "timeoutMs": 10000
+      },
+      "fixtures": [
+        {
+          "name": "reads a pending export",
+          "kind": "safe",
+          "arguments": {
+            "name": "op_7f3a9c"
+          },
+          "expect": {
+            "facts": {
+              "class": "read"
+            },
+            "response": "{\"name\":\"op_7f3a9c\",\"done\":false}",
+            "projection": {
+              "name": "op_7f3a9c",
+              "done": false
+            },
+            "request": {
+              "body": null,
+              "headers": [
+                [
+                  "accept",
+                  "application/json"
+                ]
+              ],
+              "maxPages": 1,
+              "method": "GET",
+              "url": "https://www.googleapis.com/drive/v3/operations/op_7f3a9c"
+            },
+            "decisions": {
+              "relaxed": "allow",
+              "balanced": "allow",
+              "strict": "allow"
+            }
+          }
+        },
+        {
+          "name": "reads a finished export",
+          "kind": "safe",
+          "arguments": {
+            "name": "op_7f3a9c"
+          },
+          "expect": {
+            "facts": {
+              "class": "read"
+            },
+            "response": "{\"name\":\"op_7f3a9c\",\"done\":true,\"response\":{\"@type\":\"type.googleapis.com/google.apps.drive.v3.DownloadFileResponse\",\"downloadUri\":\"https://www.googleapis.com/download/drive/v3/files/x\"}}",
+            "projection": {
+              "name": "op_7f3a9c",
+              "done": true,
+              "download_uri": "https://www.googleapis.com/download/drive/v3/files/x"
+            },
+            "request": {
+              "body": null,
+              "headers": [
+                [
+                  "accept",
+                  "application/json"
+                ]
+              ],
+              "maxPages": 1,
+              "method": "GET",
+              "url": "https://www.googleapis.com/drive/v3/operations/op_7f3a9c"
+            },
+            "decisions": {
+              "relaxed": "allow",
+              "balanced": "allow",
+              "strict": "allow"
+            }
+          }
+        },
+        {
+          "name": "refuses an operation name with a path",
+          "kind": "risky",
+          "arguments": {
+            "name": "op/../../files"
+          },
+          "expect": {
+            "error": "invalid_argument"
+          }
+        }
+      ]
+    },
+    {
+      "actionId": "drive.files.create",
+      "title": "Create a file or folder",
+      "executor": {
+        "kind": "declarative-http",
+        "request": {
+          "method": "POST",
+          "host": "www.googleapis.com",
+          "path": "/drive/v3/files",
+          "query": [
+            {
+              "name": "supportsAllDrives",
+              "value": {
+                "const": true
+              }
+            },
+            {
+              "name": "fields",
+              "value": {
+                "const": "id,name,mimeType,trashed"
+              }
+            }
+          ],
+          "headers": [
+            {
+              "name": "accept",
+              "value": "application/json"
+            }
+          ],
+          "body": {
+            "object": [
+              {
+                "name": "name",
+                "value": {
+                  "arg": "name"
+                }
+              },
+              {
+                "name": "mimeType",
+                "value": {
+                  "arg": "mime_type"
+                }
+              },
+              {
+                "name": "parents",
+                "value": {
+                  "arg": "parents"
+                }
+              }
+            ]
+          },
+          "maxPages": 1
+        }
+      },
+      "arguments": {
+        "name": {
+          "type": "string",
+          "required": true,
+          "maxLength": 512,
+          "pattern": "^[^\\x00-\\x1f\\x7f]{1,512}$"
+        },
+        "mime_type": {
+          "type": "string",
+          "required": true,
+          "maxLength": 128,
+          "pattern": "^application/vnd\\.google-apps\\.(?:folder|document|spreadsheet|presentation)$"
+        },
+        "parents": {
+          "type": "array",
+          "required": false,
+          "minItems": 0,
+          "maxItems": 1,
+          "items": {
+            "maxLength": 128,
+            "pattern": "^[A-Za-z0-9_-]{10,128}$"
+          }
+        }
+      },
+      "facts": {
+        "class": "update",
+        "object": {
+          "const": "file"
+        },
+        "scope": {
+          "const": "single"
+        },
+        "reversibility": {
+          "const": "reversible"
+        },
+        "recordCount": {
+          "const": 1
+        }
+      },
+      "response": {
+        "maxBytes": 65536,
+        "fields": [
+          {
+            "name": "id",
+            "value": {
+              "from": "id"
+            }
+          },
+          {
+            "name": "name",
+            "value": {
+              "from": "name"
+            },
+            "untrusted": true
+          },
+          {
+            "name": "mime_type",
+            "value": {
+              "from": "mimeType"
+            }
+          },
+          {
+            "name": "trashed",
+            "value": {
+              "from": "trashed"
+            }
+          }
+        ]
+      },
+      "safety": {
+        "effect": "write",
+        "requiredCapabilities": [
+          "bounded-output",
+          "egress-pinned"
+        ],
+        "idempotency": "none",
+        "scopes": [
+          "https://www.googleapis.com/auth/drive.file"
+        ],
+        "maxItems": 1,
+        "minIntervalMs": 500,
+        "timeoutMs": 10000
+      },
+      "fixtures": [
+        {
+          "name": "creates a folder",
+          "kind": "safe",
+          "arguments": {
+            "name": "Q3 reports",
+            "mime_type": "application/vnd.google-apps.folder"
+          },
+          "expect": {
+            "facts": {
+              "class": "update"
+            },
+            "request": {
+              "body": "{\"name\":\"Q3 reports\",\"mimeType\":\"application/vnd.google-apps.folder\"}",
+              "headers": [
+                [
+                  "accept",
+                  "application/json"
+                ],
+                [
+                  "content-type",
+                  "application/json; charset=utf-8"
+                ]
+              ],
+              "maxPages": 1,
+              "method": "POST",
+              "url": "https://www.googleapis.com/drive/v3/files?supportsAllDrives=true&fields=id%2Cname%2CmimeType%2Ctrashed"
+            },
+            "decisions": {
+              "relaxed": "allow",
+              "balanced": "allow",
+              "strict": "review"
+            }
+          }
+        },
+        {
+          "name": "refuses two parents",
+          "kind": "risky",
+          "arguments": {
+            "name": "x",
+            "mime_type": "application/vnd.google-apps.folder",
+            "parents": [
+              "a1B2c3D4e5F6g7H8i9J0",
+              "a1B2c3D4e5F6g7H8i9J0x"
+            ]
+          },
+          "expect": {
+            "error": "invalid_argument"
+          }
+        }
+      ]
+    },
+    {
+      "actionId": "drive.files.update",
+      "title": "Rename or describe a file",
+      "executor": {
+        "kind": "declarative-http",
+        "request": {
+          "method": "PATCH",
+          "host": "www.googleapis.com",
+          "path": "/drive/v3/files/{file_id}",
+          "query": [
+            {
+              "name": "supportsAllDrives",
+              "value": {
+                "const": true
+              }
+            },
+            {
+              "name": "fields",
+              "value": {
+                "const": "id,name,mimeType,trashed"
+              }
+            }
+          ],
+          "headers": [
+            {
+              "name": "accept",
+              "value": "application/json"
+            }
+          ],
+          "body": {
+            "object": [
+              {
+                "name": "name",
+                "value": {
+                  "arg": "name"
+                }
+              },
+              {
+                "name": "description",
+                "value": {
+                  "arg": "description"
+                }
+              }
+            ]
+          },
+          "maxPages": 1
+        }
+      },
+      "arguments": {
+        "file_id": {
+          "type": "string",
+          "required": true,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9_-]{10,128}$"
+        },
+        "name": {
+          "type": "string",
+          "required": false,
+          "maxLength": 512,
+          "pattern": "^[^\\x00-\\x1f\\x7f]{1,512}$"
+        },
+        "description": {
+          "type": "string",
+          "required": false,
+          "maxLength": 4096,
+          "pattern": "^[^\\x00-\\x08\\x0b\\x0c\\x0e-\\x1f\\x7f]+$"
+        }
+      },
+      "facts": {
+        "class": "update",
+        "object": {
+          "const": "file"
+        },
+        "scope": {
+          "const": "single"
+        },
+        "reversibility": {
+          "const": "reversible"
+        },
+        "recordCount": {
+          "const": 1
+        }
+      },
+      "response": {
+        "maxBytes": 65536,
+        "fields": [
+          {
+            "name": "id",
+            "value": {
+              "from": "id"
+            }
+          },
+          {
+            "name": "name",
+            "value": {
+              "from": "name"
+            },
+            "untrusted": true
+          },
+          {
+            "name": "mime_type",
+            "value": {
+              "from": "mimeType"
+            }
+          },
+          {
+            "name": "trashed",
+            "value": {
+              "from": "trashed"
+            }
+          }
+        ]
+      },
+      "safety": {
+        "effect": "write",
+        "requiredCapabilities": [
+          "bounded-output",
+          "egress-pinned"
+        ],
+        "idempotency": "none",
+        "scopes": [
+          "https://www.googleapis.com/auth/drive.file"
+        ],
+        "maxItems": 1,
+        "minIntervalMs": 500,
+        "timeoutMs": 10000
+      },
+      "fixtures": [
+        {
+          "name": "renames a file",
+          "kind": "safe",
+          "arguments": {
+            "file_id": "a1B2c3D4e5F6g7H8i9J0",
+            "name": "Budget (final)"
+          },
+          "expect": {
+            "facts": {
+              "class": "update"
+            },
+            "request": {
+              "body": "{\"name\":\"Budget (final)\"}",
+              "headers": [
+                [
+                  "accept",
+                  "application/json"
+                ],
+                [
+                  "content-type",
+                  "application/json; charset=utf-8"
+                ]
+              ],
+              "maxPages": 1,
+              "method": "PATCH",
+              "url": "https://www.googleapis.com/drive/v3/files/a1B2c3D4e5F6g7H8i9J0?supportsAllDrives=true&fields=id%2Cname%2CmimeType%2Ctrashed"
+            },
+            "decisions": {
+              "relaxed": "allow",
+              "balanced": "allow",
+              "strict": "review"
+            }
+          }
+        },
+        {
+          "name": "refuses a trash flag",
+          "kind": "risky",
+          "arguments": {
+            "file_id": "a1B2c3D4e5F6g7H8i9J0",
+            "trashed": true
+          },
+          "expect": {
+            "error": "unknown_argument"
+          }
+        }
+      ]
+    },
+    {
+      "actionId": "drive.files.move",
+      "title": "Move a file",
+      "executor": {
+        "kind": "declarative-http",
+        "request": {
+          "method": "PATCH",
+          "host": "www.googleapis.com",
+          "path": "/drive/v3/files/{file_id}",
+          "query": [
+            {
+              "name": "addParents",
+              "value": {
+                "arg": {
+                  "name": "add_parent"
+                }
+              }
+            },
+            {
+              "name": "removeParents",
+              "value": {
+                "arg": {
+                  "name": "remove_parent"
+                }
+              }
+            },
+            {
+              "name": "supportsAllDrives",
+              "value": {
+                "const": true
+              }
+            },
+            {
+              "name": "fields",
+              "value": {
+                "const": "id,name,mimeType,trashed"
+              }
+            }
+          ],
+          "headers": [
+            {
+              "name": "accept",
+              "value": "application/json"
+            }
+          ],
+          "body": {
+            "object": []
+          },
+          "maxPages": 1
+        }
+      },
+      "arguments": {
+        "file_id": {
+          "type": "string",
+          "required": true,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9_-]{10,128}$"
+        },
+        "add_parent": {
+          "type": "string",
+          "required": true,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9_-]{10,128}$"
+        },
+        "remove_parent": {
+          "type": "string",
+          "required": true,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9_-]{10,128}$"
+        }
+      },
+      "facts": {
+        "class": "update",
+        "object": {
+          "const": "file"
+        },
+        "scope": {
+          "const": "single"
+        },
+        "reversibility": {
+          "const": "reversible"
+        },
+        "recordCount": {
+          "const": 1
+        }
+      },
+      "response": {
+        "maxBytes": 65536,
+        "fields": [
+          {
+            "name": "id",
+            "value": {
+              "from": "id"
+            }
+          },
+          {
+            "name": "name",
+            "value": {
+              "from": "name"
+            },
+            "untrusted": true
+          },
+          {
+            "name": "mime_type",
+            "value": {
+              "from": "mimeType"
+            }
+          },
+          {
+            "name": "trashed",
+            "value": {
+              "from": "trashed"
+            }
+          }
+        ]
+      },
+      "safety": {
+        "effect": "write",
+        "requiredCapabilities": [
+          "bounded-output",
+          "egress-pinned"
+        ],
+        "idempotency": "none",
+        "scopes": [
+          "https://www.googleapis.com/auth/drive.file"
+        ],
+        "maxItems": 1,
+        "minIntervalMs": 500,
+        "timeoutMs": 10000
+      },
+      "fixtures": [
+        {
+          "name": "moves a file to another folder",
+          "kind": "safe",
+          "arguments": {
+            "file_id": "a1B2c3D4e5F6g7H8i9J0",
+            "add_parent": "Z9y8X7w6V5u4T3s2R1q0",
+            "remove_parent": "P0o9I8u7Y6t5R4e3W2q1"
+          },
+          "expect": {
+            "facts": {
+              "class": "update"
+            },
+            "request": {
+              "body": "{}",
+              "headers": [
+                [
+                  "accept",
+                  "application/json"
+                ],
+                [
+                  "content-type",
+                  "application/json; charset=utf-8"
+                ]
+              ],
+              "maxPages": 1,
+              "method": "PATCH",
+              "url": "https://www.googleapis.com/drive/v3/files/a1B2c3D4e5F6g7H8i9J0?addParents=Z9y8X7w6V5u4T3s2R1q0&removeParents=P0o9I8u7Y6t5R4e3W2q1&supportsAllDrives=true&fields=id%2Cname%2CmimeType%2Ctrashed"
+            },
+            "decisions": {
+              "relaxed": "allow",
+              "balanced": "allow",
+              "strict": "review"
+            }
+          }
+        },
+        {
+          "name": "refuses a list of parents",
+          "kind": "risky",
+          "arguments": {
+            "file_id": "a1B2c3D4e5F6g7H8i9J0",
+            "add_parent": "Z9y8X7w6V5u4T3s2R1q0,P0o9I8u7Y6t5R4e3W2q1",
+            "remove_parent": "P0o9I8u7Y6t5R4e3W2q1"
+          },
+          "expect": {
+            "error": "invalid_argument"
+          }
+        }
+      ]
+    },
+    {
+      "actionId": "drive.files.trash",
+      "title": "Move a file to trash",
+      "executor": {
+        "kind": "declarative-http",
+        "request": {
+          "method": "PATCH",
+          "host": "www.googleapis.com",
+          "path": "/drive/v3/files/{file_id}",
+          "query": [
+            {
+              "name": "supportsAllDrives",
+              "value": {
+                "const": true
+              }
+            },
+            {
+              "name": "fields",
+              "value": {
+                "const": "id,name,mimeType,trashed"
+              }
+            }
+          ],
+          "headers": [
+            {
+              "name": "accept",
+              "value": "application/json"
+            }
+          ],
+          "body": {
+            "object": [
+              {
+                "name": "trashed",
+                "value": {
+                  "const": true
+                }
+              }
+            ]
+          },
+          "maxPages": 1
+        }
+      },
+      "arguments": {
+        "file_id": {
+          "type": "string",
+          "required": true,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9_-]{10,128}$"
+        }
+      },
+      "facts": {
+        "class": "delete",
+        "object": {
+          "const": "file"
+        },
+        "reversibility": {
+          "const": "recoverable"
+        }
+      },
+      "response": {
+        "maxBytes": 65536,
+        "fields": [
+          {
+            "name": "id",
+            "value": {
+              "from": "id"
+            }
+          },
+          {
+            "name": "name",
+            "value": {
+              "from": "name"
+            },
+            "untrusted": true
+          },
+          {
+            "name": "mime_type",
+            "value": {
+              "from": "mimeType"
+            }
+          },
+          {
+            "name": "trashed",
+            "value": {
+              "from": "trashed"
+            }
+          }
+        ]
+      },
+      "safety": {
+        "effect": "destructive",
+        "requiredCapabilities": [
+          "bounded-output",
+          "egress-pinned"
+        ],
+        "idempotency": "none",
+        "scopes": [
+          "https://www.googleapis.com/auth/drive.file"
+        ],
+        "maxItems": 1,
+        "minIntervalMs": 500,
+        "timeoutMs": 10000
+      },
+      "fixtures": [
+        {
+          "name": "trashes one file or folder",
+          "kind": "safe",
+          "arguments": {
+            "file_id": "a1B2c3D4e5F6g7H8i9J0"
+          },
+          "expect": {
+            "facts": {
+              "class": "delete",
+              "reversibility": {
+                "state": "known",
+                "value": "recoverable"
+              }
+            },
+            "request": {
+              "body": "{\"trashed\":true}",
+              "headers": [
+                [
+                  "accept",
+                  "application/json"
+                ],
+                [
+                  "content-type",
+                  "application/json; charset=utf-8"
+                ]
+              ],
+              "maxPages": 1,
+              "method": "PATCH",
+              "url": "https://www.googleapis.com/drive/v3/files/a1B2c3D4e5F6g7H8i9J0?supportsAllDrives=true&fields=id%2Cname%2CmimeType%2Ctrashed"
+            },
+            "decisions": {
+              "relaxed": "allow",
+              "balanced": "require-reapproval",
+              "strict": "review"
+            }
+          }
+        },
+        {
+          "name": "refuses a missing file id",
+          "kind": "risky",
+          "arguments": {},
+          "expect": {
+            "error": "missing_argument"
+          }
+        }
+      ]
+    },
+    {
+      "actionId": "drive.files.untrash",
+      "title": "Restore a file from trash",
+      "executor": {
+        "kind": "declarative-http",
+        "request": {
+          "method": "PATCH",
+          "host": "www.googleapis.com",
+          "path": "/drive/v3/files/{file_id}",
+          "query": [
+            {
+              "name": "supportsAllDrives",
+              "value": {
+                "const": true
+              }
+            },
+            {
+              "name": "fields",
+              "value": {
+                "const": "id,name,mimeType,trashed"
+              }
+            }
+          ],
+          "headers": [
+            {
+              "name": "accept",
+              "value": "application/json"
+            }
+          ],
+          "body": {
+            "object": [
+              {
+                "name": "trashed",
+                "value": {
+                  "const": false
+                }
+              }
+            ]
+          },
+          "maxPages": 1
+        }
+      },
+      "arguments": {
+        "file_id": {
+          "type": "string",
+          "required": true,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9_-]{10,128}$"
+        }
+      },
+      "facts": {
+        "class": "update",
+        "object": {
+          "const": "file"
+        },
+        "reversibility": {
+          "const": "reversible"
+        }
+      },
+      "response": {
+        "maxBytes": 65536,
+        "fields": [
+          {
+            "name": "id",
+            "value": {
+              "from": "id"
+            }
+          },
+          {
+            "name": "name",
+            "value": {
+              "from": "name"
+            },
+            "untrusted": true
+          },
+          {
+            "name": "mime_type",
+            "value": {
+              "from": "mimeType"
+            }
+          },
+          {
+            "name": "trashed",
+            "value": {
+              "from": "trashed"
+            }
+          }
+        ]
+      },
+      "safety": {
+        "effect": "write",
+        "requiredCapabilities": [
+          "bounded-output",
+          "egress-pinned"
+        ],
+        "idempotency": "none",
+        "scopes": [
+          "https://www.googleapis.com/auth/drive.file"
+        ],
+        "maxItems": 1,
+        "minIntervalMs": 500,
+        "timeoutMs": 10000
+      },
+      "fixtures": [
+        {
+          "name": "restores one file or folder",
+          "kind": "safe",
+          "arguments": {
+            "file_id": "a1B2c3D4e5F6g7H8i9J0"
+          },
+          "expect": {
+            "facts": {
+              "class": "update"
+            },
+            "request": {
+              "body": "{\"trashed\":false}",
+              "headers": [
+                [
+                  "accept",
+                  "application/json"
+                ],
+                [
+                  "content-type",
+                  "application/json; charset=utf-8"
+                ]
+              ],
+              "maxPages": 1,
+              "method": "PATCH",
+              "url": "https://www.googleapis.com/drive/v3/files/a1B2c3D4e5F6g7H8i9J0?supportsAllDrives=true&fields=id%2Cname%2CmimeType%2Ctrashed"
+            },
+            "decisions": {
+              "relaxed": "allow",
+              "balanced": "review",
+              "strict": "review"
+            }
+          }
+        },
+        {
+          "name": "refuses an unknown argument",
+          "kind": "risky",
+          "arguments": {
+            "file_id": "a1B2c3D4e5F6g7H8i9J0",
+            "all": true
+          },
+          "expect": {
+            "error": "unknown_argument"
+          }
+        }
+      ]
+    },
+    {
+      "actionId": "drive.files.delete",
+      "title": "Permanently delete a file",
+      "link": {
+        "permissionId": "command.google-workspace.gws.permission.delete"
+      },
+      "executor": {
+        "kind": "declarative-http",
+        "request": {
+          "method": "DELETE",
+          "host": "www.googleapis.com",
+          "path": "/drive/v3/files/{file_id}",
+          "query": [
+            {
+              "name": "supportsAllDrives",
+              "value": {
+                "const": true
+              }
+            }
+          ],
+          "headers": [
+            {
+              "name": "accept",
+              "value": "application/json"
+            }
+          ],
+          "maxPages": 1
+        }
+      },
+      "arguments": {
+        "file_id": {
+          "type": "string",
+          "required": true,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9_-]{10,128}$"
+        }
+      },
+      "facts": {
+        "class": "delete",
+        "object": {
+          "const": "file"
+        },
+        "reversibility": {
+          "const": "permanent"
+        }
+      },
+      "response": {
+        "maxBytes": 4096,
+        "fields": [
+          {
+            "name": "error",
+            "value": {
+              "exists": "error"
+            }
+          }
+        ]
+      },
+      "safety": {
+        "effect": "destructive",
+        "requiredCapabilities": [
+          "bounded-output",
+          "egress-pinned"
+        ],
+        "idempotency": "none",
+        "scopes": [
+          "https://www.googleapis.com/auth/drive.file"
+        ],
+        "maxItems": 1,
+        "minIntervalMs": 1000,
+        "timeoutMs": 10000
+      },
+      "fixtures": [
+        {
+          "name": "permanently deletes one file or folder",
+          "kind": "safe",
+          "arguments": {
+            "file_id": "a1B2c3D4e5F6g7H8i9J0"
+          },
+          "expect": {
+            "facts": {
+              "class": "delete",
+              "reversibility": {
+                "state": "known",
+                "value": "permanent"
+              }
+            },
+            "request": {
+              "body": null,
+              "headers": [
+                [
+                  "accept",
+                  "application/json"
+                ]
+              ],
+              "maxPages": 1,
+              "method": "DELETE",
+              "url": "https://www.googleapis.com/drive/v3/files/a1B2c3D4e5F6g7H8i9J0?supportsAllDrives=true"
+            },
+            "decisions": {
+              "relaxed": "review",
+              "balanced": "require-reapproval",
+              "strict": "block"
+            }
+          }
+        },
+        {
+          "name": "refuses the trash folder as a file id",
+          "kind": "risky",
+          "arguments": {
+            "file_id": "trash"
+          },
+          "expect": {
+            "error": "invalid_argument"
+          }
+        }
+      ]
+    },
+    {
+      "actionId": "drive.files.empty_trash",
+      "title": "Empty the trash",
+      "link": {
+        "permissionId": "command.google-workspace.gws.permission.delete"
+      },
+      "executor": {
+        "kind": "declarative-http",
+        "request": {
+          "method": "DELETE",
+          "host": "www.googleapis.com",
+          "path": "/drive/v3/files/trash",
+          "headers": [
+            {
+              "name": "accept",
+              "value": "application/json"
+            }
+          ],
+          "maxPages": 1
+        }
+      },
+      "arguments": {},
+      "facts": {
+        "class": "delete",
+        "object": {
+          "const": "file"
+        },
+        "scope": {
+          "const": "all"
+        },
+        "reversibility": {
+          "const": "permanent"
+        }
+      },
+      "response": {
+        "maxBytes": 4096,
+        "fields": [
+          {
+            "name": "error",
+            "value": {
+              "exists": "error"
+            }
+          }
+        ]
+      },
+      "safety": {
+        "effect": "destructive",
+        "requiredCapabilities": [
+          "bounded-output",
+          "egress-pinned"
+        ],
+        "idempotency": "none",
+        "scopes": [
+          "https://www.googleapis.com/auth/drive"
+        ],
+        "maxItems": 1,
+        "minIntervalMs": 60000,
+        "timeoutMs": 10000
+      },
+      "fixtures": [
+        {
+          "name": "empties the trash",
+          "kind": "safe",
+          "arguments": {},
+          "expect": {
+            "facts": {
+              "class": "delete",
+              "scope": {
+                "state": "known",
+                "value": "all"
+              }
+            },
+            "request": {
+              "body": null,
+              "headers": [
+                [
+                  "accept",
+                  "application/json"
+                ]
+              ],
+              "maxPages": 1,
+              "method": "DELETE",
+              "url": "https://www.googleapis.com/drive/v3/files/trash"
+            },
+            "decisions": {
+              "relaxed": "review",
+              "balanced": "require-reapproval",
+              "strict": "block"
+            }
+          }
+        },
+        {
+          "name": "refuses a drive id",
+          "kind": "risky",
+          "arguments": {
+            "drive_id": "0AbCdEf"
+          },
+          "expect": {
+            "error": "unknown_argument"
+          }
+        }
+      ]
+    },
+    {
+      "actionId": "drive.permissions.create_user",
+      "title": "Share a file with a person",
+      "link": {
+        "permissionId": "command.google-workspace.gws.permission.share"
+      },
+      "executor": {
+        "kind": "declarative-http",
+        "request": {
+          "method": "POST",
+          "host": "www.googleapis.com",
+          "path": "/drive/v3/files/{file_id}/permissions",
+          "query": [
+            {
+              "name": "supportsAllDrives",
+              "value": {
+                "const": true
+              }
+            },
+            {
+              "name": "sendNotificationEmail",
+              "value": {
+                "arg": {
+                  "name": "notify",
+                  "default": false
+                }
+              }
+            }
+          ],
+          "headers": [
+            {
+              "name": "accept",
+              "value": "application/json"
+            }
+          ],
+          "body": {
+            "object": [
+              {
+                "name": "type",
+                "value": {
+                  "const": "user"
+                }
+              },
+              {
+                "name": "role",
+                "value": {
+                  "arg": "role"
+                }
+              },
+              {
+                "name": "emailAddress",
+                "value": {
+                  "arg": "email_address"
+                }
+              }
+            ]
+          },
+          "maxPages": 1
+        }
+      },
+      "arguments": {
+        "file_id": {
+          "type": "string",
+          "required": true,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9_-]{10,128}$"
+        },
+        "role": {
+          "type": "string",
+          "required": true,
+          "maxLength": 16,
+          "pattern": "^(?:reader|commenter|writer)$"
+        },
+        "notify": {
+          "type": "boolean",
+          "required": false
+        },
+        "email_address": {
+          "type": "string",
+          "required": true,
+          "maxLength": 320,
+          "pattern": "^[A-Za-z0-9.!#$%&'*+/=?^_`{|}~-]{1,64}@[A-Za-z0-9.-]{1,253}$"
+        }
+      },
+      "facts": {
+        "class": "share",
+        "object": {
+          "const": "file"
+        },
+        "scope": {
+          "const": "single"
+        },
+        "reversibility": {
+          "const": "reversible"
+        },
+        "recordCount": {
+          "const": 1
+        },
+        "audienceKind": {
+          "const": "named"
+        },
+        "recipientCount": {
+          "const": 1
+        },
+        "recipientDomains": {
+          "domains": {
+            "arguments": [
+              "email_address"
+            ]
+          }
+        }
+      },
+      "response": {
+        "maxBytes": 16384,
+        "fields": [
+          {
+            "name": "id",
+            "value": {
+              "from": "id"
+            }
+          },
+          {
+            "name": "type",
+            "value": {
+              "from": "type"
+            }
+          },
+          {
+            "name": "role",
+            "value": {
+              "from": "role"
+            }
+          }
+        ]
+      },
+      "safety": {
+        "effect": "write",
+        "requiredCapabilities": [
+          "bounded-output",
+          "egress-pinned"
+        ],
+        "idempotency": "none",
+        "scopes": [
+          "https://www.googleapis.com/auth/drive.file"
+        ],
+        "maxItems": 1,
+        "minIntervalMs": 1000,
+        "timeoutMs": 10000
+      },
+      "fixtures": [
+        {
+          "name": "shares a file with an outside reviewer",
+          "kind": "safe",
+          "arguments": {
+            "file_id": "a1B2c3D4e5F6g7H8i9J0",
+            "role": "commenter",
+            "email_address": "pat@example.org"
+          },
+          "expect": {
+            "facts": {
+              "class": "share",
+              "audience": {
+                "external": {
+                  "state": "unknown"
+                },
+                "kind": {
+                  "state": "known",
+                  "value": "named"
+                },
+                "recipient_domains": {
+                  "state": "known",
+                  "value": [
+                    "example.org"
+                  ]
+                }
+              }
+            },
+            "request": {
+              "body": "{\"type\":\"user\",\"role\":\"commenter\",\"emailAddress\":\"pat@example.org\"}",
+              "headers": [
+                [
+                  "accept",
+                  "application/json"
+                ],
+                [
+                  "content-type",
+                  "application/json; charset=utf-8"
+                ]
+              ],
+              "maxPages": 1,
+              "method": "POST",
+              "url": "https://www.googleapis.com/drive/v3/files/a1B2c3D4e5F6g7H8i9J0/permissions?supportsAllDrives=true&sendNotificationEmail=false"
+            },
+            "decisions": {
+              "relaxed": "allow",
+              "balanced": "review",
+              "strict": "review"
+            }
+          }
+        },
+        {
+          "name": "refuses ownership transfer",
+          "kind": "risky",
+          "arguments": {
+            "file_id": "a1B2c3D4e5F6g7H8i9J0",
+            "role": "owner",
+            "email_address": "pat@example.org"
+          },
+          "expect": {
+            "error": "invalid_argument"
+          }
+        }
+      ]
+    },
+    {
+      "actionId": "drive.permissions.create_domain",
+      "title": "Share a file with a domain",
+      "link": {
+        "permissionId": "command.google-workspace.gws.permission.share"
+      },
+      "executor": {
+        "kind": "declarative-http",
+        "request": {
+          "method": "POST",
+          "host": "www.googleapis.com",
+          "path": "/drive/v3/files/{file_id}/permissions",
+          "query": [
+            {
+              "name": "supportsAllDrives",
+              "value": {
+                "const": true
+              }
+            },
+            {
+              "name": "sendNotificationEmail",
+              "value": {
+                "arg": {
+                  "name": "notify",
+                  "default": false
+                }
+              }
+            }
+          ],
+          "headers": [
+            {
+              "name": "accept",
+              "value": "application/json"
+            }
+          ],
+          "body": {
+            "object": [
+              {
+                "name": "type",
+                "value": {
+                  "const": "domain"
+                }
+              },
+              {
+                "name": "role",
+                "value": {
+                  "arg": "role"
+                }
+              },
+              {
+                "name": "domain",
+                "value": {
+                  "arg": "domain"
+                }
+              }
+            ]
+          },
+          "maxPages": 1
+        }
+      },
+      "arguments": {
+        "file_id": {
+          "type": "string",
+          "required": true,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9_-]{10,128}$"
+        },
+        "role": {
+          "type": "string",
+          "required": true,
+          "maxLength": 16,
+          "pattern": "^(?:reader|commenter|writer)$"
+        },
+        "notify": {
+          "type": "boolean",
+          "required": false
+        },
+        "domain": {
+          "type": "string",
+          "required": true,
+          "maxLength": 253,
+          "pattern": "^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)+$"
+        }
+      },
+      "facts": {
+        "class": "share",
+        "object": {
+          "const": "file"
+        },
+        "scope": {
+          "const": "single"
+        },
+        "reversibility": {
+          "const": "reversible"
+        },
+        "recordCount": {
+          "const": 1
+        },
+        "audienceKind": {
+          "const": "domain"
+        }
+      },
+      "response": {
+        "maxBytes": 16384,
+        "fields": [
+          {
+            "name": "id",
+            "value": {
+              "from": "id"
+            }
+          },
+          {
+            "name": "type",
+            "value": {
+              "from": "type"
+            }
+          },
+          {
+            "name": "role",
+            "value": {
+              "from": "role"
+            }
+          }
+        ]
+      },
+      "safety": {
+        "effect": "write",
+        "requiredCapabilities": [
+          "bounded-output",
+          "egress-pinned"
+        ],
+        "idempotency": "none",
+        "scopes": [
+          "https://www.googleapis.com/auth/drive.file"
+        ],
+        "maxItems": 1,
+        "minIntervalMs": 1000,
+        "timeoutMs": 10000
+      },
+      "fixtures": [
+        {
+          "name": "shares a file with a whole domain",
+          "kind": "safe",
+          "arguments": {
+            "file_id": "a1B2c3D4e5F6g7H8i9J0",
+            "role": "reader",
+            "domain": "example.org"
+          },
+          "expect": {
+            "facts": {
+              "class": "share",
+              "audience": {
+                "external": {
+                  "state": "unknown"
+                },
+                "kind": {
+                  "state": "known",
+                  "value": "domain"
+                },
+                "recipient_domains": {
+                  "state": "unknown"
+                }
+              }
+            },
+            "request": {
+              "body": "{\"type\":\"domain\",\"role\":\"reader\",\"domain\":\"example.org\"}",
+              "headers": [
+                [
+                  "accept",
+                  "application/json"
+                ],
+                [
+                  "content-type",
+                  "application/json; charset=utf-8"
+                ]
+              ],
+              "maxPages": 1,
+              "method": "POST",
+              "url": "https://www.googleapis.com/drive/v3/files/a1B2c3D4e5F6g7H8i9J0/permissions?supportsAllDrives=true&sendNotificationEmail=false"
+            },
+            "decisions": {
+              "relaxed": "allow",
+              "balanced": "review",
+              "strict": "review"
+            }
+          }
+        },
+        {
+          "name": "refuses a domain with a path",
+          "kind": "risky",
+          "arguments": {
+            "file_id": "a1B2c3D4e5F6g7H8i9J0",
+            "role": "reader",
+            "domain": "example.org/x"
+          },
+          "expect": {
+            "error": "invalid_argument"
+          }
+        }
+      ]
+    },
+    {
+      "actionId": "drive.permissions.create_anyone",
+      "title": "Share a file with anyone who has the link",
+      "link": {
+        "permissionId": "command.google-workspace.gws.permission.share"
+      },
+      "executor": {
+        "kind": "declarative-http",
+        "request": {
+          "method": "POST",
+          "host": "www.googleapis.com",
+          "path": "/drive/v3/files/{file_id}/permissions",
+          "query": [
+            {
+              "name": "supportsAllDrives",
+              "value": {
+                "const": true
+              }
+            },
+            {
+              "name": "sendNotificationEmail",
+              "value": {
+                "arg": {
+                  "name": "notify",
+                  "default": false
+                }
+              }
+            }
+          ],
+          "headers": [
+            {
+              "name": "accept",
+              "value": "application/json"
+            }
+          ],
+          "body": {
+            "object": [
+              {
+                "name": "type",
+                "value": {
+                  "const": "anyone"
+                }
+              },
+              {
+                "name": "role",
+                "value": {
+                  "arg": "role"
+                }
+              },
+              {
+                "name": "allowFileDiscovery",
+                "value": {
+                  "const": false
+                }
+              }
+            ]
+          },
+          "maxPages": 1
+        }
+      },
+      "arguments": {
+        "file_id": {
+          "type": "string",
+          "required": true,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9_-]{10,128}$"
+        },
+        "role": {
+          "type": "string",
+          "required": true,
+          "maxLength": 16,
+          "pattern": "^(?:reader|commenter|writer)$"
+        },
+        "notify": {
+          "type": "boolean",
+          "required": false
+        }
+      },
+      "facts": {
+        "class": "share",
+        "object": {
+          "const": "file"
+        },
+        "scope": {
+          "const": "single"
+        },
+        "reversibility": {
+          "const": "reversible"
+        },
+        "recordCount": {
+          "const": 1
+        },
+        "audienceKind": {
+          "const": "public"
+        }
+      },
+      "response": {
+        "maxBytes": 16384,
+        "fields": [
+          {
+            "name": "id",
+            "value": {
+              "from": "id"
+            }
+          },
+          {
+            "name": "type",
+            "value": {
+              "from": "type"
+            }
+          },
+          {
+            "name": "role",
+            "value": {
+              "from": "role"
+            }
+          }
+        ]
+      },
+      "safety": {
+        "effect": "write",
+        "requiredCapabilities": [
+          "bounded-output",
+          "egress-pinned"
+        ],
+        "idempotency": "none",
+        "scopes": [
+          "https://www.googleapis.com/auth/drive.file"
+        ],
+        "maxItems": 1,
+        "minIntervalMs": 1000,
+        "timeoutMs": 10000
+      },
+      "fixtures": [
+        {
+          "name": "makes a file readable by anyone with the link",
+          "kind": "safe",
+          "arguments": {
+            "file_id": "a1B2c3D4e5F6g7H8i9J0",
+            "role": "reader"
+          },
+          "expect": {
+            "facts": {
+              "class": "share",
+              "audience": {
+                "external": {
+                  "state": "unknown"
+                },
+                "kind": {
+                  "state": "known",
+                  "value": "public"
+                },
+                "recipient_domains": {
+                  "state": "unknown"
+                }
+              }
+            },
+            "request": {
+              "body": "{\"type\":\"anyone\",\"role\":\"reader\",\"allowFileDiscovery\":false}",
+              "headers": [
+                [
+                  "accept",
+                  "application/json"
+                ],
+                [
+                  "content-type",
+                  "application/json; charset=utf-8"
+                ]
+              ],
+              "maxPages": 1,
+              "method": "POST",
+              "url": "https://www.googleapis.com/drive/v3/files/a1B2c3D4e5F6g7H8i9J0/permissions?supportsAllDrives=true&sendNotificationEmail=false"
+            },
+            "decisions": {
+              "relaxed": "review",
+              "balanced": "block",
+              "strict": "block"
+            }
+          }
+        },
+        {
+          "name": "refuses a public writer link outside the role list",
+          "kind": "risky",
+          "arguments": {
+            "file_id": "a1B2c3D4e5F6g7H8i9J0",
+            "role": "fileOrganizer"
+          },
+          "expect": {
+            "error": "invalid_argument"
+          }
+        }
+      ]
+    },
+    {
+      "actionId": "drive.permissions.delete",
+      "title": "Remove someone's access",
+      "link": {
+        "permissionId": "command.google-workspace.gws.permission.share"
+      },
+      "executor": {
+        "kind": "declarative-http",
+        "request": {
+          "method": "DELETE",
+          "host": "www.googleapis.com",
+          "path": "/drive/v3/files/{file_id}/permissions/{permission_id}",
+          "query": [
+            {
+              "name": "supportsAllDrives",
+              "value": {
+                "const": true
+              }
+            }
+          ],
+          "headers": [
+            {
+              "name": "accept",
+              "value": "application/json"
+            }
+          ],
+          "maxPages": 1
+        }
+      },
+      "arguments": {
+        "file_id": {
+          "type": "string",
+          "required": true,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9_-]{10,128}$"
+        },
+        "permission_id": {
+          "type": "string",
+          "required": true,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9_-]{1,128}$"
+        }
+      },
+      "facts": {
+        "class": "update",
+        "object": {
+          "const": "file"
+        },
+        "scope": {
+          "const": "single"
+        },
+        "reversibility": {
+          "const": "reversible"
+        },
+        "recordCount": {
+          "const": 1
+        }
+      },
+      "response": {
+        "maxBytes": 4096,
+        "fields": [
+          {
+            "name": "error",
+            "value": {
+              "exists": "error"
+            }
+          }
+        ]
+      },
+      "safety": {
+        "effect": "write",
+        "requiredCapabilities": [
+          "bounded-output",
+          "egress-pinned"
+        ],
+        "idempotency": "none",
+        "scopes": [
+          "https://www.googleapis.com/auth/drive.file"
+        ],
+        "maxItems": 1,
+        "minIntervalMs": 500,
+        "timeoutMs": 10000
+      },
+      "fixtures": [
+        {
+          "name": "removes one person's access",
+          "kind": "safe",
+          "arguments": {
+            "file_id": "a1B2c3D4e5F6g7H8i9J0",
+            "permission_id": "anyoneWithLink"
+          },
+          "expect": {
+            "facts": {
+              "class": "update"
+            },
+            "request": {
+              "body": null,
+              "headers": [
+                [
+                  "accept",
+                  "application/json"
+                ]
+              ],
+              "maxPages": 1,
+              "method": "DELETE",
+              "url": "https://www.googleapis.com/drive/v3/files/a1B2c3D4e5F6g7H8i9J0/permissions/anyoneWithLink?supportsAllDrives=true"
+            },
+            "decisions": {
+              "relaxed": "allow",
+              "balanced": "allow",
+              "strict": "review"
+            }
+          }
+        },
+        {
+          "name": "refuses a permission id with a separator",
+          "kind": "risky",
+          "arguments": {
+            "file_id": "a1B2c3D4e5F6g7H8i9J0",
+            "permission_id": "a/b"
+          },
+          "expect": {
+            "error": "invalid_argument"
+          }
+        }
+      ]
+    }
+  ]
+}
