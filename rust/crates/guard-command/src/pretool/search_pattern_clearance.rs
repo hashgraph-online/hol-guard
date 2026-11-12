@@ -12,8 +12,13 @@
 //! Every dialect that could run it (`grep` basic or extended, ripgrep, Perl)
 //! reads those characters the same way, and the check is deliberately wider
 //! than any of them: it ignores case, lets `.` cross lines, and anchors
-//! nothing. A pattern with an operator, a class, an escape, or an inverted
-//! match is never cleared. A file that is large, not plain ASCII (binary,
+//! nothing. Two escapes are read too, each more widely than any dialect does:
+//! `\|` is an alternative in basic `grep` and a literal `|` everywhere else,
+//! and every alternative is a part of that literal; `\.` is one literal dot
+//! to a regex and two characters to `grep -F`, so it is checked as one or two
+//! of any character. Several `-e` patterns are checked as alternatives of one.
+//! A pattern with an operator, a class, another escape, or an inverted match
+//! is never cleared. A file that is large, not plain ASCII (binary,
 //! UTF-16, Latin-1 or any other encoding a locale could read differently), a
 //! key container, or inside a credential store is never cleared either, so
 //! those keep the review.
@@ -55,10 +60,21 @@ impl PatternClearance {
     /// `None` unless `pattern` is plain enough to read the same way in every
     /// search dialect.
     pub(in crate::pretool) fn new(pattern: &str) -> Option<Self> {
-        if pattern.len() > MAX_PATTERN_BYTES || !plain_pattern(pattern) {
+        Self::any(std::slice::from_ref(&pattern))
+    }
+
+    /// `None` unless every pattern is plain; a line matching any of them
+    /// is printed, as with `grep -e a -e b`.
+    pub(in crate::pretool) fn any<P: AsRef<str>>(patterns: &[P]) -> Option<Self> {
+        let source: usize = patterns.iter().map(|pattern| pattern.as_ref().len()).sum();
+        if patterns.is_empty() || source > MAX_PATTERN_BYTES {
             return None;
         }
-        let matcher = regex::bytes::RegexBuilder::new(pattern)
+        let readings = patterns
+            .iter()
+            .map(|pattern| wide_reading(pattern.as_ref()))
+            .collect::<Option<Vec<_>>>()?;
+        let matcher = regex::bytes::RegexBuilder::new(&readings.join("|"))
             .case_insensitive(true)
             .multi_line(true)
             .dot_matches_new_line(true)
@@ -140,33 +156,52 @@ impl PatternClearance {
     }
 }
 
-/// Plain characters only: words, digits, spaces, a little punctuation and `.`
-/// (any character in every dialect), with `|` between non-empty alternatives.
-fn plain_pattern(pattern: &str) -> bool {
-    pattern.split('|').all(|alternative| {
-        !alternative.is_empty()
-            && alternative.chars().all(|character| {
-                character.is_ascii_alphanumeric()
-                    || matches!(
-                        character,
-                        '_' | '-'
-                            | ' '
-                            | ':'
-                            | '/'
-                            | '='
-                            | '@'
-                            | '#'
-                            | '%'
-                            | '~'
-                            | ','
-                            | '.'
-                            | '!'
-                            | '<'
-                            | '>'
-                            | '&'
-                    )
-            })
-    })
+/// The regex this check runs for `pattern`, or `None` unless the pattern is
+/// plain: words, digits, spaces, a little punctuation and `.` (any character
+/// in every dialect), with `|` or `\|` between non-empty alternatives and
+/// `\.` read as one or two of any character.
+fn wide_reading(pattern: &str) -> Option<String> {
+    let mut alternatives = vec![String::new()];
+    let mut characters = pattern.chars();
+    while let Some(character) = characters.next() {
+        let current = alternatives.last_mut()?;
+        match character {
+            '|' => alternatives.push(String::new()),
+            '\\' => match characters.next()? {
+                '|' => alternatives.push(String::new()),
+                '.' => current.push_str("..?"),
+                _ => return None,
+            },
+            character if plain_character(character) => current.push(character),
+            _ => return None,
+        }
+    }
+    alternatives
+        .iter()
+        .all(|alternative| !alternative.is_empty())
+        .then(|| alternatives.join("|"))
+}
+
+fn plain_character(character: char) -> bool {
+    character.is_ascii_alphanumeric()
+        || matches!(
+            character,
+            '_' | '-'
+                | ' '
+                | ':'
+                | '/'
+                | '='
+                | '@'
+                | '#'
+                | '%'
+                | '~'
+                | ','
+                | '.'
+                | '!'
+                | '<'
+                | '>'
+                | '&'
+        )
 }
 
 /// A name whose content this clearance may read: not inside a credential

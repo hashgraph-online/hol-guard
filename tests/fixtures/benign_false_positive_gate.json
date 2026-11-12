@@ -55694,6 +55694,88 @@
       "cwd": "worktree",
       "expect": "not_allow",
       "contained_ok": true
+    },
+    {
+      "id": "grep-escaped-alternatives-past-plugin-manifest",
+      "fix_area": "read",
+      "harnesses": [
+        "claude-code",
+        "codex",
+        "omp",
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "grep -rn \"report\\|window\" integrations"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "grep-escaped-dot-past-plugin-manifest",
+      "fix_area": "read",
+      "harnesses": [
+        "claude-code",
+        "codex",
+        "omp",
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "grep -rn \"report\\.window\" integrations"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "grep-two-patterns-past-plugin-manifest",
+      "fix_area": "read",
+      "harnesses": [
+        "claude-code",
+        "codex",
+        "omp",
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "grep -rn -e report -e window integrations"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "neg-grep-escaped-alternative-matching-plugin-manifest",
+      "fix_area": "read",
+      "harnesses": [
+        "claude-code",
+        "codex",
+        "omp",
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "grep -rn \"report\\|example\" integrations"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow",
+      "contained_ok": true
+    },
+    {
+      "id": "neg-grep-second-pattern-matching-plugin-manifest",
+      "fix_area": "read",
+      "harnesses": [
+        "claude-code",
+        "codex",
+        "omp",
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "grep -rn -e report -e author integrations"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow",
+      "contained_ok": true
     }
   ],
   "mcp_cases": [
