@@ -494,6 +494,7 @@
       "src/pretool/list_wrapper.rs",
       "src/pretool/listing_metadata.rs",
       "src/pretool/listing_reads.rs",
+      "src/pretool/listing_words.rs",
       "src/pretool/listing_temporary.rs",
       "src/pretool/liveness_probes.rs",
       "src/pretool/lockfile_install.rs",

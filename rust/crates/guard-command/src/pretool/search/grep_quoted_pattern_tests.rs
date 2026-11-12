@@ -73,6 +73,7 @@ fn a_quoted_pattern_is_not_a_file_name_but_an_unquoted_one_is() {
         // Bash expands a brace list into separate words, the second one a file.
         ("grep .env{,.local} notes.md", false),
         ("rg .env{,.local} notes.md", false),
+        ("grep --regexp=\".env*\" -e .env* notes.md", false),
     ] {
         let model = parsed(command);
         let segment = &model.segments[0];
@@ -93,6 +94,8 @@ fn a_quoted_pattern_filters_piped_text() {
         (r#"cat notes.md | grep -o "FAILED tests/[^ ]*""#, true),
         ("cat notes.md | grep a*", false),
         ("cat notes.md | grep .env{,.local}", false),
+        ("cat notes.md | grep --regexp=\".env*\" -e .env*", false),
+        ("cat notes.md | grep -e .env* -e \".env*\"", false),
     ] {
         let model = parsed(command);
         let segment = &model.segments[1];
