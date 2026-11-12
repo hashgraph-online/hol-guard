@@ -81,7 +81,12 @@ fn hosts_that_spell_data_into_labels_are_flagged() {
 
 #[test]
 fn a_lowercase_base32_label_that_spells_text_is_data() {
+    // "customerdata2025", base32 in lower case.
     assert!(super::host_spells_data(
+        "mn2xg5dpnvsxezdborqtembsgu.collect.example.test"
+    ));
+    // Base32 that decodes to binary is a hash or key, not spelled text.
+    assert!(!super::host_spells_data(
         "jbswy3dpehpk3pxp.collect.example.test"
     ));
     assert!(!super::host_spells_data("storage3dataprod.example.com"));

@@ -8441,39 +8441,80 @@
               "description": "Identifies forced removal of untracked files from a repository.",
               "family": "git-destructive",
               "matcher": {
-                "config": {
-                  "allow_leading_options": true,
-                  "executables": [
-                    "git"
-                  ],
-                  "fail_secure_unknown_options": false,
-                  "forbidden_flags": [],
-                  "interspersed_flags": [],
-                  "interspersed_options_with_values": [],
-                  "inverse_flag_pairs": [],
-                  "leading_options_with_values": [
-                    "--config-env",
-                    "--exec-path",
-                    "--git-dir",
-                    "--namespace",
-                    "--super-prefix",
-                    "--work-tree",
-                    "-c"
-                  ],
-                  "options_with_values": [
-                    "--exclude",
-                    "-e"
-                  ],
-                  "required_flags": [
-                    "-f"
-                  ],
-                  "required_flags_in_all_arguments": false,
-                  "required_option_values": [],
-                  "subcommands": [
-                    "clean"
-                  ]
-                },
-                "op": "executable.v1"
+                "config": {},
+                "matchers": [
+                  {
+                    "config": {
+                      "allow_leading_options": true,
+                      "executables": [
+                        "git"
+                      ],
+                      "fail_secure_unknown_options": false,
+                      "forbidden_flags": [],
+                      "interspersed_flags": [],
+                      "interspersed_options_with_values": [],
+                      "inverse_flag_pairs": [],
+                      "leading_options_with_values": [
+                        "--config-env",
+                        "--exec-path",
+                        "--git-dir",
+                        "--namespace",
+                        "--super-prefix",
+                        "--work-tree",
+                        "-c"
+                      ],
+                      "options_with_values": [
+                        "--exclude",
+                        "-e"
+                      ],
+                      "required_flags": [
+                        "-f"
+                      ],
+                      "required_flags_in_all_arguments": false,
+                      "required_option_values": [],
+                      "subcommands": [
+                        "clean"
+                      ]
+                    },
+                    "op": "executable.v1"
+                  },
+                  {
+                    "config": {
+                      "allow_leading_options": true,
+                      "executables": [
+                        "git"
+                      ],
+                      "fail_secure_unknown_options": false,
+                      "forbidden_flags": [],
+                      "interspersed_flags": [],
+                      "interspersed_options_with_values": [],
+                      "inverse_flag_pairs": [],
+                      "leading_options_with_values": [
+                        "--config-env",
+                        "--exec-path",
+                        "--git-dir",
+                        "--namespace",
+                        "--super-prefix",
+                        "--work-tree",
+                        "-c"
+                      ],
+                      "options_with_values": [
+                        "--exclude",
+                        "-e"
+                      ],
+                      "required_flags": [
+                        "--force"
+                      ],
+                      "required_flags_in_all_arguments": false,
+                      "required_option_values": [],
+                      "subcommands": [
+                        "clean"
+                      ]
+                    },
+                    "op": "executable.v1"
+                  }
+                ],
+                "op": "any.v1"
               },
               "native_capability": null,
               "permission_id": "command.git.permission.force-clean",

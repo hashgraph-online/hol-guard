@@ -666,9 +666,8 @@ fn a_lone_inline_program_that_reaches_past_the_sandbox_keeps_its_review() {
         "python3 -c 'import subprocess; subprocess.run([\"git\", \"status\", \"--short\"])'";
     let (reason, action) = outcome(command);
     assert_ne!(action, "allow", "{command} ({reason})");
-    assert_eq!(
-        action == "sandbox-required",
-        cfg!(target_os = "macos"),
-        "{command} ({reason})"
-    );
+    // Linux contains it too where bubblewrap can mount; Windows narrows by shell.
+    if cfg!(target_os = "macos") {
+        assert_eq!(action, "sandbox-required", "{command} ({reason})");
+    }
 }
