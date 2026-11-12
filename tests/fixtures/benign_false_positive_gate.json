@@ -1549,6 +1549,74 @@
       "expect": "allow"
     },
     {
+      "id": "grep-include-globs-beside-exclude-dir",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "grep -rln --include=\"*.ts\" --include=\"*.tsx\" --exclude-dir=fixtures \"export\" app src"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "grep-include-glob-beside-separated-exclude-dir",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "grep -rn --include \"*.ts\" --exclude-dir node_modules \"export\" src"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "neg-grep-exclude-before-include-over-env-backup",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "grep -rln \"edge.*setting\" --exclude=\"*.md\" --include=\"*.ts\" --exclude-dir=node_modules ${HOME}/edge-clone/"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-grep-dereference-include-over-env-backup",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "grep -Rln \"edge.*setting\" --include=\"*.ts\" --exclude-dir=node_modules ${HOME}/edge-clone/"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
       "id": "cargo-search-term",
       "fix_area": "shell",
       "harnesses": [

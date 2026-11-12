@@ -153,8 +153,9 @@ struct Scan {
     /// The search operands, after the pattern.
     targets: Vec<String>,
     recursive: bool,
-    /// `--include` appears beside an `--exclude` or `--exclude-dir` of any
-    /// shape, which keeps the review however the walk is narrowed.
+    /// `--include` appears beside an `--exclude` of any shape, which keeps
+    /// the review however the walk is narrowed. An `--exclude-dir` beside an
+    /// include stays part of the proof.
     include_beside_exclusion: bool,
     /// Exact names the command leaves out of its walk.
     excluded_files: Vec<String>,
@@ -407,9 +408,10 @@ fn scan_into(
     pending_value.is_none()
         && !exclusions.pending()
         // Include/exclude precedence differs across grep implementations. Do not
-        // use exclusions as proof when an include could re-enable a file.
+        // use file exclusions as proof when an include could re-enable a file.
         // GNU grep also widens an include list whose first entry is an
         // exclude, so any `--exclude` beside an include keeps review too.
+        // `--exclude-dir` is matched against directories only, so it holds.
         && (!includes_present || exclusions.leave_includes_exact())
         && includes.scope_proven(&targets, context)
         && (!stdin_only || (pattern_supplied && !recursive))
@@ -488,6 +490,9 @@ fn proven_glob(value: &str, context: ReadContext<'_>) -> bool {
     value.contains(['*', '?', '[']) && tree::safe_glob_search_operand(value, context)
 }
 
+#[cfg(test)]
+#[path = "grep_include_tests.rs"]
+mod include_tests;
 #[cfg(test)]
 #[path = "grep_tests.rs"]
 mod tests;
