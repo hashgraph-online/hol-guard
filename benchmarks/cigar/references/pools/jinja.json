@@ -8,505 +8,57 @@
   "tests/test_loader.py::test_package_zip_list"
  ],
  "mutations": [
-  {
-   "path": "src/jinja2/loaders.py",
-   "qual": "DictLoader.get_source",
-   "line": 424,
-   "orig": "            return source, None, lambda: source == self.mapping.get(template)\n",
-   "new": "            return source, None, lambda: source != self.mapping.get(template)\n",
-   "failing": [
-    "tests/test_loader.py::TestLoaders::test_dict_loader_cache_invalidates",
-    "tests/test_loader.py::TestLoaders::test_limited_size_cache",
-    "tests/test_regression.py::TestBug::test_cached_extends[extends]",
-    "tests/test_regression.py::TestBug::test_cached_extends[include]"
-   ]
-  },
-  {
-   "path": "src/jinja2/nodes.py",
-   "qual": "CondExpr.as_const",
-   "line": 712,
-   "orig": "        if self.expr2 is None:\n",
-   "new": "        if self.expr2 is not None:\n",
-   "failing": [
-    "tests/test_api.py::TestUndefined::test_strict_undefined",
-    "tests/test_lexnparse.py::TestSyntax::test_short_conditional_expression"
-   ]
-  },
-  {
-   "path": "src/jinja2/parser.py",
-   "qual": "Parser.parse_filter_block",
-   "line": 440,
-   "orig": "        node.body = self.parse_statements((\"name:endfilter\",), drop_needle=True)\n",
-   "new": "        node.body = self.parse_statements((\"name:endfilter\",), drop_needle=False)\n",
-   "failing": [
-    "tests/test_filters.py::TestFilter::test_block",
-    "tests/test_filters.py::TestFilter::test_filtertag"
-   ]
-  },
-  {
-   "path": "src/jinja2/environment.py",
-   "qual": "TemplateStream.disable_buffering",
-   "line": 1637,
-   "orig": "        self.buffered = False\n",
-   "new": "        self.buffered = True\n",
-   "failing": [
-    "tests/test_api.py::TestStreaming::test_streaming_behavior"
-   ]
-  },
-  {
-   "path": "src/jinja2/compiler.py",
-   "qual": "Frame.inner",
-   "line": 229,
-   "orig": "            return Frame(self.eval_ctx, level=self.symbols.level + 1)\n",
-   "new": "            return Frame(self.eval_ctx, level=self.symbols.level - 1)\n",
-   "failing": [
-    "tests/test_ext.py::TestAutoEscape::test_overlay_scopes"
-   ]
-  },
-  {
-   "path": "src/jinja2/idtracking.py",
-   "qual": "FrameSymbolVisitor.visit_If",
-   "line": 267,
-   "orig": "        else_symbols = inner_visit(node.else_ or ())\n",
-   "new": "        else_symbols = inner_visit(node.else_ and ())\n",
-   "failing": [
-    "tests/test_filters.py::TestFilter::test_filter_undefined_in_nested_if"
-   ]
-  },
-  {
-   "path": "src/jinja2/compiler.py",
-   "qual": "CodeGenerator.visit_CallBlock",
-   "line": 1335,
-   "orig": "        self.visit_Call(node.call, frame, forward_caller=True)\n",
-   "new": "        self.visit_Call(node.call, frame, forward_caller=False)\n",
-   "failing": [
-    "tests/test_async.py::TestAsyncForLoop::test_call_in_loop",
-    "tests/test_core_tags.py::TestForLoop::test_call_in_loop",
-    "tests/test_core_tags.py::TestMacros::test_complex_call",
-    "tests/test_core_tags.py::TestMacros::test_simple_call",
-    "tests/test_regression.py::TestBug::test_call_with_args",
-    "tests/test_regression.py::TestBug::test_caller_scoping",
-    "tests/test_regression.py::TestBug::test_double_caller",
-    "tests/test_regression.py::TestBug::test_loop_call_loop"
-   ]
-  },
-  {
-   "path": "src/jinja2/runtime.py",
-   "qual": "LoopContext.revindex0",
-   "line": 470,
-   "orig": "        return self.length - self.index\n",
-   "new": "        return self.length + self.index\n",
-   "failing": [
-    "tests/test_core_tags.py::TestForLoop::test_context_vars",
-    "tests/test_runtime.py::test_loop_idx0"
-   ]
-  },
-  {
-   "path": "src/jinja2/tests.py",
-   "qual": "test_boolean",
-   "line": 102,
-   "orig": "    return value is True or value is False\n",
-   "new": "    return value is True or value is not False\n",
-   "failing": [
-    "tests/test_tests.py::TestTestsCase::test_types[0",
-    "tests/test_tests.py::TestTestsCase::test_types[0.0",
-    "tests/test_tests.py::TestTestsCase::test_types[1",
-    "tests/test_tests.py::TestTestsCase::test_types[1.0",
-    "tests/test_tests.py::TestTestsCase::test_types[3.14159",
-    "tests/test_tests.py::TestTestsCase::test_types[42",
-    "tests/test_tests.py::TestTestsCase::test_types[false",
-    "tests/test_tests.py::TestTestsCase::test_types[none"
-   ]
-  },
-  {
-   "path": "src/jinja2/tests.py",
-   "qual": "test_integer",
-   "line": 127,
-   "orig": "    return isinstance(value, int) and value is not True and value is not False\n",
-   "new": "    return isinstance(value, int) and value is not True and value is False\n",
-   "failing": [
-    "tests/test_tests.py::TestTestsCase::test_types[(10",
-    "tests/test_tests.py::TestTestsCase::test_types[42",
-    "tests/test_tests.py::TestTestsCase::test_types[false"
-   ]
-  },
-  {
-   "path": "src/jinja2/tests.py",
-   "qual": "test_none",
-   "line": 94,
-   "orig": "    return value is None\n",
-   "new": "    return value is not None\n",
-   "failing": [
-    "tests/test_nativetypes.py::test_booleans[{{",
-    "tests/test_tests.py::TestTestsCase::test_types[42",
-    "tests/test_tests.py::TestTestsCase::test_types[false",
-    "tests/test_tests.py::TestTestsCase::test_types[none",
-    "tests/test_tests.py::TestTestsCase::test_types[true"
-   ]
-  },
-  {
-   "path": "src/jinja2/tests.py",
-   "qual": "test_odd",
-   "line": 17,
-   "orig": "    return value % 2 == 1\n",
-   "new": "    return value % 2 != 1\n",
-   "failing": [
-    "tests/test_async_filters.py::test_simple_reject[<lambda>0]",
-    "tests/test_async_filters.py::test_simple_reject[<lambda>1]",
-    "tests/test_async_filters.py::test_simple_select[<lambda>0]",
-    "tests/test_async_filters.py::test_simple_select[<lambda>1]",
-    "tests/test_filters.py::TestFilter::test_func_reject_attr",
-    "tests/test_filters.py::TestFilter::test_func_select_attr",
-    "tests/test_filters.py::TestFilter::test_simple_reject",
-    "tests/test_filters.py::TestFilter::test_simple_select",
-    "tests/test_tests.py::TestTestsCase::test_odd"
-   ]
-  }
+  {"path": "src/jinja2/loaders.py", "qual": "DictLoader.get_source", "line": 424, "orig": "            return source, None, lambda: source == self.mapping.get(template)\n", "new": "            return source, None, lambda: source != self.mapping.get(template)\n", "failing": ["tests/test_loader.py::TestLoaders::test_dict_loader_cache_invalidates", "tests/test_loader.py::TestLoaders::test_limited_size_cache", "tests/test_regression.py::TestBug::test_cached_extends[extends]", "tests/test_regression.py::TestBug::test_cached_extends[include]"]},
+  {"path": "src/jinja2/nodes.py", "qual": "CondExpr.as_const", "line": 712, "orig": "        if self.expr2 is None:\n", "new": "        if self.expr2 is not None:\n", "failing": ["tests/test_api.py::TestUndefined::test_strict_undefined", "tests/test_lexnparse.py::TestSyntax::test_short_conditional_expression"]},
+  {"path": "src/jinja2/parser.py", "qual": "Parser.parse_filter_block", "line": 440, "orig": "        node.body = self.parse_statements((\"name:endfilter\",), drop_needle=True)\n", "new": "        node.body = self.parse_statements((\"name:endfilter\",), drop_needle=False)\n", "failing": ["tests/test_filters.py::TestFilter::test_block", "tests/test_filters.py::TestFilter::test_filtertag"]},
+  {"path": "src/jinja2/environment.py", "qual": "TemplateStream.disable_buffering", "line": 1637, "orig": "        self.buffered = False\n", "new": "        self.buffered = True\n", "failing": ["tests/test_api.py::TestStreaming::test_streaming_behavior"]},
+  {"path": "src/jinja2/compiler.py", "qual": "Frame.inner", "line": 229, "orig": "            return Frame(self.eval_ctx, level=self.symbols.level + 1)\n", "new": "            return Frame(self.eval_ctx, level=self.symbols.level - 1)\n", "failing": ["tests/test_ext.py::TestAutoEscape::test_overlay_scopes"]},
+  {"path": "src/jinja2/idtracking.py", "qual": "FrameSymbolVisitor.visit_If", "line": 267, "orig": "        else_symbols = inner_visit(node.else_ or ())\n", "new": "        else_symbols = inner_visit(node.else_ and ())\n", "failing": ["tests/test_filters.py::TestFilter::test_filter_undefined_in_nested_if"]},
+  {"path": "src/jinja2/compiler.py", "qual": "CodeGenerator.visit_CallBlock", "line": 1335, "orig": "        self.visit_Call(node.call, frame, forward_caller=True)\n", "new": "        self.visit_Call(node.call, frame, forward_caller=False)\n", "failing": ["tests/test_async.py::TestAsyncForLoop::test_call_in_loop", "tests/test_core_tags.py::TestForLoop::test_call_in_loop", "tests/test_core_tags.py::TestMacros::test_complex_call", "tests/test_core_tags.py::TestMacros::test_simple_call", "tests/test_regression.py::TestBug::test_call_with_args", "tests/test_regression.py::TestBug::test_caller_scoping", "tests/test_regression.py::TestBug::test_double_caller", "tests/test_regression.py::TestBug::test_loop_call_loop"]},
+  {"path": "src/jinja2/runtime.py", "qual": "LoopContext.revindex0", "line": 470, "orig": "        return self.length - self.index\n", "new": "        return self.length + self.index\n", "failing": ["tests/test_core_tags.py::TestForLoop::test_context_vars", "tests/test_runtime.py::test_loop_idx0"]},
+  {"path": "src/jinja2/tests.py", "qual": "test_boolean", "line": 102, "orig": "    return value is True or value is False\n", "new": "    return value is True or value is not False\n", "failing": ["tests/test_tests.py::TestTestsCase::test_types[0", "tests/test_tests.py::TestTestsCase::test_types[0.0", "tests/test_tests.py::TestTestsCase::test_types[1", "tests/test_tests.py::TestTestsCase::test_types[1.0", "tests/test_tests.py::TestTestsCase::test_types[3.14159", "tests/test_tests.py::TestTestsCase::test_types[42", "tests/test_tests.py::TestTestsCase::test_types[false", "tests/test_tests.py::TestTestsCase::test_types[none"]},
+  {"path": "src/jinja2/tests.py", "qual": "test_integer", "line": 127, "orig": "    return isinstance(value, int) and value is not True and value is not False\n", "new": "    return isinstance(value, int) and value is not True and value is False\n", "failing": ["tests/test_tests.py::TestTestsCase::test_types[(10", "tests/test_tests.py::TestTestsCase::test_types[42", "tests/test_tests.py::TestTestsCase::test_types[false"]},
+  {"path": "src/jinja2/tests.py", "qual": "test_none", "line": 94, "orig": "    return value is None\n", "new": "    return value is not None\n", "failing": ["tests/test_nativetypes.py::test_booleans[{{", "tests/test_tests.py::TestTestsCase::test_types[42", "tests/test_tests.py::TestTestsCase::test_types[false", "tests/test_tests.py::TestTestsCase::test_types[none", "tests/test_tests.py::TestTestsCase::test_types[true"]},
+  {"path": "src/jinja2/tests.py", "qual": "test_odd", "line": 17, "orig": "    return value % 2 == 1\n", "new": "    return value % 2 != 1\n", "failing": ["tests/test_async_filters.py::test_simple_reject[<lambda>0]", "tests/test_async_filters.py::test_simple_reject[<lambda>1]", "tests/test_async_filters.py::test_simple_select[<lambda>0]", "tests/test_async_filters.py::test_simple_select[<lambda>1]", "tests/test_filters.py::TestFilter::test_func_reject_attr", "tests/test_filters.py::TestFilter::test_func_select_attr", "tests/test_filters.py::TestFilter::test_simple_reject", "tests/test_filters.py::TestFilter::test_simple_select", "tests/test_tests.py::TestTestsCase::test_odd"]}
  ],
  "stubs": [
-  {
-   "path": "src/jinja2/parser.py",
-   "qual": "Parser.fail",
-   "body_start": 86,
-   "end": 88,
-   "body": "        if lineno is None:\n            lineno = self.stream.current.lineno\n        raise exc(msg, lineno, self.name, self.filename)\n",
-   "indent": 8,
-   "failing": [
-    "tests/test_core_tags.py::TestMacros::test_arguments_defaults_nonsense",
-    "tests/test_core_tags.py::TestMacros::test_caller_defaults_nonsense",
-    "tests/test_debug.py::TestDebug::test_include_syntax_error_source",
-    "tests/test_debug.py::TestDebug::test_syntax_error",
-    "tests/test_ext.py::TestInternationalization::test_complex_plural",
-    "tests/test_ext.py::TestInternationalization::test_nested_trans_error",
-    "tests/test_ext.py::TestInternationalization::test_trans_block_error",
-    "tests/test_ext.py::TestNewstyleInternationalization::test_complex_plural",
-    "tests/test_inheritance.py::TestInheritance::test_invalid_required",
-    "tests/test_lexnparse.py::TestLexer::test_name[a--False]",
-    "tests/test_lexnparse.py::TestParser::test_error_messages",
-    "tests/test_lexnparse.py::TestSyntax::test_const_assign",
-    "tests/test_lexnparse.py::TestSyntax::test_function_calls",
-    "tests/test_lexnparse.py::TestSyntax::test_test_chaining",
-    "tests/test_lexnparse.py::TestTrimBlocks::test_raw_no_trim_lstrip",
-    "tests/test_loader.py::TestModuleLoader::test_choice_loader",
-    "tests/test_loader.py::TestModuleLoader::test_deflated_zip_compile",
-    "tests/test_loader.py::TestModuleLoader::test_filesystem_compile",
-    "tests/test_loader.py::TestModuleLoader::test_log",
-    "tests/test_loader.py::TestModuleLoader::test_path_as_pathlib",
-    "tests/test_loader.py::TestModuleLoader::test_prefix_loader",
-    "tests/test_loader.py::TestModuleLoader::test_stored_zip_compile",
-    "tests/test_loader.py::TestModuleLoader::test_supports_pathlib_in_list_of_paths",
-    "tests/test_loader.py::TestModuleLoader::test_weak_references",
-    "tests/test_regression.py::TestBug::test_empty_if_condition_fails"
-   ]
-  },
-  {
-   "path": "src/jinja2/utils.py",
-   "qual": "LRUCache.setdefault",
-   "body_start": 474,
-   "end": 478,
-   "body": "        try:\n            return self[key]\n        except KeyError:\n            self[key] = default\n            return default\n",
-   "indent": 8,
-   "failing": [
-    "tests/test_utils.py::TestLRUCache::test_setdefault"
-   ]
-  },
-  {
-   "path": "src/jinja2/environment.py",
-   "qual": "Environment.list_templates",
-   "body_start": 916,
-   "end": 931,
-   "body": "        assert self.loader is not None, \"No loader configured.\"\n        names = self.loader.list_templates()\n\n        if extensions is not None:\n            if filter_func is not None:\n                raise TypeError(\n                    \"either extensions or filter_func can be passed, but not both\"\n                )\n\n            def filter_func(x: str) -> bool:\n                return \".\" in x and x.rsplit(\".\", 1)[1] in extensions\n\n        if filter_func is not None:\n            names = [name for name in names if filter_func(name)]\n\n        return names\n",
-   "indent": 8,
-   "failing": [
-    "tests/test_compile.py::test_filters_deterministic",
-    "tests/test_compile.py::test_import_as_with_context_deterministic",
-    "tests/test_loader.py::TestModuleLoader::test_choice_loader",
-    "tests/test_loader.py::TestModuleLoader::test_deflated_zip_compile",
-    "tests/test_loader.py::TestModuleLoader::test_filesystem_compile",
-    "tests/test_loader.py::TestModuleLoader::test_log",
-    "tests/test_loader.py::TestModuleLoader::test_path_as_pathlib",
-    "tests/test_loader.py::TestModuleLoader::test_prefix_loader",
-    "tests/test_loader.py::TestModuleLoader::test_stored_zip_compile",
-    "tests/test_loader.py::TestModuleLoader::test_supports_pathlib_in_list_of_paths",
-    "tests/test_loader.py::TestModuleLoader::test_weak_references"
-   ]
-  },
-  {
-   "path": "src/jinja2/utils.py",
-   "qual": "url_quote",
-   "body_start": 405,
-   "end": 417,
-   "body": "    if not isinstance(obj, bytes):\n        if not isinstance(obj, str):\n            obj = str(obj)\n\n        obj = obj.encode(charset)\n\n    safe = b\"\" if for_qs else b\"/\"\n    rv = quote_from_bytes(obj, safe)\n\n    if for_qs:\n        rv = rv.replace(\"%20\", \"+\")\n\n    return rv\n",
-   "indent": 4,
-   "failing": [
-    "tests/test_filters.py::TestFilter::test_urlencode[Hello,",
-    "tests/test_filters.py::TestFilter::test_urlencode[a",
-    "tests/test_filters.py::TestFilter::test_urlencode[value2-f=1]",
-    "tests/test_filters.py::TestFilter::test_urlencode[value3-f=1&amp;z=2]",
-    "tests/test_filters.py::TestFilter::test_urlencode[value4-%E2%80%BD=1]",
-    "tests/test_filters.py::TestFilter::test_urlencode[value5-0=1]",
-    "tests/test_filters.py::TestFilter::test_urlencode[value6-a+b%2Fc=a+b%2Fc]"
-   ]
-  },
-  {
-   "path": "src/jinja2/environment.py",
-   "qual": "Template._get_default_module",
-   "body_start": 1441,
-   "end": 1453,
-   "body": "        if self.environment.is_async:\n            raise RuntimeError(\"Module is not available in async mode.\")\n\n        if ctx is not None:\n            keys = ctx.globals_keys - self.globals.keys()\n\n            if keys:\n                return self.make_module({k: ctx.parent[k] for k in keys})\n\n        if self._module is None:\n            self._module = self.make_module()\n\n        return self._module\n",
-   "indent": 8,
-   "failing": [
-    "tests/test_core_tags.py::TestMacros::test_include",
-    "tests/test_core_tags.py::TestMacros::test_macro_api",
-    "tests/test_core_tags.py::TestMacros::test_macro_defaults_self_ref",
-    "tests/test_core_tags.py::TestSet::test_block",
-    "tests/test_core_tags.py::TestSet::test_block_filtered",
-    "tests/test_core_tags.py::TestSet::test_block_filtered_set",
-    "tests/test_core_tags.py::TestSet::test_normal",
-    "tests/test_imports.py::TestImports::test_context_imports",
-    "tests/test_imports.py::TestImports::test_exports",
-    "tests/test_imports.py::TestImports::test_from_import_with_globals",
-    "tests/test_imports.py::TestImports::test_import_with_globals",
-    "tests/test_imports.py::TestImports::test_import_with_globals_override",
-    "tests/test_imports.py::TestImports::test_not_exported",
-    "tests/test_imports.py::TestIncludes::test_context_include",
-    "tests/test_regression.py::TestBug::test_caller_scoping",
-    "tests/test_regression.py::TestBug::test_double_caller_no_default",
-    "tests/test_security.py::TestSandbox::test_template_data"
-   ]
-  },
-  {
-   "path": "src/jinja2/filters.py",
-   "qual": "do_format",
-   "body_start": 1025,
-   "end": 1030,
-   "body": "    if args and kwargs:\n        raise FilterArgumentError(\n            \"can't handle positional and keyword arguments at the same time\"\n        )\n\n    return soft_str(value) % (kwargs or args)\n",
-   "indent": 4,
-   "failing": [
-    "tests/test_ext.py::TestInternationalization::test_trans_stringformatting",
-    "tests/test_filters.py::TestFilter::test_format"
-   ]
-  },
-  {
-   "path": "src/jinja2/runtime.py",
-   "qual": "Context.derived",
-   "body_start": 315,
-   "end": 320,
-   "body": "        context = new_context(\n            self.environment, self.name, {}, self.get_all(), True, None, locals\n        )\n        context.eval_ctx = self.eval_ctx\n        context.blocks.update((k, list(v)) for k, v in self.blocks.items())\n        return context\n",
-   "indent": 8,
-   "failing": [
-    "tests/test_ext.py::TestAutoEscape::test_overlay_scopes",
-    "tests/test_ext.py::TestExtensions::test_contextreference_node_can_pass_locals",
-    "tests/test_inheritance.py::TestInheritance::test_required_with_scope",
-    "tests/test_inheritance.py::TestInheritance::test_scoped_block",
-    "tests/test_inheritance.py::TestInheritance::test_scoped_block_after_inheritance",
-    "tests/test_inheritance.py::TestInheritance::test_super_in_scoped_block",
-    "tests/test_regression.py::TestBug::test_pass_context_block_and_loop",
-    "tests/test_regression.py::TestBug::test_pass_context_in_blocks",
-    "tests/test_regression.py::TestBug::test_pass_context_loop_vars",
-    "tests/test_regression.py::TestBug::test_pass_context_scoped_loop_vars",
-    "tests/test_regression.py::TestBug::test_scoped_block",
-    "tests/test_regression.py::TestBug::test_scoped_block_loop_vars"
-   ]
-  },
-  {
-   "path": "src/jinja2/nativetypes.py",
-   "qual": "native_concat",
-   "body_start": 25,
-   "end": 47,
-   "body": "    head = list(islice(values, 2))\n\n    if not head:\n        return None\n\n    if len(head) == 1:\n        raw = head[0]\n        if not isinstance(raw, str):\n            return raw\n    else:\n        if isinstance(values, GeneratorType):\n            values = chain(head, values)\n        raw = \"\".join([str(v) for v in values])\n\n    try:\n        return literal_eval(\n            # In Python 3.10+ ast.literal_eval removes leading spaces/tabs\n            # from the given string. For backwards compatibility we need to\n            # parse the string ourselves without removing leading spaces/tabs.\n            parse(raw, mode=\"eval\")\n        )\n    except (ValueError, SyntaxError, MemoryError):\n        return raw\n",
-   "indent": 4,
-   "failing": [
-    "tests/test_async.py::test_native_async",
-    "tests/test_async.py::test_native_list_async",
-    "tests/test_nativetypes.py::test_adding_undefined_native_return",
-    "tests/test_nativetypes.py::test_booleans[{{",
-    "tests/test_nativetypes.py::test_cast_int",
-    "tests/test_nativetypes.py::test_concat_strings_with_quotes",
-    "tests/test_nativetypes.py::test_constant_dunder",
-    "tests/test_nativetypes.py::test_constant_dunder_to_string",
-    "tests/test_nativetypes.py::test_is_defined_native_return",
-    "tests/test_nativetypes.py::test_leading_spaces",
-    "tests/test_nativetypes.py::test_list_add",
-    "tests/test_nativetypes.py::test_loop_look_alike",
-    "tests/test_nativetypes.py::test_loops",
-    "tests/test_nativetypes.py::test_loops_with_ints",
-    "tests/test_nativetypes.py::test_macro",
-    "tests/test_nativetypes.py::test_multi_expression_add",
-    "tests/test_nativetypes.py::test_no_intermediate_eval",
-    "tests/test_nativetypes.py::test_string_literal_var",
-    "tests/test_nativetypes.py::test_string_top_level",
-    "tests/test_nativetypes.py::test_tuple_of_variable_strings",
-    "tests/test_nativetypes.py::test_undefined_native_return",
-    "tests/test_nativetypes.py::test_variable_dunder"
-   ]
-  }
+  {"path": "src/jinja2/parser.py", "qual": "Parser.fail", "body_start": 86, "end": 88, "body": "        if lineno is None:\n            lineno = self.stream.current.lineno\n        raise exc(msg, lineno, self.name, self.filename)\n", "indent": 8, "failing": ["tests/test_core_tags.py::TestMacros::test_arguments_defaults_nonsense", "tests/test_core_tags.py::TestMacros::test_caller_defaults_nonsense", "tests/test_debug.py::TestDebug::test_include_syntax_error_source", "tests/test_debug.py::TestDebug::test_syntax_error", "tests/test_ext.py::TestInternationalization::test_complex_plural", "tests/test_ext.py::TestInternationalization::test_nested_trans_error", "tests/test_ext.py::TestInternationalization::test_trans_block_error", "tests/test_ext.py::TestNewstyleInternationalization::test_complex_plural", "tests/test_inheritance.py::TestInheritance::test_invalid_required", "tests/test_lexnparse.py::TestLexer::test_name[a--False]", "tests/test_lexnparse.py::TestParser::test_error_messages", "tests/test_lexnparse.py::TestSyntax::test_const_assign", "tests/test_lexnparse.py::TestSyntax::test_function_calls", "tests/test_lexnparse.py::TestSyntax::test_test_chaining", "tests/test_lexnparse.py::TestTrimBlocks::test_raw_no_trim_lstrip", "tests/test_loader.py::TestModuleLoader::test_choice_loader", "tests/test_loader.py::TestModuleLoader::test_deflated_zip_compile", "tests/test_loader.py::TestModuleLoader::test_filesystem_compile", "tests/test_loader.py::TestModuleLoader::test_log", "tests/test_loader.py::TestModuleLoader::test_path_as_pathlib", "tests/test_loader.py::TestModuleLoader::test_prefix_loader", "tests/test_loader.py::TestModuleLoader::test_stored_zip_compile", "tests/test_loader.py::TestModuleLoader::test_supports_pathlib_in_list_of_paths", "tests/test_loader.py::TestModuleLoader::test_weak_references", "tests/test_regression.py::TestBug::test_empty_if_condition_fails"]},
+  {"path": "src/jinja2/utils.py", "qual": "LRUCache.setdefault", "body_start": 474, "end": 478, "body": "        try:\n            return self[key]\n        except KeyError:\n            self[key] = default\n            return default\n", "indent": 8, "failing": ["tests/test_utils.py::TestLRUCache::test_setdefault"]},
+  {"path": "src/jinja2/environment.py", "qual": "Environment.list_templates", "body_start": 916, "end": 931, "body": "        assert self.loader is not None, \"No loader configured.\"\n        names = self.loader.list_templates()\n\n        if extensions is not None:\n            if filter_func is not None:\n                raise TypeError(\n                    \"either extensions or filter_func can be passed, but not both\"\n                )\n\n            def filter_func(x: str) -> bool:\n                return \".\" in x and x.rsplit(\".\", 1)[1] in extensions\n\n        if filter_func is not None:\n            names = [name for name in names if filter_func(name)]\n\n        return names\n", "indent": 8, "failing": ["tests/test_compile.py::test_filters_deterministic", "tests/test_compile.py::test_import_as_with_context_deterministic", "tests/test_loader.py::TestModuleLoader::test_choice_loader", "tests/test_loader.py::TestModuleLoader::test_deflated_zip_compile", "tests/test_loader.py::TestModuleLoader::test_filesystem_compile", "tests/test_loader.py::TestModuleLoader::test_log", "tests/test_loader.py::TestModuleLoader::test_path_as_pathlib", "tests/test_loader.py::TestModuleLoader::test_prefix_loader", "tests/test_loader.py::TestModuleLoader::test_stored_zip_compile", "tests/test_loader.py::TestModuleLoader::test_supports_pathlib_in_list_of_paths", "tests/test_loader.py::TestModuleLoader::test_weak_references"]},
+  {"path": "src/jinja2/utils.py", "qual": "url_quote", "body_start": 405, "end": 417, "body": "    if not isinstance(obj, bytes):\n        if not isinstance(obj, str):\n            obj = str(obj)\n\n        obj = obj.encode(charset)\n\n    safe = b\"\" if for_qs else b\"/\"\n    rv = quote_from_bytes(obj, safe)\n\n    if for_qs:\n        rv = rv.replace(\"%20\", \"+\")\n\n    return rv\n", "indent": 4, "failing": ["tests/test_filters.py::TestFilter::test_urlencode[Hello,", "tests/test_filters.py::TestFilter::test_urlencode[a", "tests/test_filters.py::TestFilter::test_urlencode[value2-f=1]", "tests/test_filters.py::TestFilter::test_urlencode[value3-f=1&amp;z=2]", "tests/test_filters.py::TestFilter::test_urlencode[value4-%E2%80%BD=1]", "tests/test_filters.py::TestFilter::test_urlencode[value5-0=1]", "tests/test_filters.py::TestFilter::test_urlencode[value6-a+b%2Fc=a+b%2Fc]"]},
+  {"path": "src/jinja2/environment.py", "qual": "Template._get_default_module", "body_start": 1441, "end": 1453, "body": "        if self.environment.is_async:\n            raise RuntimeError(\"Module is not available in async mode.\")\n\n        if ctx is not None:\n            keys = ctx.globals_keys - self.globals.keys()\n\n            if keys:\n                return self.make_module({k: ctx.parent[k] for k in keys})\n\n        if self._module is None:\n            self._module = self.make_module()\n\n        return self._module\n", "indent": 8, "failing": ["tests/test_core_tags.py::TestMacros::test_include", "tests/test_core_tags.py::TestMacros::test_macro_api", "tests/test_core_tags.py::TestMacros::test_macro_defaults_self_ref", "tests/test_core_tags.py::TestSet::test_block", "tests/test_core_tags.py::TestSet::test_block_filtered", "tests/test_core_tags.py::TestSet::test_block_filtered_set", "tests/test_core_tags.py::TestSet::test_normal", "tests/test_imports.py::TestImports::test_context_imports", "tests/test_imports.py::TestImports::test_exports", "tests/test_imports.py::TestImports::test_from_import_with_globals", "tests/test_imports.py::TestImports::test_import_with_globals", "tests/test_imports.py::TestImports::test_import_with_globals_override", "tests/test_imports.py::TestImports::test_not_exported", "tests/test_imports.py::TestIncludes::test_context_include", "tests/test_regression.py::TestBug::test_caller_scoping", "tests/test_regression.py::TestBug::test_double_caller_no_default", "tests/test_security.py::TestSandbox::test_template_data"]},
+  {"path": "src/jinja2/filters.py", "qual": "do_format", "body_start": 1025, "end": 1030, "body": "    if args and kwargs:\n        raise FilterArgumentError(\n            \"can't handle positional and keyword arguments at the same time\"\n        )\n\n    return soft_str(value) % (kwargs or args)\n", "indent": 4, "failing": ["tests/test_ext.py::TestInternationalization::test_trans_stringformatting", "tests/test_filters.py::TestFilter::test_format"]},
+  {"path": "src/jinja2/runtime.py", "qual": "Context.derived", "body_start": 315, "end": 320, "body": "        context = new_context(\n            self.environment, self.name, {}, self.get_all(), True, None, locals\n        )\n        context.eval_ctx = self.eval_ctx\n        context.blocks.update((k, list(v)) for k, v in self.blocks.items())\n        return context\n", "indent": 8, "failing": ["tests/test_ext.py::TestAutoEscape::test_overlay_scopes", "tests/test_ext.py::TestExtensions::test_contextreference_node_can_pass_locals", "tests/test_inheritance.py::TestInheritance::test_required_with_scope", "tests/test_inheritance.py::TestInheritance::test_scoped_block", "tests/test_inheritance.py::TestInheritance::test_scoped_block_after_inheritance", "tests/test_inheritance.py::TestInheritance::test_super_in_scoped_block", "tests/test_regression.py::TestBug::test_pass_context_block_and_loop", "tests/test_regression.py::TestBug::test_pass_context_in_blocks", "tests/test_regression.py::TestBug::test_pass_context_loop_vars", "tests/test_regression.py::TestBug::test_pass_context_scoped_loop_vars", "tests/test_regression.py::TestBug::test_scoped_block", "tests/test_regression.py::TestBug::test_scoped_block_loop_vars"]},
+  {"path": "src/jinja2/nativetypes.py", "qual": "native_concat", "body_start": 25, "end": 47, "body": "    head = list(islice(values, 2))\n\n    if not head:\n        return None\n\n    if len(head) == 1:\n        raw = head[0]\n        if not isinstance(raw, str):\n            return raw\n    else:\n        if isinstance(values, GeneratorType):\n            values = chain(head, values)\n        raw = \"\".join([str(v) for v in values])\n\n    try:\n        return literal_eval(\n            # In Python 3.10+ ast.literal_eval removes leading spaces/tabs\n            # from the given string. For backwards compatibility we need to\n            # parse the string ourselves without removing leading spaces/tabs.\n            parse(raw, mode=\"eval\")\n        )\n    except (ValueError, SyntaxError, MemoryError):\n        return raw\n", "indent": 4, "failing": ["tests/test_async.py::test_native_async", "tests/test_async.py::test_native_list_async", "tests/test_nativetypes.py::test_adding_undefined_native_return", "tests/test_nativetypes.py::test_booleans[{{", "tests/test_nativetypes.py::test_cast_int", "tests/test_nativetypes.py::test_concat_strings_with_quotes", "tests/test_nativetypes.py::test_constant_dunder", "tests/test_nativetypes.py::test_constant_dunder_to_string", "tests/test_nativetypes.py::test_is_defined_native_return", "tests/test_nativetypes.py::test_leading_spaces", "tests/test_nativetypes.py::test_list_add", "tests/test_nativetypes.py::test_loop_look_alike", "tests/test_nativetypes.py::test_loops", "tests/test_nativetypes.py::test_loops_with_ints", "tests/test_nativetypes.py::test_macro", "tests/test_nativetypes.py::test_multi_expression_add", "tests/test_nativetypes.py::test_no_intermediate_eval", "tests/test_nativetypes.py::test_string_literal_var", "tests/test_nativetypes.py::test_string_top_level", "tests/test_nativetypes.py::test_tuple_of_variable_strings", "tests/test_nativetypes.py::test_undefined_native_return", "tests/test_nativetypes.py::test_variable_dunder"]}
  ],
  "renames": [
-  {
-   "old": "_environment_config_check",
-   "new": "_environment_config_check_impl",
-   "count": 3,
-   "files": [
-    "src/jinja2/environment.py"
-   ],
-   "path": "src/jinja2/environment.py"
-  },
-  {
-   "old": "_import_common",
-   "new": "_import_common_impl",
-   "count": 3,
-   "files": [
-    "src/jinja2/compiler.py"
-   ],
-   "path": "src/jinja2/compiler.py"
-  },
-  {
-   "old": "_min_or_max",
-   "new": "_min_or_max_impl",
-   "count": 3,
-   "files": [
-    "src/jinja2/filters.py"
-   ],
-   "path": "src/jinja2/filters.py"
-  },
-  {
-   "old": "_trim_whitespace",
-   "new": "_trim_whitespace_impl",
-   "count": 3,
-   "files": [
-    "src/jinja2/ext.py"
-   ],
-   "path": "src/jinja2/ext.py"
-  },
-  {
-   "old": "_load_template",
-   "new": "_load_template_impl",
-   "count": 3,
-   "files": [
-    "src/jinja2/environment.py"
-   ],
-   "path": "src/jinja2/environment.py"
-  },
-  {
-   "old": "_make_unop",
-   "new": "_make_unop_impl",
-   "count": 4,
-   "files": [
-    "src/jinja2/compiler.py"
-   ],
-   "path": "src/jinja2/compiler.py"
-  },
-  {
-   "old": "_prepare_attribute_parts",
-   "new": "_prepare_attribute_parts_impl",
-   "count": 3,
-   "files": [
-    "src/jinja2/filters.py"
-   ],
-   "path": "src/jinja2/filters.py"
-  },
-  {
-   "old": "_get_default_module",
-   "new": "_get_default_module_impl",
-   "count": 4,
-   "files": [
-    "src/jinja2/compiler.py",
-    "src/jinja2/environment.py"
-   ],
-   "path": "src/jinja2/environment.py"
-  }
+  {"old": "_environment_config_check", "new": "_environment_config_check_impl", "count": 3, "files": ["src/jinja2/environment.py"], "path": "src/jinja2/environment.py"},
+  {"old": "_import_common", "new": "_import_common_impl", "count": 3, "files": ["src/jinja2/compiler.py"], "path": "src/jinja2/compiler.py"},
+  {"old": "_min_or_max", "new": "_min_or_max_impl", "count": 3, "files": ["src/jinja2/filters.py"], "path": "src/jinja2/filters.py"},
+  {"old": "_trim_whitespace", "new": "_trim_whitespace_impl", "count": 3, "files": ["src/jinja2/ext.py"], "path": "src/jinja2/ext.py"},
+  {"old": "_load_template", "new": "_load_template_impl", "count": 3, "files": ["src/jinja2/environment.py"], "path": "src/jinja2/environment.py"},
+  {"old": "_make_unop", "new": "_make_unop_impl", "count": 4, "files": ["src/jinja2/compiler.py"], "path": "src/jinja2/compiler.py"},
+  {"old": "_prepare_attribute_parts", "new": "_prepare_attribute_parts_impl", "count": 3, "files": ["src/jinja2/filters.py"], "path": "src/jinja2/filters.py"},
+  {"old": "_get_default_module", "new": "_get_default_module_impl", "count": 4, "files": ["src/jinja2/compiler.py", "src/jinja2/environment.py"], "path": "src/jinja2/environment.py"}
  ],
  "docs": [
-  {
-   "path": "src/jinja2/lexer.py",
-   "module": "jinja2.lexer",
-   "qual": "get_lexer"
-  },
-  {
-   "path": "src/jinja2/tests.py",
-   "module": "jinja2.tests",
-   "qual": "test_divisibleby"
-  },
-  {
-   "path": "src/jinja2/filters.py",
-   "module": "jinja2.filters",
-   "qual": "sync_do_reject"
-  },
-  {
-   "path": "src/jinja2/tests.py",
-   "module": "jinja2.tests",
-   "qual": "test_undefined"
-  },
-  {
-   "path": "src/jinja2/lexer.py",
-   "module": "jinja2.lexer",
-   "qual": "compile_rules"
-  },
-  {
-   "path": "src/jinja2/tests.py",
-   "module": "jinja2.tests",
-   "qual": "test_false"
-  },
-  {
-   "path": "src/jinja2/tests.py",
-   "module": "jinja2.tests",
-   "qual": "test_boolean"
-  },
-  {
-   "path": "src/jinja2/tests.py",
-   "module": "jinja2.tests",
-   "qual": "test_filter"
-  }
+  {"path": "src/jinja2/lexer.py", "module": "jinja2.lexer", "qual": "get_lexer"},
+  {"path": "src/jinja2/tests.py", "module": "jinja2.tests", "qual": "test_divisibleby"},
+  {"path": "src/jinja2/filters.py", "module": "jinja2.filters", "qual": "sync_do_reject"},
+  {"path": "src/jinja2/tests.py", "module": "jinja2.tests", "qual": "test_undefined"},
+  {"path": "src/jinja2/lexer.py", "module": "jinja2.lexer", "qual": "compile_rules"},
+  {"path": "src/jinja2/tests.py", "module": "jinja2.tests", "qual": "test_false"},
+  {"path": "src/jinja2/tests.py", "module": "jinja2.tests", "qual": "test_boolean"},
+  {"path": "src/jinja2/tests.py", "module": "jinja2.tests", "qual": "test_filter"}
  ],
  "questions": [
-  {
-   "sentence": "Find all filter and test names used in the template and assign them to variables in the compiled namespace.",
-   "path": "src/jinja2/compiler.py",
-   "qual": "CodeGenerator.pull_dependencies",
-   "name": "pull_dependencies"
-  },
-  {
-   "sentence": "Format the value like a 'human-readable' file size (i.e.",
-   "path": "src/jinja2/filters.py",
-   "qual": "do_filesizeformat",
-   "name": "do_filesizeformat"
-  },
-  {
-   "sentence": "Put the bucket into the cache.",
-   "path": "src/jinja2/bccache.py",
-   "qual": "BytecodeCache.set_bucket",
-   "name": "set_bucket"
-  },
-  {
-   "sentence": "Babel extraction method for Jinja templates.",
-   "path": "src/jinja2/ext.py",
-   "qual": "babel_extract",
-   "name": "babel_extract"
-  },
-  {
-   "sentence": "Sets the value for an item.",
-   "path": "src/jinja2/utils.py",
-   "qual": "LRUCache.__setitem__",
-   "name": "__setitem__"
-  },
-  {
-   "sentence": "Iterates over all direct child nodes of the node.",
-   "path": "src/jinja2/nodes.py",
-   "qual": "Node.iter_child_nodes",
-   "name": "iter_child_nodes"
-  },
-  {
-   "sentence": "Replace all newlines with the configured sequence in strings and template data.",
-   "path": "src/jinja2/lexer.py",
-   "qual": "Lexer._normalize_newlines",
-   "name": "_normalize_newlines"
-  },
-  {
-   "sentence": "Return true if the variable is a number.",
-   "path": "src/jinja2/tests.py",
-   "qual": "test_number",
-   "name": "test_number"
-  }
+  {"sentence": "Find all filter and test names used in the template and assign them to variables in the compiled namespace.", "path": "src/jinja2/compiler.py", "qual": "CodeGenerator.pull_dependencies", "name": "pull_dependencies"},
+  {"sentence": "Format the value like a 'human-readable' file size (i.e.", "path": "src/jinja2/filters.py", "qual": "do_filesizeformat", "name": "do_filesizeformat"},
+  {"sentence": "Put the bucket into the cache.", "path": "src/jinja2/bccache.py", "qual": "BytecodeCache.set_bucket", "name": "set_bucket"},
+  {"sentence": "Babel extraction method for Jinja templates.", "path": "src/jinja2/ext.py", "qual": "babel_extract", "name": "babel_extract"},
+  {"sentence": "Sets the value for an item.", "path": "src/jinja2/utils.py", "qual": "LRUCache.__setitem__", "name": "__setitem__"},
+  {"sentence": "Iterates over all direct child nodes of the node.", "path": "src/jinja2/nodes.py", "qual": "Node.iter_child_nodes", "name": "iter_child_nodes"},
+  {"sentence": "Replace all newlines with the configured sequence in strings and template data.", "path": "src/jinja2/lexer.py", "qual": "Lexer._normalize_newlines", "name": "_normalize_newlines"},
+  {"sentence": "Return true if the variable is a number.", "path": "src/jinja2/tests.py", "qual": "test_number", "name": "test_number"}
  ]
 }

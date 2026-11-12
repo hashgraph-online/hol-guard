@@ -24,6 +24,10 @@ Every step is checked: the suite passes, tests are untouched, the rename is
 complete, the doctest runs, the answer names the right function. A session
 passes only if every step does.
 
+The lookup check is loose: it passes any answer that names the function, without
+checking the file or class. It applies the same way to every arm, so paired
+savings stay fair, but the pass rate on that step reads high.
+
 Seeds below 200 use the benchmark prompts on the main repos (click, boltons,
 toolz, more-itertools, jinja, pluggy). Seeds 200 and up are held out: they run
 only on the repos marked `heldout` in `references/repos.json` (cachetools,

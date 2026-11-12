@@ -58,37 +58,39 @@ def wait_job(job, field):
     sys.exit(1)
 
 
-def dash(path, body):
-    from codex_plugin_scanner.guard.daemon.client import (
-        _DASHBOARD_PROTOCOL_VERSIONS,
-        build_local_dashboard_session_token,
-        load_guard_surface_daemon_client,
-    )
-
-    client = load_guard_surface_daemon_client(guard)
-    seed = build_local_dashboard_session_token(auth_token=client.auth_token, surface="dashboard")
-    init = client._dashboard_session_request(
-        "/v1/initialize",
-        method="POST",
-        payload={
-            "client_name": "guard-dashboard-web",
-            "surface": "dashboard",
-            "supported_protocol_versions": list(_DASHBOARD_PROTOCOL_VERSIONS),
-        },
-        dashboard_session_token=seed,
-        deadline=time.monotonic() + 30,
-    )
+def post(url, body, session):
     request = urllib.request.Request(
-        f"{client.daemon_url}{path}",
+        url,
         data=json.dumps(body).encode(),
         method="POST",
-        headers={"X-Guard-Dashboard-Session": init["dashboard_session_token"], "Content-Type": "application/json"},
+        headers={"X-Guard-Dashboard-Session": session, "Content-Type": "application/json"},
     )
     try:
         with urllib.request.urlopen(request, timeout=120) as response:
             return json.loads(response.read())
     except urllib.error.HTTPError as error:
         return {"http": error.code}
+
+
+def dash(path, body):
+    from codex_plugin_scanner.guard.local_dashboard_session import build_local_dashboard_session_token
+    from codex_plugin_scanner.guard.native_daemon_client import load_guard_surface_daemon_client
+
+    client = load_guard_surface_daemon_client(guard)
+    seed = build_local_dashboard_session_token(auth_token=client.auth_token, surface="dashboard")
+    init = post(
+        f"{client.daemon_url}/v1/initialize",
+        {
+            "client_name": "guard-dashboard-web",
+            "surface": "dashboard",
+            "supported_protocol_versions": ["1.1", "1.0"],
+        },
+        seed,
+    )
+    if "dashboard_session_token" not in init:
+        log("dashboard initialize failed", init)
+        sys.exit(1)
+    return post(f"{client.daemon_url}{path}", body, init["dashboard_session_token"])
 
 
 def builds():
@@ -145,4 +147,6 @@ for _ in range(60):
         break
     time.sleep(3)
 log("cigar", status.get("availability"), status.get("diagnostic"), "requested", status.get("requested_enabled"))
-sys.exit(0 if status.get("requested_enabled") else 1)
+# requested_enabled is only the saved setting; the arm is ready only once CIGAR actually runs.
+running = status.get("availability") == "ready" or status.get("diagnostic") == "runtime_resting"
+sys.exit(0 if status.get("requested_enabled") and running else 1)

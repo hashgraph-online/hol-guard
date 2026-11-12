@@ -133,4 +133,8 @@ for harness, bad, partial in verdicts:
     print(f"{harness}: {'REGRESSION: ' + '; '.join(bad) if bad else 'OK'}{note}")
 if a.json:
     Path(a.json).write_text(json.dumps(report, indent=1) + "\n")
-sys.exit(1 if any(bad for _, bad, _ in verdicts) else 2 if any(partial for _, _, partial in verdicts) else 0)
+if any(bad for _, bad, _ in verdicts):
+    sys.exit(1)
+if any(partial for _, _, partial in verdicts):
+    sys.exit(2)
+sys.exit(0)

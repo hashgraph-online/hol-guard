@@ -1,4 +1,4 @@
-"""Per-step cost and request counts of a Codex session row, for the by-kind table."""
+"""Per-step cost and request counts of a session row, for the by-kind table."""
 
 import json
 from pathlib import Path
@@ -79,5 +79,29 @@ def claude_steps(row, runs_dir):
     return [{"kind": k, "usd": round(usd * s / whole, 6), "requests": r} for k, s, r in zip(kinds, shares, requests)]
 
 
+def omp_steps(row, runs_dir):
+    """[{kind, usd, requests}] per step of an Oh My Pi row: each assistant message_end carries its own cost."""
+    kinds, shares, requests = row["kinds"], [], []
+    for n in range(1, len(kinds) + 1):
+        path = Path(runs_dir) / f"{row['arm']}-s{row['seed']}-{n}.jsonl"
+        share, count = 0.0, 0
+        if path.exists():
+            for line in path.read_text().splitlines():
+                try:
+                    e = json.loads(line)
+                except ValueError:
+                    continue
+                message = e.get("message") or {}
+                if e.get("type") == "message_end" and message.get("role") == "assistant":
+                    share += ((message.get("usage") or {}).get("cost") or {}).get("total", 0.0)
+                    count += 1
+        shares.append(share)
+        requests.append(count if path.exists() else None)
+    whole = sum(shares) or 1.0
+    usd = row["cost"]["usd"]
+    return [{"kind": k, "usd": round(usd * s / whole, 6), "requests": r} for k, s, r in zip(kinds, shares, requests)]
+
+
 def row_steps(row, runs_dir):
-    return (claude_steps if row.get("harness") == "claude-code" else codex_steps)(row, runs_dir)
+    by_harness = {"claude-code": claude_steps, "omp": omp_steps}
+    return by_harness.get(row.get("harness"), codex_steps)(row, runs_dir)

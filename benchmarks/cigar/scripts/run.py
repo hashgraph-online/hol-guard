@@ -342,7 +342,9 @@ def rename_hint(project, r):
 
 
 def tree_hash(project):
-    return hashlib.sha256((git(project, "status", "--porcelain") + git(project, "diff", "HEAD")).encode()).hexdigest()
+    # HEAD is in the hash too: an edit committed during the step leaves status and diff empty.
+    state = git(project, "rev-parse", "HEAD") + git(project, "status", "--porcelain") + git(project, "diff", "HEAD")
+    return hashlib.sha256(state.encode()).hexdigest()
 
 
 def final_message(out):

@@ -33,6 +33,11 @@ if not seeds:
     sys.exit(f"no seed has both {a.base} and {a.cigar} rows")
 
 
+def pct(base, other, digits=0):
+    # A session that failed before its first response has no cost to compare against.
+    return f"{100 * (base - other) / base:.{digits}f}%" if base else "n/a"
+
+
 def failed(row):
     return ",".join(f"{x['step']}:{x['kind']}" for x in row["steps"] if not x["passed"]) + (
         f" {row['error']}" if row.get("error") else ""
@@ -48,9 +53,9 @@ for s in seeds:
     tb, tc = tb + b["cost"]["usd"], tc + c["cost"]["usd"]
     pb, pc = pb + b["passed"], pc + c["passed"]
     note = "".join(f"  {arm} FAIL {failed(r)}" for arm, r in ((a.base, b), (a.cigar, c)) if not r["passed"])
-    saved = 100 * (b["cost"]["usd"] - c["cost"]["usd"]) / b["cost"]["usd"]
+    saved = pct(b["cost"]["usd"], c["cost"]["usd"])
     print(
-        f"{s:>4} {c['repo']:8} {b['cost']['usd']:8.4f} {c['cost']['usd']:8.4f} {saved:5.0f}%  {int(b['passed'])}/{int(c['passed'])}{note}"
+        f"{s:>4} {c['repo']:8} {b['cost']['usd']:8.4f} {c['cost']['usd']:8.4f} {saved:>6}  {int(b['passed'])}/{int(c['passed'])}{note}"
     )
     for x, y in zip(row_steps(b, where[(a.base, s)]), row_steps(c, where[(a.cigar, s)])):
         k = kinds[x["kind"]]
@@ -60,7 +65,7 @@ for s in seeds:
         k[3] += x["requests"] or 0
         k[4] += y["requests"] or 0
 print(
-    f"TOTAL {len(seeds)} seeds  base {tb:.4f}  cigar {tc:.4f}  cost saved {100 * (tb - tc) / tb:.1f}%  passes {pb}/{pc}"
+    f"TOTAL {len(seeds)} seeds  base {tb:.4f}  cigar {tc:.4f}  cost saved {pct(tb, tc, 1)}  passes {pb}/{pc}"
 )
 
 
