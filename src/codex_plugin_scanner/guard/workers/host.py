@@ -331,13 +331,13 @@ def run_worker_host(guard_home: Path) -> int:
     """Runs the workers until standard input closes."""
 
     from ..runtime_health.background_diagnostics import install_sink, release_sink
-    from ..runtime_health.diagnostics import background_log_sinks
+    from ..runtime_health.diagnostics import BackgroundLogWriter
 
     store = GuardStore(guard_home)
     # Nothing else in this process opens daemon.log, so without these sinks a
     # failed migration or publication left no line for support to read.
-    sink, notice = background_log_sinks(store.guard_home)
-    install_sink(sink, notice=notice)
+    writer = BackgroundLogWriter(store.guard_home)
+    install_sink(writer.error, notice=writer.notice)
     host = WorkerHost(store, home_dir=Path.home().expanduser().resolve(strict=False))
     host.start()
     host.wait_for_policy_publication()
@@ -354,7 +354,8 @@ def run_worker_host(guard_home: Path) -> int:
         pass
     finally:
         host.shutdown()
-        release_sink(sink)
+        release_sink(writer.error)
+        _ = writer.close()
     return 0
 
 

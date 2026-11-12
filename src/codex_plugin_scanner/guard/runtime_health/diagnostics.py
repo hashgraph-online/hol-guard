@@ -8,7 +8,6 @@ import os
 import queue
 import sys
 import threading
-from collections.abc import Callable
 from contextlib import suppress
 from datetime import datetime, timezone
 from pathlib import Path
@@ -227,26 +226,73 @@ class DaemonDiagnostics:
         return True
 
 
-def background_log_sinks(
-    guard_home: Path,
-) -> tuple[Callable[[str, str], bool], Callable[[str, str], bool]]:
-    """Error and notice sinks that append each background record to ``daemon.log`` at once.
+# (is_notice, event, detail); None asks the writer thread to stop.
+_BackgroundRecord = tuple[bool, str, str]
+
+
+@final
+class BackgroundLogWriter:
+    """Error and notice sinks that hand background records to one writer thread.
 
     For a long-lived process that keeps no diagnostics open: a record queued
-    until shutdown would be lost to a crash and unread while it mattered. Each
-    call opens, writes and closes the log, which only background threads pay.
+    until shutdown would be lost to a crash and unread while it mattered. The
+    sinks only enqueue, so a request thread that reports a failure returns at
+    once; the writer thread opens, appends and closes ``daemon.log`` for each
+    batch it drains. A full queue drops the record and the sink says so.
     """
 
-    def write(event: str, detail: str, *, notice: bool) -> bool:
-        diagnostics = DaemonDiagnostics(guard_home)
-        record = diagnostics.record_background_notice if notice else diagnostics.record_background
-        taken = record(event, detail)
-        return diagnostics.close() and taken
+    def __init__(self, guard_home: Path, *, queue_capacity: int = _DEFAULT_QUEUE_CAPACITY) -> None:
+        self._guard_home = guard_home
+        self._queue: queue.Queue[_BackgroundRecord | None] = queue.Queue(maxsize=max(1, queue_capacity))
+        self._closed = False
+        self._thread = threading.Thread(target=self._run, daemon=True, name="guard-background-log-writer")
+        self._thread.start()
 
-    def error(event: str, detail: str) -> bool:
-        return write(event, detail, notice=False)
+    def error(self, event: str, detail: str) -> bool:
+        return self._put((False, event, detail))
 
-    def notice(event: str, detail: str) -> bool:
-        return write(event, detail, notice=True)
+    def notice(self, event: str, detail: str) -> bool:
+        return self._put((True, event, detail))
 
-    return error, notice
+    def close(self, *, timeout_seconds: float = 1.0) -> bool:
+        """Stop taking records and wait, bounded, for those already queued."""
+
+        self._closed = True
+        with suppress(queue.Full):
+            self._queue.put(None, timeout=max(0.0, timeout_seconds))
+        self._thread.join(timeout=max(0.0, timeout_seconds))
+        return not self._thread.is_alive()
+
+    def _put(self, item: _BackgroundRecord) -> bool:
+        if self._closed:
+            return False
+        try:
+            self._queue.put_nowait(item)
+        except queue.Full:
+            return False
+        return True
+
+    def _run(self) -> None:
+        while True:
+            batch = [self._queue.get()]
+            while True:
+                try:
+                    batch.append(self._queue.get_nowait())
+                except queue.Empty:
+                    break
+            records = [item for item in batch if item is not None]
+            if records:
+                # A failed write must not end the thread that later records need.
+                with suppress(Exception):
+                    self._write(records)
+            if len(records) != len(batch):
+                return
+
+    def _write(self, records: list[_BackgroundRecord]) -> None:
+        diagnostics = DaemonDiagnostics(self._guard_home, queue_capacity=len(records))
+        for notice, event, detail in records:
+            if notice:
+                _ = diagnostics.record_background_notice(event, detail)
+            else:
+                _ = diagnostics.record_background(event, detail)
+        _ = diagnostics.close(timeout_seconds=5.0)
