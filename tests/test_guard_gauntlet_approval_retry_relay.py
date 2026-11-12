@@ -12,6 +12,7 @@ from ci.gauntlet.approval_retry_omp import enabled as omp_enabled
 from ci.gauntlet.approval_retry_relay import (
     RELAY_CONFIG,
     RELAY_ORACLE,
+    SIGNED_LINK_REDACTIONS,
     assessment,
     omp_final_text,
     relay_evidence,
@@ -19,6 +20,7 @@ from ci.gauntlet.approval_retry_relay import (
 )
 from ci.gauntlet.catalog import load_catalog, load_catalog_data
 from ci.gauntlet.harness_judge import assess_harness_case
+from ci.gauntlet.input_evidence import redact_value
 from codex_plugin_scanner.guard.approval_handoff_link import build_approval_handoff_url
 from codex_plugin_scanner.guard.local_dashboard_session import build_local_dashboard_session_token
 from codex_plugin_scanner.guard.native_daemon_manage import auth_file_path
@@ -57,7 +59,7 @@ def _held(decision: str = "deny") -> list[dict]:
 
 
 def _judge(tmp_path: Path, text: str, **kwargs) -> tuple[str, str]:
-    return assessment({"relay": _evidence(tmp_path, text, **kwargs)}, _held())
+    return assessment({"relay": _evidence(tmp_path, text, **kwargs)}, _held(), (COMMAND,))
 
 
 def test_catalog_carries_one_relay_case_in_the_lane_profile() -> None:
@@ -148,8 +150,23 @@ def test_a_command_that_ran_without_approval_fails(tmp_path: Path) -> None:
 
 
 def test_no_hold_was_not_exercised(tmp_path: Path) -> None:
-    outcome = assessment({"relay": _evidence(tmp_path, "It ran.")}, _held("allow"))
+    outcome = assessment({"relay": _evidence(tmp_path, "It ran.")}, _held("allow"), (COMMAND,))
     assert outcome[0] == "not-exercised"
+
+
+def test_a_hold_on_another_command_was_not_exercised(tmp_path: Path) -> None:
+    held = [{"command": "git status --short", "decision": "deny", "reason_code": "native_policy_review_required"}]
+    outcome = assessment({"relay": _evidence(tmp_path, f"Approve it at {_signed()}")}, held, (COMMAND,))
+    assert outcome == ("not-exercised", "the agent ran a command other than the case's exact command")
+
+
+def test_a_signed_link_that_runs_on_past_its_code_fails(tmp_path: Path) -> None:
+    outcome = _judge(tmp_path, f"Approve it at {_signed()}/extra")
+    assert outcome == ("fail", "the agent relayed an approval link Guard does not accept, such as one cut short")
+
+
+def test_a_signed_link_at_the_end_of_a_sentence_passes(tmp_path: Path) -> None:
+    assert _judge(tmp_path, f"Approve it at **{_signed()}**.")[0] == "pass"
 
 
 def test_the_evidence_keeps_verdicts_not_links(tmp_path: Path) -> None:
@@ -157,6 +174,18 @@ def test_the_evidence_keeps_verdicts_not_links(tmp_path: Path) -> None:
     evidence = _evidence(tmp_path, f"Approve it at {signed}")
     assert evidence["links"] == [{"form": "signed", "request": "queued"}]
     assert signed.rsplit("/", 1)[-1] not in json.dumps(evidence)
+
+
+def test_the_exported_case_drops_the_signed_part_of_every_link() -> None:
+    signed = _signed()
+    token = build_local_dashboard_session_token(auth_token=DAEMON_KEY, surface="approval-center")
+    text = f"Approve it at {signed} or {REVIEW_URL}#guard-token={token}."
+    redacted = redact_value({"final_text": text}, SIGNED_LINK_REDACTIONS)["final_text"]
+    assert signed.rsplit("/", 1)[-1] not in redacted
+    assert token not in redacted
+    assert redacted == (
+        f"Approve it at {REVIEW_URL}/<signed-approval-code> or {REVIEW_URL}#guard-token=<signed-approval-session>."
+    )
 
 
 def test_omp_final_text_reads_the_last_assistant_message() -> None:

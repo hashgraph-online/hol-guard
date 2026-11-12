@@ -37541,6 +37541,30 @@ function storage() {
     return null;
   }
 }
+function readTabFlag(store2, key) {
+  try {
+    return store2?.getItem(key) === "1";
+  } catch {
+    return false;
+  }
+}
+function writeTabFlag(store2, key) {
+  if (store2 === null) {
+    return false;
+  }
+  try {
+    store2.setItem(key, "1");
+    return true;
+  } catch {
+    return false;
+  }
+}
+function clearTabFlag(store2, key) {
+  try {
+    store2?.removeItem(key);
+  } catch {
+  }
+}
 function tabIsEmbedded() {
   const store2 = storage();
   let embedded = false;
@@ -37550,16 +37574,16 @@ function tabIsEmbedded() {
     embedded = false;
   }
   if (embedded) {
-    store2?.setItem(EMBEDDED_KEY, "1");
+    writeTabFlag(store2, EMBEDDED_KEY);
     return true;
   }
-  return store2?.getItem(EMBEDDED_KEY) === "1";
+  return readTabFlag(store2, EMBEDDED_KEY);
 }
 function requestHandedOffToDesktop(requestId) {
   if (!requestId) {
     return false;
   }
-  return storage()?.getItem(HANDOFF_KEY_PREFIX + requestId) === "1";
+  return readTabFlag(storage(), HANDOFF_KEY_PREFIX + requestId);
 }
 function handOffRequestPageToDesktop() {
   let pathname;
@@ -37576,14 +37600,16 @@ function handOffRequestPageToDesktop() {
   });
   const requestId = requestPageId(pathname);
   const store2 = storage();
-  if (target2 === null || requestId === null || store2 === null) {
+  if (target2 === null || requestId === null) {
     return;
   }
-  store2.setItem(HANDOFF_KEY_PREFIX + requestId, "1");
+  if (!writeTabFlag(store2, HANDOFF_KEY_PREFIX + requestId)) {
+    return;
+  }
   try {
     window.location.assign(target2);
   } catch {
-    store2.removeItem(HANDOFF_KEY_PREFIX + requestId);
+    clearTabFlag(store2, HANDOFF_KEY_PREFIX + requestId);
   }
 }
 function QueueConnectionError(props) {

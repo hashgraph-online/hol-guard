@@ -64,6 +64,40 @@ function storage(): Storage | null {
 }
 
 /**
+ * Tab storage can refuse any call, for example when it is full or a webview
+ * blocks it. This runs before the dashboard mounts, so every call here fails
+ * closed instead of throwing.
+ */
+export function readTabFlag(store: Storage | null, key: string): boolean {
+  try {
+    return store?.getItem(key) === "1";
+  } catch {
+    return false;
+  }
+}
+
+/** Records `key` for this tab, and says whether it was recorded. */
+export function writeTabFlag(store: Storage | null, key: string): boolean {
+  if (store === null) {
+    return false;
+  }
+  try {
+    store.setItem(key, "1");
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function clearTabFlag(store: Storage | null, key: string): void {
+  try {
+    store?.removeItem(key);
+  } catch {
+    // Nothing to undo when storage refuses the call.
+  }
+}
+
+/**
  * Whether this tab is Desktop's own window. The `desktop_embed` hint only
  * rides the first URL, so the answer is kept for the tab's lifetime and a
  * reload inside Desktop never hands the page back to Desktop.
@@ -77,10 +111,10 @@ function tabIsEmbedded(): boolean {
     embedded = false;
   }
   if (embedded) {
-    store?.setItem(EMBEDDED_KEY, "1");
+    writeTabFlag(store, EMBEDDED_KEY);
     return true;
   }
-  return store?.getItem(EMBEDDED_KEY) === "1";
+  return readTabFlag(store, EMBEDDED_KEY);
 }
 
 /** Whether this tab already opened `requestId` in Desktop. */
@@ -88,7 +122,7 @@ export function requestHandedOffToDesktop(requestId: string | null | undefined):
   if (!requestId) {
     return false;
   }
-  return storage()?.getItem(HANDOFF_KEY_PREFIX + requestId) === "1";
+  return readTabFlag(storage(), HANDOFF_KEY_PREFIX + requestId);
 }
 
 /** Open this request page in Desktop once per tab, when Desktop opens requests. */
@@ -107,13 +141,17 @@ export function handOffRequestPageToDesktop(): void {
   });
   const requestId = requestPageId(pathname);
   const store = storage();
-  if (target === null || requestId === null || store === null) {
+  if (target === null || requestId === null) {
     return;
   }
-  store.setItem(HANDOFF_KEY_PREFIX + requestId, "1");
+  // Without a record of the handoff, every reload would open Desktop again,
+  // so a tab that cannot record it stays in the browser.
+  if (!writeTabFlag(store, HANDOFF_KEY_PREFIX + requestId)) {
+    return;
+  }
   try {
     window.location.assign(target);
   } catch {
-    store.removeItem(HANDOFF_KEY_PREFIX + requestId);
+    clearTabFlag(store, HANDOFF_KEY_PREFIX + requestId);
   }
 }

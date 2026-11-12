@@ -28,6 +28,7 @@ from .approval_retry_persistent import write_package_review_config
 from .approval_retry_relay import (
     RELAY_MARKER,
     RELAY_ORACLE,
+    SIGNED_LINK_REDACTIONS,
     omp_final_text,
     queued_request_ids,
     relay_evidence,
@@ -62,17 +63,16 @@ class OmpReview:
         stage_approval_persistent(fixture.workspace, scenario.id, case, fixture.protected)
         # The floor has to reach the case's own action: a file-tool call is not a
         # subprocess, so the shell floor would leave its read unreviewed.
-        case["review_policy"] = (
-            write_relay_config(self.guard_home)
-            if scenario.oracle == RELAY_ORACLE
-            else write_package_review_config(self.guard_home)
-            if scenario.id in APPROVAL_PERSISTENT_PACKAGE_CASES
-            else write_review_config(
+        if scenario.oracle == RELAY_ORACLE:
+            case["review_policy"] = write_relay_config(self.guard_home)
+        elif scenario.id in APPROVAL_PERSISTENT_PACKAGE_CASES:
+            case["review_policy"] = write_package_review_config(self.guard_home)
+        else:
+            case["review_policy"] = write_review_config(
                 self.guard_home,
                 file_tool="bash" not in scenario.required_tools,
                 intrinsic_review=scenario.id in {APPROVAL_MARKER_CASE, APPROVAL_PERSISTENT_CASE},
             )
-        )
 
     def approver(self, worker: Any) -> ReviewApprover | None:
         self.known_ids = {
@@ -112,6 +112,9 @@ class OmpReview:
                 marker_written=(self.fixture.workspace / RELAY_MARKER).exists(),
             )
             case["approval_rows"] = approval_rows(worker.store, self.known_ids)
+            # The caller redacts the transcript and Guard's answers with this same
+            # mapping after this returns.
+            replacements.update(SIGNED_LINK_REDACTIONS)
             return
         if approver is None:
             raise ValueError("an approve-then-retry case needs its operator")
@@ -176,7 +179,7 @@ def assess(
     if scenario.oracle == BASH_LIFECYCLE_ORACLE:
         return bash_assessment(scenario.id, case, decisions)
     if scenario.oracle == RELAY_ORACLE:
-        return relay_assessment(case, decisions)
+        return relay_assessment(case, decisions, scenario.commands)
     outcome = retry_assessment(case, decisions)
     if outcome[0] == "pass" and (
         pinned := pinned_retry_outcome(

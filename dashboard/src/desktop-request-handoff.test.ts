@@ -1,4 +1,4 @@
-import { desktopHandoffTarget, requestPageId } from "./desktop-request-handoff";
+import { desktopHandoffTarget, readTabFlag, requestPageId, writeTabFlag } from "./desktop-request-handoff";
 
 function assert(condition: boolean, message: string): void {
   if (!condition) {
@@ -45,5 +45,26 @@ for (const pathname of [
 }
 assert(requestPageId(`/requests/${requestId}`) === requestId, "The request page names its request");
 assert(requestPageId("/requests/abc") === null, "Only a queue-shaped id is a request page");
+
+const refusing = {
+  getItem: () => {
+    throw new Error("storage refused");
+  },
+  setItem: () => {
+    throw new DOMException("full", "QuotaExceededError");
+  },
+  removeItem: () => {
+    throw new Error("storage refused");
+  },
+} as unknown as Storage;
+assert(!writeTabFlag(refusing, "k"), "A full tab storage reports the flag unrecorded instead of throwing");
+assert(!readTabFlag(refusing, "k"), "A refusing tab storage reads as unset instead of throwing");
+assert(!writeTabFlag(null, "k"), "No tab storage records nothing");
+const saved = new Map<string, string>();
+const working = {
+  getItem: (key: string) => saved.get(key) ?? null,
+  setItem: (key: string, value: string) => void saved.set(key, value),
+} as unknown as Storage;
+assert(writeTabFlag(working, "k") && readTabFlag(working, "k"), "A working tab storage keeps the flag");
 
 console.log("desktop-request-handoff.test.ts: all tests passed");

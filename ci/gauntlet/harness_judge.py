@@ -246,7 +246,7 @@ def _outcome(scenario: Scenario, case: dict[str, Any]) -> tuple[str, str]:
         # the approval link the agent hands the user while it is held.
         if not calls:
             return "not-exercised", "the model made no tool call"
-        return relay_assessment(case, decisions)
+        return relay_assessment(case, decisions, scenario.commands)
     # A Codex call Guard routed into its contained runner ran there; its resident deny is the
     # route, not a stop, once codex_contained binds the run to the reviewed input.
     routed, routed_error = routed_calls(scenario.expectation, case)
