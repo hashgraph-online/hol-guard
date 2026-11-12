@@ -67,6 +67,17 @@ fn a_missing_bundle_is_a_503() {
 }
 
 #[test]
+fn a_folder_that_gave_nothing_is_read_again() {
+    let dir = tempfile::tempdir().unwrap();
+    let root = dir.path().join("static");
+    assert!(get(Some(&root), "/").starts_with("HTTP/1.0 503 "));
+    assert_eq!(build_id(&root), None);
+    bundle(&root);
+    assert!(get(Some(&root), "/").starts_with("HTTP/1.0 200 OK\r\n"));
+    assert!(build_id(&root).is_some());
+}
+
+#[test]
 fn serves_pinned_and_root_files_and_nothing_outside() {
     let dir = tempfile::tempdir().unwrap();
     let root = dir.path().join("static");

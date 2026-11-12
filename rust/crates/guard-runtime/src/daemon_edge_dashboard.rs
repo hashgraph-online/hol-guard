@@ -7,9 +7,10 @@
 //! kept for the life of the process. So an in-place upgrade never pairs a new
 //! dashboard with this daemon's API. And once the daemon has started, serving
 //! never depends on the folder: a frozen launcher hands the daemon its own
-//! temporary unpack folder, which is deleted when that launcher exits. The
-//! shell is stamped with the fingerprint of `index.html` and `assets/`, so a
-//! tab left open across a restart can tell it is stale.
+//! temporary unpack folder, which is deleted when that launcher exits. A
+//! folder that gave nothing is read again on the next request. The shell is
+//! stamped with the fingerprint of `index.html` and `assets/`, so a tab left
+//! open across a restart can tell it is stale.
 
 use std::collections::HashMap;
 use std::fs;
@@ -61,6 +62,10 @@ struct Bundle {
 
 static PINNED: LazyLock<Mutex<HashMap<PathBuf, &'static Bundle>>> =
     LazyLock::new(|| Mutex::new(HashMap::new()));
+static NO_BUNDLE: LazyLock<Bundle> = LazyLock::new(|| Bundle {
+    files: HashMap::new(),
+    build: None,
+});
 
 /// `_is_public_static_path`: files any page may load with a plain tag, so
 /// they are served without an origin check.
@@ -111,9 +116,18 @@ fn pinned(static_dir: &Path) -> &'static Bundle {
     let mut pinned = PINNED
         .lock()
         .unwrap_or_else(|poisoned| poisoned.into_inner());
-    pinned
-        .entry(static_dir.to_path_buf())
-        .or_insert_with(|| Box::leak(Box::new(read_bundle(static_dir))))
+    if let Some(bundle) = pinned.get(static_dir) {
+        return bundle;
+    }
+    let bundle = read_bundle(static_dir);
+    // A folder that gave nothing, missing or unreadable, is read again on the
+    // next request instead of serving a 503 for the life of the process.
+    if bundle.files.is_empty() {
+        return &NO_BUNDLE;
+    }
+    let bundle: &'static Bundle = Box::leak(Box::new(bundle));
+    pinned.insert(static_dir.to_path_buf(), bundle);
+    bundle
 }
 
 /// `_read_bundle` and `dashboard_build_id`: every file the dashboard serves.
