@@ -38,6 +38,8 @@ mod recover;
 pub(crate) mod recovery_host;
 #[path = "daemon_manage_retire.rs"]
 mod retire;
+#[path = "daemon_manage_start_progress.rs"]
+mod start_progress;
 #[path = "daemon_manage_state.rs"]
 mod state;
 #[cfg(all(test, unix))]
