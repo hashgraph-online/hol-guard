@@ -33,7 +33,7 @@ fn expand(value: &Value, root: &str) -> Value {
     }
 }
 
-struct Fixture(PathBuf);
+pub(super) struct Fixture(pub(super) PathBuf);
 
 #[test]
 fn per_request_home_selects_nvm_and_preserves_home_root_refusal() {
@@ -102,7 +102,7 @@ impl Drop for Fixture {
     }
 }
 
-fn fixture(prefix: &str) -> Fixture {
+pub(super) fn fixture(prefix: &str) -> Fixture {
     let mut random = [0u8; 16];
     getrandom::fill(&mut random).unwrap();
     let root = env::temp_dir().join(format!("{prefix}-{}", hex::encode(random)));
@@ -447,90 +447,9 @@ fn pytest_prepare_honors_the_explicit_caller_home() {
     );
 }
 
-#[test]
-fn bun_inline_eval_uses_the_node_eval_profile_with_an_installer_image() {
-    let fixture = fixture("guard-bun-eval");
-    let home = fixture.0.join("caller-home");
-    let bun = home.join(".bun/bin/bun");
-    let workspace = fixture.0.join("project");
-    fs::create_dir_all(bun.parent().unwrap()).unwrap();
-    fs::create_dir(&workspace).unwrap();
-    fs::write(workspace.join("package.json"), "{}").unwrap();
-    fs::write(&bun, b"\x7fELFnative-fixture").unwrap();
-    fs::set_permissions(&bun, fs::Permissions::from_mode(0o755)).unwrap();
-    let mut launch = json!({"command":[bun,"-e","console.log(1)"],"workspace":workspace,
-        "cwd":workspace,"home":home,"platform":"darwin","backend_executable":"/usr/bin/true",
-        "search_path":""});
-    let result = evaluate("prepare_inline", &launch);
-    let plan = &result["value"];
-    assert_eq!(plan["profile_version"], "node-eval-readonly-v1", "{plan}");
-    // Bun's automatic `.env` load is off: the profile denies reading it, and
-    // Bun 1.4 aborts the whole run when that load is refused.
-    assert_eq!(
-        plan["command"],
-        json!([bun, "--no-env-file", "-e", "console.log(1)"])
-    );
-    assert_eq!(
-        plan["denied_capabilities"],
-        json!([
-            "host-home-read",
-            "host-secret-environment",
-            "network",
-            "docker-socket",
-            "workspace-write",
-            "workspace-credential-read",
-            "unapproved-process-exec",
-            "privileged-operation"
-        ])
-    );
-    launch["command"] = json!([bun, "--print", "1"]);
-    assert_eq!(
-        evaluate("prepare_inline", &launch)["value"]["command"],
-        json!([bun, "--no-env-file", "--print", "1"])
-    );
-    // `bun test` and the single test file Bun runs on its own take the Node
-    // test profile with the same automatic `.env` load turned off.
-    launch["command"] = json!([bun, "test"]);
-    let plan = evaluate("prepare_node", &launch)["value"].clone();
-    assert_eq!(plan["profile_version"], "node-test-readonly-v1", "{plan}");
-    assert_eq!(plan["command"], json!([bun, "--no-env-file", "test"]));
-    fs::write(workspace.join("calc.test.ts"), "").unwrap();
-    launch["command"] = json!([bun, "calc.test.ts"]);
-    assert_eq!(
-        evaluate("prepare_node", &launch)["value"]["command"],
-        json!([bun, "--no-env-file", "calc.test.ts"])
-    );
-    launch["command"] = json!([bun, "--print", "1"]);
-    // Another home's installer, a repository copy, a writable or script image.
-    let invalid = |launch: &Value| {
-        assert_eq!(
-            evaluate("prepare_inline", launch)["reason_code"],
-            "inline_eval_invalid_command",
-            "{launch}"
-        );
-    };
-    let other = fixture.0.join("other-home");
-    fs::create_dir(&other).unwrap();
-    launch["home"] = json!(other);
-    invalid(&launch);
-    launch["home"] = json!(home);
-    let local = workspace.join("bun");
-    fs::copy(&bun, &local).unwrap();
-    launch["command"] = json!([local, "-e", "1"]);
-    invalid(&launch);
-    launch["command"] = json!([bun, "-e", "1"]);
-    fs::set_permissions(&bun, fs::Permissions::from_mode(0o775)).unwrap();
-    invalid(&launch);
-    fs::write(&bun, b"#!/bin/sh\n").unwrap();
-    fs::set_permissions(&bun, fs::Permissions::from_mode(0o755)).unwrap();
-    invalid(&launch);
-    launch["command"] = json!([bun, "run", "-e", "1"]);
-    invalid(&launch);
-}
-
 /// A native runtime image at `path`, owned by this account and writable by
 /// nobody else, as a version manager leaves one on disk.
-fn plant_runtime(path: &Path) {
+pub(super) fn plant_runtime(path: &Path) {
     fs::create_dir_all(path.parent().unwrap()).unwrap();
     fs::write(path, b"\x7fELFnative-fixture").unwrap();
     fs::set_permissions(path, fs::Permissions::from_mode(0o755)).unwrap();
@@ -612,45 +531,6 @@ fn linked_manager_root_resolves_as_an_approved_runtime() {
             &json!({"path":node,"workspace":workspace,"home":home})
         ),
         json!({"value":true})
-    );
-}
-
-#[test]
-fn bun_installed_by_a_version_manager_runs_contained() {
-    let fixture = fixture("guard-manager-bun");
-    let home = fixture.0.join("caller-home");
-    let workspace = fixture.0.join("project");
-    fs::create_dir_all(&workspace).unwrap();
-    fs::write(workspace.join("package.json"), "{}").unwrap();
-    let launch = |bun: &Path| {
-        evaluate(
-            "prepare_inline",
-            &json!({"command":[bun,"-e","console.log(1)"],"workspace":workspace,"cwd":workspace,
-                "home":home,"platform":"darwin","backend_executable":"/usr/bin/true",
-                "search_path":""}),
-        )
-    };
-    // Bun's own installer directory, and the managers that install Bun.
-    for relative in [
-        ".bun/bin/bun",
-        ".asdf/installs/bun/1.1.30/bin/bun",
-        ".local/share/mise/installs/bun/1.1.30/bin/bun",
-    ] {
-        let bun = home.join(relative);
-        plant_runtime(&bun);
-        assert_eq!(
-            launch(&bun)["value"]["executable"],
-            json!(bun),
-            "{relative}"
-        );
-    }
-    // Guard's own shim directory is still refused, so a shim can never answer
-    // for Bun inside containment.
-    let shim = home.join(".hol-guard/package-shims/bin/bun");
-    plant_runtime(&shim);
-    assert_eq!(
-        launch(&shim)["reason_code"],
-        json!("inline_eval_invalid_command")
     );
 }
 
