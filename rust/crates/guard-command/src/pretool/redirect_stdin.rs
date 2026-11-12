@@ -56,6 +56,18 @@ pub(super) fn reads_data(model: &CanonicalCommandV1, separated_after: bool) -> b
     }
 }
 
+/// Whether `model` is exactly one plain `git commit` that takes its message
+/// from standard input. The workspace sandbox's own projection asks this of
+/// the segment a quoted heredoc feeds, so the sandbox can plan the commit the
+/// decision already routed to it.
+pub(super) fn commit_reads_message(model: &CanonicalCommandV1) -> bool {
+    model.wrapper_chain.is_empty()
+        && !model.path_overridden
+        && model.segments.len() == 1
+        && segment_reads_data(&model.segments[0])
+        && model.segments[0].executable.as_deref() == Some("git")
+}
+
 /// Whether one segment, spelled plainly by name with no wrapper, environment
 /// assignment or path override, only reads what reaches it on standard input.
 fn segment_reads_data(segment: &CommandSegmentV1) -> bool {

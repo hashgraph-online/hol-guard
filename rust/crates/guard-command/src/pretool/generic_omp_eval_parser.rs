@@ -33,6 +33,7 @@ const RESERVED: &[&str] = &[
     "read",
     "tool",
     "display",
+    "print",
     "log",
     "console",
     "Promise",
@@ -160,7 +161,9 @@ impl Parser {
                 self.declared.extend(names);
                 Some(())
             }
-            Token::Ident(word) if word == "display" || word == "log" => {
+            // The JavaScript prelude binds `print` to the same console bridge
+            // as `log`, so all three only show what they are given.
+            Token::Ident(word) if matches!(word.as_str(), "display" | "print" | "log") => {
                 self.pos += 1;
                 self.paren_value()
             }
@@ -451,4 +454,21 @@ fn literal_read_helper_is_parsed_as_one_read() {
     let calls = parse_program("display(await read('README.md'))").unwrap();
     assert_eq!(calls.len(), 1);
     assert_eq!(calls[0].tool, "read");
+}
+
+/// The JavaScript prelude sets `globalThis.print = consoleBridge.log`, so an
+/// agent that prints what a tool returned only shows it, as `display` does.
+#[test]
+fn print_shows_a_tool_result_like_display() {
+    for code in [
+        "const content = await tool.read({path: \"notes/SKILL.md\"}); print(content);",
+        "const content = await tool.read({path: \"notes/SKILL.md\"}); display(content);",
+        "print(await read('README.md'))",
+    ] {
+        let calls = parse_program(code).unwrap_or_else(|| panic!("{code}"));
+        assert_eq!(calls.len(), 1, "{code}");
+        assert_eq!(calls[0].tool, "read", "{code}");
+    }
+    // `print` stays the prelude's: a program may not rebind it.
+    assert!(parse_program("const print = 1; print(await read('README.md'))").is_none());
 }

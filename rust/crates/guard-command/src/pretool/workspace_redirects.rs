@@ -17,7 +17,8 @@ use guard_contracts::{GuardExecutionEnvironmentV1, PreToolResultV1};
 use serde_json::Value;
 
 use super::redirect_projection::{
-    boundary, remove_quoted_heredoc, skip_heredoc_bodies, trailing_word,
+    boundary, heredoc_records_commit_message, remove_quoted_heredoc, skip_heredoc_bodies,
+    trailing_word,
 };
 use crate::native_command_controls::{
     python_is_builtin_only, python_stdin, CompiledNativeCommandControls,
@@ -33,7 +34,8 @@ enum Quote {
 }
 
 /// The command with every literal-path redirect, descriptor copy and quoted
-/// `cat` heredoc removed. A quoted heredoc may also feed `python3 -` a program
+/// `cat` heredoc removed. A quoted heredoc may also carry the message of a
+/// `git commit -F -`, or feed `python3 -` a program
 /// that reads only builtins, which cannot start a program or load a module;
 /// the projection keeps `python3 -`, so every control still sees it. `None`
 /// when nothing was removed or any redirect has another form: process
@@ -109,11 +111,13 @@ fn project_scan(raw: &str) -> Option<(String, Vec<usize>, bool)> {
                 continue;
             }
             '<' if chars.get(index + 1) == Some(&'<') => {
-                // A heredoc is stdin. Only `cat` is known to treat it as data;
-                // Python runs it, so its body is checked once it is read.
+                // A heredoc is stdin. `cat` treats it as data and `git commit
+                // -F -` records it as the message, exactly as the decision's
+                // own projection reads both; Python runs it, so its body is
+                // checked once it is read.
                 let segment = current_segment(&out).trim();
                 let program = python_stdin(segment);
-                if segment != "cat" && !program {
+                if segment != "cat" && !program && !heredoc_records_commit_message(segment) {
                     return None;
                 }
                 index = remove_quoted_heredoc(&chars, index, &mut out, &mut heredocs)?;
