@@ -8,9 +8,9 @@
 //! dashboard with this daemon's API. And once the daemon has started, serving
 //! never depends on the folder: a frozen launcher hands the daemon its own
 //! temporary unpack folder, which is deleted when that launcher exits. A
-//! folder that gave nothing is read again on the next request. The shell is
-//! stamped with the fingerprint of `index.html` and `assets/`, so a tab left
-//! open across a restart can tell it is stale.
+//! folder that cannot serve the shell yet is read again on the next request.
+//! The shell is stamped with the fingerprint of `index.html` and `assets/`, so
+//! a tab left open across a restart can tell it is stale.
 
 use std::collections::HashMap;
 use std::fs;
@@ -58,6 +58,14 @@ const NO_STORE: &str =
 struct Bundle {
     files: HashMap<String, Vec<u8>>,
     build: Option<String>,
+}
+
+impl Bundle {
+    /// Whether this bundle holds what the dashboard shell needs.
+    fn has_shell(&self) -> bool {
+        self.files.contains_key("index.html")
+            && self.files.contains_key("assets/guard-dashboard.js")
+    }
 }
 
 static PINNED: LazyLock<Mutex<HashMap<PathBuf, &'static Bundle>>> =
@@ -120,9 +128,10 @@ fn pinned(static_dir: &Path) -> &'static Bundle {
         return bundle;
     }
     let bundle = read_bundle(static_dir);
-    // A folder that gave nothing, missing or unreadable, is read again on the
-    // next request instead of serving a 503 for the life of the process.
-    if bundle.files.is_empty() {
+    // A folder that cannot serve the shell yet (missing, unreadable or half
+    // there) is read again on the next request instead of serving a 503 for
+    // the life of the process.
+    if !bundle.has_shell() {
         return &NO_BUNDLE;
     }
     let bundle: &'static Bundle = Box::leak(Box::new(bundle));

@@ -67,9 +67,13 @@ fn a_missing_bundle_is_a_503() {
 }
 
 #[test]
-fn a_folder_that_gave_nothing_is_read_again() {
+fn a_folder_that_cannot_serve_the_shell_yet_is_read_again() {
     let dir = tempfile::tempdir().unwrap();
     let root = dir.path().join("static");
+    assert!(get(Some(&root), "/").starts_with("HTTP/1.0 503 "));
+    assert_eq!(build_id(&root), None);
+    fs::create_dir_all(&root).unwrap();
+    fs::write(root.join("favicon.svg"), "<svg/>").unwrap();
     assert!(get(Some(&root), "/").starts_with("HTTP/1.0 503 "));
     assert_eq!(build_id(&root), None);
     bundle(&root);
