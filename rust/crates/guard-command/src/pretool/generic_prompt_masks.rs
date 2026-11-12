@@ -103,7 +103,7 @@ pub(super) fn mask_liveness_probes(value: &str) -> String {
     static OTHER_KILL: OnceLock<Regex> = OnceLock::new();
     static MULTI_SIGNAL: OnceLock<Regex> = OnceLock::new();
     let multi_signal = MULTI_SIGNAL.get_or_init(|| {
-        Regex::new(r"(?i)\bkill\b(?:(?![;&|]).)*(?:-[sn]\s+|--signal(?:=|\s+))\S+(?:(?![;&|]).)*(?:-[sn]\s+|--signal(?:=|\s+))\S+")
+        Regex::new(r"(?i)\bkill\b[^;&|]*(?:-[sn]\s+|--signal(?:=|\s+))\S+[^;&|]*(?:-[sn]\s+|--signal(?:=|\s+))\S+")
             .expect("bounded multiple signal options")
     });
     if multi_signal.is_match(value) {
