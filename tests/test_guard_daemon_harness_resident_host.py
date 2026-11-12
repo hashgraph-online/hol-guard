@@ -30,12 +30,15 @@ def test_the_view_reads_the_worker_that_reviewed_the_daemons_hooks(
     guard_home.mkdir(parents=True)
     daemon = GuardDaemonServer(GuardStore(guard_home), host="127.0.0.1", port=0)
     before_start = daemon._server.hook_worker
+    seeded = daemon._server.request_capacity
     daemon.start()
     # Keep Oh My Pi hooks off the resident's direct lane so the daemon reviews them.
     monkeypatch.setenv("HOL_GUARD_PI_DIRECT_HOOK", "0")
     try:
         worker = daemon._server.hook_worker
         assert worker is not before_start
+        # State a test seeds before the daemon runs stays the state it reads back.
+        assert daemon._server.request_capacity is seeded
         reviewed: list[dict[str, Any]] = []
         original = worker.review_http_payload
 

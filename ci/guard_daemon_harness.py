@@ -88,14 +88,21 @@ class _LibraryCallServer:
         wait_for_background_work()
 
 
+# What the daemon's hook reviews change: the worker that reviews them, and the
+# writer their native receipts go to.
+_RESIDENT_ATTRIBUTES = frozenset({"hook_worker", "runtime_hook_evidence_writer"})
+
+
 class _NativeServerView:
     """Server attributes tests read or seed, from the native daemon.
 
     Anything beyond ``store`` and ``auth_token`` comes from the request host
     the daemon's library calls build, so state it keeps on disk, such as the
-    connect flows, is shared with the calls the daemon makes. Once the daemon
-    runs, that is the resident's own host, so the hook worker a test reads is
-    the one that reviewed the daemon's hooks.
+    connect flows, is shared with the calls the daemon makes. The hook worker
+    and the evidence its reviews write come from the resident's own host once
+    the daemon runs, so a test reads the worker that reviewed the daemon's
+    hooks; everything else stays on one host across ``start``, so state a test
+    seeds before the daemon runs is the state it reads back afterwards.
     """
 
     def __init__(self, daemon: Any) -> None:
@@ -135,8 +142,6 @@ class _NativeServerView:
         )
 
     def _request_host(self) -> Any:
-        if (resident := self._resident_host()) is not None:
-            return resident
         host = self.__dict__["_host"]
         if host is None:
             from codex_plugin_scanner.guard.routes.request_host import _replay_server_class
@@ -152,13 +157,18 @@ class _NativeServerView:
             object.__setattr__(self, "_host", host)
         return host
 
+    def _host_for(self, name: str) -> Any:
+        if name in _RESIDENT_ATTRIBUTES and (resident := self._resident_host()) is not None:
+            return resident
+        return self._request_host()
+
     def __getattr__(self, name: str) -> Any:
         if name.startswith("__"):
             raise AttributeError(name)
-        return getattr(self._request_host(), name)
+        return getattr(self._host_for(name), name)
 
     def __setattr__(self, name: str, value: object) -> None:
-        setattr(self._request_host(), name, value)
+        setattr(self._host_for(name), name, value)
 
 
 class GuardDaemonServer:
