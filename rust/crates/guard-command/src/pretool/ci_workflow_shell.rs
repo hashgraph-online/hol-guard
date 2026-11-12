@@ -1,7 +1,7 @@
 //! How a CI step's command line splits into pipelines and groups, so a
 //! credential read is tied to the network stage it actually feeds.
 
-use super::{command_words, reads_credential_file, runs_network_tool, INLINE_SCRIPT};
+use super::{reads_credential_file, runs_network_tool, INLINE_SCRIPT};
 
 /// A group the scanner is inside: the character that closes it, whether that
 /// is a `}` that closes only in command position, and the quoting to resume
@@ -22,8 +22,8 @@ fn closes_brace_group(chars: &[char], at: usize) -> bool {
         && after.is_none_or(|c| c.is_whitespace() || ";|&)<>".contains(*c))
 }
 
-/// The scripts `bash -c '...'` or `eval '...'` run where the shell is the
-/// command itself, not text an `echo` prints or a comment holds.
+/// The scripts `bash -c '...'` or `eval '...'` run, including under a runner
+/// such as `xargs` or `find -exec`, but not text inside quotes or a comment.
 pub(super) fn inline_scripts(text: &str) -> Vec<String> {
     INLINE_SCRIPT
         .captures_iter(text)
@@ -45,40 +45,44 @@ pub(super) fn inline_scripts(text: &str) -> Vec<String> {
         .collect()
 }
 
-/// True when a command word placed after `head` is the command a shell runs:
-/// `head` ends outside any quote, and since its last separator holds only
-/// assignments, wrappers and clause keywords. A `$( … )` or backtick inside
-/// double quotes starts a new command.
+/// True when a command word placed after `head` runs rather than being text:
+/// `head` ends outside any quote and outside a `#` comment. A `$( … )` or
+/// backtick inside double quotes starts a new command, and nested
+/// substitutions each restore the quoting they opened in.
 fn command_position(head: &str) -> bool {
     let mut quote: Option<char> = None;
-    let mut resume: Vec<Option<char>> = Vec::new();
-    let mut start = 0;
-    let mut previous = None;
-    let mut chars = head.char_indices();
-    while let Some((at, ch)) = chars.next() {
-        match (quote, ch) {
-            (Some('\''), '\'') => quote = None,
-            (Some('\''), _) => {}
-            (_, '\\') => {
-                chars.next();
+    let mut frames: Vec<(char, Option<char>)> = Vec::new();
+    let mut comment = false;
+    let mut previous: Option<char> = None;
+    let mut chars = head.chars();
+    while let Some(ch) = chars.next() {
+        if comment {
+            comment = ch != '\n';
+        } else {
+            match (quote, ch) {
+                (Some('\''), '\'') | (Some('"'), '"') => quote = None,
+                (Some('\''), _) => {}
+                (_, '\\') => {
+                    chars.next();
+                }
+                (Some('"'), '(') if previous == Some('$') => frames.push((')', quote.take())),
+                (Some('"'), '`') => frames.push(('`', quote.take())),
+                (Some(_), _) => {}
+                (None, '\'' | '"') => quote = Some(ch),
+                (None, '#') if previous.is_none_or(|p| p.is_whitespace() || ";&|(".contains(p)) => {
+                    comment = true;
+                }
+                (None, ')' | '`') if frames.last().is_some_and(|frame| frame.0 == ch) => {
+                    quote = frames.pop().and_then(|frame| frame.1);
+                }
+                (None, '(') => frames.push((')', None)),
+                (None, '`') => frames.push(('`', None)),
+                _ => {}
             }
-            (Some('"'), '"') => quote = None,
-            (Some('"'), '`') | (Some('"'), '(') if ch == '`' || previous == Some('$') => {
-                resume.push(quote.take());
-                start = at + 1;
-            }
-            (Some(_), _) => {}
-            (None, '\'' | '"') => quote = Some(ch),
-            (None, ')' | '`') if !resume.is_empty() => {
-                quote = resume.pop().flatten();
-                start = at + 1;
-            }
-            (None, ';' | '&' | '|' | '(' | ')' | '{' | '}' | '\n' | '`') => start = at + 1,
-            _ => {}
         }
         previous = Some(ch);
     }
-    quote.is_none() && command_words(&head[start..]).is_empty()
+    quote.is_none() && !comment
 }
 
 /// True when a stage runs a command `test` accepts, directly or inside a

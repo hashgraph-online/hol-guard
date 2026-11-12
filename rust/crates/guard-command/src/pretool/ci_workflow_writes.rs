@@ -70,10 +70,11 @@ static UPLOAD_OPERAND: LazyLock<Regex> = LazyLock::new(|| {
     .expect("upload operand pattern compiles")
 });
 
-/// A credential file read inside a command substitution: `$(cat .env)`.
+/// A credential file read inside a command or process substitution:
+/// `$(cat .env)` or `@<(cat .env)`.
 static SUBSTITUTED_READ: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(
-        r#"(?:\$\(|`)\s*(?:cat|base64|head|tail|xxd)\s+(?:-\S+\s+)*["']?(?P<file>[^\s"'`)]+)"#,
+        r#"(?:\$\(|<\(|`)\s*(?:cat|base64|head|tail|xxd)\s+(?:-\S+\s+)*["']?(?P<file>[^\s"'`)]+)"#,
     )
     .expect("substituted read pattern compiles")
 });
@@ -299,18 +300,27 @@ fn segment_uploads(segment: &str, depth: usize) -> bool {
     if let Some(inner) = inline {
         return depth < 3 && command_uploads(&inner, depth + 1);
     }
-    if !NETWORK_TOOLS.contains(&command) {
+    // `CMD=curl; bash -c "$CMD -d @.env ..."`: a command read from a variable
+    // may be any tool, so its curl-style upload operands still count.
+    let variable = command.starts_with('$');
+    if !variable && !NETWORK_TOOLS.contains(&command) {
         return false;
     }
+    let operands: &[&str] = if variable {
+        &["at", "flag"]
+    } else {
+        &["at", "flag", "redirect"]
+    };
     let operand = UPLOAD_OPERAND.captures_iter(segment).any(|captures| {
-        ["at", "flag", "redirect"]
+        operands
             .iter()
             .filter_map(|name| captures.name(name))
             .any(|operand| credential_file_operand(operand.as_str()))
     });
     // `scp`, `rsync`, `nc` and `socat` take the local file as a plain operand.
     operand
-        || (!matches!(command, "curl" | "wget" | "http" | "https" | "xh")
+        || (!variable
+            && !matches!(command, "curl" | "wget" | "http" | "https" | "xh")
             && words[1..]
                 .iter()
                 .filter(|word| !word.starts_with('-') && !word.contains(':'))
