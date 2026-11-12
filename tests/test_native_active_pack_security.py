@@ -480,3 +480,23 @@ def test_a_failed_fetch_cancels_the_ones_not_started():
     # The failed task, then at most one wave: its worker can pick up one more
     # task before the rest are cancelled. Without cancelling, all 32 start.
     assert len(started) <= active_security.FETCH_WORKERS + 1
+
+
+def test_queued_fetches_skip_once_one_failed():
+    # Quick tasks keep every worker taking queued work; none may start a
+    # download after the failure is known.
+    started = []
+    lock = threading.Lock()
+
+    def failing():
+        raise ValueError("active_security_required_proofs_unavailable")
+
+    def quick(index):
+        with lock:
+            started.append(index)
+        time.sleep(0.02)
+
+    tasks = [failing] + [functools.partial(quick, index) for index in range(63)]
+    with pytest.raises(ValueError, match="active_security_required_proofs_unavailable"):
+        active_security._fetch_together(tasks)
+    assert len(started) <= active_security.FETCH_WORKERS

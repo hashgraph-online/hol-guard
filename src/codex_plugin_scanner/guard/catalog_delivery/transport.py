@@ -9,11 +9,12 @@ from __future__ import annotations
 import hashlib
 import os
 import tempfile
+import threading
 import time
 import urllib.error
 import urllib.parse
 import urllib.request
-from contextlib import suppress
+from contextlib import contextmanager, suppress
 from pathlib import Path
 
 from codex_plugin_scanner.guard.extension_builder.errors import BuilderError
@@ -148,14 +149,43 @@ def cached_fetcher(directory):
     return fetch
 
 
+# Container URLs being fetched in this process, with how many callers want each.
+_CONTAINERS: dict[str, list] = {}
+_CONTAINERS_LOCK = threading.Lock()
+
+
+@contextmanager
+def _one_container_fetch(url):
+    """Let one caller at a time fetch a container; the next finds it cached.
+
+    Concurrent misses often share a container of up to 32 MiB. Without this
+    each would download its own copy before the first reached the cache.
+    """
+    with _CONTAINERS_LOCK:
+        entry = _CONTAINERS.setdefault(url, [threading.Lock(), 0])
+        entry[1] += 1
+    try:
+        with entry[0]:
+            yield
+    finally:
+        with _CONTAINERS_LOCK:
+            entry[1] -= 1
+            if entry[1] == 0:
+                del _CONTAINERS[url]
+
+
 def _fetch(target, maximum, cache=None):
     # The runtime names the asset, checks its location and bounds the container.
     plan = call("asset", profile="release", target=target, invalid="release object location invalid")
-    asset, name = plan["asset"], plan["name"]
-    url = f"https://github.com/{REPOSITORY}/releases/download/{plan['tag']}/{asset}"
+    url = f"https://github.com/{REPOSITORY}/releases/download/{plan['tag']}/{plan['asset']}"
     if plan["bound"] is None:
         return download(url, maximum)
-    bound = plan["bound"]
+    with _one_container_fetch(url):
+        return _fetch_container(url, plan, maximum, cache)
+
+
+def _fetch_container(url, plan, maximum, cache):
+    asset, name, bound = plan["asset"], plan["name"], plan["bound"]
     path = None if cache is None else checked_path(cache / (hashlib.sha256(url.encode()).hexdigest() + ".zip"))
     repair = False
     if path is not None and path.exists():

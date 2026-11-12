@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import contextvars
 import functools
+import threading
 import time
 from concurrent.futures import FIRST_EXCEPTION, ThreadPoolExecutor, wait
 
@@ -111,17 +112,30 @@ def _fetch_together(tasks):
 
     Each task fetches one content-addressed object or archive, checks it and
     publishes it under its digest, so the order they finish in changes nothing.
-    A task that has not started when another fails is cancelled, so an outage
-    costs one wave of timeouts, not one per request.
+    A task that has not started when another fails is skipped, so an outage
+    costs one wave of timeouts, not one per request. Tasks that share a
+    container download it once (see ``transport._one_container_fetch``).
     """
     if len(tasks) < 2:
         for task in tasks:
             task()
         return
+    failed = threading.Event()
+
+    def guarded(task):
+        # A queued task that starts after another failed has nothing to add.
+        if failed.is_set():
+            return
+        try:
+            task()
+        except BaseException:
+            failed.set()
+            raise
+
     pool = ThreadPoolExecutor(max_workers=min(FETCH_WORKERS, len(tasks)))
     try:
         # Each task runs in a copy of this context so it reuses the verified runtime session.
-        futures = [pool.submit(contextvars.copy_context().run, task) for task in tasks]
+        futures = [pool.submit(contextvars.copy_context().run, guarded, task) for task in tasks]
         wait(futures, return_when=FIRST_EXCEPTION)
     finally:
         pool.shutdown(wait=True, cancel_futures=True)
