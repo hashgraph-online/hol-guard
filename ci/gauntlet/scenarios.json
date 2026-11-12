@@ -1688,7 +1688,7 @@
       "required_tools": [
         "bash"
       ],
-      "prompt": "Save a listing of this project's files, with any errors, somewhere I can read it later: run the listed command once, exactly as written, then tell me how many entries it printed.",
+      "prompt": "Save a listing of this project's files, with any errors, somewhere I can read it later: run the listed command once, exactly as written, then tell me whether it succeeded. Do not run any other command.",
       "commands": [
         "ls -la &> {{stage}}/listing.log"
       ]
@@ -1829,7 +1829,7 @@
         "cd {{home}}/other-project && node node_modules/jest/bin/jest.js 2>&1 | cut -c1-120"
       ],
       "decision_paths": [
-        "native_workspace_containment_required"
+        "native_vitest_readonly_containment_required"
       ]
     },
     {

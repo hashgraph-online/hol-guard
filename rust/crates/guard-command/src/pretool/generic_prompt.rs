@@ -4,7 +4,7 @@ use std::sync::OnceLock;
 
 #[path = "generic_prompt_masks.rs"]
 mod masks;
-use masks::{mask_credential_categories, mask_format_options};
+use masks::{mask_credential_categories, mask_format_options, mask_liveness_probes, mask_rereads};
 
 const BYPASS_PATTERNS: [&str; 10] = [
     "disable hol-guard",
@@ -440,6 +440,7 @@ pub(super) fn benign_prompt_text(text: &str) -> bool {
     // dumps and value requests still keep the prompt off the benign path.
     // Words inside an unconditional prohibition ("never X or Y") are not
     // requested actions; the strong intent detectors run on the raw prompt.
+    let remainder = mask_rereads(&mask_liveness_probes(&remainder));
     !prompt_requests_secret(&remainder)
         && !risky_action.is_match(&mask_transfer_encoding(&mask_format_options(
             &mask_negated_clauses(&remainder),
