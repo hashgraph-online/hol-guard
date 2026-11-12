@@ -1,41 +1,47 @@
 //! The jq filter grammar admitted by the bounded `jq` read proofs.
 //!
-//! A filter is a short pipeline over the value jq already read. Each stage is
-//! a field/index projection (`.scripts`, `.items[0].name`, `.[]`), a builtin
+//! A filter is a pipeline over the value jq already read. Each stage is a
+//! field/index projection (`.scripts`, `.items[0].name`, `.[]`), a builtin
 //! that only reshapes that value (argument-free ones such as `keys`, `length`
-//! or `sort`, optionally iterated or indexed as in `keys[]`; a few that take
-//! one plain literal such as `has("name")` or `join("\n")`; and a few whose
-//! one argument is itself an admitted filter, such as `select(.draft)` or
-//! `map(.number)`), an object or array built from admitted filters, or a
-//! parenthesised group. Stages may compare two such operands against each
-//! other or against a plain literal, combine comparisons with `and`/`or`, and
-//! fall back to a second filter with `//`, emit several results with the
-//! comma operator, and drop an error with the optional `?`. A stage may also be a bare
-//! format such as `@tsv` or `@base64`, which only renders the value as text,
-//! or bind a term to a name (`(.state // "") as $state`) that later stages
-//! read back as `$state`.
+//! or `sort`, optionally iterated or indexed as in `keys[]`; and the ones
+//! whose arguments are themselves admitted filters or plain literals, such as
+//! `select(.draft)`, `test("^fix"; "i")` or `limit(3; .[])`), an object or
+//! array built from admitted filters, a parenthesised group, a conditional,
+//! a `reduce` or `foreach` fold, a `try`, an assignment to a path of the
+//! value, or arithmetic over admitted operands. Stages may compare two
+//! operands, combine comparisons with `and`/`or`, fall back to a second
+//! filter with `//`, emit several results with the comma operator, and drop
+//! an error with the optional `?`. A stage may also be a bare format such as
+//! `@tsv` or `@base64`, which only renders the value as text, or bind a term
+//! to a name (`(.state // "") as $state`) that later stages read back as
+//! `$state`. Leading zero-arity `def`s are inlined before the parse.
 //!
 //! Every form here is a pure function of the value read: none of them reaches
 //! the environment, further input, files or modules, and the characters that
 //! would let one do so are refused outright. A `$` that names anything but a
 //! variable the filter binds itself (so `$ENV`, `$__loc__` and a `--arg`
 //! value stay out), `@` outside a bare rendering format (so `@sh` and a
-//! `@fmt "string"` template stay out), `;` (which every multi-argument and
-//! binding builtin needs: `def`, `reduce`, `foreach`, `limit`, `range`,
-//! `getpath`), a `:` outside an object or a subscript, computed object keys,
-//! and every builtin outside the lists below are all rejected.
+//! `@fmt "string"` template stay out), a `;` outside the parentheses of a
+//! call or fold (so `import`, `include` and a `def` that is not inlined stay
+//! out), a `:` outside an object or a subscript, a `#` comment, and every
+//! builtin outside the lists here and in [`terms`] are all rejected.
 //! A string may render admitted filters into its text
 //! (`"\(.name) \(.state)"`): each interpolation is read as a filter over the
 //! same value, so the whole string stays a pure function of it.
 //! A shorthand object entry (`{number, title}`) names a field of the value
 //! read, so it is admitted under the same key rules as `{number: .number}`.
 
-const MAX_STAGES: usize = 8;
+#[path = "jq_filter_program.rs"]
+mod program;
+#[path = "jq_filter_terms.rs"]
+mod terms;
+
+use program::literal;
+
+const MAX_STAGES: usize = 16;
 
 /// How many `//` fallbacks one operand may chain.
 const MAX_ALTERNATIVES: usize = 4;
-
-const MAX_LITERAL: usize = 128;
 
 const VALUE_BUILTINS: &[&str] = &[
     "add",
@@ -119,7 +125,9 @@ const FORMATS: &[&str] = &[
 const COMPARISONS: &[&str] = &["==", "!=", "<=", ">=", "<", ">"];
 
 pub(super) fn safe_filter(filter: &str) -> bool {
-    filter.len() <= 256 && valid_characters(filter) && variables_bound(filter) && pipeline(filter)
+    program::prepared(filter).is_some_and(|program| {
+        valid_characters(&program) && variables_bound(&program) && pipeline(&program)
+    })
 }
 
 fn pipeline(filter: &str) -> bool {
@@ -171,6 +179,8 @@ pub(crate) fn variables_bound(filter: &str) -> bool {
     // `\(` interpolation returns to string text when its `)` closes.
     let mut groups: Vec<(u8, usize)> = Vec::new();
     let mut bound: Vec<&str> = Vec::new();
+    // Where the name of the latest binding ends.
+    let mut binding_end: Option<usize> = None;
     let mut in_string = false;
     let mut index = 0;
     while index < bytes.len() {
@@ -194,7 +204,13 @@ pub(crate) fn variables_bound(filter: &str) -> bool {
             // after it starts no string and the rest of the scan is unsound.
             b'#' => return false,
             b'"' => in_string = true,
-            b'(' | b'[' | b'{' => groups.push((byte, bound.len())),
+            // `reduce .[] as $x (0; . + $x)`: a fold's binding reaches into
+            // the parentheses that follow it and no further.
+            b'(' | b'[' | b'{' => {
+                let folds = byte == b'('
+                    && binding_end.is_some_and(|end| filter[end..index].trim().is_empty());
+                groups.push((byte, bound.len() - usize::from(folds)));
+            }
             b')' | b']' | b'}' => {
                 let Some((open, in_scope)) = groups.pop() else {
                     return false;
@@ -225,6 +241,7 @@ pub(crate) fn variables_bound(filter: &str) -> bool {
                     .is_some_and(|term| term.ends_with(' '))
                 {
                     bound.push(name);
+                    binding_end = Some(index + 1 + end);
                 } else if !bound.contains(&name) {
                     return false;
                 }
@@ -256,13 +273,12 @@ fn alternative(part: &str) -> bool {
     if sides.len() > MAX_ALTERNATIVES {
         return false;
     }
-    match sides.as_slice() {
-        [only] => disjunction(only),
-        // A fallback ends in a constant when the field is absent, as in
-        // `.body // ""`. A plain literal is admitted here and as a comparison
-        // operand, never as a stage of its own.
-        sides => sides.iter().all(|side| disjunction(side) || literal(side)),
-    }
+    // A side is an assignment, a boolean, or a plain literal: a fallback
+    // ends in a constant when the field is absent, as in `.body // ""`, and
+    // `map(1)` or `if .a then "x" else "y" end` yield one too.
+    sides
+        .iter()
+        .all(|side| terms::assignment(side).unwrap_or_else(|| disjunction(side) || literal(side)))
 }
 
 fn disjunction(part: &str) -> bool {
@@ -288,8 +304,10 @@ fn boolean_parts(part: &str, marker: &[u8], side: impl Fn(&str) -> bool) -> bool
 /// than read with a precedence this grammar does not model.
 fn comparison(part: &str) -> bool {
     match compare(part) {
-        Compare::Absent => stage(part),
-        Compare::Pair(left, right) => operand(left) && operand(right),
+        Compare::Absent => terms::arithmetic(part).unwrap_or_else(|| stage(part)),
+        Compare::Pair(left, right) => [left, right]
+            .iter()
+            .all(|side| terms::arithmetic(side).unwrap_or_else(|| operand(side))),
         Compare::Refused => false,
     }
 }
@@ -306,6 +324,19 @@ fn compare(part: &str) -> Compare<'_> {
     let mut depth = 0usize;
     let mut index = 0;
     while index < bytes.len() {
+        if let Some(length) = program::opens_block(bytes, index) {
+            depth += 1;
+            index += length;
+            continue;
+        }
+        if let Some(length) = program::closes_block(bytes, index) {
+            let Some(up) = depth.checked_sub(1) else {
+                return Compare::Refused;
+            };
+            depth = up;
+            index += length;
+            continue;
+        }
         match bytes[index] {
             b'"' => match string_end(bytes, index) {
                 Some(end) => index = end,
@@ -339,8 +370,7 @@ fn compare(part: &str) -> Compare<'_> {
     }
 }
 
-/// One side of a comparison or a `//` fallback. A plain literal is admitted
-/// here and nowhere else, so a bare `"x"` is still not a stage of its own.
+/// One side of a comparison.
 fn operand(part: &str) -> bool {
     literal(part) || stage(part)
 }
@@ -359,6 +389,7 @@ fn stage(part: &str) -> bool {
         || format(part)
         || interpolated_string(part)
         || variable(part)
+        || terms::term(part)
 }
 
 /// `$state`, `$check.name` or `$items[0]`: a variable read back, optionally
@@ -386,8 +417,7 @@ fn variable(part: &str) -> bool {
 /// [`valid_characters`], and a format followed by a string is neither a bare
 /// format nor a string, so [`stage`] refuses it.
 ///
-/// A string with no interpolation is a plain literal, which stays an operand
-/// of a comparison or a `//` fallback and never a stage of its own.
+/// A string with no interpolation is a plain literal, read by [`literal`].
 fn interpolated_string(stage: &str) -> bool {
     let bytes = stage.as_bytes();
     if bytes.first() != Some(&b'"') || string_end(bytes, 0) != Some(bytes.len() - 1) {
@@ -428,16 +458,16 @@ pub(crate) fn rendering_format(name: &str) -> bool {
     FORMATS.contains(&name)
 }
 
-/// Outside string literals only names, projections, spaces, call and group
-/// parentheses, comparison operators, the `+` and `-` a number literal
-/// uses, `//`, the comma operator, the `?` of an optional projection, a `@`
-/// that opens a known rendering format, a `$` that opens a
-/// variable name, and bracket punctuation may appear; inside one only printable
-/// ASCII and the `\n`, `\t` and `\\`
-/// escapes, so neither `\(` interpolation nor an escaped quote can appear.
-/// A `:` is admitted inside an object, where it parts key from value, and
-/// inside a subscript, where it parts the two ends of a slice.
-/// Brackets must balance and close in the kind they opened.
+/// Outside string literals only names, projections, spaces, brackets,
+/// comparison, arithmetic and assignment operators, `//`, the comma
+/// operator, the `?` of an optional projection, a `@` that opens a known
+/// rendering format and a `$` that opens a variable name may appear; inside
+/// one only printable ASCII and jq's escapes, with each interpolation read
+/// by [`interpolated_string`]. A `:` is admitted inside an object, where it
+/// parts key from value, and inside a subscript, where it parts the two ends
+/// of a slice. A `;` is admitted inside parentheses, where it parts the
+/// arguments of a call or a fold. Brackets must balance and close in the
+/// kind they opened.
 fn valid_characters(filter: &str) -> bool {
     let bytes = filter.as_bytes();
     let mut open: Vec<u8> = Vec::new();
@@ -460,6 +490,7 @@ fn valid_characters(filter: &str) -> bool {
                 }
             }
             b':' if matches!(open.last(), Some(&b'{' | &b'[')) => {}
+            b';' if open.last() == Some(&b'(') => {}
             b'@' => {
                 let name = filter[index + 1..]
                     .split(|value: char| !value.is_ascii_alphanumeric())
@@ -493,6 +524,8 @@ fn valid_characters(filter: &str) -> bool {
                         | b'>'
                         | b'+'
                         | b'-'
+                        | b'*'
+                        | b'%'
                         | b','
                         | b'?'
                 ) => {}
@@ -516,7 +549,21 @@ fn string_end(bytes: &[u8], start: usize) -> Option<usize> {
             b'\\' if bytes.get(index + 1) == Some(&b'(') => {
                 index = interpolation_end(bytes, index + 1)? + 1;
             }
-            b'\\' if matches!(bytes.get(index + 1)?, b'n' | b't' | b'\\') => index += 2,
+            b'\\'
+                if matches!(
+                    bytes.get(index + 1)?,
+                    b'n' | b't' | b'r' | b'b' | b'f' | b'\\' | b'/' | b'"'
+                ) =>
+            {
+                index += 2;
+            }
+            b'\\' if bytes.get(index + 1) == Some(&b'u') => {
+                let digits = bytes.get(index + 2..index + 6)?;
+                if !digits.iter().all(u8::is_ascii_hexdigit) {
+                    return None;
+                }
+                index += 6;
+            }
             b'\\' => return None,
             byte if (b' '..=b'~').contains(byte) => index += 1,
             _ => return None,
@@ -548,21 +595,35 @@ fn interpolation_end(bytes: &[u8], start: usize) -> Option<usize> {
     None
 }
 
-/// Splits on `marker` outside string literals and brackets, trimming each
-/// part. An unbalanced bracket or string refuses the split rather than
-/// splitting at a position the real parse would read differently.
+/// Splits on `marker` outside string literals, brackets and `if ... end`
+/// blocks, trimming each part. An unbalanced bracket, block or string
+/// refuses the split rather than splitting at a position the real parse
+/// would read differently. The `|` of `|=` and the `//` of `//=` are
+/// assignments, not markers.
 fn split_marker<'a>(text: &'a str, marker: &[u8]) -> Option<Vec<&'a str>> {
     let bytes = text.as_bytes();
     let mut parts = Vec::new();
     let mut depth = 0usize;
     let mut start = 0;
     let mut index = 0;
+    let assigns =
+        |at: usize| matches!(marker, b"|" | b"//") && bytes.get(at + marker.len()) == Some(&b'=');
     while index < bytes.len() {
+        if let Some(length) = program::opens_block(bytes, index) {
+            depth += 1;
+            index += length;
+            continue;
+        }
+        if let Some(length) = program::closes_block(bytes, index) {
+            depth = depth.checked_sub(1)?;
+            index += length;
+            continue;
+        }
         match bytes[index] {
             b'"' => index = string_end(bytes, index)?,
             b'{' | b'[' | b'(' => depth += 1,
             b'}' | b']' | b')' => depth = depth.checked_sub(1)?,
-            _ if depth == 0 && bytes[index..].starts_with(marker) => {
+            _ if depth == 0 && bytes[index..].starts_with(marker) && !assigns(index) => {
                 parts.push(text[start..index].trim());
                 index += marker.len();
                 start = index;
@@ -578,7 +639,9 @@ fn split_marker<'a>(text: &'a str, marker: &[u8]) -> Option<Vec<&'a str>> {
 
 /// `{"a": .x | has("y"), b: .z}`: every entry is a name or plain string key
 /// and an admitted filter, or a shorthand entry (`{a}`, `{"a b"}`) that reads
-/// the field of that name. Computed and `$`-variable keys are rejected.
+/// the field of that name. A key may also be computed by an admitted filter
+/// in parentheses (`{(.name): .value}`), and `{$name}` reads back a variable
+/// the filter bound itself, which [`variables_bound`] has checked.
 fn object(stage: &str) -> bool {
     let Some(inner) = stage
         .strip_prefix('{')
@@ -594,8 +657,8 @@ fn object(stage: &str) -> bool {
             return false;
         };
         match colon.as_slice() {
-            [key] => object_key(key),
-            [key, value] => object_key(key) && pipeline(value),
+            [key] => object_key(key) || key.strip_prefix('$').is_some_and(variable_name),
+            [key, value] => (object_key(key) || group(key)) && pipeline(value),
             _ => false,
         }
     })
@@ -623,18 +686,10 @@ fn bounded_by(stage: &str, open: char, close: char) -> Option<&str> {
         .filter(|body| !body.is_empty())
 }
 
-/// A name (`a`, `_id`) or a plain string literal of names, spaces and dashes.
+/// A name (`a`, `_id`) or a plain string literal.
 fn object_key(key: &str) -> bool {
-    match key
-        .strip_prefix('"')
-        .and_then(|value| value.strip_suffix('"'))
-    {
-        Some(name) => {
-            !name.is_empty()
-                && name
-                    .bytes()
-                    .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'-' | b' '))
-        }
+    match key.strip_prefix('"') {
+        Some(_) => key.len() > 2 && literal(key),
         None => {
             key.starts_with(|value: char| value.is_ascii_alphabetic() || value == '_')
                 && key
@@ -651,7 +706,7 @@ fn iterated_builtin(stage: &str) -> bool {
         .find(|value: char| !(value.is_ascii_alphanumeric() || value == '_'))
         .unwrap_or(stage.len());
     let (name, suffix) = stage.split_at(end);
-    VALUE_BUILTINS.contains(&name)
+    (VALUE_BUILTINS.contains(&name) || terms::value_builtin(name))
         && (suffix.is_empty() || (suffix.starts_with('[') && projection(&format!(".{suffix}"))))
 }
 
@@ -678,105 +733,6 @@ fn filter_builtin(stage: &str) -> bool {
 fn call(stage: &str) -> Option<(&str, &str)> {
     let (name, rest) = stage.split_once('(')?;
     Some((name.trim_end(), rest.strip_suffix(')')?))
-}
-
-/// A plain value: a bounded string with no inner quote and no interpolation,
-/// a jq number, or a JSON keyword. An interpolated string carries a filter,
-/// which [`interpolated_string`] reads as one; admitting it here would take
-/// its code for text. The number is jq's own literal — an optional minus, digits
-/// or a leading fraction, and an optional exponent — and nothing else. A
-/// `+` or `-` standing between two operands is arithmetic, which [`stage`]
-/// never reads, so allowing the signs through [`valid_characters`] does not
-/// admit `.a + 1` or `.a - 1`.
-fn literal(part: &str) -> bool {
-    matches!(part, "true" | "false" | "null")
-        || (part.len() <= MAX_LITERAL
-            && part
-                .strip_prefix('"')
-                .and_then(|value| value.strip_suffix('"'))
-                .is_some_and(|value| !value.contains('"') && !interpolates(value)))
-        || numeric_literal(part)
-}
-
-/// Whether `value`, the text inside a jq string, opens an interpolation. jq
-/// reads `\(` as the start of one, but a backslash escapes whatever follows
-/// it, so the `\\(` of `has("\\(")` is an escaped backslash and then a plain
-/// parenthesis, which is text. Walking the escapes the way
-/// [`interpolated_string`] does is the only way to tell the two apart: a
-/// substring test reads the second as the first and sends a plain filter to
-/// review.
-fn interpolates(value: &str) -> bool {
-    let bytes = value.as_bytes();
-    let mut index = 0;
-    while index + 1 < bytes.len() {
-        if bytes[index] != b'\\' {
-            index += 1;
-            continue;
-        }
-        if bytes[index + 1] == b'(' {
-            return true;
-        }
-        index += 2;
-    }
-    false
-}
-
-/// `1`, `-1`, `1.5`, `.5`, `1e-2`: a bounded jq number. A leading `+` is the
-/// addition operator, not a sign, and a trailing dot or a bare exponent is
-/// not a number this grammar will guess at.
-fn numeric_literal(part: &str) -> bool {
-    let bytes = part.as_bytes();
-    if bytes.is_empty() || bytes.len() > 32 {
-        return false;
-    }
-    let mut index = 0;
-    if bytes[0] == b'-' {
-        index = 1;
-    }
-    if index >= bytes.len() {
-        return false;
-    }
-    let mut saw_digit = false;
-    if bytes[index] == b'.' {
-        index += 1;
-        let start = index;
-        while index < bytes.len() && bytes[index].is_ascii_digit() {
-            index += 1;
-        }
-        saw_digit = index > start;
-    } else if bytes[index].is_ascii_digit() {
-        while index < bytes.len() && bytes[index].is_ascii_digit() {
-            index += 1;
-        }
-        saw_digit = true;
-        if index < bytes.len() && bytes[index] == b'.' {
-            index += 1;
-            let start = index;
-            while index < bytes.len() && bytes[index].is_ascii_digit() {
-                index += 1;
-            }
-            if index == start {
-                return false;
-            }
-        }
-    }
-    if !saw_digit {
-        return false;
-    }
-    if index < bytes.len() && matches!(bytes[index], b'e' | b'E') {
-        index += 1;
-        if index < bytes.len() && matches!(bytes[index], b'+' | b'-') {
-            index += 1;
-        }
-        let start = index;
-        while index < bytes.len() && bytes[index].is_ascii_digit() {
-            index += 1;
-        }
-        if index == start {
-            return false;
-        }
-    }
-    index == bytes.len()
 }
 
 /// Field/index projections only: no functions, file operands, modules or

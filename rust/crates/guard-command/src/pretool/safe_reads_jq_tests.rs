@@ -54,8 +54,8 @@ fn a_filter_that_reaches_outside_the_value_read_is_still_refused() {
         "input",
         "input_filename",
         ".items | @sh",
-        "reduce .[] as $item (0; . + $item)",
-        "limit(1; .[])",
+        "reduce .[] as $item (0; env)",
+        "limit(1; inputs)",
         "include \"evil\"; .",
     ] {
         let args = arguments(&["-r", filter]);
