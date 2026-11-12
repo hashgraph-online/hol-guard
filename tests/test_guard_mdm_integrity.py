@@ -351,8 +351,14 @@ def test_snapshot_loads_policy_without_writing_cache(tmp_path: Path, monkeypatch
     assert calls == [{"write_cache": False}]
 
 
-def test_running_supervisor_counts_as_healthy_for_remediation() -> None:
-    assert integrity._remediation_class("mdm-managed", True, ["healthy", "running"]) == "none"
+def test_snapshot_fails_closed_without_the_native_runtime(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from codex_plugin_scanner.guard import native_runtime
+
+    monkeypatch.setattr(integrity, "default_machine_paths", lambda: _paths(tmp_path))
+    monkeypatch.setattr(native_runtime, "_run_native_process", lambda *_args, **_kwargs: '{"schemaVersion": "other"}')
+
+    with pytest.raises(OSError, match="integrity_snapshot_native_unavailable"):
+        integrity.machine_integrity_snapshot()
 
 
 def test_snapshot_projects_native_supervisor_health(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

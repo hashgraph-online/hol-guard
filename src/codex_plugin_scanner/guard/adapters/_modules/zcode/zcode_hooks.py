@@ -22,19 +22,12 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 
+from ....action_lattice import normalize_guard_action
+
 # Review-tier actions become ZCode's ``ask`` so the native permission prompt
 # (allow once / always / deny) can satisfy them; hard denials stay ``deny``.
 _ZCODE_ASK_ACTIONS = frozenset({"review", "require-reapproval"})
 _ZCODE_BLOCKING_ACTIONS = frozenset({"review", "require-reapproval", "sandbox-required", "block"})
-
-# Reason text emitted by the native command control floor when the local
-# authority is degraded, tampered, or pending recovery. ZCode sessions see
-# this on every tool call until the control floor is restored, so the
-# remediation command must travel with the message.
-_AUTHORITY_BLOCK_REASON_MARKER = "native command extension policy"
-_AUTHORITY_BLOCK_REMEDIATION = (
-    " Run `hol-guard command controls recover-authority` in a terminal to restore the protected control floor."
-)
 
 
 def _raw_hook_event_name(payload: Mapping[str, object]) -> str:
@@ -65,19 +58,6 @@ def _event_name_for_response(payload: Mapping[str, object]) -> str:
     return _canonical_zcode_event_name(raw_event) if raw_event else "PreToolUse"
 
 
-def zcode_authority_block_reason(reason: str) -> str:
-    """Append the control-floor remediation hint to authority block reasons.
-
-    ZCode surfaces the deny reason directly to the user; without the hint a
-    degraded control floor reads as an unactionable brick on every tool call.
-    """
-
-    text = reason if isinstance(reason, str) else ""
-    if _AUTHORITY_BLOCK_REASON_MARKER in text and "hol-guard command controls" not in text:
-        return text + _AUTHORITY_BLOCK_REMEDIATION
-    return text
-
-
 def zcode_hook_process_exit(
     *,
     policy_action: str,
@@ -91,18 +71,22 @@ def zcode_hook_process_exit(
     therefore must exit ``0`` so ZCode parses the ``permissionDecision: "ask"``
     envelope and opens its native permission prompt; the user, not the exit
     code, decides whether the action proceeds.
+
+    An action outside the canonical lattice is normalized to the review tier
+    before either set is consulted, so an unrecognized producer value cannot
+    exit ``0`` as though ZCode had been told to allow the call.
     """
 
     resolved_event = event_name
     if resolved_event is None and payload is not None:
         resolved_event = _event_name_for_response(payload)
     compact = (resolved_event or "PreToolUse").replace("_", "").replace("-", "").lower()
-    if compact == "pretooluse" and policy_action in _ZCODE_ASK_ACTIONS:
+    normalized = normalize_guard_action(policy_action)
+    if compact == "pretooluse" and normalized in _ZCODE_ASK_ACTIONS:
         return 0
-    return 2 if policy_action in _ZCODE_BLOCKING_ACTIONS else 0
+    return 2 if normalized in _ZCODE_BLOCKING_ACTIONS else 0
 
 
 __all__ = [
-    "zcode_authority_block_reason",
     "zcode_hook_process_exit",
 ]

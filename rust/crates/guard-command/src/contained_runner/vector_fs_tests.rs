@@ -164,6 +164,33 @@ fn node_runner_evidence_matches_python() {
 }
 
 #[test]
+fn every_alternate_lock_makes_package_script_evidence_ambiguous() {
+    let complete = section("package_script_evidence")
+        .iter()
+        .find(|case| case["id"] == "test-complete")
+        .expect("test-complete vector");
+    for name in [
+        "bun.lock",
+        "bun.lockb",
+        "npm-shrinkwrap.json",
+        "pnpm-lock.yaml",
+        "yarn.lock",
+    ] {
+        let workspace = Workspace::with_fixture(fixture_of(complete));
+        std::fs::write(workspace.path.join(name), "untrusted-lock").expect("write lock");
+        let evidence = build_local_package_script_evidence(
+            "bun",
+            &strings(&complete["argv"]),
+            &workspace.path,
+        )
+        .expect("evidence")
+        .unwrap_or_else(|| panic!("{name}: missing evidence"));
+        assert!(!evidence.complete, "{name}");
+        assert_eq!(evidence.reasons, ["lock_source_ambiguous"], "{name}");
+    }
+}
+
+#[test]
 fn package_script_evidence_matches_python() {
     for case in section("package_script_evidence") {
         let id = text(case, "id");

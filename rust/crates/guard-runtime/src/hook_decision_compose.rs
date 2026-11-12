@@ -305,11 +305,12 @@ pub(crate) fn edge_floor(
         // Before execution, the edge's review-tier "unproven" verdict is
         // provenance: grants and configured policy settle reviewability. Only
         // a hard native enforcement verdict floors the emitted decision, and a
-        // network protection or known-vulnerable runtime review, which matched
-        // a synced bundle.
+        // network protection, known-vulnerable runtime or exact-command rule
+        // review, which matched a synced bundle or saved rule.
         let network_review = edge?.reason_code.as_str().is_some_and(|code| {
             crate::network_protection::is_review_finding(code)
                 || crate::runtime_known_vulnerable::is_review_finding(code)
+                || crate::edge_exact_command_review::is_review_finding(code)
         });
         action = network_review
             .then(|| action.map_or(GuardAction::Review, |a| a.max(GuardAction::Review)));

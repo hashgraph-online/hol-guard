@@ -6,24 +6,20 @@ marketplace, the detection merge plan and the MCP server digests. This module
 only anchors paths, ships typed inputs through ``native_runner_authority`` and
 applies the returned plan to the caller's own artifacts. Discovery, merge and
 skill inventory fail closed with :class:`NativeAibomError` when the resident
-cannot answer; MCP metadata degrades to unbound sentinels that can never
-validate as approval context.
+cannot answer.
 """
 
 from __future__ import annotations
 
 import os
-import time
 from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
 from .artifact_native_fields import artifact_native_fields as _artifact_wire
 from .models import GuardArtifact, HarnessDetection
-from .native_context import _UNBOUND_PREFIX
 from .native_path_anchor import anchor_to_process_directory
 from .native_runner_authority import NativeRunnerAuthorityError, native_runner_authority
-from .runtime.approval_context import _unbound_context_digest
 from .skill_directory_identity import (
     discover_skill_documents,
     inspect_skill_directory,
@@ -58,7 +54,7 @@ _CODEX_HOME_SKILL_ROOTS = (".codex/skills", ".agents/skills")
 # workspace directory; keep in sync with ``WORKSPACE_SKILL_HARNESSES`` in the
 # resident's ``aibom_discovery.rs``. Only the portable skill walk reads this.
 _WORKSPACE_CODEX_SKILL_HARNESSES = frozenset(
-    {"codex", "openclaw", "opencode", "claude-code", "cursor", "gemini", "pi", "omp"}
+    {"codex", "openclaw", "opencode", "claude-code", "cursor", "gemini", "pi", "omp", "muse"}
 )
 
 
@@ -77,6 +73,27 @@ def _native(kind: str, args: Mapping[str, Any]) -> dict[str, Any]:
         return native_runner_authority(kind, args, timeout_seconds=_AIBOM_DISCOVERY_TIMEOUT_SECONDS)
     except NativeRunnerAuthorityError as error:
         raise NativeAibomError(str(error)) from error
+
+
+def _private_metadata_from_wire(item: Mapping[str, Any]) -> dict[str, object]:
+    """The unredacted MCP arguments and environment a native kind passes privately."""
+
+    private = item.get("runtime_private_metadata")
+    if private is None:
+        return {}
+    if not isinstance(private, dict):
+        raise NativeAibomError("native_runner_authority_result_invalid")
+    args = private.get("mcp_args")
+    environment = private.get("mcp_env")
+    if (
+        set(private) != {"mcp_args", "mcp_env"}
+        or not isinstance(args, list)
+        or not all(isinstance(value, str) for value in args)
+        or not isinstance(environment, dict)
+        or not all(isinstance(key, str) and isinstance(value, str) for key, value in environment.items())
+    ):
+        raise NativeAibomError("native_runner_authority_result_invalid")
+    return {"mcp_args": tuple(args), "mcp_env": dict(environment)}
 
 
 def _artifact_from_wire(item: object) -> GuardArtifact:
@@ -107,6 +124,7 @@ def _artifact_from_wire(item: object) -> GuardArtifact:
         transport=item["transport"],
         publisher=item["publisher"],
         metadata=metadata,
+        runtime_private_metadata=_private_metadata_from_wire(item),
     )
 
 
@@ -341,125 +359,3 @@ def extend_detection_with_workspace_aibom(
         artifacts=tuple(merged),
         warnings=detection.warnings,
     )
-
-
-def _string_items(value: object) -> list[str]:
-    return [item for item in value if isinstance(item, str)] if isinstance(value, (list, tuple)) else []
-
-
-def _string_pairs(value: object) -> list[list[str]] | None:
-    if not isinstance(value, Mapping):
-        return None
-    return [[key, item] for key, item in value.items() if isinstance(key, str) and isinstance(item, str)]
-
-
-def _explicit_hash(value: object) -> str | None:
-    return value if isinstance(value, str) else None
-
-
-def _unbound_keys(configured: object, pairs: object) -> list[str]:
-    keys = sorted({key.strip() for key in _string_items(configured) if key.strip()})
-    if keys or not isinstance(pairs, list):
-        return keys
-    return sorted({pair[0].strip() for pair in pairs if pair[0].strip()})
-
-
-def _unbound_mcp_digests(request: Mapping[str, object]) -> dict[str, object]:
-    """Sentinel digests for an unreachable resident; never valid as context proof."""
-
-    env_hash = _explicit_hash(request["env_values_hash"])
-    header_hash = _explicit_hash(request["header_values_hash"])
-    env_hash = env_hash.strip() if env_hash and env_hash.strip() else f"{_UNBOUND_PREFIX}configured-environment"
-    header_hash = header_hash.strip() if header_hash and header_hash.strip() else f"{_UNBOUND_PREFIX}configured-headers"
-    env_keys = _unbound_keys(request["env_keys"], request["env"])
-    header_keys = _unbound_keys(request["headers_keys"], request["headers"])
-    content_hash = _unbound_context_digest(
-        "mcp-server",
-        material={
-            "command": request["command"],
-            "args": request["args"],
-            "url": request["url"],
-            "transport": request["transport"],
-            "env_keys": env_keys,
-            "env_values_hash": env_hash,
-            "headers_keys": header_keys,
-            "header_values_hash": header_hash,
-        },
-    )
-    return {
-        "env_keys": env_keys,
-        "headers_keys": header_keys,
-        "env_values_hash": env_hash,
-        "header_values_hash": header_hash,
-        "content_hash": content_hash,
-        "versionInfo": {
-            "versionLabel": request["label"],
-            "hashBasis": "content",
-            "contentHash": content_hash,
-            "changedFields": [],
-        },
-    }
-
-
-# One resident outage should not cost a full deadline per configured server:
-# after the first failure the remaining enrichments fall back to unbound
-# digests until the retry window passes. Only outage-class errors open the
-# latch — per-request failures (oversized or unencodable envelopes) and bound
-# refusals either precede resident contact or prove the resident answered, so
-# they must not suppress the next server's enrichment.
-_MCP_NATIVE_RETRY_SECONDS = 30.0
-_MCP_OUTAGE_CODES = frozenset(
-    {
-        "native_runner_authority_unavailable",
-        "native_runner_authority_prerequisite_unavailable",
-        "native_runner_authority_resident_unavailable",
-        "native_runner_authority_result_invalid",
-        "native_overloaded",
-    }
-)
-_mcp_native_backoff_until = 0.0
-
-
-def enrich_mcp_server_metadata(
-    metadata: dict[str, object],
-    *,
-    command: str | None,
-    args: tuple[str, ...],
-    url: str | None,
-    transport: str | None,
-    configured_environment: Mapping[str, object] | None = None,
-    configured_headers: Mapping[str, object] | None = None,
-) -> dict[str, object]:
-    global _mcp_native_backoff_until
-    raw_env = configured_environment if configured_environment is not None else metadata.get("env")
-    raw_headers = configured_headers if configured_headers is not None else metadata.get("headers")
-    request: dict[str, object] = {
-        "command": command,
-        "args": list(args),
-        "url": url,
-        "transport": transport,
-        "env_keys": _string_items(metadata.get("env_keys")),
-        "headers_keys": _string_items(metadata.get("headers_keys")),
-        "env": _string_pairs(raw_env),
-        "headers": _string_pairs(raw_headers),
-        "env_values_hash": _explicit_hash(metadata.get("env_values_hash")),
-        "header_values_hash": _explicit_hash(metadata.get("header_values_hash")),
-        "label": str(metadata.get("name", "mcp")),
-    }
-    answer = None
-    if time.monotonic() >= _mcp_native_backoff_until:
-        try:
-            answer = native_runner_authority("aibom_mcp_metadata", request)
-        except NativeRunnerAuthorityError as error:
-            if str(error).startswith("native_runner_authority_aibom_"):
-                raise NativeAibomError(str(error)) from error
-            if str(error).split(":", 1)[0] in _MCP_OUTAGE_CODES:
-                _mcp_native_backoff_until = time.monotonic() + _MCP_NATIVE_RETRY_SECONDS
-    if answer is None:
-        answer = _unbound_mcp_digests(request)
-    enriched = dict(metadata)
-    for key in ("env_keys", "headers_keys", "env_values_hash", "header_values_hash", "content_hash", "versionInfo"):
-        if key not in answer:
-            raise NativeAibomError("native_runner_authority_result_invalid")
-        enriched[key] = answer[key]
-    return enriched

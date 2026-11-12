@@ -276,7 +276,7 @@ pub(crate) fn observed_mcp_history(connection: &Connection, args: &Args<'_>) -> 
              from approval_requests where {OBSERVED_LABEL} \
              order by coalesce(last_seen_at, created_at) desc limit ?"
         ),
-        &[limit.clone()],
+        std::slice::from_ref(&limit),
     )?;
     let receipts = query_all(
         connection,
@@ -516,6 +516,9 @@ fn command_catalog(connection: &Connection, cli_id: &str) -> StoreResult<Vec<(St
         .filter_map(|row| Some((text(row, "command_id")?, text(row, "usage")?)))
         .collect())
 }
+
+#[path = "guard_store_observed_mcp_discovery.rs"]
+pub(crate) mod discovery;
 
 #[cfg(test)]
 #[path = "guard_store_observed_mcp_vectors_tests.rs"]

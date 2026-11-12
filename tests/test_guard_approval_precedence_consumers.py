@@ -4,16 +4,13 @@ from __future__ import annotations
 
 from dataclasses import replace
 from pathlib import Path
+from typing import Any
 
 import pytest
 
 import codex_plugin_scanner.guard.local_supply_chain as local_supply_chain_module
 from codex_plugin_scanner.guard.config import GuardConfig
-from codex_plugin_scanner.guard.consumer import artifact_hash
-from codex_plugin_scanner.guard.local_supply_chain import (
-    apply_stored_package_policy_override,
-    package_request_policy_hash,
-)
+from codex_plugin_scanner.guard.local_supply_chain import package_request_policy_hash
 from codex_plugin_scanner.guard.mcp_tool_calls import (
     build_tool_call_artifact,
     build_tool_call_hash,
@@ -30,12 +27,15 @@ from codex_plugin_scanner.guard.runtime.package_request_evaluation import (
     PackageRequestEvaluation,
     SupplyChainUserCopy,
 )
-from codex_plugin_scanner.guard.runtime.secret_file_requests import (
-    extract_sensitive_file_read_request_artifact,
-)
 from codex_plugin_scanner.guard.store import GuardStore
 
 pytestmark = pytest.mark.usefixtures("approval_questionnaire_mode")
+
+
+def apply_stored_package_policy_override(evaluation: object, **kwargs: Any) -> PackageRequestEvaluation:
+    """The saved-policy override the package lane applies, as its resolver returns it."""
+
+    return local_supply_chain_module._resolve_stored_package_policy_override(evaluation, **kwargs).evaluation
 
 
 def _exact_package_context_token() -> str:
@@ -102,8 +102,9 @@ def _package_artifact(workspace: Path) -> GuardArtifact:
 
 
 class _SavedPackagePolicyStore:
-    def __init__(self, action: GuardAction) -> None:
+    def __init__(self, action: GuardAction, guard_home: Path) -> None:
         self.action = action
+        self.guard_home = guard_home
         self.claimed = False
 
     def resolve_policy_decision_lookup(self, *_args: object, **kwargs: object) -> dict[str, object]:
@@ -130,13 +131,13 @@ class _SavedPackagePolicyStore:
 def test_package_saved_allow_never_lowers_terminal_current_action(
     tmp_path: Path,
     current_action: GuardAction,
-    native_context_digest: Path,
+    package_workspace_scope_native: Path,
 ) -> None:
     workspace = tmp_path / "workspace"
     workspace.mkdir()
     artifact = _package_artifact(workspace)
     context = build_package_execution_context(workspace_dir=workspace, artifact=artifact, executable="npm")
-    store = _SavedPackagePolicyStore("allow")
+    store = _SavedPackagePolicyStore("allow", tmp_path / "guard-home")
 
     result = apply_stored_package_policy_override(
         _package_evaluation(current_action),
@@ -156,12 +157,14 @@ def test_package_saved_allow_never_lowers_terminal_current_action(
     assert store.claimed is False
 
 
-def test_package_durable_exact_saved_allow_satisfies_reapproval(tmp_path: Path, native_context_digest: Path) -> None:
+def test_package_durable_exact_saved_allow_satisfies_reapproval(
+    tmp_path: Path, package_workspace_scope_native: Path
+) -> None:
     workspace = tmp_path / "workspace"
     workspace.mkdir()
     artifact = _package_artifact(workspace)
     context = build_package_execution_context(workspace_dir=workspace, artifact=artifact, executable="npm")
-    store = _SavedPackagePolicyStore("allow")
+    store = _SavedPackagePolicyStore("allow", tmp_path / "guard-home")
 
     result = apply_stored_package_policy_override(
         _package_evaluation("require-reapproval"),
@@ -178,12 +181,14 @@ def test_package_durable_exact_saved_allow_satisfies_reapproval(tmp_path: Path, 
     assert store.claimed is True
 
 
-def test_package_exact_saved_allow_satisfies_only_current_review(tmp_path: Path, native_context_digest: Path) -> None:
+def test_package_exact_saved_allow_satisfies_only_current_review(
+    tmp_path: Path, package_workspace_scope_native: Path
+) -> None:
     workspace = tmp_path / "workspace"
     workspace.mkdir()
     artifact = _package_artifact(workspace)
     context = build_package_execution_context(workspace_dir=workspace, artifact=artifact, executable="npm")
-    store = _SavedPackagePolicyStore("allow")
+    store = _SavedPackagePolicyStore("allow", tmp_path / "guard-home")
 
     result = apply_stored_package_policy_override(
         _package_evaluation("review"),
@@ -201,13 +206,13 @@ def test_package_exact_saved_allow_satisfies_only_current_review(tmp_path: Path,
 
 
 def test_package_reuse_uses_post_scanner_current_action_before_claim(
-    tmp_path: Path, native_context_digest: Path
+    tmp_path: Path, package_workspace_scope_native: Path
 ) -> None:
     workspace = tmp_path / "workspace"
     workspace.mkdir()
     artifact = _package_artifact(workspace)
     context = build_package_execution_context(workspace_dir=workspace, artifact=artifact, executable="npm")
-    store = _SavedPackagePolicyStore("allow")
+    store = _SavedPackagePolicyStore("allow", tmp_path / "guard-home")
 
     result = apply_stored_package_policy_override(
         _package_evaluation("review"),
@@ -226,13 +231,13 @@ def test_package_reuse_uses_post_scanner_current_action_before_claim(
 
 
 def test_package_weaker_supplied_current_action_cannot_erase_package_block(
-    tmp_path: Path, native_context_digest: Path
+    tmp_path: Path, package_workspace_scope_native: Path
 ) -> None:
     workspace = tmp_path / "workspace"
     workspace.mkdir()
     artifact = _package_artifact(workspace)
     context = build_package_execution_context(workspace_dir=workspace, artifact=artifact, executable="npm")
-    store = _SavedPackagePolicyStore("allow")
+    store = _SavedPackagePolicyStore("allow", tmp_path / "guard-home")
 
     result = apply_stored_package_policy_override(
         _package_evaluation("block"),
@@ -250,12 +255,14 @@ def test_package_weaker_supplied_current_action_cannot_erase_package_block(
     assert store.claimed is False
 
 
-def test_package_local_saved_allow_without_exact_hash_is_rejected(tmp_path: Path, native_context_digest: Path) -> None:
+def test_package_local_saved_allow_without_exact_hash_is_rejected(
+    tmp_path: Path, package_workspace_scope_native: Path
+) -> None:
     workspace = tmp_path / "workspace"
     workspace.mkdir()
     artifact = _package_artifact(workspace)
     context = build_package_execution_context(workspace_dir=workspace, artifact=artifact, executable="npm")
-    store = _SavedPackagePolicyStore("allow")
+    store = _SavedPackagePolicyStore("allow", tmp_path / "guard-home")
     original_lookup = store.resolve_policy_decision_lookup
 
     def lookup_without_hash(*args: object, **kwargs: object) -> dict[str, object]:
@@ -283,13 +290,13 @@ def test_package_local_saved_allow_without_exact_hash_is_rejected(tmp_path: Path
 
 def test_package_equal_legacy_hash_cannot_prove_complete_approval_context(
     tmp_path: Path,
-    native_context_digest: Path,
+    package_workspace_scope_native: Path,
 ) -> None:
     workspace = tmp_path / "workspace"
     workspace.mkdir()
     artifact = _package_artifact(workspace)
     context = build_package_execution_context(workspace_dir=workspace, artifact=artifact, executable="npm")
-    store = _SavedPackagePolicyStore("allow")
+    store = _SavedPackagePolicyStore("allow", tmp_path / "guard-home")
     original_lookup = store.resolve_policy_decision_lookup
 
     def lookup_with_legacy_hash(*args: object, **kwargs: object) -> dict[str, object]:
@@ -326,15 +333,22 @@ def test_package_policy_and_sandbox_context_changes_invalidate_review_approval(
     tmp_path: Path,
     changed_dimension: str,
     expected_reason: str,
-    native_context_digest: Path,
+    package_workspace_scope_native: Path,
 ) -> None:
     workspace = tmp_path / "workspace"
     workspace.mkdir()
     artifact = _package_artifact(workspace)
     context = build_package_execution_context(workspace_dir=workspace, artifact=artifact, executable="npm")
     base_evaluation = _package_evaluation("review")
+    # A new reason code changes the verdict the approval was granted under. A
+    # policy or bundle version bump alone does not.
     current_evaluation = (
-        replace(base_evaluation, policy_version="policy-v3") if changed_dimension == "policy" else base_evaluation
+        replace(
+            base_evaluation,
+            reasons=(*base_evaluation.reasons, {"code": "malicious_package", "message": "Known malicious package."}),
+        )
+        if changed_dimension == "policy"
+        else base_evaluation
     )
     base_config = GuardConfig(guard_home=tmp_path / "guard-home", workspace=workspace, sandbox_analysis="off")
     current_config = GuardConfig(
@@ -968,16 +982,3 @@ def test_tool_call_resolved_executable_change_invalidates_review_approval(tmp_pa
 
     assert decision.action == "review"
     assert decision.approval_reuse_reason_code == "approval_reuse_identity_changed"
-
-
-def _sensitive_read_artifact(workspace: Path) -> tuple[GuardArtifact, str]:
-    _request, artifact = extract_sensitive_file_read_request_artifact(
-        "read_file",
-        {"path": ".env"},
-        cwd=workspace,
-        harness="codex",
-        config_path=str(workspace / ".mcp.json"),
-        source_scope="project",
-    )
-    assert artifact is not None
-    return artifact, artifact_hash(artifact)

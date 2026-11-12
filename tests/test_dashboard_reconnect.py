@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import hashlib
+import hmac
 import json
 import os
 import stat
@@ -9,25 +11,118 @@ import time
 import urllib.error
 import urllib.request
 from pathlib import Path
-from typing import cast
+from typing import Any, cast
 
 import pytest
 
-from codex_plugin_scanner.guard.daemon import GuardDaemonServer
-from codex_plugin_scanner.guard.daemon.dashboard_reconnect import (
-    DASHBOARD_RECONNECT_CHALLENGE_TTL_SECONDS,
-    DashboardReconnectChallenge,
-    consume_dashboard_reconnect_challenge,
-    dashboard_reconnect_proof,
-    issue_dashboard_reconnect_challenge,
-    prepare_dashboard_reconnect_authorization,
-)
-from codex_plugin_scanner.guard.daemon.discovery import (
+from ci.native_daemon_harness import NativeGuardDaemon as GuardDaemonServer
+from codex_plugin_scanner.guard.local_dashboard_session import build_local_dashboard_session_token
+from codex_plugin_scanner.guard.store import GuardStore
+from tests.guard_daemon_state_signing import (
     daemon_discovery_key_path,
     ensure_daemon_discovery_key,
 )
-from codex_plugin_scanner.guard.local_dashboard_session import build_local_dashboard_session_token
-from codex_plugin_scanner.guard.store import GuardStore
+
+# The native ``dashboard_reconnect`` kind, called the way the dashboard's daemon routes call it.
+
+DASHBOARD_RECONNECT_PROTOCOL_VERSION = 1
+DASHBOARD_RECONNECT_CHALLENGE_TTL_SECONDS = 10
+_IDENTITY_UNAVAILABLE = "dashboard_reconnect_identity_unavailable"
+
+
+def _native(guard_home: Path, op: str, args: dict[str, object]) -> dict[str, Any] | None:
+    from codex_plugin_scanner.guard.native_runner_authority import NativeRunnerAuthorityError, native_runner_authority
+
+    try:
+        return native_runner_authority("dashboard_reconnect", {"op": op, **args}, guard_home=guard_home)
+    except NativeRunnerAuthorityError:
+        return None
+
+
+def prepare_dashboard_reconnect_authorization(
+    guard_home: Path,
+    *,
+    now_ms: int | None = None,
+) -> dict[str, object]:
+    """Persist and return one browser-held verifier before an update restart."""
+
+    answer = _native(guard_home, "prepare", {"now_ms": now_ms})
+    authorization = None if answer is None else answer.get("authorization")
+    if not isinstance(authorization, dict):
+        raise RuntimeError("dashboard reconnect authorization is unavailable")
+    return authorization
+
+
+def issue_dashboard_reconnect_challenge(
+    guard_home: Path,
+    *,
+    reconnect_id: object,
+    client_nonce: object,
+    candidate_origin: object,
+    state_id: object,
+    now_ms: int | None = None,
+) -> tuple[dict[str, object] | None, str]:
+    """Issue a short-lived server proof for a prepared browser verifier."""
+
+    answer = _native(
+        guard_home,
+        "challenge",
+        {
+            "reconnect_id": reconnect_id,
+            "client_nonce": client_nonce,
+            "candidate_origin": candidate_origin,
+            "state_id": state_id,
+            "now_ms": now_ms,
+        },
+    )
+    reason = None if answer is None else answer.get("reason")
+    if answer is None or not isinstance(reason, str):
+        return None, _IDENTITY_UNAVAILABLE
+    challenge = answer.get("challenge")
+    return (challenge if isinstance(challenge, dict) else None), reason
+
+
+def consume_dashboard_reconnect_challenge(
+    guard_home: Path,
+    *,
+    challenge: dict[str, object],
+    proof: object,
+    expected_candidate_origin: str,
+    expected_state_id: str,
+    now_ms: int | None = None,
+) -> tuple[bool, str]:
+    """Verify one browser proof against a prepared reconnect authorization."""
+
+    answer = _native(
+        guard_home,
+        "consume",
+        {
+            "challenge": challenge,
+            "proof": proof,
+            "expected_candidate_origin": expected_candidate_origin,
+            "expected_state_id": expected_state_id,
+            "now_ms": now_ms,
+        },
+    )
+    reason = None if answer is None else answer.get("reason")
+    if answer is None or not isinstance(reason, str):
+        return False, _IDENTITY_UNAVAILABLE
+    return answer.get("verified") is True, reason
+
+
+def dashboard_reconnect_challenge_identity(guard_home: Path, challenge: dict[str, object]) -> tuple[str | None, str]:
+    """Return the replay-cache identity of the normalized challenge, or why there is none.
+
+    A native outage is reported as unavailable, never as a malformed proof.
+    """
+
+    answer = _native(guard_home, "challenge_identity", {"challenge": challenge})
+    if answer is None:
+        return None, _IDENTITY_UNAVAILABLE
+    identity = answer.get("identity")
+    if isinstance(identity, str):
+        return identity, ""
+    return None, "dashboard_reconnect_malformed_proof"
 
 
 def _store(tmp_path: Path) -> GuardStore:
@@ -68,7 +163,7 @@ def _post_json(
 
 def _prepare(daemon: GuardDaemonServer) -> dict[str, object]:
     dashboard_session = build_local_dashboard_session_token(
-        auth_token=daemon._server.auth_token,
+        auth_token=daemon.auth_token,
         surface="dashboard",
     )
     status, payload = _post_json(
@@ -103,31 +198,17 @@ def _challenge(
     )
 
 
-def _challenge_without_proof(payload: dict[str, object]) -> DashboardReconnectChallenge:
-    return cast(DashboardReconnectChallenge, {key: value for key, value in payload.items() if key != "proof"})
+def _challenge_without_proof(payload: dict[str, object]) -> dict[str, object]:
+    return {key: value for key, value in payload.items() if key != "proof"}
 
 
-def test_dashboard_reconnect_proof_has_cross_language_canonical_fixture() -> None:
-    challenge: DashboardReconnectChallenge = {
-        "protocol_version": 1,
-        "reconnect_id": "11" * 32,
-        "client_nonce": "66" * 32,
-        "server_nonce": "55" * 32,
-        "state_id": "state",
-        "candidate_origin": "http://127.0.0.1:4781",
-        "installation_id": "33" * 32,
-        "guard_home_id": "44" * 32,
-        "surface": "dashboard",
-        "issued_at_ms": 1_000,
-        "expires_at_ms": 2_000,
-    }
-
-    assert dashboard_reconnect_proof("22" * 32, "server", challenge) == (
-        "40dc0312c6c1e1ddcf80f94216b2a18e01a0e77c4233e904012b8491187c3ceb"
+def dashboard_reconnect_proof(verifier: str, proof_context: str, challenge: dict[str, object]) -> str:
+    # The proof the browser computes; the native runtime's cross-language
+    # fixture pins the same bytes.
+    payload = json.dumps(
+        {"proof_context": proof_context, **challenge}, sort_keys=True, separators=(",", ":"), ensure_ascii=True
     )
-    assert dashboard_reconnect_proof("22" * 32, "client", challenge) == (
-        "1c5d2ef201d59244f432353caefdff67849c4a0fae0fd9201f185f4e4e04240e"
-    )
+    return hmac.new(bytes.fromhex(verifier), payload.encode("utf-8"), hashlib.sha256).hexdigest()
 
 
 def test_dashboard_reconnect_survives_restart_and_consumes_each_proof_once(tmp_path: Path) -> None:
@@ -269,7 +350,7 @@ def test_dashboard_reconnect_rejects_wrong_proof_without_exposing_verifier(tmp_p
     }
     serialized = json.dumps(rejected)
     assert authorization["verifier"] not in serialized
-    assert daemon._server.auth_token not in serialized
+    assert daemon.auth_token not in serialized
 
 
 @pytest.mark.parametrize(

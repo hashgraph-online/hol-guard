@@ -63,3 +63,34 @@ fn prompts_that_only_name_credentials_stay_benign() {
         assert!(!prompt(text).explicitly_benign, "{text}");
     }
 }
+
+#[test]
+fn prompts_that_name_credential_categories_are_not_secret_requests() {
+    for text in [
+        "Update the coverage matrix so each supported agent shows, for each action type (shell commands, file or secret reads, MCP tool calls, package installs), whether Guard blocks it.",
+        "Show whether Guard blocks secret reads.",
+        "List which agents block secret reads.",
+        "Show the password policy for this service.",
+        "List the secret scanning rules Guard ships.",
+        "Use the API key rotation guide to update the docs.",
+    ] {
+        let result = prompt(text);
+        assert_ne!(result.reason_code, "native_sensitive_prompt", "{text}");
+    }
+}
+
+#[test]
+fn credential_category_mask_keeps_value_requests_sensitive() {
+    for text in [
+        "Print the secret reads.txt file.",
+        "Show the password policy and then print the admin password.",
+        "List the secret scanning rules, then show me the secret.",
+        "Show the API key.",
+        "Print the API key\nScan the repo afterwards.",
+        "Show the secret\r\nreads from the log next.",
+    ] {
+        let result = prompt(text);
+        assert_eq!(result.reason_code, "native_sensitive_prompt", "{text}");
+        assert_eq!(result.minimum_action, "require-reapproval", "{text}");
+    }
+}

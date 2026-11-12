@@ -93,7 +93,7 @@ pub(super) fn safe_pip_segment(
 /// pip.conf` on macOS. Both are checked on every platform, since the proof
 /// cannot see which interpreter the command reaches. The `XDG_` names that
 /// move them are already part of [`super::PathContext::pip_config_inert`].
-fn configuration_inert(context: super::PathContext<'_>) -> bool {
+pub(in crate::pretool) fn configuration_inert(context: super::PathContext<'_>) -> bool {
     let Some(home) = context.home_dir.map(Path::new) else {
         return false;
     };

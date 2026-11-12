@@ -330,20 +330,36 @@ fn digest_ok(text: &Option<String>) -> bool {
     })
 }
 
+fn artifact_input_ok(input: &ArtifactInput) -> bool {
+    let optional_text = [&input.vendor, &input.version, &input.build_id];
+    [&input.artifact_id, &input.family, &input.os, &input.arch]
+        .into_iter()
+        .all(|value| text_ok(value))
+        && optional_text
+            .into_iter()
+            .flatten()
+            .all(|value| text_ok(value))
+        && digest_ok(&input.executable_sha256)
+        && digest_ok(&input.component_identity_sha256)
+}
+
+/// Whether `artifact` is one the assessment accepts, and claims no more than
+/// `self_reported`. A probe carries stored artifacts into its reply, so one the
+/// assessment would reject must be refused before it costs the whole reply.
+pub(crate) fn carried_artifact_ok(artifact: &Value) -> bool {
+    serde_json::from_value::<ArtifactInput>(artifact.clone()).is_ok_and(|input| {
+        artifact_input_ok(&input)
+            && matches!(
+                input.identity_assurance,
+                Assurance::Unknown | Assurance::SelfReported
+            )
+    })
+}
+
 fn artifacts_by_id(inputs: &[ArtifactInput]) -> Result<BTreeMap<&str, Artifact<'_>>, String> {
     let mut artifacts = BTreeMap::new();
     for input in inputs {
-        let optional_text = [&input.vendor, &input.version, &input.build_id];
-        let valid = [&input.artifact_id, &input.family, &input.os, &input.arch]
-            .into_iter()
-            .all(|value| text_ok(value))
-            && optional_text
-                .into_iter()
-                .flatten()
-                .all(|value| text_ok(value))
-            && digest_ok(&input.executable_sha256)
-            && digest_ok(&input.component_identity_sha256);
-        if !valid {
+        if !artifact_input_ok(input) {
             return Err("runtime_identity_artifact_invalid".to_owned());
         }
         let (assurance, downgraded) = effective_assurance(input);

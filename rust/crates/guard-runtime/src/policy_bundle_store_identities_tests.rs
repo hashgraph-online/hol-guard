@@ -26,17 +26,17 @@ fn sync_state(connection: &Connection, key: &str, payload: &str) {
         .unwrap();
 }
 
+fn identities(connection: &Connection, now: &str) -> Option<Vec<Identity>> {
+    cached_bundle_authority(connection, now).map(|(identities, _bundle)| identities)
+}
+
 #[test]
 fn a_missing_or_empty_bundle_authorizes_nothing() {
     let connection = store();
-    assert_eq!(cached_bundle_identities(&connection, NOW), Some(Vec::new()));
+    assert_eq!(identities(&connection, NOW), Some(Vec::new()));
     for payload in ["{}", "[1]", "\"text\"", "null"] {
         sync_state(&connection, "policy_bundle", payload);
-        assert_eq!(
-            cached_bundle_identities(&connection, NOW),
-            Some(Vec::new()),
-            "{payload}"
-        );
+        assert_eq!(identities(&connection, NOW), Some(Vec::new()), "{payload}");
     }
 }
 
@@ -44,14 +44,11 @@ fn a_missing_or_empty_bundle_authorizes_nothing() {
 fn a_bundle_the_store_cannot_parse_defers() {
     let connection = store();
     sync_state(&connection, "policy_bundle", "not json");
-    assert_eq!(cached_bundle_identities(&connection, NOW), None);
+    assert_eq!(identities(&connection, NOW), None);
     sync_state(&connection, "policy_bundle", "{}");
-    assert_eq!(
-        cached_bundle_identities(&connection, "not a time"),
-        Some(Vec::new())
-    );
+    assert_eq!(identities(&connection, "not a time"), Some(Vec::new()));
     sync_state(&connection, "policy_bundle", r#"{"bundleVersion": 1}"#);
-    assert_eq!(cached_bundle_identities(&connection, "not a time"), None);
+    assert_eq!(identities(&connection, "not a time"), None);
 }
 
 #[cfg(unix)]
@@ -63,7 +60,7 @@ fn an_unsigned_bundle_authorizes_nothing() {
         "policy_bundle",
         r#"{"bundleVersion": 1, "decisions": [{"harness": "codex"}]}"#,
     );
-    assert_eq!(cached_bundle_identities(&connection, NOW), Some(Vec::new()));
+    assert_eq!(identities(&connection, NOW), Some(Vec::new()));
 }
 
 #[test]
@@ -128,6 +125,15 @@ fn an_identity_is_keyed_the_way_the_store_saves_the_row() {
     );
 }
 
+#[cfg(any(unix, windows))]
+#[test]
+fn the_host_name_a_generic_label_yields_to_is_read() {
+    // Off Unix this was unknown, which left the bundle's identities to the
+    // Python store.
+    let name = device_display_name(&store(), "localhost").expect("host name");
+    assert!(!name.is_empty());
+}
+
 #[test]
 fn a_generic_label_yields_to_the_host_name() {
     assert_eq!(
@@ -188,4 +194,131 @@ fn a_document_past_the_limit_is_not_chunked() {
         Some(MAX_DOCUMENT_CHARS)
     );
     assert_eq!(chunks(&json!("é".repeat(MAX_DOCUMENT_CHARS - 1))), None);
+}
+
+fn policy_row(connection: &Connection, source: &str) {
+    connection
+        .execute_batch("create table if not exists policy_decisions (source text not null)")
+        .unwrap();
+    connection
+        .execute(
+            "insert into policy_decisions (source) values (?1)",
+            [source],
+        )
+        .unwrap();
+}
+
+#[test]
+fn a_lookup_derives_identities_only_for_a_store_with_bundle_rows() {
+    let connection = store();
+    sync_state(&connection, "policy_bundle", "not json");
+    assert_eq!(lookup_bundle_authority(&connection, NOW), Ok(None));
+    policy_row(&connection, "local");
+    assert_eq!(lookup_bundle_authority(&connection, NOW), Ok(None));
+    policy_row(&connection, "policy-bundle");
+    assert_eq!(lookup_bundle_authority(&connection, NOW), Err(()));
+}
+
+#[cfg(unix)]
+#[test]
+fn a_bundle_that_authorizes_nothing_ships_no_identities() {
+    let connection = store();
+    policy_row(&connection, "policy-bundle");
+    sync_state(
+        &connection,
+        "policy_bundle",
+        r#"{"bundleVersion": 1, "decisions": [{"harness": "codex"}]}"#,
+    );
+    assert_eq!(
+        lookup_bundle_authority(&connection, NOW),
+        Ok(Some((Vec::new(), None)))
+    );
+}
+
+fn canonical_bundle(mode: &str, rules: Value) -> Map<String, Value> {
+    json!({
+        "contractVersion": CANONICAL_CONTRACT,
+        "payload": {
+            "apiVersion": "guard.hashgraphonline.com/v1alpha1",
+            "kind": "GuardPolicy",
+            "metadata": {"id": "managed-policy", "name": "Managed policy", "revision": 0},
+            "spec": {"defaults": {"mode": mode}, "rules": rules},
+        },
+    })
+    .as_object()
+    .unwrap()
+    .clone()
+}
+
+fn allow_command(id: &str, command: &str) -> Value {
+    json!({
+        "id": id,
+        "enabled": true,
+        "effect": "allow",
+        "match": {"commands": [command]},
+        "lifetime": {"mode": "permanent", "expiresAt": null},
+        "provenance": {"source": "cloud", "createdAt": "2026-01-01T00:00:00Z"},
+    })
+}
+
+fn this_device(connection: &Connection) {
+    connection
+        .execute(
+            "insert into guard_devices values ('local-device', 'device-1', 'Workstation')",
+            [],
+        )
+        .unwrap();
+}
+
+#[test]
+fn a_canonical_bundle_authorizes_the_rows_it_compiles_to_for_this_device() {
+    let connection = store();
+    this_device(&connection);
+    let rules = json!([allow_command("allow-publish", "npm publish --tag next")]);
+    let identities = canonical_identities(&connection, &canonical_bundle("prompt", rules)).unwrap();
+    assert!(!identities.is_empty());
+    for identity in &identities {
+        assert_eq!(identity[1], json!("artifact"));
+        assert!(identity[2]
+            .as_str()
+            .unwrap()
+            .starts_with("memory:exact-shell-command:"));
+        assert_eq!(identity[6], json!("allow"));
+        assert_eq!(identity[8], json!("allow-publish"));
+        assert_eq!(identity[9], json!("policy-bundle-canonical"));
+    }
+}
+
+#[test]
+fn a_canonical_bundle_authorizes_nothing_it_does_not_enforce_here() {
+    let connection = store();
+    this_device(&connection);
+    let watched = json!([allow_command("allow-publish", "npm publish --tag next")]);
+    assert_eq!(
+        canonical_identities(&connection, &canonical_bundle("observe", watched)),
+        Some(Vec::new())
+    );
+    let mut elsewhere = allow_command("allow-publish", "npm publish --tag next");
+    elsewhere["match"]["devices"] = json!(["device-2"]);
+    assert_eq!(
+        canonical_identities(&connection, &canonical_bundle("prompt", json!([elsewhere]))),
+        Some(Vec::new())
+    );
+    let mut v1 = canonical_bundle("prompt", json!([]));
+    v1.remove("contractVersion");
+    assert_eq!(canonical_identities(&connection, &v1), Some(Vec::new()));
+}
+
+#[test]
+fn a_canonical_bundle_without_this_device_or_a_compile_authorizes_nothing() {
+    let connection = store();
+    let rules = json!([allow_command("allow-publish", "npm publish --tag next")]);
+    assert_eq!(
+        canonical_identities(&connection, &canonical_bundle("prompt", rules)),
+        None
+    );
+    this_device(&connection);
+    let mut broken = canonical_bundle("prompt", json!([]));
+    broken["payload"]["spec"] = json!("not a spec");
+    assert_eq!(canonical_identities(&connection, &broken), None);
 }

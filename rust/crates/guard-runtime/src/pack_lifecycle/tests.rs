@@ -38,7 +38,7 @@ fn separate_profiles_cross_engine_and_source_rollback() {
     next.engine = "4".repeat(64);
     next.root = "5".repeat(64);
     next.source = "b".repeat(40);
-    let evidence = json!({"status":"ahead","base_commit":{"sha":remote.source},"merge_base_commit":{"sha":remote.source},"head_commit":{"sha":next.source},"behind_by":0,"ahead_by":1});
+    let evidence = json!({"status":"ahead","base_commit":{"sha":remote.source},"merge_base_commit":{"sha":remote.source},"url":compare_url(&remote.source, &next.source),"behind_by":0,"ahead_by":1});
     let next_floor = transition(&remote_floor, &next, &evidence).unwrap();
     assert_eq!(next_floor.source, remote_floor.source);
     assert_eq!(next_floor.remote.as_ref().unwrap().version, "100.7");

@@ -34,6 +34,8 @@ use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
 use std::sync::LazyLock;
 
+use guard_contracts::write_canonical_json;
+use hmac::{Hmac, Mac};
 use serde_json::{json, Map, Value};
 use sha2::{Digest, Sha256, Sha512};
 
@@ -50,10 +52,9 @@ use crate::package_manifest_diff::parse_manifest_dependencies;
 use crate::package_policy_override as ppo;
 use crate::package_protect_projection as ppp;
 use crate::workspace_inventory::{
-    inventory_from_sbom_payload, merge_inventory_item, package_manager_for_scan,
-    split_namespace_name, target_for_package_spec, target_from_inventory_item,
-    target_from_manifest_dependency, InventoryMap, ECOSYSTEM_BY_LOCKFILE, ECOSYSTEM_BY_MANIFEST,
-    SEVERITY_RANK,
+    dependency_name, inventory_from_sbom_payload, merge_inventory_item, package_manager_for_scan,
+    target_for_package_spec, target_from_inventory_item, target_from_manifest_dependency,
+    DirectDependencies, InventoryMap, ECOSYSTEM_BY_LOCKFILE, ECOSYSTEM_BY_MANIFEST, SEVERITY_RANK,
 };
 
 pub const WORKSPACE_AUDIT_DISCOVERY_MAX_DEPTH: usize = 3;
@@ -643,8 +644,8 @@ pub struct GuardConfig {
     /// `harness_risk_actions` (config.py :419).
     pub harness_risk_actions:
         Option<std::collections::BTreeMap<String, std::collections::BTreeMap<String, String>>>,
-    /// `harness_postures` (config.py :421), canonically keyed as
-    /// `coerce_loaded_harness_postures` leaves them.
+    /// `harness_postures` (config.py :421), canonically keyed with malformed
+    /// entries dropped.
     pub harness_postures: Option<std::collections::BTreeMap<String, String>>,
     /// `managed_policy_status` (config.py :426).
     pub managed_policy_status: String,
@@ -1092,6 +1093,22 @@ pub const VALID_RISK_ACTION_KEYS: &[&str] = &[
 /// `DEFAULT_SECURITY_LEVEL` (config.py).
 pub const DEFAULT_SECURITY_LEVEL: &str = "balanced";
 
+/// Days in a Gregorian month, so an impossible calendar day is rejected
+/// rather than rolled into the next month.
+fn days_in_month(year: i64, month: u32) -> u32 {
+    match month {
+        1 | 3 | 5 | 7 | 8 | 10 | 12 => 31,
+        4 | 6 | 9 | 11 => 30,
+        2 if (year % 4 == 0 && year % 100 != 0) || year % 400 == 0 => 29,
+        2 => 28,
+        _ => 0,
+    }
+}
+
+/// Python's `datetime.fromisoformat` reads the whole string or raises, and it
+/// knows how long each month is. This mirror did neither, so a signed document
+/// carrying `2026-02-31` or an instant with text after it parsed here where it
+/// was refused before.
 pub fn parse_timestamp(value: &str) -> Option<Timestamp> {
     let text = value.trim();
     let bytes = text.as_bytes();
@@ -1104,7 +1121,7 @@ pub fn parse_timestamp(value: &str) -> Option<Timestamp> {
     }
     let month: u32 = text.get(5..7)?.parse().ok()?;
     let day: u32 = text.get(8..10)?.parse().ok()?;
-    if !(1..=12).contains(&month) || !(1..=31).contains(&day) {
+    if !(1..=12).contains(&month) || day < 1 || day > days_in_month(year, month) {
         return None;
     }
     let mut hour: u32 = 0;
@@ -1145,21 +1162,35 @@ pub fn parse_timestamp(value: &str) -> Option<Timestamp> {
         } else {
             cursor += 5;
         }
+        if hour > 23 || minute > 59 || second > 59 {
+            return None;
+        }
         if let Some(&marker) = bytes.get(cursor) {
             match marker {
-                b'Z' | b'z' => offset_seconds = 0,
+                b'Z' | b'z' => {
+                    offset_seconds = 0;
+                    cursor += 1;
+                }
                 b'+' | b'-' => {
                     let sign: i64 = if marker == b'-' { -1 } else { 1 };
                     let off_h = two(text, cursor + 1)?;
-                    let off_m = if bytes.get(cursor + 3) == Some(&b':') {
+                    let separated = bytes.get(cursor + 3) == Some(&b':');
+                    let off_m = if separated {
                         two(text, cursor + 4)?
                     } else {
                         two(text, cursor + 3)?
                     };
+                    if off_h > 23 || off_m > 59 {
+                        return None;
+                    }
                     offset_seconds = sign * ((off_h as i64) * 3600 + (off_m as i64) * 60);
+                    cursor += if separated { 6 } else { 5 };
                 }
-                _ => {}
+                _ => return None,
             }
+        }
+        if cursor != bytes.len() {
+            return None;
         }
     }
     let days = days_from_civil(year, month as i64, day as i64);
@@ -1193,28 +1224,10 @@ pub fn stable_digest_hex(payload: &[u8]) -> String {
 
 /// `stable_digest_hex(payload, length=n)`.
 pub fn stable_digest_hex_len(payload: &[u8], length: Option<usize>) -> String {
-    const BLOCK: usize = 128; // sha512 block size
-    let mut key = [0u8; BLOCK];
-    if STABLE_DIGEST_KEY.len() > BLOCK {
-        let hashed = Sha512::digest(STABLE_DIGEST_KEY);
-        key[..64].copy_from_slice(&hashed);
-    } else {
-        key[..STABLE_DIGEST_KEY.len()].copy_from_slice(STABLE_DIGEST_KEY);
-    }
-    let mut ipad = [0x36u8; BLOCK];
-    let mut opad = [0x5cu8; BLOCK];
-    for i in 0..BLOCK {
-        ipad[i] ^= key[i];
-        opad[i] ^= key[i];
-    }
-    let mut inner = Sha512::new();
-    inner.update(ipad);
-    inner.update(payload);
-    let inner_digest = inner.finalize();
-    let mut outer = Sha512::new();
-    outer.update(opad);
-    outer.update(inner_digest);
-    let hex_digest = hex::encode(outer.finalize());
+    let mut mac =
+        <Hmac<Sha512>>::new_from_slice(STABLE_DIGEST_KEY).expect("hmac accepts any key length");
+    mac.update(payload);
+    let hex_digest = hex::encode(mac.finalize().into_bytes());
     match length {
         Some(n) => hex_digest[..n.min(64)].to_string(),
         None => hex_digest[..64].to_string(),
@@ -1953,9 +1966,6 @@ pub fn build_local_supply_chain_posture(
         .synced_policy_payload(store)
         .and_then(|p| dict_payload(Some(&p)))
         .unwrap_or_default();
-    // Legacy team-policy siblings are not signed policy-bundle content and
-    // therefore cannot contribute enforcement or managed-policy status.
-    let team_policy_pack: Map<String, Value> = Map::new();
     let cached_bundle = workspace_id
         .as_deref()
         .and_then(|id| store.get_cached_supply_chain_bundle(id));
@@ -1988,16 +1998,9 @@ pub fn build_local_supply_chain_posture(
         .or_else(|| string_value(remote_policy.get("package_script_action")));
     let remote_cloud_advisory_action = string_value(remote_policy.get("cloudAdvisoryAction"))
         .or_else(|| string_value(remote_policy.get("cloud_advisory_action")));
-    let managed_by_cloud = !remote_policy.is_empty() || !team_policy_pack.is_empty();
-    let managed_label = string_value(team_policy_pack.get("name")).or_else(|| {
-        if managed_by_cloud {
-            Some("Guard Cloud sync".to_string())
-        } else {
-            None
-        }
-    });
-    let managed_updated_at = string_value(team_policy_pack.get("updatedAt"))
-        .or_else(|| string_value(remote_policy.get("updatedAt")));
+    let managed_by_cloud = !remote_policy.is_empty();
+    let managed_label = managed_by_cloud.then(|| "Guard Cloud sync".to_string());
+    let managed_updated_at = string_value(remote_policy.get("updatedAt"));
 
     let mut posture = Map::new();
     posture.insert("generated_at".into(), json!(now_text));
@@ -2042,7 +2045,6 @@ pub fn build_local_supply_chain_posture(
                 .or_else(|| resolve_risk_action(config, Some("package_script"), None)),
             "managed_by_cloud": managed_by_cloud,
             "remote_policy_active": !remote_policy.is_empty(),
-            "team_policy_active": !team_policy_pack.is_empty(),
             "managed_label": managed_label,
             "managed_updated_at": managed_updated_at,
         }),
@@ -2848,7 +2850,7 @@ pub fn resolve_supply_chain_audit_workspace_dir(
     Ok(None)
 }
 
-/// `_audit_lockfile_warnings` — `parse_manifest_dependencies` is the shared
+/// `_audit_lockfile_warnings` — `try_parse_manifest_dependencies_ordered` is the shared
 /// `package_manifest_diff` port; `path` is the relative lockfile path.
 #[allow(dead_code)]
 fn audit_lockfile_warnings(
@@ -2883,13 +2885,14 @@ fn audit_lockfile_warnings(
             }));
             continue;
         };
-        let dependency_map = crate::package_manifest_diff::parse_manifest_dependencies(
+        // A lockfile that parses and lists no packages is complete, not a warning.
+        let dependency_map = crate::package_manifest_diff::try_parse_manifest_dependencies_ordered(
             lockfile_path,
             &lockfile_text,
             2_097_152,
             50,
         );
-        if dependency_map.is_empty() {
+        if dependency_map.is_none() {
             warnings.push(json!({
                 "code": "lockfile_parse_warning",
                 "message": format!("Guard could not parse {lockfile_name} for workspace audit."),
@@ -3472,6 +3475,7 @@ fn workspace_inventory_from_paths(
     manifest_parser: &dyn ManifestParserApi,
 ) -> Vec<Map<String, Value>> {
     let mut inventory_map = InventoryMap::new();
+    let mut direct_dependencies = DirectDependencies::default();
 
     for relative_path in manifest_paths {
         let text = match read_workspace_audit_text(paths, workspace_dir, relative_path) {
@@ -3489,23 +3493,10 @@ fn workspace_inventory_from_paths(
             DEFAULT_MANIFEST_PARSE_DEADLINE_MS,
         );
         for (package_name, version) in &dependency_map {
-            let mut item = Map::new();
-            item.insert("ecosystem".into(), json!(*ecosystem));
-            let (ns, name) = split_namespace_name(package_name);
-            item.insert("namespace".into(), ns.map_or(Value::Null, Value::String));
-            item.insert("name".into(), json!(name));
-            item.insert("direct".into(), json!(true));
-            let range = version.trim();
-            item.insert(
-                "range".into(),
-                if range.is_empty() {
-                    Value::Null
-                } else {
-                    Value::String(range.to_string())
-                },
-            );
-            item.insert("version".into(), Value::Null);
-            merge_inventory_item(&mut inventory_map, &item);
+            let range = Some(version.trim())
+                .filter(|range| !range.is_empty())
+                .map(str::to_string);
+            direct_dependencies.record(relative_path, ecosystem, package_name, range);
         }
     }
 
@@ -3527,11 +3518,15 @@ fn workspace_inventory_from_paths(
         for (package_name, version) in &dependency_map {
             let mut item = Map::new();
             item.insert("ecosystem".into(), json!(*ecosystem));
-            let (ns, name) = split_namespace_name(package_name);
+            let (ns, name) = dependency_name(ecosystem, package_name);
             item.insert("namespace".into(), ns.map_or(Value::Null, Value::String));
             item.insert("name".into(), json!(name));
-            item.insert("direct".into(), json!(false));
-            item.insert("range".into(), Value::Null);
+            let range = direct_dependencies.lockfile_range(relative_path, ecosystem, package_name);
+            item.insert("direct".into(), json!(range.is_some()));
+            item.insert(
+                "range".into(),
+                range.flatten().map_or(Value::Null, Value::String),
+            );
             let version = version.trim();
             item.insert(
                 "version".into(),
@@ -3544,6 +3539,19 @@ fn workspace_inventory_from_paths(
             merge_inventory_item(&mut inventory_map, &item);
         }
     }
+
+    for (ecosystem, package_name, range) in direct_dependencies.unresolved() {
+        let mut item = Map::new();
+        item.insert("ecosystem".into(), json!(ecosystem));
+        let (ns, name) = dependency_name(ecosystem, package_name);
+        item.insert("namespace".into(), ns.map_or(Value::Null, Value::String));
+        item.insert("name".into(), json!(name));
+        item.insert("direct".into(), json!(true));
+        item.insert("range".into(), range.map_or(Value::Null, Value::String));
+        item.insert("version".into(), Value::Null);
+        merge_inventory_item(&mut inventory_map, &item);
+    }
+    inventory_map.lead_with(direct_dependencies.listed_keys());
 
     inventory_map.into_values()
 }
@@ -3742,7 +3750,7 @@ fn workspace_diff_audit_inventory(
                 Some(v) => v,
                 None => continue,
             };
-            let (ns, name) = split_namespace_name(&change.package_name);
+            let (ns, name) = dependency_name(ecosystem, &change.package_name);
             changed_packages.push(change.package_name.clone());
             let mut item = Map::new();
             item.insert("ecosystem".into(), json!(*ecosystem));
@@ -5400,16 +5408,24 @@ pub fn package_request_runtime_workspace_scope(
         "scope": "package-request-workspace-exact",
         "version": PACKAGE_EXECUTION_CONTEXT_VERSION,
     });
-    let canonical = serde_json::to_string(&material).unwrap_or_default();
-    let digest = stable_digest_hex(canonical.as_bytes());
+    let digest = package_scope_digest(&material)?;
     Some(format!(
         "package-request-workspace-exact:v{PACKAGE_EXECUTION_CONTEXT_VERSION}:{digest}"
     ))
 }
 
+/// The key a saved package approval is already stored under: `json.dumps(
+/// material, sort_keys=True, separators=(",", ":"))` hashed with plain
+/// SHA-256. The crate's keyed `stable_digest_hex` would be a different string,
+/// and a different string is an approval the user has to grant a second time.
+fn package_scope_digest(material: &Value) -> Option<String> {
+    let mut encoded = Vec::new();
+    write_canonical_json(material, &mut encoded).ok()?;
+    Some(sha256_content_digest(&encoded))
+}
+
 /// `approval_scope_support.package_request_portable_workspace_scope`.
-#[allow(dead_code)]
-fn package_request_portable_workspace_scope(
+pub fn package_request_portable_workspace_scope(
     artifact_id: Option<&str>,
     artifact_hash: Option<&str>,
     artifact_type: Option<&str>,
@@ -5433,8 +5449,7 @@ fn package_request_portable_workspace_scope(
         "scope": "package-request-workspace",
         "version": PACKAGE_EXECUTION_CONTEXT_VERSION,
     });
-    let canonical = serde_json::to_string(&material).unwrap_or_default();
-    let digest = stable_digest_hex(canonical.as_bytes());
+    let digest = package_scope_digest(&material)?;
     Some(format!(
         "package-request-workspace:v{PACKAGE_EXECUTION_CONTEXT_VERSION}:{digest}"
     ))
@@ -5502,6 +5517,48 @@ fn compose_current_package_policy_action(
 // resolve_stored_package_policy_override + apply_stored_package_policy_override
 // ---------------------------------------------------------------------------
 
+/// How many times one package request reads its saved allow's authority.
+///
+/// Guard settles up to eight Cloud Review jobs at once. Each sibling moves the
+/// revision twice, once when its allow is stored and once when its own install
+/// claims it, so a request can need two reads per job. Keep this in step with
+/// the Python resolver's `_AUTHORITY_READS`.
+const PACKAGE_AUTHORITY_READS: u32 = 16;
+
+/// Whether a fresh read offers the refused saved allow at a newer revision.
+///
+/// Every allow stored or spent moves the shared approval authority revision,
+/// and a claim refuses a row read at an older one. When a reviewer approves
+/// several requests at once, another request's allow can land between this
+/// request reading its saved allow and claiming it. Only then is the claim
+/// tried again, with the row read at the new revision. The fresh read repeats
+/// the ordinary lookup, so a block saved in between still wins, and a row
+/// already spent reads as nothing.
+fn package_authority_moved(refused: &Value, fresh: &Value) -> bool {
+    let revision = |decision: &Value| {
+        decision
+            .get("_approval_authority_revision")
+            .and_then(Value::as_i64)
+    };
+    let Some(fresh_revision) = revision(fresh) else {
+        return false;
+    };
+    if revision(refused) == Some(fresh_revision) {
+        return false;
+    }
+    match refused
+        .get("approval_id")
+        .and_then(Value::as_str)
+        .filter(|id| !id.is_empty())
+    {
+        Some(id) => fresh.get("approval_id").and_then(Value::as_str) == Some(id),
+        None => {
+            let id = refused.get("decision_id").and_then(Value::as_i64);
+            id.is_some() && fresh.get("decision_id").and_then(Value::as_i64) == id
+        }
+    }
+}
+
 /// Result of `_resolve_stored_package_policy_override`.
 #[allow(dead_code)]
 struct StoredPackagePolicyResolution {
@@ -5545,90 +5602,106 @@ fn resolve_stored_package_policy_override(
         execution_context,
         paths_api,
     );
-    let mut saved_decision: Option<Value> = None;
-    for workspace in &workspaces {
-        let lookup = store.resolve_policy_decision_lookup(
-            &artifact.harness,
-            artifact.artifact_id.as_str(),
-            Some(artifact_hash),
-            workspace,
-            artifact.publisher.as_deref(),
-            now,
-            false,
-        );
-        if let Some(code) = lookup.error.as_deref() {
-            // A store failure is not an empty lookup. The review verdict
-            // stands. The event is written when the store can take it; the
-            // code is also returned, because this same store may be unable
-            // to record the event.
-            store.add_event(
-                "package_policy_lookup_failed",
-                &json!({ "code": code }),
+    let mut refused: Option<Value> = None;
+    let mut reads = 0;
+    let (did, disposition) = loop {
+        reads += 1;
+        let mut saved_decision: Option<Value> = None;
+        for workspace in &workspaces {
+            let lookup = store.resolve_policy_decision_lookup(
+                &artifact.harness,
+                artifact.artifact_id.as_str(),
+                Some(artifact_hash),
+                workspace,
+                artifact.publisher.as_deref(),
                 now,
+                false,
             );
-            return StoredPackagePolicyResolution {
-                evaluation: evaluation.clone(),
-                claim_disposition: None,
-                lookup_error: Some(code.to_string()),
-            };
+            if let Some(code) = lookup.error.as_deref() {
+                // A store failure is not an empty lookup. The review verdict
+                // stands. The event is written when the store can take it; the
+                // code is also returned, because this same store may be unable
+                // to record the event.
+                store.add_event(
+                    "package_policy_lookup_failed",
+                    &json!({ "code": code }),
+                    now,
+                );
+                return StoredPackagePolicyResolution {
+                    evaluation: evaluation.clone(),
+                    claim_disposition: None,
+                    lookup_error: Some(code.to_string()),
+                };
+            }
+            // A row whose local integrity did not verify stops the probe: Python
+            // hands that case to the daemon authority, which this lane has no seam
+            // for, so the review verdict stands rather than a row being reused on
+            // unverified integrity.
+            if lookup.ignored_local_integrity.is_some() {
+                return unchanged();
+            }
+            if lookup.decision.is_some() {
+                saved_decision = lookup.decision;
+                break;
+            }
         }
-        // A row whose local integrity did not verify stops the probe: Python
-        // hands that case to the daemon authority, which this lane has no seam
-        // for, so the review verdict stands rather than a row being reused on
-        // unverified integrity.
-        if lookup.ignored_local_integrity.is_some() {
+        let Some(saved) = saved_decision else {
+            return unchanged();
+        };
+        // A refused claim reads the facts again only when the same row is still
+        // offered at a newer authority revision; see `package_authority_moved`.
+        if let Some(previous) = refused.as_ref() {
+            if !package_authority_moved(previous, &saved) {
+                return unchanged();
+            }
+        }
+        if !claim_saved_approval {
             return unchanged();
         }
-        if lookup.decision.is_some() {
-            saved_decision = lookup.decision;
-            break;
+        // Attempt to claim the saved approval — verify artifact-hash match and
+        // freshness via the approval_context seam.
+        let decision_id = saved.get("decision_id").and_then(Value::as_i64);
+        let Some(did) = decision_id else {
+            return unchanged();
+        };
+        // Only a saved allow is reused. A row recording any other action is read
+        // by the saved-policy lanes that own it, never claimed as an approval.
+        if saved.get("action").and_then(Value::as_str) != Some("allow") {
+            return unchanged();
         }
-    }
-    let Some(saved) = saved_decision else {
-        return unchanged();
+        let saved_hash = saved.get("artifact_hash").and_then(Value::as_str);
+        if saved_hash != Some(artifact_hash) {
+            return unchanged();
+        }
+        // Check freshness — expiry, approval-context token, etc.
+        if approval_context_api
+            .approval_context_tokens_validation_reason(
+                saved.get("artifact_hash").unwrap_or(&Value::Null),
+                &Value::String(artifact_hash.to_string()),
+            )
+            .is_some()
+        {
+            return unchanged();
+        }
+        // The disposition the row reports is the store's, and only the two values
+        // the caller's vocabulary carries: a single-use row reads as `consumed`,
+        // a durable one as `retained`.
+        let disposition = match store.approval_reuse_claim_disposition(&saved).as_deref() {
+            Some(value @ ("consumed" | "retained")) => Some(value.to_owned()),
+            _ => None,
+        };
+        // The store claims the row before the evaluation reports the approval
+        // (`_run_claim`, kind `store`). A refused claim — another caller took the
+        // single-use row, or the row no longer stands — leaves the review verdict
+        // the package lane settled, so an unclaimed row is never read as approved.
+        if store.claim_approval_reuse_decision(&saved, now) {
+            break (did, disposition);
+        }
+        if reads >= PACKAGE_AUTHORITY_READS {
+            return unchanged();
+        }
+        refused = Some(saved);
     };
-    if !claim_saved_approval {
-        return unchanged();
-    }
-    // Attempt to claim the saved approval — verify artifact-hash match and
-    // freshness via the approval_context seam.
-    let decision_id = saved.get("decision_id").and_then(Value::as_i64);
-    let Some(did) = decision_id else {
-        return unchanged();
-    };
-    // Only a saved allow is reused. A row recording any other action is read
-    // by the saved-policy lanes that own it, never claimed as an approval.
-    if saved.get("action").and_then(Value::as_str) != Some("allow") {
-        return unchanged();
-    }
-    let saved_hash = saved.get("artifact_hash").and_then(Value::as_str);
-    if saved_hash != Some(artifact_hash) {
-        return unchanged();
-    }
-    // Check freshness — expiry, approval-context token, etc.
-    if approval_context_api
-        .approval_context_tokens_validation_reason(
-            saved.get("artifact_hash").unwrap_or(&Value::Null),
-            &Value::String(artifact_hash.to_string()),
-        )
-        .is_some()
-    {
-        return unchanged();
-    }
-    // The disposition the row reports is the store's, and only the two values
-    // the caller's vocabulary carries: a single-use row reads as `consumed`,
-    // a durable one as `retained`.
-    let disposition = match store.approval_reuse_claim_disposition(&saved).as_deref() {
-        Some(value @ ("consumed" | "retained")) => Some(value.to_owned()),
-        _ => None,
-    };
-    // The store claims the row before the evaluation reports the approval
-    // (`_run_claim`, kind `store`). A refused claim — another caller took the
-    // single-use row, or the row no longer stands — leaves the review verdict
-    // the package lane settled, so an unclaimed row is never read as approved.
-    if !store.claim_approval_reuse_decision(&saved, now) {
-        return unchanged();
-    }
     // Apply the saved approval — rewrite decision fields.
     let claimed = evaluation.with_fields(&[
         ("decision", json!("allow")),
@@ -5865,6 +5938,24 @@ pub fn package_config_policy_context(
     artifact: &GuardArtifact,
     config: Option<&GuardConfig>,
 ) -> Map<String, Value> {
+    package_config_policy_context_for(
+        &artifact.artifact_id,
+        artifact.publisher.as_deref(),
+        &artifact.harness,
+        config,
+    )
+}
+
+/// The same context for a caller that holds the artifact's identity rather
+/// than the artifact itself: a request the resident answers carries the
+/// artifact as a payload, and these three fields are all of it the context
+/// reads.
+pub fn package_config_policy_context_for(
+    artifact_id: &str,
+    publisher: Option<&str>,
+    harness: &str,
+    config: Option<&GuardConfig>,
+) -> Map<String, Value> {
     let mut out = Map::new();
     let Some(config) = config else {
         out.insert("available".into(), json!(false));
@@ -5879,12 +5970,10 @@ pub fn package_config_policy_context(
             .and_then(Value::as_str)
             .map(str::to_owned)
     };
-    let artifact_override = map_lookup("artifact_actions", &artifact.artifact_id);
-    let publisher_override = artifact
-        .publisher
-        .as_deref()
-        .and_then(|publisher| map_lookup("publisher_actions", publisher));
-    let harness_override = map_lookup("harness_actions", &artifact.harness);
+    let artifact_override = map_lookup("artifact_actions", artifact_id);
+    let publisher_override =
+        publisher.and_then(|publisher| map_lookup("publisher_actions", publisher));
+    let harness_override = map_lookup("harness_actions", harness);
     out.insert("artifact_override".into(), option_json(artifact_override));
     out.insert("available".into(), json!(true));
     out.insert(
@@ -5892,19 +5981,19 @@ pub fn package_config_policy_context(
         option_json(resolve_risk_action(
             config,
             Some("package_script"),
-            Some(&artifact.harness),
+            Some(harness),
         )),
     );
     out.insert(
         "global_package_script_action".into(),
         option_json(resolve_risk_action(config, Some("package_script"), None)),
     );
-    out.insert("harness".into(), json!(artifact.harness));
+    out.insert("harness".into(), json!(harness));
     out.insert("harness_override".into(), option_json(harness_override));
     out.insert(
         "harness_package_script_action".into(),
         option_json(config.harness_risk_actions.as_ref().and_then(|map| {
-            map.get(&artifact.harness)
+            map.get(harness)
                 .and_then(|inner| inner.get("package_script"))
                 .cloned()
         })),
@@ -6223,35 +6312,11 @@ fn package_request_artifact_hash(
         "package_manager_executable".into(),
         digest_or_null("package_manager_executable"),
     );
-    #[cfg(unix)]
+    // `crate::launch_identity` is the Unix module or its stub, and both
+    // re-export the same projection, so every platform binds the approval
+    // through one code path.
     let package_launch_identity_material =
         crate::launch_identity::package_request_launch_identity_material(launch_identity);
-    #[cfg(not(unix))]
-    let package_launch_identity_material = {
-        let mut material = Map::new();
-        if let Some(launch_identity) = launch_identity {
-            let wrapper_resolution = launch_identity
-                .get("wrapper_resolution")
-                .filter(|value| value.is_object())
-                .cloned()
-                .unwrap_or_else(|| {
-                    let mut direct = Map::new();
-                    direct.insert("status".into(), json!("direct"));
-                    Value::Object(direct)
-                });
-            material.insert(
-                "argv_sha256".into(),
-                launch_identity
-                    .get("argv_sha256")
-                    .cloned()
-                    .unwrap_or(Value::Null),
-            );
-            material.insert("wrapper_resolution".into(), wrapper_resolution);
-        } else {
-            material.insert("available".into(), json!(false));
-        }
-        material
-    };
     identity.insert(
         "package_launch_identity".into(),
         Value::Object(package_launch_identity_material),
@@ -7357,3 +7422,7 @@ pub fn sync_supply_chain_cloud_state(
     }
     Ok(payload)
 }
+
+#[cfg(test)]
+#[path = "local_supply_chain_stable_digest_tests.rs"]
+mod stable_digest_tests;

@@ -535,6 +535,8 @@ fn parse_integrity_trust(value: Option<&Value>) -> PolicyResult<ManagedIntegrity
     }) {
         return Err("Windows signer thumbprints must be SHA-1 certificate thumbprints".to_owned());
     }
+    // MDM machine-install pins only. Do not store Azure Artifact Signing leaves;
+    // those certificates rotate and are used by HOL Guard Desktop, not HOLGuardMachine.
     Ok(ManagedIntegrityTrust {
         release_public_keys,
         macos_team_id: optional_string(raw.get("macosTeamId"), "integrityTrust.macosTeamId")?,

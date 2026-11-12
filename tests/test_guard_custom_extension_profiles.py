@@ -4,8 +4,8 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.daemon.local_cli_api import LocalCliApiService
-from codex_plugin_scanner.guard.daemon.local_cli_profiles_api import (
+from codex_plugin_scanner.guard.local_clis.local_cli_api import LocalCliApiService
+from codex_plugin_scanner.guard.local_clis.local_cli_profiles_api import (
     annotate_cli_profiles,
     is_default_catalog,
     merge_profile_commands,
@@ -14,10 +14,11 @@ from codex_plugin_scanner.guard.daemon.local_cli_profiles_api import (
     seeded_profile_cli_id,
     seeded_profile_items,
 )
+from codex_plugin_scanner.guard.runtime import custom_extension_profiles
 from codex_plugin_scanner.guard.runtime.custom_extension_continuity import record_local_custom_extension_mutation
 from codex_plugin_scanner.guard.runtime.custom_extension_profiles import (
-    KNOWN_CLI_PROFILES,
-    WRANGLER_PROFILE,
+    KnownCliProfile,
+    known_cli_profiles,
     profile_for_executable,
 )
 from codex_plugin_scanner.guard.runtime.local_cli_commands import (
@@ -27,7 +28,6 @@ from codex_plugin_scanner.guard.runtime.local_cli_commands import (
     LocalCliCommand,
     default_local_cli_commands,
     is_local_cli_command_id,
-    match_command_id,
 )
 from codex_plugin_scanner.guard.runtime.local_cli_identity import (
     UnlistedCliIdentity,
@@ -35,10 +35,18 @@ from codex_plugin_scanner.guard.runtime.local_cli_identity import (
     is_local_cli_id,
 )
 from codex_plugin_scanner.guard.store import GuardStore
+from tests.local_cli_command_id_client import match_command_id
 
 
-@pytest.mark.parametrize("profile", KNOWN_CLI_PROFILES, ids=lambda profile: profile.profile_id)
-def test_profile_command_tree_is_valid(profile) -> None:
+def _wrangler() -> KnownCliProfile:
+    profile = profile_for_executable("wrangler")
+    assert profile is not None
+    return profile
+
+
+@pytest.mark.parametrize("profile_id", ["wrangler"])
+def test_profile_command_tree_is_valid(profile_id: str) -> None:
+    profile = next(profile for profile in known_cli_profiles() if profile.profile_id == profile_id)
     ids = [entry.command.command_id for entry in profile.commands]
 
     assert len(ids) == len(set(ids))
@@ -52,7 +60,7 @@ def test_profile_command_tree_is_valid(profile) -> None:
 
 
 def test_wrangler_suggestions_leave_writes_to_guard_and_allow_reads_only() -> None:
-    suggested = WRANGLER_PROFILE.suggested_states()
+    suggested = _wrangler().suggested_states()
 
     # CLI commands cannot store an explicit review rule; inherit keeps them on
     # Guard's default review for commands it cannot prove read-only.
@@ -81,9 +89,26 @@ def test_wrangler_tokens_match_profile_ids(tokens: tuple[str, ...], expected: st
 
 
 def test_profile_for_executable_accepts_windows_shims() -> None:
-    assert profile_for_executable("wrangler.CMD") is WRANGLER_PROFILE
+    assert profile_for_executable("wrangler.CMD") is _wrangler()
     assert profile_for_executable("wrangle") is None
     assert profile_for_executable(None) is None
+
+
+def test_a_runtime_that_cannot_answer_offers_no_profile() -> None:
+    from codex_plugin_scanner.guard import native_runner_authority as authority
+
+    def unavailable(*_args: object, **_kwargs: object) -> dict[str, object]:
+        raise authority.NativeRunnerAuthorityError("unavailable")
+
+    custom_extension_profiles._profiles.cache_clear()
+    with pytest.MonkeyPatch.context() as patch:
+        patch.setattr(authority, "native_runner_authority", unavailable)
+        assert known_cli_profiles() == ()
+        assert profile_for_executable("wrangler") is None
+        wrangler = {"cli_id": "local-cli.wrangler-1234abcd", "name": "wrangler", "surface": "cli", "commands": []}
+        assert annotate_cli_profiles([wrangler]) == [wrangler]
+    # A failed answer is never cached, so the next read sees the profiles.
+    assert _wrangler().profile_id == "wrangler"
 
 
 def test_merge_profile_commands_prefers_discovered_help_and_adds_profile_paths() -> None:
@@ -273,7 +298,7 @@ def test_recognize_profiled_cli_runner_skips_mcp_probe(tmp_path: Path, monkeypat
     home = tmp_path / "home"
     home.mkdir()
     monkeypatch.setattr(
-        "codex_plugin_scanner.guard.daemon.local_cli_api.Path.home",
+        "codex_plugin_scanner.guard.local_clis.local_cli_api.Path.home",
         staticmethod(lambda: home),
     )
 
@@ -281,7 +306,7 @@ def test_recognize_profiled_cli_runner_skips_mcp_probe(tmp_path: Path, monkeypat
         raise AssertionError("profiled CLIs must not be probed as MCP servers")
 
     monkeypatch.setattr(
-        "codex_plugin_scanner.guard.daemon.local_cli_api.probe_stdio_mcp_server",
+        "codex_plugin_scanner.guard.local_clis.local_cli_api.probe_stdio_mcp_server",
         _probe,
     )
     service = LocalCliApiService(store=GuardStore(home))
@@ -300,6 +325,7 @@ def test_recognize_profiled_cli_runner_skips_mcp_probe(tmp_path: Path, monkeypat
         ("npx wrangler", True),
         ("npx -y wrangler@4 deploy", True),
         ("bunx wrangler", True),
+        ("pnpx wrangler", True),
         ("npx --package wrangler some-mcp", False),
         ("npx @other/wrangler", False),
         ("npx wrangler@npm:other-mcp", False),
@@ -310,3 +336,44 @@ def test_recognize_profiled_cli_runner_skips_mcp_probe(tmp_path: Path, monkeypat
 )
 def test_profiled_cli_package_launch_needs_direct_unscoped_target(command: str, expected: bool) -> None:
     assert profiled_cli_package_launch(command.split()) is expected
+
+
+@pytest.mark.parametrize(
+    ("command", "expected"),
+    [
+        ("npx wrangler", True),
+        ("pnpx wrangler", True),
+        ("npx.cmd wrangler", True),
+        ("demo-mcp-server", False),
+        ("./server.js", False),
+    ],
+)
+def test_an_unreadable_runner_answer_only_covers_a_runner_paste(monkeypatch, command: str, expected: bool) -> None:
+    """A missing native answer spawns nothing a runner could have launched.
+
+    The native grammar reads a launched bin only through a package runner, so a
+    paste that names no runner has no answer to miss and keeps MCP discovery.
+    """
+
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.local_clis.local_cli_profiles_api.native_context_digest",
+        lambda *args, **kwargs: {"status": "unavailable"},
+    )
+    assert profiled_cli_package_launch(command.split()) is expected
+
+
+def test_an_unanswered_profile_lookup_spawns_nothing(monkeypatch) -> None:
+    """A runner target the runtime read, with no profile answer, is treated as profiled."""
+
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.local_clis.local_cli_profiles_api.native_context_digest",
+        lambda *args, **kwargs: {"status": "ok", "package_runner_target": "cowsay"},
+    )
+
+    def unavailable(*_args: object, **_kwargs: object) -> dict[str, object]:
+        raise custom_extension_profiles.CliProfileUnavailableError("cli_profiles")
+
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.local_clis.local_cli_profiles_api.profiles_for_executables", unavailable
+    )
+    assert profiled_cli_package_launch(["npx", "cowsay"]) is True

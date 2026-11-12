@@ -28,6 +28,15 @@ fn claude_pending_target<'a>(
     }
 }
 
+/// The hook fields a Claude lifecycle op reads, which the host must send.
+fn hook_payload(request: &HookAuthorityStateRequestV1) -> Result<&Object, &'static str> {
+    request
+        .payload
+        .as_ref()
+        .and_then(Value::as_object)
+        .ok_or(ERROR_INVALID)
+}
+
 impl Env<'_> {
     pub(super) fn dispatch(
         &self,
@@ -82,6 +91,19 @@ impl Env<'_> {
                 let (pending_key, _) = claude_pending_target(session_id, request)?;
                 self.claude_remove_pending(session_id, &pending_key);
                 Ok(json!({}))
+            }
+            "claude_question_settle" => self.claude_question_settle(
+                required(&request.session_id)?,
+                request.payload.as_ref(),
+                request.tilde_home.as_deref(),
+            ),
+            "claude_permission_request" => Ok(self
+                .claude_permission_request(request.session_id.as_deref(), hook_payload(request)?)),
+            "claude_permission_prompt" => {
+                self.claude_permission_prompt(request.session_id.as_deref(), hook_payload(request)?)
+            }
+            "claude_turn_stop" => {
+                self.claude_turn_stop(request.session_id.as_deref(), hook_payload(request)?)
             }
             "claude_discard_session" => Ok(json!({
                 "discarded": self.claude_discard_session(required(&request.session_id)?)

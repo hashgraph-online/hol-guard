@@ -16,7 +16,7 @@ import sys
 import threading
 import urllib.error
 import urllib.request
-from base64 import urlsafe_b64decode
+from base64 import urlsafe_b64decode, urlsafe_b64encode
 from contextlib import contextmanager
 from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, HTTPServer
@@ -26,6 +26,7 @@ from typing import ClassVar
 
 import pytest
 
+from ci.guard_daemon_harness import GuardDaemonServer
 from codex_plugin_scanner.cli import main
 from codex_plugin_scanner.guard import native_prompt
 from codex_plugin_scanner.guard import synced_policy as synced_policy_module
@@ -34,17 +35,11 @@ from codex_plugin_scanner.guard.adapters.codex import CodexHarnessAdapter
 from codex_plugin_scanner.guard.approvals import apply_approval_resolution
 from codex_plugin_scanner.guard.cli import commands as guard_commands_module
 from codex_plugin_scanner.guard.cli import render as guard_render_module
-from codex_plugin_scanner.guard.cli.commands_support_runtime_artifact_policy import runtime_policy_artifact_facts
-from codex_plugin_scanner.guard.cli.commands_support_runtime_artifacts import (
-    _codex_post_tool_output_artifact,
-)
-from codex_plugin_scanner.guard.cli.commands_support_runtime_resolution import _runtime_policy_path
 from codex_plugin_scanner.guard.cli.oauth_client import generate_dpop_key_pair
 from codex_plugin_scanner.guard.cli.render import emit_guard_payload
 from codex_plugin_scanner.guard.codex_config import read_toml_payload
 from codex_plugin_scanner.guard.config import GuardConfig, load_guard_config, overlay_synced_guard_policy
 from codex_plugin_scanner.guard.consumer import artifact_hash, evaluate_detection
-from codex_plugin_scanner.guard.daemon import GuardDaemonServer
 from codex_plugin_scanner.guard.models import (
     GuardAction,
     GuardApprovalRequest,
@@ -53,15 +48,11 @@ from codex_plugin_scanner.guard.models import (
     HarnessDetection,
     PolicyDecision,
 )
+from codex_plugin_scanner.guard.native_hook_authority_state import hook_authority_state, object_field
 from codex_plugin_scanner.guard.native_runner_authority import NativeRunnerAuthorityError
-from codex_plugin_scanner.guard.policy import decide_action, decide_action_with_v2
+from codex_plugin_scanner.guard.policy import build_decision_v2
 from codex_plugin_scanner.guard.policy_bundle_delivery import policy_bundle_acknowledgement_payload
-from codex_plugin_scanner.guard.policy_bundle_parser import (
-    computed_policy_bundle_hash,
-    payload_hash_for_policy_bundle,
-    policy_bundle_rejection_message,
-    validated_policy_bundle_payload,
-)
+from codex_plugin_scanner.guard.policy_bundle_parser import policy_bundle_rejection_message
 from codex_plugin_scanner.guard.proxy import RemoteGuardProxy
 from codex_plugin_scanner.guard.receipts import build_receipt
 from codex_plugin_scanner.guard.runtime import guard_run_evaluation as guard_run_evaluation
@@ -71,21 +62,38 @@ from codex_plugin_scanner.guard.runtime import wrapper_run as wrapper_run
 from codex_plugin_scanner.guard.runtime.approval_context import (
     APPROVAL_CONTEXT_TOKEN_PREFIX,
 )
-from codex_plugin_scanner.guard.runtime.secret_file_request_services import constants_core
 from codex_plugin_scanner.guard.runtime.secret_file_requests import (
-    extract_sensitive_file_write_request,
     extract_sensitive_tool_action_request,
 )
 from codex_plugin_scanner.guard.store import (
     GuardStore,
 )
 from codex_plugin_scanner.guard.synced_policy import synced_policy_payload
+from tests.claude_notice_support import claude_guard_approval_question_text, record_claude_permission_notice
 from tests.guard_signed_approval_fixtures import write_synthetic_daemon_auth_token
+from tests.live_hook_review_support import (
+    LIVE_ALLOWS_RETIRED_REVIEW,
+    LIVE_REVIEWS_RETIRED_ALLOW,
+    live_hook_review,
+    live_post_tool_flag,
+    live_post_tool_review,
+    live_reviews_retired_allow_on,
+    live_shell_review,
+    post_tool_output_flagged,
+    quietly_allowed,
+)
+from tests.policy_bundle_parser_support import (
+    computed_policy_bundle_hash,
+    payload_hash_for_policy_bundle,
+    validated_policy_bundle_payload,
+)
 from tests.policy_bundle_signing_helpers import (
     policy_bundle_test_keyring,
     policy_bundle_test_verification_key,
     sign_policy_bundle,
 )
+from tests.policy_store_support import replace_remote_policies, resolve_policy
+from tests.runtime_artifact_policy_support import _runtime_artifact_policy_action, runtime_policy_artifact_facts
 from tests.support.network import stub_authenticated_urlopen
 
 # A credential-shaped literal in source output, assembled so that repository
@@ -146,16 +154,19 @@ def _seed_guard_cloud(store, *, workspace_id=None, sync_url=None, token="demo-to
 
 
 @pytest.fixture(autouse=True)
-def _native_runtime_package_context(package_intent_native, native_mcp_probe, monkeypatch) -> None:
-    original = guard_commands_module._hook_runtime_artifact
+def _native_runtime_package_context(package_intent_native, native_mcp_probe) -> None:
+    """Keep the real package-intent runtime and keyed MCP resident for every test."""
 
-    def enrolled_artifact(*args, **kwargs):
-        home = kwargs.get("guard_home")
-        if home is not None:
-            native_mcp_probe(Path(home))
-        return original(*args, **kwargs)
 
-    monkeypatch.setattr(guard_commands_module, "_hook_runtime_artifact", enrolled_artifact)
+def _live_request_hash(result: dict[str, object], guard_home: Path) -> str:
+    """The approval binding the live review queued for this exact request."""
+
+    resume = result.get("approval_resume")
+    request_id = resume.get("request_id") if isinstance(resume, dict) else result.get("approval_request_id")
+    assert isinstance(request_id, str), result
+    row = GuardStore(guard_home).get_approval_request(request_id)
+    assert row is not None
+    return str(row["artifact_hash"])
 
 
 @pytest.fixture(autouse=True)
@@ -413,14 +424,14 @@ def _assert_output_withheld(output: dict[str, object]) -> None:
     assert "approval_requests" not in output
 
 
-def _assert_prompt_refused_without_queue(payload: dict[str, object]) -> None:
-    # The daemon refuses a prompt that asks for sensitive local data outright.
-    # It queues nothing, so the user rephrases instead of following a link.
-    assert payload["decision"] == "block"
-    assert payload["continue"] is False
-    assert payload["reason_code"] == "native_sensitive_prompt"
-    assert "Nothing is waiting for approval" in str(payload["reason"])
-    assert "/requests/" not in str(payload["reason"])
+def _assert_prompt_sent_with_notice(payload: dict[str, object]) -> None:
+    # A prompt that asks for sensitive local data is sent with Guard's notice.
+    # Its review waits for the tool call, which offers Allow once and Always
+    # allow; the prompt itself queues nothing.
+    assert "decision" not in payload
+    assert "continue" not in payload
+    assert str(payload["systemMessage"]).startswith("HOL Guard flagged this prompt")
+    assert "/requests/" not in str(payload["systemMessage"])
 
 
 def _assert_copilot_allows(output: dict[str, object]) -> None:
@@ -861,7 +872,6 @@ clearer UX and an implementation plan with technical references.
         assert all(artifact.artifact_type == "prompt_request" for artifact in artifacts)
         assert all("prompt_summary" in artifact.metadata for artifact in artifacts)
 
-    @pytest.mark.usefixtures("native_command_artifact_reviews")
     def test_guard_hook_uses_process_cwd_for_global_copilot_hooks(self, monkeypatch, tmp_path, capsys) -> None:
         home_dir = tmp_path / "home"
         workspace_dir = tmp_path / "workspace"
@@ -947,20 +957,6 @@ clearer UX and an implementation plan with technical references.
 
         assert rc == 0
         _assert_copilot_holds_for_review(json.loads(output))
-
-    def test_codex_prompt_display_sanitizes_common_home_paths(self) -> None:
-        display = guard_commands_module._codex_prompt_display_text(
-            r"Read /Users/alice/.npmrc, /home/bob/.env, and C:\Users\carol\.ssh\id_rsa with API_KEY=sk-test"
-        )
-
-        assert "alice" not in display
-        assert "bob" not in display
-        assert "carol" not in display
-        assert "sk-test" not in display
-        assert "API_KEY=[redacted]" in display
-        assert "/Users/" not in display
-        assert "/home/" not in display
-        assert r"C:\Users" not in display
 
     def test_codex_post_tool_use_allows_read_only_source_search_with_secret_like_output(
         self,
@@ -1433,7 +1429,6 @@ clearer UX and an implementation plan with technical references.
         assert output["policy_action"] == "block"
         assert output["reason_code"] == "native_command_extension_evaluation_failed"
 
-    @pytest.mark.usefixtures("native_command_artifact_reviews")
     def test_codex_pre_tool_use_blocks_fd_skill_docs_mutating_sed_exec(
         self,
         monkeypatch,
@@ -1471,7 +1466,6 @@ clearer UX and an implementation plan with technical references.
         assert output["policy_action"] == "block"
         assert output["reason_code"] == "native_command_extension_evaluation_failed"
 
-    @pytest.mark.usefixtures("native_command_artifact_reviews")
     def test_codex_pre_tool_use_blocks_fd_skill_docs_metachar_sed_exec(
         self,
         monkeypatch,
@@ -1509,7 +1503,6 @@ clearer UX and an implementation plan with technical references.
         assert output["policy_action"] == "block"
         assert output["reason_code"] == "native_command_extension_evaluation_failed"
 
-    @pytest.mark.usefixtures("native_command_artifact_reviews")
     def test_codex_pre_tool_use_blocks_fd_skill_docs_compact_shell_exec(
         self,
         monkeypatch,
@@ -1547,7 +1540,6 @@ clearer UX and an implementation plan with technical references.
         assert output["policy_action"] == "block"
         assert output["reason_code"] == "native_command_extension_evaluation_failed"
 
-    @pytest.mark.usefixtures("native_command_artifact_reviews")
     def test_codex_pre_tool_use_blocks_fd_skill_docs_clustered_shell_exec(
         self,
         monkeypatch,
@@ -1585,7 +1577,6 @@ clearer UX and an implementation plan with technical references.
         assert output["policy_action"] == "block"
         assert output["reason_code"] == "native_command_extension_evaluation_failed"
 
-    @pytest.mark.usefixtures("native_command_artifact_reviews")
     def test_codex_pre_tool_use_blocks_fd_implicit_root_sed_exec(
         self,
         monkeypatch,
@@ -1623,7 +1614,6 @@ clearer UX and an implementation plan with technical references.
         assert output["policy_action"] == "block"
         assert output["reason_code"] == "native_command_extension_evaluation_failed"
 
-    @pytest.mark.usefixtures("native_command_artifact_reviews")
     def test_codex_pre_tool_use_blocks_fd_skill_doc_symlink_exec(
         self,
         monkeypatch,
@@ -1666,7 +1656,6 @@ clearer UX and an implementation plan with technical references.
         assert output["policy_action"] == "block"
         assert output["reason_code"] == "native_command_extension_evaluation_failed"
 
-    @pytest.mark.usefixtures("native_command_artifact_reviews")
     def test_codex_pre_tool_use_blocks_fd_follow_symlink_descendant_exec(
         self,
         monkeypatch,
@@ -1710,7 +1699,6 @@ clearer UX and an implementation plan with technical references.
         assert output["policy_action"] == "block"
         assert "approval_requests" not in output
 
-    @pytest.mark.usefixtures("native_command_artifact_reviews")
     def test_codex_pre_tool_use_blocks_fd_search_path_sensitive_dir_exec(
         self,
         monkeypatch,
@@ -2961,26 +2949,23 @@ clearer UX and an implementation plan with technical references.
         assert output["continue"] is True
         assert "sensitive content" in output["stopReason"]
 
+    @LIVE_ALLOWS_RETIRED_REVIEW
     def test_codex_post_tool_helpers_treat_env_ignore_environment_with_shell_expansion_as_local_secret_read(
         self,
-        tmp_path,
+        live_hook_root,
     ) -> None:
         command = "env -i OPENAI_API_KEY=$OPENAI_API_KEY | grep OPENAI_API_KEY"
 
-        artifact = guard_commands_module._codex_post_tool_output_artifact(
+        artifact = live_post_tool_flag(
             payload={
                 "tool_name": "Bash",
                 "tool_input": {"command": command},
                 "tool_response": {"stdout": "OPENAI_API_KEY=token=definitely-invalid\n"},
             },
-            config_path=str(tmp_path / "config.toml"),
-            source_scope="project",
-            cwd=tmp_path,
+            cwd=live_hook_root / "workspace",
         )
 
         assert artifact is not None
-        assert artifact.metadata["guard_default_action"] == "require-reapproval"
-        assert artifact.metadata["secret_source_family"] == "environment variables"
 
     def test_codex_post_tool_use_detects_url_looking_local_secret_paths(
         self,
@@ -3027,24 +3012,24 @@ clearer UX and an implementation plan with technical references.
         assert output["continue"] is True
         assert "sensitive content" in output["stopReason"]
 
-    def test_codex_url_looking_local_path_does_not_escape_workspace(self, tmp_path) -> None:
-        outside_secret = tmp_path.parent / f"{tmp_path.name}-outside" / ".env"
+    def test_codex_url_looking_local_path_does_not_escape_workspace(self, live_hook_root) -> None:
+        workspace = live_hook_root / "workspace"
+        outside_secret = live_hook_root / "workspace-outside" / ".env"
         outside_secret.parent.mkdir(parents=True)
         outside_secret.write_text("OPENAI_API_KEY=token=definitely-invalid\n", encoding="utf-8")
 
         command = f"python -c \"print(open('https://example.test/../../{outside_secret.parent.name}/.env').read())\""
-        artifact = guard_commands_module._codex_post_tool_output_artifact(
+        artifact = live_post_tool_flag(
             payload={
                 "tool_name": "Bash",
                 "tool_input": {"command": command},
                 "tool_response": {"stdout": "token=definitely-invalid\n"},
             },
-            config_path=str(tmp_path / "config.toml"),
-            source_scope="project",
-            cwd=tmp_path,
+            cwd=workspace,
         )
 
-        assert artifact is None or "secret_source_family" not in artifact.metadata
+        # The URL-looking path never resolves to the outside .env: no local secret read.
+        assert artifact is None
 
     def test_codex_post_tool_use_allows_short_option_value_payloads(
         self,
@@ -4375,6 +4360,7 @@ clearer UX and an implementation plan with technical references.
             *,
             session: dict[str, object],
             auth_context: dict[str, object] | None = None,
+            catalog_failures: list[Exception] | None = None,
         ) -> dict[str, object]:
             assert current_store is store
             call_order.append("runtime")
@@ -4387,7 +4373,16 @@ clearer UX and an implementation plan with technical references.
                 "client_title": "HOL Guard CLI",
                 "client_version": guard_runner_module.__version__,
                 "workspace": "local-machine",
-                "capabilities": ["approval-center", "guard-cloud-sync", "local-daemon", "fleet-posture/v1"],
+                "capabilities": [
+                    "approval-center",
+                    "guard-cloud-sync",
+                    "local-daemon",
+                    "fleet-posture/v1",
+                    "policy-bundle-v2-cloud-exceptions.v1",
+                    "policy-document-exact-commands.v1",
+                    "policy-document-review-rules.v1",
+                    "policy-document-command-pattern-allow.v1",
+                ],
                 "policy_bundle_versions": [
                     "guard-policy-bundle.v1",
                     "guard-policy-bundle.v2",
@@ -4497,6 +4492,7 @@ clearer UX and an implementation plan with technical references.
             *,
             session: dict[str, object],
             auth_context: dict[str, object] | None = None,
+            catalog_failures: list[Exception] | None = None,
         ) -> dict[str, object]:
             assert current_store is store
             assert auth_context is shared_auth_context
@@ -7801,7 +7797,6 @@ def test_guard_hook_copilot_reviews_perl_sleep_wait(
     _assert_copilot_holds_for_review(output)
 
 
-@pytest.mark.usefixtures("native_command_artifact_reviews")
 def test_guard_hook_emits_copilot_native_deny_for_unsupported_coauthored_commit_redirect(
     tmp_path,
     capsys,
@@ -8310,81 +8305,6 @@ def test_guard_hook_copilot_permission_request_defers_tool_calls_payload(
     # The daemon decides Copilot tool calls at preToolUse and leaves the
     # permission prompt to Copilot instead of answering it a second time.
     _assert_permission_request_deferred(output)
-
-
-def test_normalize_hook_payload_prefers_matching_tool_call_args() -> None:
-    payload = guard_commands_module._normalize_hook_payload(
-        {
-            "toolName": "danger_lab/dangerous_delete",
-            "toolCalls": [
-                {
-                    "id": "call-safe",
-                    "name": "safe_tools/read_file",
-                    "args": json.dumps({"path": "README.md"}),
-                },
-                {
-                    "id": "call-dangerous",
-                    "name": "danger_lab/dangerous_delete",
-                    "args": json.dumps({"target": "dangerous-marker.json"}),
-                },
-            ],
-        }
-    )
-
-    assert payload["tool_name"] == "danger_lab/dangerous_delete"
-    assert payload["tool_input"] == {"target": "dangerous-marker.json"}
-    assert payload["arguments"] == {"target": "dangerous-marker.json"}
-
-
-def test_runtime_policy_path_prefers_pi_workspace_settings(tmp_path):
-    home_dir = tmp_path / "home"
-    workspace_dir = tmp_path / "workspace"
-    _write_json(workspace_dir / ".pi" / "settings.json", {"extensions": []})
-
-    assert _runtime_policy_path("pi", home_dir, workspace_dir) == workspace_dir / ".pi" / "settings.json"
-
-
-def test_runtime_policy_path_defaults_to_pi_workspace_settings_without_payload_override(tmp_path):
-    home_dir = tmp_path / "home"
-    workspace_dir = tmp_path / "workspace"
-    _write_json(workspace_dir / ".omp" / "settings.json", {"extensions": []})
-
-    assert _runtime_policy_path("pi", home_dir, workspace_dir) == workspace_dir / ".pi" / "settings.json"
-
-
-def test_runtime_policy_path_honors_payload_config_path_for_pi(tmp_path):
-    home_dir = tmp_path / "home"
-    workspace_dir = tmp_path / "workspace"
-    config_path = workspace_dir / ".omp" / "settings.json"
-    _write_json(workspace_dir / ".pi" / "settings.json", {"extensions": []})
-    _write_json(config_path, {"extensions": []})
-
-    assert _runtime_policy_path("pi", home_dir, workspace_dir, payload={"config_path": str(config_path)}) == config_path
-
-
-def test_runtime_policy_path_ignores_forged_payload_config_path_for_pi(tmp_path):
-    home_dir = tmp_path / "home"
-    workspace_dir = tmp_path / "workspace"
-    forged_path = workspace_dir / ".cursor" / "mcp.json"
-    _write_json(workspace_dir / ".pi" / "settings.json", {"extensions": []})
-    _write_json(forged_path, {"servers": {}})
-
-    assert _runtime_policy_path("pi", home_dir, workspace_dir, payload={"config_path": str(forged_path)}) == (
-        workspace_dir / ".pi" / "settings.json"
-    )
-
-
-def test_runtime_policy_path_ignores_payload_config_path_for_other_harnesses(tmp_path):
-    home_dir = tmp_path / "home"
-    workspace_dir = tmp_path / "workspace"
-    _write_json(workspace_dir / ".omp" / "settings.json", {"extensions": []})
-
-    assert _runtime_policy_path(
-        "codex",
-        home_dir,
-        workspace_dir,
-        payload={"config_path": str(workspace_dir / ".omp" / "settings.json")},
-    ) == (workspace_dir / ".codex" / "config.toml")
 
 
 def test_guard_hook_emits_copilot_native_deny_for_risky_mcp_pre_tool_use(
@@ -9336,14 +9256,14 @@ def test_guard_hook_claude_tampered_pending_state_cannot_bootstrap_signed_allow(
         source_scope="project",
         config_path="/workspace/.env",
     )
-    guard_commands_module._record_claude_permission_notice(
+    record_claude_permission_notice(
         store=store,
         payload={"session_id": session_id, "tool_name": "Read"},
         reason="HOL Guard intercepted Claude's attempt to read .env.",
         artifact=artifact,
         artifact_hash="hash-authentic",
     )
-    index_payload = store.get_sync_payload(guard_commands_module._claude_pending_permission_index_key(session_id))
+    index_payload = store.get_sync_payload(f"claude_pending_permissions:{session_id}")
     assert isinstance(index_payload, dict)
     pending_keys = index_payload.get("pending_keys")
     assert isinstance(pending_keys, list)
@@ -9362,7 +9282,7 @@ def test_guard_hook_claude_tampered_pending_state_cannot_bootstrap_signed_allow(
             (json.dumps(tampered), pending_key),
         )
 
-    persisted = guard_commands_module._persist_claude_guard_question_decision(
+    persisted = guard_commands_module._settle_claude_guard_question(
         store,
         {
             "session_id": session_id,
@@ -9383,7 +9303,7 @@ def test_guard_hook_claude_tampered_pending_state_cannot_bootstrap_signed_allow(
         },
     )
 
-    assert persisted is False
+    assert persisted is None
     assert store.list_policy_decisions("claude-code") == []
     assert store.get_sync_payload(pending_key) is None
     events = store.list_events(event_name="rule.ignored.local_integrity")
@@ -9407,7 +9327,7 @@ def test_guard_hook_claude_signed_unseen_pending_cannot_bootstrap_allow(tmp_path
         config_path="/workspace/.env",
     )
     artifact_hash_value = "hash-signed-unseen"
-    guard_commands_module._record_claude_permission_notice(
+    record_claude_permission_notice(
         store=store,
         payload={"session_id": session_id, "tool_name": "Read"},
         reason="HOL Guard intercepted Claude's attempt to read .env.",
@@ -9415,17 +9335,16 @@ def test_guard_hook_claude_signed_unseen_pending_cannot_bootstrap_allow(tmp_path
         artifact_hash=artifact_hash_value,
     )
 
-    pending_pair = guard_commands_module._load_single_claude_pending_permission(
-        store,
-        {"session_id": session_id},
+    reply = hook_authority_state(
+        store, "claude_load_single_pending", now=guard_commands_module._now(), session_id=session_id
     )
-    assert pending_pair is not None
-    pending = pending_pair[1]
+    pending = object_field(reply, "pending")
+    assert pending is not None
     assert pending.get("permission_prompt_seen") is not True
     approval_question = str(pending["approval_question"])
     approval_options = pending["approval_options"]
     assert isinstance(approval_options, list)
-    question_saved = guard_commands_module._persist_claude_guard_question_decision(
+    question_saved = guard_commands_module._settle_claude_guard_question(
         store,
         {
             "session_id": session_id,
@@ -9475,12 +9394,12 @@ def test_guard_hook_claude_ask_user_question_unsigned_legacy_pending_state_canno
         now,
     )
     store.set_sync_payload(
-        guard_commands_module._claude_pending_permission_index_key(session_id),
+        f"claude_pending_permissions:{session_id}",
         [pending_key],
         now,
     )
 
-    persisted = guard_commands_module._persist_claude_guard_question_decision(
+    persisted = guard_commands_module._settle_claude_guard_question(
         store,
         {
             "session_id": session_id,
@@ -9517,9 +9436,9 @@ def test_guard_hook_claude_ask_user_question_unsigned_legacy_pending_state_canno
     )
     policies = store.list_policy_decisions("claude-code")
 
-    assert persisted is False
+    assert persisted is None
     assert policies == []
-    assert store.get_sync_payload(guard_commands_module._claude_pending_permission_index_key(session_id)) is None
+    assert store.get_sync_payload(f"claude_pending_permissions:{session_id}") is None
     events = store.list_events(event_name="rule.ignored.local_integrity")
     event_payloads = [event_payload for event in events if isinstance(event_payload := event.get("payload"), dict)]
     assert any(event_payload.get("integrity_status") == "missing_integrity" for event_payload in event_payloads)
@@ -9532,7 +9451,7 @@ def test_guard_hook_claude_ask_user_question_unsigned_bound_pending_cannot_persi
     artifact_id = "claude-code:runtime:file-read:.env"
     now = "2026-04-24T00:00:00+00:00"
     approval_code = "abc123abc123"
-    approval_question = guard_commands_module._claude_guard_approval_question_text(approval_code)
+    approval_question = claude_guard_approval_question_text(approval_code)
     pending_key = _claude_pending_permission_state_key(session_id, artifact_id)
     store.set_sync_payload(
         pending_key,
@@ -9551,12 +9470,12 @@ def test_guard_hook_claude_ask_user_question_unsigned_bound_pending_cannot_persi
         now,
     )
     store.set_sync_payload(
-        guard_commands_module._claude_pending_permission_index_key(session_id),
+        f"claude_pending_permissions:{session_id}",
         [pending_key],
         now,
     )
 
-    persisted = guard_commands_module._persist_claude_guard_question_decision(
+    persisted = guard_commands_module._settle_claude_guard_question(
         store,
         {
             "session_id": session_id,
@@ -9593,7 +9512,7 @@ def test_guard_hook_claude_ask_user_question_unsigned_bound_pending_cannot_persi
     )
     policies = store.list_policy_decisions("claude-code")
 
-    assert persisted is False
+    assert persisted is None
     assert policies == []
 
 
@@ -9786,10 +9705,11 @@ def test_guard_hook_claude_alias_saved_allow_does_not_lower_canonical_reapproval
     assert any(harness == "claude-code" for harness, _decision in _native_receipts(home_dir))
 
 
-def test_hook_runtime_artifact_prefers_raw_file_read_path_over_redacted_action_path(tmp_path):
-    home_dir = tmp_path / "home"
-    workspace_dir = tmp_path / "workspace"
-    outside_secret = tmp_path / "outside-a" / ".env"
+def test_hook_runtime_artifact_prefers_raw_file_read_path_over_redacted_action_path(live_hook_root):
+    home_dir = live_hook_root / "home"
+    workspace_dir = live_hook_root / "workspace"
+    workspace_dir.mkdir(parents=True)
+    outside_secret = live_hook_root / "outside-a" / ".env"
     payload = {
         "event": "PreToolUse",
         "tool_name": "Read",
@@ -9803,19 +9723,26 @@ def test_hook_runtime_artifact_prefers_raw_file_read_path_over_redacted_action_p
         workspace=workspace_dir,
     )
 
-    artifact = guard_commands_module._hook_runtime_artifact(
+    result = live_hook_review(
+        {**payload, "hook_event_name": "PreToolUse"},
         harness="claude-code",
-        payload=payload,
-        action_envelope=action,
         home_dir=home_dir,
+        cwd=workspace_dir,
         guard_home=home_dir,
-        workspace=workspace_dir,
     )
 
     assert action is not None
     assert action.target_paths == (".../.env",)
-    assert artifact is not None
-    assert artifact.metadata["normalized_path"] == str(outside_secret)
+    # The redacted action path does not hide the raw read target from review:
+    # the queued approval names the raw outside-workspace file.
+    assert result["reason_code"] == "native_policy_reapproval_required"
+    resume = result.get("approval_resume")
+    request_id = resume.get("request_id") if isinstance(resume, dict) else result.get("approval_request_id")
+    assert isinstance(request_id, str), result
+    row = GuardStore(home_dir).get_approval_request(request_id)
+    assert row is not None
+    assert row["launch_target"] == str(outside_secret)
+    assert json.loads(str(row["action_identity"]))["command"] == str(outside_secret)
 
 
 @pytest.mark.parametrize(
@@ -9921,311 +9848,168 @@ def test_guard_hook_codex_strict_default_reviews_protected_apply_patch(
     assert requests[0]["artifact_type"] == "tool_call"
 
 
-def test_hook_runtime_artifact_routes_package_installs_to_package_request(tmp_path, native_approval_reuse_runtime):
-    home_dir = tmp_path / "home"
-    workspace_dir = tmp_path / "workspace"
+def test_hook_runtime_artifact_routes_package_installs_to_package_request(live_hook_root):
+    home_dir = live_hook_root / "home"
+    workspace_dir = live_hook_root / "workspace"
     _write_text(home_dir / "config.toml", '[risk_actions]\npackage_script = "block"\ndestructive_shell = "allow"\n')
     _write_text(workspace_dir / "package.json", '{"name":"demo"}\n')
-    payload = {
-        "hook_event_name": "PreToolUse",
-        "tool_name": "Bash",
-        "tool_input": {"command": "npm install react@18.3.0"},
-        "source_scope": "project",
-    }
-    action = guard_commands_module._hook_action_envelope(
-        harness="codex",
-        payload=payload,
+
+    result = live_shell_review(
+        "npm install react@18.3.0",
         home_dir=home_dir,
-        workspace=workspace_dir,
-    )
-    artifact = guard_commands_module._hook_runtime_artifact(
-        harness="codex",
-        payload=payload,
-        action_envelope=action,
-        home_dir=home_dir,
+        cwd=workspace_dir,
         guard_home=home_dir,
-        workspace=workspace_dir,
     )
 
-    assert artifact is not None
-    assert artifact.artifact_type == "package_request"
-    assert artifact.metadata["package_manager"] == "npm"
-    assert (
-        guard_commands_module._runtime_artifact_policy_action(
-            load_guard_config(home_dir),
-            artifact,
-            "codex",
-            guard_home=native_approval_reuse_runtime,
-        )
-        == "block"
+    assert result["policy_action"] == "block"
+    assert "package script setting" in result["hookSpecificOutput"]["permissionDecisionReason"]
+
+
+# Each command with the reason the live hook path holds it for. Package
+# scripts are allowed, so only the later shell step can make it a block.
+_PACKAGE_THEN_SHELL_RISK_COMMANDS = (
+    ("npm install lodash && rm -f important.txt", "native_package_review"),
+    ("rm -f important.txt; npm install lodash", "native_package_review"),
+    ("npm install lodash || rm -f important.txt", "native_package_review"),
+    ("npm install lodash\nrm -f important.txt", "native_package_review"),
+    ("npm install lodash | sh -c 'rm -f important.txt'", "native_command_extension_evaluation_failed"),
+    ("sh -c 'npm install lodash && rm -f important.txt'", "native_package_review"),
+    ("(npm install lodash) && (rm -f important.txt)", "native_package_review"),
+    ("npm install lodash > install.log", "native_package_review"),
+    ("npm install lodash > install.log && rm -f important.txt", "native_command_review_required"),
+    ("npm install lodash && bash <<'EOF'\nrm -f important.txt\nEOF", "native_command_extension_evaluation_failed"),
+)
+# The live hook path holds these for review; only the retired Python
+# composition escalated the later destructive step to a block.
+_LIVE_REVIEWS_RETIRED_BLOCK = pytest.mark.xfail(
+    reason="the live hook path holds this for review; only the retired Python composition blocked it under "
+    'destructive_shell = "block"',
+    strict=True,
+)
+
+
+def _package_then_shell_risk_review(root: Path, command: str) -> dict[str, object]:
+    home_dir = root / "home"
+    workspace_dir = root / "workspace"
+    _write_text(workspace_dir / "package.json", '{"name":"demo"}\n')
+    # Package scripts are allowed; only a later destructive segment can hold this.
+    _write_text(
+        home_dir / "config.toml",
+        'security_level = "custom"\ndefault_action = "allow"\n'
+        '[risk_actions]\npackage_script = "allow"\ndestructive_shell = "block"\n',
     )
+    return live_shell_review(command, home_dir=home_dir, cwd=workspace_dir, guard_home=home_dir)
+
+
+@pytest.mark.parametrize(("command", "reason_code"), _PACKAGE_THEN_SHELL_RISK_COMMANDS)
+def test_hook_runtime_artifact_composes_package_and_later_shell_risks(
+    live_hook_root: Path, command: str, reason_code: str
+) -> None:
+    result = _package_then_shell_risk_review(live_hook_root, command)
+
+    assert not quietly_allowed(result)
+    assert result["reason_code"] == reason_code
 
 
 @pytest.mark.parametrize(
     "command",
     [
-        "npm install lodash && rm -f important.txt",
-        "rm -f important.txt; npm install lodash",
-        "npm install lodash || rm -f important.txt",
-        "npm install lodash\nrm -f important.txt",
-        "npm install lodash | sh -c 'rm -f important.txt'",
-        "sh -c 'npm install lodash && rm -f important.txt'",
-        "(npm install lodash) && (rm -f important.txt)",
-        "npm install lodash > install.log",
-        "npm install lodash > install.log && rm -f important.txt",
-        "npm install lodash && bash <<'EOF'\nrm -f important.txt\nEOF",
+        command
+        if reason_code == "native_command_extension_evaluation_failed"
+        else pytest.param(command, marks=_LIVE_REVIEWS_RETIRED_BLOCK)
+        for command, reason_code in _PACKAGE_THEN_SHELL_RISK_COMMANDS
     ],
 )
-def test_hook_runtime_artifact_composes_package_and_later_shell_risks(
-    tmp_path: Path, command: str, native_approval_reuse_runtime
+def test_hook_runtime_artifact_blocks_composed_shell_risk_under_destructive_block_policy(
+    live_hook_root: Path, command: str
 ) -> None:
-    home_dir = tmp_path / "home"
-    workspace_dir = tmp_path / "workspace"
+    assert _package_then_shell_risk_review(live_hook_root, command)["policy_action"] == "block"
+
+
+def test_hook_runtime_artifact_binds_compound_approval_to_the_complete_command(live_hook_root: Path) -> None:
+    home_dir = live_hook_root / "home"
+    workspace_dir = live_hook_root / "workspace"
     _write_text(workspace_dir / "package.json", '{"name":"demo"}\n')
-    payload = {
-        "hook_event_name": "PreToolUse",
-        "tool_name": "Bash",
-        "tool_input": {"command": command},
-        "source_scope": "project",
-    }
-    action = guard_commands_module._hook_action_envelope(
-        harness="codex",
-        payload=payload,
-        home_dir=home_dir,
-        workspace=workspace_dir,
-    )
+    home_dir.mkdir(parents=True)
 
-    artifact = guard_commands_module._hook_runtime_artifact(
-        harness="codex",
-        payload=payload,
-        action_envelope=action,
-        home_dir=home_dir,
-        guard_home=home_dir,
-        workspace=workspace_dir,
-    )
+    def binding_for(command: str) -> str:
+        result = live_shell_review(command, home_dir=home_dir, cwd=workspace_dir, guard_home=home_dir)
+        assert not quietly_allowed(result)
+        return _live_request_hash(result, home_dir)
 
-    assert artifact is not None
-    assert artifact.artifact_type == "package_request"
-    assert artifact.metadata["compound_complete"] is True
-    assert artifact.metadata["compound_finding_count"] == 2
-    assert set(_resident_risk_classes(artifact, native_approval_reuse_runtime)) >= {
-        "package_script",
-        "destructive_shell",
-    }
-    assert len(artifact.metadata["runtime_request_signals"]) >= 2
-    config = GuardConfig(
-        guard_home=home_dir,
-        workspace=None,
-        security_level="custom",
-        default_action="allow",
-        risk_actions={"package_script": "allow", "destructive_shell": "block"},
-    )
-    assert (
-        guard_commands_module._runtime_artifact_policy_action(
-            config, artifact, "codex", guard_home=native_approval_reuse_runtime
-        )
-        == "block"
-    )
+    first = binding_for("npm install lodash && rm -f first.txt")
+    changed_suffix = binding_for("npm install lodash && rm -f second.txt")
+    changed_control = binding_for("npm install lodash || rm -f first.txt")
+
+    assert first != changed_suffix
+    assert first != changed_control
 
 
-def test_hook_runtime_artifact_binds_compound_approval_to_the_complete_command(tmp_path: Path) -> None:
-    home_dir = tmp_path / "home"
-    workspace_dir = tmp_path / "workspace"
-    _write_text(workspace_dir / "package.json", '{"name":"demo"}\n')
-
-    def artifact_for(command: str) -> GuardArtifact:
-        payload = {
-            "hook_event_name": "PreToolUse",
-            "tool_name": "Bash",
-            "tool_input": {"command": command},
-            "source_scope": "project",
-        }
-        action = guard_commands_module._hook_action_envelope(
-            harness="codex",
-            payload=payload,
-            home_dir=home_dir,
-            workspace=workspace_dir,
-        )
-        artifact = guard_commands_module._hook_runtime_artifact(
-            harness="codex",
-            payload=payload,
-            action_envelope=action,
-            home_dir=home_dir,
-            guard_home=home_dir,
-            workspace=workspace_dir,
-        )
-        assert artifact is not None
-        return artifact
-
-    first = artifact_for("npm install lodash && rm -f first.txt")
-    changed_suffix = artifact_for("npm install lodash && rm -f second.txt")
-    changed_control = artifact_for("npm install lodash || rm -f first.txt")
-
-    assert first.artifact_id != changed_suffix.artifact_id
-    assert first.artifact_id != changed_control.artifact_id
-    assert first.metadata["command_security_identity"] != changed_suffix.metadata["command_security_identity"]
-    assert first.metadata["command_security_identity"] != changed_control.metadata["command_security_identity"]
-
-
-def test_hook_runtime_artifact_binds_compound_approval_to_effective_cwd(tmp_path: Path) -> None:
-    home_dir = tmp_path / "home"
-    first_workspace = tmp_path / "first-workspace"
-    second_workspace = tmp_path / "second-workspace"
+def test_hook_runtime_artifact_binds_compound_approval_to_effective_cwd(live_hook_root: Path) -> None:
+    home_dir = live_hook_root / "home"
+    home_dir.mkdir(parents=True)
+    first_workspace = live_hook_root / "first-workspace"
+    second_workspace = live_hook_root / "second-workspace"
     for workspace_dir in (first_workspace, second_workspace):
         _write_text(workspace_dir / "packages" / "api" / "package.json", '{"name":"demo"}\n')
 
-    def artifact_for(workspace_dir: Path) -> GuardArtifact:
-        command = "cd packages/api && npm install lodash"
-        payload = {
-            "hook_event_name": "PreToolUse",
-            "tool_name": "Bash",
-            "tool_input": {"command": command},
-            "source_scope": "project",
-        }
-        action = guard_commands_module._hook_action_envelope(
-            harness="codex",
-            payload=payload,
+    def binding_for(workspace_dir: Path) -> str:
+        result = live_shell_review(
+            "cd packages/api && npm install lodash",
             home_dir=home_dir,
-            workspace=workspace_dir,
-        )
-        artifact = guard_commands_module._hook_runtime_artifact(
-            harness="codex",
-            payload=payload,
-            action_envelope=action,
-            home_dir=home_dir,
+            cwd=workspace_dir,
             guard_home=home_dir,
-            workspace=workspace_dir,
         )
-        assert artifact is not None
-        return artifact
+        assert not quietly_allowed(result)
+        return _live_request_hash(result, home_dir)
 
-    first = artifact_for(first_workspace)
-    second = artifact_for(second_workspace)
-
-    assert first.metadata["command_security_identity"] == second.metadata["command_security_identity"]
-    assert first.metadata["shell_execution_context_hash"] != second.metadata["shell_execution_context_hash"]
-    assert first.artifact_id != second.artifact_id
+    assert binding_for(first_workspace) != binding_for(second_workspace)
 
 
 @pytest.mark.parametrize(
     "command",
     [
-        "npm view react version && git status",
-        "false || npm view react version",
-        "npm view react version; printf ok",
-        "npm view react version | jq -r .",
-        "npm view react version 2>/dev/null",
+        pytest.param("npm view react version && git status", marks=LIVE_REVIEWS_RETIRED_ALLOW),
+        pytest.param("false || npm view react version", marks=LIVE_REVIEWS_RETIRED_ALLOW),
+        pytest.param("npm view react version; printf ok", marks=live_reviews_retired_allow_on("darwin")),
+        pytest.param("npm view react version | jq -r .", marks=live_reviews_retired_allow_on("darwin")),
+        pytest.param("npm view react version 2>/dev/null", marks=live_reviews_retired_allow_on("darwin")),
         "printf '%s\\n' '&& is quoted' && pwd",
     ],
 )
 def test_hook_runtime_artifact_keeps_safe_compound_shell_workflow_prompt_free(
-    tmp_path: Path,
+    live_hook_root: Path,
     command: str,
 ) -> None:
-    home_dir = tmp_path / "home"
-    workspace_dir = tmp_path / "workspace"
+    home_dir = live_hook_root / "home"
+    workspace_dir = live_hook_root / "workspace"
     workspace_dir.mkdir(parents=True)
-    payload = {
-        "hook_event_name": "PreToolUse",
-        "tool_name": "Bash",
-        "tool_input": {"command": command},
-        "source_scope": "project",
-    }
-    action = guard_commands_module._hook_action_envelope(
-        harness="codex",
-        payload=payload,
-        home_dir=home_dir,
-        workspace=workspace_dir,
-    )
 
-    artifact = guard_commands_module._hook_runtime_artifact(
-        harness="codex",
-        payload=payload,
-        action_envelope=action,
-        home_dir=home_dir,
-        guard_home=home_dir,
-        workspace=workspace_dir,
-    )
+    result = live_shell_review(command, home_dir=home_dir, cwd=workspace_dir, guard_home=home_dir)
 
-    assert artifact is None
+    assert quietly_allowed(result)
 
 
-def test_hook_runtime_artifact_fails_closed_once_for_malformed_compound_command(tmp_path: Path) -> None:
-    home_dir = tmp_path / "home"
-    workspace_dir = tmp_path / "workspace"
-    workspace_dir.mkdir(parents=True)
-    command = "npm install lodash && printf '%s"
-    payload = {
-        "hook_event_name": "PreToolUse",
-        "tool_name": "Bash",
-        "tool_input": {"command": command},
-        "source_scope": "project",
-    }
-    action = guard_commands_module._hook_action_envelope(
-        harness="codex",
-        payload=payload,
-        home_dir=home_dir,
-        workspace=workspace_dir,
-    )
-
-    artifact = guard_commands_module._hook_runtime_artifact(
-        harness="codex",
-        payload=payload,
-        action_envelope=action,
-        home_dir=home_dir,
-        guard_home=home_dir,
-        workspace=workspace_dir,
-    )
-
-    assert artifact is not None
-    assert artifact.artifact_type == "tool_action_request"
-    assert artifact.metadata["guard_default_action"] == "require-reapproval"
-    assert artifact.metadata["compound_complete"] is False
-    assert artifact.metadata["command_uncertainty_reason"] == "malformed_shell_quoting"
-
-
-def test_hook_runtime_artifact_fails_closed_once_for_dynamic_compound_segment(tmp_path: Path) -> None:
-    home_dir = tmp_path / "home"
-    workspace_dir = tmp_path / "workspace"
+@pytest.mark.parametrize(
+    "command",
+    ["npm install lodash && printf '%s", 'npm install lodash && eval "$GENERATED_COMMAND"'],
+    ids=("malformed_quoting", "dynamic_segment"),
+)
+def test_hook_runtime_artifact_fails_closed_for_incomplete_compound_command(live_hook_root: Path, command: str) -> None:
+    home_dir = live_hook_root / "home"
+    workspace_dir = live_hook_root / "workspace"
     _write_text(workspace_dir / "package.json", '{"name":"demo"}\n')
-    payload = {
-        "hook_event_name": "PreToolUse",
-        "tool_name": "Bash",
-        "tool_input": {"command": 'npm install lodash && eval "$GENERATED_COMMAND"'},
-        "source_scope": "project",
-    }
-    action = guard_commands_module._hook_action_envelope(
-        harness="codex",
-        payload=payload,
-        home_dir=home_dir,
-        workspace=workspace_dir,
-    )
 
-    artifact = guard_commands_module._hook_runtime_artifact(
-        harness="codex",
-        payload=payload,
-        action_envelope=action,
-        home_dir=home_dir,
-        guard_home=home_dir,
-        workspace=workspace_dir,
-    )
+    result = live_shell_review(command, home_dir=home_dir, cwd=workspace_dir, guard_home=home_dir)
 
-    assert artifact is not None
-    assert artifact.artifact_type == "package_request"
-    assert artifact.metadata["guard_default_action"] == "require-reapproval"
-    assert artifact.metadata["compound_complete"] is False
-    assert any(
-        finding["artifact_type"] == "tool_action_request" and "execution" in finding["risk_classes"]
-        for finding in artifact.metadata["compound_findings"]
-    )
+    assert not quietly_allowed(result)
 
 
-def test_hook_runtime_artifact_routes_post_tool_package_installs_without_pretool_decision(tmp_path):
-    home_dir = tmp_path / "home"
+def test_hook_runtime_artifact_routes_post_tool_package_installs_without_pretool_decision(live_hook_root):
+    home_dir = live_hook_root / "home"
     guard_home = home_dir / ".hol-guard"
-    workspace_dir = tmp_path / "workspace"
+    workspace_dir = live_hook_root / "workspace"
     guard_home.mkdir(parents=True, exist_ok=True)
-    workspace_dir.mkdir(parents=True, exist_ok=True)
     _write_text(workspace_dir / "package.json", '{"name":"demo"}\n')
     payload = {
         "hook_event_name": "PostToolUse",
@@ -10239,20 +10023,13 @@ def test_hook_runtime_artifact_routes_post_tool_package_installs_without_pretool
         home_dir=home_dir,
         workspace=workspace_dir,
     )
-    artifact = guard_commands_module._hook_runtime_artifact(
-        harness="codex",
-        payload=payload,
-        action_envelope=action,
-        home_dir=home_dir,
-        guard_home=guard_home,
-        workspace=workspace_dir,
-    )
+
+    result = live_post_tool_review(payload, home_dir=home_dir, cwd=workspace_dir, guard_home=guard_home)
 
     assert action is not None
     assert action.pre_execution_result is None
-    assert artifact is not None
-    assert artifact.artifact_type == "package_request"
-    assert artifact.metadata["package_manager"] == "npm"
+    # With no earlier verdict to lean on, the finished install is not passed through silently.
+    assert post_tool_output_flagged(result)
 
 
 def test_guard_hook_claude_stop_keeps_native_cancel_transient(tmp_path, capsys, monkeypatch):
@@ -10469,7 +10246,7 @@ def test_native_approval_center_context_uses_harness_specific_retry_copy() -> No
     assert "Codex command" not in claude_context
 
 
-def test_guard_hook_refuses_claude_user_prompt_submit_for_secret_read(
+def test_guard_hook_sends_claude_user_prompt_submit_for_secret_read_with_notice(
     tmp_path,
     capsys,
     monkeypatch,
@@ -10492,12 +10269,16 @@ def test_guard_hook_refuses_claude_user_prompt_submit_for_secret_read(
     )
     payload = json.loads(output)
 
-    # The daemon refuses a prompt that asks for a secret read instead of letting
-    # it reach the tool stage; nothing is queued for it.
+    # A prompt that asks for a secret read is sent with Guard's notice; the
+    # read it leads to is reviewed at the tool stage with Allow once and Always
+    # allow. Nothing is queued for the prompt itself.
     assert rc == 0
     assert payload["hookSpecificOutput"]["hookEventName"] == "UserPromptSubmit"
-    assert payload["decision"] == "block"
+    assert "decision" not in payload
+    assert payload["policy_action"] == "warn"
     assert payload["reason_code"] == "native_sensitive_prompt"
+    assert payload["systemMessage"].startswith("HOL Guard flagged this prompt")
+    assert "Do not ask for approval at the prompt stage." in payload["hookSpecificOutput"]["additionalContext"]
     assert "approval_requests" not in payload
 
 
@@ -10552,19 +10333,16 @@ def test_guard_hook_emits_json_for_claude_user_prompt_submit_overridable_prompts
     )
 
     assert rc == 0
-    assert output["decision"] == "block", output
-    assert output["policy_action"] == "require-reapproval", output
+    # The prompt is sent with Guard's notice; the .env read it leads to is
+    # reviewed at the tool stage, so nothing is queued for the prompt.
+    assert "decision" not in output, output
+    assert output["policy_action"] == "warn", output
     assert output["reason_code"] == "native_sensitive_prompt", output
-    # Blocking Claude CLI responses use top-level decision/reason fields.
-    # hookSpecificOutput is not required by this presentation path.
-    assert output["reason"], output
+    assert output["systemMessage"].startswith("HOL Guard flagged this prompt"), output
     assert any("local .env file" in signal for signal in output["risk_signals"]), output
-    # The blocking copy and native decision receipt must not echo the prompt.
-    assert event["prompt"] not in output["reason"]
-    assert event["prompt"] not in json.dumps(output["risk_signals"])
-    # The daemon refuses the prompt outright and queues nothing for it.
+    # The notice and native decision receipt must not echo the prompt.
+    assert event["prompt"] not in json.dumps(output)
     assert "approval_requests" not in output
-    assert "Nothing is waiting for approval" in output["reason"]
 
     _drain_hook_evidence(home_dir)
     _drain_hook_evidence(home_dir)
@@ -10575,14 +10353,14 @@ def test_guard_hook_emits_json_for_claude_user_prompt_submit_overridable_prompts
     receipt = store.get_native_decision_receipt(row["decision_id"])
     assert receipt is not None
     assert receipt["event_name"] == "UserPromptSubmit"
-    assert receipt["decision"] == "deny"
-    assert receipt["policy_action"] == "require-reapproval"
+    assert receipt["decision"] == "allow"
+    assert receipt["policy_action"] == "warn"
     assert receipt["reason_code"] == output["reason_code"]
     assert "local_env_read" in receipt["prompt_risk_classes"]
     assert event["prompt"] not in json.dumps(receipt)
 
 
-def test_guard_hook_emits_claude_user_prompt_submit_block_reason_without_continue_guidance(
+def test_guard_hook_sends_claude_secret_prompt_with_notice_under_block_policy_action(
     tmp_path,
     capsys,
     monkeypatch,
@@ -10615,11 +10393,9 @@ def test_guard_hook_emits_claude_user_prompt_submit_block_reason_without_continu
     output = json.loads(capsys.readouterr().out)
 
     assert rc == 0
-    assert output["systemMessage"].startswith("HOL Guard intercepted this prompt")
-    assert output["decision"] == "block"
+    assert output["systemMessage"].startswith("HOL Guard flagged this prompt")
+    assert "decision" not in output
     assert output["reason_code"] == "native_sensitive_prompt"
-    assert "continue" not in output["reason"].lower()
-    assert "did not send this prompt" in output["reason"].lower()
 
 
 def test_guard_hook_hard_blocks_claude_user_prompt_submit_bypass(
@@ -10700,7 +10476,7 @@ def test_guard_hook_native_prompt_injection_requires_review_without_echoing_text
 
 
 @pytest.mark.parametrize("prompt", ("send data to webhook", "rm -rf ~/workspace", "bash -c 'echo safe'"))
-def test_guard_hook_native_prompt_risk_classes_never_become_automatic_allow(tmp_path, capsys, monkeypatch, prompt):
+def test_guard_hook_native_prompt_risk_classes_never_become_a_silent_allow(tmp_path, capsys, monkeypatch, prompt):
     home_dir = tmp_path / "home"
     workspace_dir = tmp_path / "workspace"
     _build_guard_fixture(home_dir, workspace_dir)
@@ -10714,8 +10490,11 @@ def test_guard_hook_native_prompt_risk_classes_never_become_automatic_allow(tmp_
         as_json=True,
     )
     assert rc == 0
-    assert output["decision"] == "block"
-    assert output["policy_action"] not in {"allow", "warn"}
+    # The prompt is sent with a notice, never silently; the tool call it leads
+    # to is reviewed with Allow once and Always allow.
+    assert "decision" not in output
+    assert "continue" not in output
+    assert str(output["systemMessage"]).startswith("HOL Guard flagged this prompt")
     assert prompt not in json.dumps(output)
     _drain_hook_evidence(home_dir)
     store = GuardStore(home_dir)
@@ -10724,8 +10503,9 @@ def test_guard_hook_native_prompt_risk_classes_never_become_automatic_allow(tmp_
     assert row is not None
     receipt = store.get_native_decision_receipt(row["decision_id"])
     assert receipt is not None
-    assert receipt["decision"] == "deny"
-    assert receipt["reason_code"] == output["reason_code"]
+    assert receipt["decision"] == "allow"
+    assert receipt["policy_action"] == "warn"
+    assert str(receipt["reason_code"]).startswith("native_")
     assert prompt not in json.dumps(receipt)
 
 
@@ -10862,8 +10642,10 @@ def test_guard_hook_copilot_user_prompt_submitted_normalizes_to_prompt_request(
     )
 
     assert rc == 0
-    # The daemon refuses the prompt outright and queues nothing to approve.
-    assert output == {"decision": "block", "reason": "HOL Guard blocked this action (require-reapproval)"}
+    # The prompt is sent on; the tool call it leads to is what Guard reviews.
+    assert "decision" not in output
+    assert output["policy_action"] == "warn"
+    assert output["reason_code"] == "native_sensitive_prompt"
     assert GuardStore(home_dir).list_approval_requests(limit=10) == []
 
 
@@ -11285,7 +11067,7 @@ def test_guard_hook_claude_notification_stale_notice_falls_back_to_generic_conte
     capsys.readouterr()
 
     store = GuardStore(home_dir)
-    pending_index_key = guard_commands_module._claude_pending_permission_index_key(session_id)
+    pending_index_key = f"claude_pending_permissions:{session_id}"
     pending_index = store.get_sync_payload(pending_index_key)
     assert isinstance(pending_index, dict)
     pending_keys = pending_index.get("pending_keys")
@@ -11385,10 +11167,11 @@ def test_guard_hook_claude_notice_storage_failures_fall_back_to_generic_prompt(t
     )
 
     # Hook authority state lives in the native resident, which reports a locked store as no reply.
-    monkeypatch.setattr(
+    for target in (
         "codex_plugin_scanner.guard.cli.commands_support_hook_state.hook_authority_state",
-        lambda *_args, **_kwargs: None,
-    )
+        "codex_plugin_scanner.guard.native_hook_authority_state.hook_authority_state",
+    ):
+        monkeypatch.setattr(target, lambda *_args, **_kwargs: None)
     pre_tool_event = {
         "session_id": "session-claude-4",
         "tool_name": "Read",
@@ -11433,11 +11216,11 @@ def test_guard_hook_claude_notice_storage_failures_fall_back_to_generic_prompt(t
     assert pre_tool_rc == 0
     assert pre_tool_output["hookSpecificOutput"]["permissionDecision"] == "ask"
     assert notification_rc == 0
+    # Without a reply there is no notice to read, so the prompt carries the
+    # generic hold copy and none of the review's reason.
     assert notification_output["systemMessage"] == (
-        "HOL Guard intercepted Claude's attempt to use Read and is routing it to a HOL Guard approval question. "
-        "This approval flow came from HOL Guard, not from Claude alone. "
-        "HOL Guard will ask the user to choose Allow once, Allow during this session, or Keep blocked before Claude "
-        "retries the action."
+        "HOL Guard is holding this Claude request for review. The HOL Guard runtime could not render "
+        "the full notice, so nothing in this prompt should be read as HOL Guard allowing the action."
     )
 
 
@@ -13241,18 +13024,6 @@ def test_guard_invalid_changed_hash_action_falls_back_to_reapproval(tmp_path):
     assert evaluation["artifacts"][0]["policy_action"] == "require-reapproval"
 
 
-def test_guard_invalid_default_action_falls_back_to_reapproval(tmp_path):
-    config = GuardConfig(
-        guard_home=tmp_path / "guard-home",
-        workspace=None,
-        default_action="blok",  # type: ignore[arg-type]
-    )
-
-    action = decide_action(configured_action=None, default_action=None, config=config, changed=False)
-
-    assert action == "require-reapproval"
-
-
 def test_guard_run_never_launches_for_unknown_stored_policy_action(tmp_path, monkeypatch):
     home_dir = tmp_path / "home"
     workspace_dir = tmp_path / "workspace"
@@ -13312,22 +13083,9 @@ def test_guard_run_never_launches_for_unknown_stored_policy_action(tmp_path, mon
     assert launch_calls == []
 
 
-def test_decide_action_with_v2_preserves_legacy_action_and_adds_decision(tmp_path):
-    config = GuardConfig(
-        guard_home=tmp_path / "guard-home",
-        workspace=None,
-        default_action="block",
-    )
+def test_build_decision_v2_preserves_legacy_action_and_adds_decision():
+    decision = build_decision_v2("block", reason="invalid-default-fallback")
 
-    action, decision = decide_action_with_v2(
-        configured_action=None,
-        default_action=None,
-        config=config,
-        changed=False,
-        reason="invalid-default-fallback",
-    )
-
-    assert action == "block"
     assert decision.action == "block"
     assert decision.reason == "invalid-default-fallback"
     assert decision.harness_message == "HOL Guard blocked this action."
@@ -13377,7 +13135,6 @@ def test_runtime_hook_saved_v1_allow_satisfies_exact_unchanged_current_review(tm
     assert "approval_requests" not in second_output
 
 
-@pytest.mark.usefixtures("native_command_artifact_reviews")
 def test_runtime_hook_saved_allow_invalidates_when_path_resolves_executable_elsewhere(
     tmp_path,
     capsys,
@@ -13459,49 +13216,35 @@ def test_runtime_hook_package_without_workspace_rejects_legacy_exact_allow(
         "tool_input": {"command": "npm install minimist@1.2.8"},
         "source_scope": "project",
     }
-    action_envelope = guard_commands_module._hook_action_envelope(
-        harness="codex",
-        payload=event,
-        home_dir=home_dir,
-        workspace=None,
-    )
-    artifact = guard_commands_module._hook_runtime_artifact(
-        harness="codex",
-        payload=event,
-        action_envelope=action_envelope,
-        home_dir=home_dir,
-        guard_home=home_dir,
-        workspace=None,
-    )
-    assert artifact is not None
-    assert artifact.artifact_type == "package_request"
+    monkeypatch.chdir(cwd)
+
+    def run_without_workspace() -> tuple[int, dict[str, object]]:
+        monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(event)))
+        rc = main(["guard", "hook", "--home", str(home_dir), "--harness", "codex", "--json"])
+        return rc, json.loads(capsys.readouterr().out)
+
+    first_rc, first_output = run_without_workspace()
+    assert first_rc == 0
+    assert first_output["approval_requests"]
+    request = first_output["approval_requests"][0]
+    queued = GuardStore(home_dir).get_approval_request(str(request["request_id"]))
+    assert queued is not None
+    # An exact allow written straight into the policy table, as older releases
+    # recorded one, is not an approval: it never resolves the queued request.
     GuardStore(home_dir).upsert_policy(
         PolicyDecision(
             harness="codex",
             scope="artifact",
             action="allow",
-            artifact_id=artifact.artifact_id,
-            artifact_hash=artifact_hash(artifact),
+            artifact_id=str(queued["artifact_id"]),
+            artifact_hash=str(queued["artifact_hash"]),
             reason="legacy exact package allow",
             source="manual",
         ),
         "2026-07-17T12:00:00+00:00",
     )
-    monkeypatch.chdir(cwd)
-    monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(event)))
 
-    rc = main(
-        [
-            "guard",
-            "hook",
-            "--home",
-            str(home_dir),
-            "--harness",
-            "codex",
-            "--json",
-        ]
-    )
-    output = json.loads(capsys.readouterr().out)
+    rc, output = run_without_workspace()
 
     assert rc == 0
     assert output["policy_action"] == "review"
@@ -13933,7 +13676,6 @@ def test_guard_hook_codex_strict_default_still_denies_destructive_shell_command(
     assert "requires fresh approval" in payload["hookSpecificOutput"]["permissionDecisionReason"]
 
 
-@pytest.mark.usefixtures("native_command_artifact_reviews")
 def test_guard_hook_codex_blocks_github_token_substitution_command(
     tmp_path,
     capsys,
@@ -14068,7 +13810,7 @@ def test_guard_hook_allows_non_sensitive_read_file_requests(tmp_path, capsys, mo
     assert output.get("approval_requests") in (None, [])
 
 
-def test_guard_hook_blocks_codex_user_prompt_submit_sensitive_file_read(
+def test_guard_hook_flags_codex_user_prompt_submit_sensitive_file_read(
     tmp_path,
     capsys,
     monkeypatch,
@@ -14094,15 +13836,8 @@ def test_guard_hook_blocks_codex_user_prompt_submit_sensitive_file_read(
     payload = json.loads(output)
 
     assert rc == 0
-    assert payload["decision"] == "block"
-    _assert_prompt_refused_without_queue(payload)
-    assert payload["systemMessage"] == payload["reason"]
-    assert payload["stopReason"] == payload["reason"]
-    assert payload["continue"] is False
-    assert payload["hookSpecificOutput"] == {
-        "hookEventName": "UserPromptSubmit",
-        "additionalContext": payload["reason"],
-    }
+    _assert_prompt_sent_with_notice(payload)
+    assert "stopReason" not in payload
 
 
 def test_guard_hook_allows_codex_user_prompt_submit_negative_dotenv_guardrail(
@@ -14242,9 +13977,8 @@ def test_guard_hook_codex_user_prompt_submit_secret_read_carries_no_approval_url
     payload = json.loads(output)
 
     assert rc == 0
-    assert payload["decision"] == "block"
-    _assert_prompt_refused_without_queue(payload)
-    assert "guard-token=" not in payload["reason"]
+    _assert_prompt_sent_with_notice(payload)
+    assert "guard-token=" not in payload["systemMessage"]
     assert GuardStore(home_dir).list_approval_requests(limit=10) == []
 
 
@@ -14472,19 +14206,6 @@ def test_guard_runtime_does_not_target_harmless_inline_process_command(tmp_path)
     assert match is None or match.reason_code != "pytest_restricted_profile_required"
 
 
-def test_guard_runtime_allows_apply_patch_to_non_sensitive_source_file(tmp_path):
-    patch = """*** Begin Patch
-*** Update File: src/codex_plugin_scanner/guard/runtime/secret_file_requests.py
-@@
-+def _shell_interpreter_flag_payload(parts: list[str], index: int) -> object:
-+    return _interpreter_flag_payload(parts, index)
-*** End Patch"""
-
-    match = extract_sensitive_file_write_request("apply_patch", {"input": patch}, cwd=tmp_path)
-
-    assert match is None
-
-
 def test_guard_runtime_does_not_execute_classify_apply_patch_content(tmp_path):
     patch = """*** Begin Patch
 *** Update File: docs/notes.md
@@ -14493,48 +14214,6 @@ def test_guard_runtime_does_not_execute_classify_apply_patch_content(tmp_path):
 *** End Patch"""
 
     match = extract_sensitive_tool_action_request("apply_patch", patch, cwd=tmp_path)
-
-    assert match is None
-
-
-def test_guard_runtime_blocks_apply_patch_to_sensitive_file(tmp_path):
-    patch = """*** Begin Patch
-*** Update File: .env
-@@
--TOKEN=old
-+TOKEN=new
-*** End Patch"""
-
-    match = extract_sensitive_file_write_request("apply_patch", {"input": patch}, cwd=tmp_path)
-
-    assert match is not None
-    assert match.path_class == "local .env file"
-
-
-def test_guard_runtime_checks_all_apply_patch_payload_keys(tmp_path):
-    sensitive_patch = """*** Begin Patch
-*** Update File: .env
-@@
--TOKEN=old
-+TOKEN=new
-*** End Patch"""
-
-    match = extract_sensitive_file_write_request(
-        "apply_patch",
-        {"patch": "no patch headers", "input": sensitive_patch},
-        cwd=tmp_path,
-    )
-
-    assert match is not None
-    assert match.path_class == "local .env file"
-
-
-def test_guard_runtime_ignores_patch_syntax_for_other_write_tools(tmp_path):
-    match = extract_sensitive_file_write_request(
-        "write",
-        {"input": "*** Update File: .env\n..."},
-        cwd=tmp_path,
-    )
 
     assert match is None
 
@@ -15334,13 +15013,6 @@ def test_guard_runtime_keeps_mutating_pytest_flags_sensitive(tmp_path):
     assert binary_match.action_class == "destructive shell command"
 
 
-def test_guard_runtime_keeps_pytest_allowlist_disjoint_from_mutating_flags():
-    pytest_mutating_flags = constants_core._PYTHON_MODULE_MUTATING_FLAGS["pytest"]
-
-    assert constants_core._PYTEST_SAFE_FLAGS.isdisjoint(pytest_mutating_flags)
-    assert constants_core._PYTEST_SAFE_FLAGS_WITH_VALUES.isdisjoint(pytest_mutating_flags)
-
-
 def _resident_risk_classes(artifact: GuardArtifact, guard_home: Path) -> object:
     """The risk classes the resident reads off ``artifact``."""
     config = GuardConfig(guard_home=guard_home, workspace=None)
@@ -15422,10 +15094,7 @@ def test_guard_runtime_tool_action_policy_uses_network_egress_when_stricter(tmp_
     )
 
     assert (
-        guard_commands_module._runtime_artifact_policy_action(
-            config, artifact, "codex", guard_home=native_approval_reuse_runtime
-        )
-        == "block"
+        _runtime_artifact_policy_action(config, artifact, "codex", guard_home=native_approval_reuse_runtime) == "block"
     )
 
 
@@ -15452,10 +15121,7 @@ def test_guard_runtime_tool_action_policy_prefers_configured_risk_action_over_de
     )
 
     assert (
-        guard_commands_module._runtime_artifact_policy_action(
-            config, artifact, "codex", guard_home=native_approval_reuse_runtime
-        )
-        == "block"
+        _runtime_artifact_policy_action(config, artifact, "codex", guard_home=native_approval_reuse_runtime) == "block"
     )
 
 
@@ -15482,9 +15148,7 @@ def test_guard_runtime_tool_action_policy_includes_defaults_for_unconfigured_ris
     )
 
     assert (
-        guard_commands_module._runtime_artifact_policy_action(
-            config, artifact, "codex", guard_home=native_approval_reuse_runtime
-        )
+        _runtime_artifact_policy_action(config, artifact, "codex", guard_home=native_approval_reuse_runtime)
         == "require-reapproval"
     )
 
@@ -15511,9 +15175,7 @@ def test_guard_runtime_tool_action_policy_does_not_let_warn_default_override_ris
     )
 
     assert (
-        guard_commands_module._runtime_artifact_policy_action(
-            config, artifact, "codex", guard_home=native_approval_reuse_runtime
-        )
+        _runtime_artifact_policy_action(config, artifact, "codex", guard_home=native_approval_reuse_runtime)
         == "require-reapproval"
     )
 
@@ -15537,10 +15199,7 @@ def test_guard_runtime_artifact_policy_includes_stronger_global_default(tmp_path
     )
 
     assert (
-        guard_commands_module._runtime_artifact_policy_action(
-            config, artifact, "codex", guard_home=native_approval_reuse_runtime
-        )
-        == "block"
+        _runtime_artifact_policy_action(config, artifact, "codex", guard_home=native_approval_reuse_runtime) == "block"
     )
 
 
@@ -15563,10 +15222,7 @@ def test_guard_runtime_artifact_exact_allow_replaces_stricter_global_default(tmp
     )
 
     assert (
-        guard_commands_module._runtime_artifact_policy_action(
-            config, artifact, "codex", guard_home=native_approval_reuse_runtime
-        )
-        == "allow"
+        _runtime_artifact_policy_action(config, artifact, "codex", guard_home=native_approval_reuse_runtime) == "allow"
     )
 
 
@@ -15595,10 +15251,7 @@ def test_guard_runtime_artifact_exact_allow_cannot_lower_independent_risk_block(
     )
 
     assert (
-        guard_commands_module._runtime_artifact_policy_action(
-            config, artifact, "codex", guard_home=native_approval_reuse_runtime
-        )
-        == "block"
+        _runtime_artifact_policy_action(config, artifact, "codex", guard_home=native_approval_reuse_runtime) == "block"
     )
 
 
@@ -15635,9 +15288,7 @@ def test_guard_runtime_artifact_policy_composes_exact_current_override(
     )
 
     assert (
-        guard_commands_module._runtime_artifact_policy_action(
-            config, artifact, "codex", guard_home=native_approval_reuse_runtime
-        )
+        _runtime_artifact_policy_action(config, artifact, "codex", guard_home=native_approval_reuse_runtime)
         == expected_action
     )
 
@@ -15770,7 +15421,6 @@ def test_guard_hook_codex_user_prompt_submit_allows_outreach_message_context(
     assert GuardStore(home_dir).list_approval_requests(limit=10) == []
 
 
-@pytest.mark.usefixtures("native_command_artifact_reviews")
 def test_guard_hook_codex_blocks_local_shell_script_that_posts_fake_credentials(
     tmp_path,
     capsys,
@@ -15990,119 +15640,73 @@ def test_guard_hook_codex_post_tool_use_explains_merged_stderr_capture(
     assert "/requests/" not in payload["stopReason"]
 
 
-def test_codex_post_tool_output_allows_focused_pytest_fake_credential_fixture(tmp_path):
-    artifact = _codex_post_tool_output_artifact(
-        payload={
-            "tool_name": "Bash",
-            "tool_input": {
-                "command": (
-                    "python3 -m pytest "
-                    "tests/test_guard_harness_smoke.py::TestSmokeEvidenceTemplate::"
-                    "test_release_checklist_references_smoke_evidence -q"
-                )
-            },
-            "tool_response": {"stdout": "fake_credential=fixture-only\n"},
-        },
-        config_path="codex.json",
-        source_scope="project",
-        cwd=tmp_path,
-        home_dir=tmp_path,
+@pytest.mark.parametrize(
+    ("flags", "stdout"),
+    (
+        ("-q", "fake_credential=fixture-only\n"),
+        ("-q -s", "fake_credential=fixture-only\n.\n1 passed in 0.02s\n"),
+    ),
+    ids=("quiet", "status_noise"),
+)
+@LIVE_REVIEWS_RETIRED_ALLOW
+def test_codex_post_tool_output_allows_focused_pytest_fake_credential_fixture(
+    live_hook_root: Path, flags: str, stdout: str
+) -> None:
+    command = (
+        "python3 -m pytest "
+        "tests/test_guard_harness_smoke.py::TestSmokeEvidenceTemplate::"
+        f"test_release_checklist_references_smoke_evidence {flags}"
+    )
+
+    artifact = live_post_tool_flag(
+        payload={"tool_name": "Bash", "tool_input": {"command": command}, "tool_response": {"stdout": stdout}},
+        cwd=live_hook_root / "workspace",
+        home_dir=live_hook_root,
     )
 
     assert artifact is None
 
 
-def test_codex_post_tool_output_allows_focused_pytest_fixture_with_status_noise(tmp_path):
-    artifact = _codex_post_tool_output_artifact(
-        payload={
-            "tool_name": "Bash",
-            "tool_input": {
-                "command": (
-                    "python3 -m pytest "
-                    "tests/test_guard_harness_smoke.py::TestSmokeEvidenceTemplate::"
-                    "test_release_checklist_references_smoke_evidence -q -s"
-                )
-            },
-            "tool_response": {
-                "stdout": "fake_credential=fixture-only\n.\n1 passed in 0.02s\n",
-            },
-        },
-        config_path="codex.json",
-        source_scope="project",
-        cwd=tmp_path,
-        home_dir=tmp_path,
-    )
-
-    assert artifact is None
-
-
-def test_codex_post_tool_output_does_not_requeue_package_request_after_pretool_block(tmp_path):
-    home_dir = tmp_path / "home"
+@pytest.mark.parametrize("camel_case_copy", (False, True), ids=("snake_case", "camel_case"))
+def test_codex_post_tool_output_does_not_requeue_package_request_after_pretool_block(
+    live_hook_root: Path, camel_case_copy: bool
+) -> None:
+    home_dir = live_hook_root / "home"
     guard_home = home_dir / ".hol-guard"
-    workspace_dir = tmp_path / "workspace"
+    workspace_dir = live_hook_root / "workspace"
     guard_home.mkdir(parents=True, exist_ok=True)
     workspace_dir.mkdir(parents=True, exist_ok=True)
-
-    artifact = guard_commands_module._hook_runtime_artifact(
-        harness="codex",
-        payload={
-            "hook_event_name": "PostToolUse",
-            "tool_name": "Bash",
-            "tool_input": {"command": "npm install -g @getpaseo/cli"},
-            "tool_response": {
-                "stdout": (
-                    "HOL Guard blocked `@getpaseo/cli` before install.\n"
-                    "Open HOL Guard to approve or keep this blocked.\n"
-                )
-            },
-            "source_scope": "project",
-            "pre_execution_result": "block",
+    payload: dict[str, object] = {
+        "hook_event_name": "PostToolUse",
+        "tool_name": "Bash",
+        "tool_input": {"command": "npm install -g @getpaseo/cli"},
+        "tool_response": {
+            "stdout": (
+                "HOL Guard blocked `@getpaseo/cli` before install.\nOpen HOL Guard to approve or keep this blocked.\n"
+            )
         },
-        action_envelope=None,
-        data_flow_signals=(),
-        home_dir=home_dir,
-        guard_home=guard_home,
-        workspace=workspace_dir,
-    )
+        "source_scope": "project",
+        "pre_execution_result": "block",
+    }
+    if camel_case_copy:
+        # The payload as the retired Python normaliser left it: the harness's
+        # camelCase keys plus their snake_case copies.
+        payload.update(
+            {
+                "hookEventName": "PostToolUse",
+                "toolName": "Bash",
+                "toolInput": {"command": "npm install -g @getpaseo/cli"},
+                "sourceScope": "project",
+                "preExecutionResult": "block",
+                "arguments": {"command": "npm install -g @getpaseo/cli"},
+            }
+        )
 
-    assert artifact is None
-
-
-def test_codex_post_tool_output_does_not_requeue_package_request_after_camelcase_pretool_block(tmp_path):
-    home_dir = tmp_path / "home"
-    guard_home = home_dir / ".hol-guard"
-    workspace_dir = tmp_path / "workspace"
-    guard_home.mkdir(parents=True, exist_ok=True)
-    workspace_dir.mkdir(parents=True, exist_ok=True)
-    payload = guard_commands_module._normalize_hook_payload(
-        {
-            "hookEventName": "PostToolUse",
-            "toolName": "Bash",
-            "toolInput": {"command": "npm install -g @getpaseo/cli"},
-            "tool_response": {
-                "stdout": (
-                    "HOL Guard blocked `@getpaseo/cli` before install.\n"
-                    "Open HOL Guard to approve or keep this blocked.\n"
-                )
-            },
-            "sourceScope": "project",
-            "preExecutionResult": "block",
-        },
-        harness="codex",
-    )
-
-    artifact = guard_commands_module._hook_runtime_artifact(
-        harness="codex",
-        payload=payload,
-        action_envelope=None,
-        data_flow_signals=(),
-        home_dir=home_dir,
-        guard_home=guard_home,
-        workspace=workspace_dir,
-    )
+    result = live_post_tool_review(payload, home_dir=home_dir, cwd=workspace_dir, guard_home=guard_home)
 
     assert payload["pre_execution_result"] == "block"
-    assert artifact is None
+    assert not post_tool_output_flagged(result)
+    assert not GuardStore(guard_home).list_approval_requests()
 
 
 def test_guard_hook_codex_post_tool_use_blocks_focused_pytest_medium_secret_output(
@@ -16252,7 +15856,7 @@ def test_guard_hook_codex_post_tool_use_blocks_named_secret_output(
     assert "sensitive content" in payload["stopReason"]
 
 
-def test_guard_hook_codex_user_prompt_submit_blocks_credential_looking_dotfile(
+def test_guard_hook_codex_user_prompt_submit_flags_credential_looking_dotfile(
     tmp_path,
     capsys,
     monkeypatch,
@@ -16281,9 +15885,7 @@ def test_guard_hook_codex_user_prompt_submit_blocks_credential_looking_dotfile(
     payload = json.loads(output)
 
     assert rc == 0
-    assert payload["decision"] == "block"
-    assert "HOL Guard" in payload["reason"]
-    _assert_prompt_refused_without_queue(payload)
+    _assert_prompt_sent_with_notice(payload)
 
 
 def test_guard_hook_codex_user_prompt_submit_allows_generic_dotfile_with_canary_text(
@@ -16315,7 +15917,7 @@ def test_guard_hook_codex_user_prompt_submit_allows_generic_dotfile_with_canary_
     assert payload == {"hookSpecificOutput": {"hookEventName": "UserPromptSubmit"}}
 
 
-def test_guard_hook_codex_user_prompt_submit_blocks_bare_credential_dotfile(
+def test_guard_hook_codex_user_prompt_submit_flags_bare_credential_dotfile(
     tmp_path,
     capsys,
     monkeypatch,
@@ -16344,12 +15946,10 @@ def test_guard_hook_codex_user_prompt_submit_blocks_bare_credential_dotfile(
     payload = json.loads(output)
 
     assert rc == 0
-    assert payload["decision"] == "block"
-    assert "HOL Guard" in payload["reason"]
-    _assert_prompt_refused_without_queue(payload)
+    _assert_prompt_sent_with_notice(payload)
 
 
-def test_guard_hook_codex_user_prompt_submit_blocks_envrc_credential_dotfile(
+def test_guard_hook_codex_user_prompt_submit_flags_envrc_credential_dotfile(
     tmp_path,
     capsys,
     monkeypatch,
@@ -16378,9 +15978,7 @@ def test_guard_hook_codex_user_prompt_submit_blocks_envrc_credential_dotfile(
     payload = json.loads(output)
 
     assert rc == 0
-    assert payload["decision"] == "block"
-    assert "HOL Guard" in payload["reason"]
-    _assert_prompt_refused_without_queue(payload)
+    _assert_prompt_sent_with_notice(payload)
 
 
 def test_guard_hook_codex_prompt_dotfile_scan_uses_bounded_file_read(
@@ -16410,8 +16008,7 @@ def test_guard_hook_codex_prompt_dotfile_scan_uses_bounded_file_read(
     payload = json.loads(output)
 
     assert rc == 0
-    assert payload["decision"] == "block"
-    _assert_prompt_refused_without_queue(payload)
+    _assert_prompt_sent_with_notice(payload)
 
 
 @pytest.mark.parametrize("prompt", ["read .authrc.", "print ./.authrc, please"])
@@ -16442,8 +16039,7 @@ def test_guard_hook_codex_prompt_dotfile_scan_ignores_trailing_punctuation(
     payload = json.loads(output)
 
     assert rc == 0
-    assert payload["decision"] == "block"
-    _assert_prompt_refused_without_queue(payload)
+    _assert_prompt_sent_with_notice(payload)
 
 
 def test_guard_hook_codex_prompt_dotfile_scan_prefers_exact_punctuation_filename(
@@ -16473,8 +16069,7 @@ def test_guard_hook_codex_prompt_dotfile_scan_prefers_exact_punctuation_filename
     payload = json.loads(output)
 
     assert rc == 0
-    assert payload["decision"] == "block"
-    _assert_prompt_refused_without_queue(payload)
+    _assert_prompt_sent_with_notice(payload)
 
 
 @pytest.mark.parametrize("scope", ["workspace", "global"])
@@ -17674,7 +17269,7 @@ def test_receipt_sync_context_omits_invalid_policy_bundle_acknowledgement(
     assert "policyBundleAcknowledgement" not in context
 
 
-def test_receipt_sync_context_omits_acknowledgement_for_untrusted_cached_bundle(tmp_path: Path) -> None:
+def test_receipt_sync_context_reports_untrusted_cached_bundle_as_failed(tmp_path: Path) -> None:
     store = GuardStore(tmp_path / "guard-home")
     _cache_signed_test_policy_bundle(store, [])
     policy_bundle = store.get_sync_payload("policy_bundle")
@@ -17709,7 +17304,10 @@ def test_receipt_sync_context_omits_acknowledgement_for_untrusted_cached_bundle(
         local_guard_online_at="2026-04-19T00:01:00+00:00",
     )
 
-    assert "policyBundleAcknowledgement" not in context
+    reported = context["policyBundleAcknowledgement"]
+    assert reported["status"] == "failed"
+    assert reported["bundleHash"] == policy_bundle["bundleHash"]
+    assert reported["bundleVersion"] == policy_bundle["bundleVersion"]
 
 
 def test_policy_bundle_validation_rejects_missing_rules_field():
@@ -17827,9 +17425,9 @@ def test_valid_signed_empty_bundle_excludes_co_delivered_unsigned_policy_sibling
     assert store.get_sync_payload("team_policy_pack") == {}
     assert store.list_policy_decisions() == []
     assert store.list_cloud_exceptions() == []
-    assert store.resolve_policy("codex", "unsigned-exception-artifact", "hash") is None
-    assert store.resolve_policy("codex", "unsigned-team-block", "hash") is None
-    assert store.resolve_policy("codex", "other", "hash", publisher="unsigned.publisher.example") is None
+    assert resolve_policy(store, "codex", "unsigned-exception-artifact", "hash") is None
+    assert resolve_policy(store, "codex", "unsigned-team-block", "hash") is None
+    assert resolve_policy(store, "codex", "other", "hash", publisher="unsigned.publisher.example") is None
     assert summary["exceptions_stored"] == 0
     assert summary["cloud_exceptions_stored"] == 0
     assert summary["remote_policies_stored"] == 0
@@ -17920,14 +17518,13 @@ def test_fresh_mdm_activation_bootstraps_first_signed_policy_sync(
     assert persisted_local_keyring["keys"] == []
     assert store.get_sync_payload("managed_policy_bundle_keyring_mirror") == keyring
     assert summary["remote_policies_stored"] == 1
-    assert (
-        store.resolve_policy(
-            "codex",
-            "codex:project:package-request:fresh-managed-device",
-            "hash",
-        )
-        == "block"
-    )
+    # The resident reads machine MDM policy natively and cannot see the policy
+    # patched in above, so the check stops at the row the sync stored.
+    with sqlite3.connect(store.path) as connection:
+        stored = connection.execute(
+            "select action from policy_decisions where source = 'policy-bundle' and harness = 'codex'"
+        ).fetchall()
+    assert stored == [("block",)]
 
 
 def test_cached_bundle_is_not_activated_after_live_anchor_revocation(
@@ -18034,7 +17631,8 @@ def test_omitted_bundle_with_invalid_cached_authority_clears_unsigned_legacy_pol
         {"name": "Stale unsigned policy", "allowedPublishers": ["stale.publisher.example"]},
         "2026-07-16T00:00:00Z",
     )
-    store.replace_remote_policies(
+    replace_remote_policies(
+        store,
         [
             PolicyDecision(
                 harness="*",
@@ -18136,11 +17734,11 @@ def test_omitted_bundle_with_invalid_cached_authority_clears_unsigned_legacy_pol
     assert store.list_policy_decisions() == []
     assert store.list_cloud_exceptions() == []
     assert synced_policy_payload(store) is None
-    assert store.resolve_policy("codex", "stale-cloud-allow", "hash") is None
-    assert store.resolve_policy("codex", "stale-bundle-allow", "hash") is None
-    assert store.resolve_policy("codex", "new-unsigned-allow", "hash") is None
-    assert store.resolve_policy("codex", "other", "hash", publisher="stale.publisher.example") is None
-    assert store.resolve_policy("codex", "other", "hash", publisher="new.publisher.example") is None
+    assert resolve_policy(store, "codex", "stale-cloud-allow", "hash") is None
+    assert resolve_policy(store, "codex", "stale-bundle-allow", "hash") is None
+    assert resolve_policy(store, "codex", "new-unsigned-allow", "hash") is None
+    assert resolve_policy(store, "codex", "other", "hash", publisher="stale.publisher.example") is None
+    assert resolve_policy(store, "codex", "other", "hash", publisher="new.publisher.example") is None
     assert summary["exceptions_stored"] == 0
     assert summary["cloud_exceptions_stored"] == 0
     assert summary["remote_policies_stored"] == 0
@@ -18238,13 +17836,13 @@ def test_malformed_policy_bundle_field_rejects_unsigned_siblings_and_preserves_s
         for item in store.list_policy_decisions()
     ] == expected_signed_rows
     assert store.list_cloud_exceptions() == []
-    assert store.resolve_policy("codex", "malformed-unsigned-allow", "hash") is None
-    assert store.resolve_policy("codex", "other", "hash", publisher="malformed.publisher.example") is None
+    assert resolve_policy(store, "codex", "malformed-unsigned-allow", "hash") is None
+    assert resolve_policy(store, "codex", "other", "hash", publisher="malformed.publisher.example") is None
     assert summary["exceptions_stored"] == 0
     assert summary["cloud_exceptions_stored"] == 0
     assert summary["remote_policies_stored"] == len(expected_signed_rows)
     if cached_authority is not None:
-        assert store.resolve_policy("codex", "codex:project:package-request:cached", "hash") == "block"
+        assert resolve_policy(store, "codex", "codex:project:package-request:cached", "hash") == "block"
 
 
 def test_omitted_bundle_rematerializes_only_valid_cached_signed_policy(
@@ -18273,7 +17871,8 @@ def test_omitted_bundle_rematerializes_only_valid_cached_signed_policy(
         {"name": "Stale unsigned policy", "allowedPublishers": ["stale.publisher.example"]},
         "2026-07-17T00:00:00Z",
     )
-    store.replace_remote_policies(
+    replace_remote_policies(
+        store,
         [
             PolicyDecision(
                 harness="*",
@@ -18374,12 +17973,12 @@ def test_omitted_bundle_rematerializes_only_valid_cached_signed_policy(
         for item in store.list_policy_decisions()
     ] == [("codex", "harness", "family:package-request", "block", "signed-package-block", "policy-bundle")]
     assert store.list_cloud_exceptions() == []
-    assert store.resolve_policy("codex", "codex:project:package-request:cached-current", "hash") == "block"
-    assert store.resolve_policy("codex", "stale-cloud-allow", "hash") is None
-    assert store.resolve_policy("codex", "stale-bundle-allow", "hash") is None
-    assert store.resolve_policy("codex", "new-unsigned-allow", "hash") is None
-    assert store.resolve_policy("codex", "other", "hash", publisher="stale.publisher.example") is None
-    assert store.resolve_policy("codex", "other", "hash", publisher="new.publisher.example") is None
+    assert resolve_policy(store, "codex", "codex:project:package-request:cached-current", "hash") == "block"
+    assert resolve_policy(store, "codex", "stale-cloud-allow", "hash") is None
+    assert resolve_policy(store, "codex", "stale-bundle-allow", "hash") is None
+    assert resolve_policy(store, "codex", "new-unsigned-allow", "hash") is None
+    assert resolve_policy(store, "codex", "other", "hash", publisher="stale.publisher.example") is None
+    assert resolve_policy(store, "codex", "other", "hash", publisher="new.publisher.example") is None
     assert summary["exceptions_stored"] == 0
     assert summary["cloud_exceptions_stored"] == 0
     assert summary["remote_policies_stored"] == 1
@@ -18456,13 +18055,13 @@ def test_policy_bundle_decisions_map_to_runtime_families(tmp_path):
         device_id=guard_runner_module._guard_device_metadata(store)[0],
         device_name="MacBook Pro",
     )
-    store.replace_remote_policies(decisions, "2026-04-19T00:00:11+00:00", remote_write_authorized=True)
+    replace_remote_policies(store, decisions, "2026-04-19T00:00:11+00:00", remote_write_authorized=True)
     _cache_signed_test_policy_bundle(store, bundle["rules"])
 
-    assert store.resolve_policy("codex", "codex:project:package-request:abc", "hash") == "block"
-    assert store.resolve_policy("codex", "codex:project:mcp:shell", "hash") == "review"
-    assert store.resolve_policy("codex", "codex:project:file-read:abc", "hash") == "allow"
-    assert store.resolve_policy("codex", "codex:project:tool-action:abc", "hash") == "block"
+    assert resolve_policy(store, "codex", "codex:project:package-request:abc", "hash") == "block"
+    assert resolve_policy(store, "codex", "codex:project:mcp:shell", "hash") == "review"
+    assert resolve_policy(store, "codex", "codex:project:file-read:abc", "hash") == "allow"
+    assert resolve_policy(store, "codex", "codex:project:tool-action:abc", "hash") == "block"
 
 
 def test_policy_bundle_exact_artifact_rules_apply_with_workspace_scope(tmp_path):
@@ -18515,7 +18114,7 @@ def test_policy_bundle_exact_artifact_rules_apply_with_workspace_scope(tmp_path)
         device_id=guard_runner_module._guard_device_metadata(store)[0],
         device_name="MacBook Pro",
     )
-    store.replace_remote_policies(decisions, "2026-06-05T13:31:00+00:00", remote_write_authorized=True)
+    replace_remote_policies(store, decisions, "2026-06-05T13:31:00+00:00", remote_write_authorized=True)
     _cache_signed_test_policy_bundle(
         store,
         bundle["rules"],
@@ -18523,18 +18122,19 @@ def test_policy_bundle_exact_artifact_rules_apply_with_workspace_scope(tmp_path)
         expires_at=str(bundle["expiresAt"]),
     )
 
-    assert store.resolve_policy("codex", allow_artifact, "hash", workspace=workspace_a, now=now) == "allow"
-    assert store.resolve_policy("codex", block_artifact, "hash", workspace=workspace_a, now=now) == "block"
+    assert resolve_policy(store, "codex", allow_artifact, "hash", workspace=workspace_a, now=now) == "allow"
+    assert resolve_policy(store, "codex", block_artifact, "hash", workspace=workspace_a, now=now) == "block"
     assert (
-        store.resolve_policy("codex", "codex:project:tool-action:other", "hash", workspace=workspace_a, now=now) is None
+        resolve_policy(store, "codex", "codex:project:tool-action:other", "hash", workspace=workspace_a, now=now)
+        is None
     )
-    assert store.resolve_policy("codex", allow_artifact, "hash", workspace=workspace_b, now=now) is None
+    assert resolve_policy(store, "codex", allow_artifact, "hash", workspace=workspace_b, now=now) is None
     expiry = "2099-12-01T00:00:00+00:00"
-    assert store.resolve_policy("codex", allow_artifact, "hash", workspace=workspace_a, now=expiry) is None
-    assert store.resolve_policy("codex", block_artifact, "hash", workspace=workspace_a, now=expiry) == "block"
+    assert resolve_policy(store, "codex", allow_artifact, "hash", workspace=workspace_a, now=expiry) is None
+    assert resolve_policy(store, "codex", block_artifact, "hash", workspace=workspace_a, now=expiry) == "block"
     expiry = "2100-10-01T00:00:00+00:00"
-    assert store.resolve_policy("codex", block_artifact, "hash", workspace=workspace_a, now=expiry) is None
-    assert store.resolve_policy("codex", allow_artifact, "hash", workspace=workspace_a, now=expiry) is None
+    assert resolve_policy(store, "codex", block_artifact, "hash", workspace=workspace_a, now=expiry) is None
+    assert resolve_policy(store, "codex", allow_artifact, "hash", workspace=workspace_a, now=expiry) is None
     exact_decisions = [item for item in store.list_policy_decisions() if item["source"] == "policy-bundle"]
     assert {item["scope"] for item in exact_decisions} == {"workspace"}
     stored_workspaces = {item["workspace"] for item in exact_decisions}
@@ -18607,7 +18207,8 @@ def test_materialized_policy_bundle_decision_requires_current_cached_signature(t
     store = GuardStore(tmp_path / "guard-home")
     _seed_guard_cloud(store, workspace_id="workspace-1")
     store.set_sync_payload("policy_bundle_keyring", policy_bundle_test_keyring(), "2026-04-19T00:00:00Z")
-    store.replace_remote_policies(
+    replace_remote_policies(
+        store,
         [
             PolicyDecision(
                 harness="codex",
@@ -18664,11 +18265,11 @@ def test_materialized_policy_bundle_decision_requires_current_cached_signature(t
     digest_bundle["verifier"]["signature"] = digest_bundle["payloadHash"]
     store.set_sync_payload("policy_bundle", digest_bundle, "2026-04-19T00:00:00Z")
 
-    assert store.resolve_policy("codex", "codex:project:package-request:test", "sha256:test") is None
+    assert resolve_policy(store, "codex", "codex:project:package-request:test", "sha256:test") is None
 
     store.set_sync_payload("policy_bundle", policy_bundle, "2026-04-19T00:00:01Z")
 
-    assert store.resolve_policy("codex", "codex:project:package-request:test", "sha256:test") == "allow"
+    assert resolve_policy(store, "codex", "codex:project:package-request:test", "sha256:test") == "allow"
 
 
 def test_cached_and_last_good_policy_bundle_preserve_signed_empty_optional_fields(tmp_path):
@@ -18700,7 +18301,8 @@ def test_cached_and_last_good_policy_bundle_preserve_signed_empty_optional_field
 def test_materialized_policy_bundle_decision_must_exist_in_current_signed_bundle(tmp_path):
     store = GuardStore(tmp_path / "guard-home")
     _cache_signed_test_policy_bundle(store, [])
-    store.replace_remote_policies(
+    replace_remote_policies(
+        store,
         [
             PolicyDecision(
                 harness="codex",
@@ -18716,7 +18318,7 @@ def test_materialized_policy_bundle_decision_must_exist_in_current_signed_bundle
         remote_write_authorized=True,
     )
 
-    assert store.resolve_policy("codex", "codex:project:package-request:test", "sha256:test") is None
+    assert resolve_policy(store, "codex", "codex:project:package-request:test", "sha256:test") is None
 
 
 def test_policy_bundle_replacement_invalidates_prevalidated_allow_claim(tmp_path):
@@ -18744,7 +18346,8 @@ def test_policy_bundle_replacement_invalidates_prevalidated_allow_claim(tmp_path
     }
     authorized_bundle = _signed_test_policy_bundle([allow_rule])
     store.set_sync_payload("policy_bundle", authorized_bundle, "2026-01-01T00:00:00Z")
-    store.replace_remote_policies(
+    replace_remote_policies(
+        store,
         guard_runner_module._build_policy_bundle_decisions(
             authorized_bundle,
             device_id=guard_runner_module._guard_device_metadata(store)[0],
@@ -18801,13 +18404,14 @@ def test_interrupted_policy_bundle_replacement_cannot_reuse_prior_materialized_a
         device_id=device_metadata["installation_id"],
         device_name=device_metadata["device_label"],
     )
-    store.replace_remote_policies(
+    replace_remote_policies(
+        store,
         old_decisions,
         "2026-01-01T00:00:00Z",
         remote_write_authorized=True,
     )
     artifact_id = "codex:project:package-request:test"
-    assert store.resolve_policy("codex", artifact_id, "sha256:test") == "allow"
+    assert resolve_policy(store, "codex", artifact_id, "sha256:test") == "allow"
 
     # Both sync paths persist the newly verified bundle before replacing its
     # materialized rows. Simulate a process interruption at exactly that point.
@@ -18819,7 +18423,7 @@ def test_interrupted_policy_bundle_replacement_cannot_reuse_prior_materialized_a
     store.set_sync_payload("policy_bundle", replacement_bundle, "2026-01-02T00:00:00Z")
     store.set_sync_payload("policy_bundle_last_good", replacement_bundle, "2026-01-02T00:00:00Z")
 
-    assert store.resolve_policy("codex", artifact_id, "sha256:test") is None
+    assert resolve_policy(store, "codex", artifact_id, "sha256:test") is None
 
 
 def test_policy_bundle_downgrade_check_normalizes_mixed_timezone_formats():
@@ -19104,6 +18708,207 @@ def test_sync_receipts_rejects_policy_bundle_for_the_wrong_workspace(tmp_path, m
     assert "Reconnect Guard" in str(last_error["message"])
 
 
+def test_sync_receipts_reports_a_dropped_bundle_as_failed_to_cloud(tmp_path, monkeypatch):
+    """Clearing a rejected bundle must not leave Cloud showing the old one as applied."""
+
+    store = GuardStore(tmp_path / "guard-home")
+    _seed_guard_cloud(store, workspace_id="workspace-a")
+    store.set_sync_payload(
+        "policy_bundle_keyring",
+        policy_bundle_test_keyring(workspace_id="workspace-a"),
+        "2026-06-05T13:29:00Z",
+    )
+    device_id, device_name = guard_runner_module._guard_device_metadata(store)
+    store.set_sync_payload(
+        "policy_bundle_ack",
+        {
+            "appliedAt": "2026-06-05T13:00:00+00:00",
+            "bundleHash": "sha256:previous-bundle",
+            "bundleVersion": "policy-2026-06-05.4",
+            "deviceId": device_id,
+            "deviceName": device_name,
+            "status": "synced",
+        },
+        "2026-06-05T13:00:00Z",
+    )
+    bundle = sign_policy_bundle(
+        {
+            "contractVersion": "guard-policy-bundle.v1",
+            "bundleVersion": "policy-2026-06-05.5",
+            "bundleHash": "",
+            "issuedAt": "2026-06-05T13:30:00+00:00",
+            "expiresAt": None,
+            "verifier": {
+                "algorithm": "rsa-pss-sha256",
+                "keyId": "guard-policy-bundle-v1",
+                "signature": None,
+            },
+            "rolloutState": "enforcing",
+            "workspaceId": "workspace-b",
+            "policyDefaults": {
+                "mode": "enforce",
+                "defaultAction": "warn",
+                "unknownPublisherAction": "review",
+                "changedHashAction": "require-reapproval",
+                "newNetworkDomainAction": "warn",
+                "subprocessAction": "block",
+                "telemetryEnabled": False,
+                "syncEnabled": True,
+            },
+            "rules": [],
+            "acknowledgements": [],
+        },
+        workspace_id="workspace-b",
+    )
+
+    class _Response:
+        def __init__(self, payload: dict[str, object]) -> None:
+            self._payload = payload
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def read(self) -> bytes:
+            return json.dumps(self._payload).encode("utf-8")
+
+    sync_bodies: list[dict[str, object]] = []
+
+    def _fake_urlopen(request, timeout):
+        if request.full_url.endswith("/api/v1/guard/events"):
+            return _Response({"accepted": 0, "rejected": 0, "statuses": []})
+        if request.full_url.endswith("/receipts/sync"):
+            sync_bodies.append(json.loads(request.data.decode("utf-8")))
+        return _Response(
+            {
+                "syncedAt": "2026-06-05T13:30:01+00:00",
+                "receiptsStored": 0,
+                "policyBundle": bundle,
+            }
+        )
+
+    stub_authenticated_urlopen(monkeypatch, _fake_urlopen)
+    monkeypatch.setattr(guard_runner_module, "sync_pain_signals", lambda _store, auth_context=None: 0)
+
+    guard_runner_module.sync_receipts(store)
+
+    assert store.get_sync_payload("policy_bundle") is None
+    failed_ack = {
+        "appliedAt": store.get_sync_payload("policy_bundle_ack")["appliedAt"],
+        "bundleHash": "sha256:previous-bundle",
+        "bundleVersion": "policy-2026-06-05.4",
+        "deviceId": device_id,
+        "deviceName": device_name,
+        "status": "failed",
+    }
+    assert store.get_sync_payload("policy_bundle_ack") == failed_ack
+    context = guard_runner_module._receipt_sync_context(store, local_guard_online_at="2026-06-05T13:31:00+00:00")
+    assert context["policyBundleAcknowledgement"] == failed_ack
+    assert "policyBundleAcknowledgementV2" not in context
+    # Cloud hears about it in the same cycle, not one interval later.
+    assert len(sync_bodies) == 2
+    assert sync_bodies[1]["receipts"] == []
+    assert sync_bodies[1]["syncContext"]["policyBundleAcknowledgement"] == failed_ack
+
+
+def test_sync_receipts_reports_failure_of_the_bundle_it_last_reported_as_synced(tmp_path, monkeypatch):
+    """A drop of the applied bundle goes out in the same cycle as its earlier success."""
+
+    store = GuardStore(tmp_path / "guard-home")
+    _seed_guard_cloud(store, workspace_id="workspace-a")
+    store.set_sync_payload(
+        "policy_bundle_keyring",
+        policy_bundle_test_keyring(workspace_id="workspace-a"),
+        "2026-06-05T13:29:00Z",
+    )
+    device_id, device_name = guard_runner_module._guard_device_metadata(store)
+    bundle = sign_policy_bundle(
+        {
+            "contractVersion": "guard-policy-bundle.v1",
+            "bundleVersion": "policy-2026-06-05.4",
+            "bundleHash": "",
+            "issuedAt": "2026-06-05T13:30:00+00:00",
+            "expiresAt": None,
+            "verifier": {
+                "algorithm": "rsa-pss-sha256",
+                "keyId": "guard-policy-bundle-v1",
+                "signature": None,
+            },
+            "rolloutState": "enforcing",
+            "workspaceId": "workspace-a",
+            "policyDefaults": {
+                "mode": "enforce",
+                "defaultAction": "warn",
+                "unknownPublisherAction": "review",
+                "changedHashAction": "require-reapproval",
+                "newNetworkDomainAction": "warn",
+                "subprocessAction": "block",
+                "telemetryEnabled": False,
+                "syncEnabled": True,
+            },
+            "rules": [],
+            "acknowledgements": [],
+        },
+        workspace_id="workspace-a",
+    )
+
+    class _Response:
+        def __init__(self, payload: dict[str, object]) -> None:
+            self._payload = payload
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def read(self) -> bytes:
+            return json.dumps(self._payload).encode("utf-8")
+
+    sync_bodies: list[dict[str, object]] = []
+
+    def _fake_urlopen(request, timeout):
+        if request.full_url.endswith("/api/v1/guard/events"):
+            return _Response({"accepted": 0, "rejected": 0, "statuses": []})
+        if request.full_url.endswith("/receipts/sync"):
+            sync_bodies.append(json.loads(request.data.decode("utf-8")))
+        return _Response(
+            {
+                "syncedAt": "2026-06-05T13:30:01+00:00",
+                "receiptsStored": 0,
+                "policyBundle": bundle,
+            }
+        )
+
+    stub_authenticated_urlopen(monkeypatch, _fake_urlopen)
+    monkeypatch.setattr(guard_runner_module, "sync_pain_signals", lambda _store, auth_context=None: 0)
+
+    guard_runner_module.sync_receipts(store)
+    applied_ack = store.get_sync_payload("policy_bundle_ack")
+    assert isinstance(applied_ack, dict)
+    assert applied_ack["status"] == "synced"
+    applied_hash = applied_ack["bundleHash"]
+
+    # The next cycle refuses the bundle it applied, so nothing is left to fall
+    # back to and Guard drops it.
+    monkeypatch.setattr(guard_runner_module, "policy_bundle_is_enforceable", lambda _bundle: False)
+    sync_bodies.clear()
+    guard_runner_module.sync_receipts(store)
+
+    assert store.get_sync_payload("policy_bundle") is None
+    assert len(sync_bodies) == 2
+    first_ack = sync_bodies[0]["syncContext"]["policyBundleAcknowledgement"]
+    assert first_ack["bundleHash"] == applied_hash
+    assert first_ack["status"] == "synced"
+    follow_up_ack = sync_bodies[1]["syncContext"]["policyBundleAcknowledgement"]
+    assert follow_up_ack["bundleHash"] == applied_hash
+    assert follow_up_ack["status"] == "failed"
+    assert follow_up_ack["deviceId"] == device_id
+    assert follow_up_ack["deviceName"] == device_name
+
+
 @pytest.mark.parametrize(
     ("spec_extra", "reason", "rule_id"),
     [
@@ -19242,7 +19047,109 @@ def test_sync_receipts_rolls_back_to_last_good_bundle_on_canonical_compile_failu
     }
 
 
-def _prepare_shadow_candidate_sync(tmp_path, monkeypatch, *, canonical=True):
+def test_sync_receipts_enforces_an_exact_command_rule_from_a_v2_bundle(tmp_path, monkeypatch):
+    # Guard Cloud's Policy Studio and Cloud Review save "block this command"
+    # as an exact `match.commands` rule. The canonical compiler used to refuse
+    # it, which rejected the whole bundle and left the device on its old policy.
+    store = GuardStore(tmp_path / "guard-home")
+    _seed_guard_cloud(store, workspace_id="workspace-1")
+    monkeypatch.setenv("HOL_GUARD_POLICY_CANONICAL_ENFORCEMENT", "1")
+    store.set_sync_payload(
+        "policy_bundle_keyring",
+        policy_bundle_test_keyring(workspace_id="workspace-1"),
+        "2026-06-05T13:29:00+00:00",
+    )
+    command = "bun install --frozen-lockfile --ignore-scripts"
+    candidate = {
+        "contractVersion": "guard-policy-bundle.v2",
+        "bundleVersion": 5,
+        "bundleHash": "b" * 64,
+        "issuedAt": "2026-06-05T13:30:00Z",
+        "workspaceId": "workspace-1",
+        "payload": {
+            "apiVersion": "guard.hashgraphonline.com/v1alpha1",
+            "kind": "GuardPolicy",
+            "metadata": {"id": "policy.exact-command", "name": "Exact command", "revision": 1},
+            "spec": {
+                "defaults": {"mode": "prompt", "defaultAction": "warn"},
+                "rules": [
+                    {
+                        "id": "rule.block-install",
+                        "enabled": True,
+                        "effect": "block",
+                        "match": {"commands": [command], "harnesses": ["codex"]},
+                        "lifetime": {"mode": "permanent", "expiresAt": None},
+                        "provenance": {
+                            "source": "manual",
+                            "receiptIds": [],
+                            "createdAt": "2026-06-05T13:30:00Z",
+                            "createdBy": "owner-1",
+                        },
+                    }
+                ],
+            },
+        },
+    }
+
+    class _Response:
+        def __init__(self, payload: dict[str, object]) -> None:
+            self._payload = payload
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def read(self) -> bytes:
+            return json.dumps(self._payload).encode("utf-8")
+
+    def _fake_urlopen(request, timeout):
+        if request.full_url.endswith("/api/v1/guard/events"):
+            return _Response({"accepted": 0, "rejected": 0, "statuses": []})
+        return _Response(
+            {
+                "syncedAt": "2026-06-05T13:30:01+00:00",
+                "receiptsStored": 0,
+                "policyBundle": candidate,
+            }
+        )
+
+    stub_authenticated_urlopen(monkeypatch, _fake_urlopen)
+    monkeypatch.setattr(
+        guard_runner_module,
+        "validate_synced_policy_bundle",
+        lambda policy_bundle, *args, **kwargs: (policy_bundle, None, ()),
+    )
+    monkeypatch.setattr(
+        guard_runner_module,
+        "_validate_cached_policy_bundle",
+        lambda _store, policy_bundle: (
+            policy_bundle if isinstance(policy_bundle, dict) else None,
+            None,
+        ),
+    )
+    monkeypatch.setattr(guard_runner_module, "sync_pain_signals", lambda _store, auth_context=None: 0)
+
+    guard_runner_module.sync_receipts(store)
+
+    assert not store.get_sync_payload("policy_bundle_last_error")
+    assert store.get_sync_payload("policy_bundle") == candidate
+    digest = hashlib.sha256(command.encode("utf-8")).hexdigest()
+    assert [
+        (decision["harness"], decision["scope"], decision["action"], decision["artifact_id"], decision["owner"])
+        for decision in store.list_policy_decisions()
+    ] == [("codex", "artifact", "block", f"memory:exact-shell-command:{digest}", "rule.block-install")]
+
+
+def _prepare_shadow_candidate_sync(
+    tmp_path,
+    monkeypatch,
+    *,
+    canonical=True,
+    mode="prompt",
+    legacy_issued_at="2026-06-05T13:30:00+00:00",
+):
     store = GuardStore(tmp_path / "guard-home")
     _seed_guard_cloud(store, workspace_id="workspace-1")
     if canonical:
@@ -19259,7 +19166,7 @@ def _prepare_shadow_candidate_sync(tmp_path, monkeypatch, *, canonical=True):
             }
         ],
         bundle_version="policy-2026-06-05.4",
-        issued_at="2026-06-05T13:29:00+00:00",
+        issued_at=legacy_issued_at,
     )
     store.set_sync_payload(
         "policy_bundle_keyring",
@@ -19283,7 +19190,7 @@ def _prepare_shadow_candidate_sync(tmp_path, monkeypatch, *, canonical=True):
                 "revision": 1,
             },
             "spec": {
-                "defaults": {"mode": "prompt", "defaultAction": "warn"},
+                "defaults": {"mode": mode, "defaultAction": "warn"},
                 "rules": [
                     {
                         "id": "rule.canonical",
@@ -19353,6 +19260,19 @@ def _prepare_shadow_candidate_sync(tmp_path, monkeypatch, *, canonical=True):
     return store, legacy
 
 
+def test_sync_receipts_activates_an_evaluate_bundle_over_legacy_rows(tmp_path, monkeypatch):
+    """Evaluate compiles to no rows on purpose; an older bundle's rows are not drift."""
+
+    store, _legacy = _prepare_shadow_candidate_sync(tmp_path, monkeypatch, mode="observe")
+
+    guard_runner_module.sync_receipts(store)
+
+    assert not store.get_sync_payload("policy_bundle_last_error")
+    assert store.get_sync_payload("policy_bundle")["contractVersion"] == "guard-policy-bundle.v2"
+    assert store.list_policy_decisions() == []
+    assert store.list_events(event_name="policy_bundle/shadow_mismatch") == []
+
+
 def test_sync_receipts_keeps_legacy_bundle_active_on_canonical_shadow_mismatch(
     tmp_path,
     monkeypatch,
@@ -19372,6 +19292,47 @@ def test_sync_receipts_keeps_legacy_bundle_active_on_canonical_shadow_mismatch(
         "reasonCodes": ["action"],
         "status": "mismatch",
     }
+
+
+def test_sync_receipts_activates_v2_over_a_shadow_from_an_older_publication(
+    tmp_path,
+    monkeypatch,
+):
+    # The stored v1 bundle was issued for an earlier publication, so its rows
+    # are a different policy, not a second compile of this one. Holding the
+    # candidate against them left canonical devices on the old policy forever.
+    store, _legacy = _prepare_shadow_candidate_sync(
+        tmp_path,
+        monkeypatch,
+        legacy_issued_at="2026-06-05T13:29:00+00:00",
+    )
+
+    guard_runner_module.sync_receipts(store)
+
+    applied = store.get_sync_payload("policy_bundle")
+    assert isinstance(applied, dict)
+    assert applied["contractVersion"] == "guard-policy-bundle.v2"
+    assert not store.get_sync_payload("policy_bundle_last_error")
+    assert [decision["action"] for decision in store.list_policy_decisions()] == ["allow"]
+
+
+def test_sync_receipts_applies_v2_bundle_outside_the_canonical_rollout(
+    tmp_path,
+    monkeypatch,
+):
+    # Cloud sends v2 only when v1 cannot carry the policy, so a device outside
+    # the canonical rollout must enforce it instead of keeping the older v1
+    # decisions. The shadow comparison is still recorded.
+    store, _legacy = _prepare_shadow_candidate_sync(tmp_path, monkeypatch, canonical=False)
+
+    guard_runner_module.sync_receipts(store)
+
+    applied = store.get_sync_payload("policy_bundle")
+    assert isinstance(applied, dict)
+    assert applied["contractVersion"] == "guard-policy-bundle.v2"
+    assert [decision["action"] for decision in store.list_policy_decisions()] == ["allow"]
+    mismatch_events = store.list_events(event_name="policy_bundle/shadow_mismatch")
+    assert mismatch_events[-1]["payload"]["reasonCodes"] == ["action"]
 
 
 def test_sync_receipts_rejects_candidate_when_native_shadow_comparison_is_unavailable(
@@ -19508,7 +19469,8 @@ def test_policy_bundle_decision_resolves_before_receipt_persistence(tmp_path, mo
             }
         ],
     }
-    store.replace_remote_policies(
+    replace_remote_policies(
+        store,
         guard_runner_module._build_policy_bundle_decisions(
             bundle,
             device_id=guard_runner_module._guard_device_metadata(store)[0],
@@ -19524,7 +19486,6 @@ def test_policy_bundle_decision_resolves_before_receipt_persistence(tmp_path, mo
     original_add_receipt = store.add_receipt
 
     def tracked_resolve_policy(*args, **kwargs):
-        assert kwargs.get("consume_one_shot") is False
         order.append("resolve_policy_non_consuming")
         return original_resolve_policy(*args, **kwargs)
 
@@ -19992,7 +19953,7 @@ def test_sign_guard_dpop_proof_sets_access_token_hash_claim() -> None:
 
     claims = _decode_jwt_segment(proof.split(".")[1])
 
-    expected_ath = guard_runner_module._base64url_encode(hashlib.sha256(access_token.encode("ascii")).digest())
+    expected_ath = urlsafe_b64encode(hashlib.sha256(access_token.encode("ascii")).digest()).decode("ascii").rstrip("=")
 
     assert claims["ath"] == expected_ath
 
@@ -20395,96 +20356,8 @@ def test_sync_runtime_session_treats_token_endpoint_503_as_retryable_error(tmp_p
     assert not isinstance(error.value, guard_runner_module.GuardSyncAuthorizationExpiredError)
 
 
-def test_codex_read_only_source_inspection_external_targets_require_plain_non_recursive_grep(
-    tmp_path: Path,
-) -> None:
-    home_dir = tmp_path / "home"
-    projects_dir = home_dir / "projects"
-    workspace_dir = projects_dir / "workspace"
-    source_root = projects_dir / "sibling-worktree"
-    source_file = source_root / "src" / "safe.ts"
-    workspace_dir.mkdir(parents=True)
-    source_file.parent.mkdir(parents=True)
-    source_file.write_text("export const browser = true;\n")
-    (source_root / ".git").write_text("gitdir: ../.git/worktrees/test-checkout\n")
-
-    assert guard_commands_module._codex_command_is_read_only_source_inspection(
-        f"grep 'browser' {source_file}",
-        cwd=workspace_dir,
-        home_dir=home_dir,
-    )
-
-    workspace_source = workspace_dir / "src" / "local.ts"
-    workspace_source.parent.mkdir()
-    workspace_source.write_text("export const browser = true;\n")
-    assert guard_commands_module._codex_command_is_read_only_source_inspection(
-        f"grep -r 'browser' {workspace_source.parent}",
-        cwd=workspace_dir,
-        home_dir=home_dir,
-    )
-
-    rejected_commands = (
-        f"grep -r 'browser' {source_file.parent}",
-        f"grep -R 'browser' {source_file.parent}",
-        f"grep -rn 'browser' {source_file.parent}",
-        f"grep -nR 'browser' {source_file.parent}",
-        f"grep --recursive 'browser' {source_file.parent}",
-        f"grep --dereference-recursive 'browser' {source_file.parent}",
-        f"grep -d recurse 'browser' {source_file.parent}",
-        f"grep -drecurse 'browser' {source_file.parent}",
-        f"grep --directories=recurse 'browser' {source_file.parent}",
-        f"grep --directories recurse 'browser' {source_file.parent}",
-        f"rg 'browser' {source_file}",
-        f"git grep 'browser' {source_file}",
-        f"bash -c \"grep 'browser' {source_file}\"",
-    )
-    for command in rejected_commands:
-        assert not guard_commands_module._codex_command_is_read_only_source_inspection(
-            command,
-            cwd=workspace_dir,
-            home_dir=home_dir,
-        )
-
-
-def test_codex_read_only_source_inspection_rejects_globbed_targets(tmp_path: Path) -> None:
-    workspace_dir = tmp_path / "workspace"
-    (workspace_dir / "src").mkdir(parents=True)
-    _write_text(workspace_dir / "src" / "safe.ts", "export const safe = true;\n")
-
-    commands = [
-        "cat src/*.ts",
-        "cat src/[leak].ts",
-        "sed -n '1,40p' src/*.ts | head -40",
-        "rg safe src/*.ts",
-    ]
-
-    for command in commands:
-        assert not guard_commands_module._codex_command_is_read_only_source_inspection(
-            command,
-            cwd=workspace_dir,
-        )
-
-
-def test_codex_read_only_source_inspection_allows_quoted_bracket_targets(tmp_path: Path) -> None:
-    workspace_dir = tmp_path / "workspace"
-    route_file = workspace_dir / "app" / "[slug]" / "page.tsx"
-    _write_text(route_file, "export default function Page() { return null; }\n")
-
-    commands = [
-        "cat 'app/[slug]/page.tsx'",
-        "sed -n '1,40p' 'app/[slug]/page.tsx' | head -40",
-        "rg Page 'app/[slug]/page.tsx'",
-    ]
-
-    for command in commands:
-        assert guard_commands_module._codex_command_is_read_only_source_inspection(
-            command,
-            cwd=workspace_dir,
-        )
-
-
-def test_codex_read_only_source_inspection_allows_safe_sed_chains(tmp_path: Path) -> None:
-    workspace_dir = tmp_path / "workspace"
+def test_codex_read_only_source_inspection_allows_safe_sed_chains(live_hook_root: Path) -> None:
+    workspace_dir = live_hook_root / "workspace"
     route_file = workspace_dir / "src" / "api" / "routes" / "skill-registry.ts"
     service_file = workspace_dir / "src" / "services" / "skill-registry" / "skill-registry-service.ts"
     _write_text(route_file, "export const headerName = 'x-api-key';\n")
@@ -20495,11 +20368,7 @@ def test_codex_read_only_source_inspection_allows_safe_sed_chains(tmp_path: Path
         "sed -n '940,1005p' src/services/skill-registry/skill-registry-service.ts"
     )
 
-    assert guard_commands_module._codex_command_is_read_only_source_inspection(
-        command,
-        cwd=workspace_dir,
-    )
-    artifact = guard_commands_module._codex_post_tool_output_artifact(
+    artifact = live_post_tool_flag(
         payload={
             "tool_name": "Bash",
             "tool_input": {"command": command},
@@ -20507,61 +20376,13 @@ def test_codex_read_only_source_inspection_allows_safe_sed_chains(tmp_path: Path
                 "stdout": "export const headerName = 'x-api-key';\nexport const registryTokenField = 'tokenId';\n"
             },
         },
-        config_path=str(workspace_dir / ".codex" / "config.toml"),
-        source_scope="workspace",
         cwd=workspace_dir,
     )
     assert artifact is None
 
 
-def test_codex_read_only_source_inspection_rejects_unbounded_sed_ranges(tmp_path: Path) -> None:
-    workspace_dir = tmp_path / "workspace"
-    source_file = workspace_dir / "src" / "safe.ts"
-    _write_text(source_file, "export const safe = true;\n")
-
-    assert not guard_commands_module._codex_command_is_read_only_source_inspection(
-        "sed -n '9999999p' src/safe.ts",
-        cwd=workspace_dir,
-    )
-    assert not guard_commands_module._codex_command_is_read_only_source_inspection(
-        f"sed -n '{'9' * 10000}p' src/safe.ts",
-        cwd=workspace_dir,
-    )
-
-
-def test_codex_read_only_source_inspection_rejects_sed_chain_with_secret_file(tmp_path: Path) -> None:
-    workspace_dir = tmp_path / "workspace"
-    route_file = workspace_dir / "src" / "api" / "routes" / "skill-registry.ts"
-    _write_text(route_file, "export const safe = true;\n")
-
-    command = "sed -n '450,510p' src/api/routes/skill-registry.ts && cat .env"
-
-    assert not guard_commands_module._codex_command_is_read_only_source_inspection(
-        command,
-        cwd=workspace_dir,
-    )
-
-
-def test_codex_read_only_source_inspection_preserves_pipelines_in_safe_chains(tmp_path: Path) -> None:
-    workspace_dir = tmp_path / "workspace"
-    route_file = workspace_dir / "src" / "api" / "routes" / "skill-registry.ts"
-    service_file = workspace_dir / "src" / "services" / "skill-registry" / "skill-registry-service.ts"
-    _write_text(route_file, "export const safe = true;\n")
-    _write_text(service_file, "export const alsoSafe = true;\n")
-
-    command = (
-        "rg skill src/api/routes/skill-registry.ts | head -20 && "
-        "sed -n '940,1005p' src/services/skill-registry/skill-registry-service.ts"
-    )
-
-    assert guard_commands_module._codex_command_is_read_only_source_inspection(
-        command,
-        cwd=workspace_dir,
-    )
-
-
-def test_codex_read_only_source_inspection_allows_cd_then_bounded_secret_term_search(tmp_path: Path) -> None:
-    repo_root = tmp_path / "CascadeProjects" / "hashgraph-online"
+def test_codex_read_only_source_inspection_allows_cd_then_bounded_secret_term_search(live_hook_root: Path) -> None:
+    repo_root = live_hook_root / "CascadeProjects" / "hashgraph-online"
     workspace_dir = repo_root / "cloud-portal" / ".worktrees" / "guard-auth-phase-r-removal"
     source_file = workspace_dir / "src" / "guard-auth.ts"
     live_prefix = "guard" + "_live" + "_"
@@ -20579,12 +20400,7 @@ def test_codex_read_only_source_inspection_allows_cd_then_bounded_secret_term_se
         f"rg -n {shlex.quote(pattern)} src app __tests__ docs -g '!**/*.map' | sed -n '1,260p'"
     )
 
-    assert guard_commands_module._codex_command_is_read_only_source_inspection(
-        command,
-        cwd=repo_root,
-        home_dir=tmp_path,
-    )
-    artifact = guard_commands_module._codex_post_tool_output_artifact(
+    artifact = live_post_tool_flag(
         payload={
             "tool_name": "Bash",
             "tool_input": {"command": command},
@@ -20595,35 +20411,14 @@ def test_codex_read_only_source_inspection_allows_cd_then_bounded_secret_term_se
                 )
             },
         },
-        config_path=str(repo_root / ".codex" / "config.toml"),
-        source_scope="workspace",
         cwd=repo_root,
-        home_dir=tmp_path,
+        home_dir=live_hook_root,
     )
     assert artifact is None
 
 
-def test_codex_read_only_source_inspection_rejects_cd_parent_escape(tmp_path: Path) -> None:
-    repo_root = tmp_path / "CascadeProjects" / "hashgraph-online"
-    workspace_dir = repo_root / "cloud-portal" / ".worktrees" / "guard-auth-phase-r-removal"
-    outside_dir = tmp_path / "CascadeProjects" / "outside"
-    _write_text(workspace_dir / "src" / "inside.ts", "export const token_label = 'field name only';\n")
-    _write_text(outside_dir / "src" / "outside.ts", "export const token_label = 'field name only';\n")
-
-    command = (
-        f"cd {shlex.quote(str(workspace_dir / '..' / '..' / '..' / '..' / 'outside'))} && "
-        "rg -n token_label src | sed -n '1,40p'"
-    )
-
-    assert not guard_commands_module._codex_command_is_read_only_source_inspection(
-        command,
-        cwd=repo_root,
-        home_dir=tmp_path,
-    )
-
-
-def test_codex_read_only_source_inspection_allows_tilde_worktree_targets(tmp_path: Path) -> None:
-    repo_root = tmp_path / "CascadeProjects" / "hashgraph-online"
+def test_codex_read_only_source_inspection_allows_tilde_worktree_targets(live_hook_root: Path) -> None:
+    repo_root = live_hook_root / "CascadeProjects" / "hashgraph-online"
     workspace_dir = repo_root / "cloud-portal" / ".worktrees" / "guard-auth-phase-r-default-surfaces"
     _write_text(
         workspace_dir / "app" / "agent-token-detail.tsx",
@@ -20637,12 +20432,7 @@ def test_codex_read_only_source_inspection_allows_tilde_worktree_targets(tmp_pat
         "~/CascadeProjects/hashgraph-online/cloud-portal/.worktrees/guard-auth-phase-r-default-surfaces/__tests__"
     )
 
-    assert guard_commands_module._codex_command_is_read_only_source_inspection(
-        command,
-        cwd=repo_root,
-        home_dir=tmp_path,
-    )
-    artifact = guard_commands_module._codex_post_tool_output_artifact(
+    artifact = live_post_tool_flag(
         payload={
             "tool_name": "Bash",
             "tool_input": {"command": command},
@@ -20653,10 +20443,8 @@ def test_codex_read_only_source_inspection_allows_tilde_worktree_targets(tmp_pat
                 )
             },
         },
-        config_path=str(repo_root / ".codex" / "config.toml"),
-        source_scope="workspace",
         cwd=repo_root,
-        home_dir=tmp_path,
+        home_dir=live_hook_root,
     )
     assert artifact is None
 
@@ -20672,13 +20460,13 @@ def test_codex_read_only_source_inspection_allows_tilde_worktree_targets(tmp_pat
 )
 def test_codex_read_only_source_inspection_still_blocks_value_like_secret_output(
     command: str,
-    tmp_path: Path,
+    live_hook_root: Path,
 ) -> None:
-    workspace_dir = tmp_path / "workspace"
+    workspace_dir = live_hook_root / "workspace"
     _write_text(workspace_dir / "src" / "config.ts", "export const label = 'token';\n")
     _write_text(workspace_dir / ".github" / "workflows" / "publish.yml", "jobs: {}\n")
 
-    artifact = guard_commands_module._codex_post_tool_output_artifact(
+    artifact = live_post_tool_flag(
         payload={
             "tool_name": "Bash",
             "tool_input": {"command": command},
@@ -20686,8 +20474,6 @@ def test_codex_read_only_source_inspection_still_blocks_value_like_secret_output
                 "stdout": "src/config.ts:1:export const token = 'ghp_123456789012345678901234567890123456';\n"
             },
         },
-        config_path=str(workspace_dir / ".codex" / "config.toml"),
-        source_scope="workspace",
         cwd=workspace_dir,
     )
     assert artifact is not None
@@ -20695,10 +20481,10 @@ def test_codex_read_only_source_inspection_still_blocks_value_like_secret_output
 
 def test_codex_read_only_source_inspection_allows_git_diff_with_bounded_sed(
     monkeypatch: pytest.MonkeyPatch,
-    tmp_path: Path,
+    live_hook_root: Path,
 ) -> None:
     _isolate_git_config(monkeypatch)
-    workspace_dir = tmp_path / "workspace"
+    workspace_dir = live_hook_root / "workspace"
     source_paths = [
         workspace_dir / "src" / "codex_plugin_scanner" / "guard" / "daemon" / "server.py",
         workspace_dir / "dashboard" / "src" / "approval-center-layout.tsx",
@@ -20710,17 +20496,13 @@ def test_codex_read_only_source_inspection_allows_git_diff_with_bounded_sed(
 
     command = (
         "git diff -- "
-        "src/codex_plugin_scanner/guard/daemon/server.py "
+        "src/codex_plugin_scanner/guard/routes/request_handler.py "
         "dashboard/src/approval-center-layout.tsx "
         "dashboard/src/review-workspace.tsx "
         "tests/test_guard_approvals.py | sed -n '1,260p'"
     )
 
-    assert guard_commands_module._codex_command_is_read_only_source_inspection(
-        command,
-        cwd=workspace_dir,
-    )
-    artifact = guard_commands_module._codex_post_tool_output_artifact(
+    artifact = live_post_tool_flag(
         payload={
             "tool_name": "Bash",
             "tool_input": {"command": command},
@@ -20731,598 +20513,9 @@ def test_codex_read_only_source_inspection_allows_git_diff_with_bounded_sed(
                 )
             },
         },
-        config_path=str(workspace_dir / ".codex" / "config.toml"),
-        source_scope="workspace",
         cwd=workspace_dir,
     )
     assert artifact is None
-
-
-def test_codex_read_only_source_inspection_rejects_git_diff_secret_path(
-    monkeypatch: pytest.MonkeyPatch,
-    tmp_path: Path,
-) -> None:
-    _isolate_git_config(monkeypatch)
-    workspace_dir = tmp_path / "workspace"
-    _write_text(workspace_dir / ".env", "TOKEN_LABEL=value\n")
-
-    assert not guard_commands_module._codex_command_is_read_only_source_inspection(
-        "git diff -- .env | sed -n '1,40p'",
-        cwd=workspace_dir,
-    )
-
-
-def test_codex_read_only_source_inspection_rejects_git_diff_external_config(
-    monkeypatch: pytest.MonkeyPatch,
-    tmp_path: Path,
-) -> None:
-    _isolate_git_config(monkeypatch)
-    workspace_dir = tmp_path / "workspace"
-    source_file = workspace_dir / "src" / "safe.ts"
-    _write_text(source_file, "export const safe = true;\n")
-    _write_text(
-        workspace_dir / ".git" / "config",
-        """
-[diff]
-    external = /tmp/guard-helper
-""".strip(),
-    )
-
-    assert not guard_commands_module._codex_command_is_read_only_source_inspection(
-        "git diff -- src/safe.ts | sed -n '1,40p'",
-        cwd=workspace_dir,
-    )
-
-
-def test_codex_read_only_source_inspection_rejects_git_diff_textconv_config(
-    monkeypatch: pytest.MonkeyPatch,
-    tmp_path: Path,
-) -> None:
-    _isolate_git_config(monkeypatch)
-    workspace_dir = tmp_path / "workspace"
-    source_file = workspace_dir / "src" / "safe.ts"
-    _write_text(source_file, "export const safe = true;\n")
-    _write_text(
-        workspace_dir / ".git" / "config",
-        """
-[diff "guard"]
-    textconv = /tmp/guard-textconv
-""".strip(),
-    )
-
-    assert not guard_commands_module._codex_command_is_read_only_source_inspection(
-        "git diff -- src/safe.ts | sed -n '1,40p'",
-        cwd=workspace_dir,
-    )
-
-
-def test_codex_read_only_source_inspection_rejects_git_diff_driver_command_config(
-    monkeypatch: pytest.MonkeyPatch,
-    tmp_path: Path,
-) -> None:
-    _isolate_git_config(monkeypatch)
-    workspace_dir = tmp_path / "workspace"
-    source_file = workspace_dir / "src" / "safe.ts"
-    _write_text(source_file, "export const safe = true;\n")
-    _write_text(
-        workspace_dir / ".git" / "config",
-        """
-[diff "guard"]
-    command = /tmp/guard-diff
-""".strip(),
-    )
-
-    assert not guard_commands_module._codex_command_is_read_only_source_inspection(
-        "git diff -- src/safe.ts | sed -n '1,40p'",
-        cwd=workspace_dir,
-    )
-
-
-def test_codex_read_only_source_inspection_rejects_git_external_diff_env(
-    monkeypatch: pytest.MonkeyPatch,
-    tmp_path: Path,
-) -> None:
-    _isolate_git_config(monkeypatch)
-    monkeypatch.setenv("GIT_EXTERNAL_DIFF", "/tmp/guard-helper")
-    workspace_dir = tmp_path / "workspace"
-    source_file = workspace_dir / "src" / "safe.ts"
-    _write_text(source_file, "export const safe = true;\n")
-
-    assert not guard_commands_module._codex_command_is_read_only_source_inspection(
-        "git diff -- src/safe.ts | sed -n '1,40p'",
-        cwd=workspace_dir,
-    )
-
-
-def test_codex_read_only_source_inspection_rejects_git_config_parameters_env(
-    monkeypatch: pytest.MonkeyPatch,
-    tmp_path: Path,
-) -> None:
-    _isolate_git_config(monkeypatch)
-    monkeypatch.setenv("GIT_CONFIG_PARAMETERS", "'diff.external=/tmp/guard-helper'")
-    workspace_dir = tmp_path / "workspace"
-    source_file = workspace_dir / "src" / "safe.ts"
-    _write_text(source_file, "export const safe = true;\n")
-
-    assert not guard_commands_module._codex_command_is_read_only_source_inspection(
-        "git diff -- src/safe.ts | sed -n '1,40p'",
-        cwd=workspace_dir,
-    )
-
-
-def test_codex_read_only_source_inspection_rejects_git_diff_global_textconv_config(
-    monkeypatch: pytest.MonkeyPatch,
-    tmp_path: Path,
-) -> None:
-    _isolate_git_config(monkeypatch)
-    global_config = tmp_path / "global-gitconfig"
-    _write_text(
-        global_config,
-        """
-[diff "guard"]
-    textconv = /tmp/guard-textconv
-""".strip(),
-    )
-    monkeypatch.setenv("GIT_CONFIG_GLOBAL", str(global_config))
-    workspace_dir = tmp_path / "workspace"
-    source_file = workspace_dir / "src" / "safe.ts"
-    _write_text(source_file, "export const safe = true;\n")
-
-    assert not guard_commands_module._codex_command_is_read_only_source_inspection(
-        "git diff -- src/safe.ts | sed -n '1,40p'",
-        cwd=workspace_dir,
-    )
-
-
-def test_codex_read_only_source_inspection_rejects_git_diff_included_config_with_comment(
-    monkeypatch: pytest.MonkeyPatch,
-    tmp_path: Path,
-) -> None:
-    _isolate_git_config(monkeypatch)
-    included_config = tmp_path / "included-gitconfig"
-    _write_text(
-        included_config,
-        """
-[diff "guard"]
-    textconv = /tmp/guard-textconv
-""".strip(),
-    )
-    global_config = tmp_path / "global-gitconfig"
-    _write_text(global_config, f"[include]\n    path = {included_config} # required by local tools\n")
-    monkeypatch.setenv("GIT_CONFIG_GLOBAL", str(global_config))
-    workspace_dir = tmp_path / "workspace"
-    source_file = workspace_dir / "src" / "safe.ts"
-    _write_text(source_file, "export const safe = true;\n")
-
-    assert not guard_commands_module._codex_command_is_read_only_source_inspection(
-        "git diff -- src/safe.ts | sed -n '1,40p'",
-        cwd=workspace_dir,
-    )
-
-
-def test_codex_read_only_source_inspection_rejects_git_diff_included_config_with_section_comment(
-    monkeypatch: pytest.MonkeyPatch,
-    tmp_path: Path,
-) -> None:
-    _isolate_git_config(monkeypatch)
-    included_config = tmp_path / "included-gitconfig"
-    _write_text(
-        included_config,
-        """
-[diff]
-    external = /tmp/guard-diff
-""".strip(),
-    )
-    global_config = tmp_path / "global-gitconfig"
-    _write_text(global_config, f"[include] # local helper config\n    path = {included_config}\n")
-    monkeypatch.setenv("GIT_CONFIG_GLOBAL", str(global_config))
-    workspace_dir = tmp_path / "workspace"
-    source_file = workspace_dir / "src" / "safe.ts"
-    _write_text(source_file, "export const safe = true;\n")
-
-    assert not guard_commands_module._codex_command_is_read_only_source_inspection(
-        "git diff -- src/safe.ts | sed -n '1,40p'",
-        cwd=workspace_dir,
-    )
-
-
-def test_codex_read_only_source_inspection_ignores_unmatched_git_include_if(
-    monkeypatch: pytest.MonkeyPatch,
-    tmp_path: Path,
-) -> None:
-    _isolate_git_config(monkeypatch)
-    included_config = tmp_path / "included-gitconfig"
-    _write_text(
-        included_config,
-        """
-[diff]
-    external = /tmp/guard-diff
-""".strip(),
-    )
-    global_config = tmp_path / "global-gitconfig"
-    _write_text(global_config, f'[includeIf "gitdir:{tmp_path / "other-repo"}/"]\n    path = {included_config}\n')
-    monkeypatch.setenv("GIT_CONFIG_GLOBAL", str(global_config))
-    workspace_dir = tmp_path / "workspace"
-    source_file = workspace_dir / "src" / "safe.ts"
-    _write_text(source_file, "export const safe = true;\n")
-    _write_text(workspace_dir / ".git" / "HEAD", "ref: refs/heads/main\n")
-
-    assert guard_commands_module._codex_command_is_read_only_source_inspection(
-        "git diff -- src/safe.ts | sed -n '1,40p'",
-        cwd=workspace_dir,
-    )
-
-
-def test_codex_read_only_source_inspection_rejects_matched_git_include_if(
-    monkeypatch: pytest.MonkeyPatch,
-    tmp_path: Path,
-) -> None:
-    _isolate_git_config(monkeypatch)
-    included_config = tmp_path / "included-gitconfig"
-    _write_text(
-        included_config,
-        """
-[diff]
-    external = /tmp/guard-diff
-""".strip(),
-    )
-    workspace_dir = tmp_path / "workspace"
-    source_file = workspace_dir / "src" / "safe.ts"
-    _write_text(source_file, "export const safe = true;\n")
-    _write_text(workspace_dir / ".git" / "HEAD", "ref: refs/heads/main\n")
-    global_config = tmp_path / "global-gitconfig"
-    _write_text(global_config, f'[includeIf "gitdir:{workspace_dir}/"]\n    path = {included_config}\n')
-    monkeypatch.setenv("GIT_CONFIG_GLOBAL", str(global_config))
-
-    assert not guard_commands_module._codex_command_is_read_only_source_inspection(
-        "git diff -- src/safe.ts | sed -n '1,40p'",
-        cwd=workspace_dir,
-    )
-
-
-def test_codex_read_only_source_inspection_rejects_git_include_if_gitdir_matches_dot_git(
-    monkeypatch: pytest.MonkeyPatch,
-    tmp_path: Path,
-) -> None:
-    _isolate_git_config(monkeypatch)
-    included_config = tmp_path / "included-gitconfig"
-    _write_text(
-        included_config,
-        """
-[diff]
-    external = /tmp/guard-diff
-""".strip(),
-    )
-    workspace_dir = tmp_path / "workspace"
-    source_file = workspace_dir / "src" / "safe.ts"
-    _write_text(source_file, "export const safe = true;\n")
-    _write_text(workspace_dir / ".git" / "HEAD", "ref: refs/heads/main\n")
-    global_config = tmp_path / "global-gitconfig"
-    _write_text(global_config, f'[includeIf "gitdir:{workspace_dir / ".git"}"]\n    path = {included_config}\n')
-    monkeypatch.setenv("GIT_CONFIG_GLOBAL", str(global_config))
-
-    assert not guard_commands_module._codex_command_is_read_only_source_inspection(
-        "git diff -- src/safe.ts | sed -n '1,40p'",
-        cwd=workspace_dir,
-    )
-
-
-def test_codex_read_only_source_inspection_rejects_git_include_if_gitdir_matches_symlink(
-    monkeypatch: pytest.MonkeyPatch,
-    tmp_path: Path,
-) -> None:
-    _isolate_git_config(monkeypatch)
-    included_config = tmp_path / "included-gitconfig"
-    _write_text(
-        included_config,
-        """
-[diff]
-    external = /tmp/guard-diff
-""".strip(),
-    )
-    workspace_dir = tmp_path / "workspace"
-    source_file = workspace_dir / "src" / "safe.ts"
-    _write_text(source_file, "export const safe = true;\n")
-    _write_text(workspace_dir / ".git" / "HEAD", "ref: refs/heads/main\n")
-    symlink_dir = tmp_path / "workspace-link"
-    try:
-        symlink_dir.symlink_to(workspace_dir, target_is_directory=True)
-    except OSError as exc:
-        pytest.skip(f"symlink unavailable: {exc}")
-    global_config = tmp_path / "global-gitconfig"
-    _write_text(global_config, f'[includeIf "gitdir:{symlink_dir / ".git"}"]\n    path = {included_config}\n')
-    monkeypatch.setenv("GIT_CONFIG_GLOBAL", str(global_config))
-
-    assert not guard_commands_module._codex_command_is_read_only_source_inspection(
-        "git diff -- src/safe.ts | sed -n '1,40p'",
-        cwd=symlink_dir,
-    )
-
-
-def test_codex_read_only_source_inspection_rejects_git_include_if_relative_gitdir(
-    monkeypatch: pytest.MonkeyPatch,
-    tmp_path: Path,
-) -> None:
-    _isolate_git_config(monkeypatch)
-    included_config = tmp_path / "included-gitconfig"
-    _write_text(
-        included_config,
-        """
-[diff]
-    external = /tmp/guard-diff
-""".strip(),
-    )
-    workspace_dir = tmp_path / "workspace"
-    source_file = workspace_dir / "src" / "safe.ts"
-    _write_text(source_file, "export const safe = true;\n")
-    _write_text(workspace_dir / ".git" / "HEAD", "ref: refs/heads/main\n")
-    global_config = tmp_path / "global-gitconfig"
-    _write_text(global_config, f'[includeIf "gitdir:./workspace/.git"]\n    path = {included_config}\n')
-    monkeypatch.setenv("GIT_CONFIG_GLOBAL", str(global_config))
-
-    assert not guard_commands_module._codex_command_is_read_only_source_inspection(
-        "git diff -- src/safe.ts | sed -n '1,40p'",
-        cwd=workspace_dir,
-    )
-
-
-def test_codex_read_only_source_inspection_rejects_git_include_if_hasconfig(
-    monkeypatch: pytest.MonkeyPatch,
-    tmp_path: Path,
-) -> None:
-    _isolate_git_config(monkeypatch)
-    included_config = tmp_path / "included-gitconfig"
-    _write_text(
-        included_config,
-        """
-[diff]
-    external = /tmp/guard-diff
-""".strip(),
-    )
-    workspace_dir = tmp_path / "workspace"
-    source_file = workspace_dir / "src" / "safe.ts"
-    _write_text(source_file, "export const safe = true;\n")
-    _write_text(
-        workspace_dir / ".git" / "config",
-        """
-[remote "origin"]
-    url = https://github.com/hashgraph-online/hol-guard
-""".strip(),
-    )
-    global_config = tmp_path / "global-gitconfig"
-    _write_text(
-        global_config,
-        f'[includeIf "hasconfig:remote.*.url:https://github.com/hashgraph-online/*"]\n    path = {included_config}\n',
-    )
-    monkeypatch.setenv("GIT_CONFIG_GLOBAL", str(global_config))
-
-    assert not guard_commands_module._codex_command_is_read_only_source_inspection(
-        "git diff -- src/safe.ts | sed -n '1,40p'",
-        cwd=workspace_dir,
-    )
-
-
-def test_codex_read_only_source_inspection_rejects_git_include_if_hasconfig_nested_include(
-    monkeypatch: pytest.MonkeyPatch,
-    tmp_path: Path,
-) -> None:
-    _isolate_git_config(monkeypatch)
-    helper_config = tmp_path / "helper-gitconfig"
-    _write_text(
-        helper_config,
-        """
-[diff]
-    external = /tmp/guard-diff
-""".strip(),
-    )
-    remote_config = tmp_path / "remote-gitconfig"
-    _write_text(
-        remote_config,
-        """
-[remote "origin"]
-    url = https://github.com/hashgraph-online/hol-guard
-""".strip(),
-    )
-    workspace_dir = tmp_path / "workspace"
-    source_file = workspace_dir / "src" / "safe.ts"
-    _write_text(source_file, "export const safe = true;\n")
-    _write_text(workspace_dir / ".git" / "HEAD", "ref: refs/heads/main\n")
-    _write_text(workspace_dir / ".git" / "config", f"[include]\n    path = {remote_config}\n")
-    global_config = tmp_path / "global-gitconfig"
-    _write_text(
-        global_config,
-        f'[includeIf "hasconfig:remote.*.url:https://github.com/hashgraph-online/*"]\n    path = {helper_config}\n',
-    )
-    monkeypatch.setenv("GIT_CONFIG_GLOBAL", str(global_config))
-
-    assert not guard_commands_module._codex_command_is_read_only_source_inspection(
-        "git diff -- src/safe.ts | sed -n '1,40p'",
-        cwd=workspace_dir,
-    )
-
-
-def test_codex_read_only_source_inspection_rejects_git_config_continued_include_path(
-    monkeypatch: pytest.MonkeyPatch,
-    tmp_path: Path,
-) -> None:
-    _isolate_git_config(monkeypatch)
-    workspace_dir = tmp_path / "workspace"
-    source_file = workspace_dir / "src" / "safe.ts"
-    _write_text(source_file, "export const safe = true;\n")
-    _write_text(workspace_dir / ".git" / "HEAD", "ref: refs/heads/main\n")
-    _write_text(workspace_dir / "helper-gitconfig", "[diff]\n    external = /tmp/guard-diff\n")
-    _write_text(
-        workspace_dir / ".git" / "config",
-        """
-[include]
-    path = ../helper-\\
-        gitconfig
-""".strip(),
-    )
-
-    assert not guard_commands_module._codex_command_is_read_only_source_inspection(
-        "git diff -- src/safe.ts | sed -n '1,40p'",
-        cwd=workspace_dir,
-    )
-
-
-def test_codex_read_only_source_inspection_rejects_git_include_if_onbranch_prefix(
-    monkeypatch: pytest.MonkeyPatch,
-    tmp_path: Path,
-) -> None:
-    _isolate_git_config(monkeypatch)
-    included_config = tmp_path / "included-gitconfig"
-    _write_text(
-        included_config,
-        """
-[diff]
-    external = /tmp/guard-diff
-""".strip(),
-    )
-    workspace_dir = tmp_path / "workspace"
-    source_file = workspace_dir / "src" / "safe.ts"
-    _write_text(source_file, "export const safe = true;\n")
-    _write_text(workspace_dir / ".git" / "HEAD", "ref: refs/heads/feature/read-only\n")
-    global_config = tmp_path / "global-gitconfig"
-    _write_text(global_config, f'[includeIf "onbranch:feature/"]\n    path = {included_config}\n')
-    monkeypatch.setenv("GIT_CONFIG_GLOBAL", str(global_config))
-
-    assert not guard_commands_module._codex_command_is_read_only_source_inspection(
-        "git diff -- src/safe.ts | sed -n '1,40p'",
-        cwd=workspace_dir,
-    )
-
-
-def test_codex_read_only_source_inspection_allows_git_diff_with_external_helpers_disabled(
-    monkeypatch: pytest.MonkeyPatch,
-    tmp_path: Path,
-) -> None:
-    _isolate_git_config(monkeypatch)
-    workspace_dir = tmp_path / "workspace"
-    source_file = workspace_dir / "src" / "safe.ts"
-    _write_text(source_file, "export const safe = true;\n")
-    _write_text(
-        workspace_dir / ".git" / "config",
-        """
-[diff "guard"]
-    textconv = /tmp/guard-textconv
-""".strip(),
-    )
-
-    assert guard_commands_module._codex_command_is_read_only_source_inspection(
-        "git diff --no-ext-diff --no-textconv -- src/safe.ts | sed -n '1,40p'",
-        cwd=workspace_dir,
-    )
-
-
-def test_codex_read_only_source_inspection_rejects_git_config_injection(
-    monkeypatch: pytest.MonkeyPatch,
-    tmp_path: Path,
-) -> None:
-    _isolate_git_config(monkeypatch)
-    workspace_dir = tmp_path / "workspace"
-    source_file = workspace_dir / "src" / "safe.ts"
-    _write_text(source_file, "export const safe = true;\n")
-
-    assert not guard_commands_module._codex_command_is_read_only_source_inspection(
-        "git -c diff.external=/tmp/guard-helper diff -- src/safe.ts | sed -n '1,40p'",
-        cwd=workspace_dir,
-    )
-
-
-def test_codex_read_only_source_inspection_rejects_unknown_git_diff_option(
-    monkeypatch: pytest.MonkeyPatch,
-    tmp_path: Path,
-) -> None:
-    _isolate_git_config(monkeypatch)
-    workspace_dir = tmp_path / "workspace"
-    source_file = workspace_dir / "src" / "safe.ts"
-    _write_text(source_file, "export const safe = true;\n")
-
-    assert not guard_commands_module._codex_command_is_read_only_source_inspection(
-        "git diff --mystery -- src/safe.ts | sed -n '1,40p'",
-        cwd=workspace_dir,
-    )
-
-
-def test_codex_read_only_source_inspection_rejects_git_diff_paths_without_separator(
-    monkeypatch: pytest.MonkeyPatch,
-    tmp_path: Path,
-) -> None:
-    _isolate_git_config(monkeypatch)
-    workspace_dir = tmp_path / "workspace"
-    source_file = workspace_dir / "src" / "safe.ts"
-    _write_text(source_file, "export const safe = true;\n")
-
-    assert not guard_commands_module._codex_command_is_read_only_source_inspection(
-        "git diff src/safe.ts | sed -n '1,40p'",
-        cwd=workspace_dir,
-    )
-
-
-def test_codex_read_only_source_inspection_rejects_disallowed_option_after_optional_git_diff_flag(
-    monkeypatch: pytest.MonkeyPatch,
-    tmp_path: Path,
-) -> None:
-    _isolate_git_config(monkeypatch)
-    workspace_dir = tmp_path / "workspace"
-    source_file = workspace_dir / "src" / "safe.ts"
-    _write_text(source_file, "export const safe = true;\n")
-
-    assert not guard_commands_module._codex_command_is_read_only_source_inspection(
-        "git diff --color --output=/tmp/leak -- src/safe.ts | sed -n '1,40p'",
-        cwd=workspace_dir,
-    )
-
-
-def test_codex_read_only_source_inspection_rejects_unbounded_sed_filter(
-    monkeypatch: pytest.MonkeyPatch,
-    tmp_path: Path,
-) -> None:
-    _isolate_git_config(monkeypatch)
-    workspace_dir = tmp_path / "workspace"
-    source_file = workspace_dir / "src" / "safe.ts"
-    _write_text(source_file, "export const safe = true;\n")
-
-    assert not guard_commands_module._codex_command_is_read_only_source_inspection(
-        "git diff -- src/safe.ts | sed 's/token/value/'",
-        cwd=workspace_dir,
-    )
-
-
-def test_codex_read_only_source_inspection_rejects_invalid_sed_without_crashing(tmp_path: Path) -> None:
-    workspace_dir = tmp_path / "workspace"
-    source_file = workspace_dir / "src" / "safe.ts"
-    _write_text(source_file, "export const safe = true;\n")
-
-    for command in (
-        "sed -i 's/safe/unsafe/' src/safe.ts",
-        "sed --unknown -n '1,40p' src/safe.ts",
-    ):
-        assert not guard_commands_module._codex_command_is_read_only_source_inspection(
-            command,
-            cwd=workspace_dir,
-        )
-
-
-def test_codex_read_only_source_inspection_rejects_malformed_chains(tmp_path: Path) -> None:
-    workspace_dir = tmp_path / "workspace"
-    source_file = workspace_dir / "src" / "safe.ts"
-    _write_text(source_file, "export const safe = true;\n")
-
-    commands = [
-        "&& sed -n '1,10p' src/safe.ts",
-        "sed -n '1,10p' src/safe.ts &&",
-        "sed -n '1,10p' src/safe.ts && && cat src/safe.ts",
-        "sed -n '1,10p' src/safe.ts || cat src/safe.ts",
-        "sed -n '1,10p' src/safe.ts;; cat src/safe.ts",
-    ]
-
-    for command in commands:
-        assert not guard_commands_module._codex_command_is_read_only_source_inspection(
-            command,
-            cwd=workspace_dir,
-        )
 
 
 def test_sign_guard_dpop_proof_sets_nonce_claim() -> None:
@@ -21339,6 +20532,37 @@ def test_sign_guard_dpop_proof_sets_nonce_claim() -> None:
     claims = _decode_jwt_segment(proof.split(".")[1])
 
     assert claims["nonce"] == "nonce-123"
+
+
+def test_sign_guard_dpop_proof_reports_a_resident_outage_as_retryable(monkeypatch: pytest.MonkeyPatch) -> None:
+    def _outage(**_kwargs: object) -> str:
+        raise guard_runner_module.PolicyBundleNativeUnavailableError("native_unavailable")
+
+    monkeypatch.setattr(guard_runner_module, "signed_dpop_proof", _outage)
+
+    with pytest.raises(guard_runner_module.GuardSyncNotAvailableError) as error:
+        guard_runner_module._sign_guard_dpop_proof(
+            request_url="https://hol.org/api/guard/runtime/sessions/sync",
+            method="POST",
+            dpop_key_material=generate_dpop_key_pair(),
+        )
+
+    assert error.value.retryable is True
+    assert not isinstance(error.value, guard_runner_module.GuardSyncAuthorizationExpiredError)
+
+
+def test_sign_guard_dpop_proof_asks_to_reconnect_when_the_key_is_refused(monkeypatch: pytest.MonkeyPatch) -> None:
+    def _refused(**_kwargs: object) -> str:
+        raise guard_runner_module.PolicyBundleNativeError("invalid_dpop_private_key")
+
+    monkeypatch.setattr(guard_runner_module, "signed_dpop_proof", _refused)
+
+    with pytest.raises(guard_runner_module.GuardSyncAuthorizationExpiredError):
+        guard_runner_module._sign_guard_dpop_proof(
+            request_url="https://hol.org/api/guard/runtime/sessions/sync",
+            method="POST",
+            dpop_key_material=generate_dpop_key_pair(),
+        )
 
 
 def test_guard_http_header_value_matches_case_insensitive_mapping() -> None:

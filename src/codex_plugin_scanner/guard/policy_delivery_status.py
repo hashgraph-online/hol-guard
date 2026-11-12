@@ -88,6 +88,9 @@ def local_policy_status(store: GuardStore) -> dict[str, object]:
         "local": _local_policy(store),
         "live": {
             "version": live_version,
+            # Version-two bundles carry an integer; a legacy id can be digits too.
+            "numbered": isinstance(bundle.get("bundleVersion"), int)
+            and not isinstance(bundle.get("bundleVersion"), bool),
             "bundleHash": _text(bundle.get("bundleHash")),
             "mode": mode,
             "rolloutState": _text(bundle.get("rolloutState")),
@@ -123,6 +126,21 @@ def _bounded_devices(value: object) -> list[dict[str, object]]:
             }
         )
     return devices
+
+
+def _count(value: object) -> int | None:
+    return value if isinstance(value, int) and not isinstance(value, bool) and value >= 0 else None
+
+
+def _state_counts(value: object) -> dict[str, int] | None:
+    """Whole-fleet counts from Cloud, which lists at most ``MAX_DEVICES`` devices; older Clouds send none."""
+
+    if not isinstance(value, dict):
+        return None
+    counts = {state: _count(value.get(state)) for state in sorted(_DEVICE_STATES)}
+    if any(count is None for count in counts.values()):
+        return None
+    return {state: count for state, count in counts.items() if count is not None}
 
 
 def fetch_policy_delivery(store: GuardStore) -> dict[str, object]:
@@ -163,6 +181,9 @@ def fetch_policy_delivery(store: GuardStore) -> dict[str, object]:
         "available": True,
         "versionNumber": version if isinstance(version, int) and not isinstance(version, bool) else None,
         "devices": devices,
+        "deviceCount": _count(response.get("deviceCount")),
+        "stateCounts": _state_counts(response.get("stateCounts")),
+        "inactiveDeviceCount": _count(response.get("inactiveDeviceCount")),
         "thisDevice": this_device,
     }
 
@@ -173,15 +194,54 @@ def policy_status_payload(store: GuardStore, *, offline: bool) -> dict[str, obje
     return payload
 
 
+def _live_version_text(version: object, delivery: dict[str, object], *, numbered: bool, acked: bool) -> str:
+    """A v1 bundle names its publication by id; show Cloud's number once Cloud says this device applied it.
+
+    Cloud does not say which bundle it saw applied, so the number is shown only
+    after this device acknowledged the bundle it holds now. A version-two bundle
+    already carries a number, so it is shown as it is.
+    """
+
+    if not version:
+        return "none"
+    cloud_version = delivery.get("versionNumber") if delivery.get("available") else None
+    mine = delivery.get("thisDevice")
+    if (
+        isinstance(cloud_version, int)
+        and not numbered
+        and acked
+        and str(version) != str(cloud_version)
+        and isinstance(mine, dict)
+        and mine.get("state") == "applied"
+    ):
+        return f"{cloud_version} (bundle {version})"
+    return str(version)
+
+
+def _inactive_text(value: object) -> str:
+    """Cloud leaves out devices Fleet retired; say how many so the totals add up."""
+
+    count = _count(value)
+    if not count:
+        return ""
+    return f" ({count} inactive device{'' if count == 1 else 's'} not counted)"
+
+
 def format_policy_status(payload: dict[str, object]) -> str:
     live = payload["live"] if isinstance(payload["live"], dict) else {}
     ack = payload["lastAck"] if isinstance(payload["lastAck"], dict) else {}
     delivery = payload["delivery"] if isinstance(payload["delivery"], dict) else {}
     local_value = payload.get("local")
     local = local_value if isinstance(local_value, dict) else None
+    live_version = _live_version_text(
+        live.get("version"),
+        delivery,
+        numbered=live.get("numbered") is True,
+        acked=ack.get("status") == "applied" and ack.get("currentVersion") is True,
+    )
     lines = [
         f"Local policy: {local['documentId']} ({local['rules']} rules)" if local else "Local policy: none",
-        f"Live version: {live.get('version') or 'none'}",
+        f"Live version: {live_version}",
         f"Mode: {live.get('mode') or 'unknown'}",
         f"Last sync: {payload.get('lastSync') or 'never'}",
         f"Last ACK: {ack.get('status') or 'none'}"
@@ -195,13 +255,14 @@ def format_policy_status(payload: dict[str, object]) -> str:
     if delivery.get("available"):
         raw_devices = delivery.get("devices")
         devices = raw_devices if isinstance(raw_devices, list) else []
-        counts = {
+        counts = _state_counts(delivery.get("stateCounts")) or {
             state: sum(1 for item in devices if isinstance(item, dict) and item.get("state") == state)
             for state in sorted(_DEVICE_STATES)
         }
         lines.append(
             f"Cloud version {delivery.get('versionNumber')}: "
             + ", ".join(f"{count} {state}" for state, count in counts.items())
+            + _inactive_text(delivery.get("inactiveDeviceCount"))
         )
         mine = delivery.get("thisDevice")
         if isinstance(mine, dict):

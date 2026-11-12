@@ -1,7 +1,7 @@
 //! Guard's Claude Code notice on a reviewed `UserPromptSubmit`.
 //!
 //! Outside Watch the edge overlays Claude's prompt response with a branded
-//! system message and, for a prompt that needs reapproval, a briefing for the
+//! system message and, for a flagged prompt Guard sent on, a briefing for the
 //! model. The action and reason come from the native result; this only
 //! renders Guard's copy for them, so the direct lane and the daemon return
 //! the same notice.
@@ -15,8 +15,8 @@ use super::HookDirectDefer;
 const SECRET_READ_CLASSES: [&str; 3] = ["local_env_read", "sensitive_material", "secret_read"];
 const HARD_BLOCK_CLASS: &str = "guard_bypass_intent";
 
-const SECRET_SYSTEM_MESSAGE: &str = "HOL Guard intercepted this prompt because it asks Claude to access local secrets. If Claude asks to continue, HOL Guard will route the decision through a branded approval prompt.";
-const SENSITIVE_SYSTEM_MESSAGE: &str = "HOL Guard intercepted this prompt because it leads to a sensitive action. If Claude asks to continue, HOL Guard will route the decision through a branded approval prompt.";
+const SECRET_SYSTEM_MESSAGE: &str = "HOL Guard flagged this prompt because it asks Claude to access local secrets. HOL Guard will ask you before Claude reads them, with Allow once and Always allow.";
+const SENSITIVE_SYSTEM_MESSAGE: &str = "HOL Guard flagged this prompt because it leads to a sensitive action. HOL Guard will ask you before Claude takes it, with Allow once and Always allow.";
 const SECRET_BRIEFING: &str = "HOL Guard will intercept Claude's next attempt to access local secrets and open a branded approval question to protect you.";
 const SENSITIVE_BRIEFING: &str =
     "HOL Guard will intercept Claude's next sensitive action and open a branded approval question.";
@@ -46,14 +46,19 @@ pub(crate) fn brand(response: &mut Value, result: &Value) -> Result<(), HookDire
     let Some(response) = response.as_object_mut() else {
         return Err(HookDirectDefer::PromptNotice);
     };
-    let reapproval = action == "require-reapproval" && !hard_block;
-    let system_message = if reapproval {
+    // Policy enforcement sends a prompt whose review waits for its tool call
+    // as a warning that still carries the prompt's risk classes.
+    let deferred = action == "warn" && !classes.is_empty() && !hard_block;
+    let system_message = if deferred {
         Some(if secret {
             SECRET_SYSTEM_MESSAGE.to_owned()
         } else {
             SENSITIVE_SYSTEM_MESSAGE.to_owned()
         })
-    } else if matches!(action, "block" | "sandbox-required") {
+    } else if matches!(
+        action,
+        "review" | "require-reapproval" | "block" | "sandbox-required"
+    ) {
         Some(ensure_terminal_punctuation(reason))
     } else {
         None
@@ -61,7 +66,7 @@ pub(crate) fn brand(response: &mut Value, result: &Value) -> Result<(), HookDire
     if let Some(message) = system_message.filter(|message| !message.is_empty()) {
         response.insert("systemMessage".to_owned(), Value::String(message));
     }
-    if reapproval {
+    if deferred {
         let briefing = if secret {
             SECRET_BRIEFING
         } else {

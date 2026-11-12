@@ -6,35 +6,18 @@
 from __future__ import annotations
 
 import importlib
-import re
-from collections.abc import Mapping, Sequence
+from collections.abc import Mapping
 from typing import TYPE_CHECKING
-
-from ..runtime.data_flow_sink import data_flow_sink_type
-from ..runtime.package_request_evaluation import strip_review_evidence_tail as _strip_review_evidence_tail
 
 if TYPE_CHECKING:
     from ._commands_shared import _now
 
 
-from ..runtime.approval_context import approval_context_tokens_validation_reason
-from ..store import runtime_tool_action_exact_match_context
-from ..text import ensure_terminal_punctuation as _ensure_terminal_punctuation
 from ._commands_shared import *
 from .commands_parser_helpers import *
-from .commands_support_runtime_artifact_policy import (
-    _runtime_artifact_command_action_floor,
-    _runtime_artifact_policy_action,
-)
 
 # Bump when runtime scanner or action-composition semantics change. Product and
 # approval-surface versions deliberately do not participate in this identity.
-_RUNTIME_HOOK_EVALUATOR_POLICY_VERSION = "runtime-hook-evaluation-v1"
-_LOCAL_REVIEW_INSTRUCTION_RE = re.compile(
-    re.escape("Review this request in HOL Guard, then retry."),
-    re.IGNORECASE,
-)
-_LOCAL_APPROVAL_REQUEST_URL_RE = re.compile(r"https?://[^\s]+/requests(?:/[^\s]*)?", re.IGNORECASE)
 
 
 def _runtime_artifacts_module():
@@ -65,19 +48,6 @@ def _runtime_request_summary(artifact: GuardArtifact) -> str | None:
     return _runtime_resolution_module()._runtime_request_summary(artifact)
 
 
-def _claude_notification_tool_name(payload: dict[str, object]) -> str | None:
-    direct_name = _optional_string(payload.get("tool_name"))
-    if direct_name is not None:
-        return direct_name
-    for key in ("message", "title"):
-        value = _optional_string(payload.get(key))
-        if value is None:
-            continue
-        match = re.search(r"\buse\s+([A-Za-z][A-Za-z0-9_]*)\b", value)
-        if match is not None:
-            return match.group(1)
-    return None
-
 def _approval_delivery_payload(
     harness: str,
     *,
@@ -85,10 +55,79 @@ def _approval_delivery_payload(
 ) -> dict[str, object]:
     return approval_delivery_payload(approval_prompt_flow(harness, managed_install=managed_install))
 
-def _native_hook_reason(*values: object | None) -> str:
-    from ..approval_hook_copy import join_native_hook_reason
+_COPY_FIELDS = ("harness_message", "action", "retry_instruction")
 
-    return join_native_hook_reason(*values)
+
+def _copy_fields(decision_v2: dict[str, object]) -> dict[str, str]:
+    return {key: value for key in _COPY_FIELDS if isinstance(value := decision_v2.get(key), str)}
+
+
+# Each native request stays well under the runner's request bound, so a long
+# approval queue is routed in several calls instead of failing as one.
+_APPROVAL_COPY_BATCH_BYTES = 1024 * 1024
+
+
+def _copy_batches(fields: list[dict[str, str]]) -> list[list[dict[str, str]]]:
+    batches: list[list[dict[str, str]]] = [[]]
+    size = 0
+    for item in fields:
+        cost = sum(len(value.encode("utf-8")) for value in item.values()) + 64
+        if batches[-1] and size + cost > _APPROVAL_COPY_BATCH_BYTES:
+            batches.append([])
+            size = 0
+        batches[-1].append(item)
+        size += cost
+    return batches
+
+
+def _approval_copy(
+    review_url: str,
+    *,
+    harness: str,
+    decisions: list[dict[str, object]] | None = None,
+    user_copy_message: str | None = None,
+) -> dict[str, object] | None:
+    """Ask the native runtime to route review copy to the local approval center.
+
+    The copy is display only, so an unavailable runtime leaves it unchanged.
+    """
+    from ..native_runner_authority import (
+        NativeRunnerAuthorityError,
+        NativeRunnerAuthorityRefusalError,
+        native_runner_authority,
+    )
+
+    result: dict[str, object] | None = None
+    patches: list[object] = []
+    batches = _copy_batches([_copy_fields(decision_v2) for decision_v2 in decisions or []])
+    for batch in batches:
+        args = {
+            "harness": _canonical_harness_name(harness),
+            "review_url": review_url,
+            "decisions": batch,
+            # The message rides with every batch until one answers, so a
+            # refused first batch does not leave it unrouted.
+            "user_copy_message": user_copy_message if result is None else None,
+        }
+        try:
+            answer = native_runner_authority("approval_copy", args)
+        except NativeRunnerAuthorityRefusalError:
+            answer = None
+        except NativeRunnerAuthorityError:
+            # An unavailable resident would cost every later batch its own
+            # budget, so the remaining copy stays unchanged instead.
+            break
+        if result is None and answer is not None:
+            result = answer
+        routed = answer.get("decisions") if answer is not None else None
+        if isinstance(routed, list) and len(routed) == len(batch):
+            patches.extend(routed)
+        else:
+            # A refused batch keeps its original copy; the others still route.
+            patches.extend([None] * len(batch))
+    if result is not None:
+        result["decisions"] = patches + [None] * (sum(len(batch) for batch in batches) - len(patches))
+    return result
 
 def _native_approval_center_context(response_payload: dict[str, object], *, harness: str) -> str | None:
     review_url = _preferred_approval_review_url(response_payload, harness=harness)
@@ -98,158 +137,45 @@ def _native_approval_center_context(response_payload: dict[str, object], *, harn
         review_url = approval_review_url_from_payload(response_payload)
     if review_url is None:
         return None
-    canonical_harness = _canonical_harness_name(harness)
-    harness_label = {
-        "claude-code": "Claude Code",
-        "codex": "Codex",
-        "copilot": "Copilot",
-        "cursor": "Cursor",
-        "devin": "Devin",
-        "guard-cli": "package install",
-        "opencode": "OpenCode",
-        "kimi": "Kimi",
-        "grok": "Grok",
-        "pi": "Pi",
-        "omp": "Oh My Pi",
-    }.get(canonical_harness, "the harness")
-    if canonical_harness in {
-        "npm",
-        "npx",
-        "pnpm",
-        "yarn",
-        "bun",
-        "pip",
-        "pip3",
-        "pipenv",
-        "pipx",
-        "poetry",
-        "uv",
-        "uvx",
-        "cargo",
-        "go",
-        "composer",
-        "bundle",
-        "mvn",
-        "gradle",
-        "brew",
-    }:
-        harness_label = "package install"
-    return (
-        f"Open HOL Guard to approve or keep this blocked: {review_url}. "
-        f"After you choose, retry the same {harness_label} action."
-    )
+    result = _approval_copy(review_url, harness=harness)
+    return None if result is None else _optional_string(result.get("review_context"))
 
 def _localize_pending_approval_copy(response_payload: dict[str, object], *, harness: str) -> None:
-    review_context = _native_approval_center_context(response_payload, harness=harness)
-    if review_context is None:
-        return
-    queued = response_payload.get("approval_requests")
     review_url = _preferred_approval_review_url(response_payload, harness=harness)
     if review_url is None:
         return
+    decisions: list[dict[str, object]] = []
     decision_v2 = response_payload.get("decision_v2_json")
     if isinstance(decision_v2, dict):
-        _localize_decision_v2_review_copy(decision_v2, review_context)
-    supply_chain_evaluation = response_payload.get("supply_chain_evaluation")
-    if isinstance(supply_chain_evaluation, dict):
-        user_copy = supply_chain_evaluation.get("user_copy")
-        if isinstance(user_copy, dict):
-            harness_message = _optional_string(user_copy.get("harness_message"))
-            if harness_message is not None:
-                user_copy["harness_message"] = _approval_center_routed_message(harness_message, review_context)
-            user_copy["dashboard_url"] = review_url
+        decisions.append(decision_v2)
+    queued = response_payload.get("approval_requests")
     if isinstance(queued, list):
         for item in queued:
-            if not isinstance(item, dict):
-                continue
-            decision_v2 = item.get("decision_v2_json")
-            if isinstance(decision_v2, dict):
-                _localize_decision_v2_review_copy(decision_v2, review_context)
-
-def _localize_decision_v2_review_copy(decision_v2: dict[str, object], review_context: str) -> None:
-    harness_message = _optional_string(decision_v2.get("harness_message"))
-    if harness_message is not None:
-        decision_v2["harness_message"] = _approval_center_routed_message(harness_message, review_context)
-    action = _optional_string(decision_v2.get("action"))
-    if action in {"ask", "block"}:
-        retry_instruction = _optional_string(decision_v2.get("retry_instruction"))
-        decision_v2["retry_instruction"] = (
-            _approval_center_routed_message(retry_instruction, review_context)
-            if retry_instruction is not None and "hol-guard connect" in retry_instruction
-            else review_context
-        )
-
-def _approval_center_routed_message(message: str, review_context: str) -> str:
-    normalized = _strip_cloud_inbox_urls(message)
-    normalized = normalized.replace("Review this request in HOL Guard, then retry.", "").strip()
-    normalized = _strip_legacy_approval_center_sentence(normalized)
-    normalized = " ".join(normalized.split())
-    normalized = _strip_review_evidence_tail(normalized)
-    if not normalized:
-        return review_context
-    return f"{_ensure_terminal_punctuation(normalized)} {review_context}"
-
-def _strip_legacy_approval_center_sentence(message: str) -> str:
-    lower_message = message.lower()
-    start = lower_message.find("open hol guard to approve or keep this blocked:")
-    if start == -1:
-        return message.strip()
-    retry_start = lower_message.find("after you choose, retry the same ", start)
-    if retry_start == -1:
-        return message[:start].strip()
-    end = lower_message.find(" action.", retry_start)
-    if end == -1:
-        return message[:start].strip()
-    end += len(" action.")
-    return f"{message[:start]} {message[end:]}".strip()
-
-def _strip_cloud_inbox_urls(message: str) -> str:
-    kept_tokens: list[str] = []
-    for token in message.split():
-        candidate = token.strip("([{<'\"")
-        candidate = candidate.rstrip(")]}>'\".,;:!?")
-        if _is_cloud_inbox_url(candidate):
-            continue
-        kept_tokens.append(token)
-    return " ".join(kept_tokens).strip()
-
-def _is_cloud_inbox_url(value: str) -> bool:
-    parsed = urllib.parse.urlparse(value)
-    return parsed.scheme in {"http", "https"} and parsed.path.rstrip("/") == "/guard/inbox"
-
-def _runtime_saved_allow_validation_reason(
-    decision: Mapping[str, object],
-    *,
-    artifact: GuardArtifact,
-    artifact_hash: str,
-) -> str | None:
-    """Require saved runtime allows to carry the complete current v1 context."""
-
-    if _optional_string(decision.get("action")) != "allow":
-        return None
-    stored_hash = _optional_string(decision.get("artifact_hash"))
-    return approval_context_tokens_validation_reason(stored_hash, artifact_hash)
-
-
-def _runtime_artifact_exact_match_context(artifact: GuardArtifact) -> str | None:
-    if artifact.artifact_type != "tool_action_request":
-        return None
-    raw_command_text = artifact.metadata.get("raw_command_text")
-    if not isinstance(raw_command_text, str) or not raw_command_text:
-        raw_command_text = artifact.command
-    wrapper_chain = artifact.metadata.get("wrapper_chain")
-    normalized_wrapper_chain = (
-        wrapper_chain if isinstance(wrapper_chain, Sequence) and not isinstance(wrapper_chain, str) else None
+            if isinstance(item, dict) and isinstance(item_decision := item.get("decision_v2_json"), dict):
+                decisions.append(item_decision)
+    supply_chain_evaluation = response_payload.get("supply_chain_evaluation")
+    user_copy = supply_chain_evaluation.get("user_copy") if isinstance(supply_chain_evaluation, dict) else None
+    user_copy_message = None
+    if isinstance(user_copy, dict):
+        message = user_copy.get("harness_message")
+        user_copy_message = message if isinstance(message, str) else None
+        user_copy["dashboard_url"] = review_url
+    result = _approval_copy(
+        review_url,
+        harness=harness,
+        decisions=decisions,
+        user_copy_message=user_copy_message,
     )
-    return runtime_tool_action_exact_match_context(
-        config_path=artifact.config_path,
-        source_scope=artifact.source_scope,
-        raw_command_text=raw_command_text if isinstance(raw_command_text, str) else None,
-        wrapper_chain=normalized_wrapper_chain,
-    )
-
-
-_runtime_data_flow_sink_type = data_flow_sink_type
+    if result is None:
+        return
+    patches = result.get("decisions")
+    if isinstance(patches, list):
+        for decision, patch in zip(decisions, patches, strict=False):
+            if isinstance(patch, dict):
+                decision.update({key: value for key, value in patch.items() if isinstance(value, str)})
+    routed_user_copy = result.get("user_copy_message")
+    if isinstance(user_copy, dict) and isinstance(routed_user_copy, str):
+        user_copy["harness_message"] = routed_user_copy
 
 def _guard_settings_payload(config: GuardConfig) -> dict[str, object]:
     return {
@@ -392,13 +318,10 @@ def _runtime_detector_perf_payload(config: GuardConfig) -> list[dict[str, object
     ]
 
 __all__ = [
-    "_approval_center_routed_message", "_approval_delivery_payload",
-    "_claude_notification_tool_name", "_ensure_terminal_punctuation",
+    "_approval_delivery_payload",
     "_guard_cli_settings_payload", "_guard_settings_doctor_payload", "_guard_settings_explain_payload",
-    "_guard_settings_payload", "_is_cloud_inbox_url", "_localize_decision_v2_review_copy",
-    "_localize_pending_approval_copy", "_native_approval_center_context", "_native_hook_reason",
-    "_runtime_artifact_command_action_floor", "_runtime_artifact_policy_action",
-    "_runtime_data_flow_sink_type", "_runtime_detector_perf_payload",
-    "_runtime_detector_registry_payload", "_strip_cloud_inbox_urls",
-    "_strip_legacy_approval_center_sentence", "_strip_review_evidence_tail",
+    "_guard_settings_payload",
+    "_localize_pending_approval_copy", "_native_approval_center_context",
+    "_runtime_detector_perf_payload",
+    "_runtime_detector_registry_payload",
 ]

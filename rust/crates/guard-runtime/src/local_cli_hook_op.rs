@@ -2,8 +2,10 @@
 //!
 //! Records the CLI a command launches (and refreshes a package script
 //! catalog), then refines the hook action with this device's grant. Python's
-//! `observe_unlisted_cli` and `apply_local_cli_grant` made one resident call
-//! per identity, record and grant read; the same steps run here in-process.
+//! observation and `apply_local_cli_grant` made one resident call per
+//! identity, record and grant read; the same steps run here in-process.
+//! [`observe_only`] records without refining, for the resident's own
+//! off-path observer (`crate::local_cli_observer`).
 //! The caller supplies only the command, its directories and environment, and
 //! the action being refined; none of those can create a grant.
 //!
@@ -28,7 +30,7 @@ use crate::context_digest_local_cli::python_path_name;
 use crate::context_digest_package_scripts::package_json_scripts;
 use crate::hook_direct::local_cli::block::{match_command_id, valid_package, valid_unlisted};
 use crate::local_cli_hook_contained::{self as contained, Refined};
-use crate::local_cli_identify::{identify, Request};
+use crate::local_cli_identify::{identify, launch_arguments, Request};
 use crate::local_store_read;
 use crate::native_exact_action_op::runner_bin::runner_split;
 
@@ -118,6 +120,13 @@ pub(crate) fn run_refined(request: &LocalCliHookRequestV1) -> Result<Refined, &'
     Ok(refined(request, &package))
 }
 
+/// The recording alone, refining nothing: what the resident's off-path
+/// observer records for an answered `PreToolUse`.
+pub(crate) fn observe_only(request: &LocalCliHookRequestV1) -> Result<(), &'static str> {
+    let package = checked_package(request)?;
+    observe(request, &package)
+}
+
 /// The grant refinement alone, recording nothing: what the workspace sink
 /// asks again right before it widens a sandbox by a grant.
 #[cfg(unix)]
@@ -150,7 +159,7 @@ fn refined(request: &LocalCliHookRequestV1, package: &Package) -> Refined {
     })
 }
 
-/// `observe_unlisted_cli`: the package script identity, else every CLI a
+/// The launch observation: the package script identity, else every CLI a
 /// single or compound invocation launches.
 fn observe(request: &LocalCliHookRequestV1, package: &Package) -> Result<(), &'static str> {
     let Ok(package) = package else {
@@ -192,6 +201,7 @@ fn observe(request: &LocalCliHookRequestV1, package: &Package) -> Result<(), &'s
             .path_class
             .clone()
             .filter(|class| !class.is_empty())
+            .or_else(|| launched_file(record_item.source_path.as_deref()))
             .unwrap_or_else(|| {
                 crate::custom_extension_suggestion::path_class(record_item.source_path.as_deref())
             });
@@ -210,6 +220,15 @@ fn observe(request: &LocalCliHookRequestV1, package: &Package) -> Result<(), &'s
         )?;
     }
     Ok(())
+}
+
+/// The resolved file the agent launched, kept so Load commands can read its
+/// help without asking the operator where it is. The store stays on this
+/// machine; anything that ranks or groups tools still derives a path class.
+fn launched_file(source_path: Option<&str>) -> Option<String> {
+    source_path
+        .filter(|path| std::path::Path::new(path).is_absolute())
+        .map(str::to_owned)
 }
 
 /// `record_local_cli_observation` with the Python store's defaults.
@@ -342,19 +361,27 @@ fn grant(request: &LocalCliHookRequestV1, package: &Package) -> contained::Answe
     };
     let catalog = crate::local_cli_grant_op::command_catalog(&request.guard_home, &launch.cli_id)
         .map_err(|_| ())?;
-    let command_id = if catalog.is_empty() {
-        None
+    let (command_id, options) = if catalog.is_empty() {
+        (None, Vec::new())
     } else {
+        // A package script's tokens name the script. What the call passes
+        // after them, the manager's own options included, still reads as the
+        // script's options and commands.
+        let arguments = invocation_arguments(request, &launch)?;
         let tokens = match package {
             Some(found) => found.command_tokens.clone(),
-            None => invocation_tokens(request, &launch)?,
+            None => leading_command_tokens(&arguments),
         };
-        Some(match_command_id(&tokens, &catalog))
+        let command_id = match_command_id(&tokens, &catalog);
+        let entries =
+            crate::local_cli_grant_op::invocation_entries(&arguments, &command_id, &catalog);
+        (Some(command_id), entries)
     };
     let answer = crate::local_cli_grant_op::decide_allowed_launch(
         &request.guard_home,
         &launch.source,
         command_id.as_deref(),
+        &options,
     )
     .map_err(|_| ())?;
     if answer["cli_id"].as_str() != Some(launch.cli_id.as_str())
@@ -402,9 +429,12 @@ fn launch(
         }))
 }
 
-/// `command_tokens_for_invocation` past the package script branch: the first
-/// segment's arguments after the runner or script name.
-fn invocation_tokens(request: &LocalCliHookRequestV1, launch: &Launch) -> Result<Vec<String>, ()> {
+/// The first segment's arguments after the runner or the script's own path,
+/// which `command_tokens` and the option reading both start from.
+fn invocation_arguments(
+    request: &LocalCliHookRequestV1,
+    launch: &Launch,
+) -> Result<Vec<String>, ()> {
     if request.command.trim().is_empty() {
         return Err(());
     }
@@ -420,13 +450,38 @@ fn invocation_tokens(request: &LocalCliHookRequestV1, launch: &Launch) -> Result
     Ok(model
         .segments
         .first()
-        .map(|segment| command_tokens(&segment.arguments, launch))
+        .map(|segment| {
+            identity_arguments(
+                launch_arguments(segment, &launch.name, &launch.kind),
+                &launch.name,
+                &launch.kind,
+                launch.runner.as_deref(),
+            )
+            .to_vec()
+        })
         .unwrap_or_default())
 }
 
 /// `command_tokens_for_invocation` past the package script branch, for a
-/// caller that derived the launch identity itself.
+/// caller that derived the launch identity itself. Only the tests read the
+/// tokens alone; the hook path reads the arguments, for its options too.
+#[cfg(test)]
 pub(crate) fn invocation_command_tokens(
+    command: &str,
+    cwd: &str,
+    home_dir: Option<&str>,
+    name: &str,
+    kind: &str,
+    runner: Option<&str>,
+) -> Vec<String> {
+    leading_command_tokens(&invocation_command_arguments(
+        command, cwd, home_dir, name, kind, runner,
+    ))
+}
+
+/// The arguments `invocation_command_tokens` reads its tokens from: the first
+/// segment's arguments after the runner or the script's own path.
+pub(crate) fn invocation_command_arguments(
     command: &str,
     cwd: &str,
     home_dir: Option<&str>,
@@ -451,12 +506,15 @@ pub(crate) fn invocation_command_tokens(
     model
         .segments
         .first()
-        .map(|segment| tokens_for_identity(&segment.arguments, name, kind, runner))
+        .map(|segment| {
+            identity_arguments(launch_arguments(segment, name, kind), name, kind, runner).to_vec()
+        })
         .unwrap_or_default()
 }
 
 /// Leading command-name tokens, after a runner's own arguments or a script's
 /// own path, up to `MAX_DEPTH`.
+#[cfg(test)]
 pub(crate) fn command_tokens(arguments: &[String], launch: &Launch) -> Vec<String> {
     tokens_for_identity(
         arguments,
@@ -467,16 +525,39 @@ pub(crate) fn command_tokens(arguments: &[String], launch: &Launch) -> Vec<Strin
 }
 
 /// `command_tokens` for an identity the caller holds as plain fields.
+#[cfg(test)]
 fn tokens_for_identity(
     arguments: &[String],
     name: &str,
     kind: &str,
     runner: Option<&str>,
 ) -> Vec<String> {
-    let arguments = match runner {
+    leading_command_tokens(identity_arguments(arguments, name, kind, runner))
+}
+
+/// The command-name tokens an argument list starts with, up to `MAX_DEPTH`.
+pub(crate) fn leading_command_tokens(arguments: &[String]) -> Vec<String> {
+    arguments
+        .iter()
+        .take_while(|argument| !argument.starts_with('-') && is_command_name(argument))
+        .take(MAX_DEPTH)
+        .cloned()
+        .collect()
+}
+
+/// The arguments the CLI itself receives: past a runner's own arguments, or
+/// past a script's own path. A runner whose arguments do not split leaves
+/// nothing to read.
+fn identity_arguments<'a>(
+    arguments: &'a [String],
+    name: &str,
+    kind: &str,
+    runner: Option<&str>,
+) -> &'a [String] {
+    match runner {
         Some(runner) => match runner_split(runner, arguments) {
             Some((_, rest)) => rest,
-            None => return Vec::new(),
+            None => &[],
         },
         None if kind == "script"
             && arguments
@@ -486,13 +567,7 @@ fn tokens_for_identity(
             &arguments[1..]
         }
         None => arguments,
-    };
-    arguments
-        .iter()
-        .take_while(|argument| !argument.starts_with('-') && is_command_name(argument))
-        .take(MAX_DEPTH)
-        .cloned()
-        .collect()
+    }
 }
 
 /// `_COMMAND_NAME`: `^[A-Za-z][A-Za-z0-9_-]{0,40}$`.

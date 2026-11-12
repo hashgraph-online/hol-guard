@@ -20,7 +20,7 @@ pub(crate) const ERR_ROOT: &str = "native_runner_authority_aibom_workspace_inval
 
 /// Harnesses that natively discover skills from the shared `.agents/skills`
 /// workspace directory.
-const WORKSPACE_SKILL_HARNESSES: [&str; 8] = [
+const WORKSPACE_SKILL_HARNESSES: [&str; 9] = [
     "codex",
     "openclaw",
     "opencode",
@@ -29,6 +29,7 @@ const WORKSPACE_SKILL_HARNESSES: [&str; 8] = [
     "gemini",
     "pi",
     "omp",
+    "muse",
 ];
 const STANDARDS_CONTEXT_ROOTS: [&str; 3] = [".", ".agents/context", "docs"];
 const ROOT_INSTRUCTION_NAMES: [(&str, &str); 8] = [

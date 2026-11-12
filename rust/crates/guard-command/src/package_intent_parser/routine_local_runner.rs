@@ -23,10 +23,35 @@ use std::path::Path;
 
 use super::*;
 use crate::direct_vitest::semver_spec_matches;
-use crate::jsonc::loads_jsonc;
 
-/// The runners whose local identity is worth establishing.
-const ROUTINE_RUNNERS: [&str; 4] = ["eslint", "jest", "tsc", "vitest"];
+#[path = "routine_local_runner_lockfiles.rs"]
+mod lockfiles;
+
+use lockfiles::locked_versions;
+
+/// The runners whose local identity is worth establishing: the lint, test,
+/// commit-hook and TypeScript entry points a project pins in its own manifest
+/// and runs through `bunx` or `npx` on every change.
+const ROUTINE_RUNNERS: [&str; 18] = [
+    "ava",
+    "borp",
+    "cucumber-js",
+    "eslint",
+    "jasmine",
+    "jest",
+    "lab",
+    "lint-staged",
+    "mocha",
+    "poku",
+    "qunit",
+    "tap",
+    "tape",
+    "tsc",
+    "tsd",
+    "tsx",
+    "uvu",
+    "vitest",
+];
 
 /// Declared-version prefixes that name a source outside the registry, where a
 /// version string proves nothing about what is installed.
@@ -76,6 +101,13 @@ pub(super) fn routine_local_runner(intent: &PackageIntent) -> bool {
     if execution.executable_name.as_deref() != Some(package_name) {
         return false;
     }
+    // The runner list names the executables a project runs, and two of them
+    // are published under another name: `tsc` ships inside `typescript` and
+    // `lab` inside `@hapi/lab`. The declared pin was already read under the
+    // dependency name, so the installed tree, the manifest key and every
+    // lockfile entry have to be read under it too, or the verdict looks for a
+    // `node_modules/tsc` that npm never creates.
+    let dependency_name = local_executable_package_alias(package_name);
     let Some(declared_version) = execution.declared_version.as_deref() else {
         return false;
     };
@@ -117,7 +149,7 @@ pub(super) fn routine_local_runner(intent: &PackageIntent) -> bool {
     let Ok(node_modules) = std::fs::canonicalize(workspace.join("node_modules")) else {
         return false;
     };
-    let Ok(package_root) = std::fs::canonicalize(node_modules.join(package_name)) else {
+    let Ok(package_root) = std::fs::canonicalize(node_modules.join(dependency_name)) else {
         return false;
     };
     if package_root.strip_prefix(&node_modules).is_err()
@@ -129,7 +161,7 @@ pub(super) fn routine_local_runner(intent: &PackageIntent) -> bool {
     intent.execution_context_reason_codes.is_empty()
         && versions_match(
             &workspace,
-            package_name,
+            dependency_name,
             declared_version,
             &execution.lockfiles,
         )
@@ -165,11 +197,27 @@ fn read_json_object(path: &Path) -> Option<Map<String, Value>> {
     }
 }
 
+/// Whether an npm lockfile entry describes a package the registry served.
+///
+/// A `link` entry points at another directory in the tree and a `resolved`
+/// value outside `http(s)` names a checkout or a tarball on disk, neither of
+/// which the declared version says anything about.
+fn registry_entry(entry: &Map<String, Value>) -> bool {
+    if entry.get("link").and_then(Value::as_bool) == Some(true) {
+        return false;
+    }
+    match entry.get("resolved").map(|value| value.as_str()) {
+        None => true,
+        Some(Some(resolved)) => resolved.starts_with("https://") || resolved.starts_with("http://"),
+        Some(None) => false,
+    }
+}
+
 /// The declared dependency pin, the installed manifest and every lockfile
 /// must name one version, and that version must satisfy the pin.
 fn versions_match(
     workspace: &Path,
-    package_name: &str,
+    dependency_name: &str,
     declared_version: &str,
     lockfiles: &[PackageExecutionFileEvidence],
 ) -> bool {
@@ -178,7 +226,7 @@ fn versions_match(
         read_json_object(
             &workspace
                 .join("node_modules")
-                .join(package_name)
+                .join(dependency_name)
                 .join("package.json"),
         ),
     ) else {
@@ -189,63 +237,34 @@ fn versions_match(
         manifest
             .get(*group)
             .and_then(Value::as_object)
-            .and_then(|group| group.get(package_name))
+            .and_then(|group| group.get(dependency_name))
             .and_then(Value::as_str)
             == Some(declared_version)
     });
-    if !declared || installed.get("name").and_then(Value::as_str) != Some(package_name) {
+    if !declared || installed.get("name").and_then(Value::as_str) != Some(dependency_name) {
         return false;
     }
     let Some(installed_version) = installed.get("version").and_then(Value::as_str) else {
         return false;
     };
 
-    let mut locked_versions: BTreeSet<String> = BTreeSet::new();
-    let npm_key = format!("node_modules/{package_name}");
-    let bun_prefix = format!("{package_name}@");
+    let mut locked: BTreeSet<String> = BTreeSet::new();
     for evidence in lockfiles {
         let Some(resolved) = evidence.resolved_path.as_deref() else {
             continue;
         };
-        let path = Path::new(resolved);
-        let Some(text) = read_bounded(path, MAX_VERDICT_FILE_BYTES) else {
-            return false;
-        };
-        let parsed = if path.file_name().and_then(|name| name.to_str()) == Some("bun.lock") {
-            loads_jsonc(&text).ok()
-        } else {
-            serde_json::from_str::<Value>(&text).ok()
-        };
-        // A document that does not parse, is not a mapping, or carries no
-        // `packages` mapping is a lockfile Guard cannot read — fail closed
-        // rather than letting the remaining lockfiles decide alone.
-        let Some(packages) = parsed
-            .as_ref()
-            .and_then(|lock| lock.get("packages"))
-            .and_then(Value::as_object)
+        // Every lockfile in the workspace has to bind this runner itself, to
+        // a release the registry served. A file Guard cannot read, cannot
+        // recognise, or that parses but never names the package would
+        // otherwise let the remaining lockfiles answer for it.
+        let Some(versions) = locked_versions(Path::new(resolved), workspace, dependency_name)
         else {
             return false;
         };
-        if let Some(version) = packages
-            .get(&npm_key)
-            .and_then(Value::as_object)
-            .and_then(|entry| entry.get("version"))
-            .and_then(Value::as_str)
-        {
-            locked_versions.insert(version.to_owned());
-        }
-        if let Some(version) = packages
-            .get(package_name)
-            .and_then(Value::as_array)
-            .and_then(|items| items.first())
-            .and_then(Value::as_str)
-            .and_then(|entry| entry.strip_prefix(&bun_prefix))
-        {
-            locked_versions.insert(version.to_owned());
-        }
+        locked.extend(versions);
     }
 
-    locked_versions.len() == 1
-        && locked_versions.contains(installed_version)
+    locked.len() == 1
+        && locked.contains(installed_version)
         && semver_spec_matches(declared_version, installed_version)
 }

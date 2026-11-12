@@ -22,6 +22,13 @@ def _require(condition: bool, detail: object = "") -> None:
         pytest.fail(repr(detail) if detail != "" else "requirement failed", pytrace=False)
 
 
+# A packaged Windows start waits out the runtime it has to unpack, which the
+# native budget now allows up to 75 seconds for. A step that outruns the
+# subprocess timeout raises ``TimeoutExpired`` and prints no diagnostics, so
+# keep this comfortably above the budget the step itself is allowed to spend.
+_CORE_STEP_TIMEOUT_SECONDS = 180
+
+
 def _run_core(executable: Path, args: list[str], *, env: dict[str, str]) -> subprocess.CompletedProcess[str]:
     result = subprocess.run(
         [str(executable), *args],
@@ -29,7 +36,7 @@ def _run_core(executable: Path, args: list[str], *, env: dict[str, str]) -> subp
         capture_output=True,
         check=False,
         text=True,
-        timeout=60,
+        timeout=_CORE_STEP_TIMEOUT_SECONDS,
     )
     if result.returncode != 0:
         print(f"Packaged daemon failure diagnostics: {_diagnostics(env)}")

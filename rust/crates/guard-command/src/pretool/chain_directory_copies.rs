@@ -58,6 +58,7 @@ pub(in crate::pretool) fn creation_chain(model: &CanonicalCommandV1) -> bool {
 /// Git subcommands that read the repository or update only refs and
 /// metadata, never files in the work tree.
 const WORK_TREE_READERS: &[&str] = &[
+    "annotate",
     "blame",
     "branch",
     "cat-file",

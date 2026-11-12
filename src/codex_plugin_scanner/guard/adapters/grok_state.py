@@ -1,32 +1,7 @@
 """Grok managed state and runtime hook verification."""
 
-import json
-from pathlib import Path
-
 from .base import HarnessContext
 from .grok_config import GUARD_HOOK_PRETOOL_FILE, GUARD_HOOK_PROMPT_FILE
-
-
-def _prior_compat_hooks_from_state(
-    state_path: Path,
-    *,
-    payload: dict[str, object] | None = None,
-) -> dict[str, str | None]:
-    if payload is None:
-        if not state_path.is_file():
-            return {}
-        try:
-            payload = json.loads(state_path.read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError):
-            return {}
-    raw = payload.get("prior_compat_hooks") if isinstance(payload, dict) else None
-    if not isinstance(raw, dict):
-        return {}
-    restored: dict[str, str | None] = {}
-    for key, value in raw.items():
-        if isinstance(key, str) and (value is None or isinstance(value, str)):
-            restored[key] = value
-    return restored
 
 
 def grok_runtime_hooks_verified(context: HarnessContext) -> bool:

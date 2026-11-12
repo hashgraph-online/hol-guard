@@ -9,6 +9,7 @@ import pytest
 from codex_plugin_scanner.guard import native_restricted_pytest as transport
 from codex_plugin_scanner.guard.runtime import restricted_inline_eval, restricted_node_test, restricted_vitest
 from codex_plugin_scanner.guard.runtime.restricted_pytest_model import RestrictedPytestError
+from tests import restricted_vitest_ops
 
 
 def reply(tmp_path, profile):
@@ -29,7 +30,7 @@ def reply(tmp_path, profile):
 
 def test_tsx_positive_nested_reply_reaches_the_caller(monkeypatch):
     monkeypatch.setattr(transport, "_call", lambda *args, **kwargs: {"value": ["math.test.ts", ["--flag"]]})
-    assert restricted_vitest.tsx_test_invocation(["tsx", "math.test.ts", "--flag"]) == ("math.test.ts", ("--flag",))
+    assert restricted_vitest_ops.tsx_test_invocation(["tsx", "math.test.ts", "--flag"]) == ("math.test.ts", ("--flag",))
 
 
 @pytest.mark.parametrize(
@@ -163,5 +164,5 @@ def test_native_domain_refusal_is_preserved(monkeypatch):
         },
     )
     with pytest.raises(RestrictedPytestError) as caught:
-        restricted_vitest.vitest_arguments(["vitest", "run"])
+        restricted_vitest_ops.vitest_arguments(["vitest", "run"])
     assert caught.value.reason_code == "vitest_restricted_dependency_unavailable"

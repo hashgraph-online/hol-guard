@@ -179,3 +179,50 @@ fn a_git_file_must_be_a_gitdir_pointer() {
         assert_ne!(pointer(text), "allow", "{text:?}");
     }
 }
+
+/// A committed catalog entry whose name carries a credential word is a
+/// project document in any repository a recursive search reaches. Every file
+/// below holds the pattern, so only the proof of the file itself can admit it:
+/// an untracked copy, a `Secret` manifest and a file holding a key keep the
+/// review.
+#[test]
+fn committed_credential_named_documents_in_a_sibling_repository_are_searched() {
+    let commit = |home: &Path, name: &str, text: &str| {
+        let sibling = home.join("other-project");
+        write(sibling.join(name), text);
+        git(&sibling, &["add", name]);
+        git(&sibling, &["commit", "--quiet", "-m", "Synthetic catalog"]);
+    };
+    let home = home();
+    commit(
+        &home,
+        "contributions/extensions/command.kubernetes-secrets.json",
+        "{\n  \"id\": \"command.kubernetes-secrets\",\n  \"title\": \"retry policy\"\n}\n",
+    );
+    assert_eq!(shell(&home, "grep -rln retry ~/other-project"), "allow");
+    write(
+        home.join("other-project/drafts/kubernetes-secrets.json"),
+        "{\"title\": \"retry policy\"}\n",
+    );
+    assert_ne!(shell(&home, "grep -rln retry ~/other-project"), "allow");
+
+    let header = concat!("-----BEGIN RSA PRIVATE", " KEY-----");
+    for (name, text) in [
+        (
+            "deploy/app-secrets.yaml",
+            "# retry\napiVersion: v1\nkind: Secret\nmetadata:\n  name: app\n".to_owned(),
+        ),
+        (
+            "config/service-secrets.yaml",
+            format!("retry: 1\nsigning: |\n  {header}\n  MIIEowIBAAKCAQEAu1SU1LfVLPHCozMxH2Mo\n"),
+        ),
+    ] {
+        let home = self::home();
+        commit(&home, name, &text);
+        assert_ne!(
+            shell(&home, "grep -rln retry ~/other-project"),
+            "allow",
+            "{name}"
+        );
+    }
+}

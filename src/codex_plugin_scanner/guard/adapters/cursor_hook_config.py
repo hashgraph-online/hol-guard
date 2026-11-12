@@ -1,4 +1,10 @@
-"""Cursor managed-hook configuration helpers."""
+"""Cursor managed-hook configuration helpers.
+
+Which hook entries and commands Guard owns, and the merge that installs Guard's
+entries, are decided by the native ``cursor_hook_config`` runner-authority
+kind. Python keeps file I/O, interpreter probing, command rendering, the
+live-script path checks and the preToolUse matcher regex.
+"""
 
 from __future__ import annotations
 
@@ -11,24 +17,24 @@ import sys
 from collections.abc import Sequence
 from hashlib import sha256
 from pathlib import Path
+from typing import cast
 
-from ..codex_hook_command_line import hook_token_name, render_hook_command
+from .. import codex_hook_command_line
+from ..codex_hook_command_line import render_hook_command
 from ..models import GuardArtifact
-from ._modules.cursor.cursor_hook_command_line import cursor_hook_command_tokens, split_cursor_hook_command
 from ._modules.cursor.cursor_hook_events import (
     CURSOR_FILE_MUTATION_TOOL_MATCHER,
+    CURSOR_SHELL_ROUTE_TOOL_MATCHER,
     cursor_entry_guards_file_mutations,
-    unsupported_cursor_hook_events,
 )
 from ._modules.cursor.cursor_hook_guard_cli import resolve_frozen_cursor_hook_launcher
 from ._modules.cursor.cursor_hook_native import (
     NATIVE_CURSOR_HOOK_COMMAND,
-    client_hook_tokens,
+    CursorNativeBridgeUnavailableError,
     native_cursor_hook_bridge,
+    python_client_pinned,
 )
 from .base import HarnessContext
-from .hook_payloads import inline_hooks_payload
-from .state_files import load_backup_payload
 
 HOOK_SCRIPT_NAME = "hol-guard-cursor-hook.py"
 FROZEN_CURSOR_HOOK_COMMAND = "__guard-cursor-hook"
@@ -110,6 +116,10 @@ def _managed_hook_command(
     event_args = ["--cursor-hook-event", event_name]
     interpreter = str(python_executable) if python_executable is not None else isolated_cursor_hook_python()
     native_bridge = native_cursor_hook_bridge(guard_home)
+    if native_bridge is None and not python_client_pinned():
+        # The client this command would launch denies every gated hook, so the
+        # frozen launcher must not render a command without the runtime either.
+        raise CursorNativeBridgeUnavailableError("guard_cursor_native_bridge_unavailable")
     prefix = [] if native_bridge is None else [str(native_bridge), NATIVE_CURSOR_HOOK_COMMAND]
     if not interpreter and bool(getattr(sys, "frozen", False)):
         launcher = [_frozen_cursor_hook_launcher(), FROZEN_CURSOR_HOOK_COMMAND, script, *event_args]
@@ -186,81 +196,131 @@ def _managed_hook_entry(
         "failClosed": event_name in _BLOCKING_MANAGED_HOOK_EVENTS,
     }
     if event_name == "preToolUse":
-        entry["matcher"] = CURSOR_FILE_MUTATION_TOOL_MATCHER
+        entry["matcher"] = (
+            CURSOR_FILE_MUTATION_TOOL_MATCHER if sys.platform == "win32" else CURSOR_SHELL_ROUTE_TOOL_MATCHER
+        )
     return entry
 
 
-def _retire_managed_hook_events(hooks: dict[str, object], *, script_path: Path) -> None:
-    """Drop Guard entries under events Cursor rejects, such as the retired beforeWriteFile.
+def _malformed() -> RuntimeError:
+    return RuntimeError("Cursor hook config answer is malformed")
 
-    Another tool's entry under such an event still makes Cursor ignore every hook,
-    so install stops with the event names instead of reporting protection.
+
+def _ask_once(request: dict[str, object]) -> tuple[dict[str, object], dict[str, str]]:
+    # Imported here so the hook bridges stay off the native runtime at import time.
+    from ..native_runner_authority import NativeRunnerAuthorityError, native_runner_authority
+
+    try:
+        answer: dict[str, object] = native_runner_authority("cursor_hook_config", request)
+    except NativeRunnerAuthorityError as error:
+        # Best-effort repair and rebind callers handle RuntimeError, not ValueError.
+        raise RuntimeError(f"Cursor hook config request failed: {error}") from error
+    short_tokens = answer.get("short_tokens")
+    if not isinstance(short_tokens, list) or not all(isinstance(token, str) for token in short_tokens):
+        raise _malformed()
+    known = cast(dict[str, str], request["long_paths"])
+    resolved = {token: codex_hook_command_line._expand_short_token(token) for token in short_tokens}
+    return answer, {token: path for token, path in resolved.items() if path != token and token not in known}
+
+
+def _ask(op: str, **fields: object) -> dict[str, object]:
+    """Ask the native kind, sending the long path of each 8.3 name it reports once."""
+
+    windows = codex_hook_command_line.hook_commands_use_windows_syntax()
+    request: dict[str, object] = {"op": op, "windows": windows, "long_paths": {}, **fields}
+    answer, resolved = _ask_once(request)
+    if resolved:
+        answer, _ = _ask_once({**request, "long_paths": resolved})
+    return answer
+
+
+def _flag(answer: dict[str, object], key: str) -> bool:
+    value = answer.get(key)
+    if not isinstance(value, bool):
+        raise _malformed()
+    return value
+
+
+def _index(value: object, size: int) -> int:
+    if isinstance(value, bool) or not isinstance(value, int) or not 0 <= value < size:
+        raise _malformed()
+    return value
+
+
+def _managed_hooks_payload(
+    payload: dict[str, object],
+    managed_entries: dict[str, dict[str, object]],
+    *,
+    script_path: Path,
+) -> dict[str, object]:
+    """Return the normalized hooks config with Guard's entries merged into each managed event.
+
+    Guard entries under events Cursor rejects, such as the retired beforeWriteFile,
+    are dropped. Another tool's entry under such an event still makes Cursor ignore
+    every hook, so install stops with the event names instead of reporting protection.
     """
 
-    for event_name in unsupported_cursor_hook_events(hooks):
-        remaining = _strip_managed_hook_entries(hooks[event_name], script_path=script_path)
-        if remaining:
-            hooks[event_name] = remaining
-        else:
-            hooks.pop(event_name, None)
-    unsupported = unsupported_cursor_hook_events(hooks)
-    if unsupported:
-        raise RuntimeError(
-            "guard_cursor_hook_unsupported_events:"
-            + ",".join(unsupported)
-            + ": Cursor ignores hooks.json while it names these events; remove or rename them, then reinstall."
-        )
+    nested = payload.get("hooks")
+    source = nested if isinstance(nested, dict) else payload
+    answer = _ask(
+        "install",
+        payload=payload,
+        top_keys=list(payload),
+        hooks_keys=list(nested) if isinstance(nested, dict) else None,
+        managed=[[event, str(entry.get("command", ""))] for event, entry in managed_entries.items()],
+        script=str(script_path.resolve()),
+    )
+    error = answer.get("error")
+    if isinstance(error, str):
+        raise RuntimeError(error)
+    version, specs = answer.get("version"), answer.get("hooks")
+    if not isinstance(version, int) or not isinstance(specs, list):
+        raise _malformed()
+    hooks: dict[str, object] = {}
+    for spec in specs:
+        if not isinstance(spec, list) or len(spec) != 3:
+            raise _malformed()
+        event, kept, guard = spec
+        if not isinstance(event, str) or event in hooks or not isinstance(guard, bool):
+            raise _malformed()
+        current = source.get(event)
+        if kept is None:
+            if guard or event not in source or isinstance(current, list):
+                raise _malformed()
+            hooks[event] = current
+            continue
+        entries = current if isinstance(current, list) else []
+        if not isinstance(kept, list) or (guard and event not in managed_entries):
+            raise _malformed()
+        merged = [entries[_index(index, len(entries))] for index in kept]
+        hooks[event] = [*merged, managed_entries[event]] if guard else merged
+    return {"version": version, "hooks": hooks}
+
+
+def _managed_entry_flags(entries: list[object], command: str) -> list[bool]:
+    flags = _ask("entries", entries=entries, command=command).get("managed")
+    if not isinstance(flags, list) or len(flags) != len(entries) or not all(isinstance(flag, bool) for flag in flags):
+        raise _malformed()
+    return cast(list[bool], flags)
 
 
 def _strip_managed_hook_entries(entries: object, *, script_path: Path) -> list[object]:
     if not isinstance(entries, list):
         return []
-    command = str(script_path.resolve())
-    return [entry for entry in entries if not _is_managed_hook_entry(entry, command=command)]
+    flags = _managed_entry_flags(entries, str(script_path.resolve()))
+    return [entry for entry, managed in zip(entries, flags, strict=True) if not managed]
 
 
-def _merge_hook_entries(entries: object, hook_entry: dict[str, object], *, event_name: str) -> list[object]:
-    del event_name
-    normalized = list(entries) if isinstance(entries, list) else []
-    command = str(hook_entry.get("command", ""))
-    preserved = [entry for entry in normalized if not _is_managed_hook_entry(entry, command=command)]
-    return [*preserved, hook_entry]
-
-
-def _is_managed_hook_entry(entry: object, *, command: str) -> bool:
-    if not isinstance(entry, dict):
-        return False
-    entry_command = entry.get("command")
-    if isinstance(entry_command, str) and entry_command == command:
-        return True
-    return _is_managed_hook_command(entry_command)
+def _command_facts(command: str) -> tuple[bool, bool, str | None]:
+    answer = _ask("command", command=command)
+    script = answer.get("script")
+    if script is not None and not isinstance(script, str):
+        raise _malformed()
+    return _flag(answer, "managed"), _flag(answer, "structured"), script
 
 
 def _is_managed_hook_command(command: object) -> bool:
-    if not isinstance(command, str):
-        return False
-    lowered = command.lower()
-    if "hol-guard-cursor-hook" in lowered:
-        return True
-    if FROZEN_CURSOR_HOOK_COMMAND in lowered:
-        return True
-    if HOOK_SCRIPT_NAME.lower() in lowered:
-        return True
-    if _is_structured_managed_cursor_hook_command(command):
-        return True
-    if "hol_guard_hook_argv" not in lowered.replace("-", "_"):
-        return False
-    if "--harness" not in lowered or "cursor" not in lowered:
-        return False
-    tokens = cursor_hook_command_tokens(command)
-    if tokens and hook_token_name(tokens[0]) == HOOK_SCRIPT_NAME:
-        return True
-    return hook_token_name(tokens[0]).lower().startswith("python") if tokens else False
-
-
-_MANAGED_CURSOR_HOOK_DOCSTRING = (
-    '"""Managed by HOL Guard. Re-run `hol-guard install cursor` after moving Guard home."""'
-)
+    return isinstance(command, str) and _command_facts(command)[0]
 
 
 def _is_managed_hook_script(source: str) -> bool:
@@ -273,31 +333,7 @@ def _is_managed_hook_script(source: str) -> bool:
     ownership.
     """
 
-    return (
-        _MANAGED_CURSOR_HOOK_DOCSTRING in source
-        and "\nGUARD_CLI =" in source
-        and "\nGUARD_RECOVERY_COMMAND =" in source
-    )
-
-
-def _managed_hooks_payload(payload: dict[str, object]) -> dict[str, object]:
-    normalized: dict[str, object] = {"version": 1, "hooks": {}}
-    version = payload.get("version")
-    if isinstance(version, int):
-        normalized["version"] = version
-    hooks = payload.get("hooks")
-    if isinstance(hooks, dict):
-        normalized["hooks"] = {
-            str(name): list(entries) if isinstance(entries, list) else entries for name, entries in hooks.items()
-        }
-        return normalized
-    normalized["hooks"] = {
-        str(name): list(entries) for name, entries in payload.items() if name != "version" and isinstance(entries, list)
-    }
-    return normalized
-
-
-_inline_hooks = inline_hooks_payload
+    return _flag(_ask("script", source=source), "managed")
 
 
 def _json_object(path: Path, *, recover_missing: bool) -> dict[str, object]:
@@ -324,37 +360,35 @@ def _hooks_state_path(target_path: Path, context: HarnessContext) -> Path:
     return context.guard_home / "managed" / "cursor" / f"hooks-{digest}.state.json"
 
 
-_backup_payload = load_backup_payload
-
-
-def _skip_leading_flags(tokens: Sequence[str]) -> list[str]:
-    rest = list(tokens)
-    while rest and rest[0].startswith("-") and rest[0] != "-c":
-        rest = rest[1:]
-    return rest
-
-
 def _accepted_live_cursor_hook_script(path: Path) -> Path | None:
     if not _is_managed_cursor_hook_script(path) or _cursor_hook_path_contains_symlink(path):
         return None
     return path
 
 
+def _live_script_exists(script: object) -> bool:
+    if not isinstance(script, str):
+        raise _malformed()
+    accepted = _accepted_live_cursor_hook_script(Path(script))
+    return accepted is not None and accepted.is_file()
+
+
 def _live_cursor_hook_script_path(command: str) -> Path | None:
-    tokens = client_hook_tokens(cursor_hook_command_tokens(command))
-    if not tokens:
-        return None
-    first = hook_token_name(tokens[0])
-    if first == HOOK_SCRIPT_NAME:
-        return _accepted_live_cursor_hook_script(Path(tokens[0]))
-    if len(tokens) >= 3 and tokens[1] == FROZEN_CURSOR_HOOK_COMMAND:
-        return _accepted_live_cursor_hook_script(Path(tokens[2]))
-    if first.lower().startswith("python"):
-        payload = _skip_leading_flags(tokens[1:])
-        if not payload or payload[0] == "-c":
-            return None
-        return _accepted_live_cursor_hook_script(Path(payload[0]))
-    return None
+    script = _command_facts(command)[2]
+    return None if script is None else _accepted_live_cursor_hook_script(Path(script))
+
+
+def _hook_pairs(hooks: dict[object, object]) -> list[list[object]]:
+    return [[str(name), entries] for name, entries in hooks.items()]
+
+
+def _intercepts(event_name: str, entries: list[object], candidate: object) -> bool:
+    if not isinstance(candidate, list) or len(candidate) != 2:
+        raise _malformed()
+    entry = entries[_index(candidate[0], len(entries))]
+    if not isinstance(entry, dict) or not _live_script_exists(candidate[1]):
+        return False
+    return event_name != "preToolUse" or cursor_entry_guards_file_mutations(entry)
 
 
 def live_guard_cursor_hooks_intercept(hooks: object) -> bool:
@@ -367,93 +401,56 @@ def live_guard_cursor_hooks_intercept(hooks: object) -> bool:
     guards writes while it fails closed and matches every file mutation tool.
     """
 
-    if not isinstance(hooks, dict) or unsupported_cursor_hook_events(hooks):
+    if not isinstance(hooks, dict):
         return False
-    for event_name in _BLOCKING_MANAGED_HOOK_EVENTS:
+    events = _ask("intercept", hooks=_hook_pairs(hooks)).get("events")
+    if events is None:
+        return False
+    if not isinstance(events, list) or len(events) != len(_BLOCKING_MANAGED_HOOK_EVENTS):
+        raise _malformed()
+    for event_name, routed in zip(_BLOCKING_MANAGED_HOOK_EVENTS, events, strict=True):
         entries = hooks.get(event_name)
-        if not isinstance(entries, list):
-            return False
-        matched = False
-        for entry in entries:
-            if not isinstance(entry, dict):
-                continue
-            command = entry.get("command")
-            if not isinstance(command, str) or not command.strip():
-                continue
-            script_path = _live_cursor_hook_script_path(command)
-            if script_path is None or not script_path.is_file():
-                continue
-            if event_name == "preToolUse" and not cursor_entry_guards_file_mutations(entry):
-                continue
-            matched = True
-            break
-        if not matched:
+        if not isinstance(routed, list) or len(routed) != 2 or routed[0] != event_name:
+            raise _malformed()
+        if not isinstance(entries, list) or not isinstance(routed[1], list):
+            raise _malformed()
+        if not any(_intercepts(event_name, entries, candidate) for candidate in routed[1]):
             return False
     return True
 
 
-_FROZEN_CURSOR_LAUNCHERS = {
-    "current-hol-guard",
-    "current-hol-guard.cmd",
-    "current-hol-guard.exe",
-    "hol-guard",
-    "hol-guard.exe",
-}
-
-
 def _is_structured_managed_cursor_hook_command(command: str) -> bool:
-    tokens = client_hook_tokens(cursor_hook_command_tokens(command))
-    if not tokens:
-        return False
-    first = hook_token_name(tokens[0]).lower()
-    if first == HOOK_SCRIPT_NAME.lower():
-        return True
-    if len(tokens) >= 3 and tokens[1] == FROZEN_CURSOR_HOOK_COMMAND:
-        return first in _FROZEN_CURSOR_LAUNCHERS and hook_token_name(tokens[2]).lower() == HOOK_SCRIPT_NAME.lower()
-    if first.startswith("python"):
-        payload = _skip_leading_flags(tokens[1:])
-        return bool(payload) and hook_token_name(payload[0]).lower() == HOOK_SCRIPT_NAME.lower()
-    return False
+    return _command_facts(command)[1]
+
+
+def _live_managed_commands(hooks: object) -> list[tuple[str, bool]]:
+    if not isinstance(hooks, dict):
+        return []
+    found = _ask("commands", hooks=_hook_pairs(hooks)).get("commands")
+    if not isinstance(found, list):
+        raise _malformed()
+    commands: list[tuple[str, bool]] = []
+    for item in found:
+        if not isinstance(item, dict) or item.keys() != {"command", "script", "frozen"}:
+            raise _malformed()
+        command, frozen = item["command"], item["frozen"]
+        if not isinstance(command, str) or not isinstance(frozen, bool):
+            raise _malformed()
+        if _live_script_exists(item["script"]):
+            commands.append((command, frozen))
+    return commands
 
 
 def live_cursor_hooks_use_frozen_control_plane(hooks: object) -> bool:
     """Return whether live Cursor config still boots the frozen control plane."""
 
-    for command in managed_cursor_hook_commands(hooks):
-        tokens = client_hook_tokens(split_cursor_hook_command(command) or ())
-        if len(tokens) >= 2 and tokens[1] == FROZEN_CURSOR_HOOK_COMMAND:
-            return True
-    return False
+    return any(frozen for _command, frozen in _live_managed_commands(hooks))
 
 
 def managed_cursor_hook_commands(hooks: object) -> tuple[str, ...]:
     """Return structured Guard-owned Cursor hook commands from a live hooks payload."""
 
-    if not isinstance(hooks, dict):
-        return ()
-    commands: list[str] = []
-    seen: set[str] = set()
-    for entries in hooks.values():
-        if not isinstance(entries, list):
-            continue
-        for entry in entries:
-            if not isinstance(entry, dict):
-                continue
-            command = entry.get("command")
-            if (
-                not isinstance(command, str)
-                or command in seen
-                or entry.get("enabled") is False
-                or entry.get("disabled") is True
-                or not _is_structured_managed_cursor_hook_command(command)
-            ):
-                continue
-            script_path = _live_cursor_hook_script_path(command)
-            if script_path is None or not script_path.is_file():
-                continue
-            seen.add(command)
-            commands.append(command)
-    return tuple(commands)
+    return tuple(command for command, _frozen in _live_managed_commands(hooks))
 
 
 def detect_managed_cursor_hook_artifact(hooks_path: Path, payload: object) -> GuardArtifact | None:

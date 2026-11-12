@@ -1,6 +1,7 @@
 """Coverage for the verdict-derived native-hook exit-code contract."""
 
 import re
+import sys
 from pathlib import Path
 
 import pytest
@@ -30,7 +31,7 @@ class TestVerdictExitCodeContract:
         assert native_hook_verdict_exit_code(h, "block") == 1
         assert native_hook_verdict_exit_code(h, "allow") == 0
 
-    @pytest.mark.parametrize("h", ("codex", "claude-code", "copilot", "pi", "omp"))
+    @pytest.mark.parametrize("h", ("codex", "claude-code", "copilot", "pi", "omp", "muse"))
     def test_envelope_driven_deny_rc0(self, h):
         # Deny rides the decision envelope (permissionDecision / decision);
         # a nonzero PREEMPTIVE rc would read as a hook error and permit the
@@ -40,7 +41,7 @@ class TestVerdictExitCodeContract:
         assert native_hook_verdict_exit_code(h, "block", "PermissionRequest") == 0
         assert native_hook_verdict_exit_code(h, "allow", "PreToolUse") == 0
 
-    @pytest.mark.parametrize("h", ("codex", "claude-code", "copilot", "pi", "omp"))
+    @pytest.mark.parametrize("h", ("codex", "claude-code", "copilot", "pi", "omp", "muse"))
     def test_envelope_post_tool_block_rc1(self, h):
         # PostToolUse cannot preempt (the tool already ran) — a blocking
         # verdict flags the violation on the exit status instead.
@@ -50,6 +51,73 @@ class TestVerdictExitCodeContract:
     def test_unknown_harness_fails_safe(self):
         assert native_hook_verdict_exit_code("some-future-harness", "block") == 1
         assert native_hook_verdict_exit_code("some-future-harness", "allow") == 0
+
+
+class TestUnknownActionFailsClosed:
+    """An action outside the lattice is not evidence of permission.
+
+    ``policy_action`` reaches this table as a bare string decoded from the
+    resident's response, so a newer resident, a truncated value or a corrupted
+    field can name an action this build has never heard of. Testing membership
+    in the blocking set made every such value non-blocking, which is the one
+    direction the contract cannot afford. The lattice normalizes an unknown
+    action to the review tier instead, so each harness renders its own
+    review-tier code.
+    """
+
+    UNKNOWN = ("quarantine-required", "", "BLOCK", "ask ", "deny", "0")
+
+    @pytest.fixture(autouse=True)
+    def _protection_is_on(self, monkeypatch):
+        # grok reads the Guard home to honour recording-only mode, which would
+        # otherwise answer 0 for every action regardless of the lattice.
+        monkeypatch.delenv("HOL_GUARD_HOME", raising=False)
+        monkeypatch.setattr(sys, "argv", ["hol-guard"])
+
+    @pytest.mark.parametrize("action", UNKNOWN)
+    @pytest.mark.parametrize("h", ("cursor", "devin", "kimi", "hermes", "grok"))
+    def test_rc_two_harnesses_block_an_unknown_action(self, action, h):
+        assert native_hook_verdict_exit_code(h, action, "PreToolUse") == 2
+        assert native_hook_verdict_exit_code(h, action, "PostToolUse") == 2
+
+    @pytest.mark.parametrize("action", UNKNOWN)
+    @pytest.mark.parametrize("h", ("opencode", "superagent", "some-future-harness"))
+    def test_rc_one_harnesses_block_an_unknown_action(self, action, h):
+        assert native_hook_verdict_exit_code(h, action, "PreToolUse") == 1
+        assert native_hook_verdict_exit_code(h, action, "PostToolUse") == 1
+
+    @pytest.mark.parametrize("action", UNKNOWN)
+    @pytest.mark.parametrize("h", ("codex", "claude-code", "copilot", "pi", "omp", "muse"))
+    def test_envelope_harnesses_flag_an_unknown_action_after_the_fact(self, action, h):
+        # The envelope carries the deny before execution, so a preemptive
+        # event still exits 0; PostToolUse has nothing left to preempt and
+        # resolves to the review tier's nonzero status.
+        assert native_hook_verdict_exit_code(h, action, "PreToolUse") == 0
+        assert native_hook_verdict_exit_code(h, action, "PostToolUse") == 1
+
+    @pytest.mark.parametrize("action", UNKNOWN)
+    def test_zcode_treats_an_unknown_action_as_review(self, action):
+        # zcode discards stdout when a hook exits 2, so its review tier has to
+        # exit 0 for the ``ask`` envelope to reach the permission prompt. Every
+        # other event takes the blocking status.
+        assert native_hook_verdict_exit_code("zcode", action, "PreToolUse") == 0
+        assert native_hook_verdict_exit_code("zcode", action, "PostToolUse") == 2
+
+    @pytest.mark.parametrize("h", ("cursor", "opencode", "codex", "grok", "zcode", "some-future-harness"))
+    def test_a_non_string_action_never_reads_as_allow(self, h):
+        # A decoder that hands back ``None`` or a number has not established
+        # permission either.
+        for action in (None, 7, {"policy_action": "allow"}, ["allow"]):
+            assert native_hook_verdict_exit_code(h, action, "PostToolUse") == native_hook_verdict_exit_code(
+                h, "review", "PostToolUse"
+            )
+
+    @pytest.mark.parametrize("h", ("cursor", "opencode", "codex", "grok", "zcode"))
+    def test_the_legacy_ask_alias_resolves_to_review(self, h):
+        # ``ask`` predates the lattice and used to exit 0 everywhere; the
+        # lattice maps it onto ``review`` rather than onto a permissive rank.
+        for event in ("PreToolUse", "PostToolUse"):
+            assert native_hook_verdict_exit_code(h, "ask", event) == native_hook_verdict_exit_code(h, "review", event)
 
 
 class TestRustTableParity:
@@ -67,7 +135,7 @@ class TestRustTableParity:
     RUST_DIRECTIVE = Path(__file__).resolve().parents[1] / "rust/crates/guard-runtime/src/hook_decision_directive.rs"
     ACTIONS = (
         "allow",
-        "observe",
+        "warn",
         "review",
         "require-reapproval",
         "sandbox-required",
@@ -99,7 +167,7 @@ class TestRustTableParity:
             (
                 "ENVELOPE_HARNESSES",
                 _RC_BLOCK_IS_ZERO_ENVELOPE,
-                {"codex", "claude-code", "copilot", "pi", "omp"},
+                {"codex", "claude-code", "copilot", "pi", "omp", "muse"},
             ),
             (
                 "PREEMPTIVE_EVENTS",

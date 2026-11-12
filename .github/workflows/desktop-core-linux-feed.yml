@@ -149,6 +149,7 @@ jobs:
           CORE_TAG: ${{ steps.release.outputs.tag }}
           CORE_VERSION: ${{ steps.release.outputs.version }}
           RELEASE_BRANCH: ${{ steps.release.outputs.branch }}
+          PUBLICATION_RUN_ID: ${{ inputs.publication_run_id || '' }}
           PUBLICATION_SOURCE_SHA: ${{ inputs.publication_source_sha || '' }}
           GH_TOKEN: ${{ github.token }}
         shell: bash
@@ -201,7 +202,7 @@ jobs:
           python-version: "3.12"
       - name: Set up uv
         if: steps.release.outputs.available == 'true' && steps.registry.outputs.registry_ready == 'true'
-        uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884
+        uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2
         with:
           version: "0.9.26"
           enable-cache: true

@@ -48,6 +48,12 @@ const CODEX_REQUEST_RESUME_TIMEOUT_CEILING_MS: u64 =
     guard_contracts::CODEX_REQUEST_RESUME_MAX_TIMEOUT_MS
         + guard_contracts::CODEX_REQUEST_RESUME_MAX_BUSY_TIMEOUT_MS
         + 5_000;
+/// A hook envelope that asks the edge to settle a custom extension rule may
+/// run this long past its review budget. The daemon waits that much longer
+/// for the edge (`_LOCAL_CLI_RULE_SECONDS` in `native_hook_edge.py`), so a
+/// relay that stopped at the review budget would abandon an answer the
+/// daemon is still waiting for and report the review unavailable.
+const LOCAL_CLI_RULE_ALLOWANCE_MS: u64 = 5_000;
 
 pub(crate) fn client_timeout(payload: &[u8]) -> Duration {
     let value = crate::strict_json_value(payload).ok();
@@ -79,5 +85,19 @@ pub(crate) fn client_timeout(payload: &[u8]) -> Duration {
         .and_then(|value| value.get("deadline_budget_ms")?.as_u64())
         .unwrap_or(750)
         .clamp(1, ceiling);
-    Duration::from_millis(budget)
+    let settles_rule = value.as_ref().is_some_and(|value| {
+        value.get("schema").and_then(|schema| schema.as_str())
+            == Some(guard_contracts::GUARD_HOOK_ENVELOPE_V2_SCHEMA)
+            && value
+                .get("local_cli_rules")
+                .is_some_and(|rules| !rules.is_null())
+    });
+    Duration::from_millis(
+        budget
+            + if settles_rule {
+                LOCAL_CLI_RULE_ALLOWANCE_MS
+            } else {
+                0
+            },
+    )
 }

@@ -327,3 +327,22 @@ def test_ordinary_access_time_changes_do_not_count_as_protected_mutation(tmp_pat
     checks = filesystem_checks(fixture, "blocked-command", "linked-destination-touch")
     assert checks["protected:.env:metadata"] is True
     assert secret.stat().st_mtime_ns == before.st_mtime_ns
+
+
+def test_sibling_climb_case_reads_a_real_checkout_beside_the_project(tmp_path):
+    """The case's cd lands in a repository, so Git answers instead of failing before Guard's read."""
+    scenario = CATALOG["git-read-after-sibling-climb"]
+    assert all(command.startswith("cd ../other-project") for command in scenario.commands)
+    fixture = create_fixture(tmp_path / "fixture", scenario_id=scenario.id)
+    sibling = fixture.workspace.parent / "other-project"
+    environment = {
+        **{k: os.environ[k] for k in ("PATH", "SYSTEMROOT", "WINDIR") if k in os.environ},
+        "HOME": str(fixture.home),
+        "USERPROFILE": str(fixture.home),
+        "GIT_CONFIG_NOSYSTEM": "1",
+    }
+    for args in (("status", "--short"), ("log", "-1", "--oneline")):
+        result = subprocess.run(
+            ["git", *args], cwd=sibling, env=environment, capture_output=True, text=True, timeout=30, check=False
+        )
+        assert result.returncode == 0, result.stderr

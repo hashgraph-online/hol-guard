@@ -83,7 +83,6 @@ fn private_temporary_root(
     parent: &std::path::Path,
     context: super::super::PathContext<'_>,
 ) -> bool {
-    use std::os::unix::fs::MetadataExt;
     let (Some(owner), Some(home)) = (
         home_owner(context),
         context
@@ -92,18 +91,10 @@ fn private_temporary_root(
     ) else {
         return false;
     };
-    let names: Vec<&std::ffi::OsStr> = parent
-        .components()
-        .skip(1)
-        .map(|part| part.as_os_str())
-        .collect();
-    if names.len() < 6 || names[..3] != ["private", "var", "folders"] || names[5] != "T" {
+    let Some(root) = private_temporary_base(parent, owner) else {
         return false;
-    }
-    let root = std::path::Path::new("/").join(names[..6].iter().collect::<std::path::PathBuf>());
-    std::fs::symlink_metadata(&root).is_ok_and(|metadata| {
-        metadata.is_dir() && metadata.uid() == owner && metadata.mode() & 0o077 == 0
-    }) && parent
+    };
+    parent
         .strip_prefix(&root)
         .is_ok_and(|relative| {
             relative.components().all(|part| {
@@ -111,6 +102,38 @@ fn private_temporary_root(
             })
         })
         && owned_below(&root, parent, &home)
+}
+
+/// The private macOS temporary directory (`/private/var/folders/<a>/<b>/T`)
+/// holding canonical `path`, when `owner` owns it and no one else can open it.
+#[cfg(target_os = "macos")]
+pub(in crate::pretool) fn private_temporary_base(
+    path: &std::path::Path,
+    owner: u32,
+) -> Option<std::path::PathBuf> {
+    use std::os::unix::fs::MetadataExt;
+    let names: Vec<&std::ffi::OsStr> = path
+        .components()
+        .skip(1)
+        .map(|part| part.as_os_str())
+        .collect();
+    if names.len() < 6 || names[..3] != ["private", "var", "folders"] || names[5] != "T" {
+        return None;
+    }
+    let root = std::path::Path::new("/").join(names[..6].iter().collect::<std::path::PathBuf>());
+    std::fs::symlink_metadata(&root)
+        .is_ok_and(|metadata| {
+            metadata.is_dir() && metadata.uid() == owner && metadata.mode() & 0o077 == 0
+        })
+        .then_some(root)
+}
+
+#[cfg(all(unix, not(target_os = "macos")))]
+pub(in crate::pretool) fn private_temporary_base(
+    _path: &std::path::Path,
+    _owner: u32,
+) -> Option<std::path::PathBuf> {
+    None
 }
 
 /// The profile's own Windows temporary directory (`<home>\AppData\Local\Temp`,

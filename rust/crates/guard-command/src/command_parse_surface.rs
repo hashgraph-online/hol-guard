@@ -144,11 +144,16 @@ pub(crate) fn parse_command_unbound(
 /// `bash -c`, `dash -c` and `ash -c`. A login shell (`-lc`) sources the profile
 /// files first and `zsh` reads `~/.zshenv` whatever option it is given, so
 /// those run code this text does not hold and keep the wrapper's own
-/// uncertainty. The bounded shape is what keeps the rest true: three words, a
-/// known shell, the `-c` option, and no expansion the parser would have to
-/// guess at. Anything else — an extra operand, `-s`, a prefix, a shell this
-/// text only names — keeps that uncertainty too, as does a script this parser
-/// cannot model exactly.
+/// uncertainty. The bounded shape is what keeps the rest true: a known shell,
+/// options that end in `-c` and change only how the script reacts to a
+/// failure, what it traces or how a glob matches (`-e`, `-u`, `-x`, `-f`,
+/// `-o pipefail`, `-O extglob` and the like, `--norc`), one script
+/// word, and no expansion the parser would have to guess at. A shell that
+/// does not know one of those options stops before the script runs, so the
+/// script is still the most the text runs. Anything else — an extra operand,
+/// `-s`, `-a`, `--posix`, `-O expand_aliases`, a prefix, a shell this text only names —
+/// keeps that uncertainty too, as does a script this parser cannot model
+/// exactly.
 ///
 /// A Windows agent runs PowerShell, which reads quotes differently from the
 /// shell this text names: `''` closes and reopens a POSIX single-quoted word
@@ -182,6 +187,19 @@ pub(crate) fn parse_inline_shell_script(
     }
     model.exact_raw_text = false;
     Some(model)
+}
+
+/// The script a bounded inline shell runs, when [`parse_inline_shell_script`]
+/// models `request` from that script rather than from the shell in front.
+///
+/// The contained sink plans the program it runs from the same words the
+/// review read. For `bash -ec 'pytest -q'` the review read `pytest -q`, so a
+/// sink that split the raw text would plan `bash` instead and refuse the run
+/// the review sent it.
+pub fn inline_shell_script_text(request: &CommandModelRequestV1) -> Option<String> {
+    let raw = request.command.trim();
+    parse_inline_shell_script(request, raw)?;
+    parser_wrappers::inline_shell_script(raw)
 }
 
 pub(crate) fn parse_explicit_powershell(
@@ -355,6 +373,11 @@ pub(crate) fn parse_posix_command(
             && segments.last().is_some_and(|previous| {
                 let context = format!("top:{}", raw_segment.group_index);
                 read_only_fanout::xargs_follows_find(
+                    previous,
+                    raw_segment.pipeline_index,
+                    &context,
+                    &arguments,
+                ) || read_only_fanout::listing::xargs_follows(
                     previous,
                     raw_segment.pipeline_index,
                     &context,

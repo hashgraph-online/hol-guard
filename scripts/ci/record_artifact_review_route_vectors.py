@@ -31,17 +31,19 @@ from __future__ import annotations
 import gzip
 import itertools
 import json
+import sys
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
 
-from codex_plugin_scanner.guard.cli.commands_support_prompts import (
-    _claude_prompt_additional_context,
-    _claude_prompt_system_message,
-)
 from codex_plugin_scanner.guard.cli.commands_support_runtime_resolution import _canonical_harness_name
+
+if __package__ is None:
+    sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+
+from scripts.ci.claude_prompt_oracle import _claude_prompt_additional_context, _claude_prompt_system_message
 
 OUTPUT = Path("rust/crates/guard-runtime/tests/fixtures/artifact_review_route_vectors.json.gz")
 

@@ -25,8 +25,8 @@ def _resident(monkeypatch: pytest.MonkeyPatch) -> list[dict[str, object]]:
     monkeypatch.setattr(bridge, "_resolve_digest_home", lambda _home: Path("/tmp/codex-hook-identity-home"))
     monkeypatch.setattr(bridge, "ensure_resident_prerequisite", lambda _home: True)
 
-    def fake(*, request, **_kwargs):
-        sent.append(request)
+    def fake(*, request, required_feature, **_kwargs):
+        sent.append({**request, "required_feature": required_feature})
         return {"identities": [_answer(index, entry) for index, entry in enumerate(request["entries"])]}
 
     monkeypatch.setattr(bridge, "_resident_request", fake)
@@ -38,12 +38,53 @@ def _answer(index: int, entry: dict[str, object]) -> dict[str, object]:
     """Answer one entry the way the resident would, distinctly per position."""
 
     kind = entry["kind"]
-    if kind == "argv":
-        command = entry.get("command")
-        return {"argv": command.split() if isinstance(command, str) else None}
+    if kind == "inventory":
+        return _inventory(entry)
     if kind == "conflict":
         return {"digests": [f"c{index}"]}
     return {"digest": f"d{index}"}
+
+
+def _inventory(entry: dict[str, object]) -> dict[str, object]:
+    """Walk the events the wire carried: a record per object handler, an issue per other."""
+
+    records: list[dict[str, object]] = []
+    issues: list[dict[str, object]] = []
+    events = entry["events"]
+    assert isinstance(events, list)
+    for event_name, groups in events:
+        for group_index, group in enumerate(groups):
+            for handler_index, handler in enumerate(group["hooks"]):
+                if not isinstance(handler, dict):
+                    issues.append(
+                        {
+                            "reason_code": "malformed_handler",
+                            "message": "not a handler",
+                            "event_name": event_name,
+                            "group_index": group_index,
+                            "handler_index": handler_index,
+                        }
+                    )
+                    continue
+                command = handler.get("command")
+                records.append(
+                    {
+                        "event_name": event_name,
+                        "group_index": group_index,
+                        "handler_index": handler_index,
+                        "matcher": group.get("matcher"),
+                        "handler_type": handler.get("type"),
+                        "command": command,
+                        "command_argv": command.split() if isinstance(command, str) else None,
+                        "timeout": None,
+                        "environment_keys": [],
+                        "active": True,
+                        "executable": True,
+                        "ownership": "unmanaged",
+                        "canonical_identity": f"i{event_name}:{group_index}:{handler_index}",
+                    }
+                )
+    return {"records": records, "issues": issues}
 
 
 def _walk(payload: dict[str, object]):
@@ -92,17 +133,18 @@ def test_every_record_keeps_its_own_answer(monkeypatch: pytest.MonkeyPatch) -> N
     assert all(record.canonical_identity for record in inventory.records)
 
 
-def test_each_handler_asks_for_its_tokens_and_its_identity(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_a_whole_source_is_one_inventory_question(monkeypatch: pytest.MonkeyPatch) -> None:
     sent = _resident(monkeypatch)
     _walk(_payload_with_three_handlers())
     (wire,) = sent
     entries = wire["entries"]
     assert isinstance(entries, list)
-    assert [entry["kind"] for entry in entries] == ["argv", "handler", "argv", "handler", "argv", "handler"]
+    assert [entry["kind"] for entry in entries] == ["inventory"]
+    assert wire["required_feature"] == bridge.CODEX_HOOK_INVENTORY_FEATURE
 
 
-def test_a_handler_that_is_not_an_object_asks_nothing(monkeypatch: pytest.MonkeyPatch) -> None:
-    sent = _resident(monkeypatch)
+def test_a_handler_that_is_not_an_object_is_an_issue(monkeypatch: pytest.MonkeyPatch) -> None:
+    _resident(monkeypatch)
     inventory = _walk(
         {
             "hooks": {
@@ -110,19 +152,28 @@ def test_a_handler_that_is_not_an_object_asks_nothing(monkeypatch: pytest.Monkey
             }
         }
     )
-    (wire,) = sent
-    entries = wire["entries"]
-    assert isinstance(entries, list)
-    assert [entry["kind"] for entry in entries] == ["argv", "handler"]
     assert [record.command for record in inventory.records] == ["echo one"]
-    assert inventory.issues
+    assert [issue.handler_index for issue in inventory.issues] == [0]
 
 
-def test_a_source_without_handlers_never_reaches_the_resident(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_a_source_without_hooks_never_reaches_the_resident(monkeypatch: pytest.MonkeyPatch) -> None:
     sent = _resident(monkeypatch)
-    inventory = _walk({"hooks": {"PreToolUse": [{"matcher": "*", "hooks": []}]}})
+    inventory = _walk({"features": {"codex_hooks": True}})
     assert sent == []
     assert inventory.records == ()
+    assert inventory.issues == ()
+
+
+def test_an_answer_that_is_not_an_inventory_is_no_answer(monkeypatch: pytest.MonkeyPatch) -> None:
+    _resident(monkeypatch)
+    monkeypatch.setattr(
+        bridge,
+        "_resident_request",
+        lambda **_kwargs: {"identities": [{"records": None}]},
+    )
+    inventory = _walk(_payload_with_three_handlers())
+    assert inventory.records == ()
+    assert [issue.reason_code for issue in inventory.issues] == [CODEX_HOOK_INVENTORY_IDENTITY_UNAVAILABLE]
 
 
 def test_an_unavailable_resident_leaves_no_inventory(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -195,7 +246,6 @@ def test_every_group_conflict_key_travels_in_one_request(monkeypatch: pytest.Mon
 
 def test_no_questions_never_reach_the_resident(monkeypatch: pytest.MonkeyPatch) -> None:
     sent = _resident(monkeypatch)
-    assert codex_hook_identity.canonical_codex_hook_handler_identities([]) == ()
     assert codex_hook_identity.canonical_codex_hook_group_identities([]) == ()
     assert codex_hook_identity.canonical_codex_hook_group_conflict_keys([]) == ()
     assert sent == []

@@ -31,7 +31,7 @@ jobs:
       ) || github.event_name == 'workflow_dispatch'
     permissions:
       pull-requests: write
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 3
     steps:
       - name: Post one safe fork-access notice

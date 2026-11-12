@@ -18,7 +18,13 @@ const SCHEMA: &str = "guard-native-policy-build.v1";
 
 // Neither key nor request can be serialized, cloned or formatted for logging.
 #[derive(Deserialize)]
-struct PublisherKey([u8; 32]);
+pub(crate) struct PublisherKey([u8; 32]);
+
+impl PublisherKey {
+    pub(crate) fn bytes(&self) -> &[u8; 32] {
+        &self.0
+    }
+}
 
 impl Drop for PublisherKey {
     fn drop(&mut self) {
@@ -46,13 +52,13 @@ struct BuildRequest {
     expires_at_ms: u64,
 }
 
-fn present_business_binding<'de, D: serde::Deserializer<'de>>(
+pub(crate) fn present_business_binding<'de, D: serde::Deserializer<'de>>(
     deserializer: D,
 ) -> Result<Option<BusinessPolicyBindingV1>, D::Error> {
     BusinessPolicyBindingV1::deserialize(deserializer).map(Some)
 }
 
-fn read_request(mut reader: impl Read) -> Result<(Zeroizing<Vec<u8>>, usize), String> {
+pub(crate) fn read_request(mut reader: impl Read) -> Result<(Zeroizing<Vec<u8>>, usize), String> {
     // A fixed allocation avoids leaving key-bearing copies in old Vec buffers
     // as read_to_end grows its capacity. Drop clears the entire allocation.
     let mut bytes = Zeroizing::new(vec![0u8; POLICY_SNAPSHOT_MAX_BYTES + 1]);
@@ -71,6 +77,74 @@ fn read_request(mut reader: impl Read) -> Result<(Zeroizing<Vec<u8>>, usize), St
     Ok((bytes, filled))
 }
 
+/// The snapshot content every constructor shares; generation and MAC come later.
+pub(crate) struct SnapshotContent {
+    pub(crate) runtime_identity: String,
+    pub(crate) rule_digest: String,
+    pub(crate) mode: String,
+    pub(crate) scope_contract: ScopeContractV3,
+    pub(crate) effective_policy: EffectiveNativePolicyV3,
+    pub(crate) command_extensions: Option<NativeCommandControlBindingV1>,
+    pub(crate) business_policy: Option<BusinessPolicyBindingV1>,
+    pub(crate) issued_at_ms: u64,
+    pub(crate) expires_at_ms: u64,
+}
+
+/// Compute both content digests. Neither covers generation, times or integrity,
+/// so the result can be compared with a retained snapshot before signing.
+pub(crate) fn unsigned_snapshot(content: SnapshotContent) -> Result<PolicySnapshotV3, String> {
+    let mut snapshot = PolicySnapshotV3 {
+        schema: POLICY_SNAPSHOT_SCHEMA.into(),
+        version: POLICY_SNAPSHOT_VERSION,
+        protocol_version: POLICY_SNAPSHOT_PROTOCOL_VERSION,
+        generation: 0,
+        runtime_identity: content.runtime_identity,
+        rule_digest: content.rule_digest,
+        mode: content.mode,
+        scope_contract: content.scope_contract,
+        effective_policy: content.effective_policy,
+        command_extensions: content.command_extensions,
+        business_policy: content.business_policy,
+        issued_at_ms: content.issued_at_ms,
+        expires_at_ms: content.expires_at_ms,
+        config_digest: String::new(),
+        policy_digest: String::new(),
+        integrity: SnapshotIntegrityV3 {
+            algorithm: POLICY_SNAPSHOT_INTEGRITY_ALGORITHM.into(),
+            key_id: String::new(),
+            mac: "0".repeat(64),
+        },
+    };
+    snapshot.config_digest =
+        config_digest(&snapshot.effective_policy).map_err(|_| ERROR.to_owned())?;
+    snapshot.policy_digest = policy_digest(&snapshot).map_err(|_| ERROR.to_owned())?;
+    Ok(snapshot)
+}
+
+/// Bind one generation, sign it and return the canonical bytes.
+pub(crate) fn seal(
+    snapshot: &mut PolicySnapshotV3,
+    generation: u64,
+    verifier_key: &[u8; 32],
+) -> Result<Vec<u8>, String> {
+    snapshot.generation = generation;
+    snapshot.integrity.key_id = verifier_key_id(verifier_key);
+    snapshot.integrity.mac = "0".repeat(64);
+    // Bound the complete output with the fixed-size MAC before signing it.
+    snapshot_bytes(snapshot).map_err(|_| ERROR.to_owned())?;
+    snapshot.integrity.mac = integrity_mac(snapshot, verifier_key).map_err(|_| ERROR.to_owned())?;
+    validate_v3(
+        snapshot,
+        generation,
+        &snapshot.runtime_identity,
+        &snapshot.rule_digest,
+        verifier_key,
+        snapshot.issued_at_ms,
+    )
+    .map_err(|_| ERROR.to_owned())?;
+    snapshot_bytes(snapshot).map_err(|_| ERROR.to_owned())
+}
+
 pub(crate) fn build_from_reader(reader: impl Read) -> Result<Vec<u8>, String> {
     let (bytes, filled) = read_request(reader)?;
     let request: BuildRequest =
@@ -78,11 +152,7 @@ pub(crate) fn build_from_reader(reader: impl Read) -> Result<Vec<u8>, String> {
     if request.schema != SCHEMA || request.version != 1 {
         return Err(ERROR.into());
     }
-    let mut snapshot = PolicySnapshotV3 {
-        schema: POLICY_SNAPSHOT_SCHEMA.into(),
-        version: POLICY_SNAPSHOT_VERSION,
-        protocol_version: POLICY_SNAPSHOT_PROTOCOL_VERSION,
-        generation: request.generation,
+    let mut snapshot = unsigned_snapshot(SnapshotContent {
         runtime_identity: request.runtime_identity,
         rule_digest: request.rule_digest,
         mode: request.mode,
@@ -92,41 +162,24 @@ pub(crate) fn build_from_reader(reader: impl Read) -> Result<Vec<u8>, String> {
         business_policy: request.business_policy,
         issued_at_ms: request.issued_at_ms,
         expires_at_ms: request.expires_at_ms,
-        config_digest: String::new(),
-        policy_digest: String::new(),
-        integrity: SnapshotIntegrityV3 {
-            algorithm: POLICY_SNAPSHOT_INTEGRITY_ALGORITHM.into(),
-            key_id: verifier_key_id(&request.verifier_key.0),
-            mac: "0".repeat(64),
-        },
-    };
-    snapshot.config_digest =
-        config_digest(&snapshot.effective_policy).map_err(|_| ERROR.to_owned())?;
-    snapshot.policy_digest = policy_digest(&snapshot).map_err(|_| ERROR.to_owned())?;
-    // Bound the complete output with the fixed-size MAC before signing it.
-    snapshot_bytes(&snapshot).map_err(|_| ERROR.to_owned())?;
-    snapshot.integrity.mac =
-        integrity_mac(&snapshot, &request.verifier_key.0).map_err(|_| ERROR.to_owned())?;
-    validate_v3(
-        &snapshot,
-        request.generation,
-        &snapshot.runtime_identity,
-        &snapshot.rule_digest,
-        &request.verifier_key.0,
-        request.issued_at_ms,
-    )
-    .map_err(|_| ERROR.to_owned())?;
-    snapshot_bytes(&snapshot).map_err(|_| ERROR.to_owned())
+    })?;
+    seal(&mut snapshot, request.generation, &request.verifier_key.0)
 }
 
 pub(crate) fn is_command(command: &str) -> bool {
-    matches!(command, "policy-snapshot-build" | "policy-snapshot-inspect")
+    matches!(
+        command,
+        "policy-snapshot-build" | "policy-snapshot-inspect" | "policy-snapshot-materialize"
+    )
 }
 
 pub(crate) fn run_command(command: &str, reader: impl Read) -> Result<Vec<u8>, String> {
     match command {
         "policy-snapshot-build" => build_from_reader(reader),
         "policy-snapshot-inspect" => inspect::inspect_from_reader(reader),
+        "policy-snapshot-materialize" => {
+            crate::policy_store::policy_snapshot_materialize::materialize_from_reader(reader)
+        }
         _ => Err(ERROR.into()),
     }
 }

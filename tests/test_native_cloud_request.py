@@ -20,6 +20,7 @@ import pytest
 
 from codex_plugin_scanner.guard.native_runner_authority import NativeRunnerAuthorityError, native_runner_authority
 from codex_plugin_scanner.guard.runtime import cloud_request_native as cloud
+from tests import local_request_snapshots_client as snapshots
 
 _VECTORS = Path(__file__).parent / "fixtures" / "cloud_request_authority" / "vectors.json.gz"
 _KINDS = (
@@ -68,17 +69,37 @@ def test_typed_adapters_return_the_owner_answer() -> None:
     ]
     assert cloud.cloud_scrub_texts([]) == []
     row = {"request_id": "r1", "harness": "codex", "policy_action": "allow", "command_text": "echo hi"}
-    payload = cloud.cloud_safe_local_request_payload(row, redaction_level="none")
+    payload = snapshots.cloud_safe_local_request_payload(row, redaction_level="none")
     assert payload["command_text"] == "echo hi"
-    display = cloud.cloud_review_event_display(row, redaction_level="full")
-    assert display["display_provenance"] == "redacted"
-    assert display["payload"]["request_id"] == "r1"
+    continuation = {
+        "correlationId": "corr-1",
+        "capability": "native_resume",
+        "hookAttached": True,
+        "opaqueTargetId": "target-1",
+        "waitDeadline": None,
+    }
+    columns = dict.fromkeys(("updated_at", "guard_version", "first_seen_guard_version", "last_seen_guard_version"))
+    facts = {
+        "sequence": 4,
+        "event_type": "request_created",
+        "claim": None,
+        "continuation": continuation,
+        "now": "2026-11-04T02:00:00+00:00",
+        "columns": columns,
+    }
+    event = cloud.cloud_review_event(row, redaction_level="full", event=facts)
+    assert event["displayProvenance"] == "redacted"
+    assert event["requestPayload"]["request_id"] == "r1"
+    assert event["localCreatedAt"] == event["sentAt"] == "2026-11-04T02:00:00+00:00"
+    assert (event["harnessId"], event["requestKind"], event["localEventSequence"]) == ("codex", "codex", 4)
+    with pytest.raises(NativeRunnerAuthorityError):
+        cloud.cloud_review_event(row, redaction_level="full", event={**facts, "sequence": "4"})
 
 
 @pytest.mark.usefixtures("native_approval_reuse_runtime")
 def test_unknown_policy_action_keeps_the_historical_value_error() -> None:
     with pytest.raises(ValueError, match="authoritative_decision_inconsistent"):
-        cloud.cloud_safe_local_request_payload(
+        snapshots.cloud_safe_local_request_payload(
             {"request_id": "r1", "policy_action": "require-approval"}, redaction_level="full"
         )
 
@@ -103,7 +124,7 @@ def test_native_unavailable_fails_closed(monkeypatch: pytest.MonkeyPatch) -> Non
             [{"receipt_id": "r"}], device_id="d", device_name="n", redaction_level="full", now="2026-01-01T00:00:00Z"
         )
     with pytest.raises(NativeRunnerAuthorityError):
-        cloud.cloud_safe_local_request_payload({"request_id": "r"}, redaction_level="full")
+        snapshots.cloud_safe_local_request_payload({"request_id": "r"}, redaction_level="full")
 
 
 @pytest.mark.usefixtures("native_approval_reuse_runtime")
@@ -134,7 +155,7 @@ def test_oversized_snapshot_is_built_in_chunks(monkeypatch: pytest.MonkeyPatch) 
         "pending": {"rows": rows, "complete": True},
         "resolved": {"rows": [], "complete": True},
     }
-    whole = cloud.local_request_snapshot(**args)
+    whole = snapshots.local_request_snapshot(**args)
     calls: list[str] = []
     original = cloud.native_runner_authority
 
@@ -143,9 +164,9 @@ def test_oversized_snapshot_is_built_in_chunks(monkeypatch: pytest.MonkeyPatch) 
         return original(kind, call_args, guard_home)
 
     monkeypatch.setattr(cloud, "native_runner_authority", spy)
-    monkeypatch.setattr(cloud, "_ONE_SHOT_BYTES", 1)
-    monkeypatch.setattr(cloud, "_CHUNK_BYTES", 5_000)
-    assert cloud.local_request_snapshot(**args) == whole
+    monkeypatch.setattr(snapshots, "_ONE_SHOT_BYTES", 1)
+    monkeypatch.setattr(snapshots, "_CHUNK_BYTES", 5_000)
+    assert snapshots.local_request_snapshot(**args) == whole
     assert calls.count("local_request_snapshot_items") > 2
     assert calls[-1] == "local_request_snapshot"
 

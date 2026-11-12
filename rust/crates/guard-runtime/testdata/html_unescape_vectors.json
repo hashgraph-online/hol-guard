@@ -1,0 +1,130 @@
+[
+ [
+  "plain text",
+  "plain text"
+ ],
+ [
+  "&lt;a&gt; &quot;b&quot; &#65;&#x42; &amp;amp; &bogus; & &#0;",
+  "<a> \"b\" AB &amp; &bogus; & �"
+ ],
+ [
+  "Bob&#39;s tool &nbsp;&mdash; done",
+  "Bob's tool  — done"
+ ],
+ [
+  "&nbsp",
+  " "
+ ],
+ [
+  "&ampfoo",
+  "&foo"
+ ],
+ [
+  "&notit;",
+  "¬it;"
+ ],
+ [
+  "&notin;",
+  "∉"
+ ],
+ [
+  "&noti",
+  "¬i"
+ ],
+ [
+  "&AMP;&AMP&lt&gt",
+  "&&<>"
+ ],
+ [
+  "&#x;&#X41;&#xg;&#;&#",
+  "&#x;A&#xg;&#;&#"
+ ],
+ [
+  "&#128;&#129;&#141;&#159;&#150;",
+  "€Ÿ–"
+ ],
+ [
+  "&#13;&#11;&#1;&#127;",
+  "\r"
+ ],
+ [
+  "&#xD800;&#xDFFF;&#x110000;&#99999999999999999999;",
+  "����"
+ ],
+ [
+  "&#xFFFE;&#x1FFFF;&#xFDD0;&#xFDEF;&#xFDF0;",
+  "ﷰ"
+ ],
+ [
+  "&#0000000065;&#x0000041",
+  "AA"
+ ],
+ [
+  "&NotNestedGreaterGreater;&nGt;&nGtv;",
+  "⪢̸≫⃒≫̸"
+ ],
+ [
+  "&fjlig;&ThickSpace;",
+  "fj  "
+ ],
+ [
+  "&aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa;",
+  "&aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa;"
+ ],
+ [
+  "&abcdefghijklmnopqrstuvwxyzabcdef;",
+  "&abcdefghijklmnopqrstuvwxyzabcdef;"
+ ],
+ [
+  "&été;&café",
+  "&été;&café"
+ ],
+ [
+  "&am p;",
+  "&am p;"
+ ],
+ [
+  "&\tamp;&\namp;&#\n65;",
+  "&\tamp;&\namp;&#\n65;"
+ ],
+ [
+  "&lt;&lt&lt;;",
+  "<<<;"
+ ],
+ [
+  "x&&amp;y",
+  "x&&y"
+ ],
+ [
+  "&amp;#65;",
+  "&#65;"
+ ],
+ [
+  "&;",
+  "&;"
+ ],
+ [
+  "&#65",
+  "A"
+ ],
+ [
+  "&#x41zz",
+  "Azz"
+ ],
+ [
+  "&Aacute&aacute;&AElig",
+  "ÁáÆ"
+ ],
+ [
+  "&copy2026",
+  "©2026"
+ ],
+ [
+  "&’quot;",
+  "&’quot;"
+ ],
+ [
+  "end&",
+  "end&"
+ ]
+]

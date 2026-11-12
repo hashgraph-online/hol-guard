@@ -2,6 +2,7 @@ import type { IconType } from "react-icons";
 import {
   HiMiniAdjustmentsHorizontal,
   HiMiniClipboardDocumentList,
+  HiMiniCircleStack,
   HiMiniDocumentText,
   HiMiniHome,
   HiMiniInbox,
@@ -32,6 +33,8 @@ export type ShellNavigationItem = {
   view: NavigationView;
   group: NavigationGroup;
   icon: IconType;
+  /** Short status chip rendered beside the label, e.g. a pre-release marker. */
+  badge?: string;
 };
 
 export type ShellNavigationProps = {
@@ -80,6 +83,16 @@ export const SHELL_NAV_ITEMS: readonly ShellNavigationItem[] = [
     view: "fleet",
     group: "primary",
     icon: HiMiniShieldCheck,
+  },
+  {
+    href: "/cigar",
+    label: "Context",
+    shortLabel: "Context",
+    description: "Local context, setup, sources, and AI app access",
+    view: "cigar",
+    group: "primary",
+    icon: HiMiniCircleStack,
+    badge: "Beta",
   },
   {
     href: "/extensions",
@@ -146,7 +159,7 @@ export const SHELL_NAV_ITEMS: readonly ShellNavigationItem[] = [
   },
 ] as const;
 
-const MOBILE_PRIMARY_VIEWS = new Set<NavigationView>(["home", "inbox", "fleet", "extensions"]);
+const MOBILE_PRIMARY_VIEWS = new Set<NavigationView>(["home", "inbox", "fleet", "cigar"]);
 
 export const NAVIGATION_GROUPS: ReadonlyArray<{ id: NavigationGroup; label: string }> = [
   { id: "primary", label: "Guard" },

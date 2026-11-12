@@ -207,7 +207,6 @@
       "deliverables": [
         "src/codex_plugin_scanner/guard/cli/commands_support_command_activity.py",
         "src/codex_plugin_scanner/guard/runtime/command_activity_contract.py",
-        "src/codex_plugin_scanner/guard/runtime/command_activity_lifecycle.py",
         "src/codex_plugin_scanner/guard/runtime/github_workflow_runtime.py",
         "tests/fixtures/guard-command-corpus/decision-diff-report.json",
         "tests/dockerlabs/command-extension-analytics/Dockerfile",
@@ -230,7 +229,6 @@
       "evidence_paths": [
         ".github/workflows/publish.yml",
         "tests/test_guard_command_activity_hook_integration.py",
-        "tests/test_guard_command_activity_lifecycle.py",
         "tests/dockerlabs/command-extension-analytics/runner.test.ts"
       ]
     },

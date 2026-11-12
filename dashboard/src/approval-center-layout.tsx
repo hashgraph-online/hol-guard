@@ -144,6 +144,7 @@ function renderInboxContent(props: LayoutProps): ReactNode {
       <QueueConnectionError
         message={props.requests.message}
         approvalUrl={props.runtime.kind === "ready" ? props.runtime.snapshot.approval_center_url : null}
+        requestId={props.activeRequestId}
         onRetry={props.onRetry}
         onRepair={props.onRepair}
       />
@@ -224,7 +225,7 @@ function renderViewContent(props: LayoutProps): ReactNode {
   if (props.view === "protection-repair") {
     return props.protectionRepairContent ?? null;
   }
-  if (props.view === "settings") {
+  if (props.view === "settings" || props.view === "cigar") {
     return props.settingsContent;
   }
   if (props.view === "about") {
@@ -340,7 +341,7 @@ export function ApprovalCenterLayout(props: LayoutProps) {
         className="guard-shell-content flex flex-col"
         data-sidebar-collapsed={sidebarCollapsed ? "true" : "false"}
       >
-        <main id="main-content" className="guard-shell-main flex-1" tabIndex={-1}>
+        <main id="main-content" className="guard-shell-main flex-1 focus:outline-none" tabIndex={-1}>
           <div className="guard-shell-workspace" data-view={props.view}>
             {updateBannerModel ? (
               <div className="mb-4">

@@ -53,6 +53,21 @@ pub(super) fn pre_tool_answer(edge: &[u8], contained: bool) -> Result<Value, Hoo
     Ok(parsed)
 }
 
+/// Whether the edge classified this `PreToolUse` as one that runs a shell
+/// command, the only kind an exact-command rule applies to. An edge the
+/// resident cannot read counts as one, so the daemon decides it.
+pub(super) fn shell_action(edge: &[u8]) -> bool {
+    let Ok(parsed) = reviewed_edge(edge, PRE_TOOL_USE) else {
+        return true;
+    };
+    matches!(
+        parsed
+            .pointer("/result/action/action_type")
+            .and_then(Value::as_str),
+        Some("command" | "package" | "process_service" | "network" | "shell" | "shell_command")
+    )
+}
+
 /// The edge result to return as is: the daemon passes every reviewed
 /// `PostToolUse` of these harnesses through unchanged.
 pub(super) fn post_tool_answer(edge: &[u8]) -> Result<Value, HookDirectDefer> {

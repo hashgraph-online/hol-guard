@@ -402,7 +402,7 @@ export function FixLoadError(props: { fixes: WorktreeFixes }) {
   );
 }
 
-function FixNotice(props: { tone: "error" | "warning" | "success"; text: string }) {
+export function FixNotice(props: { tone: "error" | "warning" | "success"; text: string }) {
   const styles = {
     error: "border-red-200 bg-red-50/60 text-red-800",
     warning: "border-amber-200 bg-amber-50/60 text-amber-900",

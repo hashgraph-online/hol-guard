@@ -2,8 +2,7 @@
 
 from __future__ import annotations
 
-import os
-from collections.abc import Mapping, Sequence
+from collections.abc import Mapping
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, TypedDict, TypeGuard, cast
@@ -25,12 +24,11 @@ from ..native_artifact_content_hash import (
     native_artifact_content_hash,
     native_artifact_content_hashes,
 )
-from ..native_consumer_artifact_compose import native_consumer_compose
+from ..native_consumer_artifact_compose import NativeConsumerComposeError, native_consumer_compose
 from ..receipts import build_receipt
 from ..risk import NO_RISK_SIGNAL_SUMMARY, artifact_risk_profile
 from ..runtime.approval_context import (
-    build_approval_context_token,
-    build_runtime_launch_identity,
+    build_consumer_approval_context_token,
 )
 from ..runtime.decisions import (
     build_authoritative_decision,
@@ -44,6 +42,9 @@ from ..types import GuardSignal
 from . import projection
 from .low_trust import low_trust_floor
 from .native_decision_projection import (
+    _compose_unavailable as _compose_unavailable,
+)
+from .native_decision_projection import (
     _ConsumerAuthorityInputs as _ConsumerAuthorityInputs,
 )
 from .native_decision_projection import (
@@ -53,16 +54,6 @@ from .native_decision_projection import (
     _native_runtime_decision as _native_runtime_decision,
 )
 
-_PROMPT_FILE_HASH_VOLATILE_METADATA_KEYS = frozenset(
-    {
-        "prompt_display_text",
-        "prompt_matched_text",
-        "prompt_signals",
-        "request_summary",
-        "runtime_request_reason",
-        "runtime_request_summary",
-    }
-)
 _CONSUMER_APPROVAL_POLICY_VERSION = "consumer-evaluation-v1"
 
 
@@ -89,13 +80,6 @@ def _serialize_artifact(artifact: GuardArtifact) -> dict[str, object]:
     return payload
 
 
-def _codex_hook_identity(artifact: GuardArtifact) -> str | None:
-    if artifact.harness != "codex" or artifact.artifact_type != "hook":
-        return None
-    identity = artifact.metadata.get("codex_hook_identity")
-    return identity if isinstance(identity, str) and identity else None
-
-
 def artifact_hash(artifact: GuardArtifact) -> str:
     """Hash a detected artifact definition (the resident spells the digest)."""
 
@@ -107,15 +91,22 @@ def diff_artifact(
     current: GuardArtifact,
     *,
     guard_home: Path | None = None,
+    content_hash: str | None = None,
 ) -> ArtifactDiff:
-    """Compare a stored snapshot to the current artifact (resident-decided)."""
+    """Compare a stored snapshot to the current artifact (resident-decided).
+
+    A caller diffing many artifacts passes each ``content_hash`` from one
+    batched request instead of paying a resident round trip per artifact.
+    """
 
     payload = _serialize_artifact(current)
     evidence = projection.artifact_evidence(
         None,
         current,
         payload=payload,
-        content_hash=native_artifact_content_hash(current, guard_home=guard_home),
+        content_hash=(
+            content_hash if content_hash is not None else native_artifact_content_hash(current, guard_home=guard_home)
+        ),
         previous=previous,
         with_history=False,
         guard_home=guard_home,
@@ -142,44 +133,6 @@ def _consumer_effective_cwd(config: GuardConfig) -> Path:
 
 def _consumer_policy_workspace(config: GuardConfig) -> str:
     return _normalized_consumer_path(_consumer_effective_cwd(config))
-
-
-def _consumer_execution_identity(
-    command: str | None,
-    *,
-    args: Sequence[object] = (),
-    cwd: Path,
-    structured_command: bool = False,
-) -> dict[str, object]:
-    requested = command.strip() if isinstance(command, str) else command
-    launch_identity = build_runtime_launch_identity(
-        command,
-        args=args,
-        structured_command=structured_command,
-        cwd=cwd,
-        launch_env=os.environ,
-    )
-    return {
-        "requested": requested,
-        "argv_sha256": launch_identity["argv_sha256"],
-        "entrypoint": launch_identity["entrypoint"],
-        "launch_cwd": launch_identity["launch_cwd"],
-        "resolved": launch_identity["executable"],
-    }
-
-
-def _consumer_context_metadata(artifact: GuardArtifact) -> dict[str, object]:
-    codex_hook_identity = _codex_hook_identity(artifact)
-    if codex_hook_identity is not None:
-        return {
-            "codex_hook_identity_schema": artifact.metadata.get("codex_hook_identity_schema"),
-            "codex_hook_identity": codex_hook_identity,
-        }
-    if artifact.artifact_type != "prompt_request":
-        return dict(artifact.metadata)
-    return {
-        key: value for key, value in artifact.metadata.items() if key not in _PROMPT_FILE_HASH_VOLATILE_METADATA_KEYS
-    }
 
 
 def _skill_directory_identity_reusable(
@@ -235,96 +188,91 @@ def _consumer_policy_context(
     }
 
 
+def _detector_telemetry(runtime_detector_context: Mapping[str, object] | None) -> list[object] | None:
+    """Each runtime detector's status fields, or ``None`` when none ran."""
+
+    telemetry = (runtime_detector_context or {}).get("telemetry")
+    if not isinstance(telemetry, list):
+        return None
+    return [
+        {key: item.get(key) for key in ("detector_id", "error_type", "status")}
+        for item in cast("list[object]", telemetry)
+        if isinstance(item, Mapping)
+    ]
+
+
+def _consumer_context_request(
+    subject: dict[str, object],
+    *,
+    config: GuardConfig,
+    policy: dict[str, object],
+    runtime_detector_context: Mapping[str, object] | None,
+) -> dict[str, object]:
+    """The native consumer approval-context request around one subject.
+
+    The runtime composes the identity, content, capability and sandbox
+    components and builds the launch identity from ``launch_cwd``.
+    """
+
+    effective_cwd = _consumer_effective_cwd(config)
+    return {
+        "subject": subject,
+        "launch_cwd": str(effective_cwd),
+        "cwd": _normalized_consumer_path(effective_cwd),
+        "workspace": _normalized_consumer_path(config.workspace) if config.workspace is not None else None,
+        "detector_telemetry": _detector_telemetry(runtime_detector_context),
+        "policy": policy,
+        "sandbox_analysis": config.sandbox_analysis,
+    }
+
+
 def _consumer_approval_context_token(
     *,
     detection: HarnessDetection,
     artifact: GuardArtifact,
     content_hash: str,
     capability_snapshot: Mapping[str, object],
-    structured_signals: tuple[GuardSignal, ...],
-    provenance: Mapping[str, object],
     config: GuardConfig,
     configured_action: GuardAction | None,
     effective_default_action: GuardAction | None,
     current_action: GuardAction,
     runtime_detector_context: Mapping[str, object] | None,
 ) -> str:
-    effective_cwd = _consumer_effective_cwd(config)
-    normalized_cwd = _normalized_consumer_path(effective_cwd)
-    normalized_workspace = _normalized_consumer_path(config.workspace) if config.workspace is not None else None
-    codex_hook_identity = _codex_hook_identity(artifact)
-    if codex_hook_identity is not None:
-        identity_payload: dict[str, object] = {
+    subject: dict[str, object] = {
+        "kind": "artifact",
+        "artifact": {
             "artifact_id": artifact.artifact_id,
-            "artifact_name": artifact.name,
+            "name": artifact.name,
             "artifact_type": artifact.artifact_type,
-            "codex_hook_identity": codex_hook_identity,
-            "config_path": f"codex-hook://{artifact.source_scope}",
-            "cwd": normalized_cwd,
-            "detection_harness": detection.harness,
-            "executable": {"codex_hook_identity": codex_hook_identity},
             "harness": artifact.harness,
             "publisher": artifact.publisher,
             "source_scope": artifact.source_scope,
-            "workspace": normalized_workspace,
-        }
-        content_payload: dict[str, object] = {
-            "artifact_hash": content_hash,
-            "codex_hook_identity": codex_hook_identity,
-            "metadata": _consumer_context_metadata(artifact),
-        }
-    else:
-        identity_payload = {
-            "artifact_id": artifact.artifact_id,
-            "artifact_name": artifact.name,
-            "artifact_type": artifact.artifact_type,
             "config_path": artifact.config_path,
-            "cwd": normalized_cwd,
-            "detection_harness": detection.harness,
-            "executable": _consumer_execution_identity(
-                artifact.command,
-                args=artifact.args,
-                cwd=effective_cwd,
-                structured_command=artifact.artifact_type == "mcp_server",
-            ),
-            "harness": artifact.harness,
-            "publisher": artifact.publisher,
-            "source_scope": artifact.source_scope,
-            "workspace": normalized_workspace,
-        }
-        content_payload = {
-            "args": list(artifact.args),
-            "artifact_hash": content_hash,
             "command": artifact.command,
-            "metadata": _consumer_context_metadata(artifact),
+            "args": list(artifact.args),
             "url": artifact.url,
-        }
-    return build_approval_context_token(
-        identity=identity_payload,
-        content=content_payload,
-        capabilities={
-            "artifact_capabilities": dict(capability_snapshot),
-            "command_available": detection.command_available,
-            "installed": detection.installed,
-            "provenance": dict(provenance),
-            "runtime_detector": dict(runtime_detector_context or {}),
-            "scanner_policy_version": _CONSUMER_APPROVAL_POLICY_VERSION,
-            "signals": [signal.to_dict() for signal in structured_signals],
             "transport": artifact.transport,
+            "metadata": dict(artifact.metadata),
         },
-        policy=_consumer_policy_context(
-            config,
-            harness=detection.harness,
-            artifact_id=artifact.artifact_id,
-            publisher=artifact.publisher,
-            configured_action=configured_action,
-            effective_default_action=effective_default_action,
-            current_action=current_action,
-        ),
-        sandbox={
-            "analysis": config.sandbox_analysis,
-            "required": current_action == "sandbox-required",
-        },
+        "detection_harness": detection.harness,
+        "command_available": detection.command_available,
+        "installed": detection.installed,
+        "content_hash": content_hash,
+        "capability_snapshot": dict(capability_snapshot),
+    }
+    policy = _consumer_policy_context(
+        config,
+        harness=detection.harness,
+        artifact_id=artifact.artifact_id,
+        publisher=artifact.publisher,
+        configured_action=configured_action,
+        effective_default_action=effective_default_action,
+        current_action=current_action,
+    )
+    return build_consumer_approval_context_token(
+        _consumer_context_request(
+            subject, config=config, policy=policy, runtime_detector_context=runtime_detector_context
+        )
     )
 
 
@@ -340,48 +288,29 @@ def _removed_consumer_approval_context_token(
     current_action: GuardAction,
     runtime_detector_context: Mapping[str, object] | None,
 ) -> str:
-    effective_cwd = _consumer_effective_cwd(config)
-    command = previous.get("command")
     publisher = previous.get("publisher")
     raw_args = previous.get("args")
-    previous_args = tuple(str(argument) for argument in raw_args) if isinstance(raw_args, (list, tuple)) else ()
-    return build_approval_context_token(
-        identity={
-            "artifact_id": artifact_id,
-            "artifact_name": previous.get("name"),
-            "artifact_type": previous.get("artifact_type"),
-            "config_path": previous.get("config_path"),
-            "cwd": _normalized_consumer_path(effective_cwd),
-            "executable": _consumer_execution_identity(
-                command if isinstance(command, str) else None,
-                args=previous_args,
-                cwd=effective_cwd,
-                structured_command=previous.get("artifact_type") == "mcp_server",
-            ),
-            "harness": harness,
-            "publisher": publisher if isinstance(publisher, str) else None,
-            "source_scope": previous.get("source_scope"),
-            "workspace": (_normalized_consumer_path(config.workspace) if config.workspace is not None else None),
-        },
-        content={"artifact_hash": previous_hash, "removed": True, "snapshot": dict(previous)},
-        capabilities={
-            "removed": True,
-            "runtime_detector": dict(runtime_detector_context or {}),
-            "snapshot": dict(previous),
-        },
-        policy=_consumer_policy_context(
-            config,
-            harness=harness,
-            artifact_id=artifact_id,
-            publisher=publisher if isinstance(publisher, str) else None,
-            configured_action=configured_action,
-            effective_default_action=effective_default_action,
-            current_action=current_action,
-        ),
-        sandbox={
-            "analysis": config.sandbox_analysis,
-            "required": current_action == "sandbox-required",
-        },
+    subject: dict[str, object] = {
+        "kind": "removed",
+        "harness": harness,
+        "artifact_id": artifact_id,
+        "previous": dict(previous),
+        "previous_hash": previous_hash,
+        "args": [str(argument) for argument in raw_args] if isinstance(raw_args, (list, tuple)) else [],
+    }
+    policy = _consumer_policy_context(
+        config,
+        harness=harness,
+        artifact_id=artifact_id,
+        publisher=publisher if isinstance(publisher, str) else None,
+        configured_action=configured_action,
+        effective_default_action=effective_default_action,
+        current_action=current_action,
+    )
+    return build_consumer_approval_context_token(
+        _consumer_context_request(
+            subject, config=config, policy=policy, runtime_detector_context=runtime_detector_context
+        )
     )
 
 
@@ -660,14 +589,21 @@ def evaluate_detection(
         artifact_risk = artifact_risk_profile(artifact)
         structured_signals = artifact_risk.signals
         risk_signals_v2 = _merge_risk_signals(artifact_risk.signals_v2, runtime_risk_signals_v2)
-        low_trust = low_trust_floor(
-            getattr(store, "guard_home", None),
-            config,
-            harness=detection.harness,
-            artifact=artifact,
-            configured_action=configured_action,
-            fresh_decision=bool(is_first_seen or evidence["changed"]),
-        )
+        try:
+            low_trust = low_trust_floor(
+                getattr(store, "guard_home", None),
+                config,
+                harness=detection.harness,
+                artifact=artifact,
+                configured_action=configured_action,
+                fresh_decision=bool(is_first_seen or evidence["changed"]),
+            )
+        except NativeConsumerComposeError as error:
+            # The floor only ever strengthens an action, so an unanswered floor
+            # query is not "no floor": the artifact blocks unscored.
+            low_trust, low_trust_unavailable = None, error.code
+        else:
+            low_trust_unavailable = None
         if low_trust is not None:
             risk_signals_v2 = _merge_risk_signals(risk_signals_v2, (low_trust.signal,))
         skill_directory_identity_reusable = _skill_directory_identity_reusable(
@@ -675,21 +611,24 @@ def evaluate_detection(
             metadata=artifact.metadata,
         )
         guard_default_action = artifact.metadata.get("guard_default_action")
-        current = _native_current_action(
-            store,
-            config,
-            composer=native_consumer_compose,
-            removed=False,
-            artifact_type=artifact.artifact_type,
-            configured_action=configured_action,
-            guard_default_action=guard_default_action if isinstance(guard_default_action, str) else None,
-            first_seen=is_first_seen,
-            changed=bool(evidence["changed"]),
-            effective_default_action=effective_default_action,
-            skill_directory_identity_reusable=skill_directory_identity_reusable,
-            scoring=_scoring_inputs(structured_signals, evidence["scoring"]),
-            low_trust_action=low_trust.action if low_trust is not None else None,
-        )
+        if low_trust_unavailable is not None:
+            current = _compose_unavailable(low_trust_unavailable)
+        else:
+            current = _native_current_action(
+                store,
+                config,
+                composer=native_consumer_compose,
+                removed=False,
+                artifact_type=artifact.artifact_type,
+                configured_action=configured_action,
+                guard_default_action=guard_default_action if isinstance(guard_default_action, str) else None,
+                first_seen=is_first_seen,
+                changed=bool(evidence["changed"]),
+                effective_default_action=effective_default_action,
+                skill_directory_identity_reusable=skill_directory_identity_reusable,
+                scoring=_scoring_inputs(structured_signals, evidence["scoring"]),
+                low_trust_action=low_trust.action if low_trust is not None else None,
+            )
         current_policy_action = cast(GuardAction, current["current_action"])
         scanner_action = cast("GuardAction | None", current["scanner_action"])
         verdict = cast("dict[str, Any] | None", current["verdict"])
@@ -698,8 +637,6 @@ def evaluate_detection(
             artifact=artifact,
             content_hash=str(evidence["current_hash"]),
             capability_snapshot=evidence["capability_snapshot"],
-            structured_signals=structured_signals,
-            provenance=evidence["provenance"],
             config=config,
             configured_action=configured_action,
             effective_default_action=effective_default_action,

@@ -13,11 +13,10 @@ from codex_plugin_scanner.guard.adapters import native_hook_bridge
 from codex_plugin_scanner.guard.adapters._modules.pi.pi_extension_native_hook import (
     PI_HOOK_BRIDGE_FEATURE,
     PI_HOOK_BRIDGE_SWITCH,
-    native_hook_reply_source,
-    native_hook_runtime_source,
     pi_native_hook_runtime,
 )
 from codex_plugin_scanner.guard.adapters.pi_extension_source import managed_extension_source
+from tests.pi_extension_template import DUMMY_VALUES, fragment, render
 from tests.test_pi_hook_latency import _bun_executable, _decode_json_object
 
 pytestmark = pytest.mark.native_pi_hook_bridge
@@ -46,9 +45,8 @@ def test_extension_spawns_the_runtime_that_advertises_the_pi_bridge(
 ) -> None:
     assert pi_native_hook_runtime(guard_home=tmp_path, platform_name="posix") == RUNTIME
     assert advertised_runtime == [(PI_HOOK_BRIDGE_FEATURE, tmp_path)]
-    assert native_hook_runtime_source(json.dumps(str(tmp_path))) == (
-        f"const GUARD_NATIVE_HOOK_RUNTIME: string | null = {json.dumps(str(RUNTIME))};\n"
-    )
+    rendered = render("active", "omp", {**DUMMY_VALUES, "native_hook_runtime": json.dumps(str(RUNTIME))})
+    assert f"\nconst GUARD_NATIVE_HOOK_RUNTIME: string | null = {json.dumps(str(RUNTIME))};\n" in rendered
 
 
 def test_windows_and_the_fetch_switch_keep_the_daemon_request(
@@ -59,9 +57,8 @@ def test_windows_and_the_fetch_switch_keep_the_daemon_request(
     assert pi_native_hook_runtime(guard_home=tmp_path, platform_name="nt") is None
     monkeypatch.setenv(PI_HOOK_BRIDGE_SWITCH, "fetch")
     assert pi_native_hook_runtime(guard_home=tmp_path, platform_name="posix") is None
-    assert native_hook_runtime_source(json.dumps(str(tmp_path))) == (
-        "const GUARD_NATIVE_HOOK_RUNTIME: string | null = null;\n"
-    )
+    rendered = render("active", "omp", DUMMY_VALUES)
+    assert "\nconst GUARD_NATIVE_HOOK_RUNTIME: string | null = null;\n" in rendered
     assert advertised_runtime == []
 
 
@@ -105,7 +102,7 @@ def _bridge_harness(tmp_path: Path, runtime: Path | None) -> Path:
         "  return typeof error === 'object' && error !== null && 'code' in error &&\n"
         "    typeof error.code === 'string' ? error.code : null;\n"
         "}\n"
-        + native_hook_reply_source("omp")
+        + fragment("native_hook_reply")
         + "const reply = await nativeGuardReply('guard-home=%2Fh&workspace=%2Fw', '{\"a\":1}', 400);\n"
         "const body = reply ? await reply.readBody(1024) : undefined;\n"
         "console.log(JSON.stringify({\n"
@@ -194,7 +191,7 @@ def _budget_harness(tmp_path: Path, runtime: Path | None) -> Path:
         f"const GUARD_HOME = {json.dumps(str(tmp_path))};\n"
         "const GUARD_NATIVE_HOOK_RUNTIME: string | null = "
         f"{json.dumps(None if runtime is None else str(runtime))};\n"
-        + native_hook_reply_source("omp")
+        + fragment("native_hook_reply")
         + "console.log(JSON.stringify([[3100, 4000], [3100, 1000], [150, 4000], [5, 1]].map(\n"
         "  ([budget, remaining]) => nativeGuardBudgetMs(budget, remaining))));\n",
         encoding="utf-8",

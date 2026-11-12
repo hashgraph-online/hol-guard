@@ -12,20 +12,18 @@
 //! roots is a fact about its own install layout. Everything the answer turns
 //! on - the file's type, owner, permissions, size and content - is read here.
 //!
-//! One question this op cannot close is whether a POSIX group is private to
-//! the file's owner: proving it means enumerating the account database. When
-//! the group-write bit is set on a file that would qualify for that exception,
-//! the answer carries `private_group_question` and the remaining checks run as
-//! if the group were private. The caller answers that question and refuses the
-//! file when it is not, which is where `validate_regular_file` refuses it too,
-//! so the order the failures arrive in is unchanged.
+//! Whether a POSIX group is private to the file's owner means enumerating the
+//! account database, so this op cannot close it. An answer that turns on it
+//! carries `private_group_question` and the remaining checks run as if the
+//! group were private; the caller refuses the file when it is not, which is
+//! where `validate_regular_file` refuses it, so failures keep their order.
 
 use std::fs;
 use std::io::Read;
 use std::path::Path;
 
 use guard_contracts::{
-    CodexHookFileIdentityQuestionV1, CodexHookFileIdentityRequestV1, CodexHookFileIdentityResultV1,
+    CodexHookFileIdentityRequestV1, CodexHookFileIdentityResultV1,
     CODEX_HOOK_FILE_IDENTITY_MAX_BYTES, CODEX_HOOK_FILE_IDENTITY_MAX_QUESTIONS,
     CODEX_HOOK_FILE_IDENTITY_REQUEST_SCHEMA, CODEX_HOOK_FILE_IDENTITY_RESULT_SCHEMA,
 };
@@ -41,11 +39,22 @@ const S_IWGRP: u32 = 0o020;
 const S_IXANY: u32 = 0o111;
 
 /// The file facts an answer turns on, read once per question.
-struct FileFacts {
-    mode: u32,
-    uid: u32,
-    gid: u32,
-    size: u64,
+pub(crate) struct FileFacts {
+    pub(crate) mode: u32,
+    pub(crate) uid: u32,
+    pub(crate) gid: u32,
+    pub(crate) size: u64,
+}
+
+impl FileFacts {
+    pub(crate) fn of(path: &Path, metadata: &fs::Metadata) -> Self {
+        Self {
+            mode: file_mode(path, metadata),
+            uid: file_uid(metadata),
+            gid: file_gid(metadata),
+            size: metadata.len(),
+        }
+    }
 }
 
 pub(crate) fn evaluate_codex_hook_file_identity_request(
@@ -93,18 +102,32 @@ pub(crate) fn evaluate_request(request: &CodexHookFileIdentityRequestV1) -> Valu
     let answers: Vec<Value> = request
         .questions
         .iter()
-        .map(|question| answer(request, question))
+        .map(|question| {
+            let ask = IdentityAsk {
+                posix: request.posix,
+                current_uid: request.current_uid,
+                canonical_path: question.canonical_path.as_deref(),
+                installed_python_package_file: question.installed_python_package_file,
+            };
+            identity_answer(&ask, &question.identity)
+        })
         .collect();
     json!({ "answers": answers })
 }
 
+/// What an answer about one file needs from its asker besides the identity.
+pub(crate) struct IdentityAsk<'a> {
+    pub(crate) posix: bool,
+    pub(crate) current_uid: Option<u32>,
+    /// The canonical spelling of the identity's path, as the asker spells it.
+    pub(crate) canonical_path: Option<&'a str>,
+    pub(crate) installed_python_package_file: bool,
+}
+
 /// The answer to one question, in the order `verify_regular_file_identity`
 /// asks: the identity's own shape, then the live file, then the comparison.
-fn answer(
-    request: &CodexHookFileIdentityRequestV1,
-    question: &CodexHookFileIdentityQuestionV1,
-) -> Value {
-    let Some(identity) = question.identity.as_object() else {
+pub(crate) fn identity_answer(ask: &IdentityAsk<'_>, identity: &Value) -> Value {
+    let Some(identity) = identity.as_object() else {
         // An identity that is not an object states no role, so it is refused
         // under the role `verify_regular_file_identity` falls back to. That
         // keeps one reason for a manifest that holds no identity and one that
@@ -135,37 +158,13 @@ fn answer(
         return failed(&role, "hash_mismatch", None);
     };
     let mode = facts.mode & 0o7777;
-    let mut private_group_question = None;
-    if request.posix {
-        if let Some(current_uid) = request.current_uid {
-            if facts.uid != current_uid && facts.uid != 0 {
-                return failed(&role, "owner_untrusted", None);
-            }
-        }
-        // A file anyone may write is refused whatever the group says, so the
-        // account database is never consulted for one.
-        if mode & S_IWOTH != 0 {
-            return failed(&role, "permissions_unsafe", None);
-        }
-        if mode & S_IWGRP != 0 {
-            match group_write(request, question, &role, &facts) {
-                GroupWrite::Trusted => {}
-                GroupWrite::Unsafe => return failed(&role, "permissions_unsafe", None),
-                GroupWrite::NeedsPrivateGroup { owner_uid } => {
-                    private_group_question = Some(json!({
-                        "owner_uid": owner_uid,
-                        "group_gid": facts.gid,
-                    }));
-                }
-            }
-        }
-        if executable_required && mode & S_IXANY == 0 {
-            return failed(&role, "not_executable", private_group_question);
-        }
-    }
+    let private_group_question = match permission_rules(ask, &role, &facts, executable_required) {
+        Ok(question) => question,
+        Err((kind, question)) => return failed(&role, kind, question),
+    };
     // Off POSIX the execute bit has no meaning: `os.access(path, X_OK)` there
     // answers for any file that exists, and this one does.
-    if question.canonical_path.as_deref() != Some(expected.path.as_str()) {
+    if ask.canonical_path != Some(expected.path.as_str()) {
         return failed(&role, "path_mismatch", private_group_question);
     }
     if i64::from(mode) != expected.mode {
@@ -179,20 +178,57 @@ fn answer(
     {
         return failed(&role, "hash_mismatch", private_group_question);
     }
-    if request.posix {
+    if ask.posix {
         if let Some(owner_uid) = expected_owner_uid(identity) {
             if i64::from(facts.uid) != owner_uid {
                 return failed(&role, "owner_mismatch", private_group_question);
             }
         }
     }
-    let mut answer = Map::new();
-    answer.insert("outcome".to_owned(), Value::String("verified".to_owned()));
-    answer.insert("role".to_owned(), Value::String(role));
-    if let Some(question) = private_group_question {
-        answer.insert("private_group_question".to_owned(), question);
+    verified(&role, private_group_question)
+}
+
+/// The ownership and permission rules of `validate_regular_file`, which apply
+/// only where files carry POSIX ownership. A group-write bit that qualifies
+/// for the private-group exception yields the question that settles it, and
+/// the remaining rules run as if the group were private.
+pub(crate) fn permission_rules(
+    ask: &IdentityAsk<'_>,
+    role: &str,
+    facts: &FileFacts,
+    executable_required: bool,
+) -> Result<Option<Value>, (&'static str, Option<Value>)> {
+    if !ask.posix {
+        return Ok(None);
     }
-    Value::Object(answer)
+    let mode = facts.mode & 0o7777;
+    if let Some(current_uid) = ask.current_uid {
+        if facts.uid != current_uid && facts.uid != 0 {
+            return Err(("owner_untrusted", None));
+        }
+    }
+    // A file anyone may write is refused whatever the group says, so the
+    // account database is never consulted for one.
+    if mode & S_IWOTH != 0 {
+        return Err(("permissions_unsafe", None));
+    }
+    let mut private_group_question = None;
+    if mode & S_IWGRP != 0 {
+        match group_write(ask, role, facts) {
+            GroupWrite::Trusted => {}
+            GroupWrite::Unsafe => return Err(("permissions_unsafe", None)),
+            GroupWrite::NeedsPrivateGroup { owner_uid } => {
+                private_group_question = Some(json!({
+                    "owner_uid": owner_uid,
+                    "group_gid": facts.gid,
+                }));
+            }
+        }
+    }
+    if executable_required && mode & S_IXANY == 0 {
+        return Err(("not_executable", private_group_question));
+    }
+    Ok(private_group_question)
 }
 
 /// Whether the group-write bit on this file is one Guard already trusts.
@@ -202,25 +238,20 @@ enum GroupWrite {
     NeedsPrivateGroup { owner_uid: u32 },
 }
 
-fn group_write(
-    request: &CodexHookFileIdentityRequestV1,
-    question: &CodexHookFileIdentityQuestionV1,
-    role: &str,
-    facts: &FileFacts,
-) -> GroupWrite {
+fn group_write(ask: &IdentityAsk<'_>, role: &str, facts: &FileFacts) -> GroupWrite {
     // Members of gid 0 already have the privilege needed to replace a
     // root-owned interpreter regardless of its group-write bit. The
     // GitHub-hosted Python toolcache uses this conventional 0775, root:root
     // layout.
     if role == "interpreter"
-        && (request.current_uid == Some(facts.uid) || (facts.uid == 0 && facts.gid == 0))
+        && (ask.current_uid == Some(facts.uid) || (facts.uid == 0 && facts.gid == 0))
     {
         return GroupWrite::Trusted;
     }
-    let owner_is_asker = request.current_uid == Some(facts.uid);
+    let owner_is_asker = ask.current_uid == Some(facts.uid);
     let exception_applies =
-        owner_is_asker && (role == "config_target" || question.installed_python_package_file);
-    match (exception_applies, request.current_uid) {
+        owner_is_asker && (role == "config_target" || ask.installed_python_package_file);
+    match (exception_applies, ask.current_uid) {
         (true, Some(owner_uid)) => GroupWrite::NeedsPrivateGroup { owner_uid },
         _ => GroupWrite::Unsafe,
     }
@@ -296,7 +327,17 @@ fn role_of(identity: &Map<String, Value>) -> String {
     }
 }
 
-fn failed(role: &str, kind: &str, private_group_question: Option<Value>) -> Value {
+pub(crate) fn verified(role: &str, private_group_question: Option<Value>) -> Value {
+    let mut answer = Map::new();
+    answer.insert("outcome".to_owned(), Value::String("verified".to_owned()));
+    answer.insert("role".to_owned(), Value::String(role.to_owned()));
+    if let Some(question) = private_group_question {
+        answer.insert("private_group_question".to_owned(), question);
+    }
+    Value::Object(answer)
+}
+
+pub(crate) fn failed(role: &str, kind: &str, private_group_question: Option<Value>) -> Value {
     let mut answer = Map::new();
     answer.insert("outcome".to_owned(), Value::String("failed".to_owned()));
     answer.insert("role".to_owned(), Value::String(role.to_owned()));
@@ -338,15 +379,7 @@ fn open_regular(path: &Path) -> Option<(FileFacts, fs::File)> {
     if !metadata.is_file() {
         return None;
     }
-    Some((
-        FileFacts {
-            mode: file_mode(path, &metadata),
-            uid: file_uid(&metadata),
-            gid: file_gid(&metadata),
-            size: metadata.len(),
-        },
-        file,
-    ))
+    Some((FileFacts::of(path, &metadata), file))
 }
 
 #[cfg(unix)]

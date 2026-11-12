@@ -13,6 +13,10 @@ const MINIMUM_DIRECT_TIMEOUT: Duration = Duration::from_millis(50);
 /// Why a bridge took a hook to the daemon without a resident answer. The
 /// bridge names it to the daemon, which counts it beside the hook; nothing
 /// decides a hook by it.
+/// The header a bridge names its [`DirectMiss`] in when it hands a hook to
+/// the daemon.
+pub(crate) const DIRECT_MISS_HEADER: &str = "X-Guard-Direct-Miss";
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum DirectMiss {
     /// The direct lane is switched off for this bridge.
@@ -64,6 +68,7 @@ impl DirectMiss {
 /// start marker its state records, and the client checks that identity again
 /// around the connect before the token handshake. A Windows resident
 /// publishes a loopback endpoint; a unix resident may publish either.
+#[cfg(unix)]
 pub(crate) fn send_to_live_resident(
     state_base: &Path,
     request: &[u8],

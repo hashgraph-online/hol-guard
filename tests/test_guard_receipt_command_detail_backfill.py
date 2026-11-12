@@ -8,12 +8,12 @@ from codex_plugin_scanner.guard.models import GuardReceipt
 from codex_plugin_scanner.guard.runtime import runner as guard_runner
 from codex_plugin_scanner.guard.runtime.actions import GuardActionEnvelope
 from codex_plugin_scanner.guard.runtime.runner import (
-    _cloud_sync_receipt_payload,
     _receipt_sync_rows_for_upload,
     _receipt_sync_rows_with_command_detail_backfill,
     sync_receipts,
 )
 from codex_plugin_scanner.guard.store import GuardStore
+from tests.cloud_receipt_payload_client import cloud_sync_receipt_payload
 
 
 def _decode_transport_command(envelope: dict[str, object]) -> str | None:
@@ -134,7 +134,7 @@ def test_redaction_disabled_backfill_payload_keeps_review_command_detail(tmp_pat
     receipt = store.get_receipt("guard-receipt-command-payload")
     assert receipt is not None
 
-    payload = _cloud_sync_receipt_payload(
+    payload = cloud_sync_receipt_payload(
         receipt,
         device_id="device",
         device_name="Developer Mac",

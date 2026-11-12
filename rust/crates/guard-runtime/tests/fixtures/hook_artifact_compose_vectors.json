@@ -6553,5 +6553,480 @@
       "kind": "package_firewall_access",
       "operation": "audit"
     }
+  },
+  {
+    "expected": {
+      "claimed_approval_request_id": null,
+      "claimed_saved_allow_hash": null,
+      "review_required": true
+    },
+    "name": "codex_live_allow_precheck_an_unchanged_envelope_reviews_without_a_claim",
+    "query": {
+      "artifact_hash": "approval-context-hash",
+      "authority_resolved": false,
+      "fresh_envelope": {
+        "action_id": "",
+        "action_type": "shell_command",
+        "command": "npm install is-even@1.0.0",
+        "event_name": "PreToolUse",
+        "harness": "codex",
+        "network_hosts": [],
+        "package_targets": [],
+        "raw_payload_redacted": {},
+        "schema_version": 1,
+        "target_paths": []
+      },
+      "hook_event_name": "PreToolUse",
+      "kind": "codex_live_allow_precheck",
+      "previous_resolution_action": null,
+      "previous_status": null,
+      "request_id": "request-replay",
+      "resolution_action": "allow",
+      "row_request_id": "request-replay",
+      "stored_envelope": {
+        "action_id": "",
+        "action_type": "shell_command",
+        "command": "npm install is-even@1.0.0",
+        "event_name": "PreToolUse",
+        "harness": "codex",
+        "network_hosts": [],
+        "package_targets": [],
+        "raw_payload_redacted": {},
+        "schema_version": 1,
+        "target_paths": []
+      }
+    }
+  },
+  {
+    "expected": {
+      "claimed_approval_request_id": "request-replay",
+      "claimed_saved_allow_hash": "approval-context-hash",
+      "review_required": false
+    },
+    "name": "codex_live_allow_precheck_a_different_action_is_refused_even_with_a_claim",
+    "query": {
+      "artifact_hash": "approval-context-hash",
+      "authority_resolved": true,
+      "fresh_envelope": {
+        "action_id": "",
+        "action_type": "shell_command",
+        "command": "npm install left-pad@1.3.0",
+        "event_name": "PreToolUse",
+        "harness": "codex",
+        "network_hosts": [],
+        "package_targets": [],
+        "raw_payload_redacted": {},
+        "schema_version": 1,
+        "target_paths": []
+      },
+      "hook_event_name": "PreToolUse",
+      "kind": "codex_live_allow_precheck",
+      "previous_resolution_action": null,
+      "previous_status": null,
+      "request_id": "request-replay",
+      "resolution_action": "allow",
+      "row_request_id": "request-replay",
+      "stored_envelope": {
+        "action_id": "",
+        "action_type": "shell_command",
+        "command": "npm install is-even@1.0.0",
+        "event_name": "PreToolUse",
+        "harness": "codex",
+        "network_hosts": [],
+        "package_targets": [],
+        "raw_payload_redacted": {},
+        "schema_version": 1,
+        "target_paths": []
+      }
+    }
+  },
+  {
+    "expected": {
+      "claimed_approval_request_id": null,
+      "claimed_saved_allow_hash": null,
+      "review_required": false
+    },
+    "name": "codex_live_allow_precheck_the_same_action_under_a_changed_payload_needs_a_claim",
+    "query": {
+      "artifact_hash": "approval-context-hash",
+      "authority_resolved": false,
+      "fresh_envelope": {
+        "action_id": "",
+        "action_type": "shell_command",
+        "command": "npm install is-even@1.0.0",
+        "event_name": "PreToolUse",
+        "harness": "codex",
+        "network_hosts": [],
+        "package_targets": [],
+        "raw_payload_redacted": {},
+        "schema_version": 1,
+        "target_paths": []
+      },
+      "hook_event_name": "PreToolUse",
+      "kind": "codex_live_allow_precheck",
+      "previous_resolution_action": null,
+      "previous_status": null,
+      "request_id": "request-replay",
+      "resolution_action": "allow",
+      "row_request_id": "request-replay",
+      "stored_envelope": {
+        "action_id": "",
+        "action_type": "shell_command",
+        "command": "npm install is-even@1.0.0",
+        "event_name": "PreToolUse",
+        "harness": "codex",
+        "network_hosts": [],
+        "package_name": "is-even",
+        "package_targets": [],
+        "raw_payload_redacted": {},
+        "schema_version": 1,
+        "target_paths": []
+      }
+    }
+  },
+  {
+    "expected": {
+      "claimed_approval_request_id": "request-replay",
+      "claimed_saved_allow_hash": "approval-context-hash",
+      "review_required": true
+    },
+    "name": "codex_live_allow_precheck_a_live_authority_carries_the_changed_payload",
+    "query": {
+      "artifact_hash": "approval-context-hash",
+      "authority_resolved": true,
+      "fresh_envelope": {
+        "action_id": "",
+        "action_type": "shell_command",
+        "command": "npm install is-even@1.0.0",
+        "event_name": "PreToolUse",
+        "harness": "codex",
+        "network_hosts": [],
+        "package_targets": [],
+        "raw_payload_redacted": {},
+        "schema_version": 1,
+        "target_paths": []
+      },
+      "hook_event_name": "PreToolUse",
+      "kind": "codex_live_allow_precheck",
+      "previous_resolution_action": null,
+      "previous_status": null,
+      "request_id": "request-replay",
+      "resolution_action": "allow",
+      "row_request_id": "request-replay",
+      "stored_envelope": {
+        "action_id": "",
+        "action_type": "shell_command",
+        "command": "npm install is-even@1.0.0",
+        "event_name": "PreToolUse",
+        "harness": "codex",
+        "network_hosts": [],
+        "package_name": "is-even",
+        "package_targets": [],
+        "raw_payload_redacted": {},
+        "schema_version": 1,
+        "target_paths": []
+      }
+    }
+  },
+  {
+    "expected": {
+      "claimed_approval_request_id": "request-replay",
+      "claimed_saved_allow_hash": "approval-context-hash",
+      "review_required": true
+    },
+    "name": "codex_live_allow_precheck_a_terminal_allow_replay_claims_the_rows_own_request",
+    "query": {
+      "artifact_hash": "approval-context-hash",
+      "authority_resolved": false,
+      "fresh_envelope": {
+        "action_id": "",
+        "action_type": "shell_command",
+        "command": "npm install is-even@1.0.0",
+        "event_name": "PreToolUse",
+        "harness": "codex",
+        "network_hosts": [],
+        "package_targets": [],
+        "raw_payload_redacted": {},
+        "schema_version": 1,
+        "target_paths": []
+      },
+      "hook_event_name": "PreToolUse",
+      "kind": "codex_live_allow_precheck",
+      "previous_resolution_action": "allow",
+      "previous_status": "resumed",
+      "request_id": "request-replay",
+      "resolution_action": "allow",
+      "row_request_id": "request-replay",
+      "stored_envelope": {
+        "action_id": "",
+        "action_type": "shell_command",
+        "command": "npm install is-even@1.0.0",
+        "event_name": "PreToolUse",
+        "harness": "codex",
+        "network_hosts": [],
+        "package_name": "is-even",
+        "package_targets": [],
+        "raw_payload_redacted": {},
+        "schema_version": 1,
+        "target_paths": []
+      }
+    }
+  },
+  {
+    "expected": {
+      "claimed_approval_request_id": null,
+      "claimed_saved_allow_hash": null,
+      "review_required": false
+    },
+    "name": "codex_live_allow_precheck_a_pending_resume_claims_nothing",
+    "query": {
+      "artifact_hash": "approval-context-hash",
+      "authority_resolved": false,
+      "fresh_envelope": {
+        "action_id": "",
+        "action_type": "shell_command",
+        "command": "npm install is-even@1.0.0",
+        "event_name": "PreToolUse",
+        "harness": "codex",
+        "network_hosts": [],
+        "package_targets": [],
+        "raw_payload_redacted": {},
+        "schema_version": 1,
+        "target_paths": []
+      },
+      "hook_event_name": "PreToolUse",
+      "kind": "codex_live_allow_precheck",
+      "previous_resolution_action": "allow",
+      "previous_status": "pending",
+      "request_id": "request-replay",
+      "resolution_action": "allow",
+      "row_request_id": "request-replay",
+      "stored_envelope": {
+        "action_id": "",
+        "action_type": "shell_command",
+        "command": "npm install is-even@1.0.0",
+        "event_name": "PreToolUse",
+        "harness": "codex",
+        "network_hosts": [],
+        "package_name": "is-even",
+        "package_targets": [],
+        "raw_payload_redacted": {},
+        "schema_version": 1,
+        "target_paths": []
+      }
+    }
+  },
+  {
+    "expected": {
+      "claimed_approval_request_id": null,
+      "claimed_saved_allow_hash": null,
+      "review_required": false
+    },
+    "name": "codex_live_allow_precheck_a_request_that_was_not_allowed_is_never_revalidated",
+    "query": {
+      "artifact_hash": "approval-context-hash",
+      "authority_resolved": true,
+      "fresh_envelope": {
+        "action_id": "",
+        "action_type": "shell_command",
+        "command": "npm install is-even@1.0.0",
+        "event_name": "PreToolUse",
+        "harness": "codex",
+        "network_hosts": [],
+        "package_targets": [],
+        "raw_payload_redacted": {},
+        "schema_version": 1,
+        "target_paths": []
+      },
+      "hook_event_name": "PreToolUse",
+      "kind": "codex_live_allow_precheck",
+      "previous_resolution_action": null,
+      "previous_status": null,
+      "request_id": "request-replay",
+      "resolution_action": "deny",
+      "row_request_id": "request-replay",
+      "stored_envelope": {
+        "action_id": "",
+        "action_type": "shell_command",
+        "command": "npm install is-even@1.0.0",
+        "event_name": "PreToolUse",
+        "harness": "codex",
+        "network_hosts": [],
+        "package_targets": [],
+        "raw_payload_redacted": {},
+        "schema_version": 1,
+        "target_paths": []
+      }
+    }
+  },
+  {
+    "expected": {
+      "claimed_approval_request_id": null,
+      "claimed_saved_allow_hash": null,
+      "review_required": false
+    },
+    "name": "codex_live_allow_precheck_a_payload_for_another_event_is_refused",
+    "query": {
+      "artifact_hash": "approval-context-hash",
+      "authority_resolved": false,
+      "fresh_envelope": {
+        "action_id": "",
+        "action_type": "shell_command",
+        "command": "npm install is-even@1.0.0",
+        "event_name": "PreToolUse",
+        "harness": "codex",
+        "network_hosts": [],
+        "package_targets": [],
+        "raw_payload_redacted": {},
+        "schema_version": 1,
+        "target_paths": []
+      },
+      "hook_event_name": "PostToolUse",
+      "kind": "codex_live_allow_precheck",
+      "previous_resolution_action": null,
+      "previous_status": null,
+      "request_id": "request-replay",
+      "resolution_action": "allow",
+      "row_request_id": "request-replay",
+      "stored_envelope": {
+        "action_id": "",
+        "action_type": "shell_command",
+        "command": "npm install is-even@1.0.0",
+        "event_name": "PreToolUse",
+        "harness": "codex",
+        "network_hosts": [],
+        "package_targets": [],
+        "raw_payload_redacted": {},
+        "schema_version": 1,
+        "target_paths": []
+      }
+    }
+  },
+  {
+    "expected": {
+      "claimed_approval_request_id": "request-replay",
+      "claimed_saved_allow_hash": "approval-context-hash",
+      "review_required": false
+    },
+    "name": "codex_live_allow_precheck_an_envelope_that_could_not_be_built_is_refused",
+    "query": {
+      "artifact_hash": "approval-context-hash",
+      "authority_resolved": true,
+      "fresh_envelope": null,
+      "hook_event_name": "PreToolUse",
+      "kind": "codex_live_allow_precheck",
+      "previous_resolution_action": null,
+      "previous_status": null,
+      "request_id": "request-replay",
+      "resolution_action": "allow",
+      "row_request_id": "request-replay",
+      "stored_envelope": {
+        "action_id": "",
+        "action_type": "shell_command",
+        "command": "npm install is-even@1.0.0",
+        "event_name": "PreToolUse",
+        "harness": "codex",
+        "network_hosts": [],
+        "package_targets": [],
+        "raw_payload_redacted": {},
+        "schema_version": 1,
+        "target_paths": []
+      }
+    }
+  },
+  {
+    "expected": {
+      "claimed_approval_request_id": "request-replay",
+      "claimed_saved_allow_hash": "approval-context-hash",
+      "review_required": false
+    },
+    "name": "codex_live_allow_precheck_a_malformed_stored_envelope_cannot_be_matched",
+    "query": {
+      "artifact_hash": "approval-context-hash",
+      "authority_resolved": true,
+      "fresh_envelope": {
+        "action_id": "",
+        "action_type": "shell_command",
+        "command": "npm install is-even@1.0.0",
+        "event_name": "PreToolUse",
+        "harness": "codex",
+        "network_hosts": [],
+        "package_targets": [],
+        "raw_payload_redacted": {},
+        "schema_version": 1,
+        "target_paths": []
+      },
+      "hook_event_name": "PreToolUse",
+      "kind": "codex_live_allow_precheck",
+      "previous_resolution_action": null,
+      "previous_status": null,
+      "request_id": "request-replay",
+      "resolution_action": "allow",
+      "row_request_id": "request-replay",
+      "stored_envelope": {
+        "action_id": "",
+        "action_type": "shell_command",
+        "command": "npm install is-even@1.0.0",
+        "event_name": "PreToolUse",
+        "harness": "codex",
+        "network_hosts": [],
+        "package_name": "is-even",
+        "package_targets": [],
+        "policy_action": "allow",
+        "raw_payload_redacted": {},
+        "schema_version": 1,
+        "target_paths": []
+      }
+    }
+  },
+  {
+    "expected": {
+      "fresh_allow_authorized": true
+    },
+    "name": "codex_live_allow_settle_an_empty_review_leaves_the_allow_standing",
+    "query": {
+      "fresh_review": {},
+      "kind": "codex_live_allow_settle"
+    }
+  },
+  {
+    "expected": {
+      "fresh_allow_authorized": true
+    },
+    "name": "codex_live_allow_settle_a_pretooluse_allow_authorizes_the_completion",
+    "query": {
+      "fresh_review": {
+        "hookSpecificOutput": {
+          "hookEventName": "PreToolUse",
+          "permissionDecision": "allow"
+        }
+      },
+      "kind": "codex_live_allow_settle"
+    }
+  },
+  {
+    "expected": {
+      "fresh_allow_authorized": false
+    },
+    "name": "codex_live_allow_settle_a_terminal_deny_refuses_the_completion",
+    "query": {
+      "fresh_review": {
+        "hookSpecificOutput": {
+          "hookEventName": "PreToolUse",
+          "permissionDecision": "deny"
+        }
+      },
+      "kind": "codex_live_allow_settle"
+    }
+  },
+  {
+    "expected": {
+      "fresh_allow_authorized": false
+    },
+    "name": "codex_live_allow_settle_a_review_that_never_ran_refuses_the_completion",
+    "query": {
+      "fresh_review": null,
+      "kind": "codex_live_allow_settle"
+    }
   }
 ]

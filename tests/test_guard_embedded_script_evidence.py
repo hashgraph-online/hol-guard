@@ -9,19 +9,23 @@ import uuid
 from pathlib import Path
 from typing import Any
 
+import pytest
+
+from codex_plugin_scanner.guard import native_runner_authority
 from codex_plugin_scanner.guard.cli.commands_dispatch_records import (
     _embedded_scripts_for_receipt,
     _run_guard_history_command,
 )
 from codex_plugin_scanner.guard.models import GuardReceipt
 from codex_plugin_scanner.guard.runtime.actions import GuardActionEnvelope
-from codex_plugin_scanner.guard.runtime.embedded_script_evidence import (
-    EMBEDDED_SCRIPT_REMEDIATION_GUIDANCE,
-    embedded_script_evidence_entries,
-)
 from codex_plugin_scanner.guard.store import GuardStore
+from tests.native_shell_helpers_client import call
 
 _MAX_EMBEDDED_SCRIPT_EVIDENCE_ENTRIES = 8
+
+
+def embedded_script_evidence_entries(command: str) -> list[dict[str, object]]:
+    return list(call("embedded_script_evidence", command))
 
 
 def _store_with_command_receipt(tmp_path: Path, command: str, receipt_id: str) -> GuardStore:
@@ -186,6 +190,15 @@ def test_embedded_scripts_for_receipt_without_evidence_returns_empty() -> None:
     assert _embedded_scripts_for_receipt({"scanner_evidence": [{"source": "policy_composition"}]}) == []
 
 
+def test_embedded_scripts_for_receipt_without_the_resident_returns_empty(monkeypatch: pytest.MonkeyPatch) -> None:
+    def unavailable(*_args: object, **_kwargs: object) -> None:
+        raise native_runner_authority.NativeRunnerAuthorityError("resident unavailable")
+
+    monkeypatch.setattr(native_runner_authority, "native_runner_authority", unavailable)
+    receipt = _receipt_with_embedded_script("python3 - <<'EOF'\nprint(1)\nEOF")
+    assert _embedded_scripts_for_receipt(receipt) == []
+
+
 def test_history_explain_includes_embedded_scripts(tmp_path: Path, capsys: Any) -> None:
     body = "console.log('from history')\n"
     command = f"node << 'EOF'\n{body}EOF"
@@ -237,8 +250,3 @@ def test_history_explain_missing_receipt_returns_error(tmp_path: Path, capsys: A
     assert result == 1
     payload = json.loads(capsys.readouterr().out)
     assert "error" in payload
-
-
-def test_remediation_guidance_is_actionable() -> None:
-    assert "workspace file" in EMBEDDED_SCRIPT_REMEDIATION_GUIDANCE
-    assert "audit" in EMBEDDED_SCRIPT_REMEDIATION_GUIDANCE.lower()

@@ -68,6 +68,10 @@ fn daemon_answer_is_forwarded_with_its_proof() {
     );
     assert_eq!(hook.header("X-Guard-Daemon-Proof").map(str::len), Some(64));
     assert_eq!(hook.header("X-Guard-Daemon-Nonce").map(str::len), Some(64));
+    // No resident answered, and the daemon is told why.
+    assert!(hook
+        .header("X-Guard-Direct-Miss")
+        .is_some_and(|miss| !miss.is_empty()));
     let body: serde_json::Value = serde_json::from_slice(&hook.body).unwrap();
     assert_eq!(body["tool_name"], "Bash");
 }

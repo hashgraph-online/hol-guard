@@ -1,46 +1,17 @@
-"""Cursor hook event names and the preToolUse matcher Guard relies on for file changes."""
+"""The preToolUse matchers Guard relies on for Cursor file changes."""
 
 from __future__ import annotations
 
 import re
 
-# Events cursor-agent 2026.10.01 accepts. Cursor ignores the whole hooks.json when
-# it names any other event, so one unknown key silently disables every hook.
-CURSOR_SUPPORTED_HOOK_EVENTS = frozenset(
-    {
-        "beforeShellExecution",
-        "beforeMCPExecution",
-        "afterShellExecution",
-        "afterMCPExecution",
-        "beforeReadFile",
-        "afterFileEdit",
-        "beforeTabFileRead",
-        "afterTabFileEdit",
-        "stop",
-        "beforeSubmitPrompt",
-        "afterAgentResponse",
-        "afterAgentThought",
-        "sessionStart",
-        "sessionEnd",
-        "preCompact",
-        "subagentStart",
-        "subagentStop",
-        "preToolUse",
-        "postToolUse",
-        "postToolUseFailure",
-        "workspaceOpen",
-    }
-)
 # Cursor has no pre-write event; its native write, edit and delete tools reach preToolUse.
 # The matcher is a regex on tool_name, so shell, MCP and read calls keep their own hooks.
 CURSOR_FILE_MUTATION_TOOLS = ("Write", "Edit", "StrReplace", "MultiEdit", "Delete")
 CURSOR_FILE_MUTATION_TOOL_MATCHER = "^(" + "|".join(CURSOR_FILE_MUTATION_TOOLS) + ")$"
-
-
-def unsupported_cursor_hook_events(hooks: dict[str, object]) -> list[str]:
-    """Event keys Cursor would reject, which would disable every configured hook."""
-
-    return sorted(str(event) for event in hooks if event not in CURSOR_SUPPORTED_HOOK_EVENTS)
+# Outside Windows preToolUse also takes Shell: Cursor applies its updated_input before
+# beforeShellExecution runs, so a test call can move into Guard's contained sink. That
+# probe only ever allows; beforeShellExecution stays the shell call's review.
+CURSOR_SHELL_ROUTE_TOOL_MATCHER = "^(" + "|".join((*CURSOR_FILE_MUTATION_TOOLS, "Shell")) + ")$"
 
 
 def cursor_entry_guards_file_mutations(entry: dict[str, object]) -> bool:

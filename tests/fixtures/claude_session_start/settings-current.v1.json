@@ -148,6 +148,16 @@
               "command": "/usr/bin/true",
               "args": [],
               "timeout": 3
+            },
+            {
+              "type": "command",
+              "command": "/opt/hol guard/bin/hol-guard-runtime",
+              "args": [
+                "claude-hook-bridge",
+                "HOL_GUARD_CLAUDE_DAEMON_HOOK",
+                "{\"state_path\":\"/home/雪 user/.hol-guard/daemon-state.json\",\"fallback_daemon_url\":\"http://127.0.0.1:43123\",\"fallback_command\":[\"/opt/hol guard/bin/python3\",\"-c\",\"print('guard hook')\",\"guard\",\"hook\",\"--guard-home=/home/雪 user/.hol-guard\"],\"query\":\"guard-home=%2Fhome%2F%E9%9B%AA+user%2F.hol-guard&workspace=%2Fwork+%22quoted%22\",\"recovery_command\":[\"/opt/hol guard/bin/python3\",\"-I\",\"-c\",\"start('\\\\\\\\x')\",\"/home/雪 user/.hol-guard\"]}"
+              ],
+              "timeout": 10
             }
           ]
         }

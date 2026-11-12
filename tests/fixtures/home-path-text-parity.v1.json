@@ -1,6 +1,6 @@
 {
   "schema": "home-path-text-parity.v1",
-  "note": "Recorded from pathlib and os.path with the POSIX and Windows flavours substituted, so both halves are recordable from any host. Regenerate with scripts/ci/generate_home_path_text_parity.py.",
+  "note": "Recorded from pathlib and os.path with the POSIX and Windows flavours substituted, so both halves are recordable from any host. The recording module and script are retired; this corpus is frozen.",
   "posix": {
     "expand_home": [
       {

@@ -8,8 +8,7 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.native_shell_helpers import _valid
-from codex_plugin_scanner.guard.runtime.embedded_script_evidence import embedded_script_evidence_entries
+from tests.native_shell_helpers_client import _valid, call
 
 _VECTORS = json.loads(
     (
@@ -20,11 +19,7 @@ _VECTORS = json.loads(
 
 @pytest.mark.parametrize("vector", _VECTORS, ids=[vector["name"] for vector in _VECTORS])
 def test_native_embedded_script_evidence_matches_recorded_vector(vector: dict[str, object]) -> None:
-    assert embedded_script_evidence_entries(vector["command"]) == vector["entries"]
-
-
-def test_non_string_command_has_no_evidence() -> None:
-    assert embedded_script_evidence_entries(None) == []
+    assert call("embedded_script_evidence", vector["command"]) == vector["entries"]
 
 
 def test_recorded_entries_pass_reply_validation() -> None:

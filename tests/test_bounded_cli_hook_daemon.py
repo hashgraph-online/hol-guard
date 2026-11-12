@@ -7,7 +7,11 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.adapters import bounded_cli_hook_bridge, bounded_cli_hook_daemon
+from codex_plugin_scanner.guard.adapters import (
+    bounded_cli_hook_bridge,
+    bounded_cli_hook_daemon,
+    bounded_cli_hook_recovery,
+)
 from codex_plugin_scanner.guard.codex_hook_launch_runtime import BoundedHookProcessResult
 
 from .bounded_cli_hook_test_support import config as _config
@@ -62,15 +66,16 @@ def test_frozen_grok_transport_budget_and_failure(tmp_path: Path, event: str) ->
     assert code == 0
 
 
-@pytest.mark.parametrize("harness", ["copilot", "grok", "hermes", "openclaw", "kimi", "zcode", "devin", "pi", "omp"])
+# Hermes answers go through hermes_bridge_response, never the bridge renderer.
+@pytest.mark.parametrize("harness", ["copilot", "grok", "openclaw", "kimi", "zcode", "devin", "pi", "omp"])
 @pytest.mark.parametrize("explicit_block", [False, True])
-def test_unavailable_posttool_observation_preserves_explicit_decision(harness: str, explicit_block: bool) -> None:
+def test_unavailable_posttool_observation_preserves_explicit_decision(
+    harness: str, explicit_block: bool, native_bridge_render
+) -> None:
     response = {"reason_code": "native_post_tool_unavailable", "reason": "native miss"}
     if explicit_block:
         response["policy_action"] = "block"
-    stdout, _stderr, code = bounded_cli_hook_daemon._daemon_response_to_native(
-        response, harness=harness, event_name="PostToolUse"
-    )
+    stdout, _stderr, code = native_bridge_render(response, harness=harness, event_name="PostToolUse")
     payload = json.loads(stdout)
     assert code == 0
     assert payload["hookSpecificOutput"]["permissionDecision"] == ("deny" if explicit_block else "allow")
@@ -84,8 +89,8 @@ def test_grok_bridge_rewrites_daemon_review_after_wait(
 
     monkeypatch.setattr(
         grok_approval_resume,
-        "wait_for_grok_live_approval",
-        lambda **_kwargs: "allow",
+        "wait_for_approval_requests",
+        lambda **_kwargs: {"resolved": True, "pending_request_ids": [], "items": [{"resolution_action": "allow"}]},
     )
     stdout, _stderr, code = bounded_cli_hook_daemon._apply_grok_bridge_approval_wait(
         guard_home=tmp_path / "guard-home",
@@ -105,8 +110,8 @@ def test_grok_bridge_rewrites_daemon_review_after_wait(
     assert json.loads(stdout)["decision"] == "allow"
 
 
-def test_grok_daemon_review_translation_keeps_wait_metadata() -> None:
-    stdout, _stderr, code = bounded_cli_hook_daemon._daemon_response_to_native(
+def test_grok_daemon_review_translation_keeps_wait_metadata(native_bridge_render) -> None:
+    stdout, _stderr, code = native_bridge_render(
         {
             "policy_action": "review",
             "reason": "needs review",
@@ -136,15 +141,9 @@ def test_grok_daemon_review_translation_keeps_wait_metadata() -> None:
         "PermissionDenied",
     ],
 )
-def test_grok_daemon_empty_observe_response_matches_native_success(event_name: str) -> None:
-    from codex_plugin_scanner.guard.adapters.grok_hooks import grok_hook_response_from_guard
-
-    native = grok_hook_response_from_guard(
-        policy_action="allow",
-        reason="",
-        event_name=event_name,
-    )
-    stdout, stderr, code = bounded_cli_hook_daemon._daemon_response_to_native(
+def test_grok_daemon_empty_observe_response_matches_native_success(event_name: str, native_bridge_render) -> None:
+    native: dict[str, object] = {}
+    stdout, stderr, code = native_bridge_render(
         native,
         harness="grok",
         event_name=event_name,
@@ -198,7 +197,7 @@ def test_grok_benign_prompt_requires_successful_daemon_review(
     else:
         monkeypatch.setattr(bounded_cli_hook_daemon, "try_daemon_hook", lambda **_kwargs: None)
     monkeypatch.setattr(
-        bounded_cli_hook_bridge,
+        bounded_cli_hook_recovery,
         "run_isolated_hook_process",
         _runner_result(BoundedHookProcessResult(0, "{}\n", False, False)),
     )
@@ -216,8 +215,8 @@ def test_grok_benign_prompt_requires_successful_daemon_review(
         assert json.loads(output.getvalue())["decision"] == "block"
 
 
-def test_grok_daemon_prompt_native_block_is_preserved() -> None:
-    stdout, stderr, code = bounded_cli_hook_daemon._daemon_response_to_native(
+def test_grok_daemon_prompt_native_block_is_preserved(native_bridge_render) -> None:
+    stdout, stderr, code = native_bridge_render(
         {"decision": "block", "reason": "Prompt blocked by HOL Guard."},
         harness="grok",
         event_name="UserPromptSubmit",
@@ -237,8 +236,9 @@ def test_grok_daemon_prompt_native_block_is_preserved() -> None:
 )
 def test_grok_daemon_nonempty_ambiguous_prompt_response_fails_closed(
     response: dict[str, object],
+    native_bridge_render,
 ) -> None:
-    stdout, _stderr, code = bounded_cli_hook_daemon._daemon_response_to_native(
+    stdout, _stderr, code = native_bridge_render(
         response,
         harness="grok",
         event_name="UserPromptSubmit",
@@ -258,8 +258,8 @@ def test_grok_daemon_nonempty_ambiguous_prompt_response_fails_closed(
         {"policy_action": "invalid", "reason": "malformed policy"},
     ],
 )
-def test_grok_daemon_ambiguous_pretool_response_fails_closed(response: dict[str, object]) -> None:
-    stdout, _stderr, code = bounded_cli_hook_daemon._daemon_response_to_native(
+def test_grok_daemon_ambiguous_pretool_response_fails_closed(response: dict[str, object], native_bridge_render) -> None:
+    stdout, _stderr, code = native_bridge_render(
         response,
         harness="grok",
         event_name="PreToolUse",
@@ -271,8 +271,8 @@ def test_grok_daemon_ambiguous_pretool_response_fails_closed(response: dict[str,
     assert payload["policy_action"] == "block"
 
 
-def test_grok_daemon_dangerous_pretool_block_keeps_reason() -> None:
-    stdout, _stderr, code = bounded_cli_hook_daemon._daemon_response_to_native(
+def test_grok_daemon_dangerous_pretool_block_keeps_reason(native_bridge_render) -> None:
+    stdout, _stderr, code = native_bridge_render(
         {"policy_action": "block", "reason": "Credential file access is blocked."},
         harness="grok",
         event_name="PreToolUse",
@@ -345,26 +345,3 @@ def test_grok_bridge_preserves_daemon_result_when_store_fails(
     assert stdout == original
     assert stderr == "keep-stderr"
     assert code == 2
-
-
-def test_grok_cli_fallback_review_gets_the_daemon_path_approval_wait(
-    monkeypatch: pytest.MonkeyPatch,
-    tmp_path: Path,
-) -> None:
-    from codex_plugin_scanner.guard.adapters import grok_approval_resume
-
-    monkeypatch.setattr(grok_approval_resume, "wait_for_grok_live_approval", lambda **_kwargs: "allow")
-    monkeypatch.setattr(bounded_cli_hook_daemon, "try_daemon_hook", lambda **_kwargs: None)
-    review = {"decision": "deny", "policy_action": "review", "approval_requests": [{"request_id": "req-1"}]}
-    monkeypatch.setattr(
-        bounded_cli_hook_bridge,
-        "run_isolated_hook_process",
-        lambda *_args, **_kwargs: BoundedHookProcessResult(2, json.dumps(review), False, False),
-    )
-    output = io.StringIO()
-    with redirect_stdout(output):
-        code = bounded_cli_hook_bridge.run_bounded_cli_hook(
-            _config(tmp_path, harness="grok"), input_text=json.dumps({"hook_event_name": "PreToolUse"})
-        )
-    assert code == 0
-    assert json.loads(output.getvalue())["decision"] == "allow"

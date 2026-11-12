@@ -1,13 +1,11 @@
-"""Validation helpers for persisted DPoP key bindings."""
+"""Transport for the native DPoP key-binding verdict."""
 
 from __future__ import annotations
 
-import base64
-import hashlib
-import json
+from .native_policy_bundle import PolicyBundleNativeUnavailableError, policy_bundle_verdict
 
-from cryptography.hazmat.primitives import serialization
-from cryptography.hazmat.primitives.asymmetric import ec
+_INVALID_MATERIAL = "invalid_dpop_key_material"
+_SCHEMA_MISMATCH = "native_policy_bundle_authority_schema_mismatch"
 
 
 def verified_dpop_jwk_thumbprint(
@@ -15,31 +13,60 @@ def verified_dpop_jwk_thumbprint(
     private_key_pem: object,
     public_jwk: object,
 ) -> str:
-    """Return the RFC 7638 JKT only when the active P-256 keypair is consistent."""
+    """Return the RFC 7638 JKT only when the active P-256 keypair is consistent.
+
+    Rust settles whether the stored JWK still describes the live private key and
+    derives the thumbprint; this only shapes the request and reports the answer.
+    Every native rejection, an outage included, raises ``ValueError`` so a caller
+    that cannot read a thumbprint refuses the binding.
+    """
 
     if not isinstance(private_key_pem, str) or not isinstance(public_jwk, dict):
-        raise ValueError("invalid_dpop_key_material")
-    try:
-        private_key = serialization.load_pem_private_key(private_key_pem.encode("ascii"), password=None)
-    except (TypeError, ValueError) as error:
-        raise ValueError("invalid_dpop_private_key") from error
-    if not isinstance(private_key, ec.EllipticCurvePrivateKey) or not isinstance(private_key.curve, ec.SECP256R1):
-        raise ValueError("invalid_dpop_private_key")
-    numbers = private_key.public_key().public_numbers()
-    expected = {
-        "crv": "P-256",
-        "kty": "EC",
-        "x": _base64url(numbers.x.to_bytes(32, byteorder="big")),
-        "y": _base64url(numbers.y.to_bytes(32, byteorder="big")),
-    }
-    if public_jwk != expected:
-        raise ValueError("dpop_public_private_key_mismatch")
-    canonical = json.dumps(expected, sort_keys=True, separators=(",", ":")).encode("utf-8")
-    return _base64url(hashlib.sha256(canonical).digest())
+        raise ValueError(_INVALID_MATERIAL)
+    verdict = policy_bundle_verdict(
+        "dpop_jwk_thumbprint",
+        {"private_key_pem": private_key_pem, "public_jwk": public_jwk},
+    )
+    thumbprint = verdict.get("thumbprint")
+    if not isinstance(thumbprint, str) or not thumbprint:
+        raise ValueError(_INVALID_MATERIAL)
+    return thumbprint
 
 
-def _base64url(value: bytes) -> str:
-    return base64.urlsafe_b64encode(value).decode("ascii").rstrip("=")
+def signed_dpop_proof(
+    *,
+    private_key_pem: str,
+    algorithm: str,
+    public_jwk: dict[str, str],
+    request_url: str,
+    method: str,
+    issued_at: int,
+    access_token: str | None = None,
+    nonce: str | None = None,
+) -> str:
+    """Return the DPoP proof (RFC 9449) Rust signs for one Guard Cloud request.
+
+    A rejected key or token raises ``PolicyBundleNativeError`` with Rust's code;
+    an outage raises ``PolicyBundleNativeUnavailableError``.
+    """
+
+    verdict = policy_bundle_verdict(
+        "dpop_proof",
+        {
+            "private_key_pem": private_key_pem,
+            "algorithm": algorithm,
+            "public_jwk": public_jwk,
+            "request_url": request_url,
+            "method": method,
+            "issued_at": issued_at,
+            "access_token": access_token,
+            "nonce": nonce,
+        },
+    )
+    proof = verdict.get("proof")
+    if not isinstance(proof, str) or proof.count(".") != 2:
+        raise PolicyBundleNativeUnavailableError(_SCHEMA_MISMATCH)
+    return proof
 
 
-__all__ = ["verified_dpop_jwk_thumbprint"]
+__all__ = ["signed_dpop_proof", "verified_dpop_jwk_thumbprint"]

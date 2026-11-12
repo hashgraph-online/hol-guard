@@ -5,8 +5,10 @@ import sqlite3
 
 import pytest
 
+from codex_plugin_scanner.guard import native_runner_authority as authority
 from codex_plugin_scanner.guard.review_event_integrity import review_event_payload_digest
-from codex_plugin_scanner.guard.runtime.review_event_delivery import decode_stored_review_event
+from codex_plugin_scanner.guard.runtime.cloud_review_event_projection import project_cloud_review_event
+from codex_plugin_scanner.guard.runtime.review_event_delivery import StoredReviewEventError, decode_stored_review_event
 from codex_plugin_scanner.guard.store import GuardStore
 from codex_plugin_scanner.guard.store_review_event_outbox_schema import (
     REVIEW_EVENT_SCHEMA_VERSION,
@@ -14,6 +16,7 @@ from codex_plugin_scanner.guard.store_review_event_outbox_schema import (
     ensure_review_event_outbox_schema,
 )
 from tests.guard_review_event_outbox_test_support import _all_events, _connect, _request, as_int
+from tests.native_store_shims import refresh_review_event_outbox_binding
 
 # pyright: reportMissingImports=false
 
@@ -299,11 +302,72 @@ def test_same_subject_refresh_updates_machine_binding_without_confirmation(tmp_p
     store.add_approval_request(_request("request-1"), _NOW)
     new_binding = _connect(store, machine_id="machine-new")
 
-    assert store.refresh_review_event_outbox_binding() == 1
+    assert refresh_review_event_outbox_binding(store) == 1
     assert store.list_ready_review_events(now=_NOW, limit=10, **old_binding) == []
     rows = store.list_ready_review_events(now=_NOW, limit=10, **new_binding)
     assert len(rows) == 1
     assert decode_stored_review_event(rows[0]).request_sequence == 1
+
+
+def test_a_native_outage_retries_the_event_instead_of_quarantining_it(tmp_path, monkeypatch) -> None:
+    store = GuardStore(tmp_path / "guard")
+    binding = _connect(store)
+    store.add_approval_request(_request("request-1"), _NOW)
+    rows = store.list_ready_review_events(now=_NOW, limit=10, **binding)
+    decoded = decode_stored_review_event(rows[0])
+    assert decoded.wire_event_type == "request_created"
+    assert decoded.payload_json == rows[0]["payload_json"]
+
+    original = authority.native_runner_authority
+
+    def unavailable(kind: str, *args: object, **kwargs: object) -> dict[str, object]:
+        if kind == "review_event_decode":
+            raise authority.NativeRunnerAuthorityError("native_runner_authority_unavailable")
+        return original(kind, *args, **kwargs)
+
+    monkeypatch.setattr(authority, "native_runner_authority", unavailable)
+    with pytest.raises(StoredReviewEventError) as raised:
+        decode_stored_review_event(rows[0])
+    assert raised.value.reason == "cloud_native_projection_unavailable"
+
+    projected = project_cloud_review_event(
+        store,
+        outbox_row=dict(rows[0]),
+        delivery_binding=binding,
+        redaction_level="full",
+        oauth=None,
+    )
+    assert projected is None
+    (saved,) = _all_events(store)
+    assert saved["binding_status"] == "ready"
+    assert saved["quarantine_reason"] is None
+    assert saved["attempt_count"] == 1
+
+
+@pytest.mark.parametrize(
+    "code",
+    [
+        "native_runner_authority_request_too_large",
+        "native_runner_authority_invalid",
+        "native_runner_authority_component_unencodable",
+    ],
+)
+def test_a_row_the_resident_refuses_is_quarantined_not_retried(tmp_path, monkeypatch, code: str) -> None:
+    store = GuardStore(tmp_path / "guard")
+    binding = _connect(store)
+    store.add_approval_request(_request("request-1"), _NOW)
+    rows = store.list_ready_review_events(now=_NOW, limit=10, **binding)
+    original = authority.native_runner_authority
+
+    def refused(kind: str, *args: object, **kwargs: object) -> dict[str, object]:
+        if kind == "review_event_decode":
+            raise authority.NativeRunnerAuthorityError(code)
+        return original(kind, *args, **kwargs)
+
+    monkeypatch.setattr(authority, "native_runner_authority", refused)
+    with pytest.raises(StoredReviewEventError) as raised:
+        decode_stored_review_event(rows[0])
+    assert raised.value.reason == "payload_snapshot_invalid"
 
 
 def test_cross_subject_or_workspace_change_requires_explicit_reassignment(tmp_path) -> None:

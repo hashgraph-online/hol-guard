@@ -26,10 +26,24 @@ pub(super) fn below(target: &str, workspace: &Path) -> bool {
     !target.is_empty()
         && !target.starts_with(['~', '-'])
         && !target.contains('$')
+        && !rewritten_before_cd(target)
         && path
             .components()
             .all(|component| !matches!(component, std::path::Component::ParentDir))
-        && (path.is_relative() || path.starts_with(workspace))
+        && (path.is_relative()
+            || path.starts_with(workspace)
+            || super::reach::through_root_link(path, workspace))
+}
+
+/// An absolute `target` that [`below`] admitted, spelled the way the
+/// workspace is: through `/private` when it was written through the macOS
+/// `/var` or `/tmp` root link, so later checks compare like with like.
+pub(super) fn canonical_below(target: &Path, workspace: &Path) -> PathBuf {
+    if target.starts_with(workspace) {
+        target.to_owned()
+    } else {
+        Path::new("/private").join(target.strip_prefix("/").unwrap_or(target))
+    }
 }
 
 /// The first directory for which `found` holds among the ones a tool's own
@@ -161,6 +175,36 @@ pub(super) fn sets_search_path(segment: &CommandSegmentV1) -> bool {
 /// run's private temporary directory.
 pub(super) fn bounded(target: &str, workspace: &Path, temp_fixed: bool) -> bool {
     below(target, workspace) || (temp_fixed && temp_cd::private_directory(target))
+}
+
+/// A literal operand the directory walk reads exactly as the shell would: no
+/// variable to expand, and no stand-in for the home or stacked directory,
+/// which name a place the walk never joined. `-` is the exception among the
+/// stand-ins, since the walk carries the directory each shell moved out of
+/// and so follows the return as precisely as the move. It is admitted only
+/// beside `cwd::moves_stay_inside`, whose own proof is that the move lands
+/// inside the workspace, so what this reading adds over [`below`] is the
+/// parent step that proof already covers.
+pub(super) fn walked(target: &str) -> bool {
+    target == "-"
+        || (!target.is_empty()
+            && !target.contains('$')
+            && !target.starts_with(['~', '-', '+'])
+            && !rewritten_before_cd(target))
+}
+
+/// Whether the shell rewrites `target` before `cd` ever sees it. Both
+/// readings above take the operand for the name of the directory entered,
+/// which a pattern is not: `cd ../x*` is the directory `x*` here and whatever
+/// the pattern matched there, and a `GLOBIGNORE` or a second entry decides
+/// which name that is. A brace list is rewritten earlier still and without
+/// consulting the file system at all, so `cd ../{1..1}` is the directory
+/// `{1..1}` to the walk and `../1` to the shell; where both names exist the
+/// walk can clear one while the run enters the other. A rewrite standing for
+/// more than one name gives `cd` two operands and fails, so nothing ordinary
+/// is lost.
+fn rewritten_before_cd(target: &str) -> bool {
+    target.contains(['*', '?', '[', '{', '}'])
 }
 
 /// Whether every temporary stand-in in the command is the only operand of a

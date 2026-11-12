@@ -15,6 +15,8 @@ from .models import GRADE_LABELS, Finding, ScanResult, max_severity
 PR_COMMENT_MARKER = "<!-- hol-guard-pr-comment -->"
 VALID_PR_COMMENT_MODES = frozenset({"auto", "always", "off"})
 VALID_PR_COMMENT_STYLES = frozenset({"concise", "detailed"})
+HOL_PLUGINS_LISTING_URL = "https://hol.org/plugins/connect"
+HOL_PLUGINS_SCAN_LIMITS_URL = "https://hol.org/plugins/trust-score/scan-limits"
 
 
 @dataclass(frozen=True, slots=True)
@@ -96,6 +98,7 @@ def build_scan_pr_comment_body(
     policy_pass: bool,
     style: str,
     max_findings_to_render: int,
+    listing_hint_repository: str = "",
 ) -> str:
     guard_status = "pass" if policy_pass else "blocked"
     severity = max_severity(result.findings)
@@ -117,7 +120,23 @@ def build_scan_pr_comment_body(
     if style == "detailed":
         findings_to_render = tuple(result.findings[:max_findings_to_render])
         lines.extend(_render_findings_section(findings_to_render, max_findings_to_render, len(result.findings)))
+    if listing_hint_repository:
+        lines.extend(_render_listing_hint(listing_hint_repository))
     return "\n".join(lines)
+
+
+def _render_listing_hint(repository: str) -> list[str]:
+    attribution = {"utm_source": "hol_marketplace", "utm_medium": "plugins_pr_comment"}
+    query = urlencode({"repo": repository, **attribution})
+    limits_query = urlencode({**attribution, "utm_content": "scan_limits"})
+    return [
+        "",
+        f"This repository's HOL Plugins listing and the published advisories matched to it: "
+        f"[{HOL_PLUGINS_LISTING_URL}]({HOL_PLUGINS_LISTING_URL}?{query})",
+        "",
+        "HOL's plugin scan reads files without running them. "
+        f"[What it checks and cannot catch]({HOL_PLUGINS_SCAN_LIMITS_URL}?{limits_query})",
+    ]
 
 
 def build_verify_pr_comment_body(
@@ -125,6 +144,7 @@ def build_verify_pr_comment_body(
     verification_payload: dict[str, object],
     style: str,
     max_findings_to_render: int,
+    listing_hint_repository: str = "",
 ) -> str:
     verify_pass = bool(verification_payload.get("verify_pass"))
     status = "pass" if verify_pass else "blocked"
@@ -149,6 +169,8 @@ def build_verify_pr_comment_body(
                 f"- {icon} `{escape_markdown_text(component)}` {escape_markdown_text(name)}: "
                 f"{escape_markdown_text(message)}"
             )
+    if listing_hint_repository:
+        lines.extend(_render_listing_hint(listing_hint_repository))
     return "\n".join(lines)
 
 

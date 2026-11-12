@@ -59,6 +59,67 @@ fn warm_native_security_quarantine_is_terminal_and_survives_restart() {
     remove_pack_test_root(&root);
 }
 
+#[test]
+fn a_floor_from_another_runtime_does_not_stop_the_operator() {
+    // A Guard home is shared by every runtime that runs against it, so the
+    // authenticated Root it retains is often one this build did not write.
+    // `complete` records a floor against each extension it covers and denies
+    // nothing, because this build can never obtain that engine's revocations.
+    // The record still binds, still survives a restart, and still lets the
+    // operator work.
+    let root = test_root("command-pack-floor");
+    let key = install_test_key(&root, 96);
+    let store = PolicySnapshotStore::new(&root, &"a".repeat(64)).unwrap();
+    let mut snapshot = command_floor_tests::control_snapshot(1, 5, 9, "enabled", &key, &root);
+    let binding = snapshot.command_extensions.as_mut().unwrap();
+    let (record, digest) =
+        crate::active_pack_security::fixture_floor_record(&binding.program_digest, &key);
+    fixture_file(
+        &root.join(crate::active_pack_security::FILE),
+        record.as_bytes(),
+    );
+    #[cfg(unix)]
+    fs::set_permissions(
+        root.join(crate::active_pack_security::FILE),
+        fs::Permissions::from_mode(0o600),
+    )
+    .unwrap();
+    binding.active_security_digest = Some(digest);
+    binding.effective_digest = binding.compute_effective_digest().unwrap();
+    command_floor_tests::resign(&mut snapshot, &key);
+    command_authority_tests::publish_marker(&store, &snapshot, "committed");
+    store
+        .push(&serde_json::json!({"schema":POLICY_SNAPSHOT_PUSH_SCHEMA,"snapshot":snapshot}))
+        .unwrap();
+    let check = |store: &PolicySnapshotStore| {
+        let snapshot = store.current_admitted_snapshot().unwrap();
+        let _lease = store.command_authority_lease(&snapshot).unwrap();
+        let result = guard_command::pretool::evaluate_pre_tool_envelope_with_execution_context(
+            "claude",
+            "PreToolUse",
+            &serde_json::json!({"tool_name":"Bash","tool_input":{"command":"git status"}}),
+            snapshot.command_extensions.as_ref(),
+            None,
+            guard_command::pretool::PathContext::default(),
+            None,
+        );
+        // Covers the quarantine floor and both ways the record itself can
+        // refuse the pack: an unreadable record and a binding that no longer
+        // matches the observation.
+        assert!(
+            !result.reason_code.starts_with("native_active_pack_"),
+            "a recorded floor must not deny: {}",
+            result.reason_code
+        );
+        assert_ne!(result.minimum_action, "block");
+    };
+    check(&store);
+    drop(store);
+    let restarted = PolicySnapshotStore::new(&root, &"a".repeat(64)).unwrap();
+    check(&restarted);
+    remove_pack_test_root(&root);
+}
+
 fn remove_pack_test_root(root: &Path) {
     assert!(root
         .file_name()

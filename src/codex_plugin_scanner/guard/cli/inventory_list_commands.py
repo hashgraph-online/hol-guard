@@ -16,7 +16,7 @@ from typing import TYPE_CHECKING, TextIO
 
 from ..runtime.connector_setup_items import connector_setup_href, connector_setup_summary
 from ..runtime.fleet_posture_aibom import fleet_inventory_rows
-from ..runtime.fleet_posture_inventory import reportable_inventory_rows
+from ..runtime.fleet_posture_inventory import reportable_inventory_rows, store_home
 
 if TYPE_CHECKING:
     from ..adapters.base import HarnessContext
@@ -60,7 +60,7 @@ def inventory_list_payload(
 
     _, kind, reported_kinds = _LIST_COMMANDS[command]
     items: list[dict[str, object]] = []
-    for selected in reportable_inventory_rows(fleet_inventory_rows(store)):
+    for selected in reportable_inventory_rows(fleet_inventory_rows(store), guard_home=store_home(store)):
         if selected.kind not in reported_kinds:
             continue
         row = selected.row
@@ -129,7 +129,7 @@ def run_inventory_list_command(
     command = str(args.guard_command)
     generated_at = datetime.now(timezone.utc).isoformat()
     if command == "mcp":
-        from ..daemon.runtime_peer import load_guard_daemon_endpoint_url
+        from ..native_daemon_peer import load_guard_daemon_endpoint_url
 
         if context is not None:
             from ..adapters.harness_mcp_discovery import observe_configured_mcp_servers

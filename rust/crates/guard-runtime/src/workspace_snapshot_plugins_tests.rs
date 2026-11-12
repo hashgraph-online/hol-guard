@@ -32,6 +32,9 @@ fn request(root: &Path) -> SnapshotRequest {
         skills: false,
         hooks: false,
         plugins: true,
+        workflows: false,
+        editor_tasks: false,
+        instructions: false,
     }
 }
 
@@ -414,6 +417,36 @@ fn findings_are_one_per_rule_file_and_name_and_a_shared_file_is_read_once() {
         .collect();
     assert_eq!(names, ["Stop", "other"]);
     assert_eq!(first["findings"], second["findings"]);
+}
+
+#[test]
+fn a_plugin_server_keeps_its_finding_id_when_it_moves_within_its_file() {
+    let root = tempfile::tempdir().unwrap();
+    write(
+        root.path(),
+        "b/.codex-plugin/plugin.json",
+        r#"{"name": "b", "version": "0.1.0", "mcpServers": "./.mcp.json"}"#,
+    );
+    write(root.path(), "b/.mcp.json", REMOTE_SERVER);
+    let before = scan(root.path())["findings"].clone();
+    assert_eq!(before.as_array().unwrap().len(), 1);
+
+    // The flagged server now comes second, below new lines.
+    write(
+        root.path(),
+        "b/.mcp.json",
+        &format!(
+            r#"{{
+
+  "mcpServers": {{
+    "files": {{"command": "npx", "args": ["-y", "@example/files-mcp"]}},
+    "helper": {{"command": "bash", "args": ["-c", "{REMOTE}"]}}
+  }}
+}}"#
+        ),
+    );
+
+    assert_eq!(scan(root.path())["findings"], before);
 }
 
 #[test]

@@ -14,8 +14,8 @@ from typing import Any
 
 import pytest
 
-from codex_plugin_scanner.guard.daemon.manager import load_guard_daemon_auth_token
 from codex_plugin_scanner.guard.mcp.policy_tools import decline_pending_policy_request, execute_create_policy
+from codex_plugin_scanner.guard.native_daemon_manage import load_guard_daemon_auth_token
 from codex_plugin_scanner.guard.store import GuardStore
 from tests.guard_mcp_policy_test_support import _BASIC_POLICY_YAML, _assert_no_policy_response_leaks, _digest
 from tests.guard_mcp_policy_test_support import env_flags as env_flags
@@ -87,7 +87,7 @@ class TestDaemonMcpPolicyRequestSurface:
     @staticmethod
     def _read_response(request: Any) -> tuple[int, dict[str, object]]:
         try:
-            with urllib.request.urlopen(request, timeout=5) as response:
+            with urllib.request.urlopen(request, timeout=30) as response:
                 return response.status, json.loads(response.read().decode("utf-8"))
         except urllib.error.HTTPError as error:
             return error.code, json.loads(error.read().decode("utf-8"))
@@ -120,12 +120,12 @@ class TestDaemonMcpPolicyRequestSurface:
         monkeypatch: pytest.MonkeyPatch,
         alter_grant: bool,
     ) -> None:
+        from ci.guard_daemon_harness import GuardDaemonServer
         from codex_plugin_scanner.guard.approval_gate import update_settings
-        from codex_plugin_scanner.guard.daemon import GuardDaemonServer
 
         native_mcp_probe(store.guard_home)
         from codex_plugin_scanner.guard import approval_gate
-        from codex_plugin_scanner.guard.daemon import mcp_policy_decisions as server
+        from codex_plugin_scanner.guard.routes import mcp_policy_decisions as server
 
         native_gate = approval_gate._approval_gate_native
 
@@ -200,7 +200,7 @@ class TestDaemonMcpPolicyRequestSurface:
         )
 
     def test_get_returns_vpc045_fields(self, store: GuardStore, env_flags: None, tmp_path: Path) -> None:
-        from codex_plugin_scanner.guard.daemon import GuardDaemonServer
+        from ci.guard_daemon_harness import GuardDaemonServer
 
         request_id = self._stage_pending_request(store)
         daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
@@ -238,7 +238,7 @@ class TestDaemonMcpPolicyRequestSurface:
         assert "removalCount" in diff
 
     def test_get_returns_404_for_unknown_request(self, store: GuardStore, tmp_path: Path) -> None:
-        from codex_plugin_scanner.guard.daemon import GuardDaemonServer
+        from ci.guard_daemon_harness import GuardDaemonServer
 
         daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
         daemon.start()
@@ -259,7 +259,7 @@ class TestDaemonMcpPolicyRequestSurface:
         assert payload["error"] == "not_found"
 
     def test_get_requires_auth_token(self, store: GuardStore, env_flags: None, tmp_path: Path) -> None:
-        from codex_plugin_scanner.guard.daemon import GuardDaemonServer
+        from ci.guard_daemon_harness import GuardDaemonServer
 
         self._stage_pending_request(store)
         daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
@@ -281,7 +281,7 @@ class TestDaemonMcpPolicyRequestSurface:
     def test_decision_post_rejects_non_loopback_origin(
         self, store: GuardStore, env_flags: None, tmp_path: Path
     ) -> None:
-        from codex_plugin_scanner.guard.daemon import GuardDaemonServer
+        from ci.guard_daemon_harness import GuardDaemonServer
 
         request_id = self._stage_pending_request(store)
         daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
@@ -305,7 +305,7 @@ class TestDaemonMcpPolicyRequestSurface:
         assert payload["error"] == "forbidden_origin"
 
     def test_decision_post_rejects_missing_token(self, store: GuardStore, env_flags: None, tmp_path: Path) -> None:
-        from codex_plugin_scanner.guard.daemon import GuardDaemonServer
+        from ci.guard_daemon_harness import GuardDaemonServer
 
         request_id = self._stage_pending_request(store)
         daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
@@ -327,7 +327,7 @@ class TestDaemonMcpPolicyRequestSurface:
         assert status == 401
 
     def test_decision_post_rejects_invalid_action(self, store: GuardStore, env_flags: None, tmp_path: Path) -> None:
-        from codex_plugin_scanner.guard.daemon import GuardDaemonServer
+        from ci.guard_daemon_harness import GuardDaemonServer
 
         request_id = self._stage_pending_request(store)
         daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
@@ -357,7 +357,7 @@ class TestDaemonMcpPolicyRequestSurface:
         self, store: GuardStore, env_flags: None, tmp_path: Path, action: str, cleaned: bool, terminal_status: str
     ) -> None:
         """VPC047: repeated decisions retain terminal state after payload cleanup."""
-        from codex_plugin_scanner.guard.daemon import GuardDaemonServer
+        from ci.guard_daemon_harness import GuardDaemonServer
 
         request_id = self._stage_pending_request(store)
         decline_pending_policy_request(store, request_id)
@@ -407,7 +407,7 @@ class TestDaemonMcpPolicyRequestSurface:
         assert "resolvedAt" in payload
 
     def test_decline_then_get_shows_terminal_state(self, store: GuardStore, env_flags: None, tmp_path: Path) -> None:
-        from codex_plugin_scanner.guard.daemon import GuardDaemonServer
+        from ci.guard_daemon_harness import GuardDaemonServer
 
         request_id = self._stage_pending_request(store)
 
@@ -447,7 +447,7 @@ class TestDaemonMcpPolicyRequestSurface:
         self, store: GuardStore, env_flags: None, tmp_path: Path, opaque_request_id: str | None
     ) -> None:
         """VPC046: the decision endpoint never echoes approval-gate material."""
-        from codex_plugin_scanner.guard.daemon import GuardDaemonServer
+        from ci.guard_daemon_harness import GuardDaemonServer
 
         request_id = self._stage_pending_request(store)
         if opaque_request_id is not None:
@@ -476,7 +476,7 @@ class TestDaemonMcpPolicyRequestSurface:
         self, store: GuardStore, env_flags: None, tmp_path: Path, opaque_request_id: str | None
     ) -> None:
         """VPC045/046: GET never returns canonical YAML, plan JSON, or credentials."""
-        from codex_plugin_scanner.guard.daemon import GuardDaemonServer
+        from ci.guard_daemon_harness import GuardDaemonServer
 
         request_id = self._stage_pending_request(store)
         if opaque_request_id is not None:

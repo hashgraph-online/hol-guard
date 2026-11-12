@@ -74,14 +74,3 @@ def _event_name(input_text: str) -> str:
             if named is not None:
                 return named
     return "PreToolUse"
-
-
-def _has_json_object_line(output: str) -> bool:
-    stripped = output.strip()
-    if stripped and _json_object(stripped) is not None:
-        return True
-    for line in reversed(output.splitlines()):
-        if not line.strip():
-            continue
-        return _json_object(line.strip()) is not None
-    return False

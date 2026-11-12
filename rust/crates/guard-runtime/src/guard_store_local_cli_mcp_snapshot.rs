@@ -21,7 +21,7 @@ const MAX_SNAPSHOT_BYTES: usize = 2_000_000;
 const MAX_SNAPSHOT_TOOLS: usize = 10_000;
 /// `_skill_metadata_snapshot` keeps at most a thousand known skills.
 const MAX_SKILL_ENTRIES: usize = 1_000;
-/// `mcp_skills.{_EXTENSION, _MIN_SKILLS_VERSION}`.
+/// The MCP Skills extension name and the first protocol version that has it.
 const SKILLS_EXTENSION: &str = "io.modelcontextprotocol/skills";
 const MIN_SKILLS_VERSION: (i64, u32, u32) = (2026, 7, 28);
 
@@ -355,9 +355,12 @@ fn skill_metadata_snapshot(
     })
 }
 
-/// `mcp_skills_declared`: the server has to name the skills extension and
-/// serve resources, on a protocol version that has the extension at all.
-fn skills_declared(capabilities: Option<&Value>, protocol_version: Option<&Value>) -> bool {
+/// The server has to name the skills extension and serve resources, on a
+/// protocol version that has the extension at all.
+pub(crate) fn skills_declared(
+    capabilities: Option<&Value>,
+    protocol_version: Option<&Value>,
+) -> bool {
     let Some(Value::String(version)) = protocol_version else {
         return false;
     };

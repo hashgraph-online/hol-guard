@@ -11,15 +11,19 @@ import pytest
 from codex_plugin_scanner.guard.adapters import get_adapter, list_adapters
 from codex_plugin_scanner.guard.adapters.base import HarnessContext, _shell_command
 from codex_plugin_scanner.guard.adapters.devin import DevinHarnessAdapter
-from codex_plugin_scanner.guard.adapters.devin_config import (
-    DEVIN_GUARD_TOOL_MATCHER,
-    GUARD_MANAGED_MARKER,
-    is_guard_managed_hook_command,
-    load_devin_jsonc,
-)
 from codex_plugin_scanner.guard.inventory_contract import _agent_type
+from codex_plugin_scanner.guard.native_runner_authority import native_runner_authority
 
 FIXTURES = Path(__file__).parent / "fixtures" / "devin"
+GUARD_MANAGED_MARKER = "HOL_GUARD_MANAGED_DEVIN"
+DEVIN_GUARD_TOOL_MATCHER = (
+    "^(exec|read|write|edit|apply_patch|notebook_read|notebook_edit|grep|glob|webfetch|mcp_call_tool|mcp__.*)$"
+)
+
+
+def is_guard_managed_hook_command(command: object) -> bool:
+    request = {"op": "managed", "harness": "devin", "commands": [command]}
+    return native_runner_authority("harness_hook_settings", request) == {"managed": [True]}
 
 
 def _ctx(tmp_path: Path, *, workspace: bool = False) -> HarnessContext:
@@ -206,14 +210,6 @@ class TestDevinDetect:
         result = DevinHarnessAdapter().detect(ctx)
         hooks = [a for a in result.artifacts if a.artifact_type == "hook"]
         assert any(a.command == "echo jsonc-hook" for a in hooks)
-
-    def test_load_devin_jsonc_flags_commented_payload(self, tmp_path: Path) -> None:
-        path = tmp_path / "config.json"
-        path.write_text((FIXTURES / "config_with_comments.jsonc").read_text(encoding="utf-8"), encoding="utf-8")
-        document = load_devin_jsonc(path)
-        assert document.had_comments is True
-        assert document.parse_failed is False
-        assert document.payload["permissions"]["allow"] == ["exec(ls*)"]
 
     def test_unparseable_config_warns_and_is_still_found(self, tmp_path: Path) -> None:
         ctx = _ctx(tmp_path)

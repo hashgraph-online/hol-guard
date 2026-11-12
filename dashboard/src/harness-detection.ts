@@ -9,7 +9,7 @@ import { normalizeVersionCompatibility, type HarnessVersionCompatibility } from 
 export type DetectedAppStatus = "protected" | "partial" | "found_unprotected" | "needs_repair" | "not_found";
 
 export type GuardHarnessSetupItem = GuardHarnessSetupContract & {
-  status: "protected" | "found" | "not_found";
+  status: "protected" | "needs_repair" | "found" | "not_found";
   observed_copy: string;
   installed: boolean;
   command_available: boolean;
@@ -86,20 +86,46 @@ export function isHarnessDetectedItems(
   return items.some((item) => item.harness === harness && item.status !== "not_found");
 }
 
+/**
+ * Whether an inactive install record still marks its app for repair.
+ *
+ * Disconnecting an app is what leaves its record inactive, and the daemon's setup status already
+ * reconciles that record: a disconnected app comes back as found or not_found. Only those two clear
+ * it. Any other status, or none yet, keeps the inactive record a repair target, so a stale
+ * "protected" can never make a disconnected app look protected.
+ */
+export function inactiveInstallNeedsRepair(
+  install: { active?: boolean },
+  setupStatus: GuardHarnessSetupItem["status"] | undefined,
+): boolean {
+  return install.active !== true && setupStatus !== "found" && setupStatus !== "not_found";
+}
+
 export function resolveDetectedAppStatus(
   install: { active?: boolean } | undefined,
   protectionHealth: GuardProtectionAppHealth,
   hasInventory: boolean,
   hasReceipts: boolean,
   detected: boolean,
+  // The daemon's status already reconciles the install record with the latest setup check, the same one Guard Cloud shows.
+  setupStatus?: GuardHarnessSetupItem["status"],
 ): DetectedAppStatus {
-  if (install !== undefined) {
+  if (setupStatus === "needs_repair") return "needs_repair";
+  if (install !== undefined && (install.active === true || inactiveInstallNeedsRepair(install, setupStatus))) {
     const hookCheck = protectionHealth.checks.find((check) => check.check_id === "harness_hooks");
     if (!install.active || hookCheck?.status !== "pass") return "needs_repair";
     if (protectionHealth.state === "protected") return "protected";
     return "partial";
   }
+  if (setupStatus === "protected") return "protected";
   return hasInventory || hasReceipts || detected ? "found_unprotected" : "not_found";
+}
+
+export function setupStatusFor(
+  state: HarnessDetectionState,
+  harness: string,
+): GuardHarnessSetupItem["status"] | undefined {
+  return state.kind === "ready" ? state.items.find((item) => item.harness === harness)?.status : undefined;
 }
 
 export function versionCompatibilityFor(

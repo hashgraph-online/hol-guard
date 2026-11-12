@@ -83,13 +83,19 @@ fn the_fetching_verbs_and_a_bare_directory_keep_their_review() {
             assert_eq!(minimum, "review", "{reason} {harness}: {command}");
         }
     }
-    // Without a phase Maven prints its help, and a bare option is no evidence
-    // of local work either, so neither reaches the sandbox.
-    for command in ["mvn", "mvn -version"] {
-        for harness in ["codex", "claude-code", "omp"] {
-            let (reason, _) = outcome(harness, command, &ws);
-            assert_ne!(reason, CONTAINED, "{harness}: {command}");
-        }
+    // Without a phase Maven prints its help, which is no evidence of local
+    // work, so it does not reach the sandbox.
+    for harness in ["codex", "claude-code", "omp"] {
+        let (reason, _) = outcome(harness, "mvn", &ws);
+        assert_ne!(reason, CONTAINED, "{harness}: mvn");
+    }
+    // `-version` is the spelling Maven documents, and a lone one prints the
+    // version and exits. The package firewall no longer claims it, so inside
+    // a project it takes the ordinary workspace route and runs without
+    // asking rather than queueing a review for a version string.
+    for harness in ["codex", "claude-code", "omp"] {
+        let (reason, minimum) = outcome(harness, "mvn -version", &ws);
+        assert_ne!(minimum, "review", "{reason} {harness}: mvn -version");
     }
     // Outside a project Maven resolves everything it runs from a remote
     // repository, so the same phase keeps its review.

@@ -5,21 +5,23 @@
 //! daemon route a call identically:
 //!
 //! * `containment_route` reads the native result. A `sandbox-required`
-//!   result goes to the sink; an outside-roots review a broad grant may lift
-//!   first asks this device's local CLI grant; anything else keeps its answer.
+//!   result goes to the sink; anything else keeps its answer, so an
+//!   outside-roots review an allowed CLI covers is left to the edge's custom
+//!   rule, which allows it.
 //! * `containment_sink` reads the rendered receipt, the harness, the host and
 //!   the shape of the call, and names the profile the sink runs it under, or
 //!   why the receipt stands.
 //!
 //! The host table is explicit: macOS runs every contained profile, Linux the
-//! workspace sandbox, Windows installed Python and Node scripts, a project's
-//! own pytest, Vite builds and local tool checks, and only for Claude Code and
-//! Codex. Any other host has no sink and says so; nothing here allows a call.
+//! workspace sandbox and every read-only profile, Windows installed Python and
+//! Node scripts, a project's own pytest, Vite builds and local tool checks, and
+//! only for Claude Code and Codex. Any other host has no sink and says so;
+//! nothing here allows a call.
 //!
 //! The approval invariant holds: a review that is not routed keeps its card
-//! with Allow once and Always allow, and a review the grant takes still ends
-//! at the sink, which asks the store for the grant again. A malformed query is
-//! an error the transport reports as a resident outage, never a default route.
+//! with Allow once and Always allow, and a review an allowed CLI lifts runs
+//! as that Always allow would. A malformed query is an error the transport
+//! reports as a resident outage, never a default route.
 
 use guard_contracts::{
     ContainmentRouteInputsV1, ContainmentRouteV1, ContainmentSinkInputsV1, ContainmentSinkV1,
@@ -27,22 +29,41 @@ use guard_contracts::{
 };
 use serde_json::Value;
 
-use crate::hook_direct::saved_decision::overridable_action_type;
-use crate::local_cli_hook_contained::OUTSIDE_ROOTS_REASON;
-
 const PRE_TOOL_USE: &str = "PreToolUse";
 const SANDBOX_REQUIRED: &str = "sandbox-required";
-const REVIEW: &str = "review";
 const PRE_TOOL_EVENTS: [&str; 2] = ["PreToolUse", "pre_tool_use"];
-const SHELL_TOOLS: [&str; 4] = ["Bash", "bash", "run_terminal_command", "run_command"];
-/// Harnesses whose hook applies `updatedInput` on its own; Codex is routed
-/// only by its bridge, which first confirms the running Codex applies it.
-const ROUTED_HARNESSES: [&str; 2] = ["zcode", "claude-code"];
-const BRIDGE_HARNESS: &str = "codex";
+const SHELL_TOOLS: [&str; 5] = [
+    "Bash",
+    "bash",
+    "run_terminal_command",
+    "run_command",
+    "Shell",
+];
+/// Harnesses whose hook applies `updatedInput` on its own. Codex is routed
+/// only by its bridge, which first confirms the running Codex applies it,
+/// and Cursor only by its silent `preToolUse` probe for `Shell`, whose
+/// `updated_input` Cursor applies before `beforeShellExecution` runs.
+const ROUTED_HARNESSES: [&str; 3] = ["zcode", "claude-code", "grok"];
+const BRIDGE_HARNESSES: [&str; 2] = ["codex", "cursor"];
 /// The sink command is quoted for Git Bash, or PowerShell for Codex; any
 /// other harness on Windows keeps its single review.
 const WINDOWS_SINK_HARNESSES: [&str; 2] = ["claude-code", "codex"];
-const LINUX_PROFILES: [&str; 1] = ["workspace-contained-v1"];
+/// Linux runs the workspace sandbox and every read-only profile, each under a
+/// bubblewrap mount. `package-test-readonly-v1` is here although the launch
+/// never sees it: a package test re-plans as the runner its script spells, so
+/// the string is only the one the receipt names for this gate to match.
+pub(crate) const LINUX_PROFILES: [&str; 10] = [
+    "workspace-contained-v1",
+    "python-eval-readonly-v1",
+    "node-eval-readonly-v1",
+    "node-build-output-v1",
+    "node-tool-readonly-v1",
+    "node-test-readonly-v1",
+    "vitest-readonly-v1",
+    "git-readonly-v1",
+    "pytest-readonly-v2",
+    "package-test-readonly-v1",
+];
 const WINDOWS_PROFILES: [&str; 5] = [
     "python-eval-readonly-v1",
     "node-eval-readonly-v1",
@@ -109,6 +130,19 @@ pub(crate) fn edge_route(event_name: &str, result: &Value, recording_only: bool)
     route(&inputs).to_owned()
 }
 
+/// The host as the resident's containment decisions name it.
+pub(crate) fn host_platform() -> &'static str {
+    if cfg!(target_os = "macos") {
+        "macos"
+    } else if cfg!(target_os = "linux") {
+        "linux"
+    } else if cfg!(windows) {
+        "windows"
+    } else {
+        "other"
+    }
+}
+
 fn route(inputs: &ContainmentRouteInputsV1) -> &'static str {
     if inputs.recording_only || inputs.event_name.as_deref() != Some(PRE_TOOL_USE) {
         return "none";
@@ -116,13 +150,6 @@ fn route(inputs: &ContainmentRouteInputsV1) -> &'static str {
     let is = |field: &Option<String>, value: &str| field.as_deref() == Some(value);
     if is(&inputs.minimum_action, SANDBOX_REQUIRED) || is(&inputs.policy_action, SANDBOX_REQUIRED) {
         return "sink";
-    }
-    if is(&inputs.minimum_action, REVIEW)
-        && is(&inputs.policy_action, REVIEW)
-        && is(&inputs.reason_code, OUTSIDE_ROOTS_REASON)
-        && overridable_action_type(inputs.action_type.as_ref())
-    {
-        return "grant";
     }
     "none"
 }
@@ -151,7 +178,9 @@ fn sink(inputs: &ContainmentSinkInputsV1, host: Host) -> Result<&'static str, &'
         return Err("receipt_only");
     }
     let harness = inputs.harness.as_str();
-    if !(ROUTED_HARNESSES.contains(&harness) || (inputs.bridge && harness == BRIDGE_HARNESS)) {
+    if !(ROUTED_HARNESSES.contains(&harness)
+        || (inputs.bridge && BRIDGE_HARNESSES.contains(&harness)))
+    {
         return Err("harness_not_routed");
     }
     if text(&inputs.decision) != Some("deny")

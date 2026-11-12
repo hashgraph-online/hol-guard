@@ -1,4 +1,5 @@
 import { recordBusinessQueueReadResult } from "./business-review-queue-status";
+import { parseNativeDecisionSelector } from "./context-assistance/native-decision-selector";
 import {
   GUARD_ACTION_TYPES,
   GUARD_DECISION_V2_ACTIONS,
@@ -109,6 +110,8 @@ const GUARD_DAEMON_PORT_RANGE = 1000;
 const GUARD_DAEMON_DISCOVERY_PROBE_COUNT = 25;
 const GUARD_DAEMON_DISCOVERY_PROBE_BATCH_SIZE = 5;
 const GUARD_DAEMON_PROBE_TIMEOUT_MS = 800;
+// A known daemon gets time for its busy retries; only the port scan stays short.
+const GUARD_DAEMON_CANDIDATE_TIMEOUT_MS = 10_000;
 const GUARD_DAEMON_RECONNECT_PROTOCOL_VERSION = 1;
 const GUARD_DAEMON_RECONNECT_NONCE_BYTES = 32;
 const RUNTIME_HEARTBEAT_MAX_AGE_MS = 30_000;
@@ -440,9 +443,11 @@ async function probeGuardDaemonHealth(origin: string): Promise<boolean> {
     return false;
   }
   try {
-    const { response, payload } = await fetchGuardDaemonCandidateJson(`${candidateOrigin}/healthz`, {
-      redirect: "error",
-    });
+    const { response, payload } = await fetchGuardDaemonCandidateJson(
+      `${candidateOrigin}/healthz`,
+      { redirect: "error" },
+      GUARD_DAEMON_PROBE_TIMEOUT_MS,
+    );
     if (!response.ok) {
       return false;
     }
@@ -458,9 +463,10 @@ async function probeGuardDaemonHealth(origin: string): Promise<boolean> {
 async function fetchGuardDaemonCandidateJson(
   input: RequestInfo,
   init: RequestInit,
+  timeoutMs = GUARD_DAEMON_CANDIDATE_TIMEOUT_MS,
 ): Promise<{ response: Response; payload: unknown }> {
   const controller = new AbortController();
-  const timeoutId = window.setTimeout(() => controller.abort(), GUARD_DAEMON_PROBE_TIMEOUT_MS);
+  const timeoutId = window.setTimeout(() => controller.abort(), timeoutMs);
   try {
     const response = await daemonFetch(input, { ...init, signal: controller.signal });
     const payload: unknown = await response.json();
@@ -1002,11 +1008,61 @@ function withGuardAuth(init?: RequestInit): RequestInit | undefined {
   return withGuardAuthForToken(init, readGuardToken());
 }
 
+// A busy computer can keep Guard's policy check from answering in time. The
+// daemon then refuses the request before acting on it, so sending it again
+// is safe. A refused restart is not busy and is not retried.
+const BUSY_RETRY_DELAYS_MS = [300, 900, 2_000];
+
+async function isBusyRefusal(response: Response): Promise<boolean> {
+  if (response.status !== 503) {
+    return false;
+  }
+  try {
+    const payload: unknown = await response.clone().json();
+    return (
+      isRecord(payload) &&
+      payload["error"] === "native_route_policy_unavailable" &&
+      payload["reason_code"] === undefined
+    );
+  } catch {
+    return false;
+  }
+}
+
+// An abort during the wait rejects the way fetch does, so callers that
+// recover from a timed-out request still see the AbortError.
+function waitForRetry(delayMs: number, signal: AbortSignal | null | undefined): Promise<void> {
+  return new Promise((resolve, reject) => {
+    if (signal?.aborted) {
+      reject(signal.reason);
+      return;
+    }
+    const timer = setTimeout(() => {
+      signal?.removeEventListener("abort", onAbort);
+      resolve();
+    }, delayMs);
+    function onAbort(): void {
+      clearTimeout(timer);
+      reject(signal?.reason);
+    }
+    signal?.addEventListener("abort", onAbort, { once: true });
+  });
+}
+
 // Every daemon response names the dashboard bundle it serves; note it so a tab
 // left running an older bundle after a Guard update can load the current one.
 async function daemonFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
-  const response = await fetch(input, init);
+  let response = await fetch(input, init);
   observeDashboardBuild(response);
+  const resendable = !(input instanceof Request) && (init?.body == null || typeof init.body === "string");
+  for (const delayMs of resendable ? BUSY_RETRY_DELAYS_MS : []) {
+    if (!(await isBusyRefusal(response))) {
+      break;
+    }
+    await waitForRetry(delayMs, init?.signal);
+    response = await fetch(input, init);
+    observeDashboardBuild(response);
+  }
   return response;
 }
 
@@ -1168,6 +1224,10 @@ async function refreshGuardDashboardSession(guardToken: string, signal?: AbortSi
 }
 
 export function guardAwareHref(href: string): string {
+  // An app link such as hol-guard-desktop:// opens outside this browser and never carries the session token.
+  if (/^[a-z][a-z0-9+.-]*:/i.test(href) && !/^https?:/i.test(href)) {
+    return href;
+  }
   const guardToken = readGuardToken();
   if (!guardToken) {
     return href;
@@ -1338,6 +1398,7 @@ export function parseActionEnvelope(raw: unknown): GuardActionEnvelope | null {
   if (!isRecord(rawPayloadRedacted)) {
     return null;
   }
+  const nativeOrigin = parseNativeDecisionSelector(raw["native_origin_receipt"], harness, eventName);
   return {
     schema_version: schemaVersion,
     action_id: actionId,
@@ -1364,7 +1425,8 @@ export function parseActionEnvelope(raw: unknown): GuardActionEnvelope | null {
       ? {}
       : { policy_action: isGuardAction(policyAction) ? policyAction : null }),
     script_name: scriptName,
-    raw_payload_redacted: rawPayloadRedacted
+    raw_payload_redacted: rawPayloadRedacted,
+    ...(nativeOrigin ? { native_origin_receipt: nativeOrigin } : {}),
   };
 }
 
@@ -2367,7 +2429,7 @@ function applyHarnessPosturePatch(
   return next;
 }
 
-export type GuardSettingsUpdate = Omit<Partial<GuardSettings>, "harness_postures"> & {
+export type GuardSettingsUpdate = Omit<Partial<GuardSettings>, "harness_postures" | "context_assistance_diagnostic" | "context_assistance_requested"> & {
   harness_postures?: GuardHarnessPosturePatch;
 };
 
@@ -4270,26 +4332,33 @@ export async function runPackageAudit(input?: {
   return normalizePackageFirewallAction(payloadBody);
 }
 
+/** How long the dashboard waits for a supply-chain sync before it stops waiting and rechecks status. */
+export const SUPPLY_CHAIN_SYNC_TIMEOUT_MS = 45_000;
+
 export async function runPackageSync(credentials?: {
   approval_password?: string;
   approval_totp_code?: string;
 }): Promise<PackageFirewallActionResponse> {
-  const response = await fetchGuardApi("/v1/supply-chain/sync", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      ...guardAuthHeaders(),
+  const { response, payload: payloadBody } = await fetchLocalProtectionJson(
+    "/v1/supply-chain/sync",
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...guardAuthHeaders(),
+      },
+      body: JSON.stringify({
+        ...(credentials?.approval_password !== undefined
+          ? { approval_password: credentials.approval_password }
+          : {}),
+        ...(credentials?.approval_totp_code !== undefined
+          ? { approval_totp_code: credentials.approval_totp_code }
+          : {}),
+      }),
     },
-    body: JSON.stringify({
-      ...(credentials?.approval_password !== undefined
-        ? { approval_password: credentials.approval_password }
-        : {}),
-      ...(credentials?.approval_totp_code !== undefined
-        ? { approval_totp_code: credentials.approval_totp_code }
-        : {}),
-    }),
-  });
-  const payloadBody = (await response.json().catch(() => null)) as unknown;
+    SUPPLY_CHAIN_SYNC_TIMEOUT_MS,
+    "Guard Cloud did not answer the intel sync in time. Guard rechecked the feed status; try syncing again if it is still out of date.",
+  );
   if (!response.ok) {
     throw new GuardHarnessActionError(
       response.status,

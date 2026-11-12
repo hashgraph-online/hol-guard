@@ -16,7 +16,7 @@ use crate::local_store_read::{
     open_read_only_cached, schema_version, table_exists, CachedConnection, STORE_FILE_NAME,
     SUPPORTED_SCHEMA_VERSION,
 };
-use crate::policy_bundle_store_identities::cached_bundle_identities;
+use crate::policy_bundle_store_identities::cached_bundle_authority;
 use crate::policy_store::policy_store_direct_lane::DirectLaneBinding;
 use base64ct::{Base64UrlUnpadded, Encoding};
 use rusqlite::{Connection, OptionalExtension};
@@ -25,6 +25,9 @@ use std::path::Path;
 use zeroize::Zeroizing;
 
 pub(super) const STORE_UNREADABLE: &str = "mcp_relay_store_unreadable";
+/// A store schema newer than this runtime reads, which the proxy of the same
+/// release still serves.
+pub(super) const STORE_NEWER: &str = "mcp_relay_store_newer";
 pub(super) const SAVED_REMOTE: &str = "mcp_relay_saved_remote_policy";
 const SAVED_UNVERIFIABLE: &str = "mcp_relay_saved_policy_unverifiable";
 /// `REMOTE_POLICY_SOURCES` (`policy_integrity.py`).
@@ -42,17 +45,18 @@ pub(super) fn open(guard_home: &Path) -> Result<Option<CachedConnection>, &'stat
     };
     match schema_version(&connection).map_err(|_| STORE_UNREADABLE)? {
         Some(version) if version <= SUPPORTED_SCHEMA_VERSION => Ok(Some(connection)),
-        _ => Err(STORE_UNREADABLE),
+        Some(_) => Err(STORE_NEWER),
+        None => Err(STORE_UNREADABLE),
     }
 }
 
 /// The evidence `policy_lookup_evidence` ships for every lookup of one call,
 /// on the snapshot the caller holds open.
-pub(super) struct Saved<'c> {
+pub(crate) struct Saved<'c> {
     pub(super) connection: &'c Connection,
     pub(super) store_path: String,
     pub(super) guard_home: String,
-    pub(super) now: String,
+    pub(crate) now: String,
     /// A row from a local source: only then does the proxy ship the policy
     /// key and the refreshed integrity state.
     pub(super) has_local_policy: bool,
@@ -62,19 +66,34 @@ pub(super) struct Saved<'c> {
     /// The decision identities the cached signed bundle authorizes; empty
     /// when no policy-bundle row can reach this call.
     pub(super) bundle_identities: Vec<Vec<Value>>,
+    /// The validated bundle every lookup of this call matches Cloud
+    /// exceptions against, read on the first lookup that needs it.
+    pub(super) exception_bundle: guard_contracts::CloudExceptionBundle,
 }
 
 /// `None` when the store holds no saved row, so every lookup misses; the
 /// saved-row evidence when the resident reads the rows as the proxy would;
 /// a defer code for every other store.
-pub(super) fn saved<'c>(
+pub(crate) fn saved<'c>(
     connection: &'c Connection,
     binding: &DirectLaneBinding,
     guard_home: &str,
     harness: &str,
 ) -> Result<Option<Saved<'c>>, &'static str> {
-    let shape = Shape { connection };
     let now = utc_now().ok_or(SAVED_UNVERIFIABLE)?;
+    saved_at(connection, binding, guard_home, harness, now)
+}
+
+/// `saved`, judged at the caller's `now`: the cached bundle is validated at
+/// the same time the lookup is evaluated at.
+pub(crate) fn saved_at<'c>(
+    connection: &'c Connection,
+    binding: &DirectLaneBinding,
+    guard_home: &str,
+    harness: &str,
+    now: String,
+) -> Result<Option<Saved<'c>>, &'static str> {
+    let shape = Shape { connection };
     let has_local_policy = shape.any(
         "policy_decisions",
         &format!("select 1 from policy_decisions where source not in {REMOTE_SOURCES_SQL}"),
@@ -100,7 +119,9 @@ pub(super) fn saved<'c>(
     // are derived last, so a store the resident cannot verify never pays for
     // the bundle's signature and payload checks.
     let bundle_identities = if shape.bundle_row_for(harness)? {
-        cached_bundle_identities(connection, &now).ok_or(SAVED_REMOTE)?
+        cached_bundle_authority(connection, &now)
+            .ok_or(SAVED_REMOTE)?
+            .0
     } else {
         Vec::new()
     };
@@ -117,12 +138,13 @@ pub(super) fn saved<'c>(
         key_b64: Zeroizing::new(Base64UrlUnpadded::encode_string(&key.key)),
         key_id: key.key_id.clone(),
         bundle_identities,
+        exception_bundle: Default::default(),
     }))
 }
 
 /// The integrity state and key the daemon published, when they are the
 /// protected, enforced, cut-over state its key signs.
-pub(super) fn published_integrity(
+pub(crate) fn published_integrity(
     binding: &DirectLaneBinding,
 ) -> Result<
     (
@@ -217,11 +239,12 @@ impl Shape<'_> {
 
 impl Saved<'_> {
     /// `policy_decision_lookup_request` for one non-consuming probe.
-    pub(super) fn lookup_request(
+    pub(crate) fn lookup_request(
         &self,
         probe: &Probe<'_>,
     ) -> guard_contracts::PolicyDecisionLookupRequestV1 {
         let policy_key = self.has_local_policy;
+        let identities = self.bundle_identities.clone();
         guard_contracts::PolicyDecisionLookupRequestV1 {
             schema: guard_contracts::POLICY_DECISION_LOOKUP_REQUEST_SCHEMA.to_owned(),
             request_id: String::new(),
@@ -245,8 +268,9 @@ impl Saved<'_> {
             integrity_key_id: policy_key.then(|| self.key_id.clone()),
             local_once_integrity_key_b64: Some(self.key_b64.to_string()),
             local_once_integrity_key_id: Some(self.key_id.clone()),
-            policy_bundle_decision_identities: (!self.bundle_identities.is_empty())
-                .then(|| self.bundle_identities.clone()),
+            policy_bundle_decision_identities: (!identities.is_empty()).then_some(identities),
+            exception_workspace: probe.exception_workspace.map(str::to_owned),
+            cloud_exception_bundle: self.exception_bundle.clone(),
             probe_groups: None,
             portable_workspace: None,
             evidence_binding: None,
@@ -277,11 +301,13 @@ impl Saved<'_> {
 }
 
 /// One probe's selectors.
-pub(super) struct Probe<'a> {
-    pub(super) harness: &'a str,
-    pub(super) artifact_id: &'a str,
-    pub(super) artifact_hash: Option<&'a str>,
-    pub(super) workspace: Option<&'a str>,
-    pub(super) publisher: Option<&'a str>,
-    pub(super) exact_match_context: Option<&'a str>,
+pub(crate) struct Probe<'a> {
+    pub(crate) harness: &'a str,
+    pub(crate) artifact_id: &'a str,
+    pub(crate) artifact_hash: Option<&'a str>,
+    pub(crate) workspace: Option<&'a str>,
+    pub(crate) publisher: Option<&'a str>,
+    pub(crate) exact_match_context: Option<&'a str>,
+    /// The checkout a portable probe stands for, which Cloud exceptions name.
+    pub(crate) exception_workspace: Option<&'a str>,
 }

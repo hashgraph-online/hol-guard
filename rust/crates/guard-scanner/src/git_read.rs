@@ -17,11 +17,15 @@
 
 use std::error::Error;
 use std::fmt;
-use std::io::{self, Read};
+use std::io;
 use std::path::Path;
 use std::process::{Command, Stdio};
 use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
+
+use zeroize::Zeroizing;
+
+use crate::wiped_read::read_whole_or_fail;
 
 /// `_GIT_TIMEOUT_SECONDS` from the Python module.
 pub const GIT_TIMEOUT_SECONDS: u64 = 20;
@@ -39,9 +43,13 @@ pub struct CompletedOutput {
     /// or `-signal` when the child was killed by a signal (POSIX only).
     pub returncode: i32,
     /// Captured stdout bytes.
-    pub stdout: Vec<u8>,
-    /// Captured stderr bytes.
-    pub stderr: Vec<u8>,
+    ///
+    /// `git cat-file blob` hands back a file's whole contents, so this buffer
+    /// is plaintext. Wrapping it wipes it on every drop, including the ones a
+    /// caller never sees, and keeps the derived `Debug` from printing it.
+    pub stdout: Zeroizing<Vec<u8>>,
+    /// Captured stderr bytes, wrapped for the same reason as `stdout`.
+    pub stderr: Zeroizing<Vec<u8>>,
 }
 
 /// Failure modes of [`run_git`], mirroring the exceptions Python callers
@@ -55,7 +63,10 @@ pub enum GitError {
     Timeout,
     /// Non-zero exit status, mirroring `CalledProcessError` (`check=True` with
     /// `returncode != 0`): carries the code and the captured stderr.
-    NonZero { code: i32, stderr: Vec<u8> },
+    NonZero {
+        code: i32,
+        stderr: Zeroizing<Vec<u8>>,
+    },
     /// Catch-all for `subprocess.SubprocessError`-style failures (e.g. a
     /// drained-pipe reader thread panicking).
     Subprocess(String),
@@ -106,13 +117,15 @@ fn raw_returncode(status: &std::process::ExitStatus) -> i32 {
 
 /// Drain one piped stream into the `Ok(stdout)`/`Ok(stderr)` buffers, mapping
 /// reader failures the same way Python maps `OSError`.
-fn drain(reader: Option<JoinHandle<io::Result<Vec<u8>>>>) -> Result<Vec<u8>, GitError> {
+fn drain(
+    reader: Option<JoinHandle<io::Result<Zeroizing<Vec<u8>>>>>,
+) -> Result<Zeroizing<Vec<u8>>, GitError> {
     match reader {
         Some(handle) => handle
             .join()
             .map_err(|_| GitError::Subprocess("pipe reader thread panicked".to_string()))?
             .map_err(GitError::Spawn),
-        None => Ok(Vec::new()),
+        None => Ok(Zeroizing::new(Vec::new())),
     }
 }
 
@@ -136,18 +149,14 @@ fn run_program(
 
     // Drain both pipes concurrently with the poll loop: `try_wait` alone
     // would leave a child blocked on a full pipe buffer past the deadline.
-    let stdout_reader = child.stdout.take().map(|mut pipe| {
-        thread::spawn(move || {
-            let mut buffer = Vec::new();
-            pipe.read_to_end(&mut buffer).map(|_| buffer)
-        })
-    });
-    let stderr_reader = child.stderr.take().map(|mut pipe| {
-        thread::spawn(move || {
-            let mut buffer = Vec::new();
-            pipe.read_to_end(&mut buffer).map(|_| buffer)
-        })
-    });
+    let stdout_reader = child
+        .stdout
+        .take()
+        .map(|mut pipe| thread::spawn(move || read_whole_or_fail(&mut pipe)));
+    let stderr_reader = child
+        .stderr
+        .take()
+        .map(|mut pipe| thread::spawn(move || read_whole_or_fail(&mut pipe)));
 
     let deadline = Instant::now() + Duration::from_secs(timeout_secs);
     let status = loop {

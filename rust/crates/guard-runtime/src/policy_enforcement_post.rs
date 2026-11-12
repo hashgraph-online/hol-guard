@@ -183,7 +183,7 @@ pub(crate) fn apply_post_tool_policy_with_delivery(
         return Ok(response);
     }
     let cause = (action_rank(&floor) > action_rank(&intrinsic)).then_some(floor_cause);
-    let (reason_code, reason) = policy_override_reason(&effective, cause, false);
+    let (reason_code, reason) = policy_override_reason(&effective, cause, PromptStop::NotPrompt);
     let mut denied = HookReviewResponseV1::deny(reason_code, reason);
     denied.policy_action = Some(effective);
     Ok(denied)

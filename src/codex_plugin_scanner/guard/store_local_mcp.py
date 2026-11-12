@@ -6,13 +6,9 @@ import sqlite3
 from collections.abc import Iterator, Mapping, Sequence
 from contextlib import AbstractContextManager, contextmanager
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, Any, TypedDict, cast
 
-from .runtime.composio_contract import composio_tool_role
-from .runtime.composio_discovery import ComposioActionSchema
-from .runtime.composio_workflows import ComposioWorkflowProposal
 from .runtime.local_cli_identity import UnlistedCliIdentity
-from .runtime.observed_mcp_tools import ObservedMcpTool, observed_mcp_tool
 from .store_local_cli_retention import LocalCliReplaySkippedError, utc_now_iso
 from .store_local_cli_schema import ensure_local_cli_schema
 from .store_mcp_provider_catalog import describe_provider_actions
@@ -21,6 +17,38 @@ if TYPE_CHECKING:
     from .store import GuardStore
 
 _OBSERVED_MCP_ACTIONS = frozenset({"allow", "review", "block"})
+_CONNECTOR_KEYS = frozenset({"harness", "namespace", "server_name", "seen_at", "tools"})
+
+
+class ObservedMcpConnectorTool(TypedDict):
+    name: str
+    qualified_name: str
+
+
+class ObservedMcpConnector(TypedDict):
+    harness: str
+    namespace: str
+    server_name: str
+    seen_at: str | None
+    tools: list[ObservedMcpConnectorTool]
+
+
+def _valid_connector(item: object) -> bool:
+    if not isinstance(item, dict) or set(item) != _CONNECTOR_KEYS:
+        return False
+    connector = cast("dict[str, object]", item)
+    tools = connector["tools"]
+    return (
+        all(isinstance(connector[key], str) for key in ("harness", "namespace", "server_name"))
+        and (connector["seen_at"] is None or isinstance(connector["seen_at"], str))
+        and isinstance(tools, list)
+        and all(
+            isinstance(tool, dict)
+            and set(tool) == {"name", "qualified_name"}
+            and all(isinstance(value, str) for value in cast("dict[str, object]", tool).values())
+            for tool in cast("list[object]", tools)
+        )
+    )
 
 
 class StoreLocalMcpMixin:
@@ -76,26 +104,16 @@ class StoreLocalMcpMixin:
             raise sqlite3.DatabaseError("native_mcp_provider_choices_invalid")
         return cast(dict[str, str], choices)
 
-    def observed_mcp_history(self, *, limit: int) -> tuple[list[dict[str, object]], list[dict[str, object]]]:
-        """Return the paused requests and receipts the connector scan reads.
+    def observed_mcp_discovery(self, *, configured_servers: dict[str, list[str]]) -> list[ObservedMcpConnector]:
+        """Return the connectors the harnesses were seen calling, as the resident groups them."""
 
-        The resident projects each row to the tool label, the harness and the
-        history timestamps, which is all the scan parses. Asking for whole
-        approval rows and whole receipts encoded a store with a few hundred of
-        either past the native response cap, and the refresh then failed
-        instead of discovering connectors.
-        """
-
-        page = self._native_store_call("observed_mcp_history", {"limit": limit})
-        if not isinstance(page, dict):
-            raise sqlite3.DatabaseError("native_observed_mcp_history_invalid")
-        batches: list[list[dict[str, object]]] = []
-        for key in ("approvals", "receipts"):
-            rows = cast(dict[str, object], page).get(key)
-            if not isinstance(rows, list) or any(not isinstance(row, dict) for row in rows):
-                raise sqlite3.DatabaseError("native_observed_mcp_history_invalid")
-            batches.append(cast("list[dict[str, object]]", rows))
-        return batches[0], batches[1]
+        answer = self._native_store_call("observed_mcp_discovery", {"configured_servers": configured_servers})
+        connectors = answer.get("connectors") if isinstance(answer, dict) and len(answer) == 1 else None
+        if not isinstance(connectors, list) or not all(
+            _valid_connector(item) for item in cast("list[object]", connectors)
+        ):
+            raise sqlite3.DatabaseError("native_observed_mcp_discovery_invalid")
+        return cast("list[ObservedMcpConnector]", connectors)
 
     def read_observed_mcp_tool_actions(self) -> dict[str, str]:
         """Return the operator's exact choices for observed MCP connectors."""
@@ -127,62 +145,6 @@ class StoreLocalMcpMixin:
         if digest is not None and not isinstance(digest, str):
             raise sqlite3.DatabaseError("native_mcp_provider_authority_invalid")
         return digest
-
-    def record_composio_discovery(
-        self,
-        source: ObservedMcpTool,
-        actions: tuple[ComposioActionSchema, ...],
-        *,
-        seen_at: str,
-        proposals: tuple[ComposioWorkflowProposal, ...] = (),
-    ) -> str:
-        if observed_mcp_tool(source.harness, source.qualified_name) != source or (
-            composio_tool_role(source.qualified_name) != "discovery"
-        ):
-            raise ValueError("invalid provider discovery source")
-        server = source.server_identity
-        cli_id = self.ensure_local_mcp_observation(
-            source.identity,
-            seen_at=seen_at,
-            server_identity_hash=server.identity_hash,
-            server_command=server.command,
-            server_args_hash=server.args_hash,
-            source_label=f"{source.harness.title()} · observed provider metadata",
-        )
-        args: dict[str, object] = {
-            "cli_id": cli_id,
-            "identity_hash": server.identity_hash,
-            "server_command": server.command,
-            "source_tool": source.qualified_name,
-            "seen_at": seen_at,
-            "actions": [
-                {
-                    "toolkit": action.toolkit,
-                    "tool_slug": action.tool_slug,
-                    "description": action.description,
-                    "input_schema": action.input_schema,
-                    "full_schema": bool(action.full_schema),
-                }
-                for action in actions
-            ],
-            "proposals": [
-                {
-                    "primary": list(proposal.primary),
-                    "supporting": list(proposal.supporting),
-                    "guidance_present": proposal.guidance_present,
-                }
-                for proposal in proposals
-            ],
-        }
-        result = self._native_store_call("record_composio_discovery", args)
-        if isinstance(result, dict) and result.get("need_barrier") is True:
-            # This batch moves the provider authority, which the native policy
-            # barrier has to bracket. The resident cannot reach the publishers
-            # that barrier notifies, so it wrote nothing and asked for one:
-            # close it and run the same write inside it.
-            with _notify_legacy_mcp_denial(cast("GuardStore", self).guard_home):
-                self._native_store_call("record_composio_discovery", {**args, "barrier_closed": True})
-        return cli_id
 
     def read_local_mcp_workflows(self, cli_id: str, *, offset: int = 0) -> dict[str, object]:
         return self._native_mcp_read(

@@ -4,10 +4,10 @@ from __future__ import annotations
 
 import json
 import urllib.parse
+from typing import cast
 
 CLOUD_REVIEW_EVENT_PROTOCOL_VERSION = 2
 _EVENTS_PATH = "/api/guard/review/v2/events:batch"
-_SUCCESS_STATUSES = frozenset({"accepted", "duplicate", "stale"})
 
 
 class CloudReviewEventProtocolError(RuntimeError):
@@ -92,76 +92,28 @@ def _normalize_response(
     events: list[dict[str, object]],
     sequences: list[int],
 ) -> dict[str, object]:
-    version = response.get("protocolVersion")
-    if version != CLOUD_REVIEW_EVENT_PROTOCOL_VERSION:
-        rendered = "missing" if version is None else str(version)
-        raise CloudReviewEventProtocolError(
-            f"Guard Cloud Review returned unsupported protocol version {rendered}. "
-            "Update HOL Guard and reconnect Guard Cloud before retrying."
-        )
-    results = response.get("results")
-    acknowledged_through = response.get("acknowledgedThrough")
-    if (
-        not isinstance(results, list)
-        or len(results) != len(events)
-        or type(acknowledged_through) is not int
-        or not 0 <= acknowledged_through <= 2**53 - 1
-    ):
-        raise CloudReviewEventProtocolError(
-            "Guard Cloud Review returned an invalid protocol 2 acknowledgement. Update HOL Guard before retrying."
-        )
-    normalized: list[dict[str, object]] = []
-    for index, item in enumerate(results):
-        expected_event_id = events[index].get("eventId")
-        if not isinstance(item, dict) or item.get("eventId") != expected_event_id:
-            raise CloudReviewEventProtocolError(
-                "Guard Cloud Review returned an acknowledgement for a different event. Retry after updating HOL Guard."
-            )
-        status = item.get("status")
-        if status not in {"accepted", "duplicate", "stale", "quarantined", "rejected"}:
-            raise CloudReviewEventProtocolError(
-                "Guard Cloud Review returned an unsupported event status. Update HOL Guard before retrying."
-            )
-        accepted = status in _SUCCESS_STATUSES
-        if accepted and sequences[index] > acknowledged_through:
-            raise CloudReviewEventProtocolError(
-                "Guard Cloud Review acknowledgement stopped before an accepted event. "
-                "Retry sync after updating HOL Guard."
-            )
-        normalized_item: dict[str, object] = {
-            "index": index,
-            "accepted": accepted,
-            "code": item.get("code"),
-            "error": None if accepted else (item.get("code") or status),
-        }
-        if status in {"accepted", "duplicate"} and item.get("nativeContextCommitted") is True:
-            normalized_item["nativeContextCommitted"] = True
-        if status == "rejected" and item.get("code") == "review_event_snapshot_sequence_collision":
-            normalized_item["eventId"] = expected_event_id
-        normalized.append(normalized_item)
-    accepted_count = sum(bool(item["accepted"]) for item in normalized)
-    if response.get("accepted") != accepted_count or response.get("rejected") != len(events) - accepted_count:
-        raise CloudReviewEventProtocolError(
-            "Guard Cloud Review acknowledgement counts are inconsistent. Retry after updating HOL Guard."
-        )
-    normalized_response: dict[str, object] = {
-        "accepted": accepted_count,
-        "delivered": sum(item.get("status") == "accepted" for item in results),
-        "rejected": len(events) - accepted_count,
-        "perEventResults": normalized,
-        "acknowledgedThrough": acknowledged_through,
-        "protocolVersion": CLOUD_REVIEW_EVENT_PROTOCOL_VERSION,
+    """Check Cloud's acknowledgement of one batch in the native ``cloud_review_ack`` kind."""
+
+    from ..native_runner_authority import NativeRunnerAuthorityError, native_runner_authority
+
+    request = {
+        "response": response,
+        "event_ids": [event.get("eventId") for event in events],
+        "sequences": sequences,
     }
-    for field in ("maxBatchEvents", "maxBatchBytes"):
-        value = response.get(field)
-        if value is None:
-            continue
-        if type(value) is not int or value <= 0:
-            raise CloudReviewEventProtocolError(
-                "Guard Cloud Review returned an invalid batch limit. Update HOL Guard before retrying."
-            )
-        normalized_response[field] = value
-    return normalized_response
+    try:
+        answer = native_runner_authority("cloud_review_ack", request)
+    except NativeRunnerAuthorityError as error:
+        raise CloudReviewEventProtocolError(
+            "Guard Cloud Review acknowledgement could not be checked without the HOL Guard native runtime."
+        ) from error
+    message = answer.get("error")
+    if isinstance(message, str):
+        raise CloudReviewEventProtocolError(message)
+    normalized = answer.get("response")
+    if not isinstance(normalized, dict):
+        raise CloudReviewEventProtocolError("HOL Guard native runtime returned a malformed Review acknowledgement.")
+    return cast("dict[str, object]", normalized)
 
 
 __all__ = [

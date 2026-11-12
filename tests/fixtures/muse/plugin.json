@@ -1,0 +1,19 @@
+{
+  "schemaVersion": 1,
+  "name": "example-plugin",
+  "displayName": "Example Plugin",
+  "version": "0.1.0",
+  "description": "Example Muse plugin.",
+  "compat": {"source": "native", "manifestDir": ".muse-plugin"},
+  "capabilities": {
+    "skills": [],
+    "commands": [],
+    "hooks": [
+      {"id": "pre-check", "event": "PreToolUse", "command": ["python3", "hooks/pre.py"], "timeoutMs": 1000}
+    ],
+    "mcpServers": [
+      {"id": "workspace-index", "transport": "stdio", "command": ["python3", "mcp/server.py"]}
+    ],
+    "reminders": []
+  }
+}

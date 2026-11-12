@@ -12,12 +12,11 @@ its historical ``ValueError(AUTHORITATIVE_DECISION_INCONSISTENT)`` contract.
 from __future__ import annotations
 
 import hashlib
-import json
 import secrets
 import threading
 from collections import OrderedDict
 from collections.abc import Mapping, Sequence
-from typing import Any
+from typing import Any, cast
 
 from ..native_runner_authority import NativeRunnerAuthorityError, native_runner_authority
 from .decisions import AUTHORITATIVE_DECISION_INCONSISTENT
@@ -44,11 +43,6 @@ NATIVE_ROW_REFUSAL_CODES = frozenset(
         "native_runner_authority_component_unencodable",
     }
 )
-# The resident accepts 4 MiB per request: send a snapshot in one call when it fits
-# and otherwise build its items in smaller chunks first.
-_ONE_SHOT_BYTES = 3_000_000
-_CHUNK_BYTES = 2_000_000
-
 # The only request-row columns the resident reads; every other column stays in
 # Python so a request stays far below the resident request cap.
 _ROW_KEYS = (
@@ -239,83 +233,19 @@ def cloud_sync_receipt_payloads(
     return payloads
 
 
-def cloud_safe_local_request_payload(
-    item: Mapping[str, object],
-    *,
-    redaction_level: str,
+def cloud_review_event(
+    item: Mapping[str, object], *, redaction_level: str, event: Mapping[str, object]
 ) -> dict[str, object]:
-    payload = _call(
-        "cloud_request_payload",
-        {"item": project_request_row(item), "redaction_level": redaction_level},
-    ).get("payload")
-    if not isinstance(payload, dict):
-        raise _invalid()
-    return payload
-
-
-def cloud_review_event_display(item: Mapping[str, object], *, redaction_level: str) -> dict[str, Any]:
-    """Display command/summary/provenance plus the safe request payload."""
+    """The Cloud review event for a request row and the facts Python read beside it."""
 
     answer = _call(
         "cloud_review_event_display",
-        {"item": project_request_row(item), "redaction_level": redaction_level},
+        {"item": project_request_row(item), "redaction_level": redaction_level, "event": event},
     )
-    if not isinstance(answer.get("payload"), dict) or not isinstance(answer.get("display_command"), str):
+    built: object = answer.get("event")
+    if len(answer) != 1 or not isinstance(built, dict):
         raise _invalid()
-    return answer
-
-
-def _encoded_size(value: object) -> int:
-    return len(json.dumps(value, ensure_ascii=False, allow_nan=False).encode("utf-8"))
-
-
-def _built_page(
-    common: Mapping[str, object],
-    status: str,
-    page: Mapping[str, object],
-) -> dict[str, object]:
-    """Build one page's items in chunks that each fit one resident request."""
-
-    entries = page.get("rows")
-    if not isinstance(entries, list):
+    event_body = cast(dict[str, object], built)
+    if not isinstance(event_body.get("requestPayload"), dict):
         raise _invalid()
-    items: list[object] = []
-    chunk: list[object] = []
-    chunk_bytes = 0
-    for entry in [*entries, None]:
-        entry_bytes = 0 if entry is None else _encoded_size(entry)
-        if chunk and (entry is None or chunk_bytes + entry_bytes > _CHUNK_BYTES):
-            built = _call("local_request_snapshot_items", {**common, "status": status, "rows": chunk}).get("items")
-            if not isinstance(built, list):
-                raise _invalid()
-            items.extend(built)
-            chunk, chunk_bytes = [], 0
-        if entry is not None:
-            chunk.append(entry)
-            chunk_bytes += entry_bytes
-    return {"items": items, "complete": page.get("complete")}
-
-
-def local_request_snapshot(
-    *,
-    redaction_level: str,
-    routing_inputs: Mapping[str, object],
-    now: str,
-    pending: Mapping[str, object],
-    resolved: Mapping[str, object],
-) -> dict[str, object]:
-    """The bounded snapshot; oversized row sets are built in resident-sized chunks."""
-
-    common: dict[str, object] = {
-        "redaction_level": redaction_level,
-        "routing_inputs": dict(routing_inputs),
-        "now": now,
-    }
-    args: dict[str, object] = {**common, "pending": dict(pending), "resolved": dict(resolved)}
-    if _encoded_size(args) > _ONE_SHOT_BYTES:
-        args["pending"] = _built_page(common, "pending", pending)
-        args["resolved"] = _built_page(common, "resolved", resolved)
-    payload = _call("local_request_snapshot", args)
-    if not isinstance(payload.get("requests"), list):
-        raise _invalid()
-    return payload
+    return event_body

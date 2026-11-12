@@ -13,13 +13,9 @@ from codex_plugin_scanner.guard.adapters.harness_mcp_discovery import (
     discover_harness_mcp_servers,
     persist_discovered_harness_mcp_servers,
 )
-from codex_plugin_scanner.guard.daemon.local_cli_api import LocalCliApiError, LocalCliApiService
-from codex_plugin_scanner.guard.daemon.local_cli_http import (
-    _RECOGNIZE_SOCKET_TIMEOUT_SECONDS,
-    handle_local_cli_post,
-)
-from codex_plugin_scanner.guard.daemon.local_cli_mcp_store import stored_mcp_recognition
 from codex_plugin_scanner.guard.local_cli_trust import utc_now
+from codex_plugin_scanner.guard.local_clis.local_cli_api import LocalCliApiError, LocalCliApiService
+from codex_plugin_scanner.guard.local_clis.local_cli_mcp_store import stored_mcp_recognition
 from codex_plugin_scanner.guard.models import GuardArtifact, HarnessDetection
 from codex_plugin_scanner.guard.runtime.local_cli_identity import UnlistedCliIdentity
 from codex_plugin_scanner.guard.runtime.local_mcp_probe import probe_stdio_mcp_server
@@ -104,7 +100,7 @@ def test_recognize_keeps_stored_mcp_when_live_probe_fails(tmp_path: Path, monkey
     home = tmp_path / "home"
     home.mkdir()
     monkeypatch.setattr(
-        "codex_plugin_scanner.guard.daemon.local_cli_api.Path.home",
+        "codex_plugin_scanner.guard.local_clis.local_cli_api.Path.home",
         staticmethod(lambda: home),
     )
     detection = _detection(
@@ -117,7 +113,7 @@ def test_recognize_keeps_stored_mcp_when_live_probe_fails(tmp_path: Path, monkey
         ),
     )
     monkeypatch.setattr(
-        "codex_plugin_scanner.guard.daemon.local_cli_api.discover_harness_mcp_servers",
+        "codex_plugin_scanner.guard.local_clis.local_cli_api.discover_harness_mcp_servers",
         lambda **_kwargs: discover_harness_mcp_servers(
             home_dir=home,
             guard_home=home,
@@ -125,7 +121,7 @@ def test_recognize_keeps_stored_mcp_when_live_probe_fails(tmp_path: Path, monkey
         ),
     )
     monkeypatch.setattr(
-        "codex_plugin_scanner.guard.daemon.local_cli_api.probe_stdio_mcp_server",
+        "codex_plugin_scanner.guard.local_clis.local_cli_api.probe_stdio_mcp_server",
         lambda *_args, **_kwargs: None,
     )
     service = LocalCliApiService(store=GuardStore(home))
@@ -149,7 +145,7 @@ def test_recognize_survives_discovery_store_lock(tmp_path: Path, monkeypatch) ->
     home = tmp_path / "home"
     home.mkdir()
     monkeypatch.setattr(
-        "codex_plugin_scanner.guard.daemon.local_cli_api.Path.home",
+        "codex_plugin_scanner.guard.local_clis.local_cli_api.Path.home",
         staticmethod(lambda: home),
     )
     detection = _detection(
@@ -162,7 +158,7 @@ def test_recognize_survives_discovery_store_lock(tmp_path: Path, monkeypatch) ->
         ),
     )
     monkeypatch.setattr(
-        "codex_plugin_scanner.guard.daemon.local_cli_api.discover_harness_mcp_servers",
+        "codex_plugin_scanner.guard.local_clis.local_cli_api.discover_harness_mcp_servers",
         lambda **_kwargs: discover_harness_mcp_servers(
             home_dir=home,
             guard_home=home,
@@ -170,7 +166,7 @@ def test_recognize_survives_discovery_store_lock(tmp_path: Path, monkeypatch) ->
         ),
     )
     monkeypatch.setattr(
-        "codex_plugin_scanner.guard.daemon.local_cli_api.probe_stdio_mcp_server",
+        "codex_plugin_scanner.guard.local_clis.local_cli_api.probe_stdio_mcp_server",
         lambda *_args, **_kwargs: None,
     )
 
@@ -178,7 +174,7 @@ def test_recognize_survives_discovery_store_lock(tmp_path: Path, monkeypatch) ->
         raise sqlite3.OperationalError("database is locked")
 
     monkeypatch.setattr(
-        "codex_plugin_scanner.guard.daemon.local_cli_api.persist_discovered_harness_mcp_servers",
+        "codex_plugin_scanner.guard.local_clis.local_cli_api.persist_discovered_harness_mcp_servers",
         boom,
     )
     service = LocalCliApiService(store=GuardStore(home))
@@ -222,7 +218,7 @@ def test_recognize_skips_package_shim_npx(tmp_path: Path, monkeypatch, native_mc
     native_mcp_probe(home)
     real_npx = _shim_first_npx_path(tmp_path, monkeypatch)
     monkeypatch.setattr(
-        "codex_plugin_scanner.guard.daemon.local_cli_api.Path.home",
+        "codex_plugin_scanner.guard.local_clis.local_cli_api.Path.home",
         staticmethod(lambda: home),
     )
     service = LocalCliApiService(store=GuardStore(home))
@@ -243,7 +239,7 @@ def test_recognize_retry_lists_tools_after_failed_store(tmp_path: Path, monkeypa
     native_mcp_probe(home)
     _shim_first_npx_path(tmp_path, monkeypatch)
     monkeypatch.setattr(
-        "codex_plugin_scanner.guard.daemon.local_cli_api.Path.home",
+        "codex_plugin_scanner.guard.local_clis.local_cli_api.Path.home",
         staticmethod(lambda: home),
     )
     detection = _detection(
@@ -256,7 +252,7 @@ def test_recognize_retry_lists_tools_after_failed_store(tmp_path: Path, monkeypa
         ),
     )
     monkeypatch.setattr(
-        "codex_plugin_scanner.guard.daemon.local_cli_api.discover_harness_mcp_servers",
+        "codex_plugin_scanner.guard.local_clis.local_cli_api.discover_harness_mcp_servers",
         lambda **_kwargs: discover_harness_mcp_servers(
             home_dir=home,
             guard_home=home,
@@ -292,14 +288,14 @@ def test_refresh_uses_exact_configured_launch_not_display_label(tmp_path: Path, 
     home.mkdir()
     native_mcp_probe(home)
     _shim_first_npx_path(tmp_path, monkeypatch)
-    monkeypatch.setattr("codex_plugin_scanner.guard.daemon.local_cli_api.Path.home", staticmethod(lambda: home))
+    monkeypatch.setattr("codex_plugin_scanner.guard.local_clis.local_cli_api.Path.home", staticmethod(lambda: home))
     args = ("-y", "chrome-devtools-mcp@latest", "--workspace", "x" * 220, "--account", "fixture-account")
     detection = _detection("cursor", _artifact(harness="cursor", name="fixture", command="npx", args=args))
     servers = discover_harness_mcp_servers(home_dir=home, guard_home=home, detections=(detection,))
     assert shlex.split(servers[0].launch_command) == ["npx", *args]
     assert len(servers[0].identity.example_label) <= 160
     monkeypatch.setattr(
-        "codex_plugin_scanner.guard.daemon.local_cli_api.discover_harness_mcp_servers", lambda **_kwargs: servers
+        "codex_plugin_scanner.guard.local_clis.local_cli_api.discover_harness_mcp_servers", lambda **_kwargs: servers
     )
     service = LocalCliApiService(store=GuardStore(home))
     service._observe_harness_mcp_servers()
@@ -313,9 +309,9 @@ def test_refresh_uses_exact_configured_launch_not_display_label(tmp_path: Path, 
 def test_unavailable_refresh_never_guesses_a_launch_command(tmp_path: Path, monkeypatch) -> None:
     home = tmp_path / "home"
     home.mkdir()
-    monkeypatch.setattr("codex_plugin_scanner.guard.daemon.local_cli_api.Path.home", staticmethod(lambda: home))
+    monkeypatch.setattr("codex_plugin_scanner.guard.local_clis.local_cli_api.Path.home", staticmethod(lambda: home))
     monkeypatch.setattr(
-        "codex_plugin_scanner.guard.daemon.local_cli_api.discover_harness_mcp_servers", lambda **_kwargs: []
+        "codex_plugin_scanner.guard.local_clis.local_cli_api.discover_harness_mcp_servers", lambda **_kwargs: []
     )
     identity = UnlistedCliIdentity(
         cli_id="local-cli.mcp-unavailable",
@@ -331,7 +327,7 @@ def test_unavailable_refresh_never_guesses_a_launch_command(tmp_path: Path, monk
     def unexpected_probe(*_args, **_kwargs):
         raise AssertionError("An unavailable connection must not be launched")
 
-    monkeypatch.setattr("codex_plugin_scanner.guard.daemon.local_cli_api.probe_stdio_mcp_server", unexpected_probe)
+    monkeypatch.setattr("codex_plugin_scanner.guard.local_clis.local_cli_api.probe_stdio_mcp_server", unexpected_probe)
     service = LocalCliApiService(store=store)
     with pytest.raises(LocalCliApiError) as rejected:
         service.recognize({"cli_id": identity.cli_id, "refresh": True, "command": "npx -y never-run"})
@@ -339,11 +335,13 @@ def test_unavailable_refresh_never_guesses_a_launch_command(tmp_path: Path, monk
 
 
 @pytest.mark.parametrize("legacy", [False, True])
-def test_configured_refresh_preserves_initialize_failure_and_stored_permissions(tmp_path, monkeypatch, native_mcp_probe, legacy):
+def test_configured_refresh_preserves_initialize_failure_and_stored_permissions(
+    tmp_path, monkeypatch, native_mcp_probe, legacy
+):
     home = tmp_path / "home"
     home.mkdir()
     native_mcp_probe(home)
-    monkeypatch.setattr("codex_plugin_scanner.guard.daemon.local_cli_api.Path.home", staticmethod(lambda: home))
+    monkeypatch.setattr("codex_plugin_scanner.guard.local_clis.local_cli_api.Path.home", staticmethod(lambda: home))
     detection = _detection(
         "opencode",
         _artifact(harness="opencode", name="fixture", command="python3", args=(str(home / "missing_server.py"),)),
@@ -356,9 +354,9 @@ def test_configured_refresh_preserves_initialize_failure_and_stored_permissions(
         assert kwargs["connection_identity_hash"] == servers[0].identity.identity_hash
         return probe_stdio_mcp_server(*args, **kwargs)
 
-    monkeypatch.setattr("codex_plugin_scanner.guard.daemon.local_cli_api.probe_stdio_mcp_server", checked_probe)
+    monkeypatch.setattr("codex_plugin_scanner.guard.local_clis.local_cli_api.probe_stdio_mcp_server", checked_probe)
     monkeypatch.setattr(
-        "codex_plugin_scanner.guard.daemon.local_cli_api.discover_harness_mcp_servers", lambda **_kwargs: servers
+        "codex_plugin_scanner.guard.local_clis.local_cli_api.discover_harness_mcp_servers", lambda **_kwargs: servers
     )
     service = LocalCliApiService(store=GuardStore(home))
     cli_id = servers[0].identity.cli_id
@@ -385,158 +383,84 @@ def test_configured_refresh_preserves_initialize_failure_and_stored_permissions(
     result = service.recognize({"cli_id": cli_id, "refresh": True})
     assert result["item"]["cli_id"] == cli_id
     assert result["help_status"] == "failed"
-    assert result["discovery_error"] == "mcp_initialize_failed"
+    # The configured script is missing, so the server exits before it answers.
+    assert result["discovery_error"] == "mcp_server_exited"
     assert result["item"]["commands"] == before["commands"]
     assert result["item"]["grant_revision"] == before["grant_revision"]
     assert "missing_server.py" not in result["summary"]
 
 
-def test_handle_local_cli_post_extends_recognize_timeout() -> None:
-    class FakeConnection:
-        def __init__(self) -> None:
-            self.timeout: float | None = None
+def test_recognize_probes_a_direct_launch_when_the_runner_answer_is_unreadable(
+    tmp_path: Path, monkeypatch, native_mcp_probe
+) -> None:
+    """A direct launcher is not a package runner, so an unreadable runner answer cannot hide it."""
+    home = tmp_path / "home"
+    home.mkdir()
+    native_mcp_probe(home)
+    server_dir = tmp_path / "real"
+    server_dir.mkdir()
+    server = server_dir / "demo-mcp-server"
+    server.write_text(_FAKE_NPX_MCP, encoding="utf-8")
+    server.chmod(0o755)
+    monkeypatch.setenv("PATH", os.pathsep.join((str(server_dir), "/usr/bin", "/bin")))
+    # The resident cannot answer which bin a package runner would launch.
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.local_clis.local_cli_profiles_api.native_context_digest",
+        lambda *args, **kwargs: {"status": "unavailable"},
+    )
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.local_clis.local_cli_api.Path.home",
+        staticmethod(lambda: home),
+    )
+    service = LocalCliApiService(store=GuardStore(home))
+    recognized = service.recognize({"command": "demo-mcp-server"})
+    item = recognized["item"]
+    assert isinstance(item, dict)
+    assert item["surface"] == "mcp"
 
-        def settimeout(self, value: float) -> None:
-            self.timeout = value
 
-    class FakeApi:
+def _local_cli_post(monkeypatch: pytest.MonkeyPatch, api: object, op: str) -> dict[str, object]:
+    from codex_plugin_scanner.guard.routes import service_calls
+
+    monkeypatch.setattr(service_calls, "_local_cli_api", lambda store: api)
+    return service_calls.local_cli_post(object(), {"op": op, "payload": {"command": "npx"}})
+
+
+def test_local_cli_post_runs_the_method_the_daemon_picked(monkeypatch: pytest.MonkeyPatch) -> None:
+    class Api:
         def recognize(self, payload: dict[str, object]) -> dict[str, object]:
             return {"ok": True, "command": payload["command"]}
 
-        def apply(self, payload: dict[str, object]) -> dict[str, object]:
-            raise AssertionError("apply")
-
-        def discover_items(self) -> dict[str, object]:
-            raise AssertionError("discover")
-
-        def preview(self, payload: dict[str, object]) -> dict[str, object]:
-            raise AssertionError("preview")
-
-    class FakeHandler:
-        def __init__(self) -> None:
-            self.connection = FakeConnection()
-            self.written: dict[str, object] | None = None
-            self.status: int | None = None
-
-        def _daemon_server(self) -> object:
-            return type("Daemon", (), {"local_cli_api": FakeApi()})()
-
-        def _write_json(
-            self,
-            payload: dict[str, object],
-            status: int = 200,
-            extra_headers: dict[str, str] | None = None,
-        ) -> None:
-            self.written = payload
-            self.status = status
-
-    handler = FakeHandler()
-    handle_local_cli_post(
-        handler,
-        "/v1/local-clis/recognize",
-        {"command": "npx -y chrome-devtools-mcp@latest"},
-    )
-    assert handler.connection.timeout == _RECOGNIZE_SOCKET_TIMEOUT_SECONDS
-    assert handler.status == 200
-    assert handler.written == {"ok": True, "command": "npx -y chrome-devtools-mcp@latest"}
+    reply = _local_cli_post(monkeypatch, Api(), "recognize")
+    assert reply == {"status": 200, "body": {"ok": True, "command": "npx"}, "no_store": True}
 
 
-def test_handle_local_cli_post_writes_unavailable_without_api() -> None:
-    class Handler:
-        written: dict[str, object] | None = None
-        status: int | None = None
-
-        def _daemon_server(self) -> object:
-            return type("Daemon", (), {"local_cli_api": None})()
-
-        def _write_json(
-            self,
-            payload: dict[str, object],
-            status: int = 200,
-            extra_headers: dict[str, str] | None = None,
-        ) -> None:
-            self.written = payload
-            self.status = status
-
-    handler = Handler()
-    handle_local_cli_post(handler, "/v1/local-clis/discover", {})
-    assert handler.status == 500
-    assert handler.written is not None
-    assert handler.written["error"] == "local_cli_unavailable"
-
-
-def test_handle_local_cli_post_maps_api_error() -> None:
+def test_local_cli_post_maps_api_error(monkeypatch: pytest.MonkeyPatch) -> None:
     class Api:
         def recognize(self, payload: dict[str, object]) -> dict[str, object]:
             raise LocalCliApiError(400, "missing_package_json", "missing")
 
-        def apply(self, payload: dict[str, object]) -> dict[str, object]:
-            raise AssertionError("apply")
-
-        def discover_items(self) -> dict[str, object]:
-            raise AssertionError("discover")
-
-        def preview(self, payload: dict[str, object]) -> dict[str, object]:
-            raise AssertionError("preview")
-
-    class Handler:
-        written: dict[str, object] | None = None
-        status: int | None = None
-
-        def _daemon_server(self) -> object:
-            return type("Daemon", (), {"local_cli_api": Api()})()
-
-        def _write_json(
-            self,
-            payload: dict[str, object],
-            status: int = 200,
-            extra_headers: dict[str, str] | None = None,
-        ) -> None:
-            self.written = payload
-            self.status = status
-
-    handler = Handler()
-    handle_local_cli_post(handler, "/v1/local-clis/recognize", {"command": "npx"})
-    assert handler.status == 400
-    assert handler.written == {"error": "missing_package_json", "message": "missing"}
+    reply = _local_cli_post(monkeypatch, Api(), "recognize")
+    assert reply["status"] == 400
+    assert reply["body"] == {"error": "missing_package_json", "message": "missing"}
 
 
-def test_handle_local_cli_post_rejects_non_dict_response() -> None:
+def test_local_cli_post_answers_unavailable_for_a_failure_or_non_dict(monkeypatch: pytest.MonkeyPatch) -> None:
     class Api:
         def discover_items(self) -> object:
             return ["not-a-dict"]
 
-        def recognize(self, payload: dict[str, object]) -> dict[str, object]:
-            raise AssertionError("recognize")
+        def forget(self, payload: dict[str, object]) -> dict[str, object]:
+            raise RuntimeError("boom")
 
-        def apply(self, payload: dict[str, object]) -> dict[str, object]:
-            raise AssertionError("apply")
-
-        def preview(self, payload: dict[str, object]) -> dict[str, object]:
-            raise AssertionError("preview")
-
-    class Handler:
-        written: dict[str, object] | None = None
-        status: int | None = None
-
-        def _daemon_server(self) -> object:
-            return type("Daemon", (), {"local_cli_api": Api()})()
-
-        def _write_json(
-            self,
-            payload: dict[str, object],
-            status: int = 200,
-            extra_headers: dict[str, str] | None = None,
-        ) -> None:
-            self.written = payload
-            self.status = status
-
-    handler = Handler()
-    handle_local_cli_post(handler, "/v1/local-clis/discover", {})
-    assert handler.status == 500
-    assert handler.written is not None
-    assert handler.written["error"] == "local_cli_unavailable"
+    for op in ("discover_items", "forget"):
+        reply = _local_cli_post(monkeypatch, Api(), op)
+        assert reply["status"] == 500
+        assert reply["body"]["error"] == "local_cli_unavailable"
 
 
-def test_handle_local_cli_post_ignores_incomplete_handler() -> None:
-    handle_local_cli_post(object(), "/v1/local-clis/recognize", {"command": "npx"})
+def test_local_cli_post_refuses_an_unknown_method(monkeypatch: pytest.MonkeyPatch) -> None:
+    from codex_plugin_scanner.guard.library_calls import LibraryCallError
+
+    with pytest.raises(LibraryCallError):
+        _local_cli_post(monkeypatch, object(), "close_discovery")

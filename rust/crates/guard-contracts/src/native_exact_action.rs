@@ -10,7 +10,7 @@
 //! "no identity" and the caller fails closed.
 
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
+use serde_json::{Map, Value};
 use std::collections::BTreeMap;
 
 /// Schema discriminator for the request.
@@ -18,7 +18,9 @@ pub const NATIVE_EXACT_ACTION_REQUEST_SCHEMA: &str = "guard-native-exact-action-
 /// Schema discriminator for the result.
 pub const NATIVE_EXACT_ACTION_RESULT_SCHEMA: &str = "guard-native-exact-action-result.v1";
 /// Capability advertised by the runtime when this operation is available.
-pub const NATIVE_EXACT_ACTION_FEATURE: &str = "native-exact-action-v5";
+pub const NATIVE_EXACT_ACTION_FEATURE: &str = "native-exact-action-v6";
+/// Same wire schema, before the resident derived a review's queries from the hook request.
+pub const NATIVE_EXACT_ACTION_V5_FEATURE: &str = "native-exact-action-v5";
 /// Same wire schema, before one query answered a review's binding and token together.
 pub const NATIVE_EXACT_ACTION_V4_FEATURE: &str = "native-exact-action-v4";
 /// Inventory alone did not establish bound script delivery.
@@ -29,6 +31,9 @@ pub const NATIVE_EXACT_ACTION_PREVIOUS_FEATURE: &str = "native-exact-action-v2";
 pub const NATIVE_EXACT_ACTION_LEGACY_FEATURE: &str = "native-exact-action-v1";
 /// Largest canonical request serialization the op will accept.
 pub const NATIVE_EXACT_ACTION_MAX_BYTES: usize = 256 * 1024;
+/// Largest `HookReview` request: it carries the whole hook payload, which the
+/// hook bridges cap at 1 MB, with room for JSON escapes and the verdict.
+pub const NATIVE_EXACT_ACTION_HOOK_REVIEW_MAX_BYTES: usize = 4 * 1024 * 1024;
 /// Longest filesystem budget a request may ask for.
 pub const NATIVE_EXACT_ACTION_MAX_BUDGET_MS: u64 = 30_000;
 
@@ -72,7 +77,8 @@ pub enum NativePolicyBindingV1 {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 pub enum NativeExactActionQueryV1 {
-    /// Non-authorizing code observations. The nested action must be ExactAction.
+    /// Non-authorizing code observations. The nested action must be an
+    /// ExactAction or a HookReview, which is observed through its ExactAction.
     LaunchEvidence {
         action: Box<NativeExactActionQueryV1>,
     },
@@ -114,6 +120,25 @@ pub enum NativeExactActionQueryV1 {
     ReviewEvidence {
         binding: Box<NativeExactActionQueryV1>,
         action: Box<NativeExactActionQueryV1>,
+    },
+    /// One reviewed `PreToolUse` as the hook sent it. The resident derives
+    /// the ReviewBinding and ExactAction queries from the payload, the native
+    /// verdict and its receipt, validates the receipt's policy binding once,
+    /// and answers both halves as a ReviewEvidence query would.
+    HookReview {
+        harness: String,
+        payload: Map<String, Value>,
+        result: Map<String, Value>,
+        #[serde(default)]
+        receipt: Option<Map<String, Value>>,
+        #[serde(default)]
+        workspace: Option<String>,
+        #[serde(default)]
+        home_dir: Option<String>,
+        /// The ambient environment the action would launch in.
+        environment: BTreeMap<String, String>,
+        extension_control_digest: String,
+        budget_ms: u64,
     },
     /// The short-lived binding that fences a retry of one review.
     ReviewBinding {
@@ -164,6 +189,15 @@ pub enum NativeExactActionPayloadV1 {
         token: Option<String>,
         once_only_reason: Option<String>,
     },
+    /// The answers of a HookReview query. `policy_binding_valid` is false
+    /// when the verdict or its receipt claims extension policy that the
+    /// receipt does not prove; the review must not be offered then.
+    HookReview {
+        policy_binding_valid: bool,
+        binding: Option<String>,
+        token: Option<String>,
+        once_only_reason: Option<String>,
+    },
 }
 
 /// A digest of observed code/configuration, never an approval context token.
@@ -193,4 +227,21 @@ pub struct NativeExactActionResultV1 {
     pub code: String,
     #[serde(default)]
     pub payload: Option<NativeExactActionPayloadV1>,
+}
+
+/// Capability advertised by the runtime when a reviewed `PreToolUse` edge
+/// answer carries its review evidence.
+pub const EDGE_REVIEW_EVIDENCE_FEATURE: &str = "edge-review-evidence-v1";
+
+/// The `HookReview` answers of one reviewed `PreToolUse`, returned in the
+/// edge answer so the daemon does not ask for them in a second request.
+/// A proof that fails carries its once-only reason; evidence the edge could
+/// not derive carries `unproven_launch` and no token.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct GuardHookReviewEvidenceV1 {
+    pub policy_binding_valid: bool,
+    pub binding: Option<String>,
+    pub token: Option<String>,
+    pub once_only_reason: Option<String>,
 }

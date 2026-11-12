@@ -22,19 +22,32 @@ function source(path: string): string {
   return readFileSync(new URL(path, import.meta.url), "utf8");
 }
 
-assert(SHELL_NAV_ITEMS.length === 10, "The shell exposes every top-level Guard destination");
+assert(SHELL_NAV_ITEMS.length === 11, "The shell exposes every top-level Guard destination");
 assert(
   new Set(SHELL_NAV_ITEMS.map((item) => item.href)).size === SHELL_NAV_ITEMS.length,
   "Top-level navigation destinations are unique",
 );
 assert(
-  mobilePrimaryNavigationItems().map((item) => item.view).join(",") === "home,inbox,fleet,extensions",
+  mobilePrimaryNavigationItems().map((item) => item.view).join(",") === "home,inbox,fleet,cigar",
   "Compact screens keep the four highest-frequency sections one tap away",
 );
 assert(
   SHELL_NAV_ITEMS.map((item) => item.view).join(",") ===
-    "home,inbox,fleet,extensions,policy,supply-chain,settings,evidence,releases,about",
-  "Sidebar order promotes Extensions right after Protect, demotes Evidence near the bottom, and keeps Releases beside About",
+    "home,inbox,fleet,cigar,extensions,policy,supply-chain,settings,evidence,releases,about",
+  "CIGAR is a primary destination beside Protect, with Extensions and existing management surfaces retained",
+);
+assert(
+  navigationItemForView("cigar").label === "Context" &&
+    navigationItemForView("cigar").shortLabel === "Context",
+  "The sidebar introduces CIGAR as Context while the workspace keeps its identity",
+);
+assert(
+  navigationItemForView("cigar").badge === "Beta",
+  "The Context entry carries a Beta status chip",
+);
+assert(
+  SHELL_NAV_ITEMS.every((item) => item.badge === undefined || item.view === "cigar"),
+  "Only the beta workspace carries a navigation status chip",
 );
 assert(
   SHELL_NAV_ITEMS.find((item) => item.view === "extensions")?.group === "primary" &&
@@ -94,6 +107,16 @@ assert(
 assert(
   markup.includes('data-navigation-item="settings"') && markup.includes('aria-current="page"'),
   "The active destination remains visible while the window changes size",
+);
+assert(
+  markup.includes('data-navigation-item="cigar"') &&
+    markup.includes('aria-label="Context"') &&
+    markup.includes('guard-shell-navigation-link__flag" aria-hidden="true">Beta</span>'),
+  "The sidebar labels the CIGAR workspace Context and marks it Beta without changing its announced name",
+);
+assert(
+  markup.includes('title="Context"'),
+  "The collapsed rail keeps the Context name as its tooltip",
 );
 assert(
   markup.includes("104 local actions need a Guard decision.") &&

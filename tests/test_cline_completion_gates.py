@@ -14,12 +14,12 @@ import pytest
 from codex_plugin_scanner.cli import _build_parser
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.adapters.cline import ClineHarnessAdapter
-from codex_plugin_scanner.guard.adapters.cline_hooks import _hook_source
 from codex_plugin_scanner.guard.adapters.cline_plugin import _plugin_source, cline_plugin_state
 from codex_plugin_scanner.guard.adapters.contracts import contract_for
 from codex_plugin_scanner.guard.cli.commands_support_interaction import _apps_disconnect_confirm_command
 from codex_plugin_scanner.guard.cli.install_commands import build_harness_verification
-from codex_plugin_scanner.guard.product_model import CANONICAL_HARNESS_VALUES, SUPPORTED_HARNESS_VALUES
+from codex_plugin_scanner.guard.product_model import SUPPORTED_HARNESS_VALUES
+from tests.cline_worker_config import worker_config as _worker_config
 
 pytestmark = pytest.mark.usefixtures("approval_questionnaire_mode")
 
@@ -60,11 +60,14 @@ else:
     return path
 
 
-def _run_native(source: str, tmp_path: Path, payload: dict[str, object]) -> dict[str, object]:
-    worker = tmp_path / "native.py"
-    worker.write_text(source, encoding="utf-8")
+def _run_native(config: str, tmp_path: Path, payload: dict[str, object]) -> dict[str, object]:
+    runtime = os.environ.get("HOL_GUARD_NATIVE_BINARY")
+    if not runtime or not os.path.isfile(runtime):
+        pytest.skip("the native Cline hook worker needs the built runtime")
+    worker = tmp_path / "PreToolUse.json"
+    worker.write_text(config, encoding="utf-8")
     result = subprocess.run(
-        [sys.executable, str(worker)],
+        [runtime, "cline-hook-worker", str(worker)],
         input=json.dumps(payload),
         capture_output=True,
         text=True,
@@ -97,7 +100,6 @@ def test_cline_is_in_static_supported_contracts() -> None:
     assert contract_for("cline-cli") is contract
     assert contract_for("cline-vscode") is contract
     assert contract.surface_capabilities == ("auto", "hooks", "plugin", "cli", "all")
-    assert "cline" in CANONICAL_HARNESS_VALUES
     assert "cline" in SUPPORTED_HARNESS_VALUES
 
 
@@ -119,9 +121,9 @@ def test_native_proof_requires_actual_block_outcome(tmp_path: Path) -> None:
     context = _context(tmp_path)
     _activate(context, "hooks")
     guard = _fake_guard(tmp_path)
-    source = _hook_source(context, event_name="PreToolUse", guard_cli=[sys.executable, str(guard)])
+    config = _worker_config(context, event_name="PreToolUse", guard_cli=[sys.executable, str(guard)])
     allowed = _run_native(
-        source,
+        config,
         tmp_path,
         {"hookName": "PreToolUse", "tool_call": {"name": "run_command", "input": {"command": "echo safe"}}},
     )
@@ -132,7 +134,7 @@ def test_native_proof_requires_actual_block_outcome(tmp_path: Path) -> None:
     assert proof["outcome"] == "allowed"
 
     blocked = _run_native(
-        source,
+        config,
         tmp_path,
         {"hookName": "PreToolUse", "tool_call": {"name": "run_command", "input": {"command": "BLOCK_ME"}}},
     )

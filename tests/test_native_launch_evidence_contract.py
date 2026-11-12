@@ -4,7 +4,8 @@ from typing import Any
 
 import pytest
 
-from codex_plugin_scanner.guard.daemon import hook_native_exact_action as bridge
+from tests import native_review_evidence_support as bridge
+from tests.native_launch_evidence_helpers import validate_launch_evidence
 
 
 def _response() -> dict[str, Any]:
@@ -44,20 +45,20 @@ def _response() -> dict[str, Any]:
 )
 def test_observation_rejects_authority_or_ambiguous_identity(field, value):
     response = _response()
-    bridge._validate_launch_evidence(response)
+    validate_launch_evidence(response)
     response["evidence"][field] = value
     with pytest.raises(bridge.NativeExactActionError, match="native_exact_action_payload_invalid"):
-        bridge._validate_launch_evidence(response)
+        validate_launch_evidence(response)
 
 
 def test_observation_requires_an_exclusive_known_refusal():
     response = _response()
     response["unavailable_reason"] = "unproven_launch"
     with pytest.raises(bridge.NativeExactActionError):
-        bridge._validate_launch_evidence(response)
+        validate_launch_evidence(response)
     response["evidence"] = None
-    bridge._validate_launch_evidence(response)
+    validate_launch_evidence(response)
     for invalid in (None, "allow", "unverified_code_closure"):
         response["unavailable_reason"] = invalid
         with pytest.raises(bridge.NativeExactActionError):
-            bridge._validate_launch_evidence(response)
+            validate_launch_evidence(response)

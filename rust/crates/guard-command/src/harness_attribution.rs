@@ -26,6 +26,7 @@ const ORIGIN_HARNESS_VALUES: &[&str] = &[
     "pi",
     "zcode",
     "devin",
+    "muse",
 ];
 
 /// `adapters.zcode_config.ZCODE_ENV_HINTS` / `ZCODE_BUNDLE_IDENTIFIER`.
@@ -67,6 +68,8 @@ const PROCESS_HARNESSES: &[(&str, &str)] = &[
     ("omp", "omp"),
     ("opencode", "opencode"),
     ("devin", "devin"),
+    ("muse", "muse"),
+    ("muse-bin", "muse"),
 ];
 
 const APP_PATH_MARKERS: &[(&str, &str)] = &[

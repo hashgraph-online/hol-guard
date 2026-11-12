@@ -20,21 +20,22 @@ from ..review_contracts import (
 )
 from ..store import GuardStore
 from ..store_review_event_outbox_schema import REVIEW_EVENT_SCHEMA_VERSION
-from .cloud_request_native import NATIVE_ROW_REFUSAL_CODES, cloud_review_event_display
+from .cloud_request_native import NATIVE_ROW_REFUSAL_CODES, cloud_review_event
 from .native_workspace_review_context import (
     NativeWorkspaceReviewContextProbeState,
     build_native_workspace_review_context,
     native_workspace_review_context_cache_key,
 )
-from .review_event_delivery import StoredReviewEventError, decode_stored_review_event
+from .review_event_delivery import _NATIVE_UNAVAILABLE_REASON, StoredReviewEventError, decode_stored_review_event
 from .time_support import parse_utc_timestamp
 
-_NATIVE_UNAVAILABLE_REASON = "cloud_native_projection_unavailable"
 _EVENT_TYPE_MAP = {
     "pending": "request_created",
     "resolved": "request_resolved",
     "superseded": "request_superseded",
 }
+# Row columns the event reads that the native row projection does not carry.
+_EVENT_COLUMNS = ("updated_at", "guard_version", "first_seen_guard_version", "last_seen_guard_version")
 
 
 def _terminal_projection(
@@ -180,43 +181,21 @@ def build_cloud_review_event(
             claim = None
     if strip_expired_capability and native_context is not None and claim is not None:
         claim = _strip_expired_replay_capability(claim)
-    display = cloud_review_event_display(item, redaction_level=redaction_level)
-    request_payload = display["payload"]
     continuation = frozen_continuation or continuation_offer_payload(store, request_row=item, now=_now(), headless=True)
-    created_at = str(item.get("created_at") or _now())
-    last_seen_at = str(item.get("last_seen_at") or created_at)
-    event = {
-        "localRequestId": request_id,
-        "correlationId": continuation["correlationId"],
-        "localEventSequence": event_sequence,
-        "eventType": _EVENT_TYPE_MAP[stored_status],
-        "harnessId": str(item.get("harness") or "guard-review"),
-        "requestKind": str(item.get("review_kind") or item.get("harness") or "guard-review"),
-        "displayProvenance": display["display_provenance"],
-        "displayCommand": display["display_command"],
-        "displaySummary": display["display_summary"],
-        "rawCommand": display["raw_command"],
-        "redactedCommand": display["redacted_command"],
-        "reviewClaim": claim,
-        "requestPayload": request_payload,
-        "continuationCapability": continuation["capability"],
-        "continuationHookAttached": continuation["hookAttached"],
-        "continuationOpaqueTargetId": continuation["opaqueTargetId"],
-        "continuationWaitDeadline": continuation["waitDeadline"],
-        "riskCategory": str(item.get("risk_category") or "") or None,
-        "policyAction": str(item.get("policy_action") or "") or None,
-        "recommendedScope": str(item.get("recommended_scope") or "") or None,
-        "localCreatedAt": created_at,
-        "localUpdatedAt": str(item.get("updated_at") or last_seen_at),
-        "localLastSeenAt": last_seen_at,
-        "guardVersion": str(item.get("guard_version") or "") or None,
-        "firstSeenGuardVersion": str(item.get("first_seen_guard_version") or "") or None,
-        "lastSeenGuardVersion": str(item.get("last_seen_guard_version") or "") or None,
-        "localEmittedAt": _now(),
-        "sentAt": _now(),
-    }
+    event = cloud_review_event(
+        item,
+        redaction_level=redaction_level,
+        event={
+            "sequence": event_sequence,
+            "event_type": _EVENT_TYPE_MAP[stored_status],
+            "claim": claim,
+            "continuation": continuation,
+            "now": _now(),
+            "columns": {key: item.get(key) for key in _EVENT_COLUMNS},
+        },
+    )
     if native_context is not None:
-        request_payload["nativeWorkspaceReview"] = native_context
+        cast(dict[str, object], event["requestPayload"])["nativeWorkspaceReview"] = native_context
     return event
 
 

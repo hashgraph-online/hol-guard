@@ -173,6 +173,8 @@ def test_explicit_macos_extension_authority_migration_rejects_partial_state(
         lambda _self, secret_id: legacy_secrets.get_secret(secret_id),
     )
     explicit_store = GuardStore(tmp_path, prime_policy_integrity=False, allow_system_keyring=True)
+    # The resident seals the anchor into the local vault; a legacy home has only Keychain.
+    explicit_store._secret_store().fallback.delete_secret(anchor_ref)
 
     assert explicit_store.migrate_legacy_extension_control_authority_secrets() is False
 
@@ -213,6 +215,8 @@ def test_explicit_macos_extension_authority_spends_one_interactive_read(
     migrating = explicit_store._secret_store()
     assert isinstance(migrating, MigratingFallbackSecretStore)
     assert isinstance(migrating.primary, SystemKeyringSecretStore)
+    # The resident seals the anchor into the local vault; a legacy home has only Keychain.
+    migrating.fallback.delete_secret(legacy_store._anchor_ref())
     # Other shard tests can leave background stores reading their own homes.
     # Track every read by this store without counting unrelated backend instances.
     monkeypatch.setattr(migrating.primary, "get_secret", tracked_interactive_read)
@@ -296,18 +300,17 @@ def test_read_finalizes_database_commit_when_final_anchor_write_failed(tmp_path:
     with pytest.raises(ExtensionControlAuthorityError, match="final anchor"):
         _commit(store)
     with store._connect() as connection:
-        premature_events = connection.execute(
+        queued_events = connection.execute(
             "select count(*) from guard_cloud_events where event_type = 'policy.changed'"
         ).fetchone()[0]
-    assert premature_events == 0
+    # The resident sealed the committed anchor in its own vault before it
+    # queued the event; only the copy this process reads was left behind.
+    assert queued_events == 1
 
-    # The commit sealed the anchor and died before the row said so. Nothing
-    # here is left for a person to decide, so the next ordinary read finishes
-    # the revision that was already authorised rather than blocking every
-    # command until someone runs the recovery verb.
-    resumed = store.read_extension_control_authority(
-        catalog_digest=BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest
-    )
+    # Nothing here is left for a person to decide, so the next ordinary read
+    # settles the revision that was already authorised rather than blocking
+    # every command until someone runs the recovery verb.
+    resumed = store.read_extension_control_authority(catalog_digest=BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest)
     assert resumed.health is AuthorityHealth.PROTECTED
     assert resumed.revision == 1
     assert resumed.layers == (_disabled_layer(),)

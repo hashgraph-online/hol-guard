@@ -35,7 +35,7 @@ const PRESERVE_UNQUOTED_BACKSLASH: bool = cfg!(windows);
 /// Characters a surviving word may not contain: the core is handed to a
 /// sandbox, not to a shell, so a redirection or list operator inside a word
 /// would be passed through as text rather than obeyed.
-const ARGUMENT_REJECT: &str = "<>|&;";
+pub(in crate::pretool) const ARGUMENT_REJECT: &str = "<>|&;";
 /// The quiet `cd` suffix the peel resolves itself instead of the shell.
 const QUIET_SUFFIX: &str = "2>/dev/null";
 /// The longest label a final `; echo "<label>$?"` may carry.
@@ -48,6 +48,31 @@ fn directory_flags(manager: &str) -> &'static [&'static str] {
         "npm" => &["--prefix", "-C"],
         "pnpm" => &["--dir", "-C"],
         _ => &[],
+    }
+}
+
+/// Flags that name the workspace root without spelling a directory, read the
+/// way native authority reads them (`package_directory_flags.rs`). Only the
+/// two exact spellings, because a boolean flag carries no attached value.
+fn workspace_root_flags(manager: &str) -> &'static [&'static str] {
+    match manager {
+        "pnpm" => &["-w", "--workspace-root"],
+        _ => &[],
+    }
+}
+
+/// The directory `pnpm -w` runs in: the nearest directory at or above `base`
+/// holding `pnpm-workspace.yaml`, as pnpm finds its own root. The caller
+/// holds the result to the workspace, as it holds a spelled directory.
+fn workspace_root(base: &Path) -> Option<PathBuf> {
+    let mut directory = std::fs::canonicalize(base).ok()?;
+    loop {
+        if directory.join("pnpm-workspace.yaml").is_file() {
+            return Some(directory);
+        }
+        if !directory.pop() {
+            return None;
+        }
     }
 }
 
@@ -156,10 +181,15 @@ pub(super) fn peel(
         let into_sibling_root = root.as_deref() == Some(directory.as_path()) && !within;
         tokens.drain(..3);
         wrapped = true;
-        if into_sibling_root {
+        // A `cd` below a sibling root leaves no single core to peel once a
+        // second command follows, and the edge roots that call's sandbox at
+        // the repository anyway, so the list is rejoined there as it is after
+        // a `cd` to the root itself. A lone command keeps the peel it has.
+        let listed = tokens.iter().any(|token| operator(token) == Some("&&"));
+        if into_sibling_root || (root.is_some() && !within && listed) {
             // `cd <sibling root> && a && b` is re-authorized whole in that
             // root. A filter after `a && b` would apply to `b` alone, so none
-            // is peeled there.
+            // is peeled there; it stays in the text the root runs.
             if let Some(joined) = joined_list(&tokens) {
                 return Ok(Some(ContainedWrapperCore {
                     core: joined,
@@ -296,10 +326,21 @@ fn operator(token: &Token) -> Option<&str> {
     token.1.then_some(token.0.as_str())
 }
 
-/// The repository holding `directory`, as native authority finds it. An
-/// absent home proves no root, as the Python peel's `home is None` did.
+/// The project holding `directory`, as native authority finds it. An absent
+/// home proves no root, as the Python peel's `home is None` did.
+///
+/// A project with a manifest and no repository roots a run here, as it does
+/// for the package-test route, because the sink peels only a command the
+/// classifier already admitted: reading fewer roots than the route that wrote
+/// the receipt would leave that receipt unredeemable and send the run to the
+/// sandbox whole. Admission stays with the classifier, which still needs a
+/// repository for every other route.
 fn sibling_root(directory: &Path, home_dir: Option<&str>) -> Option<PathBuf> {
-    contained_wrapper::sibling_project_root(directory, home_dir?)
+    contained_wrapper::project_root(
+        directory,
+        home_dir?,
+        contained_wrapper::ProjectRoots::RepositoryOrPackage,
+    )
 }
 
 /// Split like a POSIX shell into `(value, is_operator)` pairs, and report
@@ -324,6 +365,9 @@ fn lex(command: &str) -> Result<(Vec<Token>, bool), &'static str> {
         } else if word.is_none() && merge_at(&characters, index) {
             tokens.push(("2>&1".to_owned(), true));
             index += 4;
+        } else if word.is_none() && stderr_at(&characters, index) {
+            tokens.push(("2>".to_owned(), true));
+            index += 2;
         } else if OPERATOR.contains(character) {
             if let Some(value) = word.take() {
                 tokens.push((value, false));
@@ -400,6 +444,19 @@ fn lex(command: &str) -> Result<(Vec<Token>, bool), &'static str> {
     Ok((tokens, exact))
 }
 
+/// `2>` as its own operator: a stderr redirect spelled the way the shell
+/// reads one, with the digit touching the `>` and no quote between them.
+///
+/// `cmd 2 >/dev/null` and `cmd '2'>/dev/null` pass `2` to the program and
+/// redirect standard output instead. Both leave the digit in the word stream,
+/// where the rejoin refuses it rather than writing back a command the shell
+/// would read as this redirect. `2>>log` and `2>&2` are not this operator
+/// either, so the `>` that follows keeps them out of every rejoin.
+fn stderr_at(characters: &[char], index: usize) -> bool {
+    characters.get(index..index + 2) == Some(&['2', '>'][..])
+        && !matches!(characters.get(index + 2).copied(), Some('&' | '>'))
+}
+
 /// `2>&1` as its own operator: the one redirection the sink applies itself.
 fn merge_at(characters: &[char], index: usize) -> bool {
     characters.get(index..index + 4) == Some(&['2', '>', '&', '1'][..])
@@ -447,8 +504,15 @@ fn filter_chain(tokens: &[Token]) -> Result<Vec<Vec<String>>, &'static str> {
             None => ("", &[] as &[String]),
         };
         if matches!(program, "head" | "tail") {
-            if let Some(count) = bounded_count(arguments) {
-                chain.push(vec![program.to_owned(), count.to_string()]);
+            if let Some((count, bytes)) = output_filters::head_tail_bound(arguments) {
+                // A byte bound carries its flag, so the sink that applies the
+                // stage reads which unit the count is in. A line bound keeps
+                // the two-word spelling the sink has always read.
+                chain.push(if bytes {
+                    vec![program.to_owned(), "-c".to_owned(), count.to_string()]
+                } else {
+                    vec![program.to_owned(), count.to_string()]
+                });
                 continue;
             }
         }
@@ -464,19 +528,6 @@ fn filter_chain(tokens: &[Token]) -> Result<Vec<Vec<String>>, &'static str> {
     Ok(chain)
 }
 
-/// The line count of a `head`/`tail` stage: `-N` or `-n N`.
-fn bounded_count(values: &[String]) -> Option<u32> {
-    let digits = match values {
-        [single] => single.strip_prefix('-')?,
-        [flag, count] if flag == "-n" => count.as_str(),
-        _ => return None,
-    };
-    if !output_filters::bounded_count(digits) {
-        return None;
-    }
-    digits.parse().ok()
-}
-
 /// `bun --cwd <dir> build` as `bun build` in `<dir>`, as native authority
 /// reads it.
 ///
@@ -487,9 +538,21 @@ fn bounded_count(values: &[String]) -> Option<u32> {
 /// lexically, as the package manager's `path.resolve` does, then resolved on
 /// disk. Other spellings return `None` and keep the unwrapped path.
 fn package_directory(tokens: &[Token], base: &Path) -> Option<(Vec<Token>, PathBuf, PathBuf)> {
+    // Leading `NAME=value` assignments belong to the manager call, not to the
+    // directory flag. Native authority carries them across the same rewrite
+    // (`package_directory_flags.rs`), so the sink peels past them here and
+    // keeps them ahead of the manager in the rewritten core. Peeling them off
+    // instead would hand the sandbox a different command from the one the
+    // classifier admitted.
+    let assignments = tokens
+        .iter()
+        .take_while(|token| !token.1 && environment_assignment(word(token)))
+        .count();
+    let (prefix, tokens) = tokens.split_at(assignments);
     let manager = tokens.first().map(word)?;
     let flags = directory_flags(manager);
-    if flags.is_empty() {
+    let root_flags = workspace_root_flags(manager);
+    if flags.is_empty() && root_flags.is_empty() {
         return None;
     }
     let end = tokens
@@ -506,15 +569,22 @@ fn package_directory(tokens: &[Token], base: &Path) -> Option<(Vec<Token>, PathB
     };
     if options
         .iter()
-        .filter(|value| names_directory_flag(value, flags))
+        .filter(|value| names_directory_flag(value, flags) || root_flags.contains(*value))
         .count()
         != 1
     {
         return None;
     }
-    let index = usize::from(words.first() == Some(&"run"));
+    let index = usize::from(
+        words
+            .first()
+            .is_some_and(|word| crate::contained_argv::names_script_run_verb(manager, word)),
+    );
     let flag = words.get(index).copied().unwrap_or_default();
-    let (value, consumed) = if flags.contains(&flag) && index + 1 < words.len() {
+    let root = root_flags.contains(&flag);
+    let (value, consumed) = if root {
+        ("", 1)
+    } else if flags.contains(&flag) && index + 1 < words.len() {
         (words[index + 1], 2)
     } else {
         match flag.split_once('=') {
@@ -524,25 +594,37 @@ fn package_directory(tokens: &[Token], base: &Path) -> Option<(Vec<Token>, PathB
     };
     let mut rest: Vec<&str> = words[..index].to_vec();
     rest.extend_from_slice(&words[index + consumed..]);
-    if value.starts_with(['-', '~'])
-        || value.contains("//")
-        || !plain_word(value)
-        || rest.is_empty()
+    if rest.is_empty()
+        || (!root && (value.starts_with(['-', '~']) || value.contains("//") || !plain_word(value)))
     {
         return None;
     }
     // A flag naming a directory that is not there keeps the unwrapped path:
     // native authority reads that text unprojected too, and the package
-    // manager is the one that reports the missing directory.
-    let resolved = std::fs::canonicalize(base)
-        .ok()
-        .and_then(|root| std::fs::canonicalize(lexical(&root.join(value))).ok())
-        .filter(|directory| directory.is_dir())?;
-    let joined = lexical(&base.join(value));
-    let mut rewritten = vec![tokens[0].clone()];
+    // manager is the one that reports the missing directory. The workspace
+    // root is already a real directory or there was none to find.
+    let (resolved, joined) = if root {
+        let found = workspace_root(base)?;
+        (found.clone(), found)
+    } else {
+        let resolved = std::fs::canonicalize(base)
+            .ok()
+            .and_then(|root| std::fs::canonicalize(lexical(&root.join(value))).ok())
+            .filter(|directory| directory.is_dir())?;
+        (resolved, lexical(&base.join(value)))
+    };
+    let mut rewritten = prefix.to_vec();
+    rewritten.push(tokens[0].clone());
     rewritten.extend(rest.iter().map(|value| ((*value).to_owned(), false)));
     rewritten.extend_from_slice(&tokens[end..]);
     Some((rewritten, resolved, joined))
+}
+
+/// A leading `NAME=value` assignment, read the way the classifier reads one.
+/// `PATH` is not one of them: native authority refuses a command that sets it
+/// (`path_overridden`), so the sink must not peel past it either.
+fn environment_assignment(value: &str) -> bool {
+    crate::parser_executables::assignment_name(value).is_some_and(|name| name != "PATH")
 }
 
 /// Any spelling of a directory flag: `--cwd`, `--cwd=x`, `-C`, `-Cx`.
@@ -582,34 +664,128 @@ fn lexical(path: &Path) -> PathBuf {
 }
 
 /// `a && b && c` of plain words, rejoined, or `None` for any other shape.
+///
+/// Each command may send its stderr to stdout or to `/dev/null`, and may bound
+/// its output with one `head` or `tail` of a line or byte count. The filter
+/// stays in the rejoined text, where the sandbox's shell applies it to that
+/// command alone, as the issued text did.
+///
+/// A lone command is rejoined only when the peel refuses its pipeline, so a
+/// shape the peel already reads keeps its narrower sink. Its pipeline may run
+/// through any number of readers of standard input whose options name no
+/// file, which is what lets a pipeline the peel has no grammar for still run
+/// in the root the `cd` named: an ordinary `| cut` or `| sort` reads as the
+/// same work as `| head`. A list keeps the narrower grammar, because a filter
+/// there bounds only the command it follows while the rest of the list still
+/// runs.
 fn joined_list(tokens: &[Token]) -> Option<String> {
-    let mut segments: Vec<Vec<&str>> = vec![Vec::new()];
-    for token in tokens {
-        match operator(token) {
-            Some("&&") => segments.push(Vec::new()),
-            Some(_) => return None,
-            None => {
-                if token
+    let lone = !tokens.iter().any(|token| operator(token) == Some("&&"));
+    let mut commands = Vec::new();
+    for command in tokens.split(|token| operator(token) == Some("&&")) {
+        let mut stages = command.split(|token| operator(token) == Some("|"));
+        let (words, redirect) = stderr_redirect(stages.next()?);
+        let mut text = plain_words(words)?;
+        if let Some(redirect) = redirect {
+            text.push(' ');
+            text.push_str(redirect);
+        }
+        let mut filters = 0usize;
+        for stage in stages {
+            filters += 1;
+            if !lone && filters > 1 {
+                return None;
+            }
+            text.push_str(" | ");
+            text.push_str(&filter_stage(stage, lone)?);
+        }
+        if redirect.is_some() && filters == 0 {
+            return None;
+        }
+        commands.push(text);
+    }
+    let piped = tokens.iter().any(|token| operator(token) == Some("|"));
+    if commands.len() < 2 && !(piped && peel_declines(tokens)) {
+        return None;
+    }
+    Some(commands.join(" && "))
+}
+
+/// One filter stage's text, or `None` when it is not a reader of standard
+/// input. A `head` or `tail` is written back from the count this module read,
+/// rather than copied, so the rejoined bound is one the peel understood. Any
+/// other reader is rejoined only for a lone command, which is the shape the
+/// peel would otherwise refuse outright.
+fn filter_stage(tokens: &[Token], lone: bool) -> Option<String> {
+    let (program, arguments) = tokens.split_first()?;
+    if tokens.iter().any(|token| token.1) {
+        return None;
+    }
+    let program = word(program);
+    let arguments: Vec<String> = arguments.iter().map(|token| token.0.clone()).collect();
+    if matches!(program, "head" | "tail") {
+        let (count, bytes) = output_filters::head_tail_bound(&arguments)?;
+        let unit = if bytes { "-c" } else { "-n" };
+        return Some(format!("{program} {unit} {count}"));
+    }
+    if !lone || !output_filters::rejoined_stage(program, &arguments) {
+        return None;
+    }
+    plain_words(tokens)
+}
+
+/// One command's words, quoted back into text, or `None` when a word is an
+/// operator or carries one inside quotes. A `;`, `|`, `<`, `>` or `&` that the
+/// sandbox's shell would read again cannot be rejoined as the word it was.
+fn plain_words(tokens: &[Token]) -> Option<String> {
+    if tokens.is_empty()
+        || tokens.iter().any(|token| {
+            token.1
+                || token
                     .0
                     .chars()
                     .any(|character| ARGUMENT_REJECT.contains(character))
-                {
-                    return None;
-                }
-                segments.last_mut()?.push(token.0.as_str());
-            }
-        }
-    }
-    if segments.len() < 2 || segments.iter().any(|segment| segment.is_empty()) {
+        })
+    {
         return None;
     }
-    Some(
-        segments
-            .iter()
-            .map(|segment| shlex_join(segment.iter().copied()))
-            .collect::<Vec<_>>()
-            .join(" && "),
-    )
+    Some(shlex_join(tokens.iter().map(|token| token.0.as_str())))
+}
+
+/// A trailing `2>&1` or `2>/dev/null` split off a command's words, with the
+/// text to re-emit after them.
+///
+/// Both lex as one operator token followed, for the quiet form, by the path,
+/// so the digit can never have been a word the program was given.
+fn stderr_redirect(tokens: &[Token]) -> (&[Token], Option<&'static str>) {
+    if let Some((last, rest)) = tokens.split_last() {
+        if operator(last) == Some("2>&1") {
+            return (rest, Some("2>&1"));
+        }
+    }
+    if let [rest @ .., redirect, target] = tokens {
+        if operator(redirect) == Some("2>") && word(target) == "/dev/null" {
+            return (rest, Some(QUIET_SUFFIX));
+        }
+    }
+    (tokens, None)
+}
+
+/// Whether the filter peel refuses this command's pipeline, leaving the rejoin
+/// as the only reading that runs it in the root the `cd` named.
+///
+/// A `2>/dev/null` before the pipe refuses it as surely as an unreadable
+/// filter does: the peel truncates the command at the pipe and then reads the
+/// redirect's `>` among the core's words, which it will not run. The rejoin
+/// keeps the redirect in the text, where the root's own shell applies it to
+/// the same command the issued text did.
+fn peel_declines(tokens: &[Token]) -> bool {
+    tokens
+        .iter()
+        .position(|token| operator(token) == Some("|"))
+        .is_some_and(|index| {
+            filter_chain(&tokens[index + 1..]).is_err()
+                || stderr_redirect(&tokens[..index]).1 == Some(QUIET_SUFFIX)
+        })
 }
 
 /// Where a bare `node -e <program>` or `python3 -c <program>` holds its
@@ -727,3 +903,9 @@ fn require_blanks(characters: &[char], index: usize) -> Option<usize> {
     let end = skip_blanks(characters, index);
     (end > index).then_some(end)
 }
+
+// The tests spell the workspace path inside POSIX shell text, and the peel
+// itself is Unix-only, so they run where the arm they cover compiles.
+#[cfg(all(test, unix))]
+#[path = "sink_peel_tests.rs"]
+mod tests;

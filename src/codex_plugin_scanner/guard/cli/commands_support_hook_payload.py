@@ -8,9 +8,7 @@
 from __future__ import annotations
 
 import logging
-import re
 import sqlite3
-import sys
 from collections.abc import Mapping
 from typing import TYPE_CHECKING
 
@@ -53,13 +51,6 @@ def _hook_event_name(payload: dict[str, object]) -> str | None:
     return resolve_hook_event_name(payload)
 
 
-def _write_json_line(payload: dict[str, object], *, output_stream: TextIO | None = None) -> None:
-    """Resolve hook output lazily without reintroducing the prompt import cycle."""
-
-    from .commands_support_prompts import _write_json_line as resolve_write_json_line
-
-    resolve_write_json_line(payload, output_stream=output_stream)
-
 if TYPE_CHECKING:
     from ..store import GuardStore
     from ._commands_shared import _GUARD_CLIENT_VERSION, _now
@@ -70,13 +61,7 @@ if TYPE_CHECKING:
 from ._commands_shared import *
 from .commands_parser_helpers import *
 from ..browser_opener import open_browser_url
-from .commands_support_hook_payload_loader import (
-    _first_hook_tool_call,
-    _load_hook_payload as _load_hook_payload_impl,
-    _normalize_hook_argument_value,
-    _normalize_hook_arguments,
-    _normalize_hook_payload,
-)
+from .commands_support_hook_payload_loader import _load_hook_payload as _load_hook_payload_impl
 
 
 def _load_hook_payload(
@@ -86,82 +71,15 @@ def _load_hook_payload(
     harness: str | None = None,
     normalize: bool = True,
 ) -> dict[str, object]:
-    """Keep the legacy CLI facade while the loader owns raw input handling."""
+    """Load the raw hook payload; the native runtime prepares it per harness.
 
-    payload = _load_hook_payload_impl(
-        event_file,
-        input_text=input_text,
-        harness=harness,
-        normalize=False,
-    )
-    return payload
+    ``harness`` and ``normalize`` are accepted for the hook command's call
+    shape and ignored: Python never rewrites a payload before native authority.
+    """
+
+    return _load_hook_payload_impl(event_file, input_text=input_text)
 
 _BLOCKING_ACTIONS = frozenset({"review", "require-reapproval", "sandbox-required", "block"})
-
-
-_GUARD_TOKEN_URL_VALUE = re.compile(r"guard-token=([A-Za-z0-9._~%+-]+)")
-_GUARD_TOKEN_SENTINEL = re.compile(r"hgdfrag=efgh(\d+)")
-
-
-def _protect_ephemeral_approval_tokens(value: object, tokens: list[str]) -> object:
-    """Swap signed dashboard-session fragments for a redaction-safe sentinel."""
-    if isinstance(value, str):
-        def _replace(match: re.Match[str]) -> str:
-            tokens.append(match.group(1))
-            return f"hgdfrag=efgh{len(tokens) - 1}"
-
-        return _GUARD_TOKEN_URL_VALUE.sub(_replace, value)
-    if isinstance(value, dict):
-        return {key: _protect_ephemeral_approval_tokens(item, tokens) for key, item in value.items()}
-    if isinstance(value, list):
-        return [_protect_ephemeral_approval_tokens(item, tokens) for item in value]
-    return value
-
-
-def _restore_ephemeral_approval_tokens(value: object, tokens: list[str]) -> object:
-    """Restore the deliberately user-facing signed approval link after redaction."""
-    if isinstance(value, str):
-        if "hgdfrag=efgh" in value:
-            def _replace(match: re.Match[str]) -> str:
-                index = int(match.group(1))
-                return f"guard-token={tokens[index]}" if index < len(tokens) else match.group(0)
-
-            return _GUARD_TOKEN_SENTINEL.sub(_replace, value)
-        return value
-    if isinstance(value, dict):
-        return {key: _restore_ephemeral_approval_tokens(item, tokens) for key, item in value.items()}
-    if isinstance(value, list):
-        return [_restore_ephemeral_approval_tokens(item, tokens) for item in value]
-    return value
-
-
-def _emit_native_hook_json_document(
-    payload: dict[str, object],
-    *,
-    compact: bool = False,
-    output_stream: TextIO | None = None,
-) -> None:
-    """Write a native protocol document, redacting everything except the
-    ephemeral signed approval link that the operator is meant to click."""
-    from .render import _redact_payload, _render_redacted_json_payload
-
-    tokens: list[str] = []
-    protected = _protect_ephemeral_approval_tokens(payload, tokens)
-    masked = _redact_payload(protected, command="hook")
-    restored = _restore_ephemeral_approval_tokens(masked, tokens)
-    rendered = (
-        json.dumps(restored, separators=(",", ":"))
-        if compact
-        else _render_redacted_json_payload(restored)
-    )
-    if output_stream is None:
-        # stdout is the harness delivery channel; the ephemeral approval
-        # link must reach the operator intact.
-        sys.stdout.write(rendered)  # codeql[py/clear-text-logging-sensitive-data]
-        sys.stdout.write("\n")
-    else:
-        output_stream.write(rendered)  # codeql[py/clear-text-logging-sensitive-data]
-        output_stream.write("\n")
 
 
 def _object_list(value: object | None) -> list[object]:
@@ -481,10 +399,7 @@ __all__ = [
     "_action_envelope_json",
     "_approval_center_browser_url",
     "_approval_surface_policy_for_flow", "_browser_url_with_guard_params", "_coalesce_string",
-    "_first_hook_tool_call",
     "_headless_approval_resolver", "_hook_action_envelope",
     "_load_hook_payload",
-    "_normalize_hook_argument_value",
-    "_normalize_hook_arguments",
-    "_normalize_hook_payload", "_open_approval_center", "_public_approval_center_url",
+    "_open_approval_center", "_public_approval_center_url",
 ]

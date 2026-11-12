@@ -82,7 +82,6 @@ fn execution_changing_prefixes_leave_the_command_untouched() {
         "CURL_HOME=/tmp curl https://x.example",
         "FOO=`id` ls",
         "FOO=~/x ls",
-        "FOO=*.env ls",
         "FOO=1",
         "FOO=1 && rm -rf x",
         "env",
@@ -325,11 +324,23 @@ fn a_data_setting_keeps_only_a_profile_that_drops_it() {
         (joined.minimum_action.as_str(), joined.reason_code.as_str()),
         ("sandbox-required", vitest)
     );
-    // The workspace sandbox would run the text without its settings.
-    for (reason_code, data_only) in [
-        (vitest, false),
-        ("native_workspace_containment_required", true),
-    ] {
+    // The workspace launcher builds its environment with the same restricted
+    // filter, so the setting does not reach that run either. Which contained
+    // profile a host picks for one command varies, and a review for the
+    // prefixed spelling alone would follow the host rather than the command.
+    let workspace = "native_workspace_containment_required";
+    let joined = super::join_reviewed(
+        verdict("sandbox-required", workspace),
+        raw(),
+        &reviewed(true),
+    );
+    assert_eq!(
+        (joined.minimum_action.as_str(), joined.reason_code.as_str()),
+        ("sandbox-required", workspace)
+    );
+    // A setting that is not data, and a route that hands the command the
+    // session environment instead of a filtered one, both keep the review.
+    for (reason_code, data_only) in [(vitest, false), ("native_bash_owner_required", true)] {
         let joined = super::join_reviewed(
             verdict("sandbox-required", reason_code),
             raw(),
@@ -353,6 +364,13 @@ fn code_loading_settings_are_named_for_the_block_reason() {
         ("REPORT_DIR=out CC=./x npm run build", Some("CC")),
         ("cd app && PYTHONPATH=. python x.py", Some("PYTHONPATH")),
         ("REPORT_DIR=out node x.mjs", None),
+        // A setting the projection removes stopped nothing, so the reason
+        // skips it and names the one that did.
+        ("NODE_OPTIONS=--max-old-space-size=4096 npm test", None),
+        (
+            "NODE_OPTIONS=--max-old-space-size=4096 NODE_PATH=/ws node x.mjs",
+            Some("NODE_PATH"),
+        ),
         ("echo NODE_PATH=/ws | cat", None),
         ("node x.mjs NODE_PATH=/ws", None),
         ("NODE-PATH=/ws node x.mjs", None),

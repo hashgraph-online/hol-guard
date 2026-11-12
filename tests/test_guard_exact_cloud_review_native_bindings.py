@@ -14,10 +14,12 @@ from codex_plugin_scanner.guard.review_contracts import (
     build_local_review_request_claim,
     compute_legacy_local_review_request_claim_hash,
     local_review_request_claim_hash_matches,
-    validate_local_review_request_claim,
     validate_remote_approval_request_binding,
 )
-from codex_plugin_scanner.guard.review_native_claim_bindings import native_review_claim_bindings
+from codex_plugin_scanner.guard.review_native_claim_bindings import (
+    native_binding_commitment_matches,
+    native_review_claim_bindings,
+)
 from codex_plugin_scanner.guard.runtime import exact_cloud_review_apply
 from codex_plugin_scanner.guard.runtime.exact_cloud_review import ExactCloudReviewError, _oauth_metadata
 from codex_plugin_scanner.guard.runtime.exact_cloud_review_apply import apply_exact_cloud_review
@@ -65,7 +67,7 @@ def test_v1_claim_hash_remains_compatible_without_native_fields(tmp_path: Path) 
     }
     legacy["claimHash"] = compute_legacy_local_review_request_claim_hash(legacy)
     assert legacy["claimHash"] != current["claimHash"]
-    assert validate_local_review_request_claim(legacy) == legacy
+    assert local_review_request_claim_hash_matches(legacy, legacy["claimHash"], allow_legacy=True)
 
 
 def test_native_binding_digest_rejects_tampered_binding(tmp_path: Path) -> None:
@@ -74,8 +76,8 @@ def test_native_binding_digest_rejects_tampered_binding(tmp_path: Path) -> None:
     assert isinstance(request, dict)
     current = build_local_review_request_claim(request_row=request, oauth=_oauth_metadata(store), store=store)
     tampered = {**current, "nativePolicyBinding": "f" * 64}
-    with pytest.raises(GuardReviewContractError, match="native_binding_digest_mismatch"):
-        validate_local_review_request_claim(tampered)
+    assert not native_binding_commitment_matches(tampered)
+    assert not local_review_request_claim_hash_matches(tampered, current["claimHash"], allow_legacy=True)
 
 
 def test_v2_claim_does_not_match_legacy_hash_without_explicit_compatibility(tmp_path: Path) -> None:

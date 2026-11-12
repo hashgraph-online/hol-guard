@@ -59,13 +59,17 @@ const generic = describeSupplyChainRecoveryFailure("Sync failed.");
 assert(generic.kind === "generic" && generic.nextStep.startsWith("Try again"), "other failures say to try again");
 assert(describeSupplyChainRecoveryFailure("   ").summary.length > 0, "an empty message still explains the failure");
 
-// Every verification failure the Python bundle verifier can raise must read as a rejected
+// Every verification failure the native bundle verifier can raise must read as a rejected
 // bundle, never as a generic retry. The messages come straight from the verifier source.
 const verifierSource = readFileSync(
-  new URL("../../src/codex_plugin_scanner/guard/runtime/supply_chain_bundle_runtime.py", import.meta.url),
+  new URL("../../rust/crates/guard-command/src/supply_chain_bundle.rs", import.meta.url),
   "utf8",
 );
-const raised = [...verifierSource.matchAll(/raise SupplyChainBundle(Expired|Rollback|Keyring|Signature|PayloadHash)Error\(\s*f?"([^"]*)"/g)];
+const raised = [
+  ...verifierSource.matchAll(
+    /SupplyChainBundleError::(Expired|Rollback|Keyring|Signature|PayloadHash)\(\s*(?:format!\()?\s*"([^"]*)"/g,
+  ),
+];
 assert(raised.length >= 10, `found the verifier's raised messages (${raised.length})`);
 const kindsByError: Record<string, string[]> = {
   Expired: ["rejected_bundle"],

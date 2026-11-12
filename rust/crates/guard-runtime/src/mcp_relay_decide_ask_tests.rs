@@ -140,3 +140,40 @@ fn post_claim_evidence_follows_the_decision_evidence_in_the_row() {
     append_scanner_evidence(&mut item, &[]);
     assert!(!item.contains_key("scanner_evidence"));
 }
+
+#[test]
+fn a_package_call_the_proxy_would_prompt_for_first_defers() {
+    let prompts = |mode: &str, harness: &str, inline: bool, decision: &Decision| {
+        prompts_before_package("complete", mode, "run", harness, inline, decision)
+    };
+    let reviewed = decision("policy");
+    for mode in ["observe", "enforce"] {
+        // The client's inline elicitation runs before the package lane would
+        // observe or queue the call.
+        assert!(prompts(mode, "codex", true, &reviewed), "{mode}");
+        // Without one the route falls through to the leg the lane takes.
+        assert!(!prompts(mode, "codex", false, &reviewed), "{mode}");
+        // The opencode proxy never elicits inline. Its native prompt raises
+        // nothing, and the package handler it leads to composes the lane from
+        // a fresh tool authority, so the lane answers the call either way.
+        assert!(
+            !prompts(mode, OPENCODE, false, &decision("approval-gate")),
+            "{mode}"
+        );
+        assert!(
+            !prompts(mode, OPENCODE, true, &decision("approval-gate")),
+            "{mode}"
+        );
+        assert!(!prompts(mode, OPENCODE, true, &reviewed), "{mode}");
+    }
+    // An executable decision, a terminal one or a saved block never prompts.
+    let mut allowed = decision("policy");
+    allowed.action = GuardAction::Allow;
+    assert!(!prompts("observe", "codex", true, &allowed));
+    let mut blocked = decision("policy");
+    blocked.action = GuardAction::Block;
+    assert!(!prompts("observe", "codex", true, &blocked));
+    let mut saved = decision("policy");
+    saved.saved_action = Some(GuardAction::Block);
+    assert!(!prompts("observe", "codex", true, &saved));
+}

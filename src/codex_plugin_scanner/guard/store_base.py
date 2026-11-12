@@ -34,7 +34,6 @@ from cryptography.fernet import Fernet, InvalidToken
 
 from .approval_gate import ApprovalGateGrant, require_policy_clear, require_policy_write, require_request_resolution
 from .cli.oauth_client import resolve_guard_oauth_client_config
-from .edge_events import build_receipt_event
 from .fork_safety import forget_in_child
 from .local_trust_contract import (
     POLICY_INTEGRITY_ENFORCEMENT_ENFORCE,
@@ -60,7 +59,6 @@ from .policy_integrity import (
 )
 from .runtime.actions import GuardActionEnvelope
 from .runtime.approval_context import approval_context_token_is_well_formed
-from .runtime.scanner_cache import scanner_cache_key
 from .schemas.guard_event_v1 import GuardEventV1
 from .sqlite_tuning import (
     SQLITE_BUSY_TIMEOUT_MS,
@@ -73,18 +71,6 @@ from .store_approvals import (
     approval_index_statements,
     approval_schema_statement,
     backfill_approval_queue_columns,
-)
-from .store_approvals import (
-    bulk_resolve_approval_requests as persist_bulk_resolution,
-)
-from .store_approvals import (
-    get_approval_request as load_approval_request,
-)
-from .store_approvals import (
-    list_approval_requests as load_approval_requests,
-)
-from .store_approvals import (
-    resolve_request_with_queue_result as persist_queue_resolution,
 )
 from .store_connect import (
     connect_request_schema_statement,
@@ -105,19 +91,7 @@ from .store_resume import (
     delete_request_resumes as purge_request_resumes,
 )
 from .store_resume import (
-    get_latest_request_resume as load_latest_request_resume,
-)
-from .store_resume import (
-    get_request_resume as load_request_resume,
-)
-from .store_resume import (
     resume_schema_statement,
-)
-from .store_resume import (
-    seed_request_resume as persist_request_resume_seed,
-)
-from .store_resume import (
-    update_request_resume as persist_request_resume_update,
 )
 from .store_supply_chain import (
     get_supply_chain_bundle as load_supply_chain_bundle,
@@ -1157,15 +1131,33 @@ def _windows_path_is_direct(path: str) -> bool:
 
 def _set_windows_private_directory(path: Path) -> None:
     from .native_policy_snapshot import NativePolicySnapshotError
-    from .native_policy_snapshot_windows_state import _windows_ensure_private_directory
 
-    key = os.path.normcase(os.path.abspath(path))
+    try:
+        _ensure_windows_private_directory_recently(path)
+    except (NativePolicySnapshotError, OSError, RuntimeError, TypeError, ValueError) as exc:
+        _store_logger.debug("Could not set a Windows private directory: %s", type(exc).__name__)
+
+
+def _ensure_windows_private_directory_recently(path: Path, *, private_root: Path | None = None) -> None:
+    """Have the runtime make `path` owner-private, at most once per recheck window.
+
+    A directory reached without a junction or link, whose identity is the one
+    the runtime last made private within the window, is not asked again. A
+    failure is raised and forgets the directory.
+    """
+
+    from .native_policy_snapshot_windows_atomic import _windows_ensure_private_directory
+
+    path_key = os.path.normcase(os.path.abspath(path))
+    key = path_key
+    if private_root is not None:
+        key = f"{path_key}\0{os.path.normcase(os.path.abspath(private_root))}"
     try:
         stat = os.stat(path)
     except OSError:
         stat = None
     now = time.monotonic()
-    if stat is not None and _windows_path_is_direct(key):
+    if stat is not None and _windows_path_is_direct(path_key):
         with _windows_private_directory_lock:
             bound = _windows_private_directory_bound.get(key)
         if (
@@ -1175,12 +1167,14 @@ def _set_windows_private_directory(path: Path) -> None:
         ):
             return
     try:
-        _windows_ensure_private_directory(path)
-    except (NativePolicySnapshotError, OSError, RuntimeError, TypeError, ValueError) as exc:
+        if private_root is None:
+            _windows_ensure_private_directory(path)
+        else:
+            _windows_ensure_private_directory(path, private_root=private_root)
+    except BaseException:
         with _windows_private_directory_lock:
             _windows_private_directory_bound.pop(key, None)
-        _store_logger.debug("Could not set Windows private directory on %s: %s", path, exc)
-        return
+        raise
     if stat is not None:
         with _windows_private_directory_lock:
             _windows_private_directory_bound[key] = (stat.st_dev, stat.st_ino, now)
@@ -1418,18 +1412,6 @@ def _runtime_scoped_exact_match_key(
     return f"{_RUNTIME_SCOPED_EXACT_MATCH_PREFIX}{digest}"
 
 
-def runtime_tool_action_policy_artifact_id(artifact_id: str | None) -> str | None:
-    """Return a scoped family identity for one exact runtime tool action."""
-
-    if artifact_id is None or not artifact_id.strip():
-        return None
-    family_key = _artifact_family_key(artifact_id)
-    if family_key is not None and _family_key_value(family_key) in _SCOPED_RUNTIME_EXACT_FAMILIES:
-        return artifact_id
-    digest = sha256(artifact_id.strip().encode("utf-8")).hexdigest()
-    return f"guard:runtime:tool-action:{digest}"
-
-
 def runtime_tool_action_exact_match_context(
     *,
     config_path: str | None,
@@ -1567,15 +1549,6 @@ def _canonical_utc_timestamp(value: str) -> str:
     """Normalize an ISO-8601 timestamp for safe storage and comparison."""
 
     return _parse_utc_timestamp(value).isoformat(timespec="microseconds")
-
-
-def _timestamp_has_expired(expires_at: str, *, now: str) -> bool:
-    """Return true at the expiry boundary and for malformed legacy values."""
-
-    try:
-        return _parse_utc_timestamp(expires_at) <= _parse_utc_timestamp(now)
-    except (TypeError, ValueError):
-        return True
 
 
 def _now() -> str:

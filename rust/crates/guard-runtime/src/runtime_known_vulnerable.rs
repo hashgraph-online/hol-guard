@@ -377,19 +377,34 @@ pub(crate) fn raise(
     } else {
         (configured, action, FINDING)
     };
-    if minimum > floor {
-        return result;
-    }
     let reason = if reason_code == OBSERVED && configured > ActionFloor::Warn {
         format!("{} Guard would have required {action}.", finding.describe())
     } else {
         finding.describe()
     };
+    if minimum > floor {
+        // In watch mode a stronger intrinsic result, such as a workspace
+        // launch reviewed because no sandbox can contain it, keeps its own
+        // code and action. The text still records what this finding would
+        // have required, so watch does not lose it behind that review.
+        if observe && configured > ActionFloor::Warn {
+            result.reason = if result.reason.trim().is_empty() {
+                reason
+            } else {
+                format!("{reason} Also: {}", result.reason)
+            };
+        }
+        return result;
+    }
     if minimum == floor {
         // The same floor raised for another reason keeps its decision; a
         // review held by this finding carries its code, with the earlier
-        // reason kept in the text so the prompt still shows it.
-        if floor >= ActionFloor::Review {
+        // reason kept in the text so the prompt still shows it. In watch
+        // mode a warning that stands in for a stronger configured action
+        // records that action over a plain warning the same way.
+        if floor >= ActionFloor::Review
+            || (reason_code == OBSERVED && configured > ActionFloor::Warn)
+        {
             result.explicitly_benign = false;
             result.reason_code = reason_code.into();
             result.reason = if result.reason.trim().is_empty() {

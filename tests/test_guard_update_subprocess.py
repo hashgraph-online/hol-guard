@@ -514,8 +514,8 @@ def test_update_context_reconstructs_platform_proxy_instead_of_ambient_proxy(
     monkeypatch.setenv("HTTPS_PROXY", "http://ambient.invalid:8080")
     monkeypatch.setattr(
         update_subprocess_module,
-        "platform_system_proxies",
-        lambda: {"http": "http://system-proxy.example:8080", "https": "http://system-proxy.example:8443"},
+        "available_system_proxies",
+        lambda **_kwargs: {"http": "http://system-proxy.example:8080", "https": "http://system-proxy.example:8443"},
     )
     monkeypatch.setattr(TrustedUpdateContext, "verify_pip_origin", lambda self: None)
     monkeypatch.setenv("PATH", _path_value(Path(sys.executable).resolve().parent))

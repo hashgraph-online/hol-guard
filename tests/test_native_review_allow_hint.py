@@ -15,7 +15,7 @@ from typing import Any
 
 import pytest
 
-from codex_plugin_scanner.guard.daemon import native_review_allow_hint as module
+from codex_plugin_scanner.guard.hook_review import native_review_allow_hint as module
 from codex_plugin_scanner.guard.runtime.extension_allow_hint import validated_extension_allow_hint
 from codex_plugin_scanner.guard.runtime.extension_coverage_hint import validated_extension_coverage_hint
 
@@ -153,49 +153,20 @@ def test_a_never_enrolled_device_still_asks(monkeypatch, tmp_path: Path) -> None
     assert asked[0]["payload"] == {"tool_input": {"command": "git fetch origin main"}, "cwd": str(tmp_path.resolve())}
 
 
-def test_queue_time_hints_hand_the_resident_the_paused_result(monkeypatch, tmp_path: Path) -> None:
-    asked = _record_asks(monkeypatch, answer=dict(_STORED_COVERAGE))
-    payload = {"tool_name": "Bash", "tool_input": {"command": "git fetch origin main"}}
-    paused = {"decision": "review", "reason_code": "native_extension_review", "command_extensions": {}}
-    store = SimpleNamespace(guard_home=tmp_path)
-
-    hint = module.native_review_hint(store, payload, paused, tmp_path, tmp_path, None, None)
-
-    assert hint == _STORED_COVERAGE
-    assert asked[0]["payload"] == payload
-    assert asked[0]["paused"] == paused
-    assert asked[0]["workspace"] == tmp_path
-    assert asked[0]["home_dir"] == tmp_path
-    assert asked[0]["budget_seconds"] == 5.0
+def test_the_queue_time_ask_carries_only_a_budget_without_a_deadline() -> None:
+    assert module.native_review_hint_ask(None) == {"budget_ms": 5000}
 
 
-def test_queue_time_hints_leave_the_hook_time_to_persist_the_review(monkeypatch, tmp_path: Path) -> None:
-    asked = _record_asks(monkeypatch)
+def test_queue_time_hints_leave_the_hook_time_to_persist_the_review(monkeypatch) -> None:
     monkeypatch.setattr(module.time, "monotonic", lambda: 100.0)
-    store = SimpleNamespace(guard_home=tmp_path)
-    paused = {"command_extensions": {}}
 
-    module.native_review_hint(store, {}, paused, None, None, 100.6, None)
-    assert asked[0]["budget_seconds"] == pytest.approx(0.25)
-
-    # Too little left after the margin: the review is persisted without hints.
-    assert module.native_review_hint(store, {}, paused, None, None, 100.45, None) is None
-    assert len(asked) == 1
-
-
-def test_queue_time_hints_need_extension_evidence_to_ask(monkeypatch, tmp_path: Path) -> None:
-    asked = _record_asks(monkeypatch, answer=dict(_STORED_COVERAGE))
-    store = SimpleNamespace(guard_home=tmp_path)
-
-    assert module.native_review_hint(store, {}, {"decision": "review"}, tmp_path, tmp_path, None, None) is None
-    assert asked == []
-
-
-def test_queue_time_hints_need_a_guard_home_to_reach_the_resident(monkeypatch, tmp_path: Path) -> None:
-    asked = _record_asks(monkeypatch, answer=dict(_STORED_COVERAGE))
-
-    assert module.native_review_hint(object(), {}, {"command_extensions": {}}, tmp_path, tmp_path, None, None) is None
-    assert asked == []
+    assert module.native_review_hint_ask(100.75) == {"budget_ms": 400}
+    # A short budget still asks: the resident decides whether it is enough for
+    # an extension hint, and a connector's setup hint needs no minimum.
+    assert module.native_review_hint_ask(100.45) == {"budget_ms": 100}
+    # Nothing left after the margin: the review is persisted without hints.
+    for deadline in (99.0, 100.0, 100.0 + module._SAFETY_MARGIN_SECONDS / 2):
+        assert module.native_review_hint_ask(deadline) is None
 
 
 def _answering(monkeypatch, hint: object) -> list[dict[str, Any]]:
@@ -223,10 +194,7 @@ def test_the_query_sends_every_field_the_resident_digests(monkeypatch, tmp_path:
     assert query == {"kind": "review_hint", "payload": payload, "workspace": "", "home_dir": "", "budget_ms": 10_000}
     assert queries[0]["operation"].timeout_seconds == 10.0
 
-    module._ask_review_hint(
-        payload, guard_home=tmp_path, workspace=tmp_path, home_dir=tmp_path, budget_seconds=0.5, paused={"a": 1}
-    )
-    assert queries[1]["query"]["paused"] == {"a": 1}
+    module._ask_review_hint(payload, guard_home=tmp_path, workspace=tmp_path, home_dir=tmp_path, budget_seconds=0.5)
     assert queries[1]["query"]["workspace"] == str(tmp_path)
     assert queries[1]["query"]["budget_ms"] == 500
 
@@ -251,6 +219,26 @@ def test_an_answer_is_shape_checked_before_it_is_stored(monkeypatch, tmp_path: P
 
     _answering(monkeypatch, {"schema": "guard.extension-allow-hint.v1", "permission_ids": ["../../etc"]})
     assert module._ask_review_hint({}, guard_home=tmp_path, workspace=None, home_dir=None, budget_seconds=1) is None
+
+
+def test_an_unchecked_hint_is_dropped_without_failing_the_resident(monkeypatch, tmp_path: Path) -> None:
+    """A shape check that runs out of budget drops the hint; the reply still counts as answered."""
+
+    raised: list[BaseException] = []
+
+    def decide(_query, _guard_home, _fields, validate, **_kwargs: Any) -> None:
+        try:
+            validate({"hint": dict(_LIVE_ALLOW)})
+        except BaseException as error:
+            raised.append(error)
+            raise
+
+    monkeypatch.setattr(module, "_decide", decide)
+    monkeypatch.setattr(module, "validated_extension_allow_hint", lambda *_a, **_k: None)
+    monkeypatch.setattr(module, "validated_extension_coverage_hint", lambda *_a, **_k: None)
+
+    assert module._ask_review_hint({}, guard_home=tmp_path, workspace=None, home_dir=None, budget_seconds=1) is None
+    assert raised == []
 
 
 def test_a_resident_failure_never_reaches_the_review(monkeypatch, tmp_path: Path) -> None:

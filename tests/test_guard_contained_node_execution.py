@@ -70,76 +70,101 @@ _VITEST = ("--no-install", "vitest", "run", "src/example.test.ts")
 _ESLINT = ("--no-install", "eslint", "--no-cache", "src/example.ts")
 
 
-def test_native_request_carries_launch_evidence_environment_and_timeout(
-    native_home: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+def _capture_resident(monkeypatch: pytest.MonkeyPatch) -> list[dict[str, object]]:
+    calls: list[dict[str, object]] = []
+
+    def resident(**kwargs: object) -> None:
+        calls.append(kwargs)
+
+    monkeypatch.setattr(execution_module._native_execution, "_resident_request", resident)
+    return calls
+
+
+def test_native_request_carries_the_shims_launch_environment_and_timeout(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     workspace = _workspace(tmp_path, "vitest")
     shim = _manager(tmp_path)
-    captured: dict[str, object] = {}
-
-    def native(workspace_arg: Path, manager: str, argv: tuple[str, ...], **kwargs: object) -> None:
-        captured.update(workspace=workspace_arg, manager=manager, argv=argv, **kwargs)
-
-    monkeypatch.setattr(execution_module._native_execution, "contained_node_execute_native", native)
+    calls = _capture_resident(monkeypatch)
     environment = {"PATH": str(shim), "GITHUB_TOKEN": "left-to-the-resident"}
     result = try_execute_contained_node_command(
         "npx",
         _VITEST,
         workspace=workspace,
-        guard_home=native_home,
+        guard_home=tmp_path,
         shim_directory=shim,
         environment=environment,
         timeout_seconds=45.0,
     )
 
     assert result is None
-    assert captured["workspace"] == workspace
-    assert captured["manager"] == "npx"
-    assert captured["argv"] == _VITEST
-    assert captured["shim_directory"] == shim
-    assert captured["environment"] == environment
-    assert captured["timeout_seconds"] == 45.0
-    evidence = captured["evidence"]
-    assert isinstance(evidence, dict)
-    assert evidence["manager_name"] == "npx"
-    assert evidence["package_name"] == "vitest"
-    assert evidence["local_only_requested"] is True
+    # One resident request: it parses the launch intent from the argv itself.
+    assert len(calls) == 1
+    assert calls[0]["operation"] == "contained_node_execute"
+    request = calls[0]["request"]
+    assert isinstance(request, dict)
+    assert request["schema"] == "guard-contained-node-execute-request.v2"
+    assert request["workspace"] == str(workspace)
+    assert request["manager"] == "npx"
+    assert request["argv"] == list(_VITEST)
+    assert request["shim_directory"] == str(shim)
+    assert request["environment"] == environment
+    assert request["timeout_seconds"] == 45.0
+    assert "evidence" not in request
+    assert "command_text" not in request
+
+
+@pytest.mark.parametrize("manager", ("pnpm", "yarn", "bun", " NPX "))
+def test_manager_and_workspace_limits_are_left_to_the_resident(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, manager: str
+) -> None:
+    calls = _capture_resident(monkeypatch)
+    for workspace in (tmp_path, Path("/usr")):
+        assert (
+            try_execute_contained_node_command(
+                manager,
+                _VITEST,
+                workspace=workspace,
+                guard_home=tmp_path,
+                shim_directory=tmp_path,
+                environment={},
+            )
+            is None
+        )
+    # The resident refuses these before it parses anything; the shim forwards
+    # the raw manager and workspace and keeps no limit of its own.
+    requests = [call["request"] for call in calls]
+    sent = [(request["manager"], request["workspace"]) for request in requests if isinstance(request, dict)]
+    assert sent == [(manager, str(tmp_path)), (manager, "/usr")]
 
 
 @pytest.mark.parametrize("manager", ("pnpm", "yarn", "bun"))
-def test_unsupported_managers_never_reach_the_resident(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, manager: str
-) -> None:
-    def native(*_args: object, **_kwargs: object) -> None:
-        raise AssertionError("resident must not see an unsupported manager")
-
-    monkeypatch.setattr(execution_module._native_execution, "contained_node_execute_native", native)
+def test_unsupported_managers_return_to_review(native_home: Path, tmp_path: Path, manager: str) -> None:
+    workspace = _workspace(tmp_path, "vitest")
+    shim = _manager(tmp_path)
     assert (
         try_execute_contained_node_command(
             manager,
             _VITEST,
-            workspace=tmp_path,
-            guard_home=tmp_path,
-            shim_directory=tmp_path,
-            environment={},
+            workspace=workspace,
+            guard_home=native_home,
+            shim_directory=shim,
+            environment={"PATH": str(shim)},
         )
         is None
     )
 
 
-def test_system_root_workspace_never_reaches_the_resident(monkeypatch: pytest.MonkeyPatch) -> None:
-    def native(*_args: object, **_kwargs: object) -> None:
-        raise AssertionError("a system-root workspace must return to review")
-
-    monkeypatch.setattr(execution_module._native_execution, "contained_node_execute_native", native)
+def test_system_root_workspace_returns_to_review(native_home: Path, tmp_path: Path) -> None:
+    shim = _manager(tmp_path)
     assert (
         try_execute_contained_node_command(
             "npx",
             _VITEST,
             workspace=Path("/usr"),
-            guard_home=Path("/usr"),
-            shim_directory=Path("/usr"),
-            environment={},
+            guard_home=native_home,
+            shim_directory=shim,
+            environment={"PATH": str(shim)},
         )
         is None
     )

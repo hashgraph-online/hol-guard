@@ -23,7 +23,7 @@ from codex_plugin_scanner.guard.approval_gate import (
     update_settings as update_approval_gate_settings,
 )
 from codex_plugin_scanner.guard.cli import approval_gate_prompt as approval_gate_prompt_module
-from codex_plugin_scanner.guard.totp import totp_code_at_counter
+from tests.guard_totp_support import totp_code_at_counter
 
 PASSWORD = "correct-password"
 

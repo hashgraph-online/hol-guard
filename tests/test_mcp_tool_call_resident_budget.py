@@ -25,7 +25,7 @@ pytestmark = [pytest.mark.usefixtures("bundle_first_cloud"), pytest.mark.usefixt
 
 # Resident ops one benign warm allow may spend, excluding the `tools/list` setup.
 # Includes the single `mcp_tool_call_identity` round trip; the stdio exchange fusion lowers it further.
-_TOTAL_BUDGET = 7
+_TOTAL_BUDGET = 8
 _CONNECTION_BUDGET = 2
 # `native_context_digest` calls (cached ones included) cost Python time even when no resident round
 # trip happens, so they are bounded too.
@@ -33,7 +33,8 @@ _DIGEST_BUDGET = 14
 _PER_OPERATION_BUDGET = {
     "mcp_tool_policy_decide": 1,
     "policy_decision_lookup": 0,
-    "mcp_proxy_decide": 0,
+    # The receipt's masked arguments (`call_projection`); no other check may re-enter the decide op.
+    "mcp_proxy_decide": 1,
     "guard_store": 1,
 }
 
@@ -86,7 +87,10 @@ def test_benign_tool_call_stays_within_the_resident_round_trip_budget(
 
     monkeypatch.setattr(sqlite3, "connect", counting_connect)
     messages = _messages(tool_name="safe_echo", arguments={"value": "hello"}, elicitation=False)
-    proxy.run_session(messages[:2])  # initialize and tools/list
+    proxy.run_session(messages[:2])  # initialize and tools/list, cold
+    operations.clear()
+    # The baseline is the same setup run warm, so a cold-only setup cost cannot offset the call's own.
+    proxy.run_session(messages[:2])
     setup = collections.Counter(operations)
     operations.clear()
     connections.clear()

@@ -442,6 +442,25 @@ export async function refreshMcpInventory(
   await waitForMcpDiscoveryJob(cliId, initialJob, signal);
 }
 
+/**
+ * Reads a recorded command-line tool's --help. A script is found by the full
+ * `path` the operator gives, since Guard records no location for it; the
+ * daemon runs it only when that file is still the one it recorded.
+ */
+export async function loadLocalCliCommands(cliId: string, signal: AbortSignal, path?: string): Promise<void> {
+  if (signal.aborted) return;
+  const initialJob = await startCancelableDiscoveryJob(signal, async (clientJobId) => readJson(await fetchLocalCliApi(
+    "/v1/local-clis/refresh-job", {
+      method: "POST", headers: { "Content-Type": "application/json" }, signal,
+      body: JSON.stringify({
+        cli_id: cliId, confirm_process_start: true, client_job_id: clientJobId, ...(path === undefined ? {} : { path }),
+      }),
+    },
+  )));
+  if (initialJob === null) return;
+  await waitForMcpDiscoveryJob(cliId, initialJob, signal);
+}
+
 export async function refreshCodexHostInventory(signal: AbortSignal, forceRefresh = false): Promise<void> {
   if (signal.aborted) return;
   const initialJob = await startCancelableDiscoveryJob(signal, async (clientJobId) => readJson(await fetchLocalCliApi(

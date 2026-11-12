@@ -118,3 +118,82 @@ fn python_strip_also_trims_information_separators() {
     assert_eq!(py_strip("\u{1c}\u{1f} {} \u{85}\u{3000}"), "{}");
     assert_eq!(py_strip("\u{200b}x"), "\u{200b}x");
 }
+
+fn validated(output: &serde_json::Value, reason: &str, event: &str) -> serde_json::Value {
+    let data = serde_json::json!({ "hook_event_name": event }).to_string();
+    let response = valid_hook_json_or_degraded(&output.to_string(), reason, &data).unwrap();
+    serde_json::from_str(&response).unwrap()
+}
+
+#[test]
+fn incomplete_or_wrong_event_tool_response_requires_native_approval() {
+    for output in [
+        serde_json::json!({}),
+        serde_json::json!({ "hookSpecificOutput": {} }),
+        serde_json::json!({ "hookSpecificOutput": { "hookEventName": "PreToolUse", "permissionDecision": "unknown" } }),
+        serde_json::json!({ "hookSpecificOutput": { "hookEventName": "PreToolUse", "permissionDecision": ["allow"] } }),
+        serde_json::json!({ "hookSpecificOutput": { "hookEventName": "Stop", "permissionDecision": "allow" } }),
+    ] {
+        let response = validated(&output, "invalid tool response", "PreToolUse");
+        assert_eq!(
+            response["hookSpecificOutput"]["permissionDecision"], "deny",
+            "{output}"
+        );
+    }
+}
+
+#[test]
+fn empty_permission_response_is_denied() {
+    for event in ["PermissionRequest", "PermissionRequestV2"] {
+        let response = validated(&serde_json::json!({}), "invalid permission response", event);
+        assert_eq!(
+            response["hookSpecificOutput"]["decision"]["behavior"],
+            "deny"
+        );
+    }
+}
+
+#[test]
+fn empty_daemon_body_degrades_to_a_pretool_deny() {
+    let data = serde_json::json!({ "hook_event_name": "PreToolUse" }).to_string();
+    let response =
+        valid_hook_json_or_degraded("", "daemon returned empty hook JSON", &data).unwrap();
+    let payload: serde_json::Value = serde_json::from_str(&response).unwrap();
+    assert_eq!(payload["hookSpecificOutput"]["hookEventName"], "PreToolUse");
+    assert_eq!(payload["hookSpecificOutput"]["permissionDecision"], "deny");
+}
+
+#[test]
+fn explicit_permission_passthrough_defers_to_the_claude_dialog() {
+    for event in ["PermissionRequest", "PermissionRequestV2"] {
+        let output = serde_json::json!({
+            "guard_permission_passthrough": true,
+            "systemMessage": "HOL Guard context",
+            "hookSpecificOutput": { "hookEventName": event, "additionalContext": "context" },
+        })
+        .to_string();
+        let data = serde_json::json!({ "hook_event_name": event }).to_string();
+        let response =
+            valid_hook_json_or_degraded(&output, "invalid permission response", &data).unwrap();
+        assert_eq!(response, output);
+    }
+}
+
+#[test]
+fn malformed_permission_passthrough_is_denied() {
+    for output in [
+        serde_json::json!({ "guard_permission_passthrough": "true", "hookSpecificOutput": { "hookEventName": "PermissionRequest" } }),
+        serde_json::json!({ "guard_permission_passthrough": true, "hookSpecificOutput": { "hookEventName": "PreToolUse" } }),
+        serde_json::json!({ "guard_permission_passthrough": true }),
+        serde_json::json!({
+            "guard_permission_passthrough": true,
+            "hookSpecificOutput": { "hookEventName": "PermissionRequest", "decision": { "behavior": "maybe" } },
+        }),
+    ] {
+        let response = validated(&output, "invalid permission response", "PermissionRequest");
+        assert_eq!(
+            response["hookSpecificOutput"]["decision"]["behavior"], "deny",
+            "{output}"
+        );
+    }
+}

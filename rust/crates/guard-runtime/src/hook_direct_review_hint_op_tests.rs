@@ -132,6 +132,89 @@ fn the_answer_is_bound_to_its_request() {
     assert!(answer.get("payload").is_none());
 }
 
+const CONNECTOR_HASH: &str = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+
+fn connector_request(
+    connector: Value,
+    paused: Option<Map<String, Value>>,
+) -> ExtensionReviewHintRequestV1 {
+    let mut raw = serde_json::to_value(request(paused, 2_000)).unwrap();
+    raw["query"]["connector"] = connector;
+    serde_json::from_value(raw).unwrap()
+}
+
+fn local_cli(surface: &str) -> Value {
+    json!({
+        "cli_id": "local-cli.acme@1+x",
+        "identity_hash": CONNECTOR_HASH,
+        "name": " acme ",
+        "surface": surface,
+        "queue_group_id": format!("connector:{CONNECTOR_HASH}:0123456789abcdef"),
+    })
+}
+
+fn hint_of(asked: &ExtensionReviewHintRequestV1) -> Value {
+    let answer: Value = serde_json::from_slice(&evaluate_with_store(asked, None).unwrap()).unwrap();
+    assert_eq!(answer["status"], "ok");
+    answer["payload"]["hint"].clone()
+}
+
+#[test]
+fn a_queued_connector_review_answers_its_setup_hint() {
+    let paused = json!({"command_extensions": {"observations": []}})
+        .as_object()
+        .cloned()
+        .unwrap();
+    let hint = hint_of(&connector_request(local_cli("cli"), Some(paused)));
+    assert_eq!(hint["schema"], "guard.connector-setup-hint.v1");
+    assert_eq!(hint["cli_id"], "local-cli.acme@1+x");
+    assert_eq!(hint["identity_hash"], CONNECTOR_HASH);
+    assert_eq!(hint["display_name"], "acme");
+    assert_eq!(hint["risk_classes"], json!([]));
+}
+
+#[test]
+fn a_connector_hint_takes_its_risk_classes_from_the_observed_rules() {
+    // A destructive shell rule also records `destructive`, so the connector
+    // recommendation keeps its caution for a pending delete; unknown rules and
+    // malformed observations name nothing.
+    let paused = json!({
+        "reason_code": "native_command_review_required",
+        "command_extensions": {"observations": [
+            {"rule_id": "command.api-gateway.delete"},
+            {"rule_id": "command.unknown.rule"},
+            "bad",
+        ]},
+    })
+    .as_object()
+    .cloned()
+    .unwrap();
+    let hint = hint_of(&connector_request(local_cli("cli"), Some(paused)));
+    assert_eq!(
+        hint["risk_classes"],
+        json!(["destructive", "destructive_shell", "network_egress"])
+    );
+}
+
+#[test]
+fn a_connector_hint_needs_a_paused_review_and_a_local_cli() {
+    let paused = Map::new();
+    assert_eq!(
+        hint_of(&connector_request(local_cli("cli"), None)),
+        Value::Null
+    );
+    assert_eq!(
+        hint_of(&connector_request(local_cli("mcp"), Some(paused.clone()))),
+        Value::Null
+    );
+    let mut unbound = local_cli("cli");
+    unbound["queue_group_id"] = json!("connector:other:0123456789abcdef");
+    assert_eq!(
+        hint_of(&connector_request(unbound, Some(paused))),
+        Value::Null
+    );
+}
+
 #[test]
 fn an_unknown_field_is_refused() {
     let mut raw = serde_json::to_value(request(None, 2_000)).unwrap();

@@ -66,7 +66,7 @@ fn shell(home: &Path, command: &str) -> String {
         pager_disabled: false,
         xdg_config_home: None,
         git_config_no_system: true,
-        library_search_paths: Default::default(),
+        ..Default::default()
     };
     let project = home.join("project");
     let [omp, zcode] = ["omp", "zcode"].map(|harness| {
@@ -81,10 +81,14 @@ fn shell(home: &Path, command: &str) -> String {
                 cwd: project.to_str(),
                 cdpath_unset: false,
                 rustup_override_absent: false,
+                cargo_config_inert: false,
                 npm_config_inert: false,
                 pip_config_inert: false,
                 shell_home_matches: false,
                 ripgrep_config_absent: false,
+                gem_config_absent: false,
+                http_config_absent: false,
+                openssl_config_absent: false,
                 psql_environment: Default::default(),
                 creates_nothing: false,
             },
@@ -115,6 +119,11 @@ fn size_and_comparison_reads_proceed() {
         "diff -u src/one.ts old/one.ts",
         "diff -ru src old",
         "diff --brief src old",
+        "cmp src/one.ts old/one.ts",
+        "cmp -s README.md src/one.ts",
+        "cmp -l -n 64 src/one.ts old/one.ts",
+        "cmp --bytes=64 src/one.ts old/one.ts 0 0",
+        "cmp -i 3:3 src/one.ts old/one.ts",
     ] {
         assert_eq!(shell(&home, command), "allow", "{command}");
     }
@@ -138,6 +147,52 @@ fn unproven_size_and_comparison_reads_still_ask() {
         "diff - README.md",
         "diff --from-file=README.md src/one.ts old/one.ts",
         "diff README.md",
+        "cmp src/.env README.md",
+        "cmp - README.md",
+        "cmp README.md",
+        "cmp src old",
+        "cmp README.md ~/.ssh/id_ed25519",
+        "cmp README.md src/one.ts $N",
+        "cmp -n $N README.md src/one.ts",
+        "cmp --ignore-initial=1K README.md src/one.ts",
+        "cmp -x README.md src/one.ts",
+    ] {
+        assert!(!shell(&home, command).contains("allow"), "{command}");
+    }
+}
+
+/// `git show HEAD:a.ts | diff - a.ts` compares a committed copy against the
+/// working file. The dash reads only what the proven producer printed, so the
+/// file operand carries the whole proof.
+#[test]
+fn a_comparison_against_piped_output_proceeds() {
+    let home = home();
+    for command in [
+        "git show HEAD:src/one.ts | diff - src/one.ts",
+        "git show HEAD:README.md | diff -u README.md -",
+        "cat old/one.ts | diff -q - src/one.ts",
+        "git show HEAD:src/one.ts | cmp - old/one.ts",
+        "cat src/one.ts | cmp -s src/one.ts -",
+    ] {
+        assert_eq!(shell(&home, command), "allow", "{command}");
+    }
+}
+
+#[test]
+fn a_piped_comparison_still_proves_its_file_and_its_producer() {
+    let home = home();
+    write(home.join("project/src/.env"), "SYNTHETIC=1\n");
+    for command in [
+        "cat README.md | diff - src/.env",
+        "cat README.md | diff - ~/.ssh/id_ed25519",
+        "cat README.md | diff - -",
+        "cat README.md | diff -r - old",
+        "cat README.md | diff --from-file=README.md - src/one.ts",
+        "cat src/.env | diff - README.md",
+        "cat README.md | cmp - src/.env",
+        "cat README.md | cmp - -",
+        "cat README.md | cmp - README.md $N",
+        "cat src/.env | cmp - README.md",
     ] {
         assert!(!shell(&home, command).contains("allow"), "{command}");
     }

@@ -77,7 +77,12 @@ def _assert_graph(jobs: dict) -> None:
         prepare = jobs[prepare_id]
         wheel = jobs[f"build-native-guard-wheel-{lane}"]
         assert prepare["uses"] == "./.github/workflows/release-native-prepare.yml"
-        assert prepare["needs"] == ["authorize-release", "resolve-alpha-version", "resolve-canary-version"]
+        assert prepare["needs"] == [
+            "authorize-release",
+            "authorize-pull-request-alpha",
+            "resolve-alpha-version",
+            "resolve-canary-version",
+        ]
         assert prepare["with"]["target"] == target
         assert wheel["uses"] == "./.github/workflows/release-native-wheel.yml"
         assert wheel["needs"] == ["build", prepare_id]
@@ -88,6 +93,7 @@ def _assert_graph(jobs: dict) -> None:
             "channel": "${{ needs.build.outputs.channel }}",
             "precompiled": f"${{{{ needs.{prepare_id}.result == 'success' }}}}",
             "release_repair": "${{ needs.build.outputs.release_repair == 'true' }}",
+            "allow_cache_write": "${{ github.event_name != 'workflow_dispatch' || inputs.pull_request == '' }}",
         }
         assert prepare["permissions"] == {"contents": "read", "actions": "read"}
         assert wheel["permissions"] == {"contents": "read"}
@@ -119,6 +125,7 @@ def _assert_graph(jobs: dict) -> None:
             "channel": "${{ needs.build.outputs.channel }}",
             "precompiled": False,
             "release_repair": "${{ needs.build.outputs.release_repair == 'true' }}",
+            "allow_cache_write": "${{ github.event_name != 'workflow_dispatch' || inputs.pull_request == '' }}",
         }
         assert wheel["permissions"] == {"contents": "read"}
         assert "secrets" not in wheel
@@ -127,7 +134,7 @@ def _assert_graph(jobs: dict) -> None:
         assert condition == conditions[0].replace(prepared, "")
     assemble = jobs["assemble-native-guard-distributions"]
     assert assemble["needs"] == ["build", *wheel_ids, "publish-installed-bundle-assets"]
-    assert assemble["runs-on"] == "ubuntu-latest"
+    assert assemble["runs-on"] == "ubuntu-24.04"
     assert "needs.build.result == 'success'" in assemble["if"]
     assert "needs.publish-installed-bundle-assets.result == 'success'" in assemble["if"]
 
@@ -221,13 +228,14 @@ def test_single_wheel_callee_retains_all_fixed_native_hardware_tuples() -> None:
         "channel": "string",
         "precompiled": "boolean",
         "release_repair": "boolean",
+        "allow_cache_write": "boolean",
     }
     assert "secrets" not in workflow[True]["workflow_call"]
     table = native_target_matrix(native_wheel_job())
     assert list(table) == list(TARGETS)
     rows = [table[target][0] for target in TARGETS]
     assert [row["runner"] for row in rows] == [
-        "ubuntu-latest",
+        "ubuntu-24.04",
         "macos-15-intel",
         "macos-15",
         "windows-latest",

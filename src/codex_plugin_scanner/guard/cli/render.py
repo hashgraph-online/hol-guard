@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import re
+import shlex
 import sys
 import textwrap
 from collections.abc import Callable, Mapping, Sequence
@@ -15,6 +16,7 @@ from ..protection_coverage import PROTECTION_NOT_IN_EFFECT_DETAIL, protection_is
 from ..redaction import redact_text
 from ..value_coercion import coerce_int as _coerce_int
 from .doctor_readiness import doctor_runtime_readiness
+from .protect_inline_approval import human_protect_guidance
 from .protect_output import _protect_harness_message_for_render, _restore_ephemeral_signed_approval_output
 from .render_approval_gate_nudge import print_approval_gate_nudge
 from .render_connectors import print_connector_setup_line, render_mcp_list
@@ -90,6 +92,7 @@ _rich_available = False
 if TYPE_CHECKING:
     from rich import box
     from rich.console import Console
+    from rich.markup import escape
     from rich.panel import Panel
     from rich.syntax import Syntax
     from rich.table import Table
@@ -100,6 +103,7 @@ else:
     try:
         from rich import box
         from rich.console import Console
+        from rich.markup import escape
         from rich.panel import Panel
         from rich.syntax import Syntax
         from rich.table import Table
@@ -107,6 +111,9 @@ else:
 
         _rich_available = True
     except ModuleNotFoundError:
+
+        def escape(markup: str) -> str:
+            return markup
 
         class _FallbackBox:
             SIMPLE_HEAD = "simple_head"
@@ -415,36 +422,6 @@ def _safe_json_output_text(command: str, payload: PayloadDict) -> str:
     return _render_redacted_json_payload(sanitized_payload)
 
 
-def _protect_guidance_lines(payload: PayloadDict) -> list[str]:
-    supply_chain_evaluation = payload.get("supply_chain_evaluation")
-    user_copy = supply_chain_evaluation.get("user_copy") if isinstance(supply_chain_evaluation, dict) else None
-    user_copy_map = _coerce_object_dict(user_copy)
-    lines: list[str] = []
-    harness_message = str(user_copy_map.get("harness_message") or "").strip()
-    if harness_message:
-        lines.append(harness_message)
-
-    next_step = str(user_copy_map.get("next_step") or "").strip()
-    if next_step and next_step not in harness_message:
-        lines.append(f"Next step: {next_step}")
-
-    signed_url = payload.get("_ephemeral_signed_approval_url")
-    if isinstance(signed_url, str) and signed_url.strip():
-        dashboard_url = signed_url.strip()
-    elif (
-        "dashboard_url" in user_copy_map
-        and user_copy_map.get("dashboard_url") is None
-        and not payload.get("primary_approval_url")
-    ):
-        dashboard_url = ""
-    else:
-        dashboard_url = str(payload.get("primary_approval_url") or user_copy_map.get("dashboard_url") or "").strip()
-    if dashboard_url and not any(dashboard_url in line for line in lines):
-        lines.append(f"Review: {dashboard_url}")
-
-    return lines
-
-
 def _plain_text_protect(payload: PayloadDict) -> str:
     if str(payload.get("mode") or "") == "status":
         lines = ["HOL Guard install protection is active."]
@@ -480,7 +457,7 @@ def _plain_text_protect(payload: PayloadDict) -> str:
     if reason:
         lines.append(f"Reason: {reason}")
 
-    lines.extend(_protect_guidance_lines(payload))
+    lines.extend(human_protect_guidance(payload)[1])
     return "\n".join(lines)
 
 
@@ -666,9 +643,23 @@ def _render_command_inspection(console: Console, payload: dict[str, object]) -> 
         console.print(trace_table)
 
 
+# A delivered extension's text is written by whoever contributed it, so it is
+# stripped of the C0 and DEL codes a terminal would act on and handed to Rich
+# as literal Text, which parses no markup.
+_UNPRINTABLE = dict.fromkeys([*range(32), 127])
+
+
+def _literal(value: object) -> str:
+    """Contributor-supplied metadata with nothing a terminal would obey."""
+
+    return str(value or "").translate(_UNPRINTABLE)
+
+
 def _render_command_extensions(console: Console, payload: dict[str, object]) -> None:
+    from .command_extension_listing import command_extensions_title
+
     extensions = _coerce_dict_list(payload.get("extensions"))
-    table = Table(title="Built-in command safety extensions", box=box.SIMPLE_HEAD, show_lines=False)
+    table = Table(title=command_extensions_title(payload), box=box.SIMPLE_HEAD, show_lines=False)
     table.add_column("Extension", style="bold cyan", no_wrap=True)
     table.add_column("Version", no_wrap=True)
     table.add_column("Coverage")
@@ -676,11 +667,11 @@ def _render_command_extensions(console: Console, payload: dict[str, object]) -> 
     table.add_column("Purpose")
     for extension in extensions:
         table.add_row(
-            str(extension.get("extension_id") or ""),
-            str(extension.get("version") or ""),
+            Text(_literal(extension.get("extension_id"))),
+            Text(_literal(extension.get("version"))),
             str(len(_coerce_string_list(extension.get("action_classes")))),
             str(extension.get("rule_count") or 0),
-            str(extension.get("description") or ""),
+            Text(_literal(extension.get("description"))),
         )
     console.print(table)
 
@@ -740,9 +731,14 @@ def _plain_text_command_inspection(payload: PayloadDict) -> str:
 
 
 def _plain_text_command_extensions(payload: PayloadDict) -> str:
+    from .command_extension_listing import command_extensions_title
+
     extensions = _coerce_dict_list(payload.get("extensions"))
-    lines = [f"Built-in command safety extensions ({len(extensions)})"]
-    lines.extend(f"{item.get('extension_id')} {item.get('version')} - {item.get('description')}" for item in extensions)
+    lines = [f"{command_extensions_title(payload)} ({len(extensions)})"]
+    lines.extend(
+        f"{_literal(item.get('extension_id'))} {_literal(item.get('version'))} - {_literal(item.get('description'))}"
+        for item in extensions
+    )
     return "\n".join(lines)
 
 
@@ -865,6 +861,30 @@ def _protection_panel_line(name: str, *, protection_off: bool, in_effect: bool) 
     return f"protection: {name}"
 
 
+def _watch_revert_line(payload: Mapping[str, object]) -> str:
+    """Say when machine-wide Watch ends, or that it will not end on its own."""
+
+    if str(payload.get("protection") or payload.get("protection_posture") or "") != "watch":
+        return ""
+    reverts_at = payload.get("watch_reverts_at")
+    if isinstance(reverts_at, str) and reverts_at:
+        return f"\nwatch ends: {escape(reverts_at)} (protection turns back on)"
+    # The panel parses Rich markup; a home path such as `~/[team]` must print as written.
+    return f"\nwatch ends: never on its own; run `{escape(_protection_restore_command(payload))}`"
+
+
+def _protection_restore_command(payload: Mapping[str, object]) -> str:
+    """The command that turns protection back on for the Guard home status reported."""
+
+    command = "hol-guard settings set protection protected"
+    home = payload.get("guard_home")
+    if not isinstance(home, str) or not home or home == "~/.hol-guard":
+        return command
+    # Status redacts the home under `~/`; keep the tilde outside the quotes so it expands.
+    quoted = f"~/{shlex.quote(home[2:])}" if home.startswith("~/") else shlex.quote(home)
+    return f"{command} --guard-home {quoted}"
+
+
 def _render_status(console: Console, payload: dict[str, object]) -> None:
     harnesses = _coerce_dict_list(payload.get("harnesses"))
     name, protection_off = _protection_status_copy(payload, "protected")
@@ -872,15 +892,20 @@ def _render_status(console: Console, payload: dict[str, object]) -> None:
     in_effect = reported if isinstance(reported, bool) else protection_is_in_effect(harnesses)
     protection_line = _protection_panel_line(name, protection_off=protection_off, in_effect=in_effect)
     protection_off = protection_off or not in_effect
+    protection_line += _watch_revert_line(payload)
     protection_line += harness_posture_line(payload)
+    body = (
+        f"[bold]HOL Guard status[/bold]\n"
+        f"{protection_line}\n"
+        f"{payload.get('managed_harnesses', 0)} managed harnesses {_bullet()} "
+        f"{payload.get('receipt_count', 0)} receipts {_bullet()} "
+        f"{payload.get('pending_approvals', 0)} approvals {_bullet()} "
+        f"sync {'connected' if payload.get('sync_configured') else 'local only'}"
+    )
+    # Markup escaping leaves emoji codes, so a home such as `/srv/:smile:` would print an emoji.
     console.print(
         Panel.fit(
-            f"[bold]HOL Guard status[/bold]\n"
-            f"{protection_line}\n"
-            f"{payload.get('managed_harnesses', 0)} managed harnesses {_bullet()} "
-            f"{payload.get('receipt_count', 0)} receipts {_bullet()} "
-            f"{payload.get('pending_approvals', 0)} approvals {_bullet()} "
-            f"sync {'connected' if payload.get('sync_configured') else 'local only'}",
+            Text.from_markup(body, emoji=False) if _rich_available else body,
             border_style="red" if protection_off else "cyan",
         )
     )
@@ -971,6 +996,9 @@ def _render_doctor(console: Console, payload: dict[str, object]) -> None:
                 border_style="red" if protection_off else "cyan",
             )
         )
+        health_note = payload.get("protection_health_note")
+        if isinstance(health_note, str) and health_note.strip():
+            console.print(f"Live health: {health_note}")
         console.print(build_doctor_harness_table(adapters))
         print_approval_gate_nudge(console, payload)
         print_connector_setup_line(console, payload)
@@ -1037,6 +1065,9 @@ def _render_doctor(console: Console, payload: dict[str, object]) -> None:
             else:
                 value = name
             summary.add_row("Protection", value)
+            health_note = payload.get("protection_health_note")
+            if isinstance(health_note, str) and health_note.strip():
+                summary.add_row("Live health", health_note)
             per_app = harness_posture_line(payload).strip()
             if per_app:
                 summary.add_row("Per app", per_app.removeprefix("per app: "))
@@ -1064,6 +1095,7 @@ def _render_doctor(console: Console, payload: dict[str, object]) -> None:
             console.print(_build_supply_chain_posture_panel(supply_chain))
     _print_bundled_runtime_warning(console, payload)
     _print_native_availability_note(console, payload)
+    _print_resident_lifecycle_note(console, payload)
     trust = payload.get("trust")
     if isinstance(trust, dict):
         console.print(_build_trust_doctor_panel(trust))
@@ -1096,6 +1128,76 @@ def _print_bundled_runtime_warning(console: Console, payload: dict[str, object])
     if isinstance(manual, str) and manual:
         lines.append(f"If the download is blocked, install it by hand: {manual}")
     console.print(Panel(Text("\n".join(lines)), title="Native runtime missing", border_style="red"))
+
+
+_LIFECYCLE_TITLE = {
+    "critical": "Native runtime not restarting",
+    "degraded": "Native runtime unhealthy today",
+}
+_LIFECYCLE_BORDER = {"critical": "red", "degraded": "yellow"}
+# What the day's journal establishes, which is not what is running now: the
+# runtime derives these states from the events it recorded over the window,
+# so the panel speaks about the day and sends the reader to `runtime status`
+# for the live answer.
+_LIFECYCLE_LEAD = {
+    "critical": (
+        "Guard's runtime stopped being restarted today: the last thing its journal recorded was "
+        "the restart budget refusing a start, so nothing of this runtime came back up after it."
+    ),
+    "degraded": (
+        "Guard's runtime has not been healthy today: runs have been ending badly and starting "
+        "again, which a report taken at any one moment does not show."
+    ),
+}
+
+
+def _lifecycle_age(seconds: object) -> str:
+    """How long ago, in the coarsest unit that still says something."""
+
+    if not isinstance(seconds, int) or isinstance(seconds, bool) or seconds < 0:
+        return "at an unknown time"
+    if seconds < 60:
+        return f"{seconds}s ago"
+    if seconds < 3600:
+        return f"{seconds // 60}m ago"
+    return f"{seconds // 3600}h ago"
+
+
+def _print_resident_lifecycle_note(console: Console, payload: dict[str, object]) -> None:
+    """Say when this install's day has been worse than this moment looks.
+
+    The counters beside this one describe the process that is running now, so
+    an install that crashes every few minutes and recovers in between reports
+    a clean bill of health between crashes. This is the one place the report
+    can say otherwise, so it prints only when the runtime's own answer is that
+    the day was degraded or that nothing is being restarted at all.
+    """
+
+    native_runtime = payload.get("native_runtime")
+    lifecycle = native_runtime.get("lifecycle") if isinstance(native_runtime, dict) else None
+    if not isinstance(lifecycle, dict):
+        return
+    state = lifecycle.get("state")
+    if state not in _LIFECYCLE_LEAD:
+        return
+    lines = [
+        _LIFECYCLE_LEAD[state],
+        (
+            f"Last 24 hours: {lifecycle.get('starts', 0)} starts, "
+            f"{lifecycle.get('orderly_exits', 0)} ended cleanly, "
+            f"{lifecycle.get('failed_exits', 0)} failed, "
+            f"{lifecycle.get('premature_exits', 0)} stopped early, "
+            f"{lifecycle.get('refused_starts', 0)} starts refused."
+        ),
+    ]
+    last_event = lifecycle.get("last_event")
+    if isinstance(last_event, str) and last_event:
+        lines.append(f"Last event: {last_event}, {_lifecycle_age(lifecycle.get('last_event_age_seconds'))}.")
+    lines.append(
+        "This is the day behind the install, not what is up now: run `hol-guard runtime status` "
+        "for that, or `hol-guard doctor --repair`."
+    )
+    console.print(Panel(Text("\n".join(lines)), title=_LIFECYCLE_TITLE[state], border_style=_LIFECYCLE_BORDER[state]))
 
 
 def _print_native_availability_note(console: Console, payload: dict[str, object]) -> None:
@@ -1511,6 +1613,11 @@ def _render_approvals(console: Console, payload: dict[str, object]) -> None:
         body = Table.grid(padding=(0, 1))
         body.add_row("Request", str(payload.get("request_id", "")))
         body.add_row("URL", f"[bold]{approval_url}[/bold]")
+        opened_in = payload.get("opened_in")
+        if opened_in == "desktop":
+            body.add_row("Opened", "In HOL Guard Desktop")
+        elif opened_in == "browser":
+            body.add_row("Opened", "In your browser, signed in")
         console.print(Panel(body, title="Open approval", border_style="cyan"))
         return
     if "title" in payload and "body" in payload:
@@ -1885,6 +1992,12 @@ def _render_connect(console: Console, payload: dict[str, object]) -> None:
         repair_message = payload.get("repair_message")
         if isinstance(repair_message, str) and repair_message.strip():
             body.add_row("Repair note", repair_message)
+        cloud_actions = payload.get("cloud_actions")
+        if isinstance(cloud_actions, dict):
+            body.add_row("Cloud actions", str(cloud_actions.get("message") or cloud_actions.get("status") or "unknown"))
+        cloud_actions_problem = payload.get("cloud_actions_problem")
+        if isinstance(cloud_actions_problem, str) and cloud_actions_problem.strip():
+            body.add_row("Needs attention", cloud_actions_problem)
         sync_payload = payload.get("sync")
         should_render_sync_counts = False
         if isinstance(sync_payload, dict):
@@ -2411,13 +2524,13 @@ def _render_protect(console: Console, payload: dict[str, object]) -> None:
             ):
                 body.add_row("Next", "Run hol-guard connect to sign in, then retry this install.")
     console.print(Panel(body, title="Install protection", border_style="cyan"))
-    guidance = _protect_guidance_lines(payload)
+    guidance_title, guidance = human_protect_guidance(payload)
     if guidance:
         guidance_text, signed_approval_url = _protect_harness_message_for_render(payload, "\n".join(guidance))
         console.print(
             Panel(
                 Text(guidance_text, no_wrap=False, overflow="fold"),
-                title="Guard guidance",
+                title=guidance_title,
                 border_style="magenta",
             )
         )
@@ -2546,6 +2659,8 @@ def _next_action_label(harness: dict[str, object]) -> str:
         return f"Review {review_count} change{'s' if review_count != 1 else ''}"
     if next_action == "run":
         return "Run through Guard"
+    if next_action == "unavailable":
+        return "Run hol-guard doctor"
     return next_action.replace("-", " ").strip() or "Check status"
 
 
@@ -3011,10 +3126,6 @@ def _build_cloud_summary_panel(payload: dict[str, object]) -> Panel:
     body.add_row("Cached advisories", str(payload.get("advisory_count") or 0))
     if payload.get("advisory_headline"):
         body.add_row("Latest advisory", str(payload.get("advisory_headline")))
-    if payload.get("team_policy_name"):
-        body.add_row("Team policy", str(payload.get("team_policy_name")))
-    elif payload.get("team_policy_active"):
-        body.add_row("Team policy", "active")
     if payload.get("watchlist_enabled"):
         body.add_row("Watchlist", "enabled")
     if payload.get("team_alerts_enabled"):

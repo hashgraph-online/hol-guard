@@ -9,6 +9,8 @@ from contextlib import suppress
 from hashlib import sha256
 from pathlib import Path
 
+from ..native_context import _resolve_existing_digest_home
+from ..native_runner_authority import NativeRunnerAuthorityError, native_runner_authority
 from .base import HarnessContext
 from .bounded_cli_hook_bridge import bounded_cli_hook_command
 from .cline_paths import cline_plugin_root as _resolve_cline_plugin_root
@@ -17,11 +19,7 @@ from .guard_cli_attestation import GuardCliAttestation, guard_hook_command, reso
 
 _MANAGED_MARKER = "HOL_GUARD_MANAGED_CLINE_PLUGIN_V1"
 _SCHEMA_VERSION = 1
-_PLUGIN_NAME = "hol-guard"
-_PLUGIN_TIMEOUT_MS = 9_000
 _BRIDGE_TIMEOUT_SECONDS = 8
-_MAX_PAYLOAD_BYTES = 256 * 1024
-_MAX_PRETOOL_INPUT_BYTES = 64 * 1024
 _PROOF_MAX_AGE_SECONDS = 7 * 24 * 60 * 60
 
 
@@ -63,371 +61,29 @@ def _is_managed_plugin(path: Path) -> bool:
 
 
 def _plugin_source(context: HarnessContext, guard_cli: list[str], hook_argv: list[str] | None = None) -> str:
+    """Render the managed plugin source natively from its recorded template."""
+
     hook = hook_argv if hook_argv is not None else [*guard_cli, "--harness", "cline", "--json"]
-    proof_loaded = str(_proof_path(context, "loaded"))
-    proof_pre = str(_proof_path(context, "pretool"))
-    proof_post = str(_proof_path(context, "posttool"))
-    adapter_state = str(_adapter_state_path(context))
-    return f"""// {_MANAGED_MARKER}
-// schema_version={_SCHEMA_VERSION}
-import {{ spawnSync }} from "node:child_process";
-import {{ createHash }} from "node:crypto";
-import {{ mkdirSync, readFileSync, renameSync, writeFileSync }} from "node:fs";
-import {{ dirname }} from "node:path";
-
-const GUARD_CLI = {json.dumps(guard_cli)};
-const GUARD_HOOK_ARGV = {json.dumps(hook)};
-const TIMEOUT_MS = {_PLUGIN_TIMEOUT_MS};
-const MAX_BYTES = {_MAX_PAYLOAD_BYTES};
-const MAX_PRETOOL_INPUT_BYTES = {_MAX_PRETOOL_INPUT_BYTES};
-const ADAPTER_STATE = {json.dumps(adapter_state)};
-const BLOCK_DECISIONS = ["deny", "block", "ask"];
-const REVIEW_ACTIONS = ["review", "require-reapproval", "sandbox-required", "block"];
-const PROOFS = {{
-  loaded: {json.dumps(proof_loaded)},
-  pretool: {json.dumps(proof_pre)},
-  posttool: {json.dumps(proof_post)},
-}};
-
-function proof(name, outcome) {{
-  try {{
-    const target = PROOFS[name];
-    const durableOutcome = name === "pretool" ? "blocked" : name === "posttool" ? "replaced" : undefined;
-    if (durableOutcome && outcome !== durableOutcome) {{
-      try {{
-        const current = JSON.parse(readFileSync(target, "utf8"));
-        if (
-          current &&
-          current.source === "cline-plugin" &&
-          current.proof === name &&
-          current.outcome === durableOutcome
-        ) return;
-      }} catch {{}}
-    }}
-    mkdirSync(dirname(target), {{ recursive: true }});
-    const temporary = `${{target}}.tmp`;
-    writeFileSync(temporary, JSON.stringify({{
-      schema_version: 1,
-      source: "cline-plugin",
-      proof: name,
-      outcome,
-      timestamp: Date.now() / 1000,
-    }}));
-    renameSync(temporary, target);
-  }} catch {{
-    // Proof persistence is diagnostic; enforcement still follows Guard's decision.
-  }}
-}}
-
-function activeTransport() {{
-  try {{
-    const state = JSON.parse(readFileSync(ADAPTER_STATE, "utf8"));
-    if (state && typeof state === "object" && typeof state.active_transport === "string") {{
-      return state.active_transport;
-    }}
-  }} catch {{}}
-  return undefined;
-}}
-
-function jsonBytes(value) {{
-  try {{
-    return Buffer.byteLength(JSON.stringify(value), "utf8");
-  }} catch {{
-    return Number.POSITIVE_INFINITY;
-  }}
-}}
-
-function extractJson(stdout) {{
-  const text = String(stdout ?? "").trim();
-  if (!text) return undefined;
-  const candidates = [text, ...text.split(/\\r?\\n/).filter(Boolean).reverse()];
-  for (const candidate of candidates) {{
-    if (!candidate.trim().startsWith("{{")) continue;
-    try {{
-      const value = JSON.parse(candidate);
-      if (value && typeof value === "object" && !Array.isArray(value)) return value;
-    }} catch {{}}
-  }}
-  return undefined;
-}}
-
-function guardBlocks(payload) {{
-  if (!payload || typeof payload !== "object") return true;
-  if (payload.blocked === true || payload.continue === false) return true;
-  if (typeof payload.decision === "string") {{
-    if (BLOCK_DECISIONS.includes(payload.decision.toLowerCase())) return true;
-  }}
-  const action = payload.policy_action ?? payload.policyAction;
-  if (typeof action === "string") {{
-    if (REVIEW_ACTIONS.includes(action.toLowerCase())) return true;
-  }}
-  const specific = payload.hookSpecificOutput;
-  if (specific && typeof specific === "object") {{
-    if (typeof specific.permissionDecision === "string") {{
-      if (BLOCK_DECISIONS.includes(specific.permissionDecision.toLowerCase())) return true;
-    }}
-    const nested = specific.decision;
-    if (nested && typeof nested === "object" && typeof nested.behavior === "string") {{
-      if (BLOCK_DECISIONS.includes(nested.behavior.toLowerCase())) return true;
-    }}
-  }}
-  return false;
-}}
-
-function guardExplicitlyAllows(payload) {{
-  if (!payload || typeof payload !== "object" || guardBlocks(payload)) return false;
-  if (Object.prototype.hasOwnProperty.call(payload, "decision") && typeof payload.decision !== "string") return false;
-  const decision = typeof payload.decision === "string" ? payload.decision.toLowerCase() : undefined;
-  const actionValue = payload.policy_action ?? payload.policyAction;
-  const action = typeof actionValue === "string" ? actionValue.toLowerCase() : undefined;
-  const specific = payload.hookSpecificOutput;
-  const permission = specific && typeof specific === "object" && typeof specific.permissionDecision === "string"
-    ? specific.permissionDecision.toLowerCase()
-    : undefined;
-  const nestedDecision = specific && typeof specific === "object"
-    && specific.decision && typeof specific.decision === "object"
-    && typeof specific.decision.behavior === "string"
-    ? specific.decision.behavior.toLowerCase()
-    : undefined;
-  if (decision !== undefined && decision !== "allow") return false;
-  if (action !== undefined && !["allow", "warn"].includes(action)) return false;
-  if (permission !== undefined && permission !== "allow") return false;
-  if (nestedDecision !== undefined && nestedDecision !== "allow") return false;
-  return decision === "allow" || action === "allow" || action === "warn"
-    || permission === "allow" || nestedDecision === "allow";
-}}
-
-function mapParameters(input) {{
-  if (!input || typeof input !== "object" || Array.isArray(input)) return {{}};
-  const output = {{}};
-  for (const [key, value] of Object.entries(input)) {{
-    if (typeof value === "string") {{
-      output[key] = value;
-    }} else {{
-      output[key] = JSON.stringify(value);
-    }}
-  }}
-  return output;
-}}
-
-function payloadsForGuard(eventName, toolCall, input, result) {{
-  const id = toolCall?.toolCallId ?? "";
-  const name = toolCall?.toolName ?? "unknown";
-  let current;
-  const base = {{ hookName: eventName, hook_event_name: eventName }};
-  if (eventName === "PostToolUse") {{
-    current = {{ id, name, input, output: result?.output }};
-    let resultText;
-    if (typeof result?.output === "string") {{
-      resultText = result.output;
-    }} else {{
-      resultText = JSON.stringify(result?.output);
-    }}
-    base.tool_result = current;
-    base.postToolUse = {{
-      toolName: current.name,
-      parameters: mapParameters(input),
-      result: resultText,
-      success: result?.isError !== true,
-      executionTimeMs: 0,
-    }};
-  }} else {{
-    current = {{ id, name, input }};
-    base.tool_call = current;
-    base.preToolUse = {{ toolName: current.name, parameters: mapParameters(input) }};
-  }}
-  if (eventName !== "PreToolUse" || current.name !== "run_commands") return [base];
-  let commands = input;
-  if (input && typeof input === "object" && !Array.isArray(input)) {{
-    commands = input.commands ?? input.command ?? input.cmd;
-  }}
-  if (typeof commands === "string") commands = [commands];
-  if (!Array.isArray(commands)) return [base];
-  const expanded = [];
-  for (const item of commands) {{
-    let command;
-    if (typeof item === "string") {{
-      command = item;
-    }} else if (item && typeof item === "object") {{
-      command = item.command ?? item.cmd;
-    }}
-    if (typeof command !== "string" || !command.trim()) continue;
-    expanded.push({{
-      hookName: eventName,
-      hook_event_name: eventName,
-      tool_call: {{ id: current.id, name: "run_command", input: {{ command }} }},
-    }});
-  }}
-  if (expanded.length) return expanded;
-  return [base];
-}}
-
-function invokeGuard(eventName, toolCall, input, result) {{
-  if (eventName === "PreToolUse" && jsonBytes(input) > MAX_PRETOOL_INPUT_BYTES) {{
-    return {{ ok: false, reason: "HOL Guard rejected an oversized Cline pre-tool request." }};
-  }}
-  let payloads;
-  try {{
-    payloads = payloadsForGuard(eventName, toolCall, input, result);
-  }} catch {{
-    return {{ ok: false, reason: "HOL Guard could not serialize this Cline action for review." }};
-  }}
-  let lastPayload;
-  for (const payload of payloads) {{
-    let encoded;
-    try {{
-      encoded = JSON.stringify(payload);
-    }} catch {{
-      return {{ ok: false, reason: "HOL Guard could not serialize this Cline action for review." }};
-    }}
-    if (Buffer.byteLength(encoded, "utf8") > MAX_BYTES) {{
-      return {{ ok: false, reason: "HOL Guard rejected an oversized Cline plugin request." }};
-    }}
-    let child;
-    try {{
-      child = spawnSync(GUARD_HOOK_ARGV[0], GUARD_HOOK_ARGV.slice(1), {{
-        input: encoded,
-        encoding: "utf8",
-        timeout: TIMEOUT_MS,
-        maxBuffer: MAX_BYTES * 2,
-        windowsHide: true,
-      }});
-    }} catch {{
-      return {{
-        ok: false,
-        reason: "HOL Guard evaluation was unavailable; this Cline action was not allowed to proceed.",
-      }};
-    }}
-    const missingOutput = !String(child.stdout ?? "").trim();
-    if (child.error || child.signal || ![0, 1, 2].includes(child.status) || missingOutput) {{
-      return {{
-        ok: false,
-        reason: "HOL Guard evaluation was unavailable; this Cline action was not allowed to proceed.",
-      }};
-    }}
-    const parsed = extractJson(child.stdout);
-    if (!parsed) {{
-      return {{
-        ok: false,
-        reason: "HOL Guard returned an invalid decision; this Cline action was not allowed to proceed.",
-      }};
-    }}
-    if (child.status !== 0) {{
-      if (guardBlocks(parsed)) return {{ ok: true, payload: parsed }};
-      return {{
-        ok: false,
-        reason: "HOL Guard evaluation failed; this Cline action was not allowed to proceed.",
-      }};
-    }}
-    lastPayload = parsed;
-    if (guardBlocks(parsed)) return {{ ok: true, payload: parsed }};
-    if (!guardExplicitlyAllows(parsed)) {{
-      return {{ ok: false, reason: "HOL Guard returned an ambiguous decision; this action was withheld." }};
-    }}
-  }}
-  return {{ ok: true, payload: lastPayload ?? {{}} }};
-}}
-
-function blockedResult(reason) {{
-  const safeResult = {{ output: reason, isError: true }};
-  return {{ result: safeResult }};
-}}
-
-const plugin = {{
-  name: "hol-guard",
-  manifest: {{ capabilities: ["hooks"] }},
-  hooks: {{
-    async beforeRun() {{
-      proof("loaded", "loaded");
-      return undefined;
-    }},
-    async beforeTool({{ toolCall, input }}) {{
-      const active = activeTransport();
-      if (active !== "plugin") {{
-        if (active === "hooks") return undefined;
-        proof("pretool", "blocked");
-        return {{
-          skip: true,
-          reason: "HOL Guard Cline transport state is unavailable; this action was not allowed to proceed safely.",
-        }};
-      }}
-      const decision = invokeGuard("PreToolUse", toolCall, input, undefined);
-      if (!decision.ok) {{
-        proof("pretool", "blocked");
-        return {{ skip: true, reason: decision.reason }};
-      }}
-      if (!guardBlocks(decision.payload)) {{
-        proof("pretool", "allowed");
-        return undefined;
-      }}
-      proof("pretool", "blocked");
-      return {{ skip: true, reason: "HOL Guard blocked this action." }};
-    }},
-    async afterTool({{ toolCall, input, result }}) {{
-      const active = activeTransport();
-      if (active !== "plugin") {{
-        if (active === "hooks") {{
-          proof("posttool", "unchanged");
-          return undefined;
-        }}
-        proof("posttool", "withheld");
-        return blockedResult("HOL Guard Cline transport state is unavailable, so this tool result was withheld.");
-      }}
-      let reviewedResult;
-      try {{
-        reviewedResult = {{ output: result?.output, isError: result?.isError === true }};
-      }} catch {{
-        proof("posttool", "withheld");
-        return blockedResult("HOL Guard could not read this tool result for review, so it was withheld.");
-      }}
-      const decision = invokeGuard("PostToolUse", toolCall, input, reviewedResult);
-      if (!decision.ok) {{
-        proof("posttool", "withheld");
-        return blockedResult("HOL Guard could not review this tool result, so it was withheld.");
-      }}
-      if (guardBlocks(decision.payload)) {{
-        proof("posttool", "replaced");
-        return blockedResult("HOL Guard withheld this tool result.");
-      }}
-      const outputAction = decision.payload?.model_output_action;
-      if (outputAction === "block") {{
-        proof("posttool", "withheld");
-        return blockedResult("HOL Guard withheld this tool result.");
-      }}
-      if (outputAction === "replace_with_reviewed_excerpt") {{
-        if (typeof decision.payload.reviewed_excerpt !== "string") {{
-          proof("posttool", "withheld");
-          return blockedResult("HOL Guard did not provide the reviewed excerpt, so this tool result was withheld.");
-        }}
-        proof("posttool", "replaced");
-        return {{ result: {{ output: decision.payload.reviewed_excerpt, isError: reviewedResult.isError }} }};
-      }}
-      if (outputAction === "allow_original") {{
-        const digest = decision.payload.reviewed_output_sha256;
-        if (
-          typeof reviewedResult.output !== "string" ||
-          typeof digest !== "string" ||
-          !/^[a-f0-9]{{64}}$/.test(digest) ||
-          createHash("sha256").update(reviewedResult.output, "utf8").digest("hex") !== digest
-        ) {{
-          proof("posttool", "withheld");
-          return blockedResult("HOL Guard could not bind its review to this tool result, so it was withheld.");
-        }}
-        proof("posttool", "filtered");
-        return {{ result: reviewedResult }};
-      }}
-      if (outputAction !== undefined) {{
-        proof("posttool", "withheld");
-        return blockedResult("HOL Guard returned an unsupported output action, so this tool result was withheld.");
-      }}
-      proof("posttool", "withheld");
-      return blockedResult("HOL Guard did not provide a reviewed output action, so this tool result was withheld.");
-    }},
-  }},
-}};
-
-export default plugin;
-"""
+    args: dict[str, object] = {
+        "guard_cli": list(guard_cli),
+        "hook_argv": list(hook),
+        "adapter_state": str(_adapter_state_path(context)),
+        "proof_loaded": str(_proof_path(context, "loaded")),
+        "proof_pretool": str(_proof_path(context, "pretool")),
+        "proof_posttool": str(_proof_path(context, "posttool")),
+    }
+    # Rendering is pure: it must not create the Guard home before install publishes it.
+    try:
+        answer = native_runner_authority(
+            "cline_plugin_render", args, guard_home=_resolve_existing_digest_home(context.guard_home)
+        )
+    except NativeRunnerAuthorityError as error:
+        # A RuntimeError lets an automatic install fall back to the hooks transport.
+        raise RuntimeError(f"Cline plugin render failed: {error}") from error
+    source = answer.get("source")
+    if not isinstance(source, str):
+        raise RuntimeError("Cline plugin render answer is malformed")
+    return source
 
 
 def _package_json() -> str:

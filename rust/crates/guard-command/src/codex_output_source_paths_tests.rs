@@ -86,12 +86,13 @@ fn decide_external(
     let ctx = Ctx::new(&host, "/", "/");
     let cwd = cwd.map(py_path);
     let home = home.map(py_path);
-    source_path_is_allowed(
+    source_path_decision(
         target,
         cwd.as_ref(),
         home.as_ref(),
         &ctx,
         allow_external_source,
+        false,
     )
 }
 

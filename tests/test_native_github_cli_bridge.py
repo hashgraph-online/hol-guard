@@ -9,8 +9,8 @@ from typing import Any
 
 import pytest
 
-from codex_plugin_scanner.guard import native_github_cli as bridge
 from codex_plugin_scanner.guard.native_context import _canonical_request_sha256
+from tests import native_github_cli as bridge
 
 _ARGS = ("pr", "view", "1")
 _FEATURES = frozenset({"resident-protocol-v2", "github-cli-classify-v1"})

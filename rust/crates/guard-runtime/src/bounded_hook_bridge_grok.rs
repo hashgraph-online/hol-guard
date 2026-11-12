@@ -31,7 +31,7 @@ use crate::claude_hook_bridge_http::{LoopbackConnection, MAX_DAEMON_RESPONSE_BYT
 use crate::claude_hook_bridge_render::py_strip;
 use crate::claude_hook_bridge_url::assert_loopback_http_url;
 use crate::codex_hook_bridge_direct::grok_direct_answer;
-use crate::codex_hook_bridge_direct_resident::DirectMiss;
+use crate::codex_hook_bridge_direct_resident::{DirectMiss, DIRECT_MISS_HEADER};
 use crate::hook_env_stamp::{current_environment, dumps, set_member, stamp_hook_input_text, Stamp};
 use crate::pyjson::PyVal;
 
@@ -43,7 +43,6 @@ const TOKEN_FILE: &str = "daemon-auth-token";
 const SETTINGS_FILE: &str = "config.toml";
 const HOOK_PATH: &str = "/v1/hooks/grok";
 /// Why the resident did not answer a hook the daemon now reviews.
-const DIRECT_MISS_HEADER: &str = "X-Guard-Direct-Miss";
 const READINESS_PATH: &str = "/v1/hooks/grok/readiness";
 const PROMPT_EVENT: &str = "UserPromptSubmit";
 const PRETOOL_EVENT: &str = "PreToolUse";

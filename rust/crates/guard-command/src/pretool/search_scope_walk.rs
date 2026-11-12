@@ -7,20 +7,31 @@
 //! itself as the blocker; a walk that cannot be bounded fails it outright.
 
 use super::search_pattern_clearance::PatternClearance;
+use super::search_scope_budget::charged_include_walk;
 use super::search_scope_filter::{Override, SearchFilter};
 use super::search_scope_ignore::{
     holds_custom_ignore_file, is_ignored, link_ignored, load_custom_rules, load_ignore_file,
     slash_path, IgnoreRule, IgnoreTiers, ScopeUnproven,
 };
-use super::search_scope_tracked::TrackedFiles;
+use super::search_scope_tracked::{Tracked, TrackedFiles};
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
+use std::time::Instant;
 
 const MAX_SCOPE_ENTRIES: usize = 20_000;
 /// A names-only walk checks only entry metadata and links, never contents,
 /// so it may cover an ordinary mid-size repository in full.
 const MAX_NAME_SCOPE_ENTRIES: usize = 100_000;
-
+/// The entries an include walk may inspect.
+///
+/// Every other reading of a recursive search answers before this one and
+/// walks the tree to do it, so an include walk spends what is left of a
+/// single evaluation's budget. A directory an include selects from -- the
+/// documentation or source tree the globs name -- fits well inside this
+/// count, and a larger tree leaves the reading unproven instead of spending
+/// the evaluation on it. Withholding it only returns the answer the readings
+/// above already reached.
+const MAX_INCLUDE_SCOPE_ENTRIES: usize = 2_000;
 /// Which ignore files a walk honors, matching the host that searches.
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub(super) enum Ignores {
@@ -149,6 +160,51 @@ pub(super) fn walk_scope(
     walk_scope_with(root, filter, ignores, names, &|_| false, home, blocker)
 }
 
+/// [`walk_scope`] for a grep include, under the entry count and the wall
+/// clock such a reading is allowed. Nothing is ignored: `grep` reads no
+/// ignore file.
+pub(super) fn walk_include_scope(
+    root: &Path,
+    filter: &SearchFilter,
+    home: Option<&str>,
+    budget: Instant,
+) -> Result<(), ScopeUnproven> {
+    walk_scope_inner(
+        root,
+        filter,
+        Ignores::None,
+        false,
+        &|_| false,
+        None,
+        false,
+        home,
+        &mut None,
+        Some(MAX_INCLUDE_SCOPE_ENTRIES),
+        Some(budget),
+    )
+}
+
+/// [`walk_include_scope`], answered once per evaluation for a given root,
+/// glob set and home.
+///
+/// `globs` names the same files the caller built `filter` from; it is the
+/// spelling this evaluation remembers the answer under.
+pub(super) fn include_scope_proven(
+    root: &Path,
+    globs: &[&str],
+    filter: &SearchFilter,
+    home: Option<&str>,
+) -> bool {
+    let key = (
+        root.to_path_buf(),
+        globs.join("\u{0}"),
+        home.map(str::to_owned),
+    );
+    charged_include_walk(key, |deadline| {
+        walk_include_scope(root, filter, home, deadline).is_ok()
+    })
+}
+
 /// A content walk where a sensitive file `clearance` proves the pattern
 /// cannot match is not a blocker.
 pub(super) fn walk_scope_cleared(
@@ -166,8 +222,35 @@ pub(super) fn walk_scope_cleared(
         false,
         &|_| false,
         clearance,
+        false,
         home,
         blocker,
+        None,
+        None,
+    )
+}
+
+/// The unfiltered walk for a host that prints names only, such as Claude
+/// `Glob` or Oh My Pi `glob`. A sensitive file still fails the proof, but a
+/// committed `Secret` manifest is held only for the values it declares, and a
+/// listing prints none of them.
+pub(super) fn walk_listing_scope(
+    root: &Path,
+    filter: &SearchFilter,
+    home: Option<&str>,
+) -> Result<(), ScopeUnproven> {
+    walk_scope_inner(
+        root,
+        filter,
+        Ignores::None,
+        false,
+        &|_| false,
+        None,
+        true,
+        home,
+        &mut None,
+        None,
+        None,
     )
 }
 
@@ -189,8 +272,11 @@ pub(super) fn walk_scope_with(
         names,
         outside_link,
         None,
+        false,
         home,
         blocker,
+        None,
+        None,
     )
 }
 
@@ -202,8 +288,11 @@ fn walk_scope_inner(
     names: bool,
     outside_link: &dyn Fn(&Path) -> bool,
     clearance: Option<&PatternClearance>,
+    listing: bool,
     home: Option<&str>,
     blocker: &mut Option<PathBuf>,
+    entries: Option<usize>,
+    budget: Option<Instant>,
 ) -> Result<(), ScopeUnproven> {
     let repository = repository_root(root).filter(|_| ignores != Ignores::None);
     let mut tiers = IgnoreTiers::default();
@@ -230,11 +319,12 @@ fn walk_scope_inner(
     let mut inspected = 0_usize;
     let mut tracked = TrackedFiles::default();
     let mut nested_repositories = 0_usize;
-    let mut entry_limit = if names {
+    let scope_entries = entries.unwrap_or(if names {
         MAX_NAME_SCOPE_ENTRIES
     } else {
         MAX_SCOPE_ENTRIES
-    };
+    });
+    let mut entry_limit = scope_entries;
     while let Some(directory) = pending.pop() {
         if directory.depth > MAX_SCOPE_DEPTH {
             return Err(ScopeUnproven);
@@ -253,11 +343,7 @@ fn walk_scope_inner(
                 if nested_repositories > MAX_NESTED_REPOSITORIES {
                     return Err(ScopeUnproven);
                 }
-                entry_limit += if names {
-                    MAX_NAME_SCOPE_ENTRIES
-                } else {
-                    MAX_SCOPE_ENTRIES
-                };
+                entry_limit += scope_entries;
             }
             load_ignore_file(&directory.path.join(".gitignore"), &base, &mut tiers.git)?;
         }
@@ -272,7 +358,7 @@ fn walk_scope_inner(
         for entry in entries {
             let entry = entry.map_err(|_| ScopeUnproven)?;
             inspected += 1;
-            if inspected > entry_limit {
+            if inspected > entry_limit || budget.is_some_and(|limit| Instant::now() >= limit) {
                 return Err(ScopeUnproven);
             }
             let path = entry.path();
@@ -361,8 +447,18 @@ fn walk_scope_inner(
             } else if searched
                 && !names
                 && sensitive_scope_file(&path, home)
-                && !tracked.non_secret(&path)
-                && !clearance.is_some_and(|clearance| clearance.clears(&path))
+                && !match tracked.classify(&path) {
+                    Tracked::Clean => true,
+                    // A committed `Secret` manifest is held for the values it
+                    // declares; a listing or a pattern that cannot occur in it
+                    // prints none.
+                    Tracked::SecretManifest => {
+                        listing
+                            || clearance
+                                .is_some_and(|clearance| clearance.clears_secret_manifest(&path))
+                    }
+                    Tracked::Unproven => clearance.is_some_and(|clearance| clearance.clears(&path)),
+                }
             {
                 *blocker = Some(path);
                 return Err(ScopeUnproven);

@@ -21,16 +21,17 @@ Guard needs both the Python package and its matching native runtime. A successfu
 or that an agent is protected. The universal `py3-none-any` wheel does not contain
 the native runtime.
 
-The 3.56.0 release provides these artifacts:
+Stable releases provide these artifacts. Linux ARM64 wheels start with 3.58.0;
+earlier releases have none.
 
 | Python platform | Native wheel location | Installation notes |
 | --- | --- | --- |
 | macOS ARM64, macOS 11 or later | PyPI and GitHub release | Use native ARM64 Python. |
-| macOS Intel, macOS 13 or later | GitHub release | The PyPI universal wheel needs the matching native wheel from the same release. |
+| macOS Intel, macOS 13 or later | GitHub release | The PyPI universal wheel needs the matching native wheel from the same release. The `cryptography` dependency must build from source; see below. |
 | Linux x86_64, glibc 2.17 or later | PyPI and GitHub release | Use a compatible manylinux interpreter. |
 | Windows x64 | PyPI and GitHub release | Use x64 Python (`win-amd64`). |
 | Windows ARM64 with native ARM64 Python | GitHub release | The native runtime exists, but the Python 3.12 dependency install currently requires source builds. Use the x64 Python route below. |
-| Linux ARM64 | No published native wheel | The universal wheel cannot complete setup or provide protection on this platform. Use a platform with a published native wheel. |
+| Linux ARM64, glibc 2.17 or later | GitHub release, 3.58.0 and later | The PyPI universal wheel needs the matching native wheel from the same release. |
 
 Check the [release assets](https://github.com/hashgraph-online/hol-guard/releases)
 for your exact Guard version. Keep the Python package and native wheel versions
@@ -38,21 +39,41 @@ matched; an artifact for another architecture is not a native installation.
 
 ### macOS Intel: install the matching native wheel
 
-Try `hol-guard update` first to let the updater repair the existing installation.
-If it cannot recover the native runtime, use the same-version wheel below.
+`cryptography` 49 and later publish no Intel macOS wheels, so `pipx install
+hol-guard` builds it from source. That build needs a Rust toolchain and OpenSSL
+headers. Without Rust the build stops with an error that it cannot find a Rust
+compiler; without the OpenSSL headers it fails with `failed to run custom build
+command for openssl-sys`. Install both (for example `brew install rust openssl@3`) before
+installing Guard.
 
-After a normal pipx installation has installed Guard and its dependencies, replace
-the universal wheel with the native wheel for the **same installed version** before
-checking runtime readiness. For Guard 3.56.0 on Intel macOS 13 or later:
+Once the install succeeds, run `hol-guard update`. On a platform whose native wheel
+is on the GitHub release only, it downloads the wheel for the installed version,
+checks it against the digest published with that release and installs it.
+
+If the updater cannot recover the native runtime, replace the universal wheel with
+the native wheel for the **same installed version** by hand before checking runtime
+readiness. On Intel macOS 13 or later:
 
 ```bash
-pipx runpip hol-guard install --force-reinstall --no-deps "https://github.com/hashgraph-online/hol-guard/releases/download/v3.56.0/hol_guard-3.56.0-py3-none-macosx_13_0_x86_64.whl"
+V=$(pipx runpip hol-guard show hol-guard | awk '/^Version:/{print $2}')
+pipx runpip hol-guard install --force-reinstall --no-deps "https://github.com/hashgraph-online/hol-guard/releases/download/v$V/hol_guard-$V-py3-none-macosx_13_0_x86_64.whl"
 ```
 
 Here `--no-deps` only repairs an existing installation whose full dependency install
 already succeeded; it is not a substitute for installing those dependencies. For a
 different Guard version, select that version's matching Intel wheel from the release
 assets. Then run the readiness check below before starting setup.
+
+### Linux ARM64: install the matching native wheel
+
+From 3.58.0, install Guard with pipx as usual, then run `hol-guard update` to fetch
+and verify the native wheel from the GitHub release. To do it by hand, use the same
+installed version:
+
+```bash
+V=$(pipx runpip hol-guard show hol-guard | awk '/^Version:/{print $2}')
+pipx runpip hol-guard install --force-reinstall --no-deps "https://github.com/hashgraph-online/hol-guard/releases/download/v$V/hol_guard-$V-py3-none-manylinux_2_17_aarch64.whl"
+```
 
 ### Windows ARM64: select x64 Python
 
@@ -200,6 +221,16 @@ matching receipt; this inspection alone is not proof of active protection.
 
    The first project-local execution through `npx` or `bunx` requires review even when the command uses a local-only flag and the package is declared and locked. Guard shows the resolved package-manager path and binds the saved approval to that manager, the local executable, and the current manifest and lockfile evidence. Retrying an unchanged approved command is prompt-free; changing `PATH`, the executable, the manifest, or the lockfile requires review again. Custom package-manager wrappers should be installed through Guard's managed package-shim flow so their identity is visible and repairable.
 
+13. Check a codebase in the background. Guard reads its manifests, lockfiles, MCP configs, skills, hooks and CI workflows on this machine, then sends a summary to the Codebases page in Guard Cloud on the next sync:
+
+   ```bash
+   cd ~/code/my-app
+   hol-guard codebases add
+   hol-guard codebases list
+   ```
+
+   `add` with no path picks the Git repository holding the current folder. A project-level `hol-guard install <harness> --workspace <folder>` adds that folder for you. Cloud receives a short code for each codebase, never its folder name. To pause a codebase, use Supply Chain, then Workspaces in `hol-guard dashboard`; the CLI only adds.
+
 ## Which command should I use?
 
 | Situation | Command | What it answers |
@@ -210,7 +241,7 @@ matching receipt; this inspection alone is not proof of active protection.
 | I need install/connect docs | `hol-guard explain install-connect` | Which local-first setup and optional cloud commands should I share? |
 | I need to preview one install before I run it | `hol-guard protect npm install <package> --dry-run` | Would Guard allow, warn, review, or block this exact install request right now? |
 | I need to understand command protection | `hol-guard command test '<command>'` or `hol-guard command explain '<command>'` | Which built-in command safety extension recognizes this command, and why, without executing it or creating Guard state? |
-| I need the command protection catalog | `hol-guard command extensions` | Which built-in command safety extensions and action classes are available in this Guard version? |
+| I need the command protection catalog | `hol-guard command extensions` | Which command safety extensions and action classes does this device have, including the ones delivered after this Guard version shipped? |
 | I need setup or runtime troubleshooting | `hol-guard doctor <harness>` | Why is this harness or Guard runtime not behaving correctly? |
 | A launch was blocked or changed | `hol-guard diff <harness>` | What changed since the last recorded snapshot? |
 | I need to resolve a queued block | `hol-guard approvals` | Which requests are waiting, and how do I approve or deny them? |
@@ -219,6 +250,7 @@ matching receipt; this inspection alone is not proof of active protection.
 | I need an exportable evidence artifact | `hol-guard abom` | What local AI-BOM can I attach to an audit or handoff? |
 | I need the chronological log | `hol-guard events` | What happened over time on this machine? |
 | I need supply-chain coverage labels | `hol-guard cloud sync-intel` | Which ecosystems are protected, beta, or monitor-only right now? |
+| I want Guard to keep checking a codebase and report it to Guard Cloud | `hol-guard codebases add` | Which packages, MCP servers, skills, hooks and workflows in this codebase need attention, kept fresh in the background? |
 | I need a workspace install scan or one-package verdict | `hol-guard supply-chain scan` or `hol-guard supply-chain explain <package> --ecosystem <ecosystem>` | Which current dependencies or package versions would Guard warn, review, or block right now? |
 | I need one-click package manager interception | Local dashboard Package Firewall or `hol-guard package-shims install --manager npm --json` | Can Guard intercept npm, pip, pnpm, yarn, bun, uv, poetry, pipenv, pipx, cargo, go, composer, bundle, mvn, and gradle before installs run? |
 | A package manager shim is missing or behind PATH | Local dashboard Repair or `hol-guard package-shims repair --manager npm --json` | Which shell PATH change or shim reinstall restores protection? |
@@ -298,6 +330,19 @@ Optional project override:
 [artifacts."codex:project:workspace_tools"]
 default_action = "block"
 ```
+
+Guard also assesses the workspaces you admit, and the ones a harness install registers, in a background
+worker that the daemon runs. To turn that worker off for the whole device, set this in the home config
+(the default is `true`):
+
+```toml
+workspace_assessment_enabled = false
+```
+
+Turning it off stops the worker from checking or queueing anything, and turning it on again resumes it; a
+running daemon notices either change within about half a minute, without a restart. It never deletes stored runs, findings, fix proposals or admissions, so turning it back on resumes where it left off. Removing
+a harness install ends the automatic admission of its workspace the same way: the worktree stops being
+checked, and its run history and fix proposals stay.
 
 Guard still reads the legacy `.ai-plugin-scanner-guard.toml` file if you already have one, but new local overrides should use `.hol-guard.toml`.
 

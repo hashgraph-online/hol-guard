@@ -6,11 +6,9 @@ import json
 import os
 from dataclasses import replace
 from pathlib import Path
-from types import SimpleNamespace
 
 import pytest
 
-from codex_plugin_scanner.guard import native_workspace_snapshot as native
 from codex_plugin_scanner.guard import workspace_assessment_runner as runner
 from codex_plugin_scanner.guard import workspace_assessment_store as assessments
 from codex_plugin_scanner.guard import workspace_assessment_worker as worker
@@ -20,14 +18,12 @@ from codex_plugin_scanner.guard.runtime import workspace_assessment_sync as sync
 from codex_plugin_scanner.guard.store import GuardStore
 from tests.test_guard_workspace_assessment_runner import (
     AUDIT,
-    HOOKS_COMPLETE,
     PLUGINS_COMPLETE,
-    SECRETS_COMPLETE,
-    SKILLS_COMPLETE,
-    SNAPSHOT,
+    SCANNED,
     T0,
     queued_run,
 )
+from tests.workspace_rule_support import project_rule_findings, with_rule_coverage
 
 FINDING_ID = "0123456789abcdef0123456789abcdef"
 HOOK_PATH = "plugins/helper/hooks/hooks.json"
@@ -95,7 +91,7 @@ def plugins_result(*findings: dict[str, object], **overrides: object) -> dict[st
 
 def run_with(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, plugins: dict[str, object] | None):
     store, claimed = queued_run(tmp_path)
-    scanned = replace(SNAPSHOT, secrets=SECRETS_COMPLETE, skills=SKILLS_COMPLETE, hooks=HOOKS_COMPLETE, plugins=plugins)
+    scanned = replace(SCANNED, plugins=plugins)
     monkeypatch.setattr(runner, "workspace_snapshot", lambda root, **_: scanned)
     monkeypatch.setattr(runner, "_local_audit", lambda store, config, root: AUDIT)
     return store, claimed, runner.execute(store, None, claimed, clock=lambda: T0)
@@ -161,51 +157,6 @@ def test_a_plugin_without_hooks_or_servers_is_complete(tmp_path: Path, monkeypat
     assert outcome.coverage["detectors"]["plugin_manifest_v1"] == "complete"
 
 
-def test_older_runtime_keeps_earlier_scans_and_reports_plugins_not_run(tmp_path: Path, monkeypatch) -> None:
-    store, claimed = queued_run(tmp_path)
-    requested: list[tuple[bool, bool, bool]] = []
-
-    def snapshot(root: Path, *, secrets: bool = False, hooks: bool = False, plugins: bool = False, **_):
-        requested.append((secrets, hooks, plugins))
-        if plugins:
-            raise native.WorkspaceSnapshotError("workspace_snapshot_plugins_unavailable")
-        if secrets:
-            return replace(SNAPSHOT, secrets=SECRETS_COMPLETE, skills=SKILLS_COMPLETE, hooks=HOOKS_COMPLETE)
-        return SNAPSHOT
-
-    monkeypatch.setattr(runner, "workspace_snapshot", snapshot)
-    monkeypatch.setattr(runner, "_local_audit", lambda store, config, root: AUDIT)
-    outcome = runner.execute(store, None, claimed, clock=lambda: T0)
-    # Detector snapshot with plugins, again without them, then the plain recheck.
-    assert requested == [(True, True, True), (True, True, False), (False, False, False)]
-    assert outcome.state == "partial"
-    assert outcome.coverage is not None
-    assert outcome.coverage["reasons"] == ["detector_not_run:plugin_manifest_v1"]
-    assert outcome.coverage["detectors"]["hook_config_v1"] == "no_inputs"
-    assert outcome.coverage["detectors"]["plugin_manifest_v1"] == "not_run"
-
-
-def test_a_runtime_without_the_plugin_scan_is_named(monkeypatch: pytest.MonkeyPatch) -> None:
-    from codex_plugin_scanner.guard import native_runtime
-
-    features = (
-        native.WORKSPACE_SNAPSHOT_FEATURE,
-        native.WORKSPACE_SECRETS_FEATURE,
-        native.WORKSPACE_SKILLS_FEATURE,
-        native.WORKSPACE_HOOKS_FEATURE,
-    )
-    status = SimpleNamespace(
-        available=True,
-        compatible=True,
-        identity=SimpleNamespace(path=Path("/runtime/hol-guard-runtime")),
-        capabilities=SimpleNamespace(features=features),
-    )
-    monkeypatch.setattr(native_runtime, "native_runtime_status", lambda: status)
-    with pytest.raises(native.WorkspaceSnapshotError) as raised:
-        native._native_request({}, needs_secrets=True, needs_skills=True, needs_hooks=True, needs_plugins=True)
-    assert raised.value.code == "workspace_snapshot_plugins_unavailable"
-
-
 @pytest.mark.parametrize(
     "reason",
     [
@@ -236,8 +187,10 @@ def test_a_plugin_the_scan_could_not_read_leaves_the_run_partial(tmp_path: Path,
 
 
 def test_a_plugin_scan_at_its_cap_marks_findings_truncated() -> None:
-    coverage = plugin_findings.with_plugin_manifest_coverage(
-        EMPTY_COVERAGE, plugins_result(native_finding(), status="incomplete", truncation_reasons=["max_findings"])
+    coverage = with_rule_coverage(
+        plugin_findings.PLUGIN_MANIFEST_DETECTOR,
+        EMPTY_COVERAGE,
+        plugins_result(native_finding(), status="incomplete", truncation_reasons=["max_findings"]),
     )
     assert coverage["reasons"] == ["plugin_manifest_incomplete", "finding_cap"]
 
@@ -255,7 +208,7 @@ def test_a_plugin_scan_at_its_cap_marks_findings_truncated() -> None:
     ],
 )
 def test_an_unreadable_plugin_result_is_an_error(payload: dict[str, object]) -> None:
-    coverage = plugin_findings.with_plugin_manifest_coverage(EMPTY_COVERAGE, payload)
+    coverage = with_rule_coverage(plugin_findings.PLUGIN_MANIFEST_DETECTOR, EMPTY_COVERAGE, payload)
     assert (coverage["status"], coverage["reasons"]) == ("partial", ["plugin_manifest_incomplete"])
     assert coverage["detectors"]["plugin_manifest_v1"] == "error"
 
@@ -296,15 +249,15 @@ def test_an_unreadable_plugin_result_is_an_error(payload: dict[str, object]) -> 
 )
 def test_a_malformed_finding_is_dropped_and_leaves_the_scan_incomplete(bad: dict[str, object]) -> None:
     result = plugins_result(native_finding(**bad))
-    assert plugin_findings.project_plugin_manifest_findings(result) == []
-    coverage = plugin_findings.with_plugin_manifest_coverage(EMPTY_COVERAGE, result)
+    assert project_rule_findings(plugin_findings.PLUGIN_MANIFEST_DETECTOR, result) == []
+    coverage = with_rule_coverage(plugin_findings.PLUGIN_MANIFEST_DETECTOR, EMPTY_COVERAGE, result)
     assert coverage["detectors"]["plugin_manifest_v1"] == "incomplete"
     assert coverage["plugin_manifest"]["truncation_reasons"] == ["invalid_finding"]
 
 
 def test_a_server_finding_needs_an_mcp_rule() -> None:
     result = plugins_result(server_finding(rule_id="hook.config.remote-code"))
-    assert plugin_findings.project_plugin_manifest_findings(result) == []
+    assert project_rule_findings(plugin_findings.PLUGIN_MANIFEST_DETECTOR, result) == []
 
 
 def test_every_file_the_runtime_reads_is_accepted() -> None:
@@ -321,8 +274,8 @@ def test_every_file_the_runtime_reads_is_accepted() -> None:
     result = plugins_result(
         *(native_finding(finding_id=f"{index:032x}", path=path) for index, path in enumerate(paths))
     )
-    assert [item["path"] for item in plugin_findings.project_plugin_manifest_findings(result)] == paths
-    coverage = plugin_findings.with_plugin_manifest_coverage(EMPTY_COVERAGE, result)
+    assert [item["path"] for item in project_rule_findings(plugin_findings.PLUGIN_MANIFEST_DETECTOR, result)] == paths
+    coverage = with_rule_coverage(plugin_findings.PLUGIN_MANIFEST_DETECTOR, EMPTY_COVERAGE, result)
     assert coverage["detectors"]["plugin_manifest_v1"] == "complete"
 
 

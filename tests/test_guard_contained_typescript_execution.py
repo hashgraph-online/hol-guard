@@ -52,54 +52,62 @@ def _manager(root: Path) -> Path:
     return directory
 
 
-def test_native_request_carries_launch_evidence_environment_and_timeout(
-    native_home: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+def _capture_resident(monkeypatch: pytest.MonkeyPatch) -> list[dict[str, object]]:
+    calls: list[dict[str, object]] = []
+
+    def resident(**kwargs: object) -> None:
+        calls.append(kwargs)
+
+    monkeypatch.setattr(execution_module._native_execution, "_resident_request", resident)
+    return calls
+
+
+def test_native_request_carries_the_shims_launch_environment_and_timeout(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     workspace = _workspace(tmp_path)
     shim = _manager(tmp_path)
-    captured: dict[str, object] = {}
-
-    def native(workspace_arg: Path, manager: str, argv: tuple[str, ...], **kwargs: object) -> None:
-        captured.update(workspace=workspace_arg, manager=manager, argv=argv, **kwargs)
-
-    monkeypatch.setattr(execution_module._native_execution, "contained_typescript_execute_native", native)
+    calls = _capture_resident(monkeypatch)
     environment = {"PATH": str(shim), "GITHUB_TOKEN": "left-to-the-resident"}
     result = try_execute_contained_typescript(
         "npx",
         _TSC,
         workspace=workspace,
-        guard_home=native_home,
+        guard_home=tmp_path,
         shim_directory=shim,
         environment=environment,
         timeout_seconds=45.0,
     )
 
     assert result is None
-    assert captured["workspace"] == workspace
-    assert captured["manager"] == "npx"
-    assert captured["argv"] == _TSC
-    assert captured["shim_directory"] == shim
-    assert captured["environment"] == environment
-    assert captured["timeout_seconds"] == 45.0
-    evidence = captured["evidence"]
-    assert isinstance(evidence, dict)
-    assert evidence["executable_name"] == "tsc"
+    # One resident request: it parses the launch intent from the argv itself.
+    assert len(calls) == 1
+    assert calls[0]["operation"] == "contained_typescript_execute"
+    request = calls[0]["request"]
+    assert isinstance(request, dict)
+    assert request["schema"] == "guard-contained-typescript-execute-request.v2"
+    assert request["workspace"] == str(workspace)
+    assert request["manager"] == "npx"
+    assert request["argv"] == list(_TSC)
+    assert request["shim_directory"] == str(shim)
+    assert request["environment"] == environment
+    assert request["timeout_seconds"] == 45.0
+    assert "evidence" not in request
+    assert "command_text" not in request
 
 
 @pytest.mark.parametrize("manager", ("pnpm", "yarn", "bun", "bunx"))
-def test_only_npx_reaches_the_resident(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, manager: str) -> None:
-    def native(*_args: object, **_kwargs: object) -> None:
-        raise AssertionError("resident must only see npx")
-
-    monkeypatch.setattr(execution_module._native_execution, "contained_typescript_execute_native", native)
+def test_only_npx_is_contained(native_home: Path, tmp_path: Path, manager: str) -> None:
+    workspace = _workspace(tmp_path)
+    shim = _manager(tmp_path)
     assert (
         try_execute_contained_typescript(
             manager,
             _TSC,
-            workspace=tmp_path,
-            guard_home=tmp_path,
-            shim_directory=tmp_path,
-            environment={},
+            workspace=workspace,
+            guard_home=native_home,
+            shim_directory=shim,
+            environment={"PATH": str(shim)},
         )
         is None
     )

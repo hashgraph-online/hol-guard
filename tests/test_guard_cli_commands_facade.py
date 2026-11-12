@@ -15,7 +15,6 @@ def test_commands_facade_exports_legacy_symbols() -> None:
         "_build_guard_device_connect_payload",
         "_finalize_guard_connect_payload",
         "_headless_approval_resolver",
-        "_native_hook_reason",
         "_resolve_guard_workspace",
         "_runtime_detector_perf_payload",
     ):

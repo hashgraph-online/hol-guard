@@ -5,11 +5,16 @@
 //! events become cloud pain signals, how often a warning must repeat before it
 //! escalates, and what the local value metrics and weekly digest say is made
 //! here. The caller uploads or stores what comes back, nothing more.
+//! Whether the cached supply-chain intel is stale is read here too.
 
 use std::collections::BTreeMap;
 
 use serde_json::{json, Map, Value};
 
+use super::cloud_request_text::{py_strip, py_truthy};
+use super::guard_store_json::{
+    add_micros_aware_isoformat, add_seconds_utc_isoformat, epoch_micros,
+};
 use super::policy_bundle_py::non_empty;
 use super::runner_authority_detector::args_object;
 use super::runner_authority_op::{KindResult, ERR_INVALID};
@@ -307,4 +312,99 @@ pub(crate) fn completed_event_ids(args: &Value) -> KindResult {
         .filter_map(|item| item.get("eventId").and_then(Value::as_str))
         .collect();
     Ok(json!({"ids": ids}))
+}
+
+/// Keys a sync summary records its last sync under, in reading order.
+const SYNCED_AT_KEYS: [&str; 5] = [
+    "synced_at",
+    "syncedAt",
+    "runtime_session_synced_at",
+    "runtimeSessionSyncedAt",
+    "local_guard_online_at",
+];
+const NEXT_REFRESH_KEYS: [&str; 2] = ["next_refresh_at", "nextRefreshAt"];
+/// The bundle summary, the only one that names its next refresh.
+const BUNDLE_SUMMARY: usize = 2;
+/// How long synced intel stays fresh when the bundle names no refresh time.
+const STALE_INTEL_REFRESH_MICROS: i64 = 15 * 60 * 1_000_000;
+
+/// `summary.get(a) or summary.get(b) or ...` read through `_optional_string`:
+/// the first truthy value decides, and only a non-blank string survives it.
+fn first_truthy_string<'a>(summary: &'a Map<String, Value>, keys: &[&str]) -> Option<&'a str> {
+    let value = keys
+        .iter()
+        .filter_map(|key| summary.get(*key))
+        .find(|value| py_truthy(value))?;
+    value.as_str().filter(|text| !py_strip(text).is_empty())
+}
+
+/// `_parse_iso_timestamp(text) + timedelta(minutes=15)` then `.isoformat()`:
+/// an aware instant keeps its offset and a naive one reads as UTC.
+fn refresh_after(text: &str) -> Option<String> {
+    if add_micros_aware_isoformat(text, 0).is_some() {
+        add_micros_aware_isoformat(text, STALE_INTEL_REFRESH_MICROS)
+    } else {
+        add_seconds_utc_isoformat(text, STALE_INTEL_REFRESH_MICROS)
+    }
+}
+
+/// The `staleIntel` block of the package-manager coverage a runtime session
+/// reports. `summaries` are the stored sync, runtime-session and supply-chain
+/// bundle summaries in that order; the latest sync among them wins.
+pub(crate) fn stale_intel(args: &Value) -> KindResult {
+    let args = args_object(args)?;
+    let Some(Value::Array(summaries)) = args.get("summaries") else {
+        return Err(ERR_INVALID);
+    };
+    if summaries.len() != BUNDLE_SUMMARY + 1 {
+        return Err(ERR_INVALID);
+    }
+    let generated_at = args
+        .get("generated_at")
+        .and_then(Value::as_str)
+        .ok_or(ERR_INVALID)?;
+    let now = args.get("now").and_then(Value::as_str).ok_or(ERR_INVALID)?;
+    let mut synced: Option<(&str, i128)> = None;
+    let mut next_refresh_at: Option<String> = None;
+    for (index, summary) in summaries.iter().enumerate() {
+        let Value::Object(summary) = summary else {
+            continue;
+        };
+        let Some(candidate) = first_truthy_string(summary, &SYNCED_AT_KEYS) else {
+            continue;
+        };
+        let Some(timestamp) = epoch_micros(candidate) else {
+            continue;
+        };
+        if synced.is_some_and(|(_, latest)| timestamp <= latest) {
+            continue;
+        }
+        synced = Some((candidate, timestamp));
+        next_refresh_at = (index == BUNDLE_SUMMARY)
+            .then(|| first_truthy_string(summary, &NEXT_REFRESH_KEYS))
+            .flatten()
+            .map(str::to_owned);
+    }
+    let reference = epoch_micros(generated_at)
+        .or_else(|| epoch_micros(now))
+        .ok_or(ERR_INVALID)?;
+    let mut next_refresh = next_refresh_at.as_deref().and_then(epoch_micros);
+    if next_refresh.is_none() {
+        if let Some((synced_at, timestamp)) = synced {
+            next_refresh_at = Some(refresh_after(synced_at).ok_or(ERR_INVALID)?);
+            next_refresh = Some(timestamp + i128::from(STALE_INTEL_REFRESH_MICROS));
+        }
+    }
+    let status = if next_refresh.is_some_and(|refresh| refresh <= reference) {
+        "stale"
+    } else if synced.is_some() {
+        "fresh"
+    } else {
+        "unknown"
+    };
+    Ok(json!({
+        "status": status,
+        "lastSyncedAt": synced.map(|(synced_at, _)| synced_at),
+        "nextRefreshAt": next_refresh_at,
+    }))
 }

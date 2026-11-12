@@ -479,3 +479,15 @@ def test_daemon_repair_never_blesses_a_rejected_runtime(tmp_path: Path, monkeypa
     )
     result = commands_support_service._repair_resident_update_marker(tmp_path / "guard-home")
     assert result == {"status": "unavailable", "reason_code": "native_manifest_missing"}
+
+
+@pytest.mark.skipif(os.name == "nt", reason="runtime mode checks use POSIX permissions")
+def test_runtime_digest_reads_a_development_wheel_runtime(tmp_path: Path) -> None:
+    # Gauntlet development wheels carry a runtime of about 150 MiB. Past the old
+    # 128 MiB bound the lock could not identify it and the resident never started.
+    runtime = tmp_path / "runtime"
+    with runtime.open("wb") as handle:
+        handle.truncate(150 * 1024 * 1024)
+    runtime.chmod(0o700)
+
+    assert lock_module._runtime_digest(runtime) is not None

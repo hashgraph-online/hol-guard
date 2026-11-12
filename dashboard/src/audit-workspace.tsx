@@ -38,6 +38,7 @@ import { listSupplyChainAuditWorkspaceChoices } from "./supply-chain-audit-works
 import type { SupplyChainAuditSession } from "./use-supply-chain-audit-session";
 import { isBlockedGuardAction } from "./guard-action";
 import { auditPriorityBadgeLabel } from "./audit-priority-badge";
+import { AuditCodebaseChecks } from "./audit-codebase-checks";
 
 export type AuditSeverity = "critical" | "high" | "medium" | "low" | "info";
 
@@ -429,9 +430,10 @@ type AuditWorkspaceProps = {
   receipts: GuardReceipt[];
   approvalGate: GuardApprovalGatePublicConfig | null;
   auditSession: SupplyChainAuditSession;
+  onOpenWorkspaces?: () => void;
 };
 
-export function AuditWorkspace({ snapshot, receipts, approvalGate, auditSession }: AuditWorkspaceProps) {
+export function AuditWorkspace({ snapshot, receipts, approvalGate, auditSession, onOpenWorkspaces }: AuditWorkspaceProps) {
   const [filter, setFilter] = useState<AuditFilterState>({
     severityFilter: "all",
     harnessFilter: "",
@@ -599,6 +601,8 @@ export function AuditWorkspace({ snapshot, receipts, approvalGate, auditSession 
           )}
         </div>
       </div>
+
+      <AuditCodebaseChecks onOpenWorkspaces={onOpenWorkspaces} />
 
       <div className="rounded-2xl border border-slate-100 bg-white shadow-sm">
         <div className="border-b border-slate-100 px-4 py-3 space-y-3">

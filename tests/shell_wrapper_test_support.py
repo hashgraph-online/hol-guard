@@ -10,7 +10,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
-from codex_plugin_scanner.guard.native_shell_helpers import call
+from tests.native_shell_helpers_client import call
 
 
 @dataclass(frozen=True, slots=True)

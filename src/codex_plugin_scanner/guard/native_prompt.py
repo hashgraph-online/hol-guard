@@ -111,43 +111,6 @@ def artifact_from_dict(value: object) -> GuardArtifact | None:
         return None
 
 
-def _artifact_wire(artifact: GuardArtifact) -> dict[str, object]:
-    """The fields the merge reads, copied straight off the dataclass.
-
-    ``GuardArtifact.to_dict()`` redacts args, url and metadata, which would
-    rewrite the matched text the merged review is meant to show.
-    """
-    return {
-        "artifact_id": artifact.artifact_id,
-        "name": artifact.name,
-        "harness": artifact.harness,
-        "artifact_type": artifact.artifact_type,
-        "source_scope": artifact.source_scope,
-        "config_path": artifact.config_path,
-        "metadata": dict(artifact.metadata),
-    }
-
-
-def merge_prompt_artifacts(
-    harness: str, artifacts: list[GuardArtifact], *, guard_home: Path | None = None
-) -> GuardArtifact:
-    """Fold several prompt artifacts into the one review Guard holds them under.
-
-    Rust derives the merged identity; an unavailable or invalid result stops
-    the hook rather than inventing a second spelling of the same review.
-    """
-    result = analyze(
-        "merge_artifacts",
-        harness=harness,
-        artifacts=[_artifact_wire(artifact) for artifact in artifacts],
-        guard_home=guard_home,
-    )
-    merged = artifact_from_dict(result)
-    if merged is None:
-        raise NativePromptAnalysisError("native_prompt_analysis_invalid_result")
-    return merged
-
-
 def should_force_reapproval(
     prompt_reqs: list[PromptRequest], prior_policy: dict[str, object] | None, *, guard_home: Path | None = None
 ) -> bool:
@@ -163,23 +126,3 @@ def should_force_reapproval(
     if not isinstance(result, bool):
         raise NativePromptAnalysisError("native_prompt_analysis_invalid_result")
     return result
-
-
-def trailing_secret_read_state(content: str, *, guard_home: Path | None = None) -> tuple[int, bool] | None:
-    result = analyze("trailing_secret_read_state", prompt_text=content, guard_home=guard_home)
-    if not isinstance(result, dict) or "state" not in result:
-        raise NativePromptAnalysisError("native_prompt_analysis_invalid_result")
-    state = result["state"]
-    if state is None:
-        return None
-    if not isinstance(state, list) or len(state) != 2:
-        raise NativePromptAnalysisError("native_prompt_analysis_invalid_result")
-    distance, positive = state
-    if (
-        isinstance(distance, bool)
-        or not isinstance(distance, int)
-        or distance not in (0, 1)
-        or not isinstance(positive, bool)
-    ):
-        raise NativePromptAnalysisError("native_prompt_analysis_invalid_result")
-    return distance, positive

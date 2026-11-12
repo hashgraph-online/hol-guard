@@ -1,12 +1,14 @@
 """A launcher runs the program it names; the sink plans that program.
 
-Which names are launchers is the native parser's to answer. The sink keeps no
-list of its own, so a name the parser learns to read reaches the planners
-without a second edit here.
+Which names are launchers, which durations bound a run and where an inert
+prefix ends are all the native parser's to answer, and it answers them in one
+reading. The sink keeps no list of its own, so a name the parser learns to
+read reaches the planners without a second edit here.
 """
 
 from __future__ import annotations
 
+import os
 import shlex
 from pathlib import Path
 
@@ -18,50 +20,81 @@ from codex_plugin_scanner.guard.runtime.contained_command_prefix import (
     _split_command_prefix,
     peel_run_prefixes,
 )
+from codex_plugin_scanner.guard.runtime.restricted_package_test import KIND_NAMES
 from codex_plugin_scanner.guard.runtime.restricted_pytest_model import (
     PYTEST_INVALID_COMMAND_REASON_CODE,
     RestrictedPytestError,
 )
 
-# Where native authority reads the program for each launcher shape; the grammar
-# itself is tested in `guard-command` (`parser_launchers_tests.rs`).
-_PROGRAM = {
-    ("nice", "-n", "10", "pytest", "-q"): 3,
-    ("nice", "pytest", "-q"): 1,
-    ("stdbuf", "-oL", "pytest", "-q"): 2,
-    ("exec", "pytest", "-q"): 1,
-    ("nice", "-n", "10", "timeout", "20", "pytest", "-q"): 3,
-    ("stdbuf", "-oL", "env", "CI=1", "pytest", "-q"): 2,
+# What native authority reads each run's prefixes down to; the peel itself is
+# tested in `guard-command` (`contained_run_prefix_tests.rs`). A command named
+# here peels as the answer says, and every other one peels not at all.
+_PEEL: dict[tuple[str, ...], dict[str, object]] = {
+    ("nice", "-n", "10", "timeout", "20", "pytest", "-q"): {"core": ["pytest", "-q"], "seconds": 20},
+    ("timeout", "20", "stdbuf", "-oL", "pytest", "-q"): {"core": ["pytest", "-q"], "seconds": 20},
+    ("stdbuf", "-oL", "env", "CI=1", "pytest", "-q"): {"core": ["pytest", "-q"]},
+    ("nice", "-n", "10", "pytest", "-q"): {"core": ["pytest", "-q"]},
+    ("nice", "pytest", "-q"): {"core": ["pytest", "-q"]},
+    ("stdbuf", "-oL", "pytest", "-q"): {"core": ["pytest", "-q"]},
+    ("exec", "pytest", "-q"): {"core": ["pytest", "-q"]},
 }
-# And where it reads the program behind a transparent prefix; that grammar is
-# tested in `guard-command` (`parser_wrappers.rs`).
-_PREFIX = {
-    ("env", "CI=1", "pytest", "-q"): 2,
-    ("/usr/bin/env", "CI=1", "pytest", "-q"): 2,
-    ("command", "pytest", "-q"): 1,
-    ("env", "REPORT_DIR=/tmp/r", "pytest", "-q"): 2,
+# And how it splits an inert prefix off a command; that reading is tested in
+# `guard-command` (`contained_prefix_tests.rs`), and the same rule applies.
+_SPLIT: dict[tuple[tuple[str, ...], bool], dict[str, object]] = {
+    (("env", "CI=1", "pytest", "-q"), False): {"core_index": 2, "assignments": [["CI", "1"]]},
+    (("/usr/bin/env", "CI=1", "pytest", "-q"), False): {
+        "core_index": 2,
+        "assignments": [["CI", "1"]],
+    },
+    (("command", "pytest", "-q"), False): {"core_index": 1, "assignments": []},
+    (("env", "REPORT_DIR=/tmp/r", "pytest", "-q"), True): {
+        "core_index": 2,
+        "assignments": [],
+        "dropped_data": True,
+    },
 }
-_KINDS = dict.fromkeys(("inline_eval", "node_test", "vitest", "git", "node_tool"), False)
+# Every command text the sink handed to the native lexer, in order.
+_WORDS_ASKED: list[str] = []
+_WHOLE: dict[str, object] = {"core_index": 0, "assignments": [], "dropped_data": False}
+_KINDS = dict.fromkeys(sorted(KIND_NAMES), False)
 
 
 def _native(operation: str, fields: dict[str, object], expected: object) -> object:
-    if operation == "launcher_program":
-        return _PROGRAM.get(tuple(fields["command"]))  # type: ignore[arg-type]
-    if operation == "transparent_prefix":
-        return _PREFIX.get(tuple(fields["command"]))  # type: ignore[arg-type]
+    if operation == "run_prefix_peel":
+        command: list[str] = fields["command"]  # type: ignore[assignment]
+        return {"core": command, "seconds": None} | _PEEL.get(tuple(command), {})
+    if operation == "command_words":
+        # Standing in for the native lexer, whose grammar is tested in
+        # `guard-command` (`contained_argv_tests.rs`). It reads a backslash
+        # the way that lexer reads it: a path separator where the platform
+        # spells paths with one, an escape everywhere else.
+        text: str = fields["command_text"]  # type: ignore[assignment]
+        _WORDS_ASKED.append(text)
+        return shlex.split(text.replace("\\", "\\\\") if os.name == "nt" else text, posix=True)
+    if operation == "command_prefix_split":
+        key = (tuple(fields["command"]), bool(fields["drop_data"]))  # type: ignore[arg-type]
+        return _WHOLE | _SPLIT.get(key, {})
+    if operation == "pytest_command":
+        # The whole grammar lives in `pytest_argv.rs`; every command reaching
+        # this file is a launcher prefix in front of a bare `pytest`, so the
+        # answer here turns on the program the planners were handed.
+        words: list[str] = fields["command"]  # type: ignore[assignment]
+        return bool(words) and Path(words[0]).name in {"pytest", "py.test"}
     return dict(_KINDS) if operation == "contained_kind" else None
 
 
 @pytest.fixture(autouse=True)
 def _native_authority(monkeypatch: pytest.MonkeyPatch) -> None:
+    _WORDS_ASKED.clear()
     monkeypatch.setattr(native_restricted_pytest, "restricted_native", _native)
 
 
-def test_launchers_and_clocks_peel_in_either_order() -> None:
+def test_the_run_stands_behind_the_prefixes_the_parser_peeled() -> None:
     assert peel_run_prefixes(shlex.split("nice -n 10 timeout 20 pytest -q")) == (["pytest", "-q"], 20)
     assert peel_run_prefixes(shlex.split("timeout 20 stdbuf -oL pytest -q")) == (["pytest", "-q"], 20)
     assert peel_run_prefixes(shlex.split("stdbuf -oL env CI=1 pytest -q")) == (["pytest", "-q"], None)
-    assert peel_run_prefixes(shlex.split("exec pytest -q")) == (["pytest", "-q"], None)
+    # `nohup` writes its own file and `setsid` detaches the run, so the parser
+    # leaves both wrapped and the planners judge the command as written.
     assert peel_run_prefixes(shlex.split("nohup pytest -q")) == (["nohup", "pytest", "-q"], None)
 
 
@@ -97,18 +130,26 @@ def test_a_setting_the_runner_cannot_carry_leaves_the_prefix_whole() -> None:
     assert _split_command_prefix(original, drop_data=True) == (["pytest", "-q"], {})
 
 
-def test_an_answer_outside_the_command_leaves_it_whole(monkeypatch: pytest.MonkeyPatch) -> None:
-    for answer in (0, 2, -1, True, "1", None):
+def test_an_answer_the_sink_cannot_read_leaves_the_command_whole(monkeypatch: pytest.MonkeyPatch) -> None:
+    for answer in (
+        {},
+        {"core": "pytest", "seconds": None},
+        {"core": ["pytest", 2], "seconds": None},
+        {"core": ["pytest"], "seconds": "20"},
+        {"core": ["pytest"], "seconds": 20.5},
+    ):
         monkeypatch.setattr(native_restricted_pytest, "restricted_native", lambda *_, a=answer: a)
         assert peel_run_prefixes(["nice", "pytest"]) == (["nice", "pytest"], None), answer
 
 
-def test_the_parser_names_the_launchers_and_the_sink_does_not(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Every command that could carry one is put to the parser, and only it decides.
+def test_the_whole_reading_is_one_question_the_parser_answers(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The sink names no launcher, no duration and no prefix, and asks once.
 
     Holding the names here instead is what drifted: the parser learned to read
     the shell's `exec`, the copy in the sink did not, and `exec pytest -q`
-    reached the planners with `exec` as its program.
+    reached the planners with `exec` as its program. Asking prefix by prefix
+    is what that cost — up to eight round trips on the hook's own path for a
+    reading native authority can finish in one.
     """
 
     asked: list[object] = []
@@ -118,31 +159,14 @@ def test_the_parser_names_the_launchers_and_the_sink_does_not(monkeypatch: pytes
         return _native(operation, fields, expected)
 
     monkeypatch.setattr(native_restricted_pytest, "restricted_native", native)
-    # A launcher stands as a bare name in front of a program. A command with
-    # nothing behind the first word cannot carry one, and a first word spelled
-    # as a path is a program of the user's own that shares the name.
-    for text in ("pytest", "./nice pytest -q", "/usr/bin/nice pytest -q"):
-        peel_run_prefixes(shlex.split(text))
-    assert asked == []
-    # Every other command is asked about, including the ones the sink once
-    # held a name for and the one it did not.
-    assert peel_run_prefixes(shlex.split("nice pytest -q")) == (["pytest", "-q"], None)
-    assert peel_run_prefixes(shlex.split("exec pytest -q")) == (["pytest", "-q"], None)
+    assert peel_run_prefixes(shlex.split("nice -n 10 timeout 20 pytest -q")) == (["pytest", "-q"], 20)
     assert peel_run_prefixes(shlex.split("wget https://example.test")) == (
         ["wget", "https://example.test"],
         None,
     )
-    # A peeled launcher leaves a command that may carry a transparent prefix of
-    # its own, and that grammar is the parser's too. `wget` is no launcher, so
-    # nothing is left to peel and nothing further is asked.
     assert asked == [
-        ("launcher_program", ["nice", "pytest", "-q"]),
-        ("transparent_prefix", ["pytest", "-q"]),
-        ("launcher_program", ["pytest", "-q"]),
-        ("launcher_program", ["exec", "pytest", "-q"]),
-        ("transparent_prefix", ["pytest", "-q"]),
-        ("launcher_program", ["pytest", "-q"]),
-        ("launcher_program", ["wget", "https://example.test"]),
+        ("run_prefix_peel", ["nice", "-n", "10", "timeout", "20", "pytest", "-q"]),
+        ("run_prefix_peel", ["wget", "https://example.test"]),
     ]
 
 
@@ -240,3 +264,38 @@ def test_a_native_failure_with_no_workspace_receipt_refuses(monkeypatch: pytest.
             payload, workspace=tmp_path, timeout_seconds=20, authorize=lambda _: _required()
         )
     assert refused.value.reason_code == "native_contained_argv_unavailable"
+
+
+def test_the_sink_reads_the_command_once_the_way_native_authority_read_it(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """One command, one reading, one ask.
+
+    `pretool` lexed this text when it decided the run is contained. Splitting
+    it again here would be a second grammar: the two part on `tests\\a.py`,
+    which this process reads as an escape and the native lexer reads as a path
+    separator where the platform spells paths with one, so a receipt drawn
+    over the escaped words would not name the run that executes. Both the
+    receipt peel and the planner take the words from the one ask, because the
+    text between them does not change and the hook pays for every round trip.
+    """
+    executed: list[list[str]] = []
+    monkeypatch.setattr(sink, "prepare_restricted_pytest", _plan_only_pytest)
+    monkeypatch.setattr(sink, "run_restricted_pytest", lambda command, **_: executed.append(command) or 0)
+    # The wrapper peel and the sibling-root anchor are earlier screens with
+    # their own tests and their own resident calls; this one is about the
+    # reading the receipt and the planner share.
+    monkeypatch.setattr(sink, "peel_contained_wrapper", lambda *_, **__: None)
+    monkeypatch.setattr(sink, "anchored_sibling_root", lambda *_, **__: None)
+    text = "pytest tests\\a.py"
+    payload = {"hook_event_name": "PreToolUse", "tool_name": "bash", "tool_input": {"command": text}}
+    assert (
+        sink.run_authorized_contained_test(
+            payload, workspace=tmp_path, timeout_seconds=20, authorize=lambda _: _required()
+        )
+        == 0
+    )
+    # The sink asked for the words once and ran what the answer named. A
+    # second split of its own would show as no ask at all.
+    assert [text] == _WORDS_ASKED
+    assert executed == [["pytest", "tests\\a.py"] if os.name == "nt" else ["pytest", "testsa.py"]]

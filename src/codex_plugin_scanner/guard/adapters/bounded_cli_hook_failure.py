@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from ..daemon.hook_availability_policy import (
+from ..hook_review.hook_availability_policy import (
     hook_event_is_permission_request,
     hook_event_pauses_when_unavailable,
 )
@@ -47,7 +47,7 @@ def _observe_payload(harness: str, event_name: str, reason: str) -> dict[str, ob
 
 def _pause_payload(harness: str, event_name: str, reason: str) -> tuple[dict[str, object], int]:
     if _is_prompt_event(event_name):
-        from ..daemon.hook_fail_closed import fail_closed_response
+        from ..hook_review.hook_fail_closed import fail_closed_response
 
         return fail_closed_response(harness, event_name), 0
     if harness == "copilot":
@@ -70,13 +70,15 @@ def _pause_payload(harness: str, event_name: str, reason: str) -> tuple[dict[str
             "stopReason": reason,
             "systemMessage": reason,
         }, 0
+    # Muse reads the JSON envelope on exit 0; exit 2 would discard it
+    # and substitute stderr, so its deny travels in the envelope.
     return {
         "hookSpecificOutput": {
             "hookEventName": event_name,
             "permissionDecision": "deny",
             "permissionDecisionReason": reason,
         }
-    }, 2
+    }, (0 if harness == "muse" else 2)
 
 
 def failure_payload(

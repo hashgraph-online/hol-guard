@@ -43,6 +43,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "alloc-no-stdlib"
+version = "2.0.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "cc7bb162ec39d46ab1ca8c77bf72e890535becd1751bb45f64c597edb4c8c6b3"
+
+[[package]]
+name = "alloc-stdlib"
+version = "0.2.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0e76a019e91224d279006ff972f1e984179a6e9feb050adba6ce8274aef23195"
+dependencies = [
+ "alloc-no-stdlib",
+]
+
+[[package]]
 name = "android_system_properties"
 version = "0.1.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -151,10 +166,32 @@ dependencies = [
 ]
 
 [[package]]
+name = "blst"
+version = "0.3.17"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c20659f9bbee16cbbd2f7393e40ab6309f5a98f76a2eb57a995ec508b72387fe"
+dependencies = [
+ "cc",
+ "glob",
+ "threadpool",
+ "zeroize",
+]
+
+[[package]]
 name = "borrow-or-share"
 version = "0.2.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "dc0b364ead1874514c8c2855ab558056ebfeb775653e7ae45ff72f28f8f3166c"
+
+[[package]]
+name = "brotli-decompressor"
+version = "5.0.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3a32acac15fe1967bc3986b2a6347dffc965602354ea6f450ad07e8bfd253583"
+dependencies = [
+ "alloc-no-stdlib",
+ "alloc-stdlib",
+]
 
 [[package]]
 name = "bumpalo"
@@ -629,8 +666,10 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "300e883d756b2e4ec94e02791f39b04b522276138852cfc41d9fb7e904106099"
 dependencies = [
  "cfg-if",
+ "js-sys",
  "libc",
  "r-efi 6.0.0",
+ "wasm-bindgen",
 ]
 
 [[package]]
@@ -655,6 +694,7 @@ version = "0.1.0"
 name = "guard-archive"
 version = "0.1.0"
 dependencies = [
+ "brotli-decompressor",
  "caseless",
  "flate2",
  "guard-alloc-probe",
@@ -665,6 +705,46 @@ dependencies = [
  "sha2",
  "tar",
  "unicode-normalization",
+]
+
+[[package]]
+name = "guard-cigar-artifacts"
+version = "0.1.0"
+dependencies = [
+ "guard-cigar-release",
+ "guard-runtime-windows-process",
+ "guard-secure-fs",
+ "nix",
+ "sha2",
+]
+
+[[package]]
+name = "guard-cigar-install"
+version = "0.1.0"
+dependencies = [
+ "flate2",
+ "guard-cigar-artifacts",
+ "guard-cigar-release",
+ "guard-context-assistance",
+ "guard-secure-fs",
+ "nix",
+ "ring",
+ "serde_json",
+ "sha2",
+ "tar",
+ "tempfile",
+ "zip",
+]
+
+[[package]]
+name = "guard-cigar-release"
+version = "0.1.0"
+dependencies = [
+ "pep440_rs",
+ "ring",
+ "serde",
+ "serde_json",
+ "sha2",
 ]
 
 [[package]]
@@ -686,6 +766,7 @@ dependencies = [
  "guard-scanner",
  "guard-secure-fs",
  "hex",
+ "hmac",
  "idna",
  "libc",
  "mailparse",
@@ -731,6 +812,7 @@ dependencies = [
  "guard-scanner",
  "guard-secure-fs",
  "hex",
+ "hmac",
  "idna",
  "libc",
  "mailparse",
@@ -783,6 +865,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "guard-context-assistance"
+version = "0.1.0"
+dependencies = [
+ "fs2",
+ "guard-cigar-artifacts",
+ "guard-cigar-release",
+ "guard-runtime-windows-process",
+ "guard-scanner",
+ "guard-secure-fs",
+ "nix",
+ "ring",
+ "serde",
+ "serde_json",
+ "sha2",
+]
+
+[[package]]
 name = "guard-contracts"
 version = "0.1.0"
 dependencies = [
@@ -818,6 +917,7 @@ dependencies = [
 name = "guard-hook-core"
 version = "0.1.0"
 dependencies = [
+ "guard-command",
  "guard-contracts",
  "guard-rules",
  "guard-scanner",
@@ -879,6 +979,7 @@ dependencies = [
  "guard-contracts",
  "guard-policy-snapshot",
  "hex",
+ "ring",
  "rsa",
  "serde_json",
  "sha2",
@@ -937,6 +1038,8 @@ name = "guard-scanner"
 version = "0.1.0"
 dependencies = [
  "base64ct",
+ "flate2",
+ "guard-alloc-probe",
  "guard-rules",
  "hex",
  "hmac",
@@ -945,11 +1048,16 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2",
+ "tar",
+ "zeroize",
 ]
 
 [[package]]
 name = "guard-seatbelt"
 version = "0.1.0"
+dependencies = [
+ "libc",
+]
 
 [[package]]
 name = "guard-secure-fs"
@@ -962,6 +1070,22 @@ dependencies = [
  "nix",
  "sha2",
  "thiserror 2.0.21",
+]
+
+[[package]]
+name = "guard-yanez-pulse"
+version = "0.1.0"
+dependencies = [
+ "base64ct",
+ "blst",
+ "hex",
+ "hmac",
+ "ring",
+ "serde",
+ "serde_json",
+ "sha2",
+ "ureq",
+ "zeroize",
 ]
 
 [[package]]
@@ -990,6 +1114,12 @@ checksum = "a596f1b20ed2cc5ecac41a164aaebc7258057060f06c0cf7a2ba3991ee7990fb"
 dependencies = [
  "hashbrown 0.17.1",
 ]
+
+[[package]]
+name = "hermit-abi"
+version = "0.5.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e17592d60ebacc7d5e169f4663c5f84f9161cc90328abcfe8456f41e4dfcb284"
 
 [[package]]
 name = "hex"
@@ -1022,8 +1152,12 @@ dependencies = [
  "getrandom 0.3.4",
  "guard-adapter-detection",
  "guard-archive",
+ "guard-cigar-artifacts",
+ "guard-cigar-install",
+ "guard-cigar-release",
  "guard-command",
  "guard-contained-process",
+ "guard-context-assistance",
  "guard-contracts",
  "guard-google-identity",
  "guard-hook-core",
@@ -1050,6 +1184,7 @@ dependencies = [
  "roxmltree 0.21.1",
  "rsa",
  "rusqlite",
+ "rustix",
  "saphyr-parser",
  "scrypt",
  "seccompiler",
@@ -1065,6 +1200,7 @@ dependencies = [
  "unicode-normalization",
  "windows-permissions",
  "zeroize",
+ "zip",
 ]
 
 [[package]]
@@ -1348,9 +1484,9 @@ dependencies = [
 
 [[package]]
 name = "libsqlite3-sys"
-version = "0.38.2"
+version = "0.39.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f1d20bef17f513b9b3004532233187769cd072d790971f4e4da0e346eb6401e8"
+checksum = "14a5f01b87b92705d07b433c06f96cbc764637d81a0bffb5734ce17cf0f9a2b3"
 dependencies = [
  "cc",
  "pkg-config",
@@ -1563,6 +1699,16 @@ checksum = "071dfc062690e90b734c0b2273ce72ad0ffa95f0c74596bc250dcfd960262841"
 dependencies = [
  "autocfg",
  "libm",
+]
+
+[[package]]
+name = "num_cpus"
+version = "1.17.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "91df4bbde75afed763b708b7eee1e8e7651e02d97f6d5dd763e89367e957b23b"
+dependencies = [
+ "hermit-abi",
+ "libc",
 ]
 
 [[package]]
@@ -1954,9 +2100,9 @@ dependencies = [
 
 [[package]]
 name = "rusqlite"
-version = "0.40.2"
+version = "0.41.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "23f2a97da3e3873c73cb2a2e71b35c40ff95e0b1eefa8d72d8499a6928c3b5b3"
+checksum = "da9bba6f3506135e120a6586df05be18b48d18896600646a4bec8f993d91a594"
 dependencies = [
  "bitflags 2.13.2",
  "fallible-iterator",
@@ -1975,9 +2121,9 @@ checksum = "6b1e7f9a428571be2dc5bc0505c13fb6bf936822b894ec87abf8a08a4e51742d"
 
 [[package]]
 name = "rustix"
-version = "1.1.5"
+version = "1.1.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "891efababe418670775f199f0d233d84843c227a0949a883ce15b37c78d6629d"
+checksum = "e5e76742e5294153d4dde1207dbec5bdd81eef6fabdc0d2118babadabfd858aa"
 dependencies = [
  "bitflags 2.13.2",
  "errno",
@@ -2353,7 +2499,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "32497e9a4c7b38532efcdebeef879707aa9f794296a4f0244f6f69e9bc8574bd"
 dependencies = [
  "fastrand",
- "getrandom 0.3.4",
+ "getrandom 0.4.3",
  "once_cell",
  "rustix",
  "windows-sys 0.61.2",
@@ -2397,6 +2543,15 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 3.0.6",
+]
+
+[[package]]
+name = "threadpool"
+version = "1.8.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d050e60b33d41c19108b32cea32164033a9013fe3b46cbd4457559bfbf77afaa"
+dependencies = [
+ "num_cpus",
 ]
 
 [[package]]
@@ -2544,6 +2699,12 @@ name = "tree-sitter-language"
 version = "0.1.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c4013970217383f67b18aef68f6fb2e8d409bc5755227092d32efb0422ba24b8"
+
+[[package]]
+name = "typed-path"
+version = "0.13.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9ce898823d8cd0f028662d2f349694b1af0a5cc9be83f1d213a00d3147445e1e"
 
 [[package]]
 name = "typenum"
@@ -3081,6 +3242,20 @@ name = "zeroize"
 version = "1.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e13c156562582aa81c60cb29407084cdb54c4164760106ab78e6c5b0858cf64e"
+dependencies = [
+ "zeroize_derive",
+]
+
+[[package]]
+name = "zeroize_derive"
+version = "1.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3c50655cbb0fe3fc43170059e702f1ce5e19b84cec58dc87b037a09935c2f328"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.119",
+]
 
 [[package]]
 name = "zerotrie"
@@ -3116,6 +3291,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "zip"
+version = "9.1.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ec2e3161de27091f18a831d9494e9c53378a34833af5c1dda35ad85849da18d6"
+dependencies = [
+ "crc32fast",
+ "flate2",
+ "getrandom 0.4.3",
+ "indexmap",
+ "memchr",
+ "nix",
+ "typed-path",
+ "windows-sys 0.61.2",
+]
+
+[[package]]
 name = "zmij"
 version = "1.0.23"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3123,27 +3314,27 @@ checksum = "29666d0abbfad1e3dc4dcf6144730dd3a3ab225bbbdac83319345b1b44ccfc1b"
 
 [[package]]
 name = "zstd"
-version = "0.14.0"
+version = "0.14.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bf06bd8162af0734b344780deb55b42a2429ae430870d13fcc12f238e880fe6e"
+checksum = "db3ae9bf90af6e40197bef767eeefc46ad6397420fe873830bd85e5fbbfb3c70"
 dependencies = [
  "zstd-safe",
 ]
 
 [[package]]
 name = "zstd-safe"
-version = "8.0.0"
+version = "8.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ae42c0555055784c70058d19ba8e275528e8a99a706684868ace5da4e716a4ab"
+checksum = "ded520f16b29e1a9b771c722221b2b0a0398c2316d9bb3c42b458a5414d7434b"
 dependencies = [
  "zstd-sys",
 ]
 
 [[package]]
 name = "zstd-sys"
-version = "2.1.0+zstd.1.5.7"
+version = "2.1.2+zstd.1.5.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0ef0a8027ec3ee71300ab3bcbcd0393f434aa72b91ca6d635a39941deae8eea0"
+checksum = "481ada9c543b2323cbb7bbdbb5249177fbf0188ed959ed2c15e4b22421c84ed3"
 dependencies = [
  "cc",
  "pkg-config",

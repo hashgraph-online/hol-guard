@@ -6,7 +6,6 @@ from pathlib import Path
 
 from codex_plugin_scanner.guard.runtime.command_extensions import (
     BUILT_IN_COMMAND_EXTENSION_REGISTRY,
-    risk_classes_for_command_action,
 )
 from tests.command_extension_contracts import (
     assert_safe_command_cases,
@@ -232,15 +231,6 @@ def test_blitcp_extension_publishes_official_references() -> None:
     assert extension is not None
     assert extension.reference_urls
     assert all(url.startswith("https://") for url in extension.reference_urls)
-
-
-def test_blitcp_actions_publish_risk_classes() -> None:
-    assert risk_classes_for_command_action("Blitcp remote destination command") == ("network_egress",)
-    assert risk_classes_for_command_action("Blitcp privilege escalation command") == ("execution",)
-    assert risk_classes_for_command_action("Blitcp self-update command") == (
-        "execution",
-        "network_egress",
-    )
 
 
 def test_blitcp_option_values_cannot_forge_a_local_destination(tmp_path: Path) -> None:

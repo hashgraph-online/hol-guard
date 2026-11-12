@@ -15,23 +15,40 @@ use std::collections::HashSet;
 use std::path::Path;
 use std::time::{Duration, Instant};
 
+mod file_mutation_output;
 mod source_slice;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ExtractedOutput {
+    /// The output exactly as the host presented it: every text part
+    /// concatenated. This is the wire surface. `reviewed_output_sha256` and
+    /// every other proof digest hash it, and the Pi extension recomputes the
+    /// same digest over its own copy, so nothing may be inserted here.
     pub text: String,
+    /// The same parts with a newline between them, for rule scanning only.
+    /// Two short fields running into one word hid a credential from a rule
+    /// that anchors on a word boundary; the separator restores that boundary
+    /// without touching the digested bytes.
+    pub boundary_text: String,
     pub chars: usize,
     pub truncated: bool,
 }
 
-fn collect_output_text(value: &Value) -> ExtractedOutput {
+/// Collect the text under `value`, counting `used` characters as already
+/// spent. The caller passes the running total so one payload's keys share a
+/// single character budget: both returned forms then cover the same content,
+/// and the separator allowance the scan adds back stays a count of
+/// separators rather than of everything the budget cut.
+fn collect_output_text(value: &Value, used: usize) -> ExtractedOutput {
     fn append(parts: &mut Vec<String>, chars: &mut usize, truncated: &mut bool, text: &str) {
         if *truncated || text.is_empty() {
             return;
         }
         let remaining = MAX_OUTPUT_CHARS.saturating_sub(*chars);
         if text.chars().count() > remaining {
-            parts.push(text.chars().take(remaining).collect());
+            if remaining > 0 {
+                parts.push(text.chars().take(remaining).collect());
+            }
             *chars = MAX_OUTPUT_CHARS;
             *truncated = true;
             return;
@@ -108,12 +125,19 @@ fn collect_output_text(value: &Value) -> ExtractedOutput {
     }
 
     let mut parts = Vec::new();
-    let mut chars = 0usize;
+    let mut chars = used;
     let mut truncated = false;
     let mut seen = HashSet::new();
     traverse(value, 0, &mut parts, &mut chars, &mut truncated, &mut seen);
+    // Two surfaces, not one. `text` stays the concatenation the host's own
+    // digest covers. `boundary_text` carries the same parts with a newline
+    // between them, because a secret rule that needs a word boundary reads
+    // two fields run together as one word: `originalFile: "a"` ahead of
+    // `newString: "AKIA..."` scans as `aAKIA...` and the rule that anchors on
+    // the key's prefix never fires. Only the scan reads the separated form.
     ExtractedOutput {
         text: parts.concat(),
+        boundary_text: parts.join("\n"),
         chars,
         truncated,
     }
@@ -123,18 +147,28 @@ pub fn extract_payload_output(payload: &Value) -> ExtractedOutput {
     let Some(record) = payload.as_object() else {
         return ExtractedOutput {
             text: String::new(),
+            boundary_text: String::new(),
             chars: 0,
             truncated: false,
         };
     };
     let mut parts = Vec::new();
+    let mut boundary_parts = Vec::new();
     let mut truncated = false;
+    // One budget across every key. Capping only the concatenated form left
+    // the separated form carrying whole keys the cap had already dropped, so
+    // the scan allowance below counted cut content as separators and sent an
+    // output that used to come back as a reviewed excerpt past the scan
+    // budget into a deny.
+    let mut used = 0usize;
     for key in PAYLOAD_OUTPUT_KEYS {
         if let Some(value) = record.get(*key) {
-            let result = collect_output_text(value);
+            let result = collect_output_text(value, used);
+            used = result.chars;
             truncated |= result.truncated;
             if !result.text.is_empty() {
                 parts.push(result.text);
+                boundary_parts.push(result.boundary_text);
             }
         }
     }
@@ -145,6 +179,7 @@ pub fn extract_payload_output(payload: &Value) -> ExtractedOutput {
     }
     ExtractedOutput {
         text: joined.chars().take(MAX_OUTPUT_CHARS).collect(),
+        boundary_text: boundary_parts.join("\n"),
         chars: chars.min(MAX_OUTPUT_CHARS),
         truncated,
     }
@@ -223,6 +258,21 @@ fn workspace_visible_target(target: &Path, request: &NativeHookRequestV1) -> boo
 /// rather than stored credentials.
 const FEATURE_FOLDER_NAMES: [&str; 2] = ["auth", "authorization"];
 
+/// A credential-named file that PreToolUse already accepted as a committed
+/// project document, such as `contributions/extensions/command.kubernetes-secrets.json`.
+/// The recheck resolves the target again and repeats the whole proof, so a
+/// file swapped for a link to a real secret after PreToolUse, an untracked
+/// copy, or a Kubernetes `Secret` manifest keeps its review.
+fn tracked_project_document(target: &str, request: &NativeHookRequestV1) -> bool {
+    let target = match target.strip_prefix("~/") {
+        Some(rest) => Path::new(&request.home_dir).join(rest),
+        None => Path::new(target).to_path_buf(),
+    };
+    target.to_str().is_some_and(|target| {
+        guard_command::pretool::proven_project_document(target, request.cwd.as_deref())
+    })
+}
+
 fn sensitive_envelope_target(request: &NativeHookRequestV1) -> bool {
     let payload = &request.payload;
     let target = envelope_target(payload);
@@ -233,7 +283,8 @@ fn sensitive_envelope_target(request: &NativeHookRequestV1) -> bool {
         let path = Path::new(target.trim());
         sensitive_path_family(path).is_some()
             || (guard_secure_fs::credential_named_path(path)
-                && !workspace_visible_target(path, request))
+                && !workspace_visible_target(path, request)
+                && !tracked_project_document(target.trim(), request))
     };
     // A `file.json?q=<filter>` read queries the file before the `?`.
     let is_sensitive_entry = |entry: &str| {
@@ -494,19 +545,18 @@ fn review_source(
     }
     let allow_external =
         matches!(request.harness.as_str(), "pi" | "omp") && request.source_ref_external_allowed;
-    let candidate_decision =
-        classify_scannable_source_path(candidate, cwd, Some(home), allow_external);
-    if !candidate_decision.allowed {
-        return inconclusive_source();
-    }
-    let target_decision = classify_scannable_source_path(&target, cwd, Some(home), allow_external);
-    if !target_decision.allowed {
-        return inconclusive_source();
-    }
-    let Some(path) = candidate_decision.resolved_path else {
+    let scannable = |value: &str| {
+        let decision = classify_scannable_source_path(value, cwd, Some(home), allow_external);
+        if decision.allowed {
+            decision.resolved_path
+        } else {
+            repository_hidden_document(value, request, cwd, home)
+        }
+    };
+    let Some(path) = scannable(candidate) else {
         return inconclusive_source();
     };
-    let Some(target_path) = target_decision.resolved_path else {
+    let Some(target_path) = scannable(&target) else {
         return inconclusive_source();
     };
     if path != target_path {
@@ -559,6 +609,29 @@ fn review_source(
     let mut response = HookReviewResponseV1::allow("source_full_scan_allow");
     response.reviewed_output_sha256 = Some(source.output_sha256.clone());
     response
+}
+
+/// The resolved file behind `value` when it is a document the session's
+/// repository keeps below a hidden directory, such as
+/// `.claude-plugin/plugin.json` in the checkout or in a linked worktree of it
+/// that `git worktree add` put under the temporary directory. PreToolUse
+/// admits that read with the same proof. The file is still read and scanned
+/// in full afterwards, so a manifest that holds a credential keeps its
+/// refusal.
+fn repository_hidden_document(
+    value: &str,
+    request: &NativeHookRequestV1,
+    cwd: &Path,
+    home: &Path,
+) -> Option<std::path::PathBuf> {
+    let resolved = guard_secure_fs::resolve_candidate(value.trim(), Some(cwd), home).ok()?;
+    let canonical = std::fs::canonicalize(resolved).ok()?;
+    guard_command::pretool::proven_repository_hidden_document(
+        &canonical,
+        Some(&request.home_dir),
+        request.cwd.as_deref(),
+    )
+    .then_some(canonical)
 }
 
 /// Review the text the host presented on its own. Only complete output whose
@@ -651,6 +724,9 @@ fn clean_slice(request: &NativeHookRequestV1, file: &str, path: &str) -> bool {
 }
 
 fn review_inline(request: &NativeHookRequestV1) -> HookReviewResponseV1 {
+    if let Some(response) = file_mutation_output::review_file_mutation(request) {
+        return response;
+    }
     let extracted = extract_payload_output(&request.payload);
     if extracted.text.is_empty() {
         if extracted.truncated {
@@ -671,8 +747,22 @@ fn review_inline(request: &NativeHookRequestV1) -> HookReviewResponseV1 {
             .chars()
             .take(REVIEWED_EXCERPT_CHARS)
             .collect();
+        // Scan the separated form of the same prefix. The separators make the
+        // boundary text longer than the excerpt, so the allowance adds them
+        // back; the scan then always covers at least the content the excerpt
+        // returns.
+        let separators = extracted
+            .boundary_text
+            .chars()
+            .count()
+            .saturating_sub(extracted.text.chars().count());
+        let scanned: String = extracted
+            .boundary_text
+            .chars()
+            .take(REVIEWED_EXCERPT_CHARS.saturating_add(separators))
+            .collect();
         let scan = scan_text(
-            &excerpt,
+            &scanned,
             local_content,
             true,
             MAX_SCAN_BYTES,
@@ -684,7 +774,7 @@ fn review_inline(request: &NativeHookRequestV1) -> HookReviewResponseV1 {
         return HookReviewResponseV1::reviewed_excerpt("output_too_large", "HOL Guard returned a reviewed excerpt because the output was too large to scan in full within local limits.", excerpt);
     }
     let scan = scan_text(
-        &extracted.text,
+        &extracted.boundary_text,
         local_content,
         true,
         MAX_SCAN_BYTES,

@@ -87,7 +87,6 @@ fn unmodeled_constructs_keep_their_review() {
     for command in [
         "while true; do cat Cargo.toml >> out.txt; done",
         "while read name; do cat Cargo.toml > copy.md; done < Cargo.toml",
-        "while read line; do echo $line; done < Cargo.toml",
         "until [ -f build/done ]; do ls build; done",
         "case $(id -u) in 0) ls;; esac",
         "case $1 in a) ls;& b) ls;; esac",

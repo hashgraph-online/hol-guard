@@ -23,8 +23,6 @@ from ..approvals import approval_prompt_flow, build_approval_browser_url, first_
 from ..blocked_request_mode import asks_for_approval, safe_alternative_reason
 from ..browser_opener import open_browser_url
 from ..config import GuardConfig
-from ..daemon import ensure_guard_daemon
-from ..daemon.manager import load_guard_daemon_auth_token
 from ..harness_posture import config_for_harness
 from ..local_supply_chain import (
     _cleanup_external_archive_downloads,
@@ -49,6 +47,7 @@ from ..native_approval_proof import (
     claimed_approval_authorizes_postclaim_review,
     fresh_claim_allows_reapproval,
 )
+from ..native_daemon_manage import ensure_guard_daemon, load_guard_daemon_auth_token
 from ..native_decisions import NativeDecisionAuthorityError, NativeDecisionUnavailableError
 from ..native_execution import (
     mcp_stdio_session_close_native,
@@ -60,7 +59,6 @@ from ..native_mcp_proxy_decision import (
     cursor_fact,
     native_external_archive_bind,
     native_inline_approval_reply,
-    native_inline_approval_reply_available,
     native_mcp_proxy_decide,
     native_package_answer,
     package_facts,
@@ -68,6 +66,7 @@ from ..native_mcp_proxy_decision import (
 )
 from ..native_mcp_relay_server_report import report_mcp_relay_server
 from ..native_package_authority import NativePackageArtifactUnavailableError
+from ..native_package_workspace_scope import NativePackageWorkspaceScopeError
 from ..package_execution_context import build_package_execution_context
 from ..runtime.approval_context import (
     build_configured_environment_hash,
@@ -349,6 +348,8 @@ class RuntimeMcpGuardProxy:
         self._tool_catalog_inflight = False
         self._tool_catalog_inflight_cursor: str | None = None
         self._tool_catalog_generation = 0
+        # (state, catalog JSON, fingerprint) of the last native fingerprint.
+        self._tool_catalog_fingerprint_memo: tuple[str, str, str] | None = None
         # The last complete catalog reported for the relay.
         self._relay_reported_catalog: str | None = None
         self._relay_report: threading.Thread | None = None
@@ -764,10 +765,7 @@ class RuntimeMcpGuardProxy:
         public_tool_definition = {key: value for key, value in tool_definition.items() if key != "name"}
         catalog_generation = self._tool_catalog_generation
         catalog_state = self._tool_catalog_state
-        catalog_fingerprint = _tool_catalog_fingerprint(
-            self._tool_catalog,
-            state=catalog_state,
-        )
+        catalog_fingerprint = self._current_catalog_fingerprint()
         identity = build_tool_call_identity(
             arguments=arguments,
             workspace=self.context.workspace_dir or Path.cwd(),
@@ -932,11 +930,6 @@ class RuntimeMcpGuardProxy:
             "method": method,
             "tool_name": params.get("name") if isinstance(params, dict) else None,
             "decision": "forward",
-            "redacted_params": (
-                self._call_projector.project(str(params.get("name") or "unknown"), params).safe_params
-                if isinstance(params, dict)
-                else {}
-            ),
         }
         if method in {"notifications/tools/list_changed", "tools/list_changed"}:
             self._invalidate_tools_catalog()
@@ -1061,15 +1054,7 @@ class RuntimeMcpGuardProxy:
             "mode": self.config.mode,
             "package_present": package_artifact is not None,
             "asks_for_approval": bool(asks_for_approval(self.config)),
-            # A prompt is only worth raising when the resident can classify the
-            # answer. Without the query every answer -- including an approval the
-            # user gave -- fails closed into the approval queue, so an older
-            # resident would interrupt the user for nothing.
-            "inline_available": bool(
-                self._inline_prompt_available
-                and approval_callback is not None
-                and native_inline_approval_reply_available()
-            ),
+            "inline_available": bool(self._inline_prompt_available and approval_callback is not None),
             "tool_name": tool_name,
         }
 
@@ -1418,12 +1403,22 @@ class RuntimeMcpGuardProxy:
                 execution_context=package_context,
                 config=self.config,
             )
-            policy_workspace = package_request_runtime_workspace_scope(
-                artifact_id=artifact.artifact_id,
-                artifact_hash=artifact_digest,
-                artifact_type=artifact.artifact_type,
-                execution_context=package_context,
-            )
+            try:
+                # The home is named so the scope is derived under the store this
+                # lookup reads, not whichever home the process last bound.
+                policy_workspace = package_request_runtime_workspace_scope(
+                    artifact_id=artifact.artifact_id,
+                    artifact_hash=artifact_digest,
+                    artifact_type=artifact.artifact_type,
+                    execution_context=package_context,
+                    guard_home=self.store.guard_home,
+                )
+            except NativePackageWorkspaceScopeError:
+                # No scope means no saved approval can be matched, which is the
+                # same position as a request that was never approved.  The
+                # enclosing handler would instead fail the package request
+                # outright, which an unavailable resident does not warrant here.
+                policy_workspace = None
             stored_package_resolution = _resolve_stored_package_policy_override(
                 package_evaluation,
                 store=self.store,
@@ -1434,6 +1429,7 @@ class RuntimeMcpGuardProxy:
                 execution_context=package_context,
                 current_action=package_current_action,
                 claim_saved_approval=False,
+                policy_workspaces=(policy_workspace,) if policy_workspace is not None else (),
             )
             resolved_package_evaluation = stored_package_resolution.evaluation
             return _PackagePolicyResolution(
@@ -2033,7 +2029,6 @@ class RuntimeMcpGuardProxy:
             "tool_name": tool_name,
             "decision": "timeout" if _is_timeout_response(response) else event_decision,
             "policy_action": policy_action,
-            "redacted_params": self._call_projector.project(tool_name, params).safe_params,
             "scanner_evidence": list(scanner_evidence),
         }
 
@@ -2182,7 +2177,6 @@ class RuntimeMcpGuardProxy:
             "tool_name": tool_name,
             "decision": "queue-package-approval",
             "policy_action": policy_action,
-            "redacted_params": self._call_projector.project(tool_name, params).safe_params,
             "approval_center_url": approval_center_url,
             "approval_requests": queued,
             "review_url": review_url,
@@ -2287,7 +2281,6 @@ class RuntimeMcpGuardProxy:
             "tool_name": tool_name,
             "decision": answer["decision"],
             "policy_action": answer["policy_action"],
-            "redacted_params": self._call_projector.project(tool_name, params).safe_params,
             "approval_requests": [],
         }
         if leg.scanner_evidence or answer["scanner_evidence_always"]:
@@ -2544,7 +2537,6 @@ class RuntimeMcpGuardProxy:
             "tool_name": params.get("name"),
             "decision": "timeout" if _is_timeout_response(response) else decision_source,
             "policy_action": policy_action,
-            "redacted_params": self._call_projector.project(str(params.get("name") or "unknown"), params).safe_params,
         }
         if scanner_evidence:
             event["scanner_evidence"] = list(scanner_evidence)
@@ -2688,12 +2680,29 @@ class RuntimeMcpGuardProxy:
         return (
             generation == self._tool_catalog_generation
             and state == self._tool_catalog_state
-            and fingerprint
-            == _tool_catalog_fingerprint(
-                self._tool_catalog,
-                state=self._tool_catalog_state,
-            )
+            and fingerprint == self._current_catalog_fingerprint()
         )
+
+    def _current_catalog_fingerprint(self) -> str:
+        """The native fingerprint of the current catalog and state.
+
+        A tools/call asks for it several times against a catalog that has not
+        changed. The native answer is reused only for byte-identical catalog
+        JSON in the same state, so any change, including one made in place,
+        asks the resident again.
+        """
+
+        state = self._tool_catalog_state
+        try:
+            document = json.dumps(self._tool_catalog, sort_keys=True, separators=(",", ":"), allow_nan=False)
+        except (TypeError, ValueError):
+            return _tool_catalog_fingerprint(self._tool_catalog, state=state)
+        memo = self._tool_catalog_fingerprint_memo
+        if memo is not None and memo[0] == state and memo[1] == document:
+            return memo[2]
+        fingerprint = _tool_catalog_fingerprint(self._tool_catalog, state=state)
+        self._tool_catalog_fingerprint_memo = (state, document, fingerprint)
+        return fingerprint
 
     def _drain_and_validate_catalog_authority(
         self,
@@ -3096,7 +3105,6 @@ class RuntimeMcpGuardProxy:
                 "policy_action": policy_action,
                 "approval_requests": [],
                 "prompted": False,
-                "redacted_params": self._call_projector.project(tool_name, params, artifact).safe_params,
             }
         approval_center_url = ensure_guard_daemon(self.context.guard_home)
         queued = queue_blocked_approvals(
@@ -3168,7 +3176,6 @@ class RuntimeMcpGuardProxy:
             "tool_name": tool_name,
             "decision": "queue-approval",
             "policy_action": policy_action,
-            "redacted_params": self._call_projector.project(tool_name, params, artifact).safe_params,
             "approval_center_url": approval_center_url,
             "approval_requests": queued,
             "review_url": review_url,

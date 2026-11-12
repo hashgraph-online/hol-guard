@@ -1,18 +1,24 @@
-"""Attach local HCS trust domain evidence to AIBOM inventory metadata."""
+"""Attach local HCS trust domain evidence to AIBOM inventory metadata.
+
+The item's trust domain is scored here and the scanner runs and findings that
+belong to it are picked from the filesystem here. The claims they become, with
+their evidence and evidence hashes, come from the native `aibom_trust_claims`
+authority.
+"""
 
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
 
 from ..checks.skill_security import resolve_skill_security_context
 from ..models import ScanOptions, Severity
 from ..trust_instruction_scoring import build_instruction_domain
 from ..trust_mcp_scoring import build_mcp_domain, build_mcp_surface_domain
-from ..trust_models import TrustAdapterScore, TrustComponentScore, TrustDomainScore
+from ..trust_models import TrustDomainScore
 from ..trust_plugin_scoring import build_plugin_domain
 from ..trust_skill_scoring import build_skill_domain
-from .runtime.evidence_hash import guard_evidence_hash
+from .native_runner_authority import NativeRunnerAuthorityError, native_runner_authority
 from .trust_metadata_boundary import separate_untrusted_adapter_trust_metadata
 
 _INVENTORY_TRUST_SCAN_OPTIONS = ScanOptions(cisco_skill_scan="off")
@@ -38,8 +44,6 @@ InventoryItemKind = Literal[
     "skill",
 ]
 
-TrustLayerType = Literal["local_baseline", "cisco_skill_scanner", "cisco_mcp_scanner"]
-
 _LOCAL_BASELINE_ITEM_KINDS = frozenset(
     {
         "agent",
@@ -55,6 +59,18 @@ _LOCAL_BASELINE_ITEM_KINDS = frozenset(
     }
 )
 _INSTRUCTION_BASELINE_ITEM_KINDS = frozenset({"agent", "daemon_plugin", "hook", "overlay", "policy", "prompt_pack"})
+_MCP_ITEM_KINDS = frozenset({"mcp_server", "mcp_tool"})
+# The scanner metadata the claims read; paths and other keys stay here.
+_RUN_METADATA_KEYS = (
+    "analyzersUsed",
+    "findingsBySeverity",
+    "mode",
+    "policyName",
+    "scanMode",
+    "skillsScanned",
+    "skillsSkipped",
+    "targetsScanned",
+)
 
 
 def trust_resolution_from_domain(
@@ -62,41 +78,10 @@ def trust_resolution_from_domain(
     *,
     captured_at: str,
 ) -> dict[str, object]:
-    from .inventory_contract import _normalize_inventory_datetime
-
-    trust_components = _trust_components_from_domain(domain)
-    normalized_captured_at = _normalize_inventory_datetime(captured_at)
-    evidence = _local_baseline_evidence_payload(
-        domain,
-        captured_at=normalized_captured_at,
-        trust_components=trust_components,
-    )
-    metadata = {
-        "profileId": domain.profile_id,
-        "profileVersion": domain.profile_version,
-        "scorer": "hol-guard-local",
-        "specId": domain.spec_id,
-        "specVersion": domain.spec_version,
-        "trustDomain": domain.domain,
-        "attestationStatus": "unsigned",
-        "evidenceSchemaVersion": "guard-aibom-local-baseline-evidence.v1",
-        "evidenceAuthority": "device_claim",
-        "affectsV4Score": False,
-        "evidence": evidence,
-        "evidenceHash": _trust_evidence_hash(evidence),
-    }
-
-    return {
-        "resolutionSource": "local",
-        "status": "local",
-        "evidenceAuthority": "device_claim",
-        "affectsV4Score": False,
-        "trustScore": round(domain.score),
-        "trustComponents": trust_components,
-        "capturedAt": normalized_captured_at,
-        "provenance": _local_claim_provenance("hol-guard-local-baseline"),
-        "metadata": metadata,
-    }
+    resolution = _native_trust_claims(captured_at=captured_at, domain=domain)["resolution"]
+    if not isinstance(resolution, dict):
+        raise NativeRunnerAuthorityError("native_runner_authority_result_invalid")
+    return resolution
 
 
 def apply_local_trust_metadata(
@@ -109,8 +94,7 @@ def apply_local_trust_metadata(
     cisco_runs: tuple[object, ...] = (),
 ) -> dict[str, object]:
     enriched = separate_untrusted_adapter_trust_metadata(metadata)
-    trust_layers: list[dict[str, object]] = []
-
+    domain = None
     if item_kind in _LOCAL_BASELINE_ITEM_KINDS:
         domain = _local_trust_domain_for_artifact(
             artifact,
@@ -118,118 +102,142 @@ def apply_local_trust_metadata(
             metadata=enriched,
             workspace_dir=workspace_dir,
         )
-        if domain is not None:
-            enriched["trustResolution"] = trust_resolution_from_domain(domain, captured_at=captured_at)
-            trust_layers.append(_trust_layer_from_domain(domain, captured_at=captured_at))
-
-    trust_layers.extend(
-        _cisco_trust_layers_for_artifact(
-            artifact,
-            item_kind=item_kind,
-            captured_at=captured_at,
-            cisco_runs=cisco_runs,
-            workspace_dir=workspace_dir,
-        )
+    cisco_layers = _cisco_layer_requests(
+        artifact,
+        item_kind=item_kind,
+        cisco_runs=cisco_runs,
+        workspace_dir=workspace_dir,
     )
-
-    local_security = _local_security_for_artifact(
+    security = _local_skill_security_request(
         artifact,
         item_kind=item_kind,
         metadata=enriched,
-        captured_at=captured_at,
+        cisco_runs=cisco_runs,
+        workspace_dir=workspace_dir,
+    ) or _local_mcp_security_request(
+        artifact,
+        item_kind=item_kind,
         cisco_runs=cisco_runs,
         workspace_dir=workspace_dir,
     )
-    if local_security is not None:
-        enriched["localSecurity"] = local_security
+    if domain is None and not cisco_layers and security is None:
+        return enriched
 
-    if trust_layers:
-        enriched["trustLayers"] = _merge_trust_layers(None, trust_layers)
+    try:
+        claims = _native_trust_claims(
+            captured_at=captured_at,
+            domain=domain,
+            cisco_layers=cisco_layers,
+            security=security,
+        )
+    except NativeRunnerAuthorityError:
+        # One item's claims never abort the inventory; it ships without them.
+        return enriched
+    if domain is not None:
+        enriched["trustResolution"] = claims["resolution"]
+    if claims["local_security"] is not None:
+        enriched["localSecurity"] = claims["local_security"]
+    if claims["layers"]:
+        enriched["trustLayers"] = claims["layers"]
     return enriched
 
 
-def _local_security_for_artifact(
-    artifact: object,
-    *,
-    item_kind: InventoryItemKind,
-    metadata: dict[str, object],
-    captured_at: str,
-    cisco_runs: tuple[object, ...],
-    workspace_dir: Path | None,
-) -> dict[str, object] | None:
-    skill_security = _local_skill_security_for_artifact(
-        artifact,
-        item_kind=item_kind,
-        metadata=metadata,
-        captured_at=captured_at,
-        cisco_runs=cisco_runs,
-        workspace_dir=workspace_dir,
-    )
-    if skill_security is not None:
-        return skill_security
-    return _local_mcp_security_for_artifact(
-        artifact,
-        item_kind=item_kind,
-        captured_at=captured_at,
-        cisco_runs=cisco_runs,
-        workspace_dir=workspace_dir,
-    )
-
-
-def _cisco_local_security_payload(
-    run: object,
-    findings: list[dict[str, object]],
+def _native_trust_claims(
     *,
     captured_at: str,
-    scripts_total: int,
-    extra_safety_fields: dict[str, object] | None = None,
-) -> tuple[str, object, list[dict[str, object]], dict[str, object] | None, dict[str, object]]:
-    """Project the shared local-scanner status, sorted findings, safety, and metadata payload."""
+    domain: TrustDomainScore | None,
+    cisco_layers: list[dict[str, object]] | None = None,
+    security: dict[str, object] | None = None,
+) -> dict[str, Any]:
     from .inventory_contract import _normalize_inventory_datetime
 
-    status = str(getattr(run, "status", "unknown"))
-    normalized_captured_at = _normalize_inventory_datetime(captured_at)
-    findings = sorted(
-        findings,
-        key=lambda finding: (finding.get("file", ""), finding.get("ruleId", ""), finding.get("message", "")),
+    answer = native_runner_authority(
+        "aibom_trust_claims",
+        {
+            "captured_at": _normalize_inventory_datetime(captured_at),
+            "domain": None if domain is None else _domain_request(domain),
+            "cisco_layers": cisco_layers or [],
+            "security": security,
+        },
     )
-    severity_counts = _cisco_severity_counts(run)
-    analyzers_used = _cisco_analyzers_used(run)
-    score = _cisco_layer_score(severity_counts, analyzers_used=analyzers_used) if status == "enabled" else None
-    safety: dict[str, object] | None = None
-    if score is not None:
-        safety = {
-            "score": score,
-            "label": _local_skill_security_label(score),
-            "findingsTotal": len(findings),
-            "highFindings": sum(1 for finding in findings if finding["severity"] == "high"),
-            "scriptsTotal": scripts_total,
-            **(extra_safety_fields or {}),
-            "permissionsMissing": [],
-        }
+    if not isinstance(answer.get("layers"), list) or not all(key in answer for key in ("resolution", "local_security")):
+        raise NativeRunnerAuthorityError("native_runner_authority_result_invalid")
+    return answer
 
-    metadata_payload: dict[str, object] = {
-        "scannerSource": str(getattr(run, "source", "unknown")),
-        "message": str(getattr(run, "message", "")),
-        "findingsBySeverity": severity_counts,
-        "totalFindings": len(findings),
+
+def _domain_request(domain: TrustDomainScore) -> dict[str, object]:
+    return {
+        "domain": domain.domain,
+        "profile_id": domain.profile_id,
+        "profile_version": domain.profile_version,
+        "spec_id": domain.spec_id,
+        "spec_version": domain.spec_version,
+        "score": domain.score,
+        "adapters": [
+            {
+                "adapter_id": adapter.adapter_id,
+                "label": adapter.label,
+                "weight": adapter.weight,
+                "emitted": adapter.emitted,
+                "components": [
+                    {
+                        "key": component.key,
+                        "score": component.score,
+                        "rationale": component.rationale,
+                        "evidence": list(component.evidence),
+                    }
+                    for component in adapter.components
+                ],
+            }
+            for adapter in domain.adapters
+        ],
     }
+
+
+def _run_request(run: object) -> dict[str, object]:
+    raw_metadata = getattr(run, "metadata", None)
+    metadata = (
+        {key: raw_metadata[key] for key in _RUN_METADATA_KEYS if key in raw_metadata}
+        if isinstance(raw_metadata, dict)
+        else None
+    )
+    severities: list[str] = []
+    for finding in tuple(getattr(run, "findings", ()) or ()):
+        severity = getattr(getattr(finding, "severity", None), "value", getattr(finding, "severity", None))
+        if isinstance(severity, str):
+            severities.append(severity)
     duration_ms = getattr(run, "duration_ms", None)
-    if isinstance(duration_ms, int):
-        metadata_payload["durationMs"] = duration_ms
-    return status, normalized_captured_at, findings, safety, metadata_payload
+    return {
+        "status": str(getattr(run, "status", "unknown")),
+        "message": str(getattr(run, "message", "")),
+        "source": str(getattr(run, "source", "unknown")),
+        "duration_ms": duration_ms if isinstance(duration_ms, int) else None,
+        "metadata": metadata,
+        "finding_severities": severities,
+    }
 
 
-def _local_skill_security_for_artifact(
+def _finding_request(finding: object, *, file: str) -> dict[str, object]:
+    severity = getattr(finding, "severity", None)
+    description = getattr(finding, "description", None)
+    title = getattr(finding, "title", None)
+    return {
+        "rule_id": str(getattr(finding, "rule_id", "unknown")),
+        "severity": severity.value if isinstance(severity, Severity) else str(severity),
+        "file": file,
+        "description": description if isinstance(description, str) else None,
+        "title": title if isinstance(title, str) else None,
+    }
+
+
+def _local_skill_security_request(
     artifact: object,
     *,
     item_kind: InventoryItemKind,
     metadata: dict[str, object],
-    captured_at: str,
     cisco_runs: tuple[object, ...],
     workspace_dir: Path | None,
 ) -> dict[str, object] | None:
-
     if item_kind != "skill" or metadata.get("artifactType") != "skill":
         return None
 
@@ -253,58 +261,22 @@ def _local_skill_security_for_artifact(
     )
     if run is None:
         return None
-
-    status, normalized_captured_at, findings, safety, metadata_payload = _cisco_local_security_payload(
-        run,
-        _local_skill_security_findings(run, skill_root=trust_root),
-        captured_at=captured_at,
-        scripts_total=_local_skill_scripts_total(run),
-    )
-
-    run_metadata = getattr(run, "metadata", None)
-    if isinstance(run_metadata, dict):
-        for key in ("analyzersUsed", "policyName", "mode", "skillsScanned", "skillsSkipped"):
-            value = run_metadata.get(key)
-            if value is not None:
-                metadata_payload[key] = value
-
-    metadata_payload["evidenceHash"] = guard_evidence_hash(
-        {
-            "capturedAt": normalized_captured_at,
-            "entityType": "skill",
-            "findings": findings,
-            "provider": "cisco-skill-scanner",
-            "safety": safety,
-            "source": "local_indexed",
-            "status": status,
-        }
-    )
-
     return {
-        "entityType": "skill",
-        "source": "local_indexed",
-        "provider": "cisco-skill-scanner",
-        "status": status,
-        "capturedAt": normalized_captured_at,
-        "safety": safety,
-        "findings": findings,
-        "metadata": metadata_payload,
+        "scanner": "skill",
+        "entity_type": "skill",
+        "run": _run_request(run),
+        "findings": _local_skill_security_findings(run, skill_root=trust_root),
     }
 
 
-def _local_mcp_security_for_artifact(
+def _local_mcp_security_request(
     artifact: object,
     *,
     item_kind: InventoryItemKind,
-    captured_at: str,
     cisco_runs: tuple[object, ...],
     workspace_dir: Path | None,
 ) -> dict[str, object] | None:
-
-    if item_kind not in {"mcp_server", "mcp_tool"} or getattr(artifact, "artifact_type", None) not in {
-        "mcp_server",
-        "mcp_tool",
-    }:
+    if item_kind not in _MCP_ITEM_KINDS or getattr(artifact, "artifact_type", None) not in _MCP_ITEM_KINDS:
         return None
 
     trust_root = _trust_root_for_artifact(artifact, item_kind=item_kind, workspace_dir=workspace_dir)
@@ -322,44 +294,11 @@ def _local_mcp_security_for_artifact(
     )
     if run is None:
         return None
-
-    scan_root = _cisco_run_target_path(run) or trust_root
-    status, normalized_captured_at, findings, safety, metadata_payload = _cisco_local_security_payload(
-        run,
-        _local_mcp_security_findings(run, scan_root=scan_root),
-        captured_at=captured_at,
-        scripts_total=_local_mcp_targets_total(run),
-        extra_safety_fields={"targetsScanned": _local_mcp_targets_total(run)},
-    )
-
-    run_metadata = getattr(run, "metadata", None)
-    if isinstance(run_metadata, dict):
-        for key in ("analyzersUsed", "scanMode", "mode", "targetsScanned"):
-            value = run_metadata.get(key)
-            if value is not None:
-                metadata_payload[key] = value
-
-    metadata_payload["evidenceHash"] = guard_evidence_hash(
-        {
-            "capturedAt": normalized_captured_at,
-            "entityType": item_kind,
-            "findings": findings,
-            "provider": "cisco-mcp-scanner",
-            "safety": safety,
-            "source": "local_indexed",
-            "status": status,
-        }
-    )
-
     return {
-        "entityType": item_kind,
-        "source": "local_indexed",
-        "provider": "cisco-mcp-scanner",
-        "status": status,
-        "capturedAt": normalized_captured_at,
-        "safety": safety,
-        "findings": findings,
-        "metadata": metadata_payload,
+        "scanner": "mcp",
+        "entity_type": item_kind,
+        "run": _run_request(run),
+        "findings": _local_mcp_security_findings(run, scan_root=_cisco_run_target_path(run) or trust_root),
     }
 
 
@@ -386,35 +325,8 @@ def _local_mcp_security_findings(
                 relative_file = path.name
         else:
             relative_file = ".mcp.json"
-
-        results.append(
-            {
-                "ruleId": str(getattr(finding, "rule_id", "unknown")),
-                "severity": _local_skill_security_severity(getattr(finding, "severity", None)),
-                "file": relative_file,
-                "message": _local_mcp_security_message(finding),
-            }
-        )
+        results.append(_finding_request(finding, file=relative_file))
     return results
-
-
-def _local_mcp_security_message(finding: object) -> str:
-    description = getattr(finding, "description", None)
-    if isinstance(description, str) and description.strip():
-        return description.strip()
-    title = getattr(finding, "title", None)
-    if isinstance(title, str) and title.strip():
-        return title.strip()
-    return "MCP security finding"
-
-
-def _local_mcp_targets_total(run: object) -> int:
-    metadata = getattr(run, "metadata", None)
-    if isinstance(metadata, dict):
-        value = metadata.get("targetsScanned")
-        if isinstance(value, int):
-            return max(0, value)
-    return 0
 
 
 def _local_skill_security_findings(
@@ -435,54 +347,8 @@ def _local_skill_security_findings(
                 relative_file = path.name
         else:
             relative_file = "SKILL.md"
-
-        results.append(
-            {
-                "ruleId": str(getattr(finding, "rule_id", "unknown")),
-                "severity": _local_skill_security_severity(getattr(finding, "severity", None)),
-                "file": relative_file,
-                "message": _local_skill_security_message(finding),
-            }
-        )
+        results.append(_finding_request(finding, file=relative_file))
     return results
-
-
-def _local_skill_security_severity(value: object) -> str:
-    severity = value.value if isinstance(value, Severity) else str(value).lower()
-    if severity in {"critical", "high"}:
-        return "high"
-    if severity == "medium":
-        return "medium"
-    return "low"
-
-
-def _local_skill_security_message(finding: object) -> str:
-    description = getattr(finding, "description", None)
-    if isinstance(description, str) and description.strip():
-        return description.strip()
-    title = getattr(finding, "title", None)
-    if isinstance(title, str) and title.strip():
-        return title.strip()
-    return "Skill security finding"
-
-
-def _local_skill_security_label(score: int) -> str:
-    if score >= 90:
-        return "safe"
-    if score >= 70:
-        return "review"
-    if score >= 45:
-        return "caution"
-    return "unsafe"
-
-
-def _local_skill_scripts_total(run: object) -> int:
-    metadata = getattr(run, "metadata", None)
-    if isinstance(metadata, dict):
-        value = metadata.get("skillsScanned")
-        if isinstance(value, int):
-            return max(0, value)
-    return 0
 
 
 def _metadata_string(metadata: dict[str, object], key: str) -> str | None:
@@ -592,111 +458,10 @@ def _skill_file_name_matches_root(artifact: object, root: Path) -> bool:
     return isinstance(artifact_id, str) and f":{root_name}:" in artifact_id
 
 
-def _trust_layer_from_domain(
-    domain: TrustDomainScore,
-    *,
-    captured_at: str,
-) -> dict[str, object]:
-    from .inventory_contract import _normalize_inventory_datetime
-
-    trust_components = _trust_components_from_domain(domain)
-    normalized_captured_at = _normalize_inventory_datetime(captured_at)
-    evidence = _local_baseline_evidence_payload(
-        domain,
-        captured_at=normalized_captured_at,
-        trust_components=trust_components,
-    )
-
-    return {
-        "layerId": "local_baseline",
-        "layerType": "local_baseline",
-        "status": "local",
-        "evidenceAuthority": "device_claim",
-        "affectsV4Score": False,
-        "trustScore": round(domain.score),
-        "trustComponents": trust_components,
-        "capturedAt": normalized_captured_at,
-        "provenance": _local_claim_provenance("hol-guard-local-baseline"),
-        "metadata": {
-            "profileId": domain.profile_id,
-            "profileVersion": domain.profile_version,
-            "scorer": "hol-guard-local",
-            "specId": domain.spec_id,
-            "specVersion": domain.spec_version,
-            "trustDomain": domain.domain,
-            "attestationStatus": "unsigned",
-            "evidenceAuthority": "device_claim",
-            "affectsV4Score": False,
-            "evidenceSchemaVersion": "guard-aibom-local-baseline-evidence.v1",
-            "evidence": evidence,
-            "evidenceHash": _trust_evidence_hash(evidence),
-        },
-    }
-
-
-def _local_baseline_evidence_payload(
-    domain: TrustDomainScore,
-    *,
-    captured_at: object,
-    trust_components: list[dict[str, object]],
-) -> dict[str, object]:
-    return {
-        "source": "hol-guard-local-baseline",
-        "capturedAt": captured_at,
-        "trustDomain": domain.domain,
-        "profileId": domain.profile_id,
-        "profileVersion": domain.profile_version,
-        "specId": domain.spec_id,
-        "specVersion": domain.spec_version,
-        "componentCount": len(trust_components),
-        "components": [
-            {
-                "componentId": str(component.get("componentId", "")),
-                "confidence": component.get("confidence"),
-                "label": str(component.get("label", "")),
-                "score": component.get("score"),
-                "status": str(component.get("status", "")),
-                "summary": str(component.get("summary", "")),
-                "weight": component.get("weight"),
-                **({"evidence": component["evidence"]} if "evidence" in component else {}),
-            }
-            for component in trust_components
-        ],
-    }
-
-
-def _merge_trust_layers(
-    existing: object,
-    additions: list[dict[str, object]],
-) -> list[dict[str, object]]:
-    merged: dict[str, dict[str, object]] = {}
-    if isinstance(existing, list):
-        for raw_layer in existing:
-            if not isinstance(raw_layer, dict):
-                continue
-            layer_type = raw_layer.get("layerType")
-            if isinstance(layer_type, str) and layer_type:
-                merged[layer_type] = dict(raw_layer)
-    for layer in additions:
-        layer_type = layer.get("layerType")
-        if isinstance(layer_type, str) and layer_type:
-            merged[layer_type] = layer
-    return list(merged.values())
-
-
-def _local_claim_provenance(derivation: str) -> dict[str, object]:
-    return {
-        "origin": "hol-guard-local",
-        "verificationStatus": "locally_derived",
-        "derivation": derivation,
-    }
-
-
-def _cisco_trust_layers_for_artifact(
+def _cisco_layer_requests(
     artifact: object,
     *,
     item_kind: InventoryItemKind,
-    captured_at: str,
     cisco_runs: tuple[object, ...],
     workspace_dir: Path | None,
 ) -> list[dict[str, object]]:
@@ -713,32 +478,9 @@ def _cisco_trust_layers_for_artifact(
                 workspace_dir=workspace_dir,
             )
         ):
-            layers.append(
-                _cisco_trust_layer(
-                    run,
-                    captured_at=captured_at,
-                    layer_id="cisco_skill_scanner",
-                    component_id="cisco.skill.score",
-                    label="Cisco Skill Scanner",
-                )
-            )
-        if (
-            source == "cisco-mcp-scanner"
-            and item_kind in {"mcp_server", "mcp_tool"}
-            and _matches_mcp_cisco_run(
-                artifact,
-                run=run,
-            )
-        ):
-            layers.append(
-                _cisco_trust_layer(
-                    run,
-                    captured_at=captured_at,
-                    layer_id="cisco_mcp_scanner",
-                    component_id="cisco.mcp.score",
-                    label="Cisco MCP Scanner",
-                )
-            )
+            layers.append({"scanner": "skill", "run": _run_request(run)})
+        if source == "cisco-mcp-scanner" and item_kind in _MCP_ITEM_KINDS and _matches_mcp_cisco_run(artifact, run=run):
+            layers.append({"scanner": "mcp", "run": _run_request(run)})
     return layers
 
 
@@ -808,231 +550,3 @@ def _cisco_run_target_path(run: object) -> Path | None:
     if not isinstance(target, str) or not target.strip() or target == "missing":
         return None
     return Path(target)
-
-
-def _cisco_trust_layer(
-    run: object,
-    *,
-    captured_at: str,
-    layer_id: TrustLayerType,
-    component_id: str,
-    label: str,
-) -> dict[str, object]:
-    from .inventory_contract import _normalize_inventory_datetime
-
-    status = str(getattr(run, "status", "unknown"))
-    message = str(getattr(run, "message", ""))
-    severity_counts = _cisco_severity_counts(run)
-    analyzers_used = _cisco_analyzers_used(run)
-    trust_score = _cisco_layer_score(severity_counts, analyzers_used=analyzers_used) if status == "enabled" else None
-    trust_components: list[dict[str, object]] = []
-    if trust_score is not None:
-        component_status = "positive"
-        if trust_score < 40:
-            component_status = "critical"
-        elif trust_score < 70:
-            component_status = "warning"
-        # Confidence scales with number of analyzers that ran:
-        # 1 analyzer = 90, 2 = 95, 3+ = 99
-        analyzer_confidence = min(90 + (len(analyzers_used) - 1) * 5, 99)
-        trust_components.append(
-            {
-                "componentId": component_id,
-                "confidence": analyzer_confidence,
-                "label": label,
-                "score": trust_score,
-                "status": component_status,
-                "summary": message
-                or (
-                    f"{label} completed with {sum(severity_counts.values())} findings "
-                    f"using {len(analyzers_used)} analyzer(s)."
-                ),
-                "weight": 1.0,
-            }
-        )
-
-    run_metadata = getattr(run, "metadata", None)
-    safe_metadata: dict[str, object] = {
-        "scannerSource": str(getattr(run, "source", "unknown")),
-        "message": message,
-        "totalFindings": sum(severity_counts.values()),
-        "findingsBySeverity": severity_counts,
-    }
-    duration_ms = getattr(run, "duration_ms", None)
-    if isinstance(duration_ms, int):
-        safe_metadata["durationMs"] = duration_ms
-    if isinstance(run_metadata, dict):
-        for key in (
-            "analyzersUsed",
-            "policyName",
-            "scanMode",
-            "mode",
-            "targetsScanned",
-            "skillsScanned",
-            "skillsSkipped",
-        ):
-            value = run_metadata.get(key)
-            if value is not None:
-                safe_metadata[key] = value
-    safe_metadata["attestationStatus"] = "unsigned"
-    safe_metadata["evidenceAuthority"] = "device_claim"
-    safe_metadata["affectsV4Score"] = False
-    safe_metadata["evidenceSchemaVersion"] = "guard-aibom-cisco-scanner-evidence.v1"
-    evidence_payload = _cisco_evidence_payload(
-        layer_id=layer_id,
-        label=label,
-        status=status,
-        message=message,
-        captured_at=_normalize_inventory_datetime(captured_at),
-        trust_score=trust_score,
-        trust_components=trust_components,
-        metadata=safe_metadata,
-    )
-    safe_metadata["evidence"] = evidence_payload
-    safe_metadata["evidenceHash"] = _trust_evidence_hash(evidence_payload)
-
-    return {
-        "layerId": layer_id,
-        "layerType": layer_id,
-        "status": status,
-        "evidenceAuthority": "device_claim",
-        "affectsV4Score": False,
-        "trustScore": trust_score,
-        "trustComponents": trust_components,
-        "capturedAt": _normalize_inventory_datetime(captured_at),
-        "provenance": _local_claim_provenance(str(safe_metadata.get("scannerSource") or layer_id)),
-        "metadata": safe_metadata,
-    }
-
-
-def _cisco_evidence_payload(
-    *,
-    layer_id: TrustLayerType,
-    label: str,
-    status: str,
-    message: str,
-    captured_at: object,
-    trust_score: int | None,
-    trust_components: list[dict[str, object]],
-    metadata: dict[str, object],
-) -> dict[str, object]:
-    payload: dict[str, object] = {
-        "source": metadata.get("scannerSource", "unknown"),
-        "layerId": layer_id,
-        "label": label,
-        "status": status,
-        "message": message,
-        "capturedAt": captured_at,
-        "trustScore": trust_score,
-        "componentCount": len(trust_components),
-        "totalFindings": metadata.get("totalFindings", 0),
-        "findingsBySeverity": metadata.get("findingsBySeverity", {}),
-    }
-    for key in (
-        "analyzersUsed",
-        "policyName",
-        "scanMode",
-        "mode",
-        "targetsScanned",
-        "skillsScanned",
-        "skillsSkipped",
-        "durationMs",
-    ):
-        value = metadata.get(key)
-        if value is not None:
-            payload[key] = value
-    return payload
-
-
-def _cisco_severity_counts(run: object) -> dict[str, int]:
-    counts = {"critical": 0, "high": 0, "medium": 0, "low": 0}
-    metadata = getattr(run, "metadata", None)
-    if isinstance(metadata, dict):
-        raw_counts = metadata.get("findingsBySeverity")
-        if isinstance(raw_counts, dict):
-            for key in counts:
-                value = raw_counts.get(key)
-                counts[key] = value if isinstance(value, int) and value >= 0 else 0
-            return counts
-    for finding in tuple(getattr(run, "findings", ()) or ()):
-        severity = getattr(getattr(finding, "severity", None), "value", getattr(finding, "severity", None))
-        if isinstance(severity, str) and severity in counts:
-            counts[severity] += 1
-    return counts
-
-
-def _cisco_analyzers_used(run: object) -> tuple[str, ...]:
-    """Extract analyzer names from a Cisco inventory run."""
-    metadata = getattr(run, "metadata", None)
-    if isinstance(metadata, dict):
-        raw = metadata.get("analyzersUsed")
-        if isinstance(raw, (list, tuple)):
-            return tuple(str(a) for a in raw if a)
-    return ("yara",)
-
-
-def _cisco_layer_score(
-    severity_counts: dict[str, int],
-    *,
-    analyzers_used: tuple[str, ...] = ("yara",),
-) -> int:
-    raw_score = 100 - (
-        30 * severity_counts["critical"]
-        + 12 * severity_counts["high"]
-        + 4 * severity_counts["medium"]
-        + severity_counts["low"]
-    )
-    # Ceiling: more analyzers = higher max achievable score.
-    # 1 analyzer: max 90, 2: max 95, 3+: max 100.
-    # Clean YARA-only can't reach 100; clean multi-analyzer can.
-    analyzer_count = len(analyzers_used)
-    if analyzer_count >= 3:
-        ceiling = 100
-    elif analyzer_count == 2:
-        ceiling = 95
-    else:
-        ceiling = 90
-    return max(0, min(ceiling, raw_score))
-
-
-def _trust_components_from_domain(domain: TrustDomainScore) -> list[dict[str, object]]:
-    components: list[dict[str, object]] = []
-    for adapter in domain.adapters:
-        if not adapter.emitted:
-            continue
-        components.extend(_trust_components_from_adapter(adapter))
-        if len(components) >= 32:
-            break
-    return components[:32]
-
-
-def _trust_components_from_adapter(adapter: TrustAdapterScore) -> list[dict[str, object]]:
-    return [_trust_component_row(adapter, component) for component in adapter.components]
-
-
-def _trust_component_row(
-    adapter: TrustAdapterScore,
-    component: TrustComponentScore,
-) -> dict[str, object]:
-    score = round(component.score)
-    status = "positive"
-    if score < 40:
-        status = "critical"
-    elif score < 70:
-        status = "warning"
-    payload: dict[str, object] = {
-        "componentId": f"{adapter.adapter_id}:{component.key}",
-        "confidence": 85,
-        "label": adapter.label,
-        "score": score,
-        "status": status,
-        "summary": component.rationale,
-        "weight": adapter.weight,
-    }
-    if component.evidence:
-        payload["evidence"] = {"lines": list(component.evidence)}
-    return payload
-
-
-def _trust_evidence_hash(payload: dict[str, object]) -> str:
-    return guard_evidence_hash(payload)

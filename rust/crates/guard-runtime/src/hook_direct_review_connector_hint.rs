@@ -6,16 +6,18 @@ use std::collections::BTreeSet;
 
 use guard_command::hook_responses::Object;
 use guard_command::native_command_catalog::packaged_command_catalog;
-use serde_json::{json, Value};
+use serde_json::{json, Map, Value};
 
 use super::{
     Connector, HookDirectDefer, HINT_SCHEMA, HINT_SURFACES, MAX_HINT_TEXT, MAX_NAME_CHARS,
     MAX_RISK_CLASSES,
 };
 
-/// `_observed_risk_classes`, filtered and capped as `connector_setup_hint`
-/// keeps them. A rule id whose trim or case fold could differ from Python's
-/// defers, as does a catalog the resident cannot load.
+/// The risk classes of the catalog rules the paused evidence observed, sorted,
+/// deduplicated and capped; a critical or destructive shell rule also records
+/// `destructive`. Rule ids are matched exactly, as the native evidence records
+/// them, so an id the catalog does not hold adds nothing. A catalog the
+/// resident cannot load defers.
 pub(super) fn observed_risk_classes(result: &Object) -> Result<Vec<String>, HookDirectDefer> {
     let observations = result
         .get("command_extensions")
@@ -30,12 +32,6 @@ pub(super) fn observed_risk_classes(result: &Object) -> Result<Vec<String>, Hook
         let Some(rule_id) = observation.get("rule_id").and_then(Value::as_str) else {
             continue;
         };
-        if !rule_id
-            .chars()
-            .all(|item| item.is_ascii() && !('\x1c'..='\x1f').contains(&item))
-        {
-            return Err(HookDirectDefer::ReviewQueue);
-        }
         let catalog = match &catalog {
             Some(catalog) => catalog,
             None => catalog
@@ -61,7 +57,7 @@ pub(super) fn observed_risk_classes(result: &Object) -> Result<Vec<String>, Hook
         .collect())
 }
 
-/// `connector_setup_hint` through `validated_connector_setup_hint`: the hint
+/// The connector setup hint `validated_connector_setup_hint` accepts: the hint
 /// for a connector whose fields are all well formed, else null.
 pub(super) fn setup_hint(connector: &Connector, risk_classes: &[String]) -> Value {
     let display_name = connector.display_name();
@@ -134,4 +130,77 @@ pub(super) fn risk_class(text: &str) -> bool {
     text.len() <= 64
         && bytes.next().is_some_and(|first| first.is_ascii_lowercase())
         && bytes.all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || byte == b'_')
+}
+
+/// `_CAPABILITY`: `[a-z][a-z0-9-]{0,63}`.
+fn capability(text: &str) -> bool {
+    let mut bytes = text.bytes();
+    text.len() <= 64
+        && bytes.next().is_some_and(|first| first.is_ascii_lowercase())
+        && bytes.all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || byte == b'-')
+}
+
+/// `_matching_strings`: the list when every entry is a string `check`
+/// accepts, at most `MAX_RISK_CLASSES` of them.
+fn matching_strings(value: Option<&Value>, check: fn(&str) -> bool) -> Option<Vec<&str>> {
+    let items = value?.as_array()?;
+    if items.len() > MAX_RISK_CLASSES {
+        return None;
+    }
+    items
+        .iter()
+        .map(|item| item.as_str().filter(|text| check(text)))
+        .collect()
+}
+
+/// `_connector_text`: a short string field `check` accepts.
+fn connector_text<'a>(
+    fields: &'a Map<String, Value>,
+    key: &str,
+    check: fn(&str) -> bool,
+) -> Option<&'a str> {
+    fields
+        .get(key)
+        .and_then(Value::as_str)
+        .filter(|text| text.chars().count() <= MAX_HINT_TEXT && check(text))
+}
+
+/// `validated_connector_setup_hint`: a shape-checked copy of a stored
+/// connector setup hint, rebuilt from the keys it knows.
+pub(super) fn validated_setup_hint(value: &Value) -> Option<Value> {
+    let fields = value.as_object()?;
+    if fields.get("schema").and_then(Value::as_str) != Some(HINT_SCHEMA) {
+        return None;
+    }
+    let identity = connector_text(fields, "identity_hash", identity_hash)?;
+    let cli = connector_text(fields, "cli_id", cli_id)?;
+    let display_name = connector_text(fields, "display_name", display_text)?;
+    let surface = fields
+        .get("surface")
+        .and_then(Value::as_str)
+        .filter(|surface| HINT_SURFACES.contains(surface))?;
+    let link = deep_link(cli);
+    if fields.get("deep_link").and_then(Value::as_str) != Some(link.as_str()) {
+        return None;
+    }
+    let recommendation = fields.get("card_recommendation")?.as_object()?;
+    let capabilities = matching_strings(recommendation.get("capabilities"), capability)?;
+    let empty = Value::Array(Vec::new());
+    let risk_classes = matching_strings(
+        Some(fields.get("risk_classes").unwrap_or(&empty)),
+        risk_class,
+    )?;
+    if recommendation.get("state").and_then(Value::as_str) != Some("allowed") {
+        return None;
+    }
+    Some(json!({
+        "schema": HINT_SCHEMA,
+        "identity_hash": identity,
+        "cli_id": cli,
+        "surface": surface,
+        "display_name": display_name,
+        "deep_link": link,
+        "card_recommendation": {"state": "allowed", "capabilities": capabilities},
+        "risk_classes": risk_classes,
+    }))
 }

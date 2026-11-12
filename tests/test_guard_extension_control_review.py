@@ -9,9 +9,12 @@ import pytest
 from codex_plugin_scanner.guard.catalog_delivery import activation_store, preparation, preparation_authority, transport
 from codex_plugin_scanner.guard.catalog_delivery.metadata_objects import ObjectStore, encoded
 from codex_plugin_scanner.guard.catalog_delivery.pack_store import PackReader
-from codex_plugin_scanner.guard.daemon import extension_control_prepared as candidates
-from codex_plugin_scanner.guard.daemon.extension_control_api import ExtensionControlApiError, ExtensionControlApiService
-from codex_plugin_scanner.guard.daemon.extension_control_targets import request_metadata
+from codex_plugin_scanner.guard.extension_controls import extension_control_prepared as candidates
+from codex_plugin_scanner.guard.extension_controls.extension_control_api import (
+    ExtensionControlApiError,
+    ExtensionControlApiService,
+)
+from codex_plugin_scanner.guard.extension_controls.extension_control_targets import request_metadata
 from codex_plugin_scanner.guard.managed_controls_policy_bundle import (
     MANAGED_CONTROLS_REVISION_STATE_KEY,
 )
@@ -256,7 +259,7 @@ def test_first_remote_fallback_preserves_installed_security_floors(
             "status": "ahead",
             "base_commit": {"sha": floor["source"]},
             "merge_base_commit": {"sha": floor["source"]},
-            "head_commit": {"sha": new},
+            "url": f"https://api.github.com/repos/hashgraph-online/hol-guard/compare/{floor['source']}...{new}",
             "ahead_by": 1,
             "behind_by": 0,
         }

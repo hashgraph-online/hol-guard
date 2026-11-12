@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from codex_plugin_scanner.guard.runtime.shell_execution_context import model_shell_execution_context
+from tests.request_context_support import model_shell_execution_context
 
 
 def test_noclobber_redirection_is_not_a_pipeline(tmp_path: Path) -> None:

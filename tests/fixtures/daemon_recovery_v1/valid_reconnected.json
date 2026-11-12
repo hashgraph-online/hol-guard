@@ -1,0 +1,22 @@
+{
+  "schema": "hol-guard-recovery.v1",
+  "capabilities": ["inspect", "restart", "status", "diagnostics"],
+  "operationId": "11111111-1111-4111-8111-111111111111",
+  "sequence": 4,
+  "startedAt": "2026-09-20T00:00:00+00:00",
+  "updatedAt": "2026-09-20T00:00:01+00:00",
+  "phase": "complete",
+  "activeElapsedMs": 1000,
+  "workerActive": false,
+  "retryAllowed": true,
+  "outcome": "reconnected",
+  "reasonCode": "healthy",
+  "service": "ready",
+  "protection": "verified",
+  "requiresHumanAction": false,
+  "checks": [
+    {"id": "authenticated_service", "result": "pass", "reasonCode": "healthy"},
+    {"id": "dashboard_ready", "result": "pass", "reasonCode": "healthy"},
+    {"id": "protection_health", "result": "pass", "reasonCode": "healthy"}
+  ]
+}

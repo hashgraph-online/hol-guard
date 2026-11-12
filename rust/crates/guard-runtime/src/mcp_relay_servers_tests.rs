@@ -61,20 +61,22 @@ fn a_server_past_the_bound_stays_unknown() {
 
 #[test]
 fn only_tools_the_relay_cannot_send_are_decided_by_the_proxy() {
-    // The relay never sends a call to an empty or non-ASCII name.
+    // The relay never sends a call to a missing or empty name.
     for tool in [
         json!({"description": "no name"}),
         json!({"name": 7}),
         json!({"name": ""}),
-        json!({"name": "composio_\u{e9}"}),
-        json!({"name": "lire_\u{e9}t\u{e9}"}),
     ] {
         assert!(proxy_tool(&tool), "{tool}");
     }
-    // The resident reads a Composio wrapper's provider catalog hash itself.
+    // The resident reads a Composio wrapper's provider catalog hash itself,
+    // and a non-ASCII name is sent like any other.
     for tool in [
         json!({"name": "COMPOSIO_SEARCH_TOOLS"}),
         json!({"name": "github__composio_execute"}),
+        json!({"name": "composio_\u{e9}"}),
+        json!({"name": "compo\u{17f}io_multi_execute_tool"}),
+        json!({"name": "lire_\u{e9}t\u{e9}"}),
     ] {
         assert!(!proxy_tool(&tool), "{tool}");
     }

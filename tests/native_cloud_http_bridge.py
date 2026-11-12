@@ -162,10 +162,8 @@ def main(data):
             store.set_sync_payload("runtime_session_summary", summary, now)
             return {"posture": posture, "summary": summary}
         if data["action"] == "sync_policy":
-            from codex_plugin_scanner.guard.policy_bundle_trusted_keys import (
-                policy_bundle_keyring_payload,
-                policy_bundle_verification_key_from_public_key,
-            )
+            from codex_plugin_scanner.guard.policy_bundle_trusted_keys import policy_bundle_keyring_payload
+            from tests.policy_bundle_signing_helpers import policy_bundle_verification_key_from_public_key
 
             key = data["verificationKey"]
             verification = policy_bundle_verification_key_from_public_key(

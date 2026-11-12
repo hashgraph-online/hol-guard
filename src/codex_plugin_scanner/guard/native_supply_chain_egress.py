@@ -12,6 +12,7 @@ parses every response and owns every decision.
 
 from __future__ import annotations
 
+import ipaddress
 import os
 import tempfile
 import time
@@ -78,6 +79,37 @@ _MAX_REDIRECTS_CEILING = 10
 _REDIRECT_STATUSES = frozenset({301, 302, 303, 307, 308})
 # A credential or cookie must never ride along to a redirect target.
 _CREDENTIAL_HEADERS = frozenset({"authorization", "dpop", "cookie", "proxy-authorization"})
+
+# Set by ``tests/conftest.py`` at import time, so every helper a test spawns
+# inherits it. Test fixtures carry production Cloud URLs and tokens that are not
+# valid there, and none of their requests may leave the machine. Archives are
+# fetched by the native runtime, outside any Python socket guard, so the rule is
+# applied here. The flag only ever refuses egress; unset is production behaviour.
+# The class lets a test that fakes one transport lift the rule for that class
+# alone, in its own process; spawned helpers still inherit the full flag.
+TEST_LOOPBACK_ONLY_ENV = "HOL_GUARD_TEST_LOOPBACK_EGRESS_ONLY"
+TEST_PUBLIC_HOST_REFUSED_CODE = "egress_test_public_host"
+TEST_RULE_HTTP = "http"
+TEST_RULE_ARCHIVE = "archive"
+
+
+def refused_by_test_loopback_rule(url: str, *, kind: str) -> bool:
+    del kind
+    if os.environ.get(TEST_LOOPBACK_ONLY_ENV) != "1":
+        return False
+    try:
+        parts = urllib.parse.urlsplit(url)
+    except ValueError:
+        return True
+    if parts.scheme.lower() not in {"http", "https"}:
+        return False
+    host = parts.hostname or ""
+    if host == "localhost":
+        return False
+    try:
+        return not ipaddress.ip_address(host).is_loopback
+    except ValueError:
+        return True
 
 
 def _redirect_budget(method: str, data: bytes | None, headers: Mapping[str, str], requested: int) -> int:
@@ -165,7 +197,12 @@ class EgressExchanger:
             delay = min(max(float(need["delay_seconds"]), 0.0), MAX_DELAY_SECONDS)
             if delay > 0:
                 time.sleep(delay)
-            outcome = self.archives.fulfil(need) if need["class"] == "archive" else self._http(need)
+            if need["class"] != "archive":
+                outcome = self._http(need)
+            elif refused_by_test_loopback_rule(str(need["url"]), kind=TEST_RULE_ARCHIVE):
+                outcome = {"kind": "blocked", "code": TEST_PUBLIC_HOST_REFUSED_CODE}
+            else:
+                outcome = self.archives.fulfil(need)
         return {
             "class": need["class"],
             "method": need["method"],
@@ -234,6 +271,8 @@ def _fetch_raw(need: Mapping[str, Any]) -> RawResponse | dict[str, object]:
     max_redirects = _redirect_budget(method, data, headers, int(need["max_redirects"]))
     hops = 0
     while True:
+        if refused_by_test_loopback_rule(url, kind=TEST_RULE_HTTP):
+            return {"kind": "blocked", "code": TEST_PUBLIC_HOST_REFUSED_CODE}
         request = urllib.request.Request(url, data=data, headers=headers, method=method)
         try:
             # Redirects are never followed by the transport: each hop is a fresh

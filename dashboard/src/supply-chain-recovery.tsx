@@ -32,7 +32,7 @@ function recoverySummary(issueCount: number, needsLocalRepair: boolean): string 
   if (!needsLocalRepair) {
     return `${issueCount} step${issueCount === 1 ? "" : "s"} left. Package protection is already on for this device.`;
   }
-  return `${issueCount} issue${issueCount === 1 ? "" : "s"} to resolve. Check Cloud access, approve device changes once, then restore package protection.`;
+  return `${issueCount} issue${issueCount === 1 ? "" : "s"} to fix. Restore protection works through them in order and asks for your approval once.`;
 }
 
 export function SupplyChainRecovery({

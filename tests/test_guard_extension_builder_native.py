@@ -15,8 +15,8 @@ from codex_plugin_scanner.guard.extension_builder.models import make_discovery, 
 from codex_plugin_scanner.guard.extension_builder.native_source_compiler import run_source_compiler
 from codex_plugin_scanner.guard.extension_builder.repository_write import apply_kit
 from codex_plugin_scanner.guard.extension_builder.review import default_review
-from codex_plugin_scanner.guard.runtime.mcp_server_contribution import validate_mcp_contribution_file
 from tests.extension_builder_support import REPOSITORY, make_kit
+from tests.mcp_contribution_loader import validate_mcp_contribution_file
 
 
 def _copy_source_tree(destination: Path) -> None:

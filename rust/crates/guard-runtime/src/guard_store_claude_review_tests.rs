@@ -204,3 +204,159 @@ fn a_foreign_notice_without_a_pending_index_stays() {
     drop(connection);
     let _ = std::fs::remove_dir_all(&fixture.home);
 }
+
+/// The daemon worker's `add_claude_approval_request` for the first recorded
+/// notice scenario, with edits applied to its `claude_review` facts and its
+/// top-level args.
+fn daemon_write(
+    fixture: &Fixture,
+    edit: impl FnOnce(&mut Map<String, Value>, &mut Map<String, Value>),
+) -> Value {
+    let notices: Value = serde_json::from_str(NOTICE_VECTORS).unwrap();
+    let scenario = &notices["scenarios"][0];
+    let mut review = json!({
+        "harness": scenario["harness"],
+        "hook_payload": scenario["payload"],
+        "reason": scenario["result"]["reason"],
+        "review_binding": scenario["binding"],
+        "config_path": scenario["workspace"],
+        "source_scope": "project",
+    })
+    .as_object()
+    .unwrap()
+    .clone();
+    let mut args = Map::new();
+    args.insert("request".to_owned(), fixture.request.clone());
+    args.insert("now".to_owned(), fixture.call["now"].clone());
+    args.insert(
+        "integrity_key_b64".to_owned(),
+        json!(Base64UrlUnpadded::encode_string(&KEY)),
+    );
+    args.insert("integrity_key_id".to_owned(), json!(KEY_ID));
+    edit(&mut review, &mut args);
+    args.insert("claude_review".to_owned(), Value::Object(review));
+    let request = GuardStoreRequestV1 {
+        schema: GUARD_STORE_REQUEST_SCHEMA.to_owned(),
+        request_id: "claude-daemon-review".to_owned(),
+        store_path: fixture.home.join("guard.db").to_string_lossy().into_owned(),
+        guard_home: fixture.home.to_string_lossy().into_owned(),
+        method: "add_claude_approval_request".to_owned(),
+        source: fixture.source.clone(),
+        busy_timeout_ms: 5000,
+        args,
+    };
+    serde_json::from_slice(&evaluate_guard_store_request(&request).unwrap()).unwrap()
+}
+
+/// The loaded notice without its signature, state key and random approval
+/// code, checking the code is the one its question names.
+fn unsigned_notice(fixture: &Fixture) -> Map<String, Value> {
+    let mut notice = load_notice(fixture);
+    let notice = notice.as_object_mut().expect("a notice");
+    assert_eq!(notice["integrity"]["integrity_key_id"], KEY_ID);
+    notice.remove("integrity");
+    notice.remove("state_key");
+    let code = notice.remove("approval_code").unwrap();
+    let code = code.as_str().unwrap();
+    assert!(code.len() == 12 && code.bytes().all(|byte| byte.is_ascii_hexdigit()));
+    let question = notice.remove("approval_question").unwrap();
+    assert!(question.as_str().unwrap().contains(code), "{question}");
+    notice.clone()
+}
+
+fn recorded_without_code(fixture: &Fixture) -> Map<String, Value> {
+    let mut recorded = fixture.call["payload"].as_object().unwrap().clone();
+    recorded.remove("approval_code");
+    recorded.remove("approval_question");
+    recorded
+}
+
+#[test]
+fn the_daemon_queue_records_the_python_notice() {
+    let fixture = fixture("claude-daemon-review");
+    let reply = daemon_write(&fixture, |_, _| {});
+    assert_eq!(reply["status"], "ok", "{reply}");
+    assert_eq!(reply["payload"], fixture.request["request_id"]);
+    assert_eq!(unsigned_notice(&fixture), recorded_without_code(&fixture));
+    let connection = Connection::open(fixture.home.join("guard.db")).unwrap();
+    assert_eq!(count(&connection, "approval_requests"), 1);
+    drop(connection);
+    let _ = std::fs::remove_dir_all(&fixture.home);
+}
+
+#[test]
+fn a_review_outside_a_workspace_names_the_guard_home() {
+    let fixture = fixture("claude-daemon-review-home");
+    let reply = daemon_write(&fixture, |review, _| {
+        review.insert("config_path".to_owned(), json!("/home/user/.hol-guard"));
+        review.insert("source_scope".to_owned(), json!("harness"));
+    });
+    assert_eq!(reply["status"], "ok", "{reply}");
+    let mut expected = recorded_without_code(&fixture);
+    expected.insert("config_path".to_owned(), json!("/home/user/.hol-guard"));
+    expected.insert("source_scope".to_owned(), json!("harness"));
+    assert_eq!(unsigned_notice(&fixture), expected);
+    let _ = std::fs::remove_dir_all(&fixture.home);
+}
+
+#[test]
+fn a_notice_the_daemon_cannot_record_leaves_the_review_queued() {
+    for (tag, edit) in [
+        ("keyless", "integrity_key_b64"),
+        ("sessionless", "session_id"),
+        ("unreadable-reason", "reason"),
+    ] {
+        let fixture = fixture(&format!("claude-daemon-review-{tag}"));
+        let reply = daemon_write(&fixture, |review, args| match edit {
+            "integrity_key_b64" => {
+                args.remove(edit);
+            }
+            "session_id" => {
+                review["hook_payload"]
+                    .as_object_mut()
+                    .unwrap()
+                    .remove("session_id");
+            }
+            "reason" => {
+                review.insert("reason".to_owned(), json!(7));
+            }
+            key => {
+                review.remove(key);
+            }
+        });
+        assert_eq!(reply["status"], "ok", "{tag}: {reply}");
+        assert_eq!(reply["payload"], fixture.request["request_id"], "{tag}");
+        assert!(load_notice(&fixture).is_null(), "{tag}: no notice");
+        let connection = Connection::open(fixture.home.join("guard.db")).unwrap();
+        assert_eq!(count(&connection, "approval_requests"), 1, "{tag}");
+        drop(connection);
+        let _ = std::fs::remove_dir_all(&fixture.home);
+    }
+}
+
+#[test]
+fn a_foreign_notice_row_is_re_signed_under_the_daemon_key() {
+    let fixture = fixture("claude-daemon-review-foreign");
+    let connection = Connection::open(fixture.home.join("guard.db")).unwrap();
+    let foreign = json!({"session_id": "sess-1", "integrity": {"integrity_key_id": "rotated"}});
+    connection
+        .execute(
+            "insert into sync_state (state_key, payload_json, updated_at) values (?1, ?2, ?3)",
+            params![
+                "claude_pending_permissions:sess-1",
+                foreign.to_string(),
+                "2026-03-01T12:00:00+00:00"
+            ],
+        )
+        .unwrap();
+    let reply = daemon_write(&fixture, |_, _| {});
+    assert_eq!(reply["status"], "ok", "{reply}");
+    assert_eq!(count(&connection, "approval_requests"), 1, "review stays");
+    assert_eq!(
+        unsigned_notice(&fixture),
+        recorded_without_code(&fixture),
+        "the stale row heals and the notice is recorded"
+    );
+    drop(connection);
+    let _ = std::fs::remove_dir_all(&fixture.home);
+}

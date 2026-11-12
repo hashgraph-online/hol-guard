@@ -47,7 +47,6 @@ def _source_copy(source: Path, target: Path) -> None:
     for name in (
         "pyproject.toml",
         "scripts/release/stage_guard_cloud_review_artifacts.py",
-        "src/codex_plugin_scanner/guard/runtime/command_reviewed_literal_matcher.py",
     ):
         destination = target / name
         destination.parent.mkdir(parents=True, exist_ok=True)

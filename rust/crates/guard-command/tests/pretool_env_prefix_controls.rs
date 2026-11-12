@@ -261,8 +261,14 @@ fn a_credential_setting_is_named_with_a_safe_alternative() {
     }
 }
 
+/// A `NODE_OPTIONS` holding only engine sizes or quieting flags loads no
+/// code, and the runtime already reads an inherited one that way. Written in
+/// front of the command it is the same setting, so it is projected away and
+/// the command is judged on its own. Guard used to block it and offer a
+/// hand-written `node --max-old-space-size=N node_modules/...` form instead;
+/// the command the developer wrote now reaches the ordinary proofs.
 #[test]
-fn a_heap_only_node_options_setting_points_to_the_sandboxed_node_form() {
+fn a_heap_only_node_options_setting_leaves_the_command_to_the_ordinary_proofs() {
     let root = std::env::temp_dir()
         .canonicalize()
         .unwrap()
@@ -272,6 +278,38 @@ fn a_heap_only_node_options_setting_points_to_the_sandboxed_node_form() {
     for command in [
         "NODE_OPTIONS=--max-old-space-size=6144 bunx tsc --noEmit",
         "NODE_OPTIONS=--max-old-space-size=6144 npx tsc --noEmit",
+        "NODE_OPTIONS=--max-old-space-size=99999999 bunx tsc --noEmit",
+        "NODE_OPTIONS='--max-old-space-size=6144 --no-warnings' bunx tsc --noEmit",
+    ] {
+        let result = evaluate(&root, command);
+        assert_ne!(
+            result.minimum_action, "block",
+            "{command}: {}",
+            result.reason
+        );
+        assert!(
+            !result.reason.contains("NODE_OPTIONS"),
+            "{command}: {}",
+            result.reason
+        );
+    }
+    // A value that can load code, open a port or name a file keeps the
+    // refusal, and so does a setting sitting beside an inert one: the reason
+    // names the setting that actually stopped the reading.
+    for (command, setting) in [
+        (
+            "NODE_OPTIONS='--max-old-space-size=6144 --require ./x.js' bunx tsc --noEmit",
+            "NODE_OPTIONS",
+        ),
+        (
+            "NODE_OPTIONS=--require=./x.js bunx tsc --noEmit",
+            "NODE_OPTIONS",
+        ),
+        ("NODE_OPTIONS=--inspect bunx tsc --noEmit", "NODE_OPTIONS"),
+        (
+            "NODE_OPTIONS=--max-old-space-size=6144 NODE_PATH=/ws bunx tsc --noEmit",
+            "NODE_PATH",
+        ),
     ] {
         let result = evaluate(&root, command);
         assert_eq!(
@@ -282,28 +320,8 @@ fn a_heap_only_node_options_setting_points_to_the_sandboxed_node_form() {
         assert!(
             result
                 .reason
-                .contains("the NODE_OPTIONS setting can load code")
-                && result.reason.contains(
-                    "`node --max-old-space-size=6144 node_modules/typescript/bin/tsc --noEmit`"
-                ),
-            "{command}: {}",
-            result.reason
-        );
-    }
-    // Anything beyond a bare memory size keeps the plain refusal.
-    for command in [
-        "NODE_OPTIONS='--max-old-space-size=6144 --require ./x.js' bunx tsc --noEmit",
-        "NODE_OPTIONS=--max-old-space-size=99999999 bunx tsc --noEmit",
-        "NODE_OPTIONS=--require=./x.js bunx tsc --noEmit",
-    ] {
-        let result = evaluate(&root, command);
-        assert_eq!(
-            result.minimum_action, "block",
-            "{command}: {}",
-            result.reason
-        );
-        assert!(
-            result.reason.contains("Run the command without it")
+                .contains(&format!("the {setting} setting can load code"))
+                && result.reason.contains("Run the command without it")
                 && !result.reason.contains("more memory"),
             "{command}: {}",
             result.reason

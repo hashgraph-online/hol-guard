@@ -134,6 +134,12 @@ def _literal_int(node: ast.expr, path: Path, depth: int = 0) -> int | None:
             if bound is not None and bound[1] is None:
                 return _name_value(node.attr, bound[0], depth + 1)
         return None
+    if isinstance(node, ast.IfExp):
+        # ``A if kind == "x" else B``: a bridge whose bound depends on which
+        # query it is sending. Both arms are offered to the transport, so the
+        # larger one is what has to fit under the ceiling.
+        chosen = [_literal_int(node.body, path, depth + 1), _literal_int(node.orelse, path, depth + 1)]
+        return None if None in chosen else max(value for value in chosen if value is not None)
     if not isinstance(node, ast.BinOp):
         return None
     left = _literal_int(node.left, path, depth + 1)

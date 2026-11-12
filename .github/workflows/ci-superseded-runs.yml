@@ -21,7 +21,7 @@ jobs:
     permissions:
       actions: write
       pull-requests: read
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 3
     steps:
       - name: Release slots held by older commits of this PR

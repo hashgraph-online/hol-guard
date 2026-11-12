@@ -15,10 +15,9 @@
    },
    "expected": {
     "hookSpecificOutput": {
-     "hookEventName": "UserPromptSubmit",
-     "additionalContext": "Guard needs approval for this prompt. Do not ask for approval at the prompt stage. Attempt the intended sensitive tool once so HOL Guard can evaluate the exact tool, path, and arguments, then route that concrete action into a HOL Guard approval question with Allow once, Allow during this session, and Keep blocked. First tell the user exactly: 'HOL Guard will intercept Claude's next sensitive action and open a branded approval question.' Attempt that sensitive tool at most once. If HOL Guard or Claude denies it, do not retry the same sensitive action automatically. Instead, tell the user approval is required in Claude to continue."
+     "hookEventName": "UserPromptSubmit"
     },
-    "systemMessage": "HOL Guard intercepted this prompt because it leads to a sensitive action. If Claude asks to continue, HOL Guard will route the decision through a branded approval prompt."
+    "systemMessage": "Guard needs approval for this prompt."
    }
   },
   {
@@ -35,10 +34,9 @@
    },
    "expected": {
     "hookSpecificOutput": {
-     "hookEventName": "UserPromptSubmit",
-     "additionalContext": "Guard blocked this prompt! Do not ask for approval at the prompt stage. Attempt the intended sensitive tool once so HOL Guard can evaluate the exact tool, path, and arguments, then route that concrete action into a HOL Guard approval question with Allow once, Allow during this session, and Keep blocked. First tell the user exactly: 'HOL Guard will intercept Claude's next sensitive action and open a branded approval question.' Attempt that sensitive tool at most once. If HOL Guard or Claude denies it, do not retry the same sensitive action automatically. Instead, tell the user approval is required in Claude to continue."
+     "hookEventName": "UserPromptSubmit"
     },
-    "systemMessage": "HOL Guard intercepted this prompt because it leads to a sensitive action. If Claude asks to continue, HOL Guard will route the decision through a branded approval prompt."
+    "systemMessage": "Guard blocked this prompt!"
    }
   },
   {
@@ -55,10 +53,9 @@
    },
    "expected": {
     "hookSpecificOutput": {
-     "hookEventName": "UserPromptSubmit",
-     "additionalContext": "Should Claude read secrets? Do not ask for approval at the prompt stage. Attempt the intended sensitive tool once so HOL Guard can evaluate the exact tool, path, and arguments, then route that concrete action into a HOL Guard approval question with Allow once, Allow during this session, and Keep blocked. First tell the user exactly: 'HOL Guard will intercept Claude's next sensitive action and open a branded approval question.' Attempt that sensitive tool at most once. If HOL Guard or Claude denies it, do not retry the same sensitive action automatically. Instead, tell the user approval is required in Claude to continue."
+     "hookEventName": "UserPromptSubmit"
     },
-    "systemMessage": "HOL Guard intercepted this prompt because it leads to a sensitive action. If Claude asks to continue, HOL Guard will route the decision through a branded approval prompt."
+    "systemMessage": "Should Claude read secrets?"
    }
   },
   {
@@ -75,10 +72,9 @@
    },
    "expected": {
     "hookSpecificOutput": {
-     "hookEventName": "UserPromptSubmit",
-     "additionalContext": "Guard flagged this prompt. Do not ask for approval at the prompt stage. Attempt the intended sensitive tool once so HOL Guard can evaluate the exact tool, path, and arguments, then route that concrete action into a HOL Guard approval question with Allow once, Allow during this session, and Keep blocked. First tell the user exactly: 'HOL Guard will intercept Claude's next sensitive action and open a branded approval question.' Attempt that sensitive tool at most once. If HOL Guard or Claude denies it, do not retry the same sensitive action automatically. Instead, tell the user approval is required in Claude to continue."
+     "hookEventName": "UserPromptSubmit"
     },
-    "systemMessage": "HOL Guard intercepted this prompt because it leads to a sensitive action. If Claude asks to continue, HOL Guard will route the decision through a branded approval prompt."
+    "systemMessage": "Guard flagged this prompt."
    }
   },
   {
@@ -95,10 +91,8 @@
    },
    "expected": {
     "hookSpecificOutput": {
-     "hookEventName": "UserPromptSubmit",
-     "additionalContext": " Do not ask for approval at the prompt stage. Attempt the intended sensitive tool once so HOL Guard can evaluate the exact tool, path, and arguments, then route that concrete action into a HOL Guard approval question with Allow once, Allow during this session, and Keep blocked. First tell the user exactly: 'HOL Guard will intercept Claude's next sensitive action and open a branded approval question.' Attempt that sensitive tool at most once. If HOL Guard or Claude denies it, do not retry the same sensitive action automatically. Instead, tell the user approval is required in Claude to continue."
-    },
-    "systemMessage": "HOL Guard intercepted this prompt because it leads to a sensitive action. If Claude asks to continue, HOL Guard will route the decision through a branded approval prompt."
+     "hookEventName": "UserPromptSubmit"
+    }
    }
   },
   {
@@ -115,10 +109,8 @@
    },
    "expected": {
     "hookSpecificOutput": {
-     "hookEventName": "UserPromptSubmit",
-     "additionalContext": " Do not ask for approval at the prompt stage. Attempt the intended sensitive tool once so HOL Guard can evaluate the exact tool, path, and arguments, then route that concrete action into a HOL Guard approval question with Allow once, Allow during this session, and Keep blocked. First tell the user exactly: 'HOL Guard will intercept Claude's next sensitive action and open a branded approval question.' Attempt that sensitive tool at most once. If HOL Guard or Claude denies it, do not retry the same sensitive action automatically. Instead, tell the user approval is required in Claude to continue."
-    },
-    "systemMessage": "HOL Guard intercepted this prompt because it leads to a sensitive action. If Claude asks to continue, HOL Guard will route the decision through a branded approval prompt."
+     "hookEventName": "UserPromptSubmit"
+    }
    }
   },
   {
@@ -135,10 +127,8 @@
    },
    "expected": {
     "hookSpecificOutput": {
-     "hookEventName": "UserPromptSubmit",
-     "additionalContext": " Do not ask for approval at the prompt stage. Attempt the intended sensitive tool once so HOL Guard can evaluate the exact tool, path, and arguments, then route that concrete action into a HOL Guard approval question with Allow once, Allow during this session, and Keep blocked. First tell the user exactly: 'HOL Guard will intercept Claude's next sensitive action and open a branded approval question.' Attempt that sensitive tool at most once. If HOL Guard or Claude denies it, do not retry the same sensitive action automatically. Instead, tell the user approval is required in Claude to continue."
-    },
-    "systemMessage": "HOL Guard intercepted this prompt because it leads to a sensitive action. If Claude asks to continue, HOL Guard will route the decision through a branded approval prompt."
+     "hookEventName": "UserPromptSubmit"
+    }
    }
   },
   {
@@ -154,10 +144,8 @@
    },
    "expected": {
     "hookSpecificOutput": {
-     "hookEventName": "UserPromptSubmit",
-     "additionalContext": " Do not ask for approval at the prompt stage. Attempt the intended sensitive tool once so HOL Guard can evaluate the exact tool, path, and arguments, then route that concrete action into a HOL Guard approval question with Allow once, Allow during this session, and Keep blocked. First tell the user exactly: 'HOL Guard will intercept Claude's next sensitive action and open a branded approval question.' Attempt that sensitive tool at most once. If HOL Guard or Claude denies it, do not retry the same sensitive action automatically. Instead, tell the user approval is required in Claude to continue."
-    },
-    "systemMessage": "HOL Guard intercepted this prompt because it leads to a sensitive action. If Claude asks to continue, HOL Guard will route the decision through a branded approval prompt."
+     "hookEventName": "UserPromptSubmit"
+    }
    }
   },
   {
@@ -175,10 +163,9 @@
    },
    "expected": {
     "hookSpecificOutput": {
-     "hookEventName": "UserPromptSubmit",
-     "additionalContext": "Guard needs approval for this prompt. Do not ask for approval at the prompt stage. Attempt the intended sensitive tool once so HOL Guard can evaluate the exact tool, path, and arguments, then route that concrete action into a HOL Guard approval question with Allow once, Allow during this session, and Keep blocked. First tell the user exactly: 'HOL Guard will intercept Claude's next sensitive action and open a branded approval question.' Attempt that sensitive tool at most once. If HOL Guard or Claude denies it, do not retry the same sensitive action automatically. Instead, tell the user approval is required in Claude to continue."
+     "hookEventName": "UserPromptSubmit"
     },
-    "systemMessage": "HOL Guard intercepted this prompt because it leads to a sensitive action. If Claude asks to continue, HOL Guard will route the decision through a branded approval prompt."
+    "systemMessage": "Guard needs approval for this prompt."
    }
   },
   {
@@ -196,10 +183,9 @@
    },
    "expected": {
     "hookSpecificOutput": {
-     "hookEventName": "UserPromptSubmit",
-     "additionalContext": "Guard blocked this prompt! Do not ask for approval at the prompt stage. Attempt the intended sensitive tool once so HOL Guard can evaluate the exact tool, path, and arguments, then route that concrete action into a HOL Guard approval question with Allow once, Allow during this session, and Keep blocked. First tell the user exactly: 'HOL Guard will intercept Claude's next sensitive action and open a branded approval question.' Attempt that sensitive tool at most once. If HOL Guard or Claude denies it, do not retry the same sensitive action automatically. Instead, tell the user approval is required in Claude to continue."
+     "hookEventName": "UserPromptSubmit"
     },
-    "systemMessage": "HOL Guard intercepted this prompt because it leads to a sensitive action. If Claude asks to continue, HOL Guard will route the decision through a branded approval prompt."
+    "systemMessage": "Guard blocked this prompt!"
    }
   },
   {
@@ -217,10 +203,9 @@
    },
    "expected": {
     "hookSpecificOutput": {
-     "hookEventName": "UserPromptSubmit",
-     "additionalContext": "Should Claude read secrets? Do not ask for approval at the prompt stage. Attempt the intended sensitive tool once so HOL Guard can evaluate the exact tool, path, and arguments, then route that concrete action into a HOL Guard approval question with Allow once, Allow during this session, and Keep blocked. First tell the user exactly: 'HOL Guard will intercept Claude's next sensitive action and open a branded approval question.' Attempt that sensitive tool at most once. If HOL Guard or Claude denies it, do not retry the same sensitive action automatically. Instead, tell the user approval is required in Claude to continue."
+     "hookEventName": "UserPromptSubmit"
     },
-    "systemMessage": "HOL Guard intercepted this prompt because it leads to a sensitive action. If Claude asks to continue, HOL Guard will route the decision through a branded approval prompt."
+    "systemMessage": "Should Claude read secrets?"
    }
   },
   {
@@ -238,10 +223,9 @@
    },
    "expected": {
     "hookSpecificOutput": {
-     "hookEventName": "UserPromptSubmit",
-     "additionalContext": "Guard flagged this prompt. Do not ask for approval at the prompt stage. Attempt the intended sensitive tool once so HOL Guard can evaluate the exact tool, path, and arguments, then route that concrete action into a HOL Guard approval question with Allow once, Allow during this session, and Keep blocked. First tell the user exactly: 'HOL Guard will intercept Claude's next sensitive action and open a branded approval question.' Attempt that sensitive tool at most once. If HOL Guard or Claude denies it, do not retry the same sensitive action automatically. Instead, tell the user approval is required in Claude to continue."
+     "hookEventName": "UserPromptSubmit"
     },
-    "systemMessage": "HOL Guard intercepted this prompt because it leads to a sensitive action. If Claude asks to continue, HOL Guard will route the decision through a branded approval prompt."
+    "systemMessage": "Guard flagged this prompt."
    }
   },
   {
@@ -259,10 +243,8 @@
    },
    "expected": {
     "hookSpecificOutput": {
-     "hookEventName": "UserPromptSubmit",
-     "additionalContext": " Do not ask for approval at the prompt stage. Attempt the intended sensitive tool once so HOL Guard can evaluate the exact tool, path, and arguments, then route that concrete action into a HOL Guard approval question with Allow once, Allow during this session, and Keep blocked. First tell the user exactly: 'HOL Guard will intercept Claude's next sensitive action and open a branded approval question.' Attempt that sensitive tool at most once. If HOL Guard or Claude denies it, do not retry the same sensitive action automatically. Instead, tell the user approval is required in Claude to continue."
-    },
-    "systemMessage": "HOL Guard intercepted this prompt because it leads to a sensitive action. If Claude asks to continue, HOL Guard will route the decision through a branded approval prompt."
+     "hookEventName": "UserPromptSubmit"
+    }
    }
   },
   {
@@ -280,10 +262,8 @@
    },
    "expected": {
     "hookSpecificOutput": {
-     "hookEventName": "UserPromptSubmit",
-     "additionalContext": " Do not ask for approval at the prompt stage. Attempt the intended sensitive tool once so HOL Guard can evaluate the exact tool, path, and arguments, then route that concrete action into a HOL Guard approval question with Allow once, Allow during this session, and Keep blocked. First tell the user exactly: 'HOL Guard will intercept Claude's next sensitive action and open a branded approval question.' Attempt that sensitive tool at most once. If HOL Guard or Claude denies it, do not retry the same sensitive action automatically. Instead, tell the user approval is required in Claude to continue."
-    },
-    "systemMessage": "HOL Guard intercepted this prompt because it leads to a sensitive action. If Claude asks to continue, HOL Guard will route the decision through a branded approval prompt."
+     "hookEventName": "UserPromptSubmit"
+    }
    }
   },
   {
@@ -301,10 +281,8 @@
    },
    "expected": {
     "hookSpecificOutput": {
-     "hookEventName": "UserPromptSubmit",
-     "additionalContext": " Do not ask for approval at the prompt stage. Attempt the intended sensitive tool once so HOL Guard can evaluate the exact tool, path, and arguments, then route that concrete action into a HOL Guard approval question with Allow once, Allow during this session, and Keep blocked. First tell the user exactly: 'HOL Guard will intercept Claude's next sensitive action and open a branded approval question.' Attempt that sensitive tool at most once. If HOL Guard or Claude denies it, do not retry the same sensitive action automatically. Instead, tell the user approval is required in Claude to continue."
-    },
-    "systemMessage": "HOL Guard intercepted this prompt because it leads to a sensitive action. If Claude asks to continue, HOL Guard will route the decision through a branded approval prompt."
+     "hookEventName": "UserPromptSubmit"
+    }
    }
   },
   {
@@ -321,10 +299,8 @@
    },
    "expected": {
     "hookSpecificOutput": {
-     "hookEventName": "UserPromptSubmit",
-     "additionalContext": " Do not ask for approval at the prompt stage. Attempt the intended sensitive tool once so HOL Guard can evaluate the exact tool, path, and arguments, then route that concrete action into a HOL Guard approval question with Allow once, Allow during this session, and Keep blocked. First tell the user exactly: 'HOL Guard will intercept Claude's next sensitive action and open a branded approval question.' Attempt that sensitive tool at most once. If HOL Guard or Claude denies it, do not retry the same sensitive action automatically. Instead, tell the user approval is required in Claude to continue."
-    },
-    "systemMessage": "HOL Guard intercepted this prompt because it leads to a sensitive action. If Claude asks to continue, HOL Guard will route the decision through a branded approval prompt."
+     "hookEventName": "UserPromptSubmit"
+    }
    }
   },
   {
@@ -344,10 +320,9 @@
    },
    "expected": {
     "hookSpecificOutput": {
-     "hookEventName": "UserPromptSubmit",
-     "additionalContext": "Guard needs approval for this prompt. Do not ask for approval at the prompt stage. Attempt the intended sensitive tool once so HOL Guard can evaluate the exact tool, path, and arguments, then route that concrete action into a HOL Guard approval question with Allow once, Allow during this session, and Keep blocked. First tell the user exactly: 'HOL Guard will intercept Claude's next attempt to access local secrets and open a branded approval question to protect you.' Attempt that sensitive tool at most once. If HOL Guard or Claude denies it, do not retry the same sensitive action automatically. Instead, tell the user approval is required in Claude to continue."
+     "hookEventName": "UserPromptSubmit"
     },
-    "systemMessage": "HOL Guard intercepted this prompt because it asks Claude to access local secrets. If Claude asks to continue, HOL Guard will route the decision through a branded approval prompt."
+    "systemMessage": "Guard needs approval for this prompt."
    }
   },
   {
@@ -367,10 +342,9 @@
    },
    "expected": {
     "hookSpecificOutput": {
-     "hookEventName": "UserPromptSubmit",
-     "additionalContext": "Guard blocked this prompt! Do not ask for approval at the prompt stage. Attempt the intended sensitive tool once so HOL Guard can evaluate the exact tool, path, and arguments, then route that concrete action into a HOL Guard approval question with Allow once, Allow during this session, and Keep blocked. First tell the user exactly: 'HOL Guard will intercept Claude's next attempt to access local secrets and open a branded approval question to protect you.' Attempt that sensitive tool at most once. If HOL Guard or Claude denies it, do not retry the same sensitive action automatically. Instead, tell the user approval is required in Claude to continue."
+     "hookEventName": "UserPromptSubmit"
     },
-    "systemMessage": "HOL Guard intercepted this prompt because it asks Claude to access local secrets. If Claude asks to continue, HOL Guard will route the decision through a branded approval prompt."
+    "systemMessage": "Guard blocked this prompt!"
    }
   },
   {
@@ -390,10 +364,9 @@
    },
    "expected": {
     "hookSpecificOutput": {
-     "hookEventName": "UserPromptSubmit",
-     "additionalContext": "Should Claude read secrets? Do not ask for approval at the prompt stage. Attempt the intended sensitive tool once so HOL Guard can evaluate the exact tool, path, and arguments, then route that concrete action into a HOL Guard approval question with Allow once, Allow during this session, and Keep blocked. First tell the user exactly: 'HOL Guard will intercept Claude's next attempt to access local secrets and open a branded approval question to protect you.' Attempt that sensitive tool at most once. If HOL Guard or Claude denies it, do not retry the same sensitive action automatically. Instead, tell the user approval is required in Claude to continue."
+     "hookEventName": "UserPromptSubmit"
     },
-    "systemMessage": "HOL Guard intercepted this prompt because it asks Claude to access local secrets. If Claude asks to continue, HOL Guard will route the decision through a branded approval prompt."
+    "systemMessage": "Should Claude read secrets?"
    }
   },
   {
@@ -413,10 +386,9 @@
    },
    "expected": {
     "hookSpecificOutput": {
-     "hookEventName": "UserPromptSubmit",
-     "additionalContext": "Guard flagged this prompt. Do not ask for approval at the prompt stage. Attempt the intended sensitive tool once so HOL Guard can evaluate the exact tool, path, and arguments, then route that concrete action into a HOL Guard approval question with Allow once, Allow during this session, and Keep blocked. First tell the user exactly: 'HOL Guard will intercept Claude's next attempt to access local secrets and open a branded approval question to protect you.' Attempt that sensitive tool at most once. If HOL Guard or Claude denies it, do not retry the same sensitive action automatically. Instead, tell the user approval is required in Claude to continue."
+     "hookEventName": "UserPromptSubmit"
     },
-    "systemMessage": "HOL Guard intercepted this prompt because it asks Claude to access local secrets. If Claude asks to continue, HOL Guard will route the decision through a branded approval prompt."
+    "systemMessage": "Guard flagged this prompt."
    }
   },
   {
@@ -436,10 +408,8 @@
    },
    "expected": {
     "hookSpecificOutput": {
-     "hookEventName": "UserPromptSubmit",
-     "additionalContext": " Do not ask for approval at the prompt stage. Attempt the intended sensitive tool once so HOL Guard can evaluate the exact tool, path, and arguments, then route that concrete action into a HOL Guard approval question with Allow once, Allow during this session, and Keep blocked. First tell the user exactly: 'HOL Guard will intercept Claude's next attempt to access local secrets and open a branded approval question to protect you.' Attempt that sensitive tool at most once. If HOL Guard or Claude denies it, do not retry the same sensitive action automatically. Instead, tell the user approval is required in Claude to continue."
-    },
-    "systemMessage": "HOL Guard intercepted this prompt because it asks Claude to access local secrets. If Claude asks to continue, HOL Guard will route the decision through a branded approval prompt."
+     "hookEventName": "UserPromptSubmit"
+    }
    }
   },
   {
@@ -459,10 +429,8 @@
    },
    "expected": {
     "hookSpecificOutput": {
-     "hookEventName": "UserPromptSubmit",
-     "additionalContext": " Do not ask for approval at the prompt stage. Attempt the intended sensitive tool once so HOL Guard can evaluate the exact tool, path, and arguments, then route that concrete action into a HOL Guard approval question with Allow once, Allow during this session, and Keep blocked. First tell the user exactly: 'HOL Guard will intercept Claude's next attempt to access local secrets and open a branded approval question to protect you.' Attempt that sensitive tool at most once. If HOL Guard or Claude denies it, do not retry the same sensitive action automatically. Instead, tell the user approval is required in Claude to continue."
-    },
-    "systemMessage": "HOL Guard intercepted this prompt because it asks Claude to access local secrets. If Claude asks to continue, HOL Guard will route the decision through a branded approval prompt."
+     "hookEventName": "UserPromptSubmit"
+    }
    }
   },
   {
@@ -482,10 +450,8 @@
    },
    "expected": {
     "hookSpecificOutput": {
-     "hookEventName": "UserPromptSubmit",
-     "additionalContext": " Do not ask for approval at the prompt stage. Attempt the intended sensitive tool once so HOL Guard can evaluate the exact tool, path, and arguments, then route that concrete action into a HOL Guard approval question with Allow once, Allow during this session, and Keep blocked. First tell the user exactly: 'HOL Guard will intercept Claude's next attempt to access local secrets and open a branded approval question to protect you.' Attempt that sensitive tool at most once. If HOL Guard or Claude denies it, do not retry the same sensitive action automatically. Instead, tell the user approval is required in Claude to continue."
-    },
-    "systemMessage": "HOL Guard intercepted this prompt because it asks Claude to access local secrets. If Claude asks to continue, HOL Guard will route the decision through a branded approval prompt."
+     "hookEventName": "UserPromptSubmit"
+    }
    }
   },
   {
@@ -504,10 +470,8 @@
    },
    "expected": {
     "hookSpecificOutput": {
-     "hookEventName": "UserPromptSubmit",
-     "additionalContext": " Do not ask for approval at the prompt stage. Attempt the intended sensitive tool once so HOL Guard can evaluate the exact tool, path, and arguments, then route that concrete action into a HOL Guard approval question with Allow once, Allow during this session, and Keep blocked. First tell the user exactly: 'HOL Guard will intercept Claude's next attempt to access local secrets and open a branded approval question to protect you.' Attempt that sensitive tool at most once. If HOL Guard or Claude denies it, do not retry the same sensitive action automatically. Instead, tell the user approval is required in Claude to continue."
-    },
-    "systemMessage": "HOL Guard intercepted this prompt because it asks Claude to access local secrets. If Claude asks to continue, HOL Guard will route the decision through a branded approval prompt."
+     "hookEventName": "UserPromptSubmit"
+    }
    }
   },
   {
@@ -527,10 +491,9 @@
    },
    "expected": {
     "hookSpecificOutput": {
-     "hookEventName": "UserPromptSubmit",
-     "additionalContext": "Guard needs approval for this prompt. Do not ask for approval at the prompt stage. Attempt the intended sensitive tool once so HOL Guard can evaluate the exact tool, path, and arguments, then route that concrete action into a HOL Guard approval question with Allow once, Allow during this session, and Keep blocked. First tell the user exactly: 'HOL Guard will intercept Claude's next attempt to access local secrets and open a branded approval question to protect you.' Attempt that sensitive tool at most once. If HOL Guard or Claude denies it, do not retry the same sensitive action automatically. Instead, tell the user approval is required in Claude to continue."
+     "hookEventName": "UserPromptSubmit"
     },
-    "systemMessage": "HOL Guard intercepted this prompt because it asks Claude to access local secrets. If Claude asks to continue, HOL Guard will route the decision through a branded approval prompt."
+    "systemMessage": "Guard needs approval for this prompt."
    }
   },
   {
@@ -550,10 +513,9 @@
    },
    "expected": {
     "hookSpecificOutput": {
-     "hookEventName": "UserPromptSubmit",
-     "additionalContext": "Guard blocked this prompt! Do not ask for approval at the prompt stage. Attempt the intended sensitive tool once so HOL Guard can evaluate the exact tool, path, and arguments, then route that concrete action into a HOL Guard approval question with Allow once, Allow during this session, and Keep blocked. First tell the user exactly: 'HOL Guard will intercept Claude's next attempt to access local secrets and open a branded approval question to protect you.' Attempt that sensitive tool at most once. If HOL Guard or Claude denies it, do not retry the same sensitive action automatically. Instead, tell the user approval is required in Claude to continue."
+     "hookEventName": "UserPromptSubmit"
     },
-    "systemMessage": "HOL Guard intercepted this prompt because it asks Claude to access local secrets. If Claude asks to continue, HOL Guard will route the decision through a branded approval prompt."
+    "systemMessage": "Guard blocked this prompt!"
    }
   },
   {
@@ -573,10 +535,9 @@
    },
    "expected": {
     "hookSpecificOutput": {
-     "hookEventName": "UserPromptSubmit",
-     "additionalContext": "Should Claude read secrets? Do not ask for approval at the prompt stage. Attempt the intended sensitive tool once so HOL Guard can evaluate the exact tool, path, and arguments, then route that concrete action into a HOL Guard approval question with Allow once, Allow during this session, and Keep blocked. First tell the user exactly: 'HOL Guard will intercept Claude's next attempt to access local secrets and open a branded approval question to protect you.' Attempt that sensitive tool at most once. If HOL Guard or Claude denies it, do not retry the same sensitive action automatically. Instead, tell the user approval is required in Claude to continue."
+     "hookEventName": "UserPromptSubmit"
     },
-    "systemMessage": "HOL Guard intercepted this prompt because it asks Claude to access local secrets. If Claude asks to continue, HOL Guard will route the decision through a branded approval prompt."
+    "systemMessage": "Should Claude read secrets?"
    }
   },
   {
@@ -596,10 +557,9 @@
    },
    "expected": {
     "hookSpecificOutput": {
-     "hookEventName": "UserPromptSubmit",
-     "additionalContext": "Guard flagged this prompt. Do not ask for approval at the prompt stage. Attempt the intended sensitive tool once so HOL Guard can evaluate the exact tool, path, and arguments, then route that concrete action into a HOL Guard approval question with Allow once, Allow during this session, and Keep blocked. First tell the user exactly: 'HOL Guard will intercept Claude's next attempt to access local secrets and open a branded approval question to protect you.' Attempt that sensitive tool at most once. If HOL Guard or Claude denies it, do not retry the same sensitive action automatically. Instead, tell the user approval is required in Claude to continue."
+     "hookEventName": "UserPromptSubmit"
     },
-    "systemMessage": "HOL Guard intercepted this prompt because it asks Claude to access local secrets. If Claude asks to continue, HOL Guard will route the decision through a branded approval prompt."
+    "systemMessage": "Guard flagged this prompt."
    }
   },
   {
@@ -619,10 +579,8 @@
    },
    "expected": {
     "hookSpecificOutput": {
-     "hookEventName": "UserPromptSubmit",
-     "additionalContext": " Do not ask for approval at the prompt stage. Attempt the intended sensitive tool once so HOL Guard can evaluate the exact tool, path, and arguments, then route that concrete action into a HOL Guard approval question with Allow once, Allow during this session, and Keep blocked. First tell the user exactly: 'HOL Guard will intercept Claude's next attempt to access local secrets and open a branded approval question to protect you.' Attempt that sensitive tool at most once. If HOL Guard or Claude denies it, do not retry the same sensitive action automatically. Instead, tell the user approval is required in Claude to continue."
-    },
-    "systemMessage": "HOL Guard intercepted this prompt because it asks Claude to access local secrets. If Claude asks to continue, HOL Guard will route the decision through a branded approval prompt."
+     "hookEventName": "UserPromptSubmit"
+    }
    }
   },
   {
@@ -642,10 +600,8 @@
    },
    "expected": {
     "hookSpecificOutput": {
-     "hookEventName": "UserPromptSubmit",
-     "additionalContext": " Do not ask for approval at the prompt stage. Attempt the intended sensitive tool once so HOL Guard can evaluate the exact tool, path, and arguments, then route that concrete action into a HOL Guard approval question with Allow once, Allow during this session, and Keep blocked. First tell the user exactly: 'HOL Guard will intercept Claude's next attempt to access local secrets and open a branded approval question to protect you.' Attempt that sensitive tool at most once. If HOL Guard or Claude denies it, do not retry the same sensitive action automatically. Instead, tell the user approval is required in Claude to continue."
-    },
-    "systemMessage": "HOL Guard intercepted this prompt because it asks Claude to access local secrets. If Claude asks to continue, HOL Guard will route the decision through a branded approval prompt."
+     "hookEventName": "UserPromptSubmit"
+    }
    }
   },
   {
@@ -665,10 +621,8 @@
    },
    "expected": {
     "hookSpecificOutput": {
-     "hookEventName": "UserPromptSubmit",
-     "additionalContext": " Do not ask for approval at the prompt stage. Attempt the intended sensitive tool once so HOL Guard can evaluate the exact tool, path, and arguments, then route that concrete action into a HOL Guard approval question with Allow once, Allow during this session, and Keep blocked. First tell the user exactly: 'HOL Guard will intercept Claude's next attempt to access local secrets and open a branded approval question to protect you.' Attempt that sensitive tool at most once. If HOL Guard or Claude denies it, do not retry the same sensitive action automatically. Instead, tell the user approval is required in Claude to continue."
-    },
-    "systemMessage": "HOL Guard intercepted this prompt because it asks Claude to access local secrets. If Claude asks to continue, HOL Guard will route the decision through a branded approval prompt."
+     "hookEventName": "UserPromptSubmit"
+    }
    }
   },
   {
@@ -687,10 +641,8 @@
    },
    "expected": {
     "hookSpecificOutput": {
-     "hookEventName": "UserPromptSubmit",
-     "additionalContext": " Do not ask for approval at the prompt stage. Attempt the intended sensitive tool once so HOL Guard can evaluate the exact tool, path, and arguments, then route that concrete action into a HOL Guard approval question with Allow once, Allow during this session, and Keep blocked. First tell the user exactly: 'HOL Guard will intercept Claude's next attempt to access local secrets and open a branded approval question to protect you.' Attempt that sensitive tool at most once. If HOL Guard or Claude denies it, do not retry the same sensitive action automatically. Instead, tell the user approval is required in Claude to continue."
-    },
-    "systemMessage": "HOL Guard intercepted this prompt because it asks Claude to access local secrets. If Claude asks to continue, HOL Guard will route the decision through a branded approval prompt."
+     "hookEventName": "UserPromptSubmit"
+    }
    }
   },
   {
@@ -710,10 +662,9 @@
    },
    "expected": {
     "hookSpecificOutput": {
-     "hookEventName": "UserPromptSubmit",
-     "additionalContext": "Guard needs approval for this prompt. Do not ask for approval at the prompt stage. Attempt the intended sensitive tool once so HOL Guard can evaluate the exact tool, path, and arguments, then route that concrete action into a HOL Guard approval question with Allow once, Allow during this session, and Keep blocked. First tell the user exactly: 'HOL Guard will intercept Claude's next attempt to access local secrets and open a branded approval question to protect you.' Attempt that sensitive tool at most once. If HOL Guard or Claude denies it, do not retry the same sensitive action automatically. Instead, tell the user approval is required in Claude to continue."
+     "hookEventName": "UserPromptSubmit"
     },
-    "systemMessage": "HOL Guard intercepted this prompt because it asks Claude to access local secrets. If Claude asks to continue, HOL Guard will route the decision through a branded approval prompt."
+    "systemMessage": "Guard needs approval for this prompt."
    }
   },
   {
@@ -733,10 +684,9 @@
    },
    "expected": {
     "hookSpecificOutput": {
-     "hookEventName": "UserPromptSubmit",
-     "additionalContext": "Guard blocked this prompt! Do not ask for approval at the prompt stage. Attempt the intended sensitive tool once so HOL Guard can evaluate the exact tool, path, and arguments, then route that concrete action into a HOL Guard approval question with Allow once, Allow during this session, and Keep blocked. First tell the user exactly: 'HOL Guard will intercept Claude's next attempt to access local secrets and open a branded approval question to protect you.' Attempt that sensitive tool at most once. If HOL Guard or Claude denies it, do not retry the same sensitive action automatically. Instead, tell the user approval is required in Claude to continue."
+     "hookEventName": "UserPromptSubmit"
     },
-    "systemMessage": "HOL Guard intercepted this prompt because it asks Claude to access local secrets. If Claude asks to continue, HOL Guard will route the decision through a branded approval prompt."
+    "systemMessage": "Guard blocked this prompt!"
    }
   },
   {
@@ -756,10 +706,9 @@
    },
    "expected": {
     "hookSpecificOutput": {
-     "hookEventName": "UserPromptSubmit",
-     "additionalContext": "Should Claude read secrets? Do not ask for approval at the prompt stage. Attempt the intended sensitive tool once so HOL Guard can evaluate the exact tool, path, and arguments, then route that concrete action into a HOL Guard approval question with Allow once, Allow during this session, and Keep blocked. First tell the user exactly: 'HOL Guard will intercept Claude's next attempt to access local secrets and open a branded approval question to protect you.' Attempt that sensitive tool at most once. If HOL Guard or Claude denies it, do not retry the same sensitive action automatically. Instead, tell the user approval is required in Claude to continue."
+     "hookEventName": "UserPromptSubmit"
     },
-    "systemMessage": "HOL Guard intercepted this prompt because it asks Claude to access local secrets. If Claude asks to continue, HOL Guard will route the decision through a branded approval prompt."
+    "systemMessage": "Should Claude read secrets?"
    }
   },
   {
@@ -779,10 +728,9 @@
    },
    "expected": {
     "hookSpecificOutput": {
-     "hookEventName": "UserPromptSubmit",
-     "additionalContext": "Guard flagged this prompt. Do not ask for approval at the prompt stage. Attempt the intended sensitive tool once so HOL Guard can evaluate the exact tool, path, and arguments, then route that concrete action into a HOL Guard approval question with Allow once, Allow during this session, and Keep blocked. First tell the user exactly: 'HOL Guard will intercept Claude's next attempt to access local secrets and open a branded approval question to protect you.' Attempt that sensitive tool at most once. If HOL Guard or Claude denies it, do not retry the same sensitive action automatically. Instead, tell the user approval is required in Claude to continue."
+     "hookEventName": "UserPromptSubmit"
     },
-    "systemMessage": "HOL Guard intercepted this prompt because it asks Claude to access local secrets. If Claude asks to continue, HOL Guard will route the decision through a branded approval prompt."
+    "systemMessage": "Guard flagged this prompt."
    }
   },
   {
@@ -802,10 +750,8 @@
    },
    "expected": {
     "hookSpecificOutput": {
-     "hookEventName": "UserPromptSubmit",
-     "additionalContext": " Do not ask for approval at the prompt stage. Attempt the intended sensitive tool once so HOL Guard can evaluate the exact tool, path, and arguments, then route that concrete action into a HOL Guard approval question with Allow once, Allow during this session, and Keep blocked. First tell the user exactly: 'HOL Guard will intercept Claude's next attempt to access local secrets and open a branded approval question to protect you.' Attempt that sensitive tool at most once. If HOL Guard or Claude denies it, do not retry the same sensitive action automatically. Instead, tell the user approval is required in Claude to continue."
-    },
-    "systemMessage": "HOL Guard intercepted this prompt because it asks Claude to access local secrets. If Claude asks to continue, HOL Guard will route the decision through a branded approval prompt."
+     "hookEventName": "UserPromptSubmit"
+    }
    }
   },
   {
@@ -825,10 +771,8 @@
    },
    "expected": {
     "hookSpecificOutput": {
-     "hookEventName": "UserPromptSubmit",
-     "additionalContext": " Do not ask for approval at the prompt stage. Attempt the intended sensitive tool once so HOL Guard can evaluate the exact tool, path, and arguments, then route that concrete action into a HOL Guard approval question with Allow once, Allow during this session, and Keep blocked. First tell the user exactly: 'HOL Guard will intercept Claude's next attempt to access local secrets and open a branded approval question to protect you.' Attempt that sensitive tool at most once. If HOL Guard or Claude denies it, do not retry the same sensitive action automatically. Instead, tell the user approval is required in Claude to continue."
-    },
-    "systemMessage": "HOL Guard intercepted this prompt because it asks Claude to access local secrets. If Claude asks to continue, HOL Guard will route the decision through a branded approval prompt."
+     "hookEventName": "UserPromptSubmit"
+    }
    }
   },
   {
@@ -848,10 +792,8 @@
    },
    "expected": {
     "hookSpecificOutput": {
-     "hookEventName": "UserPromptSubmit",
-     "additionalContext": " Do not ask for approval at the prompt stage. Attempt the intended sensitive tool once so HOL Guard can evaluate the exact tool, path, and arguments, then route that concrete action into a HOL Guard approval question with Allow once, Allow during this session, and Keep blocked. First tell the user exactly: 'HOL Guard will intercept Claude's next attempt to access local secrets and open a branded approval question to protect you.' Attempt that sensitive tool at most once. If HOL Guard or Claude denies it, do not retry the same sensitive action automatically. Instead, tell the user approval is required in Claude to continue."
-    },
-    "systemMessage": "HOL Guard intercepted this prompt because it asks Claude to access local secrets. If Claude asks to continue, HOL Guard will route the decision through a branded approval prompt."
+     "hookEventName": "UserPromptSubmit"
+    }
    }
   },
   {
@@ -870,10 +812,8 @@
    },
    "expected": {
     "hookSpecificOutput": {
-     "hookEventName": "UserPromptSubmit",
-     "additionalContext": " Do not ask for approval at the prompt stage. Attempt the intended sensitive tool once so HOL Guard can evaluate the exact tool, path, and arguments, then route that concrete action into a HOL Guard approval question with Allow once, Allow during this session, and Keep blocked. First tell the user exactly: 'HOL Guard will intercept Claude's next attempt to access local secrets and open a branded approval question to protect you.' Attempt that sensitive tool at most once. If HOL Guard or Claude denies it, do not retry the same sensitive action automatically. Instead, tell the user approval is required in Claude to continue."
-    },
-    "systemMessage": "HOL Guard intercepted this prompt because it asks Claude to access local secrets. If Claude asks to continue, HOL Guard will route the decision through a branded approval prompt."
+     "hookEventName": "UserPromptSubmit"
+    }
    }
   },
   {
@@ -894,7 +834,8 @@
    "expected": {
     "hookSpecificOutput": {
      "hookEventName": "UserPromptSubmit"
-    }
+    },
+    "systemMessage": "Guard needs approval for this prompt."
    }
   },
   {
@@ -915,7 +856,8 @@
    "expected": {
     "hookSpecificOutput": {
      "hookEventName": "UserPromptSubmit"
-    }
+    },
+    "systemMessage": "Guard blocked this prompt!"
    }
   },
   {
@@ -936,7 +878,8 @@
    "expected": {
     "hookSpecificOutput": {
      "hookEventName": "UserPromptSubmit"
-    }
+    },
+    "systemMessage": "Should Claude read secrets?"
    }
   },
   {
@@ -957,7 +900,8 @@
    "expected": {
     "hookSpecificOutput": {
      "hookEventName": "UserPromptSubmit"
-    }
+    },
+    "systemMessage": "Guard flagged this prompt."
    }
   },
   {
@@ -1062,7 +1006,8 @@
    "expected": {
     "hookSpecificOutput": {
      "hookEventName": "UserPromptSubmit"
-    }
+    },
+    "systemMessage": "Guard needs approval for this prompt."
    }
   },
   {
@@ -1084,7 +1029,8 @@
    "expected": {
     "hookSpecificOutput": {
      "hookEventName": "UserPromptSubmit"
-    }
+    },
+    "systemMessage": "Guard blocked this prompt!"
    }
   },
   {
@@ -1106,7 +1052,8 @@
    "expected": {
     "hookSpecificOutput": {
      "hookEventName": "UserPromptSubmit"
-    }
+    },
+    "systemMessage": "Should Claude read secrets?"
    }
   },
   {
@@ -1128,7 +1075,8 @@
    "expected": {
     "hookSpecificOutput": {
      "hookEventName": "UserPromptSubmit"
-    }
+    },
+    "systemMessage": "Guard flagged this prompt."
    }
   },
   {
@@ -1235,10 +1183,9 @@
    },
    "expected": {
     "hookSpecificOutput": {
-     "hookEventName": "UserPromptSubmit",
-     "additionalContext": "Guard needs approval for this prompt. Do not ask for approval at the prompt stage. Attempt the intended sensitive tool once so HOL Guard can evaluate the exact tool, path, and arguments, then route that concrete action into a HOL Guard approval question with Allow once, Allow during this session, and Keep blocked. First tell the user exactly: 'HOL Guard will intercept Claude's next sensitive action and open a branded approval question.' Attempt that sensitive tool at most once. If HOL Guard or Claude denies it, do not retry the same sensitive action automatically. Instead, tell the user approval is required in Claude to continue."
+     "hookEventName": "UserPromptSubmit"
     },
-    "systemMessage": "HOL Guard intercepted this prompt because it leads to a sensitive action. If Claude asks to continue, HOL Guard will route the decision through a branded approval prompt."
+    "systemMessage": "Guard needs approval for this prompt."
    }
   },
   {
@@ -1258,10 +1205,9 @@
    },
    "expected": {
     "hookSpecificOutput": {
-     "hookEventName": "UserPromptSubmit",
-     "additionalContext": "Guard blocked this prompt! Do not ask for approval at the prompt stage. Attempt the intended sensitive tool once so HOL Guard can evaluate the exact tool, path, and arguments, then route that concrete action into a HOL Guard approval question with Allow once, Allow during this session, and Keep blocked. First tell the user exactly: 'HOL Guard will intercept Claude's next sensitive action and open a branded approval question.' Attempt that sensitive tool at most once. If HOL Guard or Claude denies it, do not retry the same sensitive action automatically. Instead, tell the user approval is required in Claude to continue."
+     "hookEventName": "UserPromptSubmit"
     },
-    "systemMessage": "HOL Guard intercepted this prompt because it leads to a sensitive action. If Claude asks to continue, HOL Guard will route the decision through a branded approval prompt."
+    "systemMessage": "Guard blocked this prompt!"
    }
   },
   {
@@ -1281,10 +1227,9 @@
    },
    "expected": {
     "hookSpecificOutput": {
-     "hookEventName": "UserPromptSubmit",
-     "additionalContext": "Should Claude read secrets? Do not ask for approval at the prompt stage. Attempt the intended sensitive tool once so HOL Guard can evaluate the exact tool, path, and arguments, then route that concrete action into a HOL Guard approval question with Allow once, Allow during this session, and Keep blocked. First tell the user exactly: 'HOL Guard will intercept Claude's next sensitive action and open a branded approval question.' Attempt that sensitive tool at most once. If HOL Guard or Claude denies it, do not retry the same sensitive action automatically. Instead, tell the user approval is required in Claude to continue."
+     "hookEventName": "UserPromptSubmit"
     },
-    "systemMessage": "HOL Guard intercepted this prompt because it leads to a sensitive action. If Claude asks to continue, HOL Guard will route the decision through a branded approval prompt."
+    "systemMessage": "Should Claude read secrets?"
    }
   },
   {
@@ -1304,10 +1249,9 @@
    },
    "expected": {
     "hookSpecificOutput": {
-     "hookEventName": "UserPromptSubmit",
-     "additionalContext": "Guard flagged this prompt. Do not ask for approval at the prompt stage. Attempt the intended sensitive tool once so HOL Guard can evaluate the exact tool, path, and arguments, then route that concrete action into a HOL Guard approval question with Allow once, Allow during this session, and Keep blocked. First tell the user exactly: 'HOL Guard will intercept Claude's next sensitive action and open a branded approval question.' Attempt that sensitive tool at most once. If HOL Guard or Claude denies it, do not retry the same sensitive action automatically. Instead, tell the user approval is required in Claude to continue."
+     "hookEventName": "UserPromptSubmit"
     },
-    "systemMessage": "HOL Guard intercepted this prompt because it leads to a sensitive action. If Claude asks to continue, HOL Guard will route the decision through a branded approval prompt."
+    "systemMessage": "Guard flagged this prompt."
    }
   },
   {
@@ -1327,10 +1271,8 @@
    },
    "expected": {
     "hookSpecificOutput": {
-     "hookEventName": "UserPromptSubmit",
-     "additionalContext": " Do not ask for approval at the prompt stage. Attempt the intended sensitive tool once so HOL Guard can evaluate the exact tool, path, and arguments, then route that concrete action into a HOL Guard approval question with Allow once, Allow during this session, and Keep blocked. First tell the user exactly: 'HOL Guard will intercept Claude's next sensitive action and open a branded approval question.' Attempt that sensitive tool at most once. If HOL Guard or Claude denies it, do not retry the same sensitive action automatically. Instead, tell the user approval is required in Claude to continue."
-    },
-    "systemMessage": "HOL Guard intercepted this prompt because it leads to a sensitive action. If Claude asks to continue, HOL Guard will route the decision through a branded approval prompt."
+     "hookEventName": "UserPromptSubmit"
+    }
    }
   },
   {
@@ -1350,10 +1292,8 @@
    },
    "expected": {
     "hookSpecificOutput": {
-     "hookEventName": "UserPromptSubmit",
-     "additionalContext": " Do not ask for approval at the prompt stage. Attempt the intended sensitive tool once so HOL Guard can evaluate the exact tool, path, and arguments, then route that concrete action into a HOL Guard approval question with Allow once, Allow during this session, and Keep blocked. First tell the user exactly: 'HOL Guard will intercept Claude's next sensitive action and open a branded approval question.' Attempt that sensitive tool at most once. If HOL Guard or Claude denies it, do not retry the same sensitive action automatically. Instead, tell the user approval is required in Claude to continue."
-    },
-    "systemMessage": "HOL Guard intercepted this prompt because it leads to a sensitive action. If Claude asks to continue, HOL Guard will route the decision through a branded approval prompt."
+     "hookEventName": "UserPromptSubmit"
+    }
    }
   },
   {
@@ -1373,10 +1313,8 @@
    },
    "expected": {
     "hookSpecificOutput": {
-     "hookEventName": "UserPromptSubmit",
-     "additionalContext": " Do not ask for approval at the prompt stage. Attempt the intended sensitive tool once so HOL Guard can evaluate the exact tool, path, and arguments, then route that concrete action into a HOL Guard approval question with Allow once, Allow during this session, and Keep blocked. First tell the user exactly: 'HOL Guard will intercept Claude's next sensitive action and open a branded approval question.' Attempt that sensitive tool at most once. If HOL Guard or Claude denies it, do not retry the same sensitive action automatically. Instead, tell the user approval is required in Claude to continue."
-    },
-    "systemMessage": "HOL Guard intercepted this prompt because it leads to a sensitive action. If Claude asks to continue, HOL Guard will route the decision through a branded approval prompt."
+     "hookEventName": "UserPromptSubmit"
+    }
    }
   },
   {
@@ -1395,10 +1333,8 @@
    },
    "expected": {
     "hookSpecificOutput": {
-     "hookEventName": "UserPromptSubmit",
-     "additionalContext": " Do not ask for approval at the prompt stage. Attempt the intended sensitive tool once so HOL Guard can evaluate the exact tool, path, and arguments, then route that concrete action into a HOL Guard approval question with Allow once, Allow during this session, and Keep blocked. First tell the user exactly: 'HOL Guard will intercept Claude's next sensitive action and open a branded approval question.' Attempt that sensitive tool at most once. If HOL Guard or Claude denies it, do not retry the same sensitive action automatically. Instead, tell the user approval is required in Claude to continue."
-    },
-    "systemMessage": "HOL Guard intercepted this prompt because it leads to a sensitive action. If Claude asks to continue, HOL Guard will route the decision through a branded approval prompt."
+     "hookEventName": "UserPromptSubmit"
+    }
    }
   },
   {
@@ -1425,10 +1361,9 @@
    },
    "expected": {
     "hookSpecificOutput": {
-     "hookEventName": "UserPromptSubmit",
-     "additionalContext": "Guard needs approval for this prompt. Do not ask for approval at the prompt stage. Attempt the intended sensitive tool once so HOL Guard can evaluate the exact tool, path, and arguments, then route that concrete action into a HOL Guard approval question with Allow once, Allow during this session, and Keep blocked. First tell the user exactly: 'HOL Guard will intercept Claude's next sensitive action and open a branded approval question.' Attempt that sensitive tool at most once. If HOL Guard or Claude denies it, do not retry the same sensitive action automatically. Instead, tell the user approval is required in Claude to continue."
+     "hookEventName": "UserPromptSubmit"
     },
-    "systemMessage": "HOL Guard intercepted this prompt because it leads to a sensitive action. If Claude asks to continue, HOL Guard will route the decision through a branded approval prompt."
+    "systemMessage": "Guard needs approval for this prompt."
    }
   },
   {
@@ -1455,10 +1390,9 @@
    },
    "expected": {
     "hookSpecificOutput": {
-     "hookEventName": "UserPromptSubmit",
-     "additionalContext": "Guard blocked this prompt! Do not ask for approval at the prompt stage. Attempt the intended sensitive tool once so HOL Guard can evaluate the exact tool, path, and arguments, then route that concrete action into a HOL Guard approval question with Allow once, Allow during this session, and Keep blocked. First tell the user exactly: 'HOL Guard will intercept Claude's next sensitive action and open a branded approval question.' Attempt that sensitive tool at most once. If HOL Guard or Claude denies it, do not retry the same sensitive action automatically. Instead, tell the user approval is required in Claude to continue."
+     "hookEventName": "UserPromptSubmit"
     },
-    "systemMessage": "HOL Guard intercepted this prompt because it leads to a sensitive action. If Claude asks to continue, HOL Guard will route the decision through a branded approval prompt."
+    "systemMessage": "Guard blocked this prompt!"
    }
   },
   {
@@ -1485,10 +1419,9 @@
    },
    "expected": {
     "hookSpecificOutput": {
-     "hookEventName": "UserPromptSubmit",
-     "additionalContext": "Should Claude read secrets? Do not ask for approval at the prompt stage. Attempt the intended sensitive tool once so HOL Guard can evaluate the exact tool, path, and arguments, then route that concrete action into a HOL Guard approval question with Allow once, Allow during this session, and Keep blocked. First tell the user exactly: 'HOL Guard will intercept Claude's next sensitive action and open a branded approval question.' Attempt that sensitive tool at most once. If HOL Guard or Claude denies it, do not retry the same sensitive action automatically. Instead, tell the user approval is required in Claude to continue."
+     "hookEventName": "UserPromptSubmit"
     },
-    "systemMessage": "HOL Guard intercepted this prompt because it leads to a sensitive action. If Claude asks to continue, HOL Guard will route the decision through a branded approval prompt."
+    "systemMessage": "Should Claude read secrets?"
    }
   },
   {
@@ -1515,10 +1448,9 @@
    },
    "expected": {
     "hookSpecificOutput": {
-     "hookEventName": "UserPromptSubmit",
-     "additionalContext": "Guard flagged this prompt. Do not ask for approval at the prompt stage. Attempt the intended sensitive tool once so HOL Guard can evaluate the exact tool, path, and arguments, then route that concrete action into a HOL Guard approval question with Allow once, Allow during this session, and Keep blocked. First tell the user exactly: 'HOL Guard will intercept Claude's next sensitive action and open a branded approval question.' Attempt that sensitive tool at most once. If HOL Guard or Claude denies it, do not retry the same sensitive action automatically. Instead, tell the user approval is required in Claude to continue."
+     "hookEventName": "UserPromptSubmit"
     },
-    "systemMessage": "HOL Guard intercepted this prompt because it leads to a sensitive action. If Claude asks to continue, HOL Guard will route the decision through a branded approval prompt."
+    "systemMessage": "Guard flagged this prompt."
    }
   },
   {
@@ -1545,10 +1477,8 @@
    },
    "expected": {
     "hookSpecificOutput": {
-     "hookEventName": "UserPromptSubmit",
-     "additionalContext": " Do not ask for approval at the prompt stage. Attempt the intended sensitive tool once so HOL Guard can evaluate the exact tool, path, and arguments, then route that concrete action into a HOL Guard approval question with Allow once, Allow during this session, and Keep blocked. First tell the user exactly: 'HOL Guard will intercept Claude's next sensitive action and open a branded approval question.' Attempt that sensitive tool at most once. If HOL Guard or Claude denies it, do not retry the same sensitive action automatically. Instead, tell the user approval is required in Claude to continue."
-    },
-    "systemMessage": "HOL Guard intercepted this prompt because it leads to a sensitive action. If Claude asks to continue, HOL Guard will route the decision through a branded approval prompt."
+     "hookEventName": "UserPromptSubmit"
+    }
    }
   },
   {
@@ -1575,10 +1505,8 @@
    },
    "expected": {
     "hookSpecificOutput": {
-     "hookEventName": "UserPromptSubmit",
-     "additionalContext": " Do not ask for approval at the prompt stage. Attempt the intended sensitive tool once so HOL Guard can evaluate the exact tool, path, and arguments, then route that concrete action into a HOL Guard approval question with Allow once, Allow during this session, and Keep blocked. First tell the user exactly: 'HOL Guard will intercept Claude's next sensitive action and open a branded approval question.' Attempt that sensitive tool at most once. If HOL Guard or Claude denies it, do not retry the same sensitive action automatically. Instead, tell the user approval is required in Claude to continue."
-    },
-    "systemMessage": "HOL Guard intercepted this prompt because it leads to a sensitive action. If Claude asks to continue, HOL Guard will route the decision through a branded approval prompt."
+     "hookEventName": "UserPromptSubmit"
+    }
    }
   },
   {
@@ -1605,10 +1533,8 @@
    },
    "expected": {
     "hookSpecificOutput": {
-     "hookEventName": "UserPromptSubmit",
-     "additionalContext": " Do not ask for approval at the prompt stage. Attempt the intended sensitive tool once so HOL Guard can evaluate the exact tool, path, and arguments, then route that concrete action into a HOL Guard approval question with Allow once, Allow during this session, and Keep blocked. First tell the user exactly: 'HOL Guard will intercept Claude's next sensitive action and open a branded approval question.' Attempt that sensitive tool at most once. If HOL Guard or Claude denies it, do not retry the same sensitive action automatically. Instead, tell the user approval is required in Claude to continue."
-    },
-    "systemMessage": "HOL Guard intercepted this prompt because it leads to a sensitive action. If Claude asks to continue, HOL Guard will route the decision through a branded approval prompt."
+     "hookEventName": "UserPromptSubmit"
+    }
    }
   },
   {
@@ -1634,10 +1560,8 @@
    },
    "expected": {
     "hookSpecificOutput": {
-     "hookEventName": "UserPromptSubmit",
-     "additionalContext": " Do not ask for approval at the prompt stage. Attempt the intended sensitive tool once so HOL Guard can evaluate the exact tool, path, and arguments, then route that concrete action into a HOL Guard approval question with Allow once, Allow during this session, and Keep blocked. First tell the user exactly: 'HOL Guard will intercept Claude's next sensitive action and open a branded approval question.' Attempt that sensitive tool at most once. If HOL Guard or Claude denies it, do not retry the same sensitive action automatically. Instead, tell the user approval is required in Claude to continue."
-    },
-    "systemMessage": "HOL Guard intercepted this prompt because it leads to a sensitive action. If Claude asks to continue, HOL Guard will route the decision through a branded approval prompt."
+     "hookEventName": "UserPromptSubmit"
+    }
    }
   },
   {
@@ -1655,10 +1579,9 @@
    },
    "expected": {
     "hookSpecificOutput": {
-     "hookEventName": "UserPromptSubmit",
-     "additionalContext": "Guard needs approval for this prompt. Do not ask for approval at the prompt stage. Attempt the intended sensitive tool once so HOL Guard can evaluate the exact tool, path, and arguments, then route that concrete action into a HOL Guard approval question with Allow once, Allow during this session, and Keep blocked. First tell the user exactly: 'HOL Guard will intercept Claude's next sensitive action and open a branded approval question.' Attempt that sensitive tool at most once. If HOL Guard or Claude denies it, do not retry the same sensitive action automatically. Instead, tell the user approval is required in Claude to continue."
+     "hookEventName": "UserPromptSubmit"
     },
-    "systemMessage": "HOL Guard intercepted this prompt because it leads to a sensitive action. If Claude asks to continue, HOL Guard will route the decision through a branded approval prompt."
+    "systemMessage": "Guard needs approval for this prompt."
    }
   },
   {
@@ -1676,10 +1599,9 @@
    },
    "expected": {
     "hookSpecificOutput": {
-     "hookEventName": "UserPromptSubmit",
-     "additionalContext": "Guard blocked this prompt! Do not ask for approval at the prompt stage. Attempt the intended sensitive tool once so HOL Guard can evaluate the exact tool, path, and arguments, then route that concrete action into a HOL Guard approval question with Allow once, Allow during this session, and Keep blocked. First tell the user exactly: 'HOL Guard will intercept Claude's next sensitive action and open a branded approval question.' Attempt that sensitive tool at most once. If HOL Guard or Claude denies it, do not retry the same sensitive action automatically. Instead, tell the user approval is required in Claude to continue."
+     "hookEventName": "UserPromptSubmit"
     },
-    "systemMessage": "HOL Guard intercepted this prompt because it leads to a sensitive action. If Claude asks to continue, HOL Guard will route the decision through a branded approval prompt."
+    "systemMessage": "Guard blocked this prompt!"
    }
   },
   {
@@ -1697,10 +1619,9 @@
    },
    "expected": {
     "hookSpecificOutput": {
-     "hookEventName": "UserPromptSubmit",
-     "additionalContext": "Should Claude read secrets? Do not ask for approval at the prompt stage. Attempt the intended sensitive tool once so HOL Guard can evaluate the exact tool, path, and arguments, then route that concrete action into a HOL Guard approval question with Allow once, Allow during this session, and Keep blocked. First tell the user exactly: 'HOL Guard will intercept Claude's next sensitive action and open a branded approval question.' Attempt that sensitive tool at most once. If HOL Guard or Claude denies it, do not retry the same sensitive action automatically. Instead, tell the user approval is required in Claude to continue."
+     "hookEventName": "UserPromptSubmit"
     },
-    "systemMessage": "HOL Guard intercepted this prompt because it leads to a sensitive action. If Claude asks to continue, HOL Guard will route the decision through a branded approval prompt."
+    "systemMessage": "Should Claude read secrets?"
    }
   },
   {
@@ -1718,10 +1639,9 @@
    },
    "expected": {
     "hookSpecificOutput": {
-     "hookEventName": "UserPromptSubmit",
-     "additionalContext": "Guard flagged this prompt. Do not ask for approval at the prompt stage. Attempt the intended sensitive tool once so HOL Guard can evaluate the exact tool, path, and arguments, then route that concrete action into a HOL Guard approval question with Allow once, Allow during this session, and Keep blocked. First tell the user exactly: 'HOL Guard will intercept Claude's next sensitive action and open a branded approval question.' Attempt that sensitive tool at most once. If HOL Guard or Claude denies it, do not retry the same sensitive action automatically. Instead, tell the user approval is required in Claude to continue."
+     "hookEventName": "UserPromptSubmit"
     },
-    "systemMessage": "HOL Guard intercepted this prompt because it leads to a sensitive action. If Claude asks to continue, HOL Guard will route the decision through a branded approval prompt."
+    "systemMessage": "Guard flagged this prompt."
    }
   },
   {
@@ -1739,10 +1659,8 @@
    },
    "expected": {
     "hookSpecificOutput": {
-     "hookEventName": "UserPromptSubmit",
-     "additionalContext": " Do not ask for approval at the prompt stage. Attempt the intended sensitive tool once so HOL Guard can evaluate the exact tool, path, and arguments, then route that concrete action into a HOL Guard approval question with Allow once, Allow during this session, and Keep blocked. First tell the user exactly: 'HOL Guard will intercept Claude's next sensitive action and open a branded approval question.' Attempt that sensitive tool at most once. If HOL Guard or Claude denies it, do not retry the same sensitive action automatically. Instead, tell the user approval is required in Claude to continue."
-    },
-    "systemMessage": "HOL Guard intercepted this prompt because it leads to a sensitive action. If Claude asks to continue, HOL Guard will route the decision through a branded approval prompt."
+     "hookEventName": "UserPromptSubmit"
+    }
    }
   },
   {
@@ -1760,10 +1678,8 @@
    },
    "expected": {
     "hookSpecificOutput": {
-     "hookEventName": "UserPromptSubmit",
-     "additionalContext": " Do not ask for approval at the prompt stage. Attempt the intended sensitive tool once so HOL Guard can evaluate the exact tool, path, and arguments, then route that concrete action into a HOL Guard approval question with Allow once, Allow during this session, and Keep blocked. First tell the user exactly: 'HOL Guard will intercept Claude's next sensitive action and open a branded approval question.' Attempt that sensitive tool at most once. If HOL Guard or Claude denies it, do not retry the same sensitive action automatically. Instead, tell the user approval is required in Claude to continue."
-    },
-    "systemMessage": "HOL Guard intercepted this prompt because it leads to a sensitive action. If Claude asks to continue, HOL Guard will route the decision through a branded approval prompt."
+     "hookEventName": "UserPromptSubmit"
+    }
    }
   },
   {
@@ -1781,10 +1697,8 @@
    },
    "expected": {
     "hookSpecificOutput": {
-     "hookEventName": "UserPromptSubmit",
-     "additionalContext": " Do not ask for approval at the prompt stage. Attempt the intended sensitive tool once so HOL Guard can evaluate the exact tool, path, and arguments, then route that concrete action into a HOL Guard approval question with Allow once, Allow during this session, and Keep blocked. First tell the user exactly: 'HOL Guard will intercept Claude's next sensitive action and open a branded approval question.' Attempt that sensitive tool at most once. If HOL Guard or Claude denies it, do not retry the same sensitive action automatically. Instead, tell the user approval is required in Claude to continue."
-    },
-    "systemMessage": "HOL Guard intercepted this prompt because it leads to a sensitive action. If Claude asks to continue, HOL Guard will route the decision through a branded approval prompt."
+     "hookEventName": "UserPromptSubmit"
+    }
    }
   },
   {
@@ -1801,10 +1715,8 @@
    },
    "expected": {
     "hookSpecificOutput": {
-     "hookEventName": "UserPromptSubmit",
-     "additionalContext": " Do not ask for approval at the prompt stage. Attempt the intended sensitive tool once so HOL Guard can evaluate the exact tool, path, and arguments, then route that concrete action into a HOL Guard approval question with Allow once, Allow during this session, and Keep blocked. First tell the user exactly: 'HOL Guard will intercept Claude's next sensitive action and open a branded approval question.' Attempt that sensitive tool at most once. If HOL Guard or Claude denies it, do not retry the same sensitive action automatically. Instead, tell the user approval is required in Claude to continue."
-    },
-    "systemMessage": "HOL Guard intercepted this prompt because it leads to a sensitive action. If Claude asks to continue, HOL Guard will route the decision through a branded approval prompt."
+     "hookEventName": "UserPromptSubmit"
+    }
    }
   },
   {
@@ -1822,10 +1734,10 @@
     }
    },
    "expected": {
-    "systemMessage": "HOL Guard intercepted this prompt because it leads to a sensitive action. If Claude asks to continue, HOL Guard will route the decision through a branded approval prompt.",
+    "systemMessage": "Guard needs approval.",
     "hookSpecificOutput": {
      "hookEventName": "UserPromptSubmit",
-     "additionalContext": "Guard needs approval. Do not ask for approval at the prompt stage. Attempt the intended sensitive tool once so HOL Guard can evaluate the exact tool, path, and arguments, then route that concrete action into a HOL Guard approval question with Allow once, Allow during this session, and Keep blocked. First tell the user exactly: 'HOL Guard will intercept Claude's next sensitive action and open a branded approval question.' Attempt that sensitive tool at most once. If HOL Guard or Claude denies it, do not retry the same sensitive action automatically. Instead, tell the user approval is required in Claude to continue."
+     "additionalContext": "Edge context"
     }
    }
   },
@@ -1847,10 +1759,10 @@
     }
    },
    "expected": {
-    "systemMessage": "HOL Guard intercepted this prompt because it asks Claude to access local secrets. If Claude asks to continue, HOL Guard will route the decision through a branded approval prompt.",
+    "systemMessage": "Guard needs approval.",
     "hookSpecificOutput": {
      "hookEventName": "UserPromptSubmit",
-     "additionalContext": "Guard needs approval. Do not ask for approval at the prompt stage. Attempt the intended sensitive tool once so HOL Guard can evaluate the exact tool, path, and arguments, then route that concrete action into a HOL Guard approval question with Allow once, Allow during this session, and Keep blocked. First tell the user exactly: 'HOL Guard will intercept Claude's next attempt to access local secrets and open a branded approval question to protect you.' Attempt that sensitive tool at most once. If HOL Guard or Claude denies it, do not retry the same sensitive action automatically. Instead, tell the user approval is required in Claude to continue."
+     "additionalContext": "Edge context"
     }
    }
   },
@@ -1872,7 +1784,7 @@
     }
    },
    "expected": {
-    "systemMessage": "Edge message",
+    "systemMessage": "Guard needs approval.",
     "hookSpecificOutput": {
      "hookEventName": "UserPromptSubmit",
      "additionalContext": "Edge context"
@@ -1893,7 +1805,7 @@
    "expected": {
     "hookSpecificOutput": "UserPromptSubmit",
     "continue": true,
-    "systemMessage": "HOL Guard intercepted this prompt because it leads to a sensitive action. If Claude asks to continue, HOL Guard will route the decision through a branded approval prompt."
+    "systemMessage": "Guard needs approval."
    }
   },
   {
@@ -1913,7 +1825,7 @@
    "expected": {
     "hookSpecificOutput": "UserPromptSubmit",
     "continue": true,
-    "systemMessage": "HOL Guard intercepted this prompt because it asks Claude to access local secrets. If Claude asks to continue, HOL Guard will route the decision through a branded approval prompt."
+    "systemMessage": "Guard needs approval."
    }
   },
   {
@@ -1932,7 +1844,8 @@
    },
    "expected": {
     "hookSpecificOutput": "UserPromptSubmit",
-    "continue": true
+    "continue": true,
+    "systemMessage": "Guard needs approval."
    }
   },
   {
@@ -1949,7 +1862,7 @@
    "expected": {
     "decision": "block",
     "reason": "Edge reason",
-    "systemMessage": "HOL Guard intercepted this prompt because it leads to a sensitive action. If Claude asks to continue, HOL Guard will route the decision through a branded approval prompt."
+    "systemMessage": "Guard needs approval."
    }
   },
   {
@@ -1969,7 +1882,7 @@
    "expected": {
     "decision": "block",
     "reason": "Edge reason",
-    "systemMessage": "HOL Guard intercepted this prompt because it asks Claude to access local secrets. If Claude asks to continue, HOL Guard will route the decision through a branded approval prompt."
+    "systemMessage": "Guard needs approval."
    }
   },
   {
@@ -1988,7 +1901,8 @@
    },
    "expected": {
     "decision": "block",
-    "reason": "Edge reason"
+    "reason": "Edge reason",
+    "systemMessage": "Guard needs approval."
    }
   },
   {
@@ -5837,8 +5751,10 @@
    },
    "expected": {
     "hookSpecificOutput": {
-     "hookEventName": "UserPromptSubmit"
-    }
+     "hookEventName": "UserPromptSubmit",
+     "additionalContext": "Reason. Do not ask for approval at the prompt stage. Attempt the intended sensitive tool once so HOL Guard can evaluate the exact tool, path, and arguments, then route that concrete action into a HOL Guard approval question with Allow once, Allow during this session, and Keep blocked. First tell the user exactly: 'HOL Guard will intercept Claude's next attempt to access local secrets and open a branded approval question to protect you.' Attempt that sensitive tool at most once. If HOL Guard or Claude denies it, do not retry the same sensitive action automatically. Instead, tell the user approval is required in Claude to continue."
+    },
+    "systemMessage": "HOL Guard flagged this prompt because it asks Claude to access local secrets. HOL Guard will ask you before Claude reads them, with Allow once and Always allow."
    }
   },
   {
@@ -5859,7 +5775,8 @@
    "expected": {
     "hookSpecificOutput": {
      "hookEventName": "UserPromptSubmit"
-    }
+    },
+    "systemMessage": "Reason."
    }
   },
   {
@@ -5923,6 +5840,1946 @@
     "hookSpecificOutput": {
      "hookEventName": "UserPromptSubmit"
     }
+   }
+  },
+  {
+   "name": "warn/no-classes/reason-plain",
+   "result": {
+    "decision": "allow",
+    "minimum_action": "warn",
+    "reason": "Guard needs approval for this prompt"
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   }
+  },
+  {
+   "name": "warn/no-classes/reason-punctuated",
+   "result": {
+    "decision": "allow",
+    "minimum_action": "warn",
+    "reason": "Guard blocked this prompt!"
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   }
+  },
+  {
+   "name": "warn/no-classes/reason-question",
+   "result": {
+    "decision": "allow",
+    "minimum_action": "warn",
+    "reason": "  Should Claude read secrets?  "
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   }
+  },
+  {
+   "name": "warn/no-classes/reason-padded",
+   "result": {
+    "decision": "allow",
+    "minimum_action": "warn",
+    "reason": "\t Guard flagged this prompt \n"
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   }
+  },
+  {
+   "name": "warn/no-classes/reason-blank",
+   "result": {
+    "decision": "allow",
+    "minimum_action": "warn",
+    "reason": "   "
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   }
+  },
+  {
+   "name": "warn/no-classes/reason-empty",
+   "result": {
+    "decision": "allow",
+    "minimum_action": "warn",
+    "reason": ""
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   }
+  },
+  {
+   "name": "warn/no-classes/reason-null",
+   "result": {
+    "decision": "allow",
+    "minimum_action": "warn",
+    "reason": null
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   }
+  },
+  {
+   "name": "warn/no-classes/reason-missing",
+   "result": {
+    "decision": "allow",
+    "minimum_action": "warn"
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   }
+  },
+  {
+   "name": "warn/empty/reason-plain",
+   "result": {
+    "decision": "allow",
+    "minimum_action": "warn",
+    "reason": "Guard needs approval for this prompt",
+    "prompt_risk_classes": []
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   }
+  },
+  {
+   "name": "warn/empty/reason-punctuated",
+   "result": {
+    "decision": "allow",
+    "minimum_action": "warn",
+    "reason": "Guard blocked this prompt!",
+    "prompt_risk_classes": []
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   }
+  },
+  {
+   "name": "warn/empty/reason-question",
+   "result": {
+    "decision": "allow",
+    "minimum_action": "warn",
+    "reason": "  Should Claude read secrets?  ",
+    "prompt_risk_classes": []
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   }
+  },
+  {
+   "name": "warn/empty/reason-padded",
+   "result": {
+    "decision": "allow",
+    "minimum_action": "warn",
+    "reason": "\t Guard flagged this prompt \n",
+    "prompt_risk_classes": []
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   }
+  },
+  {
+   "name": "warn/empty/reason-blank",
+   "result": {
+    "decision": "allow",
+    "minimum_action": "warn",
+    "reason": "   ",
+    "prompt_risk_classes": []
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   }
+  },
+  {
+   "name": "warn/empty/reason-empty",
+   "result": {
+    "decision": "allow",
+    "minimum_action": "warn",
+    "reason": "",
+    "prompt_risk_classes": []
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   }
+  },
+  {
+   "name": "warn/empty/reason-null",
+   "result": {
+    "decision": "allow",
+    "minimum_action": "warn",
+    "reason": null,
+    "prompt_risk_classes": []
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   }
+  },
+  {
+   "name": "warn/empty/reason-missing",
+   "result": {
+    "decision": "allow",
+    "minimum_action": "warn",
+    "prompt_risk_classes": []
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   }
+  },
+  {
+   "name": "warn/local-env/reason-plain",
+   "result": {
+    "decision": "allow",
+    "minimum_action": "warn",
+    "reason": "Guard needs approval for this prompt",
+    "prompt_risk_classes": [
+     "local_env_read"
+    ]
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit",
+     "additionalContext": "Guard needs approval for this prompt. Do not ask for approval at the prompt stage. Attempt the intended sensitive tool once so HOL Guard can evaluate the exact tool, path, and arguments, then route that concrete action into a HOL Guard approval question with Allow once, Allow during this session, and Keep blocked. First tell the user exactly: 'HOL Guard will intercept Claude's next attempt to access local secrets and open a branded approval question to protect you.' Attempt that sensitive tool at most once. If HOL Guard or Claude denies it, do not retry the same sensitive action automatically. Instead, tell the user approval is required in Claude to continue."
+    },
+    "systemMessage": "HOL Guard flagged this prompt because it asks Claude to access local secrets. HOL Guard will ask you before Claude reads them, with Allow once and Always allow."
+   }
+  },
+  {
+   "name": "warn/local-env/reason-punctuated",
+   "result": {
+    "decision": "allow",
+    "minimum_action": "warn",
+    "reason": "Guard blocked this prompt!",
+    "prompt_risk_classes": [
+     "local_env_read"
+    ]
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit",
+     "additionalContext": "Guard blocked this prompt! Do not ask for approval at the prompt stage. Attempt the intended sensitive tool once so HOL Guard can evaluate the exact tool, path, and arguments, then route that concrete action into a HOL Guard approval question with Allow once, Allow during this session, and Keep blocked. First tell the user exactly: 'HOL Guard will intercept Claude's next attempt to access local secrets and open a branded approval question to protect you.' Attempt that sensitive tool at most once. If HOL Guard or Claude denies it, do not retry the same sensitive action automatically. Instead, tell the user approval is required in Claude to continue."
+    },
+    "systemMessage": "HOL Guard flagged this prompt because it asks Claude to access local secrets. HOL Guard will ask you before Claude reads them, with Allow once and Always allow."
+   }
+  },
+  {
+   "name": "warn/local-env/reason-question",
+   "result": {
+    "decision": "allow",
+    "minimum_action": "warn",
+    "reason": "  Should Claude read secrets?  ",
+    "prompt_risk_classes": [
+     "local_env_read"
+    ]
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit",
+     "additionalContext": "Should Claude read secrets? Do not ask for approval at the prompt stage. Attempt the intended sensitive tool once so HOL Guard can evaluate the exact tool, path, and arguments, then route that concrete action into a HOL Guard approval question with Allow once, Allow during this session, and Keep blocked. First tell the user exactly: 'HOL Guard will intercept Claude's next attempt to access local secrets and open a branded approval question to protect you.' Attempt that sensitive tool at most once. If HOL Guard or Claude denies it, do not retry the same sensitive action automatically. Instead, tell the user approval is required in Claude to continue."
+    },
+    "systemMessage": "HOL Guard flagged this prompt because it asks Claude to access local secrets. HOL Guard will ask you before Claude reads them, with Allow once and Always allow."
+   }
+  },
+  {
+   "name": "warn/local-env/reason-padded",
+   "result": {
+    "decision": "allow",
+    "minimum_action": "warn",
+    "reason": "\t Guard flagged this prompt \n",
+    "prompt_risk_classes": [
+     "local_env_read"
+    ]
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit",
+     "additionalContext": "Guard flagged this prompt. Do not ask for approval at the prompt stage. Attempt the intended sensitive tool once so HOL Guard can evaluate the exact tool, path, and arguments, then route that concrete action into a HOL Guard approval question with Allow once, Allow during this session, and Keep blocked. First tell the user exactly: 'HOL Guard will intercept Claude's next attempt to access local secrets and open a branded approval question to protect you.' Attempt that sensitive tool at most once. If HOL Guard or Claude denies it, do not retry the same sensitive action automatically. Instead, tell the user approval is required in Claude to continue."
+    },
+    "systemMessage": "HOL Guard flagged this prompt because it asks Claude to access local secrets. HOL Guard will ask you before Claude reads them, with Allow once and Always allow."
+   }
+  },
+  {
+   "name": "warn/local-env/reason-blank",
+   "result": {
+    "decision": "allow",
+    "minimum_action": "warn",
+    "reason": "   ",
+    "prompt_risk_classes": [
+     "local_env_read"
+    ]
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit",
+     "additionalContext": " Do not ask for approval at the prompt stage. Attempt the intended sensitive tool once so HOL Guard can evaluate the exact tool, path, and arguments, then route that concrete action into a HOL Guard approval question with Allow once, Allow during this session, and Keep blocked. First tell the user exactly: 'HOL Guard will intercept Claude's next attempt to access local secrets and open a branded approval question to protect you.' Attempt that sensitive tool at most once. If HOL Guard or Claude denies it, do not retry the same sensitive action automatically. Instead, tell the user approval is required in Claude to continue."
+    },
+    "systemMessage": "HOL Guard flagged this prompt because it asks Claude to access local secrets. HOL Guard will ask you before Claude reads them, with Allow once and Always allow."
+   }
+  },
+  {
+   "name": "warn/local-env/reason-empty",
+   "result": {
+    "decision": "allow",
+    "minimum_action": "warn",
+    "reason": "",
+    "prompt_risk_classes": [
+     "local_env_read"
+    ]
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit",
+     "additionalContext": " Do not ask for approval at the prompt stage. Attempt the intended sensitive tool once so HOL Guard can evaluate the exact tool, path, and arguments, then route that concrete action into a HOL Guard approval question with Allow once, Allow during this session, and Keep blocked. First tell the user exactly: 'HOL Guard will intercept Claude's next attempt to access local secrets and open a branded approval question to protect you.' Attempt that sensitive tool at most once. If HOL Guard or Claude denies it, do not retry the same sensitive action automatically. Instead, tell the user approval is required in Claude to continue."
+    },
+    "systemMessage": "HOL Guard flagged this prompt because it asks Claude to access local secrets. HOL Guard will ask you before Claude reads them, with Allow once and Always allow."
+   }
+  },
+  {
+   "name": "warn/local-env/reason-null",
+   "result": {
+    "decision": "allow",
+    "minimum_action": "warn",
+    "reason": null,
+    "prompt_risk_classes": [
+     "local_env_read"
+    ]
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit",
+     "additionalContext": " Do not ask for approval at the prompt stage. Attempt the intended sensitive tool once so HOL Guard can evaluate the exact tool, path, and arguments, then route that concrete action into a HOL Guard approval question with Allow once, Allow during this session, and Keep blocked. First tell the user exactly: 'HOL Guard will intercept Claude's next attempt to access local secrets and open a branded approval question to protect you.' Attempt that sensitive tool at most once. If HOL Guard or Claude denies it, do not retry the same sensitive action automatically. Instead, tell the user approval is required in Claude to continue."
+    },
+    "systemMessage": "HOL Guard flagged this prompt because it asks Claude to access local secrets. HOL Guard will ask you before Claude reads them, with Allow once and Always allow."
+   }
+  },
+  {
+   "name": "warn/local-env/reason-missing",
+   "result": {
+    "decision": "allow",
+    "minimum_action": "warn",
+    "prompt_risk_classes": [
+     "local_env_read"
+    ]
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit",
+     "additionalContext": " Do not ask for approval at the prompt stage. Attempt the intended sensitive tool once so HOL Guard can evaluate the exact tool, path, and arguments, then route that concrete action into a HOL Guard approval question with Allow once, Allow during this session, and Keep blocked. First tell the user exactly: 'HOL Guard will intercept Claude's next attempt to access local secrets and open a branded approval question to protect you.' Attempt that sensitive tool at most once. If HOL Guard or Claude denies it, do not retry the same sensitive action automatically. Instead, tell the user approval is required in Claude to continue."
+    },
+    "systemMessage": "HOL Guard flagged this prompt because it asks Claude to access local secrets. HOL Guard will ask you before Claude reads them, with Allow once and Always allow."
+   }
+  },
+  {
+   "name": "warn/sensitive-material/reason-plain",
+   "result": {
+    "decision": "allow",
+    "minimum_action": "warn",
+    "reason": "Guard needs approval for this prompt",
+    "prompt_risk_classes": [
+     "sensitive_material"
+    ]
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit",
+     "additionalContext": "Guard needs approval for this prompt. Do not ask for approval at the prompt stage. Attempt the intended sensitive tool once so HOL Guard can evaluate the exact tool, path, and arguments, then route that concrete action into a HOL Guard approval question with Allow once, Allow during this session, and Keep blocked. First tell the user exactly: 'HOL Guard will intercept Claude's next attempt to access local secrets and open a branded approval question to protect you.' Attempt that sensitive tool at most once. If HOL Guard or Claude denies it, do not retry the same sensitive action automatically. Instead, tell the user approval is required in Claude to continue."
+    },
+    "systemMessage": "HOL Guard flagged this prompt because it asks Claude to access local secrets. HOL Guard will ask you before Claude reads them, with Allow once and Always allow."
+   }
+  },
+  {
+   "name": "warn/sensitive-material/reason-punctuated",
+   "result": {
+    "decision": "allow",
+    "minimum_action": "warn",
+    "reason": "Guard blocked this prompt!",
+    "prompt_risk_classes": [
+     "sensitive_material"
+    ]
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit",
+     "additionalContext": "Guard blocked this prompt! Do not ask for approval at the prompt stage. Attempt the intended sensitive tool once so HOL Guard can evaluate the exact tool, path, and arguments, then route that concrete action into a HOL Guard approval question with Allow once, Allow during this session, and Keep blocked. First tell the user exactly: 'HOL Guard will intercept Claude's next attempt to access local secrets and open a branded approval question to protect you.' Attempt that sensitive tool at most once. If HOL Guard or Claude denies it, do not retry the same sensitive action automatically. Instead, tell the user approval is required in Claude to continue."
+    },
+    "systemMessage": "HOL Guard flagged this prompt because it asks Claude to access local secrets. HOL Guard will ask you before Claude reads them, with Allow once and Always allow."
+   }
+  },
+  {
+   "name": "warn/sensitive-material/reason-question",
+   "result": {
+    "decision": "allow",
+    "minimum_action": "warn",
+    "reason": "  Should Claude read secrets?  ",
+    "prompt_risk_classes": [
+     "sensitive_material"
+    ]
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit",
+     "additionalContext": "Should Claude read secrets? Do not ask for approval at the prompt stage. Attempt the intended sensitive tool once so HOL Guard can evaluate the exact tool, path, and arguments, then route that concrete action into a HOL Guard approval question with Allow once, Allow during this session, and Keep blocked. First tell the user exactly: 'HOL Guard will intercept Claude's next attempt to access local secrets and open a branded approval question to protect you.' Attempt that sensitive tool at most once. If HOL Guard or Claude denies it, do not retry the same sensitive action automatically. Instead, tell the user approval is required in Claude to continue."
+    },
+    "systemMessage": "HOL Guard flagged this prompt because it asks Claude to access local secrets. HOL Guard will ask you before Claude reads them, with Allow once and Always allow."
+   }
+  },
+  {
+   "name": "warn/sensitive-material/reason-padded",
+   "result": {
+    "decision": "allow",
+    "minimum_action": "warn",
+    "reason": "\t Guard flagged this prompt \n",
+    "prompt_risk_classes": [
+     "sensitive_material"
+    ]
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit",
+     "additionalContext": "Guard flagged this prompt. Do not ask for approval at the prompt stage. Attempt the intended sensitive tool once so HOL Guard can evaluate the exact tool, path, and arguments, then route that concrete action into a HOL Guard approval question with Allow once, Allow during this session, and Keep blocked. First tell the user exactly: 'HOL Guard will intercept Claude's next attempt to access local secrets and open a branded approval question to protect you.' Attempt that sensitive tool at most once. If HOL Guard or Claude denies it, do not retry the same sensitive action automatically. Instead, tell the user approval is required in Claude to continue."
+    },
+    "systemMessage": "HOL Guard flagged this prompt because it asks Claude to access local secrets. HOL Guard will ask you before Claude reads them, with Allow once and Always allow."
+   }
+  },
+  {
+   "name": "warn/sensitive-material/reason-blank",
+   "result": {
+    "decision": "allow",
+    "minimum_action": "warn",
+    "reason": "   ",
+    "prompt_risk_classes": [
+     "sensitive_material"
+    ]
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit",
+     "additionalContext": " Do not ask for approval at the prompt stage. Attempt the intended sensitive tool once so HOL Guard can evaluate the exact tool, path, and arguments, then route that concrete action into a HOL Guard approval question with Allow once, Allow during this session, and Keep blocked. First tell the user exactly: 'HOL Guard will intercept Claude's next attempt to access local secrets and open a branded approval question to protect you.' Attempt that sensitive tool at most once. If HOL Guard or Claude denies it, do not retry the same sensitive action automatically. Instead, tell the user approval is required in Claude to continue."
+    },
+    "systemMessage": "HOL Guard flagged this prompt because it asks Claude to access local secrets. HOL Guard will ask you before Claude reads them, with Allow once and Always allow."
+   }
+  },
+  {
+   "name": "warn/sensitive-material/reason-empty",
+   "result": {
+    "decision": "allow",
+    "minimum_action": "warn",
+    "reason": "",
+    "prompt_risk_classes": [
+     "sensitive_material"
+    ]
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit",
+     "additionalContext": " Do not ask for approval at the prompt stage. Attempt the intended sensitive tool once so HOL Guard can evaluate the exact tool, path, and arguments, then route that concrete action into a HOL Guard approval question with Allow once, Allow during this session, and Keep blocked. First tell the user exactly: 'HOL Guard will intercept Claude's next attempt to access local secrets and open a branded approval question to protect you.' Attempt that sensitive tool at most once. If HOL Guard or Claude denies it, do not retry the same sensitive action automatically. Instead, tell the user approval is required in Claude to continue."
+    },
+    "systemMessage": "HOL Guard flagged this prompt because it asks Claude to access local secrets. HOL Guard will ask you before Claude reads them, with Allow once and Always allow."
+   }
+  },
+  {
+   "name": "warn/sensitive-material/reason-null",
+   "result": {
+    "decision": "allow",
+    "minimum_action": "warn",
+    "reason": null,
+    "prompt_risk_classes": [
+     "sensitive_material"
+    ]
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit",
+     "additionalContext": " Do not ask for approval at the prompt stage. Attempt the intended sensitive tool once so HOL Guard can evaluate the exact tool, path, and arguments, then route that concrete action into a HOL Guard approval question with Allow once, Allow during this session, and Keep blocked. First tell the user exactly: 'HOL Guard will intercept Claude's next attempt to access local secrets and open a branded approval question to protect you.' Attempt that sensitive tool at most once. If HOL Guard or Claude denies it, do not retry the same sensitive action automatically. Instead, tell the user approval is required in Claude to continue."
+    },
+    "systemMessage": "HOL Guard flagged this prompt because it asks Claude to access local secrets. HOL Guard will ask you before Claude reads them, with Allow once and Always allow."
+   }
+  },
+  {
+   "name": "warn/sensitive-material/reason-missing",
+   "result": {
+    "decision": "allow",
+    "minimum_action": "warn",
+    "prompt_risk_classes": [
+     "sensitive_material"
+    ]
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit",
+     "additionalContext": " Do not ask for approval at the prompt stage. Attempt the intended sensitive tool once so HOL Guard can evaluate the exact tool, path, and arguments, then route that concrete action into a HOL Guard approval question with Allow once, Allow during this session, and Keep blocked. First tell the user exactly: 'HOL Guard will intercept Claude's next attempt to access local secrets and open a branded approval question to protect you.' Attempt that sensitive tool at most once. If HOL Guard or Claude denies it, do not retry the same sensitive action automatically. Instead, tell the user approval is required in Claude to continue."
+    },
+    "systemMessage": "HOL Guard flagged this prompt because it asks Claude to access local secrets. HOL Guard will ask you before Claude reads them, with Allow once and Always allow."
+   }
+  },
+  {
+   "name": "warn/secret-read/reason-plain",
+   "result": {
+    "decision": "allow",
+    "minimum_action": "warn",
+    "reason": "Guard needs approval for this prompt",
+    "prompt_risk_classes": [
+     "secret_read"
+    ]
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit",
+     "additionalContext": "Guard needs approval for this prompt. Do not ask for approval at the prompt stage. Attempt the intended sensitive tool once so HOL Guard can evaluate the exact tool, path, and arguments, then route that concrete action into a HOL Guard approval question with Allow once, Allow during this session, and Keep blocked. First tell the user exactly: 'HOL Guard will intercept Claude's next attempt to access local secrets and open a branded approval question to protect you.' Attempt that sensitive tool at most once. If HOL Guard or Claude denies it, do not retry the same sensitive action automatically. Instead, tell the user approval is required in Claude to continue."
+    },
+    "systemMessage": "HOL Guard flagged this prompt because it asks Claude to access local secrets. HOL Guard will ask you before Claude reads them, with Allow once and Always allow."
+   }
+  },
+  {
+   "name": "warn/secret-read/reason-punctuated",
+   "result": {
+    "decision": "allow",
+    "minimum_action": "warn",
+    "reason": "Guard blocked this prompt!",
+    "prompt_risk_classes": [
+     "secret_read"
+    ]
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit",
+     "additionalContext": "Guard blocked this prompt! Do not ask for approval at the prompt stage. Attempt the intended sensitive tool once so HOL Guard can evaluate the exact tool, path, and arguments, then route that concrete action into a HOL Guard approval question with Allow once, Allow during this session, and Keep blocked. First tell the user exactly: 'HOL Guard will intercept Claude's next attempt to access local secrets and open a branded approval question to protect you.' Attempt that sensitive tool at most once. If HOL Guard or Claude denies it, do not retry the same sensitive action automatically. Instead, tell the user approval is required in Claude to continue."
+    },
+    "systemMessage": "HOL Guard flagged this prompt because it asks Claude to access local secrets. HOL Guard will ask you before Claude reads them, with Allow once and Always allow."
+   }
+  },
+  {
+   "name": "warn/secret-read/reason-question",
+   "result": {
+    "decision": "allow",
+    "minimum_action": "warn",
+    "reason": "  Should Claude read secrets?  ",
+    "prompt_risk_classes": [
+     "secret_read"
+    ]
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit",
+     "additionalContext": "Should Claude read secrets? Do not ask for approval at the prompt stage. Attempt the intended sensitive tool once so HOL Guard can evaluate the exact tool, path, and arguments, then route that concrete action into a HOL Guard approval question with Allow once, Allow during this session, and Keep blocked. First tell the user exactly: 'HOL Guard will intercept Claude's next attempt to access local secrets and open a branded approval question to protect you.' Attempt that sensitive tool at most once. If HOL Guard or Claude denies it, do not retry the same sensitive action automatically. Instead, tell the user approval is required in Claude to continue."
+    },
+    "systemMessage": "HOL Guard flagged this prompt because it asks Claude to access local secrets. HOL Guard will ask you before Claude reads them, with Allow once and Always allow."
+   }
+  },
+  {
+   "name": "warn/secret-read/reason-padded",
+   "result": {
+    "decision": "allow",
+    "minimum_action": "warn",
+    "reason": "\t Guard flagged this prompt \n",
+    "prompt_risk_classes": [
+     "secret_read"
+    ]
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit",
+     "additionalContext": "Guard flagged this prompt. Do not ask for approval at the prompt stage. Attempt the intended sensitive tool once so HOL Guard can evaluate the exact tool, path, and arguments, then route that concrete action into a HOL Guard approval question with Allow once, Allow during this session, and Keep blocked. First tell the user exactly: 'HOL Guard will intercept Claude's next attempt to access local secrets and open a branded approval question to protect you.' Attempt that sensitive tool at most once. If HOL Guard or Claude denies it, do not retry the same sensitive action automatically. Instead, tell the user approval is required in Claude to continue."
+    },
+    "systemMessage": "HOL Guard flagged this prompt because it asks Claude to access local secrets. HOL Guard will ask you before Claude reads them, with Allow once and Always allow."
+   }
+  },
+  {
+   "name": "warn/secret-read/reason-blank",
+   "result": {
+    "decision": "allow",
+    "minimum_action": "warn",
+    "reason": "   ",
+    "prompt_risk_classes": [
+     "secret_read"
+    ]
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit",
+     "additionalContext": " Do not ask for approval at the prompt stage. Attempt the intended sensitive tool once so HOL Guard can evaluate the exact tool, path, and arguments, then route that concrete action into a HOL Guard approval question with Allow once, Allow during this session, and Keep blocked. First tell the user exactly: 'HOL Guard will intercept Claude's next attempt to access local secrets and open a branded approval question to protect you.' Attempt that sensitive tool at most once. If HOL Guard or Claude denies it, do not retry the same sensitive action automatically. Instead, tell the user approval is required in Claude to continue."
+    },
+    "systemMessage": "HOL Guard flagged this prompt because it asks Claude to access local secrets. HOL Guard will ask you before Claude reads them, with Allow once and Always allow."
+   }
+  },
+  {
+   "name": "warn/secret-read/reason-empty",
+   "result": {
+    "decision": "allow",
+    "minimum_action": "warn",
+    "reason": "",
+    "prompt_risk_classes": [
+     "secret_read"
+    ]
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit",
+     "additionalContext": " Do not ask for approval at the prompt stage. Attempt the intended sensitive tool once so HOL Guard can evaluate the exact tool, path, and arguments, then route that concrete action into a HOL Guard approval question with Allow once, Allow during this session, and Keep blocked. First tell the user exactly: 'HOL Guard will intercept Claude's next attempt to access local secrets and open a branded approval question to protect you.' Attempt that sensitive tool at most once. If HOL Guard or Claude denies it, do not retry the same sensitive action automatically. Instead, tell the user approval is required in Claude to continue."
+    },
+    "systemMessage": "HOL Guard flagged this prompt because it asks Claude to access local secrets. HOL Guard will ask you before Claude reads them, with Allow once and Always allow."
+   }
+  },
+  {
+   "name": "warn/secret-read/reason-null",
+   "result": {
+    "decision": "allow",
+    "minimum_action": "warn",
+    "reason": null,
+    "prompt_risk_classes": [
+     "secret_read"
+    ]
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit",
+     "additionalContext": " Do not ask for approval at the prompt stage. Attempt the intended sensitive tool once so HOL Guard can evaluate the exact tool, path, and arguments, then route that concrete action into a HOL Guard approval question with Allow once, Allow during this session, and Keep blocked. First tell the user exactly: 'HOL Guard will intercept Claude's next attempt to access local secrets and open a branded approval question to protect you.' Attempt that sensitive tool at most once. If HOL Guard or Claude denies it, do not retry the same sensitive action automatically. Instead, tell the user approval is required in Claude to continue."
+    },
+    "systemMessage": "HOL Guard flagged this prompt because it asks Claude to access local secrets. HOL Guard will ask you before Claude reads them, with Allow once and Always allow."
+   }
+  },
+  {
+   "name": "warn/secret-read/reason-missing",
+   "result": {
+    "decision": "allow",
+    "minimum_action": "warn",
+    "prompt_risk_classes": [
+     "secret_read"
+    ]
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit",
+     "additionalContext": " Do not ask for approval at the prompt stage. Attempt the intended sensitive tool once so HOL Guard can evaluate the exact tool, path, and arguments, then route that concrete action into a HOL Guard approval question with Allow once, Allow during this session, and Keep blocked. First tell the user exactly: 'HOL Guard will intercept Claude's next attempt to access local secrets and open a branded approval question to protect you.' Attempt that sensitive tool at most once. If HOL Guard or Claude denies it, do not retry the same sensitive action automatically. Instead, tell the user approval is required in Claude to continue."
+    },
+    "systemMessage": "HOL Guard flagged this prompt because it asks Claude to access local secrets. HOL Guard will ask you before Claude reads them, with Allow once and Always allow."
+   }
+  },
+  {
+   "name": "warn/bypass/reason-plain",
+   "result": {
+    "decision": "allow",
+    "minimum_action": "warn",
+    "reason": "Guard needs approval for this prompt",
+    "prompt_risk_classes": [
+     "guard_bypass_intent"
+    ]
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   }
+  },
+  {
+   "name": "warn/bypass/reason-punctuated",
+   "result": {
+    "decision": "allow",
+    "minimum_action": "warn",
+    "reason": "Guard blocked this prompt!",
+    "prompt_risk_classes": [
+     "guard_bypass_intent"
+    ]
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   }
+  },
+  {
+   "name": "warn/bypass/reason-question",
+   "result": {
+    "decision": "allow",
+    "minimum_action": "warn",
+    "reason": "  Should Claude read secrets?  ",
+    "prompt_risk_classes": [
+     "guard_bypass_intent"
+    ]
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   }
+  },
+  {
+   "name": "warn/bypass/reason-padded",
+   "result": {
+    "decision": "allow",
+    "minimum_action": "warn",
+    "reason": "\t Guard flagged this prompt \n",
+    "prompt_risk_classes": [
+     "guard_bypass_intent"
+    ]
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   }
+  },
+  {
+   "name": "warn/bypass/reason-blank",
+   "result": {
+    "decision": "allow",
+    "minimum_action": "warn",
+    "reason": "   ",
+    "prompt_risk_classes": [
+     "guard_bypass_intent"
+    ]
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   }
+  },
+  {
+   "name": "warn/bypass/reason-empty",
+   "result": {
+    "decision": "allow",
+    "minimum_action": "warn",
+    "reason": "",
+    "prompt_risk_classes": [
+     "guard_bypass_intent"
+    ]
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   }
+  },
+  {
+   "name": "warn/bypass/reason-null",
+   "result": {
+    "decision": "allow",
+    "minimum_action": "warn",
+    "reason": null,
+    "prompt_risk_classes": [
+     "guard_bypass_intent"
+    ]
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   }
+  },
+  {
+   "name": "warn/bypass/reason-missing",
+   "result": {
+    "decision": "allow",
+    "minimum_action": "warn",
+    "prompt_risk_classes": [
+     "guard_bypass_intent"
+    ]
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   }
+  },
+  {
+   "name": "warn/bypass-and-secret/reason-plain",
+   "result": {
+    "decision": "allow",
+    "minimum_action": "warn",
+    "reason": "Guard needs approval for this prompt",
+    "prompt_risk_classes": [
+     "local_env_read",
+     "guard_bypass_intent"
+    ]
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   }
+  },
+  {
+   "name": "warn/bypass-and-secret/reason-punctuated",
+   "result": {
+    "decision": "allow",
+    "minimum_action": "warn",
+    "reason": "Guard blocked this prompt!",
+    "prompt_risk_classes": [
+     "local_env_read",
+     "guard_bypass_intent"
+    ]
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   }
+  },
+  {
+   "name": "warn/bypass-and-secret/reason-question",
+   "result": {
+    "decision": "allow",
+    "minimum_action": "warn",
+    "reason": "  Should Claude read secrets?  ",
+    "prompt_risk_classes": [
+     "local_env_read",
+     "guard_bypass_intent"
+    ]
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   }
+  },
+  {
+   "name": "warn/bypass-and-secret/reason-padded",
+   "result": {
+    "decision": "allow",
+    "minimum_action": "warn",
+    "reason": "\t Guard flagged this prompt \n",
+    "prompt_risk_classes": [
+     "local_env_read",
+     "guard_bypass_intent"
+    ]
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   }
+  },
+  {
+   "name": "warn/bypass-and-secret/reason-blank",
+   "result": {
+    "decision": "allow",
+    "minimum_action": "warn",
+    "reason": "   ",
+    "prompt_risk_classes": [
+     "local_env_read",
+     "guard_bypass_intent"
+    ]
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   }
+  },
+  {
+   "name": "warn/bypass-and-secret/reason-empty",
+   "result": {
+    "decision": "allow",
+    "minimum_action": "warn",
+    "reason": "",
+    "prompt_risk_classes": [
+     "local_env_read",
+     "guard_bypass_intent"
+    ]
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   }
+  },
+  {
+   "name": "warn/bypass-and-secret/reason-null",
+   "result": {
+    "decision": "allow",
+    "minimum_action": "warn",
+    "reason": null,
+    "prompt_risk_classes": [
+     "local_env_read",
+     "guard_bypass_intent"
+    ]
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   }
+  },
+  {
+   "name": "warn/bypass-and-secret/reason-missing",
+   "result": {
+    "decision": "allow",
+    "minimum_action": "warn",
+    "prompt_risk_classes": [
+     "local_env_read",
+     "guard_bypass_intent"
+    ]
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   }
+  },
+  {
+   "name": "warn/other/reason-plain",
+   "result": {
+    "decision": "allow",
+    "minimum_action": "warn",
+    "reason": "Guard needs approval for this prompt",
+    "prompt_risk_classes": [
+     "destructive_command"
+    ]
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit",
+     "additionalContext": "Guard needs approval for this prompt. Do not ask for approval at the prompt stage. Attempt the intended sensitive tool once so HOL Guard can evaluate the exact tool, path, and arguments, then route that concrete action into a HOL Guard approval question with Allow once, Allow during this session, and Keep blocked. First tell the user exactly: 'HOL Guard will intercept Claude's next sensitive action and open a branded approval question.' Attempt that sensitive tool at most once. If HOL Guard or Claude denies it, do not retry the same sensitive action automatically. Instead, tell the user approval is required in Claude to continue."
+    },
+    "systemMessage": "HOL Guard flagged this prompt because it leads to a sensitive action. HOL Guard will ask you before Claude takes it, with Allow once and Always allow."
+   }
+  },
+  {
+   "name": "warn/other/reason-punctuated",
+   "result": {
+    "decision": "allow",
+    "minimum_action": "warn",
+    "reason": "Guard blocked this prompt!",
+    "prompt_risk_classes": [
+     "destructive_command"
+    ]
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit",
+     "additionalContext": "Guard blocked this prompt! Do not ask for approval at the prompt stage. Attempt the intended sensitive tool once so HOL Guard can evaluate the exact tool, path, and arguments, then route that concrete action into a HOL Guard approval question with Allow once, Allow during this session, and Keep blocked. First tell the user exactly: 'HOL Guard will intercept Claude's next sensitive action and open a branded approval question.' Attempt that sensitive tool at most once. If HOL Guard or Claude denies it, do not retry the same sensitive action automatically. Instead, tell the user approval is required in Claude to continue."
+    },
+    "systemMessage": "HOL Guard flagged this prompt because it leads to a sensitive action. HOL Guard will ask you before Claude takes it, with Allow once and Always allow."
+   }
+  },
+  {
+   "name": "warn/other/reason-question",
+   "result": {
+    "decision": "allow",
+    "minimum_action": "warn",
+    "reason": "  Should Claude read secrets?  ",
+    "prompt_risk_classes": [
+     "destructive_command"
+    ]
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit",
+     "additionalContext": "Should Claude read secrets? Do not ask for approval at the prompt stage. Attempt the intended sensitive tool once so HOL Guard can evaluate the exact tool, path, and arguments, then route that concrete action into a HOL Guard approval question with Allow once, Allow during this session, and Keep blocked. First tell the user exactly: 'HOL Guard will intercept Claude's next sensitive action and open a branded approval question.' Attempt that sensitive tool at most once. If HOL Guard or Claude denies it, do not retry the same sensitive action automatically. Instead, tell the user approval is required in Claude to continue."
+    },
+    "systemMessage": "HOL Guard flagged this prompt because it leads to a sensitive action. HOL Guard will ask you before Claude takes it, with Allow once and Always allow."
+   }
+  },
+  {
+   "name": "warn/other/reason-padded",
+   "result": {
+    "decision": "allow",
+    "minimum_action": "warn",
+    "reason": "\t Guard flagged this prompt \n",
+    "prompt_risk_classes": [
+     "destructive_command"
+    ]
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit",
+     "additionalContext": "Guard flagged this prompt. Do not ask for approval at the prompt stage. Attempt the intended sensitive tool once so HOL Guard can evaluate the exact tool, path, and arguments, then route that concrete action into a HOL Guard approval question with Allow once, Allow during this session, and Keep blocked. First tell the user exactly: 'HOL Guard will intercept Claude's next sensitive action and open a branded approval question.' Attempt that sensitive tool at most once. If HOL Guard or Claude denies it, do not retry the same sensitive action automatically. Instead, tell the user approval is required in Claude to continue."
+    },
+    "systemMessage": "HOL Guard flagged this prompt because it leads to a sensitive action. HOL Guard will ask you before Claude takes it, with Allow once and Always allow."
+   }
+  },
+  {
+   "name": "warn/other/reason-blank",
+   "result": {
+    "decision": "allow",
+    "minimum_action": "warn",
+    "reason": "   ",
+    "prompt_risk_classes": [
+     "destructive_command"
+    ]
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit",
+     "additionalContext": " Do not ask for approval at the prompt stage. Attempt the intended sensitive tool once so HOL Guard can evaluate the exact tool, path, and arguments, then route that concrete action into a HOL Guard approval question with Allow once, Allow during this session, and Keep blocked. First tell the user exactly: 'HOL Guard will intercept Claude's next sensitive action and open a branded approval question.' Attempt that sensitive tool at most once. If HOL Guard or Claude denies it, do not retry the same sensitive action automatically. Instead, tell the user approval is required in Claude to continue."
+    },
+    "systemMessage": "HOL Guard flagged this prompt because it leads to a sensitive action. HOL Guard will ask you before Claude takes it, with Allow once and Always allow."
+   }
+  },
+  {
+   "name": "warn/other/reason-empty",
+   "result": {
+    "decision": "allow",
+    "minimum_action": "warn",
+    "reason": "",
+    "prompt_risk_classes": [
+     "destructive_command"
+    ]
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit",
+     "additionalContext": " Do not ask for approval at the prompt stage. Attempt the intended sensitive tool once so HOL Guard can evaluate the exact tool, path, and arguments, then route that concrete action into a HOL Guard approval question with Allow once, Allow during this session, and Keep blocked. First tell the user exactly: 'HOL Guard will intercept Claude's next sensitive action and open a branded approval question.' Attempt that sensitive tool at most once. If HOL Guard or Claude denies it, do not retry the same sensitive action automatically. Instead, tell the user approval is required in Claude to continue."
+    },
+    "systemMessage": "HOL Guard flagged this prompt because it leads to a sensitive action. HOL Guard will ask you before Claude takes it, with Allow once and Always allow."
+   }
+  },
+  {
+   "name": "warn/other/reason-null",
+   "result": {
+    "decision": "allow",
+    "minimum_action": "warn",
+    "reason": null,
+    "prompt_risk_classes": [
+     "destructive_command"
+    ]
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit",
+     "additionalContext": " Do not ask for approval at the prompt stage. Attempt the intended sensitive tool once so HOL Guard can evaluate the exact tool, path, and arguments, then route that concrete action into a HOL Guard approval question with Allow once, Allow during this session, and Keep blocked. First tell the user exactly: 'HOL Guard will intercept Claude's next sensitive action and open a branded approval question.' Attempt that sensitive tool at most once. If HOL Guard or Claude denies it, do not retry the same sensitive action automatically. Instead, tell the user approval is required in Claude to continue."
+    },
+    "systemMessage": "HOL Guard flagged this prompt because it leads to a sensitive action. HOL Guard will ask you before Claude takes it, with Allow once and Always allow."
+   }
+  },
+  {
+   "name": "warn/other/reason-missing",
+   "result": {
+    "decision": "allow",
+    "minimum_action": "warn",
+    "prompt_risk_classes": [
+     "destructive_command"
+    ]
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit",
+     "additionalContext": " Do not ask for approval at the prompt stage. Attempt the intended sensitive tool once so HOL Guard can evaluate the exact tool, path, and arguments, then route that concrete action into a HOL Guard approval question with Allow once, Allow during this session, and Keep blocked. First tell the user exactly: 'HOL Guard will intercept Claude's next sensitive action and open a branded approval question.' Attempt that sensitive tool at most once. If HOL Guard or Claude denies it, do not retry the same sensitive action automatically. Instead, tell the user approval is required in Claude to continue."
+    },
+    "systemMessage": "HOL Guard flagged this prompt because it leads to a sensitive action. HOL Guard will ask you before Claude takes it, with Allow once and Always allow."
+   }
+  },
+  {
+   "name": "warn/odd-items/reason-plain",
+   "result": {
+    "decision": "allow",
+    "minimum_action": "warn",
+    "reason": "Guard needs approval for this prompt",
+    "prompt_risk_classes": [
+     "",
+     "  ",
+     null,
+     3,
+     {
+      "class": "local_env_read"
+     },
+     " local_env_read"
+    ]
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit",
+     "additionalContext": "Guard needs approval for this prompt. Do not ask for approval at the prompt stage. Attempt the intended sensitive tool once so HOL Guard can evaluate the exact tool, path, and arguments, then route that concrete action into a HOL Guard approval question with Allow once, Allow during this session, and Keep blocked. First tell the user exactly: 'HOL Guard will intercept Claude's next sensitive action and open a branded approval question.' Attempt that sensitive tool at most once. If HOL Guard or Claude denies it, do not retry the same sensitive action automatically. Instead, tell the user approval is required in Claude to continue."
+    },
+    "systemMessage": "HOL Guard flagged this prompt because it leads to a sensitive action. HOL Guard will ask you before Claude takes it, with Allow once and Always allow."
+   }
+  },
+  {
+   "name": "warn/odd-items/reason-punctuated",
+   "result": {
+    "decision": "allow",
+    "minimum_action": "warn",
+    "reason": "Guard blocked this prompt!",
+    "prompt_risk_classes": [
+     "",
+     "  ",
+     null,
+     3,
+     {
+      "class": "local_env_read"
+     },
+     " local_env_read"
+    ]
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit",
+     "additionalContext": "Guard blocked this prompt! Do not ask for approval at the prompt stage. Attempt the intended sensitive tool once so HOL Guard can evaluate the exact tool, path, and arguments, then route that concrete action into a HOL Guard approval question with Allow once, Allow during this session, and Keep blocked. First tell the user exactly: 'HOL Guard will intercept Claude's next sensitive action and open a branded approval question.' Attempt that sensitive tool at most once. If HOL Guard or Claude denies it, do not retry the same sensitive action automatically. Instead, tell the user approval is required in Claude to continue."
+    },
+    "systemMessage": "HOL Guard flagged this prompt because it leads to a sensitive action. HOL Guard will ask you before Claude takes it, with Allow once and Always allow."
+   }
+  },
+  {
+   "name": "warn/odd-items/reason-question",
+   "result": {
+    "decision": "allow",
+    "minimum_action": "warn",
+    "reason": "  Should Claude read secrets?  ",
+    "prompt_risk_classes": [
+     "",
+     "  ",
+     null,
+     3,
+     {
+      "class": "local_env_read"
+     },
+     " local_env_read"
+    ]
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit",
+     "additionalContext": "Should Claude read secrets? Do not ask for approval at the prompt stage. Attempt the intended sensitive tool once so HOL Guard can evaluate the exact tool, path, and arguments, then route that concrete action into a HOL Guard approval question with Allow once, Allow during this session, and Keep blocked. First tell the user exactly: 'HOL Guard will intercept Claude's next sensitive action and open a branded approval question.' Attempt that sensitive tool at most once. If HOL Guard or Claude denies it, do not retry the same sensitive action automatically. Instead, tell the user approval is required in Claude to continue."
+    },
+    "systemMessage": "HOL Guard flagged this prompt because it leads to a sensitive action. HOL Guard will ask you before Claude takes it, with Allow once and Always allow."
+   }
+  },
+  {
+   "name": "warn/odd-items/reason-padded",
+   "result": {
+    "decision": "allow",
+    "minimum_action": "warn",
+    "reason": "\t Guard flagged this prompt \n",
+    "prompt_risk_classes": [
+     "",
+     "  ",
+     null,
+     3,
+     {
+      "class": "local_env_read"
+     },
+     " local_env_read"
+    ]
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit",
+     "additionalContext": "Guard flagged this prompt. Do not ask for approval at the prompt stage. Attempt the intended sensitive tool once so HOL Guard can evaluate the exact tool, path, and arguments, then route that concrete action into a HOL Guard approval question with Allow once, Allow during this session, and Keep blocked. First tell the user exactly: 'HOL Guard will intercept Claude's next sensitive action and open a branded approval question.' Attempt that sensitive tool at most once. If HOL Guard or Claude denies it, do not retry the same sensitive action automatically. Instead, tell the user approval is required in Claude to continue."
+    },
+    "systemMessage": "HOL Guard flagged this prompt because it leads to a sensitive action. HOL Guard will ask you before Claude takes it, with Allow once and Always allow."
+   }
+  },
+  {
+   "name": "warn/odd-items/reason-blank",
+   "result": {
+    "decision": "allow",
+    "minimum_action": "warn",
+    "reason": "   ",
+    "prompt_risk_classes": [
+     "",
+     "  ",
+     null,
+     3,
+     {
+      "class": "local_env_read"
+     },
+     " local_env_read"
+    ]
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit",
+     "additionalContext": " Do not ask for approval at the prompt stage. Attempt the intended sensitive tool once so HOL Guard can evaluate the exact tool, path, and arguments, then route that concrete action into a HOL Guard approval question with Allow once, Allow during this session, and Keep blocked. First tell the user exactly: 'HOL Guard will intercept Claude's next sensitive action and open a branded approval question.' Attempt that sensitive tool at most once. If HOL Guard or Claude denies it, do not retry the same sensitive action automatically. Instead, tell the user approval is required in Claude to continue."
+    },
+    "systemMessage": "HOL Guard flagged this prompt because it leads to a sensitive action. HOL Guard will ask you before Claude takes it, with Allow once and Always allow."
+   }
+  },
+  {
+   "name": "warn/odd-items/reason-empty",
+   "result": {
+    "decision": "allow",
+    "minimum_action": "warn",
+    "reason": "",
+    "prompt_risk_classes": [
+     "",
+     "  ",
+     null,
+     3,
+     {
+      "class": "local_env_read"
+     },
+     " local_env_read"
+    ]
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit",
+     "additionalContext": " Do not ask for approval at the prompt stage. Attempt the intended sensitive tool once so HOL Guard can evaluate the exact tool, path, and arguments, then route that concrete action into a HOL Guard approval question with Allow once, Allow during this session, and Keep blocked. First tell the user exactly: 'HOL Guard will intercept Claude's next sensitive action and open a branded approval question.' Attempt that sensitive tool at most once. If HOL Guard or Claude denies it, do not retry the same sensitive action automatically. Instead, tell the user approval is required in Claude to continue."
+    },
+    "systemMessage": "HOL Guard flagged this prompt because it leads to a sensitive action. HOL Guard will ask you before Claude takes it, with Allow once and Always allow."
+   }
+  },
+  {
+   "name": "warn/odd-items/reason-null",
+   "result": {
+    "decision": "allow",
+    "minimum_action": "warn",
+    "reason": null,
+    "prompt_risk_classes": [
+     "",
+     "  ",
+     null,
+     3,
+     {
+      "class": "local_env_read"
+     },
+     " local_env_read"
+    ]
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit",
+     "additionalContext": " Do not ask for approval at the prompt stage. Attempt the intended sensitive tool once so HOL Guard can evaluate the exact tool, path, and arguments, then route that concrete action into a HOL Guard approval question with Allow once, Allow during this session, and Keep blocked. First tell the user exactly: 'HOL Guard will intercept Claude's next sensitive action and open a branded approval question.' Attempt that sensitive tool at most once. If HOL Guard or Claude denies it, do not retry the same sensitive action automatically. Instead, tell the user approval is required in Claude to continue."
+    },
+    "systemMessage": "HOL Guard flagged this prompt because it leads to a sensitive action. HOL Guard will ask you before Claude takes it, with Allow once and Always allow."
+   }
+  },
+  {
+   "name": "warn/odd-items/reason-missing",
+   "result": {
+    "decision": "allow",
+    "minimum_action": "warn",
+    "prompt_risk_classes": [
+     "",
+     "  ",
+     null,
+     3,
+     {
+      "class": "local_env_read"
+     },
+     " local_env_read"
+    ]
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit",
+     "additionalContext": " Do not ask for approval at the prompt stage. Attempt the intended sensitive tool once so HOL Guard can evaluate the exact tool, path, and arguments, then route that concrete action into a HOL Guard approval question with Allow once, Allow during this session, and Keep blocked. First tell the user exactly: 'HOL Guard will intercept Claude's next sensitive action and open a branded approval question.' Attempt that sensitive tool at most once. If HOL Guard or Claude denies it, do not retry the same sensitive action automatically. Instead, tell the user approval is required in Claude to continue."
+    },
+    "systemMessage": "HOL Guard flagged this prompt because it leads to a sensitive action. HOL Guard will ask you before Claude takes it, with Allow once and Always allow."
+   }
+  },
+  {
+   "name": "warn/not-a-list/reason-plain",
+   "result": {
+    "decision": "allow",
+    "minimum_action": "warn",
+    "reason": "Guard needs approval for this prompt",
+    "prompt_risk_classes": "local_env_read"
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   }
+  },
+  {
+   "name": "warn/not-a-list/reason-punctuated",
+   "result": {
+    "decision": "allow",
+    "minimum_action": "warn",
+    "reason": "Guard blocked this prompt!",
+    "prompt_risk_classes": "local_env_read"
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   }
+  },
+  {
+   "name": "warn/not-a-list/reason-question",
+   "result": {
+    "decision": "allow",
+    "minimum_action": "warn",
+    "reason": "  Should Claude read secrets?  ",
+    "prompt_risk_classes": "local_env_read"
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   }
+  },
+  {
+   "name": "warn/not-a-list/reason-padded",
+   "result": {
+    "decision": "allow",
+    "minimum_action": "warn",
+    "reason": "\t Guard flagged this prompt \n",
+    "prompt_risk_classes": "local_env_read"
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   }
+  },
+  {
+   "name": "warn/not-a-list/reason-blank",
+   "result": {
+    "decision": "allow",
+    "minimum_action": "warn",
+    "reason": "   ",
+    "prompt_risk_classes": "local_env_read"
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   }
+  },
+  {
+   "name": "warn/not-a-list/reason-empty",
+   "result": {
+    "decision": "allow",
+    "minimum_action": "warn",
+    "reason": "",
+    "prompt_risk_classes": "local_env_read"
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   }
+  },
+  {
+   "name": "warn/not-a-list/reason-null",
+   "result": {
+    "decision": "allow",
+    "minimum_action": "warn",
+    "reason": null,
+    "prompt_risk_classes": "local_env_read"
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   }
+  },
+  {
+   "name": "warn/not-a-list/reason-missing",
+   "result": {
+    "decision": "allow",
+    "minimum_action": "warn",
+    "prompt_risk_classes": "local_env_read"
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   }
+  },
+  {
+   "name": "warn/no-classes/hook-output-existing",
+   "result": {
+    "decision": "allow",
+    "minimum_action": "warn",
+    "reason": "Guard needs approval"
+   },
+   "response": {
+    "systemMessage": "Edge message",
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit",
+     "additionalContext": "Edge context"
+    }
+   },
+   "expected": {
+    "systemMessage": "Edge message",
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit",
+     "additionalContext": "Edge context"
+    }
+   }
+  },
+  {
+   "name": "warn/local-env/hook-output-existing",
+   "result": {
+    "decision": "allow",
+    "minimum_action": "warn",
+    "reason": "Guard needs approval",
+    "prompt_risk_classes": [
+     "local_env_read"
+    ]
+   },
+   "response": {
+    "systemMessage": "Edge message",
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit",
+     "additionalContext": "Edge context"
+    }
+   },
+   "expected": {
+    "systemMessage": "HOL Guard flagged this prompt because it asks Claude to access local secrets. HOL Guard will ask you before Claude reads them, with Allow once and Always allow.",
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit",
+     "additionalContext": "Guard needs approval. Do not ask for approval at the prompt stage. Attempt the intended sensitive tool once so HOL Guard can evaluate the exact tool, path, and arguments, then route that concrete action into a HOL Guard approval question with Allow once, Allow during this session, and Keep blocked. First tell the user exactly: 'HOL Guard will intercept Claude's next attempt to access local secrets and open a branded approval question to protect you.' Attempt that sensitive tool at most once. If HOL Guard or Claude denies it, do not retry the same sensitive action automatically. Instead, tell the user approval is required in Claude to continue."
+    }
+   }
+  },
+  {
+   "name": "warn/bypass/hook-output-existing",
+   "result": {
+    "decision": "allow",
+    "minimum_action": "warn",
+    "reason": "Guard needs approval",
+    "prompt_risk_classes": [
+     "guard_bypass_intent"
+    ]
+   },
+   "response": {
+    "systemMessage": "Edge message",
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit",
+     "additionalContext": "Edge context"
+    }
+   },
+   "expected": {
+    "systemMessage": "Edge message",
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit",
+     "additionalContext": "Edge context"
+    }
+   }
+  },
+  {
+   "name": "warn/no-classes/hook-output-not-object",
+   "result": {
+    "decision": "allow",
+    "minimum_action": "warn",
+    "reason": "Guard needs approval"
+   },
+   "response": {
+    "hookSpecificOutput": "UserPromptSubmit",
+    "continue": true
+   },
+   "expected": {
+    "hookSpecificOutput": "UserPromptSubmit",
+    "continue": true
+   }
+  },
+  {
+   "name": "warn/local-env/hook-output-not-object",
+   "result": {
+    "decision": "allow",
+    "minimum_action": "warn",
+    "reason": "Guard needs approval",
+    "prompt_risk_classes": [
+     "local_env_read"
+    ]
+   },
+   "response": {
+    "hookSpecificOutput": "UserPromptSubmit",
+    "continue": true
+   },
+   "expected": {
+    "hookSpecificOutput": "UserPromptSubmit",
+    "continue": true,
+    "systemMessage": "HOL Guard flagged this prompt because it asks Claude to access local secrets. HOL Guard will ask you before Claude reads them, with Allow once and Always allow."
+   }
+  },
+  {
+   "name": "warn/bypass/hook-output-not-object",
+   "result": {
+    "decision": "allow",
+    "minimum_action": "warn",
+    "reason": "Guard needs approval",
+    "prompt_risk_classes": [
+     "guard_bypass_intent"
+    ]
+   },
+   "response": {
+    "hookSpecificOutput": "UserPromptSubmit",
+    "continue": true
+   },
+   "expected": {
+    "hookSpecificOutput": "UserPromptSubmit",
+    "continue": true
+   }
+  },
+  {
+   "name": "warn/no-classes/no-hook-output",
+   "result": {
+    "decision": "allow",
+    "minimum_action": "warn",
+    "reason": "Guard needs approval"
+   },
+   "response": {
+    "decision": "block",
+    "reason": "Edge reason"
+   },
+   "expected": {
+    "decision": "block",
+    "reason": "Edge reason"
+   }
+  },
+  {
+   "name": "warn/local-env/no-hook-output",
+   "result": {
+    "decision": "allow",
+    "minimum_action": "warn",
+    "reason": "Guard needs approval",
+    "prompt_risk_classes": [
+     "local_env_read"
+    ]
+   },
+   "response": {
+    "decision": "block",
+    "reason": "Edge reason"
+   },
+   "expected": {
+    "decision": "block",
+    "reason": "Edge reason",
+    "systemMessage": "HOL Guard flagged this prompt because it asks Claude to access local secrets. HOL Guard will ask you before Claude reads them, with Allow once and Always allow."
+   }
+  },
+  {
+   "name": "warn/bypass/no-hook-output",
+   "result": {
+    "decision": "allow",
+    "minimum_action": "warn",
+    "reason": "Guard needs approval",
+    "prompt_risk_classes": [
+     "guard_bypass_intent"
+    ]
+   },
+   "response": {
+    "decision": "block",
+    "reason": "Edge reason"
+   },
+   "expected": {
+    "decision": "block",
+    "reason": "Edge reason"
    }
   }
  ]

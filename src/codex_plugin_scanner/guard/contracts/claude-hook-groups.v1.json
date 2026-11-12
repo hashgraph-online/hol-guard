@@ -41,9 +41,15 @@
       "matcher": null,
       "timeout_seconds": 10,
       "status_message": null
+    },
+    {
+      "event": "UserPromptSubmit",
+      "matcher": null,
+      "timeout_seconds": 10,
+      "status_message": null
     }
   ],
-  "pruned_events": ["PermissionDenied", "UserPromptSubmit"],
+  "pruned_events": ["PermissionDenied"],
   "bridge_config": {
     "required_keys": ["state_path", "fallback_daemon_url", "fallback_command", "query"],
     "optional_keys": ["recovery_command"]

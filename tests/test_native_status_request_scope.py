@@ -13,7 +13,6 @@ import hashlib
 import json
 import os
 import threading
-import urllib.request
 from collections.abc import Iterator
 from pathlib import Path
 from types import SimpleNamespace
@@ -21,7 +20,7 @@ from types import SimpleNamespace
 import pytest
 
 import codex_plugin_scanner.guard.native_runtime as native_runtime_module
-from codex_plugin_scanner.guard.daemon.hook_worker import HookWorker
+from codex_plugin_scanner.guard.hook_review.hook_worker import HookWorker
 from codex_plugin_scanner.guard.native_runtime import native_runtime_status
 from codex_plugin_scanner.guard.native_runtime_request_scope import (
     _REQUEST_CANDIDATES,
@@ -64,6 +63,7 @@ def status_probe(
     binary.chmod(0o700)
     calls: list[Path] = []
     monkeypatch.setenv("HOL_GUARD_NATIVE", "force")
+    monkeypatch.setenv("HOL_GUARD_NATIVE_BINARY", str(binary))
 
     def validate(candidate: Path) -> native_runtime_module.NativeRuntimeIdentity:
         calls.append(candidate)
@@ -141,8 +141,10 @@ def test_scope_does_not_cache_unavailable_statuses(
         return None
 
     monkeypatch.setenv("HOL_GUARD_NATIVE", "force")
+    monkeypatch.setenv("HOL_GUARD_NATIVE_BINARY", str(missing))
     monkeypatch.setattr(native_runtime_module, "_runtime_candidates", lambda: (missing,))
     monkeypatch.setattr(native_runtime_module, "_validate_binary", validate)
+    native_runtime_module._clear_capabilities_probe_state()
     with native_status_request_scope() as scope:
         assert native_runtime_status().reason == "native_unavailable"
         assert native_runtime_status().reason == "native_unavailable"
@@ -320,92 +322,6 @@ def test_scope_does_not_leak_into_another_thread() -> None:
     assert _REQUEST_STATUS.get() is None
 
 
-def test_daemon_hook_dispatch_enters_the_request_scope(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """A live ``POST /v1/hooks/<harness>`` runs its handler inside the scope."""
-    from codex_plugin_scanner.guard.daemon import GuardDaemonServer
-    from codex_plugin_scanner.guard.daemon import server as server_module
-    from codex_plugin_scanner.guard.store import GuardStore
-
-    observed: list[object] = []
-
-    def record_scope(handler, payload, query, *, default_harness):
-        del payload, query, default_harness
-        observed.append(_REQUEST_STATUS.get())
-        handler._write_json({"decision": "deny", "reason": "request-scope probe"})
-
-    monkeypatch.setattr(
-        server_module._GuardDaemonHandler,
-        "_handle_runtime_hook",
-        record_scope,
-    )
-    store = GuardStore(tmp_path / "guard-home")
-    daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
-    daemon.start()
-    try:
-        request = urllib.request.Request(
-            f"http://127.0.0.1:{daemon.port}/v1/hooks/pi",
-            data=json.dumps({"hook_event_name": "PreToolUse", "tool_name": "Bash"}).encode(),
-            headers={
-                "Content-Type": "application/json",
-                "X-Guard-Token": daemon._server.auth_token,
-            },
-            method="POST",
-        )
-        with urllib.request.urlopen(request, timeout=10) as response:
-            result = json.loads(response.read())
-    finally:
-        daemon.stop()
-
-    assert result["reason"] == "request-scope probe"
-    assert len(observed) == 1
-    assert isinstance(observed[0], dict)
-    assert _REQUEST_STATUS.get() is None
-
-
-def test_hook_dispatch_opens_the_scope_before_route_classification(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """Route facts for a hook POST already see the request scope; other POSTs do not."""
-    from codex_plugin_scanner.guard.daemon import GuardDaemonServer
-    from codex_plugin_scanner.guard.daemon import server as server_module
-    from codex_plugin_scanner.guard.native_daemon_route import NativeDaemonRouteError
-    from codex_plugin_scanner.guard.store import GuardStore
-
-    observed: list[tuple[str, bool]] = []
-
-    def record_scope(command: str, path: str, *, guard_home: Path) -> None:
-        del command, guard_home
-        observed.append((path, _REQUEST_CANDIDATES.get() is not None))
-        raise NativeDaemonRouteError("request-scope probe")
-
-    monkeypatch.setattr(server_module, "native_route_facts", record_scope)
-    store = GuardStore(tmp_path / "guard-home")
-    daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
-    daemon.start()
-    try:
-        for path in ("/v1/hooks/pi", "/v1/healthz/verify"):
-            request = urllib.request.Request(
-                f"http://127.0.0.1:{daemon.port}{path}",
-                data=json.dumps({"hook_event_name": "PreToolUse", "tool_name": "Bash"}).encode(),
-                headers={
-                    "Content-Type": "application/json",
-                    "X-Guard-Token": daemon._server.auth_token,
-                },
-                method="POST",
-            )
-            with pytest.raises(urllib.request.HTTPError) as excinfo:
-                urllib.request.urlopen(request, timeout=10)
-            assert excinfo.value.code == 503
-    finally:
-        daemon.stop()
-
-    assert observed == [("/v1/hooks/pi", True), ("/v1/healthz/verify", False)]
-
-
 def _verified_status(binary: Path) -> native_runtime_module.NativeRuntimeStatus:
     return native_runtime_module.NativeRuntimeStatus(
         mode="force",
@@ -492,6 +408,7 @@ def test_status_for_a_fallback_candidate_is_not_shared(
     binary, calls = status_probe
     preferred = tmp_path / "preferred-runtime"
     preferred.write_bytes(b"preferred-runtime")
+    monkeypatch.setenv("HOL_GUARD_NATIVE_BINARY", str(preferred))
     monkeypatch.setattr(native_runtime_module, "_runtime_candidates", lambda: (preferred, binary))
     fallback = _verified_status(binary)
     with native_status_request_scope():

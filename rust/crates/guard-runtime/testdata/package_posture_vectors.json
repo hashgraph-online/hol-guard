@@ -36,8 +36,7 @@
     "managed_updated_at": null,
     "package_script_action": "warn",
     "remote_policy_active": false,
-    "security_level": "balanced",
-    "team_policy_active": false
+    "security_level": "balanced"
    },
    "status": "not_connected",
    "supported_ecosystems": [
@@ -130,12 +129,22 @@
   "name": "not_connected",
   "request": {
    "bundle_payload": {},
-   "config_cloud_advisory_action": "review",
-   "config_package_script_action": "warn",
    "credentials_present": false,
    "entitlement": {},
    "now": "2026-06-01T12:00:00Z",
    "remote_policy": {},
+   "risk_action_config": {
+    "harness_postures": {},
+    "harness_risk_actions": {},
+    "managed_locked_settings": [],
+    "protection_posture": "balanced",
+    "protection_posture_explicit": false,
+    "risk_actions": {
+     "cloud_advisory": "review",
+     "package_script": "warn"
+    },
+    "security_level": "balanced"
+   },
    "security_level": "balanced",
    "summary": {},
    "workspace_id": "ws-1"
@@ -178,8 +187,7 @@
     "managed_updated_at": null,
     "package_script_action": "warn",
     "remote_policy_active": false,
-    "security_level": "balanced",
-    "team_policy_active": false
+    "security_level": "balanced"
    },
    "status": "not_connected",
    "supported_ecosystems": [
@@ -272,12 +280,22 @@
   "name": "not_connected_with_ws",
   "request": {
    "bundle_payload": {},
-   "config_cloud_advisory_action": "review",
-   "config_package_script_action": "warn",
    "credentials_present": false,
    "entitlement": {},
    "now": "2026-06-01T12:00:00Z",
    "remote_policy": {},
+   "risk_action_config": {
+    "harness_postures": {},
+    "harness_risk_actions": {},
+    "managed_locked_settings": [],
+    "protection_posture": "balanced",
+    "protection_posture_explicit": false,
+    "risk_actions": {
+     "cloud_advisory": "review",
+     "package_script": "warn"
+    },
+    "security_level": "balanced"
+   },
    "security_level": "balanced",
    "summary": {
     "status": "synced"
@@ -322,8 +340,7 @@
     "managed_updated_at": null,
     "package_script_action": "warn",
     "remote_policy_active": false,
-    "security_level": "balanced",
-    "team_policy_active": false
+    "security_level": "balanced"
    },
    "status": "workspace_required",
    "supported_ecosystems": [
@@ -416,12 +433,22 @@
   "name": "workspace_required",
   "request": {
    "bundle_payload": {},
-   "config_cloud_advisory_action": "review",
-   "config_package_script_action": "warn",
    "credentials_present": true,
    "entitlement": {},
    "now": "2026-06-01T12:00:00Z",
    "remote_policy": {},
+   "risk_action_config": {
+    "harness_postures": {},
+    "harness_risk_actions": {},
+    "managed_locked_settings": [],
+    "protection_posture": "balanced",
+    "protection_posture_explicit": false,
+    "risk_actions": {
+     "cloud_advisory": "review",
+     "package_script": "warn"
+    },
+    "security_level": "balanced"
+   },
    "security_level": "balanced",
    "summary": {},
    "workspace_id": null
@@ -464,8 +491,7 @@
     "managed_updated_at": null,
     "package_script_action": "warn",
     "remote_policy_active": false,
-    "security_level": "balanced",
-    "team_policy_active": false
+    "security_level": "balanced"
    },
    "status": "sync_required",
    "supported_ecosystems": [
@@ -558,12 +584,22 @@
   "name": "sync_required",
   "request": {
    "bundle_payload": {},
-   "config_cloud_advisory_action": "review",
-   "config_package_script_action": "warn",
    "credentials_present": true,
    "entitlement": {},
    "now": "2026-06-01T12:00:00Z",
    "remote_policy": {},
+   "risk_action_config": {
+    "harness_postures": {},
+    "harness_risk_actions": {},
+    "managed_locked_settings": [],
+    "protection_posture": "balanced",
+    "protection_posture_explicit": false,
+    "risk_actions": {
+     "cloud_advisory": "review",
+     "package_script": "warn"
+    },
+    "security_level": "balanced"
+   },
    "security_level": "balanced",
    "summary": {},
    "workspace_id": "ws-1"
@@ -606,8 +642,7 @@
     "managed_updated_at": null,
     "package_script_action": "warn",
     "remote_policy_active": false,
-    "security_level": "balanced",
-    "team_policy_active": false
+    "security_level": "balanced"
    },
    "status": "synced",
    "supported_ecosystems": [
@@ -706,12 +741,22 @@
     "policyHash": "ph",
     "tier": "pro"
    },
-   "config_cloud_advisory_action": "review",
-   "config_package_script_action": "warn",
    "credentials_present": true,
    "entitlement": {},
    "now": "2026-06-01T12:00:00Z",
    "remote_policy": {},
+   "risk_action_config": {
+    "harness_postures": {},
+    "harness_risk_actions": {},
+    "managed_locked_settings": [],
+    "protection_posture": "balanced",
+    "protection_posture_explicit": false,
+    "risk_actions": {
+     "cloud_advisory": "review",
+     "package_script": "warn"
+    },
+    "security_level": "balanced"
+   },
    "security_level": "balanced",
    "summary": {},
    "workspace_id": "ws-1"
@@ -754,8 +799,7 @@
     "managed_updated_at": null,
     "package_script_action": "warn",
     "remote_policy_active": false,
-    "security_level": "balanced",
-    "team_policy_active": false
+    "security_level": "balanced"
    },
    "status": "synced",
    "supported_ecosystems": [
@@ -848,12 +892,22 @@
   "name": "synced_summary",
   "request": {
    "bundle_payload": {},
-   "config_cloud_advisory_action": "review",
-   "config_package_script_action": "warn",
    "credentials_present": true,
    "entitlement": {},
    "now": "2026-06-01T12:00:00Z",
    "remote_policy": {},
+   "risk_action_config": {
+    "harness_postures": {},
+    "harness_risk_actions": {},
+    "managed_locked_settings": [],
+    "protection_posture": "balanced",
+    "protection_posture_explicit": false,
+    "risk_actions": {
+     "cloud_advisory": "review",
+     "package_script": "warn"
+    },
+    "security_level": "balanced"
+   },
    "security_level": "balanced",
    "summary": {
     "advisory_count": 12,
@@ -906,8 +960,7 @@
     "managed_updated_at": null,
     "package_script_action": "warn",
     "remote_policy_active": false,
-    "security_level": "balanced",
-    "team_policy_active": false
+    "security_level": "balanced"
    },
    "status": "expired",
    "supported_ecosystems": [
@@ -1002,12 +1055,22 @@
    "bundle_payload": {
     "expiresAt": "2026-05-01T00:00:00Z"
    },
-   "config_cloud_advisory_action": "review",
-   "config_package_script_action": "warn",
    "credentials_present": true,
    "entitlement": {},
    "now": "2026-06-01T12:00:00Z",
    "remote_policy": {},
+   "risk_action_config": {
+    "harness_postures": {},
+    "harness_risk_actions": {},
+    "managed_locked_settings": [],
+    "protection_posture": "balanced",
+    "protection_posture_explicit": false,
+    "risk_actions": {
+     "cloud_advisory": "review",
+     "package_script": "warn"
+    },
+    "security_level": "balanced"
+   },
    "security_level": "balanced",
    "summary": {},
    "workspace_id": "ws-1"
@@ -1050,8 +1113,7 @@
     "managed_updated_at": null,
     "package_script_action": "warn",
     "remote_policy_active": false,
-    "security_level": "balanced",
-    "team_policy_active": false
+    "security_level": "balanced"
    },
    "status": "expired",
    "supported_ecosystems": [
@@ -1146,12 +1208,22 @@
    "bundle_payload": {
     "expiresAt": "2026-06-01T12:00:00Z"
    },
-   "config_cloud_advisory_action": "review",
-   "config_package_script_action": "warn",
    "credentials_present": true,
    "entitlement": {},
    "now": "2026-06-01T12:00:00Z",
    "remote_policy": {},
+   "risk_action_config": {
+    "harness_postures": {},
+    "harness_risk_actions": {},
+    "managed_locked_settings": [],
+    "protection_posture": "balanced",
+    "protection_posture_explicit": false,
+    "risk_actions": {
+     "cloud_advisory": "review",
+     "package_script": "warn"
+    },
+    "security_level": "balanced"
+   },
    "security_level": "balanced",
    "summary": {},
    "workspace_id": "ws-1"
@@ -1194,8 +1266,7 @@
     "managed_updated_at": null,
     "package_script_action": "warn",
     "remote_policy_active": false,
-    "security_level": "balanced",
-    "team_policy_active": false
+    "security_level": "balanced"
    },
    "status": "synced",
    "supported_ecosystems": [
@@ -1290,12 +1361,22 @@
    "bundle_payload": {
     "expiresAt": "2026-06-01T12:00:00.000001Z"
    },
-   "config_cloud_advisory_action": "review",
-   "config_package_script_action": "warn",
    "credentials_present": true,
    "entitlement": {},
    "now": "2026-06-01T12:00:00Z",
    "remote_policy": {},
+   "risk_action_config": {
+    "harness_postures": {},
+    "harness_risk_actions": {},
+    "managed_locked_settings": [],
+    "protection_posture": "balanced",
+    "protection_posture_explicit": false,
+    "risk_actions": {
+     "cloud_advisory": "review",
+     "package_script": "warn"
+    },
+    "security_level": "balanced"
+   },
    "security_level": "balanced",
    "summary": {},
    "workspace_id": "ws-1"
@@ -1338,8 +1419,7 @@
     "managed_updated_at": null,
     "package_script_action": "warn",
     "remote_policy_active": false,
-    "security_level": "balanced",
-    "team_policy_active": false
+    "security_level": "balanced"
    },
    "status": "expired",
    "supported_ecosystems": [
@@ -1434,12 +1514,22 @@
    "bundle_payload": {
     "expiresAt": "2026-06-01T13:00:00+01:00"
    },
-   "config_cloud_advisory_action": "review",
-   "config_package_script_action": "warn",
    "credentials_present": true,
    "entitlement": {},
    "now": "2026-06-01T12:00:00Z",
    "remote_policy": {},
+   "risk_action_config": {
+    "harness_postures": {},
+    "harness_risk_actions": {},
+    "managed_locked_settings": [],
+    "protection_posture": "balanced",
+    "protection_posture_explicit": false,
+    "risk_actions": {
+     "cloud_advisory": "review",
+     "package_script": "warn"
+    },
+    "security_level": "balanced"
+   },
    "security_level": "balanced",
    "summary": {},
    "workspace_id": "ws-1"
@@ -1482,8 +1572,7 @@
     "managed_updated_at": null,
     "package_script_action": "warn",
     "remote_policy_active": false,
-    "security_level": "balanced",
-    "team_policy_active": false
+    "security_level": "balanced"
    },
    "status": "expired",
    "supported_ecosystems": [
@@ -1578,12 +1667,22 @@
    "bundle_payload": {
     "expiresAt": "2026-06-01T11:59:59"
    },
-   "config_cloud_advisory_action": "review",
-   "config_package_script_action": "warn",
    "credentials_present": true,
    "entitlement": {},
    "now": "2026-06-01T12:00:00Z",
    "remote_policy": {},
+   "risk_action_config": {
+    "harness_postures": {},
+    "harness_risk_actions": {},
+    "managed_locked_settings": [],
+    "protection_posture": "balanced",
+    "protection_posture_explicit": false,
+    "risk_actions": {
+     "cloud_advisory": "review",
+     "package_script": "warn"
+    },
+    "security_level": "balanced"
+   },
    "security_level": "balanced",
    "summary": {},
    "workspace_id": "ws-1"
@@ -1626,8 +1725,7 @@
     "managed_updated_at": null,
     "package_script_action": "warn",
     "remote_policy_active": false,
-    "security_level": "balanced",
-    "team_policy_active": false
+    "security_level": "balanced"
    },
    "status": "synced",
    "supported_ecosystems": [
@@ -1722,12 +1820,22 @@
    "bundle_payload": {
     "expiresAt": "garbage"
    },
-   "config_cloud_advisory_action": "review",
-   "config_package_script_action": "warn",
    "credentials_present": true,
    "entitlement": {},
    "now": "2026-06-01T12:00:00Z",
    "remote_policy": {},
+   "risk_action_config": {
+    "harness_postures": {},
+    "harness_risk_actions": {},
+    "managed_locked_settings": [],
+    "protection_posture": "balanced",
+    "protection_posture_explicit": false,
+    "risk_actions": {
+     "cloud_advisory": "review",
+     "package_script": "warn"
+    },
+    "security_level": "balanced"
+   },
    "security_level": "balanced",
    "summary": {
     "status": "synced"
@@ -1772,8 +1880,7 @@
     "managed_updated_at": null,
     "package_script_action": "warn",
     "remote_policy_active": false,
-    "security_level": "balanced",
-    "team_policy_active": false
+    "security_level": "balanced"
    },
    "status": "synced",
    "supported_ecosystems": [
@@ -1869,12 +1976,22 @@
     "bundleVersion": "v",
     "expiresAt": "   "
    },
-   "config_cloud_advisory_action": "review",
-   "config_package_script_action": "warn",
    "credentials_present": true,
    "entitlement": {},
    "now": "2026-06-01T12:00:00Z",
    "remote_policy": {},
+   "risk_action_config": {
+    "harness_postures": {},
+    "harness_risk_actions": {},
+    "managed_locked_settings": [],
+    "protection_posture": "balanced",
+    "protection_posture_explicit": false,
+    "risk_actions": {
+     "cloud_advisory": "review",
+     "package_script": "warn"
+    },
+    "security_level": "balanced"
+   },
    "security_level": "balanced",
    "summary": {},
    "workspace_id": "ws-1"
@@ -1917,8 +2034,7 @@
     "managed_updated_at": null,
     "package_script_action": "warn",
     "remote_policy_active": false,
-    "security_level": "balanced",
-    "team_policy_active": false
+    "security_level": "balanced"
    },
    "status": "synced",
    "supported_ecosystems": [
@@ -2013,12 +2129,22 @@
    "bundle_payload": {
     "expiresAt": "2026-01-01T00:00:00z"
    },
-   "config_cloud_advisory_action": "review",
-   "config_package_script_action": "warn",
    "credentials_present": true,
    "entitlement": {},
    "now": "2026-06-01T12:00:00Z",
    "remote_policy": {},
+   "risk_action_config": {
+    "harness_postures": {},
+    "harness_risk_actions": {},
+    "managed_locked_settings": [],
+    "protection_posture": "balanced",
+    "protection_posture_explicit": false,
+    "risk_actions": {
+     "cloud_advisory": "review",
+     "package_script": "warn"
+    },
+    "security_level": "balanced"
+   },
    "security_level": "balanced",
    "summary": {},
    "workspace_id": "ws-1"
@@ -2061,8 +2187,7 @@
     "managed_updated_at": null,
     "package_script_action": "warn",
     "remote_policy_active": false,
-    "security_level": "balanced",
-    "team_policy_active": false
+    "security_level": "balanced"
    },
    "status": "expired",
    "supported_ecosystems": [
@@ -2157,12 +2282,22 @@
    "bundle_payload": {
     "expiresAt": "2026-01-01"
    },
-   "config_cloud_advisory_action": "review",
-   "config_package_script_action": "warn",
    "credentials_present": true,
    "entitlement": {},
    "now": "2026-06-01T12:00:00Z",
    "remote_policy": {},
+   "risk_action_config": {
+    "harness_postures": {},
+    "harness_risk_actions": {},
+    "managed_locked_settings": [],
+    "protection_posture": "balanced",
+    "protection_posture_explicit": false,
+    "risk_actions": {
+     "cloud_advisory": "review",
+     "package_script": "warn"
+    },
+    "security_level": "balanced"
+   },
    "security_level": "balanced",
    "summary": {},
    "workspace_id": "ws-1"
@@ -2205,8 +2340,7 @@
     "managed_updated_at": null,
     "package_script_action": "warn",
     "remote_policy_active": false,
-    "security_level": "balanced",
-    "team_policy_active": false
+    "security_level": "balanced"
    },
    "status": "expired",
    "supported_ecosystems": [
@@ -2301,12 +2435,22 @@
    "bundle_payload": {
     "expiresAt": "20260101T000000Z"
    },
-   "config_cloud_advisory_action": "review",
-   "config_package_script_action": "warn",
    "credentials_present": true,
    "entitlement": {},
    "now": "2026-06-01T12:00:00Z",
    "remote_policy": {},
+   "risk_action_config": {
+    "harness_postures": {},
+    "harness_risk_actions": {},
+    "managed_locked_settings": [],
+    "protection_posture": "balanced",
+    "protection_posture_explicit": false,
+    "risk_actions": {
+     "cloud_advisory": "review",
+     "package_script": "warn"
+    },
+    "security_level": "balanced"
+   },
    "security_level": "balanced",
    "summary": {},
    "workspace_id": "ws-1"
@@ -2349,8 +2493,7 @@
     "managed_updated_at": null,
     "package_script_action": "warn",
     "remote_policy_active": false,
-    "security_level": "balanced",
-    "team_policy_active": false
+    "security_level": "balanced"
    },
    "status": "expired",
    "supported_ecosystems": [
@@ -2445,12 +2588,22 @@
    "bundle_payload": {
     "expiresAt": "  2026-01-01T00:00:00Z  "
    },
-   "config_cloud_advisory_action": "review",
-   "config_package_script_action": "warn",
    "credentials_present": true,
    "entitlement": {},
    "now": "2026-06-01T12:00:00Z",
    "remote_policy": {},
+   "risk_action_config": {
+    "harness_postures": {},
+    "harness_risk_actions": {},
+    "managed_locked_settings": [],
+    "protection_posture": "balanced",
+    "protection_posture_explicit": false,
+    "risk_actions": {
+     "cloud_advisory": "review",
+     "package_script": "warn"
+    },
+    "security_level": "balanced"
+   },
    "security_level": "balanced",
    "summary": {},
    "workspace_id": "ws-1"
@@ -2493,8 +2646,7 @@
     "managed_updated_at": null,
     "package_script_action": "warn",
     "remote_policy_active": false,
-    "security_level": "balanced",
-    "team_policy_active": false
+    "security_level": "balanced"
    },
    "status": "synced",
    "supported_ecosystems": [
@@ -2590,12 +2742,22 @@
     "bundleVersion": "v",
     "expiresAt": 12345
    },
-   "config_cloud_advisory_action": "review",
-   "config_package_script_action": "warn",
    "credentials_present": true,
    "entitlement": {},
    "now": "2026-06-01T12:00:00Z",
    "remote_policy": {},
+   "risk_action_config": {
+    "harness_postures": {},
+    "harness_risk_actions": {},
+    "managed_locked_settings": [],
+    "protection_posture": "balanced",
+    "protection_posture_explicit": false,
+    "risk_actions": {
+     "cloud_advisory": "review",
+     "package_script": "warn"
+    },
+    "security_level": "balanced"
+   },
    "security_level": "balanced",
    "summary": {},
    "workspace_id": "ws-1"
@@ -2638,8 +2800,7 @@
     "managed_updated_at": null,
     "package_script_action": "warn",
     "remote_policy_active": false,
-    "security_level": "balanced",
-    "team_policy_active": false
+    "security_level": "balanced"
    },
    "status": "weird_state",
    "supported_ecosystems": [
@@ -2732,12 +2893,22 @@
   "name": "summary_status_custom",
   "request": {
    "bundle_payload": {},
-   "config_cloud_advisory_action": "review",
-   "config_package_script_action": "warn",
    "credentials_present": true,
    "entitlement": {},
    "now": "2026-06-01T12:00:00Z",
    "remote_policy": {},
+   "risk_action_config": {
+    "harness_postures": {},
+    "harness_risk_actions": {},
+    "managed_locked_settings": [],
+    "protection_posture": "balanced",
+    "protection_posture_explicit": false,
+    "risk_actions": {
+     "cloud_advisory": "review",
+     "package_script": "warn"
+    },
+    "security_level": "balanced"
+   },
    "security_level": "balanced",
    "summary": {
     "status": "weird_state",
@@ -2783,8 +2954,7 @@
     "managed_updated_at": null,
     "package_script_action": "warn",
     "remote_policy_active": false,
-    "security_level": "balanced",
-    "team_policy_active": false
+    "security_level": "balanced"
    },
    "status": "degraded",
    "supported_ecosystems": [
@@ -2877,12 +3047,22 @@
   "name": "summary_status_degraded",
   "request": {
    "bundle_payload": {},
-   "config_cloud_advisory_action": "review",
-   "config_package_script_action": "warn",
    "credentials_present": true,
    "entitlement": {},
    "now": "2026-06-01T12:00:00Z",
    "remote_policy": {},
+   "risk_action_config": {
+    "harness_postures": {},
+    "harness_risk_actions": {},
+    "managed_locked_settings": [],
+    "protection_posture": "balanced",
+    "protection_posture_explicit": false,
+    "risk_actions": {
+     "cloud_advisory": "review",
+     "package_script": "warn"
+    },
+    "security_level": "balanced"
+   },
    "security_level": "balanced",
    "summary": {
     "status": "degraded"
@@ -2927,8 +3107,7 @@
     "managed_updated_at": null,
     "package_script_action": "warn",
     "remote_policy_active": false,
-    "security_level": "balanced",
-    "team_policy_active": false
+    "security_level": "balanced"
    },
    "status": "degraded",
    "supported_ecosystems": [
@@ -3021,12 +3200,22 @@
   "name": "summary_status_blank",
   "request": {
    "bundle_payload": {},
-   "config_cloud_advisory_action": "review",
-   "config_package_script_action": "warn",
    "credentials_present": true,
    "entitlement": {},
    "now": "2026-06-01T12:00:00Z",
    "remote_policy": {},
+   "risk_action_config": {
+    "harness_postures": {},
+    "harness_risk_actions": {},
+    "managed_locked_settings": [],
+    "protection_posture": "balanced",
+    "protection_posture_explicit": false,
+    "risk_actions": {
+     "cloud_advisory": "review",
+     "package_script": "warn"
+    },
+    "security_level": "balanced"
+   },
    "security_level": "balanced",
    "summary": {
     "advisory_count": 1,
@@ -3072,8 +3261,7 @@
     "managed_updated_at": null,
     "package_script_action": "warn",
     "remote_policy_active": false,
-    "security_level": "balanced",
-    "team_policy_active": false
+    "security_level": "balanced"
    },
    "status": "sync_required",
    "supported_ecosystems": [
@@ -3166,12 +3354,22 @@
   "name": "summary_status_sync_required",
   "request": {
    "bundle_payload": {},
-   "config_cloud_advisory_action": "review",
-   "config_package_script_action": "warn",
    "credentials_present": true,
    "entitlement": {},
    "now": "2026-06-01T12:00:00Z",
    "remote_policy": {},
+   "risk_action_config": {
+    "harness_postures": {},
+    "harness_risk_actions": {},
+    "managed_locked_settings": [],
+    "protection_posture": "balanced",
+    "protection_posture_explicit": false,
+    "risk_actions": {
+     "cloud_advisory": "review",
+     "package_script": "warn"
+    },
+    "security_level": "balanced"
+   },
    "security_level": "balanced",
    "summary": {
     "status": "sync_required"
@@ -3216,8 +3414,7 @@
     "managed_updated_at": null,
     "package_script_action": "warn",
     "remote_policy_active": false,
-    "security_level": "balanced",
-    "team_policy_active": false
+    "security_level": "balanced"
    },
    "status": "not_connected",
    "supported_ecosystems": [
@@ -3310,12 +3507,22 @@
   "name": "summary_status_not_connected",
   "request": {
    "bundle_payload": {},
-   "config_cloud_advisory_action": "review",
-   "config_package_script_action": "warn",
    "credentials_present": true,
    "entitlement": {},
    "now": "2026-06-01T12:00:00Z",
    "remote_policy": {},
+   "risk_action_config": {
+    "harness_postures": {},
+    "harness_risk_actions": {},
+    "managed_locked_settings": [],
+    "protection_posture": "balanced",
+    "protection_posture_explicit": false,
+    "risk_actions": {
+     "cloud_advisory": "review",
+     "package_script": "warn"
+    },
+    "security_level": "balanced"
+   },
    "security_level": "balanced",
    "summary": {
     "status": "not_connected"
@@ -3360,8 +3567,7 @@
     "managed_updated_at": null,
     "package_script_action": "warn",
     "remote_policy_active": false,
-    "security_level": "balanced",
-    "team_policy_active": false
+    "security_level": "balanced"
    },
    "status": "expired",
    "supported_ecosystems": [
@@ -3454,12 +3660,22 @@
   "name": "summary_status_expired",
   "request": {
    "bundle_payload": {},
-   "config_cloud_advisory_action": "review",
-   "config_package_script_action": "warn",
    "credentials_present": true,
    "entitlement": {},
    "now": "2026-06-01T12:00:00Z",
    "remote_policy": {},
+   "risk_action_config": {
+    "harness_postures": {},
+    "harness_risk_actions": {},
+    "managed_locked_settings": [],
+    "protection_posture": "balanced",
+    "protection_posture_explicit": false,
+    "risk_actions": {
+     "cloud_advisory": "review",
+     "package_script": "warn"
+    },
+    "security_level": "balanced"
+   },
    "security_level": "balanced",
    "summary": {
     "status": "expired"
@@ -3504,8 +3720,7 @@
     "managed_updated_at": null,
     "package_script_action": "warn",
     "remote_policy_active": false,
-    "security_level": "balanced",
-    "team_policy_active": false
+    "security_level": "balanced"
    },
    "status": "workspace_required",
    "supported_ecosystems": [
@@ -3598,12 +3813,22 @@
   "name": "summary_status_workspace_required",
   "request": {
    "bundle_payload": {},
-   "config_cloud_advisory_action": "review",
-   "config_package_script_action": "warn",
    "credentials_present": true,
    "entitlement": {},
    "now": "2026-06-01T12:00:00Z",
    "remote_policy": {},
+   "risk_action_config": {
+    "harness_postures": {},
+    "harness_risk_actions": {},
+    "managed_locked_settings": [],
+    "protection_posture": "balanced",
+    "protection_posture_explicit": false,
+    "risk_actions": {
+     "cloud_advisory": "review",
+     "package_script": "warn"
+    },
+    "security_level": "balanced"
+   },
    "security_level": "balanced",
    "summary": {
     "status": "workspace_required"
@@ -3648,8 +3873,7 @@
     "managed_updated_at": null,
     "package_script_action": "warn",
     "remote_policy_active": false,
-    "security_level": "balanced",
-    "team_policy_active": false
+    "security_level": "balanced"
    },
    "status": "synced",
    "supported_ecosystems": [
@@ -3742,12 +3966,22 @@
   "name": "stale_after_grace",
   "request": {
    "bundle_payload": {},
-   "config_cloud_advisory_action": "review",
-   "config_package_script_action": "warn",
    "credentials_present": true,
    "entitlement": {},
    "now": "2026-06-01T12:00:00Z",
    "remote_policy": {},
+   "risk_action_config": {
+    "harness_postures": {},
+    "harness_risk_actions": {},
+    "managed_locked_settings": [],
+    "protection_posture": "balanced",
+    "protection_posture_explicit": false,
+    "risk_actions": {
+     "cloud_advisory": "review",
+     "package_script": "warn"
+    },
+    "security_level": "balanced"
+   },
    "security_level": "balanced",
    "summary": {
     "status": "synced",
@@ -3793,8 +4027,7 @@
     "managed_updated_at": null,
     "package_script_action": "warn",
     "remote_policy_active": false,
-    "security_level": "balanced",
-    "team_policy_active": false
+    "security_level": "balanced"
    },
    "status": "synced",
    "supported_ecosystems": [
@@ -3887,12 +4120,22 @@
   "name": "stale_boundary",
   "request": {
    "bundle_payload": {},
-   "config_cloud_advisory_action": "review",
-   "config_package_script_action": "warn",
    "credentials_present": true,
    "entitlement": {},
    "now": "2026-06-01T12:00:00Z",
    "remote_policy": {},
+   "risk_action_config": {
+    "harness_postures": {},
+    "harness_risk_actions": {},
+    "managed_locked_settings": [],
+    "protection_posture": "balanced",
+    "protection_posture_explicit": false,
+    "risk_actions": {
+     "cloud_advisory": "review",
+     "package_script": "warn"
+    },
+    "security_level": "balanced"
+   },
    "security_level": "balanced",
    "summary": {
     "next_refresh_at": "2026-06-01T11:55:00Z",
@@ -3938,8 +4181,7 @@
     "managed_updated_at": null,
     "package_script_action": "warn",
     "remote_policy_active": false,
-    "security_level": "balanced",
-    "team_policy_active": false
+    "security_level": "balanced"
    },
    "status": "synced",
    "supported_ecosystems": [
@@ -4032,12 +4274,22 @@
   "name": "stale_boundary_minus1us",
   "request": {
    "bundle_payload": {},
-   "config_cloud_advisory_action": "review",
-   "config_package_script_action": "warn",
    "credentials_present": true,
    "entitlement": {},
    "now": "2026-06-01T12:00:00Z",
    "remote_policy": {},
+   "risk_action_config": {
+    "harness_postures": {},
+    "harness_risk_actions": {},
+    "managed_locked_settings": [],
+    "protection_posture": "balanced",
+    "protection_posture_explicit": false,
+    "risk_actions": {
+     "cloud_advisory": "review",
+     "package_script": "warn"
+    },
+    "security_level": "balanced"
+   },
    "security_level": "balanced",
    "summary": {
     "next_refresh_at": "2026-06-01T11:55:00.000001Z",
@@ -4083,8 +4335,7 @@
     "managed_updated_at": null,
     "package_script_action": "warn",
     "remote_policy_active": false,
-    "security_level": "balanced",
-    "team_policy_active": false
+    "security_level": "balanced"
    },
    "status": "synced",
    "supported_ecosystems": [
@@ -4177,12 +4428,22 @@
   "name": "explicit_next_refresh_micros",
   "request": {
    "bundle_payload": {},
-   "config_cloud_advisory_action": "review",
-   "config_package_script_action": "warn",
    "credentials_present": true,
    "entitlement": {},
    "now": "2026-06-01T12:00:00Z",
    "remote_policy": {},
+   "risk_action_config": {
+    "harness_postures": {},
+    "harness_risk_actions": {},
+    "managed_locked_settings": [],
+    "protection_posture": "balanced",
+    "protection_posture_explicit": false,
+    "risk_actions": {
+     "cloud_advisory": "review",
+     "package_script": "warn"
+    },
+    "security_level": "balanced"
+   },
    "security_level": "balanced",
    "summary": {
     "next_refresh_at": "2026-06-01T12:30:00.123456+00:00",
@@ -4228,8 +4489,7 @@
     "managed_updated_at": null,
     "package_script_action": "warn",
     "remote_policy_active": false,
-    "security_level": "balanced",
-    "team_policy_active": false
+    "security_level": "balanced"
    },
    "status": "synced",
    "supported_ecosystems": [
@@ -4322,12 +4582,22 @@
   "name": "explicit_next_refresh_offset",
   "request": {
    "bundle_payload": {},
-   "config_cloud_advisory_action": "review",
-   "config_package_script_action": "warn",
    "credentials_present": true,
    "entitlement": {},
    "now": "2026-06-01T12:00:00Z",
    "remote_policy": {},
+   "risk_action_config": {
+    "harness_postures": {},
+    "harness_risk_actions": {},
+    "managed_locked_settings": [],
+    "protection_posture": "balanced",
+    "protection_posture_explicit": false,
+    "risk_actions": {
+     "cloud_advisory": "review",
+     "package_script": "warn"
+    },
+    "security_level": "balanced"
+   },
    "security_level": "balanced",
    "summary": {
     "next_refresh_at": "2026-06-01T14:30:00+02:00",
@@ -4373,8 +4643,7 @@
     "managed_updated_at": null,
     "package_script_action": "warn",
     "remote_policy_active": false,
-    "security_level": "balanced",
-    "team_policy_active": false
+    "security_level": "balanced"
    },
    "status": "synced",
    "supported_ecosystems": [
@@ -4467,12 +4736,22 @@
   "name": "explicit_next_refresh_naive",
   "request": {
    "bundle_payload": {},
-   "config_cloud_advisory_action": "review",
-   "config_package_script_action": "warn",
    "credentials_present": true,
    "entitlement": {},
    "now": "2026-06-01T12:00:00Z",
    "remote_policy": {},
+   "risk_action_config": {
+    "harness_postures": {},
+    "harness_risk_actions": {},
+    "managed_locked_settings": [],
+    "protection_posture": "balanced",
+    "protection_posture_explicit": false,
+    "risk_actions": {
+     "cloud_advisory": "review",
+     "package_script": "warn"
+    },
+    "security_level": "balanced"
+   },
    "security_level": "balanced",
    "summary": {
     "next_refresh_at": "2026-06-01T12:30:00",
@@ -4518,8 +4797,7 @@
     "managed_updated_at": null,
     "package_script_action": "warn",
     "remote_policy_active": false,
-    "security_level": "balanced",
-    "team_policy_active": false
+    "security_level": "balanced"
    },
    "status": "synced",
    "supported_ecosystems": [
@@ -4612,12 +4890,22 @@
   "name": "explicit_next_refresh_bad",
   "request": {
    "bundle_payload": {},
-   "config_cloud_advisory_action": "review",
-   "config_package_script_action": "warn",
    "credentials_present": true,
    "entitlement": {},
    "now": "2026-06-01T12:00:00Z",
    "remote_policy": {},
+   "risk_action_config": {
+    "harness_postures": {},
+    "harness_risk_actions": {},
+    "managed_locked_settings": [],
+    "protection_posture": "balanced",
+    "protection_posture_explicit": false,
+    "risk_actions": {
+     "cloud_advisory": "review",
+     "package_script": "warn"
+    },
+    "security_level": "balanced"
+   },
    "security_level": "balanced",
    "summary": {
     "next_refresh_at": "nope",
@@ -4664,8 +4952,7 @@
     "managed_updated_at": null,
     "package_script_action": "warn",
     "remote_policy_active": false,
-    "security_level": "balanced",
-    "team_policy_active": false
+    "security_level": "balanced"
    },
    "status": "synced",
    "supported_ecosystems": [
@@ -4758,12 +5045,22 @@
   "name": "synced_at_micros",
   "request": {
    "bundle_payload": {},
-   "config_cloud_advisory_action": "review",
-   "config_package_script_action": "warn",
    "credentials_present": true,
    "entitlement": {},
    "now": "2026-06-01T12:00:00Z",
    "remote_policy": {},
+   "risk_action_config": {
+    "harness_postures": {},
+    "harness_risk_actions": {},
+    "managed_locked_settings": [],
+    "protection_posture": "balanced",
+    "protection_posture_explicit": false,
+    "risk_actions": {
+     "cloud_advisory": "review",
+     "package_script": "warn"
+    },
+    "security_level": "balanced"
+   },
    "security_level": "balanced",
    "summary": {
     "status": "synced",
@@ -4809,8 +5106,7 @@
     "managed_updated_at": null,
     "package_script_action": "warn",
     "remote_policy_active": false,
-    "security_level": "balanced",
-    "team_policy_active": false
+    "security_level": "balanced"
    },
    "status": "synced",
    "supported_ecosystems": [
@@ -4903,12 +5199,22 @@
   "name": "synced_at_bad",
   "request": {
    "bundle_payload": {},
-   "config_cloud_advisory_action": "review",
-   "config_package_script_action": "warn",
    "credentials_present": true,
    "entitlement": {},
    "now": "2026-06-01T12:00:00Z",
    "remote_policy": {},
+   "risk_action_config": {
+    "harness_postures": {},
+    "harness_risk_actions": {},
+    "managed_locked_settings": [],
+    "protection_posture": "balanced",
+    "protection_posture_explicit": false,
+    "risk_actions": {
+     "cloud_advisory": "review",
+     "package_script": "warn"
+    },
+    "security_level": "balanced"
+   },
    "security_level": "balanced",
    "summary": {
     "status": "synced",
@@ -4954,8 +5260,7 @@
     "managed_updated_at": null,
     "package_script_action": "warn",
     "remote_policy_active": false,
-    "security_level": "balanced",
-    "team_policy_active": false
+    "security_level": "balanced"
    },
    "status": "synced",
    "supported_ecosystems": [
@@ -5048,12 +5353,22 @@
   "name": "synced_at_number",
   "request": {
    "bundle_payload": {},
-   "config_cloud_advisory_action": "review",
-   "config_package_script_action": "warn",
    "credentials_present": true,
    "entitlement": {},
    "now": "2026-06-01T12:00:00Z",
    "remote_policy": {},
+   "risk_action_config": {
+    "harness_postures": {},
+    "harness_risk_actions": {},
+    "managed_locked_settings": [],
+    "protection_posture": "balanced",
+    "protection_posture_explicit": false,
+    "risk_actions": {
+     "cloud_advisory": "review",
+     "package_script": "warn"
+    },
+    "security_level": "balanced"
+   },
    "security_level": "balanced",
    "summary": {
     "status": "synced",
@@ -5099,8 +5414,7 @@
     "managed_updated_at": null,
     "package_script_action": "warn",
     "remote_policy_active": false,
-    "security_level": "balanced",
-    "team_policy_active": false
+    "security_level": "balanced"
    },
    "status": "custom_ok",
    "supported_ecosystems": [
@@ -5193,12 +5507,22 @@
   "name": "synced_unknown_health",
   "request": {
    "bundle_payload": {},
-   "config_cloud_advisory_action": "review",
-   "config_package_script_action": "warn",
    "credentials_present": true,
    "entitlement": {},
    "now": "2026-06-01T12:00:00Z",
    "remote_policy": {},
+   "risk_action_config": {
+    "harness_postures": {},
+    "harness_risk_actions": {},
+    "managed_locked_settings": [],
+    "protection_posture": "balanced",
+    "protection_posture_explicit": false,
+    "risk_actions": {
+     "cloud_advisory": "review",
+     "package_script": "warn"
+    },
+    "security_level": "balanced"
+   },
    "security_level": "balanced",
    "summary": {
     "status": "custom_ok",
@@ -5244,8 +5568,7 @@
     "managed_updated_at": null,
     "package_script_action": "warn",
     "remote_policy_active": false,
-    "security_level": "balanced",
-    "team_policy_active": false
+    "security_level": "balanced"
    },
    "status": "expired",
    "supported_ecosystems": [
@@ -5340,12 +5663,22 @@
    "bundle_payload": {
     "expiresAt": "2026-06-01T11:00:00Z"
    },
-   "config_cloud_advisory_action": "review",
-   "config_package_script_action": "warn",
    "credentials_present": true,
    "entitlement": {},
    "now": "2026-06-01T12:00:00Z",
    "remote_policy": {},
+   "risk_action_config": {
+    "harness_postures": {},
+    "harness_risk_actions": {},
+    "managed_locked_settings": [],
+    "protection_posture": "balanced",
+    "protection_posture_explicit": false,
+    "risk_actions": {
+     "cloud_advisory": "review",
+     "package_script": "warn"
+    },
+    "security_level": "balanced"
+   },
    "security_level": "balanced",
    "summary": {
     "status": "synced"
@@ -5390,8 +5723,7 @@
     "managed_updated_at": null,
     "package_script_action": "warn",
     "remote_policy_active": false,
-    "security_level": "balanced",
-    "team_policy_active": false
+    "security_level": "balanced"
    },
    "status": "synced",
    "supported_ecosystems": [
@@ -5484,8 +5816,6 @@
   "name": "entitlement_fallbacks",
   "request": {
    "bundle_payload": {},
-   "config_cloud_advisory_action": "review",
-   "config_package_script_action": "warn",
    "credentials_present": true,
    "entitlement": {
     "bundle_version": "e1",
@@ -5495,6 +5825,18 @@
    },
    "now": "2026-06-01T12:00:00Z",
    "remote_policy": {},
+   "risk_action_config": {
+    "harness_postures": {},
+    "harness_risk_actions": {},
+    "managed_locked_settings": [],
+    "protection_posture": "balanced",
+    "protection_posture_explicit": false,
+    "risk_actions": {
+     "cloud_advisory": "review",
+     "package_script": "warn"
+    },
+    "security_level": "balanced"
+   },
    "security_level": "balanced",
    "summary": {
     "status": "synced"
@@ -5539,8 +5881,7 @@
     "managed_updated_at": null,
     "package_script_action": "warn",
     "remote_policy_active": false,
-    "security_level": "balanced",
-    "team_policy_active": false
+    "security_level": "balanced"
    },
    "status": "synced",
    "supported_ecosystems": [
@@ -5638,12 +5979,22 @@
     "policyHash": "bh",
     "tier": "bt"
    },
-   "config_cloud_advisory_action": "review",
-   "config_package_script_action": "warn",
    "credentials_present": true,
    "entitlement": {},
    "now": "2026-06-01T12:00:00Z",
    "remote_policy": {},
+   "risk_action_config": {
+    "harness_postures": {},
+    "harness_risk_actions": {},
+    "managed_locked_settings": [],
+    "protection_posture": "balanced",
+    "protection_posture_explicit": false,
+    "risk_actions": {
+     "cloud_advisory": "review",
+     "package_script": "warn"
+    },
+    "security_level": "balanced"
+   },
    "security_level": "balanced",
    "summary": {
     "status": "synced"
@@ -5688,8 +6039,7 @@
     "managed_updated_at": null,
     "package_script_action": "warn",
     "remote_policy_active": false,
-    "security_level": "balanced",
-    "team_policy_active": false
+    "security_level": "balanced"
    },
    "status": "synced",
    "supported_ecosystems": [
@@ -5782,8 +6132,6 @@
   "name": "blank_fallthrough",
   "request": {
    "bundle_payload": {},
-   "config_cloud_advisory_action": "review",
-   "config_package_script_action": "warn",
    "credentials_present": true,
    "entitlement": {
     "bundle_version": "e2",
@@ -5791,6 +6139,18 @@
    },
    "now": "2026-06-01T12:00:00Z",
    "remote_policy": {},
+   "risk_action_config": {
+    "harness_postures": {},
+    "harness_risk_actions": {},
+    "managed_locked_settings": [],
+    "protection_posture": "balanced",
+    "protection_posture_explicit": false,
+    "risk_actions": {
+     "cloud_advisory": "review",
+     "package_script": "warn"
+    },
+    "security_level": "balanced"
+   },
    "security_level": "balanced",
    "summary": {
     "bundle_version": " ",
@@ -5837,8 +6197,7 @@
     "managed_updated_at": null,
     "package_script_action": "warn",
     "remote_policy_active": false,
-    "security_level": "balanced",
-    "team_policy_active": false
+    "security_level": "balanced"
    },
    "status": "synced",
    "supported_ecosystems": [
@@ -5931,12 +6290,22 @@
   "name": "workspace_empty_string",
   "request": {
    "bundle_payload": {},
-   "config_cloud_advisory_action": "review",
-   "config_package_script_action": "warn",
    "credentials_present": true,
    "entitlement": {},
    "now": "2026-06-01T12:00:00Z",
    "remote_policy": {},
+   "risk_action_config": {
+    "harness_postures": {},
+    "harness_risk_actions": {},
+    "managed_locked_settings": [],
+    "protection_posture": "balanced",
+    "protection_posture_explicit": false,
+    "risk_actions": {
+     "cloud_advisory": "review",
+     "package_script": "warn"
+    },
+    "security_level": "balanced"
+   },
    "security_level": "balanced",
    "summary": {
     "status": "synced"
@@ -5981,8 +6350,7 @@
     "managed_updated_at": null,
     "package_script_action": "warn",
     "remote_policy_active": false,
-    "security_level": "balanced",
-    "team_policy_active": false
+    "security_level": "balanced"
    },
    "status": "synced",
    "supported_ecosystems": [
@@ -6075,12 +6443,22 @@
   "name": "advisory_bool",
   "request": {
    "bundle_payload": {},
-   "config_cloud_advisory_action": "review",
-   "config_package_script_action": "warn",
    "credentials_present": true,
    "entitlement": {},
    "now": "2026-06-01T12:00:00Z",
    "remote_policy": {},
+   "risk_action_config": {
+    "harness_postures": {},
+    "harness_risk_actions": {},
+    "managed_locked_settings": [],
+    "protection_posture": "balanced",
+    "protection_posture_explicit": false,
+    "risk_actions": {
+     "cloud_advisory": "review",
+     "package_script": "warn"
+    },
+    "security_level": "balanced"
+   },
    "security_level": "balanced",
    "summary": {
     "advisory_count": true,
@@ -6127,8 +6505,7 @@
     "managed_updated_at": null,
     "package_script_action": "warn",
     "remote_policy_active": false,
-    "security_level": "balanced",
-    "team_policy_active": false
+    "security_level": "balanced"
    },
    "status": "synced",
    "supported_ecosystems": [
@@ -6221,12 +6598,22 @@
   "name": "advisory_float",
   "request": {
    "bundle_payload": {},
-   "config_cloud_advisory_action": "review",
-   "config_package_script_action": "warn",
    "credentials_present": true,
    "entitlement": {},
    "now": "2026-06-01T12:00:00Z",
    "remote_policy": {},
+   "risk_action_config": {
+    "harness_postures": {},
+    "harness_risk_actions": {},
+    "managed_locked_settings": [],
+    "protection_posture": "balanced",
+    "protection_posture_explicit": false,
+    "risk_actions": {
+     "cloud_advisory": "review",
+     "package_script": "warn"
+    },
+    "security_level": "balanced"
+   },
    "security_level": "balanced",
    "summary": {
     "advisory_count": 1.5,
@@ -6273,8 +6660,7 @@
     "managed_updated_at": null,
     "package_script_action": "warn",
     "remote_policy_active": false,
-    "security_level": "balanced",
-    "team_policy_active": false
+    "security_level": "balanced"
    },
    "status": "synced",
    "supported_ecosystems": [
@@ -6367,12 +6753,22 @@
   "name": "advisory_big",
   "request": {
    "bundle_payload": {},
-   "config_cloud_advisory_action": "review",
-   "config_package_script_action": "warn",
    "credentials_present": true,
    "entitlement": {},
    "now": "2026-06-01T12:00:00Z",
    "remote_policy": {},
+   "risk_action_config": {
+    "harness_postures": {},
+    "harness_risk_actions": {},
+    "managed_locked_settings": [],
+    "protection_posture": "balanced",
+    "protection_posture_explicit": false,
+    "risk_actions": {
+     "cloud_advisory": "review",
+     "package_script": "warn"
+    },
+    "security_level": "balanced"
+   },
    "security_level": "balanced",
    "summary": {
     "advisory_count": 1099511627776,
@@ -6419,8 +6815,7 @@
     "managed_updated_at": null,
     "package_script_action": "warn",
     "remote_policy_active": false,
-    "security_level": "balanced",
-    "team_policy_active": false
+    "security_level": "balanced"
    },
    "status": "synced",
    "supported_ecosystems": [
@@ -6433,12 +6828,22 @@
   "name": "ecosystem_custom",
   "request": {
    "bundle_payload": {},
-   "config_cloud_advisory_action": "review",
-   "config_package_script_action": "warn",
    "credentials_present": true,
    "entitlement": {},
    "now": "2026-06-01T12:00:00Z",
    "remote_policy": {},
+   "risk_action_config": {
+    "harness_postures": {},
+    "harness_risk_actions": {},
+    "managed_locked_settings": [],
+    "protection_posture": "balanced",
+    "protection_posture_explicit": false,
+    "risk_actions": {
+     "cloud_advisory": "review",
+     "package_script": "warn"
+    },
+    "security_level": "balanced"
+   },
    "security_level": "balanced",
    "summary": {
     "ecosystem_support": [
@@ -6489,8 +6894,7 @@
     "managed_updated_at": null,
     "package_script_action": "warn",
     "remote_policy_active": false,
-    "security_level": "balanced",
-    "team_policy_active": false
+    "security_level": "balanced"
    },
    "status": "synced",
    "supported_ecosystems": [
@@ -6583,12 +6987,22 @@
   "name": "ecosystem_empty",
   "request": {
    "bundle_payload": {},
-   "config_cloud_advisory_action": "review",
-   "config_package_script_action": "warn",
    "credentials_present": true,
    "entitlement": {},
    "now": "2026-06-01T12:00:00Z",
    "remote_policy": {},
+   "risk_action_config": {
+    "harness_postures": {},
+    "harness_risk_actions": {},
+    "managed_locked_settings": [],
+    "protection_posture": "balanced",
+    "protection_posture_explicit": false,
+    "risk_actions": {
+     "cloud_advisory": "review",
+     "package_script": "warn"
+    },
+    "security_level": "balanced"
+   },
    "security_level": "balanced",
    "summary": {
     "ecosystem_support": [],
@@ -6634,8 +7048,7 @@
     "managed_updated_at": null,
     "package_script_action": "warn",
     "remote_policy_active": false,
-    "security_level": "balanced",
-    "team_policy_active": false
+    "security_level": "balanced"
    },
    "status": "synced",
    "supported_ecosystems": [
@@ -6728,12 +7141,22 @@
   "name": "ecosystem_not_list",
   "request": {
    "bundle_payload": {},
-   "config_cloud_advisory_action": "review",
-   "config_package_script_action": "warn",
    "credentials_present": true,
    "entitlement": {},
    "now": "2026-06-01T12:00:00Z",
    "remote_policy": {},
+   "risk_action_config": {
+    "harness_postures": {},
+    "harness_risk_actions": {},
+    "managed_locked_settings": [],
+    "protection_posture": "balanced",
+    "protection_posture_explicit": false,
+    "risk_actions": {
+     "cloud_advisory": "review",
+     "package_script": "warn"
+    },
+    "security_level": "balanced"
+   },
    "security_level": "balanced",
    "summary": {
     "ecosystem_support": "npm",
@@ -6779,8 +7202,7 @@
     "managed_updated_at": null,
     "package_script_action": "warn",
     "remote_policy_active": false,
-    "security_level": "balanced",
-    "team_policy_active": false
+    "security_level": "balanced"
    },
    "status": "synced",
    "supported_ecosystems": [
@@ -6791,12 +7213,22 @@
   "name": "ecosystem_list_of_str",
   "request": {
    "bundle_payload": {},
-   "config_cloud_advisory_action": "review",
-   "config_package_script_action": "warn",
    "credentials_present": true,
    "entitlement": {},
    "now": "2026-06-01T12:00:00Z",
    "remote_policy": {},
+   "risk_action_config": {
+    "harness_postures": {},
+    "harness_risk_actions": {},
+    "managed_locked_settings": [],
+    "protection_posture": "balanced",
+    "protection_posture_explicit": false,
+    "risk_actions": {
+     "cloud_advisory": "review",
+     "package_script": "warn"
+    },
+    "security_level": "balanced"
+   },
    "security_level": "balanced",
    "summary": {
     "ecosystem_support": [
@@ -6845,8 +7277,7 @@
     "managed_updated_at": "2026-05-30T00:00:00Z",
     "package_script_action": "block",
     "remote_policy_active": true,
-    "security_level": "balanced",
-    "team_policy_active": false
+    "security_level": "balanced"
    },
    "status": "sync_required",
    "supported_ecosystems": [
@@ -6939,8 +7370,6 @@
   "name": "remote_camel",
   "request": {
    "bundle_payload": {},
-   "config_cloud_advisory_action": "review",
-   "config_package_script_action": "warn",
    "credentials_present": true,
    "entitlement": {},
    "now": "2026-06-01T12:00:00Z",
@@ -6948,6 +7377,18 @@
     "cloudAdvisoryAction": "warn",
     "packageScriptAction": "block",
     "updatedAt": "2026-05-30T00:00:00Z"
+   },
+   "risk_action_config": {
+    "harness_postures": {},
+    "harness_risk_actions": {},
+    "managed_locked_settings": [],
+    "protection_posture": "balanced",
+    "protection_posture_explicit": false,
+    "risk_actions": {
+     "cloud_advisory": "review",
+     "package_script": "warn"
+    },
+    "security_level": "balanced"
    },
    "security_level": "balanced",
    "summary": {},
@@ -6991,8 +7432,7 @@
     "managed_updated_at": null,
     "package_script_action": "block",
     "remote_policy_active": true,
-    "security_level": "balanced",
-    "team_policy_active": false
+    "security_level": "balanced"
    },
    "status": "sync_required",
    "supported_ecosystems": [
@@ -7085,14 +7525,24 @@
   "name": "remote_snake",
   "request": {
    "bundle_payload": {},
-   "config_cloud_advisory_action": "review",
-   "config_package_script_action": "warn",
    "credentials_present": true,
    "entitlement": {},
    "now": "2026-06-01T12:00:00Z",
    "remote_policy": {
     "cloud_advisory_action": "warn",
     "package_script_action": "block"
+   },
+   "risk_action_config": {
+    "harness_postures": {},
+    "harness_risk_actions": {},
+    "managed_locked_settings": [],
+    "protection_posture": "balanced",
+    "protection_posture_explicit": false,
+    "risk_actions": {
+     "cloud_advisory": "review",
+     "package_script": "warn"
+    },
+    "security_level": "balanced"
    },
    "security_level": "balanced",
    "summary": {},
@@ -7136,8 +7586,7 @@
     "managed_updated_at": null,
     "package_script_action": "review",
     "remote_policy_active": true,
-    "security_level": "balanced",
-    "team_policy_active": false
+    "security_level": "balanced"
    },
    "status": "sync_required",
    "supported_ecosystems": [
@@ -7230,8 +7679,6 @@
   "name": "remote_both",
   "request": {
    "bundle_payload": {},
-   "config_cloud_advisory_action": "review",
-   "config_package_script_action": "warn",
    "credentials_present": true,
    "entitlement": {},
    "now": "2026-06-01T12:00:00Z",
@@ -7240,6 +7687,18 @@
     "cloud_advisory_action": "allow",
     "packageScriptAction": "review",
     "package_script_action": "block"
+   },
+   "risk_action_config": {
+    "harness_postures": {},
+    "harness_risk_actions": {},
+    "managed_locked_settings": [],
+    "protection_posture": "balanced",
+    "protection_posture_explicit": false,
+    "risk_actions": {
+     "cloud_advisory": "review",
+     "package_script": "warn"
+    },
+    "security_level": "balanced"
    },
    "security_level": "balanced",
    "summary": {},
@@ -7283,8 +7742,7 @@
     "managed_updated_at": null,
     "package_script_action": "warn",
     "remote_policy_active": true,
-    "security_level": "balanced",
-    "team_policy_active": false
+    "security_level": "balanced"
    },
    "status": "sync_required",
    "supported_ecosystems": [
@@ -7377,8 +7835,6 @@
   "name": "remote_blank",
   "request": {
    "bundle_payload": {},
-   "config_cloud_advisory_action": "review",
-   "config_package_script_action": "warn",
    "credentials_present": true,
    "entitlement": {},
    "now": "2026-06-01T12:00:00Z",
@@ -7386,6 +7842,18 @@
     "cloudAdvisoryAction": 5,
     "other": 1,
     "packageScriptAction": "  "
+   },
+   "risk_action_config": {
+    "harness_postures": {},
+    "harness_risk_actions": {},
+    "managed_locked_settings": [],
+    "protection_posture": "balanced",
+    "protection_posture_explicit": false,
+    "risk_actions": {
+     "cloud_advisory": "review",
+     "package_script": "warn"
+    },
+    "security_level": "balanced"
    },
    "security_level": "balanced",
    "summary": {},
@@ -7429,8 +7897,7 @@
     "managed_updated_at": null,
     "package_script_action": "warn",
     "remote_policy_active": true,
-    "security_level": "balanced",
-    "team_policy_active": false
+    "security_level": "balanced"
    },
    "status": "sync_required",
    "supported_ecosystems": [
@@ -7523,13 +7990,23 @@
   "name": "remote_updated_blank",
   "request": {
    "bundle_payload": {},
-   "config_cloud_advisory_action": "review",
-   "config_package_script_action": "warn",
    "credentials_present": true,
    "entitlement": {},
    "now": "2026-06-01T12:00:00Z",
    "remote_policy": {
     "updatedAt": " "
+   },
+   "risk_action_config": {
+    "harness_postures": {},
+    "harness_risk_actions": {},
+    "managed_locked_settings": [],
+    "protection_posture": "balanced",
+    "protection_posture_explicit": false,
+    "risk_actions": {
+     "cloud_advisory": "review",
+     "package_script": "warn"
+    },
+    "security_level": "balanced"
    },
    "security_level": "balanced",
    "summary": {},
@@ -7573,8 +8050,7 @@
     "managed_updated_at": null,
     "package_script_action": "warn",
     "remote_policy_active": true,
-    "security_level": "balanced",
-    "team_policy_active": false
+    "security_level": "balanced"
    },
    "status": "sync_required",
    "supported_ecosystems": [
@@ -7667,13 +8143,23 @@
   "name": "remote_only_unknown",
   "request": {
    "bundle_payload": {},
-   "config_cloud_advisory_action": "review",
-   "config_package_script_action": "warn",
    "credentials_present": true,
    "entitlement": {},
    "now": "2026-06-01T12:00:00Z",
    "remote_policy": {
     "x": 1
+   },
+   "risk_action_config": {
+    "harness_postures": {},
+    "harness_risk_actions": {},
+    "managed_locked_settings": [],
+    "protection_posture": "balanced",
+    "protection_posture_explicit": false,
+    "risk_actions": {
+     "cloud_advisory": "review",
+     "package_script": "warn"
+    },
+    "security_level": "balanced"
    },
    "security_level": "balanced",
    "summary": {},
@@ -7717,8 +8203,7 @@
     "managed_updated_at": null,
     "package_script_action": null,
     "remote_policy_active": false,
-    "security_level": "balanced",
-    "team_policy_active": false
+    "security_level": "balanced"
    },
    "status": "sync_required",
    "supported_ecosystems": [
@@ -7808,11 +8293,9 @@
     }
    ]
   },
-  "name": "config_actions_none",
+  "name": "risk_action_config_absent",
   "request": {
    "bundle_payload": {},
-   "config_cloud_advisory_action": null,
-   "config_package_script_action": null,
    "credentials_present": true,
    "entitlement": {},
    "now": "2026-06-01T12:00:00Z",
@@ -7853,14 +8336,13 @@
     ]
    },
    "policy": {
-    "cloud_advisory_action": "",
+    "cloud_advisory_action": "warn",
     "managed_by_cloud": false,
     "managed_label": null,
     "managed_updated_at": null,
-    "package_script_action": "",
+    "package_script_action": "warn",
     "remote_policy_active": false,
-    "security_level": "balanced",
-    "team_policy_active": false
+    "security_level": "balanced"
    },
    "status": "sync_required",
    "supported_ecosystems": [
@@ -7950,15 +8432,22 @@
     }
    ]
   },
-  "name": "config_actions_empty",
+  "name": "risk_action_config_defaults",
   "request": {
    "bundle_payload": {},
-   "config_cloud_advisory_action": "",
-   "config_package_script_action": "",
    "credentials_present": true,
    "entitlement": {},
    "now": "2026-06-01T12:00:00Z",
    "remote_policy": {},
+   "risk_action_config": {
+    "harness_postures": {},
+    "harness_risk_actions": {},
+    "managed_locked_settings": [],
+    "protection_posture": "balanced",
+    "protection_posture_explicit": false,
+    "risk_actions": {},
+    "security_level": "balanced"
+   },
    "security_level": "balanced",
    "summary": {},
    "workspace_id": "ws-1"
@@ -8001,8 +8490,7 @@
     "managed_updated_at": null,
     "package_script_action": "warn",
     "remote_policy_active": false,
-    "security_level": "strict",
-    "team_policy_active": false
+    "security_level": "strict"
    },
    "status": "sync_required",
    "supported_ecosystems": [
@@ -8095,12 +8583,22 @@
   "name": "security_level_strict",
   "request": {
    "bundle_payload": {},
-   "config_cloud_advisory_action": "review",
-   "config_package_script_action": "warn",
    "credentials_present": true,
    "entitlement": {},
    "now": "2026-06-01T12:00:00Z",
    "remote_policy": {},
+   "risk_action_config": {
+    "harness_postures": {},
+    "harness_risk_actions": {},
+    "managed_locked_settings": [],
+    "protection_posture": "balanced",
+    "protection_posture_explicit": false,
+    "risk_actions": {
+     "cloud_advisory": "review",
+     "package_script": "warn"
+    },
+    "security_level": "balanced"
+   },
    "security_level": "strict",
    "summary": {},
    "workspace_id": "ws-1"
@@ -8143,8 +8641,7 @@
     "managed_updated_at": null,
     "package_script_action": "warn",
     "remote_policy_active": false,
-    "security_level": "balanced",
-    "team_policy_active": false
+    "security_level": "balanced"
    },
    "status": "synced",
    "supported_ecosystems": [
@@ -8237,12 +8734,22 @@
   "name": "now_date_only",
   "request": {
    "bundle_payload": {},
-   "config_cloud_advisory_action": "review",
-   "config_package_script_action": "warn",
    "credentials_present": true,
    "entitlement": {},
    "now": "2026-06-01",
    "remote_policy": {},
+   "risk_action_config": {
+    "harness_postures": {},
+    "harness_risk_actions": {},
+    "managed_locked_settings": [],
+    "protection_posture": "balanced",
+    "protection_posture_explicit": false,
+    "risk_actions": {
+     "cloud_advisory": "review",
+     "package_script": "warn"
+    },
+    "security_level": "balanced"
+   },
    "security_level": "balanced",
    "summary": {
     "next_refresh_at": "2026-06-01T00:00:00Z",
@@ -8288,8 +8795,7 @@
     "managed_updated_at": null,
     "package_script_action": "warn",
     "remote_policy_active": false,
-    "security_level": "balanced",
-    "team_policy_active": false
+    "security_level": "balanced"
    },
    "status": "expired",
    "supported_ecosystems": [
@@ -8384,12 +8890,22 @@
    "bundle_payload": {
     "expiresAt": "2026-06-01T12:00:00Z"
    },
-   "config_cloud_advisory_action": "review",
-   "config_package_script_action": "warn",
    "credentials_present": true,
    "entitlement": {},
    "now": "2026-06-01T14:00:00+02:00",
    "remote_policy": {},
+   "risk_action_config": {
+    "harness_postures": {},
+    "harness_risk_actions": {},
+    "managed_locked_settings": [],
+    "protection_posture": "balanced",
+    "protection_posture_explicit": false,
+    "risk_actions": {
+     "cloud_advisory": "review",
+     "package_script": "warn"
+    },
+    "security_level": "balanced"
+   },
    "security_level": "balanced",
    "summary": {},
    "workspace_id": "ws-1"
@@ -8432,8 +8948,7 @@
     "managed_updated_at": null,
     "package_script_action": "warn",
     "remote_policy_active": false,
-    "security_level": "balanced",
-    "team_policy_active": false
+    "security_level": "balanced"
    },
    "status": "synced",
    "supported_ecosystems": [
@@ -8526,12 +9041,22 @@
   "name": "now_micros",
   "request": {
    "bundle_payload": {},
-   "config_cloud_advisory_action": "review",
-   "config_package_script_action": "warn",
    "credentials_present": true,
    "entitlement": {},
    "now": "2026-06-01T12:00:00.250Z",
    "remote_policy": {},
+   "risk_action_config": {
+    "harness_postures": {},
+    "harness_risk_actions": {},
+    "managed_locked_settings": [],
+    "protection_posture": "balanced",
+    "protection_posture_explicit": false,
+    "risk_actions": {
+     "cloud_advisory": "review",
+     "package_script": "warn"
+    },
+    "security_level": "balanced"
+   },
    "security_level": "balanced",
    "summary": {
     "next_refresh_at": "2026-06-01T11:55:00.250000Z",
@@ -8577,8 +9102,7 @@
     "managed_updated_at": null,
     "package_script_action": "warn",
     "remote_policy_active": false,
-    "security_level": "balanced",
-    "team_policy_active": false
+    "security_level": "balanced"
    },
    "status": "synced",
    "supported_ecosystems": [
@@ -8671,12 +9195,22 @@
   "name": "now_padded",
   "request": {
    "bundle_payload": {},
-   "config_cloud_advisory_action": "review",
-   "config_package_script_action": "warn",
    "credentials_present": true,
    "entitlement": {},
    "now": " 2026-06-01T12:00:00Z ",
    "remote_policy": {},
+   "risk_action_config": {
+    "harness_postures": {},
+    "harness_risk_actions": {},
+    "managed_locked_settings": [],
+    "protection_posture": "balanced",
+    "protection_posture_explicit": false,
+    "risk_actions": {
+     "cloud_advisory": "review",
+     "package_script": "warn"
+    },
+    "security_level": "balanced"
+   },
    "security_level": "balanced",
    "summary": {
     "status": "synced"
@@ -8721,8 +9255,7 @@
     "managed_updated_at": null,
     "package_script_action": "warn",
     "remote_policy_active": false,
-    "security_level": "balanced",
-    "team_policy_active": false
+    "security_level": "balanced"
    },
    "status": "synced",
    "supported_ecosystems": [
@@ -8817,12 +9350,22 @@
    "bundle_payload": {
     "expiresAt": "9000-01-01T00:00:00Z"
    },
-   "config_cloud_advisory_action": "review",
-   "config_package_script_action": "warn",
    "credentials_present": true,
    "entitlement": {},
    "now": null,
    "remote_policy": {},
+   "risk_action_config": {
+    "harness_postures": {},
+    "harness_risk_actions": {},
+    "managed_locked_settings": [],
+    "protection_posture": "balanced",
+    "protection_posture_explicit": false,
+    "risk_actions": {
+     "cloud_advisory": "review",
+     "package_script": "warn"
+    },
+    "security_level": "balanced"
+   },
    "security_level": "balanced",
    "summary": {
     "next_refresh_at": "9000-01-01T00:00:00Z",
@@ -8868,8 +9411,7 @@
     "managed_updated_at": null,
     "package_script_action": "warn",
     "remote_policy_active": false,
-    "security_level": "balanced",
-    "team_policy_active": false
+    "security_level": "balanced"
    },
    "status": "synced",
    "supported_ecosystems": [
@@ -8962,12 +9504,22 @@
   "name": "far_future_clock_garbage",
   "request": {
    "bundle_payload": {},
-   "config_cloud_advisory_action": "review",
-   "config_package_script_action": "warn",
    "credentials_present": true,
    "entitlement": {},
    "now": "garbage",
    "remote_policy": {},
+   "risk_action_config": {
+    "harness_postures": {},
+    "harness_risk_actions": {},
+    "managed_locked_settings": [],
+    "protection_posture": "balanced",
+    "protection_posture_explicit": false,
+    "risk_actions": {
+     "cloud_advisory": "review",
+     "package_script": "warn"
+    },
+    "security_level": "balanced"
+   },
    "security_level": "balanced",
    "summary": {
     "next_refresh_at": "9000-01-01T00:00:00Z",
@@ -9013,8 +9565,7 @@
     "managed_updated_at": null,
     "package_script_action": "warn",
     "remote_policy_active": false,
-    "security_level": "balanced",
-    "team_policy_active": false
+    "security_level": "balanced"
    },
    "status": "expired",
    "supported_ecosystems": [
@@ -9109,12 +9660,22 @@
    "bundle_payload": {
     "expiresAt": "2000-01-01T00:00:00Z"
    },
-   "config_cloud_advisory_action": "review",
-   "config_package_script_action": "warn",
    "credentials_present": true,
    "entitlement": {},
    "now": null,
    "remote_policy": {},
+   "risk_action_config": {
+    "harness_postures": {},
+    "harness_risk_actions": {},
+    "managed_locked_settings": [],
+    "protection_posture": "balanced",
+    "protection_posture_explicit": false,
+    "risk_actions": {
+     "cloud_advisory": "review",
+     "package_script": "warn"
+    },
+    "security_level": "balanced"
+   },
    "security_level": "balanced",
    "summary": {},
    "workspace_id": "ws-1"
@@ -9157,8 +9718,7 @@
     "managed_updated_at": null,
     "package_script_action": "warn",
     "remote_policy_active": false,
-    "security_level": "balanced",
-    "team_policy_active": false
+    "security_level": "balanced"
    },
    "status": "synced",
    "supported_ecosystems": [
@@ -9254,12 +9814,22 @@
     "bundleVersion": "v",
     "expiresAt": "2028-02-29T00:00:00Z"
    },
-   "config_cloud_advisory_action": "review",
-   "config_package_script_action": "warn",
    "credentials_present": true,
    "entitlement": {},
    "now": "2026-06-01T12:00:00Z",
    "remote_policy": {},
+   "risk_action_config": {
+    "harness_postures": {},
+    "harness_risk_actions": {},
+    "managed_locked_settings": [],
+    "protection_posture": "balanced",
+    "protection_posture_explicit": false,
+    "risk_actions": {
+     "cloud_advisory": "review",
+     "package_script": "warn"
+    },
+    "security_level": "balanced"
+   },
    "security_level": "balanced",
    "summary": {},
    "workspace_id": "ws-1"
@@ -9302,8 +9872,7 @@
     "managed_updated_at": null,
     "package_script_action": "warn",
     "remote_policy_active": false,
-    "security_level": "balanced",
-    "team_policy_active": false
+    "security_level": "balanced"
    },
    "status": "synced",
    "supported_ecosystems": [
@@ -9399,12 +9968,22 @@
     "bundleVersion": "v",
     "expiresAt": "2026-02-30T00:00:00Z"
    },
-   "config_cloud_advisory_action": "review",
-   "config_package_script_action": "warn",
    "credentials_present": true,
    "entitlement": {},
    "now": "2026-06-01T12:00:00Z",
    "remote_policy": {},
+   "risk_action_config": {
+    "harness_postures": {},
+    "harness_risk_actions": {},
+    "managed_locked_settings": [],
+    "protection_posture": "balanced",
+    "protection_posture_explicit": false,
+    "risk_actions": {
+     "cloud_advisory": "review",
+     "package_script": "warn"
+    },
+    "security_level": "balanced"
+   },
    "security_level": "balanced",
    "summary": {},
    "workspace_id": "ws-1"
@@ -9447,8 +10026,7 @@
     "managed_updated_at": null,
     "package_script_action": "warn",
     "remote_policy_active": false,
-    "security_level": "balanced",
-    "team_policy_active": false
+    "security_level": "balanced"
    },
    "status": "synced",
    "supported_ecosystems": [
@@ -9541,12 +10119,22 @@
   "name": "offset_compact",
   "request": {
    "bundle_payload": {},
-   "config_cloud_advisory_action": "review",
-   "config_package_script_action": "warn",
    "credentials_present": true,
    "entitlement": {},
    "now": "2026-06-01T12:00:00Z",
    "remote_policy": {},
+   "risk_action_config": {
+    "harness_postures": {},
+    "harness_risk_actions": {},
+    "managed_locked_settings": [],
+    "protection_posture": "balanced",
+    "protection_posture_explicit": false,
+    "risk_actions": {
+     "cloud_advisory": "review",
+     "package_script": "warn"
+    },
+    "security_level": "balanced"
+   },
    "security_level": "balanced",
    "summary": {
     "next_refresh_at": "2026-06-01T12:30:00+0100",
@@ -9592,8 +10180,7 @@
     "managed_updated_at": null,
     "package_script_action": "warn",
     "remote_policy_active": false,
-    "security_level": "balanced",
-    "team_policy_active": false
+    "security_level": "balanced"
    },
    "status": "synced",
    "supported_ecosystems": [
@@ -9686,12 +10273,22 @@
   "name": "offset_hour_only",
   "request": {
    "bundle_payload": {},
-   "config_cloud_advisory_action": "review",
-   "config_package_script_action": "warn",
    "credentials_present": true,
    "entitlement": {},
    "now": "2026-06-01T12:00:00Z",
    "remote_policy": {},
+   "risk_action_config": {
+    "harness_postures": {},
+    "harness_risk_actions": {},
+    "managed_locked_settings": [],
+    "protection_posture": "balanced",
+    "protection_posture_explicit": false,
+    "risk_actions": {
+     "cloud_advisory": "review",
+     "package_script": "warn"
+    },
+    "security_level": "balanced"
+   },
    "security_level": "balanced",
    "summary": {
     "next_refresh_at": "2026-06-01T12:30:00+01",
@@ -9737,8 +10334,7 @@
     "managed_updated_at": null,
     "package_script_action": "warn",
     "remote_policy_active": false,
-    "security_level": "balanced",
-    "team_policy_active": false
+    "security_level": "balanced"
    },
    "status": "synced",
    "supported_ecosystems": [
@@ -9831,12 +10427,22 @@
   "name": "space_separator",
   "request": {
    "bundle_payload": {},
-   "config_cloud_advisory_action": "review",
-   "config_package_script_action": "warn",
    "credentials_present": true,
    "entitlement": {},
    "now": "2026-06-01T12:00:00Z",
    "remote_policy": {},
+   "risk_action_config": {
+    "harness_postures": {},
+    "harness_risk_actions": {},
+    "managed_locked_settings": [],
+    "protection_posture": "balanced",
+    "protection_posture_explicit": false,
+    "risk_actions": {
+     "cloud_advisory": "review",
+     "package_script": "warn"
+    },
+    "security_level": "balanced"
+   },
    "security_level": "balanced",
    "summary": {
     "next_refresh_at": "2026-06-01 12:30:00",

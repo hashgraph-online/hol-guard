@@ -42,9 +42,10 @@ export type ExpectedRow = {
   // Row buttons beside the manager name, in page order.
   actions: string[];
   detected: boolean;
+  group: "Needs a fix" | "Protected" | "Not protected yet";
 };
 
-// Mirrors normalizePackageShimEntries, resolveShimStatus and ManagerRow for
+// Mirrors normalizePackageShimEntries, resolveShimStatus, rosterGroupFor and ManagerRow for
 // the managers the page lists. The host decides which managers it detects, so
 // specs compare the page with the daemon rather than with a fixed list.
 export function expectedRows(shims: PackageShimsResponse): ExpectedRow[] {
@@ -82,17 +83,36 @@ export function expectedRows(shims: PackageShimsResponse): ExpectedRow[] {
       }
       actions.push("Remove");
     }
-    return { manager, status: label, tone, actions, detected: detected.has(manager) };
+    const group = !isInstalled ? "Not protected yet" : tone === "green" ? "Protected" : "Needs a fix";
+    return { manager, status: label, tone, actions, detected: detected.has(manager), group };
   });
 }
 
+// The roster: one group per next step (Needs a fix, Protected, Not protected yet).
 export function managerList(page: Page): Locator {
-  return page.getByRole("list", { name: "Package manager controls" });
+  return page.getByRole("group", { name: "Package manager controls" });
+}
+
+export function rosterSection(page: Page, name: "Needs a fix" | "Protected" | "Not protected yet"): Locator {
+  return managerList(page).getByRole("region", { name, exact: true });
+}
+
+// A long "Not protected yet" group folds into one line; open it so every row is on the page.
+export async function showAllManagers(page: Page): Promise<void> {
+  await managerList(page).waitFor();
+  const toggle = managerList(page).getByRole("button", { name: /^Show all \d+$/ });
+  if ((await toggle.count()) > 0) await toggle.click();
+}
+
+// Recent activity, audit, intel, apps and sources sit behind one disclosure.
+export async function openActivity(page: Page): Promise<void> {
+  const toggle = page.getByRole("button", { name: "Activity and sources", exact: true });
+  if ((await toggle.getAttribute("aria-expanded")) !== "true") await toggle.click();
 }
 
 // The card for one manager: the list item that holds its details button.
 export function managerCard(page: Page, manager: string): Locator {
   return managerList(page)
-    .getByRole("listitem")
+    .getByTestId("manager-row")
     .filter({ has: page.getByRole("button", { name: `Open ${manager} manager details`, exact: true }) });
 }

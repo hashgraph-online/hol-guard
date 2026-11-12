@@ -34,7 +34,7 @@ from tests.test_guard_extension_control_authority import (
 def _allow_local_terminal_confirmation(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
         "codex_plugin_scanner.guard.runtime.extension_control_proof._require_local_terminal_confirmation",
-        lambda _enrollment: None,
+        lambda _guard_home, _enrollment: None,
     )
 
 
@@ -121,33 +121,15 @@ def test_stale_managed_activation_revision_mismatch_still_fails_closed(
     assert tampered.health is AuthorityHealth.TAMPERED
 
 
-def test_catalog_upgrade_resumes_anchored_pending_migration_without_repair(tmp_path: Path) -> None:
+def test_catalog_upgrade_commits_its_migration_in_one_read(tmp_path: Path) -> None:
     secrets = MemorySecretStore()
     store = _store(tmp_path, secrets)
     store.read_extension_control_authority(catalog_digest=BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest)
     _commit(store)
-    original = store._write_and_verify_anchor
-    interrupted = False
-
-    def interrupt_after_anchor(anchor, *, key):
-        nonlocal interrupted
-        original(anchor, key=key)
-        if not interrupted and anchor.phase is AuthorityPhase.ANCHORED:
-            interrupted = True
-            raise RuntimeError("injected catalog migration interrupt")
-
-    store._write_and_verify_anchor = interrupt_after_anchor  # pyright: ignore[reportAttributeAccessIssue]
     upgraded_registry = _upgraded_registry()
-    first = store.read_extension_control_authority_for_registry(upgraded_registry)
-    assert first.health is AuthorityHealth.DEGRADED_UNACKNOWLEDGED
-    with store._connect() as connection:
-        pending = connection.execute(
-            "select phase, catalog_digest from extension_control_authority_transition order by revision desc limit 1"
-        ).fetchone()
-    assert pending is not None
-    assert pending["phase"] == AuthorityPhase.PREPARED.value
-    assert pending["catalog_digest"] == upgraded_registry.catalog_digest
 
+    # The resident prepares, anchors and commits the migration in one call,
+    # so no read sees it half done.
     resumed = store.read_extension_control_authority_for_registry(upgraded_registry)
 
     assert resumed.health is AuthorityHealth.PROTECTED
@@ -174,39 +156,14 @@ def test_catalog_upgrade_resumes_anchored_pending_migration_without_repair(tmp_p
     assert payload["catalog_digest"] == upgraded_registry.catalog_digest
 
 
-def test_catalog_upgrade_records_migrated_event_on_later_protected_read(tmp_path: Path) -> None:
+def test_catalog_upgrade_records_its_migrated_event_once(tmp_path: Path) -> None:
     secrets = MemorySecretStore()
     store = _store(tmp_path, secrets)
     store.read_extension_control_authority(catalog_digest=BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest)
     _commit(store)
-    original_anchor = store._write_and_verify_anchor
-    interrupted = False
-
-    def interrupt_after_anchor(anchor, *, key):
-        nonlocal interrupted
-        original_anchor(anchor, key=key)
-        if not interrupted and anchor.phase is AuthorityPhase.ANCHORED:
-            interrupted = True
-            raise RuntimeError("injected catalog migration interrupt")
-
-    store._write_and_verify_anchor = interrupt_after_anchor  # pyright: ignore[reportAttributeAccessIssue]
     upgraded_registry = _upgraded_registry()
     first = store.read_extension_control_authority_for_registry(upgraded_registry)
-    assert first.health is AuthorityHealth.DEGRADED_UNACKNOWLEDGED
-
-    original_record = store._record_catalog_migrated_event_once
-    attempts = 0
-
-    def fail_first_record(*args, **kwargs):
-        nonlocal attempts
-        attempts += 1
-        if attempts == 1:
-            raise RuntimeError("injected catalog event failure")
-        return original_record(*args, **kwargs)
-
-    store._record_catalog_migrated_event_once = fail_first_record  # pyright: ignore[reportAttributeAccessIssue]
-    second = store.read_extension_control_authority_for_registry(upgraded_registry)
-    assert second.health is AuthorityHealth.DEGRADED_UNACKNOWLEDGED
+    assert first.health is AuthorityHealth.PROTECTED
 
     recovered = store.read_extension_control_authority_for_registry(upgraded_registry)
     assert recovered.health is AuthorityHealth.PROTECTED

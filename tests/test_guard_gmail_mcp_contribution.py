@@ -13,11 +13,9 @@ from codex_plugin_scanner.guard.runtime.extension_control_contract import Contro
 from codex_plugin_scanner.guard.runtime.generated_command_catalog import GeneratedCommandCatalog
 from codex_plugin_scanner.guard.runtime.generated_command_catalog_loader import _extension
 from codex_plugin_scanner.guard.runtime.mcp_protection import build_mcp_server_identity
-from codex_plugin_scanner.guard.runtime.mcp_server_contribution import (
-    catalog_id_for_mcp_id,
-    validate_mcp_contribution,
-)
+from codex_plugin_scanner.guard.runtime.mcp_server_contribution import validate_mcp_contribution
 from scripts.native_directory_inventory import catalog_rows
+from tests.mcp_contribution_loader import catalog_id_for_mcp_id
 
 from .local_cli_native_fixture import native_local_cli_grant_resident  # noqa: F401
 from .mcp_extension_driver import apply_contributed_mcp_decision

@@ -209,7 +209,12 @@ fn case_dir(name: &str) -> PathBuf {
 #[cfg(not(windows))]
 fn run_case(vectors: &Value, case: &Value) -> Result<(), String> {
     let name = case["name"].as_str().expect("name");
-    let (payload, sent) = evaluate_case(vectors, case)?;
+    let (mut payload, sent) = evaluate_case(vectors, case)?;
+    // The review settlement rides beside the recorded evaluation; it has its
+    // own tests next to the evaluator.
+    if let Some(fields) = payload.as_object_mut() {
+        fields.remove(guard_command::supply_chain_package_eval::REVIEW_SETTLEMENT_KEY);
+    }
     let contract: Value = serde_json::from_str(CACHE_CONTRACT).expect("cache contract");
     let mut expected = case["expect"].clone();
     if let Some(patch) = contract["expected_patches"][name].as_object() {

@@ -22,6 +22,11 @@ from packaging.tags import Tag
 from packaging.utils import InvalidWheelFilename, parse_wheel_filename
 from packaging.version import InvalidVersion, Version
 
+if __package__:
+    from .core_metadata import core_metadata_version_error
+else:
+    from core_metadata import core_metadata_version_error  # pyright: ignore[reportImplicitRelativeImport]
+
 EXPECTED_PLATFORMS: Mapping[str, str] = {
     "manylinux_2_17_x86_64": "x86_64-unknown-linux-musl",
     "macosx_13_0_x86_64": "x86_64-apple-darwin",
@@ -115,6 +120,9 @@ def _validate_wheel_metadata(path: Path, *, name: str, version: str, tag: Tag) -
     except (OSError, UnicodeDecodeError, zipfile.BadZipFile) as error:
         raise ReleaseArtifactError(f"wheel metadata could not be read: {path.name}") from error
     fields = {line.split(":", 1)[0]: line.split(":", 1)[1].strip() for line in metadata.splitlines() if ":" in line}
+    metadata_error = core_metadata_version_error(metadata, label="wheel")
+    if metadata_error is not None:
+        raise ReleaseArtifactError(f"{metadata_error}: {path.name}")
     if fields.get("Name", "").replace("-", "_").lower() != name.replace("-", "_").lower():
         raise ReleaseArtifactError(f"wheel metadata package name mismatch: {path.name}")
     if fields.get("Version") != version:

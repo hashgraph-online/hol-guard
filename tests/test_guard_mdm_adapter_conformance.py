@@ -8,7 +8,7 @@ from typing import cast
 import pytest
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
-from codex_plugin_scanner.guard.mdm.adapter_conformance import (
+from tests.mdm_adapter_conformance import (
     AdapterConformanceError,
     ObserverAdapterConformanceHarness,
     RemediationAdapterConformanceHarness,

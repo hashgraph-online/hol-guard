@@ -4,7 +4,7 @@ use super::*;
 
 use guard_command::package_intent_common::build_package_request_artifact;
 use guard_command::package_intent_parser::parse_package_intent;
-use serde_json::json;
+use serde_json::{json, Map};
 
 /// `_tool_call_configuration` of a config with a harness override for the
 /// package-script risk class, as the publisher binds it.
@@ -48,6 +48,7 @@ fn view(config: Map<String, Value>) -> HarnessView {
         config,
         hash_config,
         layers: Vec::new(),
+        layers_unavailable: false,
         receipt_redaction_level: None,
     }
 }

@@ -51,7 +51,7 @@ fn environment(home: &Path) -> guard_contracts::GuardExecutionEnvironmentV1 {
         pager_disabled: false,
         xdg_config_home: None,
         git_config_no_system: false,
-        library_search_paths: Default::default(),
+        ..Default::default()
     }
 }
 
@@ -81,9 +81,13 @@ fn home_result(
             shell_home_matches: true,
             cdpath_unset: false,
             rustup_override_absent: false,
+            cargo_config_inert: false,
             npm_config_inert: false,
             pip_config_inert: false,
             ripgrep_config_absent: false,
+            gem_config_absent: false,
+            http_config_absent: false,
+            openssl_config_absent: false,
             psql_environment: Default::default(),
             creates_nothing: false,
         },
@@ -133,7 +137,7 @@ fn evidence(result: &guard_contracts::PreToolResultV1) -> String {
 /// plain directory, all below a private home.
 fn fixture() -> (PathBuf, PathBuf, PathBuf) {
     // `/tmp`, not `$TMPDIR`: macOS puts the latter below `/private/var`,
-    // which no path proof admits outside the working directory.
+    // which the path proofs judge as its own location rather than a home.
     let root = Path::new("/tmp").join(format!(
         "guard-sibling-{}-{}",
         std::process::id(),
@@ -194,9 +198,13 @@ fn the_home_projection_answers_for_a_sibling_root() {
         shell_home_matches: true,
         cdpath_unset: false,
         rustup_override_absent: false,
+        cargo_config_inert: false,
         npm_config_inert: false,
         pip_config_inert: false,
         ripgrep_config_absent: false,
+        gem_config_absent: false,
+        http_config_absent: false,
+        openssl_config_absent: false,
         psql_environment: Default::default(),
         creates_nothing: false,
     };
@@ -259,6 +267,45 @@ fn a_list_after_cd_into_a_sibling_root_runs_contained_there() {
     let _ = std::fs::remove_dir_all(home.parent().unwrap());
 }
 
+/// A run that reports its own status: agents end a sibling-root command with
+/// `; echo "<label>$?"` so the status survives the filter that bounds the
+/// output. The sink peels that tail before it lexes the text, and the
+/// classifier reads the same suffix, so the list is the one the root runs.
+#[test]
+fn a_status_echo_after_a_sibling_cd_stays_contained() {
+    let (home, main, tree) = fixture();
+    for command in [
+        format!("cd {} && npm run build; echo \"build=$?\"", tree.display()),
+        format!(
+            "cd {} && node scripts/report.mjs 2>&1 | tail -3; echo \"rc=$?\"",
+            tree.display()
+        ),
+        format!("cd {}; npm run build; echo rc=$?", tree.display()),
+    ] {
+        assert_eq!(
+            contained(&reason("omp", &home, &main, &command)),
+            host(),
+            "{command}"
+        );
+    }
+    for command in [
+        // Not the tail the sink peels: no status to print, a quoting the sink
+        // cannot read, or work after the echo that the `cd` would still join.
+        format!("cd {} && npm run build; echo done", tree.display()),
+        format!("cd {} && npm run build; echo 'rc=$?'", tree.display()),
+        format!(
+            "cd {} && npm run build; echo \"rc=$?\" && ls dist",
+            tree.display()
+        ),
+    ] {
+        assert!(
+            !contained(&reason("omp", &home, &main, &command)),
+            "{command}"
+        );
+    }
+    let _ = std::fs::remove_dir_all(home.parent().unwrap());
+}
+
 #[test]
 fn a_sibling_cd_the_sink_would_not_rebase_keeps_its_review() {
     let (home, main, _tree) = fixture();
@@ -269,11 +316,7 @@ fn a_sibling_cd_the_sink_would_not_rebase_keeps_its_review() {
         "cd ../other && npm run build && ls dist".to_owned(),
         "cd ../plain && npm run build && ls dist".to_owned(),
         "cd .. && npm run build && ls dist".to_owned(),
-        // Not a repository root, or no repository at all.
-        format!(
-            "cd {}/app-report/scripts && node report.mjs && cat out.md",
-            projects.display()
-        ),
+        // No repository at all.
         format!(
             "cd {}/plain && npm run build && ls dist",
             projects.display()
@@ -476,9 +519,8 @@ fn a_command_below_a_sibling_root_reaching_outside_it_keeps_its_review() {
             tree.display(),
             config.display()
         ),
-        // Unproved, or more than one command.
+        // Unproved, or not the list the sink rejoins.
         "cd ../app-report/scripts && ./report.sh".to_owned(),
-        format!("cd {}/scripts && ./report.sh && ls", tree.display()),
         format!("cd {}/scripts; ./report.sh; ls", tree.display()),
         format!("cd {}/scripts && ./report.sh | wc -l", tree.display()),
         format!(
@@ -511,8 +553,9 @@ fn a_command_below_a_sibling_root_reaching_outside_it_keeps_its_review() {
         &main,
         &format!("cd {}/scripts && ./report.sh", tree.display())
     )));
-    // macOS holds a Vite build to its own read-only output profile instead.
-    if !cfg!(target_os = "macos") {
+    // A host with a sandbox holds a Vite build to its own read-only output
+    // profile instead, which `contained` reads as contained.
+    if !host() {
         let command = format!(
             "cd {}/web && ./node_modules/.bin/vite build --config {}",
             tree.display(),
@@ -709,3 +752,54 @@ fn a_temporary_or_enclosing_repository_is_no_sibling_root() {
     );
     let _ = std::fs::remove_dir_all(root);
 }
+
+/// A stage whose words carry an operator inside quotes keeps its review.
+///
+/// The classifier reads the stage the way a shell does, where `'|'` is an
+/// ordinary character. The sink rejoins a `tr` stage from its lexed words, where
+/// that character is an operator again, and refuses it. Admitting the shape
+/// here promised a containment the sink would not build, so the command
+/// failed instead of running in the sibling root.
+#[test]
+fn a_quoted_operator_in_a_rejoined_stage_keeps_its_review() {
+    let (home, main, _tree) = fixture();
+    let projects = main.parent().unwrap();
+    let command = format!(
+        "cd {}/other && npm run build | tr '|' x",
+        projects.display()
+    );
+    assert!(
+        !contained(&reason("omp", &home, &main, &command)),
+        "{command}"
+    );
+    let _ = std::fs::remove_dir_all(home.parent().unwrap());
+}
+
+/// The same quoted operator is safe once the stage is peeled instead of rejoined.
+///
+/// A `cut` stage is one the peel runs itself: the sink hands the runtime the
+/// stage's lexed words and the runtime execs `cut` with them, so `-d|` arrives
+/// as one argument and no shell ever reads that character again. `tr` has no
+/// peel of its own and still reaches the sink as rejoined text, which is why
+/// the two spellings part company here.
+#[test]
+fn a_quoted_delimiter_in_a_peeled_stage_stays_contained() {
+    let (home, main, _tree) = fixture();
+    let projects = main.parent().unwrap();
+    let command = format!(
+        "cd {}/other && npm run build | cut -d'|' -f2",
+        projects.display()
+    );
+    assert!(
+        contained(&reason("omp", &home, &main, &command)),
+        "{command}"
+    );
+    let _ = std::fs::remove_dir_all(home.parent().unwrap());
+}
+
+#[path = "workspace_contained_sibling_cat_tests.rs"]
+mod cat;
+
+#[cfg(unix)]
+#[path = "workspace_contained_sibling_chain_tests.rs"]
+mod chain;

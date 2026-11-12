@@ -21,6 +21,9 @@ use crate::claude_hook_bridge::home_directory;
 use crate::claude_hook_bridge_http::remaining;
 use crate::hook_process_spawn::{isolated_hook_environment, run_isolated_hook_process};
 
+#[path = "hook_bridge_daemon_reservation.rs"]
+mod reservation;
+
 /// `HOL_GUARD_HOOK_FAILURE_KIND` for a daemon that is down or did not answer.
 pub(crate) const TRANSPORT_FAILURE: &str = "transport-failure";
 
@@ -42,16 +45,30 @@ const START_WAIT: Duration = Duration::from_secs(8);
 const FIRST_POLL: Duration = Duration::from_millis(50);
 const MAX_POLL: Duration = Duration::from_millis(250);
 
-/// Run `command` to start the daemon, inside `deadline`. `true` when it
-/// exited zero in time. An empty command, a hook with less than
-/// `MINIMUM_START` left, or no home directory runs nothing and is `false`.
-pub(crate) fn start_daemon(command: &[String], failure_kind: &str, deadline: Instant) -> bool {
+/// Run `command` to start the daemon, inside `deadline`. `true` when a
+/// start is under way: this hook ran the command and it exited zero in
+/// time, or another hook in `guard_home` began one moments ago and this
+/// hook waits for that daemon instead of starting a second one. An empty
+/// command, a hook with less than `MINIMUM_START` left, or no home
+/// directory runs nothing and is `false`.
+pub(crate) fn start_daemon(
+    command: &[String],
+    failure_kind: &str,
+    deadline: Instant,
+    guard_home: Option<&Path>,
+) -> bool {
     let left = remaining(deadline);
     if command.is_empty() || left < MINIMUM_START {
         return false;
     }
     let Some(home) = home_directory() else {
         return false;
+    };
+    // A burst of hooks meets one dead daemon together, and one start brings
+    // it up for all of them. The hooks that do not own the reservation keep
+    // their whole budget for the wait that follows.
+    let Some(reserved) = reservation::reserve(guard_home) else {
+        return true;
     };
     let source: BTreeMap<String, String> = std::env::vars_os()
         .filter_map(|(key, value)| Some((key.into_string().ok()?, value.into_string().ok()?)))
@@ -72,10 +89,16 @@ pub(crate) fn start_daemon(command: &[String], failure_kind: &str, deadline: Ins
         None,
         Some(start_deadline),
     );
-    result.returncode == Some(0)
+    let started = result.returncode == Some(0)
         && !result.timed_out
         && !result.output_limit_exceeded
-        && !result.containment_failed
+        && !result.containment_failed;
+    if !started {
+        // Nothing is coming up, so the next hook starts rather than waiting
+        // out a reservation whose start is already over.
+        reserved.release();
+    }
+    started
 }
 
 /// `isolated_hook_environment()`: the allowlisted keys plus, for a Desktop
@@ -139,23 +162,26 @@ mod tests {
         let marker = home.path().join("started");
         let touch = shell(&format!(": > '{}'", marker.display()));
         let soon = Instant::now() + Duration::from_secs(1);
-        assert!(!start_daemon(&touch, TRANSPORT_FAILURE, soon));
+        assert!(!start_daemon(&touch, TRANSPORT_FAILURE, soon, None));
         assert!(!start_daemon(
             &[],
             TRANSPORT_FAILURE,
-            Instant::now() + START_TIMEOUT
+            Instant::now() + START_TIMEOUT,
+            None
         ));
         assert!(!marker.exists());
         assert!(start_daemon(
             &touch,
             TRANSPORT_FAILURE,
-            Instant::now() + START_TIMEOUT
+            Instant::now() + START_TIMEOUT,
+            None
         ));
         assert!(marker.exists());
         assert!(!start_daemon(
             &shell("exit 3"),
             TRANSPORT_FAILURE,
-            Instant::now() + START_TIMEOUT
+            Instant::now() + START_TIMEOUT,
+            None
         ));
     }
 
@@ -167,9 +193,52 @@ mod tests {
         assert!(start_daemon(
             &shell(&script),
             "overload",
-            Instant::now() + START_TIMEOUT
+            Instant::now() + START_TIMEOUT,
+            None
         ));
         assert_eq!(std::fs::read_to_string(seen).unwrap(), "overload");
+    }
+
+    #[test]
+    fn one_dead_daemon_is_started_for_once_however_many_hooks_meet_it() {
+        let guard_home = tempfile::tempdir().unwrap();
+        let log = guard_home.path().join("starts");
+        let append = shell(&format!("printf . >> '{}'", log.display()));
+        let starts = || std::fs::read_to_string(&log).unwrap_or_default().len();
+
+        for _ in 0..4 {
+            assert!(start_daemon(
+                &append,
+                TRANSPORT_FAILURE,
+                Instant::now() + START_TIMEOUT,
+                Some(guard_home.path())
+            ));
+        }
+        assert_eq!(
+            starts(),
+            1,
+            "the hooks after the first wait for the daemon the first one is starting"
+        );
+    }
+
+    #[test]
+    fn a_start_that_failed_leaves_the_next_hook_free_to_start() {
+        let guard_home = tempfile::tempdir().unwrap();
+        let marker = guard_home.path().join("started");
+        let touch = shell(&format!(": > '{}'", marker.display()));
+        assert!(!start_daemon(
+            &shell("exit 3"),
+            TRANSPORT_FAILURE,
+            Instant::now() + START_TIMEOUT,
+            Some(guard_home.path())
+        ));
+        assert!(start_daemon(
+            &touch,
+            TRANSPORT_FAILURE,
+            Instant::now() + START_TIMEOUT,
+            Some(guard_home.path())
+        ));
+        assert!(marker.exists());
     }
 
     #[test]

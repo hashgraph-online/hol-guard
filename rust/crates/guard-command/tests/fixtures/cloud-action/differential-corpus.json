@@ -1,0 +1,72 @@
+{
+  "schema": "guard.cloud-action-differential-corpus.v1",
+  "note": "Minimal reproducible cases. Every spelling must give one identity and one decision; every distinct entry must give a different identity. Add a case here when the generated suite reports a mismatch.",
+  "cases": [
+    {
+      "id": "utf16-key-order",
+      "why": "Keys sort by UTF-16 code units, so an astral key sorts before U+FFFF however it is spelled.",
+      "spellings": [
+        "{\"\\uD83D\\uDE00\":1,\"\\uFFFF\":2}",
+        "{\"￿\":2,\"😀\":1}",
+        "{ \"\\ufffF\" : 2 , \"\\ud83d\\ude00\" : 1 }"
+      ],
+      "distinct": []
+    },
+    {
+      "id": "escape-forms",
+      "why": "Escaped solidus, unicode escapes and short escapes all name the same string.",
+      "spellings": [
+        "{\"a\":\"\\/\\u0041\\n\\\"\\\\\"}",
+        "{\"a\":\"/A\\u000a\\u0022\\u005c\"}"
+      ],
+      "distinct": [
+        "{\"a\":\"/A\\n\\\"\\\\ \"}"
+      ]
+    },
+    {
+      "id": "whitespace-and-empty-containers",
+      "why": "JSON whitespace between tokens and empty containers carry no meaning.",
+      "spellings": [
+        "{\"a\":[{},[]],\"b\":null}",
+        "{ \t\"b\" :null,\r\n \"a\" : [ { } , [ ] ] }"
+      ],
+      "distinct": [
+        "{\"a\":[[],{}],\"b\":null}"
+      ]
+    },
+    {
+      "id": "safe-integer-bounds",
+      "why": "Integers at the safe bounds are accepted and keep their exact value.",
+      "spellings": [
+        "{\"n\":9007199254740991,\"m\":-9007199254740991}",
+        "{\"m\":-9007199254740991,\"n\":9007199254740991}"
+      ],
+      "distinct": [
+        "{\"n\":9007199254740990,\"m\":-9007199254740991}"
+      ]
+    },
+    {
+      "id": "no-unicode-normalization",
+      "why": "A precomposed and a decomposed accent are two different actions.",
+      "spellings": [
+        "{\"s\":\"é\"}",
+        "{\"s\":\"\\u00e9\"}"
+      ],
+      "distinct": [
+        "{\"s\":\"e\\u0301\"}"
+      ]
+    },
+    {
+      "id": "type-is-meaning",
+      "why": "A number and a string with the same digits are different arguments.",
+      "spellings": [
+        "{\"n\":1,\"t\":true}",
+        "{\"t\":true,\"n\":1}"
+      ],
+      "distinct": [
+        "{\"n\":\"1\",\"t\":true}",
+        "{\"n\":1,\"t\":\"true\"}"
+      ]
+    }
+  ]
+}

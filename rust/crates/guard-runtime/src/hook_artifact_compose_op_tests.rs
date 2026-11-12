@@ -315,6 +315,23 @@ fn a_network_protection_review_floors_before_execution() {
 }
 
 #[test]
+fn an_exact_command_rule_review_floors_before_execution() {
+    for reason_code in ["policy_exact_command_review", "saved_exact_command_review"] {
+        let review = json!({
+            "decision": "deny",
+            "policy_action": "review",
+            "minimum_action": "review",
+            "reason_code": reason_code,
+        });
+        assert_eq!(
+            native_edge_floor(&edge("PreToolUse", review), None),
+            Some(GuardAction::Review),
+            "{reason_code}"
+        );
+    }
+}
+
+#[test]
 fn the_package_evaluator_owns_command_control_failures_but_not_secret_denies() {
     let failure = |package_request| {
         edge(

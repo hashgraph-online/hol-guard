@@ -12,6 +12,7 @@ from codex_plugin_scanner.guard.native_mcp_proxy_decision import NativeMcpProxyD
 def test_constructing_a_proxy_does_not_leave_a_digest_home_bound(tmp_path: Path) -> None:
     from codex_plugin_scanner.guard import native_context
     from codex_plugin_scanner.guard.adapters.base import HarnessContext
+    from codex_plugin_scanner.guard.config import GuardConfig
     from codex_plugin_scanner.guard.proxy.runtime_mcp import RuntimeMcpGuardProxy
     from codex_plugin_scanner.guard.store import GuardStore
 
@@ -22,7 +23,7 @@ def test_constructing_a_proxy_does_not_leave_a_digest_home_bound(tmp_path: Path)
         command=["echo", "hello"],
         context=HarnessContext(home_dir=tmp_path, workspace_dir=tmp_path, guard_home=tmp_path / "home"),
         store=GuardStore(tmp_path / "home"),
-        config=type("MockConfig", (), {})(),
+        config=GuardConfig(guard_home=tmp_path / "home", workspace=tmp_path),
         source_scope="global",
         config_path=str(tmp_path / "config.yaml"),
     )
@@ -31,7 +32,7 @@ def test_constructing_a_proxy_does_not_leave_a_digest_home_bound(tmp_path: Path)
 
 
 def test_malformed_reuse_answer_is_rejected_as_a_decision_error(monkeypatch: pytest.MonkeyPatch) -> None:
-    from codex_plugin_scanner.guard import native_mcp_sensitive_read as transport
+    from tests import native_mcp_sensitive_read_client as transport
 
     monkeypatch.setattr(transport, "native_mcp_proxy_decide", lambda *_a, **_k: {"policy_action": "allow"})
 

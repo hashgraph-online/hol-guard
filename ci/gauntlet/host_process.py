@@ -11,6 +11,7 @@ from contextlib import suppress
 from pathlib import Path
 
 from .evidence import TRANSCRIPT_LIMIT
+from .workspace_runner_fixtures import home_bun_bin
 
 # Set by a ``--jobs`` case worker so its parent can reap agent sessions that the
 # worker could not reap itself (for example after a forced kill).
@@ -121,6 +122,9 @@ def realistic_environment(environment: dict[str, str], home: Path) -> dict[str, 
     local_bin = home / ".local/bin"
     if "PATH" in environment and local_bin.is_dir():
         environment["PATH"] = str(local_bin) + os.pathsep + environment["PATH"]
+    # Bun's installer puts ~/.bun/bin ahead of the rest of PATH in the login shell it edits.
+    if "PATH" in environment and (bun_bin := home_bun_bin(home)) is not None:
+        environment["PATH"] = str(bun_bin) + os.pathsep + environment["PATH"]
     # Windows resolves DLLs through PATH, so a Windows developer shell carries no loader path.
     if os.name != "nt":
         libraries = home / ".local/lib"

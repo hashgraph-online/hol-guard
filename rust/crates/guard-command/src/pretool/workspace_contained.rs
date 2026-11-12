@@ -9,6 +9,7 @@ use super::PathContext;
 use crate::native_command_controls::CompiledNativeCommandControls;
 use crate::CanonicalCommandV1;
 use guard_contracts::{GuardExecutionEnvironmentV1, PreToolActionTypeV1, PreToolResultV1};
+use serde_json::Value;
 use std::path::Path;
 
 #[cfg(unix)]
@@ -46,10 +47,12 @@ mod cwd;
 mod git_metadata;
 #[path = "workspace_contained_home_cd.rs"]
 pub(super) mod home_cd;
+#[path = "workspace_contained_home_exec.rs"]
+pub(super) mod home_exec;
 #[path = "workspace_git_keeps_work.rs"]
 mod keeps_work;
 #[path = "workspace_contained_kill.rs"]
-mod kill;
+pub(super) mod kill;
 #[path = "workspace_contained_launch.rs"]
 mod launch;
 #[path = "workspace_contained_links.rs"]
@@ -66,6 +69,8 @@ mod removal;
 pub(super) mod runner;
 #[path = "workspace_contained_script.rs"]
 mod script;
+#[path = "workspace_contained_sed.rs"]
+mod sed;
 #[path = "workspace_contained_settings.rs"]
 mod settings;
 #[path = "workspace_contained_sibling.rs"]
@@ -73,7 +78,7 @@ pub(super) mod sibling;
 #[path = "workspace_contained_vendored.rs"]
 mod vendored;
 
-pub(super) use keeps_work::keeping_arguments;
+pub(super) use keeps_work::{created_branch_name, keeping_arguments};
 pub(super) use reach::PRIVATE_TEMP_WITH_FALLBACK;
 pub(super) use reach::{private_temp_expansions_only, rebinds_private_temp};
 pub(super) use settings::carry_settings;
@@ -110,7 +115,10 @@ const PRIVILEGE_DENY: &[&str] = &[
     "killall",
     "pkill",
 ];
-// The sandbox cannot undo losing uncommitted work, so these stay at review.
+// The sandbox cannot undo losing work, committed or not, so these stay at
+// review. A note and a replacement ref are work the repository keeps and
+// nothing else holds: the sandbox writes inside the same worktree, so
+// containing a write to either would hide it rather than hold it back.
 const UNRECOVERABLE_RULES: &[&str] = &[
     "command.git.hard-reset",
     "command.git.force-clean",
@@ -122,6 +130,10 @@ const UNRECOVERABLE_RULES: &[&str] = &[
     "command.git.restore",
     "command.git.switch",
     "command.git.unsafe-read",
+    "command.git.reflog",
+    "command.git.tag",
+    "command.git.notes",
+    "command.git.replace",
 ];
 // Remote changes: with no network, containing them only hides a consent prompt.
 const REMOTE_RULES: &[&str] = &["command.git.force-push", "command.git.remote-branch-delete"];
@@ -215,6 +227,11 @@ pub(crate) fn command_shape(
     // How far under the workspace root each segment's shell stands, so a
     // relative path may spend that many parent steps and stay inside.
     let below = cwd::depths(model, workspace);
+    // A chain that enters a directory, works and climbs back spends a parent
+    // step no single operand can be read as staying inside. The walk reads
+    // the whole chain, so where it proves every move lands in the workspace,
+    // an operand it accounted for is as bounded as one that never climbed.
+    let walked_inside = cwd::moves_stay_inside(model, workspace);
     for (index, segment) in model.segments.iter().enumerate() {
         // A bare private assignment starts no program.
         if segment.executable.is_none() && cd::assigns_private(model, segment) {
@@ -237,6 +254,9 @@ pub(crate) fn command_shape(
             return None;
         }
         let name = super::executable_basename(executable);
+        if matches!(name, "sed" | "gsed") && !sed::arguments_without_execution(&segment.arguments) {
+            return None;
+        }
         // A scratch script outside the workspace is read as that one file.
         let script = script::outside_script(segment, workspace);
         // The sandbox has no network, so a network client would only fail,
@@ -245,6 +265,29 @@ pub(crate) fn command_shape(
         // scripts write it, not a transfer. Only that shape leaves the
         // exclusion; `reaches_outside` still holds its operands to the
         // workspace.
+        let moves = matches!(name, "cd" | "pushd");
+        // A move the walk joined is bounded by the walk, not by the parent
+        // steps the shallowest shell could spend. The reach check reads the
+        // operand as a path, and after a `;` the shallowest shell is the one
+        // whose descent failed — the shell the move climbs out of and that
+        // runs nothing afterwards. Hand the operand to the reach check as
+        // already accounted for, so everything else about the segment, a
+        // redirect target above all, is still read from that shell.
+        //
+        // Only the bare spelling earns that, because only the bare spelling is
+        // what the walk followed: `./cd` is a program in the workspace that
+        // happens to carry the builtin's name, and the walk never moved for it.
+        // And Git's metadata stays refused wherever it stands, since the reach
+        // check denies it to every program but `git` and an accounted operand
+        // would carry it straight past that refusal.
+        let walked_move = matches!(executable, "cd" | "pushd")
+            && walked_inside
+            && matches!(segment.arguments.as_slice(),
+                [target] if cd::walked(target) && !names_git_metadata(target));
+        let accounted = script
+            .as_ref()
+            .map(|(operand, _)| operand.as_str())
+            .or_else(|| walked_move.then(|| segment.arguments[0].as_str()));
         if (NETWORK_CLIENTS.contains(&name)
             && !(name == "rsync" && super::rsync_local::local_copy_segment(segment)))
             || reach::reaches_outside(
@@ -253,12 +296,13 @@ pub(crate) fn command_shape(
                 workspace,
                 temp_fixed,
                 home_fixed,
-                script.as_ref().map(|(operand, _)| operand.as_str()),
+                accounted,
                 below.get(index).copied().unwrap_or(0),
             )
-            || (matches!(name, "cd" | "pushd")
+            || (moves
                 && !matches!(segment.arguments.as_slice(),
-                    [target] if cd::bounded(target, workspace, temp_fixed)))
+                    [target] if cd::bounded(target, workspace, temp_fixed)
+                        || (walked_inside && cd::walked(target))))
         {
             return None;
         }
@@ -273,7 +317,15 @@ pub(crate) fn command_shape(
         }
         if PRIVILEGE_DENY.contains(&name)
             && !(name == "chmod" && chmod::plain_mode(&segment.arguments))
-            && !(name == "kill" && kill::jobs_only(&segment.arguments))
+            && !(name == "kill"
+                // An expansion stands for a number by the time the arguments
+                // are read, so `kill -0 $((-1))` would reach this form as the
+                // pid `1` while the shell signals every process the user can
+                // reach. The operands these two forms admit are read from the
+                // words the caller wrote, so a segment carrying an expansion
+                // is not one of them.
+                && !segment.text.contains('$')
+                && (kill::jobs_only(&segment.arguments) || kill::liveness_only(&segment.arguments)))
         {
             return None;
         }
@@ -362,6 +414,15 @@ pub(crate) fn split_at_init(
     Some((prefix, rest.trim().to_owned()))
 }
 
+/// Whether `target` names Git's metadata directory, which belongs to `git`
+/// alone wherever it stands. The reach check refuses it to every other
+/// program, so a move that names it is never already accounted for.
+fn names_git_metadata(target: &str) -> bool {
+    Path::new(target)
+        .components()
+        .any(|component| component.as_os_str() == ".git")
+}
+
 fn extensions_contain(
     result: &PreToolResultV1,
     controls: &CompiledNativeCommandControls,
@@ -399,13 +460,35 @@ fn extensions_contain(
 
 /// Whether this host runs the workspace sandbox for this harness hook: macOS
 /// Seatbelt, or a Linux bubblewrap that passed the overlay probe.
-pub(super) fn host_eligible(harness: &str, event: &str) -> bool {
+///
+/// Grok applies a `PreToolUse` `updatedInput` on an allow, so its hook reaches
+/// the sink the same way Claude Code and ZCode do. Muse is absent on purpose:
+/// it applies `updatedInput` only from an `onFailure` correction, so a
+/// requirement it cannot route would record a contained run it ran uncontained.
+pub(super) fn host_eligible(harness: &str, event: &str, payload: &Value) -> bool {
     event == "PreToolUse"
-        && matches!(
+        && (matches!(
             harness,
-            "omp" | "oh-my-pi" | "pi" | "zcode" | "claude-code" | "codex"
-        )
+            "omp" | "oh-my-pi" | "pi" | "zcode" | "claude-code" | "codex" | "grok"
+        ) || cursor_shell_route(harness, payload))
         && sandbox_available()
+}
+
+/// Whether a Cursor call can be rewritten into the contained sink. Cursor
+/// rewrites a shell call only from its `preToolUse` hook for `Shell`, which
+/// carries no `cursor_source_hook_event` and which Guard's hook names with
+/// `cursor_route_probe`; the sink then re-authorizes the call
+/// it saved with the receipt-only flag. `beforeShellExecution` cannot rewrite,
+/// so there the same command keeps its review.
+pub(crate) fn cursor_shell_route(harness: &str, payload: &Value) -> bool {
+    let probe = payload.get("tool_name").and_then(Value::as_str) == Some("Shell")
+        && payload.get("cursor_source_hook_event").is_none()
+        && payload.get("cursor_route_probe").and_then(Value::as_bool) == Some(true);
+    let receipt = payload
+        .get("guard_containment_receipt_only")
+        .and_then(Value::as_bool)
+        == Some(true);
+    harness == "cursor" && (probe || receipt)
 }
 
 pub(super) fn sandbox_available() -> bool {
@@ -435,9 +518,10 @@ pub(super) fn convert(
     execution_environment: Option<&GuardExecutionEnvironmentV1>,
     harness: &str,
     event: &str,
+    payload: &Value,
     command_text: Option<&str>,
 ) {
-    if !host_eligible(harness, event)
+    if !host_eligible(harness, event, payload)
         || !matches!(
             result.action.action_type,
             PreToolActionTypeV1::Command | PreToolActionTypeV1::Package
@@ -475,6 +559,13 @@ pub(super) fn convert(
     let home = home_cd::as_absolute_cd(model, context);
     let model = home.as_ref().map_or(model, |list| &list.model);
     let command_text = home
+        .as_ref()
+        .map_or(command_text, |list| Some(list.text.as_str()));
+    // The sink expands a `~/<dir>/<program>` launcher the same way, and the
+    // session PATH grants its directory as an executable root either way.
+    let launcher = home_exec::as_absolute_program(model, context);
+    let model = launcher.as_ref().map_or(model, |list| &list.model);
+    let command_text = launcher
         .as_ref()
         .map_or(command_text, |list| Some(list.text.as_str()));
     // The home spelling and the directory it expands to are the same command
@@ -518,8 +609,8 @@ pub(super) fn convert(
     // workspace, so a manager running a local verb answers for the
     // observation too. A command with no manager in it proves nothing about
     // the permission, so it keeps the admission it has.
-    let local_work = package::local_package_work(model, runners.is_some(), &workspace);
-    let manager_work = local_work && package::names_a_manager(model);
+    let local_work = package::local_package_work(shaped, runners.is_some(), &workspace);
+    let manager_work = local_work && package::names_a_manager(shaped);
     if !extensions_contain(result, controls, issued, package || manager_work)
         || (package && !local_work)
     {

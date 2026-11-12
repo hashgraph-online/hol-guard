@@ -73,6 +73,52 @@ fn oversized_request_is_rejected() {
 }
 
 #[test]
+fn cli_hook_emit_refuses_a_document_larger_than_a_response() {
+    // A character the answer carries as two bytes is written `\u00e9` in the
+    // printed document and escaped a second time when that document travels
+    // as a JSON string, so it leaves as seven - against the six the same
+    // character costs in the canonical request the budget is measured on.
+    // An answer well inside the answer budget can therefore render a document
+    // no caller could ever read.
+    let reason = "\u{e9}".repeat(600_000);
+    let response_json = serde_json::to_string(&json!({
+        "policy_action": "block", "reason": reason,
+    }))
+    .expect("answer");
+    let mut req = request("cli_hook_emit");
+    req.harness = "cursor".to_owned();
+    req.cli = Some(json!({
+        "event_name": "PreToolUse",
+        "response_json": response_json.clone(),
+        "document": true,
+    }));
+    // The request budget is read off the canonical serialization, not the
+    // answer's own bytes, so measure the premise the way the op does: this
+    // request is one the op accepts, and only its document is too large.
+    crate::package_authority_op::request_digest_with_limit(
+        &req,
+        guard_contracts::hook_render_max_bytes("cli_hook_emit"),
+    )
+    .expect("the request stays inside its own budget");
+    let result = decode(evaluate_hook_render_request(&req).expect("encoded"));
+    assert_eq!(result.status, "error");
+    assert_eq!(result.code, "native_hook_render_document_too_large");
+
+    // The same answer still names its verdict for a caller that prints its
+    // own document: only the document the resident writes is bounded here.
+    req.cli = Some(json!({
+        "event_name": "PreToolUse",
+        "response_json": response_json,
+    }));
+    let result = decode(evaluate_hook_render_request(&req).expect("encoded"));
+    assert_eq!(result.status, "ok");
+    assert_eq!(
+        result.payload.expect("payload")["response"]["policy_action"],
+        "block"
+    );
+}
+
+#[test]
 fn cli_kinds_wrap_the_composed_outcome() {
     let mut req = request("cli_document");
     req.harness = "claude-code".to_owned();
@@ -346,4 +392,206 @@ fn hermes_bridge_rejects_a_request_with_no_response() {
     let result = decode(evaluate_hook_render_request(&req).expect("encoded"));
     assert_eq!(result.status, "error");
     assert_eq!(result.code, "native_hook_render_invalid");
+}
+
+#[test]
+fn cli_hook_emit_reads_the_answer_or_reports_why_not() {
+    let mut req = request("cli_hook_emit");
+    req.harness = "devin".to_owned();
+    req.cli = Some(json!({
+        "event_name": "PreToolUse",
+        "response_json": r#"{"policy_action":"block","reason":"denied"}"#,
+    }));
+    let result = decode(evaluate_hook_render_request(&req).expect("encoded"));
+    assert_eq!(result.status, "ok");
+    let payload = result.payload.expect("payload");
+    assert_eq!(payload["outcome"], "document");
+    assert_eq!(payload["response"]["exit_code"], 2);
+    assert_eq!(payload["response"]["stderr"], "denied");
+
+    req.cli = Some(json!({"event_name": "PreToolUse", "response_json": "[]"}));
+    let result = decode(evaluate_hook_render_request(&req).expect("encoded"));
+    assert_eq!(result.code, "native_hook_render_unrenderable");
+    req.cli = Some(json!({"event_name": "PreToolUse"}));
+    let result = decode(evaluate_hook_render_request(&req).expect("encoded"));
+    assert_eq!(result.code, "native_hook_render_invalid");
+}
+
+#[test]
+fn cli_hook_emit_reads_an_answer_larger_than_the_render_budget() {
+    // The answer travels as escaped JSON text, so a reason past the shared
+    // render budget must still reach the resident and render.
+    let reason = "\"x\"".repeat(guard_contracts::HOOK_RENDER_MAX_BYTES / 2);
+    let response_json = serde_json::to_string(&json!({
+        "policy_action": "block", "reason": reason,
+    }))
+    .expect("answer");
+    let mut req = request("cli_hook_emit");
+    req.harness = "cursor".to_owned();
+    req.cli = Some(json!({"event_name": "PreToolUse", "response_json": response_json}));
+    let result = decode(evaluate_hook_render_request(&req).expect("encoded"));
+    assert_eq!(result.status, "ok");
+    assert_eq!(
+        result.payload.expect("payload")["response"]["policy_action"],
+        "block"
+    );
+
+    req.cli = Some(json!({
+        "event_name": "PreToolUse",
+        "response_json": "x".repeat(guard_contracts::HOOK_RENDER_CLI_EMIT_MAX_BYTES),
+    }));
+    assert_eq!(
+        evaluate_hook_render_request(&req).unwrap_err(),
+        "native_hook_render_too_large"
+    );
+}
+
+#[path = "hook_render_op_redaction_tests.rs"]
+mod redaction;
+
+/// The `cli_hook_emit` answer for a caller that prints the resident's
+/// document.
+fn printed(harness: &str, event_name: &str, response_json: &str, home_dir: Option<&str>) -> Value {
+    let mut req = request("cli_hook_emit");
+    req.harness = harness.to_owned();
+    let mut params = json!({
+        "event_name": event_name, "response_json": response_json, "document": true,
+    });
+    if let Some(home_dir) = home_dir {
+        params["home_dir"] = json!(home_dir);
+    }
+    req.cli = Some(params);
+    let result = decode(evaluate_hook_render_request(&req).expect("encoded"));
+    assert_eq!(result.status, "ok", "{response_json}");
+    let payload = result.payload.expect("payload");
+    assert_eq!(payload["outcome"], "document");
+    payload["response"].clone()
+}
+
+#[test]
+fn cli_hook_emit_shortens_only_the_home_the_caller_names() {
+    let response_json = r#"{"m":"/opt/me/x","n":"/opt/me","o":"/opt/mex/y"}"#;
+    let answer = printed("codex", "Stop", response_json, Some("/opt/me//"));
+    assert_eq!(
+        answer["stdout"],
+        "{\n  \"m\": \"~/x\",\n  \"n\": \"~\",\n  \"o\": \"/opt/mex/y\"\n}"
+    );
+    let answer = printed("codex", "Stop", response_json, None);
+    assert_eq!(
+        answer["stdout"],
+        "{\n  \"m\": \"/opt/me/x\",\n  \"n\": \"/opt/me\",\n  \"o\": \"/opt/mex/y\"\n}"
+    );
+}
+
+#[test]
+fn cli_hook_emit_names_the_exit_status_the_harness_expects() {
+    for (harness, event_name, action, exit_code) in [
+        // Claude reads a hook's JSON only on exit 0, a block included.
+        ("claude-code", "Stop", "block", 0),
+        ("claude-code", "PreToolUse", "block", 0),
+        ("codex", "PreToolUse", "block", 0),
+        ("codex", "UserPromptSubmit", "block", 0),
+        ("codex", "Stop", "block", 1),
+        ("pi", "PostToolUse", "sandbox-required", 1),
+        ("cursor", "PreToolUse", "require-reapproval", 2),
+        ("cursor", "PreToolUse", "allow", 0),
+        ("opencode", "PreToolUse", "block", 1),
+        ("superagent", "PreToolUse", "warn", 0),
+        ("unlisted", "PreToolUse", "block", 1),
+    ] {
+        let response_json = format!(r#"{{"policy_action":"{action}"}}"#);
+        let answer = printed(harness, event_name, &response_json, None);
+        assert_eq!(answer["exit_code"], exit_code, "{harness} {event_name}");
+        assert_eq!(answer["policy_action"], action);
+        let stdout = format!("{{\n  \"policy_action\": \"{action}\"\n}}");
+        assert_eq!(answer["stdout"], stdout);
+    }
+}
+
+#[test]
+fn cli_hook_emit_without_document_answers_as_before() {
+    // A caller that prints its own document reads the policy action alone.
+    let mut req = request("cli_hook_emit");
+    req.harness = "codex".to_owned();
+    req.cli = Some(json!({"event_name": "Stop", "response_json": r#"{"policy_action":"block"}"#}));
+    let result = decode(evaluate_hook_render_request(&req).expect("encoded"));
+    assert_eq!(
+        result.payload.expect("payload")["response"],
+        json!({"policy_action": "block"})
+    );
+    // A bridge-rendered harness keeps its bridge's output with or without it.
+    let answer = printed(
+        "devin",
+        "PreToolUse",
+        r#"{"policy_action":"block","reason":"denied"}"#,
+        None,
+    );
+    assert_eq!(answer["exit_code"], 2);
+    assert_eq!(answer["stderr"], "denied");
+    // A colliding surrogate-plane character cannot be printed faithfully.
+    req.cli = Some(json!({
+        "event_name": "Stop", "response_json": "{\"m\":\"\u{f0000}\\udcff\"}", "document": true,
+    }));
+    let result = decode(evaluate_hook_render_request(&req).expect("encoded"));
+    assert_eq!(result.code, "native_hook_render_unrenderable");
+}
+
+#[test]
+fn a_large_cursor_edge_still_fits_its_route_budget() {
+    // The route sends the edge result the daemon already produced, and a
+    // native response may be far larger than an ordinary render request. A
+    // valid large edge that did not fit would drop the probe back to an
+    // ordinary review and lose its containment route, so the kind carries a
+    // budget of its own.
+    let mut req = request("cursor_shell_route");
+    req.harness = "cursor".to_owned();
+    req.cli = Some(json!({
+        "payload": {"tool_name": "Bash"},
+        "edge": {
+            "harness": "cursor",
+            "event_name": "PreToolUse",
+            "containment_route": "none",
+            "result": {"reason": "x".repeat(guard_contracts::HOOK_RENDER_MAX_BYTES)},
+        },
+    }));
+    crate::package_authority_op::request_digest_with_limit(
+        &req,
+        guard_contracts::HOOK_RENDER_MAX_BYTES,
+    )
+    .expect_err("the ordinary budget is too small for this edge");
+    crate::package_authority_op::request_digest_with_limit(
+        &req,
+        guard_contracts::hook_render_max_bytes("cursor_shell_route"),
+    )
+    .expect("the route's own budget holds it");
+}
+
+#[test]
+fn a_large_daemon_reply_still_fits_the_bridge_budget() {
+    // The bridge kinds carry the whole daemon reply they render, and a native
+    // response may be far larger than an ordinary render request. Refusing a
+    // valid large reply would turn an allow the daemon already reached into a
+    // fail-closed refusal of a permitted call, so the kinds carry a budget of
+    // their own.
+    for kind in ["hermes_bridge", "muse_bridge"] {
+        let mut req = request(kind);
+        req.harness = kind.trim_end_matches("_bridge").to_owned();
+        req.cli = Some(json!({
+            "event_name": "PreToolUse",
+            "response": {
+                "policy_action": "allow",
+                "reason": "x".repeat(guard_contracts::HOOK_RENDER_MAX_BYTES),
+            },
+        }));
+        crate::package_authority_op::request_digest_with_limit(
+            &req,
+            guard_contracts::HOOK_RENDER_MAX_BYTES,
+        )
+        .expect_err("the ordinary budget is too small for this reply");
+        crate::package_authority_op::request_digest_with_limit(
+            &req,
+            guard_contracts::hook_render_max_bytes(kind),
+        )
+        .expect("the bridge's own budget holds it");
+    }
 }

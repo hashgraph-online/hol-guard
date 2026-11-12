@@ -37,6 +37,9 @@ concurrency:
   # in-flight run on every push, so a main run can actually finish green.
   cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
+# Linux jobs name ubuntu-24.04 rather than ubuntu-latest. The hosted image behind ubuntu-latest
+# moved to 26.04, where the native sandbox and coreutils layout the runtime tests assert against
+# differ; that platform needs its own qualification before CI follows it.
 jobs:
   # Trusted change planner (shadow mode): computes which lanes the diff requires.
   # Runs on PRs only; the diff is taken from the strict PR merge parent so a
@@ -45,7 +48,7 @@ jobs:
   plan:
     name: plan
     if: github.event_name == 'pull_request'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 5
     permissions:
       contents: read
@@ -134,7 +137,7 @@ jobs:
           echo "lanes=$LANES" >> "$GITHUB_OUTPUT"
           echo "data_only=$DATA_ONLY" >> "$GITHUB_OUTPUT"
       - name: Upload ci-plan
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: ci-plan
           path: ci-plan.json
@@ -142,7 +145,7 @@ jobs:
           retention-days: 7
 
   quality:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
@@ -153,7 +156,7 @@ jobs:
   # Rust validation is required, but is not on the artifact/Python fan-out critical path.
   native-workspace:
     name: Rust workspace (${{ matrix.check }})
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     # Required main consumers are the archive producers. Only the two runtime
     # shards share an archive; core/command and PR/Clippy work stay independent.
@@ -315,7 +318,7 @@ jobs:
         run: '"$SCCACHE_PATH" --show-stats || true'
       - name: Retain Rust test compilation timings
         if: always() && matrix.check != 'clippy' && steps.runtime-archive.outputs.cache-hit != 'true'
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: rust-test-compilation-timings-${{ matrix.check }}-${{ github.run_attempt }}
           path: rust/target/cargo-timings/cargo-timing.html
@@ -326,7 +329,7 @@ jobs:
         run: python3 -m scripts.ci.clippy_report bind
       - name: Upload successful strict Clippy report
         if: matrix.check == 'clippy'
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: clippy-report-${{ github.run_attempt }}
           path: clippy-report/
@@ -334,7 +337,7 @@ jobs:
           retention-days: 1
 
   native-command-evaluators:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     outputs:
       shard-indices: ${{ steps.shard-indices.outputs.indices }}
       shard-count: ${{ steps.shard-indices.outputs.count }}
@@ -363,7 +366,7 @@ jobs:
         run: |
           uv run --no-sync python scripts/prepare_extension_directory.py --compiler rust/target/release/guard-command-source --write-and-check
       - name: Upload native command evaluators
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: pytest-native-command-evaluators
           path: |
@@ -372,7 +375,7 @@ jobs:
           if-no-files-found: error
           retention-days: 1
       - name: Upload matching native command projections
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: pytest-native-command-projections
           path: |
@@ -404,7 +407,7 @@ jobs:
 
   native-offline-previous:
     name: native-offline-previous
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
@@ -478,7 +481,7 @@ jobs:
             previous-client/src/codex_plugin_scanner/guard/contracts/data/extensions/
           key: ${{ steps.previous-cache.outputs.cache-primary-key }}
       - name: Upload pinned prior native command evaluators
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: pytest-prior-native-command-evaluators-${{ env.NATIVE_OFFLINE_PREVIOUS_SHA }}
           path: |
@@ -487,7 +490,7 @@ jobs:
           if-no-files-found: error
           retention-days: 1
       - name: Upload matching prior command projections
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: pytest-prior-native-command-projections-${{ env.NATIVE_OFFLINE_PREVIOUS_SHA }}
           path: |
@@ -499,7 +502,7 @@ jobs:
   native-offline-upgrade:
     name: native-offline-upgrade
     needs: [native-command-evaluators, native-offline-previous]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
@@ -516,17 +519,17 @@ jobs:
           python-version: ${{ env.CI_PYTHON_VERSION }}
           cache-dependency-glob: ${{ env.CI_UV_CACHE_DEPENDENCY_GLOB }}
       - name: Download pinned prior native command evaluators
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
         with:
           name: pytest-prior-native-command-evaluators-${{ env.NATIVE_OFFLINE_PREVIOUS_SHA }}
           path: rust/target/previous-client/release
       - name: Restore matching prior command projections
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
         with:
           name: pytest-prior-native-command-projections-${{ env.NATIVE_OFFLINE_PREVIOUS_SHA }}
           path: previous-client
       - name: Download current native command evaluators
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
         with:
           name: pytest-native-command-evaluators
           path: rust/target/release
@@ -549,7 +552,7 @@ jobs:
   native-gates:
     name: native-gates (${{ matrix.shard-index }})
     needs: native-command-evaluators
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     # Includes checkout/setup plus the shard. The gate gains cases with each
     # false-positive fix, so a slower runner cancelled shards whose tests had
     # all passed. The cap stays well above the measured shard so that keeps
@@ -574,7 +577,7 @@ jobs:
           python-version: ${{ env.CI_PYTHON_VERSION }}
           cache-dependency-glob: ${{ env.CI_UV_CACHE_DEPENDENCY_GLOB }}
       - name: Download native command evaluators
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
         with:
           name: pytest-native-command-evaluators
           path: rust/target/release
@@ -633,7 +636,7 @@ jobs:
       needs.native-command-evaluators.result == 'success' &&
       (github.event_name != 'pull_request' ||
        (needs.plan.result == 'success' && needs.plan.outputs.data_only != 'true'))
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     # Includes checkout/setup plus the instrumented shard. Five minutes can
     # cancel a healthy shard before it produces the coverage artifact Sonar needs.
     # Planning lags a newly slower test by one main run; the headroom lets that
@@ -652,12 +655,12 @@ jobs:
           python-version: ${{ env.CI_PYTHON_VERSION }}
           cache-dependency-glob: ${{ env.CI_UV_CACHE_DEPENDENCY_GLOB }}
       - name: Download pytest shard plan
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
         with:
           name: pytest-shard-plan-3.12
           path: pytest-shards
       - name: Download native command evaluators
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
         with:
           name: pytest-native-command-evaluators
           path: rust/target/release
@@ -718,7 +721,7 @@ jobs:
             "${coverage_args[@]}"
       - name: Upload pytest coverage data artifact
         if: always() && github.event_name != 'pull_request'
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: pytest-coverage-${{ github.run_attempt }}-${{ matrix.shard-index }}
           path: .coverage
@@ -727,7 +730,7 @@ jobs:
           retention-days: 1
       - name: Upload pytest duration artifact
         if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: pytest-durations-${{ github.run_attempt }}-${{ matrix.shard-index }}
           path: pytest-durations.json
@@ -742,14 +745,14 @@ jobs:
       needs.coverage.result == 'success' &&
       needs.native-command-evaluators.result == 'success'
     needs: [coverage, native-command-evaluators]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 2
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
         with:
           persist-credentials: false
       - name: Download pytest duration reports
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
         with:
           pattern: pytest-durations-${{ github.run_attempt }}-*
           path: duration-reports
@@ -771,7 +774,7 @@ jobs:
           echo "complete=true" >> "$GITHUB_OUTPUT"
       - name: Upload pytest duration manifest candidate
         if: steps.duration-manifest.outputs.complete == 'true'
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: pytest-duration-manifest-candidate
           path: pytest-duration-manifest-candidate.json.gz
@@ -783,7 +786,7 @@ jobs:
     # PRs already run the full behavioral suite above; Sonar consumes the
     # authoritative instrumented main run and stays off the contributor path.
     if: vars.SONAR_CI_ENABLED == 'true' && github.event_name != 'pull_request'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 2
     outputs:
       has-token: ${{ steps.token-presence.outputs.has-token }}
@@ -804,7 +807,7 @@ jobs:
     name: Rust coverage (${{ matrix.partition }})
     needs: sonar-context
     if: needs.sonar-context.outputs.has-token == 'true'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     strategy:
       fail-fast: false
@@ -826,7 +829,7 @@ jobs:
       needs.sonar-rust-coverage.result == 'success' &&
       needs.native-workspace.result == 'success' &&
       needs.coverage.result == 'success'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     permissions:
       contents: read
@@ -851,7 +854,7 @@ jobs:
       needs.native-command-evaluators.result == 'success' &&
       (github.event_name != 'pull_request' ||
        (needs.plan.result == 'success' && needs.plan.outputs.data_only != 'true'))
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     strategy:
       fail-fast: false
@@ -875,7 +878,7 @@ jobs:
       needs.native-command-evaluators.result == 'success' &&
       (github.event_name != 'pull_request' ||
        (needs.plan.result == 'success' && needs.plan.outputs.data_only != 'true'))
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 5
     strategy:
       fail-fast: false
@@ -903,7 +906,7 @@ jobs:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
         with:
           persist-credentials: false
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
         with:
           name: pytest-native-command-projections
           path: .
@@ -915,7 +918,7 @@ jobs:
       !cancelled() &&
       (github.event_name != 'pull_request' ||
        (needs.plan.result == 'success' && needs.plan.outputs.data_only != 'true'))
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
@@ -945,7 +948,7 @@ jobs:
       !cancelled() &&
       (github.event_name != 'pull_request' ||
        (needs.plan.result == 'success' && needs.plan.outputs.data_only != 'true'))
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
@@ -1012,7 +1015,7 @@ jobs:
             --implementation-digest "$(jq -r '.implementation_digest' "$work/source-compiled.json")" \
             --base-program-digest "$(jq -r '.base_program_digest' "$work/source-compiled.json")"
           test "$(find dashboard-integration-wheel -maxdepth 1 -name 'hol_guard-*.whl' | wc -l)" -eq 1
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: dashboard-integration-wheel
           path: dashboard-integration-wheel/hol_guard-*.whl
@@ -1029,17 +1032,17 @@ jobs:
       needs.dashboard-integration-wheel.result == 'success' &&
       (github.event_name != 'pull_request' ||
        (needs.plan.result == 'success' && needs.plan.outputs.data_only != 'true'))
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 8
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
         with:
           persist-credentials: false
-      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2
         with:
           version: "0.9.26"
           enable-cache: false
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
         with:
           name: dashboard-integration-wheel
           path: ${{ runner.temp }}/dashboard-integration-wheel
@@ -1081,7 +1084,7 @@ jobs:
       needs.native-command-evaluators.result == 'success' &&
       (github.event_name != 'pull_request' ||
        (needs.plan.result == 'success' && needs.plan.outputs.data_only != 'true'))
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
@@ -1229,9 +1232,13 @@ jobs:
       (github.event_name != 'pull_request' ||
        (needs.plan.result == 'success' && needs.plan.outputs.data_only != 'true'))
     runs-on: macos-latest
-    # Use the three allocated CPU cores while retaining twelve runners,
-    # the full gate catalog and the existing five-minute job budget.
-    timeout-minutes: 5
+    # Use the three allocated CPU cores while retaining twelve runners and
+    # the full gate catalog. The catalog keeps growing: the slowest shards
+    # now spend around 430 seconds in pytest alone, so checkout and setup push
+    # them past an eight-minute limit and GitHub cancels them after their
+    # cases have already passed. Twelve minutes restores the headroom without
+    # a wider macOS fan-out, which the runner pool cannot spare.
+    timeout-minutes: 12
     strategy:
       fail-fast: false
       matrix:
@@ -1256,7 +1263,7 @@ jobs:
     name: hol-guard / required
     if: always()
     needs: [plan, native-workspace, native-command-evaluators, native-offline-previous, native-offline-upgrade, native-gates, quality, coverage, compatibility, scheduling-sensitive, dashboard, dashboard-integration-wheel, dashboard-integration, cisco-full, pi-exact-continuation, cross-platform, windows-native-runtime, windows-shim-admin, windows-packaged-daemon, macos-native-runtime, macos-skill-identity, macos-gates]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 2
     permissions:
       contents: read

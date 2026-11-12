@@ -1,7 +1,6 @@
-//! Derived identities, kept like `_cached_portable_project_identity`
-//! (`store_portable_project_memory.py`): only a successful identity is kept,
-//! under the workspace and the size and modification time of every Git
-//! metadata file it was read from. The key also names the `.git` directory
+//! Derived identities: only a successful identity is kept, under the
+//! workspace and the size and modification time of every Git metadata file
+//! it was read from. The key also names the `.git` directory
 //! the ancestor walk found, and the walk runs before every lookup, so a
 //! repository appearing nearer the workspace is never shadowed by a hit.
 //!
@@ -15,7 +14,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 use std::time::SystemTime;
 
-/// `_PROJECT_IDENTITY_CACHE_MAX_ITEMS`.
+/// The most identities kept at once.
 const MAX_ITEMS: usize = 128;
 
 static CACHE: Mutex<Vec<(Key, String)>> = Mutex::new(Vec::new());

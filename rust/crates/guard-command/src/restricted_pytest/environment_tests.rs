@@ -109,3 +109,61 @@ fn a_contained_run_is_never_given_a_directory_search_path() {
     }
     fs::remove_dir_all(&root).unwrap();
 }
+
+/// `composer test` is admitted as the project's own script because the
+/// project's `composer.json` admits no plugin, and on a host that reading
+/// would be incomplete: Composer merges `$COMPOSER_HOME/config.json` into the
+/// project configuration and loads whatever `composer global require`
+/// installed. The reading holds because the contained run has no Composer
+/// home to merge from — the environment is an allow-list carrying no
+/// `COMPOSER_*` name, and `HOME` is the private scratch directory. Pin that,
+/// so a name added to the allow-list later cannot quietly give the run a
+/// global configuration the admission already assumed away.
+#[test]
+fn a_contained_run_is_never_given_a_composer_home() {
+    let mut random = [0u8; 16];
+    getrandom::fill(&mut random).unwrap();
+    let root = env::temp_dir().join(format!("guard-env-{}", hex::encode(random)));
+    fs::create_dir(&root).unwrap();
+    let root = root.canonicalize().unwrap();
+    let workspace = root.join("workspace");
+    let private = root.join("private");
+    for directory in [&workspace, &private] {
+        fs::create_dir(directory).unwrap();
+    }
+    let source: BTreeMap<String, String> = [
+        "COMPOSER_HOME",
+        "COMPOSER",
+        "COMPOSER_VENDOR_DIR",
+        "COMPOSER_BIN_DIR",
+        "COMPOSER_ALLOW_SUPERUSER",
+    ]
+    .into_iter()
+    .map(|name| (name.to_owned(), "/".to_owned()))
+    .collect();
+    let environment = filter(
+        &source,
+        &workspace,
+        &workspace,
+        &private,
+        &private,
+        &[],
+        false,
+    )
+    .unwrap();
+    // The rule rather than the sample: no name Composer reads its own
+    // configuration through reaches the run.
+    for name in environment.keys() {
+        assert!(
+            !name.to_ascii_uppercase().starts_with("COMPOSER"),
+            "{name} gives the run a Composer configuration: {environment:?}"
+        );
+    }
+    // And the home it does get is the private one, which holds no Composer
+    // home for Composer to find under its default `$HOME/.composer`.
+    assert_eq!(
+        environment.get("HOME").map(String::as_str),
+        Some(private.to_string_lossy().as_ref())
+    );
+    fs::remove_dir_all(&root).unwrap();
+}

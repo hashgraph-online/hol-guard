@@ -272,6 +272,8 @@ fn recursive_search_source_globs_are_not_mistaken_for_env_files() {
         ("tests/helpers.ts", "ordinary"),
         ("configured/app.test.ts", "ordinary"),
         ("configured/.env", "TOKEN=ordinary"),
+        ("secrets/notes.ts", "ordinary"),
+        ("secrets/.env.local", "TOKEN=ordinary"),
     ] {
         let file = root.join(path);
         std::fs::create_dir_all(file.parent().unwrap()).unwrap();
@@ -284,14 +286,30 @@ fn recursive_search_source_globs_are_not_mistaken_for_env_files() {
             ("grep -r --include=\"*.test.ts\" -l ordinary tests", true),
             ("grep -rl --include=*.spec.tsx ordinary tests", true),
             ("grep -rl --include=*.ts ordinary tests", true),
-            ("grep -rl --include=.env.* ordinary tests", false),
+            // How the glob is spelled is not the screen; what it can select
+            // is. Below a directory holding no credential file, an
+            // env-shaped include selects none either.
+            ("grep -rl --include=.env.* ordinary tests", true),
+            ("grep -rl --include=.env*.ts ordinary tests", true),
+            // BSD grep matches an include against the whole path it reached
+            // a file by, so a leading wildcard can carry the glob across a
+            // separator and select a file no name match selects.
             ("grep -rl --include=*.env.* ordinary tests", false),
-            ("grep -rl --include=.env*.ts ordinary tests", false),
-            ("grep -rl --include=.e*.ts ordinary tests", false),
+            // `?` and a bracket mean one character to grep and one byte to
+            // the matcher behind this walk, so neither is modeled.
             ("grep -rl --include=?env.*.ts ordinary tests", false),
             ("grep -rl --include=[.]env*.ts ordinary tests", false),
-            // The walk still refuses a tree that holds a credential file.
-            ("grep -rl --include=*.test.ts ordinary configured", false),
+            // A glob carrying a separator is matched against the whole name
+            // grep reached the file by, which the walk does not render.
+            ("grep -rl --include=src/.env.* ordinary tests", false),
+            // An include that does select a credential file keeps the review.
+            ("grep -rl --include=.env.* ordinary secrets", false),
+            // A tree holding a credential file the glob misses does not: the
+            // walk below the root skips every file no include selects, so
+            // `configured/.env` is never opened.
+            ("grep -rl --include=*.test.ts ordinary configured", true),
+            // The same tree with no include keeps the review.
+            ("grep -rl ordinary configured", false),
         ] {
             let result = evaluate_pre_tool_envelope_with_context(
                 harness,
@@ -397,6 +415,119 @@ fn a_recursive_search_over_a_pipe_still_asks() {
         for (command, expected) in [
             ("grep -rln ordinary src/", false),
             ("grep -rln --devices=read ordinary src/", false),
+        ] {
+            let result = evaluate_pre_tool_envelope_with_context(
+                harness,
+                "PreToolUse",
+                &json!({"toolName":"Bash", "toolInput":{"command":command}}),
+                None,
+                None,
+                root.to_str(),
+                root.to_str(),
+            );
+            assert_eq!(
+                result.minimum_action == "allow",
+                expected,
+                "{harness}: {command}"
+            );
+        }
+    }
+}
+
+/// A sweep for a name the agent guessed at, beside a step that only reads.
+///
+/// The missing root is proven by every other step being unable to put a file,
+/// directory or link there before the walk reaches it. `cat notes.md`, `ls` and
+/// `head -3 notes.md` open paths to read them and write to standard output;
+/// with no redirect they create nothing, so they answer that question exactly
+/// as `pwd` already did. A step that does create, `touch app`, keeps the
+/// review.
+#[test]
+fn a_reader_beside_a_missing_root_leaves_the_walk_quiet() {
+    let nonce = crate::unique_nanos::unique_nanos();
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../target/recursive-file-search")
+        .join(format!("reader-peer-{}-{nonce}", std::process::id()));
+    let _fixture = FixtureDirectory(root.clone());
+    std::fs::create_dir_all(root.join("src")).unwrap();
+    let root = std::fs::canonicalize(root).unwrap();
+    std::fs::write(root.join("src/index.ts"), "ordinary source").unwrap();
+    std::fs::write(root.join("notes.md"), "ordinary notes").unwrap();
+    for harness in ["omp", "zcode"] {
+        let allows = |command: &str| {
+            let result = evaluate_pre_tool_envelope_with_context(
+                harness,
+                "PreToolUse",
+                &json!({"toolName":"Bash", "toolInput":{"command":command}}),
+                None,
+                None,
+                root.to_str(),
+                root.to_str(),
+            );
+            result.minimum_action == "allow"
+        };
+        for (command, expected) in [
+            // The root that is there, to show the fixture proves an ordinary
+            // sweep beside the same reader.
+            ("grep -rn ordinary src; cat notes.md", true),
+            ("grep -rn ordinary app; cat notes.md", true),
+            ("grep -rn ordinary app; ls", true),
+            ("grep -rn ordinary app; head -3 notes.md", true),
+            ("grep -rn ordinary app | head -3; cat notes.md", true),
+            ("ls -R app; cat notes.md", true),
+            ("grep -rn ordinary app; pwd", true),
+            ("grep -rn ordinary app; touch app", false),
+        ] {
+            assert_eq!(allows(command), expected, "{harness}: {command}");
+        }
+        // A redirect into the workspace is the sandbox's question, not the
+        // sweep's: the parser cannot model one at all, so the command reaches
+        // the workspace profile through the projection that removes it, and
+        // whether the sweep's root is there decides nothing about the write.
+        // Before the peer screens agreed, a missing root pulled the whole
+        // command back to review while the same redirect beside a root that
+        // exists ran contained.
+        assert_eq!(
+            allows("grep -rn ordinary app; cat notes.md > app"),
+            allows("grep -rn ordinary src; cat notes.md > app"),
+            "{harness}: a missing sweep root must not change how a redirect is answered"
+        );
+    }
+}
+
+/// The same question, asked of `fd`, which lists names rather than contents.
+///
+/// Every `fd` root proof resolves the directory it describes, so a root that
+/// is not there failed all of them and the listing went to review — while the
+/// same missing root under `rg`, `grep`, `find` and `ls` was already quiet. An
+/// agent spells a tree it has not looked at yet (`fd ts ~/other/app`) and gets
+/// an error from `fd` either way; the review bought nothing.
+#[test]
+fn a_names_only_listing_of_a_missing_root_is_quiet() {
+    let nonce = crate::unique_nanos::unique_nanos();
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../target/recursive-file-search")
+        .join(format!("fd-absent-{}-{nonce}", std::process::id()));
+    let _fixture = FixtureDirectory(root.clone());
+    std::fs::create_dir_all(root.join("src")).unwrap();
+    let root = std::fs::canonicalize(root).unwrap();
+    std::fs::write(root.join("src/index.ts"), "ordinary source").unwrap();
+    std::fs::write(root.join("notes.md"), "ordinary notes").unwrap();
+    let spelled = root.to_string_lossy().replace('\\', "/");
+    for harness in ["omp", "zcode"] {
+        for (command, expected) in [
+            // The root that is there, to show the fixture proves an ordinary
+            // listing of the same shape.
+            (format!("fd ts {spelled}/src"), true),
+            (format!("fd ts {spelled}/app"), true),
+            (format!("fd --extension ts . {spelled}/app"), true),
+            (format!("fd -t f ts {spelled}/app"), true),
+            (format!("fd ts {spelled}/app; cat notes.md"), true),
+            (format!("fd ts {spelled}/app; pwd"), true),
+            // A peer that can put a tree at the name before the walk reaches
+            // it keeps the review, exactly as it does for a recursive search.
+            (format!("fd ts {spelled}/app; touch {spelled}/app"), false),
+            (format!("fd ts {spelled}/app; cat notes.md > app"), false),
         ] {
             let result = evaluate_pre_tool_envelope_with_context(
                 harness,

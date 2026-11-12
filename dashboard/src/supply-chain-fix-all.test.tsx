@@ -44,7 +44,7 @@ const markup = renderToStaticMarkup(
 
 assert(markup.includes("Restore supply-chain protection"), "recovery heading is visible");
 assert(markup.includes("Restore protection"), "one aggregate repair action is visible");
-assert(markup.includes("2 issues to resolve"), "summary reports the bounded repair scope");
+assert(markup.includes("2 issues to fix"), "summary reports the bounded repair scope");
 assert(markup.includes("View issue details"), "issues remain available through progressive disclosure");
 assert(!markup.includes("Package installs are not protected yet"), "details start collapsed");
 assert(markup.includes('aria-live="polite"'), "the result live region exists before repair starts");

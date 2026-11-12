@@ -74,7 +74,9 @@ fn checkout(label: &str, pager: bool) -> (PathBuf, FixtureCleanup) {
     git(&root, &project, &["add", "-A"]);
     git(&root, &project, &["commit", "--quiet", "-m", "fixture"]);
     std::fs::write(project.join("src/index.ts"), "export const a = 2;\n").unwrap();
-    let root = root.canonicalize().unwrap();
+    // Git for Windows reads no global configuration from a `\\?\` home, so the
+    // fixture spells the root the way a user's home is spelled.
+    let root = fixture::canonical_spelling(&root);
     (root.clone(), FixtureCleanup(root))
 }
 
@@ -148,6 +150,46 @@ fn an_allowed_refresh_runs_its_reads_without_review() {
             let result = decide(&root, harness, command, &controls);
             if result.decision != "allow" {
                 failures.push(format!(
+                    "{harness}: {command}: {} {} {}",
+                    result.decision, result.reason_code, result.reason
+                ));
+            }
+        }
+    }
+    assert!(failures.is_empty(), "{failures:#?}");
+}
+
+/// Reads the Git extension has no permission for, each after a step the user
+/// allowed. Guard proves the read on its own, and the step before it changes
+/// nothing the read looks up, so the Allow on that step carries the command.
+const REF_READS_AFTER_ALLOWED_STEPS: &[&str] = &[
+    "git push origin HEAD:feature && git rev-parse HEAD",
+    "git push -u origin HEAD && git rev-parse --short HEAD",
+    "git checkout main && git pull --ff-only && git rev-parse --short HEAD",
+    "git checkout -B refresh origin/main && git rev-parse --abbrev-ref HEAD",
+    "git branch -D stale && git branch --show-current",
+    "git reset --hard origin/main && git rev-parse HEAD",
+    "git restore src/index.ts && git rev-parse HEAD",
+    "git fetch upstream main && git rev-parse HEAD",
+    "git push origin HEAD:feature && git merge-base HEAD origin/main",
+    "git fetch upstream main && git merge-base HEAD FETCH_HEAD",
+    "git commit -am 'Update index' && git push && git rev-parse HEAD",
+    "git checkout -B refresh --no-track origin/main && git rev-parse --abbrev-ref HEAD \
+     && git rev-parse --short HEAD && git merge-base HEAD origin/main",
+    "git checkout -B refresh origin/main && docker ps",
+    "git reset --hard origin/main && git rev-parse HEAD && docker images",
+];
+
+#[test]
+fn a_ref_read_after_an_allowed_step_runs_without_review() {
+    let (root, _cleanup) = checkout("ref-reads", false);
+    let controls = every_permission("enabled");
+    let mut failures = Vec::new();
+    for harness in ["omp", "zcode", "codex", "claude-code"] {
+        for command in REF_READS_AFTER_ALLOWED_STEPS {
+            let result = decide(&root, harness, command, &controls);
+            if result.decision != "allow" {
+                failures.push(format!(
                     "{harness}: {command}: {} {}",
                     result.decision, result.reason_code
                 ));
@@ -155,6 +197,72 @@ fn an_allowed_refresh_runs_its_reads_without_review() {
         }
     }
     assert!(failures.is_empty(), "{failures:#?}");
+}
+
+#[test]
+fn a_ref_read_keeps_the_review_of_a_step_nobody_allowed() {
+    let (root, _cleanup) = checkout("ref-reads-unallowed", false);
+    let defaults = fixture::github_controls("default");
+    let mut reviewed_steps = 0;
+    for command in REF_READS_AFTER_ALLOWED_STEPS {
+        let step = command.split(" && ").next().unwrap();
+        if decide(&root, "omp", step, &defaults).decision == "allow" {
+            continue;
+        }
+        reviewed_steps += 1;
+        let result = decide(&root, "omp", command, &defaults);
+        assert_ne!(
+            result.decision, "allow",
+            "{command}: {}",
+            result.reason_code
+        );
+    }
+    assert!(reviewed_steps > 0, "no step waits for review by default");
+    let allowed = every_permission("enabled");
+    // A container start runs code an allowed checkout may just have changed,
+    // and an allowed `git config` may name the pager the read then runs.
+    for command in [
+        "hol-guard hooks remove && git rev-parse HEAD",
+        "git config core.pager 'sh -c true' && git log -1",
+        "git config core.pager 'sh -c true' && git rev-parse HEAD && git log -1",
+        "git checkout -B refresh origin/main && docker start web",
+        "git reset --hard origin/main && docker container start web",
+    ] {
+        let result = decide(&root, "omp", command, &allowed);
+        assert_ne!(
+            result.decision, "allow",
+            "{command}: {}",
+            result.reason_code
+        );
+    }
+}
+
+/// A home configuration that includes a file the work tree tracks. A checkout,
+/// reset or stash can replace that file, so the configuration Guard probed
+/// before the command is not the one a later read runs under.
+#[test]
+fn a_read_after_an_allowed_checkout_waits_when_an_include_reaches_the_work_tree() {
+    let (root, _cleanup) = checkout("tracked-include", false);
+    std::fs::create_dir_all(root.join("project/tools")).unwrap();
+    std::fs::write(root.join("project/tools/git.cfg"), "[color]\n\tui = auto\n").unwrap();
+    std::fs::write(
+        root.join(".gitconfig"),
+        "[include]\n\tpath = ~/project/tools/git.cfg\n",
+    )
+    .unwrap();
+    let controls = every_permission("enabled");
+    for command in [
+        "git checkout -B refresh origin/main && git rev-parse --abbrev-ref HEAD",
+        "git reset --hard origin/main && git log -1 --oneline",
+        "git stash push -m 'warm-cache' -- src/index.ts && git log -1 --oneline",
+    ] {
+        let result = decide(&root, "omp", command, &controls);
+        assert_ne!(
+            result.decision, "allow",
+            "{command}: {}",
+            result.reason_code
+        );
+    }
 }
 
 #[test]
@@ -198,6 +306,202 @@ fn an_allowed_refresh_that_configures_git_itself_still_waits_for_review() {
         "git --exec-path=/tmp/exec status -sb",
     ] {
         let result = decide(&root, "omp", command, &controls);
+        assert_ne!(
+            result.decision, "allow",
+            "{command}: {}",
+            result.reason_code
+        );
+    }
+}
+
+/// A home configuration holding a value Git stores as bytes the probe cannot
+/// decode. The `git config` reply is read as one piece of text, so a single
+/// such value leaves the probe with no answer about any setting.
+///
+/// This stands in for every way the probe runs out of answers in a real
+/// session — a query that exhausts its budget part way through a compound, a
+/// Git the host does not trust, a home or working directory the hook cannot
+/// canonicalize, an environment that reaches Git's setup. Those depend on
+/// host timing or host layout; this one reproduces the same state from a
+/// fixture, on every platform, without a race.
+/// A value the probe cannot decode must not hide the rest of the reply. Git
+/// spells configuration keys in ASCII, so an undecodable value is read as a
+/// helper that was found, never as a question the probe never asked: the
+/// monitor sitting beside it keeps its review however much the user allowed.
+#[test]
+fn an_allowed_read_whose_undecodable_configuration_hides_a_monitor_still_waits() {
+    let (root, _cleanup) = checkout("undecodable-monitor", false);
+    let mut configuration = b"[core]\n\texcludesfile = /tmp/".to_vec();
+    configuration.extend_from_slice(&[0xff, 0xfe]);
+    configuration.extend_from_slice(b"/ignore\n\tfsmonitor = /tmp/watch\n");
+    std::fs::write(root.join(".gitconfig"), configuration).unwrap();
+    let controls = every_permission("enabled");
+    for command in [
+        "git status --short --branch",
+        "git status --short --branch && git remote -v",
+    ] {
+        let result = decide(&root, "omp", command, &controls);
+        assert_ne!(
+            result.decision, "allow",
+            "{command}: {}",
+            result.reason_code
+        );
+    }
+}
+
+/// The other half. Where the probe did answer and named a program the read
+/// would start, the review is a helper Guard can see, and no Allow settles
+/// it. A file-system monitor runs on the index `git status` refreshes.
+#[test]
+fn an_allowed_read_whose_configuration_names_a_monitor_still_waits_for_review() {
+    let (root, _cleanup) = checkout("fsmonitor", false);
+    std::fs::write(
+        root.join(".gitconfig"),
+        "[core]\n\tfsmonitor = /tmp/watch\n",
+    )
+    .unwrap();
+    let controls = every_permission("enabled");
+    for command in [
+        "git status --short --branch",
+        "git status --short --branch && git remote -v",
+    ] {
+        let result = decide(&root, "omp", command, &controls);
+        assert_ne!(
+            result.decision, "allow",
+            "{command}: {}",
+            result.reason_code
+        );
+    }
+}
+
+/// A setting written with no value carries Git's implicit true, and the reply
+/// spells it by leaving the value off the record. Reading that record as a
+/// question the probe never asked would hand the whole reply to an explicit
+/// allow, and the monitor configured beside it would run.
+#[test]
+fn an_allowed_read_whose_valueless_setting_hides_a_monitor_still_waits() {
+    let (root, _cleanup) = checkout("valueless-monitor", false);
+    std::fs::write(
+        root.join(".gitconfig"),
+        "[log]\n\tshowSignature\n[core]\n\tfsmonitor = /tmp/watch\n",
+    )
+    .unwrap();
+    let controls = every_permission("enabled");
+    for command in [
+        "git status --short --branch",
+        "git status --short --branch && git remote -v",
+    ] {
+        let result = decide(&root, "omp", command, &controls);
+        assert_ne!(
+            result.decision, "allow",
+            "{command}: {}",
+            result.reason_code
+        );
+    }
+}
+
+/// A path as the shell reads it. On Windows a path's separators are the
+/// shell's own escape character, so a command that spells one unquoted reaches
+/// Git as something else and Guard refuses to prove it. The drive-absolute
+/// forward-slash form is the one Guard's own path proofs work in, and every
+/// shell passes it through unchanged.
+fn shell_path(path: &Path) -> String {
+    path.to_string_lossy().replace('\\', "/")
+}
+
+/// A second checkout beside the first, so a step can be routed somewhere other
+/// than the checkout the read runs in.
+fn sibling_checkout(root: &Path) -> PathBuf {
+    let other = root.join("other");
+    std::fs::create_dir_all(&other).unwrap();
+    git(root, &other, &["init", "--quiet", "-b", "main"]);
+    git(root, &other, &["config", "user.name", "Guard Fixture"]);
+    git(
+        root,
+        &other,
+        &["config", "user.email", "guard-fixture@example.invalid"],
+    );
+    git(
+        root,
+        &other,
+        &[
+            "remote",
+            "add",
+            "origin",
+            "https://github.com/example-org/app-portal.git",
+        ],
+    );
+    std::fs::write(other.join("README.md"), "sibling\n").unwrap();
+    git(root, &other, &["add", "-A"]);
+    git(root, &other, &["commit", "--quiet", "-m", "sibling"]);
+    other
+}
+
+/// A leading `-C` names the checkout a Git step works in; it does not change
+/// what the step is. An agent that spells every step of a refresh with the
+/// same `-C` runs the same refresh as one that spells none of them, so the
+/// user's Allow carries the read the same way.
+#[test]
+fn a_ref_read_after_a_step_routed_to_its_own_checkout_runs_without_review() {
+    let (root, _cleanup) = checkout("routed-same", false);
+    let project = shell_path(&root.join("project"));
+    let controls = every_permission("enabled");
+    let mut failures = Vec::new();
+    for harness in ["omp", "zcode", "codex", "claude-code"] {
+        for command in [
+            format!(
+                "git -C {project} pull --ff-only origin main \
+                 && git -C {project} rev-parse --short HEAD"
+            ),
+            format!(
+                "git -C {project} pull --ff-only origin main \
+                 && git -C {project} merge-base HEAD origin/main"
+            ),
+            format!(
+                "git -C {project} fetch origin main && git -C {project} rev-parse --short HEAD"
+            ),
+            format!(
+                "git -C {project} checkout -B refresh origin/main \
+                 && git -C {project} rev-parse --abbrev-ref HEAD"
+            ),
+            // The spellings mix: the step names the checkout the read runs in
+            // without a route of its own, and the other way round.
+            format!("git -C {project} pull --ff-only origin main && git rev-parse --short HEAD"),
+            format!("git pull --ff-only origin main && git -C {project} rev-parse --short HEAD"),
+        ] {
+            let result = decide(&root, harness, &command, &controls);
+            if result.decision != "allow" {
+                failures.push(format!(
+                    "{harness}: {command}: {} {} {}",
+                    result.decision, result.reason_code, result.reason
+                ));
+            }
+        }
+    }
+    assert!(failures.is_empty(), "{failures:#?}");
+}
+
+/// The other side of the same rule. A step routed to another checkout, or one
+/// carrying a leading option that does more than route or shape output, leaves
+/// the read where it started: under review.
+#[test]
+fn a_ref_read_after_a_step_routed_elsewhere_still_waits_for_review() {
+    let (root, _cleanup) = checkout("routed-elsewhere", false);
+    let other = shell_path(&sibling_checkout(&root));
+    let project = shell_path(&root.join("project"));
+    let controls = every_permission("enabled");
+    for command in [
+        // The step refreshes a different checkout than the read reports on.
+        format!("git -C {other} pull --ff-only origin main && git -C {project} rev-parse --short HEAD"),
+        format!("git -C {other} pull --ff-only origin main && git rev-parse --short HEAD"),
+        format!("git pull --ff-only origin main && git -C {other} rev-parse --short HEAD"),
+        // `--git-dir` and `-c` reach past the route, so they keep the refusal
+        // they had before a route could carry a read.
+        format!("git --git-dir={project}/.git pull --ff-only origin main && git rev-parse --short HEAD"),
+        format!("git -C {project} -c core.pager=/tmp/pager pull --ff-only origin main && git rev-parse --short HEAD"),
+        format!("git -C {project} pull --ff-only origin main && git -c core.pager=/tmp/pager rev-parse --short HEAD"),
+    ] {
+        let result = decide(&root, "omp", &command, &controls);
         assert_ne!(
             result.decision, "allow",
             "{command}: {}",

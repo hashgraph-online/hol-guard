@@ -9,9 +9,10 @@ use serde_json::{json, Map, Value};
 pub mod cli_documents;
 mod containment;
 pub mod hermes;
+pub mod muse;
 mod prompt_risk;
 
-use prompt_risk::PROMPT_RISK_CLASSES;
+use prompt_risk::prompt_risk_signals;
 
 /// JSON object used for verdicts and rendered responses.
 pub type Object = Map<String, Value>;
@@ -23,7 +24,7 @@ const POST_BLOCK_REASON: &str =
     "HOL Guard blocked this tool output because it could not be proven safe.";
 const POST_WARN_REASON: &str =
     "HOL Guard raised a non-blocking warning under the installed native policy.";
-const PROMPT_UNAVAILABLE_REASON: &str = "HOL Guard could not complete native prompt review safely.";
+const PROMPT_UNAVAILABLE_REASON: &str = "HOL Guard could not check this prompt, so it was blocked. If HOL Guard is not running or not responding, open HOL Guard and choose Troubleshoot Guard, then Restart Guard, or run hol-guard daemon recovery restart, then send the prompt again. For a custom Guard home, run hol-guard daemon recovery restart --guard-home <path>.";
 const SILENT_WARNING_CODES: [&str; 2] = ["native_policy_observed", "native_policy_warning"];
 
 /// The execution profile a containment `reason_code` requires, if any.
@@ -261,29 +262,6 @@ fn observe_lifecycle(canonical: &str, event_name: &str, reason_code: &str) -> Ob
     }
 }
 
-fn prompt_risk_signals(response: &Object) -> Vec<&'static str> {
-    let Some(Value::Array(classes)) = response.get("prompt_risk_classes") else {
-        return Vec::new();
-    };
-    let order = |item: &Value| {
-        PROMPT_RISK_CLASSES
-            .iter()
-            .position(|(code, _)| item.as_str() == Some(code))
-    };
-    let indexes: Option<Vec<usize>> = classes.iter().map(order).collect();
-    match indexes {
-        Some(indexes)
-            if (1..=6).contains(&indexes.len()) && indexes.windows(2).all(|w| w[0] < w[1]) =>
-        {
-            indexes
-                .into_iter()
-                .map(|index| PROMPT_RISK_CLASSES[index].1)
-                .collect()
-        }
-        _ => Vec::new(),
-    }
-}
-
 /// Render a UserPromptSubmit verdict.
 pub fn prompt(harness: &str, response: &Object) -> Object {
     let canonical = canonical_hook_harness(harness);
@@ -291,14 +269,23 @@ pub fn prompt(harness: &str, response: &Object) -> Object {
     let reason_code = text_or(response, "reason_code", "native_prompt_unavailable");
     let signals = prompt_risk_signals(response);
     if is_allow(response) && matches!(action, Some("allow" | "warn")) {
+        // A flagged prompt Guard sent on tells the person why, where the
+        // harness shows a system message.
+        let notice = (action == Some("warn") && !signals.is_empty())
+            .then(|| text_or(response, "reason", ""))
+            .filter(|reason| !reason.is_empty());
         if canonical == "grok" {
             return Object::new();
         }
         if canonical == "codex" {
-            return object(vec![(
+            let mut output = object(vec![(
                 "hookSpecificOutput",
                 hook_output("UserPromptSubmit"),
             )]);
+            if let Some(notice) = notice {
+                output.insert("systemMessage".into(), json!(notice));
+            }
+            return output;
         }
         let mut output = object(vec![
             ("policy_action", json!(action)),
@@ -310,6 +297,9 @@ pub fn prompt(harness: &str, response: &Object) -> Object {
         }
         if !signals.is_empty() && canonical != "copilot" {
             output.insert("risk_signals".into(), json!(signals));
+        }
+        if let Some(notice) = notice.filter(|_| canonical == "claude-code") {
+            output.insert("systemMessage".into(), json!(notice));
         }
         return output;
     }

@@ -1,6 +1,7 @@
-//! The Cursor `after*` observers and prompts the resident records.
+//! The Cursor `after*` observers and prompts the resident records, and the
+//! route probe it answers without a record.
 
-use super::{drain, lane, prompt_payload, run_as, HOME};
+use super::{deferred, drain, lane, prompt_payload, run_as, HOME};
 use serde_json::json;
 
 #[test]
@@ -71,4 +72,48 @@ fn a_cursor_prompt_is_answered_with_the_edge_response_in_either_posture() {
             "{label}"
         );
     }
+}
+
+fn route_probe(lane: &super::Lane, tool_cwd: &str) -> serde_json::Value {
+    json!({
+        "hook_event_name": "PreToolUse",
+        "tool_name": "Shell",
+        "tool_input": { "command": "make build", "cwd": tool_cwd },
+        "cwd": lane.workspace,
+        "cursor_route_probe": true,
+    })
+}
+
+#[test]
+fn a_route_probe_for_another_directory_is_a_plain_allow_with_no_record() {
+    let probed = lane(
+        "cursor-probe-elsewhere",
+        json!({ "contained_sink_command": ["/opt/guard/bin/python", "-I"] }),
+    );
+    let result = run_as(&probed, "cursor", Some(HOME), route_probe(&probed, "/"));
+    assert_eq!(result["outcome"], "answer", "{result}");
+    assert_eq!(
+        result["edge"],
+        json!({ "harness_response": { "policy_action": "allow" } })
+    );
+    let page = drain(&probed, None);
+    assert!(
+        page["records"].as_array().is_none_or(Vec::is_empty),
+        "{page}"
+    );
+}
+
+#[test]
+fn a_route_probe_without_its_sink_or_its_name_keeps_the_daemon() {
+    let unbound = lane("cursor-probe-unbound", json!({}));
+    let result = run_as(&unbound, "cursor", Some(HOME), route_probe(&unbound, "/"));
+    assert_eq!(deferred(&result), "direct_hook_binding_incomplete");
+
+    let mut unnamed = route_probe(&unbound, "/");
+    unnamed
+        .as_object_mut()
+        .unwrap()
+        .remove("cursor_route_probe");
+    let result = run_as(&unbound, "cursor", Some(HOME), unnamed);
+    assert_eq!(deferred(&result), "direct_hook_cursor_probe_unnamed");
 }

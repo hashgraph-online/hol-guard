@@ -21,6 +21,45 @@ pub(in crate::pretool) fn verified_cwd_list_context(
     context: PathContext<'_>,
     sequence_after_cd: bool,
 ) -> Option<String> {
+    cwd_list_context(model, context, sequence_after_cd, false)
+}
+
+/// Like [`verified_cwd_compound_context`], but also admits a `cd` that climbs
+/// out of the cwd, such as `cd .. && ls`. Only read-only steps may be proved
+/// against it; see [`directory_targets::verified_climb_target`].
+fn verified_read_cwd_compound_context(
+    model: &CanonicalCommandV1,
+    context: PathContext<'_>,
+) -> Option<String> {
+    cwd_list_context(model, context, false, true)
+}
+
+/// The directory the Git reads of a `cd <dir> && ...` list run in, for the
+/// Git execution-context floor and the helper-configuration probe. Those
+/// inspect a read where it runs; they authorize no step. A `cd` that climbs
+/// out of the cwd, such as `cd ../app && git status`, counts when no later
+/// step carries an effect of its own.
+pub(in crate::pretool) fn git_read_cwd_compound_context(
+    model: &CanonicalCommandV1,
+    context: PathContext<'_>,
+) -> Option<String> {
+    verified_cwd_compound_context(model, context).or_else(|| {
+        model
+            .segments
+            .iter()
+            .skip(1)
+            .all(|segment| !cwd_effectful_segment(segment))
+            .then(|| verified_read_cwd_compound_context(model, context))
+            .flatten()
+    })
+}
+
+fn cwd_list_context(
+    model: &CanonicalCommandV1,
+    context: PathContext<'_>,
+    sequence_after_cd: bool,
+    climb: bool,
+) -> Option<String> {
     let first = model.segments.first()?;
     if model.segments.len() < 2
         || first.executable.as_deref() != Some("cd")
@@ -37,7 +76,18 @@ pub(in crate::pretool) fn verified_cwd_list_context(
     let [target] = first.arguments.as_slice() else {
         return None;
     };
-    let cwd = safe_reads::verified_cwd_target(target, context)?;
+    let cwd = safe_reads::verified_cwd_target(target, context).or_else(|| {
+        climb
+            .then(|| directory_targets::verified_climb_target(target, context))
+            .flatten()
+    })?;
+    // A trailing `; echo "<label>$?"` reports the status the steps before it
+    // left. It runs whatever the `cd` did, but an `echo` of a label is all it
+    // runs, so it joins no work to the directory the command started in.
+    let status_tail = model
+        .segments
+        .last()
+        .is_some_and(|segment| super::super::contained_wrapper::status_echo(model, segment));
     for (index, pair) in model.segments.windows(2).enumerate() {
         // Parser spans count Unicode characters, not UTF-8 byte offsets.
         let length = pair[1].span.start.checked_sub(pair[0].span.end)?;
@@ -50,6 +100,8 @@ pub(in crate::pretool) fn verified_cwd_list_context(
         let separator = separator.trim();
         let allowed = if index == 0 {
             separator == "&&" || (sequence_after_cd && separator == ";")
+        } else if separator == ";" {
+            status_tail && index + 2 == model.segments.len()
         } else {
             matches!(separator, "&&" | "|")
         };
@@ -60,20 +112,241 @@ pub(in crate::pretool) fn verified_cwd_list_context(
     Some(cwd)
 }
 
+/// The directory a leading `cd <dir>` names, read without the separator
+/// shape [`verified_cwd_compound_context`] needs to prove the steps after it.
+///
+/// A `;` anywhere after the `cd` leaves those steps unproven, because a
+/// failed `cd` would let the part after the `;` run in the directory the
+/// command started in. The `cd` itself is not in doubt: it is the first thing
+/// the list runs, it runs unconditionally, and a verified target neither
+/// reads nor creates anything. Only that one step is answered here; nothing
+/// after it is proved against the directory it names.
+///
+/// A target that climbs out of the cwd counts too, under the read screens
+/// [`directory_targets::verified_climb_target`] applies. `cd ../other` is the
+/// same single step as `cd /abs/other` or `cd ~/other`: it names a directory
+/// and stops. Holding the climb to a linked worktree would make the rules a
+/// user allowed cover `cd /abs/other && gh pr merge 1; gh pr view 1` while
+/// the same command spelled `cd ../other` kept a review, for the one step
+/// nobody doubts. The steps after it stay unproved either way, and the
+/// write, Git write and contained-run routes keep the stricter proof.
+pub(in crate::pretool) fn verified_leading_cd_target(
+    model: &CanonicalCommandV1,
+    context: PathContext<'_>,
+) -> Option<String> {
+    let first = model.segments.first()?;
+    if first.executable.as_deref() != Some("cd")
+        || !first.environment_names.is_empty()
+        || first.pipeline_index != 0
+        || !directory_targets::drive_targets_quoted(first)
+        || !directory_targets::home_targets_unquoted(first)
+    {
+        return None;
+    }
+    // A redirection reaches the parser as an argument, so a `cd` that also
+    // writes a file is not the single-target step this proves.
+    let [target] = first.arguments.as_slice() else {
+        return None;
+    };
+    safe_reads::verified_cwd_target(target, context)
+        .or_else(|| directory_targets::verified_climb_target(target, context))
+}
+
+/// `cd <dir> && <reads>`, then more of the same, with a read outside a group
+/// proved in the directory that group leaves behind.
+///
+/// A later `cd` is absolute, so it names the same directory whether or not an
+/// earlier group was a subshell. `||` does not start that `cd`: it skips the
+/// `cd` when the step before it succeeds, and a later `&&` read would then
+/// run in a directory this proof did not verify. A read after a `)` is
+/// outside the subshell, so it is proved in the directory the command started
+/// in. A read after a brace group stays with the `cd`, because `{ ...; }`
+/// does not restore the directory and the `;` before `}` is not the join.
+pub(in crate::pretool) fn exact_safe_absolute_cd_chain(
+    model: &CanonicalCommandV1,
+    allow_git_helper_context: bool,
+    context: PathContext<'_>,
+) -> bool {
+    if model.segments.len() < 2 || model.confidence != "exact" {
+        return false;
+    }
+    let mut saw_directory = false;
+    let mut index = 0usize;
+    while index < model.segments.len() {
+        if index > 0 && !reaches_segment(model, index) {
+            return false;
+        }
+        if model.segments[index].executable.as_deref() == Some("cd") {
+            if !take_cd_chunk(model, allow_git_helper_context, context, &mut index) {
+                return false;
+            }
+            saw_directory = true;
+            continue;
+        }
+        if !read_in_context(model, index, allow_git_helper_context, context) {
+            return false;
+        }
+        index += 1;
+    }
+    saw_directory
+}
+
+/// `&&` or `;` may start an absolute `cd`. A read that is not a `cd` may also
+/// follow `||`: that operator only chooses whether the read runs.
+fn reaches_segment(model: &CanonicalCommandV1, index: usize) -> bool {
+    let Some(operator) = separator_operator(model, index) else {
+        return false;
+    };
+    if model.segments[index].executable.as_deref() == Some("cd") {
+        matches!(operator.as_str(), "&&" | ";")
+    } else {
+        matches!(operator.as_str(), "&&" | "||" | ";")
+    }
+}
+
+fn take_cd_chunk(
+    model: &CanonicalCommandV1,
+    allow_git_helper_context: bool,
+    context: PathContext<'_>,
+    index: &mut usize,
+) -> bool {
+    let cd = &model.segments[*index];
+    if !cd.environment_names.is_empty()
+        || cd.pipeline_index != 0
+        || !directory_targets::drive_targets_quoted(cd)
+        || !directory_targets::home_targets_unquoted(cd)
+    {
+        return false;
+    }
+    let [target] = cd.arguments.as_slice() else {
+        return false;
+    };
+    if *index > 0 && !std::path::Path::new(target).is_absolute() {
+        return false;
+    }
+    let Some(cwd) = safe_reads::verified_cwd_target(target, context) else {
+        return false;
+    };
+    let proved = PathContext {
+        cwd: Some(&cwd),
+        ..context
+    };
+    *index += 1;
+    let mut reads = 0usize;
+    while *index < model.segments.len()
+        && model.segments[*index].executable.as_deref() != Some("cd")
+    {
+        // A `)` closes the subshell the `cd` ran in. The next command is back
+        // in the directory the command started in, so it is not a read there.
+        if separator_operator(model, *index).as_deref() != Some("&&")
+            || gap_closes_subshell(model, *index)
+        {
+            break;
+        }
+        if !read_in_context(model, *index, allow_git_helper_context, proved) {
+            return false;
+        }
+        reads += 1;
+        *index += 1;
+    }
+    reads > 0
+}
+
+fn read_in_context(
+    model: &CanonicalCommandV1,
+    index: usize,
+    allow_git_helper_context: bool,
+    context: PathContext<'_>,
+) -> bool {
+    let segment = &model.segments[index];
+    !cwd_effectful_segment(segment)
+        && exact_safe_segment_with_context(model, segment, allow_git_helper_context, context)
+        && segment.arguments.iter().all(|argument| {
+            // An absent name inside a repository is still a safe read on its
+            // own. Here the directory was chosen by `cd`, so the operand has
+            // to be the file in that directory: `cat one.txt` after
+            // `cd web` is not the `one.txt` that sits beside `web`.
+            if argument.starts_with('-') {
+                return true;
+            }
+            let path = std::path::Path::new(argument);
+            let resolved = if path.is_absolute() {
+                path.to_path_buf()
+            } else {
+                let Some(cwd) = context.cwd else {
+                    return false;
+                };
+                std::path::Path::new(cwd).join(path)
+            };
+            resolved.is_file()
+        })
+}
+
+fn gap_closes_subshell(model: &CanonicalCommandV1, index: usize) -> bool {
+    let previous = &model.segments[index - 1];
+    let next = &model.segments[index];
+    let Some(length) = next.span.start.checked_sub(previous.span.end) else {
+        return false;
+    };
+    model
+        .normalized_text
+        .chars()
+        .skip(previous.span.end)
+        .take(length)
+        .any(|character| character == ')')
+}
+
+/// The control operator joining the segment at `index` to the one before it.
+///
+/// The gap between two segments keeps whatever brackets the text had, as in
+/// `) && (` or `; } && {`. Brackets are not operators: the shape proof reads
+/// each group's own list, and the directory model decides what a bracket does
+/// to the directory. The `;` that ends a brace group's list goes with them,
+/// because it terminates that list rather than joining the two groups.
+fn separator_operator(model: &CanonicalCommandV1, index: usize) -> Option<String> {
+    let previous = &model.segments[index - 1];
+    let next = &model.segments[index];
+    let length = next.span.start.checked_sub(previous.span.end)?;
+    let gap: Vec<char> = model
+        .normalized_text
+        .chars()
+        .skip(previous.span.end)
+        .take(length)
+        .collect();
+    let mut operator = String::new();
+    for (position, character) in gap.iter().enumerate() {
+        match character {
+            value if value.is_whitespace() => {}
+            '(' | ')' | '{' | '}' => {}
+            ';' if gap[position + 1..]
+                .iter()
+                .find(|value| !value.is_whitespace())
+                == Some(&'}') => {}
+            value => operator.push(*value),
+        }
+    }
+    Some(operator)
+}
+
 pub(in crate::pretool) fn exact_safe_cwd_compound(
     model: &CanonicalCommandV1,
     allow_git_helper_context: bool,
     context: PathContext<'_>,
 ) -> bool {
-    let Some(cwd) = verified_cwd_compound_context(model, context) else {
-        return false;
-    };
-    if model.segments.len() == 2
+    let writes = model.segments.len() == 2
         && matches!(
             model.segments[1].executable.as_deref(),
             Some("cp" | "mkdir" | "touch" | "mv" | "ln" | "rm")
-        )
-    {
+        );
+    let cwd = if writes {
+        verified_cwd_compound_context(model, context)
+    } else {
+        verified_read_cwd_compound_context(model, context)
+    };
+    let Some(cwd) = cwd else {
+        return false;
+    };
+    if writes {
         // `rm` and `ln` delete or publish a path. Re-anchoring them is safe
         // only inside the original workspace or a linked worktree of it.
         // `cd ~` and `cd /tmp` must not become the new write boundary.
@@ -94,10 +367,14 @@ pub(in crate::pretool) fn exact_safe_cwd_compound(
                 home_dir: context.home_dir,
                 cdpath_unset: context.cdpath_unset,
                 rustup_override_absent: context.rustup_override_absent,
+                cargo_config_inert: context.cargo_config_inert,
                 npm_config_inert: context.npm_config_inert,
                 pip_config_inert: context.pip_config_inert,
                 shell_home_matches: context.shell_home_matches,
                 ripgrep_config_absent: context.ripgrep_config_absent,
+                gem_config_absent: context.gem_config_absent,
+                http_config_absent: context.http_config_absent,
+                openssl_config_absent: context.openssl_config_absent,
                 psql_environment: context.psql_environment,
                 cwd: Some(&cwd),
                 creates_nothing: false,
@@ -114,13 +391,17 @@ pub(in crate::pretool) fn exact_safe_cwd_compound(
                     home_dir: context.home_dir,
                     cdpath_unset: context.cdpath_unset,
                     rustup_override_absent: context.rustup_override_absent,
+                    cargo_config_inert: context.cargo_config_inert,
                     npm_config_inert: context.npm_config_inert,
                     pip_config_inert: context.pip_config_inert,
                     shell_home_matches: context.shell_home_matches,
                     ripgrep_config_absent: context.ripgrep_config_absent,
+                    gem_config_absent: context.gem_config_absent,
+                    http_config_absent: context.http_config_absent,
+                    openssl_config_absent: context.openssl_config_absent,
                     psql_environment: context.psql_environment,
                     cwd: Some(&cwd),
-                    creates_nothing: false,
+                    creates_nothing: context.creates_nothing,
                 },
             )
     })
@@ -183,8 +464,16 @@ fn cwd_effectful_executable(executable: Option<&str>) -> bool {
 }
 
 /// Executables a verified `cd` compound may run after the directory change.
+///
+/// Membership narrows; it never admits. Every caller pairs this with the
+/// segment proof for the same program, so a name here still has to prove its
+/// own arguments open nothing. A program whose segment proof exists but whose
+/// name is missing here is refused for the name alone, so the spellings that
+/// read the way `grep` and `rg` do belong beside them.
 pub(in crate::pretool) fn cwd_read_executable(executable: Option<&str>) -> bool {
-    if executable.is_some_and(super::super::digest_reads::digest_program) {
+    if executable
+        .is_some_and(|name| super::super::digest_reads::digest_program(name) || name == "openssl")
+    {
         return true;
     }
     matches!(
@@ -208,6 +497,7 @@ pub(in crate::pretool) fn cwd_read_executable(executable: Option<&str>) -> bool 
                 | "ls"
                 | "cat"
                 | "base64"
+                | "base32"
                 | "stat"
                 | "test"
                 | "find"
@@ -220,6 +510,12 @@ pub(in crate::pretool) fn cwd_read_executable(executable: Option<&str>) -> bool 
                 | "od"
                 | "rg"
                 | "grep"
+                | "egrep"
+                | "fgrep"
+                | "fd"
+                | "tree"
+                | "dirname"
+                | "basename"
                 | "sed"
                 | "sort"
                 | "uniq"
@@ -228,14 +524,17 @@ pub(in crate::pretool) fn cwd_read_executable(executable: Option<&str>) -> bool 
                 | "du"
                 | "df"
                 | "diff"
+                | "cmp"
         )
     )
 }
 
 /// The command from its only `cd` onward, when everything before that `cd`
 /// is a proven read that neither depends on nor changes the directory or Git
-/// state the rest reads. `ls /tmp/a && cd /tmp/a/app && git status` then gets
-/// the same decision as `cd /tmp/a/app && git status`. The prefix keeps its
+/// state the rest reads. `ls /tmp/a && cd /tmp/a/app && git status` and
+/// `sleep 30; cd /tmp/a/app && git status` then get the same decision as
+/// `cd /tmp/a/app && git status`: after `;` the `cd` runs whatever the prefix
+/// returned, and the rest still runs only once it succeeded. The prefix keeps its
 /// own proof against the original directory; Git segments stay out of it so
 /// the Git execution floor always sees every Git read with its directory.
 pub(in crate::pretool) fn after_read_prefix(
@@ -263,7 +562,7 @@ pub(in crate::pretool) fn after_read_prefix(
             .take(length)
             .collect();
         let last = index + 2 == start + 1;
-        if (last && separator.trim() != "&&") || !matches!(separator.trim(), "&&" | "|") {
+        if (last && separator.trim() == "|") || !matches!(separator.trim(), "&&" | "|" | ";") {
             return None;
         }
     }
@@ -271,6 +570,9 @@ pub(in crate::pretool) fn after_read_prefix(
         segment.environment_names.is_empty()
             && segment.wrapper_chain.is_empty()
             && !segment.path_overridden
+            // `$((PATH=10))` assigns as it expands, which the steps after the
+            // `cd` would see.
+            && !super::super::shell_arithmetic::arithmetic_assigns(&segment.text)
             && segment
                 .executable
                 .as_deref()

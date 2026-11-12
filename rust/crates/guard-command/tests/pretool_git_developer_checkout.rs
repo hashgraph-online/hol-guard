@@ -208,9 +208,34 @@ fn worktree_add_in_a_hook_manager_checkout_is_quiet_only_while_no_hook_can_run()
     session.assert_not_allow(&format!(
         "git -C {primary} fetch origin main --quiet && git -C {primary} worktree add {destination} -b fix/hooks-new origin/main"
     ));
-    // Hooks outside the repository stay reviewed.
-    for path in ["/tmp/hooks", "../hooks", "~/hooks", ".husky/../../hooks"] {
-        session.config(&["core.hooksPath", path]);
+    // A fixed directory outside the repository is read, whichever file names
+    // it. `git clone` does not carry `.git/config`, so a repository value is
+    // this developer's as much as a global one, and an absolute path cannot
+    // resolve into the tree the new checkout brings.
+    let outside = session.home.join(".config/git/hooks");
+    std::fs::create_dir_all(&outside).unwrap();
+    for value in [
+        outside.display().to_string(),
+        "~/.config/git/hooks".to_owned(),
+    ] {
+        session.config(&["core.hooksPath", value.as_str()]);
+        session.assert_allow(&commands[0], ADD);
+        let planted = outside.join("post-checkout");
+        executable_hook(&planted);
+        session.assert_not_allow(&commands[0]);
+        std::fs::remove_file(&planted).unwrap();
+        session.assert_allow(&commands[0], ADD);
+    }
+    // A directory that is not there, and a value Git resolves against the
+    // working tree, stay reviewed.
+    let absent = session.home.join(".config/git/later");
+    for path in [
+        absent.display().to_string(),
+        "../hooks".to_owned(),
+        "~/hooks".to_owned(),
+        ".husky/../../hooks".to_owned(),
+    ] {
+        session.config(&["core.hooksPath", path.as_str()]);
         session.assert_not_allow(&commands[0]);
     }
 }

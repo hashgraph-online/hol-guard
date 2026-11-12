@@ -7,13 +7,13 @@ from typing import cast
 
 import pytest
 
-from codex_plugin_scanner.guard.cli.commands_support_runtime_policy import _runtime_artifact_policy_action
 from codex_plugin_scanner.guard.config import GuardConfig
 from codex_plugin_scanner.guard.models import GuardArtifact
 from codex_plugin_scanner.guard.runtime import secret_file_requests
 from codex_plugin_scanner.guard.runtime.command_evaluation import evaluate_command
 from codex_plugin_scanner.guard.runtime.native_command_extension_evidence import NativeCommandExtensionEvidenceError
 from tests.native_command_test_support import native_test_guard_home, real_native_command_evaluation
+from tests.runtime_artifact_policy_support import _runtime_artifact_policy_action
 
 
 def test_ordinary_central_review_reaches_final_runtime_policy_and_rejects_private_detail(

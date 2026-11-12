@@ -40,6 +40,11 @@ pub(super) fn bounded_task_list(payload: &Value, tool_name: Option<&str>) -> boo
                 | "transcript_path"
                 | "transcriptPath"
                 | "permission_mode"
+                // Claude Code's turn, reasoning effort and session scratch
+                // directory: host context that names nothing the tool runs.
+                | "prompt_id"
+                | "effort"
+                | "scratchpad_dir"
                 | "harness"
                 | "guard_execution_environment"
         )

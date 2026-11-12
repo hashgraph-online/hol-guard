@@ -181,6 +181,29 @@ mod tests {
     }
 
     #[test]
+    fn proves_every_install_form_guard_guidance_names() {
+        // `native_package_review` guidance tells a stopped agent which installs can
+        // proceed. Every form it names has to be one this predicate actually proves,
+        // or the agent retypes Guard's own advice and is stopped again. pnpm needs
+        // `--ignore-pnpmfile` because pnpmfile runs inside the pnpm process, where
+        // `--ignore-scripts` does not reach it.
+        for command in [
+            "bun install --frozen-lockfile --ignore-scripts",
+            "pnpm install --frozen-lockfile --ignore-scripts --ignore-pnpmfile",
+            "npm ci --ignore-scripts",
+        ] {
+            assert!(
+                no_script_install_command(command),
+                "guidance names {command}"
+            );
+        }
+        // The form the guidance used to name, which this predicate has never proved.
+        assert!(!no_script_install_command(
+            "pnpm install --frozen-lockfile --ignore-scripts"
+        ));
+    }
+
+    #[test]
     fn proves_only_the_plain_no_scripts_install_forms() {
         for command in [
             "bun install --frozen-lockfile --ignore-scripts",

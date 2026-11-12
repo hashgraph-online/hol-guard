@@ -2,8 +2,12 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 from codex_plugin_scanner.guard.project_identity import resolve_portable_project_identity
 from tests.test_guard_project_identity import _init_repository
+
+pytestmark = pytest.mark.usefixtures("native_approval_reuse_runtime")
 
 
 def test_ipv6_remote_endpoints_do_not_collide(tmp_path: Path) -> None:

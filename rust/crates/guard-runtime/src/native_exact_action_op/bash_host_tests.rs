@@ -60,6 +60,27 @@ fn bash_final_host_context_replaces_hook_values_without_exposing_unrelated_expor
 }
 
 #[test]
+fn bash_final_host_context_marks_only_an_inert_node_options_value() {
+    let root = tempfile::tempdir().unwrap();
+    let intended = intended(root.path());
+    let stamp = |value: Option<&str>| {
+        let mut values = environment(root.path());
+        values.extend(value.map(|value| ("NODE_OPTIONS".into(), value.into())));
+        restamp(&intended, root.path(), values)
+            .unwrap()
+            .execution_environment
+    };
+    let inert = stamp(Some("--max-old-space-size=8192"));
+    let preload = stamp(Some("--max-old-space-size=8192 --require=./hook.js"));
+    assert!(inert.node_options_inert);
+    assert!(!preload.node_options_inert);
+    assert!(!stamp(None).node_options_inert);
+    assert!(!serde_json::to_string(&inert).unwrap().contains("8192"));
+    // Both carry the same names, so only the verdict separates their digests.
+    assert_ne!(inert.environment_digest, preload.environment_digest);
+}
+
+#[test]
 fn bash_final_host_environment_refuses_ambiguous_and_unencodable_required_values() {
     let root = tempfile::tempdir().unwrap();
     let request = intended(root.path());

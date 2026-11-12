@@ -10,16 +10,14 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.guard.adapters import hermes as hermes_adapter
-from codex_plugin_scanner.guard.adapters import mcp_relay_native, native_hook_bridge
+from codex_plugin_scanner.guard.adapters import mcp_relay_native, mcp_servers, native_hook_bridge
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.adapters.codex import CodexHarnessAdapter
 from codex_plugin_scanner.guard.adapters.cursor import CursorHarnessAdapter
 from codex_plugin_scanner.guard.adapters.harness_mcp_discovery import discover_harness_mcp_servers
 from codex_plugin_scanner.guard.adapters.managed_mcp_upstream import proxy_argument_tail
 from codex_plugin_scanner.guard.adapters.mcp_relay_native import (
-    MCP_RELAY_SELECTION_ENV,
     NATIVE_MCP_RELAY_COMMAND,
-    NATIVE_MCP_RELAY_DECIDE_FEATURE,
     NATIVE_MCP_RELAY_FEATURE,
     RELAY_PROXY_COMMANDS,
     mcp_proxy_command,
@@ -34,6 +32,8 @@ from codex_plugin_scanner.guard.adapters.mcp_servers import (
 )
 from codex_plugin_scanner.guard.models import GuardArtifact, HarnessDetection
 from codex_plugin_scanner.guard.stable_guard_cli import guard_cli_launcher
+
+pytestmark = pytest.mark.native_mcp_relay
 
 _RUNTIME_SRC = Path(__file__).resolve().parents[1] / "rust" / "crates" / "guard-runtime" / "src"
 _RUNTIME = Path("/opt/guard/hol-guard-runtime")
@@ -57,10 +57,26 @@ def _python_args(tmp_path: Path, proxy: str = "codex-mcp-proxy", harness: str = 
     return proxy_cli_args(proxy_command=proxy, guard_home=str(tmp_path / "guard"), server=_server(tmp_path, harness))
 
 
+@pytest.fixture(autouse=True)
+def _fixed_server_id(request: pytest.FixtureRequest, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Relay selection only reads the proxy argv; the native server ID needs a resident."""
+    if "native_server_id" in request.fixturenames:
+        return
+    monkeypatch.setattr(
+        mcp_servers,
+        "stable_mcp_server_identifier",
+        lambda server: f"mcp_server:{server.harness}:{server.source_scope}:{server.name}:fixture",
+    )
+
+
+@pytest.fixture
+def native_server_id() -> None:
+    """Keep the real native server ID for a test that recovers the launch behind it."""
+
+
 @pytest.fixture
 def advertised(monkeypatch: pytest.MonkeyPatch) -> set[str]:
     features: set[str] = set()
-    monkeypatch.delenv(MCP_RELAY_SELECTION_ENV, raising=False)
     monkeypatch.setattr(
         native_hook_bridge,
         "native_hook_bridge_executable",
@@ -71,18 +87,16 @@ def advertised(monkeypatch: pytest.MonkeyPatch) -> set[str]:
 
 def test_feature_and_proxy_names_match_the_native_relay() -> None:
     relay = (_RUNTIME_SRC / "mcp_relay.rs").read_text(encoding="utf-8")
-    decide = (_RUNTIME_SRC / "mcp_relay_decide.rs").read_text(encoding="utf-8")
     args = (_RUNTIME_SRC / "mcp_relay_args.rs").read_text(encoding="utf-8")
     assert f'RELAY_COMMAND: &str = "{NATIVE_MCP_RELAY_COMMAND}"' in relay
     assert f'RELAY_FEATURE: &str = "{NATIVE_MCP_RELAY_FEATURE}"' in relay
-    assert f'MCP_RELAY_DECIDE_FEATURE: &str = "{NATIVE_MCP_RELAY_DECIDE_FEATURE}"' in decide
     assert set(re.findall(r'\("([a-z]+-mcp-proxy)", "[a-z]+", "[a-z]+", (?:true|false)\)', args)) == set(
         RELAY_PROXY_COMMANDS
     )
 
 
 def test_an_unadvertised_relay_keeps_the_python_proxy(tmp_path: Path, advertised: set[str]) -> None:
-    advertised.add(NATIVE_MCP_RELAY_DECIDE_FEATURE)
+    advertised.add("mcp-relay-decide-v2")
     args = _python_args(tmp_path)
     assert mcp_proxy_launch(sys.executable, args) == (sys.executable, args)
 
@@ -109,27 +123,7 @@ def test_other_guard_proxies_are_never_relayed(tmp_path: Path, advertised: set[s
     assert mcp_proxy_launch(sys.executable, ["-m", "other.module", "guard", "codex-mcp-proxy"])[0] == sys.executable
 
 
-def test_python_selection_overrides_an_advertised_relay(
-    tmp_path: Path, advertised: set[str], monkeypatch: pytest.MonkeyPatch
-) -> None:
-    advertised.update({NATIVE_MCP_RELAY_FEATURE, NATIVE_MCP_RELAY_DECIDE_FEATURE})
-    monkeypatch.setenv(MCP_RELAY_SELECTION_ENV, "python")
-    args = _python_args(tmp_path)
-    assert mcp_proxy_launch(sys.executable, args) == (sys.executable, args)
-
-
-def test_native_canary_needs_a_runtime_serving_relay_decisions(
-    tmp_path: Path, advertised: set[str], monkeypatch: pytest.MonkeyPatch
-) -> None:
-    monkeypatch.setenv(MCP_RELAY_SELECTION_ENV, "native")
-    args = _python_args(tmp_path)
-    assert mcp_proxy_launch(sys.executable, args)[0] == sys.executable
-    advertised.add(NATIVE_MCP_RELAY_DECIDE_FEATURE)
-    assert mcp_proxy_launch(sys.executable, args)[0] == str(_RUNTIME)
-
-
 def test_the_relay_is_resolved_for_the_proxys_guard_home(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.delenv(MCP_RELAY_SELECTION_ENV, raising=False)
     homes: list[Path | None] = []
 
     def executable(feature: str, *, guard_home: Path | None = None) -> Path | None:
@@ -147,7 +141,6 @@ def test_the_relay_is_resolved_for_the_proxys_guard_home(tmp_path: Path, monkeyp
 def test_a_frozen_build_launches_the_durable_runtime_copy(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     from codex_plugin_scanner.guard import native_runtime, native_runtime_durable
 
-    monkeypatch.delenv(MCP_RELAY_SELECTION_ENV, raising=False)
     monkeypatch.setattr(native_hook_bridge.sys, "frozen", True, raising=False)
     identity = type("Identity", (), {"path": _RUNTIME})()
     capabilities = type("Capabilities", (), {"features": frozenset({NATIVE_MCP_RELAY_FEATURE})})()
@@ -274,7 +267,7 @@ def test_codex_interpreter_refresh_reselects_the_launcher(tmp_path: Path, advert
 
 
 @pytest.mark.skipif(sys.platform == "win32", reason="the server identity digest needs the resident runtime")
-def test_inventory_recovers_the_original_launch_behind_the_relay(tmp_path: Path) -> None:
+def test_inventory_recovers_the_original_launch_behind_the_relay(tmp_path: Path, native_server_id: None) -> None:
     server = replace(_server(tmp_path, "cursor"), config_path=str(tmp_path / "mcp.json"))
     args = proxy_cli_args(proxy_command="cursor-mcp-proxy", guard_home=str(tmp_path / "guard"), server=server)
     artifact = GuardArtifact(

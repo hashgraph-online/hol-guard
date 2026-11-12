@@ -26,6 +26,7 @@ import {
   HiMiniCog6Tooth,
   HiMiniSquares2X2,
   HiMiniPuzzlePiece,
+  HiMiniCircleStack,
 } from "react-icons/hi2";
 
 import { guardAwareHref } from "./guard-api";
@@ -44,6 +45,7 @@ export type AppView =
   | "fleet"
   | "evidence"
   | "settings"
+  | "cigar"
   | "extensions"
   | "app-detail"
   | "supply-chain"
@@ -167,6 +169,7 @@ const sidebarLinks = [
   { href: "/", label: "Home", view: "home", icon: HiMiniHome },
   { href: "/inbox", label: "Inbox", view: "inbox", icon: HiMiniInbox },
   { href: "/protect", label: "Protect", view: "fleet", icon: HiMiniShieldCheck },
+  { href: "/cigar", label: "CIGAR", view: "cigar", icon: HiMiniCircleStack },
   { href: "/extensions", label: "Extensions", view: "extensions", icon: HiMiniPuzzlePiece },
   { href: "/supply-chain", label: "Supply chain", view: "supply-chain", icon: HiMiniSquares2X2 },
   { href: "/policy", label: "Policy", view: "policy", icon: HiMiniClipboardDocumentList },

@@ -1,112 +1,8 @@
 #![cfg(unix)]
 
-use crate::git_helper_fixture as fixture;
-use fixture::{evaluate_pre_tool_envelope_with_context, FixtureCleanup};
-use serde_json::json;
+use crate::worktree_chain_fixture::{assert_allowed, assert_reviewed, git, repository};
 use std::os::unix::fs::PermissionsExt;
-use std::path::{Path, PathBuf};
-
-fn evaluate(home: &Path, cwd: &Path, command: &str) -> guard_contracts::PreToolResultV1 {
-    evaluate_pre_tool_envelope_with_context(
-        "omp",
-        "PreToolUse",
-        &json!({"tool_name":"bash", "tool_input":{"command":command}}),
-        Some(&fixture::github_controls("enabled")),
-        None,
-        home.to_str(),
-        cwd.to_str(),
-    )
-}
-
-fn directory(path: &Path) {
-    std::fs::create_dir_all(path).unwrap();
-    std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o755)).unwrap();
-}
-
-fn git(home: &Path, repository: &Path, arguments: &[&str]) {
-    assert!(std::process::Command::new("git")
-        .arg("-C")
-        .arg(repository)
-        .env("HOME", home)
-        .env("GIT_CONFIG_NOSYSTEM", "1")
-        .env_remove("GIT_DIR")
-        .env_remove("GIT_WORK_TREE")
-        .env_remove("GIT_INDEX_FILE")
-        .env_remove("GIT_COMMON_DIR")
-        .args(arguments)
-        .status()
-        .unwrap()
-        .success());
-}
-
-/// `org/app` below a fresh home, with a remote-tracking `origin/main`, a
-/// sibling repository and a symlink beside it that leads out of `org` into a
-/// directory every user can write, where no checkout is admitted.
-fn repository(name: &str) -> (FixtureCleanup, PathBuf, PathBuf) {
-    let unique = format!(
-        "{}-{}",
-        std::process::id(),
-        crate::unique_nanos::unique_nanos()
-    );
-    let root = std::fs::canonicalize("/tmp")
-        .unwrap()
-        .join(format!("guard-worktree-{name}-{unique}"));
-    let cleanup = FixtureCleanup(root.clone());
-    let home = root.join("home");
-    let organization = home.join("org");
-    let repository = organization.join("app");
-    for path in [&root, &home, &organization, &repository] {
-        directory(path);
-    }
-    git(
-        &home,
-        &repository,
-        &["init", "--quiet", "--initial-branch=main"],
-    );
-    git(
-        &home,
-        &repository,
-        &["config", "user.name", "Guard Fixture"],
-    );
-    git(
-        &home,
-        &repository,
-        &["config", "user.email", "guard-fixture@example.invalid"],
-    );
-    std::fs::write(repository.join("tracked.txt"), "fixture\n").unwrap();
-    git(&home, &repository, &["add", "tracked.txt"]);
-    git(&home, &repository, &["commit", "--quiet", "-m", "fixture"]);
-    git(
-        &home,
-        &repository,
-        &["update-ref", "refs/remotes/origin/main", "HEAD"],
-    );
-    let sibling = organization.join("service");
-    directory(&sibling);
-    git(&home, &sibling, &["init", "--quiet"]);
-    directory(&root.join("elsewhere"));
-    std::fs::set_permissions(
-        root.join("elsewhere"),
-        std::fs::Permissions::from_mode(0o777),
-    )
-    .unwrap();
-    std::os::unix::fs::symlink(root.join("elsewhere"), organization.join("link")).unwrap();
-    (cleanup, home, repository)
-}
-
-fn assert_allowed(home: &Path, cwd: &Path, command: &str) {
-    let result = evaluate(home, cwd, command);
-    assert_eq!(
-        result.minimum_action, "allow",
-        "{command}: {}",
-        result.reason_code
-    );
-}
-
-fn assert_reviewed(home: &Path, cwd: &Path, command: &str) {
-    let result = evaluate(home, cwd, command);
-    assert_ne!(result.minimum_action, "allow", "{command}");
-}
+use std::path::Path;
 
 /// Without `-b` Git checks the reference out detached and creates no branch,
 /// except with no reference at all, where it names a branch after the
@@ -194,7 +90,6 @@ fn other_work_in_the_new_worktree_stays_reviewed() {
     for command in [
         "git worktree add -b flat ../service origin/main && cd ../service && git status",
         "git worktree add -b flat ../link/flat origin/main && cd ../link/flat && git status",
-        "git worktree add -b flat ../app-flat origin/main; cd ../app-flat && git status",
         "git worktree add -b flat ../app-flat origin/main && git status && cd ../app-flat",
         "rm -rf ../app-flat && git worktree add -b flat ../app-flat origin/main && cd ../app-flat && git status",
     ] {
@@ -434,4 +329,153 @@ fn swappable_links_on_the_way_to_the_checkout_stay_reviewed() {
         &repository,
         "git worktree add -b flat ~/via/app-flat origin/main",
     );
+}
+
+/// The same reads when the add reports through a bounded pipe, when `;`
+/// joins the `cd`, and when the reads name the index or count their own
+/// output. The checkout proof read the destination and found nothing there,
+/// so entering it succeeds only once the add has created it.
+#[test]
+fn inspecting_the_new_worktree_through_a_pipe_is_allowed() {
+    let (_cleanup, home, repository) = repository("chain-pipe");
+    for command in [
+        "git worktree add ../app-flat -b flat origin/main 2>&1 | tail -3; cd ../app-flat && git rev-parse HEAD && git status --short | wc -l",
+        "git worktree add -b flat ../app-flat origin/main 2>&1 | tail -3 && cd ../app-flat && git log -1 --oneline",
+        "git worktree add -b flat ../app-flat origin/main; cd ../app-flat && git rev-parse --abbrev-ref HEAD",
+        "git worktree add -b flat ../app-flat origin/main && cd ../app-flat && git ls-files | wc -l",
+    ] {
+        assert_allowed(&home, &repository, command);
+    }
+}
+
+/// The relaxation rests on the `cd`: without one, a weaker separator proves
+/// nothing about whether the add ran. The stages stay bounded, and the two
+/// new reads keep the spellings that open a file the caller names or expand
+/// a format under review.
+#[test]
+fn a_weaker_separator_without_the_cd_stays_reviewed() {
+    let (_cleanup, home, repository) = repository("chain-pipe-reviewed");
+    let add = "git worktree add -b flat ../app-flat origin/main";
+    for tail in [
+        "; git -C ../app-flat status",
+        " 2>&1 | tail -3 && git -C ../app-flat status",
+        " | cat && cd ../app-flat && git status",
+        " && cd ../app-flat && git status --short | wc -l tracked.txt",
+        " && cd ../app-flat && git ls-files --format=%(path)",
+        " && cd ../app-flat && git ls-files -X ../exclude",
+        " && cd ../app-flat && git rev-parse --sq-quote tracked.txt",
+    ] {
+        assert_reviewed(&home, &repository, &format!("{add}{tail}"));
+    }
+}
+
+/// Agents end a worktree chain by saying what happened, and start one by
+/// saying what they are about to do. `echo`, `pwd` and a bare listing write
+/// no configuration the Git reads beside them could pick up, so they leave
+/// the entered-checkout proof standing.
+#[test]
+fn read_only_steps_beside_the_reads_keep_the_checkout_proof() {
+    let (_cleanup, home, repository) = repository("chain-inert");
+    let add = "git worktree add -b flat ../app-flat origin/main";
+    for tail in [
+        " && cd ../app-flat && git status --short && echo CLEAN",
+        " && cd ../app-flat && echo entering && git log -1 --oneline",
+        " && cd ../app-flat && pwd && git status --short",
+        " && cd ../app-flat && git status --short && ls",
+        " && cd ../app-flat && git status --porcelain | head -3 && echo CLEAN",
+        " && cd ../app-flat && true && git rev-parse --abbrev-ref HEAD",
+    ] {
+        assert_allowed(&home, &repository, &format!("{add}{tail}"));
+    }
+}
+
+/// The step has to be read-only on the proof's own terms. A writer, a
+/// redirect, a named environment value, a second `cd` and a program the new
+/// checkout could supply each reach past what the destination proof answers
+/// for, so the reads beside them stay reviewed.
+#[test]
+fn a_writing_step_beside_the_reads_still_revokes_the_proof() {
+    let (_cleanup, home, repository) = repository("chain-inert-reviewed");
+    let add = "git worktree add -b flat ../app-flat origin/main";
+    for tail in [
+        " && cd ../app-flat && touch marker && git status --short",
+        " && cd ../app-flat && echo CLEAN > marker && git status --short",
+        " && cd ../app-flat && GIT_CONFIG_GLOBAL=../other true && git status --short",
+        " && cd ../app-flat && git status --short && cd .. && git status --short",
+        " && cd ../app-flat && ./report.sh && git status --short",
+        " && cd ../app-flat && rg --pre ./pre tracked && git status --short",
+    ] {
+        assert_reviewed(&home, &repository, &format!("{add}{tail}"));
+    }
+}
+
+/// Agents name the branch they will work on right after making the checkout.
+/// With no start point the branch begins at the commit the add already
+/// proved, so the step changes no file and runs only the hooks that proof
+/// covers.
+#[test]
+fn a_new_branch_in_the_entered_checkout_keeps_the_proof() {
+    let (_cleanup, home, repository) = repository("chain-branch");
+    let add = "git worktree add --detach ../app-flat origin/main";
+    for tail in [
+        " && cd ../app-flat && git checkout -b feat/landing && git rev-parse HEAD",
+        " && cd ../app-flat && git switch -c feat/landing && git status --porcelain | head -3",
+        " && cd ../app-flat && git checkout -b feat/landing && git status --porcelain | head -3 && echo READY",
+    ] {
+        assert_allowed(&home, &repository, &format!("{add}{tail}"));
+    }
+}
+
+/// The step is proven only as a branch creation on the commit the add read.
+/// A start point names another commit, a checkout of a path rewrites files
+/// from the index, and a branch name spelled as an option or a parent step
+/// is not a name the proof answers for.
+#[test]
+fn a_checkout_past_the_new_branch_revokes_the_proof() {
+    let (_cleanup, home, repository) = repository("chain-branch-reviewed");
+    let add = "git worktree add --detach ../app-flat origin/main";
+    for tail in [
+        " && cd ../app-flat && git checkout -b feat/landing origin/main~1 && git status --short",
+        " && cd ../app-flat && git checkout -b feat/landing HEAD~1 && git status --short",
+        " && cd ../app-flat && git checkout main && git status --short",
+        " && cd ../app-flat && git checkout -- . && git status --short",
+        " && cd ../app-flat && git checkout -b ../escape && git status --short",
+        " && cd ../app-flat && git checkout -B feat/landing && git status --short",
+        " && cd ../app-flat && git switch -c feat/landing origin/main && git status --short",
+    ] {
+        assert_reviewed(&home, &repository, &format!("{add}{tail}"));
+    }
+}
+
+/// The same setup written with `-C` instead of a `cd`. An agent that already
+/// routes the add into the repository routes the branch and the reads after
+/// it the same way, and `-C` enters exactly the checkout the `cd` would.
+#[test]
+fn a_new_branch_routed_into_the_new_checkout_keeps_the_proof() {
+    let (_cleanup, home, repository) = repository("chain-branch-routed");
+    let repository_text = repository.display().to_string();
+    for command in [
+        "git worktree add --detach ../app-flat origin/main && git -C ../app-flat checkout -b feat/landing && git -C ../app-flat log --oneline -1".to_owned(),
+        "git worktree add --detach ../app-flat origin/main && git -C ../app-flat switch -c feat/landing && git -C ../app-flat status --short".to_owned(),
+        format!("git -C {repository_text} worktree add --detach ../app-flat origin/main && git -C ../app-flat checkout -b feat/landing && git -C ../app-flat rev-parse HEAD"),
+    ] {
+        assert_allowed(&home, &repository, &command);
+    }
+}
+
+/// The routed step is proven as the same branch creation the `cd` spelling
+/// proves, so a start point, a force-create and a `-C` that leaves the new
+/// checkout all keep their review.
+#[test]
+fn a_routed_checkout_past_the_new_branch_revokes_the_proof() {
+    let (_cleanup, home, repository) = repository("chain-branch-routed-reviewed");
+    let add = "git worktree add --detach ../app-flat origin/main";
+    for tail in [
+        " && git -C ../app-flat checkout -b feat/landing origin/main~1 && git -C ../app-flat status --short",
+        " && git -C ../app-flat checkout -B feat/landing && git -C ../app-flat status --short",
+        " && git -C ../app-flat switch -c feat/landing origin/main && git -C ../app-flat status --short",
+        " && git -C .. checkout -b feat/landing && git -C ../app-flat status --short",
+    ] {
+        assert_reviewed(&home, &repository, &format!("{add}{tail}"));
+    }
 }

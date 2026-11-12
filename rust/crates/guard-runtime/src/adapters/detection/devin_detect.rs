@@ -14,11 +14,14 @@ use std::path::{Path, PathBuf};
 
 use serde_json::{json, Map, Value};
 
-use super::adapter_inventory::{carried, json_payload, Inventory, Request, SkillNaming, ERR_VALUE};
+use super::adapter_inventory::{
+    carried, json_payload, skill_root_label, Inventory, Request, SkillNaming, ERR_VALUE,
+};
 use super::aibom_mcp_metadata::{enrich, McpMetadataInput, ERR_METADATA};
 use super::claude_guard_question::python_lower;
 use super::context_digest::python_strip;
-use super::pyjson::{parse_marking_lone_surrogates, JsonFailure, PyVal, LONE_SURROGATE_MARK};
+use super::devin_jsonc::parse_jsonc;
+use super::pyjson::{PyVal, LONE_SURROGATE_MARK};
 use super::runner_authority_op::KindResult;
 use super::zcode_artifacts::{pair_value, scalar_args, string_pairs, transport, Fields, Scope};
 
@@ -50,108 +53,6 @@ fn under(base: &Path, parts: &[&str]) -> PathBuf {
 
 fn empty() -> PyVal {
     PyVal::Dict(Vec::new())
-}
-
-/// The end of the `//` or `/* */` comment that starts at `index`, if one does.
-fn comment_end(chars: &[char], index: usize) -> Option<usize> {
-    if chars[index] != '/' || index + 1 >= chars.len() {
-        return None;
-    }
-    let mut end = index + 2;
-    match chars[index + 1] {
-        '/' => {
-            while end < chars.len() && !matches!(chars[end], '\r' | '\n') {
-                end += 1;
-            }
-            Some(end)
-        }
-        '*' => {
-            while end + 1 < chars.len() && !(chars[end] == '*' && chars[end + 1] == '/') {
-                end += 1;
-            }
-            Some(end + 2)
-        }
-        _ => None,
-    }
-}
-
-/// `_strip_jsonc_syntax`: comments and trailing commas outside strings go.
-fn strip_jsonc_syntax(text: &str) -> String {
-    let chars: Vec<char> = text.chars().collect();
-    let mut output = String::with_capacity(text.len());
-    let mut index = 0;
-    let mut in_string = false;
-    while index < chars.len() {
-        let character = chars[index];
-        if in_string {
-            output.push(character);
-            if character == '\\' && index + 1 < chars.len() {
-                output.push(chars[index + 1]);
-                index += 2;
-                continue;
-            }
-            in_string = character != '"';
-            index += 1;
-            continue;
-        }
-        if character == '"' {
-            in_string = true;
-            output.push(character);
-            index += 1;
-            continue;
-        }
-        if let Some(end) = comment_end(&chars, index) {
-            index = end;
-            continue;
-        }
-        if character == ',' {
-            let mut lookahead = index + 1;
-            while lookahead < chars.len() {
-                if matches!(chars[lookahead], ' ' | '\t' | '\r' | '\n') {
-                    lookahead += 1;
-                } else if let Some(end) = comment_end(&chars, lookahead) {
-                    lookahead = end;
-                } else {
-                    break;
-                }
-            }
-            if lookahead < chars.len() && matches!(chars[lookahead], ']' | '}') {
-                index += 1;
-                continue;
-            }
-        }
-        output.push(character);
-        index += 1;
-    }
-    output
-}
-
-/// One `json.loads` attempt: `Ok(None)` on a syntax error, the object or an
-/// unparsed marker otherwise. Integer-limit and depth failures raise in
-/// Python, so they are refused.
-fn loads(text: &str) -> Result<Option<Option<PyVal>>, &'static str> {
-    match parse_marking_lone_surrogates(text) {
-        Ok(value @ PyVal::Dict(_)) => Ok(Some(Some(value))),
-        Ok(_) => Ok(Some(None)),
-        Err(JsonFailure::Syntax) => Ok(None),
-        Err(_) => Err(ERR_VALUE),
-    }
-}
-
-/// `parse_devin_jsonc`: the object a config holds, or `None` when it could
-/// not be parsed.
-fn parse_jsonc(text: &str) -> Result<Option<PyVal>, &'static str> {
-    if python_strip(text).is_empty() {
-        return Ok(Some(empty()));
-    }
-    if let Some(parsed) = loads(text)? {
-        return Ok(parsed);
-    }
-    let stripped = strip_jsonc_syntax(text);
-    if python_strip(&stripped).is_empty() {
-        return Ok(Some(empty()));
-    }
-    Ok(loads(&stripped)?.flatten())
 }
 
 /// `load_devin_jsonc`: a file that vanished is empty; one that cannot be read
@@ -193,7 +94,7 @@ fn file_name(path: &Path) -> &str {
 }
 
 /// `is_guard_managed_hook_command`.
-fn guard_managed(command: &str) -> bool {
+pub(crate) fn guard_managed(command: &str) -> bool {
     let normalized = command.replace("\\\"", "\"");
     command.contains("HOL_GUARD_MANAGED_DEVIN")
         || (command.contains("codex_plugin_scanner.cli")
@@ -425,20 +326,6 @@ fn claude_hooks_overlap(
     Ok(false)
 }
 
-/// `skill_root.relative_to(identity_root).as_posix()`, else the root itself.
-fn root_label(skill_root: &Path, identity_root: &Path) -> String {
-    let label = skill_root
-        .strip_prefix(identity_root)
-        .unwrap_or(skill_root)
-        .to_string_lossy()
-        .into_owned();
-    if cfg!(windows) {
-        label.replace('\\', "/")
-    } else {
-        label
-    }
-}
-
 pub(crate) fn detect(args: &Value) -> KindResult {
     let request = Request::parse(args, HARNESS)?;
     let config_dir = request.path(args, "config_dir")?;
@@ -503,13 +390,14 @@ pub(crate) fn detect(args: &Value) -> KindResult {
         ));
     }
     for (skill_root, identity_root, scope) in skill_roots {
-        let label = root_label(&skill_root, &identity_root);
+        let label = skill_root_label(&skill_root, &identity_root);
         inventory.skills(
             scope,
             "Devin",
             &SkillNaming::Bare { root_label: &label },
             &skill_root,
             &identity_root,
+            "skills",
         )?;
     }
 

@@ -10,8 +10,7 @@ import pytest
 
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.cli import commands_hook_native_authority as cli
-from codex_plugin_scanner.guard.daemon import server as daemon
-from codex_plugin_scanner.guard.daemon.hook_availability_policy import availability_harness_response
+from codex_plugin_scanner.guard.hook_review.hook_availability_policy import availability_harness_response
 from codex_plugin_scanner.guard.native_policy_snapshot import native_policy_snapshot_v3
 from codex_plugin_scanner.guard.store import GuardStore
 
@@ -32,7 +31,7 @@ def test_hermes_pre_tool_worker_failure_never_allows_execution() -> None:
 
 
 @pytest.mark.parametrize("state", ["observe", "enforce", "missing", "expired", "tampered"])
-@pytest.mark.parametrize("failure", ["worker_exception", "worker_none", "capacity"])
+@pytest.mark.parametrize("failure", ["worker_exception", "worker_none"])
 def test_outage_mode_requires_authenticated_unexpired_snapshot(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, state: str, failure: str
 ) -> None:
@@ -64,46 +63,40 @@ def test_outage_mode_requires_authenticated_unexpired_snapshot(
         "hook_event_name": "PreToolUse",
         "tool_input": {"command": "printf fixture > output.txt"},
     }
-    if failure == "capacity":
-        handler = object.__new__(daemon._GuardDaemonHandler)
-        handler.server = Mock(store=store)
-        response = handler._runtime_hook_capacity_response(payload, {}, default_harness="codex")
+    worker = Mock()
+    if failure == "worker_exception":
+        worker.review_http_payload.side_effect = RuntimeError("injected unavailable native worker")
     else:
-        worker = Mock()
-        if failure == "worker_exception":
-            worker.review_http_payload.side_effect = RuntimeError("injected unavailable native worker")
-        else:
-            worker.review_http_payload.return_value = None
-        monkeypatch.setattr(cli, "HookWorker", lambda **_kwargs: worker)
-        responses = []
-        monkeypatch.setattr(cli, "_emit_native_hook_json_document", lambda value, **_kwargs: responses.append(value))
-        if failure == "worker_exception":
-            response = cli.try_native_hook_authority(
-                payload=payload,
-                harness="codex",
-                home_dir=tmp_path / "home",
-                guard_home=guard_home,
-                workspace=None,
-                store=store,
-            )
-        monkeypatch.setattr(
-            cli,
-            "try_native_hook_authority",
-            lambda **_kwargs: response if failure == "worker_exception" else None,
-        )
-        status = cli.route_native_hook(
-            Mock(harness="codex", json=True),
-            config=None,
-            context=HarnessContext(home_dir=tmp_path / "home", guard_home=guard_home, workspace_dir=None),
+        worker.review_http_payload.return_value = None
+    monkeypatch.setattr(cli, "HookWorker", lambda **_kwargs: worker)
+    responses = []
+    monkeypatch.setattr(cli, "native_cli_hook_emit", lambda _harness, value, **_kwargs: responses.append(value))
+    if failure == "worker_exception":
+        response = cli.try_native_hook_authority(
             payload=payload,
-            runtime_workspace=None,
+            harness="codex",
+            home_dir=tmp_path / "home",
+            guard_home=guard_home,
+            workspace=None,
             store=store,
         )
-        # codex denies via the hookSpecificOutput.permissionDecision envelope;
-        # rc stays 0 because a nonzero rc would read as a hook error and permit.
-        assert status == 0
-        assert len(responses) == 1
-        response = responses[0]
+    monkeypatch.setattr(
+        cli,
+        "try_native_hook_authority",
+        lambda **_kwargs: response if failure == "worker_exception" else None,
+    )
+    status = cli.route_native_hook(
+        Mock(harness="codex", json=True),
+        context=HarnessContext(home_dir=tmp_path / "home", guard_home=guard_home, workspace_dir=None),
+        payload=payload,
+        runtime_workspace=None,
+        store=store,
+    )
+    # codex denies via the hookSpecificOutput.permissionDecision envelope;
+    # rc stays 0 because a nonzero rc would read as a hook error and permit.
+    assert status == 0
+    assert len(responses) == 1
+    response = responses[0]
     hook_output = response["hookSpecificOutput"]
     assert isinstance(hook_output, dict)
     # The resident being unavailable never authorizes, whatever the snapshot says.

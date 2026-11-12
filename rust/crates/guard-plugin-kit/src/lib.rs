@@ -1,20 +1,23 @@
 //! The HOL Guard Plugin Kit: check a plugin source, package it for every
 //! agent runtime that can load it, and print its install links.
 //!
-//! The Kit reads only the repository it is pointed at, plus the record of
-//! what `plugin install` added under the Guard home. It runs no commands and
-//! makes no network calls. `hol-guard plugin` sends one JSON request on stdin
+//! The Kit reads only the repository it is pointed at, the record of what
+//! `plugin install` added under the Guard home, and Claude Code's own plugin
+//! records and marketplace checkouts. It runs no commands and makes no
+//! network calls. `hol-guard plugin` sends one JSON request on stdin
 //! to `hol-guard-runtime plugin-kit --stdin` and gets one response back:
 //! `{"ok": true, "result": ...}` or `{"ok": false, "error": <code>}`.
 
 mod agent_plugins;
 mod card;
 mod check;
+mod claude;
 mod config;
 mod detect;
 mod emit;
 mod init;
 mod install;
+mod integrity;
 mod ledger;
 mod links;
 mod model;
@@ -91,6 +94,13 @@ enum Request {
         slug: Option<String>,
         #[serde(default)]
         version: Option<String>,
+        /// Set only when the user overrode the install-spec endpoint.
+        #[serde(default)]
+        listing_origin: Option<String>,
+        /// Days since 1970-01-01, to age HOL's scan. Tests pin it; Guard
+        /// leaves it out and the Kit reads the clock.
+        #[serde(default)]
+        today: Option<i64>,
     },
     /// Plans from what Guard recorded installing; see `ledger.rs`.
     Uninstall {
@@ -100,6 +110,8 @@ enum Request {
         available: Vec<String>,
         #[serde(default)]
         runtimes: Vec<String>,
+        #[serde(default)]
+        listing_origin: Option<String>,
     },
     Record {
         guard_home: String,
@@ -108,9 +120,38 @@ enum Request {
         installed: bool,
         #[serde(default)]
         spec: Option<Value>,
+        #[serde(default)]
+        listing_origin: Option<String>,
+        /// Guard registered the marketplace for this install.
+        #[serde(default)]
+        marketplace_added: bool,
     },
     Installs {
         guard_home: String,
+        /// Move a record that no longer parses aside instead of failing.
+        #[serde(default)]
+        recover: bool,
+    },
+    /// Checks an install-spec endpoint override; see `install::endpoint_origin`.
+    Endpoint { value: String },
+    /// What Claude Code recorded under its config folder; see `claude::state`.
+    Claude {
+        home: String,
+        #[serde(default)]
+        plugin_id: Option<String>,
+        #[serde(default)]
+        marketplace: Option<String>,
+    },
+    /// The commit a checkout is at; see `claude::git_head`.
+    #[serde(rename = "git_head")]
+    GitHead { root: String },
+    /// HOL's integrity ledger held against an install; see `integrity::check`.
+    Integrity {
+        slug: String,
+        #[serde(default)]
+        spec_slug: Value,
+        installed: integrity::Installed,
+        ledger: Value,
     },
 }
 
@@ -163,8 +204,18 @@ fn handle(request: Request) -> Result<Value, String> {
             runtimes,
             slug,
             version,
+            listing_origin,
+            today,
         } => {
-            let plan = install::plan(spec, install::Action::Install, &available, &runtimes)?;
+            let origin = origin(listing_origin.as_deref())?;
+            let plan = install::plan(
+                spec,
+                install::Action::Install,
+                &available,
+                &runtimes,
+                origin,
+                today.unwrap_or_else(install::today),
+            )?;
             if slug.is_some_and(|slug| slug != plan.slug) {
                 return Err("plugin_kit_install_spec_mismatch".to_owned());
             }
@@ -178,14 +229,31 @@ fn handle(request: Request) -> Result<Value, String> {
             slug,
             available,
             runtimes,
+            listing_origin,
         } => {
+            let origin = origin(listing_origin.as_deref())?;
             let spec = ledger::spec(&guard_home, &slug)?;
-            let plan = install::plan(spec, install::Action::Uninstall, &available, &runtimes)
-                .map_err(|error| match error.as_str() {
-                    "plugin_kit_install_runtime_not_offered" => ledger::NOT_RECORDED.to_owned(),
-                    "plugin_kit_install_runtime_unknown" => error,
-                    _ => ledger::INVALID.to_owned(),
-                })?;
+            // A listing recorded through another install-spec endpoint is
+            // readable, just not removable from this one; say which.
+            let listing = spec.get("listingUrl").and_then(Value::as_str);
+            if listing.is_some_and(|url| !url.starts_with(origin)) {
+                return Err("plugin_kit_install_recorded_elsewhere".to_owned());
+            }
+            let owned = ledger::marketplaces_added(&guard_home, &slug)?;
+            let mut plan = install::plan(
+                spec,
+                install::Action::Uninstall,
+                &available,
+                &runtimes,
+                origin,
+                install::today(),
+            )
+            .map_err(|error| match error.as_str() {
+                "plugin_kit_install_runtime_not_offered" => ledger::NOT_RECORDED.to_owned(),
+                "plugin_kit_install_runtime_unknown" => error,
+                _ => ledger::INVALID.to_owned(),
+            })?;
+            install::offer_marketplace_removal(&mut plan, &owned);
             encode(&plan)
         }
         Request::Record {
@@ -194,8 +262,39 @@ fn handle(request: Request) -> Result<Value, String> {
             runtime,
             installed,
             spec,
-        } => ledger::record(&guard_home, &slug, &runtime, installed, spec),
-        Request::Installs { guard_home } => ledger::installs(&guard_home),
+            listing_origin,
+            marketplace_added,
+        } => {
+            let origin = origin(listing_origin.as_deref())?;
+            ledger::record(
+                &guard_home,
+                &slug,
+                &runtime,
+                installed,
+                spec,
+                origin,
+                marketplace_added,
+            )
+        }
+        Request::Installs {
+            guard_home,
+            recover,
+        } => ledger::installs(&guard_home, recover),
+        Request::Claude {
+            home,
+            plugin_id,
+            marketplace,
+        } => claude::state(&home, plugin_id.as_deref(), marketplace.as_deref()),
+        Request::GitHead { root } => Ok(claude::git_head(&root)),
+        Request::Integrity {
+            slug,
+            spec_slug,
+            installed,
+            ledger,
+        } => Ok(integrity::check(&installed, &ledger, &slug, &spec_slug)),
+        Request::Endpoint { value } => install::endpoint_origin(&value)
+            .map(|origin| json!({ "origin": origin }))
+            .ok_or_else(|| "plugin_kit_install_endpoint_invalid".to_owned()),
         Request::Package {
             root,
             out_dir,
@@ -206,6 +305,16 @@ fn handle(request: Request) -> Result<Value, String> {
             let root = resolve_root(&root)?;
             package(&root, out_dir.as_deref(), &runtimes, force, strict)
         }
+    }
+}
+
+/// The origin listing URLs must use: HOL's own unless the CLI passed the
+/// origin of an overridden install-spec endpoint.
+fn origin(listing_origin: Option<&str>) -> Result<&str, String> {
+    match listing_origin {
+        None => Ok(install::HOL_ORIGIN),
+        Some(origin) if install::valid_origin(origin) => Ok(origin),
+        Some(_) => Err("plugin_kit_request_invalid".to_owned()),
     }
 }
 
@@ -354,10 +463,11 @@ fn package(
         }
     };
     let detection = detect::detect(root)?;
+    output::reject_unsafe_out(root, &out)?;
     output::reject_source_overlap(root, &out, &detection.plugin)?;
     let outputs = package_plan(root, requested)?;
     let mode = if force {
-        output::clear_previous(&out)?;
+        output::clear_previous(&out, &outputs)?;
         output::Mode::Replace
     } else {
         output::require_empty(&out)?;

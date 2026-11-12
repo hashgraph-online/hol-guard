@@ -1104,8 +1104,8 @@ def test_guard_requires_confirmation_for_github_mutations_and_unverified_composi
 
 
 def test_native_classification_is_memoized_but_failures_are_not(monkeypatch: pytest.MonkeyPatch) -> None:
-    from codex_plugin_scanner.guard import native_github_cli
     from tests import native_github_capability_support as bridge
+    from tests import native_github_cli
 
     answers: list[native_github_cli.NativeGitHubCliClassification | None] = [
         None,

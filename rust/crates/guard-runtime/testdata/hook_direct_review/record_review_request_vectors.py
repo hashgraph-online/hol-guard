@@ -7,6 +7,11 @@ adapter answer, and the `GuardApprovalRequest.to_dict()` the daemon persisted
 around that answer. The adapter itself has its own parity vectors; these pin
 the query derivation and everything around the envelope.
 
+The daemon's own builder has since retired: the resident's `review_request`
+adapter query builds the request from one round trip, and these vectors pin
+that builder to the daemon's former output. Record them again only from a
+checkout that still has the daemon builder.
+
 Run from the repository root:
 
     .venv/bin/python rust/crates/guard-runtime/testdata/hook_direct_review/record_review_request_vectors.py
@@ -23,9 +28,9 @@ from types import SimpleNamespace
 from unittest import mock
 
 from codex_plugin_scanner.guard import native_hook_adapter
-from codex_plugin_scanner.guard.daemon import hook_native_review_approval as review
-from codex_plugin_scanner.guard.daemon import native_review_allow_hint as hint
-from codex_plugin_scanner.guard.daemon.hook_request_parsing import pre_tool_command
+from codex_plugin_scanner.guard.hook_review import hook_native_review_approval as review
+from codex_plugin_scanner.guard.hook_review import native_review_allow_hint as hint
+from codex_plugin_scanner.guard.hook_review.hook_request_parsing import pre_tool_command
 
 OUT = Path(__file__).with_name("review_request_vectors.json")
 REQUEST_ID = "0123456789abcdef0123456789abcdef"

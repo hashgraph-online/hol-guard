@@ -11,7 +11,6 @@ from dataclasses import dataclass
 from functools import lru_cache
 from importlib import resources
 from itertools import islice
-from pathlib import Path
 from typing import TypeAlias, cast
 
 import yaml
@@ -181,10 +180,6 @@ def _load_policy_document_schema() -> dict[str, object]:
         raise RuntimeError("invalid_packaged_policy_schema")
     Draft202012Validator.check_schema(value)
     return value
-
-
-def policy_document_schema() -> dict[str, object]:
-    return copy.deepcopy(_load_policy_document_schema())
 
 
 @lru_cache(maxsize=1)
@@ -483,10 +478,6 @@ def parse_policy_document_yaml(
     _validate_native_metadata(value, "validate_timestamps")
     _validate_command_expressions(value)
     return GuardPolicyDocument.from_mapping(value)
-
-
-def load_policy_document(path: Path) -> GuardPolicyDocument:
-    return parse_policy_document_yaml(path.read_bytes())
 
 
 def format_policy_document_yaml(document: GuardPolicyDocument) -> str:

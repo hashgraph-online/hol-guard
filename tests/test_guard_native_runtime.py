@@ -9,13 +9,12 @@ from pathlib import Path
 import pytest
 
 import codex_plugin_scanner.guard.native_runtime as native_runtime_module
+from ci.native_runtime.post_tool_review import HookReviewResponse, parity_signature
 from codex_plugin_scanner.guard.codex_hook_launch_runtime import isolated_hook_environment
 from codex_plugin_scanner.guard.native_runtime import (
     native_mode,
     native_runtime_status,
-    parity_signature,
 )
-from codex_plugin_scanner.guard.runtime.hook_review_types import HookReviewResponse
 
 
 def test_native_mode_defaults_auto(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -157,6 +156,16 @@ def test_windows_native_environment_uses_the_interpreter_crt_without_user_path(
     assert str(tmp_path / "user-bin") not in environment["PATH"].split(os.pathsep)
     assert str(prefix) in environment["PATH"].split(os.pathsep)
     assert str(tmp_path / "Windows" / "System32") in environment["PATH"].split(os.pathsep)
+
+
+def test_the_resident_keeps_the_desktop_notice_opt_out(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("HOL_GUARD_DESKTOP_NOTIFICATIONS", "off")
+    monkeypatch.setenv("HOL_GUARD_NATIVE_BINARY", "/elsewhere")
+
+    environment = native_runtime_module._isolated_environment()
+
+    assert environment["HOL_GUARD_DESKTOP_NOTIFICATIONS"] == "off"
+    assert "HOL_GUARD_NATIVE_BINARY" not in environment
 
 
 def test_override_is_ignored_in_auto_mode(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

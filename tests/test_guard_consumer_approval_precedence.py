@@ -15,7 +15,6 @@ import pytest
 
 from codex_plugin_scanner.guard.adapters import codex_remote_control
 from codex_plugin_scanner.guard.adapters import grok as grok_adapter_module
-from codex_plugin_scanner.guard.adapters import grok_executable as grok_executable_module
 from codex_plugin_scanner.guard.adapters.base import HarnessAdapter, HarnessContext
 from codex_plugin_scanner.guard.adapters.codex import CodexHarnessAdapter
 from codex_plugin_scanner.guard.adapters.grok import GrokHarnessAdapter
@@ -24,7 +23,6 @@ from codex_plugin_scanner.guard.adapters.opencode_artifacts import runtime_confi
 from codex_plugin_scanner.guard.approvals import queue_blocked_approvals
 from codex_plugin_scanner.guard.config import GuardConfig, load_guard_config
 from codex_plugin_scanner.guard.consumer import evaluate_detection
-from codex_plugin_scanner.guard.consumer.service import _consumer_execution_identity
 from codex_plugin_scanner.guard.models import GuardAction, GuardArtifact, HarnessDetection, PolicyDecision
 from codex_plugin_scanner.guard.runtime import guard_run_evaluation as guard_run_evaluation
 from codex_plugin_scanner.guard.runtime import guard_run_launch as guard_run_launch
@@ -34,8 +32,11 @@ from codex_plugin_scanner.guard.runtime import wrapper_run_finish
 from codex_plugin_scanner.guard.runtime.approval_context import (
     approval_context_token_is_well_formed,
     build_approval_context_token,
+    build_runtime_launch_identity,
 )
 from codex_plugin_scanner.guard.store import GuardStore
+
+from .grok_native_fake import install_grok_native_fake
 
 pytestmark = pytest.mark.usefixtures("native_prompt_runtime")
 
@@ -58,23 +59,21 @@ def _stable_guard_run_launch_adapter(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(guard_run_launch, "get_adapter", lambda _harness: LaunchAdapter())
 
 
-def test_consumer_execution_identity_resolves_dot_slash_from_runtime_cwd(tmp_path: Path) -> None:
+def test_consumer_launch_identity_resolves_dot_slash_from_runtime_cwd(tmp_path: Path) -> None:
     runtime_cwd = tmp_path / "runtime"
     runtime_cwd.mkdir()
     executable = runtime_cwd / "server"
     executable.write_bytes(b"#!/bin/sh\necho runtime\n")
     executable.chmod(0o755)
 
-    identity = _consumer_execution_identity("./server --stdio", cwd=runtime_cwd)
-
-    resolved = identity["resolved"]
+    resolved = build_runtime_launch_identity("./server --stdio", cwd=runtime_cwd, launch_env=os.environ)["executable"]
     assert isinstance(resolved, dict)
     assert resolved["path"] == str(executable.resolve())
     assert resolved["launch_cwd"] == str(runtime_cwd.resolve())
     assert resolved["status"] == "verified"
 
 
-def test_consumer_execution_identity_resolves_relative_path_entries_from_runtime_cwd(
+def test_consumer_launch_identity_resolves_relative_path_entries_from_runtime_cwd(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -86,9 +85,7 @@ def test_consumer_execution_identity_resolves_relative_path_entries_from_runtime
     executable.chmod(0o755)
     monkeypatch.setenv("PATH", "bin")
 
-    identity = _consumer_execution_identity("server --stdio", cwd=runtime_cwd)
-
-    resolved = identity["resolved"]
+    resolved = build_runtime_launch_identity("server --stdio", cwd=runtime_cwd, launch_env=os.environ)["executable"]
     assert isinstance(resolved, dict)
     assert resolved["path"] == str(executable.resolve())
     assert resolved["launch_cwd"] == str(runtime_cwd.resolve())
@@ -866,7 +863,7 @@ def test_grok_previews_do_not_register_and_final_setup_registers_once_after_clai
         events.append("execute")
         return subprocess.CompletedProcess(args=command, returncode=0)
 
-    monkeypatch.setattr(grok_executable_module, "_executable_security_error", lambda *_args: None)
+    install_grok_native_fake(monkeypatch)
     monkeypatch.setattr(grok_adapter_module, "register_trusted_grok_executable", register_once)
     monkeypatch.setattr(wrapper_run, "detect_harness", lambda _harness, _context: detection)
     monkeypatch.setattr(guard_run_launch, "get_adapter", lambda _harness: RecordingGrokAdapter())
@@ -936,7 +933,7 @@ def test_no_saved_grok_preview_registers_once_only_in_authorized_finalizer(
         events.append("execute")
         return subprocess.CompletedProcess(args=command, returncode=0)
 
-    monkeypatch.setattr(grok_executable_module, "_executable_security_error", lambda *_args: None)
+    install_grok_native_fake(monkeypatch)
     monkeypatch.setattr(grok_adapter_module, "register_trusted_grok_executable", register_once)
     monkeypatch.setattr(wrapper_run, "detect_harness", lambda _harness, _context: detection)
     monkeypatch.setattr(guard_run_launch, "get_adapter", lambda _harness: RecordingGrokAdapter())
@@ -1987,7 +1984,8 @@ def test_matching_saved_allow_is_composed_non_consumingly_before_any_claim(
     store = GuardStore(tmp_path / "guard-home")
 
     def exact_saved_allow(*_args: object, **kwargs: object) -> dict[str, object]:
-        assert kwargs["consume_one_shot"] is False
+        # The memory-pattern lookup only peeks: it has no consuming mode.
+        assert "consume_one_shot" not in kwargs
         return {
             "decision": {
                 "action": "allow",
@@ -2379,7 +2377,24 @@ def test_runtime_detector_unchanged_status_ignores_elapsed_ms_and_launches_after
     assert len(launches) == 1
 
 
-def test_runtime_detector_signal_change_invalidates_exact_saved_approval(
+def test_turning_the_detector_registry_off_changes_the_approval_context(
+    tmp_path: Path,
+) -> None:
+    artifact = _artifact(tmp_path)
+    detection = _detection(artifact)
+    config = _config(tmp_path)
+    store = GuardStore(tmp_path / "guard-home")
+    detectors_ran = {"telemetry": [{"detector_id": "persistence", "status": "ok"}]}
+
+    ran = evaluate_detection(detection, store, config, persist=False, runtime_detector_context=detectors_ran)
+    registry_off = evaluate_detection(detection, store, config, persist=False, runtime_detector_context=None)
+
+    # A clean run and a run without the detector registry both have no
+    # failures; the approval still tells them apart.
+    assert ran["artifacts"][0]["approval_context_hash"] != registry_off["artifacts"][0]["approval_context_hash"]
+
+
+def test_runtime_detector_finding_change_keeps_exact_saved_approval(
     tmp_path: Path,
 ) -> None:
     artifact = _artifact(tmp_path)
@@ -2424,11 +2439,12 @@ def test_runtime_detector_signal_change_invalidates_exact_saved_approval(
         runtime_detector_context=second_detector_context,
     )
 
+    # A new detector finding is reported, not re-asked: the approval covers
+    # the unchanged artifact.
     assert unchanged["artifacts"][0]["approval_context_hash"] == first_context_hash
     assert unchanged["artifacts"][0]["policy_action"] == "allow"
-    assert changed["artifacts"][0]["approval_context_hash"] != first_context_hash
-    assert changed["artifacts"][0]["policy_action"] == "review"
-    assert changed["artifacts"][0]["approval_reuse_reason_code"] == ("approval_reuse_capability_changed")
+    assert changed["artifacts"][0]["approval_context_hash"] == first_context_hash
+    assert changed["artifacts"][0]["policy_action"] == "allow"
     assert (
         store.peek_local_once_approval(
             harness=artifact.harness,
@@ -2517,7 +2533,7 @@ def test_changed_effective_workspace_rejects_review_allow_as_identity_change(tmp
     )
 
 
-def test_changed_scanner_provenance_rejects_review_allow_as_capability_change(tmp_path: Path) -> None:
+def test_blocking_publisher_advisory_still_blocks_a_saved_review_allow(tmp_path: Path) -> None:
     artifact = _artifact(tmp_path)
     detection = _detection(artifact)
     config = _config(tmp_path)
@@ -2550,7 +2566,9 @@ def test_changed_scanner_provenance_rejects_review_allow_as_capability_change(tm
     assert item["policy_composition"]["current_action"] == "block"
     assert item["policy_composition"]["scanner_action"] == "block"
     assert item["approval_reuse_status"] == "rejected"
-    assert item["approval_reuse_reason_code"] == "approval_reuse_capability_changed"
+    # Provenance is not part of the approval context; the blocking advisory
+    # changes the current action, and a saved allow never lowers a block.
+    assert item["approval_reuse_reason_code"] == "approval_reuse_policy_changed"
     assert item["provenance"]["publisher_trust"] == "flagged"
     assert result["blocked"] is True
     assert (

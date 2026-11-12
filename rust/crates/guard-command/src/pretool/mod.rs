@@ -12,6 +12,10 @@ pub struct PathContext<'a> {
     /// No inherited `RUSTUP_TOOLCHAIN` or `RUSTUP_HOME` can change which
     /// toolchain the rustup proxy runs. Literal contexts leave this false.
     pub rustup_override_absent: bool,
+    /// No inherited Cargo registry, transport, credential or alias variable
+    /// can move the registry a Cargo query contacts, the index it reads or
+    /// the credential provider it starts. Literal contexts leave this false.
+    pub cargo_config_inert: bool,
     /// No inherited npm or Node variable can move npm's registry, config
     /// files or loaded code. Literal contexts leave this false.
     pub npm_config_inert: bool,
@@ -26,6 +30,21 @@ pub struct PathContext<'a> {
     /// `--pre`, `--hidden` or extra search paths to an `rg` command that
     /// omits `--no-config`. Literal contexts leave this false.
     pub ripgrep_config_absent: bool,
+    /// No inherited `GEMRC`, `RUBYOPT`, `RUBYLIB` or `RUBYGEMS_GEMDEPS` can
+    /// hand a RubyGems query a second configuration file, a load path or code
+    /// to require before it starts, and no redirected `XDG_CONFIG_HOME`
+    /// moves the user `gemrc` out of the directory the proof reads. Literal
+    /// contexts leave this false.
+    pub gem_config_absent: bool,
+    /// No inherited `HTTPIE_CONFIG_DIR` or `XH_CONFIG_DIR` can move the
+    /// `config.json` whose `default_options` HTTPie and `xh` prepend to
+    /// every request. Literal contexts leave this false.
+    pub http_config_absent: bool,
+    /// No inherited `OPENSSL_CONF`, `OPENSSL_CONF_INCLUDE`, `OPENSSL_MODULES`
+    /// or `OPENSSL_ENGINES` can point the `openssl` command at a
+    /// configuration that loads a provider or engine library before it
+    /// hashes a file. Literal contexts leave this false.
+    pub openssl_config_absent: bool,
     /// No step of this command creates a filesystem entry, so a path with
     /// nothing at it now still has nothing at it when a read runs and cannot
     /// be a link a peer step planted. Literal contexts leave this false.
@@ -40,11 +59,25 @@ mod brace_group;
 mod contained_wrapper;
 mod contained_wrapper_plan;
 pub use contained_wrapper_plan::{
-    contained_wrapper_plan, ContainedOutput, ContainedWrapperCore, ContainedWrapperPlan,
-    CONTAINED_WRAPPER_PLAN_UNSUPPORTED,
+    contained_wrapper_plan, ContainedOutput, ContainedWorktreeAdd, ContainedWrapperCore,
+    ContainedWrapperPlan, CONTAINED_WORKTREE_ADD_REASON, CONTAINED_WRAPPER_PLAN_UNSUPPORTED,
 };
+
+/// Whether `program <arguments>` is a matcher stage the contained sink may
+/// run: it reads only standard input and names no file, pattern file or
+/// other output.
+pub fn contained_matcher_stage(program: &str, arguments: &[String]) -> bool {
+    contained_wrapper::output_filters::matcher_stage(program, arguments)
+}
 pub(crate) mod curl_reads;
 pub use curl_reads::bound_curl_read_destinations;
+
+/// Whether this host runs Guard's contained execution sink for a read-only
+/// profile. macOS always does; a Linux host only where the bubblewrap probe
+/// answers, so a host with no usable sandbox keeps the review it had.
+pub fn workspace_sandbox_available() -> bool {
+    workspace_contained::sandbox_available()
+}
 #[cfg(unix)]
 mod contained_exact_shape;
 pub(crate) mod dd_reads;
@@ -52,6 +85,7 @@ mod digest_reads;
 pub(crate) mod docker_reads;
 mod docker_start;
 mod doctl_reads;
+mod http_reads;
 mod inert_environment;
 pub(crate) mod kubectl_reads;
 mod loopback_ports;
@@ -79,11 +113,14 @@ mod bun_eval;
 mod chain_temporary;
 mod clone_siblings;
 mod compound_reason;
+mod control_flow_chain;
 mod control_flow_flatten;
+mod environment_names;
 mod fanout_reads;
 mod filter_pattern_text;
 mod find_reads;
 mod for_loop_unroll;
+mod gem_reads;
 pub(crate) mod git_apply_check;
 pub(crate) mod git_branch_listing;
 pub(crate) mod git_clean_preview;
@@ -115,8 +152,11 @@ mod git_history_reads;
 mod git_hook_files;
 pub(crate) mod git_listing_reads;
 mod git_local_writes;
+mod git_ls_remote;
+mod git_output_target;
 mod git_probe;
 mod git_push;
+mod git_read_after_allow;
 mod git_remote_config;
 mod git_remote_ops;
 mod git_routes;
@@ -125,17 +165,25 @@ mod git_worktree;
 pub(crate) mod github_conversation;
 mod glob_words;
 mod guard_diagnostics;
+mod guard_names;
+mod helm_usage;
+pub(crate) mod help_probes;
+mod installed_program_path;
 mod list_wrapper;
 mod listing_reads;
 mod listing_temporary;
+mod liveness_probes;
 mod lookup_reads;
+mod manager_usage;
 mod metadata_reads;
 mod npm_environment;
 mod npm_reads;
 mod npmrc_keys;
 mod path_word_reads;
 mod pip_reads;
+mod pnpm_reads;
 mod postgres_reads;
+mod printf_words;
 mod process_stops;
 mod pytest_contained;
 mod tool_bin_listing;
@@ -149,6 +197,7 @@ pub(crate) use git_routes::{
 mod apply_patch_writes;
 mod data_heredocs;
 mod lockfile_install;
+mod omp_file_url;
 mod omp_hashline_writes;
 pub(crate) mod pipe_attacks;
 mod pure_expression;
@@ -156,33 +205,55 @@ mod read_paths;
 mod source_reads;
 use source_reads::{plain_source_code_path, sensitive_command_input, source_file_read_segment};
 mod recursive_copy;
+mod ref_name_words;
 mod restricted_test_commands;
+pub(crate) use restricted_test_commands::{manager_local_bin_arguments, manager_script_task};
 mod rust_toolchain;
 mod rustfmt_writes;
 mod safe_links;
 pub(crate) mod safe_reads;
 mod safe_scalar;
 mod safe_writes;
+pub(crate) use safe_writes::protected_checkout_destination;
 mod script_content;
 pub(crate) use script_content::{argv_script, ArgvScript};
+mod decompress_reads;
+mod dump_filter_options;
 mod search;
 mod search_pattern_clearance;
+mod search_pattern_text;
 mod search_scope;
+mod search_scope_budget;
 mod search_scope_filter;
 mod search_scope_glob;
 mod search_scope_ignore;
-mod search_scope_tracked;
+pub(crate) mod search_scope_tracked;
 mod search_scope_walk;
 mod secret_aliases;
 pub(crate) mod sed_edits;
 mod segment_proof;
+mod shell_arithmetic;
+mod shell_flow;
+pub(crate) mod shell_literal;
 mod shell_script;
 mod sink_peel;
 mod stderr_merge;
+mod stdin_filter_options;
 mod stdin_filters;
 mod symlink_writes;
+mod tool_inventory_reads;
 mod tree_reads;
-mod version_probes;
+pub(crate) mod version_probes;
+pub(crate) mod wget_reads;
+#[cfg(test)]
+#[path = "workspace_contained_effects_tests.rs"]
+mod workspace_contained_effects_tests;
+#[cfg(test)]
+#[path = "workspace_contained_git_tests.rs"]
+mod workspace_contained_git_tests;
+#[cfg(test)]
+#[path = "workspace_contained_package_tests.rs"]
+mod workspace_contained_package_tests;
 #[cfg(test)]
 #[path = "workspace_contained_runner_tests.rs"]
 mod workspace_contained_runner_tests;
@@ -209,6 +280,11 @@ pub use generic::{bounded_task_metadata_output, evaluate_pre_tool_envelope};
 pub use git_push::{
     install_git_push_verdict, push_environment_git, GitPushRequest, GitPushVerdict,
 };
+pub(crate) use git_read_after_allow::{
+    git_reads_after_allowed_steps, git_step_overwrites_what_runs_next,
+    step_preserves_later_programs,
+};
+pub use read_paths::proven_repository_hidden_document;
 pub use safe_scalar::PsqlEnvironment;
 #[cfg_attr(not(unix), allow(unused_imports))]
 pub(crate) use script_content::launch_loopback_ports;
@@ -216,7 +292,9 @@ pub(crate) use script_content::{
     activation_script_text, backgrounded_launch, models_exactly, prefixed_launch, sequential_jobs,
     sole_program_sources, sourced_program_sources, sourcing_bounded_sources,
 };
-pub(crate) use segment_proof::{benign_command_segments, without_stderr_merge};
+pub use search_scope_tracked::proven_project_document;
+pub(crate) use segment_proof::{benign_command_segments, leading_cd_segment, without_stderr_merge};
+pub(crate) use worktree_add::entered_checkouts;
 pub(crate) use worktree_add::new_checkout_route;
 pub(crate) use worktree_add::verified_leading_cd;
 
@@ -292,7 +370,9 @@ pub(crate) fn fixed_command_floor(model: &CanonicalCommandV1) -> bool {
             &crate::canonical_command::CanonicalCommand::from_v1(model),
         )
         || ps::sensitive_exfiltration(model, sensitive_command, exfiltration_command)
-        || model.segments.iter().any(names_guard_outside_message)
+        || model.segments.iter().enumerate().any(|(index, segment)| {
+            names_guard_outside_message(segment, &guard_names::moved_by(&model.segments[..index]))
+        })
         || model.segments.iter().any(selects_secret_outside_message)
 }
 
@@ -303,8 +383,22 @@ pub(crate) fn fixed_command_floor(model: &CanonicalCommandV1) -> bool {
 /// The repository `gh` selects with `--repo` or `-R` is not such an argument:
 /// `owner/name` names a repository on the GitHub host, never a local file,
 /// program or process, so a repository called `hol-guard` keeps the Allow.
-fn names_guard_outside_message(segment: &crate::CommandSegmentV1) -> bool {
+/// The same holds for the owner and name in a `gh api repos/{owner}/{name}/...`
+/// endpoint; the rest of that path is still checked. A raw `-f` field of that
+/// call is a string in the request body, so only Guard's state counts there.
+///
+/// Git and directory changes take checkout paths, pathspecs and remote URLs.
+/// Those name Guard only when they reach its state, an installed Guard
+/// program or shell text an alias could run; see [`guard_names`].
+fn names_guard_outside_message(
+    segment: &crate::CommandSegmentV1,
+    moved: &guard_names::Moved,
+) -> bool {
     let selectors = github_repository_values(segment);
+    let endpoint = github_api_endpoint(segment);
+    let raw_fields =
+        endpoint.map_or_else(Vec::new, |_| guard_names::github_api_raw_fields(segment));
+    let by_location = guard_names::judged_by_location(segment);
     arguments_outside_message(segment).any(|argument| {
         if selectors
             .iter()
@@ -312,11 +406,64 @@ fn names_guard_outside_message(segment: &crate::CommandSegmentV1) -> bool {
         {
             return false;
         }
-        let lowered = argument.to_ascii_lowercase();
-        ["hol-guard", "plugin-guard", ".hol-guard"]
+        if endpoint.is_some_and(|endpoint| std::ptr::eq(endpoint, argument)) {
+            return names_guard(github_api_path_after_repository(argument).unwrap_or(argument));
+        }
+        if raw_fields
             .iter()
-            .any(|needle| lowered.contains(needle))
+            .any(|field| std::ptr::eq(*field, argument))
+        {
+            return guard_names::names_guard_state(argument);
+        }
+        if by_location {
+            return guard_names::names_guard_location(argument, moved);
+        }
+        names_guard(argument)
     })
+}
+
+fn names_guard(argument: &str) -> bool {
+    let lowered = argument.to_ascii_lowercase();
+    ["hol-guard", "plugin-guard", ".hol-guard"]
+        .iter()
+        .any(|needle| lowered.contains(needle))
+}
+
+/// The endpoint operand of `gh api`, found by the same parser that
+/// classifies the call. An argument list it cannot parse has no endpoint.
+fn github_api_endpoint(segment: &crate::CommandSegmentV1) -> Option<&String> {
+    if crate::command_compatibility::basename(segment) != "gh" {
+        return None;
+    }
+    let start = crate::github_command_capabilities::global_options_end(&segment.arguments)?;
+    let (first, rest) = segment.arguments[start..].split_first()?;
+    if first != "api" {
+        return None;
+    }
+    let index = crate::github_command_capabilities::api_endpoint_index(rest)?;
+    rest.get(index)
+}
+
+/// The part of a `repos/{owner}/{name}/...` endpoint after the repository,
+/// or `None` when the endpoint does not start with a valid `owner/name`.
+fn github_api_path_after_repository(endpoint: &str) -> Option<&str> {
+    let path = endpoint.strip_prefix('/').unwrap_or(endpoint);
+    let path = path.strip_prefix("repos/")?;
+    let mut parts = path.splitn(3, '/');
+    let owner = parts.next()?;
+    let name = parts.next()?;
+    let name = name.split(['?', '#']).next()?;
+    if [owner, name]
+        .iter()
+        .any(|part| part.trim_matches('.').is_empty())
+    {
+        return None;
+    }
+    let repository = format!("{owner}/{name}");
+    if !crate::command_compatibility::github_repository_selector(&repository) {
+        return None;
+    }
+    Some(&path[repository.len()..])
 }
 
 /// The `owner/name` values `gh` provably reads as its `--repo` selector.
@@ -396,10 +543,18 @@ fn takes_next_value(token: &str, merge: bool) -> bool {
 /// A class the glob check reads differently from the shell and Git is
 /// screened as `?`; see [`readable_pattern`].
 fn selects_secret_outside_message(segment: &crate::CommandSegmentV1) -> bool {
+    // A `git config --get-regexp` operand names configuration keys, so the
+    // wider path questions -- which refuse every pattern holding a `.*` --
+    // would floor an ordinary `remote.*url` read. The pattern still faces the
+    // markers the glob's own text names, the screen a search pattern faces.
+    let patterns = git_config_reads::configuration_patterns(segment);
     arguments_outside_message(segment).any(|argument| {
         let last_component = argument.rsplit('/').next().unwrap_or(argument);
         if !argument.contains(['*', '?', '[', '{']) || readable_pattern(last_component).1 {
             return false;
+        }
+        if patterns.contains(&argument.as_str()) {
+            return search::literal_glob_names_sensitive_path(&readable_pattern(argument).0);
         }
         match argument.split_once('=') {
             Some((name, _))
@@ -590,7 +745,8 @@ fn sensitive_location_text(value: &str) -> bool {
         ".env",
     ];
     needles.iter().any(|needle| lowered.contains(needle))
-        || crate::environment_secret_dump::printenv_may_print_secret(&lowered)
+        || (crate::environment_secret_dump::printenv_may_print_secret(&lowered)
+            && !crate::environment_name_filters::printenv_renders_only_names(value))
         || lowered.contains("os.environ")
         || lowered.contains("process.env")
 }
@@ -701,7 +857,22 @@ fn exact_safe_command_with_context(
     {
         return false;
     }
+    // `$((PATH=10))` assigns as it expands, so a later step could run a
+    // program the proof never looked at.
+    if model.segments[..model.segments.len() - 1]
+        .iter()
+        .any(|segment| shell_arithmetic::arithmetic_assigns(&segment.text))
+    {
+        return false;
+    }
+    // A read may name a path that is missing now. It stays missing only when
+    // no step of the whole command can create an entry.
+    let context = PathContext {
+        creates_nothing: search::command_creates_nothing(model),
+        ..context
+    };
     if segment_proof::exact_safe_cwd_compound(model, allow_git_helper_context, context)
+        || segment_proof::exact_safe_absolute_cd_chain(model, allow_git_helper_context, context)
         || safe_reads::exact_safe_sequence(model, allow_git_helper_context, context)
     {
         return true;
@@ -796,6 +967,18 @@ pub(super) fn evaluate_pre_tool_with_execution_context(
     deadline: Option<std::time::Instant>,
     execution_environment: Option<&guard_contracts::GuardExecutionEnvironmentV1>,
 ) -> Result<PreToolDecisionV1, String> {
+    // One submission is read again for every spelling a rewrite reaches, and
+    // each reading may ask the include walk about a recursive root. The walk
+    // is the one proof here that spends its own wall clock, so the clock is
+    // started here, where the submission starts, and shared by every walk
+    // below rather than handed out afresh to each one.
+    //
+    // This function is also where each of those readings arrives: an envelope
+    // evaluates its projections by calling back in. The guard counts that
+    // nesting, so a projection joins the submission already open instead of
+    // starting one of its own, and the budget ends when the outermost
+    // reading returns.
+    let _budget = search_scope_budget::begin_include_scope_budget();
     evaluate_rewritten(request, home_dir, cwd, deadline, execution_environment, 0)
 }
 
@@ -810,6 +993,7 @@ const MAX_REWRITE_ROUNDS: usize = 3;
 fn rewritten_command_list(command: &str) -> Option<String> {
     for_loop_unroll::unroll(command)
         .or_else(|| control_flow_flatten::flatten(command))
+        .or_else(|| control_flow_chain::spliced(command))
         .or_else(|| list_wrapper::unwrapped(command))
 }
 
@@ -1107,6 +1291,14 @@ fn evaluate_single_command(
             "The Rust command authority proved this Bun program only prints constants and no preload can run first.",
         ));
     }
+    if environment_names::exact_safe_command(&model) {
+        return Ok(pretool_decision(
+            model,
+            "allow",
+            "native_exact_safe_command",
+            "The Rust command authority proved this pipeline prints variable names with their values removed.",
+        ));
+    }
     if worktree_add::exact_safe_command(&model, context, deadline, execution_environment) {
         return Ok(pretool_decision(
             model,
@@ -1168,10 +1360,8 @@ fn evaluate_single_command(
             "The Rust command authority proved this bounded command explicitly benign.",
         ));
     }
-    if git_search_text::sensitive_beyond_patterns(
-        &data_heredocs::without_data_bodies(normalized),
-        git_search_text::command_without_patterns(&model),
-    ) || secret_aliases::names_secret_alias(&model, context)
+    if search_pattern_text::command_sensitive(&model, normalized, context.cwd)
+        || secret_aliases::names_secret_alias(&model, context)
         || glob_words::names_hidden_glob(&model, context)
     {
         return Ok(pretool_decision(
@@ -1232,13 +1422,19 @@ fn evaluate_single_command(
             "HOL Guard could not match this command to the installed extension controls, so it stays blocked. A command that runs a script or another program (such as `bash script.sh`, `env`, `xargs`, `node -e` or a `$(...)` that runs one) cannot be matched. Run the program directly, or use a built-in tool. If an ordinary command keeps getting this, ask the user to run `hol-guard doctor`.",
         ));
     }
+    // Advice to split the command only helps a command with steps to split. A
+    // construct the parser could not flatten has no segments at all, and may
+    // still hold several commands, so only a single modeled step drops it.
+    let generic = if model.segments.len() != 1 {
+        "HOL Guard requires review because this command could not be confirmed read-only. Splitting it into simpler commands can let the read-only parts run without review."
+    } else {
+        "HOL Guard requires review because this command could not be confirmed read-only."
+    };
     Ok(pretool_decision(
         model,
         "review",
         "native_command_review_required",
-        reason.as_deref().unwrap_or(
-            "HOL Guard requires review because this command could not be confirmed read-only. Splitting it into simpler commands can let the read-only parts run without review.",
-        ),
+        reason.as_deref().unwrap_or(generic),
     ))
 }
 
@@ -1248,6 +1444,9 @@ mod control_flow_tests;
 #[cfg(test)]
 #[path = "for_loop_tests.rs"]
 mod for_loop_tests;
+#[cfg(test)]
+#[path = "guard_named_repository_tests.rs"]
+mod guard_named_repository_tests;
 #[cfg(test)]
 mod tests;
 #[cfg(test)]

@@ -1,0 +1,139 @@
+{
+  "comment": "Expected readings from the Python inventory_contract_mcp classifiers and inventory_contract_fingerprints before they moved to the native runtime.",
+  "cases": [
+    {
+      "server": "codex:mcp_server:abc",
+      "definitions": "{\"tools\": [{\"name\": \"read_file\", \"description\": \"Reads a file\", \"inputSchema\": {\"type\": \"object\", \"properties\": {\"path\": {\"type\": \"string\"}}}}, {\"name\": \"read_file\", \"description\": \"dup\"}, {\"name\": \"  \"}, {\"name\": \"ping\", \"title\": \"\", \"annotations\": {\"readOnlyHint\": 1}}], \"toolSchemas\": [{\"name\": \"nuke\", \"title\": \"Nuke\", \"annotations\": {\"destructiveHint\": true}, \"input_schema\": null, \"outputSchema\": {\"x\": 1.5e300, \"y\": [1, 2.0]}}]}",
+      "tools": [
+        {
+          "name": "read_file",
+          "display_name": "read_file",
+          "capabilities": [
+            "reads_files"
+          ],
+          "risk_level": "info",
+          "descriptionHash": "02d6181552c72795bb919d1c83a02296a06076c3748b7499fa9a6a892f84d18a",
+          "inputSchemaHash": "53582d9d7229826e75097ac478787ca403c94ce74e4611571be1b03c706952cc",
+          "semantic_hash": "9fbb4cedb7f5b3dae0c5f540d84022319b2d2ffa618434ff7aa87429a46d3fd7",
+          "source_fingerprint": "4b4bca9512b3deb33575ad6b5da7387526c728824a6672823d7d175a3926c515"
+        },
+        {
+          "name": "ping",
+          "display_name": "ping",
+          "capabilities": [
+            "unknown"
+          ],
+          "risk_level": "info",
+          "descriptionHash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "inputSchemaHash": null,
+          "semantic_hash": "01164f4b3a87d5e67ddb409a4b587a25d2991f0e0893bc54c8a894235d9efff3",
+          "source_fingerprint": "136be7c813ff5a941d9f9f524a3842285bab3745f921303ea9bc03eb9f6197ad"
+        },
+        {
+          "name": "nuke",
+          "display_name": "Nuke",
+          "capabilities": [
+            "deletes_files",
+            "writes_files"
+          ],
+          "risk_level": "high",
+          "descriptionHash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "inputSchemaHash": null,
+          "semantic_hash": "3b3b16d4a228c24a07205b9732bfdc07f687152390511646fea55132bdc5a5e7",
+          "source_fingerprint": "a3e96edbfd4de64a1e678c980d4de19a2a9d6a07142d7fca6fa02da6ad206e0b"
+        }
+      ]
+    },
+    {
+      "server": "s",
+      "definitions": "{\"tools\": [{\"name\": \"a\", \"inputSchema\": {\"x\": \"API\", \"key\": 1}}, {\"name\": \"b\", \"inputSchema\": {\"key\": 1, \"x\": \"api\"}}, {\"name\": \"c\", \"description\": \"lıst ſecrets\"}, {\"name\": \"d\", \"description\": \"api\\u001fkey and apikey3\"}, {\"name\": \"e\", \"description\": \"subprocess_x shellac readme\"}, {\"name\": \"f\", \"inputSchema\": [\"api\", \"\", \"key\"], \"description\": \"\\u00e9t\\u00e9 \\u2603 \\ud83d\\ude00\"}, {\"name\": \"g\", \"inputSchema\": {\"$schema\": \"token\", \"$id\": \"exec\", \"llm\": null}}]}",
+      "tools": [
+        {
+          "name": "a",
+          "display_name": "a",
+          "capabilities": [
+            "reads_secrets"
+          ],
+          "risk_level": "high",
+          "descriptionHash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "inputSchemaHash": "b29833154c5c25d5c98ea1bf97fc944df1360412e50117c7b6c056b7f32935a0",
+          "semantic_hash": "c95840ed94057f81127dc6838cbe8e33a13f321bcbc033931fa31a913dcccdb6",
+          "source_fingerprint": "39c2920888ec24df8f861e9ad296982cd6249933adbea0477f623ddae78ab5bd"
+        },
+        {
+          "name": "b",
+          "display_name": "b",
+          "capabilities": [
+            "unknown"
+          ],
+          "risk_level": "info",
+          "descriptionHash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "inputSchemaHash": "4d32ceeec9be30fd34c35fa76467bfc8c164466740bece65418699b91a6a5ea2",
+          "semantic_hash": "6546957752ea627e5a6d08b344475bdc815548408c3c250f28960888df90069a",
+          "source_fingerprint": "888b9011aa43080bd83d6771bbfe2e8d3ec26f8ef4f86b417f8062d6d77199b6"
+        },
+        {
+          "name": "c",
+          "display_name": "c",
+          "capabilities": [
+            "reads_files",
+            "reads_secrets"
+          ],
+          "risk_level": "high",
+          "descriptionHash": "a2ec145f6569b02ea42622325137ecd731b90734cab1d7876e3ca08993cdf9bc",
+          "inputSchemaHash": null,
+          "semantic_hash": "77a86fd137c2daf6945abb9a38731681f6a446071bdf79864f32060a31d41c59",
+          "source_fingerprint": "c41d8f6dced8e092c2fd7019183a885b26d3a52e5b6e2b87126c6395238c848a"
+        },
+        {
+          "name": "d",
+          "display_name": "d",
+          "capabilities": [
+            "reads_secrets"
+          ],
+          "risk_level": "high",
+          "descriptionHash": "4b49d282a231b12135e1cc10049c9fc33f3e8519fb917a48837ec85bdae6b006",
+          "inputSchemaHash": null,
+          "semantic_hash": "c1d710e89289690c7db337811340c7d712be4ad24b0866c6dcc4b13f394b38c2",
+          "source_fingerprint": "5cb0fb750c9c7630df529d18188ae7a3677380ed785caa6054360809893adfcf"
+        },
+        {
+          "name": "e",
+          "display_name": "e",
+          "capabilities": [
+            "runs_shell"
+          ],
+          "risk_level": "high",
+          "descriptionHash": "a08193d04d18bbb620a86fedef74273bdada80f506f31f6a4917d108f272c5c6",
+          "inputSchemaHash": null,
+          "semantic_hash": "cc664eb3fb92f14f3f2fa6d151d5b0a46de92e87d975e61629f43d1e226a6c9a",
+          "source_fingerprint": "2943812227586cc899176a528d11d3d8d8207001ddeb2191062e05025a79b774"
+        },
+        {
+          "name": "f",
+          "display_name": "f",
+          "capabilities": [
+            "unknown"
+          ],
+          "risk_level": "info",
+          "descriptionHash": "1ca66a844379f288830b2603c4563c684a61c94561aa0632be9ad80654396f8c",
+          "inputSchemaHash": "d41c1437c817e1a31807c65cd96048c15cf9b02ffa8cff1f0a76dddc1edd20f4",
+          "semantic_hash": "59c5ccd339dc0016c8e66a3556b20dffe4f3d6e706eee5e3f6ec11d607a08e0b",
+          "source_fingerprint": "a609a2a1320edb22a394f9818351a75e6a878ddde10098f58d4d9fc9f765f63e"
+        },
+        {
+          "name": "g",
+          "display_name": "g",
+          "capabilities": [
+            "uses_model_sampling"
+          ],
+          "risk_level": "medium",
+          "descriptionHash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "inputSchemaHash": "aa1284764898cf8937d4d32ed15fb504b024c2309e5989da61abc9335e9e1676",
+          "semantic_hash": "072939c61b38ab7013561a3c699225f523c7f3d4e52995e372533e70e76343c4",
+          "source_fingerprint": "390f7198822800f96df6422efc5a5e48732ec008466542aa2ff9f0cf4b8197cf"
+        }
+      ]
+    }
+  ]
+}

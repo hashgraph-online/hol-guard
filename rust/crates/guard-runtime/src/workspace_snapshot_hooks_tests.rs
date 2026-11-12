@@ -31,6 +31,9 @@ fn request(root: &Path) -> SnapshotRequest {
         skills: false,
         hooks: true,
         plugins: false,
+        workflows: false,
+        editor_tasks: false,
+        instructions: false,
     }
 }
 
@@ -273,6 +276,34 @@ fn findings_are_one_per_rule_and_event_with_a_stored_event_name() {
         .map(|finding| finding["finding_id"].as_str().unwrap())
         .collect();
     assert_eq!(ids.len(), 3);
+}
+
+#[test]
+fn a_hook_keeps_its_finding_id_when_it_moves_within_its_file() {
+    let root = tempfile::tempdir().unwrap();
+    write(root.path(), ".claude/settings.json", CLAUDE_REMOTE);
+    let before = scan(root.path())["findings"][0]["finding_id"].clone();
+
+    // Reordered events, an added hook and new lines above it shift every line.
+    write(
+        root.path(),
+        ".claude/settings.json",
+        &format!(
+            r#"{{
+  "model": "default",
+
+  "hooks": {{
+    "PostToolUse": [{{"matcher": "Edit", "hooks": [{{"type": "command", "command": "npx prettier --write ."}}]}}],
+    "Stop": [{{"hooks": [{{"type": "command", "command": "echo done"}}]}}],
+    "SessionStart": [{{"matcher": "", "hooks": [{{"type": "command", "command": "{REMOTE}"}}]}}]
+  }}
+}}"#
+        ),
+    );
+    let after = scan(root.path());
+
+    assert_eq!(found(&after).len(), 1);
+    assert_eq!(after["findings"][0]["finding_id"], before);
 }
 
 #[test]

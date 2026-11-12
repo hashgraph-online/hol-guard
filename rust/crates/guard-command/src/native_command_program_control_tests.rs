@@ -175,3 +175,108 @@ fn native_mcp_defaults_are_opt_in_tightening_only_and_redacted() {
         }));
     }
 }
+
+#[test]
+fn a_lone_short_version_flag_is_the_same_inspection_as_the_long_one() {
+    let unrestricted = binding(&[], false);
+    for command in [
+        "npx -v",
+        "bunx -v",
+        "npm -V",
+        "uv -v",
+        "go -v",
+        "mvn -v",
+        "composer -v",
+        "bundle -v",
+        "gradle -v",
+        "cargo -V",
+    ] {
+        let observations = decision(command, &unrestricted).command_extensions.unwrap();
+        assert!(
+            !observations
+                .permission_observations
+                .iter()
+                .any(|item| item.extension_id.starts_with("command.package.")),
+            "{command}"
+        );
+    }
+    // A flag is only an inspection while it is the whole argument list: a
+    // second word can name the package the manager would fetch. And `-V` is
+    // not that flag everywhere: Gradle and Maven spell `--show-version` with
+    // it, which prints the version and then runs the build, and Bundler reads
+    // it as `--verbose`, where a bare `bundle` installs.
+    for command in [
+        "npx -v left-pad",
+        "npx --no-install -v",
+        "uv add -v httpx",
+        "gradle -V",
+        "gradlew -V",
+        "mvn -V",
+        "mvnw -V",
+        "bundle -V",
+        "bundler -V",
+    ] {
+        let observations = decision(command, &unrestricted).command_extensions.unwrap();
+        assert!(
+            observations
+                .permission_observations
+                .iter()
+                .any(|item| item.extension_id.starts_with("command.package.")),
+            "{command}"
+        );
+    }
+}
+
+#[test]
+fn a_watched_executable_names_the_program_a_projection_must_not_rewrite_away() {
+    let controls = authored_controls(&binding(&[], false)).unwrap();
+    let program = crate::native_command_program::authored_test_support::full_program();
+    assert!(program
+        .extensions
+        .iter()
+        .flat_map(|extension| &extension.executables)
+        .any(|name| controls.watches_executable(name)));
+    assert!(!controls.watches_executable("guard-no-such-program"));
+    // No authored extension watches `tee`, so the pipeline rewrite that
+    // reads a `| tee PATH` stage as the redirect it performs stays on.
+    assert!(!controls.watches_executable("tee"));
+}
+
+#[test]
+fn a_watched_program_is_recognized_however_the_command_spells_its_name() {
+    let controls = authored_controls(&binding(&[], false)).unwrap();
+    let program = crate::native_command_program::authored_test_support::full_program();
+    let declared = program
+        .extensions
+        .iter()
+        .flat_map(|extension| &extension.executables)
+        .find(|name| controls.watches_executable(name))
+        .expect("an authored extension declares a program it watches")
+        .clone();
+    // The rest of the program attributes a command by basename, without
+    // case. A projection asking whether a program is watched reads the same
+    // name, so a path or a shout cannot slip the rewrite past the extension
+    // that would have evaluated it.
+    assert!(controls.watches_executable(&format!("/usr/bin/{declared}")));
+    assert!(controls.watches_executable(&format!("C:\\Windows\\{declared}")));
+    assert!(controls.watches_executable(&declared.to_ascii_uppercase()));
+}
+
+#[test]
+fn a_program_only_a_rule_matcher_requires_is_watched() {
+    let controls = authored_controls(&binding(&[], false)).unwrap();
+    let program = crate::native_command_program::authored_test_support::full_program();
+    // `command.filesystem` is required, so it is always active, and it
+    // declares no executables of its own: `rm` reaches it through the
+    // programs its rules require. An extension watches what its rules match
+    // on, not only what it lists.
+    assert!(program
+        .extensions
+        .iter()
+        .find(|extension| extension.extension_id == "command.filesystem")
+        .expect("the authored program carries the filesystem extension")
+        .executables
+        .is_empty());
+    assert!(controls.watches_executable("rm"));
+    assert!(controls.watches_executable("/bin/rm"));
+}

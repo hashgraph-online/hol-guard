@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import threading
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
@@ -213,6 +214,54 @@ def test_user_health_rejects_group_readable_or_symlinked_state(guard_home: Path)
     state_path.chmod(0o644)
     with pytest.raises(PermissionError, match="user_health_state_acl_invalid"):
         user_health.user_health_status(guard_home)
+
+
+def test_user_health_rejects_a_state_whose_key_id_does_not_match(guard_home: Path) -> None:
+    user_health.configure_user_health_leases(guard_home, enabled=True, now=NOW)
+    state_path = guard_home / "user-health-state.json"
+    stored = json.loads(state_path.read_bytes())
+    stored["keyId"] = "A" * 43
+    state_path.write_text(json.dumps(stored), encoding="utf-8")
+    with pytest.raises(ValueError, match="user_health_state_invalid"):
+        user_health.user_health_status(guard_home)
+
+
+def test_user_health_state_fails_closed_without_the_native_runtime(
+    guard_home: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from codex_plugin_scanner.guard import native_runtime
+
+    monkeypatch.setattr(
+        native_runtime,
+        "native_runtime_status",
+        lambda **_kwargs: SimpleNamespace(available=False, compatible=False, identity=None, capabilities=None),
+    )
+    with pytest.raises(OSError, match="user_health_state_native_unavailable"):
+        user_health.configure_user_health_leases(guard_home, enabled=True, now=NOW)
+    assert not (guard_home / "user-health-state.json").exists()
+
+
+def test_user_health_status_never_asks_the_native_runtime_without_a_state(
+    guard_home: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from codex_plugin_scanner.guard import native_runtime
+
+    def unreachable(**_kwargs: object) -> object:
+        raise AssertionError("native runtime consulted without a state")
+
+    monkeypatch.setattr(native_runtime, "native_runtime_status", unreachable)
+    assert user_health.user_health_status(guard_home)["enabled"] is False
+
+
+@pytest.mark.skipif(not hasattr(os, "geteuid") or os.geteuid() == 0, reason="needs an unprivileged POSIX user")
+def test_user_health_status_never_reads_an_unreadable_home_as_unconfigured(guard_home: Path) -> None:
+    user_health.configure_user_health_leases(guard_home, enabled=True, now=NOW)
+    guard_home.chmod(0)
+    try:
+        with pytest.raises(OSError):
+            user_health.user_health_status(guard_home)
+    finally:
+        guard_home.chmod(0o700)
 
 
 def test_user_health_cli_exposes_explicit_status_surface(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:

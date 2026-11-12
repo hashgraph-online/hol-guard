@@ -15,6 +15,17 @@ export const COLLAPSE_GROUPS_AT = 30;
 const STATE_RANK: Record<LocalCliCommandState, number> = { block: 0, review: 1, allow: 2, inherit: 3 };
 const SPECIAL_COMMAND_IDS = new Set(["root", "other"]);
 
+/** What a load found, as "3 commands and 7 options"; null when it found nothing. */
+export function listedVariationsSummary(commands: readonly LocalCliCommand[]): string | null {
+  const listed = commands.filter((command) => !SPECIAL_COMMAND_IDS.has(command.command_id));
+  const options = listed.filter((command) => command.command_id.startsWith("-")).length;
+  const subcommands = listed.length - options;
+  const count = (n: number, noun: string) => `${n} ${noun}${n === 1 ? "" : "s"}`;
+  const parts = [subcommands > 0 ? count(subcommands, "command") : "", options > 0 ? count(options, "option") : ""];
+  const found = parts.filter(Boolean);
+  return found.length > 0 ? found.join(" and ") : null;
+}
+
 export function commandMatchesQuery(command: LocalCliCommand, query: string): boolean {
   const terms = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
   if (terms.length === 0) return true;

@@ -10,8 +10,9 @@ construct a semantic evaluator in the resident worker.
 
 ### `HookReviewRequest` / `HookReviewResponse`
 
-The typed API contract between adapters, the native edge, and explicit test
-oracles. Defined in `runtime/hook_review_types.py`.
+The typed request and response used by the direct PostToolUse test client.
+Defined in `ci/native_runtime/post_tool_review.py`; production hooks reach the
+resident through the daemon edge.
 
 Key fields:
 - `model_output_action`: Controls what the adapter does with the output (`allow_original`, `replace_with_reviewed_excerpt`, `block`, `not_applicable`)
@@ -76,7 +77,7 @@ ARBITRARY_STDOUT_FULL_ALLOW_BYTES = 256 * 1024  # Max arbitrary stdout for full 
 
 ## Integration Points
 
-- **Daemon**: `daemon/server.py` `_handle_runtime_hook()` dispatches supported
+- **Daemon**: `routes/request_handler.py` `_handle_runtime_hook()` dispatches supported
   events through the native worker or returns a fail-safe result.
 - **CLI**: `cli/commands_hook_native_authority.py` sends complete
   PreToolUse/PostToolUse envelopes to the native worker. Source-ref evaluation

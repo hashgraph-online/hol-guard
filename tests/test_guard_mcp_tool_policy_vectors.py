@@ -86,9 +86,7 @@ class _ReplayStore:
         memory_command,
         memory_artifact_type,
         memory_artifact_name,
-        consume_one_shot,
     ):
-        assert consume_one_shot is False
         result = self._serve(
             {
                 "kind": "policy_lookup",

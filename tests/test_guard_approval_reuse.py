@@ -9,7 +9,6 @@ from typing import cast
 import pytest
 
 from codex_plugin_scanner.guard.approvals import apply_approval_resolution
-from codex_plugin_scanner.guard.cli.commands_support_runtime_policy import _runtime_saved_allow_validation_reason
 from codex_plugin_scanner.guard.models import (
     GUARD_ACTION_VALUES,
     DecisionScope,
@@ -31,6 +30,8 @@ from codex_plugin_scanner.guard.runtime.approval_reuse import (
 )
 from codex_plugin_scanner.guard.store import GuardStore
 from tests.policy_bundle_signing_helpers import policy_bundle_test_keyring, sign_policy_bundle
+from tests.policy_store_support import resolve_policy
+from tests.resident_probe_support import _runtime_saved_allow_validation_reason
 
 
 def _exact_command_id(command: str) -> str:
@@ -632,7 +633,8 @@ def test_approval_resolution_preserves_exact_context_token_across_every_scope(
     if scope != "artifact":
         assert resolved["scope_warning"] == "legacy_scope_narrowed_to_artifact"
     assert (
-        store.resolve_policy(
+        resolve_policy(
+            store,
             "codex",
             artifact_id,
             current_token,
@@ -645,7 +647,8 @@ def test_approval_resolution_preserves_exact_context_token_across_every_scope(
     )
     changed_token = _approval_context_token(content="sha256:changed")
     assert (
-        store.resolve_policy(
+        resolve_policy(
+            store,
             "codex",
             artifact_id,
             changed_token,
@@ -716,7 +719,8 @@ def test_broad_scope_exact_context_allow_does_not_resolve_or_authorize_other_con
     assert store.get_approval_request("request-first")["status"] == "resolved"
     assert store.get_approval_request("request-second")["status"] == "pending"
     assert (
-        store.resolve_policy(
+        resolve_policy(
+            store,
             "codex",
             "codex:project:mcp-tool:read",
             first_token,
@@ -726,7 +730,8 @@ def test_broad_scope_exact_context_allow_does_not_resolve_or_authorize_other_con
         == "allow"
     )
     assert (
-        store.resolve_policy(
+        resolve_policy(
+            store,
             "codex",
             "codex:project:mcp-tool:write",
             second_token,
@@ -980,7 +985,6 @@ def test_non_consuming_runtime_lookup_composes_direct_allow_with_exact_command_b
         memory_artifact_type="tool_action_request",
         memory_artifact_name="shell",
         now="2026-07-17T12:02:00+00:00",
-        consume_one_shot=False,
     )
 
     assert lookup["decision"] is not None
@@ -1097,7 +1101,8 @@ def test_claim_accepts_unchanged_persistent_policy_without_consuming_it(tmp_path
 
     assert store.claim_approval_reuse_decision(selected, now="2026-07-17T12:02:00+00:00") is True
     assert (
-        store.resolve_policy(
+        resolve_policy(
+            store,
             "codex",
             artifact_id,
             artifact_hash,
@@ -1174,7 +1179,6 @@ def test_claim_rejects_direct_allow_when_memory_block_is_inserted_after_lookup(
         memory_artifact_type="tool_action_request",
         memory_artifact_name="shell",
         now="2026-07-17T12:01:00+00:00",
-        consume_one_shot=False,
     )
     selected = lookup["decision"]
     assert selected is not None

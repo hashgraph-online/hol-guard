@@ -71,7 +71,7 @@ def pack_descriptors(root, compiler: Path | None, read_object, *, inventory=None
         metadata = subprocess.run(
             [
                 "cargo",
-                "+1.88.0",
+                "+1.89.0",
                 "metadata",
                 "--no-deps",
                 "--format-version",

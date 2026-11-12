@@ -14,6 +14,18 @@ def _wait_timeout(value: str) -> int:
     return seconds
 
 
+def _add_read_only_json_flag(parser: argparse.ArgumentParser) -> None:
+    """Add `--json` without erasing the value the `approvals` parser already read.
+
+    argparse hands the subparser the namespace the parent filled in, so a leaf
+    `store_true` with its own default rewrites a `--json` that was spelled
+    before the subcommand. Suppressing the leaf default leaves the parent's
+    value in place, and Guard admits both spellings of these reads.
+    """
+
+    parser.add_argument("--json", action="store_true", default=argparse.SUPPRESS)
+
+
 def add_approval_parser(
     guard_subparsers: argparse._SubParsersAction[argparse.ArgumentParser],
     add_common_args,
@@ -39,7 +51,7 @@ def add_approval_parser(
         decision_parser.add_argument(
             "--remember",
             action="store_true",
-            help="Save an exact-action remembered rule for artifact scope instead of resolving only this request.",
+            help="Save a remembered rule at the selected scope instead of resolving only this request.",
         )
         if action == "allow":
             decision_parser.add_argument(
@@ -68,7 +80,7 @@ def add_approval_parser(
         help="List pending approval requests and recent receipts without opening the approval center",
     )
     add_common_args(list_parser)
-    list_parser.add_argument("--json", action="store_true")
+    _add_read_only_json_flag(list_parser)
 
     wait_parser = approvals_subparsers.add_parser("wait", help="Wait for a decision without resolving or executing it")
     wait_parser.add_argument("request_id")
@@ -76,7 +88,7 @@ def add_approval_parser(
         "--timeout", type=_wait_timeout, default=120, help="Wait at most this many seconds (0-600)"
     )
     add_common_args(wait_parser)
-    wait_parser.add_argument("--json", action="store_true")
+    _add_read_only_json_flag(wait_parser)
 
     clear_history_parser = approvals_subparsers.add_parser(
         "clear-history",
@@ -100,9 +112,14 @@ def add_approval_parser(
 
     open_parser = approvals_subparsers.add_parser(
         "open",
-        help="Show the approval URL for a pending request",
+        help="Open a pending request in HOL Guard Desktop or a signed-in browser tab",
     )
     open_parser.add_argument("request_id", help="The approval request ID to open")
+    open_parser.add_argument(
+        "--no-open",
+        action="store_true",
+        help="Print the request's approval URL without opening it",
+    )
     add_common_args(open_parser)
     open_parser.add_argument("--json", action="store_true")
 
@@ -112,7 +129,7 @@ def add_approval_parser(
     )
     retry_hint_parser.add_argument("request_id", help="The approval request ID to get the retry hint for")
     add_common_args(retry_hint_parser)
-    retry_hint_parser.add_argument("--json", action="store_true")
+    _add_read_only_json_flag(retry_hint_parser)
 
     resume_parser = approvals_subparsers.add_parser(
         "resume",

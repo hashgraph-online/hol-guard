@@ -30,6 +30,7 @@ PUBLISH_PR_PATHS = [
     "tests/__init__.py",
     "tests/guard_command_corpus*.py",
     "tests/harness_attribution_env.py",
+    "tests/native_command_effect_batch.py",
     "tests/native_command_test_support.py",
     "tests/native_guard_home_key.py",
     "tests/native_github_offline.py",
@@ -81,7 +82,7 @@ def test_publish_path_filter_keeps_every_shipped_and_canary_input() -> None:
     hatch = pyproject["tool"]["hatch"]["build"]
     shipped = [*hatch["targets"]["sdist"]["only-include"], *hatch["targets"]["wheel"]["force-include"]]
     probes = {
-        "src/codex_plugin_scanner/guard/agent-safety-guidance.md",
+        "rust/crates/guard-runtime/src/agent_safety_guidance.md",
         "tests/__init__.py",
         "tests/fixtures/guard-command-corpus/seed-manifest.json",
         "tests/dockerlabs/command-extension-analytics/package.json",

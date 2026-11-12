@@ -16,6 +16,14 @@
 //! `{"status":0}` means no answer arrived: the extension then recovers the
 //! daemon or fails the hook closed. The bridge never decides a verdict and
 //! never starts Python.
+//!
+//! A resident's workspace sandbox requirement whose shape the runtime's own
+//! sink reproduces is marked `native_contained_sink`, as the edge marks the
+//! routed calls of other harnesses. The extension then starts this runtime's
+//! `contained-workspace-sink` in place of Guard's CLI. That sink asks the
+//! resident about the call again before anything runs, so the mark only
+//! picks the sink and never authorizes. A daemon's answer is never marked:
+//! the resident it would ask again did not answer.
 
 use std::io::{self, Write};
 use std::path::PathBuf;
@@ -25,13 +33,19 @@ use serde_json::{json, Value};
 
 use crate::bounded_hook_bridge::{daemon_target, read_hook_input, Input};
 use crate::claude_hook_bridge_http::remaining;
-use crate::codex_hook_bridge_direct::{direct_answer, DirectHarness, OMP, PI};
+use crate::codex_hook_bridge_direct::{
+    direct_answer_reporting, parse_hook_query, DirectHarness, OMP, PI,
+};
+use crate::codex_hook_bridge_direct_resident::DirectMiss;
+use crate::hook_direct::contained::{native_sink, unprojected_sink_command, NativeSink};
 
 pub(crate) const BRIDGE_COMMAND: &str = "pi-hook-bridge";
 pub(crate) const BRIDGE_FEATURE: &str = "pi-hook-bridge-v1";
 /// The extension's longest daemon request; a longer config is refused.
 const MAX_TIMEOUT_MS: u64 = 60_000;
 const INVALID_CONFIG: &str = "pi hook bridge configuration is invalid";
+/// The mark on an answer the runtime's own sink runs.
+pub(crate) const NATIVE_SINK_FIELD: &str = "native_contained_sink";
 
 /// The extension's config for one hook.
 #[derive(Debug, PartialEq, Eq)]
@@ -89,28 +103,70 @@ pub(crate) fn reply(
     data: &str,
     deadline: Instant,
 ) -> Option<(u16, String)> {
-    if let Some(event_name) = event_name(data) {
-        // The resident gets half the time left, so the daemon keeps the rest.
-        let rpc_deadline = deadline.min(Instant::now() + remaining(deadline) / 2);
-        if let Some(answer) = direct_answer(
-            config.harness,
-            &config.guard_home,
-            &config.query,
-            &event_name,
-            data,
-            rpc_deadline,
-        ) {
-            return Some((200, answer));
+    let miss = match event_name(data) {
+        Some(event_name) => {
+            // The resident gets half the time left, so the daemon keeps the
+            // rest.
+            let rpc_deadline = deadline.min(Instant::now() + remaining(deadline) / 2);
+            match direct_answer_reporting(
+                config.harness,
+                &config.guard_home,
+                &config.query,
+                &event_name,
+                data,
+                rpc_deadline,
+            ) {
+                Ok(answer) => {
+                    return Some((200, marked(&config.query, data, answer, native_sink)));
+                }
+                Err(miss) => miss,
+            }
         }
-    }
+        None => DirectMiss::Request,
+    };
     let target = daemon_target(&config.guard_home, config.harness.name)?;
     let path = format!("/v1/hooks/{}?{}", config.harness.name, config.query);
-    let (status, body) = target.post_status(&path, data, deadline)?;
+    let (status, body) = target.post_status(&path, data, deadline, miss)?;
     // `fetch` decodes the body as UTF-8, replacing malformed bytes, and
     // drops a leading BOM.
     let text = String::from_utf8_lossy(&body);
     let text = text.strip_prefix('\u{feff}').unwrap_or(&text).to_owned();
     Some((status, text))
+}
+
+/// `answer` marked for the runtime's own sink when it is a sandbox
+/// requirement for a `bash` call whose shape `native` reproduces, from the
+/// workspace and home the extension named. The shape is read as the Codex
+/// bridge reads it: a call with its own `cwd` argument as that directory's
+/// `cd` form, and a projected call (a virtualenv activation, a trailing
+/// group or a home-spelled launcher) as the text the verdict answered for.
+/// Any other answer, or one the bridge cannot read, is relayed as sent.
+fn marked(query: &str, data: &str, answer: String, native: NativeSink) -> String {
+    let mark = || {
+        let Value::Object(mut response) = serde_json::from_str(&answer).ok()? else {
+            return None;
+        };
+        let text = |name: &str| response.get(name).and_then(Value::as_str);
+        if text("decision") != Some("deny") || text("policy_action") != Some("sandbox-required") {
+            return None;
+        }
+        let payload: Value = serde_json::from_str(data).ok()?;
+        if payload.get("tool_name")?.as_str()? != "bash" {
+            return None;
+        }
+        let input = payload.get("tool_input")?.as_object()?;
+        let query = parse_hook_query(query)?;
+        let workspace = query.workspace?;
+        let home = match query.home {
+            Some(home) => home,
+            None => std::env::var("HOME").ok()?,
+        };
+        let reviewed = Value::Object(response.clone());
+        unprojected_sink_command(&reviewed, input, &workspace, &home, native)?;
+        response.insert(NATIVE_SINK_FIELD.to_owned(), Value::Bool(true));
+        serde_json::to_string(&response).ok()
+    };
+    mark().unwrap_or(answer)
 }
 
 /// The line the extension reads for a reply.

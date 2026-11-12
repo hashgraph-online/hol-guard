@@ -5,7 +5,8 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.daemon import live_identity, manager, runtime_repair, start_lock
+from codex_plugin_scanner.guard import native_daemon_manage as manager
+from codex_plugin_scanner.guard.runtime_health import runtime_repair
 
 
 def test_repair_restarts_authenticated_older_runtime(
@@ -98,47 +99,6 @@ def test_repair_retains_authenticated_newer_runtime(
     assert result["runtime_status"] == "retained_newer_runtime"
     assert result["daemon_version"] == "3.0.35"
     assert result["cursor_hook_rebind"] == "stable_frozen_cli_unavailable"
-
-
-def test_ensure_keeps_newer_live_daemon_when_older_executable_is_requested(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    home_dir = tmp_path / "home"
-    home_dir.mkdir()
-    monkeypatch.setattr(manager, "desktop_preflight_requested", lambda: False)
-    monkeypatch.setattr(manager, "_schedule_stale_ephemeral_guard_daemon_reap", lambda **_kwargs: None)
-    monkeypatch.setattr(manager, "_schedule_duplicate_guard_daemon_retirement", lambda _home: None)
-    monkeypatch.setattr(
-        manager,
-        "_live_or_newer_daemon_url",
-        lambda _home, *, executable, preferred_port: "http://127.0.0.1:59999",
-    )
-
-    url = manager.ensure_guard_daemon(
-        tmp_path / "guard-home",
-        home_dir=home_dir,
-        executable=tmp_path / "older-core" / "hol-guard",
-        preferred_port=5474,
-    )
-
-    assert url == "http://127.0.0.1:59999"
-
-
-def test_live_or_newer_daemon_url_port_rules(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    from codex_plugin_scanner.guard.daemon import runtime_peer
-
-    monkeypatch.setattr(runtime_peer, "retain_newer_live_daemon_url", lambda *_a, **_k: "http://127.0.0.1:59999")
-    monkeypatch.setattr(manager, "load_guard_daemon_url", lambda _home: "http://127.0.0.1:59999")
-    monkeypatch.setattr(manager, "_guard_daemon_url_port", lambda _url: 59999)
-    kept = runtime_peer.live_or_newer_daemon_url(
-        tmp_path, executable=tmp_path / "older", preferred_port=5474, current_version="3.0.1"
-    )
-    skipped = runtime_peer.live_or_newer_daemon_url(
-        tmp_path, executable=None, preferred_port=5474, current_version="3.0.1"
-    )
-    assert kept == "http://127.0.0.1:59999"
-    assert skipped is None
 
 
 def test_repair_restarts_newer_mismatched_non_desktop_runtime(
@@ -411,88 +371,3 @@ def test_repair_rejects_home_file(
 
     with pytest.raises(RuntimeError, match="user home directory"):
         runtime_repair.repair_guard_daemon_runtime(tmp_path / "guard-home", home_dir=home_file)
-
-
-@pytest.mark.parametrize("host", [[], {}])
-def test_live_identity_rejects_non_string_host(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-    host: object,
-) -> None:
-    monkeypatch.setattr(
-        live_identity,
-        "load_authenticated_daemon_state",
-        lambda _home: {
-            "package_version": "3.0.34",
-            "host": host,
-            "port": 5474,
-            "pid": 321,
-            "compatibility_version": manager.GUARD_DAEMON_COMPATIBILITY_VERSION,
-            "runtime_fingerprint": "fingerprint",
-        },
-    )
-    monkeypatch.setattr(live_identity, "load_guard_daemon_auth_token", lambda _home: "token")
-
-    assert live_identity.verified_live_guard_daemon_identity(tmp_path) is None
-
-
-def test_live_identity_rejects_empty_health_guard_home(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    state = {
-        "package_version": "3.0.34",
-        "host": "127.0.0.1",
-        "port": 5474,
-        "pid": 321,
-        "compatibility_version": manager.GUARD_DAEMON_COMPATIBILITY_VERSION,
-        "runtime_fingerprint": "fingerprint",
-    }
-    monkeypatch.setattr(live_identity, "load_authenticated_daemon_state", lambda _home: state)
-    monkeypatch.setattr(live_identity, "load_guard_daemon_auth_token", lambda _home: "token")
-    monkeypatch.setattr(
-        live_identity,
-        "_proxy_disabled_health_details",
-        lambda _url, _token: {**state, "ok": True, "guard_home": ""},
-    )
-
-    assert live_identity.verified_live_guard_daemon_identity(tmp_path) is None
-
-
-def test_live_identity_rejects_authenticated_probe_redirects() -> None:
-    """The authenticated production client must not follow even a loopback redirect."""
-    from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-    from threading import Thread
-
-    paths: list[str] = []
-
-    class Redirect(BaseHTTPRequestHandler):
-        def do_GET(self) -> None:
-            """Record requests and redirect the health probe to a token collection path."""
-            paths.append(self.path)
-            self.send_response(302 if self.path.endswith("details") else 200)
-            self.send_header("Location", "/collect")
-            self.end_headers()
-
-        def log_message(self, *_args: object) -> None:
-            """Suppress loopback-test access logs."""
-
-    with ThreadingHTTPServer(("127.0.0.1", 0), Redirect) as server:
-        worker = Thread(target=server.serve_forever, kwargs={"poll_interval": 0.01}, daemon=True)
-        worker.start()
-        try:
-            result = live_identity._proxy_disabled_health_details(f"http://127.0.0.1:{server.server_port}", "token")
-            assert result is None
-            assert paths == ["/v1/healthz/details"]
-        finally:
-            server.shutdown()
-            worker.join(timeout=2)
-
-
-def test_daemon_start_lock_is_reentrant_for_repair_transaction(tmp_path: Path) -> None:
-    guard_home = tmp_path / "guard-home"
-
-    with manager._guard_daemon_start_lock(guard_home), manager._guard_daemon_start_lock(guard_home):
-        assert start_lock._THREAD_DEPTHS[(start_lock.threading.get_ident(), str(guard_home.resolve()))] == 2
-
-    assert start_lock._THREAD_DEPTHS == {}

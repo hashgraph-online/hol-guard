@@ -56,7 +56,7 @@ or payload is a conflict. Adapters report only `accepted`, `running`, `succeeded
 
 ## Conformance harness
 
-`codex_plugin_scanner.guard.mdm.adapter_conformance` is the executable reference boundary. Adapter
+`tests/mdm_adapter_conformance.py` is the executable reference boundary. Adapter
 certification must feed the adapter's real canonical envelopes and configured public keys through
 both harnesses. The matrix must pass:
 

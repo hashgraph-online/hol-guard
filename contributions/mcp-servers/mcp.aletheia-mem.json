@@ -1,0 +1,59 @@
+{
+  "schemaVersion": "guard.mcp-server-contribution.v1",
+  "id": "mcp.aletheia-mem",
+  "version": "1.0.0",
+  "name": "Aletheia MCP",
+  "description": "Local memory and rules hub for AI coding tools: one SQLite store on the user's machine, shared by every connected tool. Reads, memory saves and reversible dismissals keep Guard's usual handling; adding or confirming a standing rule and replacing a work-state list are gated on review. Off until you turn it on.",
+  "trustClass": "external",
+  "activation": "opt-in",
+  "publisher": {
+    "id": "io.github.mohamed-ashraf-elsaed",
+    "displayName": "Mohamed Ashraf Elsaed",
+    "url": "https://github.com/mohamed-ashraf-elsaed"
+  },
+  "icon": {
+    "kind": "react-icon",
+    "name": "HiMiniCube",
+    "background": "#111827"
+  },
+  "homepage": "https://aletheia.mohamedashrafelsaed.com/",
+  "license": "Apache-2.0",
+  "launch": {
+    "kind": "package-launcher",
+    "command": "npx",
+    "package": "aletheia-mem"
+  },
+  "riskClasses": [
+    "local-sqlite-write",
+    "local-data-access"
+  ],
+  "tools": [
+    { "name": "search", "state": "inherit" },
+    { "name": "timeline", "state": "inherit" },
+    { "name": "get_observations", "state": "inherit" },
+    { "name": "session_start_context", "state": "inherit" },
+    { "name": "fact_history", "state": "inherit" },
+    { "name": "list_rules", "state": "inherit" },
+    { "name": "work_state_read", "state": "inherit" },
+    { "name": "save_memory", "state": "inherit" },
+    { "name": "dismiss_memory", "state": "inherit" },
+    { "name": "restore_memory", "state": "inherit" },
+    { "name": "add_rule", "state": "review" },
+    { "name": "confirm_rule", "state": "review" },
+    { "name": "work_state_write", "state": "review" },
+    { "name": "other", "state": "review" }
+  ],
+  "referenceUrls": [
+    "https://github.com/mohamed-ashraf-elsaed/aletheia-mem",
+    "https://aletheia.mohamedashrafelsaed.com/docs/reference/mcp-tools.html",
+    "https://www.npmjs.com/package/aletheia-mem",
+    "https://registry.modelcontextprotocol.io/v0/servers?search=aletheia-mem"
+  ],
+  "saferAlternatives": [
+    "Every tool reads or writes only the local SQLite store; none sends data off the machine. Set ALETHEIA_DATA_DIR or ALETHEIA_HUB_DB to keep a separate store.",
+    "add_rule stores a standing rule that later reaches every connected tool's session start context, so it stays on review; list_rules only reads.",
+    "Memory text is redacted for secrets before it is stored, and recalled memory is returned to the model marked as untrusted data.",
+    "dismiss_memory hides an item without deleting it; restore_memory undoes it. work_state_write replaces a whole list, so it stays on review.",
+    "This entry matches npx aletheia-mem mcp (0.1.13 or newer). The installer's bun <path>/bin/mcp.mjs launch is not a package launch and keeps Guard's normal handling."
+  ]
+}

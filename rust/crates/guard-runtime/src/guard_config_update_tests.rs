@@ -125,6 +125,25 @@ fn command_writes_creates_and_resets_home_config() {
     assert_eq!(fs::read_to_string(&config).unwrap(), "\n");
 }
 
+#[cfg(unix)]
+#[test]
+fn command_saves_ordinary_settings_into_a_group_writable_home() {
+    use std::os::unix::fs::PermissionsExt;
+    let home = scratch("group-writable").join("home");
+    fs::create_dir_all(&home).unwrap();
+    fs::set_permissions(&home, fs::Permissions::from_mode(0o775)).unwrap();
+
+    let response = run(&home, "settings", r#"{"mode": "enforce"}"#);
+
+    assert_eq!(response["ok"], json!(true), "{response}");
+    assert_eq!(
+        fs::read_to_string(home.join(HOME_CONFIG_FILENAME)).unwrap(),
+        "mode = \"enforce\"\n"
+    );
+    let mode = fs::metadata(&home).unwrap().permissions().mode();
+    assert_eq!(mode & 0o777, 0o755);
+}
+
 #[test]
 fn command_reports_invalid_payloads_without_writing() {
     let home = scratch("invalid").join("home");
@@ -170,4 +189,63 @@ fn command_rejects_unknown_kinds_and_schemas() {
         "value_text": "null",
     });
     assert!(run_command(request.to_string().as_bytes()).is_err());
+}
+
+#[test]
+fn watch_stamp_repair_stamps_only_an_unstamped_explicit_watch() {
+    let home = scratch("watch-stamp").join("home");
+    let config = home.join(HOME_CONFIG_FILENAME);
+    fs::create_dir_all(&home).unwrap();
+    fs::write(
+        &config,
+        "mode = \"observe\"\nprotection_posture = \"watch\"\n",
+    )
+    .unwrap();
+    let response = run(&home, "settings", r#"{"watch_stamp_repair": true}"#);
+    assert_eq!(response["ok"], json!(true));
+    assert_eq!(response["previous"]["previous"], json!("watch"));
+    assert_eq!(response["previous"]["selected"], json!(false));
+    let stamped = fs::read_to_string(&config).unwrap();
+    assert!(stamped.contains("watch_entered_at = "), "{stamped}");
+    assert!(stamped.contains("protection_posture = \"watch\""));
+
+    // A second repair keeps the first stamp.
+    run(&home, "settings", r#"{"watch_stamp_repair": true}"#);
+    assert_eq!(fs::read_to_string(&config).unwrap(), stamped);
+
+    // Protected saved first: the repair must not bring Watch back.
+    fs::write(
+        &config,
+        "mode = \"enforce\"\nprotection_posture = \"protected\"\n",
+    )
+    .unwrap();
+    let response = run(&home, "settings", r#"{"watch_stamp_repair": true}"#);
+    assert_eq!(response["ok"], json!(true));
+    assert_eq!(
+        fs::read_to_string(&config).unwrap(),
+        "mode = \"enforce\"\nprotection_posture = \"protected\"\n"
+    );
+}
+
+#[test]
+fn watch_stamp_repair_leaves_a_managed_watch_unstamped() {
+    let managed = ManagedInput {
+        settings: json!({"protection_posture": "watch", "mode": "observe"})
+            .as_object()
+            .unwrap()
+            .clone(),
+        locked_settings: vec!["protection_posture".to_owned()],
+    };
+    let value = pyjson::parse(r#"{"watch_stamp_repair": true}"#).unwrap();
+    let Ok(computed) = compute(
+        "settings",
+        Some("telemetry = true\n"),
+        &value,
+        Some(&managed),
+        false,
+        "2026-11-04T00:00:00+00:00",
+    ) else {
+        panic!("the repair request must not be refused");
+    };
+    assert_eq!(computed.text, "telemetry = true\n");
 }

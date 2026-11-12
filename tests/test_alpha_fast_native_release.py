@@ -75,7 +75,7 @@ def test_resolve_job_mirrors_build_alpha_version_rules() -> None:
         "inputs.release_train == 'main'",
     ):
         assert required in condition
-    assert resolve["needs"] == "authorize-release"
+    assert resolve["needs"] == ["authorize-release", "authorize-pull-request-alpha"]
     assert resolve["permissions"] == {"contents": "read"}
     script = next(s for s in resolve["steps"] if s.get("id") == "version")["run"]
     build = "\n".join(s.get("run", "") for s in PUBLISH["build"]["steps"])

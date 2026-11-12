@@ -12,6 +12,7 @@ import {
 } from "./connector-setup-groups";
 import type { GuardAction, GuardActionEnvelope, GuardApprovalGatePublicConfig, GuardApprovalRequest } from "./guard-types";
 import type { LocalCliItem } from "./local-cli-api";
+import { connectorSetupLinkFromSearch } from "./protection-center/custom-extension-profile";
 import { queuePageSyncTarget } from "./review-queue-page-sync";
 
 function assert(condition: boolean, message: string): void {
@@ -70,7 +71,7 @@ const BASE_REQUEST: GuardApprovalRequest = {
 
 // Connector setup: rows held only because a local CLI was never set up share
 // `connector:<identity_hash>:<action>` and collapse into one pinned card.
-const IDENTITY = "a1b2c3d4e5f6a7b8c9d0";
+const IDENTITY = `a1b2c3d4e5f6a7b8c9d0${"e".repeat(44)}`;
 const connectorRow = (
   id: string,
   digest: string,
@@ -125,7 +126,15 @@ const lane = groups.find((group) => group.identityHash === IDENTITY);
 assert(lane !== undefined, "the lanectl connector is grouped");
 assert(lane!.items.length === 2, "distinct actions on one connector stay as separate evidence rows");
 assert(lane!.callCount === 4, "merged retries count toward calls waiting on the connector");
-assert(lane!.setupHref === "/extensions/local-cli/local-cli.lanectl", "a resolved connector links to its Protect page");
+assert(
+  lane!.setupHref === `/extensions/local-cli/local-cli.lanectl?setup=conn-1&identity=${IDENTITY}`,
+  "a resolved connector links to its Protect page, opened on the newest held request",
+);
+const parsedLink = connectorSetupLinkFromSearch(lane!.setupHref.slice(lane!.setupHref.indexOf("?")));
+assert(
+  parsedLink?.requestId === "conn-1" && parsedLink.identityHash === IDENTITY,
+  "the Protect page accepts the link the card builds",
+);
 assert(
   lane!.triedCommands.join(",") === "listen,status",
   "tried commands come from the catalog and never include operands",
@@ -280,7 +289,34 @@ const cautionCard = renderToStaticMarkup(
 );
 assert(cautionCard.includes("destructive or touch"), "a caution row shows the caution banner on the card");
 assert(cautionCard.includes("2 of these calls are destructive"), "the caution banner counts merged retries as calls");
-assert(card.includes('href="/extensions/local-cli/local-cli.lanectl"'), "Set up deep-links into the Protect flow");
+assert(
+  card.includes(`href="/extensions/local-cli/local-cli.lanectl?setup=conn-1&amp;identity=${IDENTITY}"`),
+  "Set up deep-links into the Protect flow so the setup there releases the held calls",
+);
+assert(card.includes("not set up on this device") && card.includes(">Set up<"), "a never-decided connector asks to be set up");
+// The script was allowed, then edited: the grant names the old file, so the card says so instead of "not set up".
+const [changedLane] = buildConnectorSetupGroups([statusRow], [{ ...lanectl, state: "allowed", stale: true }]);
+const changedCard = renderToStaticMarkup(
+  createElement(ConnectorSetupCard, {
+    group: changedLane!,
+    approvalGate: gate,
+    activeRequestId: null,
+    onOpenRequest: () => undefined,
+  }),
+);
+assert(changedCard.includes("You allowed an earlier version"), "a changed file is named as changed since it was allowed");
+assert(!changedCard.includes("not set up on this device"), "a changed file is never called not set up");
+assert(changedCard.includes("Review this version"), "the card offers to review the current version");
+const [blockedLane] = buildConnectorSetupGroups([statusRow], [{ ...lanectl, state: "blocked", stale: true }]);
+const blockedCard = renderToStaticMarkup(
+  createElement(ConnectorSetupCard, {
+    group: blockedLane!,
+    approvalGate: gate,
+    activeRequestId: null,
+    onOpenRequest: () => undefined,
+  }),
+);
+assert(!blockedCard.includes("You allowed an earlier version"), "an earlier block is not described as an allow");
 const ungatedCard = renderToStaticMarkup(
   createElement(ConnectorSetupCard, {
     group: lane!,

@@ -281,7 +281,7 @@ fn trusted_workspace(
     }
 }
 
-fn evaluate(request: &DirectoryTrustRequestV1) -> Value {
+pub(crate) fn evaluate(request: &DirectoryTrustRequestV1) -> Value {
     let temp_dir = PathBuf::from(&request.temp_dir);
     let roots = trusted_guard_directory_roots(&request.guard_home, &request.home_dir);
     let results: Vec<Value> = request

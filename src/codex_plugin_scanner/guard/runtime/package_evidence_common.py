@@ -2,20 +2,14 @@
 
 from __future__ import annotations
 
-import base64
-import binascii
 import hashlib
 import json
 import os
-import re
 import stat
-from pathlib import Path, PurePosixPath
+from pathlib import Path
 from typing import cast
 
 from .jsonc import loads_jsonc
-
-_MAX_PACKAGE_JSON_BYTES = 16 * 1024 * 1024
-
 
 _MAX_MANIFEST_JSON_BYTES = 16 * 1024 * 1024
 
@@ -90,66 +84,3 @@ def object_mapping(value: object) -> dict[str, object] | None:
 def require(condition: bool, reason: str, reasons: list[str]) -> None:
     if not condition:
         reasons.append(reason)
-
-
-def version_spec_matches(
-    specifier: str | None,
-    version: str | None,
-    *,
-    version_re: re.Pattern[str],
-    caret_pins_zero_major: bool,
-) -> bool:
-    """Compare an observed version against a ~/^ semver specifier.
-
-    caret_pins_zero_major selects the stricter ^0.x policy that pins the
-    minor (and patch for ^0.0.x); the loose policy keeps ^ scoped to the
-    major even when it is zero.
-    """
-
-    if specifier is None or version is None:
-        return False
-    spec_match = version_re.fullmatch(specifier)
-    version_match = version_re.fullmatch(version)
-    if spec_match is None or version_match is None:
-        return False
-    spec_parts = tuple(int(value) for value in spec_match.groups())
-    version_parts = tuple(int(value) for value in version_match.groups())
-    if specifier.startswith("^"):
-        if spec_parts[0] > 0:
-            return version_parts >= spec_parts and version_parts[0] == spec_parts[0]
-        if caret_pins_zero_major:
-            if spec_parts[1] > 0:
-                return version_parts >= spec_parts and version_parts[:2] == spec_parts[:2]
-            return version_parts == spec_parts
-        return version_parts >= spec_parts and version_parts[0] == spec_parts[0]
-    if specifier.startswith("~"):
-        return version_parts >= spec_parts and version_parts[:2] == spec_parts[:2]
-    return version_parts == spec_parts
-
-
-def valid_sha512_integrity(value: object) -> bool:
-    """Return true for a syntactically valid 64-byte SRI SHA-512 digest."""
-
-    if not isinstance(value, str) or not value.startswith("sha512-"):
-        return False
-    try:
-        decoded = base64.b64decode(value.removeprefix("sha512-"), validate=True)
-    except (binascii.Error, ValueError):
-        return False
-    return len(decoded) == 64
-
-
-def resolved_package_bin_target(package_root: Path, target: str | None) -> Path | None:
-    """Resolve a relative package bin target without allowing root escape."""
-
-    if target is None:
-        return None
-    portable = PurePosixPath(target.replace("\\", "/"))
-    if portable.is_absolute() or not portable.parts or ".." in portable.parts:
-        return None
-    candidate = package_root.joinpath(*portable.parts).resolve(strict=False)
-    try:
-        _ = candidate.relative_to(package_root)
-    except ValueError:
-        return None
-    return candidate

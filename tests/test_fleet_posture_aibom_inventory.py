@@ -142,76 +142,26 @@ def test_a_removed_table_row_does_not_hide_the_item_found_installed_again(
     assert [item["name"] for item in inventory_items(store, hash_key=b"k" * 32)] == ["chrome-devtools"]
 
 
-def test_a_workspace_scan_keeps_the_project_items_of_other_workspaces(store: GuardStore, tmp_path: Path) -> None:
-    home = tmp_path / "home"
-    alpha = home / "code" / "alpha"
-    beta = home / "code" / "beta"
-
-    def scan(workspace: Path | None, at: str, *items: GuardAgentInventoryItem) -> list[str]:
-        remember_aibom_items(store, [_snapshot("codex", at, *items)], now=at, home_dir=home, workspace_dir=workspace)
-        stored = store.get_sync_payload(AIBOM_ITEMS_STATE_KEY)
-        assert isinstance(stored, dict)
-        return sorted(str(row["artifact_name"]) for row in stored["rows"])
-
-    user_skill = _item("codex:global:shared", "skill", "shared")
-    alpha_skill = _item("codex:project:alpha-skill", "skill", "alpha-skill")
-    beta_skill = _item("codex:project:beta-skill", "skill", "beta-skill")
-    assert scan(alpha, "2026-10-18T00:00:00Z", user_skill, alpha_skill) == ["alpha-skill", "shared"]
-    # A scan of another workspace, or of none, does not mean alpha's items were removed.
-    assert scan(beta, "2026-10-19T00:00:00Z", user_skill, beta_skill) == ["alpha-skill", "beta-skill", "shared"]
-    assert scan(None, "2026-10-20T00:00:00Z", user_skill) == ["alpha-skill", "beta-skill", "shared"]
-    # Rescanning alpha is what removes an alpha item.
-    assert scan(alpha, "2026-10-21T00:00:00Z", user_skill) == ["beta-skill", "shared"]
-
-
-def test_an_artifact_type_fleet_posture_does_not_report_is_left_out(store: GuardStore) -> None:
-    host = _item("cline:global:vscode", "plugin", "Cline for VS Code", artifact_type="harness_host")
-    skill = _item("cline:global:review", "skill", "review")
-    remember_aibom_items(store, [_snapshot("cline", "2026-10-20T00:00:00Z", host, skill)], now="2026-10-20T00:00:00Z")
-    stored = store.get_sync_payload(AIBOM_ITEMS_STATE_KEY)
-    assert isinstance(stored, dict)
-    assert [row["artifact_name"] for row in stored["rows"]] == ["review"]
-
-
-@pytest.mark.parametrize(
-    ("harness", "item_id", "workspace", "path", "expected"),
-    [
-        ("codex", "codex:project:review", None, "{home}/x/review", "project"),
-        ("omp", "omp:omp-global:review", None, "{home}/.omp/review", "global"),
-        ("hermes", "hermes:skill:review", "code/app", "{home}/code/app/.hermes/review", "project"),
-        ("openclaw", "openclaw:plugin:review", "code/app", "{home}/.openclaw/review", "global"),
-        ("openclaw", "openclaw:plugin:review", None, "{home}/.openclaw/review", "global"),
-    ],
-)
-def test_source_scope_comes_from_the_id_or_where_the_file_lives(
-    store: GuardStore, tmp_path: Path, harness: str, item_id: str, workspace: str | None, path: str, expected: str
+def test_stored_rows_carry_the_item_hash_and_survive_a_runtime_that_cannot_answer(
+    store: GuardStore, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    home = tmp_path / "home"
-    item = _item(item_id, "skill", "review")
-    item.metadata["configPath"] = path
-    remember_aibom_items(
-        store,
-        [_snapshot(harness, "2026-10-20T00:00:00Z", item)],
-        now="2026-10-20T00:00:00Z",
-        home_dir=home,
-        workspace_dir=home / workspace if workspace else None,
+    from codex_plugin_scanner.guard import native_runner_authority as authority
+
+    item = _item("codex:global:one", "skill", "one")
+    assert (
+        remember_aibom_items(store, [_snapshot("codex", "2026-10-19T00:00:00Z", item)], now="2026-10-19T00:00:00Z") == 1
     )
     stored = store.get_sync_payload(AIBOM_ITEMS_STATE_KEY)
     assert isinstance(stored, dict)
-    assert stored["rows"][0]["source_scope"] == expected
+    assert (stored["rows"][0]["artifact_hash"], stored["rows"][0]["present"]) == (HASH, True)
 
+    def _unavailable(*_args: object, **_kwargs: object) -> dict[str, object]:
+        raise authority.NativeRunnerAuthorityError("native_runner_authority_unavailable")
 
-def test_a_later_collection_keeps_first_seen_and_drops_items_it_no_longer_finds(store: GuardStore) -> None:
-    first = _item("codex:global:one", "skill", "one")
-    second = _item("codex:global:two", "skill", "two")
-    remember_aibom_items(store, [_snapshot("codex", "2026-10-19T00:00:00Z", first, second)], now="2026-10-19T00:00:00Z")
-    remember_aibom_items(store, [_snapshot("codex", "2026-10-20T00:00:00Z", first)], now="2026-10-20T00:00:00Z")
-    stored = store.get_sync_payload(AIBOM_ITEMS_STATE_KEY)
-    assert isinstance(stored, dict)
-    rows = stored["rows"]
-    assert [row["artifact_name"] for row in rows] == ["one"]
-    assert rows[0]["first_seen_at"] == "2026-10-19T00:00:00Z"
-    assert rows[0]["last_seen_at"] == "2026-10-20T00:00:00Z"
+    monkeypatch.setattr(authority, "native_runner_authority", _unavailable)
+    # A collection the runtime cannot answer for leaves the stored rows as they were.
+    assert remember_aibom_items(store, [_snapshot("codex", "2026-10-20T00:00:00Z")], now="2026-10-20T00:00:00Z") == 0
+    assert store.get_sync_payload(AIBOM_ITEMS_STATE_KEY) == stored
 
 
 @pytest.mark.parametrize("label", ["Local machine", "local-device", "This machine", "  "])
@@ -234,26 +184,6 @@ def test_a_chosen_label_that_reads_like_a_default_is_kept(store: GuardStore, mon
     # Clearing the label hands the name back to the host name.
     store.set_device_label("", "2026-10-20T00:01:00Z")
     assert tools.device_display_name(store, "Local machine") == "Ada-MacBook-Pro"
-
-
-def test_policy_matching_and_approval_checks_use_one_machine_name(
-    store: GuardStore, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    from codex_plugin_scanner.guard.runtime import runner
-
-    monkeypatch.setattr(naming.platform, "node", lambda: "Ada-MacBook-Pro.local")
-    captured: list[str] = []
-    monkeypatch.setattr(
-        "codex_plugin_scanner.guard.policy_bundle_decisions.build_policy_bundle_decisions",
-        lambda bundle, *, device_id, device_name: captured.append(device_name) or [],
-    )
-    monkeypatch.setattr(
-        "codex_plugin_scanner.guard.synced_policy.cached_policy_bundle_validation",
-        lambda *args, **kwargs: ({"bundle": True}, None),
-    )
-    monkeypatch.setattr(store, "get_sync_payload", lambda key: {"bundle": True} if key == "policy_bundle" else None)
-    store._cached_policy_bundle_decision_identities()  # type: ignore[attr-defined]
-    assert captured == [runner._guard_device_metadata(store)[1]] == ["Ada-MacBook-Pro"]
 
 
 def test_a_generic_label_stays_when_the_host_has_no_usable_name(monkeypatch: pytest.MonkeyPatch) -> None:

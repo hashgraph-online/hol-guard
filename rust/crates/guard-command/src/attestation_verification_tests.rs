@@ -392,14 +392,14 @@ fn an_attestation_with_no_expiry_never_expires() {
 fn a_sequence_must_advance_past_the_one_already_seen() {
     let payload = payload();
     let envelope = envelope(&payload);
-    let past = |minimum: i64| TrustAttestationVerificationPolicy {
-        minimum_sequence: Some(minimum),
+    let past = |minimum: &str| TrustAttestationVerificationPolicy {
+        minimum_sequence: Some(minimum.to_owned()),
         ..TrustAttestationVerificationPolicy::default()
     };
 
-    assert!(trust_attestation_under_signature(&payload, &envelope, None, None, &past(7)).is_ok());
+    assert!(trust_attestation_under_signature(&payload, &envelope, None, None, &past("7")).is_ok());
     assert_eq!(
-        refusal(&payload, &envelope, &past(8)),
+        refusal(&payload, &envelope, &past("8")),
         "Trust attestation sequence is not monotonic"
     );
 }
@@ -414,11 +414,64 @@ fn a_sequence_too_wide_to_hold_still_outruns_the_one_already_seen() {
     );
     let envelope = envelope(&payload);
     let policy = TrustAttestationVerificationPolicy {
-        minimum_sequence: Some(i64::MAX),
+        minimum_sequence: Some(i64::MAX.to_string()),
         ..TrustAttestationVerificationPolicy::default()
     };
 
     assert!(trust_attestation_under_signature(&payload, &envelope, None, None, &policy).is_ok());
+}
+
+#[test]
+fn a_minimum_too_wide_to_hold_still_refuses_in_the_verifier_s_own_words() {
+    // The caller's integers have no width bound. A limit above `i64::MAX` is a
+    // limit no sequence clears, and it has to come back as the monotonic
+    // refusal rather than as a verifier that could not be asked.
+    let payload = payload();
+    let envelope = envelope(&payload);
+    let policy = TrustAttestationVerificationPolicy {
+        minimum_sequence: Some("1000000000000000000000000000000000000000000".to_owned()),
+        ..TrustAttestationVerificationPolicy::default()
+    };
+
+    assert_eq!(
+        refusal(&payload, &envelope, &policy),
+        "Trust attestation sequence is not monotonic"
+    );
+}
+
+#[test]
+fn a_minimum_below_every_sequence_lets_one_through() {
+    let payload = payload();
+    let envelope = envelope(&payload);
+    for minimum in ["-1", "-0", "0000006", "000"] {
+        let policy = TrustAttestationVerificationPolicy {
+            minimum_sequence: Some(minimum.to_owned()),
+            ..TrustAttestationVerificationPolicy::default()
+        };
+
+        assert!(
+            trust_attestation_under_signature(&payload, &envelope, None, None, &policy).is_ok(),
+            "{minimum}"
+        );
+    }
+}
+
+#[test]
+fn a_minimum_that_is_not_a_whole_count_refuses_rather_than_being_read_past() {
+    let payload = payload();
+    let envelope = envelope(&payload);
+    for minimum in ["", "-", "7.5", "seven", "0x7"] {
+        let policy = TrustAttestationVerificationPolicy {
+            minimum_sequence: Some(minimum.to_owned()),
+            ..TrustAttestationVerificationPolicy::default()
+        };
+
+        assert_eq!(
+            refusal(&payload, &envelope, &policy),
+            "Trust attestation sequence is not monotonic",
+            "{minimum}"
+        );
+    }
 }
 
 #[test]
@@ -427,7 +480,7 @@ fn a_sequence_that_is_absent_cannot_advance_one() {
     payload.remove("sequence");
     let envelope = envelope(&payload);
     let policy = TrustAttestationVerificationPolicy {
-        minimum_sequence: Some(0),
+        minimum_sequence: Some("0".to_owned()),
         ..TrustAttestationVerificationPolicy::default()
     };
 
@@ -447,7 +500,7 @@ fn a_sequence_that_is_not_a_whole_count_is_refused_by_the_payload_rules() {
         payload.insert("sequence".to_owned(), sequence.clone());
         let envelope = envelope(&payload);
         let policy = TrustAttestationVerificationPolicy {
-            minimum_sequence: Some(0),
+            minimum_sequence: Some("0".to_owned()),
             ..TrustAttestationVerificationPolicy::default()
         };
 

@@ -244,3 +244,24 @@ b6926bac2ef58d0794d1df6e2bb9ee401d8ac18b:tests/test_guard_runtime.py:generic-api
 8319742b46f30e0e6928d9dbb122fa5fc1c156d4:rust/crates/guard-scanner/src/prose_answer_value.rs:generic-api-key:396
 # Synthetic bearer token in a credential-masking test (rewritten in the next commit), not a credential.
 363b7be8220e73b5884dcfd90d27dffdbe3846fc:rust/crates/guard-runtime/src/hook_direct_lifecycle_tests.rs:curl-auth-header:375
+# Synthetic PEM armour around a three-byte body in a redaction test vector, not a key.
+7136401132f36177bc30c55605ccaa50b35872c7:rust/crates/guard-runtime/src/hook_render_op_redaction_tests.rs:private-key:16
+# Synthetic GitHub-token-shaped argument in the Cline MCP argument-redaction
+# vectors (recorder input and its recorded output), not a credential.
+8b5c468693c94bcba57cffe5e4eceab69400b29b:rust/crates/guard-runtime/testdata/gemini/cline_vector_cases.py:github-pat:65
+8b5c468693c94bcba57cffe5e4eceab69400b29b:rust/crates/guard-runtime/testdata/cline/vectors.json:github-pat:2742
+8b5c468693c94bcba57cffe5e4eceab69400b29b:rust/crates/guard-runtime/testdata/cline/vectors.json:github-pat:2761
+# Synthetic canary value in the Cloud actions settings preview tests, not a credential.
+30151f99e991cfd2da9cca4a26b18c01880ea499:tests/test_guard_cloud_actions_host_config.py:generic-api-key:28
+30151f99e991cfd2da9cca4a26b18c01880ea499:tests/test_guard_cloud_actions_host_config.py:generic-api-key:30
+# Synthetic PEM armour in a CIGAR prompt-read test that checks key-shaped files are
+# never read (rewritten in the next commit), not a key.
+476e1b4a9ab225700ef584bb795e5e5dc0b11ac4:rust/crates/guard-runtime/src/context_assistance_engine_quick_tests.rs:private-key:116
+# Synthetic placeholder ("header.e30.signature") in the connect Cloud actions tests, not a credential.
+486624632b8665166ff84788ff8e976bfa71791f:tests/test_guard_connect_cloud_actions.py:generic-api-key:71
+# Synthetic sk- key in the inventory description redaction vectors, not a credential.
+029f6e816d3bfda39fc459be662433da45d922b0:rust/crates/guard-runtime/testdata/inventory_item_description/description_vectors.json:generic-api-key:787
+# Resume handle variable in the daemon edge session writes, renamed in a follow-up commit; not a credential.
+a3d54c9b6298f3905bfb176744259c771d72364c:rust/crates/guard-runtime/src/daemon_edge_sessions.rs:generic-api-key:270
+# Hook key variable in the Codex hook repair request, renamed in a follow-up commit; not a credential.
+812a4ae4cfb328a2044b47ad03630cbb51e30e20:src/codex_plugin_scanner/guard/codex_hook_repair_request.py:generic-api-key:213

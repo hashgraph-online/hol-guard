@@ -17,7 +17,6 @@ from typing import cast
 import codex_plugin_scanner
 from codex_plugin_scanner import __version__
 from codex_plugin_scanner.guard import native_execution
-from codex_plugin_scanner.guard.native_execution import contained_execute_native
 from codex_plugin_scanner.guard.native_policy_snapshot_publisher import ensure_native_launch_resident_verifier
 from codex_plugin_scanner.guard.store import GuardStore
 
@@ -27,6 +26,31 @@ SCHEMA_VERSION = "containment-contract-v1"
 # libraries have to be bound in read-only by name. Absent roots are dropped:
 # bubblewrap refuses to bind a path that does not exist.
 SYSTEM_READ_ROOTS = ("/bin", "/sbin", "/usr", "/lib", "/lib64")
+
+
+def contained_execute_native(
+    request: dict[str, object], policy: dict[str, object], *, guard_home: Path, run_id: str
+) -> dict[str, object] | None:
+    """Run one contained request through the installed wheel's resident transport."""
+
+    timeout_seconds = cast(int, request["timeout_seconds"])
+    decoded = native_execution._resident_request(
+        operation="contained_execute",
+        request={
+            "schema": "guard-contained-execute-request.v1",
+            "request_id": native_execution._request_id("contained_execute"),
+            "request": request,
+            "policy": policy,
+            "guard_home": str(guard_home),
+            "run_id": run_id,
+        },
+        guard_home=guard_home,
+        # The resident reports a timeout itself after sandbox setup and reaping.
+        timeout_seconds=float(timeout_seconds) + 30.0,
+        required_feature="contained-execution-v1",
+    )
+    result = decoded.get("result") if decoded is not None else None
+    return result if isinstance(result, dict) else None
 
 
 @dataclass(frozen=True)

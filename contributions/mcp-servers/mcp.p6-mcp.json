@@ -1,9 +1,9 @@
 {
   "schemaVersion": "guard.mcp-server-contribution.v1",
   "id": "mcp.p6-mcp",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "name": "P6 MCP for Primavera P6",
-  "description": "Reads and, when the user allows it, edits Primavera P6 Professional schedules in a local P6 standalone (SQLite) database or in XER files. 32 read tools return schedule analysis; p6_export_xer writes a caller-named .xer file; 18 write tools change the database, are off by default and apply only after a dry run and a single-use confirmation token. Independent project, not affiliated with Oracle. Off until enabled locally.",
+  "description": "Reads and, when the user allows it, edits Primavera P6 Professional schedules in a local P6 standalone (SQLite) database or in XER files. 32 read tools return schedule analysis; p6_export_xer and p6_export_dashboard write a caller-named .xer or .xlsx file; 18 write tools change the database, are off by default and apply only after a dry run and a single-use confirmation token. Independent project, not affiliated with Oracle. Off until enabled locally.",
   "trustClass": "external",
   "activation": "opt-in",
   "publisher": {
@@ -58,6 +58,7 @@
     { "name": "p6_sql_select", "state": "inherit" },
     { "name": "p6_list_udfs", "state": "inherit" },
     { "name": "p6_export_xer", "state": "review" },
+    { "name": "p6_export_dashboard", "state": "review" },
     { "name": "p6_update_activity", "state": "review" },
     { "name": "p6_update_assignment", "state": "review" },
     { "name": "p6_update_assignments", "state": "review" },
@@ -79,10 +80,10 @@
     { "name": "other", "state": "review" }
   ],
   "referenceUrls": [
-    "https://github.com/nizarhamza/p6-mcp/releases/tag/v1.5.1",
-    "https://github.com/nizarhamza/p6-mcp/blob/v1.5.1/README.md",
-    "https://github.com/nizarhamza/p6-mcp/blob/v1.5.1/SECURITY.md",
-    "https://github.com/nizarhamza/p6-mcp/blob/v1.5.1/p6mcp/policy.py"
+    "https://github.com/nizarhamza/p6-mcp/releases/tag/v1.6.0",
+    "https://github.com/nizarhamza/p6-mcp/blob/v1.6.0/README.md",
+    "https://github.com/nizarhamza/p6-mcp/blob/v1.6.0/SECURITY.md",
+    "https://github.com/nizarhamza/p6-mcp/blob/v1.6.0/p6mcp/policy.py"
   ],
   "saferAlternatives": [
     "Keep 'Allow write operations' off in P6 MCP Settings (the default): the server then lists no write tool and refuses every write call itself, whatever the client decides.",

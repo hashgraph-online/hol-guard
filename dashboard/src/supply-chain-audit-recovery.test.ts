@@ -3,6 +3,7 @@ import {
   isStandaloneSyncRecoveryGate,
   resolveSupplyChainAuditRecoveryGate,
 } from "./supply-chain-audit-recovery";
+import { resolveBusyHint } from "./supply-chain-audit-recovery-modal";
 
 function assert(condition: boolean, message: string): void {
   if (!condition) {
@@ -68,3 +69,10 @@ assert(
 );
 
 console.log("supply-chain-audit-recovery.test.ts: all assertions passed");
+
+assert(resolveBusyHint("syncing", 2) === null, "a quick sync shows no waiting hint");
+const syncHint = resolveBusyHint("syncing", 12) ?? "";
+assert(syncHint.includes("12s"), "a slow sync shows how long Guard has waited");
+assert(syncHint.includes("45s"), "a slow sync says when Guard stops waiting");
+assert(resolveBusyHint("approval", 30) === null, "the approval step has no busy hint");
+assert((resolveBusyHint("auditing", 7) ?? "").includes("7s"), "a slow audit shows elapsed time");

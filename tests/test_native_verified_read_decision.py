@@ -58,8 +58,8 @@ def _install(monkeypatch: pytest.MonkeyPatch, mutate) -> list[tuple[str, object]
 
 
 def _call(tmp_path):
-    return native_verified_read_decision.workspace_read_decision(
-        operation_id="read-file", binding_digest="sha256:" + "b" * 64, guard_home=tmp_path
+    return native_verified_read_decision.github_public_read_decision(
+        binding_digest="sha256:" + "b" * 64, guard_home=tmp_path
     )
 
 
@@ -92,21 +92,3 @@ def test_a_missing_resident_reply_leaves_recording_to_the_transport(monkeypatch,
     with pytest.raises(native_verified_read_decision.NativeVerifiedReadDecisionError, match="unavailable"):
         _call(tmp_path)
     assert recorded == []
-
-
-def test_a_resident_failure_fails_the_workspace_read_closed(monkeypatch) -> None:
-    from codex_plugin_scanner.guard.runtime import verified_read_execution
-
-    def unavailable(*_args, **_kwargs):
-        raise native_verified_read_decision.NativeVerifiedReadDecisionError("native_verified_read_decision_unavailable")
-
-    monkeypatch.setattr(verified_read_execution, "_decision", unavailable)
-    monkeypatch.setattr(verified_read_execution, "_source_digest", lambda: "digest")
-    monkeypatch.setattr(verified_read_execution, "_current_workspace_context", lambda: "context")
-    monkeypatch.setattr(
-        verified_read_execution,
-        "_perform_read",
-        lambda *_args, **_kwargs: SimpleNamespace(stdout="ok\n", operation_id="read-file"),
-    )
-    monkeypatch.setattr(verified_read_execution, "_proof", lambda *_args, **_kwargs: object())
-    assert verified_read_execution.try_execute_verified_local_read(("cat", "README.md")) is None

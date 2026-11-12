@@ -11,6 +11,7 @@ use std::path::Path;
 
 use guard_scanner::precommit::{install_precommit_hook, uninstall_precommit_hook};
 use guard_scanner::repository_scanner::{scan_repository_secrets, RepositoryScanOptions};
+use guard_scanner::secret_detection::{detector_version, secret_rule_catalog};
 use guard_scanner::staged_scanner::{scan_staged_secrets, StagedScanOptions};
 use serde::Deserialize;
 use serde_json::{json, Value};
@@ -21,6 +22,7 @@ pub(crate) const COMMAND: &str = "secrets-cli";
 #[serde(rename_all = "kebab-case", tag = "command")]
 pub(crate) enum SecretsRequest {
     Scan(ScanRequest),
+    Rules(RulesRequest),
     InstallHook(HookRequest),
     UninstallHook(HookRequest),
 }
@@ -51,6 +53,13 @@ pub(crate) struct ScanRequest {
     max_findings: usize,
 }
 
+/// The catalog is the same for every caller, so the request carries nothing.
+/// It still refuses unknown fields: a caller that sent a target or a bound
+/// meant a different command, and answering it anyway would hide that.
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct RulesRequest {}
+
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct HookRequest {
@@ -66,6 +75,7 @@ pub(crate) fn run_command(bytes: &[u8]) -> Result<Value, String> {
 pub(crate) fn respond(request: &SecretsRequest) -> Value {
     let outcome = match request {
         SecretsRequest::Scan(scan) => run_scan(scan),
+        SecretsRequest::Rules(_) => Ok(rules_catalog()),
         SecretsRequest::InstallHook(hook) => install_precommit_hook(Path::new(&hook.target))
             .map(|result| result.to_public_dict())
             .map_err(|error| error.to_string()),
@@ -77,6 +87,34 @@ pub(crate) fn respond(request: &SecretsRequest) -> Value {
         Ok(result) => json!({"ok": true, "result": result}),
         Err(error) => json!({"ok": false, "error": error}),
     }
+}
+
+/// The public description of what the detector looks for.
+///
+/// This is what `hol-guard secrets rules` prints. Every field comes from the
+/// rule table that the scan path itself uses, so the list a user reads is the
+/// list that runs; it cannot drift into describing rules that were renamed or
+/// no longer exist. Executable patterns stay here: the catalog names each
+/// family and how it is confirmed, and nothing a scan saw reaches it.
+fn rules_catalog() -> Value {
+    let rules: Vec<Value> = secret_rule_catalog()
+        .into_iter()
+        .map(|rule| {
+            json!({
+                "rule_id": rule.rule_id,
+                "family": rule.family,
+                "severity": rule.severity,
+                "validation": rule.validation,
+                "strong_format": rule.strong_format,
+                "description": rule.description,
+            })
+        })
+        .collect();
+    json!({
+        "schema": "guard-secret-rules.v1",
+        "detector_version": detector_version(),
+        "rules": rules,
+    })
 }
 
 fn run_scan(request: &ScanRequest) -> Result<Value, String> {

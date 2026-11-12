@@ -65,7 +65,18 @@ def _native_current_action(
             guard_home=getattr(store, "guard_home", None),
         )
     except NativeConsumerComposeError as error:
-        return {"current_action": "block", "scanner_action": None, "verdict": None, "compose_unavailable": error.code}
+        return _compose_unavailable(error.code)
+
+
+def _compose_unavailable(code: str) -> dict[str, object]:
+    """The current action for an artifact whose composition could not be made.
+
+    Every composition query an artifact needs is authoritative, so a failure in
+    any of them blocks the artifact unscored rather than letting the evaluation
+    fall through with that query's contribution missing.
+    """
+
+    return {"current_action": "block", "scanner_action": None, "verdict": None, "compose_unavailable": code}
 
 
 @dataclass(frozen=True)
@@ -123,7 +134,6 @@ def _native_runtime_decision(
         memory_command=memory_command,
         memory_artifact_type=memory_artifact_type,
         memory_artifact_name=memory_artifact_name,
-        consume_one_shot=False,
     )
     saved_decision = lookup["decision"]
     ignored_integrity = lookup["ignored_local_integrity"] is not None

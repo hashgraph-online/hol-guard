@@ -21,6 +21,7 @@ import pytest
 
 from codex_plugin_scanner.guard import native_guard_store, store_receipts, store_review_event_outbox
 from codex_plugin_scanner.guard.store import GuardStore
+from tests import native_store_shims
 
 # pyright: reportAny=false, reportPrivateUsage=false, reportUnknownMemberType=false
 # pyright: reportUnknownVariableType=false, reportUnknownArgumentType=false
@@ -68,7 +69,12 @@ def _freeze_device_id(monkeypatch: pytest.MonkeyPatch, step: dict[str, Any]) -> 
 
 
 def _invoke(store: GuardStore, source: dict[str, Any]) -> object:
-    return getattr(store, source["method"])(*source.get("args", ()), **source.get("kwargs", {}))
+    args, kwargs = source.get("args", ()), source.get("kwargs", {})
+    # Ops only tests reach have no store wrapper; their shim takes the store first.
+    shim = getattr(native_store_shims, source["method"], None)
+    if shim is not None:
+        return shim(store, *args, **kwargs)
+    return getattr(store, source["method"])(*args, **kwargs)
 
 
 def test_every_scenario_has_matching_recorded_steps() -> None:

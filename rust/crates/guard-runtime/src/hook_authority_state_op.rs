@@ -128,6 +128,14 @@ pub(crate) fn evaluate_hook_authority_state_request(
 }
 
 pub(crate) fn evaluate(request: &HookAuthorityStateRequestV1) -> Result<Value, &'static str> {
+    evaluate_within(request, Duration::from_millis(5000))
+}
+
+/// `evaluate` waiting at most `busy` for a store another writer holds.
+pub(crate) fn evaluate_within(
+    request: &HookAuthorityStateRequestV1,
+    busy: Duration,
+) -> Result<Value, &'static str> {
     if request.schema != HOOK_AUTHORITY_STATE_REQUEST_SCHEMA {
         return Err("native_hook_authority_state_schema_mismatch");
     }
@@ -140,9 +148,7 @@ pub(crate) fn evaluate(request: &HookAuthorityStateRequestV1) -> Result<Value, &
     let connection =
         Connection::open_with_flags(&request.store_path, OpenFlags::SQLITE_OPEN_READ_WRITE)
             .map_err(|_| ERROR_STORE)?;
-    connection
-        .busy_timeout(Duration::from_millis(5000))
-        .map_err(|_| ERROR_STORE)?;
+    connection.busy_timeout(busy).map_err(|_| ERROR_STORE)?;
     // One writer at a time: every flow reads, then rewrites or consumes state,
     // so concurrent hooks must not interleave between those steps.
     connection
@@ -367,14 +373,8 @@ fn unkeyed_notice_present(
         .map_err(|_| DirectNoticeDefer::StoreUnavailable)
 }
 
-fn direct_notice_transaction(
-    store_path: &std::path::Path,
-    key: Option<(&[u8], &str)>,
-    now: &str,
-    session_id: Option<&str>,
-    tool_name: Option<&str>,
-    event: Option<PromptEvent<'_>>,
-) -> Result<Option<Map<String, Value>>, DirectNoticeDefer> {
+/// The store, opened for the direct lane with its write lock held.
+fn begin_direct(store_path: &std::path::Path) -> Result<Connection, DirectNoticeDefer> {
     let connection = Connection::open_with_flags(store_path, OpenFlags::SQLITE_OPEN_READ_WRITE)
         .map_err(|_| DirectNoticeDefer::StoreUnavailable)?;
     // A held write lock sends the hook to the daemon, which waits for it.
@@ -384,6 +384,18 @@ fn direct_notice_transaction(
     connection
         .execute_batch("BEGIN IMMEDIATE")
         .map_err(|_| DirectNoticeDefer::StoreUnavailable)?;
+    Ok(connection)
+}
+
+fn direct_notice_transaction(
+    store_path: &std::path::Path,
+    key: Option<(&[u8], &str)>,
+    now: &str,
+    session_id: Option<&str>,
+    tool_name: Option<&str>,
+    event: Option<PromptEvent<'_>>,
+) -> Result<Option<Map<String, Value>>, DirectNoticeDefer> {
+    let connection = begin_direct(store_path)?;
     let foreign_key = std::cell::Cell::new(false);
     let env = Env {
         connection: &connection,
@@ -447,9 +459,12 @@ fn required(value: &Option<String>) -> Result<&str, &'static str> {
     value.as_deref().ok_or(ERROR_INVALID)
 }
 
+mod claude_lifecycle;
+pub(crate) use claude_lifecycle::claude_turn_stop_direct;
 pub(crate) mod direct_record;
 mod dispatch;
 mod flows;
+mod question_settle;
 mod store;
 
 #[cfg(all(test, unix))]
@@ -459,3 +474,11 @@ mod vectors;
 #[cfg(all(test, unix))]
 #[path = "hook_authority_state_session_ops_tests.rs"]
 mod session_ops;
+
+#[cfg(all(test, unix))]
+#[path = "hook_authority_state_question_settle_tests.rs"]
+mod question_settle_tests;
+
+#[cfg(all(test, unix))]
+#[path = "hook_authority_state_claude_lifecycle_tests.rs"]
+mod claude_lifecycle_tests;

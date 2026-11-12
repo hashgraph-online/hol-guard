@@ -25,6 +25,7 @@ from .codex_hook_windows_job import (
     close_windows_hook_job,
     spawn_windows_hook_process,
 )
+from .native_process_stop_scope import scoped_native_stop_event
 
 _HOOK_SUBPROCESS_OUTPUT_LIMIT = 1_000_000
 _HOOK_ENVIRONMENT_KEYS = frozenset(
@@ -92,6 +93,9 @@ class BoundedHookProcessResult:
     timed_out: bool
     containment_failed: bool = False
     stderr: str = ""
+    capture_incomplete: bool = False
+    stdout_bytes: bytes = b""
+    stderr_bytes: bytes = b""
 
 
 @dataclass(slots=True)
@@ -106,11 +110,21 @@ _HOOK_PROCESS_QUARANTINE_LOCK = threading.Lock()
 _HOOK_PROCESS_QUARANTINE: list[_QuarantinedHookProcess] = []
 
 
-def _retry_quarantined_hook_processes() -> bool:
-    with _HOOK_PROCESS_QUARANTINE_LOCK:
-        retry_deadline = time.monotonic() + _HOOK_PROCESS_FINAL_IO_JOIN_TIMEOUT_SECONDS
+def _retry_quarantined_hook_processes(*, deadline_monotonic: float | None = None) -> bool:
+    if deadline_monotonic is None:
+        _ = _HOOK_PROCESS_QUARANTINE_LOCK.acquire()
+    elif not _HOOK_PROCESS_QUARANTINE_LOCK.acquire(timeout=max(0.0, deadline_monotonic - time.monotonic())):
+        return False
+    retry_deadline = time.monotonic() + _HOOK_PROCESS_FINAL_IO_JOIN_TIMEOUT_SECONDS
+    if deadline_monotonic is not None:
+        retry_deadline = min(retry_deadline, deadline_monotonic)
+    try:
         survivors: list[_QuarantinedHookProcess] = []
-        for quarantined in _HOOK_PROCESS_QUARANTINE:
+        for index, quarantined in enumerate(_HOOK_PROCESS_QUARANTINE):
+            if deadline_monotonic is not None and time.monotonic() >= deadline_monotonic:
+                # Leave unvisited helpers quarantined for the next retry.
+                survivors.extend(_HOOK_PROCESS_QUARANTINE[index:])
+                break
             contained = _kill_hook_process(quarantined.process, quarantined.windows_job)
             remaining = max(0.0, retry_deadline - time.monotonic())
             try:
@@ -143,6 +157,17 @@ def _retry_quarantined_hook_processes() -> bool:
             return False
         _HOOK_PROCESS_CONTAINMENT_FAILED.clear()
         return True
+    finally:
+        _HOOK_PROCESS_QUARANTINE_LOCK.release()
+
+
+def hook_processes_contained(*, deadline_monotonic: float | None = None) -> bool:
+    """Confirm no quarantined hook process survives, retrying the quarantine once."""
+    if not _HOOK_PROCESS_CONTAINMENT_FAILED.is_set():
+        return True
+    if deadline_monotonic is not None and time.monotonic() >= deadline_monotonic:
+        return False
+    return _retry_quarantined_hook_processes(deadline_monotonic=deadline_monotonic)
 
 
 def _quarantine_hook_process(
@@ -209,7 +234,7 @@ def isolated_daemon_start_command(
         "import os,sys;"
         f"sys.path.insert(0, {str(package_root.resolve())!r});"
         "from pathlib import Path;"
-        "from codex_plugin_scanner.guard.daemon import schedule_guard_daemon_recovery;"
+        "from codex_plugin_scanner.guard.native_daemon_manage import schedule_guard_daemon_recovery;"
         "failure_kind=os.environ.get('HOL_GUARD_HOOK_FAILURE_KIND','transport-failure');"
         "failure_kind=failure_kind if failure_kind in"
         " {'overload','transport-failure','authenticated-control-plane-failure'}"
@@ -338,12 +363,18 @@ def run_isolated_hook_process(
 
     ``stop_event`` lets a long-lived reviewed helper terminate through the same
     process-group / Windows Job containment path used for deadlines. Existing
-    one-shot callers do not need to supply it.
+    one-shot callers do not need to supply it. Without one, the stop event
+    bound by ``native_process_stop_scope`` applies, and once it is set no
+    child starts.
 
     When ``deadline_monotonic`` is supplied it is authoritative. The deadline
     is captured before process creation so startup and stream cleanup consume
     the caller's existing budget instead of receiving a new minimum timeout.
     """
+    if stop_event is None:
+        stop_event = scoped_native_stop_event()
+    if stop_event is not None and stop_event.is_set():
+        return BoundedHookProcessResult(None, "", False, False)
     if deadline_monotonic is None:
         if timeout_seconds is None:
             return BoundedHookProcessResult(None, "", False, False)
@@ -367,34 +398,42 @@ def run_isolated_hook_process(
         )
     except OSError:
         return BoundedHookProcessResult(None, "", False, False)
-    stdout_bytes, stderr_bytes, output_limit_exceeded, output_lock, io_threads = start_hook_io(
-        process,
-        input_text=input_text,
-        output_limit=output_limit,
-    )
-    returncode, timed_out, containment_confirmed, termination_requested = wait_for_hook_process(
-        process,
-        windows_job,
-        deadline=deadline,
-        stop_event=stop_event,
-        output_limit_exceeded=output_limit_exceeded,
-        terminate=_kill_hook_process,
-    )
-    windows_job, containment_confirmed, job_cleanup_failed = join_and_cleanup_hook_process(
-        process,
-        windows_job,
-        io_threads,
-        containment_confirmed=containment_confirmed,
-        termination_requested=termination_requested,
-        terminate=_kill_hook_process,
-        quarantine=_quarantine_hook_process,
-        close_streams=_close_process_streams,
-        close_job=close_windows_hook_job,
-    )
-    if liveness_write_fd is not None:
-        os.close(liveness_write_fd)
+    try:
+        stdout_bytes, stderr_bytes, output_limit_exceeded, capture_error, output_lock, io_threads = start_hook_io(
+            process,
+            input_text=input_text,
+            output_limit=output_limit,
+        )
+        returncode, timed_out, containment_confirmed, termination_requested = wait_for_hook_process(
+            process,
+            windows_job,
+            deadline=deadline,
+            stop_event=stop_event,
+            output_limit_exceeded=output_limit_exceeded,
+            terminate=_kill_hook_process,
+        )
+        windows_job, containment_confirmed, job_cleanup_failed = join_and_cleanup_hook_process(
+            process,
+            windows_job,
+            io_threads,
+            containment_confirmed=containment_confirmed,
+            termination_requested=termination_requested,
+            terminate=_kill_hook_process,
+            quarantine=_quarantine_hook_process,
+            close_streams=_close_process_streams,
+            close_job=close_windows_hook_job,
+        )
+    except BaseException:
+        # An interrupt (Ctrl-C) must not leave the child's group running with
+        # nobody enforcing its deadline; the child is in its own session.
+        _ = _kill_hook_process(process, windows_job)
+        raise
+    finally:
+        if liveness_write_fd is not None:
+            os.close(liveness_write_fd)
     with output_lock:
         stdout_decoded, stderr_decoded = _decode_combined_output(stdout_bytes, stderr_bytes, output_limit)
+        stdout_raw, stderr_raw = bytes(stdout_bytes), bytes(stderr_bytes)
     return BoundedHookProcessResult(
         returncode=None if job_cleanup_failed or not containment_confirmed else returncode,
         stdout=stdout_decoded,
@@ -402,6 +441,9 @@ def run_isolated_hook_process(
         timed_out=timed_out,
         containment_failed=not containment_confirmed,
         stderr=stderr_decoded,
+        capture_incomplete=capture_error.is_set(),
+        stdout_bytes=stdout_raw,
+        stderr_bytes=stderr_raw,
     )
 
 

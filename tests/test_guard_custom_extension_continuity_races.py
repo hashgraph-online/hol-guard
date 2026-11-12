@@ -6,10 +6,10 @@ import pytest
 
 from codex_plugin_scanner.guard.runtime.custom_extension_continuity import (
     CustomExtensionContinuityError,
-    apply_verified_custom_extension_continuity,
     record_local_custom_extension_mutation,
 )
 from codex_plugin_scanner.guard.store import GuardStore
+from tests.custom_extension_continuity_client import apply_verified_custom_extension_continuity
 from tests.test_guard_custom_extension_continuity import _NOW, _bundle, _identity, _observe
 
 

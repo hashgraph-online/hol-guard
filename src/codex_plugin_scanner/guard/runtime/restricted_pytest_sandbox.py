@@ -102,7 +102,7 @@ def _backend_argv(plan: RestrictedPytestPlan, *, private_root: Path, user_site_r
         from .restricted_node_tool import validate_build_output_root
 
         for path in plan.output_roots:
-            validate_build_output_root(path, workspace=plan.workspace, cwd=plan.cwd)
+            validate_build_output_root(path, workspace=plan.workspace, cwd=plan.cwd, arguments=plan.command)
     if plan.read_only_roots and plan.profile_version != "git-readonly-v1":
         raise RestrictedPytestError(PYTEST_SANDBOX_UNAVAILABLE_REASON_CODE, "Unexpected extra read grants.")
     if plan.backend == "macos-seatbelt":
@@ -142,21 +142,6 @@ def _bubblewrap_argv(plan: RestrictedPytestPlan, *, private_root: Path) -> list[
 
         return linux_readonly_argv(plan, private_root=private_root)
     return restricted_native("bubblewrap_argv", _profile_fields(plan, private_root), list)
-
-
-def _runtime_read_roots(plan: RestrictedPytestPlan, *, private_root: Path | None = None) -> tuple[Path, ...]:
-    return tuple(
-        Path(path)
-        for path in restricted_native(
-            "runtime_roots",
-            {
-                "allowed_executables": plan.allowed_executables,
-                "workspace": plan.workspace,
-                "private_root": private_root,
-            },
-            list,
-        )
-    )
 
 
 def _current_user_process_ceiling() -> int:

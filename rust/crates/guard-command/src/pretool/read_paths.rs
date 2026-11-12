@@ -12,7 +12,7 @@ pub(super) mod harness_notes;
 mod missing;
 use missing::missing_absolute_read_allowed;
 #[path = "hidden_listing.rs"]
-mod hidden_listing;
+pub(super) mod hidden_listing;
 #[path = "omp_json_query.rs"]
 mod omp_json_query;
 #[path = "omp_read_targets.rs"]
@@ -24,12 +24,13 @@ pub(super) use hidden_listing::{
 use hidden_listing::{resolved_home_hidden_content_read, resolved_home_hidden_listing};
 #[path = "private_temporary_workspace.rs"]
 mod private_temporary;
+pub(super) use private_temporary::inside_private_temporary_directory;
 #[path = "workspace_scratch_reads.rs"]
 mod scratch;
 use allowances::{
-    agent_home_state, agent_skill_document, codex_notes_document, execution_output_log,
-    git_config_document, git_ref_document, guard_safety_doc, project_skill_document,
-    worktree_gitfile,
+    agent_home_state, agent_skill_document, agent_skill_script, codex_notes_document,
+    execution_output_log, git_config_document, git_ref_document, guard_safety_doc,
+    project_skill_document, worktree_gitfile,
 };
 pub(super) use omp_targets::{
     bounded_omp_directory_read_target, bounded_omp_file_read_target,
@@ -356,6 +357,22 @@ pub(super) fn resolved_path_allowed_in_scope(
     resolved_path_allowed_for_operation(canonical, home_dir, cwd, verified_temporary, false)
 }
 
+/// Whether `canonical`, a resolved file, is a document the repository the
+/// session works in keeps below a hidden directory, such as
+/// `.claude-plugin/plugin.json`, read from that checkout or from a linked
+/// worktree of it. PreToolUse admits the read with this proof; the output
+/// review repeats it, or the file is read and its content withheld.
+pub fn proven_repository_hidden_document(
+    canonical: &std::path::Path,
+    home_dir: Option<&str>,
+    cwd: Option<&str>,
+) -> bool {
+    let temporary = private_temporary::inside_private_temporary_directory(canonical, home_dir);
+    location_allowed(canonical, home_dir, cwd, temporary, true)
+        && (hidden_listing::repository_hidden_source_document(canonical, home_dir, cwd)
+            || hidden_listing::repository_hidden_marker_file(canonical, home_dir, cwd))
+}
+
 pub(super) fn resolved_path_allowed_for_operation(
     canonical: &std::path::Path,
     home_dir: Option<&str>,
@@ -390,6 +407,7 @@ fn path_gate(
             || guard_safety_doc(canonical, home_dir)
             || (read_only
                 && (agent_skill_document(canonical, home_dir)
+                    || agent_skill_script(canonical, home_dir)
                     || agent_home_state(canonical, home_dir)
                     || project_skill_document(canonical, home_dir, cwd)
                     || codex_notes_document(canonical, home_dir)
@@ -399,7 +417,11 @@ fn path_gate(
                     || worktree_gitfile(canonical)
                     || scratch::workspace_scratch_read(canonical, home_dir, cwd)
                     || scratch::private_temporary_scratch_read(canonical, home_dir)
-                    || virtualenv_activation_script(canonical)))
+                    || virtualenv_activation_script(canonical)
+                    || hidden_listing::repository_hidden_source_document(
+                        canonical, home_dir, cwd,
+                    )
+                    || hidden_listing::repository_hidden_marker_file(canonical, home_dir, cwd)))
             || (read_only && execution_output_log(canonical, home_dir)))
     {
         return false;
@@ -514,7 +536,7 @@ fn location_allowed(
             .any(|prefix| lowered == *prefix || lowered.starts_with(&format!("{prefix}/"))))
         || foreign_user_home(canonical, home_dir, cwd)
         || guard_secure_fs::sensitive_path_family(canonical).is_some()
-        || (credential_names && guard_secure_fs::credential_named_path(canonical)))
+        || (credential_names && super::search_scope_tracked::names::unproven(canonical, cwd)))
 }
 
 pub(super) fn foreign_user_home(

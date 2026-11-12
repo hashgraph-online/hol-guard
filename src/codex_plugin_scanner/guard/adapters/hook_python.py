@@ -89,10 +89,6 @@ class HookPythonAttestation:
     def executable(self) -> Path:
         return self.identity.invocation_path
 
-    @property
-    def executable_target(self) -> Path:
-        return self.identity.target_path
-
 
 @dataclass(frozen=True, slots=True)
 class _ParentExpectation:

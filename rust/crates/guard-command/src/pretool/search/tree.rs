@@ -18,17 +18,26 @@
 use super::ReadContext;
 use crate::pretool::search_pattern_clearance::PatternClearance;
 use glob_expand::expand_glob_matches;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 #[path = "glob_expand.rs"]
 mod glob_expand;
 
+#[path = "descendant.rs"]
+mod descendant;
 #[path = "literal_bracket.rs"]
 mod literal_bracket;
+#[path = "operand.rs"]
+mod operand;
 
 use literal_bracket::inert_bracket_class;
+
+pub(in crate::pretool) use descendant::SECRET_EXTENSIONS;
+pub(super) use descendant::{descendant_allowed, hidden_allowed};
 pub(in crate::pretool) use literal_bracket::{
     safe_literal_bracket_read_target, safe_literal_bracket_search_target, safe_literal_bracket_tree,
 };
+use operand::checked_directory;
+pub(super) use operand::{expanded_operand, home_relative, real_allowed_directory, HAZARDS};
 
 /// An ordinary repository is already past ten thousand entries — this one
 /// counts 11,217 below its own root — so a lower bound decided every search
@@ -41,35 +50,6 @@ const MAX_WALK_ENTRIES: usize = 100_000;
 const MAX_WALK_DEPTH: usize = 64;
 const MAX_GLOB_MATCHES: usize = 256;
 const MAX_GLOB_ENTRIES: usize = 20_000;
-
-/// Hidden names that carry no credentials and are common in source trees.
-/// Hidden names that hold project metadata, never credentials. Descendants of
-/// the listed directories still clear every per-entry screen.
-const BENIGN_HIDDEN_NAMES: &[&str] = &[
-    ".ds_store",
-    ".well-known",
-    ".gitignore",
-    ".gitkeep",
-    ".keep",
-    ".gitattributes",
-    ".nvmrc",
-    ".node-version",
-    ".python-version",
-    ".editorconfig",
-    ".prettierrc",
-    ".prettierignore",
-    ".eslintignore",
-    ".dockerignore",
-    ".github",
-    ".vscode",
-    ".husky",
-    ".changeset",
-];
-
-/// Key and certificate containers whose names carry no credential word.
-pub(in crate::pretool) const SECRET_EXTENSIONS: &[&str] = &[
-    "pem", "p12", "pfx", "jks", "keystore", "asc", "gpg", "kdbx", "ppk",
-];
 
 /// Names-only recursive listing (`ls -R`). `lists_hidden` is the `-a`/`-A`
 /// flag. Without it the lister prints no hidden name and descends into no
@@ -253,7 +233,7 @@ pub(in crate::pretool) fn safe_glob_operand(
     context: ReadContext<'_>,
     recursive: bool,
 ) -> bool {
-    let Some(matches) = expand_glob(value, context) else {
+    let Some(matches) = expand_listing_glob(value, context) else {
         return false;
     };
     // With globstar a final `**` also expands to every nested entry, so the
@@ -319,138 +299,6 @@ pub(in crate::pretool) fn safe_glob_search_operand(value: &str, context: ReadCon
             .into_iter()
             .all(|path| !inside_agent_state(&path, context) && walk(path, &[], &[], false, false))
     })
-}
-
-pub(super) fn home_relative(value: &str, home: Option<&str>) -> Option<PathBuf> {
-    if value == "~" || value.starts_with("~/") {
-        Some(Path::new(home?).join(value.strip_prefix("~/").unwrap_or("")))
-    } else {
-        Some(PathBuf::from(value))
-    }
-}
-
-pub(super) fn expanded_operand(value: &str, context: ReadContext<'_>) -> Option<PathBuf> {
-    let expanded = if value == "~" || value.starts_with("~/") {
-        home_relative(value, context.home_dir)?
-    } else if Path::new(value).is_absolute() {
-        PathBuf::from(value)
-    } else {
-        home_relative(context.cwd?, context.home_dir)?.join(value)
-    };
-    // Remove trailing separators so symlink_metadata cannot follow a directory link.
-    Some(expanded.components().collect())
-}
-
-/// Characters that make a word mean more than one literal path.
-pub(super) const HAZARDS: [char; 11] = ['$', '`', '|', ';', '&', '<', '>', '\n', '\r', '\0', '\\'];
-
-/// A relative, quoted operand naming an existing real directory.
-fn checked_directory(value: &str, context: ReadContext<'_>) -> Option<PathBuf> {
-    if value.is_empty()
-        || value.len() > 4096
-        || value.contains(HAZARDS)
-        || value.contains(['{', '}', '*', '?'])
-        || value.starts_with(['/', '~', '-'])
-        || value.split('/').any(|part| part == "..")
-        || !super::super::safe_reads::verified_path_context(context.home_dir, context.cwd)
-    {
-        return None;
-    }
-    let path = expanded_operand(value, context)?;
-    real_allowed_directory(&path, context)
-}
-
-fn real_allowed_directory(path: &Path, context: ReadContext<'_>) -> Option<PathBuf> {
-    if !std::fs::symlink_metadata(path).ok()?.is_dir() {
-        return None;
-    }
-    let canonical = std::fs::canonicalize(path).ok()?;
-    super::super::read_paths::resolved_path_allowed(&canonical, context.home_dir, context.cwd)
-        .then(|| path.to_path_buf())
-}
-
-pub(super) fn hidden_allowed(name: &str) -> bool {
-    BENIGN_HIDDEN_NAMES.contains(&name.to_ascii_lowercase().as_str())
-}
-
-/// `node_modules/.bin` holds a package manager's executable shims. The name is
-/// hidden, but the directory is part of every install, and what it holds is
-/// links into packages this walk screens entry by entry. Refusing it on the
-/// name alone sends every recursive search of an installed checkout to review.
-fn package_store_bin(path: &Path, name: &str) -> bool {
-    name == ".bin"
-        && path
-            .parent()
-            .and_then(|parent| parent.file_name())
-            .and_then(|parent| parent.to_str())
-            .is_some_and(|parent| parent == "node_modules")
-}
-
-pub(super) fn descendant_allowed(path: &Path, root: &Path, is_file: bool) -> bool {
-    let Some(name) = path.file_name().and_then(|name| name.to_str()) else {
-        return false;
-    };
-    if (name.starts_with('.') && !hidden_allowed(name) && !package_store_bin(path, name))
-        || guard_secure_fs::sensitive_path_family(path).is_some()
-    {
-        return false;
-    }
-    if !is_file {
-        return true;
-    }
-    let relative = path.strip_prefix(root).unwrap_or(path);
-    let extension = path
-        .extension()
-        .and_then(|extension| extension.to_str())
-        .unwrap_or_default()
-        .to_ascii_lowercase();
-    !SECRET_EXTENSIONS.contains(&extension.as_str())
-        && (!guard_secure_fs::credential_named_path(relative)
-            || path
-                .strip_prefix(root)
-                .is_ok_and(|relative| synthetic_fixture(root, relative)))
-}
-
-/// Directories that hold a project's test data.
-const FIXTURE_DIRECTORIES: &[&str] = &[
-    "testdata",
-    "test-data",
-    "test_data",
-    "fixtures",
-    "fixture",
-    "__fixtures__",
-    "tests",
-    "test",
-    "__tests__",
-];
-
-/// Test trees name their vectors for what they exercise
-/// (`testdata/secrets_cli/vectors.json`, `tests/fixtures/tokens.json`), so a
-/// credential name at or below a test-data directory inside the walk marks
-/// data a test reads, not a store. A test directory inside a credential
-/// directory (`secrets/tests/prod.json`), or a walk rooted in one, is still a
-/// store. Key containers, hidden names and the sensitive families (`.env`,
-/// `*.key`, `.npmrc`) are refused before this is asked.
-fn synthetic_fixture(root: &Path, relative: &Path) -> bool {
-    let Some(parent) = relative.parent() else {
-        return false;
-    };
-    let mut above = root.to_path_buf();
-    for part in parent.components() {
-        let std::path::Component::Normal(name) = part else {
-            return false;
-        };
-        if name
-            .to_str()
-            .is_some_and(|name| FIXTURE_DIRECTORIES.contains(&name.to_ascii_lowercase().as_str()))
-        {
-            // Every directory above the test directory is checked as a
-            // directory, below a neutral entry name.
-            return !guard_secure_fs::credential_named_path(&above.join("entry"));
-        }
-        above.push(name);
-    }
-    false
 }
 
 pub(super) fn walk(
@@ -528,6 +376,7 @@ pub(super) fn walk_uncached(
     // directory listing already reported for the entry.
     let mut pending = vec![(root.clone(), 0_usize, false, None::<std::fs::FileType>)];
     let mut inspected = 0_usize;
+    let _documents = crate::pretool::search_scope_tracked::names::document_walk();
     // Inspect metadata only. Never follow links or read a secret to classify it.
     while let Some((path, depth, admitted_below, listed)) = pending.pop() {
         let mut below = admitted_below;
@@ -627,6 +476,11 @@ pub(super) fn walk_uncached(
 /// [`glob_expand::expand_glob_matches`] with at least one match.
 fn expand_glob(value: &str, context: ReadContext<'_>) -> Option<Vec<PathBuf>> {
     expand_glob_matches(value, context).filter(|matches| !matches.is_empty())
+}
+
+/// [`glob_expand::expand_glob_matches_listing`] with at least one match.
+fn expand_listing_glob(value: &str, context: ReadContext<'_>) -> Option<Vec<PathBuf>> {
+    glob_expand::expand_glob_matches_listing(value, context).filter(|matches| !matches.is_empty())
 }
 
 pub(super) fn parent_component(value: &str) -> bool {

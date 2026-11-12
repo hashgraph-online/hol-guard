@@ -229,9 +229,6 @@ class StoreReviewEventOutboxMixin:
             )
         )
 
-    def refresh_review_event_outbox_binding(self) -> int:
-        return int(self._native_store_call("refresh_review_event_outbox_binding", {}))
-
     def reassign_quarantined_review_events(
         self,
         *,

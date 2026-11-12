@@ -24,18 +24,6 @@ def summarize_aibom_layers(
     return native_aibom_summaries.report_summaries(snapshots, generated_at=generated_at)
 
 
-def summarize_aibom_trust(snapshots: tuple[GuardAgentInventorySnapshot, ...]) -> dict[str, object]:
-    """Summarize recorded trust evidence without inventing unavailable assessments."""
-    # The trust summary never reads the timestamp, so the report it belongs to
-    # does not have to be known to ask for it.
-    return native_aibom_summaries.report_summaries(snapshots, generated_at="")[1]
-
-
-def summarize_aibom_drift(snapshots: tuple[GuardAgentInventorySnapshot, ...]) -> dict[str, object]:
-    """Report changed artifacts from the current stored inventory view."""
-    return native_aibom_summaries.report_summaries(snapshots, generated_at="")[2]
-
-
 def _metadata_lookup_from_snapshots(
     snapshots: tuple[GuardAgentInventorySnapshot, ...],
 ) -> dict[tuple[str, str], dict[str, object]]:

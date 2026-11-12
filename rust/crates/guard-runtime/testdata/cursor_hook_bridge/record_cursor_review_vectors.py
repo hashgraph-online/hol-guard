@@ -17,14 +17,14 @@ from __future__ import annotations
 import json
 import sys
 import tempfile
-from pathlib import Path
 from datetime import datetime, timezone
+from pathlib import Path
 from unittest import mock
 
 from codex_plugin_scanner.guard import local_dashboard_session
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.adapters.cursor_hooks import cursor_hook_script_source
-from codex_plugin_scanner.guard.approval_link_output import native_review_reason
+from codex_plugin_scanner.guard.approval_hook_copy import live_approval_review_url
 
 OUT = Path(__file__).with_name("cursor_review_vectors.json")
 SCHEMA = "hol-guard-cursor-native-review-answers.v1"
@@ -92,9 +92,10 @@ def _responses(guard_home: Path, tokened: bool) -> list[tuple[str, dict[str, obj
     urls = [EXTERNAL] if tokened else [LOOPBACK, LOCALHOST, EXTERNAL]
     responses: list[tuple[str, dict[str, object]]] = []
     for url in urls:
-        # The resident writes the link into a Cursor pause's reason as the
-        # daemon's `native_review_reason` does.
-        linked = native_review_reason("cursor", review, url, guard_home=guard_home)
+        # The resident links a Cursor pause's reason as `native_review_reason`
+        # in `native_review_link.rs` does for a reason that names no link.
+        live_url = live_approval_review_url(url, guard_home=guard_home)
+        linked = f"{review} Open HOL Guard to approve or keep this blocked: {live_url}."
         responses.append(("pause", _pause(linked, url)))
         responses.append(("pause-reapproval", _pause(linked, url, action="require-reapproval")))
         responses.append(("pause-reason-without-link", _pause(review, url)))

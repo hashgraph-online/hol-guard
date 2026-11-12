@@ -104,6 +104,9 @@ impl SearchFilter {
         if negated {
             filter.exclude = expanded;
         } else {
+            if !single_width_wildcards_absent(glob) {
+                return None;
+            }
             filter.include = expanded;
         }
         Some(filter)
@@ -119,7 +122,8 @@ impl SearchFilter {
         let mut include = Vec::new();
         let mut path_shaped = false;
         for glob in globs {
-            if glob.starts_with('!') || glob.contains('\\') {
+            if glob.starts_with('!') || glob.contains('\\') || !single_width_wildcards_absent(glob)
+            {
                 return None;
             }
             for pattern in expand_braces(glob).ok()? {
@@ -235,6 +239,18 @@ impl SearchFilter {
                 .iter()
                 .any(|pattern| glob_matches(pattern, name).unwrap_or(true))
     }
+}
+
+/// Whether a glob leaves out the two constructs this matcher reads a byte at
+/// a time while a search reads them a character at a time.
+///
+/// `?` consumes one byte here and one character in both grep and ripgrep, so
+/// `?.env` would model a multi-byte name as unselected while the search opens
+/// it. A bracket is worse: `[[:punct:]]` is a named class to a search and an
+/// ordinary set of bytes to `glob_matches`, so the two disagree about which
+/// names it selects. An inclusion that holds either one is left unmodeled.
+fn single_width_wildcards_absent(glob: &str) -> bool {
+    !glob.contains(['?', '[', ']'])
 }
 
 fn has_top_level_comma(glob: &str) -> bool {

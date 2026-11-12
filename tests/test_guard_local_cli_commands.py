@@ -6,6 +6,7 @@ from codex_plugin_scanner.guard.local_cli_trust import utc_now
 from codex_plugin_scanner.guard.runtime.local_cli_commands import LocalCliCommand
 from codex_plugin_scanner.guard.runtime.local_cli_identity import identify_unlisted_cli
 from codex_plugin_scanner.guard.store import GuardStore
+from tests.local_cli_store_support import upsert_local_cli_command_states
 
 from .local_cli_native_fixture import native_local_cli_grant_resident, review_rule_verdict  # noqa: F401
 
@@ -64,7 +65,7 @@ def test_allowed_subcommand_overrides_review(tmp_path: Path) -> None:
         ),
     )
     store.upsert_local_cli_grant(identity=identity, state="allowed", expected_revision=0, updated_at=utc_now())
-    store.upsert_local_cli_command_states(identity.cli_id, {"deploy": "allow"})
+    upsert_local_cli_command_states(store, identity.cli_id, {"deploy": "allow"})
     matched = review_rule_verdict(store, command=f"python3 {script} deploy --yes", cwd=tmp_path, home_dir=tmp_path)
     assert matched is not None
     assert matched[0] == "allowed"
@@ -85,7 +86,7 @@ def test_blocked_subcommand_blocks_review(tmp_path: Path) -> None:
         ),
     )
     store.upsert_local_cli_grant(identity=identity, state="allowed", expected_revision=0, updated_at=utc_now())
-    store.upsert_local_cli_command_states(identity.cli_id, {"deploy": "block"})
+    upsert_local_cli_command_states(store, identity.cli_id, {"deploy": "block"})
     matched = review_rule_verdict(store, command=f"python3 {script} deploy", cwd=tmp_path, home_dir=tmp_path)
     assert matched is not None
     assert matched[0] == "blocked"
@@ -106,7 +107,7 @@ def test_blocked_subcommand_blocks_allow(tmp_path: Path) -> None:
         ),
     )
     store.upsert_local_cli_grant(identity=identity, state="allowed", expected_revision=0, updated_at=utc_now())
-    store.upsert_local_cli_command_states(identity.cli_id, {"deploy": "block"})
+    upsert_local_cli_command_states(store, identity.cli_id, {"deploy": "block"})
     matched = review_rule_verdict(
         store, command=f"python3 {script} deploy", cwd=tmp_path, home_dir=tmp_path, mode="allowed"
     )

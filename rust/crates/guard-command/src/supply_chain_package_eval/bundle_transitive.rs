@@ -6,18 +6,12 @@ use super::bundle_results::{
     bundle_package_from_index, bundle_package_index, bundle_package_label,
     emergency_deny_bundle_message, is_bundle_stale,
 };
+use super::lockfile_direct_copies::{direct_copy_versions, lockfile_target_versions};
 use super::lockfile_evidence::incomplete_lockfile_package_result;
 use super::manifest_dependencies::{
-    cargo_lock_target_versions, composer_lock_target_versions, gemfile_lock_target_versions,
     manifest_dependency_versions, manifest_direct_dependency_names,
 };
-use super::package_lock::package_lock_target_versions_from_entries;
-use super::pnpm_lock::pnpm_lock_target_versions;
-use super::python_lock::{
-    pipfile_lock_target_versions, poetry_lock_target_versions, uv_lock_target_versions,
-};
 use super::version_selectors::dependency_package_name;
-use super::yarn_bun_lock::{bun_lock_target_versions, yarn_lock_target_versions};
 use super::*;
 use crate::supply_chain_bundle::{
     is_high_confidence_block, SupplyChainBundle, SupplyChainBundlePackage,
@@ -103,22 +97,14 @@ pub(super) fn lockfile_dependency_versions(
         if !parse_result.complete {
             continue;
         }
-        let found = match name.as_str() {
-            "package-lock.json" => {
-                package_lock_target_versions_from_entries(deps, &parse_result, targets)
-            }
-            "pnpm-lock.yaml" => pnpm_lock_target_versions(deps, &text, targets),
-            "yarn.lock" => yarn_lock_target_versions(&text, targets),
-            "bun.lock" => bun_lock_target_versions(deps, &parse_result, targets),
-            "Cargo.lock" => cargo_lock_target_versions(deps, &text, targets),
-            "composer.lock" => composer_lock_target_versions(deps, &text, targets),
-            "Gemfile.lock" => gemfile_lock_target_versions(deps, &text, targets),
-            "poetry.lock" => poetry_lock_target_versions(deps, &text, targets, &python_names),
-            "uv.lock" => uv_lock_target_versions(deps, &text, targets, &python_names),
-            "Pipfile.lock" => pipfile_lock_target_versions(deps, &text, targets, &python_names),
-            _ => BTreeMap::new(),
-        };
-        versions.extend(found);
+        versions.extend(lockfile_target_versions(
+            deps,
+            &name,
+            &text,
+            &parse_result,
+            targets,
+            &python_names,
+        ));
     }
     for (key, version) in manifest_dependency_versions(deps, Some(workspace), artifact, targets) {
         versions.entry(key).or_insert(version);
@@ -263,6 +249,7 @@ pub(super) fn transitive_lockfile_results(
     let mut names_by_ecosystem: BTreeMap<String, HashSet<String>> = BTreeMap::new();
     let mut all_names: HashSet<String> = HashSet::new();
     let direct_targets = evaluation_targets(deps, artifact, Some(workspace));
+    let python_names = manifest_direct_dependency_names(deps, Some(workspace), artifact, "pypi");
     for target in &direct_targets {
         let ecosystem = optional_string(target.get("ecosystem")).unwrap_or_else(|| "npm".into());
         let mut candidates: Vec<String> = target_candidate_names(deps, target);
@@ -306,6 +293,26 @@ pub(super) fn transitive_lockfile_results(
             ));
             continue;
         }
+        // A lockfile can resolve a direct dependency to several versions. Only
+        // the copy a direct target names or resolves to is that target; every
+        // other copy is audited as a transitive package. When no copy is
+        // known to be the target's, every copy is left to the target.
+        let mut listed: HashMap<&str, HashSet<&str>> = HashMap::new();
+        for entry in &parse_result.entries {
+            listed
+                .entry(entry.dependency_path.trim_matches('/'))
+                .or_default()
+                .insert(entry.version.as_str());
+        }
+        let resolved = lockfile_target_versions(
+            deps,
+            &name,
+            &text,
+            &parse_result,
+            &direct_targets,
+            &python_names,
+        );
+        let direct_versions = direct_copy_versions(deps, &direct_targets, &resolved, &listed);
         let mut entries: Vec<(String, String, String, bool)> = Vec::new();
         for entry in &parse_result.entries {
             let normalized_path = entry.dependency_path.trim_matches('/').to_owned();
@@ -320,7 +327,10 @@ pub(super) fn transitive_lockfile_results(
             let Some(package_name) = package_name else {
                 continue;
             };
-            let direct = direct_names.contains(&normalized_path);
+            let direct = direct_names.contains(&normalized_path)
+                && direct_versions
+                    .get(&normalized_path)
+                    .is_none_or(|versions| versions.contains(&entry.version));
             entries.push((
                 entry.dependency_path.clone(),
                 package_name,

@@ -221,12 +221,13 @@ fn risk_classes_are_the_ones_python_keeps() {
         observed_risk_classes(&result).unwrap(),
         Vec::<String>::new()
     );
-    // Python's `strip` removes a file separator that Rust's `trim` keeps.
+    // Rule ids are matched exactly: one the catalog does not hold adds nothing
+    // rather than costing the row its setup hint.
     let separator = json!({"command_extensions": {"observations": [{"rule_id": "rule\u{1c}"}]}});
-    assert!(matches!(
-        observed_risk_classes(separator.as_object().unwrap()),
-        Err(HookDirectDefer::ReviewQueue)
-    ));
+    assert_eq!(
+        observed_risk_classes(separator.as_object().unwrap()).unwrap(),
+        Vec::<String>::new()
+    );
 }
 
 #[test]

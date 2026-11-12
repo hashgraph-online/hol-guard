@@ -8,8 +8,8 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.cli import main
-from codex_plugin_scanner.guard.daemon.diagnostics import DaemonDiagnostics
 from codex_plugin_scanner.guard.redaction import redact_text
+from codex_plugin_scanner.guard.runtime_health.diagnostics import DaemonDiagnostics
 from tests.native_command_test_support import (
     extract_sensitive_tool_action_request_native_test as extract_sensitive_tool_action_request,
 )
@@ -71,7 +71,7 @@ def test_python_getenv_path_is_not_secret_read() -> None:
     command = "python3 -c \"import os; print(os.getenv('PATH'))\""
     reviewed = real_native_command_evaluation(command, cwd=Path("/tmp"))
     assert not reviewed.evaluation.extension_observations
-    assert reviewed.native_minimum_action == "review"
+    assert reviewed.payload["minimum_action"] == "review"
     assert reviewed.evaluation.minimum_action == "review"
     assert not reviewed.evaluation.decision_plane.proof_routes
     # Host discovery may prove the running interpreter's harmless PATH lookup
@@ -112,7 +112,7 @@ def test_inspect_command_reviews_python_environ_dump() -> None:
 def _guard_log_tail(guard_home: Path) -> str:
     """Return the end of Guard's own log, where a generic hook deny records its cause."""
 
-    log_path = DaemonDiagnostics(guard_home, start_worker=False, rotate=False).log_path
+    log_path = DaemonDiagnostics(guard_home).log_path
     try:
         return log_path.read_text(encoding="utf-8", errors="replace")[-6000:]
     except OSError as error:

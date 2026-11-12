@@ -8,6 +8,7 @@ import {
   HiMiniShieldCheck,
 } from "react-icons/hi2";
 import { ApprovalProofInline, buildApprovalProofCredentials } from "./approval-proof-inline";
+import { SUPPLY_CHAIN_SYNC_TIMEOUT_MS } from "./guard-api";
 import { ActionButton, Tag } from "./approval-center-primitives";
 import { GuardModalLayer } from "./guard-modal-layer";
 import type { GuardApprovalGatePublicConfig, PackageFirewallStatusResponse } from "./guard-types";
@@ -105,6 +106,43 @@ function resolvePrimaryLabel(
   return gate.primaryLabel;
 }
 
+/** Seconds a step must run before the dialog explains what Guard is waiting on. */
+const BUSY_HINT_AFTER_SECONDS = 5;
+
+export function resolveBusyHint(phase: AuditRecoveryModalPhase, elapsedSeconds: number): string | null {
+  if (elapsedSeconds < BUSY_HINT_AFTER_SECONDS) {
+    return null;
+  }
+  if (phase === "syncing") {
+    const limitSeconds = Math.round(SUPPLY_CHAIN_SYNC_TIMEOUT_MS / 1000);
+    return `Downloading the signed bundle from Guard Cloud (${elapsedSeconds}s). Guard stops waiting after ${limitSeconds}s and rechecks the feed.`;
+  }
+  if (phase === "connecting") {
+    return `Waiting for you to approve Guard Cloud access in your browser (${elapsedSeconds}s).`;
+  }
+  if (phase === "auditing") {
+    return `Scanning workspace manifests and lockfiles (${elapsedSeconds}s).`;
+  }
+  return null;
+}
+
+/** Seconds spent in the current busy phase; restarts when the dialog moves to another step. */
+function useElapsedSeconds(busyPhase: AuditRecoveryModalPhase | null): number {
+  const [elapsedSeconds, setElapsedSeconds] = useState(0);
+  useEffect(() => {
+    setElapsedSeconds(0);
+    if (busyPhase === null) {
+      return;
+    }
+    const startedAt = Date.now();
+    const handle = window.setInterval(() => {
+      setElapsedSeconds(Math.floor((Date.now() - startedAt) / 1000));
+    }, 1000);
+    return () => window.clearInterval(handle);
+  }, [busyPhase]);
+  return elapsedSeconds;
+}
+
 function resolveActiveStepIndex(
   gate: SupplyChainAuditRecoveryGate,
   phase: AuditRecoveryModalPhase,
@@ -157,6 +195,8 @@ export function AuditRecoveryModal({
   const standaloneSync = isStandaloneSyncRecoveryGate(gate);
   const primaryBusy = phase === "syncing" || phase === "connecting" || phase === "auditing";
   const PrimaryIcon = resolvePrimaryIcon(gate, phase);
+  const elapsedSeconds = useElapsedSeconds(primaryBusy ? phase : null);
+  const busyHint = primaryBusy ? resolveBusyHint(phase, elapsedSeconds) : null;
   const showConnectFlow =
     gate.primaryAction === "connect" && connectFlow !== null && phase !== "auditing";
   const showApprovalStep = phase === "approval";
@@ -212,17 +252,20 @@ export function AuditRecoveryModal({
         </div>
 
         {showConnectFlow ? (
-          <ConnectFlowCard
-            minimal
-            purpose="audit"
-            mode="repair"
-            connectFlow={connectFlow}
-            connectStarting={connectStarting}
-            connectError={connectError}
-            headline={gate.headline}
-            detail={gate.detail}
-            onStartConnect={onStartConnect}
-          />
+          <>
+            <ConnectFlowCard
+              minimal
+              purpose="audit"
+              mode="repair"
+              connectFlow={connectFlow}
+              connectStarting={connectStarting}
+              connectError={connectError}
+              headline={gate.headline}
+              detail={gate.detail}
+              onStartConnect={onStartConnect}
+            />
+            {busyHint !== null ? <p className="px-5 pb-4 text-xs leading-relaxed text-slate-500">{busyHint}</p> : null}
+          </>
         ) : showApprovalStep ? (
           <div className="px-5 py-5">
             <ApprovalProofInline
@@ -285,6 +328,7 @@ export function AuditRecoveryModal({
                 </ActionButton>
               ) : null}
             </div>
+            {busyHint !== null ? <p className="text-xs leading-relaxed text-slate-500">{busyHint}</p> : null}
           </div>
         )}
       </div>

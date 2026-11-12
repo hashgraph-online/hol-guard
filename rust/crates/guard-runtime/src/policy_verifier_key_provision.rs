@@ -45,7 +45,7 @@ impl VerifierKeyProvision {
 ///
 /// `Ok(None)` means no key is there yet. Every other failure keeps its own
 /// code: the caller must not rewrite a key it could not read.
-fn existing_key(state_base: &Path) -> Result<Option<[u8; VERIFIER_KEY_BYTES]>, String> {
+pub(crate) fn existing_key(state_base: &Path) -> Result<Option<[u8; VERIFIER_KEY_BYTES]>, String> {
     let mut attempt = 0usize;
     loop {
         match read_verifier_key(state_base) {
@@ -194,19 +194,28 @@ pub(crate) fn provision_verifier_key(
         return Err("native_policy_verifier_master_invalid".to_owned());
     }
     let derived = derive_verifier_key(policy_integrity_key);
+    provision_derived_key(state_base, &derived)
+}
+
+/// Create or confirm the key from its derived bytes, for a caller that already
+/// holds the verifier key rather than the policy master.
+pub(crate) fn provision_derived_key(
+    state_base: &Path,
+    derived: &[u8; VERIFIER_KEY_BYTES],
+) -> Result<VerifierKeyProvision, String> {
     let private_root = private_root_for_state_base(state_base)?;
     ensure_private_directory_under(state_base, &private_root, true)?;
     let path = state_base.join(VERIFIER_KEY_FILE_NAME);
 
     if let Some(existing) = existing_key(state_base)? {
-        if !constant_time_eq(&existing, &derived) {
+        if !constant_time_eq(&existing, derived) {
             return Err("native_policy_verifier_key_mismatch".to_owned());
         }
         return Ok(VerifierKeyProvision::Verified);
     }
 
     let temporary: PathBuf = state_base.join(temporary_name()?);
-    let written = write_private_key(&temporary, &derived, &private_root);
+    let written = write_private_key(&temporary, derived, &private_root);
     let published = written.map_err(|failure| failure.code).and_then(|()| {
         match publish_without_replacing(&temporary, &path, &private_root) {
             Ok(published) => Ok(Some(published)),
@@ -226,9 +235,9 @@ pub(crate) fn provision_verifier_key(
             // Another provisioner won the race. Validate its key rather than
             // replacing it, and make its directory entry durable first.
             sync_directory(state_base)?;
-            confirm_existing(state_base, &derived)
+            confirm_existing(state_base, derived)
         }
-        None => create_final_key(state_base, &path, &derived, &private_root),
+        None => create_final_key(state_base, &path, derived, &private_root),
     }
 }
 

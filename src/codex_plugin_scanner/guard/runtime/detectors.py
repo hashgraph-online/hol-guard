@@ -97,10 +97,6 @@ class DetectorRunResult:
     signals: tuple[RiskSignalV2, ...]
     telemetry: tuple[DetectorTelemetry, ...]
 
-    def slow_detectors(self, threshold_ms: int = _SLOW_DETECTOR_THRESHOLD_MS) -> tuple[DetectorTelemetry, ...]:
-        """Return telemetry entries that exceeded *threshold_ms*."""
-        return tuple(t for t in self.telemetry if t.elapsed_ms >= threshold_ms)
-
 
 class NativeRuntimeDetectors:
     """Marker for the resident-owned default detectors, run as one native call.

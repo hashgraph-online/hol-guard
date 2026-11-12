@@ -30,6 +30,10 @@ const LEASE_ACQUIRE_RETRY_BUDGET: Duration = Duration::from_millis(1000);
 const LEASE_CLEANUP_RETRY_BUDGET: Duration = Duration::from_millis(100);
 const LEASE_ACQUIRE_RETRY_INITIAL_DELAY: Duration = Duration::from_millis(1);
 const LEASE_ACQUIRE_RETRY_MAX_DELAY: Duration = Duration::from_millis(16);
+/// Bounds the wait for the lease directory lock when proving a lease live,
+/// well under a handoff shutdown's timeout. A requester that holds the lock
+/// across its shutdown is answered after this budget.
+const LEASE_DEFINITE_PROBE_BUDGET: Duration = Duration::from_millis(100);
 
 #[path = "managed_resident_lease_owner.rs"]
 mod owner;
@@ -37,7 +41,10 @@ use owner::deadline_for_timeout;
 pub(super) use owner::ClientLease;
 #[path = "managed_resident_lease_record.rs"]
 mod record;
-use record::{lease_file_is_recent, lease_is_live, read_lease, remove_stale_lease, LeaseReadError};
+use record::{
+    lease_file_is_recent, lease_is_live, read_lease, record_is_live, remove_stale_lease,
+    LeaseReadError,
+};
 #[path = "managed_resident_lease_retirement.rs"]
 mod retirement;
 
@@ -333,6 +340,43 @@ fn batch_has_live_lease(
         }
     });
     found_live
+}
+
+/// Whether a client of `digest` provably holds a live lease. Unlike
+/// `any_live`, which retains a resident on every doubt, each doubt here (a
+/// busy or unreadable directory, an unreadable or malformed record) answers
+/// false, so a caller that refuses work on this answer never refuses on a
+/// guess. Read-only: stale records are left for the liveness probe.
+pub(super) fn definitely_live(state_base: &Path, digest: &str) -> bool {
+    let Ok(private_root) = private_root_for_state_base(state_base) else {
+        return false;
+    };
+    let Ok(directory) = lease_directory(state_base) else {
+        return false;
+    };
+    let Ok(_lock) =
+        acquire_directory_lock_with_retry(&directory, &private_root, LEASE_DEFINITE_PROBE_BUDGET)
+    else {
+        return false;
+    };
+    let Ok(entries) = fs::read_dir(&directory) else {
+        return false;
+    };
+    let observed_at = SystemTime::now();
+    entries
+        .take(LEASE_MAX_DIRECTORY_ENTRIES)
+        .map_while(Result::ok)
+        .any(|entry| {
+            let name = entry.file_name();
+            let name = name.to_string_lossy();
+            // A lease is a regular file. Opening anything else named like
+            // one, such as a FIFO, could block the resident's answer.
+            name.starts_with(LEASE_PREFIX)
+                && name.ends_with(LEASE_SUFFIX)
+                && entry.file_type().is_ok_and(|kind| kind.is_file())
+                && read_lease(&entry.path(), &private_root)
+                    .is_ok_and(|record| record_is_live(&record, Some(digest), observed_at))
+        })
 }
 
 pub(super) fn any_live(state_base: &Path, expected_digest: &str) -> bool {

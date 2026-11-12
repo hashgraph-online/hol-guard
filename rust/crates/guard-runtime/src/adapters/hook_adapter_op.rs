@@ -26,7 +26,7 @@ use serde_json::{json, Value};
 
 /// A typed failure: `code` plus an optional detail the Python side maps back
 /// to the exception the old in-process path raised.
-struct Failure {
+pub(crate) struct Failure {
     code: String,
     payload: Option<Value>,
 }
@@ -175,10 +175,17 @@ fn answer(query: &HookAdapterQueryV1) -> Result<Value, Failure> {
             };
             Ok(json!({ "paths": paths }))
         }
+        HookAdapterQueryV1::ReviewRequest(query) => review_request::review_request(query),
     }
 }
 
 fn action_envelope(query: &ActionEnvelopeQueryV1) -> Result<Value, Failure> {
+    let (envelope, payload) = envelope_map(query)?;
+    Ok(OValue::Map(envelope).to_wire_with_refs(&ref_digests(&payload)))
+}
+
+/// The typed action envelope for `query`, with the decoded payload it read.
+fn envelope_map(query: &ActionEnvelopeQueryV1) -> Result<(OMap, OMap), Failure> {
     let payload = ordered_map(&query.payload)?;
     let environment: Option<BTreeMap<String, String>> = query
         .path_env
@@ -207,8 +214,11 @@ fn action_envelope(query: &ActionEnvelopeQueryV1) -> Result<Value, Failure> {
         env: path_env(&query.host),
     };
     let envelope = normalize_harness_envelope(&request, &mut provider)?;
-    Ok(OValue::Map(envelope).to_wire_with_refs(&ref_digests(&payload)))
+    Ok((envelope, payload))
 }
+
+#[path = "hook_adapter_review_request.rs"]
+pub(crate) mod review_request;
 
 #[cfg(test)]
 #[path = "hook_adapter_op_tests.rs"]

@@ -40,6 +40,21 @@ pub(crate) fn unwrapped(command: &str) -> Option<String> {
     Some(unnegated.to_owned())
 }
 
+/// The pipeline a `!` negates, for one item of a command list a construct
+/// has already been written out as.
+///
+/// The item is one pipeline, because the list it came from was split on
+/// every `&&`, `||`, `;` and newline it held. Dropping the `!` would still
+/// change which successor runs when the item chooses one, so only an item
+/// whose separator is `;` is read this way: nothing downstream reads its
+/// outcome, and the flat list runs the same commands either way.
+///
+/// Guard's own launcher is left out for the reason `unwrapped` leaves it out.
+pub(super) fn unnegated_item(item: &str) -> Option<String> {
+    let rest = unnegated(item.trim())?;
+    (!super::guard_diagnostics::names_launcher(rest)).then(|| rest.to_owned())
+}
+
 /// The list a leading `!` negates. `!` is a reserved word only as the first
 /// word of the list, so it has to stand alone: the text after it is a list in
 /// its own right, and a second `!` is not a list this recognizer models.

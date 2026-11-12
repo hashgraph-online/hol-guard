@@ -47,12 +47,18 @@ mod case_labels;
 mod compound;
 #[path = "native_command_unmodeled_expansion.rs"]
 mod expansion;
+#[path = "native_command_unmodeled_fd_exec.rs"]
+mod fd_exec;
 #[path = "native_command_unmodeled_find_exec.rs"]
 mod find_exec;
 #[path = "native_command_unmodeled_functions.rs"]
 mod functions;
+#[path = "native_command_unmodeled_heredoc.rs"]
+mod heredoc;
 #[path = "native_command_link_makers.rs"]
 mod link_makers;
+#[path = "native_command_unmodeled_operands.rs"]
+mod operands;
 #[path = "native_command_unmodeled_redirections.rs"]
 mod redirections;
 #[path = "native_command_unmodeled_shapes.rs"]
@@ -62,13 +68,15 @@ mod substitution;
 #[path = "native_command_unmodeled_xargs.rs"]
 mod xargs;
 use case_labels::without_case_labels;
+use fd_exec::{fd_exec_programs, text_outside_fd_exec_arguments};
 use find_exec::{find_exec_programs, text_outside_exec_arguments, EXEC_ACTIONS};
 use link_makers::creates_links;
+use operands::text_in_command_positions;
 pub(crate) use prefix::{launcher_body, prefix_reads_a_program_file, Handover};
 use redirections::without_redirections;
 use shapes::{data_heredocs, without_lookups, without_plain_awk};
 pub(crate) use shapes::{python_is_builtin_only, python_stdin};
-use substitution::bounded_substitutions;
+use substitution::{bounded_substitutions, reviewable_substitutions};
 use xargs::{xargs_input_is_named, xargs_names_its_program, xargs_programs};
 
 /// Compatibility owners recognize these programs without a catalog matcher.
@@ -79,6 +87,15 @@ const COMPATIBILITY_EXECUTABLES: &[(&str, &[&str])] = &[
     ("command.kubernetes-operations", &["kubectl", "oc"]),
     ("command.kubernetes-secrets", &["kubectl", "oc"]),
 ];
+
+/// The programs a compatibility-only rule of `extension_id` stands for, when
+/// the catalog names them outside the program itself.
+pub(super) fn compatibility_executables(extension_id: &str) -> Option<&'static [&'static str]> {
+    COMPATIBILITY_EXECUTABLES
+        .iter()
+        .find(|(id, _)| *id == extension_id)
+        .map(|(_, executables)| *executables)
+}
 
 const UNMODELED_ERRORS: [&str; 2] = [
     "native_command_compatibility_model_unsupported",
@@ -209,7 +226,7 @@ impl CompiledNativeCommandControls {
         let heredocs = data_heredocs(text);
         let shell = match &heredocs {
             Some((shell, _)) => shell.clone(),
-            None => shell_text(text).to_owned(),
+            None => shell_text(text),
         };
         // A redirection such as `;2>&1` is not a program. It goes before the
         // awk pass, which rejoins words with spaces: `2>&1` became `2 >& 1`,
@@ -218,6 +235,11 @@ impl CompiledNativeCommandControls {
         let shell = without_plain_awk(&shell);
         let shell = shell.as_str();
         let interpreted = named_words(&joined_quotes(&bare));
+        // The words that can name a program this text runs. An interpreter's
+        // name in an operand position runs nothing: `rg env src` searches for
+        // the word, the way `rg bar src` always has, and reading the operand
+        // as a program refused it outright with no approval left to give it.
+        let commanded = named_words(&joined_quotes(&text_in_command_positions(&bare)));
         // `source FILE` runs the file's words in this shell, so the file names
         // the programs the command can run. Reading it bounds those owners the
         // way a script file bounds an interpreter's. Until it was read, an
@@ -287,17 +309,42 @@ impl CompiledNativeCommandControls {
         } else {
             BTreeSet::new()
         };
+        let fd_programs = fd_exec_programs(shell);
+        // `fd` stands among the interpreters for the `--exec` it may carry,
+        // and it is the only one of them whose ordinary use carries none:
+        // `fd -e ts` and `fd -e ts | xargs wc -l` start no program of fd's
+        // own. Reading the walk tells the two apart, so an empty set is a
+        // bounded `fd` just as a named program is, and `None` is an `fd` this
+        // reader could not bind. Until it was read, naming `fd` anywhere in
+        // an unmodeled command reached an evaluation failure and blocked
+        // outright, with no approval left to give it, while the same walk
+        // spelled `find` ran.
+        let fd_bounded = fd_programs.is_some();
+        let fd_names_program = fd_programs
+            .as_ref()
+            .is_some_and(|programs| !programs.is_empty());
+        // The words after the program an `--exec` names are that program's
+        // arguments, not command positions, so a name that appears only there
+        // runs nothing: `fd -e ts -x echo sh` prints `sh`.
+        let outside_fd_exec = if fd_names_program {
+            named_words(&joined_quotes(&text_outside_fd_exec_arguments(&bare)))
+        } else {
+            BTreeSet::new()
+        };
         if INTERPRETERS.iter().any(|name| {
             interpreted.contains(*name)
+                && commanded.contains(*name)
                 && !(sourced_bounded && matches!(*name, "source" | "."))
                 && !(xargs_bounded && *name == "xargs")
+                && !(fd_bounded && *name == "fd")
                 && !(exec_names_program && EXEC_ACTIONS.contains(name))
                 && (!exec_names_program || outside_exec.contains(*name))
+                && (!fd_names_program || outside_fd_exec.contains(*name))
         }) {
             // An `xargs` whose operands are not in the text is not bounded by
             // reading a script file. `2>/dev/null xargs gh` still takes its
             // arguments from the caller.
-            if interpreted.contains("xargs") && !xargs_bounded {
+            if commanded.contains("xargs") && !xargs_bounded {
                 return None;
             }
             // A program read from a file names the tools it may launch
@@ -335,14 +382,15 @@ impl CompiledNativeCommandControls {
                 ),
             }
         }
-        // The programs read out of an `xargs` or a `find -exec`. Reading one
-        // leaves the operands standard input, or find's own search, supplies
-        // unread.
+        // The programs read out of an `xargs`, a `find -exec` or an
+        // `fd --exec`. Reading one leaves the operands standard input, or the
+        // walk's own search, supplies unread.
         let delegated: Option<BTreeSet<String>> =
-            (xargs_names_program || exec_names_program).then(|| {
+            (xargs_names_program || exec_names_program || fd_names_program).then(|| {
                 xargs_programs
                     .iter()
                     .chain(exec_programs.iter())
+                    .chain(fd_programs.iter())
                     .flatten()
                     .cloned()
                     .collect()
@@ -363,6 +411,7 @@ impl CompiledNativeCommandControls {
         // evaluation failure, as `xargs gh` does. A required owner, such as
         // the one for `git` or `kill`, still supplies its floor below.
         if bounded_substitutions(text)
+            .or_else(|| reviewable_substitutions(text))
             .is_some_and(|bounded| self.contributed_owner_names_a_program(&bounded.programs))
         {
             return None;
@@ -370,10 +419,7 @@ impl CompiledNativeCommandControls {
         let mut floor = "review";
         for &index in self.candidate_index.extension_indices() {
             let extension = &self.program.extensions[index];
-            let compatibility = COMPATIBILITY_EXECUTABLES
-                .iter()
-                .find(|(id, _)| *id == extension.extension_id)
-                .map(|(_, executables)| *executables);
+            let compatibility = compatibility_executables(&extension.extension_id);
             let extension_names = self.program.extension_names(index, compatibility);
             let owns = extension_names
                 .as_ref()
@@ -416,10 +462,7 @@ impl CompiledNativeCommandControls {
                 if extension.required || !self.active_extensions.contains(&extension.extension_id) {
                     return false;
                 }
-                let compatibility = COMPATIBILITY_EXECUTABLES
-                    .iter()
-                    .find(|(id, _)| *id == extension.extension_id)
-                    .map(|(_, executables)| *executables);
+                let compatibility = compatibility_executables(&extension.extension_id);
                 !self
                     .program
                     .extension_known_names(index, compatibility)
@@ -441,10 +484,7 @@ impl CompiledNativeCommandControls {
                 {
                     return false;
                 }
-                let compatibility = COMPATIBILITY_EXECUTABLES
-                    .iter()
-                    .find(|(id, _)| *id == extension.extension_id)
-                    .map(|(_, executables)| *executables);
+                let compatibility = compatibility_executables(&extension.extension_id);
                 let extension_names = self.program.extension_names(index, compatibility);
                 extension_names
                     .as_ref()
@@ -499,7 +539,8 @@ fn backgrounded_nested_executor(normalized: &str) -> bool {
     let foreground = foreground.as_str();
     // Both of these name the program they run, so the floor below can still
     // bound them and backgrounding takes nothing away.
-    if named_xargs_pipeline(foreground) || named_find_exec(foreground) {
+    if named_xargs_pipeline(foreground) || named_find_exec(foreground) || named_fd_exec(foreground)
+    {
         return false;
     }
     // Only one command of the foreground text has to be the executor, and it
@@ -548,14 +589,28 @@ fn executor_name(word: &str) -> String {
 
 /// A pipeline whose only data movement is a pipe into an `xargs` that names
 /// the program it runs. A pipe into a shell, `curl url | sh`, is not one.
+/// A redirect that only discards or merges output, such as a search's
+/// `2>/dev/null`, writes nothing a review would need to see.
 fn named_xargs_pipeline(text: &str) -> bool {
-    let literal = unquoted_literal(text);
+    let kept: Vec<&str> = text
+        .split_whitespace()
+        .filter(|word| !DISCARDED_OUTPUT.contains(word))
+        .collect();
     text.contains("xargs")
         && xargs_names_its_program(text)
         && xargs_input_is_named(text)
-        && !text.contains(['<', '>', '`', '$', '\n'])
-        && !moves_data(&literal)
+        && !text.contains(['<', '`', '$', '\n'])
+        && !moves_data(&unquoted_literal(&kept.join(" ")))
 }
+
+/// Redirects that write nowhere but `/dev/null` or the other output stream.
+const DISCARDED_OUTPUT: &[&str] = &[
+    "2>/dev/null",
+    ">/dev/null",
+    "1>/dev/null",
+    "&>/dev/null",
+    "2>&1",
+];
 
 /// A `find` whose every `-exec` names the program it runs. find passes the
 /// paths it found as that program's operands, and those come from the roots
@@ -569,8 +624,28 @@ fn named_find_exec(text: &str) -> bool {
     let literal = unquoted_literal(text);
     find_exec_programs(text).is_some_and(|programs| !programs.is_empty())
         && !text.contains(['<', '>', '`', '\n'])
-        && (!text.contains('$') || compound::parameters_only_root_paths(text))
+        && walk_parameters_are_root_paths(text)
         && !moves_data(&literal)
+}
+
+/// Whether every parameter the walk itself reads is a root path.
+///
+/// find searches the roots this text names, so a parameter inside one leaves
+/// the walk unread unless the reader proves it is a root. A parameter in
+/// another command of the same text is that command's operand and changes
+/// nothing about what the walk searches: in `find "$ROOT" -type d -exec
+/// basename {} \; | sort; printf 'latest=%s\n' "$latest"` the walk searches
+/// exactly what the first command names. Asking the whole text refused the
+/// second half along with the first, and the command blocked outright with no
+/// approval left to give it, while the walk on its own reviewed.
+fn walk_parameters_are_root_paths(text: &str) -> bool {
+    text.split(['\n', ';', '&', '|'])
+        .filter(|piece| {
+            piece
+                .split_whitespace()
+                .any(|word| EXEC_ACTIONS.contains(&word))
+        })
+        .all(|piece| !piece.contains('$') || compound::parameters_only_root_paths(piece))
 }
 
 /// `;2>&1 python3 evil.py` and the same shape with `<` or `>&`. A spaced
@@ -627,6 +702,22 @@ fn glued_redirect_runs_interpreter(text: &str) -> bool {
     }) && words.iter().any(|word| word.contains('.'))
 }
 
+/// An `fd` whose every `--exec` names the program it runs. fd hands the paths
+/// it found to that program the way `find -exec` does, and those paths come
+/// from the roots this text already names, so `fd -e ts -x wc -l` runs the
+/// `wc` the text shows and owns what `wc` owns. Reading it as an unbounded
+/// nested executor refused it outright, with no approval left to give it,
+/// while the same walk spelled `find . -name '*.ts' -exec wc -l {} +` was
+/// allowed by name. `fd -x sh -c ...` runs whatever that reads and names no
+/// bounded program, so it keeps the evaluation failure, as `xargs sh` does.
+fn named_fd_exec(text: &str) -> bool {
+    let literal = unquoted_literal(text);
+    fd_exec_programs(text).is_some_and(|programs| !programs.is_empty())
+        && !text.contains(['<', '>', '`', '\n'])
+        && (!text.contains('$') || compound::parameters_only_root_paths(text))
+        && !moves_data(&literal)
+}
+
 /// Loops and conditionals, or one heredoc that only feeds standard input,
 /// with nothing in the shell text that substitutes or overrides `PATH` and no
 /// redirect except to a literal path.
@@ -651,7 +742,8 @@ fn reviewable_structure(
     // A bounded substitution prints arguments and nothing else, so the shape
     // around it is read with each one as the word it prints. Anything else
     // keeps the text as written, where `$(` still reads as moving data.
-    let substituted = bounded_substitutions(&command.normalized_text);
+    let substituted = bounded_substitutions(&command.normalized_text)
+        .or_else(|| reviewable_substitutions(&command.normalized_text));
     let normalized = substituted
         .as_ref()
         .map_or(command.normalized_text.as_str(), |bounded| {
@@ -692,6 +784,7 @@ fn reviewable_structure(
             let literal = unquoted_literal(normalized);
             named_xargs_pipeline(normalized)
                 || named_find_exec(normalized)
+                || named_fd_exec(normalized)
                 || ((!moves_data(&literal) || literal_redirects_only(normalized))
                     && sourcing_names_its_files(command, context))
         }
@@ -700,7 +793,7 @@ fn reviewable_structure(
             // `;2>&1 python3 evil.py` has no segments: the redirect is the
             // uncertainty. Reviewing it would hide the interpreter.
             !glued_redirect_runs_interpreter(&text)
-                && (input_heredoc(&text)
+                && (heredoc::input_heredoc(&text)
                     || literal_redirects_only(&text)
                     || data_heredocs(&text).is_some_and(|(shell, _)| plain_after_heredocs(&shell)))
         }
@@ -745,13 +838,18 @@ fn reviewable_structure(
         // command it runs is named in its text (see `substitution`).
         Some("command_substitution_not_yet_supported") => {
             let looked = without_lookups(&command.normalized_text);
-            bounded_substitutions(&looked).is_some_and(|bounded| {
-                let text = bounded.text;
-                !text.contains("$(")
-                    && !text.contains('`')
-                    && !text.contains("<<")
-                    && plain_after_heredocs(&text)
-            })
+            bounded_substitutions(&looked)
+                .or_else(|| {
+                    reviewable_substitutions(&looked)
+                        .filter(|bounded| plain_sequence(&bounded.text))
+                })
+                .is_some_and(|bounded| {
+                    let text = bounded.text;
+                    !text.contains("$(")
+                        && !text.contains('`')
+                        && !text.contains("<<")
+                        && plain_after_heredocs(&text)
+                })
         }
         _ => false,
     }
@@ -854,33 +952,34 @@ fn moves_data(literal: &str) -> bool {
         })
 }
 
-/// One heredoc on the first line, ending the text, whose body cannot run
-/// commands: its delimiter is quoted, or the body expands nothing.
-fn input_heredoc(text: &str) -> bool {
-    let Some((line, rest)) = text.split_once('\n') else {
-        return false;
-    };
-    let Some((before, after)) = line.split_once("<<") else {
-        return false;
-    };
-    let after = after.strip_prefix('-').unwrap_or(after).trim();
-    let quoted = after.starts_with(['\'', '"']);
-    let delimiter = after.trim_matches(['\'', '"']);
-    if delimiter.is_empty()
-        || !delimiter
-            .chars()
-            .all(|c| c.is_ascii_alphanumeric() || c == '_')
-        || moves_data(&unquoted_literal(before))
-    {
-        return false;
-    }
-    let mut lines: Vec<&str> = rest.lines().collect();
-    if lines.pop().map(str::trim) != Some(delimiter)
-        || lines.iter().any(|body| body.trim() == delimiter)
-    {
-        return false;
-    }
-    quoted || lines.iter().all(|body| !body.contains(['$', '`', '\\']))
+/// Whether the text runs its commands one after another, with no construct
+/// that puts a command position somewhere this reading does not look.
+///
+/// The weaker, assignment-flow read of a substitution is used only when the
+/// strict one refuses, so the text it hands back is read with the
+/// substitution already replaced by the word it stands for. That reading
+/// answers for a sequence of simple commands, which is what the shapes it was
+/// written for are: `latest=$(ls -1 versions | tail -1); printf \'%s\\n\'
+/// "$latest"`. A loop or a conditional around the rest of the text is a
+/// different shape, whose body the floor beneath does not bound the same way:
+/// `x=$(curl -s https://example.invalid); for f in a; do node -e
+/// \'console.log(1)\' "$f"; done` keeps its evaluation failure, as it does
+/// without the substitution. `while`, `until` and `if` open with a word the
+/// reader already steps past, so the closing `done`, `fi` and `esac` are what
+/// this looks for, together with the openers that stand in a command position
+/// of their own.
+fn plain_sequence(text: &str) -> bool {
+    let literal = unquoted_literal(text);
+    let construct = command_words(&literal).any(|word| {
+        // Bash takes a redirect on a compound command, and the closer carries
+        // it in the same word: `done>/dev/null` is still the end of a loop.
+        let keyword = word.split(['<', '>']).next().unwrap_or(word);
+        matches!(
+            keyword,
+            "for" | "done" | "case" | "esac" | "fi" | "select" | "function" | "coproc"
+        )
+    });
+    !construct
 }
 
 /// Every word the shell could read as a program name or keyword token, with
@@ -959,12 +1058,20 @@ fn unquoted_literal(text: &str) -> String {
 }
 
 /// The text the shell runs as commands. An accepted input heredoc contributes
-/// only its command, since `input_heredoc` already keeps its body from
-/// expanding and the body is data on standard input.
-fn shell_text(text: &str) -> &str {
-    match text.split_once('\n') {
-        Some((line, _)) if text.contains("<<") => line.split_once("<<").map_or(line, |(b, _)| b),
-        _ => text,
+/// its command and whatever follows its delimiter, since `input_heredoc`
+/// already keeps the body from expanding and the body is data on standard
+/// input. Dropping the rest of the line with the body would hide the
+/// programs a pipe after the heredoc names from the owners below.
+fn shell_text(text: &str) -> String {
+    let Some((line, _)) = text.split_once('\n').filter(|_| text.contains("<<")) else {
+        return text.to_owned();
+    };
+    match heredoc::first_heredoc(text) {
+        Some(heredoc) => format!("{}{}", heredoc.before, heredoc.trailing),
+        None => line
+            .split_once("<<")
+            .map_or(line, |(before, _)| before)
+            .to_owned(),
     }
 }
 
@@ -1463,6 +1570,10 @@ mod sourced_tests;
 #[path = "native_command_unmodeled_bounded_tests.rs"]
 mod bounded_tests;
 
+#[cfg(test)]
+#[path = "native_command_unmodeled_fd_exec_tests.rs"]
+mod fd_exec_tests;
+
 // A Windows shell keeps an unquoted backslash literal, so the evaluator refuses
 // `$'…'` there rather than read it a second way; these vectors are POSIX-only.
 #[cfg(all(test, not(windows)))]
@@ -1476,6 +1587,10 @@ mod funsub_tests;
 #[cfg(test)]
 #[path = "native_command_unmodeled_prefix_tests.rs"]
 mod prefix_tests;
+
+#[cfg(test)]
+#[path = "native_command_unmodeled_operands_tests.rs"]
+mod operands_tests;
 
 #[cfg(test)]
 #[path = "native_command_unmodeled_expansion_tests.rs"]

@@ -41,10 +41,10 @@
     },
     {
       "commands": [
-        "npx skills add acme/pdf-tools"
+        "npx skills@1.7.4 add acme/pdf-tools"
       ],
       "runtime": "agent-skills",
-      "verify": "npx skills list"
+      "verify": "npx skills@1.7.4 list"
     }
   ],
   "repository": "acme/pdf-tools"

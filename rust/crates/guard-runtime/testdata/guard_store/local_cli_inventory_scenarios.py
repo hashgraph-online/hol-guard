@@ -3,8 +3,8 @@
 Run by the recorder through the ORIGINAL Python store. Steps are either
 `{"sql": [(statement, params), ...]}` or `{"method", "kwargs"}`.
 
-`list_local_cli_items` takes no arguments, so every scenario is a seed built
-with SQL and one read of the whole inventory. The recorder runs with the
+`list_local_cli_items` reads from the start of the list by default, so every
+scenario is a seed built with SQL and one read of the whole inventory. The recorder runs with the
 native resident off, which leaves the ranking and MCP classification fields at
 their defaults; the replay normalizes those three fields away on both sides and
 covers them separately.

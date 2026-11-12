@@ -1,16 +1,12 @@
 from __future__ import annotations
 
-import http.client
-import time
-import urllib.error
-import urllib.request
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from threading import Thread
 
 import pytest
 
-from codex_plugin_scanner.guard.daemon.client import (
-    GuardDaemonResponseSchemaError,
-    GuardDaemonTimeoutError,
-    GuardDaemonTransportError,
+from codex_plugin_scanner.guard.native_daemon_client import (
+    GuardDaemonRequestError,
     GuardSurfaceDaemonClient,
 )
 from codex_plugin_scanner.guard.runtime.network_status import build_network_status
@@ -31,19 +27,39 @@ def test_network_status_client_uses_fast_status_deadline(
     assert observed == {"path": "/v1/network/status", "timeout": 0.25}
 
 
-def test_network_status_client_types_timeout_without_transport_detail(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    client = GuardSurfaceDaemonClient("http://127.0.0.1:1", "token")
+def test_dashboard_session_rejects_redirect_without_sending_session_to_target() -> None:
+    paths: list[tuple[str, str | None]] = []
 
-    def timeout(_request: urllib.request.Request, *, timeout: float) -> None:
-        assert timeout == 0.25
-        raise TimeoutError("private operating system detail")
+    class RedirectingHandler(BaseHTTPRequestHandler):
+        def do_POST(self) -> None:
+            paths.append((self.path, self.headers.get("X-Guard-Dashboard-Session")))
+            self.send_response(302)
+            self.send_header("Location", "/collect")
+            self.end_headers()
 
-    monkeypatch.setattr(urllib.request, "urlopen", timeout)
-    with pytest.raises(GuardDaemonTimeoutError, match="timed out") as error:
-        client.network_status()
-    assert "private" not in str(error.value)
+        def do_GET(self) -> None:
+            paths.append((self.path, self.headers.get("X-Guard-Dashboard-Session")))
+            self.send_response(200)
+            self.end_headers()
+
+        def log_message(self, *_args: object) -> None:
+            return None
+
+    server = ThreadingHTTPServer(("127.0.0.1", 0), RedirectingHandler)
+    thread = Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        client = GuardSurfaceDaemonClient(f"http://127.0.0.1:{server.server_port}", "private-auth-token")
+        with pytest.raises(GuardDaemonRequestError):
+            client.dashboard_session_capabilities(timeout=0.5)
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=1.0)
+
+    assert len(paths) == 1
+    assert paths[0][0] == "/v1/initialize"
+    assert paths[0][1] is not None and paths[0][1].startswith("gld1.")
 
 
 class _RawResponse:
@@ -74,171 +90,3 @@ class _RawResponse:
 
     def close(self) -> None:
         self.closed = True
-
-
-def test_network_status_client_enforces_total_body_deadline(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    class SlowResponse(_RawResponse):
-        def read(self, _amount: int = -1) -> bytes:
-            assert self.read_timeout is not None
-            time.sleep(self.read_timeout)
-            raise TimeoutError("private socket timeout")
-
-    client = GuardSurfaceDaemonClient("http://127.0.0.1:1", "token")
-    monkeypatch.setattr(
-        urllib.request,
-        "urlopen",
-        lambda _request, *, timeout: SlowResponse(payload=b"{}"),
-    )
-    started_at = time.monotonic()
-    with pytest.raises(GuardDaemonTimeoutError, match="timed out"):
-        client.network_status()
-    assert time.monotonic() - started_at < 0.75
-
-
-def test_network_status_client_bounds_http_error_body(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    class SlowErrorBody(_RawResponse):
-        def read(self, _amount: int = -1) -> bytes:
-            assert self.read_timeout is not None
-            time.sleep(self.read_timeout)
-            raise TimeoutError("private socket timeout")
-
-    error_body = SlowErrorBody(payload=b"{}")
-
-    def raise_http_error(_request: urllib.request.Request, *, timeout: float) -> None:
-        raise urllib.error.HTTPError(
-            "http://127.0.0.1:1/v1/network/status",
-            503,
-            "private",
-            {},
-            error_body,
-        )
-
-    client = GuardSurfaceDaemonClient("http://127.0.0.1:1", "token")
-    monkeypatch.setattr(urllib.request, "urlopen", raise_http_error)
-    started_at = time.monotonic()
-    with pytest.raises(GuardDaemonTimeoutError, match="timed out") as error:
-        client.network_status()
-    assert "private" not in str(error.value)
-    assert error_body.closed is True
-    assert time.monotonic() - started_at < 0.75
-
-
-def test_network_status_client_enforces_deadline_across_slow_chunks(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    class TrickleResponse(_RawResponse):
-        def read1(self, _amount: int = -1) -> bytes:
-            time.sleep(0.06)
-            return b"x"
-
-    client = GuardSurfaceDaemonClient("http://127.0.0.1:1", "token")
-    monkeypatch.setattr(
-        urllib.request,
-        "urlopen",
-        lambda _request, *, timeout: TrickleResponse(payload=b"unused"),
-    )
-    started_at = time.monotonic()
-    with pytest.raises(GuardDaemonTimeoutError, match="timed out"):
-        client.network_status()
-    assert time.monotonic() - started_at < 0.75
-
-
-def test_network_status_client_types_invalid_utf8_as_schema_failure(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    client = GuardSurfaceDaemonClient("http://127.0.0.1:1", "token")
-    monkeypatch.setattr(
-        urllib.request,
-        "urlopen",
-        lambda _request, *, timeout: _RawResponse(payload=b"\xffprivate"),
-    )
-    with pytest.raises(GuardDaemonResponseSchemaError) as error:
-        client.network_status()
-    assert "private" not in str(error.value)
-
-
-def test_network_status_client_types_truncated_body_as_transport_failure(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    client = GuardSurfaceDaemonClient("http://127.0.0.1:1", "token")
-    monkeypatch.setattr(
-        urllib.request,
-        "urlopen",
-        lambda _request, *, timeout: _RawResponse(read_error=http.client.IncompleteRead(b"private partial body", 100)),
-    )
-    with pytest.raises(GuardDaemonTransportError, match="truncated") as error:
-        client.network_status()
-    assert "private" not in str(error.value)
-
-
-def test_post_decodes_truncated_json_without_retry(monkeypatch: pytest.MonkeyPatch) -> None:
-    calls = {"count": 0}
-
-    def fake_urlopen(_request: urllib.request.Request, *, timeout: float) -> _RawResponse:
-        del timeout
-        calls["count"] += 1
-        return _RawResponse(read_error=http.client.IncompleteRead(b'{"claimed": true}', 32))
-
-    client = GuardSurfaceDaemonClient("http://127.0.0.1:1", "token")
-    monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
-    assert client.claim_policy_decision({"decision_id": "1"}) is True
-    assert calls["count"] == 1
-
-
-def test_post_does_not_retry_truncated_non_json(monkeypatch: pytest.MonkeyPatch) -> None:
-    calls = {"count": 0}
-
-    def fake_urlopen(_request: urllib.request.Request, *, timeout: float) -> _RawResponse:
-        del timeout
-        calls["count"] += 1
-        return _RawResponse(read_error=http.client.IncompleteRead(b"private partial body", 100))
-
-    client = GuardSurfaceDaemonClient("http://127.0.0.1:1", "token")
-    monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
-    with pytest.raises(GuardDaemonTransportError, match="truncated") as error:
-        client.resolve_policy_decision({"action": "allow"})
-    assert "private" not in str(error.value)
-    assert calls["count"] == 1
-
-
-def test_network_status_retry_timeout_stays_timeout(monkeypatch: pytest.MonkeyPatch) -> None:
-    calls = {"count": 0}
-
-    def fake_urlopen(_request: urllib.request.Request, *, timeout: float) -> _RawResponse:
-        del timeout
-        calls["count"] += 1
-        if calls["count"] == 1:
-            return _RawResponse(read_error=http.client.IncompleteRead(b"{", 8))
-        raise TimeoutError("private socket timeout")
-
-    client = GuardSurfaceDaemonClient("http://127.0.0.1:1", "token")
-    monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
-    with pytest.raises(GuardDaemonTimeoutError, match="timed out") as error:
-        client.network_status()
-    assert "private" not in str(error.value)
-    assert calls["count"] == 2
-
-
-@pytest.mark.parametrize("raw_payload", ("not-json", "[]"))
-def test_network_status_client_types_invalid_json_object(raw_payload: str) -> None:
-    with pytest.raises(GuardDaemonResponseSchemaError):
-        GuardSurfaceDaemonClient._decode_json_response(raw_payload)
-
-
-def test_catalog_read_uses_catalog_cap_while_other_reads_stay_bounded(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    client = GuardSurfaceDaemonClient("http://127.0.0.1:1", "token")
-    body = b'{"padding":"' + b"x" * 1_100_000 + b'"}'
-    monkeypatch.setattr(
-        urllib.request,
-        "urlopen",
-        lambda _request, *, timeout: _RawResponse(payload=body),
-    )
-    assert len(client.extension_control_catalog()["padding"]) == 1_100_000
-    with pytest.raises(GuardDaemonResponseSchemaError, match="size limit"):
-        client.network_status()

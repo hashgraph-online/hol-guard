@@ -30,13 +30,12 @@ semantic fallback.
 
 ## Reachability proof
 
-`commands_support` and `commands_hook` no longer import the legacy hook
-evaluators eagerly. The compatibility modules are loaded by
-`commands_hook_compat_loader.py` only when all of the following are true:
-
-1. the Python oracle flag is explicitly enabled;
-2. test mode (or pytest's test marker) is present; and
-3. the selected native mode is `off` or an explicitly diagnostic `shadow`.
+`commands_support` and `commands_hook` do not import the legacy hook
+evaluators at all. The conditional compatibility loader this section first
+described is gone with the modules it loaded: `HOL_GUARD_PYTHON_ORACLE` is a
+retired runtime flag, and the native modes it tested for, `off` and `shadow`,
+are retired values that resolve to the product default. No flag combination
+reaches a Python evaluator in an installed tree.
 
 Direct imports of legacy modules remain available to named regression tests
 through the test-only namespace bootstrap. A clean subprocess import of the
@@ -94,7 +93,7 @@ source deletion or oracle removal remains a separately reviewed change.
 ```text
 uv run --no-sync ruff check <changed Python files>
 uv run --no-sync pytest -q tests/test_python_capability_cleanup_gate.py
-uv run --no-sync pytest -q tests/test_python_hook_semantic_callgraph_gate.py tests/test_guard_hook_payload_reference.py
+uv run --no-sync pytest -q tests/test_python_hook_semantic_callgraph_gate.py
 uv run --no-sync python scripts/ci/python_capability_cleanup_gate.py --root . --json python-capability-cleanup.json
 ```
 

@@ -260,7 +260,8 @@ fn run_case(case: &Value) -> Result<(), String> {
         | NativeExactActionPayloadV1::LaunchEvidence { .. } => {
             Err("legacy identity vector unexpectedly returned a Bash subject".into())
         }
-        NativeExactActionPayloadV1::ReviewEvidence { .. } => {
+        NativeExactActionPayloadV1::ReviewEvidence { .. }
+        | NativeExactActionPayloadV1::HookReview { .. } => {
             Err("legacy identity vector unexpectedly returned review evidence".into())
         }
         NativeExactActionPayloadV1::ReviewBinding { binding } => {

@@ -26,7 +26,7 @@ from pathlib import Path
 from types import MappingProxyType
 from typing import BinaryIO
 
-from ..mdm.network import platform_system_proxies
+from ..mdm.network import ManagedNetworkError, available_system_proxies, resolved_network_policy
 from ..redaction import redact_sensitive_text
 from ..shims import _trusted_python_flags
 from ..update_staging import note_update_activity, reject_linked_path_components
@@ -305,6 +305,21 @@ class _FilesystemSnapshot:
     size: int
     sha256: str | None
     prefix: bytes | None
+
+
+class _WindowsByHandleFileInformation(ctypes.Structure):
+    _fields_ = [
+        ("dwFileAttributes", wintypes.DWORD),
+        ("ftCreationTime", wintypes.FILETIME),
+        ("ftLastAccessTime", wintypes.FILETIME),
+        ("ftLastWriteTime", wintypes.FILETIME),
+        ("dwVolumeSerialNumber", wintypes.DWORD),
+        ("nFileSizeHigh", wintypes.DWORD),
+        ("nFileSizeLow", wintypes.DWORD),
+        ("nNumberOfLinks", wintypes.DWORD),
+        ("nFileIndexHigh", wintypes.DWORD),
+        ("nFileIndexLow", wintypes.DWORD),
+    ]
 
 
 class _WindowsJobObjectBasicLimitInformation(ctypes.Structure):
@@ -873,20 +888,6 @@ def _inspect_windows_filesystem_path(path: Path, *, kind: str) -> _FilesystemSna
         raise OSError("windows_handle_api_unavailable")
     kernel32 = win_dll("kernel32", use_last_error=True)
 
-    class _ByHandleFileInformation(ctypes.Structure):
-        _fields_ = [
-            ("dwFileAttributes", wintypes.DWORD),
-            ("ftCreationTime", wintypes.FILETIME),
-            ("ftLastAccessTime", wintypes.FILETIME),
-            ("ftLastWriteTime", wintypes.FILETIME),
-            ("dwVolumeSerialNumber", wintypes.DWORD),
-            ("nFileSizeHigh", wintypes.DWORD),
-            ("nFileSizeLow", wintypes.DWORD),
-            ("nNumberOfLinks", wintypes.DWORD),
-            ("nFileIndexHigh", wintypes.DWORD),
-            ("nFileIndexLow", wintypes.DWORD),
-        ]
-
     class _FileId128(ctypes.Structure):
         _fields_ = [("Identifier", ctypes.c_ubyte * 16)]
 
@@ -908,7 +909,7 @@ def _inspect_windows_filesystem_path(path: Path, *, kind: str) -> _FilesystemSna
     ]
     create_file.restype = wintypes.HANDLE
     get_information = kernel32.GetFileInformationByHandle
-    get_information.argtypes = [wintypes.HANDLE, ctypes.POINTER(_ByHandleFileInformation)]
+    get_information.argtypes = [wintypes.HANDLE, ctypes.POINTER(_WindowsByHandleFileInformation)]
     get_information.restype = wintypes.BOOL
     get_extended_information = kernel32.GetFileInformationByHandleEx
     get_extended_information.argtypes = [
@@ -951,7 +952,7 @@ def _inspect_windows_filesystem_path(path: Path, *, kind: str) -> _FilesystemSna
     if handle in {None, invalid_handle}:
         raise OSError("trusted Windows path could not be opened")
     try:
-        information = _ByHandleFileInformation()
+        information = _WindowsByHandleFileInformation()
         if not get_information(handle, ctypes.byref(information)):
             raise OSError("trusted Windows path identity is unavailable")
         attributes = int(information.dwFileAttributes)
@@ -1299,7 +1300,12 @@ def _trusted_environment(
         environment["HTTP_PROXY"] = proxy_url.strip()
         environment["HTTPS_PROXY"] = proxy_url.strip()
     elif proxy_mode == "system":
-        for scheme, value in platform_system_proxies().items():
+        _network_policy, managed = resolved_network_policy(None)
+        try:
+            system_proxies = available_system_proxies(managed=managed)
+        except ManagedNetworkError as error:
+            raise UpdateSubprocessError("update_source_invalid") from error
+        for scheme, value in system_proxies.items():
             environment[f"{scheme.upper()}_PROXY"] = value
     elif proxy_mode != "none":
         raise UpdateSubprocessError("update_source_invalid")

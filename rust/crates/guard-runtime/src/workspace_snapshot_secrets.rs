@@ -178,7 +178,7 @@ impl SecretScan {
         let Ok(fingerprint) = finding.fingerprint(self.fingerprint_key.as_slice()) else {
             return;
         };
-        finding.candidate.zeroize();
+        finding.scrub_candidate();
         let fingerprint = fingerprint[..FINGERPRINT_HEX_CHARS].to_owned();
         let key = (finding.rule_id, finding.path.clone(), fingerprint.clone());
         if let Some(&index) = self.group_index.get(&key) {
@@ -201,7 +201,10 @@ impl SecretScan {
             family: finding.family,
             severity,
             confidence: finding.confidence,
-            path: finding.path,
+            // Taken rather than moved out: `SecretFinding` scrubs its
+            // candidate on drop, so the finding has to stay whole until it
+            // goes out of scope.
+            path: std::mem::take(&mut finding.path),
             fingerprint,
             lines: vec![finding.line],
             occurrences: 1,
@@ -278,7 +281,7 @@ impl SecretScan {
     }
 }
 
-fn is_credential_store(relative: &str) -> bool {
+pub(super) fn is_credential_store(relative: &str) -> bool {
     let basename = relative.rsplit('/').next().unwrap_or(relative);
     if let Some((_, extension)) = basename.rsplit_once('.') {
         if KEY_MATERIAL_EXTENSIONS

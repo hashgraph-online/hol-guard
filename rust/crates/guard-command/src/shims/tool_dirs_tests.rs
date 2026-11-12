@@ -24,14 +24,18 @@ struct Machine {
     launcher_bin: PathBuf,
 }
 
+/// The root is canonicalized because the real binary is reported by its
+/// resolved path, and the temporary area itself sits behind a link on macOS
+/// (`/var` is `/private/var`).
 fn machine() -> Machine {
     let root = tempfile::tempdir().expect("tempdir");
-    let home = root.path().join("home");
-    let launcher_bin = root.path().join("launcher-bin");
+    let base = fs::canonicalize(root.path()).expect("canonical root");
+    let home = base.join("home");
+    let launcher_bin = base.join("launcher-bin");
     fs::create_dir_all(&home).expect("home");
     fs::create_dir_all(&launcher_bin).expect("launcher bin");
     Machine {
-        guard_home: root.path().join("guard"),
+        guard_home: base.join("guard"),
         _root: root,
         home,
         launcher_bin,

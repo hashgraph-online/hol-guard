@@ -3,23 +3,25 @@ from __future__ import annotations
 import pytest
 
 from codex_plugin_scanner.guard.runtime.network_capability_contract import (
+    PlatformCapabilityProfile,
+    PlatformFamily,
+    default_platform_profiles,
+)
+from codex_plugin_scanner.guard.runtime.network_policy_contract import (
+    BackendCapability,
+    EnforcementGrade,
+)
+from tests.network_capability_negotiation import (
     BackendState,
     CapabilityRequirement,
     ControlPlaneEscapeHatch,
     ControlPlaneRoute,
     NetworkPrivacyPolicy,
-    PlatformCapabilityProfile,
-    PlatformFamily,
     RecoveryAction,
-    default_platform_profiles,
     failure_disposition,
     negotiate_capability,
 )
-from codex_plugin_scanner.guard.runtime.network_policy_contract import (
-    BackendCapability,
-    EnforcementGrade,
-    FailureMode,
-)
+from tests.network_policy_model import FailureMode
 
 _DIGEST = "b" * 64
 

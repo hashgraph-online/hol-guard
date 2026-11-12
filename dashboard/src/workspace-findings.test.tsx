@@ -185,11 +185,12 @@ for (const copy of [
   "Secret scanning is not part of this check yet.",
   "minimist",
   "1.2.9",
-  "Blocked",
+  ">Block<",
+  "Advisory match",
   "GHSA-xxxx-yyyy-zzzz",
   "github-token",
   "src/deploy.py:2",
-  "Not verified",
+  "Rule match, not confirmed",
   "Assess now",
   "Pause",
   "Prepare fix",
@@ -202,6 +203,7 @@ for (const copy of [
 ]) {
   assert.ok(markup.includes(copy), `row shows ${copy}`);
 }
+assert.ok(!markup.includes(">Blocked<"), "a finding in the worktree is not shown as a blocked action");
 assert.equal(markup.match(/Prepare fix/g)?.length, 1, "a runtime finding is observation only and offers no fix");
 
 const secretsRan = normalizeWorkspaceFindingsState(

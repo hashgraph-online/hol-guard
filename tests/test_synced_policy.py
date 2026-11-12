@@ -6,15 +6,12 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from codex_plugin_scanner.guard.config import GuardConfig, overlay_synced_guard_policy
-from codex_plugin_scanner.guard.policy_bundle_parser import (
-    computed_policy_bundle_hash,
-    payload_hash_for_policy_bundle,
-)
 from codex_plugin_scanner.guard.synced_policy import (
     synced_policy_bundle_validation,
     synced_policy_payload,
     validated_synced_policy_bundle,
 )
+from tests.policy_bundle_parser_support import computed_policy_bundle_hash, payload_hash_for_policy_bundle
 from tests.policy_bundle_signing_helpers import policy_bundle_test_keyring, sign_policy_bundle
 
 _WORKSPACE_ID = "workspace-1"

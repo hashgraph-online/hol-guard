@@ -50,10 +50,9 @@ def test_stale_page_is_detected(tmp_path: Path, monkeypatch, capsys) -> None:
 
 
 def test_every_starter_is_in_the_cross_reference() -> None:
-    from codex_plugin_scanner.guard.policy_starters import starter_ids
-
+    vectors = ROOT / "rust/crates/guard-command/testdata/policy_starters/starter_vectors.json"
     page = (ROOT / "docs/policy/STARTERS.md").read_text(encoding="utf-8")
-    for identifier in starter_ids():
+    for identifier in (item["id"] for item in json.loads(vectors.read_text(encoding="utf-8"))["starters"]):
         assert f"`{identifier}`" in page
 
 

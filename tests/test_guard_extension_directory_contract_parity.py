@@ -19,8 +19,8 @@ from codex_plugin_scanner.guard.extension_builder.listing import (
     listing_template,
     validate_listing,
 )
-from codex_plugin_scanner.guard.runtime.mcp_server_contribution import catalog_id_for_mcp_id
 from tests.extension_builder_support import REPOSITORY, metadata
+from tests.mcp_contribution_loader import catalog_id_for_mcp_id
 from tests.support.extension_directory import bounded_extensions, copy_projected_contribution_sources
 
 

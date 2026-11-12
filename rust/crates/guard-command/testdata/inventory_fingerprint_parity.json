@@ -17,6 +17,10 @@
    "value": "hermes"
   },
   {
+   "normalized": "muse",
+   "value": "muse"
+  },
+  {
    "normalized": "codex",
    "value": "Codex"
   },
@@ -278,6 +282,10 @@
   {
    "repr": "0.3333333333333333",
    "value": 0.3333333333333333
+  },
+  {
+   "repr": "1.2345678",
+   "value": 1.2345678
   },
   {
    "repr": "123456789.12345679",

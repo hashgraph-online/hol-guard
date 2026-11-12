@@ -127,8 +127,16 @@ export function triedCatalogCommands(items: GuardApprovalRequest[], cli: LocalCl
   return [...tried].sort();
 }
 
-export function connectorSetupHref(cli: LocalCliItem | null): string {
-  return cli === null ? PROTECT_LIST_HREF : localCliHref(cli.cli_id);
+/**
+ * The Protect page for this connector, opened on the newest held request so a
+ * setup there also releases the requests held on it. The page re-checks the
+ * identity and ignores a link it cannot match.
+ */
+export function connectorSetupHref(cli: LocalCliItem | null, held?: GuardApprovalRequest): string {
+  if (cli === null) return PROTECT_LIST_HREF;
+  const href = localCliHref(cli.cli_id);
+  if (held === undefined) return href;
+  return `${href}?${new URLSearchParams({ setup: held.request_id, identity: cli.identity_hash })}`;
 }
 
 export function buildConnectorSetupGroups(
@@ -163,7 +171,7 @@ export function buildConnectorSetupGroups(
       caution: cautionCount > 0,
       cautionCount,
       cli,
-      setupHref: connectorSetupHref(cli),
+      setupHref: connectorSetupHref(cli, sorted[0]),
       triedCommands: triedCatalogCommands(sorted, cli),
     });
   }

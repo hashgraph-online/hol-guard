@@ -7,7 +7,6 @@ from pathlib import Path
 
 from codex_plugin_scanner.guard.runtime.command_extensions import (
     BUILT_IN_COMMAND_EXTENSION_REGISTRY,
-    risk_classes_for_command_action,
 )
 from tests.command_extension_contracts import (
     assert_safe_command_cases,
@@ -193,8 +192,6 @@ def test_ollama_extension_publishes_references_and_action_risks() -> None:
         "https://docs.ollama.com/cli",
     )
     assert all(url.startswith("https://") for url in extension.reference_urls)
-    assert risk_classes_for_command_action(_PUSH_ACTION) == ("network_egress",)
-    assert risk_classes_for_command_action(_RM_ACTION) == ("destructive_shell",)
     payload = extension.to_dict()
     assert payload["enabled"] is False
     assert payload["trust_class"] == "external"

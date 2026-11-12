@@ -5,11 +5,12 @@ import type {
   ReleaseComparison,
   ReleaseContributor,
   ReleaseCoverage,
-  ReleaseFeedFailure,
   ReleaseIndex,
   ReleaseSummary,
   ReleaseVerificationMethod,
 } from "./releases-types";
+
+export * from "./releases-failure";
 
 /**
  * Presentation decisions for the release archive. Everything here is pure so
@@ -272,42 +273,6 @@ export function standingCopy(standing: InstalledStanding): StandingCopy {
     title: normalizeVersionLabel(standing.release.versionLabel),
     body: `Running here. ${count} been published since.${newest}`,
   };
-}
-
-export type ReleaseFailureCopy = { title: string; body: string };
-
-const FAILURE_COPY: Record<ReleaseFeedFailure, ReleaseFailureCopy> = {
-  offline: {
-    title: "Guard could not reach the release archive",
-    body: "The archive is published by hol.org and read through Guard on this device. Check this device's connection and try again.",
-  },
-  unavailable: {
-    title: "The release archive did not answer",
-    body: "hol.org could not serve the archive just now. Nothing on this device is affected; try again in a few minutes.",
-  },
-  "not-found": {
-    title: "That release is not published",
-    body: "Guard only shows releases that have been published and verified. Pick another version from the list.",
-  },
-  unsupported: {
-    title: "This Guard build cannot read the archive",
-    body: "The release archive needs Guard's native runtime. Update Guard to see release history here.",
-  },
-  disabled: {
-    title: "Release history is turned off on this device",
-    body: "Guard is set to skip the release archive (HOL_GUARD_RELEASE_FEED=off). Nothing on hol.org is affected; clear that setting and restart Guard to read release history here.",
-  },
-};
-
-export function failureCopy(failure: ReleaseFeedFailure): ReleaseFailureCopy {
-  return FAILURE_COPY[failure];
-}
-
-/** Only a failure that could clear on its own is worth a retry button: an old
- * build and a switched-off archive both stay failed however often the reader
- * presses it, and a release that was never published stays unpublished. */
-export function isRetryable(failure: ReleaseFeedFailure): boolean {
-  return failure === "unavailable" || failure === "offline";
 }
 
 /** Which release the detail pane should open.

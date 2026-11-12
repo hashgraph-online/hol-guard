@@ -8,6 +8,7 @@ import io
 import json
 import subprocess
 import sys
+import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -520,6 +521,7 @@ def test_phase14_claude_compatibility_hook_enforces_package_install_without_node
         "tool_input": {"command": "npm install minimist@1.2.8"},
         "cwd": str(workspace_dir),
     }
+    started = time.perf_counter()
     result = subprocess.run(
         fallback_command,
         input=json.dumps(event),
@@ -528,15 +530,22 @@ def test_phase14_claude_compatibility_hook_enforces_package_install_without_node
         timeout=40,
         check=False,
     )
+    elapsed = time.perf_counter() - started
     payload = json.loads(result.stdout)
+    # A fail-closed answer here reads as a bare `deny` unless the evidence
+    # travels with it. The reason code names the route that produced it and the
+    # wall time separates a refusal the policy reached from one a busy host ran
+    # out of time for, which is the difference between a regression and a
+    # loaded runner.
+    evidence = f"reason_code={payload.get('reason_code')!r} after {elapsed:.2f}s: {payload}"
 
-    assert result.returncode == 0
+    assert result.returncode == 0, evidence
     assert payload["hookSpecificOutput"]["hookEventName"] == "PreToolUse"
     # `blocked_request_mode="ask"` opts this surface into prompting, so the
     # install reaches Claude as an `ask` backed by a queued package review.
-    assert payload["hookSpecificOutput"]["permissionDecision"] == "ask"
-    assert payload["policy_action"] == "review"
-    assert payload["reason_code"] == "native_package_review"
-    assert payload["approval_requests"]
+    assert payload["reason_code"] == "native_package_review", evidence
+    assert payload["hookSpecificOutput"]["permissionDecision"] == "ask", evidence
+    assert payload["policy_action"] == "review", evidence
+    assert payload["approval_requests"], evidence
     reason = payload["hookSpecificOutput"]["permissionDecisionReason"]
     assert "requires review before this package or script command can execute" in reason

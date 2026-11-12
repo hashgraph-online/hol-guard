@@ -4,11 +4,12 @@ from __future__ import annotations
 
 import json
 import os
-import re
 import stat
 from dataclasses import dataclass
 from pathlib import Path
+from typing import cast
 
+from ..native_runner_authority import NativeRunnerAuthorityError, native_runner_authority
 from ..strict_json_pairs import unique_json_object
 from .base import HarnessContext
 
@@ -21,33 +22,24 @@ PASEO_NATIVE_HARNESSES = {
     "omp": "omp",
 }
 _MAX_CONFIG_BYTES = 2 * 1024 * 1024
-_PROVIDER_ID = re.compile(r"^[a-z][a-z0-9-]{0,127}$")
-_COMMON_OVERRIDES = frozenset(
-    {
-        "HOME",
-        "USERPROFILE",
-        "HOMEDRIVE",
-        "HOMEPATH",
-        "PATH",
-        "NODE_OPTIONS",
-        "PYTHONPATH",
-        "PYTHONHOME",
-        "LD_PRELOAD",
-        "LD_LIBRARY_PATH",
-        "DYLD_INSERT_LIBRARIES",
-        "DYLD_LIBRARY_PATH",
-        "BASH_ENV",
-        "ENV",
-    }
+# Each native runtime's configuration-redirecting variables; the native
+# classifier sees only these from the current environment.
+_RUNTIME_ENV_PREFIXES = (
+    "CLAUDE_CONFIG_DIR",
+    "CLAUDE_CODE_DISABLE_HOOKS",
+    "CLAUDE_CODE_SIMPLE",
+    "CODEX_HOME",
+    "COPILOT_HOME",
+    "COPILOT_CONFIG_DIR",
+    "XDG_CONFIG_HOME",
+    "OPENCODE_CONFIG",
+    "OPENCODE_DISABLE",
+    "PI_CODING_AGENT_DIR",
+    "PI_CONFIG_DIR",
+    "PI_PROFILE",
+    "OMP_AGENT_DIR",
+    "OMP_PROFILE",
 )
-_RUNTIME_OVERRIDES = {
-    "claude-code": ("CLAUDE_CONFIG_DIR", "CLAUDE_CODE_DISABLE_HOOKS", "CLAUDE_CODE_SIMPLE"),
-    "codex": ("CODEX_HOME",),
-    "copilot": ("COPILOT_HOME", "COPILOT_CONFIG_DIR", "XDG_CONFIG_HOME"),
-    "opencode": ("OPENCODE_CONFIG", "OPENCODE_DISABLE", "XDG_CONFIG_HOME"),
-    "pi": ("PI_CODING_AGENT_DIR", "PI_CONFIG_DIR", "PI_PROFILE"),
-    "omp": ("PI_CODING_AGENT_DIR", "PI_CONFIG_DIR", "PI_PROFILE", "OMP_AGENT_DIR", "OMP_PROFILE"),
-}
 
 
 @dataclass(frozen=True, slots=True)
@@ -147,79 +139,42 @@ def read_config_object(path: Path) -> dict[str, object]:
         ) from error
 
 
-def _object_field(payload: dict[str, object], key: str) -> dict[str, object]:
-    """Read an optional object field without silently accepting malformed configuration."""
-    value = payload.get(key, {})
-    if not isinstance(value, dict):
-        raise ValueError(f"Paseo {key} must be a JSON object.")
-    return value
-
-
-def _override_reason(harness: str, entry: dict[str, object], context: HarnessContext) -> str | None:
-    """Identify execution overrides that can relocate or bypass native protection."""
-    if "command" in entry:
-        return "Custom provider commands require separate native Guard configuration and verification."
-    environment: dict[str, str] = {}
-    for key, value in _object_field(entry, "env").items():
-        if not isinstance(value, str):
-            raise ValueError("Paseo provider environment values must be strings.")
-        environment[key] = value
-    prefixes = (*_RUNTIME_OVERRIDES[harness], "HOL_GUARD_", "GUARD_")
-
-    def redirects(key: str, value: str) -> bool:
-        """Allow only the normal XDG home, never alternate native configuration roots."""
-        if key.upper() == "XDG_CONFIG_HOME" and (
-            not value or (Path(value).is_absolute() and Path(os.path.abspath(value)) == context.home_dir / ".config")
-        ):
-            return False
-        return key.upper().startswith(prefixes)
-
-    provider_keys = {str(key).upper() for key in environment}
-    if provider_keys.intersection(_COMMON_OVERRIDES) or any(
-        redirects(key, value) for key, value in environment.items()
-    ):
-        return "Provider environment overrides may relocate or disable native Guard protection."
-    if any(
-        value and key.upper().startswith(_RUNTIME_OVERRIDES[harness]) and redirects(key, value)
-        for key, value in os.environ.items()
-    ):
-        return "The current environment redirects this runtime; verify the daemon's native configuration separately."
-    return None
-
-
-def _effective_provider_entry(raw: dict[str, object], base: object) -> dict[str, object]:
-    """Merge the inherited native command and environment before classifying coverage."""
-    if not isinstance(base, dict):
-        raise ValueError("Paseo inherited provider configuration must be a JSON object.")
-    return {**base, **raw, "env": {**_object_field(base, "env"), **_object_field(raw, "env")}}
-
-
-def _provider(provider_id: str, raw: object, entries: dict[str, object], context: HarnessContext) -> PaseoProvider:
-    """Classify a profile using its effective inherited command and environment."""
-    if not _PROVIDER_ID.fullmatch(provider_id) or not isinstance(raw, dict):
-        raise ValueError("Paseo providers must use valid provider IDs and JSON objects.")
-    enabled = raw.get("enabled", provider_id != "omp")
-    if not isinstance(enabled, bool):
-        raise ValueError("Paseo provider enabled must be a boolean.")
-    base = raw.get("extends", provider_id)
-    native = PASEO_NATIVE_HARNESSES.get(base) if isinstance(base, str) else None
-    reason = "ACP and plugin providers require a separately verified native Guard integration."
-    if native is not None:
-        inherited = entries.get(str(base), {}) if base != provider_id else {}
-        effective = _effective_provider_entry(raw, inherited)
-        if isinstance(inherited, dict) and "extends" in inherited:
-            reason = "Nested provider inheritance requires separate native Guard verification."
-        else:
-            reason = _override_reason(native, effective, context)
-    return PaseoProvider(provider_id, native, enabled, reason)
-
-
 def paseo_providers(context: HarnessContext) -> tuple[PaseoProvider, ...]:
-    """Read bounded provider configuration and include the supported native defaults."""
-    payload = read_config_object(paseo_config_path(context))
-    providers = _object_field(_object_field(payload, "agents"), "providers")
-    if len(providers) > 256:
-        raise ValueError("Paseo provider configuration exceeds the supported provider count.")
-    entries: dict[str, object] = {key: {} for key in PASEO_NATIVE_HARNESSES}
-    entries.update(providers)
-    return tuple(_provider(key, value, entries, context) for key, value in sorted(entries.items()))
+    """Classify every configured provider plus the supported native defaults in the native runtime."""
+    answer = native_runner_authority(
+        "paseo_providers",
+        {
+            "config_path": str(paseo_config_path(context)),
+            "xdg_default": str(context.home_dir / ".config"),
+            "environ": {
+                key: value
+                for key, value in os.environ.items()
+                if value and key.upper().startswith(_RUNTIME_ENV_PREFIXES)
+            },
+        },
+    )
+    error = answer.get("error")
+    if isinstance(error, str):
+        raise ValueError(error)
+    rows = answer.get("providers")
+    if not isinstance(rows, list):
+        raise NativeRunnerAuthorityError("Paseo providers are malformed")
+    return tuple(_provider(row) for row in cast("list[object]", rows))
+
+
+def _provider(row: object) -> PaseoProvider:
+    if not isinstance(row, dict):
+        raise NativeRunnerAuthorityError("Paseo providers are malformed")
+    fields = cast("dict[str, object]", row)
+    provider_id = fields.get("provider")
+    native = fields.get("native_harness")
+    enabled = fields.get("enabled")
+    reason = fields.get("unsupported_reason")
+    if (
+        not isinstance(provider_id, str)
+        or not (native is None or isinstance(native, str))
+        or not isinstance(enabled, bool)
+        or not (reason is None or isinstance(reason, str))
+    ):
+        raise NativeRunnerAuthorityError("Paseo providers are malformed")
+    return PaseoProvider(provider_id, native, enabled, reason)

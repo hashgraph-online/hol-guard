@@ -119,78 +119,45 @@ pub fn normalize_cursor_shell_command(command: &str) -> CursorShellNormalization
     CursorShellNormalization::Command(stripped.to_owned())
 }
 
-#[cfg(all(test, unix))]
+#[cfg(test)]
 mod tests {
-    use std::io::Write;
-    use std::process::{Command, Stdio};
-
     use super::{normalize_cursor_shell_command, CursorShellNormalization};
 
     fn as_command(value: CursorShellNormalization) -> String {
         match value {
             CursorShellNormalization::Command(command) => command,
-            CursorShellNormalization::Unnormalizable => panic!("python helper returns a string"),
+            CursorShellNormalization::Unnormalizable => panic!("expected a command"),
         }
     }
 
+    /// Outputs recorded from the retired Python helper: the command, one pass,
+    /// and the second pass that the observer proof applies.
     #[test]
-    fn normalisation_matches_the_live_python_helper() {
-        let commands = vec![
-            "git status".to_owned(),
-            "  git status  ".to_owned(),
-            "/usr/bin/lean-ctx -c echo hi".to_owned(),
-            "lean-ctx -c 'lean-ctx -c git status'".to_owned(),
-            String::new(),
-            "a".repeat(8193),
+    fn normalisation_matches_the_recorded_python_outputs() {
+        let oversized = "a".repeat(8193);
+        let graphql = "gh api graphql -f query='query { viewer { login } }' 2>&1 | python3 -c import json,sys; print(json.load(sys.stdin))";
+        let cases: Vec<(&str, &str, &str)> = vec![
+            ("git status", "git status", "git status"),
+            ("  git status  ", "git status", "git status"),
+            ("/usr/bin/lean-ctx -c echo hi", "echo hi", "echo hi"),
+            (
+                "lean-ctx -c 'lean-ctx -c git status'",
+                "lean-ctx -c git status",
+                "git status",
+            ),
+            ("", "", ""),
+            (&oversized, &oversized, &oversized),
+            (
+                r#"/path/to/lean-ctx -c 'gh api graphql -f query='\''query { viewer { login } }'\''' 2>&1 | python3 -c "import json,sys; print(json.load(sys.stdin))""#,
+                graphql,
+                graphql,
+            ),
         ];
-        let root = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../..");
-        let script = r#"
-import json, sys
-from codex_plugin_scanner.guard.adapters.cursor_native_approval import (
-    normalize_cursor_shell_command,
-)
-commands = json.load(sys.stdin)
-json.dump(
-    [
-        [
-            normalize_cursor_shell_command(command),
-            normalize_cursor_shell_command(normalize_cursor_shell_command(command)),
-        ]
-        for command in commands
-    ],
-    sys.stdout,
-)
-"#;
-        let mut child = Command::new("python3")
-            .arg("-c")
-            .arg(script)
-            .current_dir(&root)
-            .env("PYTHONPATH", root.join("src"))
-            .stdin(Stdio::piped())
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            .spawn()
-            .expect("python3");
-        let mut stdin = child.stdin.take().expect("stdin");
-        stdin
-            .write_all(
-                serde_json::to_string(&commands)
-                    .expect("commands")
-                    .as_bytes(),
-            )
-            .expect("write commands");
-        drop(stdin);
-        let output = child.wait_with_output().expect("wait");
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        assert!(output.status.success(), "python helper failed: {stderr}");
-        let parsed: Vec<(String, String)> =
-            serde_json::from_slice(&output.stdout).expect("python json");
-        assert_eq!(parsed.len(), commands.len());
-        for (command, (python_once, python_twice)) in commands.iter().zip(parsed) {
+        for (command, expected_once, expected_twice) in cases {
             let once = as_command(normalize_cursor_shell_command(command));
             let twice = as_command(normalize_cursor_shell_command(&once));
-            assert_eq!(once, python_once, "once {command:?}");
-            assert_eq!(twice, python_twice, "twice {command:?}");
+            assert_eq!(once, expected_once, "once {command:?}");
+            assert_eq!(twice, expected_twice, "twice {command:?}");
         }
     }
 }

@@ -23,7 +23,7 @@ from codex_plugin_scanner.guard.models import PolicyDecision
 from codex_plugin_scanner.guard.native_approval_gate import approval_gate_native
 from codex_plugin_scanner.guard.native_policy_snapshot import provision_native_policy_verifier_key
 from codex_plugin_scanner.guard.native_resident_client import close_native_residents
-from codex_plugin_scanner.guard.totp import totp_code_at_counter
+from tests.guard_totp_support import totp_code_at_counter
 
 VECTORS = json.loads(
     (Path(__file__).parent / "fixtures" / "approval_gate" / "parity_vectors.json").read_text(encoding="utf-8")

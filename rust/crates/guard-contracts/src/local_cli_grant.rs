@@ -40,6 +40,12 @@ pub struct LocalCliGrantRequestV1 {
     /// missing id is treated as the catch-all `other` command.
     #[serde(default)]
     pub command_id: Option<String>,
+    /// The options the invocation passes, as the shell model split them: one
+    /// entry per argument that starts with `-`, cut at `=`. Like `command_id`
+    /// it only selects stored states; an option the catalog does not name
+    /// leaves the call to review whenever the catalog names any option.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub options: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -111,6 +117,9 @@ pub const HOOK_LOCAL_CLI_RULE_REQUEST_SCHEMA: &str = "guard-hook-local-cli-rule-
 pub const HOOK_LOCAL_CLI_RULE_RESULT_SCHEMA: &str = "guard-hook-local-cli-rule-result.v1";
 /// Capability advertised by the runtime when `hook_local_cli_rule` is available.
 pub const HOOK_LOCAL_CLI_RULE_FEATURE: &str = "hook-local-cli-rule-v1";
+/// Capability advertised by the runtime when the hook edge reads the daemon's
+/// custom extension rules (`GuardHookEnvelopeV2::local_cli_rules`).
+pub const EDGE_LOCAL_CLI_RULE_FEATURE: &str = "edge-local-cli-rule-v1";
 
 /// The custom extension rule for one native `PreToolUse` the daemon holds:
 /// `allowed` checks a command the edge allowed against the custom block

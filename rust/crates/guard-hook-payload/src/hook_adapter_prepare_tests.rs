@@ -132,3 +132,34 @@ fn a_devin_mcp_dispatch_names_the_call_it_carries_under_every_spelling() {
         [("tool_name", "mcp__s__t"), ("toolName", "mcp__s__t")]
     );
 }
+
+#[test]
+fn a_kimi_prompt_joins_its_text_parts_and_keeps_anything_else() {
+    fn part(key: &str, value: &str) -> OValue {
+        let mut item = OMap::new();
+        item.insert("role", OValue::str("user"));
+        item.insert(key, OValue::str(value));
+        OValue::Map(item)
+    }
+    fn with_prompt(prompt: OValue) -> OMap {
+        let mut map = OMap::new();
+        map.insert("hook_event_name", OValue::str("UserPromptSubmit"));
+        map.insert("prompt", prompt);
+        map
+    }
+
+    let parts = OValue::List(vec![part("text", "Hello"), part("text", "World")]);
+    let prepared = prepare_payload("kimi", &with_prompt(parts.clone()), None).unwrap();
+    assert_eq!(prepared.get("prompt"), Some(&OValue::str("Hello\nWorld")));
+
+    let images = OValue::List(vec![part("image_url", "data:image/png;base64,AAAA")]);
+    let prepared = prepare_payload("kimi", &with_prompt(images.clone()), None).unwrap();
+    assert_eq!(prepared.get("prompt"), Some(&images));
+
+    let plain = OValue::str("plain text");
+    let prepared = prepare_payload("kimi", &with_prompt(plain.clone()), None).unwrap();
+    assert_eq!(prepared.get("prompt"), Some(&plain));
+
+    let prepared = prepare_payload("codex", &with_prompt(parts.clone()), None).unwrap();
+    assert_eq!(prepared.get("prompt"), Some(&parts));
+}

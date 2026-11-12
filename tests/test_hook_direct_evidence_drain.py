@@ -7,9 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard import native_decision_receipt
-from codex_plugin_scanner.guard.daemon import hook_native_cli_observer
-from codex_plugin_scanner.guard.daemon.hook_direct_evidence_drain import (
+from codex_plugin_scanner.guard.evidence_drains.hook_direct_evidence_drain import (
     DirectHookEvidenceDrain,
     record_direct_hook_evidence,
 )
@@ -55,34 +53,47 @@ def _record(**overrides: object) -> dict[str, object]:
         "payload": dict(PAYLOAD),
         "receipt": dict(RECEIPT),
         "harness_response": dict(RESPONSE),
+        "receipt_valid": True,
     }
     value.update(overrides)
     return value
 
 
-@pytest.fixture
-def observed(monkeypatch: pytest.MonkeyPatch) -> list[dict[str, object]]:
-    calls: list[dict[str, object]] = []
-    monkeypatch.setattr(native_decision_receipt, "validate_native_decision_receipt", lambda receipt: receipt)
-    monkeypatch.setattr(
-        hook_native_cli_observer,
-        "observe_native_pre_tool_cli",
-        lambda store, **values: calls.append(values),
-    )
-    return calls
-
-
-def test_a_drained_answer_is_recorded_like_a_daemon_allow(tmp_path: Path, observed: list[dict[str, object]]) -> None:
+def test_a_drained_answer_is_recorded_like_a_daemon_allow(tmp_path: Path) -> None:
     host = _host(tmp_path)
     assert record_direct_hook_evidence(host, _record())
 
     assert host.activity_writer.receipts == [RECEIPT]
-    assert observed == [{"payload": PAYLOAD, "workspace": Path("/work"), "home_dir": Path("/home/user")}]
     [activity] = host.activity_writer.activity
     assert activity["harness"] == "codex"
     assert activity["event"] == "PreToolUse"
     assert activity["policy_action"] == "allow"
     assert activity["receipt_id"] == RECEIPT["decision_id"]
+
+
+def test_a_receipt_the_resident_recorded_is_not_submitted_again(tmp_path: Path) -> None:
+    host = _host(tmp_path)
+    assert record_direct_hook_evidence(host, _record(receipt_recorded=True))
+
+    assert host.activity_writer.receipts == []
+    [activity] = host.activity_writer.activity
+    assert activity["receipt_id"] == RECEIPT["decision_id"]
+
+
+def test_activity_the_resident_recorded_is_not_submitted_again(tmp_path: Path) -> None:
+    host = _host(tmp_path)
+    assert record_direct_hook_evidence(host, _record(receipt_recorded=True, activity_recorded=True))
+
+    assert host.activity_writer.receipts == []
+    assert host.activity_writer.activity == []
+
+
+def test_post_tool_activity_the_resident_recorded_is_not_submitted_again(tmp_path: Path) -> None:
+    host = _host(tmp_path)
+    record = _record(event="PostToolUse", receipt_recorded=True, activity_recorded=True)
+    assert record_direct_hook_evidence(host, record)
+
+    assert host.post_tool_activity == []
 
 
 class _EventStore:
@@ -94,9 +105,7 @@ class _EventStore:
         self.events.append((event_name, payload))
 
 
-def test_a_drained_answer_that_waited_out_a_policy_update_leaves_a_window_event(
-    tmp_path: Path, observed: list[dict[str, object]]
-) -> None:
+def test_a_drained_answer_that_waited_out_a_policy_update_leaves_a_window_event(tmp_path: Path) -> None:
     host = _Host(tmp_path, store=_EventStore())
     assert record_direct_hook_evidence(host, _record(fence_wait_ms=300))
 
@@ -107,9 +116,14 @@ def test_a_drained_answer_that_waited_out_a_policy_update_leaves_a_window_event(
     assert host.activity_writer.receipts == [RECEIPT]
 
 
-def test_a_drained_answer_without_a_wait_leaves_no_window_event(
-    tmp_path: Path, observed: list[dict[str, object]]
-) -> None:
+def test_a_fence_wait_the_resident_recorded_leaves_no_second_window_event(tmp_path: Path) -> None:
+    host = _Host(tmp_path, store=_EventStore())
+    assert record_direct_hook_evidence(host, _record(fence_wait_ms=300, fence_wait_recorded=True))
+    assert host.store.events == []  # pyright: ignore[reportAttributeAccessIssue]
+    assert host.activity_writer.receipts == [RECEIPT]
+
+
+def test_a_drained_answer_without_a_wait_leaves_no_window_event(tmp_path: Path) -> None:
     host = _Host(tmp_path, store=_EventStore())
     assert record_direct_hook_evidence(host, _record())
     assert record_direct_hook_evidence(host, _record(fence_wait_ms=0))
@@ -119,9 +133,7 @@ def test_a_drained_answer_without_a_wait_leaves_no_window_event(
 @pytest.mark.parametrize(
     "harness", ["claude-code", "cursor", "kimi", "copilot", "zcode", "hermes", "opencode", "grok", "pi", "omp"]
 )
-def test_a_drained_answer_is_recorded_for_its_harness(
-    tmp_path: Path, observed: list[dict[str, object]], harness: str
-) -> None:
+def test_a_drained_answer_is_recorded_for_its_harness(tmp_path: Path, harness: str) -> None:
     host = _host(tmp_path)
     assert record_direct_hook_evidence(host, _record(harness=harness))
 
@@ -140,9 +152,7 @@ class _Capture:
 
 
 @pytest.mark.parametrize(("harness", "captured"), [("codex", 1), ("claude-code", 0), ("cursor", 0)])
-def test_a_codex_receipt_reaches_the_binding_capture(
-    tmp_path: Path, observed: list[dict[str, object]], harness: str, captured: int
-) -> None:
+def test_a_codex_receipt_reaches_the_binding_capture(tmp_path: Path, harness: str, captured: int) -> None:
     host = _host(tmp_path)
     capture = _Capture()
     host.capture_writer = capture  # pyright: ignore[reportAttributeAccessIssue]
@@ -152,6 +162,14 @@ def test_a_codex_receipt_reaches_the_binding_capture(
     if captured:
         assert capture.captured[0]["guard_home"] == tmp_path
         assert capture.captured[0]["receipt"] == RECEIPT
+
+
+def test_a_codex_receipt_the_resident_captured_is_not_captured_again(tmp_path: Path) -> None:
+    host = _host(tmp_path)
+    capture = _Capture()
+    host.capture_writer = capture  # pyright: ignore[reportAttributeAccessIssue]
+    assert record_direct_hook_evidence(host, _record(capture_recorded=True))
+    assert capture.captured == []
 
 
 @pytest.mark.parametrize(
@@ -166,19 +184,18 @@ def test_a_codex_receipt_reaches_the_binding_capture(
         _record(event=None),
     ],
 )
-def test_a_malformed_record_is_not_recorded(tmp_path: Path, observed: list[dict[str, object]], record: object) -> None:
+def test_a_malformed_record_is_not_recorded(tmp_path: Path, record: object) -> None:
     host = _host(tmp_path)
     assert not record_direct_hook_evidence(host, record)
     assert host.activity_writer.receipts == []
     assert host.activity_writer.activity == []
-    assert observed == []
     assert host.post_tool_activity == []
 
 
 def test_an_unmanaged_harness_is_passed_through_without_recording(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, observed: list[dict[str, object]]
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from codex_plugin_scanner.guard.daemon import hook_managed_install_state
+    from codex_plugin_scanner.guard.hook_review import hook_managed_install_state
 
     harnesses: list[str] = []
 
@@ -192,17 +209,14 @@ def test_an_unmanaged_harness_is_passed_through_without_recording(
     assert harnesses == ["codex"]
     assert host.activity_writer.receipts == []
     assert host.activity_writer.activity == []
-    assert observed == []
 
 
-def test_an_invalid_receipt_is_not_submitted(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, observed: list[dict[str, object]]
-) -> None:
-    monkeypatch.setattr(native_decision_receipt, "validate_native_decision_receipt", lambda receipt: None)
+@pytest.mark.parametrize("valid", [True, False, None])
+def test_only_a_receipt_the_resident_checked_is_submitted(tmp_path: Path, valid: bool | None) -> None:
     host = _host(tmp_path)
-    assert record_direct_hook_evidence(host, _record())
-    assert host.activity_writer.receipts == []
-    assert host.activity_writer.activity[0]["receipt_id"] is None
+    assert record_direct_hook_evidence(host, _record(receipt_valid=valid))
+    assert host.activity_writer.receipts == ([RECEIPT] if valid else [])
+    assert (host.activity_writer.activity[0]["receipt_id"] is not None) is (valid is True)
 
 
 def _page(records: list[object], remaining: int, through: int | None = None, epoch: object = "e1") -> bytes:
@@ -217,7 +231,7 @@ def _page(records: list[object], remaining: int, through: int | None = None, epo
     return json.dumps(body).encode()
 
 
-def test_drain_pulls_pages_until_the_queue_is_empty(tmp_path: Path, observed: list[dict[str, object]]) -> None:
+def test_drain_pulls_pages_until_the_queue_is_empty(tmp_path: Path) -> None:
     host = _host(tmp_path)
     pages = [_page([_record(), "junk"], 1, through=2), _page([_record()], 0, through=3)]
     requests: list[dict[str, object]] = []
@@ -240,6 +254,33 @@ def test_drain_pulls_pages_until_the_queue_is_empty(tmp_path: Path, observed: li
     assert json.loads(requests[1]["payload"])["request"]["ack_epoch"] == "e1"  # pyright: ignore[reportArgumentType]
 
 
+def test_drain_pages_past_a_page_the_resident_fully_recorded(tmp_path: Path) -> None:
+    host = _host(tmp_path)
+    pages = [_page([], 1, through=256), _page([_record()], 0, through=257)]
+    requests: list[dict[str, object]] = []
+
+    def client(**values: object) -> bytes:
+        requests.append(values)
+        return pages.pop(0)
+
+    drain = DirectHookEvidenceDrain(host, transport=lambda: (tmp_path, client))
+    assert drain.drain_once() is False
+    assert (drain.recorded, drain.failures) == (1, 0)
+    assert json.loads(requests[1]["payload"])["request"]["ack_through"] == 256  # pyright: ignore[reportArgumentType]
+
+
+def test_an_empty_page_without_a_cursor_ends_the_wake(tmp_path: Path) -> None:
+    requests: list[dict[str, object]] = []
+
+    def client(**values: object) -> bytes:
+        requests.append(values)
+        return _page([], 3)
+
+    drain = DirectHookEvidenceDrain(_host(tmp_path), transport=lambda: (tmp_path, client))
+    assert drain.drain_once() is False
+    assert len(requests) == 1
+
+
 @pytest.mark.parametrize("epoch", [None, "", 7])
 def test_a_cursor_without_its_resident_epoch_is_a_bad_page(tmp_path: Path, epoch: object) -> None:
     output = _page([_record()], 0, through=1, epoch=epoch)
@@ -248,9 +289,7 @@ def test_a_cursor_without_its_resident_epoch_is_a_bad_page(tmp_path: Path, epoch
     assert (drain.recorded, drain.failures) == (0, 1)
 
 
-def test_a_restarted_resident_gets_the_cursor_of_its_own_page(
-    tmp_path: Path, observed: list[dict[str, object]]
-) -> None:
+def test_a_restarted_resident_gets_the_cursor_of_its_own_page(tmp_path: Path) -> None:
     host = _host(tmp_path)
     pages = [_page([_record()], 0, through=9, epoch="old"), _page([_record()], 0, through=1, epoch="new"), _page([], 0)]
     requests: list[dict[str, object]] = []
@@ -298,7 +337,7 @@ def test_drain_without_a_resident_does_nothing(tmp_path: Path) -> None:
     assert drain.failures == 0
 
 
-def test_stop_collects_what_the_resident_still_holds(tmp_path: Path, observed: list[dict[str, object]]) -> None:
+def test_stop_collects_what_the_resident_still_holds(tmp_path: Path) -> None:
     host = _host(tmp_path)
     drain = DirectHookEvidenceDrain(host, transport=lambda: (tmp_path, lambda **_: _page([_record()], 0, through=1)))
     drain.stop()
@@ -315,7 +354,7 @@ POST_PAYLOAD = {
 
 @pytest.mark.parametrize(("harness", "captured"), [("codex", 1), ("claude-code", 0)])
 def test_a_drained_post_tool_use_is_recorded_like_the_daemon_records_it(
-    tmp_path: Path, observed: list[dict[str, object]], harness: str, captured: int
+    tmp_path: Path, harness: str, captured: int
 ) -> None:
     host = _host(tmp_path)
     capture = _Capture()
@@ -327,11 +366,10 @@ def test_a_drained_post_tool_use_is_recorded_like_the_daemon_records_it(
     assert len(capture.captured) == captured
     assert host.post_tool_activity == [{"harness": harness, "payload": POST_PAYLOAD, "succeeded": True}]
     # The pre-tool recording does not run after a tool already ran.
-    assert observed == []
     assert host.activity_writer.activity == []
 
 
-def test_a_failed_tool_is_recorded_as_failed(tmp_path: Path, observed: list[dict[str, object]]) -> None:
+def test_a_failed_tool_is_recorded_as_failed(tmp_path: Path) -> None:
     host = _host(tmp_path)
     payload = {**POST_PAYLOAD, "exit_code": 2}
     assert record_direct_hook_evidence(host, _record(event="PostToolUse", payload=payload))
@@ -344,9 +382,7 @@ PROMPT_PAYLOAD = {"hook_event_name": "UserPromptSubmit", "prompt": "List the fil
 
 
 @pytest.mark.parametrize(("harness", "captured"), [("codex", 1), ("claude-code", 0)])
-def test_a_drained_prompt_records_only_its_receipt_and_capture(
-    tmp_path: Path, observed: list[dict[str, object]], harness: str, captured: int
-) -> None:
+def test_a_drained_prompt_records_only_its_receipt_and_capture(tmp_path: Path, harness: str, captured: int) -> None:
     host = _host(tmp_path)
     capture = _Capture()
     host.capture_writer = capture  # pyright: ignore[reportAttributeAccessIssue]
@@ -355,7 +391,21 @@ def test_a_drained_prompt_records_only_its_receipt_and_capture(
 
     assert host.activity_writer.receipts == [RECEIPT]
     assert len(capture.captured) == captured
-    # The daemon records no command activity or observation for a prompt.
-    assert observed == []
+    # The daemon records no command activity for a prompt.
     assert host.activity_writer.activity == []
     assert host.post_tool_activity == []
+
+
+def test_a_store_failure_on_the_page_reaches_the_writer_client(tmp_path: Path) -> None:
+    host = _host(tmp_path)
+    asked: list[str] = []
+    host.activity_writer.stats = lambda: asked.append("stats")  # pyright: ignore[reportAttributeAccessIssue]
+    body = json.loads(_page([_record(receipt_recorded=True)], 0, through=1))
+    body["store_fatal"] = {"id": "f1", "code": "native_guard_store_corrupt"}
+    output = json.dumps(body).encode()
+    drain = DirectHookEvidenceDrain(host, transport=lambda: (tmp_path, lambda **_: output))
+
+    assert drain.drain_once() is False
+    assert asked == ["stats"]
+    assert drain.recorded == 1
+    assert host.activity_writer.receipts == []

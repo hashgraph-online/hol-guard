@@ -1,172 +1,14 @@
-"""Cursor native approval attestation for afterShell and afterMCP observer hooks."""
+"""Cursor hook attestation key: the secret the hook script signs observer proofs with."""
 
 from __future__ import annotations
 
-import hashlib
-import hmac
 import os
 import secrets
-import shlex
 import stat
-from collections.abc import Mapping
 from contextlib import suppress
 from pathlib import Path
 
 _CURSOR_HOOK_ATTESTATION_RELATIVE = Path("secrets") / "cursor-hook-attestation.key"
-_AFTER_SHELL_PROOF_EVENT = "afterShellExecution"
-_MAX_CURSOR_SHELL_NORMALIZE_BYTES = 8192
-_LEAN_CTX_COMMAND_MARKER = "lean-ctx"
-_SHELL_WRAPPER_BINARIES = frozenset(
-    {
-        _LEAN_CTX_COMMAND_MARKER,
-        "ash",
-        "bash",
-        "dash",
-        "fish",
-        "sh",
-        "zsh",
-    }
-)
-
-
-def _split_posix_single_quoted_argument(text: str) -> tuple[str, str] | None:
-    if not text.startswith("'"):
-        return None
-    parts: list[str] = []
-    index = 1
-    while index < len(text):
-        character = text[index]
-        if character != "'":
-            parts.append(character)
-            index += 1
-            continue
-        if index + 3 < len(text) and text[index : index + 4] == "'\\''":
-            parts.append("'")
-            index += 4
-            continue
-        return "".join(parts), text[index + 1 :].lstrip()
-    return None
-
-
-def _split_first_shell_argument(text: str) -> tuple[str, str] | None:
-    text = text.lstrip()
-    if not text:
-        return None
-    if text[0] == "'":
-        return _split_posix_single_quoted_argument(text)
-    try:
-        tokens = shlex.split(text, posix=True, comments=False)
-    except ValueError:
-        return None
-    if not tokens:
-        return None
-    first = tokens[0]
-    remainder = text
-    for token in tokens[:1]:
-        token_index = remainder.find(token)
-        if token_index == -1:
-            return first, ""
-        remainder = remainder[token_index + len(token) :].lstrip()
-    return first, remainder
-
-
-def normalize_cursor_shell_command(command: str) -> str:
-    """Unwrap lean-ctx shell rewrites so approval memory keys stay stable."""
-
-    stripped = command.strip()
-    if not stripped or len(stripped) > _MAX_CURSOR_SHELL_NORMALIZE_BYTES:
-        return stripped
-    lowered = stripped.lower()
-    needle = _LEAN_CTX_COMMAND_MARKER
-    start = 0
-    while True:
-        idx = lowered.find(needle, start)
-        if idx == -1:
-            return stripped
-        if idx == 0 or stripped[idx - 1] == "/":
-            tail = stripped[idx + len(needle) :].lstrip()
-            if tail.startswith("-c"):
-                rest = tail[2:].lstrip()
-                parsed: tuple[str, str] | None = None
-                try:
-                    tokens = shlex.split(rest, posix=True, comments=False)
-                except ValueError:
-                    tokens = None
-                if tokens:
-                    inner = tokens[0]
-                    suffix = tokens[1:]
-                    return " ".join((inner, *suffix)) if suffix else inner
-                parsed = _split_first_shell_argument(rest)
-                if parsed is None:
-                    return stripped
-                inner, suffix = parsed
-                return " ".join((inner, suffix)) if suffix else inner
-        start = idx + 1
-    return stripped
-
-
-def is_lean_ctx_wrapper_command(command: str) -> bool:
-    stripped = command.strip()
-    if not stripped:
-        return False
-    first_token = stripped.split(maxsplit=1)[0]
-    return Path(first_token).name.lower() == _LEAN_CTX_COMMAND_MARKER
-
-
-def is_shell_wrapper_command(command: str) -> bool:
-    """Return True when a top-level command is wrapping an inner shell invocation."""
-
-    stripped = command.strip()
-    if not stripped:
-        return False
-    if is_lean_ctx_wrapper_command(stripped):
-        return True
-    try:
-        parts = shlex.split(stripped, posix=True, comments=False)
-    except ValueError:
-        return False
-    if not parts:
-        return False
-    binary = Path(parts[0]).name.lower()
-    if binary not in _SHELL_WRAPPER_BINARIES:
-        return False
-    return len(parts) > 1 and parts[1] == "-c"
-
-
-def cursor_hook_payload_is_mcp_execution(payload: Mapping[str, object]) -> bool:
-    """Return True when the payload came from Cursor MCP before/after hooks."""
-
-    source_event = payload.get("cursor_source_hook_event")
-    if isinstance(source_event, str) and source_event.strip().lower() == "beforemcpexecution":
-        return True
-    for key in ("hook_event_name", "hookEventName", "hook_name", "hookName", "event", "eventName"):
-        value = payload.get(key)
-        if isinstance(value, str):
-            lowered = value.strip().lower()
-            if lowered in {"beforemcpexecution", "aftermcpexecution"}:
-                return True
-    return False
-
-
-def cursor_after_observer_proof_message(
-    *,
-    conversation_id: str,
-    command: str,
-    approval_binding: str,
-    observer_event: str,
-) -> bytes:
-    return (
-        chr(0)
-        .join(
-            (
-                conversation_id.strip(),
-                command.strip(),
-                approval_binding.strip(),
-                observer_event.strip(),
-            )
-        )
-        .encode("utf-8")
-    )
 
 
 def cursor_hook_attestation_secret_path(guard_home: Path) -> Path:
@@ -268,49 +110,7 @@ def ensure_cursor_hook_attestation_secret(guard_home: Path) -> bytes:
     return generated
 
 
-def compute_cursor_after_observer_proof(
-    *,
-    secret: bytes,
-    conversation_id: str,
-    command: str,
-    approval_binding: str,
-    observer_event: str,
-) -> str:
-    normalized_command = normalize_cursor_shell_command(normalize_cursor_shell_command(command))
-    message = cursor_after_observer_proof_message(
-        conversation_id=conversation_id,
-        command=normalized_command,
-        approval_binding=approval_binding,
-        observer_event=observer_event,
-    )
-    digest = hmac.new(secret, message, hashlib.sha256).hexdigest()
-    return digest
-
-
-def compute_cursor_after_shell_proof(
-    *,
-    secret: bytes,
-    conversation_id: str,
-    command: str,
-    approval_binding: str,
-) -> str:
-    return compute_cursor_after_observer_proof(
-        secret=secret,
-        conversation_id=conversation_id,
-        command=command,
-        approval_binding=approval_binding,
-        observer_event=_AFTER_SHELL_PROOF_EVENT,
-    )
-
-
 __all__ = [
-    "compute_cursor_after_observer_proof",
-    "compute_cursor_after_shell_proof",
-    "cursor_after_observer_proof_message",
     "cursor_hook_attestation_secret_path",
-    "cursor_hook_payload_is_mcp_execution",
     "ensure_cursor_hook_attestation_secret",
-    "is_lean_ctx_wrapper_command",
-    "is_shell_wrapper_command",
-    "normalize_cursor_shell_command",
 ]

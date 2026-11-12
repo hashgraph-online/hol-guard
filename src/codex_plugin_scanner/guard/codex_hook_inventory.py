@@ -2,26 +2,16 @@
 
 from __future__ import annotations
 
-import math
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Literal
+from typing import Literal, cast
 
 from .codex_hook_identity import (
-    CODEX_HOOK_IDENTITY_SCHEMA,
     CodexHookDefinitionTooDeepError,
-    CodexHookGroupQuestion,
-    CodexHookHandlerQuestion,
     CodexHookIdentityUnavailableError,
-    canonical_codex_command_argv,
-    canonical_codex_hook_conflict_keys,
-    canonical_codex_hook_group_conflict_keys,
-    canonical_codex_hook_group_identities,
-    canonical_codex_hook_group_identity,
-    canonical_codex_hook_handler_identities,
-    canonical_codex_hook_identity,
 )
+from .native_codex_hook_identity import CODEX_HOOK_INVENTORY_FEATURE, native_codex_hook_identity
 
 CODEX_HOOK_INVENTORY_UNMANAGED_EXECUTABLE = "codex_hook_inventory_unmanaged_executable"
 CODEX_HOOK_INVENTORY_UNSUPPORTED_EVENT = "codex_hook_inventory_unsupported_event_shape"
@@ -120,104 +110,41 @@ def enumerate_codex_hooks(
     legacy_bindings: Sequence[Mapping[str, object]] = (),
     self_bindings: Sequence[Mapping[str, object]] = (),
 ) -> CodexHookInventory:
-    """Walk every event, group, and handler accepted by the Codex hook shape."""
+    """Every event, group, and handler accepted by the Codex hook shape.
+
+    The resident walks the source, the same walk native detection runs, and
+    answers with each handler's record and identity and every shape it cannot
+    model. A source without hooks has nothing to walk.
+    """
 
     hooks = payload.get("hooks")
     if hooks is None:
         return CodexHookInventory(str(source_path), (), ())
-    if not isinstance(hooks, Mapping):
-        issue = CodexHookInventoryIssue(
-            CODEX_HOOK_INVENTORY_UNSUPPORTED_EVENT,
-            "Codex hooks must be an event table. Repair the hook configuration before retrying install.",
-            str(source_path),
-        )
-        return CodexHookInventory(str(source_path), (), (issue,))
-
-    records: list[CodexHookInventoryRecord] = []
-    issues: list[CodexHookInventoryIssue] = []
-    questions: list[CodexHookHandlerQuestion] = []
-    for event_name, groups in hooks.items():
-        if _is_codex_hook_state_metadata(event_name, groups, source_format):
-            continue
-        if not isinstance(event_name, str) or not isinstance(groups, list):
-            issues.append(
-                CodexHookInventoryIssue(
-                    CODEX_HOOK_INVENTORY_UNSUPPORTED_EVENT,
-                    "Each Codex hook event must contain a list of matcher groups. Repair the event shape before "
-                    "retrying install.",
-                    str(source_path),
-                    event_name if isinstance(event_name, str) else None,
-                )
-            )
-            continue
-        for group_index, group in enumerate(groups):
-            if not isinstance(group, Mapping):
-                issues.append(
-                    CodexHookInventoryIssue(
-                        CODEX_HOOK_INVENTORY_MALFORMED_GROUP,
-                        "Each Codex hook matcher group must be an object. Repair the group before retrying install.",
-                        str(source_path),
-                        event_name,
-                        group_index,
-                    )
-                )
-                continue
-            if not _activation_fields_are_valid(group) or not isinstance(group.get("matcher"), (str, type(None))):
-                issues.append(
-                    CodexHookInventoryIssue(
-                        CODEX_HOOK_INVENTORY_MALFORMED_GROUP,
-                        "A Codex hook matcher and activation fields must use supported scalar types. Repair the "
-                        "group before retrying install.",
-                        str(source_path),
-                        event_name,
-                        group_index,
-                    )
-                )
-            handlers = group.get("hooks")
-            if handlers is None:
-                continue
-            if not isinstance(handlers, list):
-                issues.append(
-                    CodexHookInventoryIssue(
-                        CODEX_HOOK_INVENTORY_MALFORMED_GROUP,
-                        "A Codex hook group's handlers must be a list. Repair the group before retrying install.",
-                        str(source_path),
-                        event_name,
-                        group_index,
-                    )
-                )
-                continue
-            group_active = _entry_is_active(group)
-            for handler_index, handler in enumerate(handlers):
-                record, handler_issues = _handler_record(
-                    questions,
-                    handler,
-                    source_path=source_path,
-                    source_scope=source_scope,
-                    source_format=source_format,
-                    source_hooks_enabled=source_hooks_enabled,
-                    event_name=event_name,
-                    group_index=group_index,
-                    matcher=group.get("matcher"),
-                    handler_index=handler_index,
-                    group_active=group_active,
-                    authenticated_bindings=authenticated_bindings,
-                    legacy_bindings=legacy_bindings,
-                    self_bindings=self_bindings,
-                    group=group,
-                )
-                if record is not None:
-                    records.append(record)
-                issues.extend(handler_issues)
+    shared = {
+        "kind": "inventory",
+        "source_scope": source_scope,
+        "source_hooks_enabled": source_hooks_enabled,
+        "source_format": source_format,
+        "authenticated_bindings": authenticated_bindings,
+        "legacy_bindings": legacy_bindings,
+        "self_bindings": self_bindings,
+    }
+    # The walk reads each event on its own, so one entry per event lets a large
+    # source split across requests without changing what any event answers.
+    events = [{name: groups} for name, groups in hooks.items()] if isinstance(hooks, Mapping) else [hooks]
     try:
-        identified = _identified(records, questions)
-    except CodexHookIdentityUnavailableError as error:
-        return CodexHookInventory(
-            str(source_path),
-            (),
-            (*issues, _unidentified_source_issue(source_path, error)),
+        answers = native_codex_hook_identity(
+            [{**shared, "hooks": event} for event in events], required_feature=CODEX_HOOK_INVENTORY_FEATURE
         )
-    return CodexHookInventory(str(source_path), identified, tuple(issues))
+        records = tuple(
+            _record(item, str(source_path), source_scope, source_format, source_hooks_enabled)
+            for answer in answers
+            for item in _list_of(answer, "records")
+        )
+        issues = tuple(_issue(item, str(source_path)) for answer in answers for item in _list_of(answer, "issues"))
+    except CodexHookIdentityUnavailableError as error:
+        return CodexHookInventory(str(source_path), (), (_unidentified_source_issue(source_path, error),))
+    return CodexHookInventory(str(source_path), records, issues)
 
 
 def _unidentified_source_issue(
@@ -241,279 +168,82 @@ def _unidentified_source_issue(
     )
 
 
-def _identified(
-    records: Sequence[CodexHookInventoryRecord],
-    questions: Sequence[CodexHookHandlerQuestion],
-) -> tuple[CodexHookInventoryRecord, ...]:
-    """Give every record the identity the resident derived for it.
+def _list_of(answer: Mapping[str, object], key: str) -> list[Mapping[str, object]]:
+    """The answer's list of objects under ``key``; anything else is no answer."""
 
-    The walk appends exactly one question per record, so the two line up by
-    position; ``strict`` makes a walk that ever stopped doing so fail closed
-    rather than hand back a record carrying another handler's identity.
-    """
-
-    identities = canonical_codex_hook_handler_identities(questions)
-    return tuple(
-        replace(
-            record,
-            command_argv=identity.command_argv,
-            canonical_identity=identity.canonical_identity,
-        )
-        for record, identity in zip(records, identities, strict=True)
-    )
+    items = answer.get(key)
+    if not isinstance(items, list) or not all(isinstance(item, Mapping) for item in items):
+        raise CodexHookIdentityUnavailableError
+    return items
 
 
-def _is_codex_hook_state_metadata(
-    event_name: object,
-    value: object,
-    source_format: HookSourceFormat,
-) -> bool:
-    """Recognize Codex's reserved TOML hook-state metadata table."""
-
-    return (
-        source_format == "toml"
-        and event_name == "state"
-        and isinstance(value, Mapping)
-        and all(
-            isinstance(coordinate, str)
-            and isinstance(state_entry, Mapping)
-            and set(state_entry).issubset({"trusted_hash", "enabled"})
-            and "trusted_hash" in state_entry
-            and _is_trusted_hook_hash(state_entry.get("trusted_hash"))
-            and ("enabled" not in state_entry or isinstance(state_entry.get("enabled"), bool))
-            for coordinate, state_entry in value.items()
-        )
-    )
-
-
-def _is_trusted_hook_hash(value: object) -> bool:
-    return (
-        isinstance(value, str)
-        and value.startswith("sha256:")
-        and len(value) == 71
-        and all(character in "0123456789abcdefABCDEF" for character in value[7:])
-    )
-
-
-def _handler_record(
-    questions: list[CodexHookHandlerQuestion],
-    handler: object,
-    *,
-    source_path: Path,
-    source_scope: str,
-    source_format: HookSourceFormat,
-    source_hooks_enabled: bool,
-    event_name: str,
-    group_index: int,
-    matcher: object,
-    handler_index: int,
-    group_active: bool,
-    authenticated_bindings: Sequence[Mapping[str, object]],
-    legacy_bindings: Sequence[Mapping[str, object]],
-    self_bindings: Sequence[Mapping[str, object]],
-    group: Mapping[str, object],
-) -> tuple[CodexHookInventoryRecord | None, tuple[CodexHookInventoryIssue, ...]]:
-    if not isinstance(handler, Mapping):
-        return None, (
-            _handler_issue(
-                CODEX_HOOK_INVENTORY_MALFORMED_HANDLER,
-                "Each Codex hook handler must be an object. Repair the handler before retrying install.",
-                source_path,
-                event_name,
-                group_index,
-                handler_index,
-            ),
-        )
-    raw_type = handler.get("type")
-    handler_type = raw_type if isinstance(raw_type, str) and raw_type.strip() else None
-    raw_command = handler.get("command")
-    command = raw_command if isinstance(raw_command, str) and raw_command.strip() else None
-    executable = raw_command is not None or handler_type == "command"
-    issues: list[CodexHookInventoryIssue] = []
-    if not _activation_fields_are_valid(handler):
-        issues.append(
-            _handler_issue(
-                CODEX_HOOK_INVENTORY_MALFORMED_HANDLER,
-                "Codex hook activation fields must be booleans. Repair the handler before retrying install.",
-                source_path,
-                event_name,
-                group_index,
-                handler_index,
-            )
-        )
-    if executable and command is None:
-        issues.append(
-            _handler_issue(
-                CODEX_HOOK_INVENTORY_MALFORMED_HANDLER,
-                "An executable Codex command hook must contain a non-empty string command. Repair the handler "
-                "before retrying install.",
-                source_path,
-                event_name,
-                group_index,
-                handler_index,
-            )
-        )
-    if handler_type not in {None, "command"}:
-        issues.append(
-            _handler_issue(
-                CODEX_HOOK_INVENTORY_UNKNOWN_HANDLER,
-                "Guard found an executable Codex hook type it cannot model. Remove or convert the handler to a "
-                "supported command hook before retrying install.",
-                source_path,
-                event_name,
-                group_index,
-                handler_index,
-            )
-        )
-    timeout = _timeout(handler.get("timeout"))
-    if handler.get("timeout") is not None and timeout is None and executable:
-        issues.append(
-            _handler_issue(
-                CODEX_HOOK_INVENTORY_MALFORMED_HANDLER,
-                "An executable Codex hook timeout must be a finite non-negative number. Repair the handler before "
-                "retrying install.",
-                source_path,
-                event_name,
-                group_index,
-                handler_index,
-            )
-        )
-    environment_keys, environment_valid = _environment_keys(handler)
-    if not environment_valid and executable:
-        issues.append(
-            _handler_issue(
-                CODEX_HOOK_INVENTORY_MALFORMED_HANDLER,
-                "An executable Codex hook environment must be a string-keyed object. Repair the handler before "
-                "retrying install.",
-                source_path,
-                event_name,
-                group_index,
-                handler_index,
-            )
-        )
-    ownership = _ownership(
-        event_name,
-        group,
-        handler,
-        authenticated_bindings=authenticated_bindings,
-        legacy_bindings=legacy_bindings,
-        self_bindings=self_bindings,
-    )
-    questions.append(
-        CodexHookHandlerQuestion(
-            source_scope=source_scope,
-            source_hooks_enabled=source_hooks_enabled,
-            event_name=event_name,
-            group=group,
-            handler=handler,
-            command=command,
-        )
-    )
-    record = CodexHookInventoryRecord(
-        source_path=str(source_path),
-        source_scope=source_scope,
-        source_format=source_format,
-        source_hooks_enabled=source_hooks_enabled,
-        event_name=event_name,
-        group_index=group_index,
-        matcher=matcher,
-        handler_index=handler_index,
-        handler_type=handler_type,
-        command=command,
-        command_argv=None,
-        timeout=timeout,
-        environment_keys=environment_keys,
-        active=group_active and _entry_is_active(handler),
-        executable=executable,
-        ownership=ownership,
-        canonical_identity="",
-    )
-    return record, tuple(issues)
-
-
-def _handler_issue(
-    reason_code: str,
-    message: str,
-    source_path: Path,
-    event_name: str,
-    group_index: int,
-    handler_index: int,
-) -> CodexHookInventoryIssue:
-    return CodexHookInventoryIssue(
-        reason_code,
-        message,
-        str(source_path),
-        event_name,
-        group_index,
-        handler_index,
-    )
-
-
-def _entry_is_active(entry: Mapping[str, object]) -> bool:
-    return entry.get("enabled") is not False and entry.get("disabled") is not True
-
-
-def _activation_fields_are_valid(entry: Mapping[str, object]) -> bool:
-    return all(key not in entry or isinstance(entry[key], bool) for key in ("enabled", "disabled"))
-
-
-def _timeout(value: object) -> int | float | None:
-    if isinstance(value, bool) or not isinstance(value, int | float):
-        return None
-    if value < 0 or not math.isfinite(value):
-        return None
+def _field(item: Mapping[str, object], key: str, kind: type | tuple[type, ...]) -> object:
+    value = item.get(key)
+    if not isinstance(value, kind) or (isinstance(value, bool) and bool not in _kinds(kind)):
+        raise CodexHookIdentityUnavailableError
     return value
 
 
-def _environment_keys(handler: Mapping[str, object]) -> tuple[tuple[str, ...], bool]:
-    raw_environment = handler.get("env", handler.get("environment"))
-    if raw_environment is None:
-        return (), True
-    if not isinstance(raw_environment, Mapping) or not all(
-        isinstance(key, str) and isinstance(value, str) for key, value in raw_environment.items()
-    ):
-        return (), False
-    return tuple(sorted(raw_environment)), True
+def _kinds(kind: type | tuple[type, ...]) -> tuple[type, ...]:
+    return kind if isinstance(kind, tuple) else (kind,)
 
 
-def _ownership(
-    event_name: str,
-    group: Mapping[str, object],
-    handler: Mapping[str, object],
-    *,
-    authenticated_bindings: Sequence[Mapping[str, object]],
-    legacy_bindings: Sequence[Mapping[str, object]],
-    self_bindings: Sequence[Mapping[str, object]] = (),
-) -> HookOwnership:
-    if _bindings_contain_handler(authenticated_bindings, event_name, group, handler):
-        return "authenticated_manifest"
-    if _bindings_contain_handler(legacy_bindings, event_name, group, handler):
-        return "exact_legacy_adoption"
-    if _bindings_contain_handler(self_bindings, event_name, group, handler):
-        return "self_install_binding"
-    return "unmanaged"
+def _strings(value: object) -> tuple[str, ...]:
+    if not isinstance(value, list) or not all(isinstance(item, str) for item in value):
+        raise CodexHookIdentityUnavailableError
+    return tuple(value)
 
 
-def _bindings_contain_handler(
-    bindings: Sequence[Mapping[str, object]],
-    event_name: str,
-    group: Mapping[str, object],
-    handler: Mapping[str, object],
-) -> bool:
-    for binding in bindings:
-        expected_group = binding.get("group")
-        if (
-            binding.get("event") == event_name
-            and isinstance(expected_group, Mapping)
-            and expected_group.get("matcher") == group.get("matcher")
-            and binding.get("handler") == handler
-        ):
-            return True
-    return False
+def _record(
+    item: Mapping[str, object],
+    source_path: str,
+    source_scope: str,
+    source_format: HookSourceFormat,
+    source_hooks_enabled: bool,
+) -> CodexHookInventoryRecord:
+    """One record the resident answered, checked field by field."""
+
+    ownership = _field(item, "ownership", str)
+    identity = _field(item, "canonical_identity", str)
+    if ownership not in _OWNERSHIPS or not identity:
+        raise CodexHookIdentityUnavailableError
+    argv = item.get("command_argv")
+    return CodexHookInventoryRecord(
+        source_path=source_path,
+        source_scope=source_scope,
+        source_format=source_format,
+        source_hooks_enabled=source_hooks_enabled,
+        event_name=cast("str", _field(item, "event_name", str)),
+        group_index=cast("int", _field(item, "group_index", int)),
+        matcher=_field(item, "matcher", (str, type(None))),
+        handler_index=cast("int", _field(item, "handler_index", int)),
+        handler_type=cast("str | None", _field(item, "handler_type", (str, type(None)))),
+        command=cast("str | None", _field(item, "command", (str, type(None)))),
+        command_argv=None if argv is None else _strings(argv),
+        timeout=cast("int | float | None", _field(item, "timeout", (int, float, type(None)))),
+        environment_keys=_strings(item.get("environment_keys")),
+        active=cast("bool", _field(item, "active", bool)),
+        executable=cast("bool", _field(item, "executable", bool)),
+        ownership=cast("HookOwnership", ownership),
+        canonical_identity=cast("str", identity),
+    )
+
+
+def _issue(item: Mapping[str, object], source_path: str) -> CodexHookInventoryIssue:
+    return CodexHookInventoryIssue(
+        cast("str", _field(item, "reason_code", str)),
+        cast("str", _field(item, "message", str)),
+        source_path,
+        cast("str | None", _field(item, "event_name", (str, type(None)))),
+        cast("int | None", _field(item, "group_index", (int, type(None)))),
+        cast("int | None", _field(item, "handler_index", (int, type(None)))),
+    )
+
+
+_OWNERSHIPS = frozenset(("authenticated_manifest", "exact_legacy_adoption", "self_install_binding", "unmanaged"))
 
 
 __all__ = [
-    "CODEX_HOOK_IDENTITY_SCHEMA",
     "CODEX_HOOK_INVENTORY_DEFINITION_TOO_DEEP",
     "CODEX_HOOK_INVENTORY_IDENTITY_UNAVAILABLE",
     "CODEX_HOOK_INVENTORY_MALFORMED_GROUP",
@@ -525,17 +255,8 @@ __all__ = [
     "CODEX_HOOK_INVENTORY_UNKNOWN_HANDLER",
     "CODEX_HOOK_INVENTORY_UNMANAGED_EXECUTABLE",
     "CODEX_HOOK_INVENTORY_UNSUPPORTED_EVENT",
-    "CodexHookGroupQuestion",
-    "CodexHookHandlerQuestion",
     "CodexHookInventory",
     "CodexHookInventoryIssue",
     "CodexHookInventoryRecord",
-    "canonical_codex_command_argv",
-    "canonical_codex_hook_conflict_keys",
-    "canonical_codex_hook_group_conflict_keys",
-    "canonical_codex_hook_group_identities",
-    "canonical_codex_hook_group_identity",
-    "canonical_codex_hook_handler_identities",
-    "canonical_codex_hook_identity",
     "enumerate_codex_hooks",
 ]

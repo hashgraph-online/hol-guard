@@ -6,7 +6,6 @@ from pathlib import Path
 
 from codex_plugin_scanner.guard.runtime.command_extensions import (
     BUILT_IN_COMMAND_EXTENSION_REGISTRY,
-    risk_classes_for_command_action,
 )
 from codex_plugin_scanner.guard.runtime.extension_control_contract import (
     CONTROL_SCHEMA_VERSION,
@@ -338,22 +337,6 @@ def test_remote_extensions_publish_official_references() -> None:
         assert extension is not None
         assert extension.reference_urls
         assert all(url.startswith("https://") for url in extension.reference_urls)
-
-
-def test_remote_execution_actions_publish_risk_classes() -> None:
-    assert risk_classes_for_command_action("SSH configured execution command") == (
-        "execution",
-        "network_egress",
-    )
-    assert risk_classes_for_command_action("Rsync remote shell command") == (
-        "execution",
-        "network_egress",
-    )
-    assert risk_classes_for_command_action("essh group execution command") == (
-        "execution",
-        "network_egress",
-    )
-    assert risk_classes_for_command_action("essh cache removal command") == ("destructive_shell",)
 
 
 def test_rsync_option_values_cannot_forge_dry_run(tmp_path: Path) -> None:

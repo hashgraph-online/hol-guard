@@ -8,9 +8,9 @@ import pytest
 
 from codex_plugin_scanner.guard.aibom_detection import _artifact_wire
 from codex_plugin_scanner.guard.artifact_native_fields import artifact_native_fields
+from codex_plugin_scanner.guard.artifact_native_fields import artifact_native_fields as _artifact_fields
 from codex_plugin_scanner.guard.models import GuardArtifact
 from codex_plugin_scanner.guard.native_artifact_content_hash import artifact_content_hash_fields
-from codex_plugin_scanner.guard.native_mcp_sensitive_read import _artifact_fields
 
 
 @pytest.mark.parametrize(

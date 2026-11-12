@@ -15,7 +15,9 @@ import { harnessDisplayName } from "./approval-center-utils";
 import { isConnectableAppHarness } from "./apps/harness-setup-target";
 import {
   detectedHarnesses,
+  inactiveInstallNeedsRepair,
   resolveDetectedAppStatus,
+  setupStatusFor,
   useHarnessDetection,
   versionCompatibilityFor,
   visibleHarnessesFor,
@@ -72,12 +74,16 @@ function formatCount(value: number): string {
 export function repairHarnessesFor(
   installs: Array<{ harness: string; active?: boolean }>,
   health: GuardProtectionHealth,
+  // The daemon's setup status per app; a disconnected app it reports as found is not repaired.
+  setupStatusOf: (harness: string) => ReturnType<typeof setupStatusFor> = () => undefined,
 ): string[] {
   return Array.from(new Set(
     installs
-      .filter((install) => install.active !== true || health.apps.find(
-        (app) => app.harness === install.harness
-      )?.checks.find((check) => check.check_id === "harness_hooks")?.status !== "pass")
+      .filter((install) => install.active !== true
+        ? inactiveInstallNeedsRepair(install, setupStatusOf(install.harness))
+        : health.apps.find(
+          (app) => app.harness === install.harness
+        )?.checks.find((check) => check.check_id === "harness_hooks")?.status !== "pass")
       .map((install) => install.harness)
   ));
 }
@@ -107,11 +113,14 @@ export function FleetWorkspace(props: FleetWorkspaceProps) {
   const protectionHealth = protectionHealthFor(props.runtime);
   const protectionState = useProtectionPresentationState(protectionHealth);
   const receiptHarnesses = new Set(props.runtime.latest_receipts.map((r) => r.harness).filter(isConnectableAppHarness));
-  const repairHarness = managedInstalls.find((install) => !install.active)?.harness
+  const setupStatusOf = (harness: string) => setupStatusFor(harnessDetection, harness);
+  const repairHarness = managedInstalls.find(
+    (install) => inactiveInstallNeedsRepair(install, setupStatusOf(install.harness))
+  )?.harness
     ?? visibleHarnesses.find((harness) => protectionHealthFor(props.runtime, harness).checks.some(
       (check) => check.check_id === "harness_hooks" && check.status === "fail"
     )) ?? visibleHarnesses[0];
-  const repairHarnesses = repairHarnessesFor(managedInstalls, protectionHealth);
+  const repairHarnesses = repairHarnessesFor(managedInstalls, protectionHealth, setupStatusOf);
   // Apps known to this machine and whether Guard actually manages their hooks.
   // The posture card only speaks about the managed ones.
   const postureApps: FleetPostureApp[] = (() => {
@@ -124,7 +133,7 @@ export function FleetWorkspace(props: FleetWorkspaceProps) {
     const install = managedInstalls.find((i) => i.harness === harness);
     const presentInventory = inventory.filter((i) => i.harness === harness && i.present);
     const appProtection = protectionHealthFor(props.runtime, harness);
-    const status = resolveDetectedAppStatus(install, appProtection, presentInventory.length > 0, receiptHarnesses.has(harness), detected.includes(harness));
+    const status = resolveDetectedAppStatus(install, appProtection, presentInventory.length > 0, receiptHarnesses.has(harness), detected.includes(harness), setupStatusFor(harnessDetection, harness));
     return {
       harness,
       status,

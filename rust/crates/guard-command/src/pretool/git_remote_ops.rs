@@ -7,6 +7,10 @@
 //! `git merge --ff-only origin/<branch>`, alone or after the refresh, is the
 //! pull split in two. It reaches no remote, so it needs only the work tree
 //! half of the pull proof: what a fast-forward checkout could start.
+//!
+//! `git ls-remote origin` is the same connection with nothing on the other
+//! end of it: it prints the refs the remote advertises and writes nothing, so
+//! the transport proof alone answers for it.
 
 use super::git_remote_config as config;
 use super::git_session_probe::Probe;
@@ -56,6 +60,8 @@ pub(super) fn exact_safe_command(
         ..context
     };
     let mut fetch_seen = false;
+    // A `git ls-remote origin` that read the remote's refs and nothing else.
+    let mut listed = false;
     // One proven fast-forward merge may follow or stand in for the fetch;
     // after it, the checkout may hold files the chain did not see.
     let mut merged = false;
@@ -102,7 +108,9 @@ pub(super) fn exact_safe_command(
             {
                 return None;
             }
-            if merge {
+            if operation.listing {
+                listed = true;
+            } else if merge {
                 merged = true;
             } else {
                 fetch_seen = true;
@@ -158,9 +166,15 @@ pub(super) fn exact_safe_command(
             }
         }
     }
-    (fetch_seen || merged).then_some((
-        "native_exact_safe_git_origin_refresh",
-        "The Rust command authority proved this fetch, pull or fast-forward of an origin branch starts no hook, filter or transport program, and any fetch reaches only a GitHub origin with trusted credential helpers and plain refspecs.",
+    if fetch_seen || merged {
+        return Some((
+            "native_exact_safe_git_origin_refresh",
+            "The Rust command authority proved this fetch, pull or fast-forward of an origin branch starts no hook, filter or transport program, and any fetch reaches only a GitHub origin with trusted credential helpers and plain refspecs.",
+        ));
+    }
+    listed.then_some((
+        "native_exact_safe_git_origin_listing",
+        "The Rust command authority proved this listing of an origin branch or tag writes nothing to the repository and starts no transport program, and reaches only a GitHub origin with trusted credential helpers.",
     ))
 }
 
@@ -323,6 +337,7 @@ pub(super) fn proven_fetch(
         parse(segment, context),
         Some((leading, operation))
             if operation.upstream.is_none()
+                && !operation.listing
                 && proven(segment, leading, operation, context, deadline, execution_environment)
     )
 }
@@ -378,6 +393,45 @@ pub(super) fn verified_refresh(
         Some(work_tree_settles(&probe, &route))
     })
     .unwrap_or(false)
+}
+
+/// Whether a later read routed by `later` takes no configuration from the
+/// work tree, so an earlier step that rewrote tracked files (a checkout, a
+/// reset, a stash) cannot have changed what the read obeys. It is the proof a
+/// pull's fast-forward needs in [`verified_refresh`], asked of any step.
+pub(super) fn work_tree_outside_configuration(
+    later: &CommandSegmentV1,
+    context: super::PathContext<'_>,
+    deadline: Option<Instant>,
+    execution_environment: Option<&guard_contracts::GuardExecutionEnvironmentV1>,
+) -> bool {
+    let (Some(executable), Some(route)) = (later.executable.as_deref(), read_route(later, context))
+    else {
+        return false;
+    };
+    let key = (
+        format!("\0tree-configuration:{executable}"),
+        vec![route.to_string_lossy().into_owned()],
+        context.home_dir.map(str::to_owned),
+        context.cwd.map(str::to_owned),
+        false,
+    );
+    super::git_probe::memoized(key, || {
+        let probe = Probe::new(executable, &[], context, deadline, execution_environment)?;
+        Some(work_tree_settles(&probe, &route))
+    })
+    .unwrap_or(false)
+}
+
+/// The directory a Git step runs in: its working directory folded through the
+/// step's leading `-C` routes, as Git folds them. `None` when a leading option
+/// could send it somewhere this cannot name, which `--git-dir` and
+/// `--work-tree` do.
+pub(super) fn routed_directory(
+    segment: &CommandSegmentV1,
+    context: super::PathContext<'_>,
+) -> Option<std::path::PathBuf> {
+    read_route(segment, context)
 }
 
 /// The directory the later read runs Git in: the segment's working directory
@@ -499,9 +553,18 @@ fn parse<'a>(
                 Operation {
                     upstream: None,
                     every_remote,
+                    listing: false,
                 },
             )
         }),
+        "ls-remote" => super::git_ls_remote::listing(rest).then_some((
+            leading,
+            Operation {
+                upstream: None,
+                every_remote: false,
+                listing: true,
+            },
+        )),
         "pull" => Some((leading, Operation::upstream(pull::shaped(rest)?))),
         "merge" => Some((
             leading,
@@ -509,6 +572,16 @@ fn parse<'a>(
         )),
         _ => None,
     }
+}
+
+/// Whether no pager is configured for the listing itself.
+///
+/// Git pages `ls-remote` as it pages any other builtin, under that command's
+/// own `pager.ls-remote` key, so the fetch's key says nothing about it. With
+/// one set and stdout a terminal, an approved listing starts the program it
+/// names.
+fn listing_pager_free(effective: &config::GitConfig) -> bool {
+    !pull::pager_enabled(effective, "ls-remote")
 }
 
 fn prove(
@@ -543,6 +616,13 @@ fn prove(
                     && !lfs_endpoint_overridden(&effective)
                     && target.is_some_and(|target| lfsconfig_absent(&probe, target))))
             && fast_forward_inert(&effective, &repository, shape, &probe);
+    }
+    // A listing writes no ref, checks nothing out and starts no hook, so
+    // where the connection goes and what it runs to get there is the whole
+    // question. Asking it for the fetch's inert hooks and absent submodules
+    // would keep the review on repositories that have them for no reason.
+    if operation.listing {
+        return transport_proven(&effective, &repository, &probe) && listing_pager_free(&effective);
     }
     // Initialized submodules are fetched on demand with their own config
     // and hooks, which this probe does not read.

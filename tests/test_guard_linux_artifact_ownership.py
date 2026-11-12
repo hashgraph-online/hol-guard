@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.runtime.linux_artifact_ownership import (
+from tests.linux_artifact_ownership import (
     LinuxArtifactMetadata,
     LinuxArtifactOwnershipError,
     verify_linux_artifact_ownership,

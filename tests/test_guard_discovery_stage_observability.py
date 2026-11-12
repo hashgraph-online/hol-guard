@@ -13,23 +13,23 @@ import sqlite3
 import threading
 import time
 from pathlib import Path
-from types import SimpleNamespace
 
 import pytest
 
 from codex_plugin_scanner.guard.adapters import harness_mcp_discovery
 from codex_plugin_scanner.guard.adapters.mcp_servers import ManagedMcpServer
-from codex_plugin_scanner.guard.daemon import background_diagnostics
-from codex_plugin_scanner.guard.daemon.local_cli_api import (
+from codex_plugin_scanner.guard.local_clis.local_cli_api import (
     DISCOVERY_STAGE_FAILED_EVENT,
     LocalCliApiService,
 )
-from codex_plugin_scanner.guard.daemon.mcp_discovery_jobs import (
+from codex_plugin_scanner.guard.local_clis.mcp_discovery_jobs import (
     DISCOVERY_JOB_FAILED_EVENT,
     DiscoveryStageError,
     McpDiscoveryJobs,
 )
 from codex_plugin_scanner.guard.models import GuardArtifact, HarnessDetection
+from codex_plugin_scanner.guard.runtime.mcp_protection import McpServerIdentity
+from codex_plugin_scanner.guard.runtime_health import background_diagnostics
 from codex_plugin_scanner.guard.store import GuardStore
 
 
@@ -53,7 +53,7 @@ def _service(tmp_path: Path, monkeypatch) -> LocalCliApiService:
     home = tmp_path / "home"
     home.mkdir()
     monkeypatch.setattr(
-        "codex_plugin_scanner.guard.daemon.local_cli_api.Path.home",
+        "codex_plugin_scanner.guard.local_clis.local_cli_api.Path.home",
         staticmethod(lambda: home),
     )
     return LocalCliApiService(store=GuardStore(home))
@@ -62,7 +62,7 @@ def _service(tmp_path: Path, monkeypatch) -> LocalCliApiService:
 def test_strict_host_scan_failure_is_recorded(tmp_path: Path, monkeypatch, recorded) -> None:
     service = _service(tmp_path, monkeypatch)
     monkeypatch.setattr(
-        "codex_plugin_scanner.guard.daemon.local_cli_api.configured_harness_detections",
+        "codex_plugin_scanner.guard.local_clis.local_cli_api.configured_harness_detections",
         lambda *_args, **_kwargs: (_ for _ in ()).throw(ValueError("unreadable config")),
     )
 
@@ -80,7 +80,7 @@ def test_recorded_detail_keeps_paths_out_of_the_log(tmp_path: Path, monkeypatch,
     service = _service(tmp_path, monkeypatch)
     secret_path = "/Users/someone/.cursor/mcp.json"
     monkeypatch.setattr(
-        "codex_plugin_scanner.guard.daemon.local_cli_api.configured_harness_detections",
+        "codex_plugin_scanner.guard.local_clis.local_cli_api.configured_harness_detections",
         lambda *_args, **_kwargs: (_ for _ in ()).throw(OSError(13, "Permission denied", secret_path)),
     )
 
@@ -100,7 +100,7 @@ def test_non_strict_host_scan_failure_stays_silent(tmp_path: Path, monkeypatch, 
 
     service = _service(tmp_path, monkeypatch)
     monkeypatch.setattr(
-        "codex_plugin_scanner.guard.daemon.local_cli_api.configured_harness_detections",
+        "codex_plugin_scanner.guard.local_clis.local_cli_api.configured_harness_detections",
         lambda *_args, **_kwargs: (_ for _ in ()).throw(ValueError("unreadable config")),
     )
 
@@ -152,21 +152,34 @@ def test_one_unreadable_harness_keeps_the_other_connections(monkeypatch) -> None
                 transport="stdio",
                 env={},
                 enabled=True,
+                identity=McpServerIdentity(
+                    config_path=artifact.config_path,
+                    command="npx",
+                    args_hash="args",
+                    package_name=None,
+                    package_version=None,
+                    package_source="",
+                    transport="stdio",
+                    env_keys=(),
+                    env_values_hash="",
+                    identity_hash=f"hash-{detection.harness}",
+                ),
             ),
         )
 
-    def identity_for(server: ManagedMcpServer):
-        # Identity building needs the native runtime, which this test does not
-        # exercise; the contract under test is that one harness failing above
-        # does not take the rest of the inventory with it.
-        return (
-            SimpleNamespace(identity_hash=f"hash-{server.harness}", name=server.name),
-            SimpleNamespace(command=server.command, args_hash="args"),
-            None,
-        )
+    def grouped(kind: str, args: dict[str, object], guard_home: object = None) -> dict[str, object]:
+        # The grouping itself is native and pinned by its Rust replay vectors;
+        # the contract here is that one harness failing above does not take
+        # the rest of the inventory with it.
+        entries = args["servers"]
+        assert kind == "harness_mcp_discovery"
+        assert isinstance(entries, list)
+        assert [entry["harness"] for entry in entries] == ["codex"]
+        texts = dict.fromkeys(("cli_id", "name", "identity_hash", "configuration_hash", "example_label"), "x")
+        return {"servers": [{"index": 0, **texts, "launch_command": "npx", "source_label": "Codex"}]}
 
     monkeypatch.setattr(harness_mcp_discovery, "observable_stdio_servers_with_proxy", servers_for)
-    monkeypatch.setattr(harness_mcp_discovery, "_identity_for", identity_for)
+    monkeypatch.setattr("codex_plugin_scanner.guard.native_runner_authority.native_runner_authority", grouped)
 
     found = harness_mcp_discovery.discover_harness_mcp_servers(
         home_dir=Path("/nonexistent-home"),
@@ -182,12 +195,12 @@ def test_persist_failure_is_named_apart_from_the_scan(tmp_path: Path, monkeypatc
 
     service = _service(tmp_path, monkeypatch)
     monkeypatch.setattr(
-        "codex_plugin_scanner.guard.daemon.local_cli_api.configured_harness_detections",
+        "codex_plugin_scanner.guard.local_clis.local_cli_api.configured_harness_detections",
         lambda *_args, **_kwargs: (),
     )
     monkeypatch.setattr(service, "_remote_scan", lambda: ((), None))
     monkeypatch.setattr(
-        "codex_plugin_scanner.guard.daemon.local_cli_api.persist_discovered_harness_mcp_servers",
+        "codex_plugin_scanner.guard.local_clis.local_cli_api.persist_discovered_harness_mcp_servers",
         lambda *_args, **_kwargs: (_ for _ in ()).throw(sqlite3.OperationalError("disk is full")),
     )
 
@@ -273,14 +286,14 @@ def test_a_failed_configured_scan_logs_no_path(tmp_path: Path, monkeypatch) -> N
 
     import json
 
-    from codex_plugin_scanner.guard.daemon.diagnostics import DaemonDiagnostics
+    from codex_plugin_scanner.guard.runtime_health.diagnostics import DaemonDiagnostics
 
     home = tmp_path / "home"
     home.mkdir()
     secret = home / ".codex" / "config.toml"
-    monkeypatch.setattr("codex_plugin_scanner.guard.daemon.local_cli_api.Path.home", staticmethod(lambda: home))
+    monkeypatch.setattr("codex_plugin_scanner.guard.local_clis.local_cli_api.Path.home", staticmethod(lambda: home))
     monkeypatch.setattr(
-        "codex_plugin_scanner.guard.daemon.local_cli_api.discover_harness_mcp_servers",
+        "codex_plugin_scanner.guard.local_clis.local_cli_api.discover_harness_mcp_servers",
         lambda **_kwargs: (_ for _ in ()).throw(PermissionError(13, "Permission denied", str(secret))),
     )
     diagnostics = DaemonDiagnostics(tmp_path / "guard-home")

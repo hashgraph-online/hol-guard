@@ -1,4 +1,7 @@
-"""Typed client for the native verified-read decisions; no Python composition."""
+"""Typed client for the native verified GitHub read decision; no Python composition.
+
+A verified workspace read gets its decision inside `verified-read-execute-v1`.
+"""
 
 from __future__ import annotations
 
@@ -26,19 +29,6 @@ _MAX_WIRE_BYTES = 6 * _MAX_REQUEST_BYTES + 4096
 
 class NativeVerifiedReadDecisionError(RuntimeError):
     """The native owner could not supply a complete, request-bound decision."""
-
-
-def workspace_read_decision(
-    *,
-    operation_id: str,
-    binding_digest: str,
-    guard_home: Path | None = None,
-    timeout_seconds: float = 10.0,
-) -> EffectDecision:
-    """Return the resident's decision for a verified workspace read."""
-
-    read: dict[str, object] = {"kind": "workspace", "operation_id": operation_id}
-    return _request_decision(read, binding_digest, guard_home=guard_home, timeout_seconds=timeout_seconds)
 
 
 def github_public_read_decision(

@@ -71,6 +71,8 @@ fn transition(input: &Obj) -> Handled {
         current_hash: present("current_hash"),
         expected_last_good_version: present("expected_last_good_version"),
         expected_last_good_hash: present("expected_last_good_hash"),
+        current_cloud_exceptions_issued_at: present("current_cloud_exceptions_issued_at"),
+        current_cloud_exceptions_hash: present("current_cloud_exceptions_hash"),
     };
     match v2::transition_error(&bundle, &state) {
         Some(code) => Err(Fail::from(code)),
@@ -123,6 +125,8 @@ pub(crate) fn handle(kind: &str, input: &Obj) -> Option<Handled> {
         "v2_canonical_payload" => object_document(input, "bundle_chunks")
             .and_then(|bundle| Ok(v2::canonical_payload(&bundle)?))
             .and_then(|bytes| page_text(bytes, page_offset(input)?)),
+        "v2_cloud_exceptions_hash" => object_document(input, "bundle_chunks")
+            .map(|bundle| json!({ "value": v2::cloud_exceptions_hash(&bundle) })),
         "v2_transition" => transition(input),
         "v2_acknowledgement" => acknowledgement(input),
         "is_downgrade" => downgrade(input),

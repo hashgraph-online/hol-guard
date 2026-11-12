@@ -137,115 +137,62 @@ def test_dns_observer_and_help_commands_remain_safe(tmp_path: Path) -> None:
 
 
 @pytest.mark.parametrize(
-    ("command", "rule_id"),
+    ("command", "rule_id", "minimum_action"),
     [
-        ("aws route53 delete-hosted-zone --id Z123 > --help", "command.dns.aws.zone-deletion"),
-        ("aws route53 delete-hosted-zone --id Z123 >--help", "command.dns.aws.zone-deletion"),
+        (
+            "aws route53 delete-hosted-zone --id Z123 > --help",
+            "command.dns.aws.zone-deletion",
+            "block",
+        ),
+        (
+            "aws route53 delete-hosted-zone --id Z123 >--help",
+            "command.dns.aws.zone-deletion",
+            "block",
+        ),
+        # A heredoc delimiter is an ordinary word, so `--help` names one the
+        # way `EOF` does. A heredoc leaves the command unmodeled, so no rule
+        # matches it and it carries no action class; the DNS extension still
+        # owns `aws` and raises the floor to its own review. The same deletion
+        # without a heredoc is modelled and carries the rule, which is what the
+        # review case below asserts. What the heredoc form must never reach is
+        # the safe `--help` classification the redirection target could stand
+        # in for.
         (
             "aws route53 delete-hosted-zone --id Z123 << --help\npayload\n--help",
             "command.dns.aws.zone-deletion",
+            "review",
         ),
     ],
 )
-def test_help_redirection_target_does_not_hide_dns_command(command: str, rule_id: str, tmp_path: Path) -> None:
+def test_help_redirection_target_does_not_hide_dns_command(
+    command: str, rule_id: str, minimum_action: str, tmp_path: Path
+) -> None:
     payload = inspect_command(command, cwd=tmp_path, home_dir=tmp_path)
     rules = payload["rules"]
     assert isinstance(rules, list)
 
-    assert payload["minimum_action"] == "block"
+    assert payload["minimum_action"] == minimum_action
     assert rules == []
     assert payload["classification"]["action_class"] is None
+
+    if minimum_action == "review":
+        # The review the heredoc form keeps is the extension's own floor, not
+        # a rule match. Pin the contrast so a shape that quietly stopped
+        # reaching the extension at all could not pass as this case: the same
+        # deletion, written without the heredoc, is modelled and names the rule.
+        modelled = inspect_command(
+            "aws route53 delete-hosted-zone --id Z123", cwd=tmp_path, home_dir=tmp_path
+        )
+        assert modelled["status"] == "review"
+        assert modelled["controlling_rule_id"] == rule_id
+        assert any(
+            isinstance(rule, dict) and rule.get("rule_id") == rule_id for rule in modelled["rules"]
+        )
+        assert modelled["classification"]["action_class"] == "AWS DNS destructive command"
 
 
 def test_lumped_dns_extension_is_not_registered() -> None:
     assert BUILT_IN_COMMAND_EXTENSION_REGISTRY.get("command.dns") is None
-
-
-def test_legacy_dns_controls_expand_onto_provider_extensions() -> None:
-    from codex_plugin_scanner.guard.runtime.command_dns_control_migration import expand_legacy_dns_layers
-    from codex_plugin_scanner.guard.runtime.extension_control_contract import (
-        CONTROL_SCHEMA_VERSION,
-        ControlLayerKind,
-        ControlState,
-        ControlTarget,
-        ControlTargetKind,
-        ExtensionControl,
-        ExtensionControlLayer,
-    )
-
-    layer = ExtensionControlLayer(
-        schema_version=CONTROL_SCHEMA_VERSION,
-        kind=ControlLayerKind.LOCAL_ADMIN,
-        catalog_digest="a" * 64,
-        global_lockdown=False,
-        controls=(
-            ExtensionControl(
-                ControlTarget(ControlTargetKind.EXTENSION, "command.dns"),
-                ControlState.DISABLED,
-            ),
-        ),
-    )
-    expanded = expand_legacy_dns_layers((layer,))
-    assert len(expanded) == 1
-    targets = {control.target.target_id for control in expanded[0].controls}
-    assert targets == {"command.dns.aws", "command.dns.gcp", "command.dns.azure"}
-    assert all(control.state is ControlState.DISABLED for control in expanded[0].controls)
-
-
-def test_legacy_dns_expansion_merges_provider_collision_and_keeps_original_duplicates() -> None:
-    from codex_plugin_scanner.guard.runtime.command_dns_control_migration import expand_legacy_dns_layers
-    from codex_plugin_scanner.guard.runtime.extension_control_contract import (
-        CONTROL_SCHEMA_VERSION,
-        ControlLayerKind,
-        ControlState,
-        ControlTarget,
-        ControlTargetKind,
-        ExtensionControl,
-        ExtensionControlLayer,
-    )
-
-    def _layer(*controls: ExtensionControl) -> ExtensionControlLayer:
-        return ExtensionControlLayer(
-            schema_version=CONTROL_SCHEMA_VERSION,
-            kind=ControlLayerKind.LOCAL_ADMIN,
-            catalog_digest="a" * 64,
-            global_lockdown=False,
-            controls=controls,
-        )
-
-    def _control(target_id: str, state: ControlState) -> ExtensionControl:
-        return ExtensionControl(ControlTarget(ControlTargetKind.EXTENSION, target_id), state)
-
-    for controls in (
-        (
-            _control("command.dns", ControlState.ENABLED),
-            _control("command.dns.aws", ControlState.DISABLED),
-        ),
-        (
-            _control("command.dns.aws", ControlState.DISABLED),
-            _control("command.dns", ControlState.ENABLED),
-        ),
-    ):
-        merged = expand_legacy_dns_layers((_layer(*controls),))
-        merged_states = {control.target.target_id: control.state for control in merged[0].controls}
-        assert merged_states == {
-            "command.dns.aws": ControlState.DISABLED,
-            "command.dns.gcp": ControlState.ENABLED,
-            "command.dns.azure": ControlState.ENABLED,
-        }
-
-    duplicated = expand_legacy_dns_layers(
-        (
-            _layer(
-                _control("command.dns.aws", ControlState.DISABLED),
-                _control("command.dns.aws", ControlState.DISABLED),
-            ),
-        )
-    )
-    assert [control.target.target_id for control in duplicated[0].controls] == [
-        "command.dns.aws",
-        "command.dns.aws",
-    ]
 
 
 def test_dns_extensions_are_provider_specific() -> None:

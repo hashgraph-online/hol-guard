@@ -2,16 +2,18 @@
 //!
 //! Cursor runs `guard-runtime cursor-hook-bridge <python> -I <script>
 //! --cursor-hook-event <event>`, where `<script>` is the client
-//! `cursor_hook_script_source` rendered. The bridge reads the six constants
+//! `cursor_hook_script` kind rendered. The bridge reads the six constants
 //! the renderer writes, from the current client or one an older Guard
 //! installed, and answers the hook itself; the client's own code never
 //! runs. A script whose constants it cannot read fails the hook closed.
+//! The current client carries only those constants and the answer for a
+//! hook no runtime answered: `{}` for an `after*` observer, else the
+//! bridge's own unavailable denial.
 //!
-//! [`CURSOR_SCRIPT_SHA256`] is the digest of the template the bridge was
-//! ported from, with its placeholders in place.
-//! `tests/test_cursor_native_bridge.py` renders the current template and
-//! checks it against this digest, so a template change fails CI until the
-//! native port is reviewed and the digest updated.
+//! `CURSOR_SCRIPT_SHA256` is the digest of the client template with its
+//! placeholders in place. The `cursor_hook_script` tests check the current
+//! template against this digest, so a template change fails CI until this
+//! reader is reviewed and the digest updated.
 
 use std::io::Read;
 use std::path::Path;
@@ -19,9 +21,9 @@ use std::path::Path;
 use crate::pyjson::{self, PyVal};
 
 /// SHA-256 of the current template with its placeholders in place.
-#[allow(dead_code)] // Read by `tests/test_cursor_native_bridge.py`.
+#[cfg(test)]
 pub(crate) const CURSOR_SCRIPT_SHA256: &str =
-    "f275bc239f22d1c4abaeb6252f25db9aaac5772150df4dc0d5bdbb97ff3cfe4d";
+    "c8101988ee68f6dc09365054a346cd29275e4e6690b098254b671e4b67b734a3";
 
 const MAX_SCRIPT_BYTES: u64 = 256 * 1024;
 /// Each constant line the renderer writes, as `<name> = <value>`.

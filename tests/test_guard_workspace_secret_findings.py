@@ -18,23 +18,20 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard import native_workspace_snapshot as native
+from ci.guard_daemon_harness import GuardDaemonServer
 from codex_plugin_scanner.guard import workspace_assessment_runner as runner
 from codex_plugin_scanner.guard import workspace_assessment_store as assessments
 from codex_plugin_scanner.guard import workspace_assessment_worker as worker
 from codex_plugin_scanner.guard import workspace_secret_findings as secret_findings
 from codex_plugin_scanner.guard.config import load_guard_config
-from codex_plugin_scanner.guard.daemon import GuardDaemonServer
 from codex_plugin_scanner.guard.store import GuardStore
 from tests.test_guard_headless_daemon_api import _dashboard_token_for, _read_json_response, _request
 from tests.test_guard_workspace_assessment_runner import (
     AUDIT,
-    HOOKS_COMPLETE,
     KEYS,
-    PLUGINS_COMPLETE,
+    NO_SUPPLY_GAPS,
     SCANNED,
     SECRETS_COMPLETE,
-    SKILLS_COMPLETE,
     SNAPSHOT,
     T0,
     queued_run,
@@ -140,6 +137,7 @@ def test_a_deeply_nested_path_is_kept() -> None:
         {"fingerprint": "short"},
         {"fingerprint": "G" * 32},
         {"severity": "catastrophic"},
+        {"severity": ["high"]},
     ],
 )
 def test_malformed_findings_are_dropped_and_leave_the_detector_incomplete(bad: dict[str, object]) -> None:
@@ -196,7 +194,7 @@ def test_a_stored_value_that_is_not_a_key_is_replaced(tmp_path: Path) -> None:
 
 
 def test_complete_scan_makes_a_complete_run() -> None:
-    coverage = runner.coverage_summary(SCANNED, AUDIT, findings_truncated=False)
+    coverage = runner.coverage_summary(SCANNED, AUDIT, NO_SUPPLY_GAPS, findings_truncated=False)
     assert coverage["status"] == "complete"
     assert coverage["detectors"]["secrets"] == "complete"
     assert coverage["secrets"]["skipped"] == {"credential_store": 0, "not_text": 0, "oversize": 0}
@@ -209,7 +207,7 @@ def test_complete_scan_makes_a_complete_run() -> None:
 )
 def test_truncated_scan_keeps_the_run_partial(reason: str, expected: list[str]) -> None:
     truncated = replace(SNAPSHOT, secrets=secrets_result(status="incomplete", truncation_reasons=[reason]))
-    coverage = runner.coverage_summary(truncated, AUDIT, findings_truncated=False)
+    coverage = runner.coverage_summary(truncated, AUDIT, NO_SUPPLY_GAPS, findings_truncated=False)
     assert coverage["status"] == "partial"
     assert coverage["reasons"] == expected
     assert coverage["detectors"]["secrets"] == "incomplete"
@@ -218,16 +216,18 @@ def test_truncated_scan_keeps_the_run_partial(reason: str, expected: list[str]) 
 
 def test_a_scan_that_hit_its_own_cap_marks_the_findings_list_truncated() -> None:
     capped = replace(SNAPSHOT, secrets=secrets_result(status="incomplete", truncation_reasons=["max_findings"]))
-    coverage = runner.coverage_summary(capped, AUDIT, findings_truncated=False)
+    coverage = runner.coverage_summary(capped, AUDIT, NO_SUPPLY_GAPS, findings_truncated=False)
     assert coverage["reasons"] == ["secrets_incomplete", "finding_cap"]
     # Other secret limits leave the run partial without claiming a cut list.
     walked = replace(SNAPSHOT, secrets=secrets_result(status="incomplete", truncation_reasons=["entry_cap"]))
-    assert "finding_cap" not in runner.coverage_summary(walked, AUDIT, findings_truncated=False)["reasons"]
+    coverage = runner.coverage_summary(walked, AUDIT, NO_SUPPLY_GAPS, findings_truncated=False)
+    assert "finding_cap" not in coverage["reasons"]
 
 
 @pytest.mark.parametrize("payload", [{"schema": "other"}, {**SECRETS_COMPLETE, "status": "weird"}, {}])
 def test_unreadable_secret_result_is_an_error(payload: dict[str, object]) -> None:
-    coverage = runner.coverage_summary(replace(SNAPSHOT, secrets=payload), AUDIT, findings_truncated=False)
+    snapshot = replace(SNAPSHOT, secrets=payload)
+    coverage = runner.coverage_summary(snapshot, AUDIT, NO_SUPPLY_GAPS, findings_truncated=False)
     assert coverage["status"] == "partial"
     assert coverage["reasons"] == ["secrets_incomplete"]
     assert coverage["detectors"]["secrets"] == "error"
@@ -235,13 +235,7 @@ def test_unreadable_secret_result_is_an_error(payload: dict[str, object]) -> Non
 
 def test_runner_projects_secret_findings_and_stays_complete(tmp_path: Path, monkeypatch) -> None:
     store, claimed = queued_run(tmp_path)
-    scanned = replace(
-        SNAPSHOT,
-        secrets=secrets_result(native_finding()),
-        skills=SKILLS_COMPLETE,
-        hooks=HOOKS_COMPLETE,
-        plugins=PLUGINS_COMPLETE,
-    )
+    scanned = replace(SCANNED, secrets=secrets_result(native_finding()))
     monkeypatch.setattr(runner, "workspace_snapshot", lambda root, **_: scanned)
     monkeypatch.setattr(runner, "_local_audit", lambda store, config, root: AUDIT)
     outcome = runner.execute(store, None, claimed, clock=lambda: T0)
@@ -263,6 +257,9 @@ def test_runner_hands_the_native_scan_a_stable_per_install_key(tmp_path: Path, m
         skills: bool = False,
         hooks: bool = False,
         plugins: bool = False,
+        workflows: bool = False,
+        editor_tasks: bool = False,
+        instructions: bool = False,
     ):
         if secrets:
             keys.append(secret_key)
@@ -278,40 +275,6 @@ def test_runner_hands_the_native_scan_a_stable_per_install_key(tmp_path: Path, m
     assert keys[0] == secret_findings.load_fingerprint_key(store, "2026-10-24T00:00:00Z")
 
 
-def test_older_runtime_falls_back_and_reports_the_detector_not_run(tmp_path: Path, monkeypatch) -> None:
-    store, claimed = queued_run(tmp_path)
-    requested: list[bool] = []
-
-    def snapshot(
-        root: Path,
-        *,
-        mode: str = "content",
-        secrets: bool = False,
-        secret_key: str | None = None,
-        skills: bool = False,
-        hooks: bool = False,
-        plugins: bool = False,
-    ) -> native.WorkspaceSnapshot:
-        requested.append(secrets)
-        if secrets:
-            raise native.WorkspaceSnapshotError("workspace_snapshot_secrets_unavailable")
-        return SNAPSHOT
-
-    monkeypatch.setattr(runner, "workspace_snapshot", snapshot)
-    monkeypatch.setattr(runner, "_local_audit", lambda store, config, root: AUDIT)
-    outcome = runner.execute(store, None, claimed, clock=lambda: T0)
-    assert requested == [True, False, False]
-    assert outcome.state == "partial"
-    assert outcome.coverage is not None
-    assert outcome.coverage["reasons"] == [
-        "detector_not_run:secrets",
-        "detector_not_run:skill_content_v1",
-        "detector_not_run:hook_config_v1",
-        "detector_not_run:plugin_manifest_v1",
-    ]
-    assert outcome.coverage["detectors"]["secrets"] == "not_run"
-
-
 def test_merged_findings_stay_bounded_and_most_severe_first() -> None:
     many = [
         secret_findings.project_secret_findings(
@@ -325,8 +288,8 @@ def test_merged_findings_stay_bounded_and_most_severe_first() -> None:
         )[0]
         for index in range(runner.MAX_FINDINGS + 20)
     ]
-    packages, _ = runner.project_supply_chain_findings(KEYS.worktree_key, AUDIT)
-    merged, truncated = runner.merge_findings(packages, many)
+    supply, _ = runner.project_supply_chain_findings(KEYS.worktree_key, AUDIT)
+    merged, truncated = runner.merge_findings(supply.findings, many)
     assert truncated is True
     assert len(merged) == runner.MAX_FINDINGS
     assert [item["severity"] for item in merged[:2]] == ["critical", "critical"]

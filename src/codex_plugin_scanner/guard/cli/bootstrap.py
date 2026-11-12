@@ -10,7 +10,7 @@ from ..adapters.base import HarnessContext
 from ..agent_safety_guidance import install_agent_safety_guidance
 from ..codex_install_transaction import codex_install_transaction
 from ..config import GuardConfig
-from ..daemon import ensure_guard_daemon
+from ..native_daemon_manage import ensure_guard_daemon
 from ..runtime_transition import assert_transition_mutation_allowed
 from ..store import GuardStore
 from .commands_parser_constants import DEFAULT_ALIAS_NAME
@@ -46,11 +46,16 @@ def build_guard_bootstrap_payload(
     payload["approval_center_reachable"] = True
     payload["bootstrap_install"] = bootstrap_install
     payload["shell_alias"] = alias
-    payload["next_steps"] = _build_bootstrap_steps(
-        harness=recommended_harness,
-        bootstrap_install=bootstrap_install,
-        alias=alias,
-    )
+    # An unavailable native runtime leaves only its repair step, which stays first.
+    repair_steps = payload.get("next_steps") if payload.get("runtime_status") == "unavailable" else None
+    payload["next_steps"] = [
+        *(repair_steps if isinstance(repair_steps, list) else []),
+        *_build_bootstrap_steps(
+            harness=recommended_harness,
+            bootstrap_install=bootstrap_install,
+            alias=alias,
+        ),
+    ]
     store.add_event(
         "bootstrap",
         {

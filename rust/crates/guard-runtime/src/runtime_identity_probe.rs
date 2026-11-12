@@ -18,18 +18,27 @@
 //! the same rules as explicit paths. The reply's `launches` says what each spec
 //! resolved to, and `candidate_limit_reached` whether the candidate cap dropped any.
 //!
-//! The reply's `artifacts` and `locations` are valid input for
+//! A request that sets `instances` also gets the running processes launched
+//! from the identified paths (see `runtime_identity_instances`), passing back
+//! the earlier reply's instances as `known_instances` so a replaced file keeps
+//! its old processes bound to the old artifact. Naming an `instance_home`
+//! instead has the probe read and update the record kept there (see
+//! `runtime_identity_instance_store`).
+//!
+//! The reply's `artifacts`, `locations` and `instances` are valid input for
 //! `runtime-identity-assess`; `observations` carries the paths for display.
 
 use std::collections::BTreeMap;
 use std::fs::{self, File, OpenOptions};
 use std::io::Read;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use serde::Deserialize;
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 
+use crate::runtime_identity_instance_store as instance_store;
+use crate::runtime_identity_instances::{self as instances, KnownInstance, Probed};
 use crate::runtime_identity_launch::{
     self as launch, Environment, LaunchSpec, DEFAULT_CANDIDATE_LIMIT, MAX_LAUNCHES,
 };
@@ -59,6 +68,14 @@ struct Request {
     environment: BTreeMap<String, String>,
     #[serde(default)]
     candidate_limit: Option<usize>,
+    #[serde(default)]
+    instances: bool,
+    #[serde(default)]
+    known_instances: Vec<KnownInstance>,
+    /// The Guard home whose instance record the probe reads and updates, in
+    /// place of `known_instances`.
+    #[serde(default)]
+    instance_home: Option<PathBuf>,
 }
 
 pub(crate) fn run_command(bytes: &[u8]) -> Result<Value, String> {
@@ -105,6 +122,23 @@ fn probe(request: &Request) -> Result<Value, String> {
     {
         return Err("runtime_identity_probe_launch_invalid".to_owned());
     }
+    if !request.known_instances.is_empty() && !request.instances {
+        return Err("runtime_identity_probe_request_invalid".to_owned());
+    }
+    if let Some(home) = &request.instance_home {
+        if !request.instances || !request.known_instances.is_empty() || !home.is_absolute() {
+            return Err("runtime_identity_probe_request_invalid".to_owned());
+        }
+    }
+    instances::validate_known(&request.known_instances)?;
+    let stored;
+    let known: &[KnownInstance] = match &request.instance_home {
+        Some(home) => {
+            stored = instance_store::load(home);
+            &stored
+        }
+        None => &request.known_instances,
+    };
     let collected = launch::collect(&request.launches, &Environment(&request.environment), limit);
     let mut requested_paths: Vec<&String> = request.paths.iter().collect();
     requested_paths.extend(&collected.paths);
@@ -115,6 +149,7 @@ fn probe(request: &Request) -> Result<Value, String> {
     let mut locations: Vec<Value> = Vec::new();
     let mut observations: Vec<Value> = Vec::new();
     let mut seen: BTreeMap<String, ()> = BTreeMap::new();
+    let mut identified: Vec<(String, String, String)> = Vec::new();
     let mut hashing = Hashing::default();
     for requested in requested_paths {
         let location_id = location_id(requested);
@@ -128,6 +163,7 @@ fn probe(request: &Request) -> Result<Value, String> {
                     .unwrap_or_default()
                     .to_owned();
                 artifacts.entry(id.clone()).or_insert(*artifact);
+                identified.push((location_id.clone(), resolved.clone(), id.clone()));
                 ("present", Some(id), Some(resolved), None)
             }
             Outcome::Missing => ("missing", None, None, None),
@@ -142,14 +178,42 @@ fn probe(request: &Request) -> Result<Value, String> {
             "artifact_id": artifact_id,
         }));
     }
-    Ok(json!({
+    let running = request.instances.then(|| {
+        let probed: Vec<Probed<'_>> = identified
+            .iter()
+            .map(|(location_id, resolved, artifact_id)| Probed {
+                location_id,
+                resolved,
+                artifact: &artifacts[artifact_id],
+            })
+            .collect();
+        let location_ids = seen.keys().map(String::as_str).collect();
+        instances::enumerate(&probed, &location_ids, known)
+    });
+    let mut reply = json!({
         "schema": RESULT_SCHEMA,
-        "artifacts": artifacts.into_values().collect::<Vec<_>>(),
         "locations": locations,
         "observations": observations,
         "launches": collected.launches,
         "candidate_limit_reached": collected.truncated,
-    }))
+    });
+    if let Some(running) = running {
+        for artifact in running.artifacts {
+            let id = artifact["artifact_id"]
+                .as_str()
+                .unwrap_or_default()
+                .to_owned();
+            artifacts.entry(id).or_insert(artifact);
+        }
+        reply["instances"] = json!(running.instances);
+        reply["unbound_processes"] = json!(running.unbound_processes);
+        reply["instance_limit_reached"] = json!(running.limit_reached);
+    }
+    reply["artifacts"] = json!(artifacts.into_values().collect::<Vec<_>>());
+    if let Some(home) = &request.instance_home {
+        instance_store::remember(home, &reply);
+    }
+    Ok(reply)
 }
 
 /// One executable for launch admission: its resolved path and artifact, or

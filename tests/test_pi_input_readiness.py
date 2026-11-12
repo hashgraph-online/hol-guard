@@ -37,6 +37,7 @@ function invalidateInputApprovalResumes() { inputApprovalResumeGeneration++; }
 function invalidateToolApprovalResumes() {}
 function invalidateApprovalContinuations() {}
 function handlerAbortSignal(ctx) { return ctx.signal; }
+function contextSessionId(ctx) { return ctx.sessionId ?? null; }
 function captureInputApprovalResumeBinding() { return null; }
 function approvalBlockedReason(_response, reason) { return reason; }
 function scheduleApprovalResume() {}
@@ -145,6 +146,7 @@ const pi = {on(name, callback) {callbacks[name] = callback;}};
 function loadGuardDaemonConnection() {return {stateId: 'fixture'};}
 function invalidateInputApprovalResumes() {inputApprovalResumeGeneration++;}
 function invalidateToolApprovalResumes() {}
+function contextSessionId(ctx) { return ctx.sessionId ?? null; }
 function captureInputApprovalResumeBinding() {return null;}
 function handlerAbortSignal(ctx) {return ctx.signal;}
 async function daemonWorkspaceReadiness() {

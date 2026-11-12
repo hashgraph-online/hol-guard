@@ -73,6 +73,11 @@ function isApprovalCredentialPromptCode(code: string | null): boolean {
   return APPROVAL_CREDENTIAL_PROMPT_MESSAGE.test(code);
 }
 
+/** True when the daemon is still running an earlier package protection change, such as a sync that outlived the dashboard's wait. */
+export function isPackageFirewallOperationInProgressError(error: unknown): boolean {
+  return readHarnessActionErrorCode(error) === "operation_in_progress";
+}
+
 export function isSupplyChainSyncConnectError(error: unknown): boolean {
   const code = readHarnessActionErrorCode(error);
   return code !== null && SUPPLY_CHAIN_CONNECT_ERROR_CODES.has(code);

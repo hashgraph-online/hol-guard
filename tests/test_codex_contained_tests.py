@@ -10,7 +10,8 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.adapters import codex_contained_tests as route
+import codex_plugin_scanner
+from tests import codex_containment_route as route
 
 
 def receipt() -> dict[str, object]:
@@ -66,6 +67,9 @@ def test_current_codex_rewrites_to_the_contained_sink(containment_resident, tmp_
     assert argv[argv.index("--guard-home") + 1] == str(tmp_path / "guard")
     assert argv[argv.index("--home") + 1] == str(hook_home)
     assert argv[argv.index("--home") + 1] != str(Path.home())
+    package_root = Path(codex_plugin_scanner.__file__).resolve().parents[1]
+    assert (package_root / "codex_plugin_scanner").is_dir()
+    assert any(f"sys.path.insert(0, {str(package_root)!r})" in arg for arg in argv)
     Path(argv[argv.index("--request-file") + 1]).unlink()
 
 
@@ -208,28 +212,25 @@ def test_version_probe_stops_at_the_hook_deadline(containment_resident, tmp_path
     assert recorded["timeout"] == 0.25
 
 
-def test_other_platforms_and_missing_guard_home_pass_through(containment_resident, tmp_path, monkeypatch):
+def test_a_missing_guard_home_passes_through(containment_resident, tmp_path, monkeypatch):
     capable(monkeypatch, "codex-cli 0.162.1")
     native = receipt()
     assert route.route_codex_containment(native, hook_input=hook_input(tmp_path), guard_home=None) is native
-    monkeypatch.setattr(sys, "platform", "linux")
-    # Linux has no sink for the pytest profile: the denial stands, with no update hint.
-    assert (
-        route.route_codex_containment(
-            native, hook_input=hook_input(tmp_path), guard_home=tmp_path / "guard", home_dir=tmp_path / "hook-home"
-        )
-        is native
-    )
 
 
-def test_linux_routes_the_workspace_sandbox(containment_resident, tmp_path, monkeypatch):
+@pytest.mark.parametrize(
+    ("reason", "profile"),
+    [
+        ("native_workspace_containment_required", "workspace-contained-v1"),
+        ("native_pytest_readonly_containment_required", "pytest-readonly-v2"),
+    ],
+)
+def test_linux_routes_the_workspace_sandbox_and_the_read_only_profiles(
+    containment_resident, tmp_path, monkeypatch, reason, profile
+):
     capable(monkeypatch, "codex-cli 0.162.1")
     monkeypatch.setattr(sys, "platform", "linux")
-    native = {
-        **receipt(),
-        "reason_code": "native_workspace_containment_required",
-        "required_execution_profile": "workspace-contained-v1",
-    }
+    native = {**receipt(), "reason_code": reason, "required_execution_profile": profile}
     result = route.route_codex_containment(
         native, hook_input=hook_input(tmp_path), guard_home=tmp_path / "guard", home_dir=tmp_path / "hook-home"
     )
@@ -292,7 +293,7 @@ def test_linux_does_not_take_an_unofficial_codex_name(monkeypatch):
 
 
 def test_windows_ancestor_walk_rejects_a_reused_parent_id(monkeypatch):
-    from codex_plugin_scanner.guard.adapters import codex_contained_tests_windows as walk
+    from tests import codex_containment_route_windows as walk
 
     monkeypatch.setattr(walk.sys, "platform", "win32")
     monkeypatch.setattr(walk.os, "getpid", lambda: 30)

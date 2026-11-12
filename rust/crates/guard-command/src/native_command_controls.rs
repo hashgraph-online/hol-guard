@@ -7,12 +7,13 @@ use std::time::Instant;
 use guard_contracts::{
     NativeCommandControlBindingV1, NativeCommandObservationBatchV1, NativeCommandObservationV1,
     NativeCommandObservationsV1, NativeCommandPermissionObservationV1,
-    NativeCommandReceiptBindingV1, PreToolResultV1, NATIVE_COMMAND_OBSERVATIONS_SCHEMA,
-    NATIVE_COMMAND_RECEIPT_BINDING_SCHEMA,
+    NativeCommandReceiptBindingV1, PreToolActionTypeV1, PreToolResultV1,
+    NATIVE_COMMAND_OBSERVATIONS_SCHEMA, NATIVE_COMMAND_RECEIPT_BINDING_SCHEMA,
 };
 
 use crate::native_command_program::{
-    digest_value, packaged_command_program, CommandCandidateIndex, NativeCommandProgram,
+    digest_value, is_deadline_error, packaged_command_program, CommandCandidateIndex,
+    NativeCommandProgram,
 };
 use crate::CanonicalCommandV1;
 
@@ -227,25 +228,53 @@ impl CompiledNativeCommandControls {
             Some(command) => self.observe_command(command, deadline, context, environment),
             None => Ok((NativeCommandObservationBatchV1::default(), None)),
         };
+        // A check that stopped because its deadline passed observed nothing,
+        // which is not the same as a command the controls cannot match. The
+        // evidence field stays one value for both, because consumers pin it;
+        // this flag carries the difference to the floor below.
+        let mut deadline_expired = false;
+        // An administrator disable is a floor the user cannot clear, and a
+        // check that ran out of time cannot show the command falls outside
+        // it. Where anything is disabled, a timeout keeps the block rather
+        // than offering an approval that would override that decision.
+        let admin_disabled =
+            !self.blocked_permissions.is_empty() || !self.blocked_extensions.is_empty();
         let (mut batch, unmodeled) = match observed {
             Ok(observed) => observed,
-            Err(_) => (
-                NativeCommandObservationBatchV1 {
-                    evaluation_error: Some("native_command_evaluation_failed".to_owned()),
-                    ..Default::default()
-                },
-                None,
-            ),
+            Err(error) => {
+                deadline_expired = is_deadline_error(error);
+                (
+                    NativeCommandObservationBatchV1 {
+                        evaluation_error: Some("native_command_evaluation_failed".to_owned()),
+                        ..Default::default()
+                    },
+                    None,
+                )
+            }
         };
         let delegated_floor = if batch.evaluation_error.is_none() {
             match self.delegated_observations(command, tool, packages, &mut batch, deadline) {
                 Ok(action) => action,
-                Err(_) => {
-                    batch = NativeCommandObservationBatchV1 {
-                        evaluation_error: Some("native_command_evaluation_failed".into()),
-                        ..Default::default()
-                    };
-                    "block"
+                Err(error) => {
+                    deadline_expired = is_deadline_error(error);
+                    if deadline_expired {
+                        // The main pass already finished. A disabled rule or a
+                        // critical one it recorded still has to raise the floor
+                        // below, so keep those observations instead of dropping
+                        // them along with the delegated pass.
+                        batch.evaluation_error =
+                            Some("native_command_evaluation_failed".to_owned());
+                    } else {
+                        batch = NativeCommandObservationBatchV1 {
+                            evaluation_error: Some("native_command_evaluation_failed".into()),
+                            ..Default::default()
+                        };
+                    }
+                    if deadline_expired && !admin_disabled {
+                        "review"
+                    } else {
+                        "block"
+                    }
                 }
             }
         } else {
@@ -259,7 +288,7 @@ impl CompiledNativeCommandControls {
         let mut reason = if self.global_block {
             "native_command_control_authority_block"
         } else if batch.evaluation_error.is_some() {
-            "native_command_extension_evaluation_failed"
+            evaluation_error_reason(deadline_expired && !admin_disabled)
         } else if delegated_floor == "block" {
             "native_command_permission_disabled"
         } else {
@@ -375,7 +404,14 @@ impl CompiledNativeCommandControls {
                 + usize::from(batch.evaluation_error.is_some()),
         };
         let explicit_allow = floor == "allow"
-            && self.explicit_allow(&result, &batch, command, context, enabled_uncertainty);
+            && self.explicit_allow(
+                &result,
+                &batch,
+                command,
+                context,
+                environment,
+                enabled_uncertainty,
+            );
         if enabled_uncertainty && !explicit_allow && rank(floor) < rank("review") {
             floor = "review";
             reason = "native_command_extension_uncertain";
@@ -391,12 +427,34 @@ impl CompiledNativeCommandControls {
             permission_observations: batch.permission_observations,
             evaluation_error: batch.evaluation_error,
         });
-        if evaluation_error.is_some() && !self.global_block && rank(floor) < rank("block") {
-            floor = "block";
-            reason = "native_command_extension_evaluation_failed";
+        if evaluation_error.is_some() && !self.global_block {
+            // A deadline that ran out leaves Guard unable to show the command
+            // is safe, but it has not shown the command is dangerous either,
+            // and the condition is transient: the same command usually
+            // evaluates fine once the machine is less busy. Settling it at a
+            // review keeps Allow once and Always allow on the card, instead of
+            // a block no approval can clear. Every other evaluation failure
+            // still blocks, and so does a timeout while an administrator has
+            // disabled anything the unfinished check could not rule out.
+            let softened = deadline_expired && !admin_disabled;
+            let error_floor = if softened { "review" } else { "block" };
+            if rank(floor) < rank(error_floor) {
+                floor = error_floor;
+                reason = evaluation_error_reason(softened);
+            }
         }
         strengthen(&mut result, floor, reason);
+        floor::explain_timed_out_review(
+            &mut result,
+            evaluation_error.is_some() && deadline_expired && !admin_disabled && !self.global_block,
+        );
         self.enforce_quarantine(command, tool, &mut result);
+        let evaluates = |probe: &CanonicalCommandV1| {
+            self.observe_command(probe, deadline, context, environment)
+                .is_ok_and(|(batch, _)| batch.evaluation_error.is_none())
+        };
+        floor::explain_home_redirect(&mut result, command, evaluates);
+        floor::explain_startup_shell(&mut result, command, evaluates);
         floor::explain_expired_deadline(&mut result, deadline);
         let global_lockdown = self
             .binding
@@ -417,6 +475,7 @@ impl CompiledNativeCommandControls {
         observations: &[NativeCommandObservationV1],
         permission_observations: &[NativeCommandPermissionObservationV1],
         context: crate::pretool::PathContext<'_>,
+        environment: Option<&guard_contracts::GuardExecutionEnvironmentV1>,
     ) -> bool {
         if command.confidence != "exact"
             || command.path_overridden
@@ -425,9 +484,18 @@ impl CompiledNativeCommandControls {
         {
             return false;
         }
-        let mut covered: BTreeSet<_> = crate::pretool::benign_command_segments(command, context)
+        let benign: BTreeSet<_> = crate::pretool::benign_command_segments(command, context)
             .into_iter()
             .collect();
+        // A `cd` into a verified directory at the head of a list whose
+        // separators leave the steps after it unproven still reads and
+        // creates nothing. It is held apart from `benign` so the walks below
+        // that decide where a later step writes keep reading the directory
+        // the command started in.
+        let entered: BTreeSet<_> = crate::pretool::leading_cd_segment(command, context)
+            .into_iter()
+            .collect();
+        let mut covered = benign.clone();
         for observation in observations {
             if observation.effective_segment_indexes.is_empty() {
                 continue;
@@ -442,7 +510,7 @@ impl CompiledNativeCommandControls {
                 if observation
                     .effective_segment_indexes
                     .iter()
-                    .all(|index| covered.contains(index))
+                    .all(|index| covered.contains(index) || entered.contains(index))
                 {
                     continue;
                 }
@@ -453,6 +521,42 @@ impl CompiledNativeCommandControls {
         // GitHub permission-only owners run last so they never hide an
         // ungranted rule.
         covered.extend(self.github_granted_segments(permission_observations));
+        // A `cd` into the checkout a `git worktree add` of this command
+        // creates, and the `head`/`tail`/`wc` stages after it, are covered
+        // when the Git and GitHub steps after it are.
+        covered.extend(crate::pretool::entered_checkouts(
+            command,
+            context,
+            environment,
+        ));
+        // A Git ref read after covered steps keeps the proof it has alone.
+        covered.extend(crate::pretool::git_reads_after_allowed_steps(
+            command, context, &benign, &covered,
+        ));
+        // Without the entered directory the rules the user enabled cover
+        // every program in `cd <dir> && gh pr merge 1; gh pr view 1` and the
+        // command keeps a review for the one step nobody doubts. The
+        // extension-wide walk below still starts from a set that excludes it,
+        // so a Git step after the `cd` keeps the review it had.
+        covered.extend(entered.iter().copied());
+        // An extension whose every permission the user explicitly enabled
+        // covers the programs it watches, including the spellings no rule
+        // models. It runs last so it never hides a rule the user left off and
+        // never changes what the proofs above read.
+        covered.extend(self.fully_allowed_extension_segments(command, &benign, context));
+        // A Git step that points its own output over `.git` or out of the
+        // workspace writes whichever route covered it: a `git log` rule the
+        // user enabled reads the verb, not the `--output=.git/config` that
+        // rewrites what the next step runs under. Packaging a tree into a
+        // file the workspace names is ordinary Git work and stays covered.
+        // Only the native benign proof, which reads where the file lands,
+        // still carries the rest.
+        covered.retain(|index| {
+            benign.contains(index)
+                || command.segments.get(*index).is_none_or(|segment| {
+                    !crate::pretool::git_step_overwrites_what_runs_next(segment)
+                })
+        });
         // Delegated package-firewall ownership is not execution consent. Only
         // verified rule observations or the native benign proof can cover a
         // segment; an extra unclassified command retains its own review.
@@ -468,22 +572,94 @@ impl CompiledNativeCommandControls {
     /// whole command. It reads the observations already recorded on the
     /// result, so it classifies exactly what the controls classified, and it
     /// keeps every fixed floor: a segment that runs a configured Git program
-    /// or names Guard itself fails `fixed_command_floor`, and an evaluation
-    /// error leaves nothing to read.
+    /// or names Guard itself fails `fixed_command_floor`, a Git checkout
+    /// into a protected location fails `protected_checkout_destination`, and
+    /// an evaluation error leaves nothing to read.
     pub(crate) fn explicit_allow_covers_command(
         &self,
         command: &CanonicalCommandV1,
         observations: &NativeCommandObservationsV1,
         context: crate::pretool::PathContext<'_>,
+        environment: Option<&guard_contracts::GuardExecutionEnvironmentV1>,
     ) -> bool {
         observations.evaluation_error.is_none()
             && !crate::pretool::fixed_command_floor(command)
+            && !crate::pretool::protected_checkout_destination(command, context)
             && self.explicit_permissions_cover_command(
                 command,
                 &observations.observations,
                 &observations.permission_observations,
                 context,
+                environment,
             )
+    }
+
+    /// Whether the user's explicit Allow settles this command outright,
+    /// uncertainty included.
+    ///
+    /// [`Self::explicit_allow_covers_command`] answers the permission
+    /// question alone. A floor the controls raise over a review Rust had
+    /// already decided keeps that review's reason code, because `strengthen`
+    /// does not replace a reason of equal rank, so the reason no longer says
+    /// whether an uncertain observation about an enabled rule is still
+    /// outstanding. A caller reading the result afterwards asks here instead,
+    /// and gets the same answer the precedence path computes while it still
+    /// has the batch in hand.
+    pub(crate) fn explicit_allow_settles_command(
+        &self,
+        command: &CanonicalCommandV1,
+        observations: &NativeCommandObservationsV1,
+        context: crate::pretool::PathContext<'_>,
+        environment: Option<&guard_contracts::GuardExecutionEnvironmentV1>,
+    ) -> bool {
+        let enabled_uncertainty = observations.observations.iter().any(|observation| {
+            !observation.uncertainty_reasons.is_empty()
+                && self.uncertain_candidate(&observation.rule_id).is_none()
+        });
+        (!enabled_uncertainty
+            || command.segments.iter().all(|segment| {
+                crate::command_compatibility::segment_settles_uncertainty(segment, context)
+            }))
+            && self.explicit_allow_covers_command(command, observations, context, environment)
+    }
+
+    /// Whether an enabled extension names `executable` among the programs it
+    /// watches. A projection that rewrites one spelling of a command into
+    /// another drops the program it rewrote away, and with it the extension
+    /// evidence that program carried, so a watched program keeps its own
+    /// evaluation instead.
+    ///
+    /// An extension reaches a program two ways: the list it declares, and the
+    /// executables its own rules require. Both are read the way the rest of
+    /// the program reads a program name — by basename, without case — so
+    /// `/usr/bin/tee` and `TEE` name the same watched program `tee` does.
+    ///
+    /// A rule that can match without naming any program is left out rather
+    /// than read as watching everything. A quarter of the packaged
+    /// extensions carry such a rule, the required `command.filesystem` and
+    /// `command.git` among them, so reading one as watching every program
+    /// would answer `true` for every name and leave no projection able to
+    /// run at all. Those rules name no program, which is not the same as
+    /// naming this one, and the unmodeled-command path reads its own name
+    /// sets the same way.
+    pub(crate) fn watches_executable(&self, executable: &str) -> bool {
+        let wanted = crate::command_ascii_comparison::lowercase_for_ascii_comparison(
+            crate::native_command_program::basename(executable),
+        );
+        self.program
+            .extensions
+            .iter()
+            .enumerate()
+            .any(|(index, extension)| {
+                self.active_extensions.contains(&extension.extension_id)
+                    && self
+                        .program
+                        .extension_known_names(
+                            index,
+                            unmodeled::compatibility_executables(&extension.extension_id),
+                        )
+                        .contains(&wanted)
+            })
     }
 }
 
@@ -495,11 +671,14 @@ pub(crate) use delegated::normalized_tool;
 
 #[path = "native_command_controls_floor.rs"]
 mod floor;
+#[path = "native_command_controls_full_allow.rs"]
+mod full_allow;
 #[path = "native_command_controls_precedence.rs"]
 mod precedence;
 #[path = "native_command_unmodeled.rs"]
 mod unmodeled;
-use floor::{add_authority_repair_hint, rank, rule_floor, strengthen};
+use floor::{add_authority_repair_hint, evaluation_error_reason, rank, rule_floor, strengthen};
+pub(crate) use precedence::settle_with_explicit_allow;
 pub(crate) use unmodeled::{
     bounds_its_owners, launcher_body, prefix_reads_a_program_file, python_is_builtin_only,
     python_stdin, unread_file_interpreter, Handover,
@@ -520,6 +699,10 @@ mod precedence_regressions;
 #[cfg(test)]
 #[path = "native_command_precedence_generic_tests.rs"]
 mod precedence_generic_regressions;
+
+#[cfg(all(test, unix))]
+#[path = "native_command_git_helper_allow_tests.rs"]
+mod git_helper_allow_regressions;
 
 #[cfg(test)]
 #[path = "native_command_compound_controls_tests.rs"]

@@ -255,7 +255,7 @@ def test_runtimes_give_way_before_inventory_rows(
     monkeypatch.setattr(fpr, "_observe", lambda *_: _posture([]))
     without = _build(store, context, adapters, runtimes_ttl_seconds=0).payload
     del without["runtimes"]
-    budget = fp.json_size(without) + 16
+    budget = len(json.dumps(without, separators=(",", ":"), ensure_ascii=False).encode("utf-8")) + 16
     monkeypatch.setattr(fp, "MAX_PAYLOAD_BYTES", budget)
     monkeypatch.setattr(fpr, "_observe", lambda *_: _posture([_runtime()] * fpr.MAX_RUNTIMES))
 
@@ -351,3 +351,31 @@ def test_a_changed_verification_input_is_rematched(
     fpr.runtimes_section(store, context, hash_key=KEY, now=NOW + timedelta(minutes=1))
 
     assert len(calls) == 2
+
+
+def test_only_what_the_section_reads_reaches_the_native_runtime(monkeypatch: pytest.MonkeyPatch) -> None:
+    from codex_plugin_scanner.guard import native_runner_authority as authority
+
+    sent: list[dict[str, object]] = []
+
+    def answer(_kind: str, args: dict[str, object], _home: object = None) -> dict[str, object]:
+        sent.append(args)
+        return {}
+
+    monkeypatch.setattr(authority, "native_runner_authority", answer)
+    launches = [{"harness": ["codex"]}, {"harness": {"name": "x"}}, *[{"harness": "codex", "pid": 1}] * 5000]
+    row = _runtime(launched_by=launches, advisory_matches=["GHSA-a"] * 5000, extra="x")
+    posture = _posture([row] * (fpr.MAX_RUNTIMES + 5), unresolved_launches=[{"command": "x" * 100}] * 20_000)
+    posture["unrelated"] = list(range(5000))
+
+    fpr.project_runtime_posture(posture, hash_key=KEY)
+
+    request = sent[0]["posture"]
+    assert isinstance(request, dict)
+    assert "unrelated" not in request
+    assert sum(len(chunk) for chunk in request["runtimes"]) == fpr.MAX_RUNTIMES + 1
+    assert sum(len(chunk) for chunk in request["unresolved_launches"]) == 10_000
+    runtime = request["runtimes"][0][0]
+    assert "extra" not in runtime
+    assert runtime["launched_by"] == [{"harness": "codex"}]
+    assert runtime["advisory_matches"] == ["GHSA-a"]

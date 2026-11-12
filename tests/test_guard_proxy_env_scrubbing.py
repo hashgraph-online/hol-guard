@@ -91,7 +91,17 @@ class TestRuntimeMcpProxyScrubbing:
         from codex_plugin_scanner.guard.store import GuardStore
 
         store = GuardStore(tmp_path)
-        config = type("MockConfig", (), {})()
+        config = type(
+            "MockConfig",
+            (),
+            {
+                # The harness posture is resolved natively off these fields.
+                "protection_posture": "protected",
+                "mode": "enforce",
+                "security_level": "balanced",
+                "harness_postures": {},
+            },
+        )()
 
         # RTM-023 moved child spawn to `mcp_stdio_session_open_native`; the
         # scrubbed env is passed via `extra_env`. Stub the native opener and the

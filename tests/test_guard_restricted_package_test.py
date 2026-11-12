@@ -7,8 +7,12 @@ import pytest
 
 from codex_plugin_scanner.guard.runtime import contained_test_hook as sink
 from codex_plugin_scanner.guard.runtime import restricted_node_test as node
-from codex_plugin_scanner.guard.runtime.restricted_package_test import is_package_test, resolve_package_test
+from codex_plugin_scanner.guard.runtime.restricted_package_test import (
+    KIND_NAMES,
+    resolve_package_test,
+)
 from codex_plugin_scanner.guard.runtime.restricted_pytest_model import RestrictedPytestError
+from tests.restricted_native_clients import is_package_test
 
 
 @pytest.mark.parametrize("manager", ["npm", "pnpm", "bun"])
@@ -110,3 +114,41 @@ def test_alias_and_underlying_runner_need_independent_fresh_authority(monkeypatc
         )
         assert executed == [(["node", "--test"],)]
         assert calls == ["npm test", "node --test", "/usr/bin/node --test"]
+
+
+@pytest.mark.parametrize(("command", "alias"), [(["npm", "test"], True), (["pytest", "-q"], False)])
+def test_the_alias_answer_rides_on_the_reading_the_sink_already_asks_for(monkeypatch, command, alias):
+    """Whether a run is a package alias is one of the kinds, not its own question.
+
+    Every contained run used to ask native authority whether it was an alias
+    and then ask again which kind of run it was, so an ordinary `pytest -q`
+    paid for a reading whose only answer was "not an alias". The kinds reply
+    names the alias too, so one reading answers both and only a run that is an
+    alias pays for a second, of the words its script spells.
+    """
+
+    asked: list[list[str]] = []
+
+    def native(operation, fields, expected):
+        assert operation == "contained_kind", operation
+        words = list(fields["command"])
+        asked.append(words)
+        return dict.fromkeys(KIND_NAMES, False) | {"package_test": alias}
+
+    monkeypatch.setattr(
+        "tests.restricted_native_clients.restricted_native",
+        native,
+    )
+    assert is_package_test(command) is alias
+    assert asked == [command]
+
+
+def test_an_answer_that_is_not_the_whole_reading_is_refused(monkeypatch):
+    """A short reply cannot stand in for the kinds, so a missing key never reads as `False`."""
+
+    monkeypatch.setattr(
+        "tests.restricted_native_clients.restricted_native",
+        lambda *args, **kwargs: {"inline_eval": False, "node_test": False},
+    )
+    with pytest.raises(RestrictedPytestError, match="could not read"):
+        is_package_test(["npm", "test"])

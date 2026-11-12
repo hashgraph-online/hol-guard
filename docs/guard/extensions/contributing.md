@@ -73,6 +73,48 @@ before Gitar can commit a repair. The repository cannot grant that permission fo
 GitHub offers **Allow edits and access to secrets by maintainers**, leave it disabled and apply
 the suggested change manually.
 
+## Test with an installed Guard
+
+The source checkout proves that the matcher and its fixtures agree. An installed HOL Guard shows
+what an end user experiences: which prompt their agent receives, which safe commands pass, and how
+the extension reads in `hol-guard command explain`, the dashboard, and receipts. Use both.
+
+Before authoring, install the released CLI, connect the agent you work with, and record the
+current behavior of a destructive command and its safe counterpart:
+
+```sh
+pipx install hol-guard
+hol-guard install claude-code    # or codex, cursor, copilot, gemini, ...
+hol-guard command explain '<destructive command>'
+hol-guard command explain '<safe counterpart>'
+```
+
+The released CLI includes the Extension Builder, so `hol-guard extensions generate` and
+`hol-guard extensions validate` work without a Rust toolchain. Add the `command explain` results to
+the **Installed Guard check** section of the pull request. They show reviewers what the current
+catalog does and confirm that the extension does not duplicate existing coverage.
+
+Community extensions stay off until a local administrator enables them, and a merged source reaches
+users only through a release. Once a release includes your extension, update, turn it on, and run
+the same cases through your agent:
+
+```sh
+hol-guard update
+hol-guard command controls preview command.<name> --target-kind extension --state enabled
+hol-guard command controls apply command.<name> --target-kind extension --state enabled
+hol-guard command explain '<destructive command>'
+```
+
+Guard asks for local approval before it applies the change; the dashboard's **Protection Center**
+offers the same setting. Point the destructive case at a disposable target, such as a scratch
+directory, a throwaway branch or resource, or a test account, and run it in an environment you can
+discard. The target must be safe to destroy even if Guard does not intercept the command or a saved
+approval allows it; never use real data or shared infrastructure. Then ask your agent to run the
+safe counterpart, which should proceed, and the destructive command, which should get the verdict
+your fixture expects: a review, or a block for rules that use `block`. If Guard presents a review,
+deny it. Confirm the outcome with `hol-guard receipts`. If the agent experience differs from your fixture, open a follow-up pull
+request with the case that exposed it.
+
 ## Choose the contribution type
 
 | Contribution | Use it for | Expected scope |
@@ -172,9 +214,9 @@ an addition with `base: "packaged"` cannot overwrite an ID already embedded in t
 Build current binaries and run the native source CLI contract:
 
 ```bash
-cargo +1.88.0 build --locked --manifest-path rust/Cargo.toml --release -p guard-command --bin guard-command-source
-cargo +1.88.0 build --locked --manifest-path rust/Cargo.toml --release -p hol-guard-runtime
-cargo +1.88.0 test --locked --manifest-path rust/Cargo.toml -p guard-command --test native_command_source_cli
+cargo +1.89.0 build --locked --manifest-path rust/Cargo.toml --release -p guard-command --bin guard-command-source
+cargo +1.89.0 build --locked --manifest-path rust/Cargo.toml --release -p hol-guard-runtime
+cargo +1.89.0 test --locked --manifest-path rust/Cargo.toml -p guard-command --test native_command_source_cli
 uv run --no-sync python scripts/build_native_command_program.py --check --compiler rust/target/release/guard-command-source
 ```
 
@@ -235,6 +277,8 @@ cannot choose its trust class, activate itself, or replace an installed policy d
 Community command extensions remain **external** and off until a local administrator enables
 them on a device. A source merge is followed by the normal release and installed-platform
 qualification; local compilation or an offline fixture pass does not establish release availability.
+After release, verify the extension in a real agent as described in
+[Test with an installed Guard](#test-with-an-installed-guard).
 
 For a public publisher profile, follow [publisher metadata](publisher-metadata.md). The
 verified PR that first introduces an external contribution establishes its initial

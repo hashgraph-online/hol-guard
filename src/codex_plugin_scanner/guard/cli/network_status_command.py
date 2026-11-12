@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from codex_plugin_scanner.guard.config import GuardConfig
-from codex_plugin_scanner.guard.daemon.client import (
+from codex_plugin_scanner.guard.native_daemon_client import (
     GuardDaemonRequestError,
     GuardDaemonResponseSchemaError,
     GuardDaemonTimeoutError,
@@ -14,6 +14,7 @@ from codex_plugin_scanner.guard.daemon.client import (
 )
 from codex_plugin_scanner.guard.runtime.network_status import (
     NetworkStatusSchemaError,
+    NetworkStatusValidatorUnavailableError,
     build_network_status,
     validate_network_status,
 )
@@ -49,6 +50,8 @@ def load_network_status_payload(
         reason_code = "daemon-schema-invalid"
     except GuardDaemonRequestError as error:
         reason_code = "daemon-authentication-failed" if error.status in {401, 403} else "daemon-request-failed"
+    except NetworkStatusValidatorUnavailableError:
+        reason_code = "native-runtime-unavailable"
     except NetworkStatusSchemaError:
         reason_code = "daemon-schema-invalid"
 

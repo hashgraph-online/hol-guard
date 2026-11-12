@@ -4,29 +4,33 @@ The native command inspects each candidate executable without starting it:
 it resolves symlinks, hashes the file and infers family and version from the
 install layout. It also resolves configured MCP server launches (search path
 lookup, relative anchoring and a script's ``#!`` interpreter) to the files to
-describe. This module only sends paths or launch specs and checks the shape of
-the reply. Its ``artifacts`` and ``locations`` are valid input for
-``runtime-identity-assess``.
+describe. Asked for instances, it also lists the processes running from those
+files, each bound to the build it started from, and keeps the running ones in
+the Guard home for the next probe. This module only sends paths
+or launch specs and checks the shape of the reply. Its ``artifacts``,
+``locations`` and ``instances`` are valid input for ``runtime-identity-assess``.
 """
 
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
+from pathlib import Path
 
 from .runtime_identity_assessment import RuntimeIdentityError, run_native_identity_command
 
-RUNTIME_PROBE_FEATURE = "runtime-identity-probe-v1"
-# Launch resolution is an additive capability of the same command.
+# Launch resolution and instances are additive capabilities of the same command.
 RUNTIME_PROBE_LAUNCH_FEATURE = "runtime-identity-launch-v1"
+RUNTIME_PROBE_INSTANCE_STORE_FEATURE = "runtime-identity-instance-store-v1"
 RUNTIME_PROBE_COMMAND = "runtime-identity-probe"
 RUNTIME_PROBE_SCHEMA = "guard.runtime-identity-probe.v1"
-RUNTIME_PROBE_MAX_PATHS = 128
 # The probe hashes whole files, so it gets more time than a plain assessment.
 _PROBE_TIMEOUT_SECONDS = 60.0
 
 _LOCATION_STATES = frozenset({"present", "missing", "unknown"})
 _LAUNCH_STATES = frozenset({"resolved", "unresolved"})
+_INSTANCE_STATES = frozenset({"running", "exited", "unknown"})
+_INSTANCE_TEXT_KEYS = ("instance_id", "boot_identity", "start_identity", "artifact_id")
 _ARTIFACT_TEXT_KEYS = ("artifact_id", "family", "os", "arch", "identity_assurance")
 
 
@@ -38,17 +42,10 @@ class RuntimeProbe:
     # One row per launch spec sent, in order; empty for a path-only probe.
     launches: tuple[dict[str, object], ...] = ()
     candidate_limit_reached: bool = False
-
-
-def probe_runtime_paths(paths: Sequence[str]) -> RuntimeProbe:
-    """Describe the executables at ``paths`` natively, never running them."""
-
-    unique = tuple(dict.fromkeys(paths))
-    if len(unique) > RUNTIME_PROBE_MAX_PATHS:
-        raise RuntimeIdentityError("runtime_identity_probe_too_many_paths")
-    if not unique:
-        return RuntimeProbe(artifacts=(), locations=(), observations=())
-    return _probe(RUNTIME_PROBE_FEATURE, {"paths": list(unique)})
+    # ``None`` when instances were not asked for.
+    instances: tuple[dict[str, object], ...] | None = None
+    unbound_processes: int = 0
+    instance_limit_reached: bool = False
 
 
 def probe_runtime_launches(
@@ -56,12 +53,17 @@ def probe_runtime_launches(
     *,
     environment: Mapping[str, str],
     candidate_limit: int,
+    instance_home: Path | None = None,
 ) -> RuntimeProbe:
     """Resolve configured launches and describe their executables natively, never running them.
 
     Each launch carries ``command``, ``launch_dir`` and optionally the server's
     own ``configured_path``. ``environment`` holds only the process values a
     search path may reference; the native command never echoes them.
+
+    ``instance_home`` asks for running instances too. The native probe reads
+    what an earlier probe stored there, so a file replaced since keeps its old
+    build, and stores the instances it saw running.
     """
 
     if not launches:
@@ -71,7 +73,10 @@ def probe_runtime_launches(
         "environment": dict(environment),
         "candidate_limit": candidate_limit,
     }
-    return _probe(RUNTIME_PROBE_LAUNCH_FEATURE, request)
+    if instance_home is None:
+        return _probe(RUNTIME_PROBE_LAUNCH_FEATURE, request)
+    home = str(instance_home.absolute())
+    return _probe(RUNTIME_PROBE_INSTANCE_STORE_FEATURE, {**request, "instances": True, "instance_home": home})
 
 
 def _probe(feature: str, request: dict[str, object]) -> RuntimeProbe:
@@ -95,20 +100,30 @@ def _parse_result(result: object) -> RuntimeProbe:
     observations = result.get("observations")
     launches = result.get("launches", [])
     limit_reached = result.get("candidate_limit_reached", False)
+    instances = result.get("instances")
+    unbound = result.get("unbound_processes", 0)
+    instance_limit_reached = result.get("instance_limit_reached", False)
     if not (
         isinstance(artifacts, list)
         and isinstance(locations, list)
         and isinstance(observations, list)
         and isinstance(launches, list)
         and isinstance(limit_reached, bool)
+        and (instances is None or isinstance(instances, list))
+        and isinstance(unbound, int)
+        and not isinstance(unbound, bool)
+        and unbound >= 0
+        and isinstance(instance_limit_reached, bool)
     ):
         raise RuntimeIdentityError("runtime_identity_probe_failed")
     artifact_ids: set[object] = {row.get("artifact_id") for row in artifacts if isinstance(row, dict)}
+    location_ids: set[object] = {row.get("location_id") for row in locations if isinstance(row, dict)}
     if not (
         all(_artifact_ok(row) for row in artifacts)
         and all(_location_ok(row, artifact_ids) for row in locations)
         and all(_observation_ok(row) for row in observations)
         and all(_launch_ok(row, index) for index, row in enumerate(launches))
+        and all(_instance_ok(row, artifact_ids, location_ids) for row in instances or ())
     ):
         raise RuntimeIdentityError("runtime_identity_probe_failed")
     return RuntimeProbe(
@@ -117,6 +132,9 @@ def _parse_result(result: object) -> RuntimeProbe:
         observations=tuple(observations),
         launches=tuple(launches),
         candidate_limit_reached=limit_reached,
+        instances=None if instances is None else tuple(instances),
+        unbound_processes=unbound,
+        instance_limit_reached=instance_limit_reached,
     )
 
 
@@ -129,7 +147,8 @@ def _artifact_ok(row: object) -> bool:
         all(isinstance(row.get(key), str) for key in _ARTIFACT_TEXT_KEYS)
         and assurance in {"unknown", "self_reported"}
         and (row.get("version") is None or isinstance(row.get("version"), str))
-        and isinstance(row.get("executable_sha256"), str)
+        # Only a process whose file was replaced runs bytes nobody hashed.
+        and (isinstance(row.get("executable_sha256"), str) or assurance == "unknown")
     )
 
 
@@ -161,11 +180,26 @@ def _launch_ok(row: object, index: int) -> bool:
     )
 
 
+def _instance_ok(row: object, artifact_ids: set[object], location_ids: set[object]) -> bool:
+    if not isinstance(row, dict):
+        return False
+    pid = row.get("pid")
+    location_id = row.get("location_id")
+    return (
+        all(isinstance(row.get(key), str) and row.get(key) for key in _INSTANCE_TEXT_KEYS)
+        and isinstance(pid, int)
+        and not isinstance(pid, bool)
+        and pid > 0
+        and row.get("artifact_id") in artifact_ids
+        and (location_id is None or location_id in location_ids)
+        and row.get("state") in _INSTANCE_STATES
+        and row.get("coverage") == "observed_only"
+    )
+
+
 __all__ = [
-    "RUNTIME_PROBE_FEATURE",
+    "RUNTIME_PROBE_INSTANCE_STORE_FEATURE",
     "RUNTIME_PROBE_LAUNCH_FEATURE",
-    "RUNTIME_PROBE_MAX_PATHS",
     "RuntimeProbe",
     "probe_runtime_launches",
-    "probe_runtime_paths",
 ]

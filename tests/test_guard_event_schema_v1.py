@@ -5,13 +5,43 @@ import threading
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from typing import ClassVar
 
-from codex_plugin_scanner.guard.edge_events import (
-    build_receipt_event,
-)
+from codex_plugin_scanner.guard.edge_events import _fingerprint
 from codex_plugin_scanner.guard.models import GuardReceipt
 from codex_plugin_scanner.guard.runtime.runner import sync_guard_events, sync_receipts
 from codex_plugin_scanner.guard.schemas.guard_event_v1 import GuardEventV1
 from codex_plugin_scanner.guard.store import GuardStore
+
+
+def build_receipt_event(
+    receipt: GuardReceipt,
+    *,
+    device_id: str | None = None,
+    workspace_id: str | None = None,
+) -> GuardEventV1:
+    payload: dict[str, object] = {
+        "receiptId": receipt.receipt_id,
+        "harness": receipt.harness,
+        "artifactId": receipt.artifact_id,
+        "artifactHash": receipt.artifact_hash,
+        "artifactName": receipt.artifact_name,
+        "sourceScope": receipt.source_scope,
+        "policyDecision": receipt.policy_decision,
+        "capabilitiesSummary": receipt.capabilities_summary,
+        "changedCapabilities": list(receipt.changed_capabilities),
+        "provenanceSummary": receipt.provenance_summary,
+        "userOverride": receipt.user_override,
+    }
+    event_id = f"guard-event-{_fingerprint('receipt.created', receipt.receipt_id)[:32]}"
+    return GuardEventV1(
+        event_id=event_id,
+        idempotency_key=f"receipt.created:{receipt.receipt_id}",
+        event_type="receipt.created",
+        source="edge",
+        occurred_at=receipt.timestamp,
+        workspace_id=workspace_id,
+        device_id=device_id,
+        payload=payload,
+    )
 
 
 def _seed_guard_cloud(store, *, workspace_id=None, sync_url=None, token="demo-token", now="2026-05-19T00:00:00Z"):

@@ -2,14 +2,10 @@
 
 from __future__ import annotations
 
-import shutil
-import sqlite3
-import tempfile
 import threading
-import time
 from collections.abc import Callable
 from dataclasses import dataclass, fields, replace
-from datetime import datetime, timedelta, timezone
+from datetime import datetime
 from pathlib import Path
 from typing import TypeGuard, cast, get_args
 
@@ -22,13 +18,12 @@ from .config_constants import (
 )
 from .config_file_io import ConfigFileTrustError
 from .config_mutation import notify_native_policy_mutation, record_posture_change_if_needed
-from .guard_home_state import database_has_custom_extension_state
 from .harness_posture import (
     HARNESS_POSTURES_KEY,
     effective_harness_postures,
     harness_posture_status,
-    harness_watch_auto_revert_due,
     managed_locks_harness_postures,
+    watch_auto_revert_due,
 )
 from .mdm.contracts import ManagedPolicy, ManagedPolicyState
 from .mdm.policy import fail_closed_managed_policy, load_managed_policy
@@ -49,27 +44,30 @@ from .protection_posture import (
 DEFAULT_GUARD_DIRNAME = ".hol-guard"
 
 
-def watch_should_auto_revert(config: GuardConfig, *, now: datetime | None = None) -> bool:
-    if config.protection_posture != "watch" or config.watch_auto_revert_hours <= 0:
-        return False
-    if config.watch_entered_at is None:
-        return False
-    try:
-        entered = datetime.fromisoformat(config.watch_entered_at.replace("Z", "+00:00"))
-    except ValueError:
-        return False
-    if entered.tzinfo is None:
-        entered = entered.replace(tzinfo=timezone.utc)
-    current = now or datetime.now(timezone.utc)
-    return current - entered >= timedelta(hours=config.watch_auto_revert_hours)
-
-
 def maybe_auto_revert_watch(guard_home: Path, *, now: datetime | None = None) -> GuardConfig:
     config = load_guard_config(guard_home)
+    if (
+        config.protection_posture == "watch"
+        and config.protection_posture_explicit
+        and not config.watch_entered_at
+        and config.watch_auto_revert_hours > 0
+        # A Watch an administrator locked must not get an end the lock would then refuse.
+        and "protection_posture" not in config.managed_locked_settings
+    ):
+        # An explicit Watch saved without a start time would never revert. The runtime
+        # stamps it now, under its write lock, and only if Watch is still unstamped, so a
+        # posture saved after this read is never turned back into Watch.
+        config = update_guard_settings(
+            guard_home,
+            {"watch_stamp_repair": True},
+            event_source="auto-revert",
+            skip_approval_gate=True,
+        )
     revert: dict[str, object] = {}
-    if watch_should_auto_revert(config, now=now):
+    posture_due, due_harnesses = watch_auto_revert_due(config, now=now)
+    if posture_due:
         revert["protection_posture"] = "protected"
-    if due_harnesses := harness_watch_auto_revert_due(config, now=now):
+    if due_harnesses:
         # A harness reverts to inheriting the baseline posture.
         revert[HARNESS_POSTURES_KEY] = dict.fromkeys(due_harnesses)
     if not revert:
@@ -83,33 +81,16 @@ def maybe_auto_revert_watch(guard_home: Path, *, now: datetime | None = None) ->
 
 
 LEGACY_GUARD_DIRNAMES = (".config/.ai-plugin-scanner-guard", ".ai-plugin-scanner-guard", ".holguard")
-NON_MIGRATED_GUARD_RUNTIME_FILES = frozenset(
-    {
-        "daemon-state.json",
-        "guard.db-journal",
-        "guard.db-shm",
-        "guard.db-wal",
-        "schema-migration.lock",
-        "storage-access.lock",
-    }
-)
-GUARD_HOME_METADATA_FILES = frozenset(
-    {
-        "oauth-keychain-access.json",
-        "schema-migration.lock",
-        "storage-access.lock",
-        "system-keyring-availability.json",
-    }
-)
-GUARD_DB_BACKUP_TIMEOUT_SECONDS = 5.0
-GUARD_DB_BACKUP_SLEEP_SECONDS = 0.05
+# One legacy home's move can back up a large guard.db; the runtime caps
+# each database copy at five seconds.
+_GUARD_HOME_RESOLVE_TIMEOUT_SECONDS = 30.0
+# The canonical home keeps winning once the runtime picks it, and a moved
+# legacy folder stays behind, so each process asks the runtime once.
+_RESOLVED_CANONICAL_HOMES: set[Path] = set()
+_RESOLVED_CANONICAL_HOMES_LOCK = threading.Lock()
 
 DEFAULT_SECURITY_LEVEL = "balanced"
 VALID_RECEIPT_REDACTION_LEVELS = frozenset({"full", "partial", "none"})
-
-
-class GuardHomeMigrationError(RuntimeError):
-    """Raised when legacy Guard state cannot be migrated safely."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -148,11 +129,17 @@ class GuardConfig:
     sync: bool = False
     receipt_redaction_level: str = "full"
     billing: bool = False
+    context_assistance: dict[str, object] | None = None
+    context_assistance_diagnostic: str | None = None
+    context_assistance_export: dict[str, object] | None = None
+    context_assistance_requested: dict[str, object] | None = None
+    context_assistance_requested_available: bool = False
     runtime_detector_registry: bool = False
     runtime_detector_timeout_ms: int = 50
     runtime_detector_debug_trace: bool = False
     runtime_detector_disabled_ids: tuple[str, ...] = ()
     sandbox_analysis: str = "off"
+    workspace_assessment_enabled: bool = True
     risk_actions: dict[str, GuardAction] | None = None
     harness_risk_actions: dict[str, dict[str, GuardAction]] | None = None
     harness_actions: dict[str, GuardAction] | None = None
@@ -204,6 +191,16 @@ _NATIVE_LOADED_FIELDS = frozenset(field.name for field in fields(GuardConfig)) -
         "managed_locked_settings",
         "install_owner",
         "managed_policy",
+        "context_assistance_requested_available",
+    }
+)
+
+_OPTIONAL_ASSISTANCE_FIELDS = frozenset(
+    {
+        "context_assistance",
+        "context_assistance_diagnostic",
+        "context_assistance_export",
+        "context_assistance_requested",
     }
 )
 
@@ -223,17 +220,29 @@ def resolve_guard_home_for_user_home(user_home: Path) -> Path:
     legacy_home = _existing_legacy_guard_home(user_home)
     if legacy_home is None:
         return canonical_home
-    if _guard_home_has_sync_credentials(canonical_home):
-        return canonical_home
-    if _guard_home_has_state(canonical_home):
-        return canonical_home
-    if _guard_home_has_sync_credentials(legacy_home) or _guard_home_has_state(legacy_home):
-        try:
-            _migrate_guard_home_transactionally(source=legacy_home, destination=canonical_home)
-        except GuardHomeMigrationError:
-            return legacy_home
-        return canonical_home
-    return canonical_home
+    with _RESOLVED_CANONICAL_HOMES_LOCK:
+        if canonical_home in _RESOLVED_CANONICAL_HOMES and canonical_home.is_dir():
+            return canonical_home
+    # `guard_home_resolve.rs` picks between the homes and moves a legacy home
+    # with state into the canonical one.
+    from .mdm.runtime_request import runtime_answer
+
+    answer = runtime_answer(
+        "native-guard-home-resolve-v1",
+        "guard-home-resolve",
+        {"schema": "guard-home-resolve.v1", "user_home": str(user_home.absolute())},
+        output_limit=64 * 1024,
+        timeout_seconds=_GUARD_HOME_RESOLVE_TIMEOUT_SECONDS,
+    )
+    guard_home = None if answer is None else answer.get("guard_home")
+    if isinstance(guard_home, str) and guard_home:
+        resolved = Path(guard_home)
+        if resolved == canonical_home:
+            with _RESOLVED_CANONICAL_HOMES_LOCK:
+                _RESOLVED_CANONICAL_HOMES.add(canonical_home)
+        return resolved
+    # An older runtime: use the canonical home once it exists, the legacy one until then.
+    return canonical_home if canonical_home.exists() else legacy_home
 
 
 def _effective_managed_policy(managed_state: ManagedPolicyState) -> ManagedPolicy | None:
@@ -268,12 +277,13 @@ def load_guard_config(
         require_canonical_workspace=require_canonical_workspace,
         managed=_native_managed_input(effective_managed_policy),
     )
-    if set(loaded) != _NATIVE_LOADED_FIELDS:
+    if not _NATIVE_LOADED_FIELDS - _OPTIONAL_ASSISTANCE_FIELDS <= set(loaded) <= _NATIVE_LOADED_FIELDS:
         raise ConfigFileTrustError("native_guard_config_invalid")
     loaded["runtime_detector_disabled_ids"] = tuple(cast("list[str]", loaded["runtime_detector_disabled_ids"]))
     return GuardConfig(
         guard_home=guard_home,
         workspace=workspace,
+        context_assistance_requested_available="context_assistance_requested" in loaded,
         **loaded,  # type: ignore[arg-type]
         managed_policy_status=managed_state.status,
         managed_policy_hash=effective_managed_policy.content_hash if effective_managed_policy is not None else None,
@@ -288,7 +298,7 @@ def load_guard_config(
 def editable_guard_settings(config: GuardConfig) -> dict[str, object]:
     """Return Guard config values that are safe to edit from the local dashboard."""
 
-    return {
+    settings: dict[str, object] = {
         "mode": config.mode,
         "presentation_mode": config.presentation_mode,
         "presentation_mode_explicit": config.presentation_mode_explicit,
@@ -333,11 +343,18 @@ def editable_guard_settings(config: GuardConfig) -> dict[str, object]:
         "receipt_redaction_level": config.receipt_redaction_level,
         "billing": config.billing,
         "approval_gate": public_config(config.guard_home).to_dict(),
+        "context_assistance": config.context_assistance_requested
+        if config.context_assistance_requested_available
+        else config.context_assistance,
+        "context_assistance_diagnostic": config.context_assistance_diagnostic,
         "managed_policy_status": config.managed_policy_status,
         "managed_policy_hash": config.managed_policy_hash,
         "managed_locked_settings": list(config.managed_locked_settings),
         "install_owner": config.install_owner,
     }
+    if config.context_assistance_requested_available:
+        settings["context_assistance_requested"] = config.context_assistance_requested
+    return settings
 
 
 # The daemon serves settings writes from a bounded threading HTTP server, so
@@ -532,12 +549,6 @@ def overlay_synced_guard_policy(
     return _overlay(config, payload)
 
 
-def _reapply_managed_config(config: GuardConfig) -> GuardConfig:
-    if config.managed_policy is None:
-        return config
-    return _overlay(config, None)
-
-
 def _overlay(config: GuardConfig, payload: dict[str, object] | None) -> GuardConfig:
     """Compose ``payload`` and the managed policy onto ``config`` natively."""
 
@@ -603,179 +614,3 @@ def _existing_legacy_guard_home(user_home: Path) -> Path | None:
         if candidate.exists():
             return candidate
     return None
-
-
-def _migrate_guard_home_state(*, source: Path, destination: Path) -> None:
-    if not source.exists():
-        return
-    destination.mkdir(parents=True, exist_ok=True)
-    replace_database = not _guard_home_has_sync_credentials(destination) and not _guard_home_has_state(destination)
-    for entry in source.iterdir():
-        if entry.name in NON_MIGRATED_GUARD_RUNTIME_FILES:
-            continue
-        target = destination / entry.name
-        if target.exists():
-            if replace_database and entry.name == "secrets" and entry.is_dir() and target.is_dir():
-                shutil.rmtree(target)
-                shutil.copytree(entry, target)
-                continue
-            if entry.is_dir() and target.is_dir():
-                _migrate_guard_home_state(source=entry, destination=target)
-                continue
-            if replace_database and entry.name == "guard.db" and entry.is_file():
-                _copy_guard_database(source=entry, destination=target)
-            continue
-        if entry.is_dir():
-            shutil.copytree(entry, target)
-            continue
-        if entry.name == "guard.db" and entry.is_file():
-            _copy_guard_database(source=entry, destination=target)
-            continue
-        shutil.copy2(entry, target)
-
-
-def _migrate_guard_home_transactionally(*, source: Path, destination: Path) -> None:
-    destination.parent.mkdir(parents=True, exist_ok=True)
-    try:
-        with tempfile.TemporaryDirectory(dir=destination.parent, prefix=f"{destination.name}-migration-") as temp_dir:
-            staging_root = Path(temp_dir) / destination.name
-            _migrate_guard_home_state(source=source, destination=staging_root)
-            if destination.exists():
-                _refuse_live_database_companions(destination)
-                _remove_guard_home_destination(destination)
-            shutil.move(str(staging_root), str(destination))
-    except OSError:
-        raise GuardHomeMigrationError("guard home migration failed") from None
-
-
-def _refuse_live_database_companions(destination: Path) -> None:
-    """Never swap guard.db out from under a non-empty WAL or rollback journal.
-
-    A later checkpoint of the old log would write stale pages into the new
-    database, and another Guard process may still hold the old files open.
-    """
-
-    for suffix in ("-wal", "-journal"):
-        companion = destination / f"guard.db{suffix}"
-        try:
-            if companion.is_file() and companion.stat().st_size > 0:
-                raise GuardHomeMigrationError("guard home has a live database log")
-        except OSError:
-            raise GuardHomeMigrationError("guard home migration failed") from None
-
-
-def _remove_guard_home_destination(path: Path) -> None:
-    for entry in path.iterdir():
-        if entry.is_dir():
-            shutil.rmtree(entry)
-            continue
-        entry.unlink()
-    path.rmdir()
-
-
-def _copy_guard_database(*, source: Path, destination: Path) -> None:
-    destination.parent.mkdir(parents=True, exist_ok=True)
-    temporary_destination = destination.with_name(f"{destination.name}.migrating")
-    deadline = time.monotonic() + GUARD_DB_BACKUP_TIMEOUT_SECONDS
-    try:
-        with (
-            sqlite3.connect(f"file:{source}?mode=ro", uri=True) as source_connection,
-            sqlite3.connect(temporary_destination) as destination_connection,
-        ):
-            source_connection.backup(
-                destination_connection,
-                pages=128,
-                progress=lambda *_: _raise_when_backup_deadline_elapsed(deadline),
-                sleep=GUARD_DB_BACKUP_SLEEP_SECONDS,
-            )
-        _prune_retired_guard_db_sync_state(temporary_destination)
-        temporary_destination.replace(destination)
-    except (TimeoutError, sqlite3.Error):
-        if temporary_destination.exists():
-            temporary_destination.unlink()
-        raise GuardHomeMigrationError("guard.db migration failed") from None
-
-
-def _prune_retired_guard_db_sync_state(database_path: Path) -> None:
-    try:
-        with sqlite3.connect(database_path) as connection:
-            connection.execute("delete from sync_state where state_key = 'credentials'")
-    except sqlite3.Error:
-        return
-
-
-def _raise_when_backup_deadline_elapsed(deadline: float) -> None:
-    if time.monotonic() >= deadline:
-        raise TimeoutError("guard.db migration timed out")
-
-
-def _guard_home_has_state(path: Path) -> bool:
-    if not path.exists():
-        return False
-    entries = list(path.iterdir())
-    if not entries:
-        return False
-    if any(
-        entry.name
-        not in {
-            "guard.db",
-            "secrets",
-            *GUARD_HOME_METADATA_FILES,
-            *NON_MIGRATED_GUARD_RUNTIME_FILES,
-        }
-        for entry in entries
-    ):
-        return True
-    secrets_dir = path / "secrets"
-    if secrets_dir.is_dir() and any(entry.name not in {"key.bin", ".key-init.lock"} for entry in secrets_dir.iterdir()):
-        return True
-    database_path = path / "guard.db"
-    if not database_path.is_file():
-        return True
-    try:
-        with sqlite3.connect(f"file:{database_path}?mode=ro", uri=True) as connection:
-            tables = {str(row[0]) for row in connection.execute("select name from sqlite_master where type = 'table'")}
-            for table_name in (
-                "harness_installations",
-                "artifact_snapshots",
-                "artifact_hashes",
-                "artifact_diffs",
-                "artifact_inventory",
-                "policy_decisions",
-                "runtime_receipts",
-                "publisher_cache",
-                "guard_events",
-                "managed_installs",
-                "guard_sessions",
-                "guard_operations",
-                "guard_operation_items",
-                "guard_client_attachments",
-                "guard_surface_opens",
-                "approval_requests",
-            ):
-                if table_name not in tables:
-                    continue
-                if connection.execute(f"select 1 from {table_name} limit 1").fetchone() is not None:
-                    return True
-            return database_has_custom_extension_state(connection, tables)
-    except sqlite3.Error:
-        return True
-
-
-def _guard_home_has_sync_credentials(path: Path) -> bool:
-    database_path = path / "guard.db"
-    if not database_path.is_file():
-        return False
-    try:
-        with sqlite3.connect(f"file:{database_path}?mode=ro", uri=True) as connection:
-            row = connection.execute(
-                """
-                select 1
-                from sync_state
-                where state_key = 'oauth_local_credentials'
-                limit 1
-                """
-            ).fetchone()
-    except sqlite3.Error:
-        return False
-    return row is not None

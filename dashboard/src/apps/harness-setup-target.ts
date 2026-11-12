@@ -35,6 +35,7 @@ const CONNECTABLE_HARNESS_ALIASES = new Set([
   "devin",
   "devin-cli",
   "cognition-devin",
+  "muse",
 ]);
 
 // These names mirror the package-shim managers in guard/shims.py. They have a

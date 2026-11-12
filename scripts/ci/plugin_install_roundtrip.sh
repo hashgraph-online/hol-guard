@@ -33,17 +33,29 @@ mkdir -p "$HOME" "$CODEX_HOME"
 ledger="$HOME/.hol-guard/plugin-kit/installs.json"
 
 source_args=()
+risk_args=()
 if [ "$mode" != "live" ]; then
+  # The fixture is what hol.org serves for a scanned listing: a passing scan
+  # tied to the commit both runtimes are pinned to.
+  ref="$(git ls-remote "https://github.com/$slug" HEAD | cut -f1)"
+  [[ "$ref" =~ ^[0-9a-f]{40}$ ]] || fail "could not read the head commit of $slug"
+  listing="https://hol.org/registry/plugins/hashgraph-online%2Fhol-guard-plugin"
   spec="$work/install-spec.json"
   cat >"$spec" <<EOF
-{"schema":"hol.plugin-install-spec.v1","slug":"$slug","name":"hol-guard-plugin","version":null,
- "repository":"$slug","listingUrl":"https://hol.org/registry/plugins/hashgraph-online%2Fhol-guard-plugin",
- "trustScore":null,"targets":[
-  {"runtime":"claude-code","marketplace":{"repository":"$slug","name":"hol-guard"},"plugin":"hol-guard"},
-  {"runtime":"codex","marketplace":{"repository":"$slug","name":"hol-guard"},"plugin":"hol-guard"},
+{"schema":"hol.plugin-install-spec.v2","slug":"$slug","name":"hol-guard-plugin","version":null,
+ "repository":"$slug","listingUrl":"$listing","trustScore":null,"installable":true,
+ "security":{"verdict":"pass","scannedAt":"$(date -u +%Y-%m-%dT00:00:00Z)","scannedRef":"$ref",
+  "findings":{"critical":0,"high":0,"medium":0,"low":0},"reasons":[],"reportUrl":"$listing"},
+ "targets":[
+  {"runtime":"claude-code","marketplace":{"repository":"$slug","name":"hol-guard","ref":"$ref"},"plugin":"hol-guard"},
+  {"runtime":"codex","marketplace":{"repository":"$slug","name":"hol-guard","ref":"$ref"},"plugin":"hol-guard"},
   {"runtime":"agent-skills","repository":"$slug"}],"manual":[]}
 EOF
   source_args=(--spec-file "$spec")
+else
+  # The canary checks install mechanics against whatever HOL's scan says today,
+  # so it accepts a warning. A blocked listing still stops it.
+  risk_args=(--accept-risk)
 fi
 
 echo "== Plan only: nothing changes"
@@ -51,7 +63,7 @@ echo "== Plan only: nothing changes"
 [ ! -e "$ledger" ] || fail "a plan wrote Guard's install list"
 
 echo "== Install into Claude Code and Codex"
-"$guard" plugin install "$slug" ${source_args[@]+"${source_args[@]}"} --runtime claude-code,codex --apply --yes
+"$guard" plugin install "$slug" ${source_args[@]+"${source_args[@]}"} --runtime claude-code,codex --apply --yes ${risk_args[@]+"${risk_args[@]}"}
 
 output="$(claude plugin list 2>&1)"
 echo "$output"

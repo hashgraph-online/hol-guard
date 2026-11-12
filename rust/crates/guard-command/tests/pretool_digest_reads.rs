@@ -33,6 +33,26 @@ fn home() -> PathBuf {
 
 /// The decision both shell harnesses reach, or "mixed" when they differ.
 fn shell(home: &Path, command: &str) -> String {
+    shell_in_environment(home, command, None)
+}
+
+/// The same decision under a stamped environment that carries `names`.
+fn shell_with_names(home: &Path, command: &str, names: &[&str]) -> String {
+    let environment = guard_contracts::GuardExecutionEnvironmentV1 {
+        path: std::env::var("PATH").unwrap_or_default(),
+        environment_names: names.iter().map(|name| (*name).to_owned()).collect(),
+        environment_digest: "0".repeat(64),
+        home: Some(home.to_str().unwrap().to_owned()),
+        ..Default::default()
+    };
+    shell_in_environment(home, command, Some(&environment))
+}
+
+fn shell_in_environment(
+    home: &Path,
+    command: &str,
+    environment: Option<&guard_contracts::GuardExecutionEnvironmentV1>,
+) -> String {
     let project = home.join("project");
     let [omp, zcode] = ["omp", "zcode"].map(|harness| {
         evaluate_pre_tool_envelope_with_execution_context(
@@ -46,14 +66,18 @@ fn shell(home: &Path, command: &str) -> String {
                 cwd: project.to_str(),
                 cdpath_unset: false,
                 rustup_override_absent: false,
+                cargo_config_inert: false,
                 npm_config_inert: false,
                 pip_config_inert: false,
                 shell_home_matches: false,
                 ripgrep_config_absent: false,
+                gem_config_absent: false,
+                http_config_absent: false,
+                openssl_config_absent: false,
                 psql_environment: Default::default(),
                 creates_nothing: false,
             },
-            None,
+            environment,
         )
         .minimum_action
     });
@@ -78,8 +102,20 @@ fn digests_of_named_files_proceed() {
         "sha1sum dist/app.whl dist/app.tar.gz",
         "cksum README.md",
         "sha256sum dist/app.whl | tail -1",
+        "openssl dgst -sha256 dist/app.whl",
+        "openssl dgst -sha256 -r dist/app.whl dist/app.tar.gz",
+        "openssl dgst -sha3-256 -hex -- dist/app.whl",
+        "openssl sha256 dist/app.whl",
+        "openssl dgst -sha256 dist/app.whl 2>&1 | head -5",
+        "cat dist/app.whl | openssl dgst -sha256",
     ] {
-        assert_eq!(shell(&home, command), "allow", "{command}");
+        // A clean stamp, so the verdict does not depend on whatever OpenSSL
+        // variables the test runner happens to export.
+        assert_eq!(
+            shell_with_names(&home, command, &["PATH"]),
+            "allow",
+            "{command}"
+        );
     }
 }
 
@@ -99,6 +135,18 @@ fn digests_that_reach_further_keep_their_review() {
         // BSD `md5 -p` copies standard input through, so a screened operand
         // does not cover everything the command prints.
         "md5 -p README.md",
+        // `dgst` options that bring in a key, a secret or a library, or that
+        // write a file, reach further than the operands the proof screened.
+        "openssl dgst -sha256 -out digest.txt dist/app.whl",
+        "openssl dgst -sha256 -sign key.pem dist/app.whl",
+        "openssl dgst -sha256 -verify key.pem -signature sig dist/app.whl",
+        "openssl dgst -sha256 -hmac secret dist/app.whl",
+        "openssl dgst -sha256 -engine pkcs11 dist/app.whl",
+        "openssl dgst -sha256 -rand README.md dist/app.whl",
+        // Other subcommands are not digests.
+        "openssl enc -aes-256-cbc -in dist/app.whl",
+        "openssl rsa -in key.pem",
+        "openssl dgst -sha256",
     ] {
         assert_eq!(shell(&home, command), "review", "{command}");
     }
@@ -113,7 +161,46 @@ fn digests_of_a_private_key_do_not_proceed() {
     for command in [
         "shasum -a 256 ~/.ssh/id_ed25519",
         "sha256sum ~/.ssh/id_ed25519",
+        "openssl dgst -sha256 ~/.ssh/id_ed25519",
     ] {
         assert_ne!(shell(&home, command), "allow", "{command}");
+    }
+}
+
+#[test]
+fn an_inherited_openssl_configuration_keeps_the_digest_reviewed() {
+    let home = home();
+    let commands = [
+        "openssl dgst -sha256 dist/app.whl",
+        "openssl sha256 dist/app.whl",
+        "cat dist/app.whl | openssl dgst -sha256",
+    ];
+    for command in commands {
+        assert_eq!(
+            shell_with_names(&home, command, &["PATH"]),
+            "allow",
+            "{command}"
+        );
+    }
+    for name in [
+        "OPENSSL_CONF",
+        "OPENSSL_CONF_INCLUDE",
+        "OPENSSL_MODULES",
+        "OPENSSL_ENGINES",
+    ] {
+        for command in commands {
+            assert_ne!(
+                shell_with_names(&home, command, &["PATH", name]),
+                "allow",
+                "{name}: {command}"
+            );
+        }
+        // The configuration only reaches `openssl`; other digest programs
+        // keep their verdict.
+        assert_eq!(
+            shell_with_names(&home, "sha256sum dist/app.whl", &["PATH", name]),
+            "allow",
+            "{name}"
+        );
     }
 }

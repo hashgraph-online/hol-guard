@@ -17,15 +17,32 @@ from .approval_retry import ReviewApprover, write_review_config
 from .approval_retry_bash import BASH_LIFECYCLE_ORACLE
 from .approval_retry_bash import evidence as bash_lifecycle_evidence
 from .approval_retry_bash import stage as stage_bash_lifecycle
+from .approval_retry_marker import CASE as APPROVAL_MARKER_CASE
+from .approval_retry_marker import collect as collect_approval_marker
+from .approval_retry_marker import stage as stage_approval_marker
+from .approval_retry_persistent import CASE as APPROVAL_PERSISTENT_CASE
+from .approval_retry_persistent import PACKAGE_CASES as APPROVAL_PERSISTENT_PACKAGE_CASES
+from .approval_retry_persistent import case_environment as approval_persistent_environment
+from .approval_retry_persistent import collect as collect_approval_persistent
+from .approval_retry_persistent import stage as stage_approval_persistent
+from .approval_retry_persistent import write_package_review_config
 from .approval_rows import approval_rows
 from .business_policy import BUSINESS_CASES, BUSINESS_CLI_CASES, bind_business_snapshot, install_business_policy
 from .case_helpers import add_credential_redactions, fixture_system_context
 from .catalog import WATCH_COMMAND, WATCH_PROMPT, Scenario
 from .cleanup import cleanup_case_resources
 from .codex_contained import request_proofs as codex_request_proofs
-from .connector_fixtures import CONNECTOR_PROFILE, connector_checks, stage_connector_case, state_digest
-from .evidence import sha256_bytes
+from .connector_fixtures import (
+    CONNECTOR_PROFILE,
+    GRANTED_SCRIPT_CASES,
+    allow_custom_script,
+    connector_checks,
+    stage_connector_case,
+    state_digest,
+)
+from .evidence import execution_error_chain, sha256_bytes
 from .extension_adapters import configure_extension_permission_denial, extension_adapter
+from .extension_allow_fixtures import EXTENSION_ALLOW_CASES, configure_extension_allow_controls
 from .fixtures import (
     create_fixture,
     digest_file,
@@ -35,6 +52,7 @@ from .fixtures import (
     scratch_checkout,
     stage_directory,
 )
+from .git_allow_fixtures import GIT_ALLOW_CASES, configure_git_allow_controls
 from .guard_tap import GuardTap, read_tap
 from .harness_judge import assess_harness_case, guard_decisions
 from .harnesses import CredentialSeed, adapter, credential_environment, keep_login_shell_path, read_transcript
@@ -42,7 +60,7 @@ from .host_process import clean_environment, realistic_environment, run_process
 from .input_evidence import redact_value
 from .provider import LoopbackCollector
 from .review_fixtures import (
-    GITHUB_REVIEW_CASE,
+    GITHUB_ENABLED_CASES,
     GITHUB_STUB_CASES,
     configure_github_review_controls,
     seed_protected_codex_hooks,
@@ -173,6 +191,8 @@ def run_harness_case(
         "cleanup_ok": False,
         "transcript": {"calls": [], "terminal": False},
     }
+    stage_approval_marker(fixture.workspace, scenario.id, case)
+    stage_approval_persistent(fixture.workspace, scenario.id, case, fixture.protected)
     daemon = None
     connector = None
     seed: CredentialSeed | None = None
@@ -211,8 +231,14 @@ def run_harness_case(
                 # path has no other way in, because a hard block never queues an approval.
                 # A case whose repeated action is a file-tool call needs the default floor;
                 # the subprocess floor the shell cases raise never reaches a file tool.
-                case["review_policy"] = write_review_config(
-                    guard_home, file_tool="bash" not in scenario.required_tools
+                case["review_policy"] = (
+                    write_package_review_config(guard_home)
+                    if scenario.id in APPROVAL_PERSISTENT_PACKAGE_CASES
+                    else write_review_config(
+                        guard_home,
+                        file_tool="bash" not in scenario.required_tools,
+                        intrinsic_review=scenario.id in {APPROVAL_MARKER_CASE, APPROVAL_PERSISTENT_CASE},
+                    )
                 )
             if CONNECTOR_PROFILE in scenario.profiles:
                 connector = stage_connector_case(scenario.oracle, fixture.root, fixture.home, guard_home, harness)
@@ -228,8 +254,12 @@ def run_harness_case(
                 case["extension_control"] = configure_extension_permission_denial(
                     daemon, guard_home, extension_adapter(scenario.commands[0])
                 )
-            if scenario.id == GITHUB_REVIEW_CASE:
+            if scenario.id in GITHUB_ENABLED_CASES:
                 case["extension_control"] = configure_github_review_controls(daemon, guard_home)
+            if scenario.id in GIT_ALLOW_CASES:
+                case["extension_control"] = configure_git_allow_controls(daemon, guard_home)
+            if scenario.id in EXTENSION_ALLOW_CASES:
+                case["extension_control"] = configure_extension_allow_controls(daemon, guard_home, scenario.id)
             if scenario.id in BUSINESS_CASES:
                 case["business_policy"] = install_business_policy(daemon, guard_home)
             # Native-tools cases run first-contact, with no pre-bound workspace policy, like a fresh install.
@@ -240,6 +270,10 @@ def run_harness_case(
                 publisher = daemon._server.hook_worker.policy_snapshot_publisher
                 case["business_policy"] = bind_business_snapshot(
                     case["business_policy"], publisher.current_snapshot(), policy_snapshot
+                )
+            if connector is not None and scenario.id in GRANTED_SCRIPT_CASES:
+                case["custom_extension"] = allow_custom_script(
+                    daemon._server.store, connector.approve_script, fixture.home
                 )
             worker = daemon._server.hook_worker
             if scenario.oracle == "watch-command":
@@ -263,7 +297,11 @@ def run_harness_case(
             environment = harness_environment(
                 spec, fixture.home, private / "agent", fixture.canary, login_environment, realistic=realistic
             )
-            if scenario.oracle == "blocked-extension" or scenario.id in BUSINESS_CLI_CASES | GITHUB_STUB_CASES:
+            environment.update(approval_persistent_environment(scenario.id))
+            if (
+                scenario.oracle == "blocked-extension"
+                or scenario.id in BUSINESS_CLI_CASES | GITHUB_STUB_CASES | EXTENSION_ALLOW_CASES
+            ):
                 environment["PATH"] = str(fixture.root / "bin") + os.pathsep + environment["PATH"]
             if connector is not None:
                 environment["PATH"] = connector.path_prefix + environment["PATH"]
@@ -324,7 +362,9 @@ def run_harness_case(
                 raise RuntimeError("installed Guard changed during the session")
     except Exception as exc:
         case["execution_error"] = type(exc).__name__
-        (private / "execution-error.txt").write_text(f"{type(exc).__name__}: {exc}\n", encoding="utf-8")
+        chain = execution_error_chain(exc, replacements)
+        case["execution_error_chain"] = chain
+        (private / "execution-error.txt").write_text("\n".join(chain) + "\n", encoding="utf-8")
     finally:
         try:
             if seed is not None:
@@ -333,6 +373,8 @@ def run_harness_case(
             case["credential_write_back_error"] = type(exc).__name__
         finally:
             case["filesystem"] = filesystem_checks(fixture, scenario.oracle, scenario.id)
+            collect_approval_marker(fixture.workspace, scenario.id, case)
+            collect_approval_persistent(fixture.workspace, scenario.id, case)
             if connector is not None:
                 case["filesystem"].update(connector_checks(connector, connector_state))
             remove_scratch_checkout(fixture.root)

@@ -9,16 +9,17 @@
 //! interpreter, ran contained, and only commands Guard proves safe run
 //! directly. Markers match whole words, so a path such as `/usr/libexec` or
 //! `rewrite.log` names no cause, and only errors a sandbox denial produces name
-//! one alone. Python keeps the same notes and markers in
-//! `contained_denial_note.py`, byte for byte, in the same order.
+//! one alone. The native sink reads its own output here, and the Python
+//! sandboxes ask through the `contained_denial_note` runner-authority kind, so
+//! both give the same note.
 
-pub(super) const WRITE_NOTE: &str = "This command ran inside HOL Guard's workspace sandbox, which blocked a write outside the workspace. Only the workspace, $TMPDIR and a private scratch $HOME are writable, apart from protected paths such as Git configuration. Keep files the command writes inside the workspace or $TMPDIR. This applies to every program the command starts, including children of an interpreter; only commands Guard proves safe run directly, outside the sandbox.";
-pub(super) const EXEC_NOTE: &str = "This command ran inside HOL Guard's workspace sandbox, which blocked starting a program outside the locations it allows. This applies to every program the command starts, including children of an interpreter; only commands Guard proves safe run directly, outside the sandbox.";
-pub(super) const CONNECT_NOTE: &str = "This command ran inside HOL Guard's workspace sandbox, which blocked a network connection. The sandbox has no network access. This applies to every program the command starts, including children of an interpreter; only commands Guard proves safe run directly, outside the sandbox.";
-pub(super) const READ_NOTE: &str = "This command ran inside HOL Guard's workspace sandbox, which blocked a read outside the workspace, such as the home directory. This applies to every program the command starts, including children of an interpreter; only commands Guard proves safe run directly, outside the sandbox.";
-pub(super) const PTY_NOTE: &str = "This command ran inside HOL Guard's workspace sandbox, which blocked opening a pseudo-terminal. The sandbox has no PTY, so a program that needs an interactive terminal cannot run contained; use its non-interactive form. This applies to every program the command starts, including children of an interpreter; only commands Guard proves safe run directly, outside the sandbox.";
-pub(super) const DOCKER_NOTE: &str = "This command ran inside HOL Guard's workspace sandbox, which blocked access to the Docker socket. The sandbox never allows Docker, so a command that needs a container runtime cannot run contained. This applies to every program the command starts, including children of an interpreter; only commands Guard proves safe run directly, outside the sandbox.";
-pub(super) const GENERIC_NOTE: &str = "This command ran inside HOL Guard's workspace sandbox, which denied an operation. Only the workspace, $TMPDIR and a private scratch $HOME are writable, and there is no network, real home directory, PTY or Docker socket access. This applies to every program the command starts, including children of an interpreter; only commands Guard proves safe run directly, outside the sandbox.";
+pub(crate) const WRITE_NOTE: &str = "This command ran inside HOL Guard's workspace sandbox, which blocked a write outside the workspace. Only the workspace, $TMPDIR and a private scratch $HOME are writable, apart from protected paths such as Git configuration. Keep files the command writes inside the workspace or $TMPDIR. This applies to every program the command starts, including children of an interpreter; only commands Guard proves safe run directly, outside the sandbox.";
+pub(crate) const EXEC_NOTE: &str = "This command ran inside HOL Guard's workspace sandbox, which blocked starting a program outside the locations it allows. This applies to every program the command starts, including children of an interpreter; only commands Guard proves safe run directly, outside the sandbox.";
+pub(crate) const CONNECT_NOTE: &str = "This command ran inside HOL Guard's workspace sandbox, which blocked a network connection. The sandbox has no network access. This applies to every program the command starts, including children of an interpreter; only commands Guard proves safe run directly, outside the sandbox.";
+pub(crate) const READ_NOTE: &str = "This command ran inside HOL Guard's workspace sandbox, which blocked a read outside the workspace, such as the home directory. This applies to every program the command starts, including children of an interpreter; only commands Guard proves safe run directly, outside the sandbox.";
+pub(crate) const PTY_NOTE: &str = "This command ran inside HOL Guard's workspace sandbox, which blocked opening a pseudo-terminal. The sandbox has no PTY, so a program that needs an interactive terminal cannot run contained; use its non-interactive form. This applies to every program the command starts, including children of an interpreter; only commands Guard proves safe run directly, outside the sandbox.";
+pub(crate) const DOCKER_NOTE: &str = "This command ran inside HOL Guard's workspace sandbox, which blocked access to the Docker socket. The sandbox never allows Docker, so a command that needs a container runtime cannot run contained. This applies to every program the command starts, including children of an interpreter; only commands Guard proves safe run directly, outside the sandbox.";
+pub(crate) const GENERIC_NOTE: &str = "This command ran inside HOL Guard's workspace sandbox, which denied an operation. Only the workspace, $TMPDIR and a private scratch $HOME are writable, and there is no network, real home directory, PTY or Docker socket access. This applies to every program the command starts, including children of an interpreter; only commands Guard proves safe run directly, outside the sandbox.";
 /// Words that make a line a denial at all.
 const DENIAL_WORDS: [&[u8]; 4] = [
     b"eperm",
@@ -119,7 +120,7 @@ fn line_note(line: &[u8]) -> Option<&'static str> {
 }
 
 /// The note for `outputs`, read in order, or `None` when none names a denial.
-pub(super) fn denial_note(outputs: &[&[u8]]) -> Option<&'static str> {
+pub(crate) fn denial_note(outputs: &[&[u8]]) -> Option<&'static str> {
     let mut denied = false;
     for output in outputs {
         let lowered = output.to_ascii_lowercase();
@@ -137,7 +138,7 @@ pub(super) fn denial_note(outputs: &[&[u8]]) -> Option<&'static str> {
 const LOOPBACK_MARKERS: [&[u8]; 3] = [b"127.0.0.1", b"localhost", b"::1"];
 
 /// Whether a line of `outputs` names a blocked connection to this machine.
-pub(super) fn loopback_denied(outputs: &[&[u8]]) -> bool {
+pub(crate) fn loopback_denied(outputs: &[&[u8]]) -> bool {
     outputs.iter().any(|output| {
         output
             .to_ascii_lowercase()

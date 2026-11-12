@@ -18,7 +18,6 @@ from ..native_mcp_classification import (
 
 __all__ = [
     "McpClassificationUnavailableError",
-    "classify_mcp_action",
     "classify_mcp_actions",
 ]
 
@@ -36,33 +35,3 @@ def classify_mcp_actions(
     cannot carry; no caller receives a locally invented description.
     """
     return native_mcp_classifications(definitions, guard_home=guard_home)
-
-
-def classify_mcp_action(
-    name: str,
-    schema: object,
-    *,
-    guard_home: Path,
-    provider: str | None = None,
-    annotations: object = None,
-    full_schema: bool = True,
-) -> dict[str, object] | None:
-    """Describe static evidence without reading field values or executing tools.
-
-    Descriptions, defaults, URLs, and enum values are deliberately excluded.
-    Schemas and annotations are provider-controlled; no result is a safe/allow
-    recommendation, a verified destination, or an account binding.
-    """
-    described = classify_mcp_actions(
-        [
-            {
-                "name": name,
-                "schema": schema,
-                "provider": provider,
-                "annotations": annotations,
-                "full_schema": full_schema,
-            }
-        ],
-        guard_home=guard_home,
-    )
-    return described[0]

@@ -1,8 +1,7 @@
-"""The grant fields of a workspace sandbox plan, checked as Rust checks them."""
+"""The grant fields of a workspace sandbox plan, read through native authority."""
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
 
 import pytest
@@ -15,27 +14,6 @@ from codex_plugin_scanner.guard.runtime.restricted_workspace_grants import (
     grant_script_roots,
 )
 from tests.test_guard_restricted_workspace import plan
-
-VECTORS = Path(__file__).parent / "fixtures" / "workspace_grant_plan" / "parity_vectors.json"
-
-
-def _expected(value: dict[str, object] | None) -> ExpectedGrant | None:
-    if value is None:
-        return None
-    return ExpectedGrant(
-        identity_hash=str(value["identity_hash"]),
-        capabilities=tuple(value["capabilities"]),
-        state_dir=value["state_dir"],
-    )
-
-
-def _cases() -> list[dict[str, object]]:
-    return json.loads(VECTORS.read_text(encoding="utf-8"))["cases"]
-
-
-@pytest.mark.parametrize("case", _cases(), ids=lambda case: case["name"])
-def test_parity_vectors_match_rust(case: dict[str, object]) -> None:
-    assert grant_script_roots(case["plan"], _expected(case["expected"])) == case["result"]
 
 
 def test_the_plan_names_its_grant_fields() -> None:

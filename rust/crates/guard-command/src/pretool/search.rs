@@ -38,10 +38,7 @@ pub(super) use walk_memo::with_walk_memo;
 /// peers; a whole-command answer serves the readers that prove one operand
 /// at a time.
 pub(super) fn command_creates_nothing(model: &crate::CanonicalCommandV1) -> bool {
-    model
-        .segments
-        .iter()
-        .all(|segment| grep::creates_nothing(segment, false))
+    model.segments.iter().all(grep::creates_nothing)
 }
 
 /// A names-only walk (`find`) rooted at a project-metadata directory such as
@@ -224,18 +221,67 @@ fn glob_intersects_contains_family(pattern: &[u8], needle: &[u8], star_consumes:
         |state, value| Some(contains_family_transition(needle, state, value)),
     )
 }
+/// The one brace pair bash would expand next, as `(open, close)` byte
+/// offsets. Bash pairs a `}` with the nearest `{` to its left, so an opening
+/// brace that never closes is skipped rather than swallowing the pair that
+/// follows it: `{x/{.gnupg,b}` is `{x/.gnupg {x/b`, and the component
+/// `.gnupg` is exactly what a sensitive-path check has to see. Pairing the
+/// first `{` with the first `}` instead produced `x/{.gnupg`, which matches
+/// no marker. A `}` with no `{` anywhere to its left is literal text to bash,
+/// which still expands the pair after it (`}{.env,x}` is `}.env }x`), so such
+/// a brace is passed over rather than ending the search for a pair.
+fn innermost_brace_pair(candidate: &str) -> Option<(usize, usize)> {
+    candidate
+        .match_indices('}')
+        .find_map(|(close, _)| candidate[..close].rfind('{').map(|open| (open, close)))
+}
+
+/// The same candidate with the `}` at `close` taken as the literal text an
+/// escaped brace leaves behind. Bash carries the pair on to the next `}`, so
+/// this reading exists only when a comma and a later `}` follow, and only
+/// when the next character is not itself a `}`: a brace that closes straight
+/// into another one is the inner half of a nested pair such as a Go template
+/// `{{.Names}},{{.Status}}`, not an escape. `None` otherwise, which is the
+/// ordinary case.
+fn escaped_close_reading(candidate: &str, close: usize) -> Option<String> {
+    if candidate[close + 1..].starts_with('}') {
+        return None;
+    }
+    let comma = candidate[close + 1..].find(',')? + close + 1;
+    candidate[comma..].find('}')?;
+    Some(format!(
+        "{}{}",
+        &candidate[..close],
+        &candidate[close + 1..]
+    ))
+}
+
 fn expand_brace_globs(pattern: &str) -> Option<Vec<String>> {
-    let mut expanded = vec![pattern.to_owned()];
-    for _depth in 0..8 {
+    // The flag beside each candidate records whether it still carries the
+    // braces of the word as written. Only such a candidate can have held the
+    // backslash the tokenizer dropped, and a comma expansion hands that
+    // standing on to every part it produces.
+    let mut expanded = vec![(pattern.to_owned(), true)];
+    for _ in 0..8 {
+        // A brace with no `}` after it expands to nothing: bash leaves `a{b`
+        // and a search pattern such as `json({ error` as the literal text it
+        // was written as. Reading that shape as a glob nobody could expand
+        // refused every search whose pattern held an unbalanced brace, so a
+        // candidate ends the pass unless one of its braces could still open
+        // an alternative.
         let Some(index) = expanded
             .iter()
-            .position(|candidate| candidate.contains('{'))
+            .position(|(candidate, _)| innermost_brace_pair(candidate).is_some())
         else {
-            return Some(expanded);
+            return Some(
+                expanded
+                    .into_iter()
+                    .map(|(candidate, _)| candidate)
+                    .collect(),
+            );
         };
-        let candidate = expanded.swap_remove(index);
-        let open = candidate.find('{')?;
-        let close = candidate[open + 1..].find('}')? + open + 1;
+        let (candidate, as_written) = expanded.swap_remove(index);
+        let (open, close) = innermost_brace_pair(&candidate)?;
         let choices: Vec<&str> = candidate[open + 1..close].split(',').collect();
         // A brace with no comma and no `..`, such as Git's `HEAD^{commit}`,
         // `@{u}` or a Go template `{{.Server.Version}}`, is literal text to the
@@ -251,7 +297,23 @@ fn expand_brace_globs(pattern: &str) -> Option<Vec<String>> {
                 let suffix = candidate[close + 1..]
                     .strip_prefix(closing.as_str())
                     .unwrap_or(&candidate[close + 1..]);
-                expanded.push(format!("{}{trimmed}{suffix}", &candidate[..open],));
+                // The tokenizer drops a backslash before it reaches here, so
+                // `z{prefix/{x\},.env}` arrives as `z{prefix/{x},.env}`. To
+                // bash that `}` was literal text, which left the pair opening
+                // further left and the words `z{prefix/x}` and `z{prefix/.env`.
+                // Reading only the inner pair would hide that second word, so
+                // the spelling with this brace taken as literal is carried
+                // alongside and screened too. Only the word as written can
+                // have carried the backslash, so a candidate this branch has
+                // already rewritten yields no further reading; generating one
+                // from every rewrite makes an ordinary multi-part template
+                // outgrow the budget below and fail closed.
+                if as_written {
+                    if let Some(escaped) = escaped_close_reading(&candidate, close) {
+                        expanded.push((escaped, false));
+                    }
+                }
+                expanded.push((format!("{}{trimmed}{suffix}", &candidate[..open],), false));
                 continue;
             }
         }
@@ -259,11 +321,14 @@ fn expand_brace_globs(pattern: &str) -> Option<Vec<String>> {
             return None;
         }
         for choice in choices {
-            expanded.push(format!(
-                "{}{}{}",
-                &candidate[..open],
-                choice,
-                &candidate[close + 1..]
+            expanded.push((
+                format!(
+                    "{}{}{}",
+                    &candidate[..open],
+                    choice,
+                    &candidate[close + 1..]
+                ),
+                as_written,
             ));
         }
     }
@@ -428,17 +493,12 @@ fn short_search_option(
     Ok((None, false))
 }
 
-pub(super) fn safe_search_arguments_with_context(
-    executable: &str,
-    arguments: &[String],
+pub(super) fn safe_fd_segment(
+    model: &crate::CanonicalCommandV1,
+    segment: &crate::CommandSegmentV1,
     context: ReadContext<'_>,
 ) -> bool {
-    match executable {
-        "rg" => rg::safe_rg_arguments(arguments, context),
-        "fd" => fd::safe_fd_arguments(arguments, context),
-        "grep" => grep::safe_grep_arguments(arguments, context),
-        _ => false,
-    }
+    fd::safe_fd_segment(model, segment, context)
 }
 
 pub(super) fn safe_rg_segment(
@@ -454,63 +514,5 @@ pub(super) fn safe_grep_stdin_arguments(arguments: &[String]) -> bool {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::{glob_can_select_sensitive_path, literal_glob_names_sensitive_path};
-
-    /// Both forms read the glob's own text the same way. They part over the
-    /// wider question a path operand answers: whether some longer string the
-    /// glob could match would hold a credential marker. Every regex that
-    /// joins two words with `.*` could, so a pattern is read on its text
-    /// alone.
-    #[test]
-    fn a_regex_wildcard_names_no_credential_on_its_own_text() {
-        for selecting in [".env*", ".ssh/*", "*secret*", "id_*", "*.pem"] {
-            assert!(literal_glob_names_sensitive_path(selecting), "{selecting}");
-            assert!(glob_can_select_sensitive_path(selecting), "{selecting}");
-        }
-        // A credential marker joined to a second word with `.*` is still a
-        // regex. A path operand spelled the same way is refused, because it
-        // is a glob some credential file could sit under.
-        for regex in [
-            "cookie.*name",
-            "a.*b",
-            "auth_token.*=",
-            "delegate.*=>",
-            "auth.*provider",
-            "token.*expired",
-            "credentials.*load",
-            "auth.*header",
-        ] {
-            assert!(!literal_glob_names_sensitive_path(regex), "{regex}");
-        }
-        for operand in ["auth.*provider", "token.*expired", "credentials.*load"] {
-            assert!(glob_can_select_sensitive_path(operand), "{operand}");
-        }
-    }
-
-    #[test]
-    fn brace_sequences_still_select_sensitive_names() {
-        // Git's brace suffixes and Go template fields are one literal alternative.
-        for literal in [
-            "head^{commit}",
-            "4dc51cdaa1^{tree}",
-            "head@{0}",
-            "@{u}",
-            "{{.server.version}}",
-        ] {
-            assert!(!glob_can_select_sensitive_path(literal), "{literal}");
-        }
-        // Bash expands a `..` sequence: `.en{v..v}` is `.env`.
-        for selecting in [
-            ".en{v..v}",
-            ".npmr{c..c}",
-            "config/.en{v..v}",
-            ".en{v..v..1}",
-            "{.env}",
-            "{{.env}}",
-            "{.env,readme.md}",
-        ] {
-            assert!(glob_can_select_sensitive_path(selecting), "{selecting}");
-        }
-    }
-}
+#[path = "search_tests.rs"]
+mod tests;

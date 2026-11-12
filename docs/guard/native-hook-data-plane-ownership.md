@@ -32,9 +32,7 @@ harness launcher or managed hook
         -> Rust edge normalization and resident client/supervisor
         -> Rust output traversal, source I/O, hashing, scanning, effective-policy floors, decision
         -> Python harness response rendering
-     -> explicit off: deterministic fail-safe disablement (no semantic fallback)
-     -> explicit shadow diagnostic surface: Rust authority plus non-authoritative comparison
-     -> explicit differential-test oracle: Python reference evaluator only
+     -> retired off/shadow values: resolve to the product default, select nothing
   -> Python bounded asynchronous evidence handoff (non-authoritative)
 ```
 
@@ -56,7 +54,7 @@ Rust raw envelope
 | Harness launchers | Python transport | Minimal launcher and mechanical serialization |
 | Harness event/action normalization | Python semantic | Rust raw-envelope normalization |
 | HTTP ingress | Python transport | Authentication and byte transport only |
-| Hook request projection | Rust semantic for auto/force; fail-safe for production off/shadow | Rust raw-envelope edge |
+| Hook request projection | Rust semantic for every supported production request | Rust raw-envelope edge |
 | CLI hook evaluation | Python semantic | Presentation and orchestration only |
 | Python reference oracle | Python semantic | Differential tests only; never production authority |
 | Resident client and supervisor | Rust transport/lifecycle with a minimal Python process launcher | Rust native edge and launcher |
@@ -91,14 +89,20 @@ or encoding-invalid input is not eligible for an allow result.
 The resident worker has no production import or lazy construction path for the
 Python semantic evaluator, content scanner, or decision cache. Supported
 `PreToolUse` and `PostToolUse` requests enter the Rust edge in `auto` and
-`force`; native failure is fail-closed. `HOL_GUARD_NATIVE=off` is an explicit
-fail-safe disablement, not permission to restore Python authority. `shadow`
-comparison is permitted only when `HOL_GUARD_NATIVE_DIAGNOSTIC=1` is present
-on a declared non-production surface.
+`force`; native failure is fail-closed. `HOL_GUARD_NATIVE=off` and
+`HOL_GUARD_NATIVE=shadow` are retired values: both resolve to the product
+default and warn once, so neither disables native authority nor restores the
+Python one. `HOL_GUARD_NATIVE_DIAGNOSTIC=1` on a declared non-production
+surface adds bounded transport and timeout diagnostics; no flag runs a second
+evaluator or compares its verdict with the native one.
 
-`HOL_GUARD_PYTHON_ORACLE=1` plus the test marker `HOL_GUARD_TEST_MODE=1` is the
-only supported semantic oracle boundary. Absent, invalid, or inherited values
-never select it. The AST/call-graph gate
+`HOL_GUARD_PYTHON_ORACLE` is retired. It is listed under
+`dependency_delta.removed_runtime_flags` in
+`docs/guard/contracts/python-capability-ownership.v1.json`, whose
+`rollback_boundary` records `retained_source: false` and no packaged Python
+oracle fallback, and `scripts/ci/python_runtime_retirement.py` reddens CI if a
+source file reads it again. There is no in-process semantic oracle boundary
+left to select. The AST/call-graph gate
 `scripts/ci/python_hook_semantic_callgraph_gate.py` rejects semantic evaluator
 imports and calls reachable from production hook entrypoints; the
 always-selected ownership workflow runs this gate.
@@ -181,7 +185,10 @@ shows the agent the `connector_setup_reason` text, and records the connector's
 setup context. The resident cannot raise a desktop notice, so it hands the stored
 request id and the CLI name to the evidence drain, which raises the notice from
 the stored row. Any lookup the resident cannot spell exactly as the daemon would,
-and any failed lookup, leaves the review to the daemon.
+and any failed lookup, leaves the review to the daemon. A connector-setup review the
+daemon queues asks the same `extension_review_hint` op for its connector-setup
+hint, handing it the connector with the paused result, so the risk classes read
+from the observed catalog rules are Rust-owned on both lanes.
 
 The recommendation shown with a pending review is that stored hint re-checked
 on every read, and the resident owns it too. The
@@ -270,6 +277,14 @@ evidence; it no longer recomputes the view or compares verdicts. A head the
 resident cannot read, or one whose managed policy has moved, refuses the
 migration with no Python fallback.
 
+Every resident writer op ensures the extension-control authority schema itself
+before it writes (`extension_control_authority_op/schema.rs`): it creates the
+missing tables and epoch triggers, moves the marker forward to the pack schema a
+reservation's record names, and refuses an unknown or forged marker by name. The
+triggers carry the exact text the Python epoch reader digests. Python's runtime
+callers only check the marker, without writing. Store initialization still runs
+the Python schema function.
+
 The inventory URL redaction now comes from the resident.
 `inventory_url_redaction_op` answers a batch of tasks through
 `inventory_redaction::redact_url`, `redact_headers` and
@@ -312,19 +327,25 @@ value that is not a string is refused before the call rather than repaired.
 None of this is an approval or an executable authentication; it selects
 which packaged catalog entry a contribution matches.
 
-Which bounded read an admitted argv names is decided in the resident
-(`verified-read-plan-v1`, `guard-command/src/verified_read_plan.rs` behind
-`verified_read_plan_op.rs`). It owns the whole grammar: that the executable is a
-bare name inside the verified-read cohort, which operation each name spells, the
-head and tail line bound and every spelling of it, the quiet-flag and range form
-`sed` is held to, the thousand-line ceiling both carry, and that a target is a
-static relative path with no dynamic shell character in it. The answer is one
-plan — an operation id, an optional target and a selection naming the lines to
-show — so Python reads the argv nowhere. This side opens the target under the
-repository, where the secret-path, symlink and identity checks live, and slices
-the text the plan selected. A refusal names the rule it broke for the
-diagnostics record; the read ends either way. Without a plan there is no read
-and no Python grammar to fall back on: the command returns to ordinary review.
+A verified workspace read happens in the resident from end to end
+(`verified-read-execute-v1`, `guard-runtime/src/verified_read_execute.rs`
+behind `verified_read_execute_op.rs`). The plan comes from
+`guard-command/src/verified_read_plan.rs`, which owns the whole grammar: that
+the executable is a bare name inside the verified-read cohort, which operation
+each name spells, the head and tail line bound and every spelling of it, the
+quiet-flag and range form `sed` is held to, the thousand-line ceiling both
+carry, and that a target is a static relative path with no dynamic shell
+character in it. The resident then checks that the working directory is a
+canonical directory inside a git checkout, refuses secret paths and symlinked
+components, opens each component beneath the repository by descriptor without
+following a link, reads a regular single-link UTF-8 file under its size bound,
+slices the planned lines, rechecks the workspace and repository identity, binds
+the proof digest over all of it and composes the silent-verified decision.
+Python sends the argv and its working directory and prints the text that comes
+back. Every refusal or failure ends the read and the command returns to
+ordinary review; there is no Python grammar or reader to fall back on. The
+executor needs descriptor-relative opens, so on Windows the op answers
+`unsupported` and the read stays under review.
 
 The AIBOM report summaries now come from the resident.
 `aibom_report_summaries_op` counts an inventory report's layers, its trust
@@ -469,6 +490,28 @@ token itself and nothing it contains can pass as a substituted scalar.
 `codex_hook_identity.py` now only names what is being identified;
 `native_codex_hook_identity.py` ships it across and fails closed.
 
+Whether the authenticated Codex hook manifest still describes the live
+installation is decided in the resident (`codex-hook-manifest-verify-v1`, in
+`codex_hook_manifest_verify_op.rs`). Python checked the manifest header, the
+config target, the interpreter and every packaged file, the launch identities
+and the hook registrations in the Codex config. It still authenticates the
+manifest, since the key never leaves it, and supplies the canonical path
+spellings, its package roots, its own command splitting and whether a file's
+group is private to its owner; the resident reads the files and answers with
+the integrity state. An unavailable resident reports the installation as
+unverified. `codex_hook_manifest.py` keeps only that authentication step.
+
+A Codex hook source's inventory is walked there as well
+(`codex-hook-identity-v2`, the `inventory` entry). Python sent one handler and
+one argv question per hook and assembled the records itself; it now sends the
+source's events in the order the file wrote them, with its manifest, legacy and
+self-install bindings, and the resident answers with every record, its
+ownership and identity, and every shape issue, from the same walk native hook
+detection runs. `codex_hook_inventory.py` checks each field of the answer and
+keeps no walk of its own. A resident without the feature, or an answer that is
+not an inventory, leaves the source with one identity issue and no records, so
+install stops before it activates.
+
 What a local CLI's `--help` means is read in the resident
 (`local-cli-help-parse-v1`, in `local_cli_help.rs`). Python ran the prose
 grammar: which line opens a command section and which closes it, when an
@@ -479,6 +522,81 @@ operator is offered a grant over, so a second copy of it would be a second
 answer to the same question. Python now only probes - it runs the CLI, collects
 the help text each subcommand prints, and sends the text; the resident returns
 the commands it names and their descriptions.
+
+The options a CLI takes are read there too (`local-cli-help-variations-v1`, in
+`local_cli_help_options.rs`): the option rows and usage line of a help that
+names no subcommands, and, for a script whose `--help` names nothing, the
+script's own source. A source is read only from its comments and heredoc text,
+plus the `case` arms, parser calls and `getopts` strings that compare its own
+arguments, so an option the script passes to another program never becomes
+one of its own. Python reads the verified script file, bounded, and sends it
+with `script_source`; it never runs anything to get it. The grant answer
+(`local_cli_grant_op.rs`) then decides a call by the options it passes: a
+blocked option blocks the call, and a call with options and no subcommand is
+allowed only when every option it passes is allowed.
+
+A resident that advertises `local-cli-help-source-first-v1` reads an
+interpreter script's source before Guard runs it at all
+(`local_cli_help_script*.rs`). For `.js`, `.mjs`, `.ts`, `.py`, `.rb` and
+shell scripts it names the subcommands the code compares its first argument
+against (`switch`, `match`, `case`/`when`, `if` comparisons and membership
+tests, followed through destructuring, slices, `shift` and the parameter of a
+function given the arguments), the options it checks for, the commands a
+parser library declares (Commander, yargs, argparse, Click, Typer), the
+`./`-relative modules it imports, and whether anything in it handles `--help`:
+`none`, `script` (the code checks for the flag itself) or `framework` (a parser
+library that answers `--help` for each subcommand). The
+`local_cli_script_source` kind (`local_cli_script_source.rs`) only finds and
+reads the files: the verified script, and at most four imported modules that resolve, through symlinks, to script files
+inside the script's own folder. On the answer it runs nothing for `none`, only
+the top-level `--help` for `script`, and nested `<command> --help` probes only
+for `framework`. A parser in the entry script answers only for the commands
+the script does not compare by hand, so a script that dispatches its own
+subcommands is `script` even when it also builds a parser. An imported module
+can raise `none` to `script`, never to `framework`, and a module the resident
+cannot read fails the whole discovery. Each module is opened without following
+a final symlink and read only when the open file is the one its path resolves
+to inside the script's folder. A script in a language the resident does not
+read (Perl, PHP, Lua) has `none`, so it is never run. A resident that cannot read the source leaves the CLI with no
+commands and runs nothing, and so does a runtime whose status cannot be read:
+a busy or missing resident is never taken for an older one. Only a resident
+whose capabilities list lacks the feature, or a compiled program that is not
+a script, takes the help-first path above.
+
+A pasted command is tried as a stdio MCP server before help discovery, and
+that launch passes the script its real arguments. A resident that advertises
+`local-cli-help-mcp-evidence-v1` adds `mcp_server` to the same source read:
+true when a code line, outside a trailing comment, imports the server side of
+an MCP library (`@modelcontextprotocol/sdk/server/*`,
+`@modelcontextprotocol/server`, `fastmcp` or `mcp-framework` from JavaScript,
+`mcp.server`, `fastmcp` or `FastMCP`/`Server` from `mcp` in Python, `mcp` or
+`fast_mcp` from Ruby) or dispatches on `tools/list` (a comparison, `case` or
+`when` label, or handler-table key). A client that imports the SDK or sends
+`tools/list` does not count. The same read adds `entry_point`: the module the
+script imports when every code line belongs to the console-script wrapper pip,
+uv or Poetry writes for an installed package (one `from module import function`,
+`sys.exit` of that function, and the `__main__` guard and `sys.argv[0]` fix-ups
+around them, its module a dotted name of at most 200 characters), else null.
+Python imports report `from .server import` and `from . import server` as
+`./server.py`, beside the script.
+Python (`local_mcp_source_evidence.py`) takes the
+script from the launch identity, so `bash ship.sh` reads `ship.sh`, not the
+shell, and asks the `mcp_evidence` op of `local_cli_script_source`, which
+says it serves MCP only when the script or one of its followed `./`
+modules (a sibling package's `__init__.py` included) has that fact. A selected
+server, a stored observation recorded for this same launch, a package MCP
+launcher (`npx`, `uvx` and the like), a package bin run through a runner, and
+a compiled program keep the launch without a read. An entry-point wrapper whose
+import is not a `./` module beside it is launched only when the installed
+module it names shows the fact: the same op finds that module in the
+`site-packages` of the environment holding the wrapper or its `#!` interpreter,
+reads its own file, then follows the imports of its own package (relative or
+by package name) up to 24 files, each opened under the package folder. Another
+module of the package, such as an optional MCP server beside a CLI's commands,
+does not count. A module it cannot find is not launched. A failed identity lookup, a
+script whose source or answer cannot be read, a runtime whose status cannot
+be read, or a resident that cannot answer the op, is not launched. A resident without the
+feature keeps the launch, as before.
 
 Two consequences are worth naming. Discovery fails closed: a resident that
 cannot answer leaves the CLI with no commands found, and the grant falls back
@@ -529,6 +647,19 @@ Current material gaps include:
 - The CLI hook answers Claude Code's permission dialog through the daemon
   review path, as the bridge does. No Python caller asks the resident's
   `claude_permission_verdict` or `hook_route` any more.
+- The CLI hook reads the daemon's answer through the resident's
+  `hook_render` `cli_hook_emit` kind: a bridge-rendered harness gets its wire
+  output and exit status. Any other harness asks with `document: true` and
+  the caller's `home_dir`, and gets the redacted document it prints (secrets
+  masked, home paths shortened, the signed `guard-token=` approval link kept
+  byte for byte), its exit status, and the policy action; Python no longer
+  redacts or renders that document. When the resident cannot answer, the CLI
+  prints the fixed fail-closed bridge payload, or the fixed
+  `fail_closed_response` envelope with the harness's outage exit status. When
+  the native bridge cannot run, the Python bounded bridge asks the same op with
+  `bridge: true`, which renders the daemon's answer for every harness as the
+  native bridge prints it, and prints the fixed fail-closed payload when the
+  resident cannot answer.
 
 ## No-environment production contract
 

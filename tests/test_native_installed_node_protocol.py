@@ -13,11 +13,21 @@ from types import SimpleNamespace
 
 import pytest
 
-from codex_plugin_scanner.guard import native_resident_decision
-from codex_plugin_scanner.guard.daemon import hook_native_exact_action as bridge
+from codex_plugin_scanner.guard import native_daemon_route, native_resident_decision
+from tests import native_review_evidence_support as bridge
+from tests.native_launch_evidence_helpers import native_launch_evidence
 
 
-@pytest.mark.parametrize("previous", ["native-exact-action-v1", "native-exact-action-v2", "native-exact-action-v3"])
+@pytest.mark.parametrize(
+    "previous",
+    [
+        "native-exact-action-v1",
+        "native-exact-action-v2",
+        "native-exact-action-v3",
+        "native-exact-action-v4",
+        "native-exact-action-v5",
+    ],
+)
 def test_older_identity_runtime_is_refused_by_the_real_transport_gate(tmp_path, monkeypatch, previous):
     status = SimpleNamespace(
         available=True,
@@ -28,7 +38,7 @@ def test_older_identity_runtime_is_refused_by_the_real_transport_gate(tmp_path, 
     monkeypatch.setattr(native_resident_decision, "native_runtime_status", lambda: status)
     monkeypatch.setattr(native_resident_decision, "ensure_resident_prerequisite", lambda _home: True)
     with pytest.raises(bridge.NativeExactActionError, match="native_exact_action_unavailable"):
-        bridge._answer({"kind": "exact_action"}, tmp_path)
+        native_daemon_route._decide({"kind": "hook_review"}, tmp_path, {}, operation=bridge._OPERATION)
     assert list(tmp_path.iterdir()) == [], "unsupported identity cannot write a grant or start a resident"
 
 
@@ -85,7 +95,7 @@ def test_real_resident_binds_installed_node_code_and_preserves_specific_uncertai
         command = f"{shlex.quote(node)} report.mjs"
 
         def identity():
-            evidence, reason = bridge.native_launch_evidence(
+            evidence, reason = native_launch_evidence(
                 harness="claude-code",
                 tool_name="Bash",
                 payload={"tool_name": "Bash", "tool_input": {"command": command}, "cwd": str(project)},
@@ -138,7 +148,8 @@ def test_actual_previous_runtime_cannot_supply_incomplete_identity(tmp_path, var
     child = r"""
 import sys
 from pathlib import Path
-from codex_plugin_scanner.guard.daemon.hook_native_exact_action import _answer, NativeExactActionError
+from tests.native_review_evidence_support import _OPERATION, NativeExactActionError
+from codex_plugin_scanner.guard.native_daemon_route import _decide
 from codex_plugin_scanner.guard.native_runtime import native_runtime_status
 from codex_plugin_scanner.guard.native_resident_client import close_native_residents
 home = Path(sys.argv[1])
@@ -148,7 +159,7 @@ assert sys.argv[2] in status.capabilities.features
 assert 'native-exact-action-v4' not in status.capabilities.features
 try:
     try:
-        _answer({'kind':'exact_action'}, home)
+        _decide({'kind':'hook_review'}, home, {}, operation=_OPERATION)
     except NativeExactActionError as error:
         assert str(error) == 'native_exact_action_unavailable'
     else:
@@ -160,6 +171,7 @@ print('previous runtime withheld exact identity')
     environment = {**os.environ, "HOL_GUARD_NATIVE": "force", "HOL_GUARD_NATIVE_BINARY": previous}
     completed = subprocess.run(
         [sys.executable, "-c", child, str(tmp_path / "old-native"), feature],
+        cwd=Path(__file__).resolve().parents[1],
         env=environment,
         text=True,
         capture_output=True,

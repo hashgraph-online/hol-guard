@@ -9,7 +9,6 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard import native_workspace_snapshot as native
 from codex_plugin_scanner.guard import workspace_assessment_runner as runner
 from codex_plugin_scanner.guard import workspace_assessment_store as assessments
 from codex_plugin_scanner.guard import workspace_assessment_worker as worker
@@ -19,14 +18,12 @@ from codex_plugin_scanner.guard.runtime import workspace_assessment_sync as sync
 from codex_plugin_scanner.guard.store import GuardStore
 from tests.test_guard_workspace_assessment_runner import (
     AUDIT,
-    HOOKS_COMPLETE,
-    PLUGINS_COMPLETE,
-    SECRETS_COMPLETE,
+    SCANNED,
     SKILLS_COMPLETE,
-    SNAPSHOT,
     T0,
     queued_run,
 )
+from tests.workspace_rule_support import project_rule_findings, with_rule_coverage
 
 FINDING_ID = "0123456789abcdef0123456789abcdef"
 SKILL_PATH = ".claude/skills/setup/SKILL.md"
@@ -54,7 +51,7 @@ def skills_result(*findings: dict[str, object], **overrides: object) -> dict[str
 
 def run_with(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, skills: dict[str, object] | None):
     store, claimed = queued_run(tmp_path)
-    scanned = replace(SNAPSHOT, secrets=SECRETS_COMPLETE, skills=skills, hooks=HOOKS_COMPLETE, plugins=PLUGINS_COMPLETE)
+    scanned = replace(SCANNED, skills=skills)
     monkeypatch.setattr(runner, "workspace_snapshot", lambda root, **_: scanned)
     monkeypatch.setattr(runner, "_local_audit", lambda store, config, root: AUDIT)
     return store, claimed, runner.execute(store, None, claimed, clock=lambda: T0)
@@ -103,32 +100,6 @@ def test_a_worktree_without_skills_has_no_skill_inputs(tmp_path: Path, monkeypat
     assert outcome.coverage["detectors"]["skill_content_v1"] == "no_inputs"
 
 
-def test_older_runtime_keeps_the_secret_scan_and_reports_skills_not_run(tmp_path: Path, monkeypatch) -> None:
-    store, claimed = queued_run(tmp_path)
-    requested: list[tuple[bool, bool]] = []
-
-    def snapshot(root: Path, *, mode: str = "content", secrets: bool = False, skills: bool = False, **_):
-        requested.append((secrets, skills))
-        if skills:
-            raise native.WorkspaceSnapshotError("workspace_snapshot_skills_unavailable")
-        return replace(SNAPSHOT, secrets=SECRETS_COMPLETE) if secrets else SNAPSHOT
-
-    monkeypatch.setattr(runner, "workspace_snapshot", snapshot)
-    monkeypatch.setattr(runner, "_local_audit", lambda store, config, root: AUDIT)
-    outcome = runner.execute(store, None, claimed, clock=lambda: T0)
-    # Detector snapshot with skills, again without them, then the plain recheck.
-    assert requested == [(True, True), (True, False), (False, False)]
-    assert outcome.state == "partial"
-    assert outcome.coverage is not None
-    assert outcome.coverage["reasons"] == [
-        "detector_not_run:skill_content_v1",
-        "detector_not_run:hook_config_v1",
-        "detector_not_run:plugin_manifest_v1",
-    ]
-    assert outcome.coverage["detectors"]["secrets"] == "complete"
-    assert outcome.coverage["detectors"]["skill_content_v1"] == "not_run"
-
-
 @pytest.mark.parametrize(
     "reason", ["skill_oversize", "skill_unread", "skill_not_text", "skill_linked", "snapshot_entry_limit"]
 )
@@ -143,7 +114,8 @@ def test_a_skill_the_scan_could_not_read_leaves_the_run_partial(tmp_path: Path, 
 
 
 def test_a_skill_scan_at_its_cap_marks_findings_truncated() -> None:
-    coverage = skill_findings.with_skill_coverage(
+    coverage = with_rule_coverage(
+        skill_findings.SKILL_DETECTOR,
         {"status": "complete", "reasons": [], "detectors": {}},
         skills_result(native_finding(), status="incomplete", truncation_reasons=["max_findings"]),
     )
@@ -164,7 +136,9 @@ def test_a_skill_scan_at_its_cap_marks_findings_truncated() -> None:
     ],
 )
 def test_an_unreadable_skill_result_is_an_error(payload: dict[str, object]) -> None:
-    coverage = skill_findings.with_skill_coverage({"status": "complete", "reasons": [], "detectors": {}}, payload)
+    coverage = with_rule_coverage(
+        skill_findings.SKILL_DETECTOR, {"status": "complete", "reasons": [], "detectors": {}}, payload
+    )
     assert (coverage["status"], coverage["reasons"]) == ("partial", ["skills_incomplete"])
     assert coverage["detectors"]["skill_content_v1"] == "error"
 
@@ -188,6 +162,8 @@ def test_an_unreadable_skill_result_is_an_error(payload: dict[str, object]) -> N
         {"category": "Execution!"},
         {"severity": "unknown"},
         {"confidence": "high"},
+        {"severity": ["critical"]},
+        {"confidence": {"level": "strong"}},
         {"title": ""},
         {"title": "line one\nline two"},
         {"reason": "r" * 2000},
@@ -196,22 +172,114 @@ def test_an_unreadable_skill_result_is_an_error(payload: dict[str, object]) -> N
 )
 def test_a_malformed_finding_is_dropped_and_leaves_the_scan_incomplete(bad: dict[str, object]) -> None:
     result = skills_result(native_finding(**bad))
-    assert skill_findings.project_skill_findings(result) == []
-    coverage = skill_findings.with_skill_coverage({"status": "complete", "reasons": [], "detectors": {}}, result)
+    assert project_rule_findings(skill_findings.SKILL_DETECTOR, result) == []
+    coverage = with_rule_coverage(
+        skill_findings.SKILL_DETECTOR, {"status": "complete", "reasons": [], "detectors": {}}, result
+    )
     assert coverage["detectors"]["skill_content_v1"] == "incomplete"
     assert coverage["skills"]["truncation_reasons"] == ["invalid_finding"]
 
 
 def test_merged_findings_order_skills_by_severity_with_the_rest() -> None:
-    low = skill_findings.project_skill_findings(
-        skills_result(native_finding(finding_id="f" * 32, severity="low", rule_id="skill.hide-actions"))
+    low = project_rule_findings(
+        skill_findings.SKILL_DETECTOR,
+        skills_result(native_finding(finding_id="f" * 32, severity="low", rule_id="skill.hide-actions")),
     )
-    critical = skill_findings.project_skill_findings(skills_result(native_finding()))
-    packages, _ = runner.project_supply_chain_findings("w" * 64, AUDIT)
-    merged, truncated = runner.merge_findings(packages, low, critical)
+    critical = project_rule_findings(skill_findings.SKILL_DETECTOR, skills_result(native_finding()))
+    supply, _ = runner.project_supply_chain_findings("w" * 64, AUDIT)
+    merged, truncated = runner.merge_findings(supply.findings, low, critical)
     assert not truncated
     assert [item["severity"] for item in merged] == ["critical", "critical", "low"]
     assert merged[-1]["rule_ids"] == ["skill.hide-actions"]
+
+
+def test_a_runtime_that_cannot_check_rule_replies_leaves_each_detector_not_run(monkeypatch) -> None:
+    from codex_plugin_scanner.guard import native_runner_authority as authority
+    from codex_plugin_scanner.guard.workspace_rule_findings import rule_findings
+
+    calls: list[object] = []
+
+    def refuse(kind: str, args: object) -> dict[str, object]:
+        calls.append(args)
+        raise authority.NativeRunnerAuthorityError("native_runner_authority_resident_unavailable")
+
+    monkeypatch.setattr(authority, "native_runner_authority", refuse)
+    base = {"status": "complete", "reasons": [], "detectors": {"supply_chain": "complete"}}
+    results = [("skill_content_v1", skills_result(native_finding())), ("mcp_config_v1", None)]
+    findings, coverage = rule_findings(base, results)
+    assert len(calls) == 1
+    assert findings == []
+    assert coverage["status"] == "partial"
+    assert coverage["reasons"] == ["detector_not_run:skill_content_v1", "detector_not_run:mcp_config_v1"]
+    assert coverage["detectors"] == {
+        "supply_chain": "complete",
+        "skill_content_v1": "not_run",
+        "mcp_config_v1": "not_run",
+    }
+
+
+def test_a_batch_the_runtime_refuses_is_checked_one_detector_at_a_time(monkeypatch) -> None:
+    from codex_plugin_scanner.guard import native_runner_authority as authority
+    from codex_plugin_scanner.guard.workspace_rule_findings import rule_findings
+
+    finding = {"rule_ids": ["skill.hide-actions"]}
+
+    def per_detector(kind: str, args: dict[str, object]) -> dict[str, object]:
+        results = args["results"]
+        assert isinstance(results, list)
+        if len(results) > 1 or results[0][0] == "mcp_config_v1":
+            raise authority.NativeRunnerAuthorityError("native_runner_authority_response_too_large")
+        coverage = args["coverage"]
+        assert isinstance(coverage, dict)
+        detectors = {**coverage["detectors"], results[0][0]: "complete"}
+        return {"findings": [finding], "coverage": {**coverage, "detectors": detectors}}
+
+    monkeypatch.setattr(authority, "native_runner_authority", per_detector)
+    base = {"status": "complete", "reasons": [], "detectors": {}}
+    results = [("skill_content_v1", {}), ("mcp_config_v1", {}), ("plugin_content_v1", {})]
+    findings, coverage = rule_findings(base, results)
+    assert findings == [finding, finding]
+    assert coverage["status"] == "partial"
+    assert coverage["reasons"] == ["detector_not_run:mcp_config_v1"]
+    assert coverage["detectors"] == {
+        "skill_content_v1": "complete",
+        "mcp_config_v1": "not_run",
+        "plugin_content_v1": "complete",
+    }
+
+
+def test_a_split_batch_stops_at_the_first_failure_that_is_not_its_size(monkeypatch) -> None:
+    from codex_plugin_scanner.guard import native_runner_authority as authority
+    from codex_plugin_scanner.guard.workspace_rule_findings import rule_findings
+
+    finding = {"rule_ids": ["skill.hide-actions"]}
+    calls: list[str] = []
+
+    def per_detector(kind: str, args: dict[str, object]) -> dict[str, object]:
+        results = args["results"]
+        assert isinstance(results, list)
+        if len(results) > 1:
+            raise authority.NativeRunnerAuthorityError("native_runner_authority_request_too_large")
+        calls.append(results[0][0])
+        if results[0][0] == "mcp_config_v1":
+            raise authority.NativeRunnerAuthorityError("native_runner_authority_resident_unavailable")
+        coverage = args["coverage"]
+        assert isinstance(coverage, dict)
+        detectors = {**coverage["detectors"], results[0][0]: "complete"}
+        return {"findings": [finding], "coverage": {**coverage, "detectors": detectors}}
+
+    monkeypatch.setattr(authority, "native_runner_authority", per_detector)
+    base = {"status": "complete", "reasons": [], "detectors": {}}
+    results = [("skill_content_v1", {}), ("mcp_config_v1", {}), ("plugin_content_v1", {})]
+    findings, coverage = rule_findings(base, results)
+    assert calls == ["skill_content_v1", "mcp_config_v1"]
+    assert findings == [finding]
+    assert coverage["reasons"] == ["detector_not_run:mcp_config_v1", "detector_not_run:plugin_content_v1"]
+    assert coverage["detectors"] == {
+        "skill_content_v1": "complete",
+        "mcp_config_v1": "not_run",
+        "plugin_content_v1": "not_run",
+    }
 
 
 @pytest.fixture

@@ -1,0 +1,450 @@
+{
+  "schema": "guard.command-extension-source.v1",
+  "extension": {
+    "extension_id": "command.opencomms",
+    "version": "1.0.0",
+    "name": "OpenComms command protection",
+    "description": "Reviews OpenComms integration installation, removal, executable updates and doctor repairs. Exact standalone doctor and update --check variants contribute no mutation requirement; version is not matched. Other forms retain conservative review and independent Guard floors remain in effect. Coverage is based on OpenComms 1.5.0 at commit 8a6d8de7bffab21059ab4d63cfd0838ac074e361; package launchers and other OpenComms operations retain Guard's existing handling.",
+    "action_classes": [
+      "OpenComms integration installation command",
+      "OpenComms integration removal command",
+      "OpenComms executable update command",
+      "OpenComms integration repair command"
+    ],
+    "risk_classes": [
+      "destructive_shell",
+      "execution",
+      "network_egress"
+    ],
+    "safer_alternatives": [
+      "Run opencomms doctor before requesting repairs.",
+      "Run opencomms update --check before updating."
+    ],
+    "reference_urls": [
+      "https://github.com/CL-BAF/OpenComms/blob/8a6d8de7bffab21059ab4d63cfd0838ac074e361/src/cli/main.ts",
+      "https://github.com/CL-BAF/OpenComms/blob/8a6d8de7bffab21059ab4d63cfd0838ac074e361/src/cli/update.ts",
+      "https://github.com/CL-BAF/OpenComms/blob/8a6d8de7bffab21059ab4d63cfd0838ac074e361/src/cli/doctor.ts"
+    ],
+    "required": false,
+    "source": "built-in",
+    "aliases": [],
+    "dependencies": [],
+    "conflicts": [],
+    "ecosystem_ids": [],
+    "executables": [
+      "opencomms",
+      "opencomms.cmd",
+      "opencomms.exe"
+    ],
+    "project_markers": [],
+    "homepage": "https://github.com/CL-BAF/OpenComms",
+    "license": "MIT",
+    "icon": {
+      "kind": "none"
+    },
+    "publisher": {
+      "id": "community.opencomms",
+      "display_name": "Community",
+      "url": "https://github.com/CL-BAF/OpenComms"
+    },
+    "permissions": [
+      {
+        "permission_id": "command.opencomms.permission.install",
+        "implementation_version": "1.0.0",
+        "label": "OpenComms integration installation",
+        "description": "Reviews installation of OpenComms integrations, which writes agent configuration and project integration artifacts. Additional arguments never imply a preview.",
+        "risk_tier": "high",
+        "baseline_floor": "review",
+        "default_enabled": true,
+        "configurable": true,
+        "typed_capabilities": [],
+        "action_classes": [
+          "OpenComms integration installation command"
+        ],
+        "dependencies": [],
+        "conflicts": [],
+        "implied_permissions": [],
+        "introduced_version": "3.25.1",
+        "deprecated": false,
+        "safer_guidance": [
+          "Inspect the selected host integration and project configuration before installing."
+        ],
+        "example_command": "opencomms install codex --project ./workspace"
+      },
+      {
+        "permission_id": "command.opencomms.permission.uninstall",
+        "implementation_version": "1.0.0",
+        "label": "OpenComms integration removal",
+        "description": "Reviews removal of OpenComms integration entries and artifacts from agent or project configuration.",
+        "risk_tier": "medium",
+        "baseline_floor": "review",
+        "default_enabled": true,
+        "configurable": true,
+        "typed_capabilities": [],
+        "action_classes": [
+          "OpenComms integration removal command"
+        ],
+        "dependencies": [],
+        "conflicts": [],
+        "implied_permissions": [],
+        "introduced_version": "3.25.1",
+        "deprecated": false,
+        "safer_guidance": [
+          "Inspect the selected integration and back up its configuration before removing it."
+        ],
+        "example_command": "opencomms uninstall codex --project ./workspace"
+      },
+      {
+        "permission_id": "command.opencomms.permission.update",
+        "implementation_version": "1.0.0",
+        "label": "OpenComms executable update",
+        "description": "Reviews self-update, which downloads and replaces the installed executable where supported. Only the exact standalone update --check invocation and its two --json orderings are reviewed safe variants. Quoting, wrappers, paths, extra arguments, assignments such as --check=true, and uncertain forms retain review because the generic flag matcher cannot prove OpenComms' exact argv.includes semantics.",
+        "risk_tier": "high",
+        "baseline_floor": "review",
+        "default_enabled": true,
+        "configurable": true,
+        "typed_capabilities": [],
+        "action_classes": [
+          "OpenComms executable update command"
+        ],
+        "dependencies": [],
+        "conflicts": [],
+        "implied_permissions": [],
+        "introduced_version": "3.25.1",
+        "deprecated": false,
+        "safer_guidance": [
+          "Run opencomms update --check to inspect update availability without replacing the executable."
+        ],
+        "example_command": "opencomms update"
+      },
+      {
+        "permission_id": "command.opencomms.permission.doctor-fix",
+        "implementation_version": "1.0.0",
+        "label": "OpenComms integration repair",
+        "description": "Reviews doctor invocations that may repair integrations, including --fix after --, as an option value, or followed by an assignment. Only exact standalone plain doctor invocations are reviewed safe variants. Extra arguments, quoting, wrappers, paths and unresolved expansions retain review until the native matcher can prove OpenComms' exact argv.includes semantics.",
+        "risk_tier": "high",
+        "baseline_floor": "review",
+        "default_enabled": true,
+        "configurable": true,
+        "typed_capabilities": [],
+        "action_classes": [
+          "OpenComms integration repair command"
+        ],
+        "dependencies": [],
+        "conflicts": [],
+        "implied_permissions": [],
+        "introduced_version": "3.25.1",
+        "deprecated": false,
+        "safer_guidance": [
+          "Run opencomms doctor without --fix to inspect integration health before repairing it."
+        ],
+        "example_command": "opencomms doctor --fix --project ./workspace"
+      }
+    ],
+    "rules": [
+      {
+        "rule_id": "command.opencomms.install",
+        "rule_version": "1.0.0",
+        "permission_id": "command.opencomms.permission.install",
+        "title": "OpenComms integration installation",
+        "description": "Reviews installation of OpenComms integrations, which writes agent configuration and project integration artifacts. Additional arguments never imply a preview.",
+        "severity": "high",
+        "risk_classes": [
+          "execution"
+        ],
+        "action_classes": [
+          "OpenComms integration installation command"
+        ],
+        "safer_alternatives": [
+          "Inspect the selected host integration and project configuration before installing."
+        ],
+        "default_mode": "review",
+        "matcher": {
+          "op": "executable.v1",
+          "config": {
+            "executables": [
+              "opencomms",
+              "opencomms.cmd",
+              "opencomms.exe"
+            ],
+            "subcommands": [
+              "install"
+            ]
+          }
+        },
+        "safe_variants": []
+      },
+      {
+        "rule_id": "command.opencomms.uninstall",
+        "rule_version": "1.0.0",
+        "permission_id": "command.opencomms.permission.uninstall",
+        "title": "OpenComms integration removal",
+        "description": "Reviews removal of OpenComms integration entries and artifacts from agent or project configuration.",
+        "severity": "medium",
+        "risk_classes": [
+          "destructive_shell"
+        ],
+        "action_classes": [
+          "OpenComms integration removal command"
+        ],
+        "safer_alternatives": [
+          "Inspect the selected integration and back up its configuration before removing it."
+        ],
+        "default_mode": "review",
+        "matcher": {
+          "op": "executable.v1",
+          "config": {
+            "executables": [
+              "opencomms",
+              "opencomms.cmd",
+              "opencomms.exe"
+            ],
+            "subcommands": [
+              "uninstall"
+            ]
+          }
+        },
+        "safe_variants": []
+      },
+      {
+        "rule_id": "command.opencomms.update",
+        "rule_version": "1.0.0",
+        "permission_id": "command.opencomms.permission.update",
+        "title": "OpenComms executable update",
+        "description": "Reviews self-update, which downloads and replaces the installed executable where supported. Only the exact standalone update --check invocation and its two --json orderings are reviewed safe variants. Quoting, wrappers, paths, extra arguments, assignments such as --check=true, and uncertain forms retain review because the generic flag matcher cannot prove OpenComms' exact argv.includes semantics.",
+        "severity": "high",
+        "risk_classes": [
+          "execution",
+          "network_egress"
+        ],
+        "action_classes": [
+          "OpenComms executable update command"
+        ],
+        "safer_alternatives": [
+          "Run opencomms update --check to inspect update availability without replacing the executable."
+        ],
+        "default_mode": "review",
+        "matcher": {
+          "op": "executable.v1",
+          "config": {
+            "executables": [
+              "opencomms",
+              "opencomms.cmd",
+              "opencomms.exe"
+            ],
+            "subcommands": [
+              "update"
+            ]
+          }
+        },
+        "safe_variants": [
+          {
+            "variant_id": "opencomms-check",
+            "title": "Check update availability without replacement",
+            "matcher": {
+              "op": "reviewed-literal.v1",
+              "config": {
+                "executable": "opencomms",
+                "arguments": [
+                  "update",
+                  "--check"
+                ]
+              }
+            }
+          },
+          {
+            "variant_id": "opencomms-check-json",
+            "title": "Check update availability without replacement",
+            "matcher": {
+              "op": "reviewed-literal.v1",
+              "config": {
+                "executable": "opencomms",
+                "arguments": [
+                  "update",
+                  "--check",
+                  "--json"
+                ]
+              }
+            }
+          },
+          {
+            "variant_id": "opencomms-json-check",
+            "title": "Check update availability without replacement",
+            "matcher": {
+              "op": "reviewed-literal.v1",
+              "config": {
+                "executable": "opencomms",
+                "arguments": [
+                  "update",
+                  "--json",
+                  "--check"
+                ]
+              }
+            }
+          },
+          {
+            "variant_id": "opencomms.cmd-check",
+            "title": "Check update availability without replacement",
+            "matcher": {
+              "op": "reviewed-literal.v1",
+              "config": {
+                "executable": "opencomms.cmd",
+                "arguments": [
+                  "update",
+                  "--check"
+                ]
+              }
+            }
+          },
+          {
+            "variant_id": "opencomms.cmd-check-json",
+            "title": "Check update availability without replacement",
+            "matcher": {
+              "op": "reviewed-literal.v1",
+              "config": {
+                "executable": "opencomms.cmd",
+                "arguments": [
+                  "update",
+                  "--check",
+                  "--json"
+                ]
+              }
+            }
+          },
+          {
+            "variant_id": "opencomms.cmd-json-check",
+            "title": "Check update availability without replacement",
+            "matcher": {
+              "op": "reviewed-literal.v1",
+              "config": {
+                "executable": "opencomms.cmd",
+                "arguments": [
+                  "update",
+                  "--json",
+                  "--check"
+                ]
+              }
+            }
+          },
+          {
+            "variant_id": "opencomms.exe-check",
+            "title": "Check update availability without replacement",
+            "matcher": {
+              "op": "reviewed-literal.v1",
+              "config": {
+                "executable": "opencomms.exe",
+                "arguments": [
+                  "update",
+                  "--check"
+                ]
+              }
+            }
+          },
+          {
+            "variant_id": "opencomms.exe-check-json",
+            "title": "Check update availability without replacement",
+            "matcher": {
+              "op": "reviewed-literal.v1",
+              "config": {
+                "executable": "opencomms.exe",
+                "arguments": [
+                  "update",
+                  "--check",
+                  "--json"
+                ]
+              }
+            }
+          },
+          {
+            "variant_id": "opencomms.exe-json-check",
+            "title": "Check update availability without replacement",
+            "matcher": {
+              "op": "reviewed-literal.v1",
+              "config": {
+                "executable": "opencomms.exe",
+                "arguments": [
+                  "update",
+                  "--json",
+                  "--check"
+                ]
+              }
+            }
+          }
+        ]
+      },
+      {
+        "rule_id": "command.opencomms.doctor-fix",
+        "rule_version": "1.0.0",
+        "permission_id": "command.opencomms.permission.doctor-fix",
+        "title": "OpenComms integration repair",
+        "description": "Reviews doctor invocations that may repair integrations, including --fix after --, as an option value, or followed by an assignment. Only exact standalone plain doctor invocations are reviewed safe variants. Extra arguments, quoting, wrappers, paths and unresolved expansions retain review until the native matcher can prove OpenComms' exact argv.includes semantics.",
+        "severity": "high",
+        "risk_classes": [
+          "execution",
+          "destructive_shell"
+        ],
+        "action_classes": [
+          "OpenComms integration repair command"
+        ],
+        "safer_alternatives": [
+          "Run opencomms doctor without --fix to inspect integration health before repairing it."
+        ],
+        "default_mode": "review",
+        "matcher": {
+          "op": "executable.v1",
+          "config": {
+            "executables": [
+              "opencomms",
+              "opencomms.cmd",
+              "opencomms.exe"
+            ],
+            "subcommands": [
+              "doctor"
+            ]
+          }
+        },
+        "safe_variants": [
+          {
+            "variant_id": "opencomms-diagnostic",
+            "title": "Diagnose integration health without requesting repair",
+            "matcher": {
+              "op": "reviewed-literal.v1",
+              "config": {
+                "executable": "opencomms",
+                "arguments": [
+                  "doctor"
+                ]
+              }
+            }
+          },
+          {
+            "variant_id": "opencomms.cmd-diagnostic",
+            "title": "Diagnose integration health without requesting repair",
+            "matcher": {
+              "op": "reviewed-literal.v1",
+              "config": {
+                "executable": "opencomms.cmd",
+                "arguments": [
+                  "doctor"
+                ]
+              }
+            }
+          },
+          {
+            "variant_id": "opencomms.exe-diagnostic",
+            "title": "Diagnose integration health without requesting repair",
+            "matcher": {
+              "op": "reviewed-literal.v1",
+              "config": {
+                "executable": "opencomms.exe",
+                "arguments": [
+                  "doctor"
+                ]
+              }
+            }
+          }
+        ]
+      }
+    ]
+  }
+}

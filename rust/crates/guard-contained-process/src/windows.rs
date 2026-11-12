@@ -416,3 +416,7 @@ fn environment_block(entries: &[(OsString, OsString)]) -> io::Result<Vec<u16>> {
 #[cfg(test)]
 #[path = "windows/environment_tests.rs"]
 mod environment_tests;
+
+#[cfg(test)]
+#[path = "windows/pinned_launch_tests.rs"]
+mod pinned_launch_tests;

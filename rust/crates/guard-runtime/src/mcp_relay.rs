@@ -6,10 +6,10 @@
 //! stdio and the child without a Python process or per-frame resident round
 //! trips. Every `tools/call` is decided in one round trip to the resident's
 //! `mcp_relay_decide` op, and anything it does not decide is blocked. A
-//! session the native lane cannot serve never reaches that point: at startup
-//! the relay hands it to the Python proxy (`mcp_relay_lane`), so installers
-//! select the relay wherever the runtime advertises it. A lane the daemon
-//! has only not prepared yet keeps the session native.
+//! session that needs a feature the relay has not ported yet never reaches
+//! that point: at startup the relay hands it to the Python proxy
+//! (`mcp_relay_lane`), so installers select the relay wherever the runtime
+//! advertises it. Any other lane that is not ready keeps the session native.
 //!
 //! The child session runs in its own process group on unix and in a
 //! kill-on-close JobObject on Windows.

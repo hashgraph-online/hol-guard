@@ -10,6 +10,8 @@ mod strict_json;
 pub(crate) use compatibility_reader::stream as compatibility_stream;
 type Result<T> = std::result::Result<T, &'static str>;
 const INVALID: &str = "installed bundle metadata invalid";
+// The resident's own bound, which admits a Gauntlet development wheel's runtime.
+const MAX_RUNTIME_BYTES: u64 = 512 * 1024 * 1024;
 
 fn fields(value: &Value, names: &[&str]) -> bool {
     value
@@ -273,7 +275,7 @@ fn installed_plan(input: &Value) -> Result<Value> {
     let size = compiler["compiler_size"]
         .as_u64()
         .ok_or("installed bundle executable size differs")?;
-    if size == 0 || size > 128 * 1024 * 1024 || runtime["runtime_size"].as_u64() != Some(size) {
+    if size == 0 || size > MAX_RUNTIME_BYTES || runtime["runtime_size"].as_u64() != Some(size) {
         return Err("installed bundle executable size differs");
     }
     Ok(json!({"executable":compiler["executable"],"size":size}))

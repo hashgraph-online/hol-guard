@@ -1,4 +1,4 @@
-use crate::local_supply_chain::{utc_now_iso, Timestamp};
+use crate::local_supply_chain::{parse_timestamp, utc_now_iso, Timestamp};
 
 /// `datetime.isoformat()` writes six fractional digits whenever the instant
 /// carries microseconds, and leaves the fraction out only on an exact second.
@@ -48,5 +48,55 @@ fn the_now_helper_keeps_microsecond_precision() {
     assert!(
         time.len() == 8 || (time.len() == 15 && time.as_bytes()[8] == b'.'),
         "{now}"
+    );
+}
+
+/// `datetime.fromisoformat` knows how long each month is; this mirror used to
+/// accept any day up to 31 and roll the surplus into the next month, so a
+/// signed document could carry a date that never existed and still pass a
+/// freshness window.
+#[test]
+fn an_impossible_calendar_day_is_not_an_instant() {
+    assert!(parse_timestamp("2026-02-31T00:00:00Z").is_none());
+    assert!(parse_timestamp("2026-04-31T00:00:00Z").is_none());
+    assert!(parse_timestamp("2025-02-29T00:00:00Z").is_none());
+    assert!(parse_timestamp("2026-00-10T00:00:00Z").is_none());
+
+    assert!(parse_timestamp("2024-02-29T00:00:00Z").is_some());
+    assert!(parse_timestamp("2000-02-29T00:00:00Z").is_some());
+    assert!(parse_timestamp("2026-01-31T00:00:00Z").is_some());
+}
+
+/// Python reads the whole string or raises. Text after the instant used to be
+/// ignored here, which let one value read as two different times depending on
+/// who parsed it.
+#[test]
+fn text_after_the_instant_is_not_an_instant() {
+    assert!(parse_timestamp("2026-10-21T12:00:00Z and later").is_none());
+    assert!(parse_timestamp("2026-10-21T12:00:00+00:00Z").is_none());
+    assert!(parse_timestamp("2026-10-21T12:00:00!").is_none());
+    assert!(parse_timestamp("2026-10-21T25:00:00Z").is_none());
+    assert!(parse_timestamp("2026-10-21T12:61:00Z").is_none());
+}
+
+/// The shapes Guard's own producers write keep parsing.
+#[test]
+fn the_shapes_guard_writes_still_parse() {
+    for value in [
+        "2026-10-21",
+        "2026-10-21T12:00",
+        "2026-10-21T12:00:00",
+        "2026-10-21 12:00:00",
+        "2026-10-21T12:00:00Z",
+        "2026-10-21T12:00:00.000Z",
+        "2026-10-21T12:00:00.221982+00:00",
+        "2026-10-21T12:00:00-07:00",
+        "2026-10-21T12:00:00+0530",
+    ] {
+        assert!(parse_timestamp(value).is_some(), "{value}");
+    }
+    assert_eq!(
+        parse_timestamp("2026-10-21T12:00:00-07:00"),
+        parse_timestamp("2026-10-21T19:00:00Z")
     );
 }

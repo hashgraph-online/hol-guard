@@ -39,6 +39,14 @@ def test_relative_cd_into_a_sibling_root_peels_an_and_list(tmp_path: Path) -> No
         worktree.resolve(),
         OutputFilter("all", 0, False, status_label="exit="),
     )
+    # In a longer list each command keeps its own bound in the text the root
+    # runs; no filter is peeled for the list.
+    assert peel_contained_wrapper(
+        "cd ../project-report && npm test 2>&1 | tail -4 && npm run build | head -n 5",
+        workspace=workspace,
+        home=home,
+        cwd=workspace,
+    ) == ("npm test 2>&1 | tail -n 4 && npm run build | head -n 5", worktree.resolve(), None)
     # A single command after the cd keeps the bounded filter.
     assert peel_contained_wrapper(
         "cd ../project-report && npm test 2>&1 | tail -5", workspace=workspace, home=home, cwd=workspace
@@ -69,9 +77,12 @@ def test_a_sequence_after_cd_into_a_sibling_root_peels_like_an_and_list(tmp_path
         "cd ../project-report/scripts && node report.mjs",
         "cd ../loose && pytest -q",
         "cd .. && pytest -q",
-        # Lists other than plain `&&` words, or with a filter that binds to the last command alone.
-        "cd ../project-report && npm test && npm run build | tail -5",
+        # Lists other than plain `&&` words, each bounded by at most one `head` or `tail`.
         "cd ../project-report && npm test && npm run build 2>&1",
+        "cd ../project-report && npm test | grep fail && npm run build",
+        "cd ../project-report && npm test | tail -4 | head -2 && npm run build",
+        "cd ../project-report && npm test | tail -f && npm run build",
+        "cd ../project-report && npm test | tail -4 notes.txt && npm run build",
         "cd ../project-report && npm test || rm -rf /",
         "cd ../project-report && npm test && rm -rf / &",
         "cd ../project-report && npm test && && ls",

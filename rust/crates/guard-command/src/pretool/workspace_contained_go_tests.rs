@@ -166,3 +166,139 @@ fn a_fetching_flag_keeps_its_review_however_it_is_spelled() {
         }
     }
 }
+
+#[test]
+fn the_chdir_flag_moves_the_run_the_way_a_cd_does() {
+    let ws = module("go-chdir");
+    std::fs::create_dir_all(ws.join("api")).unwrap();
+    std::fs::write(ws.join("api/go.mod"), MODULE).unwrap();
+    std::fs::create_dir_all(ws.join("docs")).unwrap();
+    // `go -C <dir>` chdirs before go reads the verb, so each of these is the
+    // local work `cd <dir> && go <verb>` is.
+    for command in [
+        "go -C api test ./...",
+        "go -C api build ./...",
+        "go -C=api test ./...",
+        "go -C docs vet ./...",
+        "go -C . test ./...",
+        "go -C api test ./... 2>&1 | tail -15",
+    ] {
+        for harness in ["codex", "claude-code", "omp"] {
+            let (reason, minimum) = outcome(harness, command, &ws);
+            assert_eq!(reason == CONTAINED, host(), "{reason} {harness}: {command}");
+            if !host() {
+                assert_eq!(
+                    minimum, "review",
+                    "{reason}: no sandbox must require review"
+                );
+            }
+        }
+    }
+    // A directory the sandbox cannot follow the run to, a fetching verb behind
+    // the move, and a `-C` with nothing behind it all keep their review.
+    for command in [
+        "go -C /etc test ./...",
+        "go -C ../outside test ./...",
+        "go -C api get golang.org/x/text",
+        "go -C api mod tidy",
+        "go -C",
+        "go -C api",
+    ] {
+        for harness in ["codex", "claude-code", "omp"] {
+            let (reason, _) = outcome(harness, command, &ws);
+            assert_ne!(reason, CONTAINED, "{harness}: {command}");
+        }
+    }
+}
+
+/// `go tool cover` reads the profile the admitted `go test -coverprofile` run
+/// just wrote, so the step after a coverage run is contained with it. The
+/// rest of the launcher's names, and a render that would open a browser
+/// instead of writing a file, keep their review.
+#[test]
+fn the_cover_tool_renders_the_profile_the_test_run_wrote() {
+    let ws = module("go-cover");
+    for command in [
+        "go test ./... -coverprofile=coverage.out",
+        "go tool cover -func=coverage.out",
+        "go tool cover -func coverage.out",
+        "go tool cover -html=coverage.out -o coverage.html",
+        "go tool cover -html coverage.out -o coverage.html",
+    ] {
+        for harness in ["codex", "claude-code", "omp"] {
+            let (reason, minimum) = outcome(harness, command, &ws);
+            assert_eq!(reason == CONTAINED, host(), "{reason} {harness}: {command}");
+            if !host() {
+                assert_eq!(
+                    minimum, "review",
+                    "{reason}: no sandbox must require review"
+                );
+            }
+        }
+    }
+    for command in [
+        // Without `-o` this serves the report and opens a browser on it.
+        "go tool cover -html=coverage.out",
+        // A flag the render does not take, and a flag with no value.
+        "go tool cover -func=coverage.out -mode=set",
+        "go tool cover -func",
+        "go tool cover -o coverage.html",
+        "go tool cover",
+        // The rest of the launcher's names run their own programs.
+        "go tool pprof -http=:8080 cpu.prof",
+        "go tool test2json ./app.test",
+        "go tool compile ./main.go",
+        "go tool nm ./app",
+    ] {
+        for harness in ["codex", "claude-code", "omp"] {
+            let (reason, _) = outcome(harness, command, &ws);
+            assert_ne!(reason, CONTAINED, "{harness}: {command}");
+        }
+    }
+}
+
+#[test]
+fn the_reporting_mod_subcommands_read_the_module_already_resolved() {
+    let ws = module("go-mod-reports");
+    for command in [
+        "go mod graph",
+        "go mod graph -go=1.22",
+        "go mod graph -x",
+        "go mod verify",
+        "go mod why example.com/app/internal/store",
+        "go mod why -m golang.org/x/text",
+        "go mod why -vendor ./...",
+        "go mod why ./...",
+    ] {
+        for harness in ["codex", "claude-code", "omp"] {
+            let (reason, minimum) = outcome(harness, command, &ws);
+            assert_eq!(reason == CONTAINED, host(), "{reason} {harness}: {command}");
+            if !host() {
+                assert_eq!(
+                    minimum, "review",
+                    "{reason}: no sandbox must require review"
+                );
+            }
+        }
+    }
+    for command in [
+        // Each of these writes the module files or fetches to fill them.
+        "go mod init example.com/app",
+        "go mod edit -require=golang.org/x/text@v0.14.0",
+        "go mod edit -json",
+        "go mod vendor",
+        // A flag the reporting subcommand does not carry.
+        "go mod graph -mod=mod",
+        "go mod verify -x",
+        "go mod why -json",
+        // A version argument is one the proxy answers.
+        "go mod why -m golang.org/x/text@latest",
+        // The bare verb runs go's own usage, not a report.
+        "go mod",
+    ] {
+        for harness in ["codex", "claude-code", "omp"] {
+            let (reason, _) = outcome(harness, command, &ws);
+            assert_ne!(reason, CONTAINED, "{harness}: {command}");
+        }
+    }
+}

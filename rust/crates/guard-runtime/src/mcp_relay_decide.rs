@@ -60,7 +60,7 @@ pub(crate) use session::session_decidable;
 pub(crate) const MCP_RELAY_DECIDE_FEATURE: &str = "mcp-relay-decide-v2";
 const RESULT_SCHEMA: &str = "guard-mcp-relay-decide-result.v1";
 /// The harnesses whose MCP proxy the relay replaces.
-const RELAY_HARNESSES: [&str; 5] = ["codex", "copilot", "cursor", "hermes", "opencode"];
+const RELAY_HARNESSES: [&str; 6] = ["cline", "codex", "copilot", "cursor", "hermes", "opencode"];
 /// `blocked_request_mode`, under which the queue route asks for approval.
 const ASK_MODE: &str = "ask";
 
@@ -289,6 +289,9 @@ enum Routed {
     SafeAlternative {
         policy_action: String,
         redaction_level: String,
+        /// The approval center origin the daemon listens on, which the
+        /// block's silent inbox row links to.
+        center: Option<String>,
     },
     /// The queue route's approval-center block under `ask`, whose request row
     /// is already written (`mcp_relay_decide_ask.rs`).
@@ -438,13 +441,26 @@ fn decide(
         policy_store,
     )?;
     drop(snapshot);
+    let asks = admitted.binding.review.blocked_request_mode.as_deref() == Some(ASK_MODE);
     // A package call is answered by its own lane, under the package policy and
     // the tool authority together, so none of the tool-only route below runs
-    // for it.
+    // for it. The inline elicitation that route raises first under `ask` is
+    // the proxy's.
     if let Some(packaged) = legged.as_ref().and_then(Legged::decided) {
+        if asks
+            && ask::prompts_before_package(
+                &request.catalog_state,
+                &resolved.mode,
+                &request.build.tool_name,
+                &request.build.harness,
+                request.inline.available,
+                &resolved.decision,
+            )
+        {
+            return Err(ask::PACKAGE_PROMPT);
+        }
         return settle_package(request, &admitted, &resolved, packaged, policy_store);
     }
-    let asks = admitted.binding.review.blocked_request_mode.as_deref() == Some(ASK_MODE);
     let proxy = crate::mcp_tool_policy_proxy::proxy_payload(
         &McpToolPolicyProxyInputV1 {
             catalog_state: request.catalog_state.clone(),
@@ -557,6 +573,7 @@ fn decide(
                 _ => queue::safe_alternative(
                     mode,
                     resolved.redaction_level.as_deref(),
+                    admitted.binding.review.approval_center_origin.as_deref(),
                     policy_action,
                 )?,
             };
@@ -743,8 +760,15 @@ fn settle(
         Routed::SafeAlternative {
             policy_action,
             redaction_level,
+            center,
         } => {
-            review = Some(json!({"redaction_level": redaction_level}));
+            // The center lets the resident write the row itself; the daemon
+            // links a row to its own origin and ignores it.
+            let mut fields = json!({"redaction_level": redaction_level});
+            if let Some(center) = center {
+                fields["approval_center_url"] = json!(center);
+            }
+            review = Some(fields);
             let (message, data) = queue::safe_alternative_block(tool, server, &decision.signals);
             (
                 Some(Answer::Block { message, data }),
@@ -893,6 +917,7 @@ fn settle_package(
                         _ => queue::safe_alternative(
                             mode,
                             resolved.redaction_level.as_deref(),
+                            admitted.binding.review.approval_center_origin.as_deref(),
                             policy_action.clone(),
                         )?,
                     }
@@ -909,6 +934,7 @@ fn settle_package(
         &packaged.artifact,
         &packaged.workspace,
         answer,
+        admitted.binding.review.approval_center_origin.as_deref(),
     )?;
     match answer.block.clone() {
         // As for a tool call, the relay commits the ticket once the child
@@ -986,7 +1012,7 @@ fn provider_catalog_hash(
 #[path = "mcp_relay_decide_ask.rs"]
 mod ask;
 #[path = "mcp_relay_decide_ask_row.rs"]
-mod ask_row;
+pub(crate) mod ask_row;
 #[path = "mcp_relay_decide_claim.rs"]
 mod claim;
 pub(crate) use claim::claim;
@@ -996,6 +1022,7 @@ pub(crate) mod inline;
 mod observe;
 #[path = "mcp_relay_decide_package.rs"]
 mod package;
+pub(crate) use package::parse_intent as parse_package_intent;
 #[path = "mcp_relay_decide_package_answer.rs"]
 mod package_answer;
 #[path = "mcp_relay_decide_package_archive.rs"]
@@ -1041,7 +1068,7 @@ mod saved;
 #[path = "mcp_relay_decide_session.rs"]
 mod session;
 #[path = "mcp_relay_decide_store.rs"]
-mod store;
+pub(crate) mod store;
 #[path = "mcp_relay_decide_subject.rs"]
 mod subject;
 #[path = "mcp_relay_decide_view.rs"]

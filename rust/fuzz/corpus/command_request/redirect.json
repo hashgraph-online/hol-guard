@@ -1,0 +1,1 @@
+{"command":"npm test > out.log 2>&1"}

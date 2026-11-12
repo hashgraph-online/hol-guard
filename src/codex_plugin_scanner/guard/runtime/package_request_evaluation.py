@@ -62,6 +62,9 @@ class PackageRequestEvaluation:
     evidence_ids: tuple[str, ...] = ()
     external_archive_downloads: tuple[RestrictedArchiveDownload, ...] = ()
     external_archive_source_hashes: tuple[str, ...] = ()
+    # How this verdict settles a pending package review, as the resident
+    # decided it: an action and the message it stops the command with.
+    review_settlement: tuple[str, str | None] = ("review", None)
 
     def to_cache_dict(self) -> dict[str, object]:
         return {
@@ -100,15 +103,6 @@ class PackageRequestEvaluation:
                 for download in self.external_archive_downloads
             ]
         return payload
-
-
-def strip_review_evidence_tail(message: str) -> str:
-    stripped = message.strip()
-    lower_stripped = stripped.lower()
-    for suffix in ("Review evidence: .", "Review evidence:.", "Review evidence:"):
-        if lower_stripped.endswith(suffix.lower()):
-            return stripped[: -len(suffix)].rstrip()
-    return stripped
 
 
 def _persist_evidence(

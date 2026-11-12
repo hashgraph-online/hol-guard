@@ -1,9 +1,9 @@
-"""An allowed local CLI grant widens the workspace sandbox; it never lifts it.
+"""An allowed local CLI grant widens a sandbox requirement; it never lifts one.
 
-Each hop is pinned: the client presents the resident's contained grant, the
-daemon and the direct CLI hook route an outside-roots review it covers into
-the sandbox sink, and the sink asks the store itself, admits only a plan
-widened by exactly that grant, and refuses one that changed before launch.
+Each hop is pinned: the client presents the resident's contained grant, and
+the sink asks the store itself, admits only a plan widened by exactly that
+grant, and refuses one that changed before launch. The resident's own answer
+for an outside-roots review is pinned in Rust: an allowed CLI lifts it.
 """
 
 from __future__ import annotations
@@ -14,18 +14,16 @@ from types import SimpleNamespace
 import pytest
 
 from codex_plugin_scanner.guard import local_cli_hook as client
-from codex_plugin_scanner.guard import native_hook_containment_route as containment_route
-from codex_plugin_scanner.guard.adapters import zcode_contained_tests
-from codex_plugin_scanner.guard.daemon import hook_contained_grant as routing
 from codex_plugin_scanner.guard.runtime import restricted_workspace as workspace_sink
 from codex_plugin_scanner.guard.runtime import restricted_workspace_grant_lookup as lookup
 from codex_plugin_scanner.guard.runtime.restricted_pytest import RestrictedPytestError
+from tests import runtime_wrapper_support
 from tests.test_guard_restricted_workspace import COMMAND, payload, plan, receipt
 
 HASH = "ab" * 32
 GRANT = {"cli_id": "local-cli.lanectl", "identity_hash": HASH, "name": "lanectl", "capabilities": ["loopback-network"]}
 CONTAINED = client.ContainedGrant("local-cli.lanectl", HASH, "lanectl", ("loopback-network",))
-OUTSIDE = routing.OUTSIDE_ROOTS_REASON
+OUTSIDE = "native_workspace_containment_executable_outside_roots"
 ROUTE = {
     "decision": "deny",
     "minimum_action": "sandbox-required",
@@ -95,7 +93,7 @@ def test_client_sends_the_reason_and_presents_the_contained_grant(
     assert "current_reason_code" not in requests[-1]
     assert CONTAINED.prepare_input() == {"identity_hash": HASH, "name": "lanectl", "capabilities": ["loopback-network"]}
     # Callers of the plain action keep the sandbox-bound action, never `allow`.
-    action = client.native_local_cli_hook(
+    action = runtime_wrapper_support.native_local_cli_hook(
         _store(tmp_path),  # type: ignore[arg-type]
         command="lanectl status",
         cwd=tmp_path,
@@ -171,79 +169,6 @@ def _decides(monkeypatch: pytest.MonkeyPatch, *answers: object) -> list[dict[str
 
     monkeypatch.setattr(client, "local_cli_contained_grant", decide)
     return calls
-
-
-def _review(**changes: object) -> dict[str, object]:
-    return {"decision": "deny", "minimum_action": "review", "policy_action": "review", "reason_code": OUTSIDE} | changes
-
-
-def test_daemon_turns_a_granted_outside_roots_review_into_the_sandbox(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
-    calls = _decides(monkeypatch, (client.ALLOW_CONTAINED_WITH_GRANT, CONTAINED, ROUTE))
-    granted = routing.granted_containment_result(
-        object(), _review(), payload=payload("lanectl status"), workspace=tmp_path, home_dir=tmp_path
-    )
-    assert granted is not None
-    assert granted["minimum_action"] == granted["policy_action"] == "sandbox-required"
-    assert granted["reason_code"] == "native_workspace_containment_required"
-    # Every routed field is the resident's answer, not one composed here.
-    assert {key: granted[key] for key in ROUTE} == ROUTE
-    assert calls[0]["current_action"] == "review"
-    assert calls[0]["reason_code"] == OUTSIDE
-
-
-@pytest.mark.parametrize(
-    ("result", "answer"),
-    [
-        # Which reviews reach the grant at all is the resident's route answer:
-        # see test_the_resident_route_matches_the_retired_python_edge.
-        # A grant the resident could not route: the review it was holding stands.
-        (_review(), (client.ALLOW_CONTAINED_WITH_GRANT, CONTAINED, None)),
-        (_review(), ("block", None, None)),
-        (_review(), ("review", None, None)),
-        (_review(), None),
-        (_review(), RuntimeError("store down")),
-    ],
-)
-def test_daemon_keeps_every_other_review(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, result: dict[str, object], answer: object
-) -> None:
-    _decides(monkeypatch, answer)
-    assert (
-        routing.granted_containment_result(
-            object(), result, payload=payload("lanectl status"), workspace=tmp_path, home_dir=tmp_path
-        )
-        is None
-    )
-
-
-def test_daemon_routes_the_grant_and_answers_the_sink_with_the_receipt(
-    containment_resident: Path, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
-    monkeypatch.setattr(containment_route, "host_platform", lambda: "macos")
-    _decides(monkeypatch, (client.ALLOW_CONTAINED_WITH_GRANT, CONTAINED, ROUTE))
-    rendered: list[dict[str, object]] = []
-    monkeypatch.setattr(
-        routing, "render_pre_tool", lambda harness, verdict, **kwargs: rendered.append(dict(verdict)) or receipt()
-    )
-    monkeypatch.setattr(zcode_contained_tests, "route_zcode_containment", lambda response, **kwargs: {"routed": True})
-    common = {"harness": "claude-code", "guard_home": tmp_path, "home_dir": tmp_path, "workspace": tmp_path}
-    routed = routing.granted_containment_response(object(), _review(), payload=payload("lanectl status"), **common)
-    assert routed == {"routed": True}
-    assert rendered[0]["policy_action"] == "sandbox-required"
-    receipt_only = payload("lanectl status") | {"guard_containment_receipt_only": True}
-    assert routing.granted_containment_response(object(), _review(), payload=receipt_only, **common) == receipt()
-    # The sink re-authorizing gets the receipt whatever the harness.
-    omp = common | {"harness": "omp"}
-    assert routing.granted_containment_response(object(), _review(), payload=receipt_only, **omp) == receipt()
-    # A harness the sink does not route keeps its review.
-    assert routing.granted_containment_response(object(), _review(), payload=payload("lanectl status"), **omp) is None
-    # A call the sink cannot take keeps its review.
-    monkeypatch.setattr(zcode_contained_tests, "route_zcode_containment", lambda response, **kwargs: response)
-    assert (
-        routing.granted_containment_response(object(), _review(), payload=payload("lanectl status"), **common) is None
-    )
 
 
 def _granted_plan(workspace: Path, **changes: object) -> dict[str, object]:

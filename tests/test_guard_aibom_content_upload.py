@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 from pathlib import Path
 from types import SimpleNamespace
+from typing import cast
 
 import pytest
 
@@ -392,3 +393,73 @@ def test_skill_outside_skills_root_does_not_advertise_uploadable_body_hash(tmp_p
 
     assert not snapshot.items[0].content_hash.startswith("sha256:")
     assert sources == ()
+
+
+def test_primary_content_admission_is_asked_in_bounded_chunks(monkeypatch: pytest.MonkeyPatch) -> None:
+    from codex_plugin_scanner.guard import aibom_content_upload as upload_module
+    from codex_plugin_scanner.guard.inventory_contract import GuardAgentInventoryItem
+    from codex_plugin_scanner.guard.native_runner_authority import NativeRunnerAuthorityError
+
+    requested: list[int] = []
+
+    def _admit(_kind: str, request: dict[str, object], **_options: object) -> dict[str, object]:
+        candidates = request["candidates"]
+        assert isinstance(candidates, list)
+        requested.append(len(candidates))
+        if len(requested) == 2:
+            raise NativeRunnerAuthorityError("native_runner_authority_invalid")
+        return {"allowed_roots": ["/skills"] * len(candidates)}
+
+    monkeypatch.setattr(upload_module, "_NATIVE_ADMIT_CHUNK", 2)
+    monkeypatch.setattr(upload_module, "native_runner_authority", _admit)
+    item = cast("GuardAgentInventoryItem", cast("object", SimpleNamespace(item_id="item")))
+    candidates = [("skill", item, "sha256:x", Path(f"/skills/s{index}/SKILL.md")) for index in range(5)]
+
+    roots = upload_module._native_allowed_roots(candidates, workspace_dir=None)
+
+    assert requested == [2, 2, 1]
+    assert roots == ["/skills", "/skills", None, None, "/skills"]
+
+
+def test_repeated_artifact_id_yields_one_source_from_the_snapshot_copy(tmp_path: Path) -> None:
+    cache = tmp_path / ".zcode" / "cli" / "plugins" / "cache" / "market" / "pdf"
+    paths = []
+    for version in ("0.1.0", "0.2.0"):
+        path = cache / version / "skills" / "pdf" / "SKILL.md"
+        path.parent.mkdir(parents=True)
+        path.write_bytes(f"# pdf {version}\n".encode())
+        paths.append(path)
+    artifacts = tuple(
+        GuardArtifact(
+            artifact_id="zcode:global:skill:pdf",
+            name="pdf",
+            harness="zcode",
+            artifact_type="skill",
+            source_scope="global",
+            config_path=str(path),
+        )
+        for path in paths
+    )
+    detection = HarnessDetection(
+        harness="zcode",
+        installed=True,
+        command_available=False,
+        config_paths=tuple(str(path) for path in paths),
+        artifacts=artifacts,
+    )
+
+    snapshot = inventory_snapshot_from_detection(
+        detection,
+        generated_at="2026-11-03T00:00:00Z",
+        home_dir=tmp_path,
+    )
+    sources = primary_content_sources_from_artifacts(
+        detection.artifacts,
+        snapshot,
+        workspace_dir=None,
+    )
+
+    item = next(item for item in snapshot.items if item.item_id == "zcode:global:skill:pdf")
+    assert len(sources) == 1
+    assert sources[0].content_hash == item.metadata["primaryContentHash"]
+    assert sources[0].content_hash == f"sha256:{hashlib.sha256(sources[0].path.read_bytes()).hexdigest()}"

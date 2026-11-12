@@ -40,7 +40,6 @@ from scripts.ci.rust_io_ownership_policy import (
     _PERSISTENCE_PATH_PREFIXES,
     _PRESENTATION_PATHS,
     _SERVICE_PATHS,
-    _STRUCTURED_OUTPUT_MEDIATION_PATHS,
     _TRANSPORT_AUTHORITY_PATHS,
     _TRANSPORT_DECODE_PATHS,
     _TRANSPORT_ENCODE_OPERATIONS,
@@ -86,7 +85,7 @@ class IoObservation:
 # `_branch_failures` asserts the shape of this one, so name it instead of reaching
 # for a position in ROOTS that a later entry point can quietly take over.
 HOOK_WORKER_ROOT: Final = RootSpec(
-    "src/codex_plugin_scanner/guard/daemon/hook_worker.py",
+    "src/codex_plugin_scanner/guard/hook_review/hook_worker.py",
     "review_http_payload",
     "HookWorker",
 )
@@ -187,8 +186,6 @@ def _category(path: str, kind: str) -> str:
         return "transport_encode"
     if path in _COMPATIBILITY_PATHS:
         return "compatibility_only"
-    if path in _STRUCTURED_OUTPUT_MEDIATION_PATHS and kind in {"hash", "decode"}:
-        return "adapter_output_mediation"
     if path in _PERSISTENCE_ONLY_PATHS:
         return "persistence_only"
     if path in _TRANSPORT_IDENTITY_PATHS:

@@ -355,7 +355,7 @@ elif {negative!s}:
         "negative-nonzero-allow": (2, b'{{"decision":"allow"}}\\n', b"cli failed\\n"),
         "negative-observe": (0, b'{{"decision":"allow","observe_mode":true}}\\n', b""),
     }}
-    returncode, stdout, stderr = responses.get(case_id, responses["negative-malformed"])
+    returncode, stdout, stderr = responses.get(case_id, (1, b"", b""))
 else:
     child_env = dict(os.environ)
     child_env.pop("PYTHONPATH", None)
@@ -668,7 +668,7 @@ def _start_installed_daemon(
     *, guard_home: Path, home: Path, workspace: Path, identity: Any, register_workspace_policy: bool = True
 ) -> Any:
     """Start the installed Guard daemon that the generated extension will use."""
-    from codex_plugin_scanner.guard.daemon.server import GuardDaemonServer
+    from ci.guard_daemon_harness import GuardDaemonServer
     from codex_plugin_scanner.guard.store import GuardStore
 
     store: Any | None = None

@@ -143,3 +143,52 @@ fn lockdown_keeps_substitutions_closed() {
         );
     }
 }
+
+#[test]
+fn heredoc_bodies_inside_substitutions_are_data_unless_a_shell_reads_them() {
+    let (root, _cleanup) = workspace("heredoc");
+    let controls = git_github_controls("default", "default");
+    // Claude Code writes commit messages this way. A quoted heredoc body is
+    // data the shell never expands, so the command plans exactly as the
+    // commit that passes the same message directly.
+    let literal = evaluate(&root, &controls, "git commit -m \"Add notes\"");
+    for command in [
+        "git commit -m \"$(cat <<'EOF'\nAdd notes\n\nSecond paragraph.\nEOF\n)\"",
+        "git commit -m \"$(cat <<'EOF'\nAdd notes\nEOF\n)\"",
+    ] {
+        let result = evaluate(&root, &controls, command);
+        assert_ne!(result.reason_code, EVALUATION_FAILED, "{command}");
+        assert_eq!(
+            result.minimum_action, literal.minimum_action,
+            "{command}: {}",
+            result.reason
+        );
+    }
+    // An unquoted heredoc body is one the shell expands before `cat` ever
+    // sees it, so it keeps whatever an unevaluated substitution earns.
+    let plain = evaluate(&root, &controls, "git commit -m \"$(echo 'Add notes')\"");
+    let command = "git commit -m \"$(cat <<EOF\nAdd notes\nEOF\n)\"";
+    let result = evaluate(&root, &controls, command);
+    assert_ne!(result.reason_code, EVALUATION_FAILED, "{command}");
+    assert_eq!(
+        result.minimum_action, plain.minimum_action,
+        "{command}: {}",
+        result.reason
+    );
+    // A body a shell reads is still a script, and nested substitutions in a
+    // data body still run.
+    for command in [
+        "git commit -m \"$(bash <<'EOF'\nrm -rf /\nEOF\n)\"",
+        "git commit -m \"$(sh <<'EOF'\nrm -rf /\nEOF\n)\"",
+        "git commit -m \"$(cat <<'EOF' | bash\nrm -rf /\nEOF\n)\"",
+        "git commit -m \"$(timeout 5 bash <<'EOF'\nrm -rf /\nEOF\n)\"",
+        "git commit -m \"$(cat <<EOF\n$(cat ~/.ssh/id_rsa)\nEOF\n)\"",
+    ] {
+        let result = evaluate(&root, &controls, command);
+        assert_ne!(
+            result.minimum_action, "allow",
+            "{command}: {}",
+            result.reason
+        );
+    }
+}

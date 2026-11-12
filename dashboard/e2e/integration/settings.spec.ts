@@ -11,6 +11,7 @@ const SECTION_PROOF: Record<SettingsSectionKey, (page: Page) => ReturnType<Page[
   notifications: (page) => page.getByRole("button", { name: "Set up alerts" }),
   rules: (page) => page.getByRole("region", { name: "Advanced rules" }),
   maintenance: (page) => page.getByRole("heading", { name: "Keep this machine tidy", level: 3 }),
+  "cloud-actions": (page) => page.getByRole("region", { name: "Cloud actions", exact: true }),
 };
 
 test.describe("Settings against the live daemon", () => {
@@ -51,6 +52,16 @@ test.describe("Settings against the live daemon", () => {
     const review = page.getByRole("region", { name: "Cloud Review" });
     await expect(review.getByRole("button", { name: "Connect Guard Cloud" })).toBeVisible();
     await expect(page.getByRole("combobox", { name: "Cloud receipt privacy" })).toBeVisible();
+  });
+
+  test("Cloud actions before connecting points to hol-guard connect and says local protection does not depend on them", async ({ page }) => {
+    await page.goto("/settings?section=cloud-actions");
+    const region = page.getByRole("region", { name: "Cloud actions", exact: true });
+    await expect(region.getByRole("status")).toHaveText("This computer is not connected to Guard Cloud.");
+    await expect(region.getByText("hol-guard connect", { exact: true })).toBeVisible();
+    await expect(region.getByRole("button", { name: /Check/ })).toHaveCount(0);
+    await expect(page.getByText("Protection on this computer does not depend on Cloud actions.", { exact: false })).toBeVisible();
+    await expectNoErrorBoundary(page);
   });
 
   test("Apps lists each protected app and filters by name", async ({ page }) => {

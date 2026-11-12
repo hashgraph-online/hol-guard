@@ -25,14 +25,8 @@ _THREAD_ID_KEYS = (
     "session_id",
     "sessionId",
 )
-_TURN_ID_KEYS = ("codex_turn_id", "turn_id", "turnId")
 _SOCKET_KEYS = ("codex_app_server_socket", "app_server_socket", "appServerSocket")
 _CODEX_HOME_KEYS = ("codex_home", "codexHome")
-_COMMAND_TEXT_KEYS = ("command_text", "commandText")
-_WORKSPACE_KEYS = ("workspace", "cwd", "working_directory", "workingDirectory")
-_MODEL_KEYS = ("codex_model", "codexModel", "model")
-_NESTED_COMMAND_TEXT_KEYS = ("command", "cmd", "shell_command", "shellCommand")
-_NESTED_TOOL_INPUT_KEYS = ("tool_input", "toolInput", "arguments", "args")
 
 
 class _WebSocketClosedError(TimeoutError):
@@ -62,41 +56,6 @@ def default_codex_app_server_socket_available(*, environ: Mapping[str, str] | No
     except OSError:
         return False
     return True
-
-
-def codex_resume_metadata_from_hook_payload(
-    payload: Mapping[str, object],
-    *,
-    environ: Mapping[str, str] | None = None,
-) -> dict[str, object]:
-    """Extract local-only Codex app-server continuation metadata from a hook payload."""
-
-    env = environ or os.environ
-    thread_id = _first_string(payload, _THREAD_ID_KEYS)
-    if thread_id is None:
-        return {}
-    metadata: dict[str, object] = {
-        "codex_thread_id": thread_id,
-    }
-    turn_id = _first_string(payload, _TURN_ID_KEYS)
-    if turn_id is not None:
-        metadata["codex_turn_id"] = turn_id
-    socket_path = _first_string_from_env(env, ("CODEX_APP_SERVER_SOCKET", "CODEX_APP_SERVER_CONTROL_SOCKET"))
-    if socket_path is not None:
-        metadata["codex_app_server_socket"] = socket_path
-    codex_home = _first_string_from_env(env, ("CODEX_HOME",))
-    if codex_home is not None:
-        metadata["codex_home"] = codex_home
-    model = _first_string(payload, _MODEL_KEYS)
-    if model is not None:
-        metadata["codex_model"] = model
-    workspace = _first_string(payload, _WORKSPACE_KEYS)
-    if workspace is not None:
-        metadata["workspace"] = workspace
-    command_text = _first_command_text(payload)
-    if command_text is not None:
-        metadata["command_text"] = command_text
-    return metadata
 
 
 def _send_websocket_handshake(client: socket.socket) -> bytes:
@@ -252,27 +211,6 @@ def _is_safe_codex_thread_id(thread_id: str) -> bool:
 def _first_string(payload: Mapping[str, object], keys: tuple[str, ...]) -> str | None:
     for key in keys:
         value = payload.get(key)
-        if isinstance(value, str) and value.strip():
-            return value.strip()
-    return None
-
-
-def _first_command_text(payload: Mapping[str, object]) -> str | None:
-    command_text = _first_string(payload, _COMMAND_TEXT_KEYS)
-    if command_text is not None:
-        return command_text
-    for key in _NESTED_TOOL_INPUT_KEYS:
-        value = payload.get(key)
-        if isinstance(value, Mapping):
-            command_text = _first_string(value, _NESTED_COMMAND_TEXT_KEYS)
-            if command_text is not None:
-                return command_text
-    return None
-
-
-def _first_string_from_env(env: Mapping[str, str], keys: tuple[str, ...]) -> str | None:
-    for key in keys:
-        value = env.get(key)
         if isinstance(value, str) and value.strip():
             return value.strip()
     return None

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from codex_plugin_scanner.guard.runtime.network_capability_contract import NetworkPrivacyPolicy
+from tests.network_capability_negotiation import NetworkPrivacyPolicy
 
 
 def test_ledger_limits_come_from_validated_privacy_policy() -> None:

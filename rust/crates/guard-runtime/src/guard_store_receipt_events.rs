@@ -15,6 +15,12 @@ use crate::guard_store_json::dumps_default;
 use crate::guard_store_receipt_decision::{inconsistent, json_object, normalized};
 
 pub(crate) const CAPACITY_KEY: &str = "guard_event_queue_capacity";
+pub(crate) const OVERSIZED_KEY: &str = "guard_event_queue_oversized";
+
+/// The largest encoded event the queue keeps. A queue read must fit in one
+/// native store response, so an event larger than this could never be read
+/// back for upload and would hold the queue forever.
+pub(crate) const EVENT_BYTES_LIMIT: usize = 1024 * 1024;
 
 fn receipt_idempotency_key(receipt_id: &str) -> String {
     format!("receipt.created:{receipt_id}")
@@ -92,6 +98,10 @@ pub(crate) fn add_guard_event(
     let payload = dumps_default(event).ok_or_else(|| {
         crate::guard_store_db::StoreError::Invalid("native_guard_store_payload_unencodable")
     })?;
+    if payload.len() > EVENT_BYTES_LIMIT {
+        let event_type = event.get("eventType").cloned().unwrap_or(Value::Null);
+        return record_oversized(connection, &event_type, now);
+    }
     exec(
         connection,
         "insert or ignore into guard_cloud_events (\
@@ -103,6 +113,46 @@ pub(crate) fn add_guard_event(
             field("eventType"),
             Value::String(payload),
             field("occurredAt"),
+        ],
+    )?;
+    Ok(())
+}
+
+/// Record that an event too large to upload was dropped from the queue.
+pub(crate) fn record_oversized(
+    connection: &rusqlite::Connection,
+    event_type: &Value,
+    now: &str,
+) -> StoreResult<()> {
+    let stored = query_one(
+        connection,
+        "select payload_json from sync_state where state_key = ?",
+        &[Value::from(OVERSIZED_KEY)],
+    )?;
+    let dropped = stored
+        .as_ref()
+        .and_then(|row| json_object(&Value::String(text(row, "payload_json").to_owned())))
+        .and_then(|previous| previous.get("droppedCount").and_then(Value::as_i64))
+        .unwrap_or(0)
+        + 1;
+    let payload = json!({
+        "droppedCount": dropped,
+        "lastDroppedAt": now,
+        "lastEventType": event_type,
+        "limitBytes": EVENT_BYTES_LIMIT,
+    });
+    let encoded = dumps_default(&payload).ok_or_else(|| {
+        crate::guard_store_db::StoreError::Invalid("native_guard_store_payload_unencodable")
+    })?;
+    exec(
+        connection,
+        "insert into sync_state (state_key, payload_json, updated_at) values (?, ?, ?) \
+         on conflict(state_key) do update set \
+         payload_json = excluded.payload_json, updated_at = excluded.updated_at",
+        &[
+            Value::from(OVERSIZED_KEY),
+            Value::String(encoded),
+            Value::from(now),
         ],
     )?;
     Ok(())

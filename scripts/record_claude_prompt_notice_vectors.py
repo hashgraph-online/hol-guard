@@ -7,6 +7,9 @@ Claude ``UserPromptSubmit`` outside Watch (``hook_direct_claude_prompt_text.rs``
 and replays every vector: one native prompt result, the harness response the
 edge rendered for it, and the response after the notice is added.
 
+That Python copy is retired; run this at a commit that still carries it
+(``31f50cfb82`` or earlier).
+
 Usage: python scripts/record_claude_prompt_notice_vectors.py [--check]
 Deterministic output.
 """
@@ -20,12 +23,13 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "src"))
+sys.path.insert(0, str(ROOT))
 
-from codex_plugin_scanner.guard.cli.commands_support_prompts import (  # noqa: E402
+from codex_plugin_scanner.guard.models import GuardArtifact  # noqa: E402
+from scripts.ci.claude_prompt_oracle import (  # noqa: E402
     _claude_prompt_additional_context,
     _claude_prompt_system_message,
 )
-from codex_plugin_scanner.guard.models import GuardArtifact  # noqa: E402
 
 OUT = ROOT / "rust/crates/guard-runtime/tests/fixtures/claude_prompt_notice_vectors.json"
 ACTIONS = ("require-reapproval", "block", "sandbox-required")

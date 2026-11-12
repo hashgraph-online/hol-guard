@@ -5,7 +5,7 @@ HOL Guard can represent two local activation milestones without serializing loca
 - `local_install_verified`: the installer reached a binary-verification or product-corroboration state tied to a server-issued handoff.
 - `first_local_proof_generated`: Guard generated a real local proof and emits only the proof kind plus a SHA-256 digest of the evidence.
 
-The versioned receipt implementation is `codex_plugin_scanner.guard.outcome_receipt`.
+This page is the privacy contract for these receipts. Guard does not emit them today; any component that starts emitting one must follow the boundaries below.
 
 ## Privacy boundary
 
@@ -21,7 +21,7 @@ A receipt contains only:
 - optional bounded proof kind; and
 - `sensitive_content_included: false`.
 
-It must not contain prompts, source code, findings, file paths, commands, secrets, tokens, usernames, hostnames, or report bodies. The helper accepts a precomputed evidence digest so callers do not need to pass sensitive evidence into a transport object.
+It must not contain prompts, source code, findings, file paths, commands, secrets, tokens, usernames, hostnames, or report bodies. Any future emitter must accept a precomputed evidence digest, so callers never pass sensitive evidence into a transport object.
 
 ## Verification boundary
 
@@ -33,4 +33,4 @@ A first-proof receipt proves only that a specific privacy-safe receipt was produ
 
 ## Idempotency
 
-`receipt_digest(receipt)` hashes canonical safe JSON and can be used as an idempotency/evidence reference. It does not add authenticity beyond the authoritative product/handoff state described above.
+A SHA-256 digest of the receipt's canonical JSON can be used as an idempotency/evidence reference. It does not add authenticity beyond the authoritative product/handoff state described above.

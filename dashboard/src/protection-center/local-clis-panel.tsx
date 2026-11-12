@@ -24,10 +24,11 @@ import { catalogRevisionChanged, commandPermissionChanges, mcpCatalogCopy, mcpTo
 import { McpProviderActions, type ProviderActionDraft } from "./mcp-provider-actions";
 import { ProviderWorkflows } from "./provider-workflows";
 import { bulkPolicyCopy, connectorGroupOutcomeCopy, continuityCopy, customExtensionStateLabel, detailCatalogHeading, detailCatalogHelper, detailPolicyCopy, FRESH_TOTP_REQUIRED_MESSAGE, isFreshTotpRequired, keepChoicesCopy, mcpPermissionStatusLabel, nativePublicationMessage, randomToken, SUGGESTED_RULES_NOTICE } from "./local-cli-panel-copy";
-import { connectorGroupOutcome, connectorSetupMatch, customExtensionDisplayName, hasSuggestedRules, prefillSuggestedStates, type ConnectorSetupLink } from "./custom-extension-profile";
+import { allowedEarlierVersion, connectorGroupOutcome, connectorSetupMatch, connectorSetupReady, customExtensionDisplayName, hasSuggestedRules, prefillSuggestedStates, type ConnectorSetupLink } from "./custom-extension-profile";
 import { ConnectorSetupBanner } from "./connector-setup-banner";
 import { CustomExtensionReviewModal } from "./local-cli-review-modal";
 import { LocalCliCapabilities } from "./local-cli-capabilities";
+import { LocalCliLoadCommands } from "./local-cli-load-commands";
 import { canForgetLocalCli, ForgetLocalCliButton, lastSeenCopy } from "./local-cli-forget";
 
 export { customExtensionStateLabel } from "./local-cli-panel-copy";
@@ -51,7 +52,7 @@ export function LocalCliDetail(props: {
   nativePublication?: LocalCliListResponse["native_publication"];
   setupLink?: ConnectorSetupLink | null;
   onBack: () => void;
-  onRefresh: () => Promise<void>;
+  onRefresh: () => Promise<boolean>;
 }) {
   const { resolvedApprovalGate, resolveApprovalGate, refreshApprovalGate } = useResolvedApprovalGate(null);
   const [pending, setPending] = useState<LocalCliState | null>(null);
@@ -184,7 +185,7 @@ export function LocalCliDetail(props: {
         ...(pending !== "unset" && Object.keys(providerDrafts).length > 0
           ? { provider_actions: Object.values(providerDrafts) } : {}),
         // Same endpoint and proof as any other change; the daemon re-checks the request belongs to this connector.
-        ...(recommended && pending === "allowed" && props.setupLink && setupMatch === "ready"
+        ...(recommended && pending === "allowed" && props.setupLink && connectorSetupReady(setupMatch)
           ? { connector_group_request_id: props.setupLink.requestId } : {}),
         ...credentials,
       };
@@ -254,7 +255,14 @@ export function LocalCliDetail(props: {
         <div className="mt-5 flex flex-wrap gap-3">
           {added ? (
             <>
-              {props.item.state === "allowed" ? (
+              {allowedEarlierVersion(props.item) ? (
+                // The allow covers an earlier version of the file, so it no longer applies; allowing again binds this one.
+                // Opened from a held request, it also releases the requests held on it, like the banner.
+                <button type="button" className="min-h-11 rounded-xl bg-brand-blue px-4 text-sm font-semibold text-white"
+                  onClick={connectorSetupReady(setupMatch) ? requestRecommended : requestAllow}>
+                  Allow this version
+                </button>
+              ) : props.item.state === "allowed" ? (
                 <p className="inline-flex min-h-11 items-center rounded-xl bg-slate-100 px-4 text-sm font-semibold text-brand-dark">
                   {props.item.surface === "mcp"
                     ? mcpPermissionStatusLabel(props.nativePublication, props.item.permission_scope)
@@ -401,7 +409,7 @@ export function LocalCliDetail(props: {
           ) : null}
         </>
       ) : null}
-      {added || hasSuggestedRules(props.item) ? (
+      {added || hasSuggestedRules(props.item) || props.item.surface === "cli" ? (
         <section className="mt-8" aria-labelledby="custom-extension-commands-heading">
           <h2 id="custom-extension-commands-heading" className="text-lg font-semibold text-brand-dark">
             {detailCatalogHeading(props.item.surface)}
@@ -411,6 +419,10 @@ export function LocalCliDetail(props: {
           </p>
           {commandsDirty && hasSuggestedRules(props.item) && !added ? (
             <p role="note" className="mt-2 max-w-2xl text-sm leading-6 text-brand-dark/75">{SUGGESTED_RULES_NOTICE}</p>
+          ) : null}
+          {props.item.surface === "cli" ? (
+            <LocalCliLoadCommands key={`${props.item.cli_id}:${props.item.identity_hash}`}
+              item={props.item} disabled={busy} onLoaded={props.onRefresh} />
           ) : null}
           <CustomExtensionCommandBrowser
             key={props.item.cli_id}

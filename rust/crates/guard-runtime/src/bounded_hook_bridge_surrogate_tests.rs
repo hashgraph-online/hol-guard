@@ -20,6 +20,14 @@ fn mapped(source: &str) -> SurrogateMapped {
     parsed
 }
 
+/// The home these vectors were recorded against. None of them carries an
+/// authority reason, so the only text the home can reach is never rendered
+/// here and any path renders them identically. Naming one keeps the renderer's
+/// signature honest without pretending this file tests the home.
+fn recorded_home() -> &'static std::path::Path {
+    std::path::Path::new("/nonexistent/.hol-guard")
+}
+
 fn vector_exit_code(case: &Value) -> i32 {
     i32::try_from(case["exit_code"].as_i64().unwrap()).unwrap()
 }
@@ -47,7 +55,7 @@ fn answers_with_lone_surrogates_render_as_python_renders_them() {
             stderr: text(&case, "stderr"),
             exit_code: vector_exit_code(&case),
         };
-        let rendered = prepared.render(&text(&case, "harness"), &answer);
+        let rendered = prepared.render(&text(&case, "harness"), &answer, recorded_home());
         assert_eq!(rendered, Some(expected), "{case}");
     }
 }
@@ -76,9 +84,17 @@ fn a_lone_surrogate_beside_its_mapped_range_is_not_rendered() {
         mapped: is_mapped,
         collision,
     };
-    assert_eq!(prepared(false, true).render("kimi", &answer), None);
-    assert_eq!(prepared(true, false).render("kimi", &genuine), None);
-    let rendered = prepared(false, false).render("kimi", &genuine).unwrap();
+    assert_eq!(
+        prepared(false, true).render("kimi", &answer, recorded_home()),
+        None
+    );
+    assert_eq!(
+        prepared(true, false).render("kimi", &genuine, recorded_home()),
+        None
+    );
+    let rendered = prepared(false, false)
+        .render("kimi", &genuine, recorded_home())
+        .unwrap();
     assert!(rendered.stdout.contains("\\udb80\\udc00"), "{rendered:?}");
     assert_eq!(rendered.stderr, "\u{f0000}");
 }

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from codex_plugin_scanner.guard.policy_bundle_parser import computed_policy_bundle_hash
+from tests.policy_bundle_parser_support import computed_policy_bundle_hash
 from tests.policy_bundle_signing_helpers import sign_policy_bundle
 
 

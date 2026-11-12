@@ -1,0 +1,426 @@
+{
+  "schema": "guard.cloud-action-local-parity.v1",
+  "action_id": "example.docs.search",
+  "relations": {
+    "same": "Both sides reach the same action.",
+    "cloud-stricter": "The hosted path is stricter for a reason only it applies; explanation names that reason code.",
+    "cloud-unavailable": "The hosted target lacks a required capability, so the call needs a sandbox; explanation names the reason code."
+  },
+  "cases": [
+    {
+      "id": "inherit-keeps-baseline",
+      "why": "An inherit tool state adds nothing on either side.",
+      "facts": {
+        "tool_state": "inherit",
+        "trust_class": "first-party",
+        "extension_enabled": false,
+        "baseline": "allow",
+        "cloud_rule": true,
+        "effect": "read",
+        "global_lockdown": false,
+        "missing_capabilities": []
+      },
+      "expect": {
+        "local": "allow",
+        "cloud": "allow",
+        "relation": "same"
+      }
+    },
+    {
+      "id": "review-tightens-allow",
+      "why": "A review tool state raises an allowed call to review.",
+      "facts": {
+        "tool_state": "review",
+        "trust_class": "first-party",
+        "extension_enabled": false,
+        "baseline": "allow",
+        "cloud_rule": true,
+        "effect": "read",
+        "global_lockdown": false,
+        "missing_capabilities": []
+      },
+      "expect": {
+        "local": "review",
+        "cloud": "review",
+        "relation": "same"
+      }
+    },
+    {
+      "id": "review-tightens-warn",
+      "why": "A review tool state raises a warning to review.",
+      "facts": {
+        "tool_state": "review",
+        "trust_class": "first-party",
+        "extension_enabled": false,
+        "baseline": "warn",
+        "cloud_rule": true,
+        "effect": "read",
+        "global_lockdown": false,
+        "missing_capabilities": []
+      },
+      "expect": {
+        "local": "review",
+        "cloud": "review",
+        "relation": "same"
+      }
+    },
+    {
+      "id": "review-keeps-reapproval",
+      "why": "A review tool state never lowers a stricter baseline.",
+      "facts": {
+        "tool_state": "review",
+        "trust_class": "first-party",
+        "extension_enabled": false,
+        "baseline": "require-reapproval",
+        "cloud_rule": true,
+        "effect": "read",
+        "global_lockdown": false,
+        "missing_capabilities": []
+      },
+      "expect": {
+        "local": "require-reapproval",
+        "cloud": "require-reapproval",
+        "relation": "same"
+      }
+    },
+    {
+      "id": "block-tightens-allow",
+      "why": "A block tool state blocks an allowed call.",
+      "facts": {
+        "tool_state": "block",
+        "trust_class": "first-party",
+        "extension_enabled": false,
+        "baseline": "allow",
+        "cloud_rule": true,
+        "effect": "read",
+        "global_lockdown": false,
+        "missing_capabilities": []
+      },
+      "expect": {
+        "local": "block",
+        "cloud": "block",
+        "relation": "same"
+      }
+    },
+    {
+      "id": "block-tightens-review",
+      "why": "A block tool state blocks a reviewed call.",
+      "facts": {
+        "tool_state": "block",
+        "trust_class": "first-party",
+        "extension_enabled": false,
+        "baseline": "review",
+        "cloud_rule": true,
+        "effect": "read",
+        "global_lockdown": false,
+        "missing_capabilities": []
+      },
+      "expect": {
+        "local": "block",
+        "cloud": "block",
+        "relation": "same"
+      }
+    },
+    {
+      "id": "allow-never-relaxes-a-remote-tool",
+      "why": "The allow tool state relaxes only a local package launch, never a remote endpoint.",
+      "facts": {
+        "tool_state": "allow",
+        "trust_class": "first-party",
+        "extension_enabled": false,
+        "baseline": "review",
+        "cloud_rule": true,
+        "effect": "read",
+        "global_lockdown": false,
+        "missing_capabilities": []
+      },
+      "expect": {
+        "local": "review",
+        "cloud": "review",
+        "relation": "same"
+      }
+    },
+    {
+      "id": "allow-never-relaxes-reapproval",
+      "why": "The allow tool state cannot lower require-reapproval on a remote endpoint.",
+      "facts": {
+        "tool_state": "allow",
+        "trust_class": "first-party",
+        "extension_enabled": false,
+        "baseline": "require-reapproval",
+        "cloud_rule": true,
+        "effect": "read",
+        "global_lockdown": false,
+        "missing_capabilities": []
+      },
+      "expect": {
+        "local": "require-reapproval",
+        "cloud": "require-reapproval",
+        "relation": "same"
+      }
+    },
+    {
+      "id": "external-without-activation-is-ignored",
+      "why": "An external contribution counts only once activated.",
+      "facts": {
+        "tool_state": "block",
+        "trust_class": "external",
+        "extension_enabled": false,
+        "baseline": "allow",
+        "cloud_rule": true,
+        "effect": "read",
+        "global_lockdown": false,
+        "missing_capabilities": []
+      },
+      "expect": {
+        "local": "allow",
+        "cloud": "allow",
+        "relation": "same"
+      }
+    },
+    {
+      "id": "external-with-activation-blocks",
+      "why": "An activated external contribution tightens like a first-party one.",
+      "facts": {
+        "tool_state": "block",
+        "trust_class": "external",
+        "extension_enabled": true,
+        "baseline": "allow",
+        "cloud_rule": true,
+        "effect": "read",
+        "global_lockdown": false,
+        "missing_capabilities": []
+      },
+      "expect": {
+        "local": "block",
+        "cloud": "block",
+        "relation": "same"
+      }
+    },
+    {
+      "id": "external-with-activation-reviews",
+      "why": "An activated external review state raises a warning to review.",
+      "facts": {
+        "tool_state": "review",
+        "trust_class": "external",
+        "extension_enabled": true,
+        "baseline": "warn",
+        "cloud_rule": true,
+        "effect": "read",
+        "global_lockdown": false,
+        "missing_capabilities": []
+      },
+      "expect": {
+        "local": "review",
+        "cloud": "review",
+        "relation": "same"
+      }
+    },
+    {
+      "id": "block-outranks-missing-capability",
+      "why": "A missing capability never lowers a block to sandbox-required.",
+      "facts": {
+        "tool_state": "block",
+        "trust_class": "first-party",
+        "extension_enabled": false,
+        "baseline": "allow",
+        "cloud_rule": true,
+        "effect": "read",
+        "global_lockdown": false,
+        "missing_capabilities": [
+          "no-subprocess"
+        ]
+      },
+      "expect": {
+        "local": "block",
+        "cloud": "block",
+        "relation": "same"
+      }
+    },
+    {
+      "id": "lockdown-stops-hosted-dispatch",
+      "why": "Global lockdown blocks every hosted dispatch. The contributed decision only loses its allow relaxation; local lockdown enforcement happens in control resolution, outside this comparison.",
+      "facts": {
+        "tool_state": "inherit",
+        "trust_class": "first-party",
+        "extension_enabled": false,
+        "baseline": "allow",
+        "cloud_rule": true,
+        "effect": "read",
+        "global_lockdown": true,
+        "missing_capabilities": []
+      },
+      "expect": {
+        "local": "allow",
+        "cloud": "block",
+        "relation": "cloud-stricter",
+        "explanation": "global_lockdown"
+      }
+    },
+    {
+      "id": "lockdown-with-allow-state",
+      "why": "Lockdown also removes the allow relaxation, so neither side relaxes.",
+      "facts": {
+        "tool_state": "allow",
+        "trust_class": "first-party",
+        "extension_enabled": false,
+        "baseline": "review",
+        "cloud_rule": true,
+        "effect": "read",
+        "global_lockdown": true,
+        "missing_capabilities": []
+      },
+      "expect": {
+        "local": "review",
+        "cloud": "block",
+        "relation": "cloud-stricter",
+        "explanation": "global_lockdown"
+      }
+    },
+    {
+      "id": "missing-capability-needs-a-sandbox",
+      "why": "The hosted target cannot enforce no-subprocess, so it may not dispatch the call.",
+      "facts": {
+        "tool_state": "inherit",
+        "trust_class": "first-party",
+        "extension_enabled": false,
+        "baseline": "allow",
+        "cloud_rule": true,
+        "effect": "read",
+        "global_lockdown": false,
+        "missing_capabilities": [
+          "no-subprocess"
+        ]
+      },
+      "expect": {
+        "local": "allow",
+        "cloud": "sandbox-required",
+        "relation": "cloud-unavailable",
+        "explanation": "capability_unavailable"
+      }
+    },
+    {
+      "id": "missing-capability-after-review",
+      "why": "A missing capability still raises a reviewed call to sandbox-required.",
+      "facts": {
+        "tool_state": "review",
+        "trust_class": "first-party",
+        "extension_enabled": false,
+        "baseline": "allow",
+        "cloud_rule": true,
+        "effect": "read",
+        "global_lockdown": false,
+        "missing_capabilities": [
+          "egress-pinned"
+        ]
+      },
+      "expect": {
+        "local": "review",
+        "cloud": "sandbox-required",
+        "relation": "cloud-unavailable",
+        "explanation": "capability_unavailable"
+      }
+    },
+    {
+      "id": "missing-filesystem-isolation",
+      "why": "The hosted target cannot keep the tool off the filesystem, so it may not dispatch the call.",
+      "facts": {
+        "tool_state": "allow",
+        "trust_class": "first-party",
+        "extension_enabled": false,
+        "baseline": "allow",
+        "cloud_rule": true,
+        "effect": "read",
+        "global_lockdown": false,
+        "missing_capabilities": [
+          "no-filesystem"
+        ]
+      },
+      "expect": {
+        "local": "allow",
+        "cloud": "sandbox-required",
+        "relation": "cloud-unavailable",
+        "explanation": "capability_unavailable"
+      }
+    },
+    {
+      "id": "write-floor-without-a-rule",
+      "why": "With no workspace rule the hosted path applies the write floor.",
+      "facts": {
+        "tool_state": "inherit",
+        "trust_class": "first-party",
+        "extension_enabled": false,
+        "baseline": "allow",
+        "cloud_rule": false,
+        "effect": "write",
+        "global_lockdown": false,
+        "missing_capabilities": []
+      },
+      "expect": {
+        "local": "allow",
+        "cloud": "review",
+        "relation": "cloud-stricter",
+        "explanation": "effect_floor"
+      }
+    },
+    {
+      "id": "destructive-floor-without-a-rule",
+      "why": "With no workspace rule a destructive action needs reapproval.",
+      "facts": {
+        "tool_state": "review",
+        "trust_class": "first-party",
+        "extension_enabled": false,
+        "baseline": "allow",
+        "cloud_rule": false,
+        "effect": "destructive",
+        "global_lockdown": false,
+        "missing_capabilities": []
+      },
+      "expect": {
+        "local": "review",
+        "cloud": "require-reapproval",
+        "relation": "cloud-stricter",
+        "explanation": "effect_floor"
+      }
+    },
+    {
+      "id": "read-floor-matches-baseline",
+      "why": "The read floor is allow, the same as an allowed local call.",
+      "facts": {
+        "tool_state": "inherit",
+        "trust_class": "first-party",
+        "extension_enabled": false,
+        "baseline": "allow",
+        "cloud_rule": false,
+        "effect": "read",
+        "global_lockdown": false,
+        "missing_capabilities": []
+      },
+      "expect": {
+        "local": "allow",
+        "cloud": "allow",
+        "relation": "same"
+      }
+    },
+    {
+      "id": "admin-effect-is-never-hosted",
+      "why": "An admin action is blocked on the hosted path even when a rule allows it.",
+      "facts": {
+        "tool_state": "inherit",
+        "trust_class": "first-party",
+        "extension_enabled": false,
+        "baseline": "allow",
+        "cloud_rule": true,
+        "effect": "admin",
+        "global_lockdown": false,
+        "missing_capabilities": []
+      },
+      "expect": {
+        "local": "allow",
+        "cloud": "block",
+        "relation": "cloud-stricter",
+        "explanation": "admin_effect_unsupported"
+      }
+    }
+  ]
+}

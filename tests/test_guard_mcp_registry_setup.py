@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.guard.approval_gate import update_settings
-from codex_plugin_scanner.guard.daemon.local_cli_api import LocalCliApiError, LocalCliApiService
+from codex_plugin_scanner.guard.local_clis.local_cli_api import LocalCliApiError, LocalCliApiService
 from codex_plugin_scanner.guard.runtime import mcp_registry_setup
 from codex_plugin_scanner.guard.runtime.codex_mcp_setup import CodexMcpSetupReceipt
 from codex_plugin_scanner.guard.store import GuardStore
@@ -59,7 +59,7 @@ def test_setup_preview_binds_exact_listing_and_requires_local_proof(tmp_path: Pa
     preview = service.registry_setup({"operation": "preview", **_SELECTION})
     assert preview["kind"] == "remote"
     assert preview["permissions_granted"] is False and preview["host_change_applied"] is False
-    assert len(preview["selection_digest"]) == 64 and launched == []
+    assert len(str(preview["selection_digest"])) == 64 and launched == []
     for endpoint in (
         "http://connect.composio.dev/mcp",
         "https://user@connect.composio.dev/mcp",
@@ -264,5 +264,5 @@ def test_long_single_component_registry_name_uses_bounded_substring_and_exact_ma
         candidate = mcp_registry_setup.reviewed_codex_setup_candidate(
             {**payload, "endpoint": "https://example.com/mcp"}
         )
-    assert candidate["kind"] == kind and len(candidate["selection_digest"]) == 64
+    assert candidate["kind"] == kind and len(str(candidate["selection_digest"])) == 64
     assert queries == [name[-80:]]

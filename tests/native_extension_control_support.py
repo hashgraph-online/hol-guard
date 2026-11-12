@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, cast
@@ -12,14 +12,17 @@ import pytest
 from codex_plugin_scanner.guard import native_daemon_route as route
 from codex_plugin_scanner.guard import native_extension_control as bridge
 from codex_plugin_scanner.guard import native_resident_decision as shared
+from codex_plugin_scanner.guard.runtime.command_extensions import CommandSafetyExtensionRegistry
 from codex_plugin_scanner.guard.runtime.extension_control_contract import (
     CONTROL_SCHEMA_VERSION,
     ControlLayerKind,
     ControlState,
+    ControlSurface,
     ControlTarget,
     ControlTargetKind,
     ExtensionControl,
     ExtensionControlLayer,
+    ResolverFailureCode,
 )
 
 DIGEST = "a" * 64
@@ -144,3 +147,24 @@ def echo_answers(request: dict[str, object]) -> dict[str, object]:
             ]
         ),
     )
+
+
+def resolve_extension_controls(
+    layers: Iterable[ExtensionControlLayer],
+    registry: CommandSafetyExtensionRegistry,
+    *,
+    extension_ids: tuple[str, ...],
+    permission_ids: tuple[str, ...],
+    surface: ControlSurface,
+    authority_failure: ResolverFailureCode | None = None,
+    guard_home: Path | None = None,
+) -> bridge.ControlAnswer:
+    """Resolve one set of catalog identities against ``layers``."""
+
+    scenario = bridge.ControlScenario(
+        tuple(layers),
+        (bridge.ControlItem(extension_ids, permission_ids),),
+        surface,
+        authority_failure,
+    )
+    return bridge.resolve_scenarios(registry, (scenario,), guard_home=guard_home)[0].items[0]

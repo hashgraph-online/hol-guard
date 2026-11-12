@@ -7,83 +7,15 @@ one AI coding harness that HOL Guard supports.
 
 from __future__ import annotations
 
-from dataclasses import replace
-
-from .contract_agent_capabilities import AGENT_EVENT_CAPABILITIES
-from .contract_capability_values import _capability
-from .contract_hook_capabilities import HOOK_EVENT_CAPABILITIES
 from .contract_models import CAPABILITY_DECLARED_ACTIONS as CAPABILITY_DECLARED_ACTIONS
 from .contract_models import CapabilityLocalHosted as CapabilityLocalHosted
-from .contract_models import HarnessCapabilityReport as HarnessCapabilityReport
 from .contract_models import HarnessCoverageSummary as HarnessCoverageSummary
 from .contract_models import HarnessEventCapability as HarnessEventCapability
 from .contract_models import HarnessProtectionContract as HarnessProtectionContract
 from .contract_models import HarnessSetupContract as HarnessSetupContract
 from .contract_models import HarnessSetupStep as HarnessSetupStep
-from .contract_registry import _BASE_HARNESS_CONTRACTS
+from .contract_registry import HARNESS_CONTRACTS as HARNESS_CONTRACTS
 from .contract_rendering import DISPLAY_NAMES as _DISPLAY_NAMES
-
-_CAPABILITY_EVENTS_BY_HARNESS = {**HOOK_EVENT_CAPABILITIES, **AGENT_EVENT_CAPABILITIES}
-
-
-def _default_capability_events(contract: HarnessProtectionContract) -> tuple[HarnessEventCapability, ...]:
-    """Give legacy contracts a conservative row without inventing hooks."""
-
-    if not contract.event_surfaces:
-        return (
-            _capability(
-                contract.harness,
-                "*",
-                "none",
-                "unsupported",
-                ("unavailable",),
-                "No event surface is declared for this adapter.",
-                "A concrete host event and transport must be added before protection is claimed.",
-                (contract.known_blind_spots,),
-                f"src/codex_plugin_scanner/guard/adapters/contracts.py:{contract.harness}.event_surfaces",
-            ),
-        )
-    rows: list[HarnessEventCapability] = []
-    for surface in contract.event_surfaces:
-        rows.append(
-            _capability(
-                contract.harness,
-                surface,
-                "adapter_declared",
-                "declared",
-                ("observe",),
-                "Failure behavior is adapter-specific until a concrete host hook contract is declared.",
-                "The host must expose the declared event and preserve the adapter's response boundary.",
-                (contract.known_blind_spots,),
-                f"src/codex_plugin_scanner/guard/adapters/contracts.py:{contract.harness}.event_surfaces",
-            )
-        )
-    if contract.harness == "opencode":
-        rows.append(
-            _capability(
-                "opencode",
-                "UserPromptSubmit",
-                "none",
-                "unsupported",
-                ("unavailable",),
-                "OpenCode's declared hooks do not surface prompt submission to Guard.",
-                "A host prompt hook must exist before prompt interception can be claimed.",
-                ("Prompt content is not available through the declared OpenCode hooks.",),
-                "src/codex_plugin_scanner/guard/adapters/contracts.py:opencode.known_blind_spots",
-            )
-        )
-    return tuple(rows)
-
-
-# Attach the event authority to the existing setup contracts without changing
-# their setup and table APIs.
-HARNESS_CONTRACTS: tuple[HarnessProtectionContract, ...] = tuple(
-    replace(
-        contract,
-        capability_events=_CAPABILITY_EVENTS_BY_HARNESS.get(contract.harness, _default_capability_events(contract)),
-    )
-    for contract in _BASE_HARNESS_CONTRACTS
-)
 
 _CONTRACT_BY_ALIAS: dict[str, HarnessProtectionContract] = {}
 for _c in HARNESS_CONTRACTS:
@@ -165,27 +97,4 @@ def setup_contract_for(harness: str) -> HarnessSetupContract | None:
         supported_actions=contract.supported_actions,
         docs_path=contract.docs_path,
         icon_label=contract.icon_label,
-    )
-
-
-def harness_capability_report(
-    *,
-    build_id: str = "unknown",
-    commit: str = "unknown",
-    requested_host: str | None = None,
-    host_version_scope: str | None = None,
-    os_arch: str | None = None,
-    local_hosted: str | None = None,
-) -> HarnessCapabilityReport:
-    """Return the additive versioned event report for all registered harnesses."""
-
-    from .capability_report import build_capability_report
-
-    return build_capability_report(
-        build_id=build_id,
-        commit=commit,
-        requested_host=requested_host,
-        host_version_scope=host_version_scope,
-        os_arch=os_arch,
-        local_hosted=local_hosted,
     )

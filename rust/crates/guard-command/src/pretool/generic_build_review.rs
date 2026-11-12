@@ -16,8 +16,28 @@ pub(crate) const BUILD_REVIEW_REASON: &str = "HOL Guard requires review before t
 /// can fetch dependencies and runs their `build.rs` scripts. `cargo fix` is
 /// left out: it also rewrites source files, which this reason does not name.
 const CARGO_BUILD_SUBCOMMANDS: &[&str] = &[
-    "b", "bench", "build", "c", "check", "clippy", "d", "doc", "miri", "nextest", "r", "run",
-    "rustc", "rustdoc", "t", "test",
+    "b",
+    "bench",
+    "build",
+    "c",
+    "check",
+    "clippy",
+    "d",
+    "doc",
+    "expand",
+    "insta",
+    "llvm-cov",
+    "machete",
+    "miri",
+    "nextest",
+    "r",
+    "run",
+    "rustc",
+    "rustdoc",
+    "t",
+    "tarpaulin",
+    "test",
+    "udeps",
 ];
 
 /// Global cargo options that take the next argument as their value.
@@ -26,12 +46,17 @@ const CARGO_VALUE_OPTIONS: &[&str] = &["--color", "--config", "-C", "-Z"];
 /// Whether every package-tool step in `model` is a cargo build or test.
 pub(super) fn build_or_test_command(
     model: &CanonicalCommandV1,
-    is_package_tool: fn(&str) -> bool,
+    is_package_executable: fn(&str) -> bool,
 ) -> bool {
     let mut package_steps = model
         .segments
         .iter()
-        .filter(|segment| segment.executable.as_deref().is_some_and(is_package_tool))
+        .filter(|segment| {
+            segment
+                .executable
+                .as_deref()
+                .is_some_and(is_package_executable)
+        })
         .peekable();
     package_steps.peek().is_some() && package_steps.all(cargo_build_step)
 }

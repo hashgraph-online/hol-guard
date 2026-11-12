@@ -1,7 +1,7 @@
 //! The argument forms of the local Git writes `git_local_writes` proves:
-//! `add`, a non-forced `rm`, `commit` with its message on the command line
-//! and a non-forced `branch` rename, plus the `stash list` and `stash show`
-//! reads beside them.
+//! `add`, a non-forced `rm`, `commit` with its message on the command line or
+//! on standard input, and a non-forced `branch` rename, plus the `stash list`
+//! and `stash show` reads beside them.
 
 use super::super::git_remote_config::GitConfig;
 use crate::{CanonicalCommandV1, CommandSegmentV1};
@@ -49,7 +49,8 @@ pub(super) fn rm(rest: &[&str]) -> bool {
     })
 }
 
-/// A commit whose message is on the command line, so no editor starts.
+/// A commit whose message is on the command line or on standard input, so no
+/// editor starts.
 pub(super) fn commit(rest: &[&str]) -> bool {
     commit_form(rest).is_some()
 }
@@ -66,7 +67,33 @@ pub(super) fn signs(segment: &CommandSegmentV1) -> bool {
 /// attached key) start the signing program, which the caller must prove.
 /// Short options may be clustered as Git allows: `-qm msg`, `-am msg`.
 pub(super) fn commit_form(rest: &[&str]) -> Option<bool> {
+    let form = commit_options(rest)?;
+    (form.message || (form.amend && form.no_edit)).then_some(form.signs)
+}
+
+/// Whether the commit reads its message from standard input, which is the only
+/// commit form that consumes the bytes a heredoc in front of it supplies.
+/// `-m`, a message file and an amended message all leave those bytes unread,
+/// so a projection that dropped the body would describe a command the shell
+/// never ran.
+pub(crate) fn message_from_standard_input(rest: &[&str]) -> bool {
+    commit_options(rest).is_some_and(|form| form.standard_input)
+}
+
+/// What the option scan found. `message` covers every spelling that supplies
+/// one; `standard_input` narrows that to the spellings that read it from
+/// standard input.
+struct CommitOptions {
+    message: bool,
+    standard_input: bool,
+    amend: bool,
+    no_edit: bool,
+    signs: bool,
+}
+
+fn commit_options(rest: &[&str]) -> Option<CommitOptions> {
     let (mut message, mut amend, mut no_edit, mut signs) = (false, false, false, false);
+    let mut standard_input = false;
     let mut options = true;
     let mut words = rest.iter();
     while let Some(word) = words.next() {
@@ -84,6 +111,20 @@ pub(super) fn commit_form(rest: &[&str]) -> Option<bool> {
             }
             value if value.starts_with("--message=") => message = true,
             value if value.starts_with("--author=") => {}
+            // `-F -` takes the message from standard input, which the caller
+            // proves carries literal data. A path reads that file instead,
+            // and a commit message is not a read this proof covers.
+            "--file" => {
+                if *words.next()? != "-" {
+                    return None;
+                }
+                message = true;
+                standard_input = true;
+            }
+            "--file=-" => {
+                message = true;
+                standard_input = true;
+            }
             value if value == "--gpg-sign" || value.starts_with("--gpg-sign=") => signs = true,
             "--quiet" | "--all" | "--signoff" | "--no-verify" | "--allow-empty"
             | "--no-gpg-sign" | "--reset-author" => {}
@@ -104,6 +145,21 @@ pub(super) fn commit_form(rest: &[&str]) -> Option<bool> {
                             message = true;
                             break;
                         }
+                        // The rest of the cluster, or else the next word,
+                        // names the file the message comes from.
+                        'F' => {
+                            let value = if cluster.len() == offset + 2 {
+                                *words.next()?
+                            } else {
+                                &cluster[offset + 2..]
+                            };
+                            if value != "-" {
+                                return None;
+                            }
+                            message = true;
+                            standard_input = true;
+                            break;
+                        }
                         // The rest of the cluster names the key; Git never
                         // takes it from the next word.
                         'S' => {
@@ -116,7 +172,13 @@ pub(super) fn commit_form(rest: &[&str]) -> Option<bool> {
             }
         }
     }
-    (message || (amend && no_edit)).then_some(signs)
+    Some(CommitOptions {
+        message,
+        standard_input,
+        amend,
+        no_edit,
+        signs,
+    })
 }
 
 /// `branch -m NEW` or `branch -m OLD NEW`, options first. A rename moves the
@@ -134,6 +196,31 @@ pub(super) fn branch_rename(rest: &[&str]) -> bool {
         }
     }
     moved && matches!(names.len(), 1 | 2)
+}
+
+/// `branch NAME` or `branch NAME START`, options first. Creation writes one
+/// new ref and nothing else: Git refuses a name that already exists without
+/// `-f`, leaves `HEAD` and the working tree exactly as they are, and records
+/// an upstream only in the same `branch.NAME.*` configuration that
+/// `checkout -b NAME START` already writes for a remote-tracking start point.
+/// `-f`, `-t`, `--set-upstream-to`, a delete, a copy and every other option
+/// are refused, as is a start point that is not an ordinary reference name.
+pub(super) fn branch_create(rest: &[&str]) -> bool {
+    let mut names: Vec<&str> = Vec::new();
+    for word in rest {
+        match *word {
+            "-q" | "--quiet" | "--no-track" if names.is_empty() => {}
+            value if names.is_empty() => {
+                if !super::super::worktree_add::valid_branch_name(value) {
+                    return false;
+                }
+                names.push(value);
+            }
+            value if names.len() == 1 && super::start::reference(value) => names.push(value),
+            _ => return false,
+        }
+    }
+    !names.is_empty()
 }
 
 /// The two `git stash` spellings that only print are judged by the read
@@ -264,20 +351,12 @@ pub(super) fn aliased(effective: &GitConfig, model: &CanonicalCommandV1) -> bool
         .any(|name| effective.contains_key(&format!("alias.{}", name.to_ascii_lowercase())))
 }
 
-/// The branch `git switch -c <name>` or `git checkout -b <name>` creates at
-/// the checked-out commit. A start point is not one of these forms.
+/// The branch `git switch -c <name>`, `git switch --create=<name>` or
+/// `git checkout -b <name>` creates at the checked-out commit. A start point
+/// is not one of these forms.
 pub(super) fn created_branch(original: &CommandSegmentV1) -> Option<&str> {
-    match original.arguments.as_slice() {
-        [command, flag, name]
-            if matches!(
-                (command.as_str(), flag.as_str()),
-                ("switch", "-c" | "--create") | ("checkout", "-b")
-            ) =>
-        {
-            Some(name.as_str())
-        }
-        _ => None,
-    }
+    let words: Vec<&str> = original.arguments.iter().map(String::as_str).collect();
+    super::super::workspace_contained::created_branch_name(&words)
 }
 
 /// Whether a write other than a branch creation may change what a push would
@@ -287,4 +366,71 @@ pub(super) fn moves_head(original: &CommandSegmentV1) -> bool {
     original.arguments.first().is_none_or(|command| {
         matches!(command.as_str(), "checkout" | "switch" | "branch" | "reset")
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{commit_form, message_from_standard_input};
+
+    /// The commit forms that take their message from standard input.
+    ///
+    /// The fixture tests around this proof accept the workspace sandbox as
+    /// well as the write proof, so they stay quiet even if these forms stop
+    /// being recognised. This reads the form directly, with no fixture and no
+    /// fallback, so the recognition itself is what fails.
+    #[test]
+    fn a_message_read_from_standard_input_is_an_accepted_commit_form() {
+        for rest in [
+            &["-F", "-"][..],
+            &["--file", "-"][..],
+            &["--file=-"][..],
+            &["-F-"][..],
+            &["-qF", "-"][..],
+            &["-q", "--allow-empty", "-F", "-"][..],
+        ] {
+            assert_eq!(commit_form(rest), Some(false), "{rest:?}");
+        }
+    }
+
+    /// A message read from a file is a file read this proof does not cover,
+    /// and a commit with no message at all is an editor session.
+    #[test]
+    fn a_message_read_from_a_path_is_not_an_accepted_commit_form() {
+        for rest in [
+            &["-F", "notes.txt"][..],
+            &["--file", "notes.txt"][..],
+            &["--file=notes.txt"][..],
+            &["-Fnotes.txt"][..],
+            &["--allow-empty"][..],
+        ] {
+            assert_eq!(commit_form(rest), None, "{rest:?}");
+        }
+    }
+
+    /// Only a message read from standard input consumes a heredoc body in
+    /// front of the commit. An amended message and a message on the command
+    /// line are accepted commit forms that read nothing, so the projection
+    /// that drops the body must not treat them as readers.
+    #[test]
+    fn only_a_message_from_standard_input_reads_the_body() {
+        for rest in [
+            &["-F", "-"][..],
+            &["--file", "-"][..],
+            &["--file=-"][..],
+            &["-F-"][..],
+            &["-qF", "-"][..],
+        ] {
+            assert!(message_from_standard_input(rest), "{rest:?}");
+        }
+        for rest in [
+            &["-F", "notes.txt"][..],
+            &["--file=notes.txt"][..],
+            &["-Fnotes.txt"][..],
+            &["-m", "subject"][..],
+            &["--message=subject"][..],
+            &["--amend", "--no-edit"][..],
+        ] {
+            assert!(!message_from_standard_input(rest), "{rest:?}");
+        }
+    }
 }

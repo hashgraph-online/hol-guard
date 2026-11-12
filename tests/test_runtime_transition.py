@@ -392,7 +392,7 @@ def test_reopened_coordinator_recovers_only_inverse_with_one_deadline(transition
 
 @pytest.mark.parametrize("side", ["candidate", "predecessor"])
 def test_daemon_binding_uses_planned_executable_digest_instead_of_artifact_archive(transition, side):
-    from codex_plugin_scanner.guard.daemon.live_identity import DaemonArtifactBinding
+    from codex_plugin_scanner.guard.native_daemon_peer import DaemonArtifactBinding
 
     _, plan, *_ = transition
     artifact = plan.candidate if side == "candidate" else plan.predecessor
@@ -674,7 +674,6 @@ def test_prepared_native_install_preserves_foreign_edit_before_any_publication(t
         ("files", [None]),
         ("managed_installs", ["invalid"]),
         ("deadline_monotonic", True),
-        ("deadline_monotonic", float("inf")),
         ("forward_expires_monotonic", "later"),
         ("candidate", {}),
         ("recovery_causes", "invalid"),
@@ -689,6 +688,19 @@ def test_authenticated_record_shape_failure_preserves_state_and_bindings(transit
     record = runtime.path.read_bytes()
     with pytest.raises(TransitionError):
         runtime.restore_files(plan.operation_id, first_cause="candidate failed")
+    assert runtime.path.read_bytes() == record
+    assert bindings.read_bytes() == b"previous hooks"
+    assert pointer.read_bytes() == b"previous pointer"
+
+
+def test_a_record_that_is_not_json_is_never_authenticated(transition):
+    runtime, plan, bindings, pointer = transition
+    begin(runtime, plan)
+    payload = runtime._read(plan.operation_id)
+    record = runtime.path.read_bytes()
+    payload["deadline_monotonic"] = float("inf")
+    with pytest.raises(ValueError):
+        runtime._write(payload)
     assert runtime.path.read_bytes() == record
     assert bindings.read_bytes() == b"previous hooks"
     assert pointer.read_bytes() == b"previous pointer"
@@ -968,7 +980,9 @@ def test_copilot_plan_restores_native_bindings_and_preserves_authority(
     workspace_enabled,
     previous_exists,
     frozen,
+    native_adapter_state_integrity_runtime,
 ):
+    del native_adapter_state_integrity_runtime
     from codex_plugin_scanner.guard.adapters.adapter_state_integrity import authenticate_adapter_state
     from codex_plugin_scanner.guard.adapters.base import HarnessContext
     from codex_plugin_scanner.guard.adapters.copilot import CopilotHarnessAdapter
@@ -1020,7 +1034,12 @@ def test_copilot_plan_restores_native_bindings_and_preserves_authority(
 
 
 @pytest.mark.parametrize("after_publication", [False, True])
-def test_changed_copilot_authority_prevents_any_transition_mutation(transition, after_publication):
+def test_changed_copilot_authority_prevents_any_transition_mutation(
+    transition,
+    after_publication,
+    native_adapter_state_integrity_runtime,
+):
+    del native_adapter_state_integrity_runtime
     from codex_plugin_scanner.guard.adapters.adapter_state_integrity import authenticate_adapter_state
     from codex_plugin_scanner.guard.adapters.base import HarnessContext
     from codex_plugin_scanner.guard.adapters.copilot import CopilotHarnessAdapter
@@ -1801,6 +1820,28 @@ def test_transition_begin_dependency_wait_consumes_original_coordinator_deadline
     assert bindings.read_bytes() == b"previous hooks" and pointer.read_bytes() == b"previous pointer"
 
 
+@pytest.mark.parametrize(
+    "expired,reason", [(True, "deadline_exceeded"), (False, "local_authority_integrity_runtime_unavailable")]
+)
+def test_transition_begin_reports_a_signer_failure_as_a_stable_reason(transition, monkeypatch, expired, reason):
+    from codex_plugin_scanner.guard import runtime_transition as module
+
+    runtime, plan, bindings, pointer = transition
+    deadline = time.monotonic() + 60
+
+    def unavailable(*_args, **_kwargs):
+        if expired:
+            monkeypatch.setattr(module.time, "monotonic", lambda: deadline + 1)
+        raise RuntimeError("local authority signing requires the native runtime")
+
+    monkeypatch.setattr(module, "sign_local_authority_payload", unavailable)
+    with pytest.raises(TransitionError) as caught:
+        runtime.begin(plan, authority_home=plan.guard_home, grant=None, deadline_monotonic=deadline)
+    assert caught.value.reason == reason
+    assert not runtime.path.exists()
+    assert bindings.read_bytes() == b"previous hooks" and pointer.read_bytes() == b"previous pointer"
+
+
 def test_core_coordinator_records_inverse_failure_once_with_original_cause(transition, monkeypatch):
     from codex_plugin_scanner.guard.runtime_transition_coordinator import RuntimeTransitionCoordinator
 
@@ -1852,7 +1893,7 @@ def test_native_runtime_bindings_require_both_signed_readonly_dependencies(trans
 @pytest.mark.usefixtures("native_hook_force")
 @pytest.mark.parametrize("rollback", [False, True])
 def test_actual_native_admission_drives_protocol_completion(transition, tmp_path, rollback):
-    from codex_plugin_scanner.guard.daemon.hook_worker import HookWorker
+    from codex_plugin_scanner.guard.hook_review.hook_worker import HookWorker
     from codex_plugin_scanner.guard.native_resident_client import close_native_residents
     from codex_plugin_scanner.guard.native_runtime import native_runtime_status
     from codex_plugin_scanner.guard.runtime_transition_admission import probe_native_protection
@@ -2208,66 +2249,3 @@ def test_real_process_exit_releases_owner_and_recovers_transition_pair(tmp_path:
     assert bindings.read_bytes() == b"previous bindings"
     assert pointer.read_bytes() == b"previous pointer"
     assert store.get_managed_install("codex") == install_row("codex", "previous")
-
-
-def test_production_driver_restores_bindings_when_candidate_start_fails(transition):
-    """A4: candidate start and predecessor restart both fail on the production driver.
-
-    The executable is a real spawned program that exits. Admission, state
-    authentication, and the coordinator stay on the production path. The
-    result keeps the original start failure and the rollback start failure.
-    """
-    from codex_plugin_scanner.guard.runtime_transition_coordinator import RuntimeTransitionCoordinator
-    from codex_plugin_scanner.guard.runtime_transition_daemon import TransitionDaemonDriver
-
-    runtime, plan, bindings, pointer = transition
-    script = b"#!/bin/sh\nexit 1\n"
-    dependencies = []
-    for _side, artifact in (("candidate", plan.candidate), ("predecessor", plan.predecessor)):
-        path = Path(artifact["path"])
-        path.write_bytes(script)
-        path.chmod(0o700)
-        dependencies.append(
-            TransitionFile.artifact_dependency(
-                {
-                    "path": str(path),
-                    "size": len(script),
-                    "sha256": hashlib.sha256(script).hexdigest(),
-                    "mode": 0o700,
-                    "owner_uid": path.stat().st_uid,
-                    "role": "artifact",
-                }
-            )
-        )
-    plan = replace(
-        plan,
-        files=(*plan.files, *dependencies),
-        deadline_epoch=time.time() + 8,
-    )
-
-    def observe(artifact, daemon_identity, operation_id, *, deadline_monotonic):
-        del daemon_identity, operation_id, deadline_monotonic
-        raise AssertionError(f"hook observation without a live daemon: {artifact['generation']}")
-
-    driver = TransitionDaemonDriver(
-        runtime,
-        plan,
-        home_dir=plan.guard_home.parent,
-        observe_hook=observe,
-    )
-    started = time.monotonic()
-    result = RuntimeTransitionCoordinator(runtime, driver).activate(
-        plan,
-        authority_home=plan.guard_home,
-        grant=None,
-        deadline_monotonic=started + 8,
-    )
-    assert bindings.read_bytes() == b"previous hooks"
-    assert pointer.read_bytes() == b"previous pointer"
-    assert result.phase == "RecoveryRequired"
-    assert result.first_cause == "daemon_start_failed"
-    assert any(item.get("code") == "daemon_start_failed" for item in result.recovery_causes)
-    print(
-        "A4 production driver phase="
-        f"{result.phase} first_cause={result.first_cause} recovery={list(result.recovery_causes)}"
-    )

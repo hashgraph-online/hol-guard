@@ -83,7 +83,7 @@ _MESSAGES: Final[dict[str, str]] = {
     "invalid_policy_spec": "The spec section is malformed.",
     "policy_compilation_limit": "The rules expand into more enforcement rows than one policy may hold.",
     "sensitive_local_policy_requires_provenance": "This rule needs provenance before Guard will enforce it.",
-    "unsupported_local_policy_action": "Guard enforces only allow and block rules.",
+    "unsupported_local_policy_action": "Guard exports only allow, block and review rules.",
     "unsupported_policy_budgets": "Budgets are not enforced by Guard.",
     "unsupported_policy_effect": "Guard enforces only allow and block rules.",
     "unsupported_policy_lifetime": "Guard enforces only permanent and until lifetimes.",
@@ -98,6 +98,7 @@ _MESSAGES: Final[dict[str, str]] = {
     "policy_file_changed": "The file changed while it was being read.",
     "policy_file_too_large": "The file is larger than the 1 MiB policy limit.",
     "policy_file_not_utf8": "The file is not valid UTF-8 text.",
+    "policy_file_io_unavailable": "Guard's native runtime is unavailable, so the file could not be checked.",
     "policy_parent_insecure_mode": "The folder can be written by other users, so Guard will not trust files in it.",
     "policy_parent_not_owned": "The folder is owned by another user, so Guard will not trust files in it.",
     "policy_parent_not_directory": "The parent path is not a folder.",
@@ -105,13 +106,13 @@ _MESSAGES: Final[dict[str, str]] = {
 }
 
 _NOT_ENFORCEABLE_EXPECTED: Final[dict[str, object]] = {
-    "unsupported_local_policy_action": ["allow", "block"],
+    "unsupported_local_policy_action": ["allow", "block", "review"],
     "unsupported_policy_effect": ["allow", "block"],
     "unsupported_policy_lifetime": ["permanent", "until"],
 }
 
 _NOT_ENFORCEABLE_SUGGESTIONS: Final[dict[str, str]] = {
-    "unsupported_local_policy_action": "Set effect to allow or block.",
+    "unsupported_local_policy_action": "Set the action to allow, block or review.",
     "unsupported_policy_effect": "Set effect to allow or block.",
     "unsupported_policy_lifetime": "Use lifetime.mode permanent, or until with an expiresAt time.",
     "unsupported_policy_budgets": "Remove the budgets field; Guard does not enforce it.",
@@ -280,17 +281,6 @@ def schema_diagnostics_from_error(error: PolicyDocumentError, text: str | None) 
     return tuple(_schema_diagnostic(item, text) for item in error.diagnostics)
 
 
-def parse_with_diagnostics(
-    text: str,
-) -> tuple[GuardPolicyDocument | None, tuple[StructuredDiagnostic, ...]]:
-    """Parse ``text`` and report every schema problem, not only the first twenty."""
-
-    try:
-        return parse_policy_document_yaml(text, diagnostic_limit=None), ()
-    except PolicyDocumentError as error:
-        return None, schema_diagnostics_from_error(error, text)
-
-
 def validate_policy_file(path: Path, *, diagnostic_limit: int | None = None) -> PolicyValidationReport:
     """Read, parse and compile one policy file and report every problem found.
 
@@ -337,7 +327,6 @@ __all__ = [
     "file_trust_diagnostic",
     "format_json_path",
     "locate_policy_path",
-    "parse_with_diagnostics",
     "schema_diagnostics_from_error",
     "validate_policy_file",
 ]

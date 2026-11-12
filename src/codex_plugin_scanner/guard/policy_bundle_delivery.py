@@ -21,7 +21,7 @@ from .native_policy_bundle import (
 from .runtime.extension_control_authority import ExtensionControlAuthorityView
 from .runtime.extension_control_runtime import ExtensionControlRuntimeSnapshot
 
-_ACK_BUNDLE_KEYS = ("contractVersion", "bundleHash", "bundleVersion")
+_ACK_BUNDLE_KEYS = ("contractVersion", "workspaceId", "bundleHash", "bundleVersion", "payload")
 
 
 def effective_projection_digest(view: ExtensionControlAuthorityView) -> str:
@@ -137,4 +137,51 @@ def effective_policy_bundle_acknowledgement(
                 "synced_at": synced_at,
             },
         )
+    )
+
+
+def policy_bundle_failure_acknowledgement(
+    *,
+    device_id: str,
+    device_name: str,
+    policy_bundle: object,
+    error_code: str,
+    previous: object,
+    synced_at: str,
+) -> dict[str, object]:
+    """Build the failed acknowledgement after Guard rejects or drops a bundle.
+
+    The native builder retracts a ``previous`` acknowledgement that told Cloud
+    a bundle was delivered, and otherwise reports ``policy_bundle``; pass
+    ``None`` when no rejected bundle is in hand. Returns ``{}`` when Cloud has
+    no acknowledgement shape that can carry the failure, or when the native
+    runtime cannot build one. Reporting a failure never changes what Guard
+    enforces.
+    """
+
+    if not isinstance(policy_bundle, dict):
+        policy_bundle = {}
+    try:
+        return _acknowledgement(
+            policy_bundle_verdict(
+                "failed_ack",
+                {
+                    "device_id": device_id,
+                    "device_name": device_name,
+                    "bundle_chunks": _chunks(policy_bundle, _ACK_BUNDLE_KEYS),
+                    "synced_at": synced_at,
+                    "error_code": error_code,
+                    "previous": previous if isinstance(previous, dict) else None,
+                },
+            )
+        )
+    except PolicyBundleNativeError:
+        return {}
+
+
+def is_failed_policy_bundle_acknowledgement(acknowledgement: object) -> bool:
+    return (
+        isinstance(acknowledgement, Mapping)
+        and acknowledgement.get("status") == "failed"
+        and "contractVersion" not in acknowledgement
     )

@@ -9,6 +9,7 @@ use serde_json::{json, Value};
 const GIT_ADD: &str = "command.git.permission.add";
 const HARD_RESET: &str = "command.git.permission.hard-reset";
 const COMMIT: &str = "command.git.permission.commit";
+const SCP_TRANSFER: &str = "command.remote.scp.permission.transfer";
 
 /// One control: target kind, target id, state.
 type Control = (&'static str, &'static str, &'static str);
@@ -178,6 +179,26 @@ fn destructive_permission_carries_caution() {
     assert!(["critical", "destructive", "sensitive"]
         .contains(&permission.caution_reason.as_deref().unwrap()));
     assert!(permission.caution_detail.is_some());
+}
+
+#[test]
+fn an_overwriting_transfer_carries_caution() {
+    let catalog = catalog();
+    let permission = catalog
+        .permission(SCP_TRANSFER)
+        .expect("a packaged SCP permission");
+    // The catalog names the effect without the word `destructive`, and no rule
+    // of this permission is critical, so only the overwrite reads as one.
+    assert_eq!(permission.action_classes, vec!["SCP overwrite command"]);
+    let recommendation = recommendation(
+        hint(&catalog, &[SCP_TRANSFER]),
+        snapshot(&catalog, "protected", &[], &[]),
+    )
+    .expect("an overwriting transfer is still recommended");
+    assert!(recommendation.caution);
+    let permission = &recommendation.permissions[0];
+    assert!(permission.caution);
+    assert_eq!(permission.caution_reason.as_deref(), Some("destructive"));
 }
 
 #[test]
@@ -534,4 +555,19 @@ fn resident_transport_binds_replies_and_rejects_unknown_fields() {
         crate::resident_protocol::evaluate_resident_bytes(envelope(surprise).as_bytes(), None)
             .is_err()
     );
+}
+
+#[test]
+fn a_control_view_without_an_admitted_snapshot_answers_no_view() {
+    let request = request(ApprovalExtensionRecommendationQueryV1::ControlView {});
+    for read in [None, Some(Err("native_policy_snapshot_missing".to_owned()))] {
+        let bytes = evaluate_with_snapshot(&request, || read).unwrap();
+        let result: ApprovalExtensionRecommendationResultV1 =
+            serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(result.status, "ok", "{}", result.code);
+        assert_eq!(
+            result.payload,
+            Some(ApprovalExtensionRecommendationPayloadV1::ControlView { view: None })
+        );
+    }
 }

@@ -277,3 +277,218 @@ fn owner_release_classifies_the_lock_holder_by_live_state() {
         OwnerHolder::ThisRuntime
     );
 }
+
+/// A private state base for a live-failure fixture, like the one the
+/// authenticated probe test builds. Unix mode bits keep the published token
+/// out of other users' reach; the Windows spawn path is covered separately.
+#[cfg(unix)]
+fn private_live_root(label: &str) -> std::path::PathBuf {
+    use std::fs;
+    use std::os::unix::fs::PermissionsExt;
+    let root = std::env::temp_dir().join(format!(
+        "hol-guard-live-{label}-{}-{}",
+        std::process::id(),
+        crate::unique_nanos::unique_nanos()
+    ));
+    fs::create_dir(&root).unwrap();
+    fs::set_permissions(&root, fs::Permissions::from_mode(0o700)).unwrap();
+    root
+}
+
+#[cfg(unix)]
+#[test]
+fn a_published_endpoint_nobody_serves_is_replaced_rather_than_reported() {
+    // Bind and release, so the address belongs to this host and nothing
+    // answers on it: the shape a resident leaves behind when it dies without
+    // retiring its state.
+    let endpoint = {
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        listener.local_addr().unwrap().to_string()
+    };
+    let root = private_live_root("dead-port");
+    let digest = runtime_digest().unwrap();
+    let scope = state_scope(&root, &digest).unwrap();
+    crate::resident_state::publish_state(
+        &scope,
+        1,
+        std::process::id(),
+        &digest,
+        "loopback",
+        endpoint,
+        &[11; crate::AUTH_TOKEN_BYTES],
+    )
+    .unwrap();
+    let client_lease = lease::acquire(&root).unwrap();
+    let result = client_request_with_deadline(
+        &root,
+        b"{}",
+        Instant::now() + Duration::from_secs(4),
+        &client_lease,
+    );
+    drop(client_lease);
+    std::fs::remove_dir_all(&root).unwrap();
+    // A refused connect says the resident is already gone, so the client
+    // starts its own instead of returning the dead endpoint's failure.
+    assert_eq!(result.unwrap_err(), "native_policy_verifier_key_missing");
+}
+
+#[cfg(unix)]
+#[test]
+fn a_resident_that_never_answers_the_handshake_does_not_spend_the_request_budget() {
+    use std::io::Read;
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    listener.set_nonblocking(true).unwrap();
+    let endpoint = listener.local_addr().unwrap().to_string();
+    let root = private_live_root("silent-handshake");
+    let digest = runtime_digest().unwrap();
+    let scope = state_scope(&root, &digest).unwrap();
+    crate::resident_state::publish_state(
+        &scope,
+        1,
+        std::process::id(),
+        &digest,
+        "loopback",
+        endpoint,
+        &[13; crate::AUTH_TOKEN_BYTES],
+    )
+    .unwrap();
+    let (stop, wait_stop) = std::sync::mpsc::channel::<()>();
+    let worker = thread::spawn(move || {
+        // Take the client's nonce and answer nothing. Every accepted
+        // connection is held open until the request has returned, so only the
+        // client's own handshake window can end the exchange: a socket closed
+        // under it would end the read as an ordinary disconnect instead.
+        let deadline = Instant::now() + Duration::from_secs(10);
+        let mut accepted = Vec::new();
+        while accepted.len() < 2 && Instant::now() < deadline {
+            match listener.accept() {
+                Ok((mut stream, _)) => {
+                    // Accepted sockets inherit nonblocking mode on some Unix hosts.
+                    stream.set_nonblocking(false).unwrap();
+                    stream
+                        .set_read_timeout(Some(Duration::from_secs(4)))
+                        .unwrap();
+                    let mut nonce = [0; crate::AUTH_NONCE_BYTES];
+                    stream
+                        .read_exact(&mut nonce)
+                        .expect("a probe reached the peer without a nonce");
+                    accepted.push(stream);
+                }
+                Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
+                    thread::sleep(Duration::from_millis(5))
+                }
+                Err(error) => panic!("test listener failed: {error}"),
+            }
+        }
+        let probes = accepted.len();
+        let _ = wait_stop.recv_timeout(Duration::from_secs(10));
+        drop(accepted);
+        probes
+    });
+    let client_lease = lease::acquire(&root).unwrap();
+    let started = Instant::now();
+    let result = client_request_with_deadline(
+        &root,
+        b"{}",
+        started + Duration::from_secs(4),
+        &client_lease,
+    );
+    let waited = started.elapsed();
+    let _ = stop.send(());
+    let probes = worker.join().unwrap();
+    drop(client_lease);
+    std::fs::remove_dir_all(&root).unwrap();
+    // Both the initial probe and the lock-protected probe reached the silent
+    // peer and gave up on their own window.
+    assert_eq!(probes, 2);
+    // Reaching the spawn admission gate proves the handshake ended on the
+    // client's auth window rather than the request budget, which would have
+    // reported `native_client_deadline_exceeded` instead.
+    assert_eq!(result.unwrap_err(), "native_policy_verifier_key_missing");
+    assert!(waited < Duration::from_secs(4), "waited {waited:?}");
+}
+
+/// A child for [`a_killed_resident_leaves_no_identity_to_match`] to kill.
+///
+/// It is started by name through the test binary, so the case below needs no
+/// program on `PATH`. The wait is only an upper bound on how long it survives
+/// a parent that never gets to kill it.
+#[cfg(unix)]
+#[test]
+#[ignore = "started as a child by a_killed_resident_leaves_no_identity_to_match"]
+fn waits_for_the_parent_that_started_it() {
+    std::thread::sleep(Duration::from_secs(30));
+}
+
+#[cfg(unix)]
+#[test]
+fn a_killed_resident_leaves_no_identity_to_match() {
+    // The child is this test binary running the ignored case above. A program
+    // from `PATH` would make a runner without it fail at `spawn`, before any
+    // of the identity assertions below ran.
+    let mut child =
+        std::process::Command::new(std::env::current_exe().expect("the test binary names itself"))
+            .args(["waits_for_the_parent_that_started_it", "--ignored"])
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .spawn()
+            .expect("the test binary could not be started");
+    let process_id = child.id();
+    let marker = crate::resident_state::process_start_marker(process_id)
+        .expect("a live process has a start marker");
+    assert_eq!(
+        crate::resident_state::validate_process_start_marker(process_id, &marker),
+        Ok(())
+    );
+    child.kill().unwrap();
+    child.wait().unwrap();
+    // A reaped pid is free at once. Either it names nothing, or it names a
+    // process that did not start when the resident did; both refuse, and
+    // neither may be mistaken for the resident that was killed.
+    let error = crate::resident_state::validate_process_start_marker(process_id, &marker)
+        .expect_err("a killed resident still matched its recorded identity");
+    assert!(
+        error == "native_resident_process_identity_mismatch"
+            || error == "native_resident_process_identity_unavailable",
+        "{error}"
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn a_scope_that_cannot_be_written_publishes_no_state() {
+    use std::fs;
+    use std::net::TcpListener;
+    use std::os::unix::fs::PermissionsExt;
+
+    let (home, base) = owner_release_fixture("read-only-scope");
+    let digest = runtime_digest().unwrap();
+    let scope = state_scope(&base, &digest).unwrap();
+    let listener = TcpListener::bind(("127.0.0.1", 0)).unwrap();
+    let endpoint = listener.local_addr().unwrap().to_string();
+    fs::set_permissions(&scope, fs::Permissions::from_mode(0o500)).unwrap();
+    // A superuser ignores the directory mode, so the mode proves nothing there.
+    let probe = scope.join("writable-probe");
+    let writable = fs::File::create(&probe).is_ok();
+    if writable {
+        fs::remove_file(&probe).unwrap();
+    }
+    let result = crate::resident_state::publish_state(
+        &scope,
+        1,
+        std::process::id(),
+        &digest,
+        "loopback",
+        endpoint,
+        &[13; crate::AUTH_TOKEN_BYTES],
+    );
+    fs::set_permissions(&scope, fs::Permissions::from_mode(0o700)).unwrap();
+    fs::remove_dir_all(&home).unwrap();
+    if writable {
+        return;
+    }
+    assert_eq!(
+        result.map(|_| ()),
+        Err("native_resident_state_write_failed".to_owned())
+    );
+}

@@ -80,10 +80,8 @@ def prefetch(
 ) -> None:
     """Answer every redaction an export will ask for, in batched requests.
 
-    A snapshot redacts far more paths and command strings than URLs: every
-    string in an artifact's metadata is a path until it proves to be a URL.
-    Left to the per-value calls below, each distinct one would be its own
-    round trip, so they are collected here with the URLs and asked together.
+    Left to the per-value calls below, each distinct string would be its own
+    round trip, so they are collected here and asked together.
 
     ``paths`` and ``commands`` need the roots their answers depend on, and are
     ignored without a ``home_dir``. Outside a pass there is nowhere to keep
@@ -165,13 +163,23 @@ def _rooted(kind: str, value: str, home_dir: Path, workspace_dir: Path | None) -
     rather than being left to whichever process answers it.
     """
 
+    return {"kind": kind, "value": value, **roots(home_dir, workspace_dir)}
+
+
+def roots(home_dir: Path, workspace_dir: Path | None) -> dict[str, str | None]:
+    """The directories a rooted redaction resolves a path against."""
+
     return {
-        "kind": kind,
-        "value": value,
         "home_dir": str(home_dir),
         "workspace_dir": None if workspace_dir is None else str(workspace_dir),
         "cwd": _cwd(),
     }
+
+
+def pass_answers() -> dict[_TaskKey, Any] | None:
+    """The current pass's answers, for a caller that batches its own redaction."""
+
+    return _PASS_ANSWERS.get()
 
 
 def _cwd() -> str:

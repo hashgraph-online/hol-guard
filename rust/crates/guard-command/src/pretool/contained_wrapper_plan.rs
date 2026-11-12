@@ -14,6 +14,13 @@ use std::path::PathBuf;
 /// the Python peel's `ValueError` did.
 pub const CONTAINED_WRAPPER_PLAN_UNSUPPORTED: &str = "native_contained_wrapper_plan_unsupported";
 
+/// The reason a `git worktree add <checkout> && cd <checkout> && <checks>`
+/// chain carries when Guard creates the checkout outside the sandbox and then
+/// runs the checks in it contained. A receipt naming it stays with the sink
+/// that plans the same split.
+pub const CONTAINED_WORKTREE_ADD_REASON: &str =
+    super::generic::contained_publish::worktree::REASON_TEXT;
+
 /// How the sink handles the core's output.
 #[derive(Debug, Clone, PartialEq)]
 pub struct ContainedOutput {
@@ -27,6 +34,19 @@ pub struct ContainedOutput {
     pub status_label: Option<String>,
     /// Each stage of a `pipe` chain, as its program followed by arguments.
     pub stages: Vec<Vec<String>>,
+}
+
+/// A `git worktree add <checkout> && cd <checkout> && <checks>` chain, split
+/// the way the classifier split it.
+#[derive(Debug, Clone, PartialEq)]
+pub struct ContainedWorktreeAdd {
+    /// The `git worktree add`, run outside the sandbox.
+    pub add: String,
+    /// `cd <checkout> && <checks>`, judged again once the checkout exists.
+    pub entered: String,
+    /// The directory the `cd` enters, resolved from the workspace. `None`
+    /// when the spelling names a home the request did not declare.
+    pub checkout: Option<PathBuf>,
 }
 
 /// The core the sink runs, and where.
@@ -50,6 +70,10 @@ pub struct ContainedWrapperPlan {
     /// The sibling repository holding the directory the caller asked about,
     /// independently of the command.
     pub project_root: Option<PathBuf>,
+    /// For `git worktree add <checkout> && cd <checkout> && <checks>`, the
+    /// add, the `cd <checkout> && <checks>` that follows it, and the checkout
+    /// both of them name.
+    pub worktree_add: Option<ContainedWorktreeAdd>,
 }
 
 /// Peel `command` the way the sink runs it.
@@ -65,11 +89,30 @@ pub fn contained_wrapper_plan(
     home_dir: Option<&str>,
     project_root_query: Option<&str>,
 ) -> ContainedWrapperPlan {
+    // The same roots the sink's own peel reads, so the directory question and
+    // the peel cannot answer differently about one run.
     let project_root = project_root_query.and_then(|directory| {
-        contained_wrapper::sibling_project_root(std::path::Path::new(directory), home_dir?)
+        contained_wrapper::project_root(
+            std::path::Path::new(directory),
+            home_dir?,
+            contained_wrapper::ProjectRoots::RepositoryOrPackage,
+        )
+    });
+    let worktree_add = super::generic::contained_publish::worktree::split(command).map(|parts| {
+        let checkout = super::generic::contained_publish::worktree::resolved_checkout(
+            &parts.destination,
+            workspace,
+            home_dir,
+        );
+        ContainedWorktreeAdd {
+            add: parts.add,
+            entered: parts.entered,
+            checkout,
+        }
     });
     ContainedWrapperPlan {
         project_root,
+        worktree_add,
         ..wrapper_plan(
             command,
             workspace,
@@ -104,7 +147,7 @@ fn wrapper_plan(
         },
         Err(_) => ContainedWrapperPlan {
             refusal: Some(CONTAINED_WRAPPER_PLAN_UNSUPPORTED),
-            anchored_sibling_root: anchored_root(command, workspace, cwd, home_dir),
+            anchored_sibling_root: refused_root(command, workspace, cwd, home_dir),
             ..ContainedWrapperPlan::default()
         },
     }
@@ -118,6 +161,35 @@ fn anchored_root(
     cwd: Option<&str>,
     home_dir: Option<&str>,
 ) -> Option<PathBuf> {
+    match sibling_route(command, workspace, cwd, home_dir)? {
+        (root, None) => Some(root),
+        (_, Some(_)) => None,
+    }
+}
+
+/// The sibling repository that roots the sandbox for text the peel refused.
+///
+/// A refusal means the sink runs the whole text, `cd` included, rather than a
+/// core it rebuilt, so the `cd <root> && …` list that `anchored_root` leaves
+/// to the peel names that root here too. Without it the sandbox would start
+/// at the session workspace while the classifier judged the list against the
+/// sibling root, and every step after the `cd` would be denied there.
+fn refused_root(
+    command: &str,
+    workspace: &str,
+    cwd: Option<&str>,
+    home_dir: Option<&str>,
+) -> Option<PathBuf> {
+    sibling_route(command, workspace, cwd, home_dir).map(|(root, _)| root)
+}
+
+/// `sibling_run` read for `command`, as the classifier reads it.
+fn sibling_route(
+    command: &str,
+    workspace: &str,
+    cwd: Option<&str>,
+    home_dir: Option<&str>,
+) -> Option<(PathBuf, Option<crate::CanonicalCommandV1>)> {
     let model = parse_command(&CommandModelRequestV1 {
         command: command.to_owned(),
         dialect: "posix".into(),
@@ -132,10 +204,7 @@ fn anchored_root(
         shell_home_matches: true,
         ..PathContext::default()
     };
-    match workspace_contained::sibling::sibling_run(&model, context)? {
-        (root, None) => Some(root),
-        (_, Some(_)) => None,
-    }
+    workspace_contained::sibling::sibling_run(&model, context)
 }
 
 #[cfg(test)]

@@ -13,7 +13,7 @@ import pytest
 from codex_plugin_scanner.guard.config import GuardConfig
 from codex_plugin_scanner.guard.consumer import artifact_hash, evaluate_detection
 from codex_plugin_scanner.guard.models import GuardArtifact, HarnessDetection
-from codex_plugin_scanner.guard.runtime import approval_context as approval_context_module
+from codex_plugin_scanner.guard.native_context import context_runtime_executable_identity
 from codex_plugin_scanner.guard.runtime.approval_context import (
     build_runtime_launch_identity,
     resolved_runtime_launch_argv,
@@ -408,7 +408,7 @@ def test_launch_identity_never_exposes_raw_shebang_arguments(tmp_path: Path) -> 
         executable=True,
     )
 
-    executable_identity = approval_context_module.build_runtime_executable_identity(str(direct_script))
+    executable_identity = context_runtime_executable_identity(str(direct_script))
     launch_identity = build_runtime_launch_identity(
         str(direct_script),
         cwd=workspace,

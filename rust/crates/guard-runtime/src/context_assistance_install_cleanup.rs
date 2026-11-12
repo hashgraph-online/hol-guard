@@ -1,0 +1,268 @@
+//! Only this job's marked private roots are eligible for bounded cleanup.
+use super::*;
+use std::time::{Duration, Instant};
+
+fn owned(home: &Path, path: &Path, job: &store::Job) -> Result<bool, String> {
+    validate_private_directory(path).map_err(|_| error("install_cleanup_unsafe"))?;
+    let marker: Option<Value> = store::private_read(
+        home,
+        &path.join("installation-owner.json"),
+        4096,
+        "cigar_install_job",
+    )?;
+    let Some(marker) = marker else {
+        if fs::read_dir(path)
+            .map_err(|_| error("install_cleanup_unsafe"))?
+            .next()
+            .is_none()
+        {
+            return Ok(true);
+        }
+        return Err(error("install_cleanup_ownership_missing"));
+    };
+    if marker["schema"] != "guard-cigar-install-owner.v1" {
+        return Err(error("install_cleanup_unsafe"));
+    }
+    Ok(marker["job_id"] == job.request.job_id
+        && marker["request_sha256"] == job.request_sha256
+        && marker["slot"] == job.slot)
+}
+/// Checking and deleting a full Python tree takes seconds on Windows, where
+/// each file's owner and link count are read through a handle.
+pub(super) const CLEANUP_TIME: Duration = Duration::from_secs(10);
+pub(super) fn collect(
+    path: &Path,
+    items: &mut Vec<(PathBuf, bool)>,
+    bytes: &mut u64,
+    depth: usize,
+    deadline: Instant,
+) -> Result<(), String> {
+    if depth > 28 || items.len() > 16384 || Instant::now() >= deadline {
+        return Err(error("install_cleanup_limit"));
+    }
+    let metadata = fs::symlink_metadata(path).map_err(|_| error("install_cleanup_unsafe"))?;
+    if metadata.file_type().is_symlink() {
+        return Err(error("install_cleanup_unsafe"));
+    }
+    if metadata.is_dir() {
+        validate_private_directory(path).map_err(|_| error("install_cleanup_unsafe"))?;
+        for entry in fs::read_dir(path).map_err(|_| error("install_cleanup_unsafe"))? {
+            collect(
+                &entry.map_err(|_| error("install_cleanup_unsafe"))?.path(),
+                items,
+                bytes,
+                depth + 1,
+                deadline,
+            )?;
+        }
+        items.push((path.into(), true));
+    } else if metadata.is_file() {
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::MetadataExt;
+            if metadata.nlink() != 1 || metadata.uid() != nix::unistd::geteuid().as_raw() {
+                return Err(error("install_cleanup_unsafe"));
+            }
+        }
+        #[cfg(windows)]
+        if !guard_cigar_artifacts::host::private_file(path, &metadata) {
+            return Err(error("install_cleanup_unsafe"));
+        }
+        *bytes = bytes
+            .checked_add(metadata.len())
+            .ok_or_else(|| error("install_cleanup_limit"))?;
+        if *bytes > 512 * 1024 * 1024 {
+            return Err(error("install_cleanup_limit"));
+        }
+        items.push((path.into(), false));
+    } else {
+        return Err(error("install_cleanup_unsafe"));
+    }
+    Ok(())
+}
+/// Unix unlinks a file whatever its mode. Windows refuses to delete a file
+/// with the read-only attribute, which published Python files carry, so the
+/// attribute is dropped first.
+fn remove_file(path: &Path) -> std::io::Result<()> {
+    #[cfg(windows)]
+    {
+        let mut permissions = fs::symlink_metadata(path)?.permissions();
+        if permissions.readonly() {
+            #[allow(clippy::permissions_set_readonly_false)]
+            permissions.set_readonly(false);
+            fs::set_permissions(path, permissions)?;
+        }
+    }
+    fs::remove_file(path)
+}
+/// Windows briefly refuses to delete a file that an exiting process or a
+/// scanner still holds, and a directory whose deleted files are still pending.
+/// Retry those refusals until the cleanup deadline instead of failing at once.
+fn removed(
+    deadline: Instant,
+    mut remove: impl FnMut() -> std::io::Result<()>,
+) -> Result<(), String> {
+    let mut pause = Duration::from_millis(20);
+    loop {
+        let refused = match remove() {
+            Ok(()) => return Ok(()),
+            Err(e) => e.kind() != std::io::ErrorKind::NotFound,
+        };
+        let now = Instant::now();
+        if !refused || now >= deadline {
+            return Err(error("install_cleanup_failed"));
+        }
+        // The last pause ends at the deadline, so one more attempt runs there.
+        std::thread::sleep(pause.min(deadline - now));
+        pause = (pause * 2).min(Duration::from_millis(500));
+    }
+}
+pub(super) fn remove_collected(
+    root: &Path,
+    items: Vec<(PathBuf, bool)>,
+    deadline: Instant,
+) -> Result<(), String> {
+    let marker = root.join("installation-owner.json");
+    for (path, directory) in items {
+        if path == root || path == marker {
+            continue;
+        }
+        if Instant::now() >= deadline {
+            return Err(error("install_cleanup_limit"));
+        }
+        removed(deadline, || {
+            if directory {
+                fs::remove_dir(&path)
+            } else {
+                remove_file(&path)
+            }
+        })?;
+    }
+    if Instant::now() >= deadline {
+        return Err(error("install_cleanup_limit"));
+    }
+    if marker.exists() {
+        removed(deadline, || remove_file(&marker))?;
+    }
+    removed(deadline, || fs::remove_dir(root))
+}
+
+fn roots(home: &Path, job: &store::Job, paths: &[(&str, &str)]) -> Result<(), String> {
+    // A config reference protects a slot even if its publication record needs
+    // repair. Never infer that external data or a selected slot is disposable.
+    let settings = crate::guard_config_load::context_assistance_config(home)
+        .map_err(|_| error("configuration_unavailable"))?;
+    if settings.requested.runtime_id == job.runtime_id
+        && paths
+            .iter()
+            .any(|(parent, _)| matches!(*parent, "bundles" | "work"))
+    {
+        return Err(error("install_slot_selected"));
+    }
+    let mut references = Vec::new();
+    for option in super::super::list(home)? {
+        let id = option["runtime_id"]
+            .as_str()
+            .ok_or_else(|| error("installation_invalid"))?;
+        let record = load(home, id)?;
+        references.extend([
+            record.selection.python,
+            record.selection.site_packages,
+            record.selection.work_dir,
+        ]);
+    }
+    let deadline = Instant::now() + CLEANUP_TIME;
+    for &(parent, slot) in paths {
+        let parent = home.join("context-assistance").join(parent);
+        match fs::symlink_metadata(&parent) {
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => continue,
+            Err(_) => return Err(error("install_cleanup_unsafe")),
+            Ok(_) => {}
+        }
+        validate_private_directory(&parent).map_err(|_| error("install_cleanup_unsafe"))?;
+        let path = parent.join(slot);
+        if references
+            .iter()
+            .any(|reference| reference.starts_with(&path))
+        {
+            return Err(error("install_slot_in_use"));
+        }
+        match fs::symlink_metadata(&path) {
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => continue,
+            Err(_) => return Err(error("install_cleanup_unsafe")),
+            Ok(_) => {}
+        }
+        if !owned(home, &path, job)? {
+            continue;
+        }
+        let mut items = Vec::new();
+        collect(&path, &mut items, &mut 0, 0, deadline)?;
+        remove_collected(&path, items, deadline)?;
+    }
+    Ok(())
+}
+
+pub(super) fn downloads(home: &Path, job: &store::Job) -> Result<(), String> {
+    let id = record_name(&job.request.job_id);
+    roots(home, job, &[("downloads", id.trim_end_matches(".json"))])
+}
+pub(super) fn verification(home: &Path, job: &store::Job) -> Result<(), String> {
+    let id = record_name(&job.request.job_id);
+    roots(home, job, &[("verification", id.trim_end_matches(".json"))])
+}
+pub(super) fn cleanup(home: &Path, job: &store::Job) -> Result<(), String> {
+    let id = record_name(&job.request.job_id);
+    roots(
+        home,
+        job,
+        &[
+            ("downloads", id.trim_end_matches(".json")),
+            ("staging", id.trim_end_matches(".json")),
+            ("bundles", job.slot.as_str()),
+            ("work", job.slot.as_str()),
+        ],
+    )
+}
+
+#[cfg(test)]
+mod removal_tests {
+    use super::*;
+
+    #[test]
+    fn a_briefly_held_file_is_removed_once_it_is_released() {
+        let mut refusals = 2;
+        let result = removed(Instant::now() + Duration::from_secs(5), || {
+            if refusals > 0 {
+                refusals -= 1;
+                return Err(std::io::Error::from(std::io::ErrorKind::PermissionDenied));
+            }
+            Ok(())
+        });
+        assert_eq!(result, Ok(()));
+        assert_eq!(refusals, 0);
+    }
+
+    #[test]
+    fn a_file_released_just_before_the_deadline_is_removed() {
+        let started = Instant::now();
+        let result = removed(started + Duration::from_millis(500), || {
+            if started.elapsed() < Duration::from_millis(350) {
+                return Err(std::io::Error::from(std::io::ErrorKind::PermissionDenied));
+            }
+            Ok(())
+        });
+        assert_eq!(result, Ok(()));
+    }
+
+    #[test]
+    fn a_file_that_stays_held_fails_at_the_deadline() {
+        let started = Instant::now();
+        let result = removed(started + Duration::from_millis(200), || {
+            Err(std::io::Error::from(std::io::ErrorKind::PermissionDenied))
+        });
+        assert_eq!(result, Err(error("install_cleanup_failed")));
+        let elapsed = started.elapsed();
+        assert!(elapsed >= Duration::from_millis(200));
+        assert!(elapsed < Duration::from_secs(2));
+    }
+}

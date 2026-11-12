@@ -9,7 +9,7 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.guard import runtime_transition_native_capture as capture
-from codex_plugin_scanner.guard.daemon.live_identity import DaemonArtifactBinding
+from codex_plugin_scanner.guard.native_daemon_peer import DaemonArtifactBinding
 
 
 @pytest.mark.skipif(capture.sys.platform != "darwin", reason="Darwin native waitid ABI")

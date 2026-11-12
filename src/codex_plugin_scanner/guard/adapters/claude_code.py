@@ -22,6 +22,7 @@ from .base import (
     _owned_adapter_mutation,
     _run_command_probe,
     _shell_command,
+    _which_from_user_directories,
 )
 
 CLAUDE_GUARD_DAEMON_HOOK_MARKER = _hook_config.CLAUDE_GUARD_DAEMON_HOOK_MARKER
@@ -30,15 +31,12 @@ CLAUDE_GUARD_SESSION_START_MATCHERS = _hook_config.CLAUDE_GUARD_SESSION_START_MA
 CLAUDE_GUARD_SESSION_START_TIMEOUT_SECONDS = _hook_config.CLAUDE_GUARD_SESSION_START_TIMEOUT_SECONDS
 CLAUDE_GUARD_TOOL_MATCHER = _hook_config.CLAUDE_GUARD_TOOL_MATCHER
 _claude_managed_settings_path = _hook_config.claude_managed_settings_path
-_command_handler_argv = _hook_config.command_handler_argv
 _guard_command_handler = _hook_config.guard_command_handler
 _handler_identity = _hook_config.handler_identity
 _is_guard_hook_command = _hook_config.is_guard_hook_command
 _is_guard_hook_url = _hook_config.is_guard_hook_url
 _manifest_notes = _hook_config.manifest_notes
-_merge_hook_group = _hook_config.merge_hook_group
 _mark_missing_guard_hooks = _hook_config.mark_missing_guard_hooks
-_prune_guard_hook_entries = _hook_config.prune_guard_hook_entries
 _remove_unsupported_guard_hook_groups = _hook_config.remove_unsupported_guard_hook_groups
 _sync_runtime_hook_groups = _hook_config.sync_runtime_hook_groups
 
@@ -48,7 +46,7 @@ def _aibom_detection_module():
 
 
 def _daemon_module():
-    return importlib.import_module("..daemon", __package__)
+    return importlib.import_module("..native_daemon_manage", __package__)
 
 
 def guard_daemon_url_for_home(guard_home: Path) -> str:
@@ -102,11 +100,14 @@ class ClaudeCodeHarnessAdapter(HarnessAdapter):
         if not context.home_dir.is_absolute() or (workspace is not None and not workspace.is_absolute()):
             request["cwd"] = os.getcwd()
         artifacts, found_paths, _warnings = native_adapter_detection_with_warnings("claude_code_detect", request)
-        resolved_executable = self.resolved_executable(context)
+        command_available = (
+            self.resolved_executable(context) is not None
+            or _which_from_user_directories(self.executable, context.home_dir) is not None
+        )
         detection = HarnessDetection(
             harness=self.harness,
-            installed=bool(found_paths) or resolved_executable is not None,
-            command_available=resolved_executable is not None,
+            installed=bool(found_paths) or command_available,
+            command_available=command_available,
             config_paths=found_paths,
             artifacts=artifacts,
             warnings=(),
@@ -149,6 +150,21 @@ class ClaudeCodeHarnessAdapter(HarnessAdapter):
         hooks = payload.get("hooks")
         if not isinstance(hooks, dict):
             return
+        # The native SessionStart lane hands off to this refresh whenever its
+        # recorded runtime build differs from the installed one, which is true
+        # after every package upgrade. Rewriting the entry here moves the next
+        # session back onto the native lane instead of paying for Python forever.
+        session_start_handler = _guard_command_handler(
+            self._session_start_command_parts(context),
+            timeout=CLAUDE_GUARD_SESSION_START_TIMEOUT_SECONDS,
+        )
+        session_start_job = (
+            _hook_config.entry_list(hooks.get("SessionStart")),
+            CLAUDE_GUARD_SESSION_START_MATCHERS,
+            session_start_handler,
+            True,
+        )
+        hooks["SessionStart"] = _hook_config.merge_hook_groups([session_start_job])[0]
         _sync_runtime_hook_groups(hooks, self._daemon_hook_command_parts(context))
         _remove_unsupported_guard_hook_groups(hooks)
         settings_path.parent.mkdir(parents=True, exist_ok=True)
@@ -192,17 +208,13 @@ class ClaudeCodeHarnessAdapter(HarnessAdapter):
         else:
             hooks = {}
         payload["hooks"] = hooks
-        session_start_payload = hooks.get("SessionStart")
-        session_start_entries = _prune_guard_hook_entries(
-            session_start_payload if isinstance(session_start_payload, list) else []
-        )
         session_start_handler = _guard_command_handler(
             session_start_argv,
             timeout=CLAUDE_GUARD_SESSION_START_TIMEOUT_SECONDS,
         )
-        for matcher in CLAUDE_GUARD_SESSION_START_MATCHERS:
-            session_start_entries = _merge_hook_group(session_start_entries, matcher, session_start_handler)
-        hooks["SessionStart"] = session_start_entries
+        session_start_entries = _hook_config.entry_list(hooks.get("SessionStart"))
+        session_start_job = (session_start_entries, CLAUDE_GUARD_SESSION_START_MATCHERS, session_start_handler, True)
+        hooks["SessionStart"] = _hook_config.merge_hook_groups([session_start_job])[0]
         _sync_runtime_hook_groups(hooks, hook_argv)
         _remove_unsupported_guard_hook_groups(hooks)
         mode = settings_path.stat().st_mode & 0o777 if before is not None else 0o644
@@ -250,17 +262,8 @@ class ClaudeCodeHarnessAdapter(HarnessAdapter):
         payload = _json_payload(settings_path)
         hooks = payload.get("hooks")
         if isinstance(hooks, dict):
-            for key in (
-                "SessionStart",
-                "PreToolUse",
-                "PermissionRequest",
-                "PostToolUse",
-                "UserPromptSubmit",
-                "Notification",
-                "Stop",
-            ):
-                entries = hooks.get(key)
-                hooks[key] = _prune_guard_hook_entries(entries if isinstance(entries, list) else [])
+            events = "SessionStart PreToolUse PermissionRequest PostToolUse UserPromptSubmit Notification Stop"
+            _hook_config.prune_guard_hook_events(hooks, tuple(events.split()))
             _remove_unsupported_guard_hook_groups(hooks)
             settings_path.parent.mkdir(parents=True, exist_ok=True)
             settings_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")

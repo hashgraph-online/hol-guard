@@ -9,11 +9,10 @@ import urllib.error
 import urllib.request
 from urllib.parse import urlparse
 
-from codex_plugin_scanner.guard.adapters._modules.claude.claude_daemon_hook_transport import (
-    authenticated_claude_hook_response,
-)
-from codex_plugin_scanner.guard.adapters._modules.codex.codex_daemon_hook_auth import _DaemonResponseError
-from codex_plugin_scanner.guard.daemon.server import GuardDaemonServer
+from ci.guard_daemon_harness import GuardDaemonServer
+from ci.native_daemon_harness import NativeGuardDaemon
+from scripts.daemon_hook_auth import _DaemonResponseError
+from scripts.daemon_hook_client import authenticated_claude_hook_response
 
 
 class AuthenticatedHookResponse(io.BytesIO):
@@ -23,17 +22,21 @@ class AuthenticatedHookResponse(io.BytesIO):
 
 
 def open_authenticated_claude_request(
-    daemon: GuardDaemonServer,
+    daemon: NativeGuardDaemon | GuardDaemonServer,
     request: urllib.request.Request,
     *,
     timeout: float,
 ) -> AuthenticatedHookResponse:
-    """Send an existing Claude request through the production challenge flow."""
+    """Send an existing Claude request the way the hook bridge sends it.
+
+    The native daemon answers the identity challenge, so every request goes
+    through the production challenge flow.
+    """
 
     body = request.data.decode("utf-8") if isinstance(request.data, bytes) else "{}"
     try:
         response = authenticated_claude_hook_response(
-            state_path=daemon._server.store.guard_home / "daemon-state.json",
+            state_path=daemon.store.guard_home / "daemon-state.json",
             query=urlparse(request.full_url).query,
             data=body,
             timeout_seconds=timeout,

@@ -3,9 +3,9 @@
 The Rust command model owns every GitHub CLI classification
 (``rust/crates/guard-command/src/github_command_capabilities.rs``) and the
 capability contract behind it
-(``rust/crates/guard-command/src/github_capability_contract.rs``). Production
-code calls the resident through ``codex_plugin_scanner.guard.native_github_cli``
-and never needs a Python copy of either.
+(``rust/crates/guard-command/src/github_capability_contract.rs``). These suites
+ask the resident through ``tests.native_github_cli`` and never need a Python
+copy of either.
 
 These helpers keep a small independent oracle of the capability contract (its
 order, permission and rule owners, and action floors) so the capability suites
@@ -25,7 +25,7 @@ from codex_plugin_scanner.guard.action_lattice import guard_action_severity
 from codex_plugin_scanner.guard.models import GuardAction
 
 if TYPE_CHECKING:
-    from codex_plugin_scanner.guard.native_github_cli import NativeGitHubCliClassification
+    from tests.native_github_cli import NativeGitHubCliClassification
 
 GitHubCommandCapability = Literal[
     "read_local",
@@ -154,7 +154,7 @@ def _classification(args: tuple[str, ...]) -> NativeGitHubCliClassification | No
     # `native_github_cli.github_cli_classify_native`, and the offline stub
     # replaces the whole module in `sys.modules`; an import-time binding would
     # see neither.
-    from codex_plugin_scanner.guard.native_github_cli import github_cli_classify_native
+    from tests.native_github_cli import github_cli_classify_native
 
     return github_cli_classify_native(args)
 

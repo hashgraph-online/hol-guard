@@ -1,0 +1,38 @@
+{
+  "schemaVersion": "guard.mcp-server-contribution.v1",
+  "id": "mcp.switchbord",
+  "version": "1.0.0",
+  "name": "SwitchBord MCP",
+  "description": "Reviews SwitchBord's hosted MCP lookups for paid agent APIs (x402, MPP). SwitchBord only reads unpaid 402 price replies and never holds or moves funds. Off until you turn it on.",
+  "trustClass": "external",
+  "activation": "opt-in",
+  "publisher": {
+    "id": "xyz.switchbord",
+    "displayName": "SwitchBord",
+    "url": "https://switchbord.xyz"
+  },
+  "icon": { "kind": "react-icon", "name": "HiMiniGlobeAlt", "background": "#0F172A" },
+  "homepage": "https://switchbord.xyz",
+  "license": "MIT",
+  "launch": {
+    "kind": "remote-http",
+    "url": "https://api.switchbord.xyz/mcp",
+    "serverNames": ["switchbord"]
+  },
+  "riskClasses": ["external-paid-api-discovery"],
+  "tools": [
+    { "name": "find_paid_endpoint", "state": "review" },
+    { "name": "report_result", "state": "review" },
+    { "name": "list_markets", "state": "inherit" },
+    { "name": "other", "state": "review" }
+  ],
+  "referenceUrls": [
+    "https://switchbord.xyz",
+    "https://github.com/6ixtyy/switchbord",
+    "https://registry.modelcontextprotocol.io/?search=switchbord"
+  ],
+  "saferAlternatives": [
+    "Keep find_paid_endpoint on Review so the user sees each lookup before an agent goes shopping for paid APIs.",
+    "SwitchBord only reads unpaid 402 price replies; any payment is made by the agent directly to the seller, never through SwitchBord."
+  ]
+}

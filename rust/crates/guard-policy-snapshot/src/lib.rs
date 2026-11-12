@@ -374,11 +374,11 @@ fn validate_risk_action_map(map: &BTreeMap<String, String>, maximum: usize) -> b
 }
 
 mod observed_mcp;
+use observed_mcp::validate_mcp_tool_actions;
 pub use observed_mcp::{
     mcp_provider_action_choice, mcp_provider_namespace_has_deny, mcp_tool_namespace,
-    observed_mcp_tool_action,
+    observed_mcp_tool_action, validate_mcp_provider_actions,
 };
-use observed_mcp::{validate_mcp_provider_actions, validate_mcp_tool_actions};
 
 /// Shape and bound checks for one effective policy, shared with the publisher
 /// composition so both reject exactly the same inputs.

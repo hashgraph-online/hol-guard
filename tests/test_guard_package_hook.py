@@ -22,6 +22,7 @@ from codex_plugin_scanner.guard.store import GuardStore
 from tests.conftest import guard_commands_module
 from tests.guard_cli_facade_isolation import isolate_terminal_block_patches, restore_cli_facade_approval_hooks
 from tests.package_review_settings import prove_npm_install, review_package_signals
+from tests.support.network import lift_test_loopback_rule
 
 pytestmark = [pytest.mark.usefixtures("approval_questionnaire_mode"), pytest.mark.usefixtures("bundle_first_cloud")]
 
@@ -376,6 +377,8 @@ def test_guard_hook_cloud_timeout_queues_package_review_instead_of_terminal_bloc
 
     monkeypatch.setattr(guard_commands_module, "load_guard_surface_daemon_client", fail_daemon)
     monkeypatch.setattr(egress_module, "managed_urlopen", timeout)
+    # The fake stands in for the network, so the suite's loopback-only rule is lifted.
+    lift_test_loopback_rule(monkeypatch, egress_module.TEST_RULE_HTTP)
 
     rc = main(
         [

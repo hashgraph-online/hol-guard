@@ -3,7 +3,7 @@ name = "guard-command-build"
 version = "0.1.0"
 edition = "2021"
 license = "Apache-2.0"
-rust-version = "1.88"
+rust-version = "1.89"
 publish = false
 autobins = false
 autotests = false
@@ -22,7 +22,7 @@ bench = false
 
 [dependencies]
 guard-hook-payload = { path = "../guard-hook-payload" }
-rusqlite = { version = "0.40.2", features = ["bundled"] }
+rusqlite = { version = "0.41.1", features = ["bundled"] }
 tempfile = "3.10"
 base64 = "=0.22.1"
 mailparse = "=0.17.0"
@@ -36,6 +36,7 @@ fs2 = "0.4.3"
 serde = { version = "1.0.219", features = ["derive"] }
 serde_json = { version = "1.0.143", features = ["raw_value"] }
 sha2 = "0.10.9"
+hmac = "0.12.1"
 hex = "0.4.3"
 idna = "1.0.3"
 percent-encoding = "2.3.1"

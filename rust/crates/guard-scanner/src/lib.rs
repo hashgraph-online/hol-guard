@@ -8,6 +8,7 @@ pub mod staged_scanner;
 
 mod code_cursor;
 mod code_expression;
+mod code_shapes;
 mod code_value;
 mod continuation;
 mod field_copy;
@@ -18,6 +19,7 @@ mod prose_answer_value;
 mod reference_value;
 mod self_named_value;
 mod url_credential;
+mod wiped_read;
 
 pub use match_spans::scan_match_spans;
 
@@ -361,6 +363,17 @@ fn counted_matches<'t>(
                 &text[matched.end()..line_end],
                 &text[..matched.start()],
                 last_value.is_some_and(|start| start >= matched.end()),
+            )
+        {
+            return false;
+        }
+        // The parameter list is read from the lines after this one, which
+        // `is_sample` does not see.
+        if answers
+            && code_shapes::opens_typed_parameter_list(
+                matched.as_str(),
+                &text[matched.end()..line_end],
+                &text[line_end..],
             )
         {
             return false;

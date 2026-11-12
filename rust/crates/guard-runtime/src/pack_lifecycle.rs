@@ -20,6 +20,13 @@ mod tests;
 mod version;
 use floor::{decode, encode, Floor};
 
+const COMPARE: &str = "https://api.github.com/repos/hashgraph-online/hol-guard/compare/";
+
+/// The API URL GitHub echoes for a compare of `base...head` by full SHA.
+pub(super) fn compare_url(base: &str, head: &str) -> String {
+    format!("{COMPARE}{base}...{head}")
+}
+
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
 pub(super) struct Identity {
@@ -113,12 +120,14 @@ pub(super) fn transition(
     }
     // Authenticated installed package releases have their own monotonic
     // authority. They do not publish a remote Root or move its ancestry cursor.
+    // GitHub's compare response names no head commit; it echoes the requested
+    // range in `url`, so that is what binds the evidence to this candidate.
     if candidate.profile == "remote"
         && candidate.source != floor.source
         && !(ancestry["status"] == "ahead"
             && ancestry["base_commit"]["sha"] == floor.source
             && ancestry["merge_base_commit"]["sha"] == floor.source
-            && ancestry["head_commit"]["sha"] == candidate.source
+            && ancestry["url"] == compare_url(&floor.source, &candidate.source)
             && ancestry["behind_by"].as_u64() == Some(0)
             && ancestry["ahead_by"].as_u64().is_some_and(|n| n > 0))
     {

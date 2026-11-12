@@ -114,7 +114,7 @@ def _stub(handler_cls, command: str, path: str, headers: dict, nonces: dict | No
 
 def _oracle(cases: list[dict]) -> list[dict]:
     from codex_plugin_scanner.guard import approval_scope_support
-    from codex_plugin_scanner.guard.daemon import server
+    from codex_plugin_scanner.guard.native_daemon_manage import server
 
     cls = server._GuardDaemonHandler
     out: list[dict] = []
@@ -217,7 +217,7 @@ def _capture_query(kind: str, raw: dict) -> dict:
 
 
 def _build(base_src: Path) -> dict:
-    from codex_plugin_scanner.guard.daemon import server as new_server
+    from codex_plugin_scanner.guard.native_daemon_manage import server as new_server
 
     base_server = base_src / "codex_plugin_scanner" / "guard" / "daemon" / "server.py"
     block = _resolve_block(base_server)

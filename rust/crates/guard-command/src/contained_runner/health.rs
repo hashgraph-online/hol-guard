@@ -20,15 +20,10 @@ use crate::effect_decision::{
     PositiveProof, ProofRequirement, EFFECT_CONTRACT_SCHEMA_VERSION, EFFECT_DECISION_SCHEMA_VERSION,
 };
 
-pub(crate) const CONTAINMENT_HEALTH_SCHEMA_VERSION: &str = "guard.containment-health.v1";
-const POLICY_CONTRACT_INPUT: &[u8] =
-    b"guard.containment-policy.v1\x00deny-network\x00deny-external-writes\x00deny-live-workspace-reads";
-const PROBE_MAX_AGE_MICROS: i64 = 5 * 60 * 1_000_000;
-const FUTURE_TOLERANCE_MICROS: i64 = 5 * 1_000_000;
-
-pub(crate) fn policy_contract_digest() -> String {
-    sha256_hex(POLICY_CONTRACT_INPUT)
-}
+pub(crate) use crate::containment_compatibility::{
+    policy_contract_digest, CONTAINMENT_HEALTH_SCHEMA_VERSION,
+};
+use crate::containment_compatibility::{CompatibilityEvidence, PROBE_MAX_AGE_MICROS};
 
 /// Privacy-safe compatibility and self-probe evidence.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -97,42 +92,19 @@ impl HealthEvidence {
         now_micros: i64,
         runtime_fingerprint: Option<&str>,
     ) -> Vec<&'static str> {
-        let mut errors: Vec<&'static str> = Vec::new();
-        if self.backend == Backend::Unsupported {
-            errors.push("unsupported_platform");
+        CompatibilityEvidence {
+            unsupported_backend: self.backend == Backend::Unsupported,
+            policy_contract_digest: &self.policy_contract_digest,
+            daemon_fingerprint: &self.daemon_fingerprint,
+            runtime_fingerprint: &self.runtime_fingerprint,
+            probe_micros: self.probe_micros,
+            probe_enforced: self.probe_enforced,
+            containment_schema_version: &self.containment_schema_version,
+            policy_version: &self.policy_version,
+            effect_contract_schema_version: &self.effect_contract_schema_version,
+            effect_decision_schema_version: &self.effect_decision_schema_version,
         }
-        if self.containment_schema_version != CONTAINMENT_SCHEMA_VERSION {
-            errors.push("containment_schema_mismatch");
-        }
-        if self.policy_version != CONTAINMENT_POLICY_VERSION {
-            errors.push("policy_version_mismatch");
-        }
-        if self.effect_contract_schema_version != EFFECT_CONTRACT_SCHEMA_VERSION {
-            errors.push("effect_contract_mismatch");
-        }
-        if self.effect_decision_schema_version != EFFECT_DECISION_SCHEMA_VERSION {
-            errors.push("decision_plane_mismatch");
-        }
-        if self.policy_contract_digest != policy_contract_digest() {
-            errors.push("policy_digest_mismatch");
-        }
-        if self.daemon_fingerprint != self.runtime_fingerprint {
-            errors.push("daemon_runtime_drift");
-        }
-        if runtime_fingerprint.is_some_and(|value| value != self.daemon_fingerprint) {
-            errors.push("daemon_runtime_drift");
-        }
-        if !self.probe_enforced {
-            errors.push("containment_probe_failed");
-        }
-        let age = now_micros - self.probe_micros;
-        if age < -FUTURE_TOLERANCE_MICROS {
-            errors.push("containment_probe_future");
-        } else if age > PROBE_MAX_AGE_MICROS {
-            errors.push("containment_probe_stale");
-        }
-        errors.sort_unstable();
-        errors
+        .errors(now_micros, runtime_fingerprint)
     }
 }
 

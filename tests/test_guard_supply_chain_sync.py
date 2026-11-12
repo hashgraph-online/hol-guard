@@ -19,8 +19,13 @@ from cryptography.hazmat.primitives.asymmetric.rsa import RSAPrivateKey, generat
 
 from codex_plugin_scanner.guard.runtime import runner as guard_runner
 from codex_plugin_scanner.guard.runtime.runner import sync_supply_chain_bundle
-from codex_plugin_scanner.guard.runtime.supply_chain_bundle import canonical_supply_chain_bundle_payload
 from codex_plugin_scanner.guard.store import GuardStore
+
+
+def _canonical_payload(bundle: dict[str, object]) -> bytes:
+    """The bytes the signing side signs: sorted keys, compact separators, UTF-8."""
+
+    return json.dumps(bundle, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
 
 
 def _seed_guard_cloud(store, *, workspace_id=None, sync_url=None, token="demo-token", now="2026-05-19T00:00:00Z"):
@@ -136,7 +141,7 @@ def _bundle_response(
         "tier": "premium",
         "workspaceId": WORKSPACE_ID,
     }
-    canonical_payload = canonical_supply_chain_bundle_payload(bundle)
+    canonical_payload = _canonical_payload(bundle)
     payload_hash = hashlib.sha256(canonical_payload).hexdigest()
     loaded_key = serialization.load_pem_private_key(private_key_pem, password=None)
     assert isinstance(loaded_key, RSAPrivateKey)
@@ -224,7 +229,7 @@ def _partition_bundle_response(
         "tier": "premium",
         "workspaceId": WORKSPACE_ID,
     }
-    canonical_payload = canonical_supply_chain_bundle_payload(bundle)
+    canonical_payload = _canonical_payload(bundle)
     payload_hash = hashlib.sha256(canonical_payload).hexdigest()
     loaded_key = serialization.load_pem_private_key(private_key_pem, password=None)
     assert isinstance(loaded_key, RSAPrivateKey)

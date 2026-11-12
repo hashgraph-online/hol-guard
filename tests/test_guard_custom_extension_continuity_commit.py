@@ -10,13 +10,13 @@ from codex_plugin_scanner.guard.runtime.custom_extension_continuity import (
     CUSTOM_EXTENSION_CONTINUITY_REMOVALS_STATE_KEY,
     CUSTOM_EXTENSION_CONTINUITY_STATE_KEY,
     CustomExtensionContinuityError,
-    apply_verified_custom_extension_continuity,
     prepare_verified_custom_extension_continuity,
     record_local_custom_extension_mutation,
 )
 from codex_plugin_scanner.guard.runtime.local_cli_identity import UnlistedCliIdentity
 from codex_plugin_scanner.guard.store import GuardStore
 from codex_plugin_scanner.guard.store_custom_extension_continuity import _local_cli_observation_snapshot
+from tests.custom_extension_continuity_client import apply_verified_custom_extension_continuity
 from tests.test_guard_custom_extension_continuity import _NOW, _bundle, _fake_plan, _identity, _observe, _state_write
 
 _V2_CAPABILITY = "custom-extension-continuity.v2"
