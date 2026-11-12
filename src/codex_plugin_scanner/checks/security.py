@@ -323,10 +323,9 @@ def _looks_like_interpolated_secret(value: str) -> bool:
     expansion).
     """
     normalized = _normalize_secret_candidate(value)
-    return bool(
-        _PURE_SHELL_EXPANSION_RE.fullmatch(normalized)
-        or _PURE_TEMPLATE_EXPANSION_RE.fullmatch(normalized)
-    )
+    return bool(_PURE_SHELL_EXPANSION_RE.fullmatch(normalized) or _PURE_TEMPLATE_EXPANSION_RE.fullmatch(normalized))
+
+
 BRACKETED_PLACEHOLDER_RE = re.compile(
     r"^(?:<[A-Za-z][A-Za-z0-9 _.,:()/\-]{0,80}>|\[[A-Za-z][A-Za-z0-9 _.,:()/\-]{0,120}\])$"
 )
