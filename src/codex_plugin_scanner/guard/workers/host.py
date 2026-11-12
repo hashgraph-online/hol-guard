@@ -35,6 +35,7 @@ _REFRESH_SECONDS = 10.0
 _ATTENTION_POLL_SECONDS = 1.0
 _REFRESH_POLL_SECONDS = 0.2
 _REFRESH_WAIT_SECONDS = 5.0
+_INSTALLED_AUTHORITY_RETRY_SECONDS = 10.0
 _REFRESH_OPERATION = "guard.review.resolveExact"
 
 
@@ -122,6 +123,7 @@ class WorkerHost:
         self._threads: list[threading.Thread] = []
         self._hook_worker: Any = None
         self._attention: Any = None
+        self._installed_authority_admitted = False
 
     def _record(self, code: str) -> None:
         _LOGGER.warning("Guard worker host error: %s", code)
@@ -191,7 +193,14 @@ class WorkerHost:
         from ..runtime_health import repair_self_check
         from ..workspace_assessment_worker import start_workspace_assessment_worker
 
+        # Admit the installed release before the first publication, as the
+        # Python daemon did at startup. A snapshot bound to packs an older
+        # engine compiled is refused by the resident, so publishing first
+        # would fail every hook closed until something else migrated it.
+        self._admit_installed_release()
         self._start_policy_publication()
+        if not self._installed_authority_admitted:
+            self._loop("installed-authority", self._admit_installed_release, _INSTALLED_AUTHORITY_RETRY_SECONDS)
         attention = ApprovalAttentionCoordinator(
             store=self.store,
             runtime=GuardSurfaceRuntime(self.store),
@@ -223,6 +232,15 @@ class WorkerHost:
         assessment = start_workspace_assessment_worker(self.store, stop=self.stop, on_error=self._record)
         if isinstance(assessment, threading.Thread):
             self._threads.append(assessment)
+
+    def _admit_installed_release(self) -> None:
+        """Migrates the active command packs to the installed engine, once it succeeds."""
+
+        if self._installed_authority_admitted:
+            return
+        from ..extension_control_host import migrate_installed_authority
+
+        self._installed_authority_admitted = migrate_installed_authority(self.store)
 
     def _start_policy_publication(self) -> None:
         """Keeps the native policy snapshot, its direct-lane ACK and evidence drain live.
@@ -312,7 +330,14 @@ class WorkerHost:
 def run_worker_host(guard_home: Path) -> int:
     """Runs the workers until standard input closes."""
 
+    from ..runtime_health.background_diagnostics import install_sink, release_sink
+    from ..runtime_health.diagnostics import background_log_sinks
+
     store = GuardStore(guard_home)
+    # Nothing else in this process opens daemon.log, so without these sinks a
+    # failed migration or publication left no line for support to read.
+    sink, notice = background_log_sinks(store.guard_home)
+    install_sink(sink, notice=notice)
     host = WorkerHost(store, home_dir=Path.home().expanduser().resolve(strict=False))
     host.start()
     host.wait_for_policy_publication()
@@ -329,6 +354,7 @@ def run_worker_host(guard_home: Path) -> int:
         pass
     finally:
         host.shutdown()
+        release_sink(sink)
     return 0
 
 

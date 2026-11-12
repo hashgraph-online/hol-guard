@@ -8,6 +8,7 @@ import os
 import queue
 import sys
 import threading
+from collections.abc import Callable
 from contextlib import suppress
 from datetime import datetime, timezone
 from pathlib import Path
@@ -224,3 +225,28 @@ class DaemonDiagnostics:
         except queue.Full:
             return False
         return True
+
+
+def background_log_sinks(
+    guard_home: Path,
+) -> tuple[Callable[[str, str], bool], Callable[[str, str], bool]]:
+    """Error and notice sinks that append each background record to ``daemon.log`` at once.
+
+    For a long-lived process that keeps no diagnostics open: a record queued
+    until shutdown would be lost to a crash and unread while it mattered. Each
+    call opens, writes and closes the log, which only background threads pay.
+    """
+
+    def write(event: str, detail: str, *, notice: bool) -> bool:
+        diagnostics = DaemonDiagnostics(guard_home)
+        record = diagnostics.record_background_notice if notice else diagnostics.record_background
+        taken = record(event, detail)
+        return diagnostics.close() and taken
+
+    def error(event: str, detail: str) -> bool:
+        return write(event, detail, notice=False)
+
+    def notice(event: str, detail: str) -> bool:
+        return write(event, detail, notice=True)
+
+    return error, notice

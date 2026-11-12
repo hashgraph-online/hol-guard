@@ -50,6 +50,24 @@ class _InstalledAuthorityMigrationError(Exception):
     """The installed release's command-pack authority is not migrated yet."""
 
 
+def migrate_installed_authority(store: GuardStore) -> bool:
+    """Admit the installed release's command packs, recording why when it cannot.
+
+    A runtime upgrade changes the command engine, and the resident refuses any
+    policy snapshot whose packs an older engine compiled. Until this runs
+    after an upgrade every hook fails closed, so the daemon's worker host runs
+    it before its first policy publication and retries it until it lands.
+    """
+
+    try:
+        store.migrate_installed_command_pack_authority()
+    except Exception as error:
+        record_background_event("installed_authority_migration_failed", failure_detail(error))
+        _LOGGER.warning("Installed command-pack authority could not be migrated: %s", error, exc_info=True)
+        return False
+    return True
+
+
 class ExtensionControlHost:
     """One Guard home's extension-control API, its runtime and its refresh."""
 
@@ -81,13 +99,9 @@ class ExtensionControlHost:
         retries it before reading anything newer.
         """
 
-        try:
-            self.store.migrate_installed_command_pack_authority()
-        except Exception as error:
+        if not migrate_installed_authority(self.store):
             self._installed_authority_pending = True
-            record_background_event("installed_authority_migration_failed", failure_detail(error))
-            _LOGGER.warning("Installed command-pack authority could not be migrated: %s", error, exc_info=True)
-            raise _InstalledAuthorityMigrationError from error
+            raise _InstalledAuthorityMigrationError
         self._installed_authority_pending = False
 
     def _enroll_authority_by_default(self) -> None:
@@ -243,4 +257,10 @@ def extension_control(store: GuardStore, args: Mapping[str, Any]) -> dict[str, o
 
 EXTENSION_CONTROL_CALLS = {"route.extension_control": extension_control}
 
-__all__ = ["EXTENSION_CONTROL_CALLS", "ExtensionControlHost", "existing_host", "host_for"]
+__all__ = [
+    "EXTENSION_CONTROL_CALLS",
+    "ExtensionControlHost",
+    "existing_host",
+    "host_for",
+    "migrate_installed_authority",
+]
