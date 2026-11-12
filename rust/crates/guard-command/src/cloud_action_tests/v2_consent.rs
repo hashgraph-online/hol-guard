@@ -180,3 +180,113 @@ fn a_tampered_bounded_selector_is_refused() {
         "invalid_request"
     );
 }
+
+fn bounded_offers(result: &Value) -> Vec<Value> {
+    result["consent_options"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|option| option["scope"] == "bounded")
+        .cloned()
+        .collect()
+}
+
+fn save_offer(offer: &Value, action_id: &str) -> Value {
+    json!({"consent_id": "c-offer", "kind": offer["kind"], "scope": {"bounded": {
+        "action_id": action_id, "connection_id": "conn-synthetic-1",
+        "selector": offer["selector"], "selector_sha256": offer["selector_sha256"]}}})
+}
+
+#[test]
+fn a_review_offers_bounded_always_allow_that_covers_equivalent_calls_only() {
+    let evaluator = evaluator();
+    let mut request = archive_request(&evaluator);
+    let review = run(&evaluator, &request);
+    assert_eq!(review["action"], "require-reapproval", "{review}");
+    let offers = bounded_offers(&review);
+    let bounds: Vec<_> = offers
+        .iter()
+        .map(|offer| offer["selector"]["max_record_count"].clone())
+        .collect();
+    assert_eq!(bounds, vec![json!(25), json!(50)], "{review}");
+    assert_eq!(
+        offers[0]["selector"],
+        json!({"providers": ["slack"], "classes": ["delete"], "objects": ["message"],
+               "reversibility": ["recoverable"], "max_record_count": 25})
+    );
+    assert!(offers.iter().all(|offer| offer["kind"] == "always"));
+
+    request["saved_consents"] = json!([save_offer(&offers[0], ARCHIVE)]);
+    let mut equivalent = request.clone();
+    equivalent["facts"]["record_count"] = json!({"state": "known", "value": 25});
+    let silenced = run(&evaluator, &equivalent);
+    assert_eq!(silenced["action"], "allow", "{silenced}");
+    assert_eq!(silenced["consent_scope"], "bounded");
+
+    let mut larger = request.clone();
+    larger["facts"]["record_count"] = json!({"state": "known", "value": 200});
+    let held = run(&evaluator, &larger);
+    assert_eq!(held["action"], "require-reapproval", "{held}");
+    assert_eq!(held["consent_applied"], "none");
+}
+
+#[test]
+fn bounded_offers_need_known_bounding_facts() {
+    let evaluator = evaluator();
+    let mut request = archive_request(&evaluator);
+    for (pointer, fact) in [
+        ("record_count", json!({"state": "unknown"})),
+        ("object", json!({"state": "unknown"})),
+        ("record_count", json!({"state": "known", "value": 1001})),
+    ] {
+        let mut changed = request.clone();
+        changed["facts"][pointer] = fact;
+        if pointer == "record_count" {
+            changed["facts"]["scope"] = json!({"state": "unknown"});
+        }
+        assert!(bounded_offers(&run(&evaluator, &changed)).is_empty());
+    }
+    request["facts"]["reversibility"] = json!({"state": "known", "value": "permanent"});
+    assert!(bounded_offers(&run(&evaluator, &request)).is_empty());
+}
+
+#[test]
+fn tainted_sessions_are_answered_only_by_exact_consent() {
+    let evaluator = evaluator();
+    let mut archive = archive_request(&evaluator);
+    let identity = run(&evaluator, &archive)["action_identity_sha256"].clone();
+    archive["saved_consents"] = json!([
+        bounded("c-b", "always", ARCHIVE, json!({"max_record_count": 25})),
+        resource("c-r", "always", ARCHIVE, "C0SYNTH01"),
+    ]);
+    assert_eq!(run(&evaluator, &archive)["action"], "allow");
+    archive["session_flow"]["injection_signal_seen"] = true.into();
+    let held = run(&evaluator, &archive);
+    assert_eq!(held["action"], "require-reapproval", "{held}");
+    assert!(bounded_offers(&held).is_empty());
+    assert_eq!(held["consent_options"].as_array().unwrap().len(), 2);
+    archive["saved_consents"] = json!([{"consent_id": "c-x", "kind": "always",
+        "scope": {"exact": {"action_identity_sha256": identity}}}]);
+    assert_eq!(run(&evaluator, &archive)["action"], "allow");
+
+    // An outbound call after untrusted content, or with no journal at all.
+    let mut send = v2_request(&evaluator);
+    send["saved_consents"] = json!([resource("c-r", "always", POST, "C0SYNTH01")]);
+    assert_eq!(run(&evaluator, &send)["action"], "allow");
+    let mut untrusted = send.clone();
+    untrusted["session_flow"]["untrusted_content_seen"] = true.into();
+    assert_eq!(run(&evaluator, &untrusted)["action"], "review");
+    let mut unjournaled = send.clone();
+    unjournaled["session_flow"] = Value::Null;
+    assert_eq!(run(&evaluator, &unjournaled)["action"], "review");
+    // A delete after untrusted content stays answerable by its bounded consent.
+    let mut delete = archive_request(&evaluator);
+    delete["session_flow"]["untrusted_content_seen"] = true.into();
+    delete["saved_consents"] = json!([bounded(
+        "c-b",
+        "always",
+        ARCHIVE,
+        json!({"max_record_count": 25})
+    )]);
+    assert_eq!(run(&evaluator, &delete)["action"], "allow");
+}
