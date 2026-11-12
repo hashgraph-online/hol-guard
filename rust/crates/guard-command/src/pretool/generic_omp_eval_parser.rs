@@ -167,6 +167,18 @@ impl Parser {
                 self.pos += 1;
                 self.paren_value()
             }
+            // The host rewrites a final top-level `return value;` into the
+            // cell's shown result, like a trailing expression. A `return`
+            // anywhere else would end the cell before later statements run,
+            // so it must be the last statement.
+            Token::Ident(word) if word == "return" => {
+                self.pos += 1;
+                self.value(0)?;
+                self.tokens[self.pos..]
+                    .iter()
+                    .all(|token| matches!(token, Token::Punct(';')))
+                    .then_some(())
+            }
             Token::Ident(word) if word == "console" => {
                 self.pos += 1;
                 self.eat('.')?;
@@ -471,4 +483,27 @@ fn print_shows_a_tool_result_like_display() {
     }
     // `print` stays the prelude's: a program may not rebind it.
     assert!(parse_program("const print = 1; print(await read('README.md'))").is_none());
+}
+
+/// The host shows a final top-level `return value;` as the cell's result, so
+/// returning what a tool read only shows it. A `return` before other
+/// statements would stop the cell early and is refused.
+#[test]
+fn a_final_return_shows_a_tool_result() {
+    for code in [
+        "const content = await tool.read({path: \"notes/SKILL.md\"}); return content;",
+        "return await read('README.md');",
+        "const content = await tool.read({path: \"notes/SKILL.md\"}); content;",
+    ] {
+        let calls = parse_program(code).unwrap_or_else(|| panic!("{code}"));
+        assert_eq!(calls.len(), 1, "{code}");
+        assert_eq!(calls[0].tool, "read", "{code}");
+    }
+    for code in [
+        "const a = await read('README.md'); return a; const b = await read('notes/x.md');",
+        "return;",
+        "const a = await read('README.md'); return a display(a)",
+    ] {
+        assert!(parse_program(code).is_none(), "{code}");
+    }
 }
