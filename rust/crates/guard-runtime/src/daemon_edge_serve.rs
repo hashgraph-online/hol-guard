@@ -241,6 +241,11 @@ pub(crate) fn run(args: &[String]) -> i32 {
         eprintln!("daemon-serve: the launch configuration names another daemon");
         return EXIT_USAGE;
     }
+    // Pin the dashboard before reporting ready: the launcher that unpacked it
+    // may exit, and remove it, once this daemon's state is published.
+    if let Some(dir) = config.dashboard_dir.as_deref() {
+        dashboard_build_id(Path::new(dir));
+    }
     if let Some(version) = config.state.get("package_version").and_then(Value::as_str) {
         super::set_package_version(version);
     }
