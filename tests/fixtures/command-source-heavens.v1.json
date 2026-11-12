@@ -1645,7 +1645,7 @@
   },
   "cases": [
     {
-      "command": "heavens delete /users/42 --env prod",
+      "command": "heaven delete /users/42 --env prod",
       "disabled_permissions": [],
       "enabled_extensions": [
         "command.heavens"
@@ -1656,7 +1656,7 @@
       "rule_id": "command.heavens.write-request"
     },
     {
-      "command": "heavens flow checkout.json --env staging",
+      "command": "heaven flow checkout.json --env staging",
       "disabled_permissions": [],
       "enabled_extensions": [
         "command.heavens"
@@ -1667,7 +1667,7 @@
       "rule_id": "command.heavens.flow-run"
     },
     {
-      "command": "heavens bench get /health -n 500 -c 25",
+      "command": "heaven bench get /health -n 500 -c 25",
       "disabled_permissions": [],
       "enabled_extensions": [
         "command.heavens"
@@ -1678,7 +1678,7 @@
       "rule_id": "command.heavens.bench"
     },
     {
-      "command": "heavens get https://staging.example.com/users --insecure",
+      "command": "heaven get https://staging.example.com/users --insecure",
       "disabled_permissions": [],
       "enabled_extensions": [
         "command.heavens"
