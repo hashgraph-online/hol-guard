@@ -7203,6 +7203,84 @@
       "expect": "allow"
     },
     {
+      "id": "omp-read-background-job-streams",
+      "fix_area": "omp",
+      "harnesses": [
+        "omp"
+      ],
+      "tool": "read",
+      "tool_input": {
+        "path": "proc://bg_1/streams/2"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "omp-read-background-job-unknown-subpath",
+      "fix_area": "omp",
+      "harnesses": [
+        "omp"
+      ],
+      "tool": "read",
+      "tool_input": {
+        "path": "proc://hol-guard-approval/output"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "omp-read-tool-device-docs",
+      "fix_area": "omp",
+      "harnesses": [
+        "omp"
+      ],
+      "tool": "read",
+      "tool_input": {
+        "path": "xd://eval"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "omp-read-tool-device-doc-topic",
+      "fix_area": "omp",
+      "harnesses": [
+        "omp"
+      ],
+      "tool": "read",
+      "tool_input": {
+        "path": "xd://eval/helpers"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "neg-omp-read-tool-device-parent-escape",
+      "fix_area": "omp",
+      "harnesses": [
+        "omp"
+      ],
+      "tool": "read",
+      "tool_input": {
+        "path": "xd://../.ssh/id_rsa"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-omp-read-background-job-kill",
+      "fix_area": "omp",
+      "harnesses": [
+        "omp"
+      ],
+      "tool": "read",
+      "tool_input": {
+        "path": "proc://bg_1/kill"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
       "id": "zcode-mcp-js",
       "fix_area": "shell",
       "harnesses": [

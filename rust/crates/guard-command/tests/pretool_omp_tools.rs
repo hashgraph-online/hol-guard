@@ -209,6 +209,11 @@ fn proc_references_are_reads_of_the_sessions_own_jobs() {
         "proc://bg_1:raw",
         "proc://bg_1:1-40:raw",
         "proc://Reviewer.2",
+        "proc://bg_1/streams",
+        "proc://bg_1/streams/2",
+        "proc://bg_1/streams/2:1-40",
+        // Not a URL the host serves: it answers with its usage text.
+        "proc://hol-guard-approval/output",
     ] {
         let result = omp(&f, "read", json!({"path": path}));
         assert!(allowed(&result), "{path}: {}", result.reason_code);
@@ -217,7 +222,12 @@ fn proc_references_are_reads_of_the_sessions_own_jobs() {
     for path in [
         "proc://bg_1/kill",
         "proc://bg_1/mode",
+        "proc://bg_1/kill:raw",
         "proc://bg_1/",
+        "proc://bg_1//streams",
+        "proc://bg_1/../../etc/passwd",
+        "proc://bg_1/.hidden",
+        "proc://bg_1/streams/2/3",
         "proc:///etc/passwd",
         "proc://../bg_1",
         "proc://.hidden",
@@ -246,6 +256,40 @@ fn proc_references_are_reads_of_the_sessions_own_jobs() {
     assert_ne!(
         run(&f, "codex", "read", json!({"path": "proc://bg_1"})).reason_code,
         "native_omp_proc_read"
+    );
+}
+
+/// `read xd://...` returns the docs of the session's mounted tool devices.
+/// Only a write to `xd://<tool>` runs one.
+#[test]
+fn device_doc_references_are_reads_of_the_hosts_tool_docs() {
+    let f = fixture();
+    for path in ["xd://", "xd://eval", "xd://eval/helpers", "xd://web_search"] {
+        let result = omp(&f, "read", json!({"path": path}));
+        assert!(allowed(&result), "{path}: {}", result.reason_code);
+        assert_eq!(result.reason_code, "native_omp_device_docs_read", "{path}");
+    }
+    for path in [
+        "xd:///etc/passwd",
+        "xd://../.ssh/id_rsa",
+        "xd://eval/../../x",
+        "xd://eval/helpers/more",
+        "xd://.hidden",
+        "xd://eval/",
+        "xd://~",
+        "xd://a%2e%2e",
+        "XD://eval",
+    ] {
+        let result = omp(&f, "read", json!({"path": path}));
+        assert_ne!(result.reason_code, "native_omp_device_docs_read", "{path}");
+    }
+    for tool in ["write", "edit"] {
+        let result = omp(&f, tool, json!({"path": "xd://eval", "content": "{}"}));
+        assert_ne!(result.reason_code, "native_omp_device_docs_read", "{tool}");
+    }
+    assert_ne!(
+        run(&f, "codex", "read", json!({"path": "xd://eval"})).reason_code,
+        "native_omp_device_docs_read"
     );
 }
 
