@@ -33956,11 +33956,11 @@ function useReviewDecisionResolve(params) {
           requestedScope,
           action === "allow" ? rememberExactAction : watchOnlyObservation
         );
-        const includeGateFields = gateRequired && gate?.configured === true && requiresApprovalPasswordPrompt(
+        const includeGateFields = gateRequired && gate?.configured === true && (freshCodeRequired || requiresApprovalPasswordPrompt(
           gate.cooldown_active,
           gate.strict_all_decisions,
           requestedScope
-        );
+        ));
         const proof = includeGateFields ? buildApprovalProofCredentials(gate, { approvalPassword, approvalTotpCode }, freshCodeRequired) : {};
         await onResolve({
           ...buildDecisionPayload({
@@ -34072,11 +34072,11 @@ function useReviewDecisionResolve(params) {
             );
             return;
           }
-          const gateEnabled = approvalGateRequiredForResolution(current, action, requestedScope) && current?.configured === true && requiresApprovalPasswordPrompt(
+          const gateEnabled = approvalGateRequiredForResolution(current, action, requestedScope) && current?.configured === true && (freshCodeRequired || requiresApprovalPasswordPrompt(
             current.cooldown_active,
             current.strict_all_decisions,
             requestedScope
-          );
+          ));
           if (!gateEnabled) {
             void handleResolve(action, current);
             return;

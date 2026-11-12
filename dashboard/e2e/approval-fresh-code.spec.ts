@@ -54,20 +54,20 @@ const request: GuardApprovalRequest = {
 };
 
 // Every settings read, including the refresh after a refusal, reports a recent confirmation.
-const recentlyConfirmedSettings = {
-  ...defaultSettingsPayload,
-  settings: {
-    ...defaultSettingsPayload.settings,
-    approval_gate: {
-      enabled: true, configured: true, cooldown_seconds: 0,
-      cooldown_active: false, cooldown_expires_at: null, locked_until: null,
-      fail_closed: true, strict_all_decisions: true,
-      totp_enabled: true, totp_recent_satisfied: true,
-    },
-  },
+const recentlyConfirmedGate = {
+  enabled: true, configured: true, cooldown_seconds: 0,
+  cooldown_active: false, cooldown_expires_at: null, locked_until: null,
+  fail_closed: true, strict_all_decisions: true,
+  totp_enabled: true, totp_recent_satisfied: true,
 };
 
-async function mountFixture(page: Page, bodies: Array<Record<string, unknown>>, refusals: number): Promise<void> {
+async function mountFixture(
+  page: Page,
+  bodies: Array<Record<string, unknown>>,
+  refusals: number,
+  gate: Record<string, unknown> = recentlyConfirmedGate,
+): Promise<void> {
+  const settings = { ...defaultSettingsPayload, settings: { ...defaultSettingsPayload.settings, approval_gate: gate } };
   let remainingRefusals = refusals;
   await page.route("**/v1/**", async (route) => {
     const path = new URL(route.request().url()).pathname;
@@ -103,7 +103,7 @@ async function mountFixture(page: Page, bodies: Array<Record<string, unknown>>, 
       body = { items: [request], next_cursor: null, total_pending_count: 1, total_count: 1, status: "pending" };
     } else if (path.endsWith("/receipts")) body = emptyReceiptsPayload;
     else if (path.endsWith("/policy")) body = emptyPoliciesPayload;
-    else if (path.endsWith("/settings")) body = recentlyConfirmedSettings;
+    else if (path.endsWith("/settings")) body = settings;
     else if (path.endsWith("/inventory")) body = emptyInventoryPayload;
     else if (path.endsWith("/diff")) body = null;
     await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(body) });
@@ -124,6 +124,22 @@ test("a recent authenticator confirmation still approves without asking for a co
 test("after Guard refuses a decision for want of a code, Retry asks for one and sends it", async ({ page }) => {
   const bodies: Array<Record<string, unknown>> = [];
   await mountFixture(page, bodies, 1);
+  await refuseThenEnterCode(page, bodies);
+});
+
+// A password cooldown recorded before the authenticator was turned on still reads as active,
+// but Guard ignores it once the authenticator is on, so it must not suppress the code either.
+test("a recorded password cooldown does not stop Retry from asking for a code", async ({ page }) => {
+  const bodies: Array<Record<string, unknown>> = [];
+  await mountFixture(page, bodies, 1, {
+    ...recentlyConfirmedGate,
+    cooldown_seconds: 300, cooldown_active: true, cooldown_expires_at: "2099-01-01T00:00:00Z",
+    strict_all_decisions: false,
+  });
+  await refuseThenEnterCode(page, bodies);
+});
+
+async function refuseThenEnterCode(page: Page, bodies: Array<Record<string, unknown>>): Promise<void> {
   await page.goto(`/requests/${request.request_id}?${DAEMON}`);
   await page.getByRole("button", { name: "Allow just this once", exact: true }).click();
   await expect.poll(() => bodies.length).toBe(1);
@@ -142,4 +158,4 @@ test("after Guard refuses a decision for want of a code, Retry asks for one and 
   await expect.poll(() => bodies.length).toBe(2);
   expect(bodies[1]).toMatchObject({ approval_totp_code: "123456" });
   await expect(page.getByRole("dialog")).toHaveCount(0);
-});
+}

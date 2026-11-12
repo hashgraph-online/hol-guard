@@ -141,14 +141,17 @@ export function useReviewDecisionResolve(params: ReviewDecisionResolveParams) {
           requestedScope,
           action === "allow" ? rememberExactAction : watchOnlyObservation,
         );
+        // Guard ignores a recorded password cooldown once the authenticator is on, so after a
+        // refusal for want of a code the cooldown must not suppress the proof either.
         const includeGateFields =
           gateRequired &&
           gate?.configured === true &&
-          requiresApprovalPasswordPrompt(
-            gate.cooldown_active,
-            gate.strict_all_decisions,
-            requestedScope,
-          );
+          (freshCodeRequired ||
+            requiresApprovalPasswordPrompt(
+              gate.cooldown_active,
+              gate.strict_all_decisions,
+              requestedScope,
+            ));
         const proof = includeGateFields
           ? buildApprovalProofCredentials(gate, { approvalPassword, approvalTotpCode }, freshCodeRequired)
           : {};
@@ -277,11 +280,12 @@ export function useReviewDecisionResolve(params: ReviewDecisionResolveParams) {
           const gateEnabled =
             approvalGateRequiredForResolution(current, action, requestedScope) &&
             current?.configured === true &&
-            requiresApprovalPasswordPrompt(
-              current.cooldown_active,
-              current.strict_all_decisions,
-              requestedScope,
-            );
+            (freshCodeRequired ||
+              requiresApprovalPasswordPrompt(
+                current.cooldown_active,
+                current.strict_all_decisions,
+                requestedScope,
+              ));
           if (!gateEnabled) {
             void handleResolve(action, current);
             return;
