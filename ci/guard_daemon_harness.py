@@ -9,6 +9,7 @@ patch the library work its routes hand off.
 from __future__ import annotations
 
 import hmac
+import os
 import socket
 import threading
 import uuid
@@ -92,7 +93,9 @@ class _NativeServerView:
 
     Anything beyond ``store`` and ``auth_token`` comes from the request host
     the daemon's library calls build, so state it keeps on disk, such as the
-    connect flows, is shared with the calls the daemon makes.
+    connect flows, is shared with the calls the daemon makes. Once the daemon
+    runs, that is the resident's own host, so the hook worker a test reads is
+    the one that reviewed the daemon's hooks.
     """
 
     def __init__(self, daemon: Any) -> None:
@@ -104,7 +107,36 @@ class _NativeServerView:
     def auth_token(self) -> str:
         return str(self._daemon.auth_token)
 
+    def _resident_host(self) -> Any | None:
+        """The host the daemon's hook library calls review in, once the daemon runs.
+
+        The daemon's hook route hands ``hook.warm``, ``hook.review`` and the rest
+        to the resident library, which here runs in this process and keeps one
+        host per Guard home. A test that reads the hook worker, its route metrics
+        or a tap on its reviews has to read that host, not a second one that
+        never sees a hook.
+        """
+
+        if not int(getattr(self._daemon, "pid", 0) or 0):
+            return None
+        from codex_plugin_scanner.guard.routes import hook_calls
+
+        wanted = os.path.realpath(self.store.guard_home)
+        with hook_calls._SERVERS_LOCK:
+            for key, server in hook_calls._SERVERS.items():
+                if os.path.realpath(key) == wanted:
+                    return server
+        home_dir = Path(self._daemon.home_dir) if self._daemon.home_dir is not None else Path.home()
+        # The same arguments the daemon's own ``hook.warm`` sends, so whichever
+        # call builds the host first, the other reuses it.
+        return hook_calls._server(
+            self.store,
+            {"port": int(self._daemon.port), "daemon_pid": int(self._daemon.pid), "home_dir": str(home_dir)},
+        )
+
     def _request_host(self) -> Any:
+        if (resident := self._resident_host()) is not None:
+            return resident
         host = self.__dict__["_host"]
         if host is None:
             from codex_plugin_scanner.guard.routes.request_host import _replay_server_class
