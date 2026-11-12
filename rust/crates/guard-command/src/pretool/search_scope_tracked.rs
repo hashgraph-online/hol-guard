@@ -41,6 +41,18 @@ pub fn proven_project_document(target: &str, cwd: Option<&str>) -> bool {
     names::resolves_to_tracked(target, cwd)
 }
 
+/// What the walk's tracked-file proof found for one file.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) enum Tracked {
+    /// Not a small committed file outside a store, or the detector flagged it.
+    Unproven,
+    /// A small committed file the detector finds clean.
+    Clean,
+    /// A committed manifest declaring a Kubernetes `Secret`: its values are
+    /// base64 the detector does not flag, so it is never clean.
+    SecretManifest,
+}
+
 #[derive(Default)]
 pub(super) struct TrackedFiles {
     indexes: HashMap<PathBuf, Option<HashSet<Vec<u8>>>>,
@@ -49,11 +61,15 @@ pub(super) struct TrackedFiles {
 
 impl TrackedFiles {
     pub(super) fn non_secret(&mut self, path: &Path) -> bool {
+        self.classify(path) == Tracked::Clean
+    }
+
+    pub(super) fn classify(&mut self, path: &Path) -> Tracked {
         let Ok(metadata) = std::fs::symlink_metadata(path) else {
-            return false;
+            return Tracked::Unproven;
         };
         if !metadata.is_file() || metadata.len() > MAX_FILE_BYTES {
-            return false;
+            return Tracked::Unproven;
         }
         let Some(repository) = path
             .ancestors()
@@ -61,20 +77,31 @@ impl TrackedFiles {
             .take(MAX_ANCESTORS)
             .find(|directory| std::fs::symlink_metadata(directory.join(".git")).is_ok())
         else {
-            return false;
+            return Tracked::Unproven;
         };
         let Ok(relative) = path.strip_prefix(repository) else {
-            return false;
+            return Tracked::Unproven;
         };
-        let in_store = relative.parent().is_some_and(|parent| {
-            parent.components().any(|part| {
+        // The directories are judged by the directory rule, not the file-name
+        // rule: `auth-evidence/` names a feature, while `secrets/` and
+        // `api-tokens/` name a store and keep the review.
+        // A repository kept inside a store, such as a dotfiles checkout under
+        // `.config`, is a store too.
+        let store_part = |directory: &Path| {
+            directory.components().any(|part| {
                 part.as_os_str().to_str().is_none_or(|part| {
                     STORE_DIRECTORIES.contains(&part.to_ascii_lowercase().as_str())
                 })
-            }) || guard_secure_fs::credential_named_path(parent)
+            })
+        };
+        let in_store = relative.parent().is_some_and(|parent| {
+            store_part(parent) || guard_secure_fs::credential_directory_path(parent)
         });
-        if in_store || guard_secure_fs::credential_named_path(repository) {
-            return false;
+        if in_store
+            || store_part(repository)
+            || guard_secure_fs::credential_directory_path(repository)
+        {
+            return Tracked::Unproven;
         }
         let Some(rendered) = relative
             .components()
@@ -82,7 +109,7 @@ impl TrackedFiles {
             .collect::<Option<Vec<_>>>()
             .map(|parts| parts.join("/").into_bytes())
         else {
-            return false;
+            return Tracked::Unproven;
         };
         let tracked = self
             .indexes
@@ -91,25 +118,36 @@ impl TrackedFiles {
             .as_ref()
             .is_some_and(|names| names.contains(&rendered));
         if !tracked {
-            return false;
+            return Tracked::Unproven;
         }
         // Past the budget the scope stays unproven and the search is reviewed.
         self.spent += metadata.len();
         if self.spent > MAX_TOTAL_BYTES {
-            return false;
+            return Tracked::Unproven;
         }
         let Ok(bytes) = std::fs::read(path) else {
-            return false;
+            return Tracked::Unproven;
         };
         let text = String::from_utf8_lossy(&bytes);
+        // A Kubernetes `Secret` holds base64 values the detector does not
+        // flag, so a manifest that declares one is never a fixture, whether
+        // a tool names it or a recursive search walks into it.
+        if names::secret_object(&text) {
+            return Tracked::SecretManifest;
+        }
         // The real name can make the detector stricter (`.env`) but also more
         // lenient (tests/, docs/); both readings must be clean.
         let name = String::from_utf8_lossy(&rendered);
-        ["", name.as_ref()].iter().all(|label| {
+        let clean = ["", name.as_ref()].iter().all(|label| {
             guard_scanner::secret_detection::scan_secret_text(&text, label, "search", None, 1)
                 .findings
                 .is_empty()
-        })
+        });
+        if clean {
+            Tracked::Clean
+        } else {
+            Tracked::Unproven
+        }
     }
 }
 

@@ -90,9 +90,19 @@ impl PatternClearance {
 
     /// Whether `path` is a regular file whose bytes the pattern cannot match.
     pub(in crate::pretool) fn clears(&self, path: &Path) -> bool {
-        if !clearable_name(path) {
-            return false;
-        }
+        clearable_name(path, false) && self.clears_bytes(path)
+    }
+
+    /// [`Self::clears`] for a committed manifest the walk holds for the
+    /// Kubernetes `Secret` it declares rather than for its name. A credential
+    /// word in the name (`app-secrets.yaml`) describes that object, so only
+    /// the store, extension and family rules apply: a pattern that cannot
+    /// occur in the manifest prints none of its values.
+    pub(in crate::pretool) fn clears_secret_manifest(&self, path: &Path) -> bool {
+        clearable_name(path, true) && self.clears_bytes(path)
+    }
+
+    fn clears_bytes(&self, path: &Path) -> bool {
         let Ok(metadata) = std::fs::symlink_metadata(path) else {
             return false;
         };
@@ -140,7 +150,7 @@ impl PatternClearance {
     /// Whether a hidden or sensitive-named directory may be searched below,
     /// each file in it clearing on its own.
     pub(in crate::pretool) fn may_descend(&self, path: &Path) -> bool {
-        clearable_name(path)
+        clearable_name(path, false)
             && std::fs::symlink_metadata(path).is_ok_and(|metadata| metadata.is_dir())
             && guard_secure_fs::sensitive_path_family(path).is_none()
     }
@@ -200,7 +210,7 @@ fn plain_character(character: char) -> bool {
 /// (`credentials.json`, `secrets/db.json`). What stays is the hidden
 /// configuration a project keeps beside its code, such as `.env.bak` or
 /// `.dev.vars`.
-fn clearable_name(path: &Path) -> bool {
+fn clearable_name(path: &Path, manifest: bool) -> bool {
     let in_store = path.components().any(|part| {
         part.as_os_str()
             .to_str()
@@ -215,7 +225,7 @@ fn clearable_name(path: &Path) -> bool {
         && !SECRET_EXTENSIONS.contains(&extension.as_str())
         && match guard_secure_fs::sensitive_path_family(path) {
             Some((family, _)) => CLEARABLE_FAMILIES.contains(&family),
-            None => !guard_secure_fs::credential_named_path(path),
+            None => manifest || !guard_secure_fs::credential_named_path(path),
         }
 }
 

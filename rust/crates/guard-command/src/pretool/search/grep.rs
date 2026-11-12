@@ -135,6 +135,7 @@ fn safe_arguments(
     arguments_pass(arguments, context, stdin_only, absent, false)
 }
 
+mod exclusion;
 mod includes;
 mod reach;
 pub(in crate::pretool) use reach::sensitive_reach_reason;
@@ -152,8 +153,9 @@ struct Scan {
     /// The search operands, after the pattern.
     targets: Vec<String>,
     recursive: bool,
-    /// `--include` appears, so exact exclusions are not part of the proof.
-    includes_present: bool,
+    /// `--include` appears beside an `--exclude` or `--exclude-dir` of any
+    /// shape, which keeps the review however the walk is narrowed.
+    include_beside_exclusion: bool,
     /// Exact names the command leaves out of its walk.
     excluded_files: Vec<String>,
     excluded_directories: Vec<String>,
@@ -217,23 +219,14 @@ fn scan_into(
     let mut recursive = false;
     let mut dereference = false;
     let mut targets = Vec::new();
-    let mut excluded_files = Vec::new();
-    let mut excluded_directories = Vec::new();
-    let mut pending_exclusion = None;
+    let mut exclusions = exclusion::Exclusions::default();
     let mut includes_present = false;
     let mut includes = includes::Includes::default();
     let mut positional_started = false;
     for argument in arguments {
-        if let Some(directory) = pending_exclusion.take() {
-            if argument.is_empty() {
+        if let Some(proven) = exclusions.take_value(argument) {
+            if !proven {
                 return false;
-            }
-            if exact_exclusion(argument) {
-                if directory {
-                    excluded_directories.push(argument.as_str());
-                } else {
-                    excluded_files.push(argument.as_str());
-                }
             }
             continue;
         }
@@ -267,26 +260,15 @@ fn scan_into(
             continue;
         }
         if options_enabled && argument.starts_with("--") {
-            let (name, attached) = argument.split_once('=').unwrap_or((argument.as_str(), ""));
-            if matches!(name, "--exclude" | "--exclude-dir") {
-                if positional_started {
+            if let Some(proven) =
+                exclusions.option(argument, positional_started, context, absent.plain)
+            {
+                if !proven {
                     return false;
-                }
-                let directory = name == "--exclude-dir";
-                if attached.is_empty() {
-                    if argument.contains('=') {
-                        return false;
-                    }
-                    pending_exclusion = Some(directory);
-                } else if exact_exclusion(attached) {
-                    if directory {
-                        excluded_directories.push(attached);
-                    } else {
-                        excluded_files.push(attached);
-                    }
                 }
                 continue;
             }
+            let (name, attached) = argument.split_once('=').unwrap_or((argument.as_str(), ""));
             includes_present |= name == "--include";
             scan.reports_unmatched |=
                 matches!(name, "--invert-match" | "--files-without-match" | "--count");
@@ -410,21 +392,25 @@ fn scan_into(
         return scan_into(arguments, context, stdin_only, absent, true, scan);
     }
     scan.recursive = recursive;
-    scan.includes_present = includes_present;
-    scan.excluded_files = excluded_files
+    scan.include_beside_exclusion = includes_present && !exclusions.leave_includes_exact();
+    scan.excluded_files = exclusions
+        .files
         .iter()
         .map(|name| (*name).to_owned())
         .collect();
-    scan.excluded_directories = excluded_directories
+    scan.excluded_directories = exclusions
+        .directories
         .iter()
         .map(|name| (*name).to_owned())
         .collect();
     let clearance = scan.clearance();
     pending_value.is_none()
-        && pending_exclusion.is_none()
+        && !exclusions.pending()
         // Include/exclude precedence differs across grep implementations. Do not
         // use exclusions as proof when an include could re-enable a file.
-        && (!includes_present || (excluded_files.is_empty() && excluded_directories.is_empty()))
+        // GNU grep also widens an include list whose first entry is an
+        // exclude, so any `--exclude` beside an include keeps review too.
+        && (!includes_present || exclusions.leave_includes_exact())
         && includes.scope_proven(&targets, context)
         && (!stdin_only || (pattern_supplied && !recursive))
         && (!recursive || {
@@ -432,16 +418,16 @@ fn scan_into(
                 tree::safe_recursive_target_excluding(
                     target,
                     context,
-                    &excluded_files,
-                    &excluded_directories,
+                    &exclusions.files,
+                    &exclusions.directories,
                     true,
                     dereference,
                 ) || (!dereference
                     && (sibling::grep_walk_root(
                         target,
                         context,
-                        &excluded_files,
-                        &excluded_directories,
+                        &exclusions.files,
+                        &exclusions.directories,
                         true,
                     ) || proven_glob(target, context)))
                     // A sensitive file the pattern cannot match prints nothing.
@@ -449,8 +435,8 @@ fn scan_into(
                         tree::safe_recursive_target_cleared(
                             target,
                             context,
-                            &excluded_files,
-                            &excluded_directories,
+                            &exclusions.files,
+                            &exclusions.directories,
                             dereference,
                             clearance,
                         )
@@ -500,14 +486,6 @@ pub(super) fn absent_target(value: &str, context: ReadContext<'_>) -> bool {
 /// into a sibling repository, such as `~/code/api/src/*.ts`, is proven.
 fn proven_glob(value: &str, context: ReadContext<'_>) -> bool {
     value.contains(['*', '?', '[']) && tree::safe_glob_search_operand(value, context)
-}
-
-fn exact_exclusion(value: &str) -> bool {
-    !value.is_empty()
-        && !matches!(value, "." | "..")
-        && value
-            .bytes()
-            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'_' | b'-'))
 }
 
 #[cfg(test)]

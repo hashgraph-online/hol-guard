@@ -4669,6 +4669,144 @@
       "expect": "allow"
     },
     {
+      "id": "sed-delete-header-and-footer-lines",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "sed '1d;$d' src/one.ts"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "sed-delete-blank-lines",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "sed '/^$/d' tests/sample.test.ts"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "sed-quit-after-line-count",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "sed 5q src/one.ts"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "sed-substitution-on-one-line",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "sed '2s/export/const/' src/one.ts"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "sed-delete-first-line-in-pipeline",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "cat src/one.ts | sed '1d'"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "neg-sed-delete-then-write-file",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "sed '1d;w ${HOME}/notes.md' src/one.ts"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow",
+      "contained_ok": true
+    },
+    {
+      "id": "neg-sed-addressed-substitution-write-flag",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "sed '2s/export/const/w ${HOME}/notes.md' src/one.ts"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow",
+      "contained_ok": true
+    },
+    {
+      "id": "neg-sed-delete-then-execute",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "sed '1d;e id' src/one.ts"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
       "id": "sed-skill-doc",
       "fix_area": "shell",
       "harnesses": [
@@ -6657,6 +6795,20 @@
       },
       "cwd": "worktree",
       "expect": "allow"
+    },
+    {
+      "id": "neg-grep-worktree-pattern-in-secret-manifest",
+      "fix_area": "negative",
+      "harnesses": [
+        "omp"
+      ],
+      "tool": "grep",
+      "tool_input": {
+        "path": "${WORKTREE}",
+        "pattern": "kind: Secret"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
     },
     {
       "id": "grep-worktree",
@@ -8774,6 +8926,57 @@
       },
       "cwd": "org_app",
       "expect": "allow"
+    },
+    {
+      "id": "guard-daemon-ensure",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "hol-guard daemon ensure"
+      },
+      "cwd": "org_app",
+      "expect": "allow"
+    },
+    {
+      "id": "neg-guard-daemon-ensure-wake-token",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "hol-guard daemon ensure --wake-token abc"
+      },
+      "cwd": "org_app",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-guard-daemon-ensure-other-home",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "hol-guard daemon ensure --guard-home /tmp/evil"
+      },
+      "cwd": "org_app",
+      "expect": "not_allow"
     },
     {
       "id": "guard-runtime-bare",
@@ -25439,6 +25642,86 @@
       "expect": "not_allow"
     },
     {
+      "id": "git-staged-names-cursor-terminal-pager",
+      "fix_area": "git",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git diff --cached --name-only"
+      },
+      "cwd": "worktree",
+      "environment": {
+        "PAGER": "sh -c \"head -n 10000 | cat\""
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "git-log-cursor-terminal-git-pager",
+      "fix_area": "git",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git log --oneline -3"
+      },
+      "cwd": "worktree",
+      "environment": {
+        "GIT_PAGER": "sh -c \"head -n 10000 | cat\""
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "neg-git-staged-names-pager-copies-output",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git diff --cached --name-only"
+      },
+      "cwd": "worktree",
+      "environment": {
+        "PAGER": "sh -c \"head -n 10000 | tee /tmp/hol-guard-gate-pager-copy\""
+      },
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-git-log-pager-runs-a-second-command",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git log --oneline -3"
+      },
+      "cwd": "worktree",
+      "environment": {
+        "GIT_PAGER": "sh -c \"head -n 10000 | cat; touch /tmp/hol-guard-gate-pager-mark\""
+      },
+      "expect": "not_allow"
+    },
+    {
       "id": "doctl-version-stderr-merged",
       "fix_area": "shell",
       "harnesses": [
@@ -36312,6 +36595,54 @@
       "expect": "not_allow"
     },
     {
+      "id": "tracked-feature-directory-doc-cat",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "cat docs/auth-evidence/phase-e-auth-schema.md"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "tracked-feature-directory-doc-grep",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "grep -n schema docs/auth-evidence/phase-e-auth-schema.md"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "neg-tracked-feature-directory-doc-beside-store",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "cat docs/auth-evidence/phase-e-auth-schema.md deploy/app-secrets.yaml"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
       "id": "neg-brace-group-reads-private-key",
       "fix_area": "shell",
       "harnesses": [
@@ -43634,6 +43965,93 @@
       },
       "cwd": "worktree",
       "expect": "allow"
+    },
+    {
+      "id": "grep-late-exclude-dir-after-operands",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "grep -rn 'TODO' src --exclude-dir=node_modules"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "grep-late-exclude-dir-beside-includes",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "grep -rln \"export\" app src --include=\"*.ts\" --include=\"*.tsx\" --exclude-dir=fixtures | sort -u"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "neg-grep-late-exclude-dir-separated-value",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "grep -rn TODO src --exclude-dir node_modules"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow",
+      "contained_ok": true
+    },
+    {
+      "id": "neg-grep-late-exclude-dir-over-env-backup",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "grep -rln \"edge.*setting\" ${HOME}/edge-clone/ --exclude-dir=node_modules"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-grep-late-exclude-beside-include",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "grep -rln \"export\" src --include=\"*.ts\" --exclude=\"*.min.js\""
+      },
+      "cwd": "worktree",
+      "expect": "not_allow",
+      "contained_ok": true
     },
     {
       "id": "tree-working-directory-listing",

@@ -258,6 +258,11 @@ def test_only_the_marked_cases_may_pass_on_containment() -> None:
         # copy and has no home access.
         "neg-grep-second-pattern-matching-plugin-manifest",
         "neg-grep-escaped-alternative-matching-plugin-manifest",
+        # A recursive grep in the worktree whose late exclusion the scan does not
+        # prove keeps its review. A contained run reads only the workspace copy the
+        # sandbox already holds, with no home or network reach.
+        "neg-grep-late-exclude-dir-separated-value",
+        "neg-grep-late-exclude-beside-include",
         # The pattern exemption's own negatives: the producer opens a dotenv
         # file, dumps the environment, or names one as a pathspec, so the
         # credential word is never the only signal. A contained run has no home
@@ -292,6 +297,8 @@ def test_only_the_marked_cases_may_pass_on_containment() -> None:
         # flag is intentionally excluded: it can damage the writable worktree.
         "neg-sed-substitute-chained-write-command",
         "neg-sed-substitute-second-expression-writes-a-file",
+        "neg-sed-delete-then-write-file",
+        "neg-sed-addressed-substitution-write-flag",
         # A `cat` that names a private key after a sibling run: the review stands,
         # and a contained run in the sibling root reaches no key at all.
         "neg-sibling-cd-jest-cat-reads-private-key",

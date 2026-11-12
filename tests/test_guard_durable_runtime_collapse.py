@@ -5,6 +5,7 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.guard import durable_runtime_collapse as collapse
+from codex_plugin_scanner.guard import repair_engine
 from codex_plugin_scanner.guard.repair_engine import repair_native_runtime
 
 _DIGEST = "a" * 64
@@ -80,14 +81,10 @@ def test_a_malformed_report_is_dropped(tmp_path: Path, monkeypatch: pytest.Monke
     assert collapse.collapse_durable_runtimes(tmp_path) is None
 
 
-def test_a_collapse_marks_a_clean_step_changed(tmp_path: Path, answers: list[tuple[str, str, object]]) -> None:
-    step: dict[str, object] = {"step": "native_runtime", "status": "ok", "summary": "No stale native runtime state."}
+def test_a_collapse_rides_on_the_runtime_step(tmp_path: Path, answers: list[tuple[str, str, object]]) -> None:
+    result = repair_engine._native_runtime_result(tmp_path, dry_run=False)
 
-    folded = collapse.with_durable_runtime_collapse(step, tmp_path)
-
-    assert folded["status"] == "changed"
-    assert folded["summary"] == "Shared one file among 2 older durable runtime copies."
-    assert folded["durable_runtimes"] == _report()
+    assert result["durable_runtimes"] == _report()
 
 
 def test_a_failed_collapse_leaves_the_step_alone(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -95,9 +92,8 @@ def test_a_failed_collapse_leaves_the_step_alone(tmp_path: Path, monkeypatch: py
         raise OSError("runtime vanished")
 
     monkeypatch.setattr(collapse, "collapse_durable_runtimes", broken)
-    step: dict[str, object] = {"step": "native_runtime", "status": "error", "summary": "Could not complete."}
 
-    assert collapse.with_durable_runtime_collapse(step, tmp_path) == step
+    assert "durable_runtimes" not in repair_engine._native_runtime_result(tmp_path, dry_run=False)
 
 
 def test_a_dry_run_repair_never_relinks(tmp_path: Path, answers: list[tuple[str, str, object]]) -> None:
