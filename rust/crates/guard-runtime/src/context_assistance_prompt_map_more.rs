@@ -27,8 +27,10 @@ const MAX_SHOWN_CHARS: usize = 1_600;
 /// opens a named definition before editing it, and that read costs a whole
 /// request, so even a long one is cheaper to show.
 const MAX_SHOWN_DEFINITION_CHARS: usize = 4_000;
-/// The most close tests looked at for showing whole.
-const MAX_SHOWN_TESTS: usize = 4;
+/// The most close tests looked at for showing whole. The room in
+/// characters is what usually stops them: a test class with six short
+/// tests is shown whole, so the agent does not open it to see the rest.
+const MAX_SHOWN_TESTS: usize = 12;
 /// How much a long doc section is marked down, as BM25's `k1`.
 const LENGTH_K: f64 = 1.2;
 
