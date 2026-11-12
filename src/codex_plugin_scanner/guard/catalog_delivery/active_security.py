@@ -6,7 +6,10 @@ factories or a previously authenticated protected native observation.
 
 from __future__ import annotations
 
+import contextvars
+import functools
 import time
+from concurrent.futures import FIRST_EXCEPTION, ThreadPoolExecutor, wait
 
 from ..native_command_control_authority_io import (
     hold_command_control_authority_lock,
@@ -22,6 +25,8 @@ from .object_native import sessioned
 PREFIX = "guard-command-pack-active-security"
 FILE = "active-pack-security.v1.json"
 MAX_BYTES = 262144
+# Downloads in flight while one round's independent misses are fetched.
+FETCH_WORKERS = 8
 
 
 # Native answers these from the request alone: no files, clock or randomness
@@ -101,6 +106,30 @@ def _no_fetch(target, maximum):
     raise ValueError("active_security_required_proofs_unavailable")
 
 
+def _fetch_together(tasks):
+    """Run one round's fetches side by side; the first failure stops the rest.
+
+    Each task fetches one content-addressed object or archive, checks it and
+    publishes it under its digest, so the order they finish in changes nothing.
+    A task that has not started when another fails is cancelled, so an outage
+    costs one wave of timeouts, not one per request.
+    """
+    if len(tasks) < 2:
+        for task in tasks:
+            task()
+        return
+    pool = ThreadPoolExecutor(max_workers=min(FETCH_WORKERS, len(tasks)))
+    try:
+        # Each task runs in a copy of this context so it reuses the verified runtime session.
+        futures = [pool.submit(contextvars.copy_context().run, task) for task in tasks]
+        wait(futures, return_when=FIRST_EXCEPTION)
+    finally:
+        pool.shutdown(wait=True, cancel_futures=True)
+    for future in futures:
+        if not future.cancelled():
+            future.result()
+
+
 @sessioned
 def _prepare(store, captured, activation, publication, fetch, *, profile=None, installed_identity=None):
     arguments = dict(
@@ -129,12 +158,15 @@ def _prepare(store, captured, activation, publication, fetch, *, profile=None, i
         # A round may name several independent misses at once (`needs`).
         result = invoke("complete", store, **complete)
         while "needs" in result or "need" in result or "need_archives" in result:
+            tasks = []
             for request in result.get("needs", [result]):
                 if "need_archives" in request:
-                    for archive in request["need_archives"]:
-                        stage_archive(directory, archive, transfer)
+                    tasks += [
+                        functools.partial(stage_archive, directory, a, transfer) for a in request["need_archives"]
+                    ]
                 else:
-                    reader.blob(request["need"])
+                    tasks.append(functools.partial(reader.blob, request["need"]))
+            _fetch_together(tasks)
             result = invoke("complete", store, budget=result["budget"], **complete)
         return result
     except (ValueError, OSError):
