@@ -126,13 +126,15 @@ def _prepare(store, captured, activation, publication, fetch, *, profile=None, i
     try:
         # Rust charges each requested object once against one cumulative budget
         # and bounds the rounds; only the echoed budget is carried between calls.
+        # A round may name several independent misses at once (`needs`).
         result = invoke("complete", store, **complete)
-        while "need" in result or "need_archives" in result:
-            if "need_archives" in result:
-                for archive in result["need_archives"]:
-                    stage_archive(directory, archive, transfer)
-            else:
-                reader.blob(result["need"])
+        while "needs" in result or "need" in result or "need_archives" in result:
+            for request in result.get("needs", [result]):
+                if "need_archives" in request:
+                    for archive in request["need_archives"]:
+                        stage_archive(directory, archive, transfer)
+                else:
+                    reader.blob(request["need"])
             result = invoke("complete", store, budget=result["budget"], **complete)
         return result
     except (ValueError, OSError):

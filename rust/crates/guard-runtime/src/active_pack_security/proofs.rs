@@ -6,9 +6,13 @@ use std::path::Path;
 pub(crate) enum Failure {
     Need(Value),
     Archives(Value),
+    /// Independent missing objects found in one pass, so a caller fetches them
+    /// together instead of restarting the whole proof once per object.
+    Batch(Vec<Value>),
     Invalid(&'static str),
 }
 type Result<T> = std::result::Result<T, Failure>;
+const BATCH: usize = 32;
 fn invalid() -> Failure {
     Failure::Invalid("active_security_proof_invalid")
 }
@@ -204,6 +208,116 @@ pub(crate) fn lookup(
     Err(invalid())
 }
 
+fn revocation_key(kind: &str, id: &str, hash: &str) -> String {
+    let mut hasher = Sha256::new();
+    hasher.update(b"hol-guard.extension-revocation.v1\0");
+    hasher.update(kind.as_bytes());
+    hasher.update(b"\0");
+    hasher.update(id.as_bytes());
+    hasher.update(b"\0");
+    hasher.update(hash.as_bytes());
+    hex::encode(hasher.finalize())
+}
+
+/// Missing objects collected across every selected pack in one pass.
+#[derive(Default)]
+struct Misses {
+    requests: Vec<Value>,
+    seen: BTreeSet<String>,
+    stopped: bool,
+}
+impl Misses {
+    /// Record what one read reports missing. Returns the value it read, if any.
+    /// An invalid proof stops collection without failing: the ordered pass in
+    /// `complete` reaches it again once the earlier misses are filled, so a
+    /// batch never reports an error the one-object-per-round order would not.
+    fn take<T>(&mut self, read: Result<T>) -> Option<T> {
+        let request = match read {
+            Ok(value) => return Some(value),
+            Err(Failure::Need(reference)) => json!({"need":reference}),
+            Err(Failure::Archives(archives)) => json!({"need_archives":archives}),
+            Err(Failure::Batch(requests)) => {
+                requests.into_iter().for_each(|r| self.add(r));
+                return None;
+            }
+            Err(Failure::Invalid(_)) => {
+                self.stopped = true;
+                return None;
+            }
+        };
+        self.add(request);
+        None
+    }
+    fn add(&mut self, request: Value) {
+        if self.requests.len() >= BATCH {
+            self.stopped = true;
+            return;
+        }
+        let Ok(bytes) = canonical_json_bytes(&request) else {
+            self.stopped = true;
+            return;
+        };
+        if self.seen.insert(hex::encode(Sha256::digest(bytes))) {
+            self.requests.push(request);
+        }
+    }
+}
+
+/// Walk every selected pack's proof reads without changing state and return
+/// all independent misses at once. Without this a cold home restarts the whole
+/// proof once per missing object, which after an upgrade means hundreds of
+/// native rounds before hooks can be served. Objects are content-addressed, so
+/// fetching them in a different order cannot change what `complete` decides.
+fn prefetch(
+    state: &Security,
+    header: &Value,
+    directory: &Path,
+    selected: &BTreeSet<String>,
+    index: &Value,
+) -> Result<()> {
+    let Some(total) = index["extensions"].as_u64() else {
+        return Ok(());
+    };
+    let revocations = &state.root["policy"]["revocations"];
+    let rev_count = revocations["count"].as_u64().unwrap_or(0);
+    let rollback = header["authority_epoch"]
+        .as_u64()
+        .is_some_and(|epoch| state.authority > epoch);
+    let mut misses = Misses::default();
+    for id in selected {
+        if misses.stopped {
+            break;
+        }
+        let Some(Some(manifest)) = misses.take(lookup(directory, &index["index"], total, id))
+        else {
+            continue;
+        };
+        misses.take(object(directory, &manifest));
+        if !rollback {
+            misses.take(super::trust::latest(directory, &state.root, id));
+        }
+        let Some(manifest_digest) = manifest["sha256"].as_str() else {
+            continue;
+        };
+        if rev_count == 0 {
+            continue;
+        }
+        for (kind, hash) in [("extension", ""), ("pack", manifest_digest)] {
+            let key = revocation_key(kind, id, hash);
+            if let Some(Some(proof)) =
+                misses.take(lookup(directory, &revocations["index"], rev_count, &key))
+            {
+                misses.take(object(directory, &proof));
+            }
+        }
+    }
+    if misses.requests.is_empty() {
+        Ok(())
+    } else {
+        Err(Failure::Batch(misses.requests))
+    }
+}
+
 pub(super) fn complete(state: &mut Security, header: &Value, directory: &Path) -> Result<()> {
     let old_root = object(directory, &header["distribution"])?;
     if header["distribution"]["sha256"] != header["root_digest"] {
@@ -251,6 +365,7 @@ pub(super) fn complete(state: &mut Security, header: &Value, directory: &Path) -
     let total = index["extensions"].as_u64().ok_or_else(invalid)?;
     let revocations = &state.root["policy"]["revocations"];
     let rev_count = revocations["count"].as_u64().ok_or_else(invalid)?;
+    prefetch(state, header, directory, &selected, index)?;
     state.quarantine.clear();
     state.applied.clear();
     for id in selected {
@@ -303,14 +418,7 @@ pub(super) fn complete(state: &mut Security, header: &Value, directory: &Path) -
             );
         }
         for (kind, hash) in [("extension", ""), ("pack", manifest_digest)] {
-            let mut hasher = Sha256::new();
-            hasher.update(b"hol-guard.extension-revocation.v1\0");
-            hasher.update(kind.as_bytes());
-            hasher.update(b"\0");
-            hasher.update(id.as_bytes());
-            hasher.update(b"\0");
-            hasher.update(hash.as_bytes());
-            let key = hex::encode(hasher.finalize());
+            let key = revocation_key(kind, &id, hash);
             let proof = if rev_count == 0 {
                 if !revocations["index"].is_null() {
                     return Err(invalid());
