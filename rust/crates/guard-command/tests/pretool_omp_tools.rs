@@ -209,6 +209,11 @@ fn proc_references_are_reads_of_the_sessions_own_jobs() {
         "proc://bg_1:raw",
         "proc://bg_1:1-40:raw",
         "proc://Reviewer.2",
+        "proc://bg_1/streams",
+        "proc://bg_1/streams/2",
+        "proc://bg_1/streams/2:1-40",
+        // Not a URL the host serves: it answers with its usage text.
+        "proc://hol-guard-approval/output",
     ] {
         let result = omp(&f, "read", json!({"path": path}));
         assert!(allowed(&result), "{path}: {}", result.reason_code);
@@ -217,7 +222,12 @@ fn proc_references_are_reads_of_the_sessions_own_jobs() {
     for path in [
         "proc://bg_1/kill",
         "proc://bg_1/mode",
+        "proc://bg_1/kill:raw",
         "proc://bg_1/",
+        "proc://bg_1//streams",
+        "proc://bg_1/../../etc/passwd",
+        "proc://bg_1/.hidden",
+        "proc://bg_1/streams/2/3",
         "proc:///etc/passwd",
         "proc://../bg_1",
         "proc://.hidden",
