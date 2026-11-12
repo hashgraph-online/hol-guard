@@ -86,6 +86,42 @@ def test_concurrent_misses_in_one_container_download_it_once(plan_type, monkeypa
     assert transport._CONTAINERS == {}
 
 
+def test_uncached_fetches_of_one_container_are_not_serialized(plan_type, monkeypatch, tmp_path):
+    # An uncached fetch writes nothing the next caller could reuse, so holding
+    # the container lock would only make concurrent misses wait on each other.
+    plan = plan_type(tmp_path / "assets", "1" * 40)
+    one, two = b'{"one":1}', b'{"two":2}'
+    first, second = plan.asset(one, "object"), plan.asset(two, "object")
+    plan.finish()
+    in_flight = [0, 0]
+    counter = threading.Lock()
+
+    def download(url, maximum):
+        with counter:
+            in_flight[0] += 1
+            in_flight[1] = max(in_flight[1], in_flight[0])
+        time.sleep(0.3)
+        with counter:
+            in_flight[0] -= 1
+        return (plan.directory / first["tag"] / first["asset"]).read_bytes()
+
+    monkeypatch.setattr(transport, "download", download)
+    results = {}
+    threads = [
+        threading.Thread(
+            target=lambda key=key, ref=ref, size=size: results.update({key: transport.fetch_object(ref, size)})
+        )
+        for key, ref, size in (("one", first, len(one)), ("two", second, len(two)))
+    ]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+    assert results == {"one": one, "two": two}
+    assert in_flight[1] == 2
+    assert transport._CONTAINERS == {}
+
+
 def test_containers_split_without_changing_member_or_byte_bounds(plan_type, build_containers, tmp_path):
     plan = plan_type(tmp_path / "assets", "1" * 40)
     for number in range(build_containers.MAX_MEMBERS + 1):

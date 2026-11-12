@@ -149,28 +149,38 @@ def cached_fetcher(directory):
     return fetch
 
 
-# Container URLs being fetched in this process, with how many callers want each.
-_CONTAINERS: dict[str, list] = {}
+class _ContainerFetch:
+    """One container URL in flight: the lock its callers share and how many wait on it."""
+
+    def __init__(self) -> None:
+        self.lock = threading.Lock()
+        self.callers = 0
+
+
+# Container URLs being fetched into a cache by this process.
+_CONTAINERS: dict[str, _ContainerFetch] = {}
 _CONTAINERS_LOCK = threading.Lock()
 
 
 @contextmanager
 def _one_container_fetch(url):
-    """Let one caller at a time fetch a container; the next finds it cached.
+    """Let one cached caller at a time fetch a container; the next finds it cached.
 
     Concurrent misses often share a container of up to 32 MiB. Without this
-    each would download its own copy before the first reached the cache.
+    each would download its own copy before the first reached the cache. Only
+    callers with a cache take the lock: an uncached caller writes nothing the
+    next one could reuse, so waiting would only serialize its downloads.
     """
     with _CONTAINERS_LOCK:
-        entry = _CONTAINERS.setdefault(url, [threading.Lock(), 0])
-        entry[1] += 1
+        entry = _CONTAINERS.setdefault(url, _ContainerFetch())
+        entry.callers += 1
     try:
-        with entry[0]:
+        with entry.lock:
             yield
     finally:
         with _CONTAINERS_LOCK:
-            entry[1] -= 1
-            if entry[1] == 0:
+            entry.callers -= 1
+            if entry.callers == 0:
                 del _CONTAINERS[url]
 
 
@@ -180,6 +190,8 @@ def _fetch(target, maximum, cache=None):
     url = f"https://github.com/{REPOSITORY}/releases/download/{plan['tag']}/{plan['asset']}"
     if plan["bound"] is None:
         return download(url, maximum)
+    if cache is None:
+        return _fetch_container(url, plan, maximum, None)
     with _one_container_fetch(url):
         return _fetch_container(url, plan, maximum, cache)
 
