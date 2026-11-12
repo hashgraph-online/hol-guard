@@ -359,18 +359,18 @@ fn extract_command_substitution_spans_impl(
     let mut substitutions = Vec::new();
     let mut index = 0usize;
     let mut quote: Option<char> = None;
-    let expanding = heredoc_bodies::expanding_bodies(command);
+    let bodies = heredoc_bodies::text_bodies(command);
     while index < n {
         let ch = chars[index];
         if ch == '\\' {
             index += 2;
             continue;
         }
-        if expanding
+        if let Some(&(_, _, expands)) = bodies
             .iter()
-            .any(|&(start, end)| start <= index && index < end)
+            .find(|&&(start, end, _)| start <= index && index < end)
         {
-            if starts_with(&chars, index, "$(") || ch == '`' {
+            if expands && (starts_with(&chars, index, "$(") || ch == '`') {
                 quote = None;
             } else {
                 index += 1;

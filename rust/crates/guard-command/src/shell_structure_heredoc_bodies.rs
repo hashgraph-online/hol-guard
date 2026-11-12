@@ -9,8 +9,8 @@ use super::{
 };
 
 /// `_extract_parenthesized` (:243-266), reading the bodies of heredocs
-/// declared inside the `$(` as text. A `<<` after a word-start `#` is in a
-/// comment and declares nothing.
+/// declared inside the `$(` as text. A word-start `#` opens a comment that
+/// runs to the end of its line: a quote, parenthesis or `<<` there is text.
 pub(super) fn extract_parenthesized(chars: &[char], start: usize) -> (String, usize) {
     let n = chars.len();
     let mut depth = 1;
@@ -18,10 +18,18 @@ pub(super) fn extract_parenthesized(chars: &[char], start: usize) -> (String, us
     let mut quote: Option<char> = None;
     let mut bodies = PendingBodies::default();
     let mut comment = false;
+    // The index after the last escaped character. A `#` there continues the
+    // word the escape belongs to, so it opens no comment.
+    let mut escape_end = None;
     while index < n {
         let ch = chars[index];
+        if comment && ch != '\n' {
+            index += 1;
+            continue;
+        }
         if ch == '\\' {
             index += 2;
+            escape_end = Some(index);
             continue;
         }
         if quote.is_none() && ch == '\n' {
@@ -31,10 +39,16 @@ pub(super) fn extract_parenthesized(chars: &[char], start: usize) -> (String, us
                 continue;
             }
         }
-        if quote.is_none() && ch == '#' && word_start(chars, start, index) {
+        if quote.is_none()
+            && ch == '#'
+            && escape_end != Some(index)
+            && word_start(chars, start, index)
+        {
             comment = true;
+            index += 1;
+            continue;
         }
-        if quote.is_none() && !comment && depth == 1 && ch == '<' {
+        if quote.is_none() && depth == 1 && ch == '<' {
             if let Some(end) = bodies.declare(chars, index) {
                 index = end;
                 continue;
@@ -136,20 +150,20 @@ impl PendingBodies {
     }
 }
 
-/// Bodies of heredocs with an unquoted delimiter. The shell still expands
-/// `$(...)` and backticks in them, but quotes there are literal characters,
-/// so the substitution scan must not let `it's` hide what follows.
-pub(super) fn expanding_bodies(command: &str) -> Vec<(usize, usize)> {
+/// Closed heredoc bodies as `(start, end, expands)`. A body is text, not
+/// shell syntax, so the substitution scan must not let `it's` there open a
+/// quote that hides what follows. With an unquoted delimiter (`expands`) the
+/// shell still runs `$(...)` and backticks in the body, so the scan looks for
+/// those. A body with no closing line is left out: bash may end it at a line
+/// such as `EOF)`, which the body scan does not model.
+pub(super) fn text_bodies(command: &str) -> Vec<(usize, usize, bool)> {
     if !command.contains("<<") {
         return Vec::new();
     }
-    let heredocs = extract_heredocs(command);
-    if !heredocs_closed(command, &heredocs) {
-        return Vec::new();
-    }
-    heredocs
+    let n = command.chars().count();
+    extract_heredocs(command)
         .into_iter()
-        .filter(|heredoc| !heredoc.quoted)
-        .map(|heredoc| (heredoc.body_start, heredoc.body_end))
+        .filter(|heredoc| heredoc.body_end < n)
+        .map(|heredoc| (heredoc.body_start, heredoc.body_end, !heredoc.quoted))
         .collect()
 }

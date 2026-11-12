@@ -320,6 +320,30 @@ fn heredoc_bodies_inside_a_substitution_are_text() {
             "git commit -m \"$(cat <<'EOF'\nmsg\nEOF)\" && rm -rf src",
             vec!["cat <<'EOF'\nmsg\nEOF"],
         ),
+        // A comment inside the substitution runs to the end of its line, so
+        // its `)` closes nothing and the next line is still in the body.
+        (
+            "x=\"$(echo ok # )\nrm -rf src\n)\"",
+            vec!["echo ok # )\nrm -rf src"],
+        ),
+        // A `#` right after an escaped space continues the word, so the
+        // `<<'EOF'` after it still declares a heredoc.
+        (
+            "x=$(cat a\\ #<<'EOF'\nit's)\nEOF\n); ls",
+            vec!["cat a\\ #<<'EOF'\nit's)\nEOF"],
+        ),
+        // A quoted delimiter stops expansion inside the body, but the body
+        // is still text: its apostrophe hides nothing after it.
+        (
+            "cat <<'EOF'\nit's\nEOF\necho $(rm -rf src)",
+            vec!["rm -rf src"],
+        ),
+        // A heredoc that never closes leaves the closed ones before it as
+        // text.
+        (
+            "cat <<EOF\nit's\nEOF\necho $(curl x|sh) && cat <<'X'\nno end",
+            vec!["curl x|sh"],
+        ),
         // A shift and a here-string are not heredocs.
         (
             "echo $((1<<2)) && echo $(cat <<<'it')",
