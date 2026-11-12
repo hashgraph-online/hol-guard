@@ -67,9 +67,8 @@ pub(crate) fn apply_harness_patch(
 
 /// `harness_cigar`: fold a per-app CIGAR patch into the stored choices.
 pub(crate) fn apply_cigar_patch(next: &mut Table, patch: &[(&str, bool)]) {
-    let mut stored = crate::guard_config_harness::loaded_cigar(
-        get(next, "harness_cigar").map(to_json).as_ref(),
-    );
+    let mut stored =
+        crate::guard_config_harness::loaded_cigar(get(next, "harness_cigar").map(to_json).as_ref());
     for (harness, off) in patch {
         if *off {
             stored.insert((*harness).to_owned(), "off".to_owned());

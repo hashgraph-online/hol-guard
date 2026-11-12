@@ -1,8 +1,8 @@
-import { al as isUnsupportedPlatformCheck, h as harnessDisplayName, j as jsxRuntimeExports, am as RECHECK_UNAVAILABLE_SIGNATURE, an as protectionReasonText, r as reactExports, A as ActionButton, ao as HiMiniExclamationCircle, ap as hasRepairableProtectionGap, aq as remainingProtectionRepairParts, ar as protectionGapSignature, as as repairOutcomeIsStalled, at as ProtectionRepairFlowError, au as nextProtectionRepairOutcome, av as waitForAuthorizeUrl, aw as startOrRecoverCloudConnect, ax as safeCloudConnectUrl, ay as openPackageFirewallAuthorizeFallback, az as waitForCloudConnection, aA as activeFailedHarnesses, aB as resetRepairOutcomeTracker, aC as HiMiniWrenchScrewdriver, v as HiMiniCheckCircle, g as HiMiniChevronDown, aD as globalPosture, aE as harnessPosturePatch, aF as selectHarnessPosture, aG as effectiveHarnessPosture, aH as fetchSettings, aI as harnessPostureRows, U as updateSettings, aJ as harnessRowTone, aK as guardAwareHref, aL as PROTECTION_POSTURE_COPY, S as SectionLabel, aM as harnessRowStatus, aa as EmptyState, H as HiMiniChevronRight, aN as HiMiniEye, aO as HiMiniXCircle, x as isConnectableAppHarness, X as protectionHealthFor, W as useProtectionPresentationState, aP as GuardHero, aQ as ProofStrip, aR as HiMiniClipboardDocumentCheck, aS as HiMiniClipboard } from "../guard-dashboard.js";
-import { H as HarnessVersionLabel, u as useHarnessDetection, d as detectedHarnesses, v as visibleHarnessesFor, i as inactiveInstallNeedsRepair, r as resolveDetectedAppStatus, s as setupStatusFor, a as versionCompatibilityFor } from "./harness-version-label-BKYJQG1Y.js";
-import { C as ConnectGuardCloudButton } from "./connect-guard-cloud-button-CntNwHb7.js";
+import { al as isUnsupportedPlatformCheck, h as harnessDisplayName, j as jsxRuntimeExports, am as RECHECK_UNAVAILABLE_SIGNATURE, an as protectionReasonText, r as reactExports, A as ActionButton, ao as HiMiniExclamationCircle, ap as hasRepairableProtectionGap, aq as remainingProtectionRepairParts, ar as protectionGapSignature, as as repairOutcomeIsStalled, at as ProtectionRepairFlowError, au as nextProtectionRepairOutcome, av as waitForAuthorizeUrl, aw as startOrRecoverCloudConnect, ax as safeCloudConnectUrl, ay as openPackageFirewallAuthorizeFallback, az as waitForCloudConnection, aA as activeFailedHarnesses, aB as resetRepairOutcomeTracker, aC as HiMiniWrenchScrewdriver, v as HiMiniCheckCircle, g as HiMiniChevronDown, aD as fetchSettings, aE as harnessPostureRows, aF as appModesUpdate, U as updateSettings, aG as appModesStatusMessage, aH as appModes, aI as needsConfirm, aJ as harnessRowTone, aK as cigarReady, aL as cigarSupported, aM as guardAwareHref, aN as PROTECTION_POSTURE_COPY, aO as guardOffPrompt, aP as cigarUnavailableReason, aQ as globalPosture, S as SectionLabel, aa as EmptyState, aR as appModesNote, aS as harnessRowStatus, H as HiMiniChevronRight, aT as HiMiniEye, aU as HiMiniXCircle, x as isConnectableAppHarness, X as protectionHealthFor, W as useProtectionPresentationState, aV as GuardHero, aW as ProofStrip, aX as HiMiniClipboardDocumentCheck, aY as HiMiniClipboard } from "../guard-dashboard.js";
+import { H as HarnessVersionLabel, u as useHarnessDetection, d as detectedHarnesses, v as visibleHarnessesFor, i as inactiveInstallNeedsRepair, r as resolveDetectedAppStatus, s as setupStatusFor, a as versionCompatibilityFor } from "./harness-version-label-BMeZqHL3.js";
+import { C as ConnectGuardCloudButton } from "./connect-guard-cloud-button-BUnXYp-e.js";
 import { a as SUPPORTED_APPS_BRIEF, d as defaultConnectHarness, A as APP_STATUS_LABELS } from "./app-catalog-Ca_M7GbC.js";
-import { G as GuardRepairControl, S as SettingsSaveProofModal } from "./settings-save-proof-modal-C6AOvqXp.js";
+import { G as GuardRepairControl, S as SettingsSaveProofModal } from "./settings-save-proof-modal-DW4goyCe.js";
 const SUPPORTED_APPS_COPY = SUPPORTED_APPS_BRIEF;
 function resolveFleetHeroCopy(cloudState, activeInstallCount, protectionState, urls) {
   const hasApps = activeInstallCount > 0;
@@ -541,81 +541,15 @@ function FleetProtectionRecovery(props) {
     }
   );
 }
-const CIGAR_APPS = /* @__PURE__ */ new Set(["claude-code", "codex", "pi", "omp"]);
-function cigarReady(settings) {
-  const config = settings.context_assistance;
-  return config?.enabled === true && config.features.agent_context && config.sources.workspace_documents;
-}
-function cigarSupported(harness) {
-  return CIGAR_APPS.has(harness);
-}
-function cigarAvailable(settings, harness) {
-  return cigarReady(settings) && cigarSupported(harness);
-}
-function appModes(settings, harness) {
-  return {
-    guard: effectiveHarnessPosture(settings, harness) !== "watch",
-    cigar: cigarAvailable(settings, harness) && settings.harness_cigar?.[harness] !== "off"
-  };
-}
-function watchIsUntimed(settings, harness) {
-  return settings.harness_postures?.[harness] === "watch" && settings.harness_watch_entered_at?.[harness] === void 0;
-}
-function appModesUpdate(settings, harness, next) {
-  const update = {};
-  const available = cigarAvailable(settings, harness);
-  const cigarOnly = !next.guard && next.cigar && available;
-  if (cigarOnly) {
-    if (!watchIsUntimed(settings, harness)) {
-      update.harness_postures = { [harness]: "watch" };
-      update.harness_watch_untimed = true;
-    }
-  } else if (next.guard) {
-    const patch = harnessPosturePatch(selectHarnessPosture(settings, harness, "on"), settings);
-    if (patch !== null) update.harness_postures = patch;
-  } else {
-    const draft = selectHarnessPosture(settings, harness, "watch");
-    const patch = harnessPosturePatch(draft, settings) ?? {};
-    if (watchIsUntimed(settings, harness) && globalPosture(settings) !== "watch") patch[harness] = "watch";
-    if (Object.keys(patch).length > 0) update.harness_postures = patch;
-  }
-  if (available) {
-    const off = settings.harness_cigar?.[harness] === "off";
-    if (next.cigar === off) update.harness_cigar = { [harness]: next.cigar ? null : "off" };
-  }
-  return Object.keys(update).length > 0 ? update : null;
-}
-function needsConfirm(current, next) {
-  if (next.guard) return false;
-  return current.guard || next.cigar && !current.cigar;
-}
-function appModesNote(settings, harness) {
-  const modes = appModes(settings, harness);
-  const available = cigarAvailable(settings, harness);
-  if (modes.guard) return available && !modes.cigar ? "Guard only · CIGAR off for this app" : null;
-  if (modes.cigar) return "CIGAR only · Guard is not checking actions";
-  return globalPosture(settings) === "watch" && settings.harness_postures?.[harness] === void 0 ? "Watch · follows the machine setting" : "Watch · recording only";
-}
-function appModesStatusMessage(next, displayName) {
-  if (next.guard && next.cigar) return `Guard and CIGAR are on in ${displayName}.`;
-  if (next.guard) return `Guard is on in ${displayName}. CIGAR is off.`;
-  if (next.cigar) return `CIGAR is on in ${displayName}. Guard is not checking actions.`;
-  return `Guard is only recording in ${displayName}.`;
-}
-function guardOffPrompt(next, displayName, revertHours) {
-  if (next.cigar) {
-    return `Guard will stop checking ${displayName}'s actions until you turn it back on. CIGAR keeps adding project context.`;
-  }
-  if (revertHours > 0) {
-    const hours = revertHours === 1 ? "1 hour" : `${revertHours} hours`;
-    return `Guard will only record in ${displayName}. Protection comes back on its own after ${hours}.`;
-  }
-  return `Guard will only record in ${displayName} until you turn it back on.`;
+function trackClass(checked, attentionWhenOff) {
+  if (checked) return "bg-brand-blue";
+  if (attentionWhenOff) return "bg-brand-attention/40";
+  return "bg-slate-200";
 }
 function FleetAppModeSwitch(props) {
   const reasonId = reactExports.useId();
   const { checked, disabled } = props;
-  const track = checked ? "bg-brand-blue" : props.attentionWhenOff ? "bg-brand-attention/40" : "bg-slate-200";
+  const track = trackClass(checked, props.attentionWhenOff === true);
   return /* @__PURE__ */ jsxRuntimeExports.jsxs(
     "label",
     {
@@ -776,7 +710,7 @@ function useFleetAppPosture(props) {
     if (part === "guard" && state.settings.harness_postures_locked === true) return;
     setError(null);
     setStatusMessage(null);
-    if (needsConfirm(current, next)) {
+    if (needsConfirm(current, next, state.settings.harness_postures_locked === true)) {
       setPendingWatch({ harness, next });
       return;
     }
@@ -820,7 +754,7 @@ function useFleetAppPosture(props) {
     if (!row) return null;
     const saving = savingHarness === harness;
     const modes = appModes(settings, harness);
-    const cigarReason = cigarAvailable(settings, harness) ? void 0 : cigarSupported(harness) ? "CIGAR is off on this machine. Set it up on the CIGAR page." : `CIGAR can't add project context in ${row.displayName}.`;
+    const cigarReason = cigarUnavailableReason(settings, harness, row.displayName);
     return /* @__PURE__ */ jsxRuntimeExports.jsxs(
       "div",
       {
@@ -1002,6 +936,12 @@ function AppSummary({ app, postureNote, watching, showBadge, onOpenAppDetail }) 
     }
   );
 }
+function rowNote(row, settings, harness, watching) {
+  if (row === void 0) return null;
+  if (settings !== null) return appModesNote(settings, harness);
+  if (watching || row.hasOverride) return harnessRowStatus(row);
+  return null;
+}
 function FleetAppCoverage(props) {
   const posture = useFleetAppPosture({ apps: props.postureApps, onChanged: props.onPostureChanged });
   const isWatching = (harness) => {
@@ -1021,7 +961,7 @@ function FleetAppCoverage(props) {
       const row = posture.rowFor(app.harness);
       const watching = isWatching(app.harness);
       const control = posture.control(app.harness);
-      const postureNote = row === void 0 ? null : posture.settings !== null ? appModesNote(posture.settings, app.harness) : watching || row.hasOverride ? harnessRowStatus(row) : null;
+      const postureNote = rowNote(row, posture.settings, app.harness, watching);
       return /* @__PURE__ */ jsxRuntimeExports.jsxs(
         "li",
         {

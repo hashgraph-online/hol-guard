@@ -49,7 +49,9 @@ export function appModesUpdate(settings: GuardSettings, harness: string, next: A
   const update: GuardSettingsUpdate = {};
   const available = cigarAvailable(settings, harness);
   const cigarOnly = !next.guard && next.cigar && available;
-  if (cigarOnly) {
+  if (settings.harness_postures_locked === true) {
+    // A managed lock owns each app's Guard setting; only CIGAR can change here.
+  } else if (cigarOnly) {
     if (!watchIsUntimed(settings, harness)) {
       update.harness_postures = { [harness]: "watch" };
       update.harness_watch_untimed = true;
@@ -71,10 +73,33 @@ export function appModesUpdate(settings: GuardSettings, harness: string, next: A
   return Object.keys(update).length > 0 ? update : null;
 }
 
-/** Turning Guard off, or making a Guard-off app last, waits for an inline confirmation. */
-export function needsConfirm(current: AppModes, next: AppModes): boolean {
-  if (next.guard) return false;
+/**
+ * Turning Guard off, or making a Guard-off app last, waits for an inline
+ * confirmation. Under a managed lock Guard cannot change, so nothing does.
+ */
+export function needsConfirm(current: AppModes, next: AppModes, locked = false): boolean {
+  if (next.guard || locked) return false;
   return current.guard || (next.cigar && !current.cigar);
+}
+
+/** Why an app's CIGAR switch cannot be used, or undefined when it can. */
+export function cigarUnavailableReason(settings: GuardSettings, harness: string, displayName: string): string | undefined {
+  if (cigarAvailable(settings, harness)) return undefined;
+  if (cigarSupported(harness)) return "CIGAR is off on this machine. Set it up on the CIGAR page.";
+  return `CIGAR can't add project context in ${displayName}.`;
+}
+
+/** Applies a per-app CIGAR patch, where null removes an app's entry. */
+export function applyHarnessCigarPatch(
+  current: GuardSettings["harness_cigar"],
+  patch: Record<string, "off" | null>,
+): NonNullable<GuardSettings["harness_cigar"]> {
+  const next = { ...(current ?? {}) };
+  for (const [harness, choice] of Object.entries(patch)) {
+    if (choice === null) delete next[harness];
+    else next[harness] = choice;
+  }
+  return next;
 }
 
 /** Short line under an app's name that says what runs there, or null for the usual Guard + CIGAR. */

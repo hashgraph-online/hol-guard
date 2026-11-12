@@ -14,6 +14,7 @@ import { APP_STATUS_LABELS, resolveAppInstallStatus } from "./apps/app-catalog";
 import { useFleetAppPosture, type FleetPostureApp } from "./fleet-app-protection";
 import type { DetectedAppStatus } from "./harness-detection";
 import { appModesNote } from "./fleet-app-modes";
+import type { GuardSettings } from "./guard-types";
 import { harnessRowStatus, harnessRowTone } from "./harness-posture-ui";
 import type { HarnessVersionCompatibility } from "./harness-version-compatibility";
 import { HarnessVersionLabel } from "./harness-version-label";
@@ -119,6 +120,19 @@ function AppSummary({ app, postureNote, watching, showBadge, onOpenAppDetail }: 
   );
 }
 
+/** What runs in an app, once settings have loaded; before that, only a Watch or override status. */
+function rowNote(
+  row: ReturnType<ReturnType<typeof useFleetAppPosture>["rowFor"]>,
+  settings: GuardSettings | null,
+  harness: string,
+  watching: boolean,
+): string | null {
+  if (row === undefined) return null;
+  if (settings !== null) return appModesNote(settings, harness);
+  if (watching || row.hasOverride) return harnessRowStatus(row);
+  return null;
+}
+
 /**
  * Every app Guard can see on this machine, with Guard and CIGAR switches on
  * the rows whose hooks Guard manages. One list answers both "is this app
@@ -151,11 +165,7 @@ export function FleetAppCoverage(props: FleetAppCoverageProps) {
             const row = posture.rowFor(app.harness);
             const watching = isWatching(app.harness);
             const control = posture.control(app.harness);
-            const postureNote = row === undefined
-              ? null
-              : posture.settings !== null
-                ? appModesNote(posture.settings, app.harness)
-                : watching || row.hasOverride ? harnessRowStatus(row) : null;
+            const postureNote = rowNote(row, posture.settings, app.harness, watching);
             return (
               <li
                 key={app.harness}

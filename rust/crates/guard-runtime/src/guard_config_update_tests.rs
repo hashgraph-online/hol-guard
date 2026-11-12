@@ -293,13 +293,25 @@ fn an_untimed_watch_keeps_no_stamp_and_a_timed_one_restarts_it() {
 fn per_app_cigar_choices_are_checked() {
     let home = scratch("cigar-invalid").join("home");
     for (payload, message) in [
-        (r#"{"harness_cigar": "off"}"#, "Per-app CIGAR choices must be a table."),
-        (r#"{"harness_cigar": {"nope": "off"}}"#, "Unknown Guard harness for CIGAR."),
-        (r#"{"harness_cigar": {"codex": "later"}}"#, "CIGAR for an app must be on or off."),
+        (
+            r#"{"harness_cigar": "off"}"#,
+            "Per-app CIGAR choices must be a table.",
+        ),
+        (
+            r#"{"harness_cigar": {"nope": "off"}}"#,
+            "Unknown Guard harness for CIGAR.",
+        ),
+        (
+            r#"{"harness_cigar": {"codex": "later"}}"#,
+            "CIGAR for an app must be on or off.",
+        ),
     ] {
         let response = run(&home, "settings", payload);
         assert_eq!(response["ok"], json!(false), "{payload}: {response}");
-        assert!(response.to_string().contains(message), "{payload}: {response}");
+        assert!(
+            response.to_string().contains(message),
+            "{payload}: {response}"
+        );
     }
     assert!(!home.join(HOME_CONFIG_FILENAME).exists());
 }

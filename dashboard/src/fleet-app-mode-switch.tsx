@@ -15,6 +15,12 @@ type FleetAppModeSwitchProps = {
   testId: string;
 };
 
+function trackClass(checked: boolean, attentionWhenOff: boolean): string {
+  if (checked) return "bg-brand-blue";
+  if (attentionWhenOff) return "bg-brand-attention/40";
+  return "bg-slate-200";
+}
+
 /**
  * A labelled on/off switch for one app's Guard or CIGAR. The visible label
  * sits beside the track so a row reads "Guard ● CIGAR ●" at a glance.
@@ -22,11 +28,7 @@ type FleetAppModeSwitchProps = {
 export function FleetAppModeSwitch(props: FleetAppModeSwitchProps) {
   const reasonId = useId();
   const { checked, disabled } = props;
-  const track = checked
-    ? "bg-brand-blue"
-    : props.attentionWhenOff
-      ? "bg-brand-attention/40"
-      : "bg-slate-200";
+  const track = trackClass(checked, props.attentionWhenOff === true);
   return (
     <label
       className={`inline-flex min-h-11 items-center gap-2 rounded-lg px-1 ${disabled ? "cursor-not-allowed" : "cursor-pointer"}`}

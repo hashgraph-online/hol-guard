@@ -89,7 +89,11 @@ pub(crate) fn loaded_cigar(value: Option<&Value>) -> BTreeMap<String, String> {
         let Some(harness) = canonical_harness_id(key) else {
             continue;
         };
-        if raw.as_str().map(|text| text.trim().to_lowercase()).as_deref() == Some("off")
+        if raw
+            .as_str()
+            .map(|text| text.trim().to_lowercase())
+            .as_deref()
+            == Some("off")
             && choices.len() < MAX_HARNESS_POSTURES
         {
             choices.insert(harness.to_owned(), "off".to_owned());

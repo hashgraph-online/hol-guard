@@ -439,7 +439,10 @@ pub(crate) fn update(
     );
     sync_posture(&mut next, current, payload, selected, now);
     if !harness_patch.is_empty() {
-        let untimed = matches!(incoming(payload, HARNESS_WATCH_UNTIMED_KEY), Some(PyVal::Bool(true)));
+        let untimed = matches!(
+            incoming(payload, HARNESS_WATCH_UNTIMED_KEY),
+            Some(PyVal::Bool(true))
+        );
         apply_harness_patch(&mut next, &harness_patch, now, untimed);
     }
     if !cigar_patch.is_empty() {

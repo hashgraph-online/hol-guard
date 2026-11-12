@@ -100,6 +100,7 @@ import {
 import { normalizeApprovalExtensionCoverage } from "./approval-extension-coverage";
 import { normalizeApprovalExtensionRecommendation } from "./approval-extension-recommendation";
 import { observeDashboardBuild } from "./dashboard-build";
+import { applyHarnessCigarPatch } from "./fleet-app-modes";
 
 const GUARD_TOKEN_PARAM = "guard-token";
 const GUARD_DAEMON_PARAM = "guardDaemon";
@@ -2436,18 +2437,6 @@ export type GuardSettingsUpdate = Omit<Partial<GuardSettings>, "harness_postures
   /** The Watch entries in this update get no auto-revert window (an app keeping only CIGAR). */
   harness_watch_untimed?: boolean;
 };
-
-function applyHarnessCigarPatch(
-  current: GuardSettings["harness_cigar"],
-  patch: Record<string, "off" | null>,
-): NonNullable<GuardSettings["harness_cigar"]> {
-  const next = { ...(current ?? {}) };
-  for (const [harness, choice] of Object.entries(patch)) {
-    if (choice === null) delete next[harness];
-    else next[harness] = choice;
-  }
-  return next;
-}
 
 export async function updateSettings(settings: GuardSettingsUpdate): Promise<GuardSettingsPayload> {
   if (isGuardDemoMode()) {

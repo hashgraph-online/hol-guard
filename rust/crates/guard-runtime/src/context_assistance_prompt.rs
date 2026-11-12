@@ -134,7 +134,9 @@ fn open_slot(response: &mut Value) -> bool {
     let Some(object) = response.as_object_mut() else {
         return false;
     };
-    if object.contains_key("hookSpecificOutput") || object.get("decision").and_then(Value::as_str) != Some("allow") {
+    if object.contains_key("hookSpecificOutput")
+        || object.get("decision").and_then(Value::as_str) != Some("allow")
+    {
         return false;
     }
     object.insert(
@@ -155,19 +157,16 @@ fn warm(
     if event != "UserPromptSubmit" {
         return;
     }
-    if let Some(store) = store
-        .filter(|_| takes_context(harness, &envelope.raw_payload))
-        .filter(|store| !cigar_off(store, harness))
-    {
+    if let Some(store) = store.filter(|_| takes_context(harness, &envelope.raw_payload)) {
         wake(harness, store);
     }
 }
 
 /// A new session or a finished turn wakes a resting worker while the person
-/// types the next prompt. Only harnesses that can receive project context wake it, and only
-/// when project context is on.
+/// types the next prompt. Only harnesses that can receive project context wake it, only
+/// when project context is on, and never for an app with CIGAR turned off.
 pub(crate) fn wake(harness: &str, store: &PolicySnapshotStore) {
-    if matches!(harness, "claude-code" | "codex" | "pi" | "omp") {
+    if matches!(harness, "claude-code" | "codex" | "pi" | "omp") && !cigar_off(store, harness) {
         store
             .context_assistance()
             .warm_prompt_lane(store.guard_home());

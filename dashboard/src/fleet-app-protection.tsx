@@ -14,7 +14,7 @@ import {
   appModes,
   appModesStatusMessage,
   appModesUpdate,
-  cigarAvailable,
+  cigarUnavailableReason,
   cigarReady,
   cigarSupported,
   guardOffPrompt,
@@ -242,7 +242,7 @@ export function useFleetAppPosture(props: FleetAppPostureOptions): FleetAppPostu
     if (part === "guard" && state.settings.harness_postures_locked === true) return;
     setError(null);
     setStatusMessage(null);
-    if (needsConfirm(current, next)) {
+    if (needsConfirm(current, next, state.settings.harness_postures_locked === true)) {
       setPendingWatch({ harness, next });
       return;
     }
@@ -295,11 +295,7 @@ export function useFleetAppPosture(props: FleetAppPostureOptions): FleetAppPostu
     if (!row) return null;
     const saving = savingHarness === harness;
     const modes = appModes(settings, harness);
-    const cigarReason = cigarAvailable(settings, harness)
-      ? undefined
-      : cigarSupported(harness)
-        ? "CIGAR is off on this machine. Set it up on the CIGAR page."
-        : `CIGAR can't add project context in ${row.displayName}.`;
+    const cigarReason = cigarUnavailableReason(settings, harness, row.displayName);
     return (
       <div
         role="group"

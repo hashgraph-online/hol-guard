@@ -2,6 +2,7 @@ import {
   appModes,
   appModesNote,
   appModesUpdate,
+  applyHarnessCigarPatch,
   cigarAvailable,
   guardOffPrompt,
   needsConfirm,
@@ -114,6 +115,25 @@ assert(needsConfirm({ guard: true, cigar: true }, { guard: false, cigar: true })
 assert(!needsConfirm({ guard: true, cigar: true }, { guard: true, cigar: false }), "CIGAR off alone does not confirm");
 assert(needsConfirm({ guard: false, cigar: false }, { guard: false, cigar: true }), "making Watch last confirms");
 assert(!needsConfirm({ guard: false, cigar: true }, { guard: false, cigar: false }), "going back to timed Watch does not confirm");
+
+// A managed lock owns Guard: only the CIGAR choice is sent, and nothing waits on a confirmation.
+const locked = settings({ protection_posture: "watch", harness_postures_locked: true });
+same(
+  appModesUpdate(locked, "codex", { guard: false, cigar: false }),
+  { harness_cigar: { codex: "off" } },
+  "CIGAR off under a lock sends no posture",
+);
+same(
+  appModesUpdate(settings({ ...locked, harness_cigar: { codex: "off" } }), "codex", { guard: false, cigar: true }),
+  { harness_cigar: { codex: null } },
+  "CIGAR on under a lock sends no posture",
+);
+assert(!needsConfirm({ guard: false, cigar: false }, { guard: false, cigar: true }, true), "a lock skips the confirmation");
+same(
+  applyHarnessCigarPatch({ codex: "off", pi: "off" }, { codex: null, omp: "off" }),
+  { pi: "off", omp: "off" },
+  "null removes an app's CIGAR entry",
+);
 
 // Notes and prompts.
 assert(appModesNote(settings(), "codex") === null, "the usual state needs no note");

@@ -13,7 +13,8 @@ fn a_watch_answer_gets_a_context_slot_only_when_it_allows_the_prompt() {
     );
     assert!(allowed(&watch));
 
-    let mut slotted = json!({"continue": true, "hookSpecificOutput": {"hookEventName": "UserPromptSubmit"}});
+    let mut slotted =
+        json!({"continue": true, "hookSpecificOutput": {"hookEventName": "UserPromptSubmit"}});
     assert!(!open_slot(&mut slotted));
 
     let mut blocked = json!({"decision": "block"});
@@ -25,12 +26,21 @@ fn a_watch_answer_gets_a_context_slot_only_when_it_allows_the_prompt() {
 #[test]
 fn cigar_off_is_read_per_app_from_the_home_config() {
     let home = tempfile::tempdir().unwrap();
-    assert!(!crate::guard_config_load::cigar_off_for(home.path(), "codex"));
+    assert!(!crate::guard_config_load::cigar_off_for(
+        home.path(),
+        "codex"
+    ));
     std::fs::write(
         home.path().join("config.toml"),
         "[harness_cigar]\ncodex = \"off\"\nclaude-code = \"on\"\n",
     )
     .unwrap();
-    assert!(crate::guard_config_load::cigar_off_for(home.path(), "codex"));
-    assert!(!crate::guard_config_load::cigar_off_for(home.path(), "claude-code"));
+    assert!(crate::guard_config_load::cigar_off_for(
+        home.path(),
+        "codex"
+    ));
+    assert!(!crate::guard_config_load::cigar_off_for(
+        home.path(),
+        "claude-code"
+    ));
 }
