@@ -338,6 +338,7 @@
       "src/pretool/curl_reads.rs",
       "src/pretool/curl_reads_bound.rs",
       "src/pretool/ci_workflow_writes.rs",
+      "src/pretool/ci_workflow_shell.rs",
       "src/pretool/data_heredocs.rs",
       "src/pretool/dd_reads.rs",
       "src/pretool/decompress_reads.rs",

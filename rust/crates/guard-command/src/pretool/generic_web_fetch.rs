@@ -89,11 +89,16 @@ fn text_carries_credential(text: &str) -> bool {
             .is_empty()
 }
 
-fn printable_text(bytes: Vec<u8>) -> Option<String> {
+/// Decoded bytes as text the credential screen can read. Control characters
+/// become spaces rather than discarding the reading, so a NUL or escape byte
+/// placed before a credential cannot hide it.
+fn decoded_text(bytes: Vec<u8>) -> Option<String> {
     let text = String::from_utf8(bytes).ok()?;
-    text.chars()
-        .all(|c| !c.is_control() || c == '\n' || c == '\r' || c == '\t')
-        .then_some(text)
+    Some(
+        text.chars()
+            .map(|c| if c.is_control() { ' ' } else { c })
+            .collect(),
+    )
 }
 
 /// The readings of one URL part under each encoding it could be spelled in.
@@ -110,7 +115,7 @@ fn decoded_readings(part: &str) -> Vec<String> {
         return readings;
     }
     if part.len().is_multiple_of(2) && part.bytes().all(|b| b.is_ascii_hexdigit()) {
-        if let Some(text) = hex::decode(part).ok().and_then(printable_text) {
+        if let Some(text) = hex::decode(part).ok().and_then(decoded_text) {
             readings.push(text);
         }
     }
@@ -119,7 +124,7 @@ fn decoded_readings(part: &str) -> Vec<String> {
         .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'+' | b'/' | b'-' | b'_' | b'='))
     {
         for engine in [&STANDARD, &STANDARD_NO_PAD, &URL_SAFE, &URL_SAFE_NO_PAD] {
-            if let Some(text) = engine.decode(part).ok().and_then(printable_text) {
+            if let Some(text) = engine.decode(part).ok().and_then(decoded_text) {
                 readings.push(text);
                 break;
             }
@@ -150,10 +155,13 @@ fn hex_text_label(label: &str) -> bool {
 /// True when any part of the URL, read raw or through up to
 /// `MAX_DECODE_DEPTH` layers of percent, hex or base64 encoding, carries a
 /// credential, or a host label spells encoded text.
-fn url_carries_credential(url: &Url) -> bool {
+fn url_carries_credential(raw: &str, url: &Url) -> bool {
     if let Some(Host::Domain(name)) = url.host() {
+        // The parser lowercases the host, which hides case-sensitive formats
+        // such as an AWS key id, so the host is also read as it was written.
         if name
             .split('.')
+            .chain(raw_host(raw).split('.'))
             .any(|label| hex_text_label(label) || part_carries_credential(label, 0))
         {
             return true;
@@ -177,6 +185,21 @@ fn url_carries_credential(url: &Url) -> bool {
         parts.push(fragment.to_owned());
     }
     parts.iter().any(|part| part_carries_credential(part, 0))
+}
+
+/// The host of a URL as it was written: the authority after `://`, without
+/// user info or port.
+fn raw_host(raw: &str) -> &str {
+    let authority = raw
+        .split_once("://")
+        .map_or(raw, |(_, rest)| rest)
+        .split(['/', '?', '#', '\\'])
+        .next()
+        .unwrap_or_default();
+    let host = authority
+        .rsplit_once('@')
+        .map_or(authority, |(_, host)| host);
+    host.rsplit_once(':').map_or(host, |(name, _)| name)
 }
 
 /// A label that spells an address, such as `127` in `127.0.0.1.example.test`
@@ -228,7 +251,7 @@ pub(in crate::pretool) fn plain_public_url(raw: &str) -> bool {
     !url.query_pairs().any(|(key, _)| {
         let key = key.to_ascii_lowercase();
         CREDENTIAL_QUERY_TERMS.iter().any(|term| key.contains(term))
-    }) && !url_carries_credential(&url)
+    }) && !url_carries_credential(raw, &url)
 }
 
 /// True only for a bounded GET-style fetch or search of public web content.
@@ -348,6 +371,12 @@ mod tests {
                 STANDARD.encode(STANDARD.encode(&aws))
             ),
             format!("https://{}.collect.example.test/", hex("HOME=/home/dev")),
+            format!("https://collect.example.test/?d=00{}", hex(&aws)),
+            format!(
+                "https://collect.example.test/?d={}",
+                STANDARD.encode([b"\0", aws.as_bytes()].concat())
+            ),
+            format!("https://{aws}.collect.example.test/"),
             format!(
                 "https://collect.example.test/{}",
                 joined(&[

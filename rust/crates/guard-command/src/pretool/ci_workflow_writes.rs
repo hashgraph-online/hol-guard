@@ -18,6 +18,10 @@ use regex::Regex;
 use serde_json::Value;
 use std::sync::LazyLock;
 
+#[path = "ci_workflow_shell.rs"]
+mod shell;
+use shell::{pipes_credential_read, simple_commands};
+
 const BODY_KEYS: [&str; 4] = ["content", "contents", "new_string", "newString"];
 const PATCH_KEYS: [&str; 3] = ["command", "input", "_input"];
 const CREDENTIAL_FILE_NEEDLES: [&str; 14] = [
@@ -74,6 +78,17 @@ static SUBSTITUTED_READ: LazyLock<Regex> = LazyLock::new(|| {
     .expect("substituted read pattern compiles")
 });
 
+/// A script run by `bash -c '...'` or `eval "..."`, read whole before the line
+/// is cut at the separators inside its quotes.
+static INLINE_SCRIPT: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(concat!(
+        r#"(?:^|[\s;&|(`])(?:\S*/)?"#,
+        r#"(?:(?:sh|bash|zsh|dash|ksh)\s+(?:-[A-Za-z]+\s+)*-[A-Za-z]*c[A-Za-z]*|eval)\s+"#,
+        r#"(?:'(?P<sq>[^']*)'|"(?P<dq>(?:[^"\\]|\\.)*)")"#,
+    ))
+    .expect("inline script pattern compiles")
+});
+
 /// A YAML list marker or mapping key ahead of a step's command.
 static YAML_PREFIX: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r"^(?:-\s+)*(?:[A-Za-z_][\w.-]*:\s+)?").expect("yaml prefix pattern compiles")
@@ -114,6 +129,19 @@ fn credential_file_operand(operand: &str) -> bool {
             .any(|needle| lowered.contains(needle))
 }
 
+/// `|`, `|-`, `|+` or `|2`: a YAML literal block opens on the next line.
+fn literal_block_indicator(value: &str) -> bool {
+    value
+        .strip_prefix('|')
+        .is_some_and(|rest| rest.chars().all(|c| matches!(c, '-' | '+' | '0'..='9')))
+}
+
+/// `cat .env |` or `npm test &&`: the shell reads the next line as the rest of
+/// this command.
+fn ends_with_operator(text: &str) -> bool {
+    text.ends_with('|') || text.ends_with("&&")
+}
+
 /// The commands a workflow body runs, one per entry: backslash continuations
 /// and folded block scalars are joined, and whole-line comments are dropped.
 fn logical_lines(body: &str) -> Vec<String> {
@@ -140,7 +168,7 @@ fn logical_lines(body: &str) -> Vec<String> {
         if continuing {
             current.push(' ');
             current.push_str(text.trim_end_matches('\\'));
-            continuing = text.ends_with('\\');
+            continuing = text.ends_with('\\') || ends_with_operator(text);
             if !continuing {
                 out.push(std::mem::take(&mut current));
             }
@@ -154,8 +182,14 @@ fn logical_lines(body: &str) -> Vec<String> {
             folded = Some(indent);
             continue;
         }
+        if literal_block_indicator(&value) {
+            continue;
+        }
         if let Some(head) = text.strip_suffix('\\') {
             current = head.to_owned();
+            continuing = true;
+        } else if ends_with_operator(text) {
+            current = text.to_owned();
             continuing = true;
         } else {
             out.push(text.to_owned());
@@ -180,20 +214,68 @@ fn command_words(segment: &str) -> Vec<String> {
         .filter(|word| !word.is_empty())
         .collect();
     let mut start = 0;
-    let mut wrapped = false;
+    let mut wrapper_in_use: Option<&str> = None;
+    let mut option_value = false;
     while let Some(word) = words.get(start) {
+        start += 1;
+        if std::mem::take(&mut option_value) {
+            continue;
+        }
         let assignment = word.contains('=') && !word.starts_with('-');
-        let wrapper = WRAPPERS.contains(&basename(word));
         let control = CONTROL_WORDS.contains(&word.as_str());
-        let wrapper_argument =
-            wrapped && (word.starts_with('-') || word.bytes().all(|b| b.is_ascii_digit()));
-        if !(assignment || wrapper || control || wrapper_argument) {
+        if WRAPPERS.contains(&basename(word)) {
+            wrapper_in_use = Some(basename(word));
+        } else if let Some(wrapper) = wrapper_in_use.filter(|_| word.starts_with('-')) {
+            option_value = wrapper_option_takes_value(wrapper, word);
+        } else if !(assignment || control || (wrapper_in_use.is_some() && duration(word))) {
+            start -= 1;
             break;
         }
-        wrapped |= wrapper;
-        start += 1;
     }
     words[start..].to_vec()
+}
+
+/// `sudo -u root`, `env -u CI`, `timeout -s KILL`: the option's value is the
+/// next word, not the command the wrapper runs.
+fn wrapper_option_takes_value(wrapper: &str, option: &str) -> bool {
+    let options: &[&str] = match wrapper {
+        "sudo" => &[
+            "-u",
+            "-g",
+            "-C",
+            "-D",
+            "-h",
+            "-p",
+            "-r",
+            "-t",
+            "-U",
+            "-T",
+            "--user",
+            "--group",
+            "--chdir",
+            "--host",
+            "--prompt",
+            "--role",
+            "--type",
+            "--other-user",
+            "--command-timeout",
+            "--close-from",
+        ],
+        "env" => &["-u", "-C", "--unset", "--chdir"],
+        "timeout" => &["-s", "-k", "--signal", "--kill-after"],
+        "nice" => &["-n", "--adjustment"],
+        "time" => &["-f", "-o", "--format", "--output"],
+        _ => &[],
+    };
+    options.contains(&option)
+}
+
+/// A `nice` adjustment or a `timeout` duration such as `30`, `10s` or `1.5m`.
+fn duration(word: &str) -> bool {
+    let number = word.trim_end_matches(['s', 'm', 'h', 'd']);
+    !number.is_empty()
+        && number.bytes().all(|b| b.is_ascii_digit() || b == b'.')
+        && number.bytes().any(|b| b.is_ascii_digit())
 }
 
 /// True when a network tool in this segment sends a credential file.
@@ -254,128 +336,24 @@ fn runs_network_tool(segment: &str) -> bool {
         .is_some_and(|word| NETWORK_TOOLS.contains(&basename(word)))
 }
 
-/// Every simple command in `text`, cut at each separator, pipe and group
-/// delimiter. `||` separates commands and `|&` is a pipe.
-fn simple_commands(text: &str) -> Vec<String> {
-    text.replace("||", ";")
-        .replace("|&", "|")
-        .split(['\n', ';', '&', '(', ')', '`', '|'])
-        .map(str::to_owned)
-        .collect()
-}
-
-/// The pipelines of one command line, cut at `;`, `&&`, `||`, a lone `&` and
-/// newlines. A `( … )`, `{ …; }`, `$( … )` or backtick group stays inside the
-/// stage it belongs to, so `{ cat .env; } | curl …` is one pipeline, and the
-/// `&` of a `2>&1` redirect is not a separator. Also returns the inner text of
-/// every top-level group, whose own pipelines are checked separately.
-fn top_level_pipelines(line: &str) -> (Vec<Vec<String>>, Vec<String>) {
-    let chars: Vec<char> = line.chars().collect();
-    let mut pipelines: Vec<Vec<String>> = Vec::new();
-    let mut stages: Vec<String> = Vec::new();
-    let mut stage = String::new();
-    let mut groups: Vec<String> = Vec::new();
-    let mut group = String::new();
-    let mut closers: Vec<char> = Vec::new();
-    let mut index = 0;
-    while let Some(&ch) = chars.get(index) {
-        let next = chars.get(index + 1).copied();
-        let previous = index.checked_sub(1).map(|at| chars[at]);
-        index += 1;
-        if closers.last() == Some(&ch) {
-            closers.pop();
-            if closers.is_empty() {
-                groups.push(std::mem::take(&mut group));
-            } else {
-                group.push(ch);
-            }
-            stage.push(ch);
-            continue;
-        }
-        let opens = match ch {
-            '(' => Some(')'),
-            '`' => Some('`'),
-            // `{ cmd; }` is a group; `${{ expr }}` and `${VAR}` are not.
-            '{' if previous.is_none_or(|p| p.is_whitespace() || ";&|(".contains(p))
-                && next.is_none_or(char::is_whitespace) =>
-            {
-                Some('}')
-            }
-            _ => None,
-        };
-        if !closers.is_empty() {
-            group.push(ch);
-        }
-        if let Some(closer) = opens {
-            closers.push(closer);
-            stage.push(ch);
-            continue;
-        }
-        if !closers.is_empty() {
-            stage.push(ch);
-            continue;
-        }
-        let ends_pipeline = match ch {
-            '|' if next == Some('|') => {
-                index += 1;
-                true
-            }
-            '|' => {
-                if next == Some('&') {
-                    index += 1;
-                }
-                stages.push(std::mem::take(&mut stage));
-                continue;
-            }
-            '&' if next == Some('&') => {
-                index += 1;
-                true
-            }
-            '&' if matches!(previous, Some('>' | '<')) || next == Some('>') => false,
-            '&' | ';' | '\n' | ')' => true,
-            _ => false,
-        };
-        if ends_pipeline {
-            stages.push(std::mem::take(&mut stage));
-            pipelines.push(std::mem::take(&mut stages));
-        } else {
-            stage.push(ch);
-        }
-    }
-    if !closers.is_empty() {
-        groups.push(group);
-    }
-    stages.push(stage);
-    pipelines.push(stages);
-    (pipelines, groups)
-}
-
-/// `cat .env | curl -d @- ...`: a credential read feeds a later network stage
-/// of the same pipeline. A read that ends at `&&` or `;` sends nothing.
-fn pipes_credential_read(line: &str, depth: usize) -> bool {
-    if depth > 4 {
-        return false;
-    }
-    let (pipelines, groups) = top_level_pipelines(line);
-    pipelines.iter().any(|stages| {
-        stages
-            .iter()
-            .rposition(|stage| simple_commands(stage).iter().any(|c| runs_network_tool(c)))
-            .is_some_and(|network| {
-                stages[..network].iter().any(|stage| {
-                    simple_commands(stage)
-                        .iter()
-                        .any(|c| reads_credential_file(c))
-                })
-            })
-    }) || groups
-        .iter()
-        .any(|inner| pipes_credential_read(inner, depth + 1))
-}
-
 /// True when one command line sends a credential file to a network host.
 fn command_uploads(line: &str, depth: usize) -> bool {
     let line = YAML_PREFIX.replace(line, "");
+    let inline_uploads = depth < 3
+        && INLINE_SCRIPT.captures_iter(&line).any(|captures| {
+            captures
+                .name("sq")
+                .map(|script| script.as_str().to_owned())
+                .or_else(|| {
+                    captures
+                        .name("dq")
+                        .map(|s| s.as_str().replace("\\\"", "\""))
+                })
+                .is_some_and(|script| command_uploads(&script, depth + 1))
+        });
+    if inline_uploads {
+        return true;
+    }
     let commands = simple_commands(&line);
     if commands
         .iter()
