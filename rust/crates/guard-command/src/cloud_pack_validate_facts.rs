@@ -84,7 +84,10 @@ fn mail_recipients_bound(action: &PackAction) -> Result<(), &'static str> {
             mail.recipient_arguments().into_iter().collect();
         let same = |arguments: &Vec<String>| {
             distinct(arguments)
-                && arguments.iter().map(String::as_str).collect::<std::collections::BTreeSet<_>>()
+                && arguments
+                    .iter()
+                    .map(String::as_str)
+                    .collect::<std::collections::BTreeSet<_>>()
                     == wanted
         };
         let domains = matches!(
