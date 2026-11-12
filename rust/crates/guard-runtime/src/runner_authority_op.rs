@@ -43,6 +43,7 @@ use super::gemini_detect;
 use super::grok_detect;
 use super::grok_legacy_settings;
 use super::grok_user_config_op;
+use super::harness_backup_restore;
 use super::harness_hook_settings;
 use super::harness_settings_file;
 use super::hermes_detect;
@@ -267,6 +268,7 @@ pub(crate) fn dispatch(kind: &str, args: &Value) -> KindResult {
         | "fleet_policy_section"
         | "fleet_runtime_posture" => crate::fleet_posture_inventory::dispatch(kind, args),
         "cursor_hook_state" => cursor_hook_state::dispatch(args),
+        "harness_backup_restore" => harness_backup_restore::dispatch(args),
         "opencode_detect" => opencode_detect::detect(args),
         "opencode_plugin_render" => opencode_plugin_render::render(args),
         "opencode_config_normalize" => opencode_config_normalize::dispatch(args),

@@ -20,6 +20,19 @@
 //! bare names, so each of those words is checked for both shapes of its own:
 //! a name like `FS=x.txt` would make `awk` assign `FS` and fall back to
 //! standard input, leaving the read this proof stands for undone.
+//!
+//! A reader's pattern that matches nothing reads nothing. Bash passes the
+//! word on unchanged when nothing matches, and the reader fails to open it:
+//! a file literally named `notes*.md` would itself match `notes*.md`, so an
+//! empty listing shows no such file exists. zsh's `nomatch` and bash's
+//! `failglob` stop the command before it runs, and `nullglob` drops the word,
+//! leaving a reader that has no other operand to read standard input, which
+//! is proven wherever it comes from. A bare pattern that starts with `-`
+//! would reach the reader as an option, so it keeps its review. The listing
+//! holds only when no step of the command can create an entry before the
+//! shell expands the pattern: `ln -s ~/.ssh/id_rsa k.txt; cat k*.txt` would
+//! read the key. A copy needs a source to copy, so `glob_file_matches` still
+//! refuses an empty match.
 
 use std::path::{Path, PathBuf};
 
@@ -33,12 +46,15 @@ const MAX_MATCHES: usize = 256;
 
 /// True when `value` is `<directory>/<pattern>`, or a bare `<pattern>` in the
 /// working directory, and every name the shell can expand it to is a bounded,
-/// non-sensitive regular file.
+/// non-sensitive regular file. A pattern that matches nothing in a directory
+/// the read may name is a read of nothing (see the module notes).
 pub(super) fn bounded_glob_file_read_target(
     value: &str,
     context: super::super::PathContext<'_>,
 ) -> bool {
-    glob_file_matches(value, context).is_some()
+    glob_words(value, context).is_some_and(|words| {
+        !words.is_empty() || (context.creates_nothing && !value.starts_with('-'))
+    })
         // A reader prints each match; it does not place them anywhere, so a
         // match from any directory reads like its literal word. A copy keeps
         // the single-directory model, where every match lands under its own
@@ -47,12 +63,18 @@ pub(super) fn bounded_glob_file_read_target(
 }
 
 /// The words the shell passes on for `value` -- `<directory>/<name>`, or a
-/// bare `<name>` when the pattern named no directory -- when every one of
-/// them clears the proof above; `None` otherwise.
+/// bare `<name>` when the pattern named no directory -- when there is at
+/// least one and every one of them clears the proof above; `None` otherwise.
 pub(in crate::pretool) fn glob_file_matches(
     value: &str,
     context: super::super::PathContext<'_>,
 ) -> Option<Vec<String>> {
+    glob_words(value, context).filter(|words| !words.is_empty())
+}
+
+/// Every word the pattern expands to, which is empty when the directory was
+/// listed in full and no name matched.
+fn glob_words(value: &str, context: super::super::PathContext<'_>) -> Option<Vec<String>> {
     // A pattern with no directory names the working directory. The shell
     // passes each match on as the bare name, so `.` anchors the proof exactly
     // as an explicit `./` prefix does while the word stays what the shell
@@ -102,7 +124,7 @@ pub(in crate::pretool) fn glob_file_matches(
         }
         matches.push(word);
     }
-    (!matches.is_empty()).then_some(matches)
+    Some(matches)
 }
 
 /// A last component holding `*` or `?` and otherwise only plain filename

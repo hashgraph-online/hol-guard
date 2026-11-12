@@ -162,15 +162,13 @@ struct Scan {
 }
 
 impl Scan {
-    /// The pattern, when it is the only one and the command prints the lines
-    /// that match it: files it cannot match add nothing to the output.
+    /// The patterns, when the command prints the lines that match any of
+    /// them: files none of them can match add nothing to the output.
     fn clearance(&self) -> Option<PatternClearance> {
-        match self.patterns.as_slice() {
-            [only] if !self.reports_unmatched && !self.pattern_unread => {
-                PatternClearance::new(only)
-            }
-            _ => None,
+        if self.reports_unmatched || self.pattern_unread {
+            return None;
         }
+        PatternClearance::any(&self.patterns)
     }
 }
 
