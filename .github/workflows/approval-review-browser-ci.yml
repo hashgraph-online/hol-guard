@@ -48,6 +48,12 @@ jobs:
         working-directory: dashboard
         run: bunx playwright test e2e/approval-scope-ui.spec.ts --project chromium
 
+      # #7528: when Guard refuses a decision for want of a code, the review card
+      # must ask for one, even if the settings still report a recent confirmation.
+      - name: Verify a refused decision asks for a fresh Authenticator code
+        working-directory: dashboard
+        run: bunx playwright test e2e/approval-fresh-code.spec.ts --project chromium
+
       # A failed connector scan must name its cause and a next action. Without
       # this step the Extensions banner had no CI coverage at all, which is how
       # one sentence that fit every failure survived several fixes.
