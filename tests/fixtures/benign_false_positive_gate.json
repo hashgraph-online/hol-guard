@@ -1594,7 +1594,7 @@
       ],
       "tool": "shell",
       "tool_input": {
-        "command": "grep -a -rln \"edge_session_marker\" ${HOME}/edge-clone/"
+        "command": "grep -a -rln \"edge.*setting\" ${HOME}/edge-clone/"
       },
       "cwd": "worktree",
       "expect": "not_allow"
@@ -1611,7 +1611,7 @@
       ],
       "tool": "shell",
       "tool_input": {
-        "command": "grep -a -rn Phase docs ${HOME}/edge-clone/"
+        "command": "grep -a -rnv edge_session_marker docs ${HOME}/edge-clone/"
       },
       "cwd": "worktree",
       "expect": "not_allow"
