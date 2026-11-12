@@ -11,6 +11,7 @@
 //! read-backs and native detectors. Model-written text is never a fact.
 //! Decoding grants nothing; the consumer still evaluates policy.
 
+use serde::de::{DeserializeOwned, Deserializer, Error as _};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeSet;
 
@@ -26,12 +27,44 @@ pub const MAX_ACTION_FACTS_BYTES: usize = 32 * 1024;
 
 /// A fact whose value may be unavailable. `unsupported` means the producer
 /// cannot know it for this action; consumers treat it like `unknown`.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+///
+/// The wire form is `{"state": "known", "value": ...}`, `{"state": "unknown"}`
+/// or `{"state": "unsupported"}`. Decoding is strict: no other key, a value
+/// only with `known`, and no `"value": null` on an unknown fact.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(tag = "state", content = "value", rename_all = "snake_case")]
 pub enum Fact<T> {
     Known(T),
     Unknown,
     Unsupported,
+}
+
+impl<'de, T: DeserializeOwned> Deserialize<'de> for Fact<T> {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        const FIELDS: &[&str] = &["state", "value"];
+        let mut map = serde_json::Map::<String, serde_json::Value>::deserialize(deserializer)?;
+        let state = map
+            .remove("state")
+            .ok_or_else(|| D::Error::missing_field("state"))?;
+        let value = map.remove("value");
+        if let Some(extra) = map.keys().next() {
+            return Err(D::Error::unknown_field(extra, FIELDS));
+        }
+        match (state.as_str(), value) {
+            (Some("known"), Some(value)) => serde_json::from_value(value)
+                .map(Self::Known)
+                .map_err(D::Error::custom),
+            (Some("known"), None) => Err(D::Error::missing_field("value")),
+            (Some("unknown"), None) => Ok(Self::Unknown),
+            (Some("unsupported"), None) => Ok(Self::Unsupported),
+            (Some("unknown" | "unsupported"), Some(_)) => {
+                Err(D::Error::custom("only a known fact carries a value"))
+            }
+            _ => Err(D::Error::custom(
+                "fact state must be known, unknown or unsupported",
+            )),
+        }
+    }
 }
 
 impl<T> Fact<T> {
@@ -301,10 +334,20 @@ impl ActionFactsV2 {
                 return inconsistent;
             }
         }
-        if let (Some(AudienceKindV2::Private), Some(count)) =
-            (self.audience.kind.known(), self.recipient_count.known())
-        {
-            if *count != 0 {
+        if self.audience.kind.known() == Some(&AudienceKindV2::Private) {
+            // A private result reaches nobody: no recipient, no recipient
+            // domain and nobody outside the workspace.
+            if self
+                .recipient_count
+                .known()
+                .is_some_and(|count| *count != 0)
+                || self
+                    .audience
+                    .recipient_domains
+                    .known()
+                    .is_some_and(|domains| !domains.is_empty())
+                || self.audience.external.known() == Some(&true)
+            {
                 return inconsistent;
             }
         }
@@ -348,7 +391,11 @@ impl ActionFactsV2 {
             .map(|recipient| recipient.domain.clone())
             .collect();
         let labels = &action.content.sensitivity_labels;
-        let sensitivity = if labels.contains(&BusinessSensitivityV1::Unknown) || labels.is_empty() {
+        let inspected = action.content.inspection_state == BusinessFactStateV1::Known;
+        let sensitivity = if !inspected
+            || labels.contains(&BusinessSensitivityV1::Unknown)
+            || labels.is_empty()
+        {
             Fact::Unknown
         } else {
             let set: BTreeSet<SensitivityV2> = labels

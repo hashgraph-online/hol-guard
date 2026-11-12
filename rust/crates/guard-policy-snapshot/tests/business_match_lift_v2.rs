@@ -198,3 +198,35 @@ fn account_bound_selectors_stay_on_v1() {
         Err(BusinessSelectorLiftErrorV1::AccountBindingsUnsupported)
     );
 }
+
+#[test]
+fn uninspected_content_lifts_sensitivity_as_unknown() {
+    let mut value = base_facts();
+    value["content"]["inspection_state"] = json!("unknown");
+    value["content"]["inspected_bytes"] = json!(0);
+    value["completeness"] = json!("unknown");
+    let facts = BusinessActionV1::from_bounded_json(&serde_json::to_vec(&value).unwrap()).unwrap();
+    let lifted_facts = ActionFactsV2::from_business_action_v1(&facts);
+    lifted_facts.validate().unwrap();
+    assert_eq!(lifted_facts.sensitivity, guard_contracts::Fact::Unknown);
+
+    let mut selector = fixtures()["base"].clone();
+    selector["sensitivityLabels"] = json!(["confidential"]);
+    let selector =
+        BusinessPolicyMatchV1::from_bounded_json(&serde_json::to_vec(&selector).unwrap()).unwrap();
+    let windows = BTreeMap::new();
+    let subject = FactSubjectV2 {
+        provider: business_service_token(facts.provider.service),
+        facts: &lifted_facts,
+        session: None,
+        windows: &windows,
+    };
+    let answers: Vec<Match3> = selector
+        .lift_to_fact_selectors_v2()
+        .unwrap()
+        .iter()
+        .map(|s| s.matches(&subject))
+        .collect();
+    assert!(!answers.contains(&Match3::No), "{answers:?}");
+    assert!(answers.contains(&Match3::Unknown), "{answers:?}");
+}

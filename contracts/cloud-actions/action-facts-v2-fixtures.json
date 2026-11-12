@@ -287,6 +287,97 @@
    "valid": false
   },
   {
+   "id": "fact-extra-key",
+   "patch": {
+    "object": {
+     "state": "known",
+     "value": "message",
+     "source": "model"
+    }
+   },
+   "valid": false
+  },
+  {
+   "id": "unknown-with-null-value",
+   "patch": {
+    "object": {
+     "state": "unknown",
+     "value": null
+    }
+   },
+   "valid": false
+  },
+  {
+   "id": "known-with-null-value",
+   "patch": {
+    "object": {
+     "state": "known",
+     "value": null
+    }
+   },
+   "valid": false
+  },
+  {
+   "id": "private-with-domains",
+   "patch": {
+    "audience": {
+     "kind": {
+      "state": "known",
+      "value": "private"
+     },
+     "recipient_domains": {
+      "state": "known",
+      "value": [
+       "example.com"
+      ]
+     },
+     "external": {
+      "state": "unknown"
+     }
+    }
+   },
+   "valid": false
+  },
+  {
+   "id": "private-external",
+   "patch": {
+    "audience": {
+     "kind": {
+      "state": "known",
+      "value": "private"
+     },
+     "recipient_domains": {
+      "state": "unknown"
+     },
+     "external": {
+      "state": "known",
+      "value": true
+     }
+    }
+   },
+   "valid": false
+  },
+  {
+   "id": "private-internal",
+   "patch": {
+    "audience": {
+     "kind": {
+      "state": "known",
+      "value": "private"
+     },
+     "recipient_domains": {
+      "state": "known",
+      "value": []
+     },
+     "external": {
+      "state": "known",
+      "value": false
+     }
+    }
+   },
+   "valid": true
+  },
+  {
    "id": "pay-needs-money-fact",
    "patch": {
     "class": "pay"
