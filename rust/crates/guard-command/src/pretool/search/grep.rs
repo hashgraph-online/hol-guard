@@ -493,8 +493,8 @@ fn proven_glob(value: &str, context: ReadContext<'_>) -> bool {
 }
 
 #[cfg(test)]
-#[path = "grep_tests.rs"]
-mod tests;
-#[cfg(test)]
 #[path = "grep_include_tests.rs"]
 mod include_tests;
+#[cfg(test)]
+#[path = "grep_tests.rs"]
+mod tests;
