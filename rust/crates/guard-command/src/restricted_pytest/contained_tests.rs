@@ -464,7 +464,12 @@ fn bun_inline_eval_uses_the_node_eval_profile_with_an_installer_image() {
     let result = evaluate("prepare_inline", &launch);
     let plan = &result["value"];
     assert_eq!(plan["profile_version"], "node-eval-readonly-v1", "{plan}");
-    assert_eq!(plan["command"], json!([bun, "-e", "console.log(1)"]));
+    // Bun's automatic `.env` load is off: the profile denies reading it, and
+    // Bun 1.4 aborts the whole run when that load is refused.
+    assert_eq!(
+        plan["command"],
+        json!([bun, "--no-env-file", "-e", "console.log(1)"])
+    );
     assert_eq!(
         plan["denied_capabilities"],
         json!([
@@ -481,8 +486,21 @@ fn bun_inline_eval_uses_the_node_eval_profile_with_an_installer_image() {
     launch["command"] = json!([bun, "--print", "1"]);
     assert_eq!(
         evaluate("prepare_inline", &launch)["value"]["command"],
-        json!([bun, "--print", "1"])
+        json!([bun, "--no-env-file", "--print", "1"])
     );
+    // `bun test` and the single test file Bun runs on its own take the Node
+    // test profile with the same automatic `.env` load turned off.
+    launch["command"] = json!([bun, "test"]);
+    let plan = evaluate("prepare_node", &launch)["value"].clone();
+    assert_eq!(plan["profile_version"], "node-test-readonly-v1", "{plan}");
+    assert_eq!(plan["command"], json!([bun, "--no-env-file", "test"]));
+    fs::write(workspace.join("calc.test.ts"), "").unwrap();
+    launch["command"] = json!([bun, "calc.test.ts"]);
+    assert_eq!(
+        evaluate("prepare_node", &launch)["value"]["command"],
+        json!([bun, "--no-env-file", "calc.test.ts"])
+    );
+    launch["command"] = json!([bun, "--print", "1"]);
     // Another home's installer, a repository copy, a writable or script image.
     let invalid = |launch: &Value| {
         assert_eq!(
