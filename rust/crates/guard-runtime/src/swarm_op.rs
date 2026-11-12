@@ -102,28 +102,23 @@ pub(crate) fn evaluate(request: &Request, store: &PolicySnapshotStore) -> Result
                 json!({"events": swarm.service.events(run_id).map_err(str::to_owned)?})
             }
         };
-        if let Ok(history) = swarm.service.history() {
-            if let Ok(bytes) = serde_json::to_vec(&history) {
-                if !history.is_empty()
-                    && {
-                        let checkpoint =
-                            swarm.checkpoint.lock().map_err(|_| "swarm_unavailable")?;
-                        bytes != checkpoint.bytes
+        {
+            let mut checkpoint = swarm.checkpoint.lock().map_err(|_| "swarm_unavailable")?;
+            if let Ok(history) = swarm.service.history() {
+                if let Ok(bytes) = serde_json::to_vec(&history) {
+                    if !history.is_empty()
+                        && bytes != checkpoint.bytes
+                        && crate::policy_store::persist_private_bytes(
+                            &history_path,
+                            &bytes,
+                            524_288,
+                            "swarm_history",
+                            home,
+                        )
+                        .is_ok()
+                    {
+                        checkpoint.bytes = bytes;
                     }
-                    && crate::policy_store::persist_private_bytes(
-                        &history_path,
-                        &bytes,
-                        524_288,
-                        "swarm_history",
-                        home,
-                    )
-                    .is_ok()
-                {
-                    swarm
-                        .checkpoint
-                        .lock()
-                        .map_err(|_| "swarm_unavailable")?
-                        .bytes = bytes;
                 }
             }
         }

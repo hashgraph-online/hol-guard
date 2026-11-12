@@ -12,8 +12,8 @@ export function AgentComposer({ snapshot, stale, initialProject, onClose, onLaun
   onLaunched: (agent: Agent) => void; onNavigate: (path: string) => void;
 }) {
   const available = snapshot.adapters.filter((a) => a.installed && a.launch_supported);
-  const pendingKey = `${snapshot.epoch}:${initialProject}:${available[0]?.id ?? ""}`;
-  const retained = pendingLaunches.get(pendingKey);
+  const retained = [...pendingLaunches.values()].find((draft) => draft.epoch === snapshot.epoch
+    && (!initialProject || draft.workspace === initialProject));
   const [harness, setHarness] = useState(retained?.harness ?? available[0]?.id ?? "");
   const [workspace, setWorkspace] = useState(retained?.workspace ?? initialProject);
   const [task, setTask] = useState(retained?.task ?? "");
@@ -30,11 +30,11 @@ export function AgentComposer({ snapshot, stale, initialProject, onClose, onLaun
     if (busy || stale) return;
     const draft = pending.current ?? { request_id: crypto.randomUUID(), epoch: snapshot.epoch, harness, workspace: workspace.trim(), task, model: model.trim() || null };
     pending.current = draft;
-    pendingLaunches.set(pendingKey, draft);
+    pendingLaunches.set(draft.request_id, draft);
     setBusy(true); setError(null);
-    try { const agent = await launchAgent(draft); pendingLaunches.delete(pendingKey); onLaunched(agent); }
+    try { const agent = await launchAgent(draft); pendingLaunches.delete(draft.request_id); onLaunched(agent); }
     catch (e) {
-      if (e instanceof RejectedAction) { pending.current = null; pendingLaunches.delete(pendingKey); setUncertain(false); }
+      if (e instanceof RejectedAction) { pending.current = null; pendingLaunches.delete(draft.request_id); setUncertain(false); }
       else setUncertain(true);
       setError(e instanceof Error ? e.message : "Launch could not be confirmed.");
     } finally { setBusy(false); }
