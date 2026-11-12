@@ -192,7 +192,7 @@ fn reclaim_state(_socket: &str, _seconds: f64) -> &'static str {
 }
 
 /// The positive decimal pid in the pid file beside `socket`, read without
-/// following a link.
+/// following a link or waiting on a pipe.
 #[cfg(unix)]
 fn tracked_pid(socket: &Path) -> Option<i32> {
     use std::io::Read;
@@ -201,7 +201,8 @@ fn tracked_pid(socket: &Path) -> Option<i32> {
     let path = socket.parent()?.join(PID_FILE);
     let file = std::fs::OpenOptions::new()
         .read(true)
-        .custom_flags(libc::O_NOFOLLOW)
+        // A FIFO planted at the path would otherwise hold this worker open.
+        .custom_flags(libc::O_NOFOLLOW | libc::O_NONBLOCK)
         .open(path)
         .ok()?;
     if !file.metadata().ok()?.is_file() {

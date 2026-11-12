@@ -266,6 +266,15 @@ mod sockets {
         server.kill().expect("kill");
         server.wait().expect("wait");
     }
+
+    #[test]
+    fn a_pipe_at_the_pid_path_does_not_hold_the_worker() {
+        let directory = private_directory();
+        let (_, text) = socket_in(directory.path());
+        let fifo = directory.path().join("hol-guard-app-server.pid");
+        nix::unistd::mkfifo(&fifo, nix::sys::stat::Mode::S_IRWXU).expect("mkfifo");
+        assert_eq!(reclaim(&text, 0.0), json!("free"));
+    }
 }
 
 #[test]
