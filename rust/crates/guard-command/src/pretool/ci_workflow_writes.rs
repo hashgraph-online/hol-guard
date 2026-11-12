@@ -254,7 +254,9 @@ fn command_uploads(line: &str, depth: usize) -> bool {
     {
         return true;
     }
-    let network = segments.iter().position(|segment| {
+    // The last network stage, so a read piped into a later call still counts
+    // when an earlier, unrelated call comes first.
+    let network = segments.iter().rposition(|segment| {
         command_words(segment)
             .first()
             .is_some_and(|word| NETWORK_TOOLS.contains(&basename(word)))
