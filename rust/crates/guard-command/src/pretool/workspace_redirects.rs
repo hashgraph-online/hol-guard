@@ -239,6 +239,7 @@ pub(super) fn contained(
     // it read, keeps the review of the text as sent.
     if crate::pretool::script_content::text_uses_network(command, context)
         || crate::pretool::script_content::text_names_system_file(command, context)
+        || crate::pretool::script_content::text_spells_destructive_git(command, context)
         || crate::pretool::literal_secrets::holds_literal_secret(command)
     {
         return None;

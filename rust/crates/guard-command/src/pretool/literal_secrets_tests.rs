@@ -194,3 +194,27 @@ fn a_search_of_a_secrets_directory_is_reviewed() {
     }
     assert_eq!(run("grep -n secrets README.md").minimum_action, "allow");
 }
+
+#[test]
+fn a_patch_that_adds_a_secret_is_a_write_of_it() {
+    let value = joined(&["Fdyg", "nrah", "kfdQ", "7mzX"]);
+    let codex = json!({
+        "tool_name": "apply_patch",
+        "tool_input": {"command": format!(
+            "*** Begin Patch\n*** Update File: app/config.py\n@@\n-client_secret = None\n+client_secret = \"{value}\"\n*** End Patch\n"
+        )}
+    });
+    assert!(writes_literal_secret(&codex));
+    let omp = json!({
+        "tool_name": "edit",
+        "tool_input": {"input": format!("[app/config.py#AB12]\nPUT 3\n+client_secret = \"{value}\"\n")}
+    });
+    assert!(writes_literal_secret(&omp));
+    let removed = json!({
+        "tool_name": "apply_patch",
+        "tool_input": {"command": format!(
+            "*** Begin Patch\n*** Update File: app/config.py\n@@\n-client_secret = \"{value}\"\n+client_secret = os.environ[\"CLIENT_SECRET\"]\n*** End Patch\n"
+        )}
+    });
+    assert!(!writes_literal_secret(&removed));
+}

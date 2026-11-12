@@ -14,6 +14,8 @@ fn account_kernel_and_log_files_are_system_files() {
         "open('/usr/usrfile.txt').read()",
         "fs.readFileSync('/etc/group', 'utf8')",
         "open('/private/etc/master.passwd').read()",
+        "open('/usr/bin/../../etc/passwd').read()",
+        "open('/var/tmp/../../etc/shadow').read()",
     ] {
         assert!(names_system_file(code), "{code}");
     }

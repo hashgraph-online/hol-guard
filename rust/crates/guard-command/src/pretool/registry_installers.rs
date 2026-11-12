@@ -49,8 +49,9 @@ fn program_name(executable: &str) -> String {
     }
 }
 
-/// `dotnet add [<project>] package <id>`, `dotnet tool install|update <id>`
-/// and `dotnet new install <template>` each download from NuGet.
+/// `dotnet add [<project>] package <id>`, `dotnet package add <id>`,
+/// `dotnet tool install|update <id>` and `dotnet new install <template>`
+/// each download from NuGet.
 fn dotnet_installs(arguments: &[&str]) -> bool {
     match arguments.first().copied() {
         Some("add") => arguments
@@ -60,12 +61,18 @@ fn dotnet_installs(arguments: &[&str]) -> bool {
             .any(|word| *word == "package"),
         Some("tool") => matches!(arguments.get(1).copied(), Some("install" | "update")),
         Some("new") => matches!(arguments.get(1).copied(), Some("install")),
+        // The .NET 10 SDK's noun-first spelling of `add package`.
+        Some("package") => matches!(arguments.get(1).copied(), Some("add" | "update")),
         _ => false,
     }
 }
 
+/// Python options that take their value as the next argument.
+const PYTHON_VALUE_OPTIONS: &[&str] = &["-W", "-X", "--check-hash-based-pycs"];
+
 /// `python -m pip install …` (any `python`, `python3`, `python3.12`, `py`)
-/// runs pip's install verb. Options before `-m` are skipped; `-m pip` with
+/// runs pip's install verb. Options before `-m` are skipped with their values
+/// (`-W ignore`, `-X utf8`), and `-mpip` reads as `-m pip`; `-m pip` with
 /// another verb (`list`, `show`, `freeze`) installs nothing.
 fn python_module_installs(name: &str, arguments: &[&str]) -> bool {
     let interpreter = name == "py"
@@ -75,22 +82,35 @@ fn python_module_installs(name: &str, arguments: &[&str]) -> bool {
     if !interpreter {
         return false;
     }
-    let Some(module_at) = arguments.iter().position(|argument| *argument == "-m") else {
-        return false;
+    let mut index = 0;
+    let (module, rest) = loop {
+        let Some(argument) = arguments.get(index).copied() else {
+            return false;
+        };
+        if argument == "-m" {
+            let Some(module) = arguments.get(index + 1).copied() else {
+                return false;
+            };
+            break (module, index + 2);
+        }
+        if let Some(module) = argument.strip_prefix("-m").filter(|m| !m.is_empty()) {
+            break (module, index + 1);
+        }
+        if !argument.starts_with('-') {
+            return false;
+        }
+        index += if PYTHON_VALUE_OPTIONS.contains(&argument) {
+            2
+        } else {
+            1
+        };
     };
-    if arguments[..module_at]
-        .iter()
-        .any(|argument| !argument.starts_with('-'))
-    {
-        return false;
-    }
-    let module = arguments.get(module_at + 1).copied().unwrap_or_default();
     if !matches!(module, "pip" | "pip3") {
         return false;
     }
     arguments
         .iter()
-        .skip(module_at + 2)
+        .skip(rest)
         .find(|argument| !argument.starts_with('-'))
         .is_some_and(|verb| matches!(*verb, "install" | "download" | "wheel"))
 }

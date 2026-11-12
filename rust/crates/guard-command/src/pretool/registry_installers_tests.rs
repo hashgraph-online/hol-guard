@@ -61,3 +61,17 @@ fn python_module_pip_queries_are_not_installs() {
     assert!(!installs("python script.py -m pip install x"));
     assert!(!installs("pythonista -m pip install x"));
 }
+
+#[test]
+fn spelling_variants_of_a_registry_install_are_found() {
+    for command in [
+        "python3 -mpip install left-pad",
+        "python3 -W ignore -m pip install left-pad",
+        "python3 -X utf8 -m pip install left-pad",
+        "dotnet package add Newtonsoft.Json",
+    ] {
+        assert!(installs(command), "{command}");
+    }
+    assert!(!installs("python3 -W ignore -m pip list"));
+    assert!(!installs("dotnet package list"));
+}

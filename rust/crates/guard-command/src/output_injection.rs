@@ -20,8 +20,6 @@ use std::sync::LazyLock;
 
 use regex::{Match, Regex};
 
-/// Output beyond this many bytes is not screened.
-const SCAN_LIMIT: usize = 512 * 1024;
 /// The longest quoted passage still treated as a quotation.
 const QUOTE_LIMIT: usize = 300;
 
@@ -110,10 +108,6 @@ fn unquoted(text: &str, shape: &Regex) -> bool {
 /// The name of the first injection shape found in `text`, if any.
 #[must_use]
 pub fn injection_shape(text: &str, source: OutputSource) -> Option<&'static str> {
-    let text = match text.char_indices().nth(SCAN_LIMIT) {
-        Some((end, _)) => &text[..end],
-        None => text,
-    };
     if unquoted(text, &OVERRIDE) {
         return Some("instruction_override");
     }

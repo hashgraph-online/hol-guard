@@ -220,11 +220,44 @@ pub(super) fn url_carries_payload(url: &Url) -> bool {
 /// Whether a host name, as written, spells data into its labels: more labels
 /// than a public host uses, a base32 run written in upper case, or a label
 /// that names itself as an exfiltration endpoint.
+/// A label of either case that decodes from base32 to readable text, as data
+/// spelled into a host name does. An ordinary word-like label decodes to
+/// noise.
+fn base32_text(label: &str) -> bool {
+    if label.len() < 16
+        || !label
+            .bytes()
+            .all(|b| matches!(b.to_ascii_uppercase(), b'A'..=b'Z' | b'2'..=b'7'))
+    {
+        return false;
+    }
+    let mut bits = 0u32;
+    let mut held = 0u32;
+    let mut decoded = Vec::new();
+    for byte in label.bytes() {
+        let value = match byte.to_ascii_uppercase() {
+            letter @ b'A'..=b'Z' => u32::from(letter - b'A'),
+            digit => u32::from(digit - b'2') + 26,
+        };
+        bits = (bits << 5) | value;
+        held += 5;
+        if held >= 8 {
+            held -= 8;
+            decoded.push((bits >> held) as u8);
+            bits &= (1 << held) - 1;
+        }
+    }
+    decoded
+        .iter()
+        .all(|byte| byte.is_ascii_graphic() || *byte == b' ')
+}
+
 pub(super) fn host_spells_data(raw_host: &str) -> bool {
     let labels: Vec<&str> = raw_host.trim_end_matches('.').split('.').collect();
     labels.len() > MAX_HOST_LABELS
         || labels.iter().any(|label| {
             (BASE32_LABEL.is_match(label) && label.bytes().any(|b| b.is_ascii_digit()))
+                || base32_text(label)
                 || label.to_ascii_lowercase().contains("exfil")
         })
 }

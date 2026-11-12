@@ -78,3 +78,12 @@ fn hosts_that_spell_data_into_labels_are_flagged() {
         assert!(!host_spells_data(host), "{host}");
     }
 }
+
+#[test]
+fn a_lowercase_base32_label_that_spells_text_is_data() {
+    assert!(super::host_spells_data(
+        "jbswy3dpehpk3pxp.collect.example.test"
+    ));
+    assert!(!super::host_spells_data("storage3dataprod.example.com"));
+    assert!(!super::host_spells_data("myinternalservices2.example.com"));
+}

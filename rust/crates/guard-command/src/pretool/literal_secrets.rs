@@ -12,6 +12,7 @@
 //! Placeholders, references, identifiers and English words next to the same
 //! names are left alone; see [`value::looks_random`].
 
+use std::borrow::Cow;
 use std::sync::LazyLock;
 
 use regex::Regex;
@@ -212,20 +213,45 @@ fn holds_spelled_secret(text: &str) -> bool {
     })
 }
 
-/// The text a file tool writes: a Write body, an Edit replacement, or each
-/// replacement of a MultiEdit.
-pub(super) fn written_bodies(input: &serde_json::Map<String, Value>) -> Vec<&str> {
-    let mut bodies: Vec<&str> = BODY_KEYS
+/// The rows a patch adds: a Codex `apply_patch` body in `command`, or an Oh
+/// My Pi hashline edit in `input`. Removed (`-`) rows are left out, and a
+/// hashline row Oh My Pi keeps without its `+` is read as added text.
+fn added_rows(patch: &str) -> Option<String> {
+    let hashline = !patch.trim_start().starts_with("*** Begin Patch");
+    let rows: Vec<&str> = patch
+        .lines()
+        .filter_map(|row| match row.strip_prefix('+') {
+            Some(added) => Some(added),
+            None if hashline && !row.starts_with('-') => Some(row),
+            None => None,
+        })
+        .collect();
+    (!rows.is_empty()).then(|| rows.join("\n"))
+}
+
+/// The text a file tool writes: a Write body, an Edit replacement, each
+/// replacement of a MultiEdit, or the rows a patch adds.
+pub(super) fn written_bodies(input: &serde_json::Map<String, Value>) -> Vec<Cow<'_, str>> {
+    let mut bodies: Vec<Cow<'_, str>> = BODY_KEYS
         .iter()
         .filter_map(|key| input.get(*key).and_then(Value::as_str))
+        .map(Cow::Borrowed)
         .collect();
     if let Some(edits) = input.get("edits").and_then(Value::as_array) {
         bodies.extend(edits.iter().filter_map(|edit| {
             BODY_KEYS
                 .iter()
                 .find_map(|key| edit.get(*key).and_then(Value::as_str))
+                .map(Cow::Borrowed)
         }));
     }
+    let patch = input.get("input").and_then(Value::as_str).or_else(|| {
+        input
+            .get("command")
+            .and_then(Value::as_str)
+            .filter(|command| command.trim_start().starts_with("*** Begin Patch"))
+    });
+    bodies.extend(patch.and_then(added_rows).map(Cow::Owned));
     bodies
 }
 
@@ -234,7 +260,31 @@ pub(super) fn writes_literal_secret(payload: &Value) -> bool {
     payload
         .get("tool_input")
         .and_then(Value::as_object)
-        .is_some_and(|input| written_bodies(input).into_iter().any(holds_literal_secret))
+        .is_some_and(|input| {
+            written_bodies(input)
+                .iter()
+                .any(|body| holds_literal_secret(body))
+        })
+}
+
+/// A command that spells out a live-looking key, token or password is
+/// reviewed even when every program in it is safe: the value lands in the
+/// transcript and shell history, and in whatever the command hands it to.
+/// The review uses the ordinary command reason, so a user's explicit
+/// extension Allow still settles it.
+pub(super) fn review_command(
+    request: &crate::CommandModelRequestV1,
+    decision: super::PreToolDecisionV1,
+) -> super::PreToolDecisionV1 {
+    if decision.minimum_action != "allow" || !holds_literal_secret(&request.command) {
+        return decision;
+    }
+    super::pretool_decision(
+        decision.command_model,
+        "review",
+        "native_command_review_required",
+        "This command spells out what looks like a real key, token or password. Once it runs, the value is in the transcript, the shell history and whatever the command sends it to.",
+    )
 }
 
 #[cfg(test)]

@@ -64,8 +64,8 @@ pub(super) fn writes_hidden_instruction(payload: &Value) -> bool {
         .and_then(Value::as_object)
         .is_some_and(|input| {
             written_bodies(input)
-                .into_iter()
-                .any(plants_hidden_instruction)
+                .iter()
+                .any(|body| plants_hidden_instruction(body))
         })
 }
 

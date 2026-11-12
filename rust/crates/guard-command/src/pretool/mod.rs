@@ -997,29 +997,7 @@ pub(super) fn evaluate_pre_tool_with_execution_context(
     // reading returns.
     let _budget = search_scope_budget::begin_include_scope_budget();
     let decision = evaluate_rewritten(request, home_dir, cwd, deadline, execution_environment, 0)?;
-    Ok(literal_secret_review(request, decision))
-}
-
-/// A command that spells out a live-looking key, token or password is
-/// reviewed even when every program in it is safe: the value lands in the
-/// transcript and shell history, and in whatever the command hands it to.
-/// The review uses the ordinary command reason, so a user's explicit
-/// extension Allow still settles it.
-fn literal_secret_review(
-    request: &CommandModelRequestV1,
-    decision: PreToolDecisionV1,
-) -> PreToolDecisionV1 {
-    if decision.minimum_action != "allow"
-        || !literal_secrets::holds_literal_secret(&request.command)
-    {
-        return decision;
-    }
-    pretool_decision(
-        decision.command_model,
-        "review",
-        "native_command_review_required",
-        "This command spells out what looks like a real key, token or password. Once it runs, the value is in the transcript, the shell history and whatever the command sends it to.",
-    )
+    Ok(literal_secrets::review_command(request, decision))
 }
 
 /// How many rewrites one submission may go through. A wrapper around a loop

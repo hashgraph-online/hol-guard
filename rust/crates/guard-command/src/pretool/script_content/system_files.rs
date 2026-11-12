@@ -38,10 +38,27 @@ const NOT_SYSTEM_STATE: &[&str] = &[
     "/usr/local/",
 ];
 
+/// `path` with `.` and `..` components resolved, as the kernel would resolve
+/// them before following any link.
+fn lexical(path: &str) -> String {
+    let mut parts: Vec<&str> = Vec::new();
+    for part in path.split('/') {
+        match part {
+            "" | "." => {}
+            ".." => {
+                parts.pop();
+            }
+            part => parts.push(part),
+        }
+    }
+    format!("/{}", parts.join("/"))
+}
+
 /// Whether `code` names a system file by a literal path.
 pub(super) fn names_system_file(code: &str) -> bool {
     SYSTEM_PATH.captures_iter(code).any(|captures| {
-        let path = &captures[1];
+        let path = &lexical(&captures[1]);
+        let path = path.as_str();
         !matches!(path, "/usr" | "/var" | "/private/var")
             && !NOT_SYSTEM_STATE
                 .iter()

@@ -662,6 +662,14 @@ pub(super) fn convert(
     if super::script_content::keeps_system_file_review(result, issued, sent_text, launch_context) {
         return;
     }
+    if super::script_content::keeps_destructive_git_review(
+        result,
+        issued,
+        sent_text,
+        launch_context,
+    ) {
+        return;
+    }
     if launch::outside(shaped, &workspace, context, execution_environment) {
         // Nothing marks a generic review as unrecognised any more plainly, so
         // only that one is renamed; any other reason already says more.
