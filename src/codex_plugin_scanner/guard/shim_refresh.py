@@ -17,7 +17,6 @@ per installed shim.
 
 from __future__ import annotations
 
-import ast
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -52,74 +51,96 @@ class _RefreshContext:
         self.home_override_explicit = home_override_explicit
 
 
-def _flag_value(args: list[str], flag: str) -> str | None:
-    """Return the value following ``flag`` in an argument list, if present."""
+def _ask(request: dict[str, object], guard_home: Path) -> dict[str, object]:
+    """Ask the native ``harness_shim_refresh`` kind for *guard_home*; raise RuntimeError on failure."""
 
-    for index, arg in enumerate(args[:-1]):
-        if arg == flag:
-            return args[index + 1]
-    return None
+    from .native_runner_authority import NativeRunnerAuthorityError, native_runner_authority
 
-
-def _installed_base_command(shim_body: str) -> list[str] | None:
-    """Parse the base_command list out of a generated shim, if recognizable."""
-
-    for line in shim_body.splitlines():
-        prefix = "# base_command = " if line.startswith("# base_command = ") else "base_command = "
-        if not line.startswith(prefix):
-            continue
-        try:
-            value = ast.literal_eval(line[len(prefix) :])
-        except (SyntaxError, ValueError):
-            return None
-        if isinstance(value, list) and all(isinstance(item, str) for item in value):
-            return list(value)
-        return None
-    return None
+    try:
+        answer = native_runner_authority("harness_shim_refresh", request, guard_home=guard_home)
+    except NativeRunnerAuthorityError as error:
+        raise RuntimeError(f"shim refresh request failed: {error}") from error
+    if not isinstance(answer, dict):
+        raise RuntimeError("shim refresh answer is malformed")
+    return answer
 
 
-def _launcher_map() -> dict[str, tuple[str, str]]:
-    """Map on-disk shim names to (harness, launcher_name) via adapter metadata.
+def _adapter_launchers() -> list[list[object]]:
+    """``[harness, launcher, legacy_names]`` for every adapter, in adapter order.
 
     Shim filenames are launcher names, not harness names: e.g. guard-claude is
-    the claude-code harness, guard-cursor-agent is cursor. Both the active
-    launcher name and any legacy names map to the same adapter so upgrades
-    rewrite whichever name is on disk to the current canonical launcher.
+    the claude-code harness, guard-cursor-agent is cursor.
     """
 
     from .adapters import list_adapters
 
-    mapping: dict[str, tuple[str, str]] = {}
-    for adapter in list_adapters():
-        launcher_name = getattr(adapter, "launcher_name", "") or adapter.harness
-        mapping.setdefault(launcher_name, (adapter.harness, launcher_name))
-        for legacy_name in getattr(adapter, "legacy_launcher_names", ()):
-            mapping.setdefault(legacy_name, (adapter.harness, launcher_name))
-    return mapping
+    return [
+        [
+            adapter.harness,
+            getattr(adapter, "launcher_name", "") or adapter.harness,
+            list(getattr(adapter, "legacy_launcher_names", ())),
+        ]
+        for adapter in list_adapters()
+    ]
 
 
-def _existing_shim_harnesses(shim_dir: Path) -> list[str]:
-    """Return launcher names with an installed Guard launcher shim."""
+def _shim_entries(shim_dir: Path) -> list[str]:
+    """Names of the regular files in the shim directory."""
 
     if not shim_dir.is_dir():
         return []
-    results: list[str] = []
-    for entry in sorted(shim_dir.iterdir()):
-        if not entry.name.startswith("guard-") or entry.name.endswith(".cmd"):
-            continue
-        if not entry.is_file():
-            continue
-        results.append(entry.name[len("guard-") :])
-    return results
+    return [entry.name for entry in shim_dir.iterdir() if entry.is_file()]
 
 
-def _workspace_dir_from_install(install: Mapping[str, object] | None) -> Path | None:
-    if install is None:
-        return None
-    workspace = install.get("workspace")
-    if not isinstance(workspace, str) or not workspace.strip():
-        return None
-    return Path(workspace)
+def _refresh_plan(entries: list[str], guard_home: Path) -> list[dict[str, object]]:
+    """The native plan: which shims to leave, drop as legacy duplicates or check."""
+
+    steps = _ask({"op": "plan", "entries": entries, "adapters": _adapter_launchers()}, guard_home).get("steps")
+    if not isinstance(steps, list) or not all(_valid_step(step) for step in steps):
+        raise RuntimeError("shim refresh plan is malformed")
+    return steps
+
+
+def _valid_step(step: object) -> bool:
+    if not isinstance(step, dict) or not isinstance(step.get("name"), str):
+        return False
+    if step.get("action") == "unknown":
+        return True
+    return (
+        step.get("action") in ("drop_legacy", "check")
+        and isinstance(step.get("harness"), str)
+        and isinstance(step.get("canonical"), str)
+        and isinstance(step.get("legacy"), bool)
+    )
+
+
+def _installed_context(
+    shim_body: str, install: Mapping[str, object] | None, guard_home: Path
+) -> tuple[str | None, str | None] | None:
+    """``(home, workspace)`` the installed shim was generated for, or None if unrecognized."""
+
+    recorded = install.get("workspace") if install is not None else None
+    answer = _ask(
+        {
+            "op": "context",
+            "body": shim_body,
+            "install_workspace": recorded if isinstance(recorded, str) else None,
+        },
+        guard_home,
+    )
+    recognized, home, workspace = answer.get("recognized"), answer.get("home"), answer.get("workspace")
+    if not isinstance(recognized, bool) or not isinstance(home, str | None) or not isinstance(workspace, str | None):
+        raise RuntimeError("shim refresh context is malformed")
+    return (home, workspace) if recognized else None
+
+
+def _unlink_legacy(shim_dir: Path, shim_name: str, errors: list[str]) -> None:
+    for suffix in ("", ".cmd"):
+        legacy_path = shim_dir / f"guard-{shim_name}{suffix}"
+        try:
+            legacy_path.unlink(missing_ok=True)
+        except OSError as error:
+            errors.append(f"{shim_name}: legacy unlink failed: {error}")
 
 
 def refresh_stale_harness_shims(
@@ -138,11 +159,13 @@ def refresh_stale_harness_shims(
     """
 
     shim_dir = guard_home / "bin"
-    launcher_names = _existing_shim_harnesses(shim_dir)
-    if not launcher_names:
+    entries = _shim_entries(shim_dir)
+    if not entries:
         return ShimRefreshResult(refreshed=(), unchanged=(), errors=())
-    launcher_map = _launcher_map()
-    launcher_name_set = set(launcher_names)
+    try:
+        steps = _refresh_plan(entries, guard_home)
+    except RuntimeError as error:
+        return ShimRefreshResult(refreshed=(), unchanged=(), errors=(str(error),))
     # managed_installs has a primary key on harness, so duplicates cannot
     # occur; the comprehension is a straight index, not a lossy merge.
     installs_by_harness: dict[str, Mapping[str, object]] = {
@@ -154,32 +177,23 @@ def refresh_stale_harness_shims(
     refreshed: list[str] = []
     unchanged: list[str] = []
     errors: list[str] = []
-    for shim_name in launcher_names:
-        posix_path = shim_dir / f"guard-{shim_name}"
-        resolved = launcher_map.get(shim_name)
-        if resolved is None:
+    for step in steps:
+        shim_name = str(step["name"])
+        if step["action"] == "unknown":
             # Shim for a harness this package version no longer knows; leave it.
             unchanged.append(shim_name)
             continue
-        harness, canonical_launcher = resolved
-        legacy_name = shim_name != canonical_launcher
-        if legacy_name and canonical_launcher in launcher_name_set:
-            # Canonical shim exists on disk independently and owns its own
-            # context via its own loop iteration; only remove the legacy
-            # duplicate instead of letting its embedded context clobber the
-            # canonical shim's content.
-            for suffix in ("", ".cmd"):
-                legacy_path = shim_dir / f"guard-{shim_name}{suffix}"
-                try:
-                    legacy_path.unlink(missing_ok=True)
-                except OSError as error:
-                    errors.append(f"{shim_name}: legacy unlink failed: {error}")
-                    continue
+        if step["action"] == "drop_legacy":
+            # The canonical shim is on disk and refreshes in its own step;
+            # only the legacy duplicate goes, so its embedded context cannot
+            # clobber the canonical shim's content.
+            _unlink_legacy(shim_dir, shim_name, errors)
             refreshed.append(shim_name)
             continue
+        harness, canonical_launcher, legacy_name = str(step["harness"]), str(step["canonical"]), bool(step["legacy"])
         try:
             try:
-                current = posix_path.read_text(encoding="utf-8")
+                current = (shim_dir / f"guard-{shim_name}").read_text(encoding="utf-8")
             except OSError as error:
                 errors.append(f"{shim_name}: read failed: {error}")
                 continue
@@ -187,17 +201,12 @@ def refresh_stale_harness_shims(
             # itself: --home and --workspace are embedded in base_command, so
             # custom-home installs refresh faithfully instead of being skipped
             # or rewritten with default paths.
-            base_command = _installed_base_command(current)
-            if base_command is None:
+            installed = _installed_context(current, installs_by_harness.get(harness), guard_home)
+            if installed is None:
                 errors.append(f"{shim_name}: unrecognized shim body")
                 continue
-            home_value = _flag_value(base_command, "--home")
-            workspace_value = _flag_value(base_command, "--workspace")
-            if workspace_value is None:
-                install = installs_by_harness.get(harness)
-                workspace_dir = _workspace_dir_from_install(install)
-            else:
-                workspace_dir = Path(workspace_value)
+            home_value, workspace_value = installed
+            workspace_dir = Path(workspace_value) if workspace_value is not None else None
             context: HarnessContextLike = _RefreshContext(
                 Path(home_value) if home_value else home_dir,
                 guard_home,
@@ -206,8 +215,7 @@ def refresh_stale_harness_shims(
             )
             workspace_args = ["--workspace", str(workspace_dir)] if workspace_dir is not None else []
             expected = _build_python_shim(harness, context, workspace_args)
-            stale_content = current != expected
-            if not stale_content and not legacy_name:
+            if current == expected and not legacy_name:
                 unchanged.append(shim_name)
                 continue
             install_guard_shim(harness, context, launcher_name=canonical_launcher)
@@ -215,12 +223,7 @@ def refresh_stale_harness_shims(
                 # install_guard_shim writes only the canonical name; remove the
                 # legacy launcher (and its .cmd companion) so the refresh is
                 # one-shot instead of re-firing on every daemon start.
-                for suffix in ("", ".cmd"):
-                    legacy_path = shim_dir / f"guard-{shim_name}{suffix}"
-                    try:
-                        legacy_path.unlink(missing_ok=True)
-                    except OSError as error:
-                        errors.append(f"{shim_name}: legacy unlink failed: {error}")
+                _unlink_legacy(shim_dir, shim_name, errors)
             refreshed.append(shim_name)
         except Exception as error:
             errors.append(f"{shim_name}: {error}")

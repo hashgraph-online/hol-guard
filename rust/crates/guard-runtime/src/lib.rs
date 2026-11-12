@@ -673,6 +673,8 @@ mod harness_mcp_discovery;
 mod harness_mcp_discovery_tests;
 #[path = "adapters/harness_settings_file.rs"]
 mod harness_settings_file;
+#[path = "adapters/harness_shim_refresh.rs"]
+mod harness_shim_refresh;
 mod harness_version_compat;
 mod health_lease_contract;
 mod health_lease_state;
@@ -686,6 +688,8 @@ mod hermes_hook_config;
 #[path = "adapters/hermes_hook_config_tests.rs"]
 mod hermes_hook_config_tests;
 mod hermes_inspect;
+#[path = "adapters/hermes_install_plan.rs"]
+mod hermes_install_plan;
 mod hermes_printable;
 mod hermes_skills;
 mod hermes_text;

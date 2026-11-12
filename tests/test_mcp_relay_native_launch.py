@@ -192,7 +192,15 @@ def _hermes_sources() -> dict[str, dict[str, object]]:
 
 def _hermes_overlay(tmp_path: Path) -> dict[str, dict[str, object]]:
     context = HarnessContext(home_dir=tmp_path, workspace_dir=None, guard_home=tmp_path / "guard")
-    return hermes_adapter._overlay_servers(context=context, source_configs=_hermes_sources())
+    # These cases check launch arguments, not naming, and the Windows relay lane
+    # runs without the native owner, so the source names stand in for its answer.
+    with pytest.MonkeyPatch.context() as patch:
+        patch.setattr(
+            hermes_adapter.hermes_install_plan,
+            "overlay_names",
+            lambda sources: [str(server["name"]) for server in sources.values()],
+        )
+        return hermes_adapter._overlay_servers(context=context, source_configs=_hermes_sources())
 
 
 def test_hermes_stdio_servers_launch_the_python_proxy_without_an_advertised_relay(
