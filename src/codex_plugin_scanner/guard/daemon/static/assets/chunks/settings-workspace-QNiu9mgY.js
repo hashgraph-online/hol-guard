@@ -5129,7 +5129,7 @@ function ContextWorkspacesPanel({ ready, waking = false, generation, dirty, docu
       setScopes((values) => [...values, scope]);
       granted = true;
       const activeTarget = targetRef.current;
-      if (activeTarget && activeTarget.id === target?.id) setSwarmContextTarget({ ...activeTarget, workspace: scope.workspace });
+      if (activeTarget) setSwarmContextTarget({ ...activeTarget, workspace: scope.workspace });
     });
     return granted;
   }
