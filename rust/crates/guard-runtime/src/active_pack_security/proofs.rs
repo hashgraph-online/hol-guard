@@ -232,8 +232,11 @@ impl Misses {
     /// `complete` reaches it again once the earlier misses are filled, so a
     /// batch never reports an error the one-object-per-round order would not.
     fn take<T>(&mut self, read: Result<T>) -> Option<T> {
+        // Once stopped, nothing more is queued: the ordered pass never reaches
+        // reads past an invalid proof, so neither may a batch fetch for them.
         let request = match read {
             Ok(value) => return Some(value),
+            Err(_) if self.stopped => return None,
             Err(Failure::Need(reference)) => json!({"need":reference}),
             Err(Failure::Archives(archives)) => json!({"need_archives":archives}),
             Err(Failure::Batch(requests)) => {
@@ -249,6 +252,9 @@ impl Misses {
         None
     }
     fn add(&mut self, request: Value) {
+        if self.stopped {
+            return;
+        }
         if self.requests.len() >= BATCH {
             self.stopped = true;
             return;
@@ -479,3 +485,6 @@ pub(super) fn complete(state: &mut Security, header: &Value, directory: &Path) -
     state.pending = false;
     Ok(())
 }
+
+#[cfg(test)]
+mod tests;
