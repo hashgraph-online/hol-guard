@@ -215,8 +215,10 @@ fn claude_code_post_tool_run_time_keeps_task_metadata_proven() {
         assert!(output_proven(&without), "{tool} without a run time");
         assert!(output_proven(&post(tool, input, json!(12))), "{tool}");
     }
-    // Only a plain run time is set aside; anything else there, or beside it, is not.
-    for duration in [json!("12"), json!(-1), json!({"ms": 12}), json!(null)] {
+    // Only a whole number of milliseconds is set aside; anything else there,
+    // or beside it, is not. `-0.0` is what an underflowing `-1e-400` parses to.
+    let odd = [json!(-0.0), json!(12.5), json!(-1), json!("12")];
+    for duration in odd.into_iter().chain([json!({"ms": 12}), json!(null)]) {
         let payload = post("AskUserQuestion", &answered, duration.clone());
         assert!(!output_proven(&payload), "{duration}");
     }
