@@ -50,7 +50,9 @@ const WRAPPERS: [&str; 8] = [
 const SHELLS: [&str; 5] = ["sh", "bash", "zsh", "dash", "ksh"];
 /// Shell keywords that open a clause and run the command after them, as in
 /// `if true; then curl ...; fi`.
-const CONTROL_WORDS: [&str; 8] = ["if", "then", "elif", "else", "do", "while", "until", "!"];
+const CONTROL_WORDS: [&str; 9] = [
+    "if", "then", "elif", "else", "do", "while", "until", "!", "{",
+];
 
 /// The file a network tool reads its request body from: `-d @path`,
 /// `-F field=@path`, `--data-binary @path`, `-T path`, `--upload-file path`,
@@ -252,41 +254,138 @@ fn runs_network_tool(segment: &str) -> bool {
         .is_some_and(|word| NETWORK_TOOLS.contains(&basename(word)))
 }
 
+/// Every simple command in `text`, cut at each separator, pipe and group
+/// delimiter. `||` separates commands and `|&` is a pipe.
+fn simple_commands(text: &str) -> Vec<String> {
+    text.replace("||", ";")
+        .replace("|&", "|")
+        .split(['\n', ';', '&', '(', ')', '`', '|'])
+        .map(str::to_owned)
+        .collect()
+}
+
+/// The pipelines of one command line, cut at `;`, `&&`, `||`, a lone `&` and
+/// newlines. A `( … )`, `{ …; }`, `$( … )` or backtick group stays inside the
+/// stage it belongs to, so `{ cat .env; } | curl …` is one pipeline, and the
+/// `&` of a `2>&1` redirect is not a separator. Also returns the inner text of
+/// every top-level group, whose own pipelines are checked separately.
+fn top_level_pipelines(line: &str) -> (Vec<Vec<String>>, Vec<String>) {
+    let chars: Vec<char> = line.chars().collect();
+    let mut pipelines: Vec<Vec<String>> = Vec::new();
+    let mut stages: Vec<String> = Vec::new();
+    let mut stage = String::new();
+    let mut groups: Vec<String> = Vec::new();
+    let mut group = String::new();
+    let mut closers: Vec<char> = Vec::new();
+    let mut index = 0;
+    while let Some(&ch) = chars.get(index) {
+        let next = chars.get(index + 1).copied();
+        let previous = index.checked_sub(1).map(|at| chars[at]);
+        index += 1;
+        if closers.last() == Some(&ch) {
+            closers.pop();
+            if closers.is_empty() {
+                groups.push(std::mem::take(&mut group));
+            } else {
+                group.push(ch);
+            }
+            stage.push(ch);
+            continue;
+        }
+        let opens = match ch {
+            '(' => Some(')'),
+            '`' => Some('`'),
+            // `{ cmd; }` is a group; `${{ expr }}` and `${VAR}` are not.
+            '{' if previous.is_none_or(|p| p.is_whitespace() || ";&|(".contains(p))
+                && next.is_none_or(char::is_whitespace) =>
+            {
+                Some('}')
+            }
+            _ => None,
+        };
+        if !closers.is_empty() {
+            group.push(ch);
+        }
+        if let Some(closer) = opens {
+            closers.push(closer);
+            stage.push(ch);
+            continue;
+        }
+        if !closers.is_empty() {
+            stage.push(ch);
+            continue;
+        }
+        let ends_pipeline = match ch {
+            '|' if next == Some('|') => {
+                index += 1;
+                true
+            }
+            '|' => {
+                if next == Some('&') {
+                    index += 1;
+                }
+                stages.push(std::mem::take(&mut stage));
+                continue;
+            }
+            '&' if next == Some('&') => {
+                index += 1;
+                true
+            }
+            '&' if matches!(previous, Some('>' | '<')) || next == Some('>') => false,
+            '&' | ';' | '\n' | ')' => true,
+            _ => false,
+        };
+        if ends_pipeline {
+            stages.push(std::mem::take(&mut stage));
+            pipelines.push(std::mem::take(&mut stages));
+        } else {
+            stage.push(ch);
+        }
+    }
+    if !closers.is_empty() {
+        groups.push(group);
+    }
+    stages.push(stage);
+    pipelines.push(stages);
+    (pipelines, groups)
+}
+
+/// `cat .env | curl -d @- ...`: a credential read feeds a later network stage
+/// of the same pipeline. A read that ends at `&&` or `;` sends nothing.
+fn pipes_credential_read(line: &str, depth: usize) -> bool {
+    if depth > 4 {
+        return false;
+    }
+    let (pipelines, groups) = top_level_pipelines(line);
+    pipelines.iter().any(|stages| {
+        stages
+            .iter()
+            .rposition(|stage| simple_commands(stage).iter().any(|c| runs_network_tool(c)))
+            .is_some_and(|network| {
+                stages[..network].iter().any(|stage| {
+                    simple_commands(stage)
+                        .iter()
+                        .any(|c| reads_credential_file(c))
+                })
+            })
+    }) || groups
+        .iter()
+        .any(|inner| pipes_credential_read(inner, depth + 1))
+}
+
 /// True when one command line sends a credential file to a network host.
 fn command_uploads(line: &str, depth: usize) -> bool {
     let line = YAML_PREFIX.replace(line, "");
-    // `||` separates commands and `|&` is a pipe, so only a lone `|` is left
-    // to join the stages of one pipeline.
-    let normalized = line.replace("||", ";").replace("|&", "|");
-    let pipelines: Vec<Vec<&str>> = normalized
-        .split(['\n', ';', '&', '(', ')', '`'])
-        .map(|part| part.split('|').collect())
-        .collect();
-    if pipelines
+    let commands = simple_commands(&line);
+    if commands
         .iter()
-        .flatten()
-        .any(|segment| segment_uploads(segment, depth))
+        .any(|command| segment_uploads(command, depth))
     {
         return true;
     }
-    // `cat .env | curl -d @- ...`: the read must feed a later network stage of
-    // the same pipeline. A read that ends at `&&` or `;` sends nothing.
-    let piped = pipelines.iter().any(|stages| {
-        stages
-            .iter()
-            .rposition(|segment| runs_network_tool(segment))
-            .is_some_and(|network| {
-                stages[..network]
-                    .iter()
-                    .any(|segment| reads_credential_file(segment))
-            })
-    });
     // `curl -d "$(cat .env)" ...`.
-    piped
-        || (pipelines
-            .iter()
-            .flatten()
-            .any(|segment| runs_network_tool(segment))
+    pipes_credential_read(&line, 0)
+        || (commands.iter().any(|command| runs_network_tool(command))
             && SUBSTITUTED_READ
                 .captures_iter(&line)
                 .filter_map(|captures| captures.name("file"))
