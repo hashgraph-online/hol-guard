@@ -39,6 +39,16 @@ fn an_absolute_path_gives_no_search_words() {
         assert!(!found.contains(&word.to_owned()), "{word}: {found:?}");
     }
     assert!(found.contains(&"outputfile".to_owned()), "{found:?}");
+    // A path inside a tag, as a harness writes a background task's output
+    // file, is still a path; the words around the tags stay.
+    let found = terms(
+        "<task-notification><output-file>/private/tmp/claude-501/-Users-alice-work/tasks/b5k.output\
+         </output-file><summary>Watch render CI</summary></task-notification>",
+    );
+    for word in ["private", "tmp", "claude", "user", "alice", "work", "b5k"] {
+        assert!(!found.contains(&word.to_owned()), "{word}: {found:?}");
+    }
+    assert!(found.contains(&"render".to_owned()), "{found:?}");
 }
 
 /// Only the path is left out: a name written right after it stays, a path
@@ -109,6 +119,18 @@ fn task_words_name_nothing_unless_written_as_code() {
     assert!(found.contains(&"convert".to_owned()), "{found:?}");
     let found = terms("Fix `last` and `edit` so `toolz.first` keeps working");
     for word in ["last", "edit", "first"] {
+        assert!(found.contains(&word.to_owned()), "{word}: {found:?}");
+    }
+    // "out" here found `SortedList._pos`, which has a local named `out`, and
+    // the agent read that method before looking at what was pushed.
+    let found = terms(
+        "tests are red on main since the last push, can you sort it out? don't touch the tests",
+    );
+    for word in ["red", "main", "since", "out", "touch"] {
+        assert!(!found.contains(&word.to_owned()), "{word}: {found:?}");
+    }
+    let found = terms("make `out` and `main()` stop going green when red");
+    for word in ["out", "main"] {
         assert!(found.contains(&word.to_owned()), "{word}: {found:?}");
     }
 }

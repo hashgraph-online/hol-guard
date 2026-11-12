@@ -14,6 +14,8 @@ fn bundle(dir: &Path) {
     fs::write(dir.join("assets/guard-dashboard.js"), "app()").unwrap();
     fs::write(dir.join("assets/chunks/a.css"), "a{}").unwrap();
     fs::write(dir.join("favicon.svg"), "<svg/>").unwrap();
+    fs::create_dir_all(dir.join("brand")).unwrap();
+    fs::write(dir.join("brand/Logo.png"), "png").unwrap();
 }
 
 fn get(dir: Option<&Path>, path: &str) -> String {
@@ -132,6 +134,40 @@ fn the_pinned_bundle_outlives_an_upgrade_on_disk() {
     assert!(get(Some(dir.path()), "/assets/guard-dashboard.js").ends_with("app()"));
     fs::write(dir.path().join("assets/guard-dashboard.js"), "new()").unwrap();
     assert!(get(Some(dir.path()), "/assets/guard-dashboard.js").ends_with("app()"));
+}
+
+#[test]
+fn every_public_file_outlives_the_directory_it_was_pinned_from() {
+    let dir = tempfile::tempdir().unwrap();
+    let root = dir.path().join("static");
+    bundle(&root);
+    assert!(super::build_id(&root).is_some());
+    fs::remove_dir_all(&root).unwrap();
+    assert!(get(Some(&root), "/brand/Logo.png").ends_with("\r\n\r\npng"));
+    assert!(get(Some(&root), "/favicon.svg").ends_with("<svg/>"));
+    assert!(get(Some(&root), "/assets/guard-dashboard.js").ends_with("app()"));
+    assert!(get(Some(&root), "/").starts_with("HTTP/1.0 200 OK\r\n"));
+}
+
+#[test]
+fn a_bundle_found_missing_is_looked_for_again() {
+    let dir = tempfile::tempdir().unwrap();
+    assert!(get(Some(dir.path()), "/").starts_with("HTTP/1.0 503 "));
+    bundle(dir.path());
+    assert!(get(Some(dir.path()), "/").starts_with("HTTP/1.0 200 OK\r\n"));
+    assert!(get(Some(dir.path()), "/brand/Logo.png").ends_with("png"));
+}
+
+#[cfg(unix)]
+#[test]
+fn a_brand_link_out_of_the_directory_is_not_served() {
+    let dir = tempfile::tempdir().unwrap();
+    let root = dir.path().join("static");
+    bundle(&root);
+    fs::write(dir.path().join("outside.png"), "no").unwrap();
+    std::os::unix::fs::symlink(dir.path().join("outside.png"), root.join("brand/out.png")).unwrap();
+    assert!(get(Some(&root), "/brand/out.png").starts_with("HTTP/1.0 404 "));
+    assert!(get(Some(&root), "/brand/Logo.png").ends_with("png"));
 }
 
 #[test]

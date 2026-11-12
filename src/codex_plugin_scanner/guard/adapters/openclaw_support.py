@@ -66,8 +66,12 @@ def install_state(
     overlay_path: Path,
     pretool_path: Path,
 ) -> str:
-    if len(existing_manifest) == 0:
-        return "installed"
-    if overlay_path.exists() and pretool_path.exists():
-        return "already_managed"
-    return "repaired_managed_install"
+    """Whether the install is new, already managed or a repair; the native runtime decides."""
+
+    from .hermes_install_plan import install_state as native_install_state
+
+    return native_install_state(
+        manifest_empty=len(existing_manifest) == 0,
+        overlay_exists=overlay_path.exists(),
+        pretool_exists=pretool_path.exists(),
+    )

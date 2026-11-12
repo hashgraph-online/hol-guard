@@ -178,7 +178,7 @@ pub(crate) fn sha256_hex(content: &[u8]) -> String {
 
 /// `ast.literal_eval` restricted to a list of plain string literals, which is
 /// all the generated shims contain. Anything else is `None`.
-pub(crate) fn parse_py_str_list(text: &str) -> Option<Vec<String>> {
+pub fn parse_py_str_list(text: &str) -> Option<Vec<String>> {
     let chars: Vec<char> = text.trim().chars().collect();
     let mut index = 0usize;
     if chars.get(index) != Some(&'[') {
