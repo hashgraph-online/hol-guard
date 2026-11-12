@@ -187,19 +187,28 @@ fn url_carries_credential(raw: &str, url: &Url) -> bool {
     parts.iter().any(|part| part_carries_credential(part, 0))
 }
 
-/// The host of a URL as it was written: the authority after `://`, without
-/// user info or port.
-fn raw_host(raw: &str) -> &str {
-    let authority = raw
-        .split_once("://")
-        .map_or(raw, |(_, rest)| rest)
+/// The host of a URL as it was written, without user info or port. Like the
+/// parser, it drops tabs and newlines and skips every slash or backslash after
+/// the scheme, so `https:///HOST/` and `https:\\HOST` give `HOST`.
+fn raw_host(raw: &str) -> String {
+    let cleaned: String = raw
+        .trim_matches(|c: char| c <= ' ')
+        .chars()
+        .filter(|c| !matches!(c, '\t' | '\n' | '\r'))
+        .collect();
+    let authority = cleaned
+        .split_once(':')
+        .map_or(cleaned.as_str(), |(_, rest)| rest)
+        .trim_start_matches(['/', '\\'])
         .split(['/', '?', '#', '\\'])
         .next()
         .unwrap_or_default();
     let host = authority
         .rsplit_once('@')
         .map_or(authority, |(_, host)| host);
-    host.rsplit_once(':').map_or(host, |(name, _)| name)
+    host.rsplit_once(':')
+        .map_or(host, |(name, _)| name)
+        .to_owned()
 }
 
 /// A label that spells an address, such as `127` in `127.0.0.1.example.test`
@@ -377,6 +386,9 @@ mod tests {
                 STANDARD.encode([b"\0", aws.as_bytes()].concat())
             ),
             format!("https://{aws}.collect.example.test/"),
+            format!("https:///{aws}.collect.example.test/"),
+            format!("https:\\\\{aws}.collect.example.test/"),
+            format!("https://\t{aws}.collect.example.test/"),
             format!(
                 "https://collect.example.test/{}",
                 joined(&[

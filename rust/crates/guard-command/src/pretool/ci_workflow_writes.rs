@@ -20,7 +20,7 @@ use std::sync::LazyLock;
 
 #[path = "ci_workflow_shell.rs"]
 mod shell;
-use shell::{pipes_credential_read, simple_commands};
+use shell::{inline_scripts, pipes_credential_read, simple_commands};
 
 const BODY_KEYS: [&str; 4] = ["content", "contents", "new_string", "newString"];
 const PATCH_KEYS: [&str; 3] = ["command", "input", "_input"];
@@ -82,8 +82,8 @@ static SUBSTITUTED_READ: LazyLock<Regex> = LazyLock::new(|| {
 /// is cut at the separators inside its quotes.
 static INLINE_SCRIPT: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(concat!(
-        r#"(?:^|[\s;&|(`])(?:\S*/)?"#,
-        r#"(?:(?:sh|bash|zsh|dash|ksh)\s+(?:-[A-Za-z]+\s+)*-[A-Za-z]*c[A-Za-z]*|eval)\s+"#,
+        r#"(?:^|[\s;&|(`])(?P<shell>(?:\S*/)?"#,
+        r#"(?:(?:sh|bash|zsh|dash|ksh)\s+(?:-[A-Za-z]+\s+)*-[A-Za-z]*c[A-Za-z]*|eval))\s+"#,
         r#"(?:'(?P<sq>[^']*)'|"(?P<dq>(?:[^"\\]|\\.)*)")"#,
     ))
     .expect("inline script pattern compiles")
@@ -340,17 +340,9 @@ fn runs_network_tool(segment: &str) -> bool {
 fn command_uploads(line: &str, depth: usize) -> bool {
     let line = YAML_PREFIX.replace(line, "");
     let inline_uploads = depth < 3
-        && INLINE_SCRIPT.captures_iter(&line).any(|captures| {
-            captures
-                .name("sq")
-                .map(|script| script.as_str().to_owned())
-                .or_else(|| {
-                    captures
-                        .name("dq")
-                        .map(|s| s.as_str().replace("\\\"", "\""))
-                })
-                .is_some_and(|script| command_uploads(&script, depth + 1))
-        });
+        && inline_scripts(&line)
+            .iter()
+            .any(|script| command_uploads(script, depth + 1));
     if inline_uploads {
         return true;
     }
