@@ -58,6 +58,8 @@ fn a_final_return_shows_a_tool_result() {
         "const content = await tool.read({path: \"notes/SKILL.md\"}); return content;",
         "return await read('README.md');",
         "const content = await tool.read({path: \"notes/SKILL.md\"}); content;",
+        "const content = await read('README.md');\nreturn content;",
+        "return await read(\n'README.md');",
     ] {
         let calls = parse_program(code).unwrap_or_else(|| panic!("{code}"));
         assert_eq!(calls.len(), 1, "{code}");
@@ -67,6 +69,10 @@ fn a_final_return_shows_a_tool_result() {
         "const a = await read('README.md'); return a; const b = await read('notes/x.md');",
         "return;",
         "const a = await read('README.md'); return a display(a)",
+        // A line break after `return` ends the statement, so nothing is shown.
+        "return\nawait read('README.md');",
+        "return\r\nawait read('README.md');",
+        "const a = await read('README.md'); return\n  a;",
     ] {
         assert!(parse_program(code).is_none(), "{code}");
     }

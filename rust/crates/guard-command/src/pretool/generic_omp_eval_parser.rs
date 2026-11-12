@@ -1,7 +1,7 @@
 //! Grammar for the OMP eval bridge: the literal-only JavaScript program and
 //! the Python `read` lines, each parsed into ordered tool calls.
 
-use super::tokens::{tokenize, Token};
+use super::tokens::{tokenize, tokenize_lines, Token};
 use serde_json::{json, Value};
 use std::collections::HashSet;
 
@@ -24,6 +24,8 @@ pub(super) struct Call {
 
 struct Parser {
     tokens: Vec<Token>,
+    /// Whether a line terminator came before each token.
+    breaks: Vec<bool>,
     pos: usize,
     declared: HashSet<String>,
     calls: Vec<Call>,
@@ -189,9 +191,13 @@ impl Parser {
             // The host rewrites a final top-level `return value;` into the
             // cell's shown result, like a trailing expression. A `return`
             // anywhere else would end the cell before later statements run,
-            // so it must be the last statement.
+            // so it must be the last statement. A line break after `return`
+            // ends it there, leaving the value unread and unshown.
             Token::Ident(word) if word == "return" => {
                 self.pos += 1;
+                if self.breaks.get(self.pos).copied().unwrap_or(true) {
+                    return None;
+                }
                 self.value(0)?;
                 self.tokens[self.pos..]
                     .iter()
@@ -412,8 +418,10 @@ pub(super) fn parse_program(code: &str) -> Option<Vec<Call>> {
     if code.len() > MAX_CODE_BYTES {
         return None;
     }
+    let (tokens, breaks) = tokenize_lines(code)?;
     let mut parser = Parser {
-        tokens: tokenize(code)?,
+        tokens,
+        breaks,
         pos: 0,
         declared: HashSet::new(),
         calls: Vec::new(),
