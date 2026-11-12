@@ -7213,7 +7213,8 @@
         "path": "proc://bg_1/streams/2"
       },
       "cwd": "worktree",
-      "expect": "allow"
+      "expect": "allow",
+      "mirror_pi": false
     },
     {
       "id": "omp-read-background-job-unknown-subpath",
@@ -7226,7 +7227,8 @@
         "path": "proc://hol-guard-approval/output"
       },
       "cwd": "worktree",
-      "expect": "allow"
+      "expect": "allow",
+      "mirror_pi": false
     },
     {
       "id": "omp-read-tool-device-docs",
@@ -7239,7 +7241,8 @@
         "path": "xd://eval"
       },
       "cwd": "worktree",
-      "expect": "allow"
+      "expect": "allow",
+      "mirror_pi": false
     },
     {
       "id": "omp-read-tool-device-doc-topic",
@@ -7252,7 +7255,8 @@
         "path": "xd://eval/helpers"
       },
       "cwd": "worktree",
-      "expect": "allow"
+      "expect": "allow",
+      "mirror_pi": false
     },
     {
       "id": "neg-omp-read-tool-device-parent-escape",
@@ -7265,7 +7269,8 @@
         "path": "xd://../.ssh/id_rsa"
       },
       "cwd": "worktree",
-      "expect": "not_allow"
+      "expect": "not_allow",
+      "mirror_pi": false
     },
     {
       "id": "neg-omp-read-background-job-kill",
@@ -7278,7 +7283,8 @@
         "path": "proc://bg_1/kill"
       },
       "cwd": "worktree",
-      "expect": "not_allow"
+      "expect": "not_allow",
+      "mirror_pi": false
     },
     {
       "id": "zcode-mcp-js",

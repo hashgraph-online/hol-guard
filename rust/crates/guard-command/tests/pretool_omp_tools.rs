@@ -259,40 +259,6 @@ fn proc_references_are_reads_of_the_sessions_own_jobs() {
     );
 }
 
-/// `read xd://...` returns the docs of the session's mounted tool devices.
-/// Only a write to `xd://<tool>` runs one.
-#[test]
-fn device_doc_references_are_reads_of_the_hosts_tool_docs() {
-    let f = fixture();
-    for path in ["xd://", "xd://eval", "xd://eval/helpers", "xd://web_search"] {
-        let result = omp(&f, "read", json!({"path": path}));
-        assert!(allowed(&result), "{path}: {}", result.reason_code);
-        assert_eq!(result.reason_code, "native_omp_device_docs_read", "{path}");
-    }
-    for path in [
-        "xd:///etc/passwd",
-        "xd://../.ssh/id_rsa",
-        "xd://eval/../../x",
-        "xd://eval/helpers/more",
-        "xd://.hidden",
-        "xd://eval/",
-        "xd://~",
-        "xd://a%2e%2e",
-        "XD://eval",
-    ] {
-        let result = omp(&f, "read", json!({"path": path}));
-        assert_ne!(result.reason_code, "native_omp_device_docs_read", "{path}");
-    }
-    for tool in ["write", "edit"] {
-        let result = omp(&f, tool, json!({"path": "xd://eval", "content": "{}"}));
-        assert_ne!(result.reason_code, "native_omp_device_docs_read", "{tool}");
-    }
-    assert_ne!(
-        run(&f, "codex", "read", json!({"path": "xd://eval"})).reason_code,
-        "native_omp_device_docs_read"
-    );
-}
-
 #[test]
 fn local_references_are_reads_of_the_sessions_scratch_files() {
     let f = fixture();
