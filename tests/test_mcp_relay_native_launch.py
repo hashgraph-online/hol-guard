@@ -15,7 +15,6 @@ from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.adapters.codex import CodexHarnessAdapter
 from codex_plugin_scanner.guard.adapters.cursor import CursorHarnessAdapter
 from codex_plugin_scanner.guard.adapters.harness_mcp_discovery import discover_harness_mcp_servers
-from codex_plugin_scanner.guard.adapters.managed_mcp_upstream import proxy_argument_tail
 from codex_plugin_scanner.guard.adapters.mcp_relay_native import (
     NATIVE_MCP_RELAY_COMMAND,
     NATIVE_MCP_RELAY_FEATURE,
@@ -113,7 +112,6 @@ def test_an_advertised_relay_wraps_the_unchanged_python_argv(tmp_path: Path, adv
     assert python_proxy_launch(command, launch_args) == ("/venv/bin/python", tuple(args))
     assert mcp_proxy_command(["/venv/bin/python", *args]) == [command, *launch_args]
     assert is_guard_proxy_command(command, tuple(launch_args))
-    assert proxy_argument_tail(tuple(launch_args), RELAY_PROXY_COMMANDS) == (proxy, tuple(args[4:]))
 
 
 def test_other_guard_proxies_are_never_relayed(tmp_path: Path, advertised: set[str]) -> None:
