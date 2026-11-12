@@ -30,7 +30,8 @@ pub(super) fn unsafe_search_value(
             ) && (rooted_operand(value)
                 || value.split(['/', '\\']).any(|part| part == "..")
                 || sensitive_path_argument(value)
-                || glob_can_select_sensitive_path(value))
+                || glob_can_select_sensitive_path(value)
+                || link_reaches_outside(value, context))
         }
         SearchValueRole::RgGlob if value.starts_with('!') => false,
         SearchValueRole::Glob | SearchValueRole::RgGlob | SearchValueRole::Path => {
@@ -38,6 +39,7 @@ pub(super) fn unsafe_search_value(
                 || value.split(['/', '\\']).any(|part| part == "..")
                 || sensitive_path_argument(value)
                 || glob_can_select_sensitive_path(value)
+                || (matches!(role, SearchValueRole::Path) && glob_reaches_outside(value, context))
         }
         // `name:include:other` copies another type's globs unscreened.
         SearchValueRole::TypeGlob => value.split_once(':').is_none_or(|(_, glob)| {
@@ -69,6 +71,109 @@ pub(super) fn unsafe_search_value(
         }
         SearchValueRole::Other => false,
     }
+}
+
+/// Whether a relative operand passes through a link whose target lies
+/// outside the working folder or fails the name screens there. The fallback
+/// above judges a relative operand by its spelling, so a checkout that
+/// carries `src/link.ts -> ~/notes/secret.txt` must not be read by its
+/// in-repo name. A link that stays inside the folder reads like its target.
+fn link_reaches_outside(value: &str, context: ReadContext<'_>) -> bool {
+    let Some(cwd) = context.cwd else {
+        return false;
+    };
+    let cwd = std::path::Path::new(cwd);
+    let mut walked = cwd.to_path_buf();
+    let mut linked = false;
+    for part in std::path::Path::new(value).components() {
+        walked.push(part);
+        linked |= std::fs::symlink_metadata(&walked)
+            .is_ok_and(|metadata| metadata.file_type().is_symlink());
+    }
+    if !linked {
+        return false;
+    }
+    link_target_unsafe(&walked, cwd)
+}
+
+/// Whether the file a link reaches lies outside `cwd` or fails the name
+/// screens below it.
+fn link_target_unsafe(link: &std::path::Path, cwd: &std::path::Path) -> bool {
+    let (Ok(target), Ok(root)) = (std::fs::canonicalize(link), std::fs::canonicalize(cwd)) else {
+        return true;
+    };
+    let Ok(relative) = target.strip_prefix(&root) else {
+        return true;
+    };
+    guard_secure_fs::sensitive_path_family(&target).is_some()
+        || guard_secure_fs::credential_named_path(relative)
+        || sensitive_path_argument(&relative.to_string_lossy())
+}
+
+/// Entries the walk below reads before it gives up.
+const MAX_LINK_WALK: usize = 10_000;
+
+/// Whether a relative glob could select a link that [`link_target_unsafe`]
+/// turns down. The walk starts at the glob's literal prefix and goes as deep
+/// as the glob does (any depth for `**`). It counts every link it meets,
+/// whatever the glob would select, and a walk that runs out of room or
+/// cannot read a directory counts as meeting one.
+fn glob_reaches_outside(value: &str, context: ReadContext<'_>) -> bool {
+    const GLOB: [char; 6] = ['*', '?', '[', ']', '{', '}'];
+    let Some(cwd) = context.cwd.map(std::path::Path::new) else {
+        return false;
+    };
+    if !value.contains(GLOB) {
+        return false;
+    }
+    let parts: Vec<&str> = value.split('/').filter(|part| !part.is_empty()).collect();
+    let literal = parts.iter().take_while(|part| !part.contains(GLOB)).count();
+    let mut directory = cwd.to_path_buf();
+    for part in &parts[..literal] {
+        directory.push(part);
+        if std::fs::symlink_metadata(&directory)
+            .is_ok_and(|metadata| metadata.file_type().is_symlink())
+            && link_target_unsafe(&directory, cwd)
+        {
+            return true;
+        }
+    }
+    if !directory.is_dir() {
+        return false;
+    }
+    let remaining = &parts[literal..];
+    let depth = if remaining.iter().any(|part| part.contains("**")) {
+        usize::MAX
+    } else {
+        remaining.len()
+    };
+    let mut pending = vec![(directory, 1usize)];
+    let mut seen = 0usize;
+    while let Some((directory, level)) = pending.pop() {
+        let Ok(entries) = std::fs::read_dir(&directory) else {
+            return true;
+        };
+        for entry in entries {
+            seen += 1;
+            let Ok(entry) = entry else {
+                return true;
+            };
+            let Ok(kind) = entry.file_type() else {
+                return true;
+            };
+            if seen > MAX_LINK_WALK {
+                return true;
+            }
+            if kind.is_symlink() {
+                if link_target_unsafe(&entry.path(), cwd) {
+                    return true;
+                }
+            } else if kind.is_dir() && level < depth {
+                pending.push((entry.path(), level + 1));
+            }
+        }
+    }
+    false
 }
 
 /// Whether `value` reaches the program in a word whose glob characters are
