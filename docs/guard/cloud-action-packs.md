@@ -14,7 +14,8 @@ them. Nothing in it sends a request.
 The language is small on purpose, so a pack from a third party can be reviewed as data:
 
 - No expressions, scripts or loops. A body is built from constants, whole arguments, one bounded copy of an
-  array argument (`each`), and the `rfc822` mail template described below.
+  array argument (`each`), one field named by an argument (`keyed`), and the `rfc822` mail template described
+  below.
 - No URL outside the declared `hosts`. The scheme is always `https`, the host is fixed per action, and an argument
   can fill only whole path segments.
 - No credential headers. Header names are lowercase constants. Names containing `auth`, `cookie`, `token`,
@@ -53,6 +54,18 @@ base64url-encodes the message.
 An action that uses the template must read `recipientDomains` and `recipientCount` from exactly its recipient
 arguments, so the facts Guard decides on name every address the message goes to. The template cannot appear
 inside `each`.
+
+## Fields named by an argument
+
+Some providers name a field after the user's own data, such as a Notion database column. `keyed` writes a
+one-field object whose name is a string argument:
+
+```json
+{"keyed": {"key": "property", "value": {"object": [{"name": "select", "value": {"object": [{"name": "name", "value": {"arg": "option"}}]}}]}}}
+```
+
+The key argument must be required, carry a pattern, and allow at most 256 characters. The name is written as a
+JSON string, so it cannot add a sibling field. A call without the key is refused rather than rendered.
 
 ## Rendering and projection
 
@@ -126,12 +139,17 @@ A result is `{"ok": true, ...}` or `{"ok": false, "error": {"code": ..., "pointe
 
 ## Shipped packs
 
-`github.json`, `notion.json` and `slack.json` cover the hosted actions that exist today. Each action links to its
-hosted tool name. `gmail.json`, `drive.json` and `calendar.json` cover Google Workspace: reading, drafting and sending
-mail, archiving, trashing and deleting messages, mail forwarding and filters, file search, export, sharing with a
-person, a domain or anyone with the link, trash and permanent delete, and calendar events with and without guests.
-Their actions link to the matching Google Workspace command permissions. Known limits of the format, compared with
-hand-written adapters:
+`github.json`, `notion.json` and `slack.json` cover Slack channel reads, posting, editing and deleting messages,
+reactions, pins and channel topics, file deletes, channel archive and restore, and inviting, sharing with and removing
+members; GitHub issues, comments and labels, pull requests, reviews and merges, branch deletes and force updates,
+repository archive, visibility and delete, release deletes, Actions secrets and workflow runs, and collaborators; and
+Notion blocks, pages and their properties, page archive and restore, block deletes, database queries and creation, and
+database column removal and type changes. A pull request review can comment or request changes but never approve. The
+actions that match an existing hosted tool link to its name; the others have no hosted tool yet. `gmail.json`,
+`drive.json` and `calendar.json` cover Google Workspace: reading, drafting and sending mail, archiving, trashing and
+deleting messages, mail forwarding and filters, file search, export, sharing with a person, a domain or anyone with
+the link, trash and permanent delete, and calendar events with and without guests. Their actions link to the matching
+Google Workspace command permissions. Known limits of the format, compared with hand-written adapters:
 
 - An argument cannot be normalized before use (for example, removing dashes from an id). The pattern accepts only
   the canonical form.

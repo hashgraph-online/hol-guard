@@ -190,6 +190,11 @@ pub enum Template {
     Element(bool),
     /// A base64url plain-text message built from recipient and text arguments.
     Rfc822(crate::cloud_pack_mail::MailTemplate),
+    /// A one-field object whose field name is a required, pattern-bound string argument.
+    Keyed {
+        key: String,
+        value: Box<Template>,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

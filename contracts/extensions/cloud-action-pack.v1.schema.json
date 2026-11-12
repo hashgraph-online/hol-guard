@@ -566,6 +566,31 @@
               }
             }
           }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "keyed"
+          ],
+          "properties": {
+            "keyed": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "key",
+                "value"
+              ],
+              "properties": {
+                "key": {
+                  "$ref": "#/$defs/argumentName"
+                },
+                "value": {
+                  "$ref": "#/$defs/template"
+                }
+              }
+            }
+          }
         }
       ]
     },
