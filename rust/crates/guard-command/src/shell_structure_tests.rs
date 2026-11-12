@@ -308,6 +308,18 @@ fn heredoc_bodies_inside_a_substitution_are_text() {
             "x=\"$(cat <<EOF\nit's `id`\nEOF\n)\"",
             vec!["cat <<EOF\nit's `id`\nEOF", "id"],
         ),
+        // A `<<` in a comment declares nothing, so the `)` on the next line
+        // still closes the substitution.
+        (
+            "echo \"$(echo hi # <<EOF\n)\" && ls",
+            vec!["echo hi # <<EOF"],
+        ),
+        // Bash ends this body at `EOF)`. With no closing line the scan reads
+        // on as shell syntax and ends the substitution at that `)`.
+        (
+            "git commit -m \"$(cat <<'EOF'\nmsg\nEOF)\" && rm -rf src",
+            vec!["cat <<'EOF'\nmsg\nEOF"],
+        ),
         // A shift and a here-string are not heredocs.
         (
             "echo $((1<<2)) && echo $(cat <<<'it')",

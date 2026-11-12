@@ -14,7 +14,7 @@ use crate::command_tokens::{executable_name, leading_environment, shell_tokens};
 use crate::data_flow::{
     extract_command_segments, extract_command_substitution_spans,
     extract_expanded_heredoc_substitution_spans, extract_heredocs, extract_pipes,
-    mask_heredoc_bodies, ShellHeredoc,
+    mask_closed_heredoc_bodies, mask_heredoc_bodies, ShellHeredoc,
 };
 use crate::shell_command_wrappers::{
     normalize_transparent_shell_command, SHELL_COMMAND_NORMALIZE_MAX_BYTES,
@@ -525,7 +525,7 @@ fn segments_for_embedded(
     );
     let command_chars: Vec<char> = command.chars().collect();
     for (context, pipeline_index, segment_text, local_offset) in execution_segment_texts(
-        &mask_heredoc_bodies(&normalization.normalized_command, &heredocs),
+        &mask_closed_heredoc_bodies(&normalization.normalized_command, &heredocs),
         execution_context,
     ) {
         let (tokens, _exact) = shell_tokens(&segment_text);

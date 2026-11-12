@@ -398,7 +398,7 @@ fn extract_command_substitution_spans_impl(
             continue;
         }
         if quote != Some('\'') && starts_with(&chars, index, "$(") {
-            let (extracted, end_index) = extract_parenthesized(&chars, index + 2);
+            let (extracted, end_index) = heredoc_bodies::extract_parenthesized(&chars, index + 2);
             let whitespace = crate::command_option_parsing::python_is_whitespace;
             if !extracted.trim_matches(whitespace).is_empty() {
                 let body_start = index + 2;
@@ -440,53 +440,6 @@ fn extract_command_substitution_spans_impl(
         index += 1;
     }
     substitutions
-}
-
-/// `_extract_parenthesized` (:243-266).
-fn extract_parenthesized(chars: &[char], start: usize) -> (String, usize) {
-    let n = chars.len();
-    let mut depth = 1;
-    let mut index = start;
-    let mut quote: Option<char> = None;
-    let mut bodies = heredoc_bodies::PendingBodies::default();
-    while index < n {
-        let ch = chars[index];
-        if ch == '\\' {
-            index += 2;
-            continue;
-        }
-        if quote.is_none() && ch == '\n' {
-            if let Some(next) = bodies.skip(chars, index) {
-                index = next;
-                continue;
-            }
-        }
-        if quote.is_none() && depth == 1 && ch == '<' {
-            if let Some(end) = bodies.declare(chars, index) {
-                index = end;
-                continue;
-            }
-        }
-        if ch == '\'' || ch == '"' {
-            if quote.is_none() {
-                quote = Some(ch);
-            } else if quote == Some(ch) {
-                quote = None;
-            }
-            index += 1;
-            continue;
-        }
-        if quote.is_none() && ch == '(' {
-            depth += 1;
-        } else if quote.is_none() && ch == ')' {
-            depth -= 1;
-            if depth == 0 {
-                return (chars[start..index].iter().collect(), index);
-            }
-        }
-        index += 1;
-    }
-    (chars[start..].iter().collect(), n)
 }
 
 /// `_extract_backtick` (:269-279).
@@ -588,7 +541,7 @@ impl ShellScanState {
             return index + 1;
         }
         if self.quote != Some('\'') && starts_with(chars, index, "$(") {
-            let (_extracted, end_index) = extract_parenthesized(chars, index + 2);
+            let (_extracted, end_index) = heredoc_bodies::extract_parenthesized(chars, index + 2);
             return (n).min(end_index + 1);
         }
         if self.quote.is_none() && ch == '(' {
@@ -614,6 +567,7 @@ fn find_newline(chars: &[char], from: usize) -> Option<usize> {
 
 #[path = "shell_structure_heredoc_bodies.rs"]
 mod heredoc_bodies;
+pub use heredoc_bodies::mask_closed_heredoc_bodies;
 
 #[cfg(test)]
 #[path = "shell_structure_tests.rs"]
