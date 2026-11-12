@@ -386,6 +386,22 @@ class TestPiInstall:
             "return reviewedToolResult(reviewedContent, event.details, event.isError === true, hookDeadlineAt);" in text
         )
 
+    def test_watch_does_not_bypass_tool_readiness_containment_or_denials(self, tmp_path: Path) -> None:
+        source = managed_extension_source(
+            guard_home=tmp_path / "guard-home",
+            home_dir=tmp_path,
+            settings_path=tmp_path / "settings.json",
+            harness="omp",
+        )
+        tool_call = source.split('  pi.on("tool_call", async (event, ctx) => {', 1)[1].split(
+            '\n  });\n}', 1
+        )[0]
+        assert "guardWatchPostureActive()" not in tool_call
+        assert "Running without containment (Watch)." not in tool_call
+        assert "if (response.observe_mode === true) return undefined;" in tool_call
+        tool_result = source.split('  pi.on("tool_result", async (event, ctx) => {', 1)[1]
+        assert "WATCH_WITHHELD_OUTPUT_CODES" in tool_result
+
     def test_install_writes_managed_extension_that_denies_on_hook_errors(self, tmp_path: Path, monkeypatch) -> None:
         ctx = _ctx(tmp_path)
 
