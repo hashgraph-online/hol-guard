@@ -77,6 +77,6 @@ fn a_body_that_repeats_an_argument_per_element_is_bounded() {
         "page_id": "0123456789abcdef0123456789abcdef",
         "paragraphs": paragraphs,
     });
-    assert!(40 * 40 * 2_000 > MAX_BODY_BYTES);
+    const _: () = assert!(40 * 40 * 2_000 > MAX_BODY_BYTES);
     assert_eq!(render(action, &args).unwrap_err().code, "render_refused");
 }
