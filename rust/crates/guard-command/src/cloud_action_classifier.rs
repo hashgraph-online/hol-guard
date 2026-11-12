@@ -23,7 +23,6 @@ pub struct Proposal {
 }
 
 const MAX_NAME_BYTES: usize = 256;
-const MAX_TOKENS: usize = 32;
 
 /// Single-token verbs and nouns, by class.
 const VERBS: &[(ActionClassV2, &[&str])] = &[
@@ -263,7 +262,6 @@ pub fn tokens(name: &str) -> Vec<String> {
         current.push(ch.to_ascii_lowercase());
     }
     flush(&mut current, &mut out);
-    out.truncate(MAX_TOKENS);
     out
 }
 
@@ -282,6 +280,14 @@ fn verb_class(token: &str) -> Option<ActionClassV2> {
 
 /// Propose a class for a tool name and an optional JSON Schema for its input.
 pub fn classify(name: &str, input_schema: Option<&Value>) -> Proposal {
+    if name.len() > MAX_NAME_BYTES {
+        // An unread tail could hold any verb, so take the strictest class.
+        return Proposal {
+            class: ActionClassV2::Admin,
+            destructive: true,
+            evidence: vec!["name_too_long".into()],
+        };
+    }
     let words = tokens(name);
     let mut class = ActionClassV2::Update;
     let mut evidence = Vec::new();

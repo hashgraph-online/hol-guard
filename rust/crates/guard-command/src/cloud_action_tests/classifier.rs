@@ -79,7 +79,23 @@ fn names_split_on_case_and_separators() {
         ["http", "request", "v", "send"]
     );
     assert_eq!(tokens("ééé"), Vec::<String>::new());
-    assert!(tokens(&"a_".repeat(400)).len() <= 32);
+    assert!(tokens(&"a_".repeat(400)).len() <= 128);
+}
+
+#[test]
+fn a_destructive_word_late_in_the_name_still_counts() {
+    let name = format!("{}delete_repository", "a_".repeat(32));
+    let proposal = classify(&name, None);
+    assert_eq!(proposal.class, ActionClassV2::Delete);
+    assert!(proposal.destructive);
+}
+
+#[test]
+fn a_name_past_the_limit_takes_the_strictest_class() {
+    let proposal = classify(&format!("{}_list", "a".repeat(300)), None);
+    assert_eq!(proposal.class, ActionClassV2::Admin);
+    assert!(proposal.destructive);
+    assert_eq!(proposal.evidence, ["name_too_long"]);
 }
 
 #[test]
