@@ -1,0 +1,73 @@
+{
+ "repo": "boltons",
+ "seed": 91,
+ "steps": [
+  {
+   "kind": "rename",
+   "prompt": "Rename the internal helper `_populate_context_lines` to `_populate_context_lines_impl` everywhere in the project, including tests. Behavior must not change.",
+   "rename": {
+    "count": 3,
+    "files": [
+     "boltons/tbutils.py"
+    ],
+    "new": "_populate_context_lines_impl",
+    "old": "_populate_context_lines",
+    "path": "boltons/tbutils.py"
+   }
+  },
+  {
+   "kind": "bug",
+   "prompt": "Something in `ThresholdCounter.get_uncommon_count` broke recently and its tests fail now. Track it down and fix it. Leave the tests alone.",
+   "setup": [
+    {
+     "failing": [
+      "tests/test_cacheutils.py::test_threshold_counter"
+     ],
+     "line": 747,
+     "new": "        return self.total + self.get_common_count()\n",
+     "orig": "        return self.total - self.get_common_count()\n",
+     "path": "boltons/cacheutils.py",
+     "qual": "ThresholdCounter.get_uncommon_count"
+    }
+   ]
+  },
+  {
+   "doc": {
+    "module": "boltons.urlutils",
+    "path": "boltons/urlutils.py",
+    "qual": "quote_path_part"
+   },
+   "kind": "doc",
+   "prompt": "Add a short usage example to the docstring of `quote_path_part` in boltons/urlutils.py, written as a doctest (`>>>` lines with their expected output). Make sure the example actually passes."
+  },
+  {
+   "doc": {
+    "module": "boltons.iterutils",
+    "path": "boltons/iterutils.py",
+    "qual": "windowed"
+   },
+   "kind": "doc",
+   "prompt": "Add a short usage example to the docstring of `windowed` in boltons/iterutils.py, written as a doctest (`>>>` lines with their expected output). Make sure the example actually passes."
+  },
+  {
+   "kind": "bug",
+   "prompt": "`tests/test_funcutils_fb_py3.py::test_wraps_async` started failing after the last commit. Fix the bug in the library code; don't edit the tests.",
+   "setup": [
+    {
+     "failing": [
+      "tests/test_funcutils_fb_py3.py::test_wraps_async"
+     ],
+     "line": 837,
+     "new": "            kwargs['is_async'] = False\n",
+     "orig": "            kwargs['is_async'] = True\n",
+     "path": "boltons/funcutils.py",
+     "qual": "FunctionBuilder.from_func"
+    }
+   ]
+  },
+  {
+   "kind": "review",
+   "prompt": "Review every change made in this session. Remove leftovers or duplication, match the style of the surrounding code, and make sure the full test suite passes."
+  }
+ ]
+}

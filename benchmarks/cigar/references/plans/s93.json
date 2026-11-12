@@ -1,0 +1,94 @@
+{
+ "repo": "moreit",
+ "seed": 93,
+ "steps": [
+  {
+   "kind": "rename",
+   "prompt": "Rename the internal helper `_partial` to `_partial_impl` everywhere in the project, including tests. Behavior must not change.",
+   "rename": {
+    "count": 3,
+    "files": [
+     "more_itertools/more.py"
+    ],
+    "new": "_partial_impl",
+    "old": "_partial",
+    "path": "more_itertools/more.py"
+   }
+  },
+  {
+   "doc": {
+    "module": "more_itertools.more",
+    "path": "more_itertools/more.py",
+    "qual": "with_iter"
+   },
+   "kind": "doc",
+   "prompt": "Add a short usage example to the docstring of `with_iter` in more_itertools/more.py, written as a doctest (`>>>` lines with their expected output). Make sure the example actually passes."
+  },
+  {
+   "kind": "bug2",
+   "prompt": "The last commit broke several tests in different places. Find every root cause in the library code and fix them all without changing the tests.",
+   "setup": [
+    {
+     "failing": [
+      "tests/test_recipes.py::TailTests::test_sized_equal",
+      "tests/test_recipes.py::TailTests::test_sized_greater",
+      "tests/test_recipes.py::TailTests::test_sized_less"
+     ],
+     "line": 145,
+     "new": "        yield from islice(iterable, max(0, len(iterable) + n), None)\n",
+     "orig": "        yield from islice(iterable, max(0, len(iterable) - n), None)\n",
+     "path": "more_itertools/recipes.py",
+     "qual": "tail"
+    },
+    {
+     "failing": [
+      "tests/test_more.py::AdjacentTests::test_zero_distance"
+     ],
+     "line": 2048,
+     "new": "    if distance <= 0:\n",
+     "orig": "    if distance < 0:\n",
+     "path": "more_itertools/more.py",
+     "qual": "adjacent"
+    }
+   ]
+  },
+  {
+   "kind": "bug",
+   "prompt": "A teammate just pushed a commit and now some tests fail. Find the root cause in the library code and fix it without changing the tests.",
+   "setup": [
+    {
+     "failing": [
+      "tests/test_more.py::ExactlyNTests::test_empty",
+      "tests/test_more.py::ExactlyNTests::test_false",
+      "tests/test_more.py::ExactlyNTests::test_true"
+     ],
+     "line": 2992,
+     "new": "    return len(take(n + 1, filter(predicate, iterable))) != n\n",
+     "orig": "    return len(take(n + 1, filter(predicate, iterable))) == n\n",
+     "path": "more_itertools/more.py",
+     "qual": "exactly_n"
+    }
+   ]
+  },
+  {
+   "kind": "bug",
+   "prompt": "Something in `callback_iter.__exit__` broke recently and its tests fail now. Track it down and fix it. Leave the tests alone.",
+   "setup": [
+    {
+     "failing": [
+      "tests/test_more.py::CallbackIterTests::test_abort"
+     ],
+     "line": 3906,
+     "new": "        self._aborted = False\n",
+     "orig": "        self._aborted = True\n",
+     "path": "more_itertools/more.py",
+     "qual": "callback_iter.__exit__"
+    }
+   ]
+  },
+  {
+   "kind": "review",
+   "prompt": "Review every change made in this session. Remove leftovers or duplication, match the style of the surrounding code, and make sure the full test suite passes."
+  }
+ ]
+}

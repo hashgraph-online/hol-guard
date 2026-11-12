@@ -1,0 +1,92 @@
+{
+ "repo": "jinja",
+ "seed": 71,
+ "steps": [
+  {
+   "kind": "rename",
+   "prompt": "Rename the internal helper `_min_or_max` to `_min_or_max_impl` everywhere in the project, including tests. Behavior must not change.",
+   "rename": {
+    "count": 3,
+    "files": [
+     "src/jinja2/filters.py"
+    ],
+    "new": "_min_or_max_impl",
+    "old": "_min_or_max",
+    "path": "src/jinja2/filters.py"
+   }
+  },
+  {
+   "kind": "rename",
+   "prompt": "Rename the internal helper `_get_default_module` to `_get_default_module_impl` everywhere in the project, including tests. Behavior must not change.",
+   "rename": {
+    "count": 4,
+    "files": [
+     "src/jinja2/compiler.py",
+     "src/jinja2/environment.py"
+    ],
+    "new": "_get_default_module_impl",
+    "old": "_get_default_module",
+    "path": "src/jinja2/environment.py"
+   }
+  },
+  {
+   "kind": "question",
+   "prompt": "Question, no code changes: which function does this? \"Babel extraction method for Jinja templates.\" Reply with its file path and function name.",
+   "question": {
+    "name": "babel_extract",
+    "path": "src/jinja2/ext.py",
+    "qual": "babel_extract",
+    "sentence": "Babel extraction method for Jinja templates."
+   }
+  },
+  {
+   "kind": "bug",
+   "prompt": "A teammate just pushed a commit and now some tests fail. Find the root cause in the library code and fix it without changing the tests.",
+   "setup": [
+    {
+     "failing": [
+      "tests/test_filters.py::TestFilter::test_filter_undefined_in_nested_if"
+     ],
+     "line": 267,
+     "new": "        else_symbols = inner_visit(node.else_ and ())\n",
+     "orig": "        else_symbols = inner_visit(node.else_ or ())\n",
+     "path": "src/jinja2/idtracking.py",
+     "qual": "FrameSymbolVisitor.visit_If"
+    }
+   ]
+  },
+  {
+   "kind": "bug2",
+   "prompt": "The last commit broke several tests in different places. Find every root cause in the library code and fix them all without changing the tests.",
+   "setup": [
+    {
+     "failing": [
+      "tests/test_ext.py::TestAutoEscape::test_overlay_scopes"
+     ],
+     "line": 229,
+     "new": "            return Frame(self.eval_ctx, level=self.symbols.level - 1)\n",
+     "orig": "            return Frame(self.eval_ctx, level=self.symbols.level + 1)\n",
+     "path": "src/jinja2/compiler.py",
+     "qual": "Frame.inner"
+    },
+    {
+     "failing": [
+      "tests/test_loader.py::TestLoaders::test_dict_loader_cache_invalidates",
+      "tests/test_loader.py::TestLoaders::test_limited_size_cache",
+      "tests/test_regression.py::TestBug::test_cached_extends[extends]",
+      "tests/test_regression.py::TestBug::test_cached_extends[include]"
+     ],
+     "line": 424,
+     "new": "            return source, None, lambda: source != self.mapping.get(template)\n",
+     "orig": "            return source, None, lambda: source == self.mapping.get(template)\n",
+     "path": "src/jinja2/loaders.py",
+     "qual": "DictLoader.get_source"
+    }
+   ]
+  },
+  {
+   "kind": "review",
+   "prompt": "Review every change made in this session. Remove leftovers or duplication, match the style of the surrounding code, and make sure the full test suite passes."
+  }
+ ]
+}

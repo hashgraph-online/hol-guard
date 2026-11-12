@@ -1,0 +1,99 @@
+{
+ "repo": "click",
+ "seed": 78,
+ "steps": [
+  {
+   "kind": "bug",
+   "prompt": "Something in `confirm` broke recently and its tests fail now. Track it down and fix it. Leave the tests alone.",
+   "setup": [
+    {
+     "failing": [
+      "tests/test_utils.py::test_confirm_repeat"
+     ],
+     "line": 240,
+     "new": "        elif default is not None or value == \"\":\n",
+     "orig": "        elif default is not None and value == \"\":\n",
+     "path": "src/click/termui.py",
+     "qual": "confirm"
+    }
+   ]
+  },
+  {
+   "kind": "bug2",
+   "prompt": "The last commit broke several tests in different places. Find every root cause in the library code and fix them all without changing the tests.",
+   "setup": [
+    {
+     "failing": [
+      "tests/test_basic.py::test_basic_group",
+      "tests/test_basic.py::test_summary_line",
+      "tests/test_commands.py::test_auto_shorthelp",
+      "tests/test_formatting.py::test_removing_multiline_marker",
+      "tests/test_shell_completion.py::test_full_complete[fish-env4-plain,a\\nplain,b\\tbee\\n]",
+      "tests/test_shell_completion.py::test_full_complete[fish-env5-plain,b\\tbee\\n]",
+      "tests/test_shell_completion.py::test_full_complete[zsh-env2-plain\\na\\n_\\nplain\\nb\\nbee\\n]",
+      "tests/test_shell_completion.py::test_full_complete[zsh-env3-plain\\nb\\nbee\\n]",
+      "tests/test_utils.py::test_make_default_short_help[-equal",
+      "tests/test_utils.py::test_make_default_short_help[-ignore",
+      "tests/test_utils.py::test_make_default_short_help[-length",
+      "tests/test_utils.py::test_make_default_short_help[-paragraph",
+      "tests/test_utils.py::test_make_default_short_help[-sentence",
+      "tests/test_utils.py::test_make_default_short_help[-truncate]",
+      "tests/test_utils.py::test_make_default_short_help[no-wrap"
+     ],
+     "line": 71,
+     "new": "    if words[0] != \"\\b\":\n",
+     "orig": "    if words[0] == \"\\b\":\n",
+     "path": "src/click/utils.py",
+     "qual": "make_default_short_help"
+    },
+    {
+     "failing": [
+      "tests/test_arguments.py::test_nargs_envvar[-1-a",
+      "tests/test_arguments.py::test_nargs_envvar[2-a",
+      "tests/test_arguments.py::test_nargs_envvar[2-a-Takes",
+      "tests/test_arguments.py::test_nargs_envvar_only_if_values_empty",
+      "tests/test_options.py::test_multiple_envvar",
+      "tests/test_options.py::test_nargs_envvar"
+     ],
+     "line": 128,
+     "new": "        return (rv and \"\").split(self.envvar_list_splitter)\n",
+     "orig": "        return (rv or \"\").split(self.envvar_list_splitter)\n",
+     "path": "src/click/types.py",
+     "qual": "ParamType.split_envvar_value"
+    }
+   ]
+  },
+  {
+   "doc": {
+    "module": "click.formatting",
+    "path": "src/click/formatting.py",
+    "qual": "join_options"
+   },
+   "kind": "doc",
+   "prompt": "Add a short usage example to the docstring of `join_options` in src/click/formatting.py, written as a doctest (`>>>` lines with their expected output). Make sure the example actually passes."
+  },
+  {
+   "doc": {
+    "module": "click.globals",
+    "path": "src/click/globals.py",
+    "qual": "pop_context"
+   },
+   "kind": "doc",
+   "prompt": "Add a short usage example to the docstring of `pop_context` in src/click/globals.py, written as a doctest (`>>>` lines with their expected output). Make sure the example actually passes."
+  },
+  {
+   "kind": "question",
+   "prompt": "Question, no code changes: which function does this? \"Extra format methods for multi methods that adds all the commands after the options.\" Reply with its file path and function name.",
+   "question": {
+    "name": "format_commands",
+    "path": "src/click/core.py",
+    "qual": "MultiCommand.format_commands",
+    "sentence": "Extra format methods for multi methods that adds all the commands after the options."
+   }
+  },
+  {
+   "kind": "review",
+   "prompt": "Review every change made in this session. Remove leftovers or duplication, match the style of the surrounding code, and make sure the full test suite passes."
+  }
+ ]
+}

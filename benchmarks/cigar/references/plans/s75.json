@@ -1,0 +1,92 @@
+{
+ "repo": "moreit",
+ "seed": 75,
+ "steps": [
+  {
+   "kind": "rename",
+   "prompt": "Rename the internal helper `_zip_equal_generator` to `_zip_equal_generator_impl` everywhere in the project, including tests. Behavior must not change.",
+   "rename": {
+    "count": 3,
+    "files": [
+     "tests/test_more.py",
+     "more_itertools/recipes.py"
+    ],
+    "new": "_zip_equal_generator_impl",
+    "old": "_zip_equal_generator",
+    "path": "more_itertools/recipes.py"
+   }
+  },
+  {
+   "kind": "stub",
+   "prompt": "Tests fail because intersperse is not implemented (more_itertools/more.py). Write the implementation; the docstring and tests describe the expected behavior.",
+   "stub": {
+    "body": "    if n == 0:\n        raise ValueError('n must be > 0')\n    elif n == 1:\n        # interleave(repeat(e), iterable) -> e, x_0, e, x_1, e, x_2...\n        # islice(..., 1, None) -> x_0, e, x_1, e, x_2...\n        return islice(interleave(repeat(e), iterable), 1, None)\n    else:\n        # interleave(filler, chunks) -> [e], [x_0, x_1], [e], [x_2, x_3]...\n        # islice(..., 1, None) -> [x_0, x_1], [e], [x_2, x_3]...\n        # flatten(...) -> x_0, x_1, e, x_2, x_3...\n        filler = repeat([e])\n        chunks = chunked(iterable, n)\n        return flatten(islice(interleave(filler, chunks), 1, None))\n",
+    "body_start": 822,
+    "end": 834,
+    "failing": [
+     "tests/test_more.py::IntersperseTest::test_even",
+     "tests/test_more.py::IntersperseTest::test_n",
+     "tests/test_more.py::IntersperseTest::test_n_zero",
+     "tests/test_more.py::IntersperseTest::test_nested",
+     "tests/test_more.py::IntersperseTest::test_not_iterable",
+     "tests/test_more.py::IntersperseTest::test_odd"
+    ],
+    "indent": 4,
+    "path": "more_itertools/more.py",
+    "qual": "intersperse"
+   }
+  },
+  {
+   "kind": "stub",
+   "prompt": "Tests fail because permutation_index is not implemented (more_itertools/more.py). Write the implementation; the docstring and tests describe the expected behavior.",
+   "stub": {
+    "body": "    index = 0\n    pool = list(iterable)\n    for i, x in zip(range(len(pool), -1, -1), element):\n        r = pool.index(x)\n        index = index * i + r\n        del pool[r]\n\n    return index\n",
+    "body_start": 4335,
+    "end": 4342,
+    "failing": [
+     "tests/test_more.py::PermutationIndexTests::test_invalid_large",
+     "tests/test_more.py::PermutationIndexTests::test_invalid_match",
+     "tests/test_more.py::PermutationIndexTests::test_long",
+     "tests/test_more.py::PermutationIndexTests::test_multiplicity",
+     "tests/test_more.py::PermutationIndexTests::test_null",
+     "tests/test_more.py::PermutationIndexTests::test_r_equal_to_n",
+     "tests/test_more.py::PermutationIndexTests::test_r_less_than_n"
+    ],
+    "indent": 4,
+    "path": "more_itertools/more.py",
+    "qual": "permutation_index"
+   }
+  },
+  {
+   "kind": "bug",
+   "prompt": "`tests/test_more.py::ExactlyNTests::test_empty` started failing after the last commit. Fix the bug in the library code; don't edit the tests.",
+   "setup": [
+    {
+     "failing": [
+      "tests/test_more.py::ExactlyNTests::test_empty",
+      "tests/test_more.py::ExactlyNTests::test_false",
+      "tests/test_more.py::ExactlyNTests::test_true"
+     ],
+     "line": 2992,
+     "new": "    return len(take(n + 1, filter(predicate, iterable))) != n\n",
+     "orig": "    return len(take(n + 1, filter(predicate, iterable))) == n\n",
+     "path": "more_itertools/more.py",
+     "qual": "exactly_n"
+    }
+   ]
+  },
+  {
+   "doc": {
+    "module": "more_itertools.more",
+    "path": "more_itertools/more.py",
+    "qual": "with_iter"
+   },
+   "kind": "doc",
+   "prompt": "Add a short usage example to the docstring of `with_iter` in more_itertools/more.py, written as a doctest (`>>>` lines with their expected output). Make sure the example actually passes."
+  },
+  {
+   "kind": "review",
+   "prompt": "Review every change made in this session. Remove leftovers or duplication, match the style of the surrounding code, and make sure the full test suite passes."
+  }
+ ]
+}
