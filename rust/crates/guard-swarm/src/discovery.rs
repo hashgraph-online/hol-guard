@@ -118,6 +118,8 @@ fn project(processes: Vec<Process>, now: u64) -> (Vec<Agent>, bool) {
                     .is_some_and(|(_, h, _)| h == harness)
                     && basename(&parent.executable)
                         .is_some_and(|n| matches!(n.as_str(), "node" | "bun"))
+                    && !basename(&process.executable)
+                        .is_some_and(|n| matches!(n.as_str(), "node" | "bun"))
             });
         if wrapper_parent {
             continue;

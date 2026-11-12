@@ -1,18 +1,19 @@
 import { r as reactExports, j as jsxRuntimeExports, ed as GuardModalLayer, ak as HiMiniXMark, b as HiMiniCommandLine, I as HiMiniArrowRight, c as HiMiniFolder } from "../guard-dashboard.js";
-import { i as isLive, p as projectsFor, l as launchAgent, R as RejectedAction } from "./swarm-workspace-B04u026b.js";
+import { i as isLive, p as projectsFor, l as launchAgent, R as RejectedAction } from "./swarm-workspace-CVGgULVl.js";
 import "./swarm-handoff-BIqKreGh.js";
 const pendingLaunches = /* @__PURE__ */ new Map();
 function AgentComposer({ snapshot, stale, initialProject, onClose, onLaunched, onNavigate }) {
   const available = snapshot.adapters.filter((a) => a.installed && a.launch_supported);
-  const [harness, setHarness] = reactExports.useState(available[0]?.id ?? "");
-  const [workspace, setWorkspace] = reactExports.useState(initialProject);
-  const [task, setTask] = reactExports.useState("");
-  const [model, setModel] = reactExports.useState("");
+  const pendingKey = `${snapshot.epoch}:${initialProject}:${available[0]?.id ?? ""}`;
+  const retained = pendingLaunches.get(pendingKey);
+  const [harness, setHarness] = reactExports.useState(retained?.harness ?? available[0]?.id ?? "");
+  const [workspace, setWorkspace] = reactExports.useState(retained?.workspace ?? initialProject);
+  const [task, setTask] = reactExports.useState(retained?.task ?? "");
+  const [model, setModel] = reactExports.useState(retained?.model ?? "");
   const [busy, setBusy] = reactExports.useState(false);
   const [error, setError] = reactExports.useState(null);
-  const [uncertain, setUncertain] = reactExports.useState(false);
-  const pendingKey = `${snapshot.epoch}:${initialProject}:${available[0]?.id ?? ""}`;
-  const pending = reactExports.useRef(pendingLaunches.get(pendingKey) ?? null);
+  const [uncertain, setUncertain] = reactExports.useState(retained !== void 0);
+  const pending = reactExports.useRef(retained ?? null);
   const peers = snapshot.agents.filter((a) => a.workspace === workspace && isLive(a));
   let launchLabel = "Start agent";
   if (busy) launchLabel = "Starting…";

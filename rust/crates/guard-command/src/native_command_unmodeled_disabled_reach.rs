@@ -51,6 +51,11 @@ impl CompiledNativeCommandControls {
                 return true;
             };
             let program = executable.to_ascii_lowercase();
+            let direct_script = [
+                ".sh", ".bash", ".zsh", ".fish", ".ps1", ".py", ".rb", ".pl", ".cmd", ".bat",
+            ]
+            .iter()
+            .any(|suffix| program.ends_with(suffix));
             let program = program
                 .strip_suffix(".exe")
                 .or_else(|| program.strip_suffix(".cmd"))
@@ -58,6 +63,7 @@ impl CompiledNativeCommandControls {
             segment.path_overridden
                 || !segment.wrapper_chain.is_empty()
                 || program.is_empty()
+                || direct_script
                 || program.contains(['$', '`', '/', '\\', '*', '?', '['])
                 || INTERPRETERS.contains(&program)
         });
@@ -90,6 +96,15 @@ impl CompiledNativeCommandControls {
                         self.blocked_permissions.contains(&permission.permission_id)
                     });
                 if !disabled {
+                    return false;
+                }
+                if !mcp_tool
+                    && extension.executables.is_empty()
+                    && extension
+                        .mcp
+                        .as_ref()
+                        .is_some_and(|mcp| mcp.mcp_launch.kind == "remote-http")
+                {
                     return false;
                 }
                 if mcp_tool && extension.mcp.is_some() {

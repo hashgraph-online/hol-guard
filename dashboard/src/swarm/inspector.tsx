@@ -8,14 +8,15 @@ import { Activity } from "./activity";
 import { contextFor, stateLabel } from "./model";
 import type { Agent, AgentAction } from "./types";
 
-const pendingActions = new Map<string, { agent: Agent; epoch: string; action: AgentAction; text: string | null; id: string }>();
+type PendingAction = { agent: Agent; epoch: string; action: AgentAction; text: string | null; id: string };
+const pendingActions = new Map<string, PendingAction>();
 
 type Props = { agent: Agent; epoch: string; stale: boolean; onClose: () => void; onRefresh: () => void; onNavigate: (path: string) => void;
   reviews: GuardApprovalRequest[]; onOpenRequest: (id: string) => void;
   context: { enabled: boolean | null; scopes: ContextWorkspaceScope[] | null } };
 
 export function AgentInspector({ agent, epoch, stale, onClose, onRefresh, onNavigate, context, reviews, onOpenRequest }: Props) {
-  const [draft, setDraft] = useState("");
+  const [draft, setDraft] = useState(() => pendingActions.get(`${epoch}:${agent.id}:message`)?.text ?? "");
   const [busy, setBusy] = useState(false);
   const [confirmStop, setConfirmStop] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
@@ -24,32 +25,37 @@ export function AgentInspector({ agent, epoch, stale, onClose, onRefresh, onNavi
   const panel = useRef<HTMLElement>(null);
   const alive = useRef(true);
   const pendingKey = `${epoch}:${agent.id}`;
-  const pending = useRef(pendingActions.get(pendingKey) ?? null);
+  const pendingFor = (action: AgentAction) => pendingActions.get(`${pendingKey}:${action}`) ?? null;
+  const pendingMessage = pendingFor("message");
+  const pendingInterrupt = pendingFor("interrupt");
+  const pendingStop = pendingFor("stop");
   useEffect(() => { alive.current = true; return () => { alive.current = false; }; }, []);
   useEffect(() => {
     if (window.matchMedia("(max-width: 1050px)").matches) panel.current?.scrollIntoView({ block: "start", behavior: "instant" });
   }, []);
-  useEffect(() => { setDraft(""); setNotice(null); setError(null); setConfirmStop(false); }, [agent.id]);
+  useEffect(() => { setDraft(pendingActions.get(`${epoch}:${agent.id}:message`)?.text ?? ""); setNotice(null); setError(null); setConfirmStop(false); }, [agent.id, epoch]);
   const cigar = contextFor(agent, context.enabled, context.scopes);
   async function act(action: AgentAction) {
     if (busy || stale) return;
-    if (pending.current && pending.current.action !== action) return;
+    const existing = pendingFor(action);
+    if (!existing && action === "message" && pendingMessage) return;
     setBusy(true); setError(null); setNotice(null);
-    const request = pending.current ?? { agent, epoch, action, text: action === "message" ? draft : null, id: crypto.randomUUID() };
-    pending.current = request;
-    pendingActions.set(pendingKey, request);
+    const request = existing ?? { agent, epoch, action, text: action === "message" ? draft : null, id: crypto.randomUUID() };
+    pendingActions.set(`${pendingKey}:${action}`, request);
     try {
       await directAgent(request.agent, request.epoch, request.action, request.text, request.id);
+      pendingActions.delete(`${pendingKey}:${action}`);
       if (!alive.current) return;
-      pending.current = null;
-      pendingActions.delete(pendingKey);
       if (action === "message") setDraft("");
       let message = "Instruction accepted by the agent service.";
       if (action === "stop") message = "Stop requested. Waiting for the process to exit.";
       else if (action === "interrupt") message = "Interruption requested.";
       setNotice(message);
       setConfirmStop(false); onRefresh();
-    } catch (e) { if (alive.current) { if (e instanceof RejectedAction) { pending.current = null; pendingActions.delete(pendingKey); } setError(e instanceof Error ? e.message : "The action could not be confirmed."); onRefresh(); } }
+    } catch (e) {
+      if (e instanceof RejectedAction) pendingActions.delete(`${pendingKey}:${action}`);
+      if (alive.current) { setError(e instanceof Error ? e.message : "The action could not be confirmed."); onRefresh(); }
+    }
     finally { if (alive.current) setBusy(false); }
   }
   return <aside ref={panel} className="swarm-inspector" aria-label="Agent details">
@@ -87,18 +93,20 @@ export function AgentInspector({ agent, epoch, stale, onClose, onRefresh, onNavi
     </div>
     {agent.controls.message ? <form className="swarm-direct" onSubmit={(e) => { e.preventDefault(); void act("message"); }}>
       <label htmlFor="swarm-direction">Next instruction</label>
-      <textarea id="swarm-direction" value={draft} onChange={(e) => setDraft(e.target.value)} maxLength={16384} rows={3} placeholder="What should it focus on?" disabled={stale || busy || pending.current !== null} />
+      <textarea id="swarm-direction" value={draft} onChange={(e) => setDraft(e.target.value)} maxLength={16384} rows={3} placeholder="What should it focus on?" disabled={stale || busy || pendingMessage !== null} />
       <p className="swarm-field-help">{agent.state === "running" || agent.state === "starting" ? "Queued after the current turn. Interrupt first to change focus now." : "Continues this agent’s conversation in the same project."}{agent.queued ? ` ${agent.queued} queued.` : ""}</p>
-      <button className="swarm-button swarm-button--primary" disabled={!draft.trim() || stale || busy || (pending.current !== null && pending.current.action !== "message")} type="submit"><HiMiniArrowUp aria-hidden="true" />{busy ? "Sending…" : pending.current ? "Check instruction" : "Send instruction"}</button>
+      <button className="swarm-button swarm-button--primary" disabled={!draft.trim() || stale || busy || pendingMessage !== null} type="submit"><HiMiniArrowUp aria-hidden="true" />{busy ? "Sending…" : pendingMessage ? "Check instruction" : "Send instruction"}</button>
     </form> : agent.origin === "observed" ? <p className="swarm-handoff">Continue in your {agent.label} window to send instructions. Swarm has observation access to this process.</p> : null}
     {error ? <p className="swarm-error" role="alert">{error}</p> : null}
     {notice ? <p className="swarm-muted" role="status">{notice}</p> : null}
     <div className="swarm-inspector-actions">
-      {agent.controls.interrupt ? <button className="swarm-button" type="button" disabled={stale || busy || pending.current !== null} onClick={() => void act("interrupt")}>Interrupt turn</button> : null}
-      {agent.controls.stop ? <button className="swarm-button swarm-button--danger" type="button" disabled={stale || busy || pending.current !== null} onClick={() => setConfirmStop(true)}>Stop agent</button> : null}
+      {agent.controls.interrupt ? <button className="swarm-button" type="button" disabled={stale || busy || pendingInterrupt !== null} onClick={() => void act("interrupt")}>Interrupt turn</button> : null}
+      {agent.controls.stop ? <button className="swarm-button swarm-button--danger" type="button" disabled={stale || busy || pendingStop !== null} onClick={() => setConfirmStop(true)}>Stop agent</button> : null}
       {agent.origin === "observed" ? <button className="swarm-button" type="button" onClick={() => onNavigate(`/apps/${encodeURIComponent(agent.harness)}`)}>App setup</button> : null}
     </div>
-    {pending.current && !busy ? <button className="swarm-text-button" disabled={stale} type="button" onClick={() => void act(pending.current!.action)}>Check unconfirmed action</button> : null}
-    {confirmStop ? <div className="swarm-stop-confirm" role="group" aria-label="Confirm stop"><p>Stop this agent and the work it is running? Changes already made to files will remain.</p><button className="swarm-button swarm-button--danger" disabled={stale || busy || (pending.current !== null && pending.current.action !== "stop")} type="button" onClick={() => void act("stop")}>Stop this agent</button><button className="swarm-text-button" type="button" disabled={busy} onClick={() => setConfirmStop(false)}>Keep working</button></div> : null}
+    {pendingMessage && !busy ? <button className="swarm-text-button" disabled={stale} type="button" onClick={() => void act("message")}>Check unconfirmed instruction</button> : null}
+    {pendingInterrupt && !busy ? <button className="swarm-text-button" disabled={stale} type="button" onClick={() => void act("interrupt")}>Check unconfirmed interruption</button> : null}
+    {pendingStop && !busy ? <button className="swarm-text-button" disabled={stale} type="button" onClick={() => void act("stop")}>Check unconfirmed stop</button> : null}
+    {confirmStop ? <div className="swarm-stop-confirm" role="group" aria-label="Confirm stop"><p>Stop this agent and the work it is running? Changes already made to files will remain.</p><button className="swarm-button swarm-button--danger" disabled={stale || busy || pendingStop !== null} type="button" onClick={() => void act("stop")}>Stop this agent</button><button className="swarm-text-button" type="button" disabled={busy} onClick={() => setConfirmStop(false)}>Keep working</button></div> : null}
   </aside>;
 }

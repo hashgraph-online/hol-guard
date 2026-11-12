@@ -12,15 +12,16 @@ export function AgentComposer({ snapshot, stale, initialProject, onClose, onLaun
   onLaunched: (agent: Agent) => void; onNavigate: (path: string) => void;
 }) {
   const available = snapshot.adapters.filter((a) => a.installed && a.launch_supported);
-  const [harness, setHarness] = useState(available[0]?.id ?? "");
-  const [workspace, setWorkspace] = useState(initialProject);
-  const [task, setTask] = useState("");
-  const [model, setModel] = useState("");
+  const pendingKey = `${snapshot.epoch}:${initialProject}:${available[0]?.id ?? ""}`;
+  const retained = pendingLaunches.get(pendingKey);
+  const [harness, setHarness] = useState(retained?.harness ?? available[0]?.id ?? "");
+  const [workspace, setWorkspace] = useState(retained?.workspace ?? initialProject);
+  const [task, setTask] = useState(retained?.task ?? "");
+  const [model, setModel] = useState(retained?.model ?? "");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [uncertain, setUncertain] = useState(false);
-  const pendingKey = `${snapshot.epoch}:${initialProject}:${available[0]?.id ?? ""}`;
-  const pending = useRef<LaunchDraft | null>(pendingLaunches.get(pendingKey) ?? null);
+  const [uncertain, setUncertain] = useState(retained !== undefined);
+  const pending = useRef<LaunchDraft | null>(retained ?? null);
   const peers = snapshot.agents.filter((a) => a.workspace === workspace && isLive(a));
   let launchLabel = "Start agent";
   if (busy) launchLabel = "Starting…";

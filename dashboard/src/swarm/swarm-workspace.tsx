@@ -29,7 +29,7 @@ export function SwarmWorkspace({ onNavigate, reviews = null, onOpenRequest }: Pr
   const visible = useMemo(() => filterAgents(agents, project, search, attention), [agents, project, search, attention]);
   const active = agents.filter(isLive).length;
   const needsAttention = agents.filter((a) => ["needs_attention", "failed", "interrupted"].includes(a.state)).length;
-  const chosen = agents.find((a) => a.id === selected);
+  const chosen = visible.find((a) => a.id === selected);
   const chosenReviews = chosen?.workspace ? (reviews ?? []).filter((r) => r.workspace === chosen.workspace && r.harness === chosen.harness && r.status === "pending") : [];
   let connection = "Live on this computer";
   if (loading) connection = "Connecting";
@@ -52,7 +52,8 @@ export function SwarmWorkspace({ onNavigate, reviews = null, onOpenRequest }: Pr
   }, [snapshot?.epoch]);
   function closeDetails() {
     const button = stageRef.current?.querySelector<HTMLButtonElement>("button[aria-pressed=true]");
-    setSelected(null); button?.focus();
+    setSelected(null);
+    (button ?? stageRef.current?.querySelector<HTMLInputElement>('input[aria-label="Search agents and projects"]'))?.focus();
   }
   return <div className="swarm-workspace">
     <header className="swarm-header"><div><div className="swarm-eyebrow"><span className="swarm-mark" aria-hidden="true"><i /><i /><i /></span>LOCAL AGENT WORKSPACE</div><h1>Swarm<span className="swarm-heading-dot">.</span></h1><p>One place to follow the work. Every agent, every project.</p></div>

@@ -26,7 +26,9 @@ export function SwarmContextPanel({ target, ready, loaded, scope, filesAllowed, 
     <p className={versionLead}>{lead}</p>
     <p className="text-sm leading-6 text-brand-dark/70">{automatic
       ? "With Guard connected in App setup, new prompts in this app receive project context. A running turn keeps its existing context; send your next instruction after setup."
-      : "This app needs a CIGAR MCP connection. After adding the project, open App setup and pair its request under “Connect another app” below. Finding its process does not connect it."}</p>
+      : target.harness === "aider"
+        ? "Aider is visible here for activity only. Guard does not connect Aider to CIGAR, so this project grant will not inject context into its prompts."
+        : "This app needs a CIGAR MCP connection. After adding the project, open App setup and pair its request under “Connect another app” below. Finding its process does not connect it."}</p>
     <div className="flex flex-wrap gap-2">
       {ready && !filesAllowed && allowFiles ? <CigarAllowFilesButton allow={allowFiles} className={versionButton} /> : null}
       <button type="button" className={versionButton} onClick={() => {

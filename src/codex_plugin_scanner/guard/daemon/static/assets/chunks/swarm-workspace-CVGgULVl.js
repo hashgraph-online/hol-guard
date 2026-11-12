@@ -1,4 +1,4 @@
-const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/chunks/agent-map-BTTSXQR-.js","assets/guard-dashboard.js","assets/index.css","assets/chunks/swarm-handoff-BIqKreGh.js","assets/chunks/composer-BAvMpZLM.js","assets/chunks/inspector-DiwCAzp8.js"])))=>i.map(i=>d[i]);
+const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/chunks/agent-map-BpzOPzpc.js","assets/guard-dashboard.js","assets/index.css","assets/chunks/swarm-handoff-BIqKreGh.js","assets/chunks/composer-BrVjiZbS.js","assets/chunks/inspector-C2S_rST_.js"])))=>i.map(i=>d[i]);
 import { f as fetchWithGuardAuth, r as reactExports, a as fetchContextAssistance, l as listContextWorkspaces, j as jsxRuntimeExports, H as HiMiniPlus, b as HiMiniCommandLine, c as HiMiniFolder, d as HiMiniCircleStack, e as HiMiniSquares2X2, g as HiMiniComputerDesktop, h as HiMiniMagnifyingGlass, i as HiMiniListBullet, k as HiMiniArrowPath, m as loadWorkspaceModule, n as browserSessionStorage, _ as __vitePreload } from "../guard-dashboard.js";
 import { w as workspaceForSwarmAgent, u as usesPromptContext } from "./swarm-handoff-BIqKreGh.js";
 const UNKNOWN_PROJECT = "@unknown";
@@ -196,9 +196,9 @@ function useSwarm() {
   return { snapshot, loading, error, stale: error !== null, context, refresh: refreshNow, acceptAgent };
 }
 const load = (id, loader) => loadWorkspaceModule(loader, { moduleId: id, storage: browserSessionStorage() });
-const AgentMap = reactExports.lazy(() => load("swarm-agent-map", () => __vitePreload(() => import("./agent-map-BTTSXQR-.js"), true ? __vite__mapDeps([0,1,2,3]) : void 0)).then((module) => ({ default: module.AgentMap })));
-const AgentComposer = reactExports.lazy(() => load("swarm-composer", () => __vitePreload(() => import("./composer-BAvMpZLM.js"), true ? __vite__mapDeps([4,1,2,3]) : void 0)).then((module) => ({ default: module.AgentComposer })));
-const AgentInspector = reactExports.lazy(() => load("swarm-inspector", () => __vitePreload(() => import("./inspector-DiwCAzp8.js"), true ? __vite__mapDeps([5,1,2,3]) : void 0)).then((module) => ({ default: module.AgentInspector })));
+const AgentMap = reactExports.lazy(() => load("swarm-agent-map", () => __vitePreload(() => import("./agent-map-BpzOPzpc.js"), true ? __vite__mapDeps([0,1,2,3]) : void 0)).then((module) => ({ default: module.AgentMap })));
+const AgentComposer = reactExports.lazy(() => load("swarm-composer", () => __vitePreload(() => import("./composer-BrVjiZbS.js"), true ? __vite__mapDeps([4,1,2,3]) : void 0)).then((module) => ({ default: module.AgentComposer })));
+const AgentInspector = reactExports.lazy(() => load("swarm-inspector", () => __vitePreload(() => import("./inspector-C2S_rST_.js"), true ? __vite__mapDeps([5,1,2,3]) : void 0)).then((module) => ({ default: module.AgentInspector })));
 function SwarmWorkspace({ onNavigate, reviews = null, onOpenRequest }) {
   const { snapshot, loading, error, stale, context, refresh, acceptAgent } = useSwarm();
   const [selected, setSelected] = reactExports.useState(() => new URLSearchParams(window.location.search).get("agent"));
@@ -215,7 +215,7 @@ function SwarmWorkspace({ onNavigate, reviews = null, onOpenRequest }) {
   const visible = reactExports.useMemo(() => filterAgents(agents, project, search, attention), [agents, project, search, attention]);
   const active = agents.filter(isLive).length;
   const needsAttention = agents.filter((a) => ["needs_attention", "failed", "interrupted"].includes(a.state)).length;
-  const chosen = agents.find((a) => a.id === selected);
+  const chosen = visible.find((a) => a.id === selected);
   const chosenReviews = chosen?.workspace ? (reviews ?? []).filter((r) => r.workspace === chosen.workspace && r.harness === chosen.harness && r.status === "pending") : [];
   let connection = "Live on this computer";
   if (loading) connection = "Connecting";
@@ -242,7 +242,7 @@ function SwarmWorkspace({ onNavigate, reviews = null, onOpenRequest }) {
   function closeDetails() {
     const button = stageRef.current?.querySelector("button[aria-pressed=true]");
     setSelected(null);
-    button?.focus();
+    (button ?? stageRef.current?.querySelector('input[aria-label="Search agents and projects"]'))?.focus();
   }
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "swarm-workspace", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsxs("header", { className: "swarm-header", children: [

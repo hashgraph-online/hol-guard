@@ -47,6 +47,11 @@ export function ContextWorkspacesPanel({ ready, waking = false, generation, dirt
   const id = useId();
   useEffect(() => { if (brief) { briefPanel.current?.focus({ preventScroll: true }); briefPanel.current?.scrollIntoView({ block: "start" }); } }, [brief]);
   useEffect(() => { targetRef.current = target; }, [target]);
+  useEffect(() => () => {
+    revision.current += 1;
+    request.current?.abort();
+    request.current = null;
+  }, []);
 
   useEffect(() => {
     const generation = ++revision.current;
@@ -93,13 +98,16 @@ export function ContextWorkspacesPanel({ ready, waking = false, generation, dirt
       return false;
     }
     let granted = false;
+    const startedTarget = targetRef.current;
     await perform(async (signal) => {
       // One pick on this page counts for every app's prompts, so it is never tied to one app.
       const scope = await grantContextWorkspace(input.workspace, input.files, credentials, signal);
       if (signal.aborted) return;
       setScopes((values) => [...values, scope]); granted = true;
       const activeTarget = targetRef.current;
-      if (activeTarget) setSwarmContextTarget({ ...activeTarget, workspace: scope.workspace });
+      if (activeTarget && startedTarget?.id === activeTarget.id) {
+        setSwarmContextTarget({ ...activeTarget, workspace: scope.workspace });
+      }
     });
     return granted;
   }
@@ -125,7 +133,7 @@ export function ContextWorkspacesPanel({ ready, waking = false, generation, dirt
   return <div className="space-y-8">
     {target ? <SwarmContextPanel target={target} ready={ready} loaded={loaded} scope={targetScope}
       filesAllowed={documentsAllowed && agentsAllowed} allowFiles={allowFiles} /> : null}
-    {ready && target && loaded && !targetScope ? <AddProjectPanel key={`${cleared}:${target.id}`} busy={busy} dirty={dirty} documentsAllowed={documentsAllowed} allowFiles={allowFiles}
+    {ready && target && documentsAllowed && loaded && !targetScope ? <AddProjectPanel key={`${cleared}:${target.id}`} busy={busy} dirty={dirty} documentsAllowed={documentsAllowed} allowFiles={allowFiles}
       executionAllowed={executionAllowed} gate={gate} error={error} first={scopes.length === 0} initialWorkspace={target.workspace}
       active={scopes.filter((scope) => !scope.revoked).map((scope) => scope.workspace)} onGrant={grant} /> : null}
     <section className="space-y-4" aria-labelledby={`${id}-projects`} aria-busy={busy}>

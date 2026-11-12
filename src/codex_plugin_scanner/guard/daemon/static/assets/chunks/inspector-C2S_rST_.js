@@ -1,6 +1,6 @@
 import { r as reactExports, j as jsxRuntimeExports, ak as HiMiniXMark, b as HiMiniCommandLine, d as HiMiniCircleStack, fp as HiMiniArrowUp } from "../guard-dashboard.js";
 import { s as setSwarmContextTarget } from "./swarm-handoff-BIqKreGh.js";
-import { r as relativeTime, a as readEvents, c as contextFor, s as stateLabel, d as directAgent, R as RejectedAction } from "./swarm-workspace-B04u026b.js";
+import { r as relativeTime, a as readEvents, c as contextFor, s as stateLabel, d as directAgent, R as RejectedAction } from "./swarm-workspace-CVGgULVl.js";
 function Activity({ agent, stale }) {
   const [events, setEvents] = reactExports.useState([]);
   const [error, setError] = reactExports.useState(false);
@@ -53,7 +53,7 @@ function Activity({ agent, stale }) {
 }
 const pendingActions = /* @__PURE__ */ new Map();
 function AgentInspector({ agent, epoch, stale, onClose, onRefresh, onNavigate, context, reviews, onOpenRequest }) {
-  const [draft, setDraft] = reactExports.useState("");
+  const [draft, setDraft] = reactExports.useState(() => pendingActions.get(`${epoch}:${agent.id}:message`)?.text ?? "");
   const [busy, setBusy] = reactExports.useState(false);
   const [confirmStop, setConfirmStop] = reactExports.useState(false);
   const [notice, setNotice] = reactExports.useState(null);
@@ -62,7 +62,10 @@ function AgentInspector({ agent, epoch, stale, onClose, onRefresh, onNavigate, c
   const panel = reactExports.useRef(null);
   const alive = reactExports.useRef(true);
   const pendingKey = `${epoch}:${agent.id}`;
-  const pending = reactExports.useRef(pendingActions.get(pendingKey) ?? null);
+  const pendingFor = (action) => pendingActions.get(`${pendingKey}:${action}`) ?? null;
+  const pendingMessage = pendingFor("message");
+  const pendingInterrupt = pendingFor("interrupt");
+  const pendingStop = pendingFor("stop");
   reactExports.useEffect(() => {
     alive.current = true;
     return () => {
@@ -73,26 +76,25 @@ function AgentInspector({ agent, epoch, stale, onClose, onRefresh, onNavigate, c
     if (window.matchMedia("(max-width: 1050px)").matches) panel.current?.scrollIntoView({ block: "start", behavior: "instant" });
   }, []);
   reactExports.useEffect(() => {
-    setDraft("");
+    setDraft(pendingActions.get(`${epoch}:${agent.id}:message`)?.text ?? "");
     setNotice(null);
     setError(null);
     setConfirmStop(false);
-  }, [agent.id]);
+  }, [agent.id, epoch]);
   const cigar = contextFor(agent, context.enabled, context.scopes);
   async function act(action) {
     if (busy || stale) return;
-    if (pending.current && pending.current.action !== action) return;
+    const existing = pendingFor(action);
+    if (!existing && action === "message" && pendingMessage) return;
     setBusy(true);
     setError(null);
     setNotice(null);
-    const request = pending.current ?? { agent, epoch, action, text: action === "message" ? draft : null, id: crypto.randomUUID() };
-    pending.current = request;
-    pendingActions.set(pendingKey, request);
+    const request = existing ?? { agent, epoch, action, text: action === "message" ? draft : null, id: crypto.randomUUID() };
+    pendingActions.set(`${pendingKey}:${action}`, request);
     try {
       await directAgent(request.agent, request.epoch, request.action, request.text, request.id);
+      pendingActions.delete(`${pendingKey}:${action}`);
       if (!alive.current) return;
-      pending.current = null;
-      pendingActions.delete(pendingKey);
       if (action === "message") setDraft("");
       let message = "Instruction accepted by the agent service.";
       if (action === "stop") message = "Stop requested. Waiting for the process to exit.";
@@ -101,11 +103,8 @@ function AgentInspector({ agent, epoch, stale, onClose, onRefresh, onNavigate, c
       setConfirmStop(false);
       onRefresh();
     } catch (e) {
+      if (e instanceof RejectedAction) pendingActions.delete(`${pendingKey}:${action}`);
       if (alive.current) {
-        if (e instanceof RejectedAction) {
-          pending.current = null;
-          pendingActions.delete(pendingKey);
-        }
         setError(e instanceof Error ? e.message : "The action could not be confirmed.");
         onRefresh();
       }
@@ -222,14 +221,14 @@ function AgentInspector({ agent, epoch, stale, onClose, onRefresh, onNavigate, c
       void act("message");
     }, children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx("label", { htmlFor: "swarm-direction", children: "Next instruction" }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("textarea", { id: "swarm-direction", value: draft, onChange: (e) => setDraft(e.target.value), maxLength: 16384, rows: 3, placeholder: "What should it focus on?", disabled: stale || busy || pending.current !== null }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("textarea", { id: "swarm-direction", value: draft, onChange: (e) => setDraft(e.target.value), maxLength: 16384, rows: 3, placeholder: "What should it focus on?", disabled: stale || busy || pendingMessage !== null }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "swarm-field-help", children: [
         agent.state === "running" || agent.state === "starting" ? "Queued after the current turn. Interrupt first to change focus now." : "Continues this agent’s conversation in the same project.",
         agent.queued ? ` ${agent.queued} queued.` : ""
       ] }),
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("button", { className: "swarm-button swarm-button--primary", disabled: !draft.trim() || stale || busy || pending.current !== null && pending.current.action !== "message", type: "submit", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("button", { className: "swarm-button swarm-button--primary", disabled: !draft.trim() || stale || busy || pendingMessage !== null, type: "submit", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniArrowUp, { "aria-hidden": "true" }),
-        busy ? "Sending…" : pending.current ? "Check instruction" : "Send instruction"
+        busy ? "Sending…" : pendingMessage ? "Check instruction" : "Send instruction"
       ] })
     ] }) : agent.origin === "observed" ? /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "swarm-handoff", children: [
       "Continue in your ",
@@ -239,14 +238,16 @@ function AgentInspector({ agent, epoch, stale, onClose, onRefresh, onNavigate, c
     error ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "swarm-error", role: "alert", children: error }) : null,
     notice ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "swarm-muted", role: "status", children: notice }) : null,
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "swarm-inspector-actions", children: [
-      agent.controls.interrupt ? /* @__PURE__ */ jsxRuntimeExports.jsx("button", { className: "swarm-button", type: "button", disabled: stale || busy || pending.current !== null, onClick: () => void act("interrupt"), children: "Interrupt turn" }) : null,
-      agent.controls.stop ? /* @__PURE__ */ jsxRuntimeExports.jsx("button", { className: "swarm-button swarm-button--danger", type: "button", disabled: stale || busy || pending.current !== null, onClick: () => setConfirmStop(true), children: "Stop agent" }) : null,
+      agent.controls.interrupt ? /* @__PURE__ */ jsxRuntimeExports.jsx("button", { className: "swarm-button", type: "button", disabled: stale || busy || pendingInterrupt !== null, onClick: () => void act("interrupt"), children: "Interrupt turn" }) : null,
+      agent.controls.stop ? /* @__PURE__ */ jsxRuntimeExports.jsx("button", { className: "swarm-button swarm-button--danger", type: "button", disabled: stale || busy || pendingStop !== null, onClick: () => setConfirmStop(true), children: "Stop agent" }) : null,
       agent.origin === "observed" ? /* @__PURE__ */ jsxRuntimeExports.jsx("button", { className: "swarm-button", type: "button", onClick: () => onNavigate(`/apps/${encodeURIComponent(agent.harness)}`), children: "App setup" }) : null
     ] }),
-    pending.current && !busy ? /* @__PURE__ */ jsxRuntimeExports.jsx("button", { className: "swarm-text-button", disabled: stale, type: "button", onClick: () => void act(pending.current.action), children: "Check unconfirmed action" }) : null,
+    pendingMessage && !busy ? /* @__PURE__ */ jsxRuntimeExports.jsx("button", { className: "swarm-text-button", disabled: stale, type: "button", onClick: () => void act("message"), children: "Check unconfirmed instruction" }) : null,
+    pendingInterrupt && !busy ? /* @__PURE__ */ jsxRuntimeExports.jsx("button", { className: "swarm-text-button", disabled: stale, type: "button", onClick: () => void act("interrupt"), children: "Check unconfirmed interruption" }) : null,
+    pendingStop && !busy ? /* @__PURE__ */ jsxRuntimeExports.jsx("button", { className: "swarm-text-button", disabled: stale, type: "button", onClick: () => void act("stop"), children: "Check unconfirmed stop" }) : null,
     confirmStop ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "swarm-stop-confirm", role: "group", "aria-label": "Confirm stop", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: "Stop this agent and the work it is running? Changes already made to files will remain." }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("button", { className: "swarm-button swarm-button--danger", disabled: stale || busy || pending.current !== null && pending.current.action !== "stop", type: "button", onClick: () => void act("stop"), children: "Stop this agent" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("button", { className: "swarm-button swarm-button--danger", disabled: stale || busy || pendingStop !== null, type: "button", onClick: () => void act("stop"), children: "Stop this agent" }),
       /* @__PURE__ */ jsxRuntimeExports.jsx("button", { className: "swarm-text-button", type: "button", disabled: busy, onClick: () => setConfirmStop(false), children: "Keep working" })
     ] }) : null
   ] });

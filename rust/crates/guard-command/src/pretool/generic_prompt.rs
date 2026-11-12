@@ -443,9 +443,14 @@ pub(super) fn benign_prompt_text(text: &str) -> bool {
     // The liveness and reread masks only answer the action scan: a reread
     // still points back at a credential named earlier, so the secret check
     // reads the text with the reread intact.
+    let action_text = if sensitive_antecedent {
+        mask_liveness_probes(&remainder)
+    } else {
+        mask_rereads(&mask_liveness_probes(&remainder))
+    };
     !prompt_requests_secret(&remainder)
         && !risky_action.is_match(&mask_transfer_encoding(&mask_format_options(
-            &mask_negated_clauses(&mask_rereads(&mask_liveness_probes(&remainder))),
+            &mask_negated_clauses(&action_text),
         )))
 }
 

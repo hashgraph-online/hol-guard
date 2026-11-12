@@ -16,7 +16,13 @@ pub(crate) fn run(registry: Arc<Mutex<Registry>>, id: String) {
             Err(error) => {
                 update(&registry, &id, |run| {
                     run.active = false;
-                    run.agent.state = AgentState::Failed;
+                    run.agent.state = if run.cancel == 2 {
+                        AgentState::Stopped
+                    } else if run.cancel == 1 {
+                        AgentState::Interrupted
+                    } else {
+                        AgentState::Failed
+                    };
                     run.pending.clear();
                     run.event("error", format!("Could not start the CLI ({:?}). Check its installation and project directory.", error.kind()));
                     run.controls();

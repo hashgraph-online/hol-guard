@@ -23,7 +23,7 @@ export function AgentMap({ agents, selected, onSelect, context, mode }: AgentMap
             <strong>{agent.label}</strong><span className={`swarm-status swarm-status--${agent.state}`}><i aria-hidden="true" />{stateLabel[agent.state]}</span></div>
           <p className="swarm-task">{agent.task ?? "Work is happening in its app"}</p>
           {agent.activity ? <p id={`swarm-latest-${agent.id}`} className="swarm-latest" title={agent.activity}><HiMiniCommandLine aria-hidden="true" /><span>{agent.activity}</span></p> : null}
-          <div className="swarm-node-foot"><span className={cigar.available || agent.context_calls > 0 ? "swarm-context-ready" : ""}><HiMiniCircleStack aria-hidden="true" />{agent.context_calls > 0 ? `${agent.context_calls} CIGAR calls` : cigar.label}</span>
+          <div className="swarm-node-foot"><span className={cigar.available ? "swarm-context-ready" : ""}><HiMiniCircleStack aria-hidden="true" />{cigar.label}{agent.context_calls > 0 ? ` · ${agent.context_calls} past calls` : ""}</span>
             <span>{agent.origin === "managed" ? "Managed" : "Observed"}<HiMiniArrowUpRight aria-hidden="true" /></span></div>
         </button>;
       })}</div>
