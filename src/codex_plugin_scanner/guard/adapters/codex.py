@@ -114,6 +114,8 @@ from .codex_detect_sources import (
     restore_paths,
     toml_payload_from_bytes,
 )
+from .codex_install_plan import guard_proxy_server_names as _guard_proxy_server_names
+from .codex_install_plan import remove_managed_shell_guard_blocks as _remove_managed_shell_guard_blocks
 from .codex_remote_control import (
     codex_remote_launch_environment,
     guarded_codex_launch_command,
@@ -123,7 +125,6 @@ from .codex_remote_control import (
 from .mcp_relay_native import mcp_proxy_launch, python_proxy_launch
 from .mcp_servers import (
     ManagedMcpServer,
-    is_guard_proxy_command,
     managed_stdio_servers,
     proxy_launcher_entry,
     skipped_stdio_server_names,
@@ -153,8 +154,6 @@ _MANAGED_HOOK_TIMEOUT_GRACE_SECONDS = 5
 _CODEX_GUARD_TOOL_MATCHER = "Bash|Read|Write|Edit|MultiEdit|^apply_patch$|mcp__.*"
 _CODEX_GUARD_PERMISSION_MATCHER = "Bash|Read|Write|Edit|MultiEdit|^apply_patch$|mcp__.*"
 _CODEX_GUARD_POST_TOOL_MATCHER = "Bash|Read|mcp__.*"
-_SHELL_GUARD_BEGIN = "# >>> HOL Guard Codex shell guard >>>"
-_SHELL_GUARD_END = "# <<< HOL Guard Codex shell guard <<<"
 _AUTHORITATIVE_ENFORCEMENT_BOUNDARY = "codex-native-hooks"
 _AUTHORITATIVE_HOOK_UNAVAILABLE_REASON = "codex_authoritative_hook_unavailable"
 
@@ -966,18 +965,18 @@ def render_codex_alternate_cleanup(
     servers = rendered.get("mcp_servers")
     if isinstance(servers, dict):
         removed_server = False
+        candidates: dict[str, object] = {}
         for name in managed_server_names:
             server = servers.get(name)
             if not isinstance(server, dict):
                 continue
-            args = server.get("args", [])
             # Malformed entries cannot be identified as an original managed server.
-            if not isinstance(args, list):
+            if not isinstance(server.get("args", []), list):
                 continue
-            command = server.get("command")
-            if not is_guard_proxy_command(
-                command if isinstance(command, str) else None, tuple(value for value in args if isinstance(value, str))
-            ):
+            candidates[name] = {**server, "args": server.get("args", [])}
+        proxies = _guard_proxy_server_names(candidates)
+        for name in candidates:
+            if name not in proxies:
                 servers.pop(name)
                 removed_server = True
         if removed_server and not servers:
@@ -1076,56 +1075,6 @@ def _payload_has_hooks_feature_enabled(config_payload: Mapping[str, object]) -> 
     if not isinstance(features, Mapping):
         return True
     return features.get("hooks") is not False
-
-
-def _line_marker_at(content: bytes, index: int, marker: bytes) -> bool:
-    if index < 0 or content[index : index + len(marker)] != marker:
-        return False
-    before_is_boundary = index == 0 or content[index - 1 : index] == b"\n"
-    after_index = index + len(marker)
-    after_is_boundary = after_index == len(content) or content[after_index : after_index + 1] in {b"\r", b"\n"}
-    return before_is_boundary and after_is_boundary
-
-
-def _find_line_marker(content: bytes, marker: bytes, start: int) -> int:
-    index = content.find(marker, start)
-    while index >= 0 and not _line_marker_at(content, index, marker):
-        index = content.find(marker, index + len(marker))
-    return index
-
-
-def _trailing_line_break_length(content: bytes) -> int:
-    if content.endswith(b"\r\n"):
-        return 2
-    if content.endswith(b"\n"):
-        return 1
-    return 0
-
-
-def _remove_managed_shell_guard_blocks(content: bytes) -> bytes:
-    """Remove only legacy Guard marker blocks while preserving every other byte."""
-
-    begin = _SHELL_GUARD_BEGIN.encode("utf-8")
-    end = _SHELL_GUARD_END.encode("utf-8")
-    search_from = 0
-    while (block_start := _find_line_marker(content, begin, search_from)) >= 0:
-        block_end_start = _find_line_marker(content, end, block_start + len(begin))
-        if block_end_start < 0:
-            break
-        removal_start = block_start
-        prefix = content[:block_start]
-        last_break_length = _trailing_line_break_length(prefix)
-        if last_break_length and _trailing_line_break_length(prefix[:-last_break_length]):
-            # Legacy installation inserted one blank separator before its block.
-            removal_start -= last_break_length
-        removal_end = block_end_start + len(end)
-        if content[removal_end : removal_end + 2] == b"\r\n":
-            removal_end += 2
-        elif content[removal_end : removal_end + 1] == b"\n":
-            removal_end += 1
-        content = content[:removal_start] + content[removal_end:]
-        search_from = removal_start
-    return content
 
 
 def _prepare_codex_shell_cleanup_file(path: Path, *, remove_entire_file: bool = False) -> TransitionFile:
@@ -1857,16 +1806,12 @@ class CodexHarnessAdapter(HarnessAdapter):
     def _refresh_managed_proxy_interpreters(mcp_servers: dict[str, object]) -> tuple[str, ...]:
         current_interpreter = _guard_python_executable()
         migrated: list[str] = []
+        proxies = _guard_proxy_server_names(mcp_servers)
         for name, server_config in mcp_servers.items():
-            if not isinstance(server_config, dict):
+            if name not in proxies or not isinstance(server_config, dict):
                 continue
             command = server_config.get("command")
-            raw_args = server_config.get("args")
-            if not isinstance(raw_args, list):
-                continue
-            args = tuple(str(value) for value in raw_args if isinstance(value, str))
-            if not is_guard_proxy_command(command if isinstance(command, str) else None, args):
-                continue
+            args = tuple(value for value in server_config["args"] if isinstance(value, str))
             _, python_args = python_proxy_launch(None, args)
             launcher, launch_args = mcp_proxy_launch(current_interpreter, python_args)
             if command == launcher and list(args) == launch_args:

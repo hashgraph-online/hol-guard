@@ -7,6 +7,7 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.guard.adapters import codex as adapter
+from codex_plugin_scanner.guard.adapters import codex_install_plan as install_plan
 from codex_plugin_scanner.guard.codex_hook_integrity import CodexHookIntegrityError
 from codex_plugin_scanner.guard.codex_hook_sources import parse_toml_object
 from codex_plugin_scanner.guard.runtime_transition import TransitionError
@@ -42,9 +43,9 @@ def _sources(tmp_path, monkeypatch):
         )
     context.home_dir.joinpath(".zshenv").write_bytes(
         b"\xffKEEP\n\n"
-        + adapter._SHELL_GUARD_BEGIN.encode()
+        + install_plan.SHELL_GUARD_BEGIN.encode()
         + b"\nlegacy\n"
-        + adapter._SHELL_GUARD_END.encode()
+        + install_plan.SHELL_GUARD_END.encode()
         + b"\nAFTER\xfe\n"
     )
     guard = context.guard_home / "managed/codex/codex-zshenv-guard.zsh"

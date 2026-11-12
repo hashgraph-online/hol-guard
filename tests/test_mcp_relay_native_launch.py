@@ -258,6 +258,7 @@ def test_refresh_moves_entries_between_launchers(tmp_path: Path, advertised: set
     assert refreshed["args"] == [NATIVE_MCP_RELAY_COMMAND, sys.executable, *args]
 
 
+@pytest.mark.skipif(sys.platform == "win32", reason="the Guard proxy recognition needs the resident runtime")
 def test_codex_interpreter_refresh_reselects_the_launcher(tmp_path: Path, advertised: set[str]) -> None:
     args = _python_args(tmp_path)
     servers: dict[str, object] = {"fixture": {"command": "/old/python", "args": list(args)}}

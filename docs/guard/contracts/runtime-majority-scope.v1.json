@@ -635,6 +635,7 @@
       {
         "path": [
           "src/codex_plugin_scanner/guard/adapters/codex.py",
+          "src/codex_plugin_scanner/guard/adapters/codex_install_plan.py",
           "src/codex_plugin_scanner/guard/adapters/codex_detect_sources.py",
           "src/codex_plugin_scanner/guard/adapters/codex_lifecycle_lock.py",
           "src/codex_plugin_scanner/guard/adapters/codex_remote_control.py",
@@ -1178,8 +1179,6 @@
         "category": "install_config",
         "path": "src/codex_plugin_scanner/guard/adapters/codex.py",
         "symbols": [
-          "_SHELL_GUARD_BEGIN",
-          "_SHELL_GUARD_END",
           "_CODEX_HOOK_MIGRATION_CONFLICT",
           "_CODEX_HOOK_MIGRATION_READBACK_MISMATCH",
           "_append_unique_hook_groups",
@@ -1197,10 +1196,6 @@
           "prepare_codex_alternate_cleanup",
           "_publish_codex_alternate_cleanup",
           "_require_complete_preactivation_inventory",
-          "_line_marker_at",
-          "_find_line_marker",
-          "_trailing_line_break_length",
-          "_remove_managed_shell_guard_blocks",
           "_prepare_codex_shell_cleanup_file",
           "prepare_codex_shell_cleanup",
           "CodexHarnessAdapter._all_hook_paths",
@@ -1226,7 +1221,7 @@
           "CodexHarnessAdapter._remove_hooks"
         ],
         "entry_points": [],
-        "reason": "Codex config.toml and hooks.json install, uninstall, migration, alternate-config cleanup and shell-guard cleanup, plus the helpers only they use.",
+        "reason": "Codex config.toml and hooks.json install, uninstall, migration, alternate-config cleanup and shell-guard cleanup, plus the helpers only they use; the shell-guard block ranges and the Guard proxy recognition they act on run in the native codex_install_plan runner-authority kind.",
         "evidence": "install, prepare_install, uninstall and prepare_codex_hook_migration have no caller in any in-scope module; they are invoked by the excluded install, uninstall and repair dispatchers. Launch, detect, diagnostics and the runtime hook-state readers stay in scope. The report validates that no retained symbol or in-scope module references the excluded names."
       },
       {

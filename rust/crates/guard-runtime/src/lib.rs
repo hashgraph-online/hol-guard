@@ -205,6 +205,8 @@ mod codex_hooks;
 mod codex_hooks_parity_tests;
 mod codex_host_inventory;
 mod codex_identity;
+#[path = "adapters/codex_install_plan.rs"]
+mod codex_install_plan;
 mod codex_live_operation;
 mod codex_live_wait_build;
 mod codex_proxy;

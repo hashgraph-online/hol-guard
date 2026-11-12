@@ -225,6 +225,7 @@ pub(crate) fn dispatch(kind: &str, args: &Value) -> KindResult {
         "pi_extension_render" => pi_extension_render::render(args),
         "codex_detect" => codex_detect::detect(args),
         "codex_host_inventory" => crate::codex_host_inventory::dispatch(args),
+        "codex_install_plan" => crate::codex_install_plan::dispatch(args),
         "package_script_memory" => crate::package_script_memory::dispatch(args),
         "cloud_review_ack" => crate::cloud_review_ack::dispatch(args),
         "cloud_review_batch" => crate::cloud_review_batch::dispatch(args),
