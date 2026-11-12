@@ -44,6 +44,14 @@
   },
   {
    "verdict": "windows-equivalent",
+   "note": "Contained runs are planned only on Unix (`restricted_pytest` is Unix-only), so no Windows plan ever puts `--no-env-file` in front of a Bun argv. Returning the argv unchanged is the same answer the Unix arm gives every argv that is not a planned Bun run, so a sink asking off Unix re-authorizes exactly the argv it runs. Proven by the Windows native-runtime build compiling this operation and by `contained_argv` tests on the Unix arm.",
+   "file": "rust/crates/guard-command/src/contained_argv.rs",
+   "item": "fn planned_route_argv(command: &[String]) -> Vec<String>",
+   "cfg": "not(unix)",
+   "body": "0911781b1f15"
+  },
+  {
+   "verdict": "windows-equivalent",
    "note": "`runtime/harness_attribution.py` returns `None` on `os.name == \"nt\"` before it ever reaches `/bin/ps`, so there is no Windows behaviour to keep parity with rather than an absent one. A Windows harness is still attributed by its environment markers, which every supported harness sets; only the fallback parent walk is missing, and its absence leaves the origin unknown rather than wrong. The slug is receipt and display identity, never a policy selector, so an unknown origin softens nothing.",
    "file": "rust/crates/guard-command/src/harness_attribution.rs",
    "item": "fn read_process_table() -> Option<String>",
