@@ -1517,6 +1517,7 @@
       },
       "response": {
         "maxBytes": 4096,
+        "emptyOk": true,
         "fields": [
           {
             "name": "error",
@@ -1572,6 +1573,10 @@
               "relaxed": "review",
               "balanced": "review",
               "strict": "block"
+            },
+            "response": "",
+            "projection": {
+              "error": false
             }
           }
         },
@@ -1649,6 +1654,7 @@
       },
       "response": {
         "maxBytes": 4096,
+        "emptyOk": true,
         "fields": [
           {
             "name": "error",
@@ -1704,6 +1710,10 @@
               "relaxed": "review",
               "balanced": "review",
               "strict": "block"
+            },
+            "response": "",
+            "projection": {
+              "error": false
             }
           }
         },

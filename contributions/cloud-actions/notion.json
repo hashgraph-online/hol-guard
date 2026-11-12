@@ -701,7 +701,7 @@
         }
       },
       "response": {
-        "maxBytes": 8192,
+        "maxBytes": 65536,
         "fields": [
           {
             "name": "results",
@@ -1663,7 +1663,7 @@
         }
       },
       "response": {
-        "maxBytes": 16384,
+        "maxBytes": 65536,
         "fields": [
           {
             "name": "id",
@@ -1803,14 +1803,8 @@
         "object": {
           "const": "record"
         },
-        "scope": {
-          "const": "single"
-        },
         "reversibility": {
           "const": "recoverable"
-        },
-        "recordCount": {
-          "const": 1
         }
       },
       "response": {
@@ -1892,7 +1886,7 @@
             },
             "decisions": {
               "relaxed": "allow",
-              "balanced": "allow",
+              "balanced": "require-reapproval",
               "strict": "review"
             }
           }
@@ -2092,14 +2086,8 @@
         "object": {
           "const": "record"
         },
-        "scope": {
-          "const": "single"
-        },
         "reversibility": {
           "const": "recoverable"
-        },
-        "recordCount": {
-          "const": 1
         }
       },
       "response": {
@@ -2177,7 +2165,7 @@
             },
             "decisions": {
               "relaxed": "allow",
-              "balanced": "allow",
+              "balanced": "require-reapproval",
               "strict": "review"
             }
           }
@@ -2825,7 +2813,7 @@
           "const": "all"
         },
         "reversibility": {
-          "const": "reversible"
+          "const": "permanent"
         },
         "recordCount": {
           "const": 1
@@ -2849,7 +2837,7 @@
         ]
       },
       "safety": {
-        "effect": "write",
+        "effect": "destructive",
         "requiredCapabilities": [
           "bounded-output",
           "egress-pinned",
@@ -2907,7 +2895,7 @@
             "decisions": {
               "relaxed": "allow",
               "balanced": "review",
-              "strict": "review"
+              "strict": "require-reapproval"
             }
           }
         },

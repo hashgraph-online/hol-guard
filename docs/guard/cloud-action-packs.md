@@ -77,6 +77,13 @@ Projection reads a response the host already received. It refuses a body over `r
 duplicate keys, keeps only the declared fields, refuses a list longer than its `maxItems`, and labels fields that
 carry provider text (`untrusted: true`) so the caller can treat them as data, not instructions.
 
+An action whose provider answers success with no body (HTTP 204 for most deletes, workflow dispatches and secret
+writes) sets `response.emptyOk: true`; an empty body then projects as `{}`, so `exists` fields read `false`. Without
+it an empty body is `response_json_invalid`, which keeps a read that comes back empty from passing as an empty
+result. Turning `emptyOk` on is a widening change in `diff`. Size `maxBytes` for the largest response the provider
+can send back, including any argument it echoes: GitHub returns the full issue or pull request body, so those
+actions allow 512 KiB.
+
 ## Fixtures
 
 Every action in a source pack carries at least one `safe` and one `risky` fixture. A fixture states the arguments

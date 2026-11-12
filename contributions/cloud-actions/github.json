@@ -381,7 +381,7 @@
         }
       },
       "response": {
-        "maxBytes": 4096,
+        "maxBytes": 65536,
         "fields": [
           {
             "name": "id",
@@ -581,7 +581,7 @@
         }
       },
       "response": {
-        "maxBytes": 16384,
+        "maxBytes": 524288,
         "fields": [
           {
             "name": "number",
@@ -763,7 +763,7 @@
         }
       },
       "response": {
-        "maxBytes": 16384,
+        "maxBytes": 524288,
         "fields": [
           {
             "name": "number",
@@ -973,7 +973,7 @@
         }
       },
       "response": {
-        "maxBytes": 16384,
+        "maxBytes": 524288,
         "fields": [
           {
             "name": "number",
@@ -1300,6 +1300,7 @@
       },
       "response": {
         "maxBytes": 4096,
+        "emptyOk": true,
         "fields": [
           {
             "name": "message",
@@ -1364,6 +1365,10 @@
               "relaxed": "review",
               "balanced": "block",
               "strict": "block"
+            },
+            "response": "",
+            "projection": {
+              "message": false
             }
           }
         },
@@ -1904,6 +1909,7 @@
       },
       "response": {
         "maxBytes": 4096,
+        "emptyOk": true,
         "fields": [
           {
             "name": "message",
@@ -1967,6 +1973,10 @@
               "relaxed": "review",
               "balanced": "require-reapproval",
               "strict": "block"
+            },
+            "response": "",
+            "projection": {
+              "message": false
             }
           }
         },
@@ -2063,6 +2073,7 @@
       },
       "response": {
         "maxBytes": 4096,
+        "emptyOk": true,
         "fields": [
           {
             "name": "message",
@@ -2133,6 +2144,10 @@
               "relaxed": "review",
               "balanced": "review",
               "strict": "block"
+            },
+            "response": "",
+            "projection": {
+              "message": false
             }
           }
         },
@@ -2220,6 +2235,7 @@
       },
       "response": {
         "maxBytes": 4096,
+        "emptyOk": true,
         "fields": [
           {
             "name": "message",
@@ -2289,6 +2305,10 @@
               "relaxed": "review",
               "balanced": "review",
               "strict": "block"
+            },
+            "response": "",
+            "projection": {
+              "message": false
             }
           }
         },
@@ -2536,6 +2556,7 @@
       },
       "response": {
         "maxBytes": 4096,
+        "emptyOk": true,
         "fields": [
           {
             "name": "message",
@@ -2604,6 +2625,10 @@
               "relaxed": "allow",
               "balanced": "allow",
               "strict": "review"
+            },
+            "response": "[{\"id\": 1, \"name\": \"bug\"}]",
+            "projection": {
+              "message": false
             }
           }
         },
@@ -2713,7 +2738,7 @@
         }
       },
       "response": {
-        "maxBytes": 4096,
+        "maxBytes": 524288,
         "fields": [
           {
             "name": "id",
@@ -2856,6 +2881,7 @@
       },
       "response": {
         "maxBytes": 4096,
+        "emptyOk": true,
         "fields": [
           {
             "name": "message",
@@ -2920,6 +2946,10 @@
               "relaxed": "review",
               "balanced": "review",
               "strict": "block"
+            },
+            "response": "",
+            "projection": {
+              "message": false
             }
           }
         },

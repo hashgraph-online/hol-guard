@@ -574,7 +574,7 @@
         }
       },
       "response": {
-        "maxBytes": 4096,
+        "maxBytes": 65536,
         "fields": [
           {
             "name": "channel",
@@ -748,7 +748,7 @@
         }
       },
       "response": {
-        "maxBytes": 4096,
+        "maxBytes": 65536,
         "fields": [
           {
             "name": "ok",

@@ -322,6 +322,11 @@ pub enum Extractor {
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct ResponseSpec {
     pub max_bytes: u64,
+    /// A success with no body (HTTP 204, or an empty 200) projects as if the
+    /// provider had sent `{}`. Off by default, so a read that comes back
+    /// empty still fails instead of passing as an empty result.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub empty_ok: bool,
     pub fields: Vec<ResponseField>,
 }
 

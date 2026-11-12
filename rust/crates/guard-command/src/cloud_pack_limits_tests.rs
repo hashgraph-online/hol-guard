@@ -109,3 +109,63 @@ fn an_error_fixture_cannot_also_expect_decisions() {
     });
     assert_eq!(code(pack), "cloud_pack_fixtures_invalid");
 }
+
+#[test]
+fn a_bodiless_success_projects_only_where_the_pack_accepts_it() {
+    let pack = pack_from_value(value(GITHUB)).unwrap();
+    let project = crate::cloud_pack_response::project;
+    // GitHub answers a branch delete and a workflow dispatch with 204 and no body.
+    for id in [
+        "github.git.delete_branch",
+        "github.repos.delete",
+        "github.releases.delete",
+        "github.actions.dispatch_workflow",
+        "github.actions.set_secret",
+    ] {
+        let action = pack.action(id).unwrap();
+        for body in [&b""[..], b"\n"] {
+            let projection = project(action, body).unwrap();
+            assert_eq!(projection.data, json!({"message": false}), "{id}");
+        }
+    }
+    // A read that comes back empty is still an error, not an empty result.
+    let list = pack.action("github.issues.list").unwrap();
+    assert_eq!(project(list, b"").unwrap_err(), "response_json_invalid");
+}
+
+#[test]
+fn turning_on_empty_success_is_widening() {
+    let old = slack();
+    let accepts = edit_action("slack.chat.delete", |action| {
+        action["response"]["emptyOk"] = json!(true);
+    });
+    let report = diff(&old, &pack_from_value(accepts).unwrap()).unwrap();
+    assert!(report.widening);
+    assert!(report
+        .changes
+        .iter()
+        .any(|change| change.code == "response_empty_accepted" && change.widening));
+}
+
+#[test]
+fn a_created_issue_or_pull_request_echoing_its_longest_body_fits() {
+    let pack = pack_from_value(value(GITHUB)).unwrap();
+    // GitHub returns the whole body; every character may need a six-byte escape.
+    let body = "\u{1}".repeat(65_536);
+    let created = json!({"number": 7, "state": "open", "title": "t",
+        "html_url": "https://github.com/o/r/issues/7", "body": body,
+        "user": {"login": "o"}, "padding": "x".repeat(16_384)});
+    let bytes = created.to_string();
+    assert!(bytes.len() > 6 * 65_536);
+    for id in [
+        "github.issues.create",
+        "github.issues.update",
+        "github.pulls.create",
+    ] {
+        let action = pack.action(id).unwrap();
+        assert!(
+            crate::cloud_pack_response::project(action, bytes.as_bytes()).is_ok(),
+            "{id}"
+        );
+    }
+}
