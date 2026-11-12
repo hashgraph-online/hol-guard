@@ -13,6 +13,7 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.guard import approval_gate, approval_gate_pulse
+from codex_plugin_scanner.guard.approval_gate_state import ApprovalGatePublicConfig
 from codex_plugin_scanner.guard.approval_gate_types import (
     ApprovalGateError,
     ApprovalGateInput,
@@ -572,7 +573,7 @@ def test_the_cli_and_the_dashboard_turn_pulse_off_under_the_binding_the_resident
 # Links to Yanez from the CLI (#7490).
 
 
-@pytest.mark.parametrize("command", [[], ["status"], ["enroll"], ["disable"], ["recover"]])
+@pytest.mark.parametrize("command", [[], ["status"], ["enroll"], ["disable"], ["recover"], ["show-command"]])
 def test_every_pulse_command_help_says_where_to_get_the_app_and_read_more(
     command: list[str], capsys: pytest.CaptureFixture[str]
 ) -> None:
@@ -600,3 +601,159 @@ def test_cli_setup_sends_new_users_to_the_yid_app_page() -> None:
     assert parse_qs(link.query) == {"referrer_id": ["holguard"]}, "only the HOL Guard referrer, nothing about the user"
     assert any(PULSE_SITE_URL in line for line in _SETUP_STEPS), "setup shows the app link"
     assert not any("docs.yanez.ai" in line for line in _SETUP_STEPS), "setup does not send new users to developer docs"
+
+
+# The command in the YID app (PR5): off by default (Michael's review of
+# #7541), and turning it on is an informed opt-in that the YID app approves. The resident builds the text the phone
+# shows (approval_gate_pulse_command.rs); these check the Python glue.
+
+
+def test_the_command_stays_off_unless_the_resident_reports_the_opt_in() -> None:
+    wire = {
+        "enabled": True,
+        "configured": True,
+        "cooldown_seconds": 0,
+        "cooldown_active": False,
+        "fail_closed": False,
+        "strict_all_decisions": False,
+        "totp_enabled": False,
+        "totp_pending": False,
+        "pulse_enabled": True,
+    }
+    hidden = config_from_wire(wire)
+    assert hidden is not None and hidden.pulse_show_command is False
+    assert hidden.to_dict()["pulse_show_command"] is False
+    for not_true in (False, None, "true", 1):
+        other = config_from_wire({**wire, "pulse_show_command": not_true})
+        assert other is not None and other.pulse_show_command is False
+    shown = config_from_wire({**wire, "pulse_show_command": True})
+    assert shown is not None and shown.pulse_show_command is True
+
+
+def _pulse_on(monkeypatch: pytest.MonkeyPatch, commands: object, *, enabled: bool = True) -> None:
+    monkeypatch.setattr(
+        commands,
+        "public_config",
+        lambda _home: ApprovalGatePublicConfig(
+            enabled=True,
+            configured=True,
+            cooldown_seconds=0,
+            cooldown_active=False,
+            cooldown_expires_at=None,
+            locked_until=None,
+            fail_closed=False,
+            strict_all_decisions=False,
+            totp_enabled=False,
+            totp_pending=False,
+            pulse_enabled=enabled,
+        ),
+    )
+
+
+@pytest.mark.parametrize(("state", "show"), [("off", False), ("on", True)])
+def test_show_command_asks_the_yid_app_to_approve_exactly_that_change(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, state: str, show: bool
+) -> None:
+    import argparse
+
+    from codex_plugin_scanner.guard.cli import approval_pulse_commands
+
+    asked: list[object] = []
+    saved: list[object] = []
+    _pulse_on(monkeypatch, approval_pulse_commands)
+    monkeypatch.setattr(approval_pulse_commands, "prompt_for_approval_gate", lambda *_a, **_k: None)
+    monkeypatch.setattr(approval_pulse_commands.sys.stdin, "isatty", lambda: True)
+    monkeypatch.setattr("builtins.input", lambda _prompt: "yes")
+
+    def gate(*_args: object, **kwargs: object) -> str:
+        asked.append(kwargs.get("settings_change"))
+        assert kwargs.get("purpose") == "settings_write"
+        return "grant"
+
+    def update(_home: Path, payload: object, *, approval_gate_grant: object) -> ApprovalGatePublicConfig:
+        saved.append((payload, approval_gate_grant))
+        return approval_pulse_commands.public_config(_home)
+
+    monkeypatch.setattr(approval_pulse_commands, "require_high_risk", gate)
+    monkeypatch.setattr(approval_pulse_commands, "update_settings", update)
+    approval_pulse_commands.run_approval_pulse_settings_command(
+        args=argparse.Namespace(settings_approval_pulse_command="show-command", state=state), guard_home=tmp_path
+    )
+    change = {"pulse_show_command": show}
+    assert asked == [{"kind": "save", "settings": {"approval_gate": change}}]
+    assert saved == [(change, "grant")]
+
+
+def test_show_command_needs_pulse(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    import argparse
+
+    from codex_plugin_scanner.guard.cli import approval_pulse_commands
+
+    _pulse_on(monkeypatch, approval_pulse_commands, enabled=False)
+    with pytest.raises(ApprovalGateError) as raised:
+        approval_pulse_commands.run_approval_pulse_settings_command(
+            args=argparse.Namespace(settings_approval_pulse_command="show-command", state="off"), guard_home=tmp_path
+        )
+    assert raised.value.code == "approval_gate_pulse_not_enabled"
+
+
+def test_show_command_takes_only_on_or_off() -> None:
+    import argparse
+
+    from codex_plugin_scanner.guard.cli.approval_pulse_commands import add_approval_pulse_parser
+
+    root = argparse.ArgumentParser()
+    settings = root.add_subparsers(dest="settings_command")
+    add_approval_pulse_parser(settings, lambda parser, **_: None, argparse.ArgumentParser)
+    assert root.parse_args(["approval-pulse", "show-command", "off"]).state == "off"
+    with pytest.raises(SystemExit):
+        root.parse_args(["approval-pulse", "show-command", "maybe"])
+
+
+def test_turning_command_sharing_on_explains_it_and_needs_a_typed_yes(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    import argparse
+
+    from codex_plugin_scanner.guard.cli import approval_pulse_commands
+
+    asked: list[object] = []
+    _pulse_on(monkeypatch, approval_pulse_commands)
+    monkeypatch.setattr(approval_pulse_commands.sys.stdin, "isatty", lambda: True)
+    monkeypatch.setattr("builtins.input", lambda _prompt: "y")
+    monkeypatch.setattr(approval_pulse_commands, "require_high_risk", lambda *_a, **k: asked.append(k))
+    with pytest.raises(ApprovalGateError) as raised:
+        approval_pulse_commands.run_approval_pulse_settings_command(
+            args=argparse.Namespace(settings_approval_pulse_command="show-command", state="on"), guard_home=tmp_path
+        )
+    assert raised.value.code == "approval_gate_cancelled"
+    assert asked == [], "nothing is sent to the YID app without a typed yes"
+    shown = capsys.readouterr().err
+    assert "best-effort" in shown and "Yanez Pulse" in shown
+
+    monkeypatch.setattr(approval_pulse_commands.sys.stdin, "isatty", lambda: False)
+    with pytest.raises(ApprovalGateError) as raised:
+        approval_pulse_commands.run_approval_pulse_settings_command(
+            args=argparse.Namespace(settings_approval_pulse_command="show-command", state="on"), guard_home=tmp_path
+        )
+    assert raised.value.code == "approval_gate_interactive_required", "an agent cannot opt in for the user"
+
+
+def test_turning_command_sharing_off_asks_nothing_extra(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    import argparse
+
+    from codex_plugin_scanner.guard.cli import approval_pulse_commands
+
+    _pulse_on(monkeypatch, approval_pulse_commands)
+    monkeypatch.setattr(approval_pulse_commands.sys.stdin, "isatty", lambda: False)
+    monkeypatch.setattr("builtins.input", lambda _prompt: pytest.fail("off needs no confirmation"))
+    monkeypatch.setattr(approval_pulse_commands, "prompt_for_approval_gate", lambda *_a, **_k: None)
+    monkeypatch.setattr(approval_pulse_commands, "require_high_risk", lambda *_a, **_k: "grant")
+    monkeypatch.setattr(
+        approval_pulse_commands,
+        "update_settings",
+        lambda home, payload, **_k: approval_pulse_commands.public_config(home),
+    )
+    approval_pulse_commands.run_approval_pulse_settings_command(
+        args=argparse.Namespace(settings_approval_pulse_command="show-command", state="off"), guard_home=tmp_path
+    )

@@ -265,6 +265,14 @@ export function pulseEnrollmentBody(agentKey: string, minTier: PulseMinTier): Re
 }
 
 /**
+ * The settings save that shows or hides the agent's command in the YID app.
+ * It names only this one setting, so the approval covers only this change.
+ */
+export function pulseShowCommandBody(show: boolean): { settings: { approval_gate: { pulse_show_command: boolean } } } {
+  return { settings: { approval_gate: { pulse_show_command: show } } };
+}
+
+/**
  * Plain words for a setup refusal about the face scan, or null to show the
  * daemon's own message. The UI never names assurance tiers.
  */

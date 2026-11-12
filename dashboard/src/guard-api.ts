@@ -103,6 +103,7 @@ import { observeDashboardBuild } from "./dashboard-build";
 import {
   pulseEnrollmentBody,
   pulseSetupRefusalMessage,
+  pulseShowCommandBody,
   sendWithPulseApproval,
   type PulseMinTier,
   type PulseWaitTiming,
@@ -4740,6 +4741,23 @@ export async function disableApprovalGatePulse(signal?: AbortSignal): Promise<Gu
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({}),
+    signal,
+  });
+}
+
+/**
+ * Show or hide the agent's command in the YID app. It is a settings save, so
+ * the Pulse layer asks the YID app first and the approval covers exactly this
+ * change; aborting `signal` stops waiting for it.
+ */
+export async function setApprovalGatePulseShowCommand(
+  show: boolean,
+  signal?: AbortSignal,
+): Promise<GuardSettingsPayload> {
+  return readJson("/v1/settings", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...guardAuthHeaders() },
+    body: JSON.stringify(pulseShowCommandBody(show)),
     signal,
   });
 }

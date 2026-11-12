@@ -37,6 +37,7 @@ mod approval_gate_enrollment;
 mod approval_gate_grants;
 mod approval_gate_op;
 mod approval_gate_pulse;
+mod approval_gate_pulse_command;
 mod approval_gate_pulse_disable;
 mod approval_gate_pulse_enrollment;
 mod approval_gate_pulse_setup;

@@ -35,6 +35,7 @@ use serde_json::{json, Value};
 use zeroize::Zeroizing;
 
 use crate::approval_gate_grants::ApprovalGateErrorV1;
+use crate::approval_gate_pulse_command as pulse_command;
 pub(crate) use crate::approval_gate_pulse_store::{
     insert_pending, ledger_error, ledger_reserve, pending_has_room, pulse_busy,
     pulse_cooldown_covers, restore_pending, same_pulse_factor, take_pending,
@@ -258,8 +259,15 @@ pub(crate) fn pulse_request(
         generation,
     );
     // What the YID app shows comes from Guard's own record of the request.
-    let summary = crate::approval_gate_pulse_summary::summary_for(
-        guard_home, purpose, action, scope, subject, batch_ids,
+    let home = pulse_command::current_home();
+    let summary = crate::approval_gate_pulse_summary::summary_with_command(
+        guard_home,
+        purpose,
+        action,
+        scope,
+        subject,
+        batch_ids,
+        pulse_command::command_row(&state, home.as_deref()),
     );
     let terms = build_terms_with_summary(&config.binding_key, &binding, &summary)
         .map_err(|e| pulse_error(&e))?;
