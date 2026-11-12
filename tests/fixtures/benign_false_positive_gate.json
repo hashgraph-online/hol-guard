@@ -35900,7 +35900,7 @@
       ],
       "tool": "shell",
       "tool_input": {
-        "command": "echo '[1]' | jq 'reduce .[] as $x (0; env)'"
+        "command": "gh pr list --json number | jq 'reduce .[] as $row (0; env)'"
       },
       "cwd": "worktree",
       "expect": "not_allow"
@@ -35916,7 +35916,7 @@
       ],
       "tool": "shell",
       "tool_input": {
-        "command": "echo '{}' | jq -r 'def home: $ENV.HOME; home'"
+        "command": "gh pr list --json number | jq -r 'def home: $ENV.HOME; home'"
       },
       "cwd": "worktree",
       "expect": "not_allow"
@@ -35932,7 +35932,7 @@
       ],
       "tool": "shell",
       "tool_input": {
-        "command": "echo '{}' | jq '.a + input'"
+        "command": "gh pr list --json number | jq '.[0].number + input'"
       },
       "cwd": "worktree",
       "expect": "not_allow"
@@ -35948,7 +35948,7 @@
       ],
       "tool": "shell",
       "tool_input": {
-        "command": "echo '{}' | jq 'if .a then env.GH_TOKEN else 1 end'"
+        "command": "gh pr list --json number | jq 'if length > 0 then env.GH_TOKEN else 1 end'"
       },
       "cwd": "worktree",
       "expect": "not_allow"
@@ -35964,7 +35964,7 @@
       ],
       "tool": "shell",
       "tool_input": {
-        "command": "echo '{}' | jq '.a |= input_filename'"
+        "command": "gh pr list --json number | jq '.[] |= input_filename'"
       },
       "cwd": "worktree",
       "expect": "not_allow"
@@ -47921,7 +47921,7 @@
         "command": "gh pr list --json number | jq 'reduce .[] as $row (0; . + $row.number)'"
       },
       "cwd": "worktree",
-      "expect": "not_allow"
+      "expect": "allow"
     },
     {
       "id": "jq-stdin-select-decimal",
@@ -47969,7 +47969,7 @@
         "command": "gh pr list --json number | jq '.[] | .number - 1'"
       },
       "cwd": "worktree",
-      "expect": "not_allow"
+      "expect": "allow"
     },
     {
       "id": "jq-stdin-limit-two-arguments",
@@ -47985,7 +47985,7 @@
         "command": "gh pr list --json number | jq 'limit(1; .[])'"
       },
       "cwd": "worktree",
-      "expect": "not_allow"
+      "expect": "allow"
     },
     {
       "id": "observed-git-01",
