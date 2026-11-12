@@ -58,7 +58,10 @@ def test_a_stop_without_an_approval_request_does_not_ask_for_approval(tmp_path: 
     assert stopped == reason
     assert pending.startswith(reason)
     assert "Retry the exact original tool call after approving it in HOL Guard." in pending
-    assert "HOL Guard approval page: http://127.0.0.1:1/approvals/req-1" in pending
+    assert (
+        "Give the user this exact HOL Guard approval link, copied in full: http://127.0.0.1:1/approvals/req-1"
+        in pending
+    )
 
 
 def test_the_approval_page_line_keeps_the_signed_link_from_the_reason(tmp_path: Path) -> None:
@@ -85,10 +88,10 @@ def test_the_approval_page_line_keeps_the_signed_link_from_the_reason(tmp_path: 
         ],
     )
 
-    # The page line repeats the signed link, never the bare page that cannot decide.
-    assert f"HOL Guard approval page: {signed}" in held
+    # The link line repeats the signed link, never the bare page that cannot decide.
+    assert f"Give the user this exact HOL Guard approval link, copied in full: {signed}" in held
     assert f"{page}\n" not in held + "\n"
     assert not held.rstrip().endswith(page)
     # Without a signed link for this request in the reason, the page is all there is.
-    assert unsigned.endswith(f"HOL Guard approval page: {page}")
-    assert foreign.endswith(f"HOL Guard approval page: {page}")
+    assert unsigned.endswith(f"copied in full: {page}")
+    assert foreign.endswith(f"copied in full: {page}")
