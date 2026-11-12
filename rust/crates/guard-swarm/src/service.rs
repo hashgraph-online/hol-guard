@@ -497,10 +497,12 @@ mod tests {
 
     #[test]
     fn control_actions_can_replay_when_receipts_are_full() {
-        let mut registry = Registry::default();
-        registry.receipts = (0..2048)
-            .map(|index| (format!("request-{index}"), ("digest".into(), "run".into())))
-            .collect();
+        let registry = Registry {
+            receipts: (0..2048)
+                .map(|index| (format!("request-{index}"), ("digest".into(), "run".into())))
+                .collect(),
+            ..Default::default()
+        };
 
         assert!(matches!(
             replay(&registry, "new-message", "digest", false),
