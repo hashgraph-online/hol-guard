@@ -1,0 +1,995 @@
+{
+ "schema": "guard.action-facts-fixtures.v2",
+ "base": {
+  "schema": "guard.action-facts.v2",
+  "version": 2,
+  "class": "delete",
+  "object": {
+   "state": "known",
+   "value": "message"
+  },
+  "reversibility": {
+   "state": "known",
+   "value": "recoverable"
+  },
+  "scope": {
+   "state": "known",
+   "value": "enumerated"
+  },
+  "record_count": {
+   "state": "known",
+   "value": 12
+  },
+  "recipient_count": {
+   "state": "unsupported"
+  },
+  "byte_count": {
+   "state": "unknown"
+  },
+  "audience": {
+   "kind": {
+    "state": "known",
+    "value": "private"
+   },
+   "recipient_domains": {
+    "state": "unsupported"
+   },
+   "external": {
+    "state": "unsupported"
+   }
+  },
+  "environment": {
+   "state": "unsupported"
+  },
+  "money": {
+   "state": "unsupported"
+  },
+  "sensitivity": {
+   "state": "unknown"
+  },
+  "findings": [],
+  "pii_kinds": []
+ },
+ "facts": [
+  {
+   "id": "base",
+   "patch": {},
+   "valid": true
+  },
+  {
+   "id": "unknown-everything",
+   "patch": {
+    "object": {
+     "state": "unknown"
+    },
+    "reversibility": {
+     "state": "unknown"
+    },
+    "scope": {
+     "state": "unknown"
+    },
+    "record_count": {
+     "state": "unknown"
+    }
+   },
+   "valid": true
+  },
+  {
+   "id": "wrong-schema",
+   "patch": {
+    "schema": "guard.action-facts.v1"
+   },
+   "valid": false
+  },
+  {
+   "id": "wrong-version",
+   "patch": {
+    "version": 1
+   },
+   "valid": false
+  },
+  {
+   "id": "unknown-class",
+   "patch": {
+    "class": "destroy"
+   },
+   "valid": false
+  },
+  {
+   "id": "null-fact",
+   "patch": {
+    "object": null
+   },
+   "valid": false
+  },
+  {
+   "id": "known-without-value",
+   "patch": {
+    "object": {
+     "state": "known"
+    }
+   },
+   "valid": false
+  },
+  {
+   "id": "unknown-with-value",
+   "patch": {
+    "object": {
+     "state": "unknown",
+     "value": "message"
+    }
+   },
+   "valid": false
+  },
+  {
+   "id": "unknown-field",
+   "patch": {
+    "model_says": "safe"
+   },
+   "valid": false
+  },
+  {
+   "id": "count-over-wire-limit",
+   "patch": {
+    "record_count": {
+     "state": "known",
+     "value": 9007199254740992
+    }
+   },
+   "valid": false
+  },
+  {
+   "id": "single-but-many",
+   "patch": {
+    "scope": {
+     "state": "known",
+     "value": "single"
+    },
+    "record_count": {
+     "state": "known",
+     "value": 3
+    }
+   },
+   "valid": false
+  },
+  {
+   "id": "single-and-one",
+   "patch": {
+    "scope": {
+     "state": "known",
+     "value": "single"
+    },
+    "record_count": {
+     "state": "known",
+     "value": 1
+    }
+   },
+   "valid": true
+  },
+  {
+   "id": "send-external",
+   "patch": {
+    "class": "send",
+    "recipient_count": {
+     "state": "known",
+     "value": 2
+    },
+    "audience": {
+     "kind": {
+      "state": "known",
+      "value": "named"
+     },
+     "recipient_domains": {
+      "state": "known",
+      "value": [
+       "example.com",
+       "example.test"
+      ]
+     },
+     "external": {
+      "state": "known",
+      "value": true
+     }
+    }
+   },
+   "valid": true
+  },
+  {
+   "id": "domains-unsorted",
+   "patch": {
+    "class": "send",
+    "recipient_count": {
+     "state": "known",
+     "value": 2
+    },
+    "audience": {
+     "kind": {
+      "state": "known",
+      "value": "named"
+     },
+     "recipient_domains": {
+      "state": "known",
+      "value": [
+       "example.test",
+       "example.com"
+      ]
+     },
+     "external": {
+      "state": "known",
+      "value": true
+     }
+    }
+   },
+   "valid": false
+  },
+  {
+   "id": "domain-uppercase",
+   "patch": {
+    "class": "send",
+    "recipient_count": {
+     "state": "known",
+     "value": 1
+    },
+    "audience": {
+     "kind": {
+      "state": "known",
+      "value": "named"
+     },
+     "recipient_domains": {
+      "state": "known",
+      "value": [
+       "Example.com"
+      ]
+     },
+     "external": {
+      "state": "known",
+      "value": true
+     }
+    }
+   },
+   "valid": false
+  },
+  {
+   "id": "domains-without-recipients",
+   "patch": {
+    "class": "send",
+    "recipient_count": {
+     "state": "known",
+     "value": 0
+    },
+    "audience": {
+     "kind": {
+      "state": "known",
+      "value": "named"
+     },
+     "recipient_domains": {
+      "state": "known",
+      "value": [
+       "example.com"
+      ]
+     },
+     "external": {
+      "state": "known",
+      "value": true
+     }
+    }
+   },
+   "valid": false
+  },
+  {
+   "id": "private-with-recipients",
+   "patch": {
+    "recipient_count": {
+     "state": "known",
+     "value": 2
+    }
+   },
+   "valid": false
+  },
+  {
+   "id": "pay-needs-money-fact",
+   "patch": {
+    "class": "pay"
+   },
+   "valid": false
+  },
+  {
+   "id": "pay-unknown-money",
+   "patch": {
+    "class": "pay",
+    "money": {
+     "state": "unknown"
+    }
+   },
+   "valid": true
+  },
+  {
+   "id": "pay-known",
+   "patch": {
+    "class": "pay",
+    "money": {
+     "state": "known",
+     "value": {
+      "amount_minor": 125000,
+      "currency": "USD",
+      "direction": "out"
+     }
+    }
+   },
+   "valid": true
+  },
+  {
+   "id": "currency-lowercase",
+   "patch": {
+    "class": "pay",
+    "money": {
+     "state": "known",
+     "value": {
+      "amount_minor": 1,
+      "currency": "usd",
+      "direction": "out"
+     }
+    }
+   },
+   "valid": false
+  },
+  {
+   "id": "sensitivity-empty",
+   "patch": {
+    "sensitivity": {
+     "state": "known",
+     "value": []
+    }
+   },
+   "valid": false
+  },
+  {
+   "id": "sensitivity-sorted",
+   "patch": {
+    "sensitivity": {
+     "state": "known",
+     "value": [
+      "personal",
+      "confidential"
+     ]
+    }
+   },
+   "valid": true
+  },
+  {
+   "id": "sensitivity-unsorted",
+   "patch": {
+    "sensitivity": {
+     "state": "known",
+     "value": [
+      "confidential",
+      "personal"
+     ]
+    }
+   },
+   "valid": false
+  },
+  {
+   "id": "findings-duplicate",
+   "patch": {
+    "findings": [
+     "secret_in_arguments",
+     "secret_in_arguments"
+    ]
+   },
+   "valid": false
+  },
+  {
+   "id": "findings-sorted",
+   "patch": {
+    "findings": [
+     "secret_in_arguments",
+     "injection_signal_in_result"
+    ]
+   },
+   "valid": true
+  }
+ ],
+ "selectors": [
+  {
+   "id": "class-yes",
+   "selector": {
+    "classes": [
+     "delete"
+    ]
+   },
+   "expect": "yes"
+  },
+  {
+   "id": "class-no",
+   "selector": {
+    "classes": [
+     "send"
+    ]
+   },
+   "expect": "no"
+  },
+  {
+   "id": "empty-selector-invalid",
+   "selector": {},
+   "expect": "invalid"
+  },
+  {
+   "id": "null-dimension-invalid",
+   "selector": {
+    "classes": null
+   },
+   "expect": "invalid"
+  },
+  {
+   "id": "empty-set-invalid",
+   "selector": {
+    "classes": []
+   },
+   "expect": "invalid"
+  },
+  {
+   "id": "duplicate-set-invalid",
+   "selector": {
+    "classes": [
+     "delete",
+     "delete"
+    ]
+   },
+   "expect": "invalid"
+  },
+  {
+   "id": "min-over-max-invalid",
+   "selector": {
+    "min_record_count": 10,
+    "max_record_count": 5
+   },
+   "expect": "invalid"
+  },
+  {
+   "id": "window-needs-one-bound",
+   "selector": {
+    "windows": [
+     {
+      "window": "deletes_per_hour"
+     }
+    ]
+   },
+   "expect": "invalid"
+  },
+  {
+   "id": "window-two-bounds-invalid",
+   "selector": {
+    "windows": [
+     {
+      "window": "deletes_per_hour",
+      "at_most": 1,
+      "above": 2
+     }
+    ]
+   },
+   "expect": "invalid"
+  },
+  {
+   "id": "recoverable-small",
+   "selector": {
+    "classes": [
+     "delete"
+    ],
+    "reversibility": [
+     "recoverable"
+    ],
+    "max_record_count": 25
+   },
+   "expect": "yes"
+  },
+  {
+   "id": "recoverable-large",
+   "facts": {
+    "record_count": {
+     "state": "known",
+     "value": 400
+    }
+   },
+   "selector": {
+    "classes": [
+     "delete"
+    ],
+    "reversibility": [
+     "recoverable"
+    ],
+    "max_record_count": 25
+   },
+   "expect": "no"
+  },
+  {
+   "id": "count-unknown",
+   "facts": {
+    "record_count": {
+     "state": "unknown"
+    },
+    "scope": {
+     "state": "known",
+     "value": "query_selected"
+    }
+   },
+   "selector": {
+    "classes": [
+     "delete"
+    ],
+    "max_record_count": 25
+   },
+   "expect": "unknown"
+  },
+  {
+   "id": "dimension-no-beats-unknown",
+   "facts": {
+    "record_count": {
+     "state": "unknown"
+    }
+   },
+   "selector": {
+    "classes": [
+     "send"
+    ],
+    "max_record_count": 25
+   },
+   "expect": "no"
+  },
+  {
+   "id": "reversibility-unknown",
+   "facts": {
+    "reversibility": {
+     "state": "unknown"
+    }
+   },
+   "selector": {
+    "reversibility": [
+     "permanent"
+    ]
+   },
+   "expect": "unknown"
+  },
+  {
+   "id": "unsupported-is-unknown",
+   "selector": {
+    "environments": [
+     "production"
+    ]
+   },
+   "expect": "unknown"
+  },
+  {
+   "id": "provider-yes",
+   "provider": "google_gmail",
+   "selector": {
+    "providers": [
+     "google_gmail"
+    ]
+   },
+   "expect": "yes"
+  },
+  {
+   "id": "provider-no",
+   "provider": "slack",
+   "selector": {
+    "providers": [
+     "google_gmail"
+    ]
+   },
+   "expect": "no"
+  },
+  {
+   "id": "all-recipients-trusted",
+   "facts": {
+    "class": "send",
+    "recipient_count": {
+     "state": "known",
+     "value": 2
+    },
+    "audience": {
+     "kind": {
+      "state": "known",
+      "value": "named"
+     },
+     "recipient_domains": {
+      "state": "known",
+      "value": [
+       "example.com",
+       "example.test"
+      ]
+     },
+     "external": {
+      "state": "known",
+      "value": true
+     }
+    }
+   },
+   "selector": {
+    "recipient_domains": [
+     "example.com",
+     "example.test"
+    ]
+   },
+   "expect": "yes"
+  },
+  {
+   "id": "one-recipient-untrusted",
+   "facts": {
+    "class": "send",
+    "recipient_count": {
+     "state": "known",
+     "value": 2
+    },
+    "audience": {
+     "kind": {
+      "state": "known",
+      "value": "named"
+     },
+     "recipient_domains": {
+      "state": "known",
+      "value": [
+       "example.com",
+       "example.test"
+      ]
+     },
+     "external": {
+      "state": "known",
+      "value": true
+     }
+    }
+   },
+   "selector": {
+    "recipient_domains": [
+     "example.com"
+    ]
+   },
+   "expect": "no"
+  },
+  {
+   "id": "outside-trusted",
+   "facts": {
+    "class": "send",
+    "recipient_count": {
+     "state": "known",
+     "value": 2
+    },
+    "audience": {
+     "kind": {
+      "state": "known",
+      "value": "named"
+     },
+     "recipient_domains": {
+      "state": "known",
+      "value": [
+       "example.com",
+       "example.test"
+      ]
+     },
+     "external": {
+      "state": "known",
+      "value": true
+     }
+    }
+   },
+   "selector": {
+    "recipient_domains_outside": [
+     "example.com"
+    ]
+   },
+   "expect": "yes"
+  },
+  {
+   "id": "outside-unknown-recipients",
+   "facts": {
+    "class": "send",
+    "recipient_count": {
+     "state": "unknown"
+    },
+    "audience": {
+     "kind": {
+      "state": "known",
+      "value": "named"
+     },
+     "recipient_domains": {
+      "state": "unknown"
+     },
+     "external": {
+      "state": "unknown"
+     }
+    }
+   },
+   "selector": {
+    "recipient_domains_outside": [
+     "example.com"
+    ]
+   },
+   "expect": "unknown"
+  },
+  {
+   "id": "external-unknown",
+   "selector": {
+    "external": true
+   },
+   "expect": "unknown"
+  },
+  {
+   "id": "sensitivity-any",
+   "facts": {
+    "sensitivity": {
+     "state": "known",
+     "value": [
+      "personal",
+      "confidential"
+     ]
+    }
+   },
+   "selector": {
+    "sensitivity": [
+     "confidential",
+     "secret"
+    ]
+   },
+   "expect": "yes"
+  },
+  {
+   "id": "finding-present",
+   "facts": {
+    "findings": [
+     "secret_in_arguments"
+    ]
+   },
+   "selector": {
+    "findings": [
+     "secret_in_arguments"
+    ]
+   },
+   "expect": "yes"
+  },
+  {
+   "id": "finding-absent",
+   "selector": {
+    "findings": [
+     "secret_in_arguments"
+    ]
+   },
+   "expect": "no"
+  },
+  {
+   "id": "money-threshold",
+   "facts": {
+    "class": "pay",
+    "money": {
+     "state": "known",
+     "value": {
+      "amount_minor": 125000,
+      "currency": "USD",
+      "direction": "out"
+     }
+    }
+   },
+   "selector": {
+    "classes": [
+     "pay"
+    ],
+    "min_amount_minor": 100000,
+    "money_directions": [
+     "out"
+    ]
+   },
+   "expect": "yes"
+  },
+  {
+   "id": "money-unknown",
+   "facts": {
+    "class": "pay",
+    "money": {
+     "state": "unknown"
+    }
+   },
+   "selector": {
+    "classes": [
+     "pay"
+    ],
+    "min_amount_minor": 100000
+   },
+   "expect": "unknown"
+  },
+  {
+   "id": "session-missing",
+   "selector": {
+    "session": [
+     "untrusted_content_seen"
+    ]
+   },
+   "expect": "unknown"
+  },
+  {
+   "id": "session-tainted",
+   "session": {
+    "untrusted_content_seen": true,
+    "sensitive_data_seen": true,
+    "injection_signal_seen": false
+   },
+   "facts": {
+    "class": "send",
+    "recipient_count": {
+     "state": "known",
+     "value": 1
+    },
+    "audience": {
+     "kind": {
+      "state": "known",
+      "value": "named"
+     },
+     "recipient_domains": {
+      "state": "known",
+      "value": [
+       "example.com"
+      ]
+     },
+     "external": {
+      "state": "known",
+      "value": true
+     }
+    }
+   },
+   "selector": {
+    "session": [
+     "untrusted_content_seen",
+     "sensitive_data_seen",
+     "egress"
+    ]
+   },
+   "expect": "yes"
+  },
+  {
+   "id": "session-clean",
+   "session": {
+    "untrusted_content_seen": false,
+    "sensitive_data_seen": true,
+    "injection_signal_seen": false
+   },
+   "facts": {
+    "class": "send",
+    "recipient_count": {
+     "state": "known",
+     "value": 1
+    },
+    "audience": {
+     "kind": {
+      "state": "known",
+      "value": "named"
+     },
+     "recipient_domains": {
+      "state": "known",
+      "value": [
+       "example.com"
+      ]
+     },
+     "external": {
+      "state": "known",
+      "value": true
+     }
+    }
+   },
+   "selector": {
+    "session": [
+     "untrusted_content_seen",
+     "egress"
+    ]
+   },
+   "expect": "no"
+  },
+  {
+   "id": "egress-not-for-delete",
+   "selector": {
+    "session": [
+     "egress"
+    ]
+   },
+   "expect": "no"
+  },
+  {
+   "id": "egress-update-external-unknown",
+   "facts": {
+    "class": "update"
+   },
+   "selector": {
+    "session": [
+     "egress"
+    ]
+   },
+   "expect": "unknown"
+  },
+  {
+   "id": "window-under",
+   "windows": {
+    "deletes_per_hour": 80
+   },
+   "selector": {
+    "windows": [
+     {
+      "window": "deletes_per_hour",
+      "at_most": 100
+     }
+    ]
+   },
+   "expect": "yes"
+  },
+  {
+   "id": "window-over",
+   "windows": {
+    "deletes_per_hour": 95
+   },
+   "selector": {
+    "windows": [
+     {
+      "window": "deletes_per_hour",
+      "at_most": 100
+     }
+    ]
+   },
+   "expect": "no"
+  },
+  {
+   "id": "window-at-limit",
+   "windows": {
+    "deletes_per_hour": 88
+   },
+   "selector": {
+    "windows": [
+     {
+      "window": "deletes_per_hour",
+      "at_most": 100
+     }
+    ]
+   },
+   "expect": "yes"
+  },
+  {
+   "id": "window-missing-is-over",
+   "selector": {
+    "windows": [
+     {
+      "window": "deletes_per_hour",
+      "at_most": 100
+     }
+    ]
+   },
+   "expect": "no"
+  },
+  {
+   "id": "window-missing-above",
+   "selector": {
+    "windows": [
+     {
+      "window": "deletes_per_hour",
+      "above": 100
+     }
+    ]
+   },
+   "expect": "yes"
+  },
+  {
+   "id": "window-count-unknown",
+   "facts": {
+    "record_count": {
+     "state": "unknown"
+    }
+   },
+   "windows": {
+    "deletes_per_hour": 1
+   },
+   "selector": {
+    "windows": [
+     {
+      "window": "deletes_per_hour",
+      "at_most": 100
+     }
+    ]
+   },
+   "expect": "unknown"
+  }
+ ]
+}
