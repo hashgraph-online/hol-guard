@@ -20,6 +20,7 @@ from .edge_clone_fixtures import write_edge_clone
 from .extension_adapters import EXTENSION_ADAPTERS
 from .extension_allow_fixtures import extension_allow_checks
 from .fast_forward_fixtures import add_fast_forward_shape, add_plain_fast_forward_shape, fast_forward_checks
+from .fixture_remotes import INSTEAD_OF_CASE, add_checkout_origin
 from .git_allow_fixtures import add_git_allow_shape, git_allow_checks
 from .parent_fixtures import PARENT_WORKSPACE_CASE, write_parent_workspace
 from .realism_fixtures import (
@@ -448,7 +449,6 @@ LFS_GITCONFIG = (
 
 
 ALIAS_ESCAPES_CASE = "omp-native-git-global-alias-escapes"
-INSTEAD_OF_CASE = "omp-native-git-global-instead-of"
 LARGE_GITCONFIG_CASE = "omp-native-git-large-global-config"
 # Extra global gitconfig text per scenario, appended to the LFS baseline. Each is ordinary
 # developer configuration that real sessions carry; none runs code or names a credential.
@@ -710,8 +710,7 @@ def _add_realistic_shapes(main: Path, home: Path, environment: dict[str, str], s
     add_sibling_test_runner(home, scenario_id)
     # A clone with ignored local configuration files beside its code.
     write_edge_clone(home, environment)
-    if scenario_id == INSTEAD_OF_CASE:
-        _git(("remote", "add", "origin", "acme:app.git"), main, environment)
+    add_checkout_origin(main, environment, scenario_id)
     if scenario_id == BENCH_SEARCH_CASE:
         # Outside the home directory, as a scratch benchmark clone under /tmp is.
         write_bench_checkout(home.parent / BENCH_CHECKOUT, environment)
