@@ -582,16 +582,15 @@ def build_fixture(root: Path) -> BenignFixture:
         _git(repository, "add", "-A", home=home)
         _git(repository, "commit", "--quiet", "-m", f"{name} base", home=home)
     # A checkout carrying two links: one to another source file inside it and
-    # one to a notes file beside the checkout. Reading through the second one
-    # reads a file outside the folder, whatever its in-repo name says.
+    # one to the SSH key in home. Reading through the second one reads the key,
+    # whatever its in-repo name says.
     linked_sources = home / "Code" / "linked-sources"
-    _write(linked_sources / "private-notes.txt", "TOKEN=synthetic-not-a-secret\n")
     linked_app = linked_sources / "app"
     linked_app.mkdir(parents=True)
     _git(linked_app, "init", "--quiet", "--initial-branch=main", home=home)
     _write(linked_app / "src" / "real.ts", "export const real = 1;\n")
     (linked_app / "src" / "alias.ts").symlink_to("real.ts")
-    (linked_app / "src" / "notes.ts").symlink_to(linked_sources / "private-notes.txt")
+    (linked_app / "src" / "notes.ts").symlink_to(home / ".ssh" / "id_rsa")
     _git(linked_app, "add", "-A", home=home)
     _git(linked_app, "commit", "--quiet", "-m", "linked sources base", home=home)
     # A non-repository parent under /tmp whose repository has a linked worktree beside the parent.

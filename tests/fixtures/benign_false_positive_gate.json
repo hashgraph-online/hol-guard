@@ -56395,7 +56395,7 @@
       ],
       "tool": "shell",
       "tool_input": {
-        "command": "grep -n TOKEN src/notes.ts"
+        "command": "grep -n KEY src/notes.ts"
       },
       "cwd": "linked_sources",
       "expect": "not_allow"
@@ -56411,7 +56411,7 @@
       ],
       "tool": "shell",
       "tool_input": {
-        "command": "grep -n TOKEN src/*.ts"
+        "command": "grep -n KEY src/*.ts"
       },
       "cwd": "linked_sources",
       "expect": "not_allow"
@@ -56427,7 +56427,7 @@
       ],
       "tool": "shell",
       "tool_input": {
-        "command": "grep -n TOKEN ./src/notes.ts"
+        "command": "grep -n KEY ./src/notes.ts"
       },
       "cwd": "linked_sources",
       "expect": "not_allow"
