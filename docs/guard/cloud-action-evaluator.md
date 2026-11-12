@@ -193,7 +193,8 @@ accepted subset: keys sorted by UTF-16 code units, minimal string escapes, integ
 exact code points with no Unicode normalization, so two spellings that look alike are two actions.
 
 Changing an argument, the account, the connection, the workspace, or the binding changes the identity and voids any
-saved consent. The principal's subject, grant, the request id, and the time do not.
+`exact` saved consent. `resource` and `bounded` consents match on their own keys, as described under version 2
+requests. The principal's subject, grant, the request id, and the time do not change the identity.
 
 ## Workspace activation
 
