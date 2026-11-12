@@ -577,9 +577,11 @@ fn safe_head_tail_with_targets(
                 continue;
             }
         }
-        // Bare `+N` is a filename on modern GNU head/tail. Never skip the
-        // read-target proof; `-n +N` remains an option/value pair above.
-        if argument.starts_with('-') {
+        // A bare `+N` before `--` is a file name to `head` but, with one
+        // file beside it, GNU `tail`'s old spelling of `-n +N`, which also
+        // takes a trailing `f` to follow. Neither reading is proven here;
+        // `-n +N` remains an option/value pair above.
+        if argument.starts_with(['-', '+']) {
             return false;
         }
         if !allow_target || !command_read_target(argument, context, false) {

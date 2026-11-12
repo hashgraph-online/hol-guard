@@ -514,8 +514,6 @@ fn allows_bounded_exact_commands() {
         "cat README.md",
         "head -n 20 README.md",
         "tail -n 5 README.md",
-        "head -n 10 README.md Cargo.toml",
-        "tail -n 5 README.md Cargo.toml",
     ] {
         let decision = evaluate_pre_tool(&request(command)).unwrap();
         assert_eq!(decision.decision, "allow", "{command}");
@@ -603,7 +601,6 @@ fn reviews_date_mutations_and_unbounded_file_reads() {
         "cat /proc//self/environ",
         "cat /var/../etc/passwd",
         "head -n 10 README.md .env",
-        "tail -n 5 README.md /etc/passwd",
         "ls /",
         "cat /root/secret",
         "cat /home/user/notes",

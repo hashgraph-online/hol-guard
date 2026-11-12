@@ -15,21 +15,22 @@ fn arguments(line: &str) -> Vec<String> {
 }
 
 #[test]
-fn a_bare_plus_number_is_a_file_operand_not_a_line_count() {
+fn a_bare_plus_number_is_neither_a_count_nor_a_proven_file() {
     let root = env!("CARGO_MANIFEST_DIR");
-    // `+31` is a file name to GNU `head` and `tail`, so it is proven as one:
-    // missing here, it reads nothing, and the operand beside it is still
-    // proven on its own.
-    assert!(safe_head_tail_arguments(
-        &arguments("+31 Cargo.toml"),
-        false,
-        context(root)
-    ));
-    assert!(!safe_head_tail_arguments(
-        &arguments("+31 .env"),
-        false,
-        context(root)
-    ));
+    // `head` opens a file named `+31`; GNU `tail +31 FILE` starts at line 31
+    // and `tail +31f FILE` follows the file. A second operand cannot make
+    // either reading proven.
+    for line in [
+        "+31 Cargo.toml",
+        "+31f Cargo.toml",
+        "+31 .env",
+        "Cargo.toml +31",
+    ] {
+        assert!(
+            !safe_head_tail_arguments(&arguments(line), false, context(root)),
+            "{line}"
+        );
+    }
     assert!(safe_head_tail_arguments(
         &arguments("-n +31 Cargo.toml"),
         false,
