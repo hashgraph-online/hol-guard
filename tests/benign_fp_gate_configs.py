@@ -56,9 +56,17 @@ PARENT_IMAGES = {
 }
 
 
+# A source directory holding more modules than Guard lists when it expands a
+# glob, as a large frontend's `src/` does. `rg pattern <dir>/*.ts` from a
+# sibling checkout reads no more than a recursive search of the directory.
+PARENT_WIDE_MODULES = {
+    f"console/src/module{index:03}.ts": f"export const moduleValue{index} = {index};\n" for index in range(300)
+}
+
+
 def write_parent_documents(parent: Path) -> None:
     """Write the parent repository's committed top-level documents and images."""
-    for relative, text in PARENT_DOCUMENTS.items():
+    for relative, text in {**PARENT_DOCUMENTS, **PARENT_WIDE_MODULES}.items():
         target = parent / relative
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_text(text, encoding="utf-8")

@@ -68,6 +68,48 @@ pub(super) fn expand_glob_matches_listing(
     expand(value, context, Mode::SHELL, Screen::Names)
 }
 
+/// The literal directory a content-search glob expands below, for a caller
+/// whose expansion was refused. Every match of `dir/*.ts` or
+/// `dir/**/*.ts` lies inside `dir`, so a walk that proves the whole tree
+/// below `dir` proves every file the shell could hand the search, however
+/// many there are and whichever shell options pick them.
+///
+/// The directory comes from the same scope as the expansion and clears the
+/// same match screens. A component after it that starts with `.` refuses:
+/// `.*` can expand to `..` and leave the directory. A sibling-repository
+/// scope refuses too, since its base is the parent of every repository.
+pub(super) fn search_glob_directory(value: &str, context: ReadContext<'_>) -> Option<PathBuf> {
+    if value.is_empty()
+        || value.len() > 4096
+        || value.contains(HAZARDS)
+        || value.contains(['{', '}', '#', '^', '(', ')'])
+        || value.starts_with('-')
+        || !crate::pretool::safe_reads::verified_path_context(context.home_dir, context.cwd)
+    {
+        return None;
+    }
+    let scope = glob_scope::glob_base(value, context)?;
+    if scope.siblings {
+        return None;
+    }
+    let mut directory = scope.base.clone();
+    for component in scope
+        .pattern
+        .split('/')
+        .filter(|part| !part.is_empty() && *part != ".")
+    {
+        if component.starts_with('.') {
+            return None;
+        }
+        if component.contains(GLOB_CHARACTERS) {
+            return screened_match(&directory, &scope.root, context, Screen::Contents)?
+                .then_some(directory);
+        }
+        directory.push(component);
+    }
+    None
+}
+
 /// What the command does with a match: read its bytes, or print its name.
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Screen {

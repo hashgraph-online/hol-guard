@@ -110,3 +110,39 @@ fn org_globs_that_could_match_outside_a_repository_stay_reviewed() {
         false,
     );
 }
+
+/// A glob naming more files than the expansion lists is proven by walking
+/// the literal directory it expands below, the same proof a recursive search
+/// of that directory clears.
+#[test]
+fn wide_sibling_globs_are_proven_by_their_directory() {
+    let layout = layout("sibling-glob-search-wide");
+    let cwd = layout.org.join("app-portal");
+    let sibling = format!("{}/service-api", layout.org.display());
+    for index in 0..300 {
+        write(
+            layout.org.join(format!("service-api/src/module{index}.ts")),
+            "export {};\n",
+        );
+    }
+    write(
+        layout.org.join("service-api/src/nested/deep.ts"),
+        "export {};\n",
+    );
+    for command in [
+        format!("rg -n export {sibling}/src/*.ts"),
+        format!("grep -n export {sibling}/src/*.ts | head -4"),
+        format!("rg -n export {sibling}/src/**/*.ts"),
+        format!("rg -n export {sibling}/src/*/*.ts"),
+    ] {
+        assert_decision(&cwd, &layout.home, &command, true);
+    }
+    write(layout.org.join("service-api/src/.env"), "TOKEN=fixture\n");
+    for command in [
+        format!("rg -n export {sibling}/src/*.ts"),
+        format!("rg -n TOKEN {sibling}/src/.*"),
+        format!("grep -n export {sibling}/src/*.ts"),
+    ] {
+        assert_decision(&cwd, &layout.home, &command, false);
+    }
+}

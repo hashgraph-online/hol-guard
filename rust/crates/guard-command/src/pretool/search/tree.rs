@@ -293,12 +293,18 @@ pub(in crate::pretool) fn glob_matches_nothing(value: &str, context: ReadContext
 
 /// Content-search glob operand: every match is walked, and matches inside an
 /// Oh My Pi agent-state tree are refused as for a literal search root.
+///
+/// A glob the expansion refuses, such as `src/*.ts` in a directory with more
+/// files than it lists, is proven by walking the literal directory it
+/// expands below: the search then reads no more than a recursive search of
+/// that directory, which the same walk admits.
 pub(in crate::pretool) fn safe_glob_search_operand(value: &str, context: ReadContext<'_>) -> bool {
-    expand_glob(value, context).is_some_and(|matches| {
-        matches
-            .into_iter()
-            .all(|path| !inside_agent_state(&path, context) && walk(path, &[], &[], false, false))
-    })
+    let searched =
+        |path: PathBuf| !inside_agent_state(&path, context) && walk(path, &[], &[], false, false);
+    match expand_glob_matches(value, context) {
+        Some(matches) => !matches.is_empty() && matches.into_iter().all(searched),
+        None => glob_expand::search_glob_directory(value, context).is_some_and(searched),
+    }
 }
 
 pub(super) fn walk(
@@ -471,11 +477,6 @@ pub(super) fn walk_uncached(
         }
     }
     true
-}
-
-/// [`glob_expand::expand_glob_matches`] with at least one match.
-fn expand_glob(value: &str, context: ReadContext<'_>) -> Option<Vec<PathBuf>> {
-    expand_glob_matches(value, context).filter(|matches| !matches.is_empty())
 }
 
 /// [`glob_expand::expand_glob_matches_listing`] with at least one match.
