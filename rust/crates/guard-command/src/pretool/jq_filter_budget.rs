@@ -33,7 +33,8 @@ pub(super) fn spend() -> bool {
 
 /// Each admitted `range` call has its own emission bound. Refuse a filter with
 /// multiple calls after definitions are inlined, so composition cannot multiply
-/// those per-call bounds.
+/// those per-call bounds. Iteration over a value, `range`'s collected output
+/// included, still multiplies; see the note in `jq_filter_terms.rs`.
 pub(super) fn range_budget(program: &str) -> bool {
     let mut calls = 0usize;
     range_calls_within_budget(program, &mut calls)
