@@ -120,7 +120,7 @@ pub(super) fn respond(
         return Some((status, body, caller.cors_origin, no_store));
     }
     if let Some((name, args)) = (request.method == "POST")
-        .then(|| route_calls::resident_route(request.path))
+        .then(|| route_calls::resident_route(request.path, config.user_home.as_deref()))
         .flatten()
     {
         let caller = authorize_write(request, &config.token)?;
