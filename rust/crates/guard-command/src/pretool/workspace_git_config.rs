@@ -319,6 +319,27 @@ fn normalize(path: &Path) -> PathBuf {
     result
 }
 
+/// `core.hooksPath = /dev/null`, the usual way to turn every hook off. Git
+/// looks for each hook below the null device, which holds no files, so it
+/// finds none, and nothing a sandboxed command writes can put one there.
+fn names_no_hooks(value: &str) -> bool {
+    value.trim().trim_matches('"') == "/dev/null" && null_device()
+}
+
+#[cfg(unix)]
+fn null_device() -> bool {
+    use std::os::unix::fs::FileTypeExt;
+    std::fs::symlink_metadata("/dev/null")
+        .is_ok_and(|metadata| metadata.file_type().is_char_device())
+}
+
+/// Git for Windows rewrites `/dev/null` against the directory a hook runs
+/// in, so the value names no device there.
+#[cfg(not(unix))]
+fn null_device() -> bool {
+    false
+}
+
 /// `value` as a path under `workspace`, resolving a relative value against
 /// `base`; `None` when it leaves the workspace or is not a plain path.
 fn inside(base: &Path, workspace: &Path, value: &str) -> Option<PathBuf> {
@@ -371,6 +392,9 @@ fn helper_denials(
             // escape, which would move the path Git uses.
             if value.contains(['#', ';', '\\']) {
                 return None;
+            }
+            if names_no_hooks(&value) {
+                continue;
             }
             let relative = !value.trim().trim_matches('"').starts_with(['~', '/']);
             let path = expand(root, home, &value)?;
