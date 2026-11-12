@@ -207,9 +207,6 @@ mod codex_host_inventory;
 mod codex_identity;
 #[path = "adapters/codex_install_plan.rs"]
 mod codex_install_plan;
-#[cfg(test)]
-#[path = "adapters/codex_install_plan_tests.rs"]
-mod codex_install_plan_tests;
 mod codex_live_operation;
 mod codex_live_wait_build;
 mod codex_proxy;

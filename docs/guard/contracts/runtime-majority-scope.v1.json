@@ -635,6 +635,7 @@
       {
         "path": [
           "src/codex_plugin_scanner/guard/adapters/codex.py",
+          "src/codex_plugin_scanner/guard/adapters/codex_install_plan.py",
           "src/codex_plugin_scanner/guard/adapters/codex_detect_sources.py",
           "src/codex_plugin_scanner/guard/adapters/codex_lifecycle_lock.py",
           "src/codex_plugin_scanner/guard/adapters/codex_remote_control.py",
@@ -1178,8 +1179,6 @@
         "category": "install_config",
         "path": "src/codex_plugin_scanner/guard/adapters/codex.py",
         "symbols": [
-          "_SHELL_GUARD_BEGIN",
-          "_SHELL_GUARD_END",
           "_CODEX_HOOK_MIGRATION_CONFLICT",
           "_CODEX_HOOK_MIGRATION_READBACK_MISMATCH",
           "_append_unique_hook_groups",
@@ -1197,10 +1196,6 @@
           "prepare_codex_alternate_cleanup",
           "_publish_codex_alternate_cleanup",
           "_require_complete_preactivation_inventory",
-          "_install_plan",
-          "_malformed_install_plan",
-          "_remove_managed_shell_guard_blocks",
-          "_guard_proxy_server_names",
           "_prepare_codex_shell_cleanup_file",
           "prepare_codex_shell_cleanup",
           "CodexHarnessAdapter._all_hook_paths",

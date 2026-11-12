@@ -114,6 +114,8 @@ from .codex_detect_sources import (
     restore_paths,
     toml_payload_from_bytes,
 )
+from .codex_install_plan import guard_proxy_server_names as _guard_proxy_server_names
+from .codex_install_plan import remove_managed_shell_guard_blocks as _remove_managed_shell_guard_blocks
 from .codex_remote_control import (
     codex_remote_launch_environment,
     guarded_codex_launch_command,
@@ -152,8 +154,6 @@ _MANAGED_HOOK_TIMEOUT_GRACE_SECONDS = 5
 _CODEX_GUARD_TOOL_MATCHER = "Bash|Read|Write|Edit|MultiEdit|^apply_patch$|mcp__.*"
 _CODEX_GUARD_PERMISSION_MATCHER = "Bash|Read|Write|Edit|MultiEdit|^apply_patch$|mcp__.*"
 _CODEX_GUARD_POST_TOOL_MATCHER = "Bash|Read|mcp__.*"
-_SHELL_GUARD_BEGIN = "# >>> HOL Guard Codex shell guard >>>"
-_SHELL_GUARD_END = "# <<< HOL Guard Codex shell guard <<<"
 _AUTHORITATIVE_ENFORCEMENT_BOUNDARY = "codex-native-hooks"
 _AUTHORITATIVE_HOOK_UNAVAILABLE_REASON = "codex_authoritative_hook_unavailable"
 
@@ -965,7 +965,7 @@ def render_codex_alternate_cleanup(
     servers = rendered.get("mcp_servers")
     if isinstance(servers, dict):
         removed_server = False
-        candidates: dict[object, object] = {}
+        candidates: dict[str, object] = {}
         for name in managed_server_names:
             server = servers.get(name)
             if not isinstance(server, dict):
@@ -1075,72 +1075,6 @@ def _payload_has_hooks_feature_enabled(config_payload: Mapping[str, object]) -> 
     if not isinstance(features, Mapping):
         return True
     return features.get("hooks") is not False
-
-
-def _install_plan(op: str, **fields: object) -> dict[str, object]:
-    from ..native_runner_authority import native_runner_authority
-
-    return native_runner_authority("codex_install_plan", {"op": op, **fields})
-
-
-def _malformed_install_plan() -> Exception:
-    from ..native_runner_authority import NativeRunnerAuthorityError
-
-    return NativeRunnerAuthorityError("Codex install plan answer is malformed")
-
-
-def _remove_managed_shell_guard_blocks(content: bytes) -> bytes:
-    """Remove only legacy Guard marker blocks while preserving every other byte.
-
-    The native runtime names the byte ranges the blocks occupy. A file without
-    the begin marker holds no block, so it is not sent.
-    """
-
-    if _SHELL_GUARD_BEGIN.encode("utf-8") not in content:
-        return content
-    ranges = _install_plan("shell_blocks", content=content.decode("latin-1")).get("ranges")
-    if not isinstance(ranges, list):
-        raise _malformed_install_plan()
-    kept = bytearray()
-    position = 0
-    for item in ranges:
-        if (
-            not isinstance(item, list)
-            or len(item) != 2
-            or not all(isinstance(value, int) and not isinstance(value, bool) for value in item)
-            or not position <= item[0] < item[1] <= len(content)
-        ):
-            raise _malformed_install_plan()
-        kept += content[position : item[0]]
-        position = item[1]
-    kept += content[position:]
-    return bytes(kept)
-
-
-def _guard_proxy_server_names(servers: Mapping[object, object]) -> frozenset[str]:
-    """The servers whose launch is a Guard MCP proxy, as the native runtime reads it.
-
-    Only an entry with an argument list is a launch the test applies to.
-    """
-
-    launches: dict[str, dict[str, object]] = {}
-    for name, server in servers.items():
-        if not isinstance(name, str) or not isinstance(server, dict):
-            continue
-        args = server.get("args")
-        if not isinstance(args, list):
-            continue
-        command = server.get("command")
-        launches[name] = {
-            "command": command if isinstance(command, str) else None,
-            "args": [value for value in args if isinstance(value, str)],
-        }
-    if not launches:
-        return frozenset()
-    names = _install_plan("guard_proxies", servers=launches).get("names")
-    if not isinstance(names, list) or not all(isinstance(name, str) and name in launches for name in names):
-        raise _malformed_install_plan()
-    return frozenset(names)
 
 
 def _prepare_codex_shell_cleanup_file(path: Path, *, remove_entire_file: bool = False) -> TransitionFile:

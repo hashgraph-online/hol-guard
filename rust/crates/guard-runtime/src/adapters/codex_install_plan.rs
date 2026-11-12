@@ -164,3 +164,7 @@ fn guard_proxies(servers: &Value) -> KindResult {
     }
     Ok(json!({ "names": names }))
 }
+
+#[cfg(test)]
+#[path = "codex_install_plan_tests.rs"]
+mod tests;
