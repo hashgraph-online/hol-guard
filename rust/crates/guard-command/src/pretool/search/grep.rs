@@ -18,7 +18,7 @@ pub(super) fn safe_grep_arguments(arguments: &[String], context: ReadContext<'_>
         plain: true,
         recursive: true,
     };
-    safe_arguments(arguments, context, false, absent)
+    arguments_pass(arguments, context, false, absent, false)
 }
 
 /// A `grep` segment inside its command. A missing operand is proven only
@@ -50,7 +50,7 @@ pub(crate) fn safe_grep_segment(
         literal_words: &words,
         ..context
     };
-    safe_arguments(&segment.arguments, context, false, absent)
+    arguments_pass(&segment.arguments, context, false, absent, false)
 }
 
 /// A peer that cannot create a filesystem entry: no output redirect beyond
@@ -129,16 +129,7 @@ pub(super) fn safe_stdin_arguments(arguments: &[String], literal_words: &[String
         literal_words,
         ..Default::default()
     };
-    safe_arguments(arguments, context, true, absent)
-}
-
-fn safe_arguments(
-    arguments: &[String],
-    context: ReadContext<'_>,
-    stdin_only: bool,
-    absent: AbsentOperands,
-) -> bool {
-    arguments_pass(arguments, context, stdin_only, absent, false)
+    arguments_pass(arguments, context, true, absent, false)
 }
 
 mod exclusion;
@@ -499,9 +490,6 @@ fn proven_glob(value: &str, context: ReadContext<'_>) -> bool {
 #[cfg(test)]
 #[path = "grep_include_tests.rs"]
 mod include_tests;
-#[cfg(test)]
-#[path = "grep_quoted_pattern_tests.rs"]
-mod quoted_pattern_tests;
 #[cfg(test)]
 #[path = "grep_tests.rs"]
 mod tests;

@@ -20,6 +20,10 @@ fn quoted_words_are_read_as_written() {
         ["grep", "-o", "FAILED tests/[^ ]*", "notes.md"]
     );
     assert_eq!(literal_words("rg 's[a-z]*' src"), ["rg", "s[a-z]*", "src"]);
+    assert_eq!(
+        literal_words("grep .env{,.local} notes.md"),
+        ["grep", "notes.md"]
+    );
     // The same text unquoted elsewhere in the command could be either one.
     assert!(!literal_words(r#"grep "a*" a* notes.md"#).contains(&"a*".to_owned()));
     // The shell rewrites these before the program sees them.
@@ -61,13 +65,21 @@ fn a_quoted_pattern_is_not_a_file_name_but_an_unquoted_one_is() {
         (r#"grep "a*" a* notes.md"#, false),
         ("grep -e s[a-z]* notes.md", false),
         ("rg s[a-z]* notes.md", false),
+        // The option reader hands over only the part after an attached option.
+        (r#"grep -e"s[a-z]*" notes.md"#, true),
+        (r#"grep --regexp="s[a-z]*" notes.md"#, true),
+        (r#"rg --regexp="s[a-z]*" notes.md"#, true),
+        ("grep -es[a-z]* notes.md", false),
+        // Bash expands a brace list into separate words, the second one a file.
+        ("grep .env{,.local} notes.md", false),
+        ("rg .env{,.local} notes.md", false),
     ] {
         let model = parsed(command);
         let segment = &model.segments[0];
         let proven = if command.starts_with("rg") {
-            super::super::safe_rg_segment(&model, segment, context)
+            super::super::super::safe_rg_segment(&model, segment, context)
         } else {
-            super::safe_grep_segment(&model, segment, context)
+            super::super::safe_grep_segment(&model, segment, context)
         };
         assert_eq!(proven, allowed, "{command}");
     }
@@ -80,16 +92,17 @@ fn a_quoted_pattern_filters_piped_text() {
         (r#"cat notes.md | grep "a*""#, true),
         (r#"cat notes.md | grep -o "FAILED tests/[^ ]*""#, true),
         ("cat notes.md | grep a*", false),
+        ("cat notes.md | grep .env{,.local}", false),
     ] {
         let model = parsed(command);
         let segment = &model.segments[1];
         assert_eq!(
-            super::safe_stdin_arguments(&segment.arguments, &literal_words(&segment.text)),
+            super::super::safe_stdin_arguments(&segment.arguments, &literal_words(&segment.text)),
             allowed,
             "{command}"
         );
         assert_eq!(
-            super::super::safe_rg_stdin_arguments(
+            super::super::super::safe_rg_stdin_arguments(
                 &segment.arguments,
                 &literal_words(&segment.text.replacen("grep", "rg", 1)),
             ),

@@ -56,7 +56,9 @@ fn quoted_words(text: &str) -> Option<Vec<Word>> {
                     quoted_glob: false,
                     unquoted_expansion: false,
                 });
-                word.unquoted_glob |= matches!(character, '*' | '?' | '[');
+                // A brace list is expanded too: `.env{,.local}` becomes two
+                // words, the second of them a file operand.
+                word.unquoted_glob |= matches!(character, '*' | '?' | '[' | '{');
                 word.unquoted_expansion |= matches!(character, '$' | '`');
                 word.value.push(character);
             }

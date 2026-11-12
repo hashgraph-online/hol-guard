@@ -252,3 +252,6 @@ fn an_expandable_pattern_is_not_proven_stdin_text() {
         );
     }
 }
+
+#[path = "grep_quoted_pattern_tests.rs"]
+mod quoted_pattern_tests;

@@ -64,11 +64,24 @@ pub(super) fn unsafe_search_value(
         // already: `grep -o "FAILED tests/[^ ]*" log` hands `grep` that text
         // and no file name, whatever files sit in the directory.
         SearchValueRole::Pattern => {
-            !context.literal_words.iter().any(|word| word == value)
+            !quoted_pattern(context.literal_words, value)
                 && literal_glob_names_sensitive_path(value)
         }
         SearchValueRole::Other => false,
     }
+}
+
+/// Whether `value` reaches the program in a word whose glob characters are
+/// all quoted: on its own (`-e 's[a-z]*'`) or attached to its option
+/// (`-e"s[a-z]*"`, `--regexp="s[a-z]*"`), where the option reader hands over
+/// only the part after the option.
+fn quoted_pattern(literal_words: &[String], value: &str) -> bool {
+    literal_words.iter().any(|word| {
+        word == value
+            || word.strip_suffix(value).is_some_and(|option| {
+                option.starts_with('-') && (option.ends_with('=') || !option.starts_with("--"))
+            })
+    })
 }
 
 /// A home, root, drive or UNC spelling names a place outside the working
