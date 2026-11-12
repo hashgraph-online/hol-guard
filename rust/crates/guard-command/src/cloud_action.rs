@@ -57,25 +57,25 @@ struct Request {
 
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
-struct Principal {
-    workspace_id: String,
-    subject_id: String,
-    client_grant_id: String,
+pub(crate) struct Principal {
+    pub(crate) workspace_id: String,
+    pub(crate) subject_id: String,
+    pub(crate) client_grant_id: String,
 }
 
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
-struct Connection {
-    connection_id: String,
-    provider: String,
-    account_digest: String,
+pub(crate) struct Connection {
+    pub(crate) connection_id: String,
+    pub(crate) provider: String,
+    pub(crate) account_digest: String,
 }
 
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
-struct RequestedAction {
-    action_id: String,
-    arguments: Value,
+pub(crate) struct RequestedAction {
+    pub(crate) action_id: String,
+    pub(crate) arguments: Value,
 }
 
 #[derive(Debug, Deserialize)]
@@ -87,7 +87,7 @@ struct Policy {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
 #[serde(rename_all = "kebab-case")]
-enum ConsentKind {
+pub(crate) enum ConsentKind {
     Once,
     Always,
 }
@@ -120,7 +120,7 @@ impl<'a> ProgramView<'a> {
 
 /// The long-lived evaluator state fixed at startup.
 pub struct CloudActionEvaluator {
-    bindings: BindingSet,
+    pub(crate) bindings: BindingSet,
     activation_key: Option<[u8; 32]>,
 }
 
@@ -147,7 +147,11 @@ impl CloudActionEvaluator {
             .and_then(Value::as_str)
             .filter(|id| valid_label(id))
             .map(str::to_owned);
-        if parsed.get("schema").and_then(Value::as_str) != Some(REQUEST_SCHEMA) {
+        let schema = parsed.get("schema").and_then(Value::as_str);
+        if schema == Some(crate::cloud_action_v2::REQUEST_SCHEMA_V2) {
+            return crate::cloud_action_v2::evaluate_v2(self, parsed, request_id.as_deref());
+        }
+        if schema != Some(REQUEST_SCHEMA) {
             return error_result(request_id.as_deref(), "unsupported_version");
         }
         let request: Request = match serde_json::from_value(parsed) {
@@ -177,73 +181,30 @@ impl CloudActionEvaluator {
     }
 
     fn decide(&self, request: &Request, program: &ProgramView<'_>) -> Result<Value, &'static str> {
+        let envelope = request.envelope();
         validate_request(request)?;
-        if request.binding_set_digest != self.bindings.digest {
-            return Err("binding_unavailable");
-        }
-        let admitted = self
-            .bindings
-            .get(&request.action.action_id)
-            .ok_or("action_unknown")?;
-        let binding = &admitted.binding;
-        if request.connection.provider != binding.adapter.provider {
-            return Err("connection_mismatch");
-        }
-        let arguments =
-            canonical_arguments(&request.action.arguments).map_err(|error| error.code())?;
-        let resource_id = resource_id(admitted, &request.action.arguments)?;
-        let activation = verify_activation(
-            request.activation.as_ref(),
-            self.activation_key.as_ref(),
-            &ActivationContext {
-                workspace_id: &request.principal.workspace_id,
-                catalog_digest: program.catalog_digest,
-                now: &request.evaluated_at,
-            },
-        )?;
-
+        let admission = self.admit(&envelope, program)?;
+        let binding = &admission.admitted.binding;
         let policy = decide_policy(
             &request.policy.rules,
             &PolicySubject {
                 action_id: &binding.action_id,
                 connection_id: &request.connection.connection_id,
-                resource_id: resource_id.as_deref(),
+                resource_id: admission.resource_id.as_deref(),
             },
             binding.effect,
         );
         let mut action = policy.action;
         let mut reason_codes = vec![policy.reason_code];
-        if let Some(tightened) = catalog_tightening(admitted, &program.catalog, &activation, action)
-        {
-            action = tightened;
-            reason_codes.push("catalog_mcp_extension");
-        }
-        if activation.global_lockdown && action != GuardAction::Block {
-            action = GuardAction::Block;
-            reason_codes.push("global_lockdown");
-        }
-        let missing: Vec<&'static str> = binding
-            .required_capabilities
-            .iter()
-            .filter(|needed| !request.target_capabilities.contains(needed))
-            .map(|capability| capability.as_str())
-            .collect();
-        if !missing.is_empty() && action.severity() < GuardAction::SandboxRequired.severity() {
-            action = GuardAction::SandboxRequired;
-            reason_codes.push("capability_unavailable");
-        }
-
-        let identity = domain_digest(
-            IDENTITY_DOMAIN,
-            &[
-                request.principal.workspace_id.as_bytes(),
-                request.connection.connection_id.as_bytes(),
-                request.connection.account_digest.as_bytes(),
-                binding.action_id.as_bytes(),
-                admitted.execution_identity_digest.as_bytes(),
-                &arguments,
-            ],
+        let missing = harden(
+            &admission,
+            &envelope,
+            program,
+            &mut action,
+            &mut reason_codes,
         );
+
+        let identity = action_identity(&envelope, &admission);
         let review_eligible =
             matches!(action, GuardAction::Review | GuardAction::RequireReapproval);
         let mut consent: Option<&SavedConsent> = None;
@@ -269,7 +230,12 @@ impl CloudActionEvaluator {
                 self.bindings.digest.as_bytes(),
                 request.policy.snapshot_id.as_bytes(),
                 rules.as_bytes(),
-                activation.digest.as_deref().unwrap_or("").as_bytes(),
+                admission
+                    .activation
+                    .digest
+                    .as_deref()
+                    .unwrap_or("")
+                    .as_bytes(),
             ],
         );
         Ok(json!({
@@ -288,29 +254,159 @@ impl CloudActionEvaluator {
             }),
             "consent_id": consent.map(|saved| saved.consent_id.as_str()),
             "action_identity_sha256": identity,
-            "execution_identity_digest": admitted.execution_identity_digest,
+            "execution_identity_digest": admission.admitted.execution_identity_digest,
             "evaluation_provenance_digest": provenance,
             "engine": {"version": env!("CARGO_PKG_VERSION"), "contract": REQUEST_SCHEMA},
         }))
     }
+
+    /// Binding, connection, arguments, resource and activation: everything a
+    /// decision needs before any policy runs. Shared by both request versions.
+    pub(crate) fn admit<'s>(
+        &'s self,
+        envelope: &Envelope<'_>,
+        program: &ProgramView<'_>,
+    ) -> Result<Admission<'s>, &'static str> {
+        if envelope.binding_set_digest != self.bindings.digest {
+            return Err("binding_unavailable");
+        }
+        let admitted = self
+            .bindings
+            .get(&envelope.action.action_id)
+            .ok_or("action_unknown")?;
+        if envelope.connection.provider != admitted.binding.adapter.provider {
+            return Err("connection_mismatch");
+        }
+        let arguments =
+            canonical_arguments(&envelope.action.arguments).map_err(|error| error.code())?;
+        let resource_id = resource_id(admitted, &envelope.action.arguments)?;
+        let activation = verify_activation(
+            envelope.activation,
+            self.activation_key.as_ref(),
+            &ActivationContext {
+                workspace_id: &envelope.principal.workspace_id,
+                catalog_digest: program.catalog_digest,
+                now: envelope.evaluated_at,
+            },
+        )?;
+        Ok(Admission {
+            admitted,
+            arguments,
+            resource_id,
+            activation,
+        })
+    }
 }
 
-fn validate_request(request: &Request) -> Result<(), &'static str> {
+/// The parts every request version shares.
+pub(crate) struct Envelope<'r> {
+    pub(crate) request_id: &'r str,
+    pub(crate) evaluated_at: &'r str,
+    pub(crate) binding_set_digest: &'r str,
+    pub(crate) principal: &'r Principal,
+    pub(crate) connection: &'r Connection,
+    pub(crate) action: &'r RequestedAction,
+    pub(crate) target_capabilities: &'r [TargetCapability],
+    pub(crate) snapshot_id: &'r str,
+    pub(crate) activation: Option<&'r SignedActivation>,
+}
+
+impl Request {
+    fn envelope(&self) -> Envelope<'_> {
+        Envelope {
+            request_id: &self.request_id,
+            evaluated_at: &self.evaluated_at,
+            binding_set_digest: &self.binding_set_digest,
+            principal: &self.principal,
+            connection: &self.connection,
+            action: &self.action,
+            target_capabilities: &self.target_capabilities,
+            snapshot_id: &self.policy.snapshot_id,
+            activation: self.activation.as_ref(),
+        }
+    }
+}
+
+/// What admission established.
+pub(crate) struct Admission<'s> {
+    pub(crate) admitted: &'s AdmittedBinding,
+    pub(crate) arguments: Vec<u8>,
+    pub(crate) resource_id: Option<String>,
+    pub(crate) activation: VerifiedActivation,
+}
+
+/// Catalog tightening, global lockdown and target capabilities, applied after
+/// policy. Each can only raise `action`. Returns the missing capabilities.
+pub(crate) fn harden(
+    admission: &Admission<'_>,
+    envelope: &Envelope<'_>,
+    program: &ProgramView<'_>,
+    action: &mut GuardAction,
+    reason_codes: &mut Vec<&'static str>,
+) -> Vec<&'static str> {
+    let binding = &admission.admitted.binding;
+    if let Some(tightened) = catalog_tightening(
+        admission.admitted,
+        &program.catalog,
+        &admission.activation,
+        *action,
+    ) {
+        *action = tightened;
+        reason_codes.push("catalog_mcp_extension");
+    }
+    if admission.activation.global_lockdown && *action != GuardAction::Block {
+        *action = GuardAction::Block;
+        reason_codes.push("global_lockdown");
+    }
+    let missing: Vec<&'static str> = binding
+        .required_capabilities
+        .iter()
+        .filter(|needed| !envelope.target_capabilities.contains(needed))
+        .map(|capability| capability.as_str())
+        .collect();
+    if !missing.is_empty() && action.severity() < GuardAction::SandboxRequired.severity() {
+        *action = GuardAction::SandboxRequired;
+        reason_codes.push("capability_unavailable");
+    }
+    missing
+}
+
+/// The exact-call identity an `exact` consent is bound to.
+pub(crate) fn action_identity(envelope: &Envelope<'_>, admission: &Admission<'_>) -> String {
+    domain_digest(
+        IDENTITY_DOMAIN,
+        &[
+            envelope.principal.workspace_id.as_bytes(),
+            envelope.connection.connection_id.as_bytes(),
+            envelope.connection.account_digest.as_bytes(),
+            admission.admitted.binding.action_id.as_bytes(),
+            admission.admitted.execution_identity_digest.as_bytes(),
+            &admission.arguments,
+        ],
+    )
+}
+
+pub(crate) fn validate_envelope(envelope: &Envelope<'_>) -> Result<(), &'static str> {
     let labels = [
-        request.request_id.as_str(),
-        request.principal.workspace_id.as_str(),
-        request.principal.subject_id.as_str(),
-        request.principal.client_grant_id.as_str(),
-        request.connection.connection_id.as_str(),
-        request.connection.provider.as_str(),
-        request.policy.snapshot_id.as_str(),
+        envelope.request_id,
+        envelope.principal.workspace_id.as_str(),
+        envelope.principal.subject_id.as_str(),
+        envelope.principal.client_grant_id.as_str(),
+        envelope.connection.connection_id.as_str(),
+        envelope.connection.provider.as_str(),
+        envelope.snapshot_id,
     ];
     if !labels.into_iter().all(valid_label)
-        || !is_sha256_hex(&request.connection.account_digest)
-        || !is_utc_timestamp(&request.evaluated_at)
+        || !is_sha256_hex(&envelope.connection.account_digest)
+        || !is_utc_timestamp(envelope.evaluated_at)
     {
         return Err("invalid_request");
     }
+    Ok(())
+}
+
+fn validate_request(request: &Request) -> Result<(), &'static str> {
+    validate_envelope(&request.envelope())?;
     if request.saved_consents.len() > MAX_SAVED_CONSENTS {
         return Err("limit");
     }
@@ -324,7 +420,7 @@ fn validate_request(request: &Request) -> Result<(), &'static str> {
     validate_rules(&request.policy.rules)
 }
 
-fn is_sha256_hex(value: &str) -> bool {
+pub(crate) fn is_sha256_hex(value: &str) -> bool {
     value.len() == 64
         && value
             .bytes()

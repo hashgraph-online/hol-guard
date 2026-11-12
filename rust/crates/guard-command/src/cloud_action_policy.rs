@@ -76,26 +76,27 @@ pub fn validate_rules(rules: &[CloudPolicyRule]) -> Result<(), &'static str> {
         return Err("limit");
     }
     for rule in rules {
-        let pattern = rule.matcher.action_id.as_str();
-        let pattern_ok = pattern == "*"
-            || valid_action_id(pattern)
-            || pattern
-                .strip_suffix(".*")
-                .is_some_and(|prefix| valid_action_id(&format!("{prefix}.x")));
-        let optional_ok = |value: &Option<String>| value.as_deref().is_none_or(valid_label);
-        if !valid_label(&rule.rule_id)
-            || !pattern_ok
-            || !optional_ok(&rule.matcher.connection_id)
-            || !optional_ok(&rule.matcher.resource_id)
-        {
+        if !valid_label(&rule.rule_id) || !valid_match(&rule.matcher) {
             return Err("invalid_request");
         }
     }
     Ok(())
 }
 
+/// An action pattern and optional connection and resource labels.
+pub fn valid_match(matcher: &CloudPolicyMatch) -> bool {
+    let pattern = matcher.action_id.as_str();
+    let pattern_ok = pattern == "*"
+        || valid_action_id(pattern)
+        || pattern
+            .strip_suffix(".*")
+            .is_some_and(|prefix| valid_action_id(&format!("{prefix}.x")));
+    let optional_ok = |value: &Option<String>| value.as_deref().is_none_or(valid_label);
+    pattern_ok && optional_ok(&matcher.connection_id) && optional_ok(&matcher.resource_id)
+}
+
 /// Specificity of a matching rule, or `None` when it does not match.
-fn specificity(rule: &CloudPolicyMatch, subject: &PolicySubject<'_>) -> Option<usize> {
+pub fn specificity(rule: &CloudPolicyMatch, subject: &PolicySubject<'_>) -> Option<usize> {
     let pattern = rule.action_id.as_str();
     let action_score = if pattern == subject.action_id {
         1000

@@ -7,6 +7,8 @@ mod differential;
 mod intake;
 mod parity;
 mod policy;
+mod v2;
+mod v2_consent;
 
 use base64::{engine::general_purpose::STANDARD, Engine};
 use ring::rand::SystemRandom;
