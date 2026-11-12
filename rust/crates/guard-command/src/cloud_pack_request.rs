@@ -135,9 +135,7 @@ pub fn render(action: &PackAction, args: &Value) -> Result<RenderedRequest, Argu
                 "content-type".into(),
                 "application/json; charset=utf-8".into(),
             ]);
-            let mut out = String::new();
-            write_template(template, record, None, &mut out)?;
-            Some(out)
+            Some(render_body(template, record)?)
         }
         None => None,
     };
@@ -328,6 +326,21 @@ fn write_template(
 /// argument once per element, so the body is checked as it grows rather than
 /// trusting the argument bounds to keep it small.
 pub const MAX_BODY_BYTES: usize = 1 << 20;
+
+/// The JSON body for `template`. The size is checked again once the body is
+/// complete, because closing brackets and separators are written after the
+/// last value check.
+pub(crate) fn render_body(
+    template: &Template,
+    args: &Map<String, Value>,
+) -> Result<String, ArgumentError> {
+    let mut out = String::new();
+    write_template(template, args, None, &mut out)?;
+    if out.len() > MAX_BODY_BYTES {
+        return Err(refused(None));
+    }
+    Ok(out)
+}
 
 fn write_json(value: &Value, out: &mut String) -> Result<(), ArgumentError> {
     out.push_str(&serde_json::to_string(value).map_err(|_| refused(None))?);

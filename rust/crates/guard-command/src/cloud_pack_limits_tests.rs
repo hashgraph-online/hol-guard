@@ -1,9 +1,10 @@
 //! Regression cases for pack limits found in review.
 
 use super::{code, edit_action, slack, value, GITHUB, SLACK};
-use crate::cloud_pack::pack_from_value;
+use crate::cloud_pack::{pack_from_value, Template, TemplateField};
 use crate::cloud_pack_cli::answer;
 use crate::cloud_pack_diff::diff;
+use crate::cloud_pack_request::{render_body, MAX_BODY_BYTES};
 use serde_json::json;
 
 #[test]
@@ -79,4 +80,24 @@ fn github_issue_lists_keep_up_to_a_hundred_labels() {
         "updated_at": "2026-11-01T00:00:00Z", "html_url": "https://github.com/o/r/issues/1",
         "labels": labels}]);
     assert!(crate::cloud_pack_response::project(action, issue.to_string().as_bytes()).is_ok());
+}
+
+#[test]
+fn a_closing_bracket_cannot_carry_the_body_past_its_limit() {
+    let template = Template::Object(vec![TemplateField {
+        name: "t".into(),
+        value: Template::Arg("t".into()),
+    }]);
+    // `{"t":` is five bytes and the quoted string two more, so the last value
+    // ends exactly at the limit and only the closing brace goes past it.
+    let body = |length: usize| {
+        let mut args = serde_json::Map::new();
+        args.insert("t".into(), json!("x".repeat(length)));
+        render_body(&template, &args)
+    };
+    assert_eq!(
+        body(MAX_BODY_BYTES - 8).map(|out| out.len()),
+        Ok(MAX_BODY_BYTES)
+    );
+    assert!(body(MAX_BODY_BYTES - 7).is_err());
 }
