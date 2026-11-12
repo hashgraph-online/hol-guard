@@ -273,3 +273,54 @@ fn a_line_continuation_carries_the_word_boundary() {
     assert!(!masked.contains("npm install hidden"));
     assert!(masked.contains("npm install after"));
 }
+
+/// A heredoc body inside `$(...)` is text: an apostrophe there opens no quote
+/// and a parenthesis there closes nothing, so the substitution ends at its own
+/// `)`. With an unquoted delimiter the body still expands, and the scan still
+/// finds the substitutions it holds.
+#[test]
+fn heredoc_bodies_inside_a_substitution_are_text() {
+    use crate::shell_structure::extract_command_substitution_spans;
+    let bodies = |command: &str| -> Vec<String> {
+        extract_command_substitution_spans(command)
+            .into_iter()
+            .map(|substitution| substitution.body)
+            .collect()
+    };
+    for (command, expected) in [
+        (
+            "git commit -m \"$(cat <<'EOF'\nit's done\nEOF\n)\" && ls",
+            vec!["cat <<'EOF'\nit's done\nEOF"],
+        ),
+        (
+            "x=$(cat <<-EOF\n\t) it's\n\tEOF\n) && ls",
+            vec!["cat <<-EOF\n\t) it's\n\tEOF"],
+        ),
+        (
+            "x=$(cat <<A <<'B'\na'\nA\n)'\nB\n); ls",
+            vec!["cat <<A <<'B'\na'\nA\n)'\nB"],
+        ),
+        (
+            "x=\"$(cat <<EOF\nit's $(id)\nEOF\n)\"",
+            vec!["cat <<EOF\nit's $(id)\nEOF", "id"],
+        ),
+        (
+            "x=\"$(cat <<EOF\nit's `id`\nEOF\n)\"",
+            vec!["cat <<EOF\nit's `id`\nEOF", "id"],
+        ),
+        // A shift and a here-string are not heredocs.
+        (
+            "echo $((1<<2)) && echo $(cat <<<'it')",
+            vec!["(1<<2)", "cat <<<'it'"],
+        ),
+    ] {
+        let found = bodies(command);
+        let mut nested = Vec::new();
+        for body in &found {
+            nested.extend(bodies(body));
+        }
+        let mut all = found;
+        all.extend(nested);
+        assert_eq!(all, expected, "{command}");
+    }
+}

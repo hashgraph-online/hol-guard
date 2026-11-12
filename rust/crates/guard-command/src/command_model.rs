@@ -524,9 +524,10 @@ fn segments_for_embedded(
         &heredocs,
     );
     let command_chars: Vec<char> = command.chars().collect();
-    for (context, pipeline_index, segment_text, local_offset) in
-        execution_segment_texts(&normalization.normalized_command, execution_context)
-    {
+    for (context, pipeline_index, segment_text, local_offset) in execution_segment_texts(
+        &mask_heredoc_bodies(&normalization.normalized_command, &heredocs),
+        execution_context,
+    ) {
         let (tokens, _exact) = shell_tokens(&segment_text);
         let command_tokens =
             shell_tokens_without_redirects(&segment_text, local_offset, &redirects);

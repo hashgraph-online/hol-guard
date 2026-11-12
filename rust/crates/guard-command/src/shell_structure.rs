@@ -359,11 +359,23 @@ fn extract_command_substitution_spans_impl(
     let mut substitutions = Vec::new();
     let mut index = 0usize;
     let mut quote: Option<char> = None;
+    let expanding = heredoc_bodies::expanding_bodies(command);
     while index < n {
         let ch = chars[index];
         if ch == '\\' {
             index += 2;
             continue;
+        }
+        if expanding
+            .iter()
+            .any(|&(start, end)| start <= index && index < end)
+        {
+            if starts_with(&chars, index, "$(") || ch == '`' {
+                quote = None;
+            } else {
+                index += 1;
+                continue;
+            }
         }
         if respect_quotes && ch == '\'' && quote.is_none() {
             quote = Some('\'');
@@ -436,11 +448,24 @@ fn extract_parenthesized(chars: &[char], start: usize) -> (String, usize) {
     let mut depth = 1;
     let mut index = start;
     let mut quote: Option<char> = None;
+    let mut bodies = heredoc_bodies::PendingBodies::default();
     while index < n {
         let ch = chars[index];
         if ch == '\\' {
             index += 2;
             continue;
+        }
+        if quote.is_none() && ch == '\n' {
+            if let Some(next) = bodies.skip(chars, index) {
+                index = next;
+                continue;
+            }
+        }
+        if quote.is_none() && depth == 1 && ch == '<' {
+            if let Some(end) = bodies.declare(chars, index) {
+                index = end;
+                continue;
+            }
         }
         if ch == '\'' || ch == '"' {
             if quote.is_none() {
@@ -586,6 +611,9 @@ fn find_newline(chars: &[char], from: usize) -> Option<usize> {
         .position(|&c| c == '\n')
         .map(|p| from + p)
 }
+
+#[path = "shell_structure_heredoc_bodies.rs"]
+mod heredoc_bodies;
 
 #[cfg(test)]
 #[path = "shell_structure_tests.rs"]

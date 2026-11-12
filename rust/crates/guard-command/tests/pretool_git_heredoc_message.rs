@@ -73,3 +73,40 @@ fn literal_standard_input_fed_to_anything_else_stays_reviewed() {
         session.assert_not_allow(command);
     }
 }
+
+/// An apostrophe in a message is message text. Agents write
+/// `git commit -m "$(cat <<'EOF' ... EOF)"` with words such as `it's` or
+/// `'in'` in the body. A lone apostrophe used to open a quote in the
+/// substitution scan that never closed, so the substitution ran to the end of
+/// the command and each line of the message was read as a command.
+#[test]
+fn an_apostrophe_in_a_substituted_commit_message_is_message_text() {
+    let session = session("heredoc-message-apostrophe");
+    let quiet = |command: &str| session.quiet_at(command, &session.worktree, WRITE);
+    for command in [
+        "git commit -m \"$(cat <<'EOF'\nfix: keep the old path\n\nit's still read here\nEOF\n)\"",
+        "git add src/a.py && git commit -m \"$(cat <<'EOF'\nfix(skip): restore the check\n\nThe condition changed from 'in' to 'not in', so it's skipped.\n\nCo-Authored-By: Agent <agent@example.com>\nEOF\n)\"",
+    ] {
+        quiet(command).unwrap();
+    }
+    for command in [
+        // An unquoted delimiter expands the body, apostrophe or not.
+        "git commit -m \"$(cat <<EOF\nit's $(cat ~/.ssh/id_rsa)\nEOF\n)\"",
+        "git commit -m \"$(cat <<EOF\nit's `cat ~/.ssh/id_rsa`\nEOF\n)\"",
+        // A shell runs the body as a script.
+        "git commit -m \"$(sh <<'EOF'\nit's\ncat ~/.ssh/id_rsa\nEOF\n)\"",
+        "git commit -m \"$(cat <<'EOF' | sh\nit's\nrm -rf src\nEOF\n)\"",
+        // The closing parenthesis ends the substitution, so what follows it
+        // is a command of its own.
+        "git commit -m \"$(cat <<'EOF'\nit's\nEOF\n)\" && cat ~/.ssh/id_rsa",
+        "git commit -m \"$(cat <<'EOF'\nit's\nEOF\n) $(cat ~/.ssh/id_rsa)\"",
+    ] {
+        let result = session.evaluate_at(command, &session.worktree);
+        assert!(
+            result.minimum_action != "allow" && result.minimum_action != "sandbox-required",
+            "{command}: {} {}",
+            result.minimum_action,
+            result.reason_code
+        );
+    }
+}
