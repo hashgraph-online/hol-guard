@@ -52,6 +52,50 @@ fn the_directories_outside_the_workspace_include_its_parent_and_tmp() {
     assert!(outside_paths(std::path::Path::new("/")).is_none());
 }
 
+/// The shared-tmp check keeps asking about home and the folders beside the
+/// workspace, drops what Codex's default sandbox writes, and refuses when a
+/// shared temporary directory would put home in reach.
+#[test]
+fn the_shared_tmp_check_keeps_home_and_drops_shared_folders() {
+    use std::path::PathBuf;
+    let paths = |names: &[&str]| names.iter().map(PathBuf::from).collect::<Vec<_>>();
+    let shared = paths(&["/private/tmp", "/private/var/folders/x/T"]);
+    let homes = paths(&["/Users/u"]);
+    let outside = |parent: &str| {
+        paths(&[
+            parent,
+            "/Users/u",
+            "/private/tmp",
+            "/private/var/folders/x/T",
+        ])
+    };
+    let kept = |workspace: &str, parent: &str| {
+        shared_tmp_denied(outside(parent), workspace.as_ref(), &shared, &homes)
+    };
+    assert_eq!(
+        kept("/Users/u/code/app", "/Users/u/code"),
+        Some(paths(&["/Users/u/code", "/Users/u"]))
+    );
+    assert_eq!(
+        kept("/private/tmp/checkouts/app", "/private/tmp/checkouts"),
+        Some(paths(&["/Users/u"])),
+        "a checkout nested in /tmp sits in a folder Codex already writes"
+    );
+    let home_tmp = paths(&["/private/tmp", "/Users/u"]);
+    let root_tmp = paths(&["/"]);
+    for shared in [home_tmp, root_tmp] {
+        assert_eq!(
+            shared_tmp_denied(outside("/w"), "/w/app".as_ref(), &shared, &homes),
+            None,
+            "{shared:?}"
+        );
+    }
+    assert_eq!(
+        shared_tmp_denied(outside("/w"), "/w/app".as_ref(), &shared, &[]),
+        None
+    );
+}
+
 #[cfg(target_os = "macos")]
 const CHILD: &str = "codex_sandbox_check::tests::sandboxed_child";
 #[cfg(target_os = "macos")]

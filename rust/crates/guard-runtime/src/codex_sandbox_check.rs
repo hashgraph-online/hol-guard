@@ -65,9 +65,10 @@ fn confined(profile: &str, workspace: &str) -> bool {
         // directory, is the one place the workspace profile writes.
         denied.retain(|directory| !directory.starts_with(&workspace));
     } else if profile == SHARED_TMP_CHECK {
-        let shared = temp_paths();
-        denied
-            .retain(|directory| !directory.starts_with(&workspace) && !shared.contains(directory));
+        let Some(kept) = shared_tmp_denied(denied, &workspace, &temp_paths(), &home_paths()) else {
+            return false;
+        };
+        denied = kept;
     } else {
         denied.push(workspace);
     }
@@ -101,6 +102,44 @@ fn outside_paths(workspace: &std::path::Path) -> Option<Vec<std::path::PathBuf>>
         }
     }
     (paths.len() >= 3).then_some(paths)
+}
+
+/// The directories `SHARED_TMP_CHECK` asks about, from the `outside` ones:
+/// the home directories always, and the rest unless they sit in the
+/// workspace or in a shared temporary directory, which Codex's default
+/// sandbox writes. `None` when a shared temporary directory is a home
+/// directory or holds one, since that sandbox would then write home.
+fn shared_tmp_denied(
+    outside: Vec<std::path::PathBuf>,
+    workspace: &std::path::Path,
+    shared: &[std::path::PathBuf],
+    homes: &[std::path::PathBuf],
+) -> Option<Vec<std::path::PathBuf>> {
+    let writes_home = homes
+        .iter()
+        .any(|home| shared.iter().any(|temp| home.starts_with(temp)));
+    if writes_home || homes.is_empty() {
+        return None;
+    }
+    let shared_or_workspace = |directory: &std::path::PathBuf| {
+        directory.starts_with(workspace) || shared.iter().any(|temp| directory.starts_with(temp))
+    };
+    let mut kept = outside;
+    kept.retain(|directory| homes.contains(directory) || !shared_or_workspace(directory));
+    Some(kept)
+}
+
+/// The home directory from both the account database and `$HOME`, resolved.
+fn home_paths() -> Vec<std::path::PathBuf> {
+    let named = [
+        seatbelt::account_home(),
+        std::env::var_os("HOME").map(Into::into),
+    ];
+    named
+        .into_iter()
+        .flatten()
+        .filter_map(|path: std::path::PathBuf| std::fs::canonicalize(path).ok())
+        .collect()
 }
 
 /// `/tmp` and the per-user temporary directory from both the system and
