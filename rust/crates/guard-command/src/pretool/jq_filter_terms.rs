@@ -11,7 +11,8 @@
 //! `include`, `label`) and the ones that can run without end or blow up on
 //! a finite value (`recurse(f)`, `while`, `until`, `repeat`, `infinite`,
 //! `combinations`) appear in no list here. `range` is admitted only over
-//! small literal bounds or the input's `length`.
+//! small literal bounds or the input's `length`, and only one call may appear
+//! in the fully inlined filter so separate per-call bounds cannot multiply.
 
 use super::program::{bounded_range, closing, identifier_byte, keyword, literal, top_level};
 use super::{

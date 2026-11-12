@@ -40,6 +40,61 @@ pub(super) fn prepared(filter: &str) -> Option<String> {
     (program.len() <= MAX_PROGRAM && nesting_bounded(&program)).then_some(program)
 }
 
+/// Each admitted `range` call has its own emission bound. Refuse a filter with
+/// multiple calls after definitions are inlined, so composition cannot multiply
+/// those per-call bounds.
+pub(super) fn range_budget(program: &str) -> bool {
+    let mut calls = 0usize;
+    range_calls_within_budget(program, &mut calls)
+}
+
+fn range_calls_within_budget(program: &str, calls: &mut usize) -> bool {
+    let bytes = program.as_bytes();
+    let mut index = 0;
+    while index < bytes.len() {
+        if bytes[index] == b'"' {
+            let Some(end) = string_end(bytes, index) else {
+                return false;
+            };
+            let mut inner = index + 1;
+            while inner < end {
+                if bytes[inner] == b'\\' && bytes.get(inner + 1) == Some(&b'(') {
+                    let Some(close) = interpolation_end(bytes, inner + 1) else {
+                        return false;
+                    };
+                    if !range_calls_within_budget(&program[inner + 2..close], calls) {
+                        return false;
+                    }
+                    inner = close + 1;
+                } else if bytes[inner] == b'\\' {
+                    inner += 2;
+                } else {
+                    inner += 1;
+                }
+            }
+            index = end + 1;
+            continue;
+        }
+        if keyword(bytes, index, "range") {
+            let end = index + "range".len();
+            let mut next = end;
+            while bytes.get(next).is_some_and(u8::is_ascii_whitespace) {
+                next += 1;
+            }
+            if bytes.get(next) == Some(&b'(') {
+                *calls += 1;
+                if *calls > 1 {
+                    return false;
+                }
+            }
+            index = end;
+        } else {
+            index += 1;
+        }
+    }
+    true
+}
+
 fn plain_whitespace(filter: &str) -> Option<String> {
     let bytes = filter.as_bytes();
     let mut spaced = String::with_capacity(filter.len());

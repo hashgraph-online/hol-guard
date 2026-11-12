@@ -126,7 +126,10 @@ const COMPARISONS: &[&str] = &["==", "!=", "<=", ">=", "<", ">"];
 
 pub(super) fn safe_filter(filter: &str) -> bool {
     program::prepared(filter).is_some_and(|program| {
-        valid_characters(&program) && variables_bound(&program) && pipeline(&program)
+        program::range_budget(&program)
+            && valid_characters(&program)
+            && variables_bound(&program)
+            && pipeline(&program)
     })
 }
 
