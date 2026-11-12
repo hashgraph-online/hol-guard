@@ -204,9 +204,7 @@ impl Service {
         let executable = self
             .executable(&request.harness, &cli_path)
             .ok_or("swarm_cli_missing")?;
-        let workspace = PathBuf::from(&request.workspace)
-            .canonicalize()
-            .map_err(|_| "swarm_workspace_invalid")?;
+        let workspace = canonical_workspace(PathBuf::from(&request.workspace))?;
         if !workspace.is_dir() {
             return Err("swarm_workspace_invalid");
         }
@@ -434,6 +432,23 @@ impl Drop for Service {
 fn digest(value: &impl serde::Serialize) -> Result<String, &'static str> {
     let bytes = serde_json::to_vec(value).map_err(|_| "swarm_request_invalid")?;
     Ok(format!("{:x}", Sha256::digest(bytes)))
+}
+
+fn canonical_workspace(path: PathBuf) -> Result<PathBuf, &'static str> {
+    let canonical = path
+        .canonicalize()
+        .map_err(|_| "swarm_workspace_invalid")?;
+    #[cfg(windows)]
+    {
+        let value = canonical.to_string_lossy();
+        if let Some(rest) = value.strip_prefix(r"\\?\UNC\") {
+            return Ok(PathBuf::from(format!(r"\\{rest}")));
+        }
+        if let Some(rest) = value.strip_prefix(r"\\?\") {
+            return Ok(PathBuf::from(rest));
+        }
+    }
+    Ok(canonical)
 }
 
 fn replay(
