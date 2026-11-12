@@ -13,8 +13,8 @@ them. Nothing in it sends a request.
 
 The language is small on purpose, so a pack from a third party can be reviewed as data:
 
-- No expressions, scripts or loops. A body is built from constants, whole arguments, and one bounded copy of an
-  array argument (`each`).
+- No expressions, scripts or loops. A body is built from constants, whole arguments, one bounded copy of an
+  array argument (`each`), and the `rfc822` mail template described below.
 - No URL outside the declared `hosts`. The scheme is always `https`, the host is fixed per action, and an argument
   can fill only whole path segments.
 - No credential headers. Header names are lowercase constants. Names containing `auth`, `cookie`, `token`,
@@ -33,6 +33,26 @@ recipient domains, environment and sensitivity. An extractor is a constant, a bo
 argument, a bounded integer argument, or the domains of address arguments. Extraction is total: a value that is
 missing, malformed or out of range becomes `unknown`, never a guess. The facts feed the version 2 evaluator in
 [Cloud Action Evaluator](cloud-action-evaluator.md).
+
+## Mail messages
+
+Mail APIs such as Gmail take a whole encoded message rather than separate recipient fields. Passing a caller's
+message through would let it name recipients Guard never saw, so a pack builds the message with the `rfc822`
+template instead:
+
+```json
+{"rfc822": {"to": "to", "cc": "cc", "bcc": "bcc", "subject": "subject", "text": "text"}}
+```
+
+Each value names an argument. `to` must be a required array with at least one item, `cc` and `bcc` are optional
+arrays, and `subject` and `text` are strings. Every recipient must be a bare `local@domain` address: a display
+name, a second address or a line break refuses the call. The subject is always RFC 2047 encoded and the text is
+always base64, so neither can add a header. Rendering writes `To`, `Cc` and `Bcc` from the arguments alone and
+base64url-encodes the message.
+
+An action that uses the template must read `recipientDomains` and `recipientCount` from exactly its recipient
+arguments, so the facts Guard decides on name every address the message goes to. The template cannot appear
+inside `each`.
 
 ## Rendering and projection
 
@@ -106,10 +126,17 @@ A result is `{"ok": true, ...}` or `{"ok": false, "error": {"code": ..., "pointe
 
 ## Shipped packs
 
-`github.json`, `notion.json` and `slack.json` cover the seven hosted actions that exist today. Each action links to
-its hosted tool name. Known limits of the format, compared with hand-written adapters:
+`github.json`, `notion.json` and `slack.json` cover the hosted actions that exist today. Each action links to its
+hosted tool name. `gmail.json`, `drive.json` and `calendar.json` cover Google Workspace: reading, drafting and sending
+mail, archiving, trashing and deleting messages, mail forwarding and filters, file search, export, sharing with a
+person, a domain or anyone with the link, trash and permanent delete, and calendar events with and without guests.
+Their actions link to the matching Google Workspace command permissions. Known limits of the format, compared with
+hand-written adapters:
 
 - An argument cannot be normalized before use (for example, removing dashes from an id). The pattern accepts only
   the canonical form.
 - Paging values that a provider returns in a response header (such as a `Link` header) cannot be projected.
 - A list longer than its `maxItems` is refused rather than truncated.
+- Responses are projected from JSON only. Drive export therefore uses the `files/{id}/download` operation, whose
+  JSON result carries a download link, rather than `files/{id}/export`, which returns the file bytes.
+- A secret pasted into an argument is not a fact. Guard's inspection finds it at call time, not the pack.

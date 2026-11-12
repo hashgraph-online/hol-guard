@@ -58,12 +58,44 @@ pub(crate) fn validate_facts(
             return Err("cloud_pack_facts_inconsistent");
         }
     }
+    mail_recipients_bound(action)?;
     if let Some(readback) = &facts.count_readback {
         let target = pack.action(readback).ok_or("cloud_pack_readback_invalid")?;
         if readback == &action.action_id
             || target.safety.effect != crate::cloud_action_binding::ActionEffect::Read
         {
             return Err("cloud_pack_readback_invalid");
+        }
+    }
+    Ok(())
+}
+
+/// A message built by an `rfc822` body must report exactly its recipient arguments as
+/// recipient domains and recipient count, so the facts name everyone the message reaches.
+fn mail_recipients_bound(action: &PackAction) -> Result<(), &'static str> {
+    let Executor::DeclarativeHttp { request } = &action.executor else {
+        return Ok(());
+    };
+    let Some(body) = &request.body else {
+        return Ok(());
+    };
+    for mail in crate::cloud_pack_mail::find(body) {
+        let wanted: std::collections::BTreeSet<&str> =
+            mail.recipient_arguments().into_iter().collect();
+        let same = |arguments: &Vec<String>| {
+            arguments.len() == wanted.len()
+                && arguments.iter().all(|name| wanted.contains(name.as_str()))
+        };
+        let domains = matches!(
+            &action.facts.recipient_domains,
+            Some(Extractor::Domains { arguments }) if same(arguments)
+        );
+        let count = matches!(
+            &action.facts.recipient_count,
+            Some(Extractor::Count { arguments }) if same(arguments)
+        );
+        if !(domains && count) {
+            return Err("cloud_pack_mail_recipients_unbound");
         }
     }
     Ok(())
