@@ -338,22 +338,26 @@ def run_worker_host(guard_home: Path) -> int:
     # failed migration or publication left no line for support to read.
     writer = BackgroundLogWriter(store.guard_home)
     install_sink(writer.error, notice=writer.notice)
-    host = WorkerHost(store, home_dir=Path.home().expanduser().resolve(strict=False))
-    host.start()
-    host.wait_for_policy_publication()
-    # The daemon announces itself only after this line, so its first hook
-    # finds a published policy, as it did when the daemon's own hook worker
-    # waited for one before the daemon reported ready.
-    sys.stdout.write("ready\n")
-    sys.stdout.flush()
     try:
-        # The daemon holds the other end; end of file means it has gone.
-        while sys.stdin.buffer.read(4096):
+        host = WorkerHost(store, home_dir=Path.home().expanduser().resolve(strict=False))
+        host.start()
+        host.wait_for_policy_publication()
+        # The daemon announces itself only after this line, so its first hook
+        # finds a published policy, as it did when the daemon's own hook worker
+        # waited for one before the daemon reported ready.
+        _ = sys.stdout.write("ready\n")
+        sys.stdout.flush()
+        try:
+            # The daemon holds the other end; end of file means it has gone.
+            while sys.stdin.buffer.read(4096):
+                pass
+        except (OSError, ValueError, KeyboardInterrupt):
             pass
-    except (OSError, ValueError, KeyboardInterrupt):
-        pass
+        finally:
+            host.shutdown()
     finally:
-        host.shutdown()
+        # A start that raises still writes what it queued, such as a failed
+        # migration, before the process exits.
         release_sink(writer.error)
         _ = writer.close()
     return 0

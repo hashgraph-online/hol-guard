@@ -177,3 +177,20 @@ def test_the_writer_thread_appends_each_batch_itself(tmp_path, monkeypatch):
     assert set(writers) == {"guard-background-log-writer"}
     events = [json.loads(line)["event"] for line in (tmp_path / "logs" / "daemon.log").read_text().splitlines()]
     assert events == ["first_failure", "second_failure"]
+
+
+def test_a_host_that_fails_to_start_still_writes_and_releases_its_log(tmp_path, monkeypatch):
+    def start(self):
+        background_diagnostics.record_background_event("worker_host_start_failed", "error=RuntimeError")
+        raise _StopError
+
+    monkeypatch.setattr(worker_host, "GuardStore", lambda guard_home: _Store(guard_home))
+    monkeypatch.setattr(worker_host.WorkerHost, "start", start)
+
+    with pytest.raises(_StopError):
+        worker_host.run_worker_host(tmp_path)
+
+    # The sink is gone and the queued record reached the log before the raise left.
+    assert background_diagnostics.record_background_event("after_exit", "error=RuntimeError") is False
+    events = [json.loads(line)["event"] for line in (tmp_path / "logs" / "daemon.log").read_text().splitlines()]
+    assert events == ["worker_host_start_failed"]
