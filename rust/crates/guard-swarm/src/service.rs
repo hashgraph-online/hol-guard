@@ -175,6 +175,7 @@ impl Service {
         snapshot.agents.retain(|observed| {
             !registry.runs.values().any(|run| {
                 run.active
+                    && observed.harness == run.agent.harness
                     && run.agent.pid.is_some_and(|pid| {
                         observed.pid == Some(pid) || observed.parent_pid == Some(pid)
                     })
