@@ -46,6 +46,13 @@ def _generated(context: HarnessContext, mode: str, monkeypatch: pytest.MonkeyPat
             "codex_plugin_scanner.guard.adapters.cursor_hook_config.isolated_cursor_hook_python",
             lambda: sys.executable,
         )
+        # Only a native runtime runs the isolated client; without one Grok registers the bridge.
+        runtime = context.guard_home.parent / "hol-guard-runtime"
+        for module in ("bounded_cli_hook_bridge", "bounded_cli_hook_native"):
+            monkeypatch.setattr(
+                f"codex_plugin_scanner.guard.adapters.{module}.native_bridge_executable",
+                lambda *_args, **_kwargs: runtime,
+            )
     if mode == "frozen":
         monkeypatch.setattr(sys, "frozen", True, raising=False)
         monkeypatch.setattr(

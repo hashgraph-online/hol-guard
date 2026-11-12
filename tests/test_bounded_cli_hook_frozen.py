@@ -190,6 +190,8 @@ def test_frozen_bounded_hook_prefers_isolated_stdlib_client(
         lambda executable, config: None,
     )
     monkeypatch.setattr(bounded_cli_hook_bridge, "isolated_cursor_hook_python", lambda: "/usr/bin/python3")
+    runtime = tmp_path / "hol-guard-runtime"
+    monkeypatch.setattr(bounded_cli_hook_bridge, "native_bridge_executable", lambda *_args, **_kwargs: runtime)
     guard_home = tmp_path / "guard-home"
     command = bounded_cli_hook_bridge.bounded_cli_hook_command(
         python_executable="/app/hol-guard",
@@ -209,8 +211,8 @@ def test_frozen_bounded_hook_prefers_isolated_stdlib_client(
 
     script = bounded_cli_hook_bridge.bounded_hook_script_path(guard_home, "grok")
     assert script is not None
-    assert command[:3] == ("/usr/bin/python3", "-I", str(script.resolve()))
-    assert json.loads(command[3])["guard_home"] == str(guard_home.resolve())
+    assert command[:5] == (str(runtime), "bounded-hook-bridge", "/usr/bin/python3", "-I", str(script.resolve()))
+    assert json.loads(command[5])["guard_home"] == str(guard_home.resolve())
     source = script.read_text(encoding="utf-8")
     assert 'HARNESS = "grok"' in source
     assert "TIMEOUT_SECONDS = 25" in source

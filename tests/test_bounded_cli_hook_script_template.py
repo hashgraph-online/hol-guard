@@ -81,7 +81,8 @@ def test_a_prompt_is_blocked_not_denied(tmp_path: Path) -> None:
         json.dumps({"hook_event_name": None}),
         json.dumps({"hook_event_name": ""}),
         json.dumps(["SessionStart"]),
-        "[" * 100_000 + "]" * 100_000,
+        # An explicit id keeps the payload out of PYTEST_CURRENT_TEST, which has a size limit.
+        pytest.param("[" * 100_000 + "]" * 100_000, id="deep-nesting"),
         "not json",
         "",
     ],
