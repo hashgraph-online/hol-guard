@@ -435,9 +435,7 @@ fn digest(value: &impl serde::Serialize) -> Result<String, &'static str> {
 }
 
 fn canonical_workspace(path: PathBuf) -> Result<PathBuf, &'static str> {
-    let canonical = path
-        .canonicalize()
-        .map_err(|_| "swarm_workspace_invalid")?;
+    let canonical = path.canonicalize().map_err(|_| "swarm_workspace_invalid")?;
     #[cfg(windows)]
     {
         let value = canonical.to_string_lossy();

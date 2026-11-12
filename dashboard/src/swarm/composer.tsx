@@ -19,6 +19,9 @@ export function AgentComposer({ snapshot, stale, initialProject, onClose, onLaun
   const [uncertain, setUncertain] = useState(false);
   const pending = useRef<LaunchDraft | null>(null);
   const peers = snapshot.agents.filter((a) => a.workspace === workspace && isLive(a));
+  let launchLabel = "Start agent";
+  if (uncertain) launchLabel = "Check launch";
+  else if (busy) launchLabel = "Starting…";
   async function launch() {
     if (busy || stale) return;
     const draft = pending.current ?? { request_id: crypto.randomUUID(), epoch: snapshot.epoch, harness, workspace: workspace.trim(), task, model: model.trim() || null };
@@ -47,7 +50,7 @@ export function AgentComposer({ snapshot, stale, initialProject, onClose, onLaun
       {error ? <p className="swarm-error" role="alert">{error}</p> : null}
       {uncertain ? <p className="swarm-muted">The launch may have succeeded. Check its status with the same request before creating another agent.</p> : null}
       {stale ? <p className="swarm-error">Reconnect to Guard before launching.</p> : null}
-      <div className="swarm-composer-footer"><button type="button" className="swarm-text-button" onClick={onClose} disabled={busy}>Cancel</button><button type="submit" className="swarm-button swarm-button--primary" disabled={busy || stale || !harness || !workspace.trim() || !task.trim()}>{busy ? "Starting…" : uncertain ? "Check launch" : "Start agent"}<HiMiniArrowRight aria-hidden="true" /></button></div>
+      <div className="swarm-composer-footer"><button type="button" className="swarm-text-button" onClick={onClose} disabled={busy}>Cancel</button><button type="submit" className="swarm-button swarm-button--primary" disabled={busy || stale || !harness || !workspace.trim() || !task.trim()}>{launchLabel}<HiMiniArrowRight aria-hidden="true" /></button></div>
     </form>}
   </GuardModalLayer>;
 }

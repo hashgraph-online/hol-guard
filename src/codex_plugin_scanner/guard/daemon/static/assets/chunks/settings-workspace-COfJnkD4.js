@@ -3,7 +3,7 @@ import { p as planGuardHookRemoval, r as removeAllGuardHooks, a as GuardRepairRe
 import { f as filterSettingsBySearch, R as RISK_CONTROL_CONSEQUENCES } from "./app-catalog-Ca_M7GbC.js";
 import { C as ConfirmDialog, u as useConfirmDialog } from "./confirm-dialog-CkHRMLuC.js";
 import { C as ConnectGuardCloudButton } from "./connect-guard-cloud-button-DeMVu_1L.js";
-import { u as usesPromptContext, s as setSwarmContextTarget, a as useSwarmContextTarget } from "./swarm-handoff-DcjWDnuh.js";
+import { u as usesPromptContext, s as setSwarmContextTarget, a as useSwarmContextTarget } from "./swarm-handoff-CPWKavP3.js";
 import { C as CIGAR_TABS, a as cigarWaking, b as canStartCigar, c as cigarHomeCopy, d as cigarTabFromSearch } from "./workspace-model-hR3eI7UO.js";
 function describeAffectedHarness(item) {
   const count2 = item.hook_count ?? item.swept_hook_count;
@@ -5031,6 +5031,11 @@ function RecentProjects({ projects, onReuse, onForget }) {
 const fieldLabel = "text-sm font-medium text-brand-dark";
 const empty = "rounded-2xl border border-dashed border-brand-dark/15 px-5 py-8 text-center text-sm text-brand-dark/70";
 const summary$1 = "inline-flex min-h-11 cursor-pointer list-none items-center gap-1.5 text-sm font-semibold text-brand-dark/80 hover:text-brand-dark [&::-webkit-details-marker]:hidden";
+function projectCardClass(revoked, selected) {
+  if (revoked) return "border-amber-300/70 bg-amber-50/40";
+  if (selected) return "border-brand-blue/30 bg-white";
+  return "border-brand-dark/10 bg-white";
+}
 function ContextWorkspacesPanel({ ready, waking = false, generation, dirty, documentsAllowed, agentsAllowed, sharingAllowed = false, executionAllowed = false, gate, allowFiles }) {
   const target = useSwarmContextTarget();
   const [scopes, setScopes] = reactExports.useState([]);
@@ -5205,7 +5210,7 @@ function ContextWorkspacesPanel({ ready, waking = false, generation, dirty, docu
             /* @__PURE__ */ jsxRuntimeExports.jsx("label", { htmlFor: `${id2}-query`, className: fieldLabel, children: "Try it: what would you ask your AI?" }),
             /* @__PURE__ */ jsxRuntimeExports.jsx("input", { id: `${id2}-query`, className: versionField, maxLength: 4096, value: query, onChange: (event) => setQuery(event.target.value), placeholder: "For example: how do releases work?" })
           ] }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("ul", { className: "space-y-3", children: orderedScopes.map((scope) => /* @__PURE__ */ jsxRuntimeExports.jsx("li", { children: /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "space-y-3 rounded-2xl border p-4 sm:p-5 " + (scope.revoked ? "border-amber-300/70 bg-amber-50/40" : scope === targetScope ? "border-brand-blue/30 bg-white" : "border-brand-dark/10 bg-white"), "aria-label": `Project ${scope.workspace}`, children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("ul", { className: "space-y-3", children: orderedScopes.map((scope) => /* @__PURE__ */ jsxRuntimeExports.jsx("li", { children: /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: `space-y-3 rounded-2xl border p-4 sm:p-5 ${projectCardClass(scope.revoked, scope === targetScope)}`, "aria-label": `Project ${scope.workspace}`, children: [
             /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-start gap-3", children: [
               /* @__PURE__ */ jsxRuntimeExports.jsx("span", { "aria-hidden": "true", className: "flex size-9 shrink-0 items-center justify-center rounded-xl bg-brand-blue/10 text-brand-blue", children: /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniFolder, { className: "size-4" }) }),
               /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0 flex-1 space-y-1.5", children: [

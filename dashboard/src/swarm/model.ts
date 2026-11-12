@@ -1,5 +1,5 @@
 import type { ContextWorkspaceScope } from "../context-assistance/workspaces-api";
-import { usesPromptContext } from "../context-assistance/swarm-handoff";
+import { usesPromptContext, workspaceForSwarmAgent } from "../context-assistance/swarm-handoff";
 import type { Agent, AgentState } from "./types";
 
 export const UNKNOWN_PROJECT = "@unknown";
@@ -28,7 +28,8 @@ export function filterAgents(agents: Agent[], project: string | null, search: st
 export function contextFor(agent: Agent, enabled: boolean | null, scopes: ContextWorkspaceScope[] | null) {
   if (enabled === null || (enabled && scopes === null)) return { label: "Context unknown", detail: "CIGAR could not be checked. Refresh or open Context.", available: false };
   if (!enabled) return { label: "CIGAR off", detail: "CIGAR is off. Agents can still work using their own context.", available: false };
-  const matches = scopes?.filter((s) => !s.revoked && s.workspace === agent.workspace);
+  const workspace = workspaceForSwarmAgent(agent.id, agent.workspace);
+  const matches = scopes?.filter((s) => !s.revoked && s.workspace === workspace);
   const scope = matches?.find((s) => s.app === "dashboard") ?? matches?.find((s) => s.app === agent.harness);
   if (!scope) return { label: "Choose project context", detail: "No files have been picked for this project. Connected prompt hooks can still find matching project files automatically. Add the project to choose its files and preview the context.", available: false };
   const connection = usesPromptContext(agent.harness)

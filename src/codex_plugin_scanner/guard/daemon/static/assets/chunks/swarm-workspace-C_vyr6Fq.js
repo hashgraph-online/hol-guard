@@ -1,5 +1,5 @@
 import { j as jsxRuntimeExports, H as HiMiniFolder, a as HiMiniCommandLine, b as HiMiniCircleStack, c as HiMiniArrowUpRight, f as fetchWithGuardAuth, r as reactExports, G as GuardModalLayer, d as HiMiniXMark, e as HiMiniArrowRight, g as HiMiniArrowUp, h as fetchContextAssistance, l as listContextWorkspaces, i as HiMiniPlus, k as HiMiniSquares2X2, m as HiMiniComputerDesktop, n as HiMiniMagnifyingGlass, o as HiMiniListBullet, p as HiMiniArrowPath } from "../guard-dashboard.js";
-import { u as usesPromptContext, s as setSwarmContextTarget } from "./swarm-handoff-DcjWDnuh.js";
+import { w as workspaceForSwarmAgent, u as usesPromptContext, s as setSwarmContextTarget } from "./swarm-handoff-CPWKavP3.js";
 const UNKNOWN_PROJECT = "@unknown";
 const stateLabel = {
   starting: "Starting",
@@ -35,7 +35,8 @@ function filterAgents(agents, project, search, attentionOnly) {
 function contextFor(agent, enabled, scopes) {
   if (enabled === null || enabled && scopes === null) return { label: "Context unknown", detail: "CIGAR could not be checked. Refresh or open Context.", available: false };
   if (!enabled) return { label: "CIGAR off", detail: "CIGAR is off. Agents can still work using their own context.", available: false };
-  const matches = scopes?.filter((s) => !s.revoked && s.workspace === agent.workspace);
+  const workspace = workspaceForSwarmAgent(agent.id, agent.workspace);
+  const matches = scopes?.filter((s) => !s.revoked && s.workspace === workspace);
   const scope = matches?.find((s) => s.app === "dashboard") ?? matches?.find((s) => s.app === agent.harness);
   if (!scope) return { label: "Choose project context", detail: "No files have been picked for this project. Connected prompt hooks can still find matching project files automatically. Add the project to choose its files and preview the context.", available: false };
   const connection = usesPromptContext(agent.harness) ? "With Guard connected in App setup, new prompts receive project context. A running turn keeps its existing context." : "Each MCP connection still needs pairing in CIGAR.";
@@ -179,6 +180,9 @@ function AgentComposer({ snapshot, stale, initialProject, onClose, onLaunched, o
   const [uncertain, setUncertain] = reactExports.useState(false);
   const pending = reactExports.useRef(null);
   const peers = snapshot.agents.filter((a) => a.workspace === workspace && isLive(a));
+  let launchLabel = "Start agent";
+  if (uncertain) launchLabel = "Check launch";
+  else if (busy) launchLabel = "Starting…";
   async function launch() {
     if (busy || stale) return;
     const draft = pending.current ?? { request_id: crypto.randomUUID(), epoch: snapshot.epoch, harness, workspace: workspace.trim(), task, model: model.trim() || null };
@@ -257,7 +261,7 @@ function AgentComposer({ snapshot, stale, initialProject, onClose, onLaunched, o
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "swarm-composer-footer", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", className: "swarm-text-button", onClick: onClose, disabled: busy, children: "Cancel" }),
         /* @__PURE__ */ jsxRuntimeExports.jsxs("button", { type: "submit", className: "swarm-button swarm-button--primary", disabled: busy || stale || !harness || !workspace.trim() || !task.trim(), children: [
-          busy ? "Starting…" : uncertain ? "Check launch" : "Start agent",
+          launchLabel,
           /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniArrowRight, { "aria-hidden": "true" })
         ] })
       ] })

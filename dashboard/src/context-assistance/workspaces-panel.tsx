@@ -18,6 +18,11 @@ import { compileWorkspaceContext, grantContextWorkspace, listContextWorkspaces, 
 const fieldLabel = "text-sm font-medium text-brand-dark";
 const empty = "rounded-2xl border border-dashed border-brand-dark/15 px-5 py-8 text-center text-sm text-brand-dark/70";
 const summary = "inline-flex min-h-11 cursor-pointer list-none items-center gap-1.5 text-sm font-semibold text-brand-dark/80 hover:text-brand-dark [&::-webkit-details-marker]:hidden";
+function projectCardClass(revoked: boolean, selected: boolean) {
+  if (revoked) return "border-amber-300/70 bg-amber-50/40";
+  if (selected) return "border-brand-blue/30 bg-white";
+  return "border-brand-dark/10 bg-white";
+}
 // `ready` means CIGAR is running and folders can change; `waking` lists saved folders read-only while it rests or starts.
 type Props = { ready: boolean; waking?: boolean; generation: string | null; dirty: boolean; documentsAllowed: boolean; agentsAllowed: boolean; sharingAllowed?: boolean; executionAllowed?: boolean; gate: GuardApprovalGatePublicConfig | null; allowFiles?: CigarAllowFiles };
 
@@ -135,7 +140,7 @@ export function ContextWorkspacesPanel({ ready, waking = false, generation, dirt
         {!loaded ? <p role="status" className={empty}>Loading your folders…</p> : scopes.length === 0 ? !error && <div className={empty}><HiMiniFolderOpen aria-hidden="true" className="mx-auto mb-2 size-6 text-brand-dark/35" /><p>No projects yet.</p><p className="mt-1 text-xs text-brand-dark/60">Add one below only if you want to pick the exact files.</p></div> : <>
           <div><label htmlFor={`${id}-query`} className={fieldLabel}>Try it: what would you ask your AI?</label>
             <input id={`${id}-query`} className={versionField} maxLength={4096} value={query} onChange={(event) => setQuery(event.target.value)} placeholder="For example: how do releases work?" /></div>
-          <ul className="space-y-3">{orderedScopes.map((scope) => <li key={scope.scope_id}><section className={"space-y-3 rounded-2xl border p-4 sm:p-5 " + (scope.revoked ? "border-amber-300/70 bg-amber-50/40" : scope === targetScope ? "border-brand-blue/30 bg-white" : "border-brand-dark/10 bg-white")} aria-label={`Project ${scope.workspace}`}>
+          <ul className="space-y-3">{orderedScopes.map((scope) => <li key={scope.scope_id}><section className={`space-y-3 rounded-2xl border p-4 sm:p-5 ${projectCardClass(scope.revoked, scope === targetScope)}`} aria-label={`Project ${scope.workspace}`}>
             <div className="flex flex-wrap items-start gap-3">
               <span aria-hidden="true" className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-brand-blue/10 text-brand-blue"><HiMiniFolder className="size-4" /></span>
               <div className="min-w-0 flex-1 space-y-1.5">
