@@ -44,6 +44,66 @@ fn a_missing_root_beside_real_ones_is_proven_but_not_a_sensitive_one() {
     std::fs::remove_dir_all(root).unwrap();
 }
 
+#[cfg(unix)]
+#[test]
+fn glob_operands_refuse_symlinks_and_parent_traversal_but_allow_capped_expansion() {
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../target/grep-glob-operand-scope")
+        .join(std::process::id().to_string());
+    let home = root.join("home");
+    let repo = home.join("work/app");
+    std::fs::create_dir_all(repo.join("src/sub")).unwrap();
+    std::fs::create_dir_all(repo.join("private")).unwrap();
+    std::fs::create_dir_all(repo.join("many")).unwrap();
+    std::fs::write(repo.join("src/safe.ts"), "SAFE_CONTENT\n").unwrap();
+    std::fs::write(
+        repo.join("private/synthetic-credential.txt"),
+        "SYNTHETIC_CANARY_A81X_DO_NOT_USE\n",
+    )
+    .unwrap();
+    std::os::unix::fs::symlink(
+        "../private/synthetic-credential.txt",
+        repo.join("src/link.ts"),
+    )
+    .unwrap();
+    for index in 0..257 {
+        std::fs::write(
+            repo.join(format!("many/file-{index:03}.ts")),
+            "ordinary content\n",
+        )
+        .unwrap();
+    }
+    let (home, repo) = (
+        crate::runtime_read_paths::canonicalize_text(&home).unwrap(),
+        crate::runtime_read_paths::canonicalize_text(&repo).unwrap(),
+    );
+    let context = crate::pretool::PathContext {
+        home_dir: home.to_str(),
+        cwd: repo.to_str(),
+        ..Default::default()
+    };
+    for (pattern, target, allowed) in [
+        ("SYNTHETIC_CANARY", "src/*.ts", false),
+        (
+            "SYNTHETIC_CANARY",
+            "src/*/../../private/*.txt",
+            false,
+        ),
+        ("ordinary", "many/*.ts", true),
+    ] {
+        let arguments = vec!["-n", pattern, target]
+            .into_iter()
+            .map(str::to_owned)
+            .collect::<Vec<_>>();
+        assert_eq!(
+            super::safe_grep_arguments(&arguments, context),
+            allowed,
+            "grep operand {target}"
+        );
+    }
+    std::fs::remove_dir_all(root).unwrap();
+}
+
 #[test]
 fn a_missing_operand_is_not_proven_beside_a_step_that_could_create_it() {
     let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))

@@ -17,8 +17,7 @@
 //! blocks its non-source files.
 use super::ReadContext;
 use crate::pretool::search_pattern_clearance::PatternClearance;
-use glob_expand::expand_glob_matches;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 #[path = "glob_expand.rs"]
 mod glob_expand;
 
@@ -294,17 +293,56 @@ pub(in crate::pretool) fn glob_matches_nothing(value: &str, context: ReadContext
 /// Content-search glob operand: every match is walked, and matches inside an
 /// Oh My Pi agent-state tree are refused as for a literal search root.
 ///
-/// A glob the expansion refuses, such as `src/*.ts` in a directory with more
-/// files than it lists, is proven by walking the literal directory it
-/// expands below: the search then reads no more than a recursive search of
-/// that directory, which the same walk admits.
+/// An expansion stopped only by its match-count cap is proven by walking the
+/// literal directory it expands below. Every match stays inside that tree, and
+/// the fallback also refuses links that a shell-expanded explicit operand
+/// could follow.
 pub(in crate::pretool) fn safe_glob_search_operand(value: &str, context: ReadContext<'_>) -> bool {
     let searched =
         |path: PathBuf| !inside_agent_state(&path, context) && walk(path, &[], &[], false, false);
-    match expand_glob_matches(value, context) {
-        Some(matches) => !matches.is_empty() && matches.into_iter().all(searched),
-        None => glob_expand::search_glob_directory(value, context).is_some_and(searched),
+    match glob_expand::expand_glob_search(value, context) {
+        glob_expand::Expansion::Matches(matches) => {
+            !matches.is_empty() && matches.into_iter().all(searched)
+        }
+        glob_expand::Expansion::Truncated => {
+            glob_expand::search_glob_directory(value, context).is_some_and(|dir| {
+                searched(dir.clone()) && no_operand_links(&dir)
+            })
+        }
+        glob_expand::Expansion::Refused => false,
     }
+}
+
+/// A fallback directory proves a shell-expanded operand only if no explicit
+/// match below it can be a symlink followed by the search program.
+fn no_operand_links(root: &Path) -> bool {
+    let mut pending = vec![(root.to_path_buf(), 0_usize)];
+    let mut inspected = 0_usize;
+    while let Some((path, depth)) = pending.pop() {
+        inspected += 1;
+        if inspected > MAX_WALK_ENTRIES || depth > MAX_WALK_DEPTH {
+            return false;
+        }
+        let Ok(metadata) = std::fs::symlink_metadata(&path) else {
+            return false;
+        };
+        if metadata.file_type().is_symlink() {
+            return false;
+        }
+        if metadata.is_dir() {
+            let Ok(entries) = std::fs::read_dir(&path) else {
+                return false;
+            };
+            for entry in entries {
+                let Ok(entry) = entry else { return false };
+                if pending.len() + inspected >= MAX_WALK_ENTRIES {
+                    return false;
+                }
+                pending.push((entry.path(), depth + 1));
+            }
+        }
+    }
+    true
 }
 
 pub(super) fn walk(
