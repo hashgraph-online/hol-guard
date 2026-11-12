@@ -1,6 +1,7 @@
 //! Committed screenshots named for the screen they show, such as
 //! `auth-login.png`, pass a recursive search's walk only as plain PNGs whose
-//! text chunks the secret detector clears.
+//! bytes the secret detector clears.
+use super::super::MAX_TOTAL_BYTES;
 use super::tests::{fixture, write_index};
 use super::*;
 use std::path::PathBuf;
@@ -82,7 +83,15 @@ fn images_carrying_text_the_walk_cannot_clear_keep_review() {
     secret.extend_from_slice(key.as_bytes());
     let mut trailing = screenshot();
     trailing.extend_from_slice(key.as_bytes());
-    let cases: [(&str, Vec<u8>); 4] = [
+    // A zlib stream whose one deflate block is stored, so the key sits in
+    // `IDAT` as plain bytes `grep -a` prints.
+    let mut stored = vec![0x78, 0x01, 0x01];
+    stored.extend_from_slice(&(key.len() as u16).to_le_bytes());
+    stored.extend_from_slice(&(!(key.len() as u16)).to_le_bytes());
+    stored.extend_from_slice(key.as_bytes());
+    let mut palette = b"names\0\x08".to_vec();
+    palette.extend_from_slice(key.as_bytes());
+    let cases: [(&str, Vec<u8>); 7] = [
         ("private chunk", png(&[header, (b"prVt", key.as_bytes())])),
         (
             "compressed text",
@@ -90,6 +99,18 @@ fn images_carrying_text_the_walk_cannot_clear_keep_review() {
         ),
         ("key in a text chunk", png(&[header, (b"tEXt", &secret)])),
         ("bytes after IEND", trailing),
+        (
+            "key in a stored IDAT block",
+            png(&[header, (b"IDAT", &stored)]),
+        ),
+        (
+            "key in a palette",
+            png(&[header, (b"PLTE", key.as_bytes())]),
+        ),
+        (
+            "key in a suggested palette",
+            png(&[header, (b"sPLT", &palette)]),
+        ),
     ];
     for (label, bytes) in cases {
         let (_, project) = fixture();
@@ -97,6 +118,28 @@ fn images_carrying_text_the_walk_cannot_clear_keep_review() {
         write_index(&project.join(".git"), &[SHOT]);
         assert!(!committed_image(&shot), "{label}");
     }
+}
+
+/// The whole image counts against the walk's content budget before any of
+/// it is read, so an image larger than what is left keeps the review.
+#[test]
+fn an_image_past_the_walk_budget_keeps_review() {
+    let (_, project) = fixture();
+    let filler = vec![0_u8; usize::try_from(MAX_TOTAL_BYTES).unwrap()];
+    let large = png(&[
+        (b"IHDR", &[0, 0, 0, 1, 0, 0, 0, 1, 8, 6, 0, 0, 0]),
+        (b"IDAT", &filler),
+    ]);
+    let shot = tracked(&project, SHOT, &large);
+    write_index(&project.join(".git"), &[SHOT]);
+    assert!(!committed_image(&shot));
+
+    let mut walk = TrackedFiles::default();
+    let small = tracked(&project, "docs/auth-small.png", &screenshot());
+    write_index(&project.join(".git"), &["docs/auth-small.png"]);
+    walk.spent = MAX_TOTAL_BYTES - 16;
+    assert!(!walk.tracked_image(&small));
+    assert!(TrackedFiles::default().tracked_image(&small));
 }
 
 /// A recursive grep over a docs tree holding a committed screenshot is

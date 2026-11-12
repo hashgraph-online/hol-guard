@@ -10,9 +10,6 @@ use std::path::{Path, PathBuf};
 const MAX_FILE_BYTES: u64 = 256 * 1024;
 /// Content one walk may read and scan across all of its fixtures.
 const MAX_TOTAL_BYTES: u64 = 2 * 1024 * 1024;
-/// The largest tracked image a walk may pass. Only its text chunks count
-/// against the content budget.
-const MAX_IMAGE_BYTES: u64 = 16 * 1024 * 1024;
 const MAX_INDEX_BYTES: u64 = 64 * 1024 * 1024;
 const MAX_ANCESTORS: usize = 64;
 const STORE_DIRECTORIES: &[&str] = &[
@@ -97,11 +94,13 @@ impl TrackedFiles {
     /// credential store, that holds pixels and nothing a search could print
     /// as a secret. Screenshots are named for the screen they show
     /// (`auth-desktop-login.png`). Without `-a` grep and rg print no line
-    /// from a binary file, but with it they print whatever text the file
-    /// carries, so the whole chunk layout is walked: every chunk must be one
-    /// the format defines, nothing may follow `IEND`, and the chunks that hold
-    /// text are scanned the way a fixture is, against the same budget. Text
-    /// the walk cannot read, a compressed `zTXt` or `iTXt`, keeps the review.
+    /// from a binary file, but with it they print whatever bytes the file
+    /// holds, and any chunk can hold plain text: a stored deflate block in
+    /// `IDAT`, a palette, an `sPLT` name. So the chunk layout must be one the
+    /// format defines, with nothing after `IEND`, and then every byte of the
+    /// file is scanned the way a fixture is. The whole file counts against
+    /// the walk's budget, which is checked before it is read. Text the walk
+    /// cannot read, a compressed `zTXt` or `iTXt`, keeps the review.
     pub(super) fn tracked_image(&mut self, path: &Path) -> bool {
         let png = path
             .extension()
@@ -110,14 +109,19 @@ impl TrackedFiles {
         if !png {
             return false;
         }
-        let Some((length, rendered)) = self.tracked(path, MAX_IMAGE_BYTES) else {
+        let remaining = MAX_TOTAL_BYTES.saturating_sub(self.spent);
+        let Some((length, rendered)) = self.tracked(path, remaining) else {
             return false;
         };
-        let Some(text) = png_text(path, length) else {
+        self.spent += length;
+        let Ok(bytes) = std::fs::read(path) else {
             return false;
         };
-        self.spent += text.len() as u64;
-        self.spent <= MAX_TOTAL_BYTES && clean(&String::from_utf8_lossy(&text), &rendered)
+        // A file that grew after its length was checked is not the file the
+        // budget allowed.
+        bytes.len() as u64 == length
+            && plain_png(&bytes)
+            && clean(&printable_runs(&bytes), &rendered)
     }
 
     /// The length of `path` and its name in the repository index, when it is
@@ -181,61 +185,73 @@ fn clean(text: &str, rendered: &[u8]) -> bool {
     })
 }
 
-/// Chunks that carry pixels, colour data or layout, never text.
-const PNG_PIXEL_CHUNKS: &[&[u8; 4]] = &[
+/// The shortest run of text in a binary file worth scanning, as `strings`
+/// reads one. No credential the detector flags is shorter.
+const MIN_PRINTABLE_RUN: usize = 4;
+
+/// The runs of printable ASCII in `bytes`, one per line. A credential a
+/// text-mode search could print from a binary file is such a run; the bytes
+/// between runs are compressed pixels the detector would only slow down on.
+fn printable_runs(bytes: &[u8]) -> String {
+    let printable = |byte: &u8| matches!(byte, b'\t' | b'\n' | b'\r' | b' '..=b'~');
+    let mut text = String::new();
+    for run in bytes.split(|byte| !printable(byte)) {
+        if run.len() >= MIN_PRINTABLE_RUN {
+            // Every byte of the run is ASCII.
+            text.extend(run.iter().map(|byte| char::from(*byte)));
+            text.push('\n');
+        }
+    }
+    text
+}
+
+/// Chunks the PNG format defines, other than `IEND` and `iTXt`.
+const PNG_CHUNKS: &[&[u8; 4]] = &[
     b"IHDR", b"PLTE", b"IDAT", b"tRNS", b"cHRM", b"gAMA", b"iCCP", b"sBIT", b"sRGB", b"cICP",
     b"mDCv", b"cLLi", b"bKGD", b"hIST", b"pHYs", b"sPLT", b"tIME", b"acTL", b"fcTL", b"fdAT",
-    b"iDOT",
+    b"iDOT", b"tEXt", b"eXIf",
 ];
 const MAX_PNG_CHUNKS: usize = 8192;
 
-/// The text a PNG at `path`, `length` bytes long, carries in its text and
-/// metadata chunks, or `None` when its layout is not a plain PNG: a bad
-/// signature, a chunk the format does not define, a compressed text chunk,
-/// or bytes after `IEND`.
-fn png_text(path: &Path, length: u64) -> Option<Vec<u8>> {
-    use std::io::{Read, Seek, SeekFrom};
-    let mut file = std::fs::File::open(path).ok()?;
-    let mut signature = [0_u8; 8];
-    file.read_exact(&mut signature).ok()?;
-    if &signature != b"\x89PNG\r\n\x1a\n" {
-        return None;
-    }
-    let mut at = 8_u64;
-    let mut text = Vec::new();
+/// Whether `bytes` lay out a plain PNG: the signature, then only chunks the
+/// format defines, an uncompressed `iTXt` where there is one, and nothing
+/// after `IEND`.
+fn plain_png(bytes: &[u8]) -> bool {
+    let Some(mut rest) = bytes.strip_prefix(b"\x89PNG\r\n\x1a\n") else {
+        return false;
+    };
     for _ in 0..MAX_PNG_CHUNKS {
-        let mut header = [0_u8; 8];
-        file.read_exact(&mut header).ok()?;
-        let size = u64::from(u32::from_be_bytes(header[..4].try_into().ok()?));
-        let kind: &[u8; 4] = header[4..].try_into().ok()?;
-        let next = at.checked_add(12)?.checked_add(size)?;
-        if next > length {
-            return None;
-        }
+        let Some((kind, data, after)) = png_chunk(rest) else {
+            return false;
+        };
         match kind {
-            b"IEND" => return (size == 0 && next == length).then_some(text),
-            b"tEXt" | b"iTXt" | b"eXIf" => {
-                let start = text.len();
-                text.resize(start + usize::try_from(size).ok()?, 0);
-                file.read_exact(&mut text[start..]).ok()?;
-                // An `iTXt` keyword ends at a NUL, then a compression flag.
-                if kind == b"iTXt" {
-                    let keyword = text[start..].iter().position(|byte| *byte == 0)?;
-                    if text.get(start + keyword + 1).copied() != Some(0) {
-                        return None;
-                    }
+            b"IEND" => return data.is_empty() && after.is_empty(),
+            // An `iTXt` keyword ends at a NUL, then a compression flag.
+            b"iTXt" => {
+                let flag = data
+                    .iter()
+                    .position(|byte| *byte == 0)
+                    .and_then(|keyword| data.get(keyword + 1));
+                if flag != Some(&0) {
+                    return false;
                 }
-                text.push(b'\n');
-                file.seek(SeekFrom::Current(4)).ok()?;
             }
-            _ if PNG_PIXEL_CHUNKS.contains(&kind) => {
-                file.seek(SeekFrom::Start(next)).ok()?;
-            }
-            _ => return None,
+            _ if PNG_CHUNKS.contains(&kind) => {}
+            _ => return false,
         }
-        at = next;
+        rest = after;
     }
-    None
+    false
+}
+
+/// The first chunk of `bytes`: its type, its data and what follows its CRC.
+fn png_chunk(bytes: &[u8]) -> Option<(&[u8; 4], &[u8], &[u8])> {
+    let size = usize::try_from(be32(bytes, 0)?).ok()?;
+    let kind: &[u8; 4] = bytes.get(4..8)?.try_into().ok()?;
+    let end = size.checked_add(8)?;
+    let data = bytes.get(8..end)?;
+    let after = bytes.get(end.checked_add(4)?..)?;
+    Some((kind, data, after))
 }
 
 /// The index of the repository at `directory`, or a linked worktree's own.
