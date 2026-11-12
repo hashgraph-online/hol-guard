@@ -11,9 +11,10 @@
 //! read-backs and native detectors. Model-written text is never a fact.
 //! Decoding grants nothing; the consumer still evaluates policy.
 
-use serde::de::{DeserializeOwned, Deserializer, Error as _};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeSet;
+
+pub use crate::action_fact::Fact;
 
 use crate::business_action::{
     is_canonical_business_domain, BusinessActionClassV1, BusinessActionV1, BusinessAudienceKindV1,
@@ -24,57 +25,6 @@ use crate::business_action::{
 pub const ACTION_FACTS_V2_SCHEMA: &str = "guard.action-facts.v2";
 pub const ACTION_FACTS_V2_VERSION: u16 = 2;
 pub const MAX_ACTION_FACTS_BYTES: usize = 32 * 1024;
-
-/// A fact whose value may be unavailable. `unsupported` means the producer
-/// cannot know it for this action; consumers treat it like `unknown`.
-///
-/// The wire form is `{"state": "known", "value": ...}`, `{"state": "unknown"}`
-/// or `{"state": "unsupported"}`. Decoding is strict: no other key, a value
-/// only with `known`, and no `"value": null` on an unknown fact.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
-#[serde(tag = "state", content = "value", rename_all = "snake_case")]
-pub enum Fact<T> {
-    Known(T),
-    Unknown,
-    Unsupported,
-}
-
-impl<'de, T: DeserializeOwned> Deserialize<'de> for Fact<T> {
-    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        const FIELDS: &[&str] = &["state", "value"];
-        let mut map = serde_json::Map::<String, serde_json::Value>::deserialize(deserializer)?;
-        let state = map
-            .remove("state")
-            .ok_or_else(|| D::Error::missing_field("state"))?;
-        let value = map.remove("value");
-        if let Some(extra) = map.keys().next() {
-            return Err(D::Error::unknown_field(extra, FIELDS));
-        }
-        match (state.as_str(), value) {
-            (Some("known"), Some(value)) => serde_json::from_value(value)
-                .map(Self::Known)
-                .map_err(D::Error::custom),
-            (Some("known"), None) => Err(D::Error::missing_field("value")),
-            (Some("unknown"), None) => Ok(Self::Unknown),
-            (Some("unsupported"), None) => Ok(Self::Unsupported),
-            (Some("unknown" | "unsupported"), Some(_)) => {
-                Err(D::Error::custom("only a known fact carries a value"))
-            }
-            _ => Err(D::Error::custom(
-                "fact state must be known, unknown or unsupported",
-            )),
-        }
-    }
-}
-
-impl<T> Fact<T> {
-    pub fn known(&self) -> Option<&T> {
-        match self {
-            Self::Known(value) => Some(value),
-            Self::Unknown | Self::Unsupported => None,
-        }
-    }
-}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
