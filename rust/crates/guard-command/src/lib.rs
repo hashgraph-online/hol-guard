@@ -46,6 +46,10 @@ pub mod cloud_action;
 pub mod cloud_action_activation;
 pub mod cloud_action_binding;
 pub mod cloud_action_canonical;
+pub mod cloud_action_inspect;
+mod cloud_action_inspect_pii;
+#[cfg(test)]
+mod cloud_action_inspect_tests;
 pub mod cloud_action_policy;
 pub mod cloud_action_serve;
 #[cfg(test)]

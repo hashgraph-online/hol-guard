@@ -246,3 +246,46 @@ Also:
 - Keep consent records and consume a `once` consent after it is used. The evaluator does not.
 - Record `evaluation_provenance_digest` and `action_identity_sha256` with the decision.
 - Restart the evaluator, and reload the binding set digest, whenever the binding set changes.
+
+## Content inspection
+
+`cloud-action inspect` reads what an action carries rather than deciding on it.
+It takes no flags and no binding set, and answers one line per request line:
+
+```bash
+hol-guard-runtime cloud-action inspect
+guard-cloud-action inspect
+```
+
+A request names the action's arguments and, after dispatch, its result. Either
+may be `null`.
+
+```json
+{"schema": "guard.cloud-action-inspection.v1", "request_id": "req-1",
+ "arguments": {"body": "..."}, "result": null}
+```
+
+The result reports what three deterministic detectors found:
+
+| Field | Meaning |
+| --- | --- |
+| `findings` | One entry per finding: `kind` (`secret` or `injection_signal`), `source` (`arguments` or `result`), `path` (a JSON Pointer into that source), and for a secret the matching rule's `rule_id`, `family`, `severity` and `confidence`. |
+| `fact_findings` | The `guard.action-facts.v2` findings to record: `secret_in_arguments`, `secret_in_result`, `injection_signal_in_result`. |
+| `pii_kinds`, `sensitivity_hints` | Personal-data shapes seen (`email_address`, `phone_number`, `payment_card` with a valid Luhn digit, `national_id`) and the sensitivity they suggest. Hints only; this is not data-loss prevention. |
+| `redactions` | Where each credential sits: `source`, `path`, and a `span` with `utf8` and `utf16` offsets into the string at `path`. A credential inside a base64 payload is covered by a span over the whole payload. A `null` span replaces the whole value at `path`; that is how a credential used as an object key is removed. |
+| `complete` | `false` when a finding or redaction limit was reached or a credential could not be located in one value. Treat an incomplete result like a refusal. |
+
+Nothing in the result repeats matched bytes. Secrets come from the same
+`guard-scanner` rules the local secret scan uses, including credentials inside
+base64 payloads; low-confidence entropy guesses are left out, because a secret
+in outbound arguments stops the action. The injection signal is read in result
+text only, from the native prompt-injection detection plus a short list of
+instructions aimed at whoever reads a result. It is a signal for the session
+ledger, never a verdict on its own.
+
+A request over 2 MiB, with more than 20,000 string and number values, or one
+that takes longer than 1.5 seconds is refused with `error.code` `limit` or
+`deadline`, `complete: false` and empty lists. A refusal means nothing is known
+about the content; the caller decides what that means for delivery. Malformed
+requests use the same codes as the evaluator, plus `invalid_request` for a
+missing `arguments` or `result` or an unknown field.
