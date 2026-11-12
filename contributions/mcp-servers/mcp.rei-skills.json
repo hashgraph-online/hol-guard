@@ -1,0 +1,79 @@
+{
+  "schemaVersion": "guard.mcp-server-contribution.v1",
+  "id": "mcp.rei-skills",
+  "version": "1.0.0",
+  "name": "REI Skills MCP",
+  "description": "Provides engineering skill search, recommendation, retrieval, workflow discovery, and AI-agent-specific compilation. Can install skill files into a local workspace. External integration; off until explicitly enabled.",
+  "trustClass": "external",
+  "activation": "opt-in",
+  "publisher": {
+    "id": "io.github.rootcastleco",
+    "displayName": "Rootcastle Engineering & Innovation",
+    "url": "https://github.com/rootcastleco/rei-skills"
+  },
+  "icon": {
+    "kind": "react-icon",
+    "name": "HiMiniCommandLine",
+    "background": "#0E3D8A"
+  },
+  "homepage": "https://github.com/rootcastleco/rei-skills",
+  "license": "MIT",
+  "launch": {
+    "kind": "package-launcher",
+    "command": "npx",
+    "package": "rei-skills@6.2.0"
+  },
+  "riskClasses": [
+    "external-filesystem-write",
+    "local-content-overwrite"
+  ],
+  "tools": [
+    {
+      "name": "rei_recommend_skills",
+      "state": "inherit"
+    },
+    {
+      "name": "rei_search_skills",
+      "state": "inherit"
+    },
+    {
+      "name": "rei_get_skill",
+      "state": "inherit"
+    },
+    {
+      "name": "rei_get_workflow",
+      "state": "inherit"
+    },
+    {
+      "name": "rei_list_bundles",
+      "state": "inherit"
+    },
+    {
+      "name": "rei_compile_skill",
+      "state": "inherit"
+    },
+    {
+      "name": "rei_list_ai_targets",
+      "state": "inherit"
+    },
+    {
+      "name": "rei_install_skill",
+      "state": "review"
+    },
+    {
+      "name": "other",
+      "state": "review"
+    }
+  ],
+  "referenceUrls": [
+    "https://github.com/rootcastleco/rei-skills",
+    "https://www.npmjs.com/package/rei-skills",
+    "https://github.com/rootcastleco/rei-skills/blob/main/README.md"
+  ],
+  "saferAlternatives": [
+    "Use search, recommendations and retrieval before installation. Treat retrieved skill instructions as untrusted content; inspect them before adoption.",
+    "Before rei_install_skill, use dry_run and review proposed paths and conflicts. Replacements need conflict_policy=backup and a matching preview_token.",
+    "Keep rei_install_skill on review because it writes workspace files. Confirm workspace_path and retain protected backups for manual recovery after interruption.",
+    "Unlisted tools default to review. Prefer the verified npm release and keep this external server disabled unless its functionality is needed."
+  ]
+}

@@ -416,3 +416,6 @@ fn contribution_matching_follows_recorded_cases() {
     }
     assert!(matched > 20, "fixture must exercise matching cases");
 }
+
+#[path = "contributed_mcp_pinned_tests.rs"]
+mod pinned;

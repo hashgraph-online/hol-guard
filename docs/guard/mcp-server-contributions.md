@@ -58,6 +58,22 @@ ordinary server environment, recognized neutral launcher switches such as `-y`,
 and server arguments can still vary. Exact command, argument, and environment
 hashes continue to bind saved approvals.
 
+A versioned `launch.package` keeps that selector in the generated launch example.
+Catalog recognition normalizes it through the same native package-identity parser
+as runtime launches. Tightening `review` and `block` defaults apply to the package
+name even for an unversioned or different-version launch; a version mismatch must
+not remove those protections. For `allow`, a declared version selector must also
+match the recorded runtime selector exactly, in addition to all launcher, source,
+stdio, and environment checks above. Unversioned declarations retain their existing
+version-independent behavior. Catalog entries cannot claim the same normalized
+package name under different version selectors.
+
+The selector is evidence of the configured launch request, not an attestation of
+the installed package version or publisher. In particular, the REI Skills example
+remains pinned to `npx -y rei-skills@6.2.0`; its install and unknown-tool defaults
+only tighten policy to `review`. An unversioned or mismatched-version launch is
+not certified as the reviewed release and receives no contributed `allow`.
+
 These source checks follow the distinction between registry names and
 [aliases, folders, tarballs, and Git selectors](https://docs.npmjs.com/cli/v11/using-npm/package-spec/).
 The native `default` source token describes argv flags; it does not attest to the
