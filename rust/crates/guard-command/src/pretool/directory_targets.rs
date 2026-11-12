@@ -647,6 +647,7 @@ impl<'a> super::PathContext<'a> {
         let psql_environment =
             super::safe_scalar::psql_environment(execution_environment, shell_home_matches);
         Self {
+            literal_words: &[],
             home_dir,
             cwd,
             cdpath_unset,

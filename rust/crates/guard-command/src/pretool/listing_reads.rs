@@ -12,6 +12,7 @@ struct Word {
     value: String,
     unquoted_glob: bool,
     quoted_glob: bool,
+    unquoted_expansion: bool,
 }
 
 /// Split segment text into shell words, tracking where glob characters sit.
@@ -32,6 +33,7 @@ fn quoted_words(text: &str) -> Option<Vec<Word>> {
                     value: String::new(),
                     unquoted_glob: false,
                     quoted_glob: false,
+                    unquoted_expansion: false,
                 });
                 word.quoted_glob |= matches!(character, '*' | '?' | '[');
                 word.value.push(character);
@@ -42,6 +44,7 @@ fn quoted_words(text: &str) -> Option<Vec<Word>> {
                     value: String::new(),
                     unquoted_glob: false,
                     quoted_glob: false,
+                    unquoted_expansion: false,
                 });
             }
             None if character == '\\' => return None,
@@ -51,8 +54,10 @@ fn quoted_words(text: &str) -> Option<Vec<Word>> {
                     value: String::new(),
                     unquoted_glob: false,
                     quoted_glob: false,
+                    unquoted_expansion: false,
                 });
                 word.unquoted_glob |= matches!(character, '*' | '?' | '[');
+                word.unquoted_expansion |= matches!(character, '$' | '`');
                 word.value.push(character);
             }
         }
@@ -62,6 +67,34 @@ fn quoted_words(text: &str) -> Option<Vec<Word>> {
     }
     words.extend(current);
     Some(words)
+}
+
+/// Words of `text` that reach the program exactly as written: every glob
+/// character in them is quoted, so the shell expands nothing. A word that
+/// also appears with an unquoted glob character is left out, because the
+/// caller matches by value and cannot tell the two apart. Text with an
+/// unquoted `$` or backtick, or a here-document, yields no words: the shell
+/// substitutes those, and the parser may hand over a value no word spells.
+pub(super) fn literal_words(text: &str) -> Vec<String> {
+    if text.contains("<<") {
+        return Vec::new();
+    }
+    let Some(words) = quoted_words(text) else {
+        return Vec::new();
+    };
+    if words.iter().any(|word| word.unquoted_expansion) {
+        return Vec::new();
+    }
+    words
+        .iter()
+        .filter(|word| {
+            !word.unquoted_glob
+                && !words
+                    .iter()
+                    .any(|other| other.unquoted_glob && other.value == word.value)
+        })
+        .map(|word| word.value.clone())
+        .collect()
 }
 
 enum Operand {

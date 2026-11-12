@@ -70,6 +70,7 @@ pub(super) fn bounded_native_temporary_write_target(
     bounded_temporary_copy_target(
         value,
         super::PathContext {
+            literal_words: &[],
             home_dir,
             cwd,
             cdpath_unset: false,

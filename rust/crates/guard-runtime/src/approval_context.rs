@@ -266,6 +266,7 @@ pub(super) fn derive_context_with_snapshot(
         None,
         None,
         guard_command::pretool::PathContext {
+            literal_words: &[],
             home_dir: Some(envelope.source.home_dir.as_str()),
             cwd: envelope.source.cwd.as_deref(),
             cdpath_unset: false,

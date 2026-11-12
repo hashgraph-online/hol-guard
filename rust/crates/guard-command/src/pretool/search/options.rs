@@ -59,7 +59,14 @@ pub(super) fn unsafe_search_value(
         // the glob could match would start with or hold a credential marker
         // says yes to every one of them: `rg 'Delegate\b.*=>' src` and
         // `rg 'Auth.*Provider' src` are searches, not file names.
-        SearchValueRole::Pattern => literal_glob_names_sensitive_path(value),
+        //
+        // A pattern whose glob characters are all quoted is past the shell
+        // already: `grep -o "FAILED tests/[^ ]*" log` hands `grep` that text
+        // and no file name, whatever files sit in the directory.
+        SearchValueRole::Pattern => {
+            !context.literal_words.iter().any(|word| word == value)
+                && literal_glob_names_sensitive_path(value)
+        }
         SearchValueRole::Other => false,
     }
 }

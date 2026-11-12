@@ -140,7 +140,7 @@ fn stdin_proof_cannot_open_files_or_recurse() {
     ] {
         let arguments: Vec<String> = arguments.into_iter().map(str::to_owned).collect();
         assert_eq!(
-            super::safe_stdin_arguments(&arguments),
+            super::safe_stdin_arguments(&arguments, &[]),
             allowed,
             "{arguments:?}"
         );
@@ -246,7 +246,7 @@ fn an_expandable_pattern_is_not_proven_stdin_text() {
     ] {
         let arguments: Vec<String> = command.split(' ').map(str::to_owned).collect();
         assert_eq!(
-            super::safe_stdin_arguments(&arguments),
+            super::safe_stdin_arguments(&arguments, &[]),
             proven,
             "grep {command}"
         );

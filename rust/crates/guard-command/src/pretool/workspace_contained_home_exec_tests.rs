@@ -49,6 +49,7 @@ fn parse(command: &str) -> crate::CanonicalCommandV1 {
 
 fn context<'a>(home: &'a Path, cwd: &'a Path, shell_home_matches: bool) -> PathContext<'a> {
     PathContext {
+        literal_words: &[],
         home_dir: home.to_str(),
         cwd: cwd.to_str(),
         shell_home_matches,

@@ -45,6 +45,11 @@ pub(crate) fn safe_grep_segment(
         plain: unplanted,
         recursive: unplanted,
     };
+    let words = crate::pretool::listing_reads::literal_words(&segment.text);
+    let context = ReadContext {
+        literal_words: &words,
+        ..context
+    };
     safe_arguments(&segment.arguments, context, false, absent)
 }
 
@@ -113,17 +118,18 @@ fn pathless_builtin(executable: &str) -> bool {
     )
 }
 
-pub(super) fn safe_stdin_arguments(arguments: &[String]) -> bool {
+/// `literal_words` are the segment's quoted words, as
+/// `listing_reads::literal_words` reads them.
+pub(super) fn safe_stdin_arguments(arguments: &[String], literal_words: &[String]) -> bool {
     let absent = AbsentOperands {
         plain: false,
         recursive: false,
     };
-    safe_arguments(
-        arguments,
-        crate::pretool::PathContext::default(),
-        true,
-        absent,
-    )
+    let context = crate::pretool::PathContext {
+        literal_words,
+        ..Default::default()
+    };
+    safe_arguments(arguments, context, true, absent)
 }
 
 fn safe_arguments(
@@ -493,6 +499,9 @@ fn proven_glob(value: &str, context: ReadContext<'_>) -> bool {
 #[cfg(test)]
 #[path = "grep_include_tests.rs"]
 mod include_tests;
+#[cfg(test)]
+#[path = "grep_quoted_pattern_tests.rs"]
+mod quoted_pattern_tests;
 #[cfg(test)]
 #[path = "grep_tests.rs"]
 mod tests;

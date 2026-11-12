@@ -51,6 +51,7 @@ pub(super) fn exact_safe_command(
         .position(|segment| segment.executable.as_deref() == Some("cd"))
         .and_then(|cd_index| verified_worktree_cwd_context(model, cd_index, context));
     let proof_context = super::PathContext {
+        literal_words: &[],
         home_dir: context.home_dir,
         cdpath_unset: context.cdpath_unset,
         rustup_override_absent: context.rustup_override_absent,

@@ -364,6 +364,7 @@ pub(in crate::pretool) fn exact_safe_cwd_compound(
             &operation.segments[0],
             false,
             crate::pretool::PathContext {
+                literal_words: &[],
                 home_dir: context.home_dir,
                 cdpath_unset: context.cdpath_unset,
                 rustup_override_absent: context.rustup_override_absent,
@@ -388,6 +389,7 @@ pub(in crate::pretool) fn exact_safe_cwd_compound(
                 segment,
                 allow_git_helper_context,
                 crate::pretool::PathContext {
+                    literal_words: &[],
                     home_dir: context.home_dir,
                     cdpath_unset: context.cdpath_unset,
                     rustup_override_absent: context.rustup_override_absent,
