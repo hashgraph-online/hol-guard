@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import base64
 from pathlib import Path
 
 from ci.gauntlet.extension_catalog_fixtures import CATALOG_PATH, CATALOG_SOURCE
@@ -45,13 +46,26 @@ PARENT_DOCUMENTS = {
     "docs/auth-evidence/phase-e-auth-schema.md": "# Phase E schema\n\nNotes on the account table.\n",
 }
 
+# A committed screenshot named for the screen it shows: a one-pixel PNG with a
+# density chunk, as a capture tool writes it. A recursive search reads pixels,
+# not text, so walking past it is not a credential read.
+PARENT_IMAGES = {
+    "docs/screens/auth-desktop-login.png": base64.b64decode(
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAACXBIWXMAABYlAAAWJQFJUiTwAAAAC0lEQVR4nGP4DwQACfsD/fteaysAAAAASUVORK5CYII="
+    ),
+}
+
 
 def write_parent_documents(parent: Path) -> None:
-    """Write the parent repository's committed top-level documents."""
+    """Write the parent repository's committed top-level documents and images."""
     for relative, text in PARENT_DOCUMENTS.items():
         target = parent / relative
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_text(text, encoding="utf-8")
+    for relative, data in PARENT_IMAGES.items():
+        target = parent / relative
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(data)
 
 
 def write_sibling_documents(sibling: Path) -> None:

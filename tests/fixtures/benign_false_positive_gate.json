@@ -1617,6 +1617,74 @@
       "expect": "not_allow"
     },
     {
+      "id": "grep-recursive-walks-past-tracked-screenshot",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "grep -rln \"Phase E\" docs"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "grep-text-mode-walks-past-tracked-screenshot",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "grep -a -rn schema docs"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "neg-grep-text-mode-over-env-backup",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "grep -a -rln \"edge.*setting\" ${HOME}/edge-clone/"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-grep-text-mode-docs-beside-env-backup",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "grep -a -rnv edge_session_marker docs ${HOME}/edge-clone/"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
       "id": "cargo-search-term",
       "fix_area": "shell",
       "harnesses": [
