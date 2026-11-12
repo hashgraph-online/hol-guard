@@ -150,3 +150,30 @@ def test_a_stalled_log_write_does_not_hold_the_reporting_thread(tmp_path, monkey
 
     assert written == ["first_failure", "second_notice"]
     assert writer.error("after_close", "error=RuntimeError") is False
+
+
+def test_the_writer_thread_appends_each_batch_itself(tmp_path, monkeypatch):
+    from codex_plugin_scanner.guard.runtime_health import diagnostics
+
+    writers: list[str] = []
+    finish = diagnostics.DaemonDiagnostics._finish_pending  # pyright: ignore[reportPrivateUsage]
+
+    def finish_pending(self):
+        writers.append(threading.current_thread().name)
+        finish(self)
+
+    monkeypatch.setattr(diagnostics.DaemonDiagnostics, "_finish_pending", finish_pending)
+    writer = BackgroundLogWriter(tmp_path)
+    try:
+        assert writer.error("first_failure", "error=RuntimeError") is True
+        assert _read_log_lines(tmp_path / "logs" / "daemon.log")
+        assert writer.error("second_failure", "error=RuntimeError") is True
+    finally:
+        assert writer.close(timeout_seconds=5.0) is True
+
+    # A drain on its own thread would outlive a stalled append and let the next
+    # batch start a second writer beside it.
+    assert writers
+    assert set(writers) == {"guard-background-log-writer"}
+    events = [json.loads(line)["event"] for line in (tmp_path / "logs" / "daemon.log").read_text().splitlines()]
+    assert events == ["first_failure", "second_failure"]

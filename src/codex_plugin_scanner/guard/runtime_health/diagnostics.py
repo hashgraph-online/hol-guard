@@ -169,6 +169,20 @@ class DaemonDiagnostics:
         drained.join(timeout=max(0.0, timeout_seconds))
         return not drained.is_alive()
 
+    def close_on_this_thread(self) -> None:
+        """Close and write every queued record on the calling thread.
+
+        No timeout: the caller waits as long as the disk takes. Only a thread
+        that nothing else waits on may call this; hook and request threads use
+        ``close``, whose bounded wait leaves a stalled write running behind it.
+        """
+
+        with self._close_lock:
+            if self._handler is None or self._closed:
+                return
+            self._closed = True
+        self._finish_pending()
+
     def _record(
         self,
         level: int,
@@ -295,4 +309,6 @@ class BackgroundLogWriter:
                 _ = diagnostics.record_background_notice(event, detail)
             else:
                 _ = diagnostics.record_background(event, detail)
-        _ = diagnostics.close(timeout_seconds=5.0)
+        # Synchronous, so a stalled append holds only this thread and later
+        # records wait in the bounded queue instead of starting a second writer.
+        diagnostics.close_on_this_thread()
