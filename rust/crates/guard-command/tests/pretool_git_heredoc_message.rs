@@ -64,6 +64,11 @@ fn literal_standard_input_fed_to_anything_else_stays_reviewed() {
         // standard input. Dropping the body would project a command that
         // leaves those bytes unaccounted for, which the proof does not do.
         "git commit -m 'feat(report): add the lane' <<'MSG'\nunused\nMSG",
+        // A comment disables the heredoc, so the shell runs its body as
+        // commands rather than handing it to the commit.
+        "git commit -F - # <<'MSG'\nrm -rf build\nMSG",
+        "git commit -F - #<<'MSG'\nrm -rf build\nMSG",
+        "cat # <<'MSG'\nrm -rf build\nMSG",
     ] {
         session.assert_not_allow(command);
     }

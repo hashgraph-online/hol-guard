@@ -17,6 +17,7 @@ pub(super) mod git_chain;
 mod leading_chain;
 #[path = "redirect_stdin.rs"]
 mod stdin;
+pub(super) use stdin::{heredoc_records_commit_message, heredoc_segment, skip_bodies};
 #[path = "redirect_targets.rs"]
 mod targets;
 
@@ -168,6 +169,7 @@ pub(super) fn project(
                 continue;
             }
             '<' if chars.get(index + 1) == Some(&'<') => {
+                heredoc_segment(&out)?;
                 index = remove_quoted_heredoc(&chars, index, &mut out, &mut heredocs)?;
                 saw_stdin_data = true;
                 removed = true;

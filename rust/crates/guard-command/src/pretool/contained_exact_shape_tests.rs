@@ -181,3 +181,25 @@ fn a_heredoc_commit_message_plans_as_the_message_it_passes() {
         assert!(!shaped(command, &ws), "{command}");
     }
 }
+
+/// A commit that takes its message from a quoted heredoc on standard input
+/// plans as the commit it runs. When Git's write proof cannot allow it, for
+/// example because a global hooks path runs a hook, the decision sends it to
+/// the sandbox, which must then be able to run it.
+#[test]
+fn a_commit_reading_its_message_from_a_heredoc_plans() {
+    let ws = tree("heredoc-stdin-message");
+    for command in [
+        "git commit -q --allow-empty -F - <<'MSG'\nchore(report): record the retry window\nMSG",
+        "git add -A && git commit -q -F - <<'MSG'\nfeat(report): add the lane\n\nBody.\nMSG",
+    ] {
+        assert!(shaped(command, &ws), "{command}");
+    }
+    for command in [
+        "git commit -F - <<MSG\n$(whoami)\nMSG",
+        "git apply <<'MSG'\ndiff --git a/x b/x\nMSG",
+        "sh <<'MSG'\nrm -rf build\nMSG",
+    ] {
+        assert!(!shaped(command, &ws), "{command}");
+    }
+}

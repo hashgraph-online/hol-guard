@@ -20,12 +20,26 @@ fn escape(chars: &mut std::iter::Peekable<std::str::Chars<'_>>, quote: char) -> 
 }
 
 pub(super) fn tokenize(code: &str) -> Option<Vec<Token>> {
+    tokenize_lines(code).map(|(tokens, _)| tokens)
+}
+
+/// Tokens, and for each one whether a line terminator came before it.
+///
+/// JavaScript inserts a semicolon after `return` when a line ends there, so a
+/// parser that reads `return` needs to know where the lines broke.
+pub(super) fn tokenize_lines(code: &str) -> Option<(Vec<Token>, Vec<bool>)> {
     let mut tokens = Vec::new();
+    let mut breaks = Vec::new();
+    let mut broke = false;
     let mut chars = code.chars().peekable();
     while let Some(&c) = chars.peek() {
         if c.is_ascii_whitespace() {
+            broke |= matches!(c, '\n' | '\r');
             chars.next();
-        } else if c.is_ascii_alphabetic() || c == '_' || c == '$' {
+            continue;
+        }
+        breaks.push(std::mem::take(&mut broke));
+        if c.is_ascii_alphabetic() || c == '_' || c == '$' {
             let mut ident = String::new();
             while let Some(&c) = chars.peek() {
                 if c.is_ascii_alphanumeric() || c == '_' || c == '$' {
@@ -81,5 +95,5 @@ pub(super) fn tokenize(code: &str) -> Option<Vec<Token>> {
             return None;
         }
     }
-    Some(tokens)
+    Some((tokens, breaks))
 }

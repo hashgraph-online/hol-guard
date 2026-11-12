@@ -189,9 +189,16 @@ def post_input_matches(tool: str, reviewed: dict[str, Any], completed: dict[str,
         return False
     # A bare `:raw` returns the whole file without line formatting, so its
     # result must still prove the same resolved source from the first line.
-    selector = re.fullmatch(r"(.+):(?:([1-9][0-9]*)(?:-([1-9][0-9]*))?|raw)", original)
+    # OMP also takes a line range combined with raw, in either order
+    # (`:1-5:raw`, `:raw:1-5`); the prelude's own located read uses the latter.
+    selector = re.fullmatch(
+        r"(.+?):(?:([1-9][0-9]*)(?:-([1-9][0-9]*))?(?::raw)?|raw(?::([1-9][0-9]*)(?:-([1-9][0-9]*))?)?)",
+        original,
+    )
     if selector:
-        base, first, last = selector.groups()
+        base, first, last, raw_first, raw_last = selector.groups()
+        if raw_first is not None:
+            first, last = raw_first, raw_last
         first = first or "1"
         if last is not None and int(last) < int(first):
             return False
