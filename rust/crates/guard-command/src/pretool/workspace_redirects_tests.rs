@@ -68,6 +68,11 @@ fn a_quoted_heredoc_carries_a_commit_message() {
             "git add -A && git commit -F- <<\"MSG\"\nfeat: add\nMSG",
             "git add -A && git commit -F-",
         ),
+        // A separator or `#` inside quotes is part of the word.
+        (
+            "git commit --author 'Dev #1 (bot) <dev@example.test>' -F - <<'MSG'\nfeat: add\nMSG",
+            "git commit --author 'Dev #1 (bot) <dev@example.test>' -F -",
+        ),
     ] {
         assert_eq!(project(raw).as_deref(), Some(projected), "{raw:?}");
     }
@@ -83,6 +88,9 @@ fn a_quoted_heredoc_carries_a_commit_message() {
         "git -C ../other commit -F - <<'MSG'\nfeat: add\nMSG",
         "GIT_DIR=../other/.git git commit -F - <<'MSG'\nfeat: add\nMSG",
         "env git commit -F - <<'MSG'\nfeat: add\nMSG",
+        // A comment disables the operator, so the shell runs the body.
+        "git commit -F - # <<'MSG'\nrm -rf build\nMSG",
+        "cat #<<'MSG'\nrm -rf build\nMSG",
     ] {
         assert_eq!(project(raw), None, "{raw:?}");
     }

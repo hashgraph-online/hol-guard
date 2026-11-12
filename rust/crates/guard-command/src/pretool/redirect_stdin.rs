@@ -56,16 +56,63 @@ pub(super) fn reads_data(model: &CanonicalCommandV1, separated_after: bool) -> b
     }
 }
 
-/// Whether `model` is exactly one plain `git commit` that takes its message
-/// from standard input. The workspace sandbox's own projection asks this of
-/// the segment a quoted heredoc feeds, so the sandbox can plan the commit the
-/// decision already routed to it.
-pub(super) fn commit_reads_message(model: &CanonicalCommandV1) -> bool {
-    model.wrapper_chain.is_empty()
-        && !model.path_overridden
-        && model.segments.len() == 1
-        && segment_reads_data(&model.segments[0])
-        && model.segments[0].executable.as_deref() == Some("git")
+/// Whether `segment` is one plain `git commit -F -`, which reads a quoted
+/// heredoc only as the message it records, with nothing else reading standard
+/// input. The decision's projection already lets such a commit take the
+/// bytes; the workspace sandbox's projection asks the same question of the
+/// segment a heredoc feeds, so a commit routed to the sandbox can be planned.
+pub(in crate::pretool) fn heredoc_records_commit_message(segment: &str) -> bool {
+    crate::parse_command(&crate::CommandModelRequestV1 {
+        command: segment.to_owned(),
+        dialect: "posix".into(),
+        transport: "shell_string".into(),
+        extraction_provenance: "pre-tool-generic".into(),
+    })
+    .is_ok_and(|model| {
+        model.confidence == "exact"
+            && model.uncertainty_reason.is_none()
+            && model.wrapper_chain.is_empty()
+            && !model.path_overridden
+            && model.segments.len() == 1
+            && segment_reads_data(&model.segments[0])
+            && model.segments[0].executable.as_deref() == Some("git")
+    })
+}
+
+/// The command a heredoc operator at the end of `out` belongs to: the text
+/// after the last unquoted separator. `None` when a comment is open there,
+/// because the shell then ignores the operator and runs the lines meant as
+/// its body as commands.
+pub(in crate::pretool) fn heredoc_segment(out: &str) -> Option<&str> {
+    let (mut quote, mut escaped, mut commented) = (Quote::None, false, false);
+    let (mut start, mut word_start) = (0, true);
+    for (position, value) in out.char_indices() {
+        let at_word_start = std::mem::replace(&mut word_start, false);
+        if escaped {
+            escaped = false;
+            continue;
+        }
+        // A comment runs to the end of its line, quotes and all.
+        if commented {
+            if value == '\n' {
+                (commented, start, word_start) = (false, position + 1, true);
+            }
+            continue;
+        }
+        match (quote, value) {
+            (Quote::Single, '\'') | (Quote::Double, '"') => quote = Quote::None,
+            (Quote::Double | Quote::None, '\\') => escaped = true,
+            (Quote::Single | Quote::Double, _) => {}
+            (Quote::None, '\'') => quote = Quote::Single,
+            (Quote::None, '"') => quote = Quote::Double,
+            (Quote::None, '#') if at_word_start => commented = true,
+            (Quote::None, ';' | '|' | '&' | '\n' | '(' | ')' | '{' | '}') => {
+                (start, word_start) = (position + 1, true);
+            }
+            (Quote::None, value) => word_start = value.is_whitespace(),
+        }
+    }
+    (!commented).then(|| &out[start..])
 }
 
 /// Whether one segment, spelled plainly by name with no wrapper, environment
@@ -228,6 +275,37 @@ fn plain_expansion(chars: &[char], start: usize) -> Option<usize> {
     }
     if index == start || chars.get(index) != Some(&'}') {
         return None;
+    }
+    Some(index)
+}
+
+/// Skips the bodies of the pending heredocs in order, as
+/// `skip_heredoc_bodies` does. A body that feeds Python must use only its
+/// builtins, the same check the extension controls apply to such a program.
+pub(in crate::pretool) fn skip_bodies(
+    chars: &[char],
+    mut index: usize,
+    heredocs: &mut Vec<(String, bool)>,
+    programs: &mut Vec<bool>,
+) -> Option<usize> {
+    if heredocs.len() != programs.len() {
+        return None;
+    }
+    for (heredoc, program) in heredocs.drain(..).zip(programs.drain(..)) {
+        let start = index;
+        index = super::skip_heredoc_bodies(chars, index, &mut vec![heredoc])?;
+        if program {
+            let text: String = chars[start..index].iter().collect();
+            let text = text.strip_suffix('\n').unwrap_or(&text);
+            // The last line is the delimiter.
+            let body: Vec<&str> = match text.rsplit_once('\n') {
+                Some((body, _)) => body.split('\n').collect(),
+                None => Vec::new(),
+            };
+            if !crate::native_command_controls::python_is_builtin_only(&body) {
+                return None;
+            }
+        }
     }
     Some(index)
 }

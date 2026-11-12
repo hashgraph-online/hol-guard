@@ -17,6 +17,7 @@ pub(super) mod git_chain;
 mod leading_chain;
 #[path = "redirect_stdin.rs"]
 mod stdin;
+pub(super) use stdin::{heredoc_records_commit_message, heredoc_segment, skip_bodies};
 #[path = "redirect_targets.rs"]
 mod targets;
 
@@ -168,6 +169,7 @@ pub(super) fn project(
                 continue;
             }
             '<' if chars.get(index + 1) == Some(&'<') => {
+                heredoc_segment(&out)?;
                 index = remove_quoted_heredoc(&chars, index, &mut out, &mut heredocs)?;
                 saw_stdin_data = true;
                 removed = true;
@@ -602,24 +604,6 @@ fn remove_input_redirect(
     // the removed redirect needs none of its own.
     *input_source = Some(target);
     Some(index)
-}
-
-/// Whether `segment` is one plain `git commit -F -`, which reads a quoted
-/// heredoc only as the message it records. The decision's projection already
-/// lets such a commit take the bytes; the workspace sandbox's projection asks
-/// the same question, so a commit routed to the sandbox can be planned there.
-pub(super) fn heredoc_records_commit_message(segment: &str) -> bool {
-    crate::parse_command(&CommandModelRequestV1 {
-        command: segment.to_owned(),
-        dialect: "posix".into(),
-        transport: "shell_string".into(),
-        extraction_provenance: "pre-tool-generic".into(),
-    })
-    .is_ok_and(|model| {
-        model.confidence == "exact"
-            && model.uncertainty_reason.is_none()
-            && stdin::commit_reads_message(&model)
-    })
 }
 
 pub(super) fn remove_quoted_heredoc(
