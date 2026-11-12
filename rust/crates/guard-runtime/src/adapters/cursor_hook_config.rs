@@ -16,6 +16,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use serde_json::{json, Map, Value};
 
 use super::cursor_hook_command::{py_space, Syntax};
+use super::cursor_hook_rebind::{self, REBIND_KEYS};
 use super::runner_authority_detector::args_object;
 use super::runner_authority_op::{KindResult, ERR_INVALID};
 
@@ -62,7 +63,8 @@ pub(crate) fn dispatch(args: &Value) -> KindResult {
         "entries" => &["entries", "command"],
         "commands" | "intercept" => &["hooks"],
         "install" => &["payload", "top_keys", "hooks_keys", "managed", "script"],
-        "script" => &["source"],
+        "script" | "ephemeral" => &["source"],
+        "rebind" => REBIND_KEYS,
         _ => return Err(ERR_INVALID),
     };
     if map.len() != SHARED_KEYS.len() + keys.len()
@@ -81,6 +83,8 @@ pub(crate) fn dispatch(args: &Value) -> KindResult {
         "commands" => commands(&mut syntax, &pairs(&map["hooks"])?),
         "intercept" => intercept(&mut syntax, &pairs(&map["hooks"])?),
         "install" => install(&mut syntax, map)?,
+        "ephemeral" => cursor_hook_rebind::ephemeral(&syntax, text(&map["source"])?),
+        "rebind" => cursor_hook_rebind::rebind(&mut syntax, map)?,
         _ => script(text(&map["source"])?),
     };
     answer["short_tokens"] = json!(syntax.short_tokens());
@@ -210,10 +214,14 @@ fn intercept(syntax: &mut Syntax, hooks: &Pairs<'_>) -> Value {
 }
 
 fn script(source: &str) -> Value {
-    let managed = source.contains(MANAGED_DOCSTRING)
+    json!({ "managed": is_managed_script(source) })
+}
+
+/// `_is_managed_hook_script`.
+pub(crate) fn is_managed_script(source: &str) -> bool {
+    source.contains(MANAGED_DOCSTRING)
         && source.contains("\nGUARD_CLI =")
-        && source.contains("\nGUARD_RECOVERY_COMMAND =");
-    json!({ "managed": managed })
+        && source.contains("\nGUARD_RECOVERY_COMMAND =")
 }
 
 /// One event of the installed hooks object.

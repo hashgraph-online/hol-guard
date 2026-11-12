@@ -40,6 +40,9 @@ PARENT_DOCUMENTS = {
     "README.md": "# Parent\n",
     CATALOG_PATH: CATALOG_SOURCE,
     "deploy/app-secrets.yaml": "apiVersion: v1\nkind: Secret\nmetadata:\n  name: app\ndata:\n  mode: cHJvZA==\n",
+    # Named for a feature, not a store: `auth-evidence/` is to auth what
+    # `auth-service/` is, and the document's own name carries the same word.
+    "docs/auth-evidence/phase-e-auth-schema.md": "# Phase E schema\n\nNotes on the account table.\n",
 }
 
 

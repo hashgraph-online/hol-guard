@@ -180,7 +180,15 @@ def test_a_launcher_beyond_the_path_bound_is_still_read(tmp_path: Path) -> None:
         elsewhere.append(str(extra))
     manifest = {**store.install["manifest"], "later": elsewhere}  # type: ignore[dict-item]
 
-    assert reconciliation._manifest_file_paths(manifest)[0] == launcher
+    assert launcher.is_file()
+    assert _launches_stale("cline", {"manifest": manifest}, store.guard_home)
+
+
+def _launches_stale(
+    harness: str, install: dict[str, object], guard_home: Path, extra_paths: tuple[Path, ...] = ()
+) -> bool:
+    entry = reconciliation._ScanEntry(harness, install, extra_paths, True)
+    return reconciliation._scan_installs([entry], current_digest=None, guard_home=guard_home.resolve())[harness]
 
 
 # The launcher grammar itself is covered by hook_launch_scan_tests.rs.
@@ -280,10 +288,12 @@ def test_a_real_zcode_cli_setting_file_is_read_though_its_manifest_omits_it(tmp_
         change.path.write_bytes(change.after or b"")
     install = {"harness": "zcode", "manifest": {"config_path": str(cli_root / "config.json")}}
 
-    assert not reconciliation._launches_stale_client("zcode", install, context, None)
+    planned = reconciliation._planned_artifact_paths
+
+    assert not _launches_stale("zcode", install, context.guard_home, planned("zcode", context))
 
     setting = cli_root / "setting.json"
     setting.write_text(setting.read_text(encoding="utf-8").replace(_current(), _FOREIGN), encoding="utf-8")
 
     assert _FOREIGN in setting.read_text(encoding="utf-8")
-    assert reconciliation._launches_stale_client("zcode", install, context, None)
+    assert _launches_stale("zcode", install, context.guard_home, planned("zcode", context))

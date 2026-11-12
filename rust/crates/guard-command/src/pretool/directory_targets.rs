@@ -611,6 +611,23 @@ impl<'a> super::PathContext<'a> {
                     )
             }
         };
+        // OpenSSL reads its configuration from `OPENSSL_CONF`, and that file
+        // can load a provider or engine from `OPENSSL_MODULES` or
+        // `OPENSSL_ENGINES`. The default file is the system one. A stamped
+        // environment carries names without values, so any name counts.
+        let openssl_config_absent = match execution_environment {
+            Some(environment) => {
+                environment.has_valid_shape()
+                    && !environment.environment_names.iter().any(|name| {
+                        OPENSSL_CONFIG_NAMES
+                            .iter()
+                            .any(|known| name.eq_ignore_ascii_case(known))
+                    })
+            }
+            None => OPENSSL_CONFIG_NAMES
+                .iter()
+                .all(|name| std::env::var_os(name).is_none_or(|value| value.is_empty())),
+        };
         // The shell expands `~` from its own HOME: the stamped one, or the
         // runtime's when no environment was stamped.
         let shell_home = match execution_environment {
@@ -641,6 +658,7 @@ impl<'a> super::PathContext<'a> {
             ripgrep_config_absent,
             gem_config_absent,
             http_config_absent,
+            openssl_config_absent,
             // A session knows its environment, not the command, so the
             // proof that no step creates a filesystem entry is set where a
             // command model is in hand.
@@ -651,6 +669,12 @@ impl<'a> super::PathContext<'a> {
 }
 
 const RIPGREP_CONFIG_NAME: &str = "RIPGREP_CONFIG_PATH";
+const OPENSSL_CONFIG_NAMES: [&str; 4] = [
+    "OPENSSL_CONF",
+    "OPENSSL_CONF_INCLUDE",
+    "OPENSSL_MODULES",
+    "OPENSSL_ENGINES",
+];
 
 /// The variables that hand a RubyGems query configuration or code.
 const GEM_CONFIG_NAMES: [&str; 4] = ["GEMRC", "RUBYOPT", "RUBYLIB", "RUBYGEMS_GEMDEPS"];

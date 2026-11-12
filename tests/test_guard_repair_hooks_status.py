@@ -33,13 +33,20 @@ def _setup(
     return context, store
 
 
+def _repair(context: HarnessContext, store: GuardStore) -> tuple[dict[str, object], dict[str, object]]:
+    result = repair_engine._hooks_result(context, store, dry_run=False)
+    report = repair_engine.build_report([result], dry_run=False)
+    steps = report["steps"]
+    assert isinstance(steps, list)
+    return steps[0], report
+
+
 def test_hooks_that_stay_broken_after_reinstall_are_skipped_not_repaired(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     context, store = _setup(tmp_path, monkeypatch, still_broken={"codex", "claude-code"})
 
-    step = repair_engine.repair_hooks(context, store, dry_run=False)
-    report = repair_engine.build_report([step], dry_run=False)
+    step, report = _repair(context, store)
 
     assert step["status"] == "skipped"
     assert step["repaired"] == []
@@ -55,13 +62,12 @@ def test_hooks_that_stay_broken_after_reinstall_are_skipped_not_repaired(
 def test_mixed_outcome_reports_changed_and_names_remaining_app(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     context, store = _setup(tmp_path, monkeypatch, still_broken={"codex"})
 
-    step = repair_engine.repair_hooks(context, store, dry_run=False)
+    step, report = _repair(context, store)
 
     assert step["status"] == "changed"
     assert step["repaired"] == ["claude-code"]
     assert step["needs_attention"] == ["codex"]
     assert "Still needs attention: codex" in str(step["summary"])
-    report = repair_engine.build_report([step], dry_run=False)
     assert report["status"] == "partial"
     assert "Guard was repaired" not in str(report["summary"])
     assert "Some steps failed" not in str(report["summary"])
@@ -89,8 +95,7 @@ def test_failed_post_reinstall_check_leaves_apps_unresolved(tmp_path: Path, monk
 
     monkeypatch.setattr(repair_engine, "broken_hook_harnesses", flaky_broken)
 
-    step = repair_engine.repair_hooks(context, store, dry_run=False)
-    report = repair_engine.build_report([step], dry_run=False)
+    step, report = _repair(context, store)
 
     assert step["status"] == "skipped"
     assert step["repaired"] == []
@@ -107,8 +112,7 @@ def test_a_failed_step_still_asks_for_another_run(tmp_path: Path, monkeypatch: p
         raise RuntimeError("install blew up")
 
     monkeypatch.setattr(install_commands, "apply_managed_install", failing_install)
-    step = repair_engine.repair_hooks(context, store, dry_run=False)
-    report = repair_engine.build_report([step], dry_run=False)
+    step, report = _repair(context, store)
 
     assert step["status"] == "error"
     assert "Some steps failed. Re-run `hol-guard repair`" in str(report["summary"])
@@ -118,13 +122,17 @@ def test_budget_exhausted_cleanup_still_asks_for_another_run(tmp_path: Path, mon
     """A step that ran out of budget left work behind, even when another step waits on the user."""
 
     context, store = _setup(tmp_path, monkeypatch, still_broken={"codex"})
-    hooks = repair_engine.repair_hooks(context, store, dry_run=False)
-    leaks = {
+    hooks = repair_engine._hooks_result(context, store, dry_run=False)
+    leaks: dict[str, object] = {
         "step": "onefile_leaks",
-        "title": "Leaked extraction folders",
-        "status": "changed",
-        "summary": "Reclaimed 25 leaked folder(s), about 40 MB. Run repair again to continue.",
-        "budget_exhausted": True,
+        "result": {
+            "reclaimed_count": 25,
+            "reclaimed_bytes": 40 * 1024 * 1024,
+            "unmarked_count": 3,
+            "unmarked_scan": "complete",
+            "budget_exhausted": True,
+            "error_count": 0,
+        },
     }
 
     report = repair_engine.build_report([leaks, hooks], dry_run=False)

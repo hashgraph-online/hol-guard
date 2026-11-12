@@ -249,10 +249,24 @@ def test_only_the_marked_cases_may_pass_on_containment() -> None:
         # nothing above the workspace to reach, so the pattern names only what
         # the sandbox already holds.
         "neg-hidden-glob-stands-for-dot-directories",
+        # A glob that matches only a dotfile, or names a directory that is not
+        # there, keeps its review; a contained run reads only the workspace copy.
+        "neg-read-glob-matching-only-dotfile",
+        "neg-read-glob-in-missing-directory",
         # A pattern that is a credential word and an unconstrained tail expands onto the
         # command line as the files beside it, so the second one becomes the file the
         # filter opens; a contained run has no home access and reads none of them.
         "neg-grep-credential-bare-wildcard-pattern",
+        # A second pattern, or an escaped alternative, that matches a plugin
+        # manifest keeps the review; a contained run reads only the workspace
+        # copy and has no home access.
+        "neg-grep-second-pattern-matching-plugin-manifest",
+        "neg-grep-escaped-alternative-matching-plugin-manifest",
+        # A recursive grep in the worktree whose late exclusion the scan does not
+        # prove keeps its review. A contained run reads only the workspace copy the
+        # sandbox already holds, with no home or network reach.
+        "neg-grep-late-exclude-dir-separated-value",
+        "neg-grep-late-exclude-beside-include",
         # The pattern exemption's own negatives: the producer opens a dotenv
         # file, dumps the environment, or names one as a pathspec, so the
         # credential word is never the only signal. A contained run has no home
@@ -262,6 +276,10 @@ def test_only_the_marked_cases_may_pass_on_containment() -> None:
         "neg-printenv-piped-into-grep",
         "neg-git-grep-pattern-with-dotenv-path",
         "neg-ls-home-missing-key-in-hidden-directory",
+        # A digest written to a file with -out keeps its review; a contained run
+        # writes only into a disposable workspace copy, so nothing the host
+        # keeps is created or overwritten.
+        "neg-openssl-dgst-writes-output",
         # A cache verb, a key write, a host this machine does not own and a
         # credential on the line: each keeps its review, and a contained run has
         # no network for any of them, so no server is reached, nothing it holds
@@ -287,6 +305,8 @@ def test_only_the_marked_cases_may_pass_on_containment() -> None:
         # flag is intentionally excluded: it can damage the writable worktree.
         "neg-sed-substitute-chained-write-command",
         "neg-sed-substitute-second-expression-writes-a-file",
+        "neg-sed-delete-then-write-file",
+        "neg-sed-addressed-substitution-write-flag",
         # A `cat` that names a private key after a sibling run: the review stands,
         # and a contained run in the sibling root reaches no key at all.
         "neg-sibling-cd-jest-cat-reads-private-key",

@@ -37,7 +37,7 @@ from .opencode_pretool import (
     pretool_plugin_source,
     remove_pretool_plugin,
 )
-from .state_files import load_backup_payload, load_string_state_payload
+from .state_files import load_string_state_payload, restore_from_backup
 
 if TYPE_CHECKING:
     from ..runtime_transition import TransitionFile
@@ -277,23 +277,11 @@ class OpenCodeHarnessAdapter(HarnessAdapter):
         backup_path = self._backup_path_from_state(context, state_payload, target_config_path)
         state_cleanup_complete = False
         if backup_path.is_file():
-            backup_payload = self._backup_payload(backup_path)
-            if backup_payload["readable"] is not True:
-                pass
-            elif backup_payload["existed"]:
-                original_text = backup_payload["content"]
-                if isinstance(original_text, str):
-                    target_config_path.parent.mkdir(parents=True, exist_ok=True)
-                    target_config_path.write_text(original_text, encoding="utf-8")
-                    backup_path.unlink()
-                    state_cleanup_complete = True
-            elif target_config_path.is_file():
-                target_config_path.unlink()
+            state_cleanup_complete = restore_from_backup(
+                backup_path, target_config_path, write=lambda path, text: path.write_text(text, encoding="utf-8")
+            )
+            if state_cleanup_complete:
                 backup_path.unlink()
-                state_cleanup_complete = True
-            else:
-                backup_path.unlink()
-                state_cleanup_complete = True
         if state_cleanup_complete and state_path.is_file():
             state_path.unlink()
         shim_manifest = remove_guard_shim(self.harness, context)
@@ -434,8 +422,6 @@ class OpenCodeHarnessAdapter(HarnessAdapter):
             return Path(backup_path)
         digest = hashlib.sha256(str(target_config_path.resolve()).encode("utf-8")).hexdigest()[:12]
         return context.guard_home / "managed" / "opencode" / f"{digest}.backup.json"
-
-    _backup_payload = staticmethod(load_backup_payload)
 
 
 __all__ = ["OpenCodeHarnessAdapter", "OpenCodeInstallConfigError"]

@@ -59,6 +59,7 @@ fn every_guard_the_home_projection_applies_admits_a_plain_cd() {
         ripgrep_config_absent: false,
         gem_config_absent: false,
         http_config_absent: false,
+        openssl_config_absent: false,
         psql_environment: Default::default(),
         creates_nothing: false,
     };

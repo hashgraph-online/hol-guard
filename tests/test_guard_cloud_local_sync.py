@@ -487,14 +487,19 @@ def test_build_runtime_snapshot_calls_oauth_health_once(tmp_path: Path, monkeypa
 
 
 def test_runtime_snapshot_reuses_one_store_connection(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    store = GuardStore(tmp_path / "guard-home")
+    guard_home = tmp_path / "guard-home"
+    store = GuardStore(guard_home)
     provision_native_verifier_key_for_store(store)
     opened = 0
     original = sqlite3.connect
 
+    # The patch is process wide, so count only this store's opens: a thread an
+    # earlier test on the same worker left running opens its own databases.
     def counted_connect(*args, **kwargs):
         nonlocal opened
-        opened += 1
+        database = args[0] if args else kwargs.get("database", "")
+        if str(guard_home) in os.fsdecode(database):
+            opened += 1
         return original(*args, **kwargs)
 
     # Count from a cold start: a connection kept from setup would hide an

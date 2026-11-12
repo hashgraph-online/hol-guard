@@ -39,6 +39,13 @@ PAGER_CASES = [
     ("less -Ttags", False),
     ("less -Pprompt", False),
     ("less -+R", False),
+    # Cursor's agent terminal pager, exactly as Cursor exports it.
+    ('sh -c "head -n 10000 | cat"', True),
+    ('sh -c "head -n 10000 | cat; touch x"', False),
+    ('sh -c "head -n 10000 | tee x"', False),
+    ("sh -c 'head -n 10000 | cat'", False),
+    ('sh -c "head -n 10000 | cat" x', False),
+    ('bash -c "head -n 10000 | cat"', False),
 ]
 
 
