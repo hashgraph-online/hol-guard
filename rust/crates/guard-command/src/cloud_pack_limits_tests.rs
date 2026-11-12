@@ -101,3 +101,11 @@ fn a_closing_bracket_cannot_carry_the_body_past_its_limit() {
     );
     assert!(body(MAX_BODY_BYTES - 7).is_err());
 }
+
+#[test]
+fn an_error_fixture_cannot_also_expect_decisions() {
+    let pack = edit_action("slack.chat.post_message", |action| {
+        action["fixtures"][1]["expect"]["decisions"] = json!({"balanced": "allow"});
+    });
+    assert_eq!(code(pack), "cloud_pack_fixtures_invalid");
+}

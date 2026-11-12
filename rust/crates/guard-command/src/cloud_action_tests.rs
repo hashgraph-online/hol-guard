@@ -2,11 +2,14 @@ mod activation;
 mod bindings;
 mod canonical;
 mod catalog;
+mod classifier;
 mod consent;
 mod differential;
 mod intake;
 mod parity;
 mod policy;
+mod policy_pack;
+mod presets;
 mod v2;
 mod v2_consent;
 

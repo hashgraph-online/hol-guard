@@ -13,11 +13,14 @@
 //! | `render`   | pack, `actionId`, `arguments`      | exact request              |
 //! | `extract`  | pack, `actionId`, `arguments`      | action facts v2            |
 //! | `project`  | pack, `actionId`, `response` text  | projection and labels      |
+//! | `policy`   | `preset` name or `policyPack`      | fact rules and pack digest |
+//! | `classify` | `name`, optional `inputSchema`, optional `preset` or `policyPack` | class proposal and unclassified action |
 //!
 //! Results are `{"ok":true,...}` or `{"ok":false,"error":{"code":..}}`. A
 //! request never reaches the network: rendering builds a request a host sends.
 
 use crate::cloud_action_canonical::parse_strict;
+use crate::cloud_action_classifier::classify;
 use crate::cloud_action_serve::{read_line, Line};
 use crate::cloud_pack::{pack_from_value, CloudActionPack, PackAction, PackError};
 use crate::cloud_pack_artifact::{compile, load_value, ARTIFACT_SCHEMA};
@@ -26,6 +29,7 @@ use crate::cloud_pack_facts::extract;
 use crate::cloud_pack_fixtures::run;
 use crate::cloud_pack_request::{check_arguments, render, ArgumentError};
 use crate::cloud_pack_response::project;
+use crate::cloud_policy_pack::{policy_pack_from_value, shipped, PolicyPack, Preset};
 use serde_json::{json, Map, Value};
 use std::io::{self, Write};
 
@@ -106,6 +110,28 @@ fn answer_op(op: &str, mut request: Map<String, Value>) -> Result<Value, Value> 
             let new = either(&mut request, "new")?;
             json!({ "diff": diff(&old, &new).map_err(pack_error)? })
         }
+        "policy" => {
+            let pack = policy(&mut request)?;
+            json!({
+                "preset": pack.preset,
+                "packDigest": pack.digest(),
+                "factRules": pack.fact_rules(),
+                "unclassified": pack.unclassified,
+            })
+        }
+        "classify" => {
+            let Some(Value::String(name)) = request.remove("name") else {
+                return Err(refuse("request_invalid", Some("/name")));
+            };
+            let schema = request.remove("inputSchema");
+            let proposal = classify(&name, schema.as_ref());
+            let mut result = json!({ "proposal": proposal });
+            if request.contains_key("policyPack") || request.contains_key("preset") {
+                let pack = policy(&mut request)?;
+                result["action"] = json!(pack.unclassified_action(&proposal));
+            }
+            result
+        }
         "render" | "extract" | "project" => return answer_action(op, request),
         _ => return Err(refuse("op_unsupported", Some("/op"))),
     };
@@ -157,6 +183,21 @@ fn source(request: &mut Map<String, Value>, key: &str) -> Result<CloudActionPack
         .remove(key)
         .ok_or_else(|| refuse("request_invalid", Some(&format!("/{key}"))))?;
     pack_from_value(value).map_err(pack_error)
+}
+
+/// A `policyPack` document, or a shipped `preset` by name.
+fn policy(request: &mut Map<String, Value>) -> Result<PolicyPack, Value> {
+    if let Some(name) = request.remove("preset") {
+        return name
+            .as_str()
+            .and_then(Preset::parse)
+            .map(|preset| shipped(preset).clone())
+            .ok_or_else(|| refuse("preset_unknown", Some("/preset")));
+    }
+    let value = request
+        .remove("policyPack")
+        .ok_or_else(|| refuse("request_invalid", Some("/policyPack")))?;
+    policy_pack_from_value(value).map_err(pack_error)
 }
 
 /// A source pack, or the pack inside a compiled artifact.

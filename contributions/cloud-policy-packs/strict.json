@@ -1,0 +1,395 @@
+{
+  "schema": "guard.cloud-policy-pack.v1",
+  "preset": "strict",
+  "title": "Strict",
+  "summary": "Reviews every change and blocks irreversible, public and money-out actions.",
+  "windows": [
+    {
+      "id": "recoverable_deletes_1h",
+      "seconds": 3600,
+      "counts": "Records deleted recoverably on one connection."
+    }
+  ],
+  "unclassified": {
+    "action": "block",
+    "destructive_name_action": "block"
+  },
+  "rules": [
+    {
+      "family": "base",
+      "summary": "Drafts are allowed. Reads are allowed by the read default.",
+      "rule": {
+        "rule_id": "strict.r00.draft",
+        "action": "allow",
+        "match": {
+          "action_id": "*"
+        },
+        "facts": {
+          "classes": [
+            "draft"
+          ]
+        }
+      }
+    },
+    {
+      "family": "R1",
+      "summary": "Permanent delete.",
+      "rule": {
+        "rule_id": "strict.r01.permanent_delete",
+        "action": "block",
+        "match": {
+          "action_id": "*"
+        },
+        "facts": {
+          "classes": [
+            "delete"
+          ],
+          "reversibility": [
+            "permanent"
+          ]
+        }
+      }
+    },
+    {
+      "family": "R2",
+      "summary": "Recoverable delete or archive.",
+      "rule": {
+        "rule_id": "strict.r02.recoverable_delete",
+        "action": "review",
+        "match": {
+          "action_id": "*"
+        },
+        "facts": {
+          "classes": [
+            "delete"
+          ],
+          "reversibility": [
+            "recoverable",
+            "reversible"
+          ]
+        }
+      }
+    },
+    {
+      "family": "R3",
+      "summary": "Destroying or truncating a database or table.",
+      "rule": {
+        "rule_id": "strict.r03.database_delete",
+        "action": "block",
+        "match": {
+          "action_id": "*"
+        },
+        "facts": {
+          "classes": [
+            "delete",
+            "admin"
+          ],
+          "objects": [
+            "database",
+            "table"
+          ]
+        }
+      }
+    },
+    {
+      "family": "R3",
+      "summary": "Destroying or truncating a database or table.",
+      "rule": {
+        "rule_id": "strict.r03.database_truncate",
+        "action": "block",
+        "match": {
+          "action_id": "*"
+        },
+        "facts": {
+          "classes": [
+            "execute"
+          ],
+          "reversibility": [
+            "permanent"
+          ],
+          "objects": [
+            "database",
+            "table"
+          ]
+        }
+      }
+    },
+    {
+      "family": "R7",
+      "summary": "Sharing publicly or with anyone who has the link.",
+      "rule": {
+        "rule_id": "strict.r07.public_share",
+        "action": "block",
+        "match": {
+          "action_id": "*"
+        },
+        "facts": {
+          "classes": [
+            "share"
+          ],
+          "audience_kinds": [
+            "public"
+          ]
+        }
+      }
+    },
+    {
+      "family": "R10",
+      "summary": "Money out.",
+      "rule": {
+        "rule_id": "strict.r10.money_out",
+        "action": "block",
+        "match": {
+          "action_id": "*"
+        },
+        "facts": {
+          "classes": [
+            "pay"
+          ],
+          "money_directions": [
+            "out"
+          ]
+        }
+      }
+    },
+    {
+      "family": "R12",
+      "summary": "A secret in the arguments of an action that sends, shares, updates or runs.",
+      "rule": {
+        "rule_id": "strict.r12.secret_leaving",
+        "action": "block",
+        "match": {
+          "action_id": "*"
+        },
+        "facts": {
+          "findings": [
+            "secret_in_arguments"
+          ],
+          "classes": [
+            "send",
+            "share",
+            "update",
+            "execute"
+          ]
+        }
+      }
+    },
+    {
+      "family": "R13",
+      "summary": "The session read untrusted content and sensitive data, and this action can send data out.",
+      "rule": {
+        "rule_id": "strict.r13.trifecta",
+        "action": "block",
+        "match": {
+          "action_id": "*"
+        },
+        "facts": {
+          "session": [
+            "untrusted_content_seen",
+            "sensitive_data_seen",
+            "egress"
+          ]
+        }
+      }
+    },
+    {
+      "family": "R14",
+      "summary": "An injection signal earlier in the session, then a permanent delete.",
+      "rule": {
+        "rule_id": "strict.r14.injection_then_permanent_delete",
+        "action": "block",
+        "match": {
+          "action_id": "*"
+        },
+        "facts": {
+          "session": [
+            "injection_signal_seen"
+          ],
+          "classes": [
+            "delete"
+          ],
+          "reversibility": [
+            "permanent"
+          ]
+        }
+      }
+    },
+    {
+      "family": "R14",
+      "summary": "An injection signal earlier in the session, then a database or table change.",
+      "rule": {
+        "rule_id": "strict.r14.injection_then_database_change",
+        "action": "block",
+        "match": {
+          "action_id": "*"
+        },
+        "facts": {
+          "session": [
+            "injection_signal_seen"
+          ],
+          "classes": [
+            "delete",
+            "admin"
+          ],
+          "objects": [
+            "database",
+            "table"
+          ]
+        }
+      }
+    },
+    {
+      "family": "R14",
+      "summary": "An injection signal earlier in the session, then a truncating execute.",
+      "rule": {
+        "rule_id": "strict.r14.injection_then_truncate",
+        "action": "block",
+        "match": {
+          "action_id": "*"
+        },
+        "facts": {
+          "session": [
+            "injection_signal_seen"
+          ],
+          "classes": [
+            "execute"
+          ],
+          "reversibility": [
+            "permanent"
+          ],
+          "objects": [
+            "database",
+            "table"
+          ]
+        }
+      }
+    },
+    {
+      "family": "R14",
+      "summary": "An injection signal earlier in the session, then money out.",
+      "rule": {
+        "rule_id": "strict.r14.injection_then_money_out",
+        "action": "block",
+        "match": {
+          "action_id": "*"
+        },
+        "facts": {
+          "session": [
+            "injection_signal_seen"
+          ],
+          "classes": [
+            "pay"
+          ],
+          "money_directions": [
+            "out"
+          ]
+        }
+      }
+    },
+    {
+      "family": "R15",
+      "summary": "A merge or push to a branch, or a repository change.",
+      "rule": {
+        "rule_id": "strict.r15.branch_change",
+        "action": "block",
+        "match": {
+          "action_id": "*"
+        },
+        "facts": {
+          "classes": [
+            "update",
+            "execute"
+          ],
+          "objects": [
+            "branch",
+            "repository"
+          ]
+        }
+      }
+    },
+    {
+      "family": "R15",
+      "summary": "A production deployment. An unknown environment counts as production.",
+      "rule": {
+        "rule_id": "strict.r15.production_deploy",
+        "action": "block",
+        "match": {
+          "action_id": "*"
+        },
+        "facts": {
+          "objects": [
+            "deployment"
+          ],
+          "environments": [
+            "production"
+          ]
+        }
+      }
+    },
+    {
+      "family": "R15",
+      "summary": "Writing or sharing a secret.",
+      "rule": {
+        "rule_id": "strict.r15.secret_write",
+        "action": "block",
+        "match": {
+          "action_id": "*"
+        },
+        "facts": {
+          "classes": [
+            "update",
+            "share",
+            "execute",
+            "send"
+          ],
+          "objects": [
+            "secret"
+          ]
+        }
+      }
+    },
+    {
+      "family": "R15",
+      "summary": "Deleting a branch.",
+      "rule": {
+        "rule_id": "strict.r15.branch_delete",
+        "action": "block",
+        "match": {
+          "action_id": "*"
+        },
+        "facts": {
+          "classes": [
+            "delete"
+          ],
+          "objects": [
+            "branch"
+          ]
+        }
+      }
+    },
+    {
+      "family": "R15",
+      "summary": "Rewriting branch history (a force push).",
+      "rule": {
+        "rule_id": "strict.r15.force_push",
+        "action": "block",
+        "match": {
+          "action_id": "*"
+        },
+        "facts": {
+          "classes": [
+            "update",
+            "execute"
+          ],
+          "objects": [
+            "branch"
+          ],
+          "reversibility": [
+            "permanent"
+          ]
+        }
+      }
+    }
+  ],
+  "workspace_rules": []
+}

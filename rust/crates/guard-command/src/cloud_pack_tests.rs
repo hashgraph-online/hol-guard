@@ -107,6 +107,15 @@ fn a_failing_fixture_stops_compilation() {
 }
 
 #[test]
+fn a_wrong_preset_decision_fails_its_fixture() {
+    let pack = edit_action("slack.chat.post_message", |action| {
+        action["fixtures"][0]["expect"]["decisions"]["balanced"] = json!("allow");
+    });
+    let pack = pack_from_value(pack).unwrap();
+    assert_eq!(run(&pack).failed, 1);
+}
+
+#[test]
 fn validation_refuses_unsafe_packs() {
     let cases: Vec<(&str, Value)> = vec![
         (

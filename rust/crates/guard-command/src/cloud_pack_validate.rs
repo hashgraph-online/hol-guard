@@ -358,7 +358,8 @@ fn validate_fixtures(action: &PackAction) -> Result<(), &'static str> {
             || (expect.error.is_some()
                 && (expect.facts.is_some()
                     || expect.request.is_some()
-                    || expect.response.is_some()))
+                    || expect.response.is_some()
+                    || expect.decisions.is_some()))
         {
             return Err("cloud_pack_fixtures_invalid");
         }

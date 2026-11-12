@@ -13,6 +13,7 @@
 //! projection reads a response the host already received.
 
 use crate::cloud_action_binding::{ActionEffect, TargetCapability};
+use crate::effect_decision::GuardAction;
 use guard_contracts::{ActionClassV2, SensitivityV2};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -403,6 +404,17 @@ pub struct FixtureExpect {
     /// A recorded provider response body and the projection it yields.
     pub response: Option<String>,
     pub projection: Option<Value>,
+    /// The policy decision under each shipped preset, from the extracted
+    /// facts with a clean session and zeroed usage windows.
+    pub decisions: Option<PresetDecisions>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct PresetDecisions {
+    pub relaxed: Option<GuardAction>,
+    pub balanced: Option<GuardAction>,
+    pub strict: Option<GuardAction>,
 }
 
 /// A pack error: a stable code and the JSON pointer it applies to.
