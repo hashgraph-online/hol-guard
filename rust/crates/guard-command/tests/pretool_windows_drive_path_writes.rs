@@ -103,6 +103,7 @@ fn action(session: &Session, command: &str) -> String {
         guard_command::pretool::PathContext {
             home_dir: Some(&home),
             cwd: Some(&cwd),
+            literal_words: &[],
             cdpath_unset: false,
             rustup_override_absent: false,
             cargo_config_inert: false,

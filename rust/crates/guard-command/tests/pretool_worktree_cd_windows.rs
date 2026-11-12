@@ -83,6 +83,7 @@ fn worktree_add_then_cd_into_it_is_proved_on_windows() {
             Some(&controls),
             None,
             guard_command::pretool::PathContext {
+                literal_words: &[],
                 home_dir: Some(&home_text),
                 cwd: Some(&cwd),
                 cdpath_unset: false,
