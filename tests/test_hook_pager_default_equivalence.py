@@ -2,18 +2,15 @@
 
 from __future__ import annotations
 
-import importlib.util
 import json
 import os
 import shutil
 import subprocess
 from pathlib import Path
-from types import ModuleType
 
 import pytest
 
 from codex_plugin_scanner.guard.adapters import pi_extension_source
-from codex_plugin_scanner.guard.adapters.bounded_cli_hook_bridge import _render_bounded_hook_script
 from codex_plugin_scanner.guard.hook_execution_environment import (
     HOOK_EXECUTION_ENVIRONMENT_KEY,
     LIBRARY_SEARCH_PATH_NAMES,
@@ -49,14 +46,6 @@ PAGER_CASES = [
 ]
 
 
-def _load(path: Path, name: str) -> ModuleType:
-    spec = importlib.util.spec_from_file_location(name, path)
-    assert spec is not None and spec.loader is not None
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
-
-
 def _set_pagers(monkeypatch: pytest.MonkeyPatch, pager: str | None) -> None:
     for name in ("PAGER", "GIT_PAGER"):
         if pager is None:
@@ -66,62 +55,32 @@ def _set_pagers(monkeypatch: pytest.MonkeyPatch, pager: str | None) -> None:
 
 
 @pytest.mark.parametrize(("pager", "expected"), PAGER_CASES)
-def test_python_senders_agree_on_default_equivalent_pagers(
-    tmp_path: Path,
+def test_python_sender_agrees_on_default_equivalent_pagers(
     monkeypatch: pytest.MonkeyPatch,
     pager: str | None,
     expected: bool,
 ) -> None:
-    guard_home = tmp_path / "guard-home"
-    guard_home.mkdir(mode=0o700)
-    script = guard_home / "zcode.py"
-    script.write_text(
-        _render_bounded_hook_script(guard_home=guard_home, harness="zcode", timeout_seconds=8),
-        encoding="utf-8",
-    )
-    generated = _load(script, "generated_zcode_pager_hook")
     _set_pagers(monkeypatch, pager)
 
-    stamped = json.loads(generated._stamp_hook_input(json.dumps({"hook_event_name": "PreToolUse"})))
+    stamped = json.loads(stamp_hook_input_text(json.dumps({"hook_event_name": "PreToolUse"})))
     context = stamped[HOOK_EXECUTION_ENVIRONMENT_KEY]
 
     assert pager_default_equivalent(pager) is expected
     assert context["pager_disabled"] is context["git_pager_disabled"] is expected
 
 
-def test_stamp_keeps_near_limit_input_forwardable(tmp_path: Path) -> None:
+def test_stamp_keeps_near_limit_input_forwardable() -> None:
     text = json.dumps({"hook_event_name": "PreToolUse", "tool_input": {"command": "x" * 999_800}})
-    guard_home = tmp_path / "guard-home"
-    guard_home.mkdir(mode=0o700)
-    script = guard_home / "zcode.py"
-    script.write_text(
-        _render_bounded_hook_script(guard_home=guard_home, harness="zcode", timeout_seconds=8),
-        encoding="utf-8",
-    )
-    generated = _load(script, "generated_zcode_size_hook")
 
     assert stamp_hook_input_text(text) == text
-    assert generated._stamp_hook_input(text) == text
 
 
-def test_all_senders_keep_present_but_empty_pager_names(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    guard_home = tmp_path / "guard-home"
-    guard_home.mkdir(mode=0o700)
-    script = guard_home / "zcode.py"
-    script.write_text(
-        _render_bounded_hook_script(guard_home=guard_home, harness="zcode", timeout_seconds=8),
-        encoding="utf-8",
-    )
-    generated = _load(script, "generated_zcode_empty_pager_hook")
+def test_python_sender_keeps_present_but_empty_pager_names(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("GIT_PAGER", "")
     monkeypatch.setenv("PAGER", "delta")
 
     contexts = [
         json.loads(stamp_hook_input_text("{}"))[HOOK_EXECUTION_ENVIRONMENT_KEY],
-        json.loads(generated._stamp_hook_input("{}"))[HOOK_EXECUTION_ENVIRONMENT_KEY],
     ]
     for context in contexts:
         assert "GIT_PAGER" in context["environment_names"]
@@ -186,14 +145,6 @@ def test_all_senders_stamp_the_same_loader_search_paths(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    guard_home = tmp_path / "guard-home"
-    guard_home.mkdir(mode=0o700)
-    script = guard_home / "zcode.py"
-    script.write_text(
-        _render_bounded_hook_script(guard_home=guard_home, harness="zcode", timeout_seconds=8),
-        encoding="utf-8",
-    )
-    generated = _load(script, "generated_zcode_loader_path_hook")
     for name in LIBRARY_SEARCH_PATH_NAMES:
         monkeypatch.delenv(name, raising=False)
     monkeypatch.setenv("LD_LIBRARY_PATH", "/usr/local/cuda/lib64:/usr/lib")
@@ -203,7 +154,6 @@ def test_all_senders_stamp_the_same_loader_search_paths(
 
     contexts = [
         json.loads(stamp_hook_input_text("{}"))[HOOK_EXECUTION_ENVIRONMENT_KEY],
-        json.loads(generated._stamp_hook_input("{}"))[HOOK_EXECUTION_ENVIRONMENT_KEY],
     ]
     if shutil.which("node") is not None:
         contexts.append(_pi_execution_environment(tmp_path, dict(os.environ)))

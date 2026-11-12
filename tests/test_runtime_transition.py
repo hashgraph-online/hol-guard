@@ -872,13 +872,13 @@ def test_pi_family_plan_restores_extension_settings_and_user_entries(transition,
             assert change.path.stat().st_mode & 0o777 == change.before_mode
 
 
-@pytest.mark.parametrize("harness", ["kimi", "grok", "zcode", "devin"])
 @pytest.mark.parametrize("helper_exists", [False, True])
-def test_frozen_helper_participates_in_signed_inverse(transition, monkeypatch, harness, helper_exists):
+def test_frozen_grok_helper_participates_in_signed_inverse(transition, monkeypatch, helper_exists):
     from codex_plugin_scanner.guard.adapters import bounded_cli_hook_bridge as bridge
     from codex_plugin_scanner.guard.adapters import get_adapter
     from codex_plugin_scanner.guard.adapters.base import HarnessContext
 
+    harness = "grok"
     runtime, plan, _, _ = transition
     ctx = HarnessContext(home_dir=runtime.home.parent, workspace_dir=None, guard_home=runtime.home)
     helper = ctx.guard_home / f"managed/bounded-hooks/{harness}.py"
@@ -1007,7 +1007,8 @@ def test_copilot_plan_restores_native_bindings_and_preserves_authority(
         monkeypatch.setattr(bridge, "isolated_cursor_hook_python", lambda: sys.executable)
         monkeypatch.setattr(bridge, "_trusted_desktop_hook_proxy_command", lambda *args: None)
     prepared = adapter.prepare_install(ctx)
-    assert len(prepared.files) == (12 if workspace_enabled else 7) + int(frozen)
+    # A frozen Guard hands the hook to its runtime and plans no helper script.
+    assert len(prepared.files) == (12 if workspace_enabled else 7)
     dependency = next(change for change in prepared.files if change.path == authority)
     assert dependency.before is dependency.after is None
     assert dependency.expected_digest is not None

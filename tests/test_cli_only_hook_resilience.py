@@ -83,41 +83,11 @@ def test_managed_cli_hooks_use_bounded_process_bridge(
     ("harness", "factory"),
     [
         ("copilot", _copilot_command),
-        ("grok", GrokHarnessAdapter._hook_command_parts),  # pyright: ignore[reportPrivateUsage]
         ("kimi", KimiHarnessAdapter._hook_command_parts),  # pyright: ignore[reportPrivateUsage]
         ("zcode", ZCodeHarnessAdapter._hook_command_parts),  # pyright: ignore[reportPrivateUsage]
     ],
 )
-def test_frozen_managed_cli_hooks_enter_supported_bridge_mode(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-    harness: str,
-    factory: CommandFactory,
-) -> None:
-    monkeypatch.setattr("sys.frozen", True, raising=False)
-    monkeypatch.setattr(
-        "codex_plugin_scanner.guard.adapters.bounded_cli_hook_bridge.isolated_cursor_hook_python",
-        lambda: None,
-    )
-
-    command = factory(_context(tmp_path))
-
-    assert command[:2] == (command[0], "__guard-bounded-hook")
-    config = cast(dict[str, object], json.loads(command[2]))
-    assert config["frozen_launcher"] is True
-    assert config["harness"] == harness
-
-
-@pytest.mark.parametrize(
-    ("harness", "factory"),
-    [
-        ("copilot", _copilot_command),
-        ("grok", GrokHarnessAdapter._hook_command_parts),  # pyright: ignore[reportPrivateUsage]
-        ("kimi", KimiHarnessAdapter._hook_command_parts),  # pyright: ignore[reportPrivateUsage]
-        ("zcode", ZCodeHarnessAdapter._hook_command_parts),  # pyright: ignore[reportPrivateUsage]
-    ],
-)
-def test_frozen_managed_cli_hooks_prefer_isolated_stdlib_client(
+def test_frozen_managed_cli_hooks_hand_off_to_the_runtime_not_a_stdlib_client(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     harness: str,
@@ -132,11 +102,33 @@ def test_frozen_managed_cli_hooks_prefer_isolated_stdlib_client(
     context = _context(tmp_path)
     command = factory(context)
 
+    assert command[0] != "/usr/bin/python3"
+    assert "__guard-bounded-hook" in command
+    assert not (context.guard_home / "managed" / "bounded-hooks" / f"{harness}.py").exists()
+    config = cast(dict[str, object], json.loads(command[-1]))
+    assert config["harness"] == harness
+
+
+def test_frozen_grok_hook_keeps_its_isolated_constants_client(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr("sys.frozen", True, raising=False)
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.adapters.bounded_cli_hook_bridge.isolated_cursor_hook_python",
+        lambda: "/usr/bin/python3",
+    )
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.adapters.bounded_cli_hook_bridge.native_bridge_executable",
+        lambda *_args, **_kwargs: None,
+    )
+
+    command = GrokHarnessAdapter._hook_command_parts(_context(tmp_path))  # pyright: ignore[reportPrivateUsage]
+
     assert command[:2] == ("/usr/bin/python3", "-I")
-    assert "managed/bounded-hooks" in command[2].replace("\\", "/")
-    assert Path(command[2]).name == f"{harness}.py"
+    assert Path(command[2]).name == "grok.py"
     source = Path(command[2]).read_text(encoding="utf-8")
-    assert f'HARNESS = "{harness}"' in source
+    assert 'HARNESS = "grok"' in source
     assert "daemon --serve" not in source
 
 
