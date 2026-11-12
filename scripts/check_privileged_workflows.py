@@ -14,6 +14,13 @@ import yaml
 _FULL_COMMIT_SHA = re.compile(r"^[0-9a-fA-F]{40}$")
 _EXACT_UV_VERSION = re.compile(r"^\d+\.\d+\.\d+$")
 _WORKFLOW_SUFFIXES = frozenset({".yml", ".yaml"})
+_PULL_REQUEST_TARGET_HEAD_MARKERS = (
+    "github.event.pull_request.head.sha",
+    "github.event.pull_request.head.ref",
+    "github.event.pull_request.head.repo",
+    "github.head_ref",
+    "refs/pull/",
+)
 # GitHub Actions workflow-syntax permission table, checked 2026-09-12.
 # https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-syntax#permissions
 _PERMISSION_LEVELS = {
@@ -63,6 +70,19 @@ def _mapping(value: object) -> dict[object, object]:
 
 def _sequence(value: object) -> list[object]:
     return value if isinstance(value, list) else []
+
+
+def _workflow_events(workflow: dict[object, object]) -> set[str]:
+    """Return the declared trigger names, including PyYAML's YAML 1.1 `on` key."""
+
+    raw_on = workflow.get("on", workflow.get(True))
+    if isinstance(raw_on, str):
+        return {raw_on}
+    if isinstance(raw_on, list):
+        return {event for event in raw_on if isinstance(event, str)}
+    if isinstance(raw_on, dict):
+        return {event for event in raw_on if isinstance(event, str)}
+    return set()
 
 
 def _has_write_capability(permissions: object) -> bool:
@@ -205,6 +225,38 @@ def _validate_privileged_job(
     return violations
 
 
+def _validate_pull_request_target_job(
+    *,
+    workflow_path: Path,
+    job_name: str,
+    job: dict[object, object],
+) -> list[WorkflowPolicyViolation]:
+    """Reject checking out attacker-controlled code from a privileged trigger."""
+
+    violations: list[WorkflowPolicyViolation] = []
+    for index, raw_step in enumerate(_sequence(job.get("steps")), start=1):
+        step = _mapping(raw_step)
+        reference = step.get("uses")
+        if not isinstance(reference, str) or not reference.startswith("actions/checkout@"):
+            continue
+        checkout_with = _mapping(step.get("with"))
+        for field in ("ref", "repository"):
+            value = checkout_with.get(field)
+            if not isinstance(value, str):
+                continue
+            if any(marker in value for marker in _PULL_REQUEST_TARGET_HEAD_MARKERS):
+                step_name = str(step.get("name") or f"step {index}")
+                violations.append(
+                    WorkflowPolicyViolation(
+                        workflow_path,
+                        job_name,
+                        "pull-request-target-untrusted-checkout",
+                        f"{step_name} checks out pull-request head data in a pull_request_target job; use the trusted base checkout instead.",
+                    )
+                )
+    return violations
+
+
 def validate_privileged_workflows(root: Path) -> tuple[WorkflowPolicyViolation, ...]:
     """Validate token defaults, job grants, and write-capable job toolchains."""
 
@@ -231,6 +283,15 @@ def validate_privileged_workflows(root: Path) -> tuple[WorkflowPolicyViolation, 
             )
             continue
         workflow = _mapping(raw_workflow)
+        if "pull_request_target" in _workflow_events(workflow):
+            for raw_job_name, raw_job in _mapping(workflow.get("jobs")).items():
+                violations.extend(
+                    _validate_pull_request_target_job(
+                        workflow_path=workflow_path,
+                        job_name=str(raw_job_name),
+                        job=_mapping(raw_job),
+                    )
+                )
         violations.extend(
             _validate_permissions(
                 workflow_path=workflow_path,
