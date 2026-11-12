@@ -129,6 +129,7 @@ mod claude_hook_bridge_http_text;
 mod claude_hook_bridge_render;
 mod claude_hook_bridge_transport;
 mod claude_hook_bridge_url;
+mod claude_hook_bridge_watch;
 #[path = "adapters/claude_hook_config.rs"]
 mod claude_hook_config;
 #[cfg(test)]

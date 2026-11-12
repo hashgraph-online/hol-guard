@@ -19,6 +19,7 @@ const RISKY_PROMPT_SYSTEM_MESSAGE: &str = "HOL Guard intercepted this prompt bec
 const RISKY_PROMPT_ADDITIONAL_CONTEXT: &str = "HOL Guard will intercept Claude's next attempt to access local secrets and open a branded approval question to protect you.";
 const RISKY_PROMPT_TOKENS: [&str; 4] = [".env", "secret", "api key", "token"];
 const PERMISSION_PASSTHROUGH_KEY: &str = "guard_permission_passthrough";
+const UNMANAGED_REASON_CODE: &str = "harness_not_managed";
 const DEFAULT_EVENT: &str = "PreToolUse";
 const EVENT_PREFIX_CHARS: usize = 4096;
 /// Stands in for `str()` of a truthy non-string event value. Only exact
@@ -283,24 +284,47 @@ pub(crate) fn should_suppress_output(data: &str, response_body: &str) -> bool {
 
 /// `_valid_hook_json_or_degraded`. `Err` carries the failure CPython's
 /// `json.loads` would raise on the response instead of `JSONDecodeError`.
+#[cfg(test)]
 pub(crate) fn valid_hook_json_or_degraded(
     output: &str,
     reason: &str,
     data: &str,
 ) -> Result<String, JsonFailure> {
+    checked_hook_json(output, data).map(|valid| valid.unwrap_or_else(|| degraded(reason, data)))
+}
+
+/// The daemon's own reply for a hook whose app Guard no longer manages
+/// (`harness_not_managed` in the fail-closed envelope contract): exactly a
+/// continue flag and the reason code, so it names no decision of any kind.
+fn is_unmanaged_passthrough(entries: &[(String, PyVal)]) -> bool {
+    entries.len() == 2
+        && member(entries, "continue") == Some(&PyVal::Bool(true))
+        && member(entries, "reason_code").and_then(PyVal::as_str) == Some(UNMANAGED_REASON_CODE)
+}
+
+/// The response trimmed when it is a decision Claude Code will honor for the
+/// hook event, or `None` when it is not one.
+pub(crate) fn checked_hook_json(output: &str, data: &str) -> Result<Option<String>, JsonFailure> {
     let trimmed = py_strip(output);
     if trimmed.is_empty() {
-        return Ok(degraded(reason, data));
+        return Ok(None);
     }
     let decoded = match pyjson::parse_mapping_lone_surrogates(trimmed) {
         Ok(parsed) => parsed.value,
-        Err(JsonFailure::Syntax) => return Ok(degraded(reason, data)),
+        Err(JsonFailure::Syntax) => return Ok(None),
         Err(failure) => return Err(failure),
     };
     let PyVal::Dict(entries) = decoded else {
-        return Ok(degraded(reason, data));
+        return Ok(None);
     };
     let event = event_name(data);
+    // A leftover hook of an app Guard does not manage is passed through for
+    // every event: it carries no decision, so Claude Code keeps its own
+    // permission flow, and it only ever comes from the authenticated daemon.
+    if (event.name == DEFAULT_EVENT || event.is_permission()) && is_unmanaged_passthrough(&entries)
+    {
+        return Ok(Some(trimmed.to_owned()));
+    }
     let hook_output = member(&entries, "hookSpecificOutput").and_then(PyVal::as_dict);
     let names_event = |output: &[(String, PyVal)]| {
         member(output, "hookEventName").and_then(PyVal::as_str) == Some(event.name.as_str())
@@ -314,14 +338,14 @@ pub(crate) fn valid_hook_json_or_degraded(
                 )
         });
         if !decided {
-            return Ok(degraded(reason, data));
+            return Ok(None);
         }
     } else if event.is_permission() {
         let passthrough = member(&entries, PERMISSION_PASSTHROUGH_KEY) == Some(&PyVal::Bool(true))
             && hook_output
                 .is_some_and(|output| names_event(output) && member(output, "decision").is_none());
         if passthrough {
-            return Ok(trimmed.to_owned());
+            return Ok(Some(trimmed.to_owned()));
         }
         let decided = hook_output.is_some_and(|output| {
             names_event(output)
@@ -332,10 +356,10 @@ pub(crate) fn valid_hook_json_or_degraded(
                     .is_some_and(|behavior| matches!(behavior, "allow" | "deny"))
         });
         if !decided {
-            return Ok(degraded(reason, data));
+            return Ok(None);
         }
     }
-    Ok(trimmed.to_owned())
+    Ok(Some(trimmed.to_owned()))
 }
 
 #[cfg(all(test, unix))]

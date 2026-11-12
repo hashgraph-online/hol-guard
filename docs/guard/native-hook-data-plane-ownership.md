@@ -620,6 +620,10 @@ Current material gaps include:
 - Copilot and Cursor event aliases are normalized by the Rust raw edge.
 - The Rust raw edge renders Guard's Claude Code notice on a reviewed
   `UserPromptSubmit` outside Watch; the daemon returns the edge response as is.
+- The Claude Code bridge accepts the daemon's `harness_not_managed` passthrough
+  as a valid answer, and in Watch it lets a `PreToolUse` through (a
+  `PermissionRequest` goes to Claude's own dialog) when native review cannot
+  complete, recording the failure under `logs/`. Enforcing postures still deny.
 - Non-command PreToolUse and native `review` remain native decisions; the
   harness bridge renders an unsupported review as a conservative deny.
 - OpenCode, Grok, Hermes, OpenClaw, ZCode, Gemini, and Antigravity expose partial
