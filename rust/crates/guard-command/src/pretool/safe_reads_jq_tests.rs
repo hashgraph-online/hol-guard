@@ -43,6 +43,28 @@ fn a_filter_that_renders_the_value_read_into_text_is_admitted() {
     }
 }
 
+/// A bounded range is admitted alone, but the native jq decision refuses a
+/// filter that composes per-call range bounds, including calls exposed by
+/// bindings or zero-arity definitions.
+#[test]
+fn composed_range_generators_are_terminally_refused() {
+    let bounded = arguments(&["-n", "range(100000)"]);
+    assert!(safe_jq_stdin_arguments(&bounded));
+    assert_eq!(jq_filter_position(&bounded, true), Some(1));
+
+    for filter in [
+        "range(100000) | range(100000)",
+        "range(100000) as $x | range(100000)",
+        "def inner: range(100000); def outer: inner; outer | range(100000)",
+        "def gen: range(100000); gen as $x | range(100000)",
+        "range(100000) | map(range(100000))",
+    ] {
+        let args = arguments(&["-n", filter]);
+        assert!(!safe_jq_stdin_arguments(&args), "{filter}");
+        assert_eq!(jq_filter_position(&args, true), None, "{filter}");
+    }
+}
+
 /// The grammar, not the leading character, is the gate: a program that
 /// reaches the environment, another file or a module is refused however
 /// it opens.
@@ -54,8 +76,8 @@ fn a_filter_that_reaches_outside_the_value_read_is_still_refused() {
         "input",
         "input_filename",
         ".items | @sh",
-        "reduce .[] as $item (0; . + $item)",
-        "limit(1; .[])",
+        "reduce .[] as $item (0; env)",
+        "limit(1; inputs)",
         "include \"evil\"; .",
     ] {
         let args = arguments(&["-r", filter]);

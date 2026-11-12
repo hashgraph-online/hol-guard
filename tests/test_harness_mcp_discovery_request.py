@@ -59,6 +59,8 @@ def _fake(monkeypatch: pytest.MonkeyPatch, answer: object) -> list[dict[str, obj
         sent.append(request)
         if isinstance(answer, Exception):
             raise answer
+        if callable(answer):
+            return answer(request)
         return answer
 
     monkeypatch.setattr(authority, "native_runner_authority", fake_native)
@@ -203,14 +205,23 @@ def test_a_malformed_match_answer_is_refused(monkeypatch: pytest.MonkeyPatch, an
         discovery.discovered_server_for_observation((_discovered("a"), _discovered("b")), cli_id="x")
 
 
+def _launch_answer(from_process: object) -> object:
+    def answer(request: dict[str, object]) -> object:
+        return {"index": 0} if request["op"] == "match" else {"from_process": from_process}
+
+    return answer
+
+
 def test_launch_env_matches_by_id_and_keeps_values_local(monkeypatch: pytest.MonkeyPatch) -> None:
-    env = (("API_TOKEN", "${API_TOKEN}"), ("MODE", "fake"))
-    sent = _fake(monkeypatch, {"index": 0})
+    env = (("API_TOKEN", "${API_TOKEN}"), ("MODE", "fake"), ("UNSET", "x"))
+    sent = _fake(monkeypatch, _launch_answer(["API_TOKEN"]))
     monkeypatch.setenv("API_TOKEN", _FAKE_SECRET)
+    monkeypatch.setenv("MODE", "process")
+    monkeypatch.delenv("UNSET", raising=False)
 
     extra = discovery.extra_env_for_mcp_launch((_discovered("a", env),), command="npx", cli_id="local-cli.mcp-a")
 
-    assert extra == {"API_TOKEN": _FAKE_SECRET, "MODE": "fake"}
+    assert extra == {"API_TOKEN": _FAKE_SECRET, "MODE": "fake", "UNSET": "x"}
     assert sent[0]["query"] == {
         "cli_id": "local-cli.mcp-a",
         "server_command": None,
@@ -218,7 +229,36 @@ def test_launch_env_matches_by_id_and_keeps_values_local(monkeypatch: pytest.Mon
         "server_identity_hash": None,
         "source_label": None,
     }
+    assert sent[1] == {
+        "op": "launch_env",
+        "configured": [["API_TOKEN", "${API_TOKEN}"], ["MODE", "fake"], ["UNSET", "x"]],
+        "present": ["API_TOKEN", "MODE"],
+    }
     assert _FAKE_SECRET not in json.dumps(sent)
+
+
+def test_launch_env_asks_nothing_when_guard_sets_none_of_the_keys(monkeypatch: pytest.MonkeyPatch) -> None:
+    sent = _fake(monkeypatch, _launch_answer(["API_TOKEN"]))
+    monkeypatch.delenv("API_TOKEN", raising=False)
+
+    extra = discovery.extra_env_for_mcp_launch(
+        (_discovered("a", (("API_TOKEN", "${API_TOKEN}"),)),), command="npx", cli_id="local-cli.mcp-a"
+    )
+
+    assert extra == {"API_TOKEN": "${API_TOKEN}"}
+    assert [request["op"] for request in sent] == ["match"]
+
+
+@pytest.mark.parametrize("from_process", [None, "API_TOKEN", [1], ["OTHER"]])
+def test_a_malformed_launch_env_answer_is_refused(monkeypatch: pytest.MonkeyPatch, from_process: object) -> None:
+    _fake(monkeypatch, _launch_answer(from_process))
+    monkeypatch.setenv("API_TOKEN", _FAKE_SECRET)
+    monkeypatch.setenv("OTHER", "other")
+
+    with pytest.raises(ValueError):
+        discovery.extra_env_for_mcp_launch(
+            (_discovered("a", (("API_TOKEN", "${API_TOKEN}"),)),), command="npx", cli_id="local-cli.mcp-a"
+        )
 
 
 def test_a_refused_group_answer_still_records_remote_servers(monkeypatch: pytest.MonkeyPatch) -> None:

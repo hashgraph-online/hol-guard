@@ -64,6 +64,9 @@ pub mod cloud_pack_cli;
 pub mod cloud_pack_diff;
 pub mod cloud_pack_facts;
 pub mod cloud_pack_fixtures;
+pub mod cloud_pack_mail;
+#[cfg(test)]
+mod cloud_pack_mail_tests;
 pub mod cloud_pack_pattern;
 pub mod cloud_pack_request;
 pub mod cloud_pack_response;

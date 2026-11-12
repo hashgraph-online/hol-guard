@@ -1,6 +1,6 @@
 use serde_json::{json, Value};
 
-use super::dispatch;
+use super::{dispatch, launched_listener};
 use crate::runner_authority_op::ERR_INVALID;
 
 const SOCKET: &str = "/home/user/.codex/app-server-control/app-server-control.sock";
@@ -47,10 +47,8 @@ fn a_launch_that_cannot_use_the_remote_tui_keeps_its_argv() {
 
 #[test]
 fn a_tracked_process_is_ours_only_when_it_listens_on_this_socket() {
-    let tracked = |command: &str| {
-        let request = json!({ "op": "tracked", "command": command, "socket": SOCKET });
-        dispatch(&request).unwrap()["ours"].clone()
-    };
+    let listener = format!("unix://{SOCKET}");
+    let tracked = |command: &str| json!(launched_listener(command, &listener));
     let ours = format!("/usr/bin/codex\napp-server\n--listen\nunix://{SOCKET}");
     assert_eq!(tracked(&ours), json!(true));
     assert_eq!(
@@ -91,6 +89,7 @@ mod sockets {
     use std::os::unix::fs::PermissionsExt;
     use std::os::unix::net::UnixListener;
     use std::path::{Path, PathBuf};
+    use std::process::{Child, Command, Stdio};
     use std::time::Duration;
 
     use serde_json::{json, Value};
@@ -165,6 +164,117 @@ mod sockets {
         assert_eq!(wait(&text, 2.0), json!(true));
         drop(binder.join().expect("join"));
     }
+
+    fn reclaim(socket: &str, seconds: f64) -> Value {
+        let request = json!({ "op": "reclaim", "socket": socket, "seconds": seconds });
+        dispatch(&request).unwrap()["state"].clone()
+    }
+
+    fn track(directory: &Path, pid: &str) {
+        fs::write(directory.join("hol-guard-app-server.pid"), pid).expect("pid file");
+    }
+
+    /// A shell whose arguments read as the app-server Guard launches on
+    /// `socket`; the loop keeps it from replacing itself with `sleep`.
+    fn fake_server(socket: &str) -> Child {
+        Command::new("/bin/sh")
+            .args(["-c", "while :; do sleep 1; done", "app-server", "--listen"])
+            .arg(format!("unix://{socket}"))
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn()
+            .expect("spawn")
+    }
+
+    /// Reaps `child` as soon as it exits, so a stopped one is gone rather
+    /// than a zombie the probe would still see.
+    fn reap(mut child: Child) -> std::thread::JoinHandle<()> {
+        std::thread::spawn(move || {
+            let _ = child.wait();
+        })
+    }
+
+    fn alive(pid: u32) -> bool {
+        let pid = nix::unistd::Pid::from_raw(i32::try_from(pid).expect("pid"));
+        nix::sys::signal::kill(pid, None).is_ok()
+    }
+
+    #[test]
+    fn nothing_tracked_or_an_unreadable_pid_leaves_the_socket_free() {
+        let directory = private_directory();
+        let (_, text) = socket_in(directory.path());
+        assert_eq!(reclaim(&text, 0.0), json!("free"));
+        for pid in ["", "0", "-5", "12a", "+12", "99999999999", " "] {
+            track(directory.path(), pid);
+            assert_eq!(reclaim(&text, 0.0), json!("free"), "{pid:?}");
+        }
+    }
+
+    #[test]
+    fn a_tracked_pid_that_now_belongs_to_another_process_is_left_alone() {
+        let directory = private_directory();
+        let (_, text) = socket_in(directory.path());
+        let mut stranger = Command::new("/bin/sh")
+            .args(["-c", "while :; do sleep 1; done"])
+            .spawn()
+            .expect("spawn");
+        track(directory.path(), &format!("{}\n", stranger.id()));
+        assert_eq!(reclaim(&text, 0.0), json!("free"));
+        assert!(alive(stranger.id()));
+        stranger.kill().expect("kill");
+        stranger.wait().expect("wait");
+    }
+
+    #[test]
+    fn a_tracked_server_that_listens_is_kept() {
+        let directory = private_directory();
+        let (socket, text) = socket_in(directory.path());
+        let _listener = UnixListener::bind(&socket).expect("bind");
+        let mut server = fake_server(&text);
+        track(directory.path(), &server.id().to_string());
+        assert_eq!(reclaim(&text, 1.0), json!("ready"));
+        assert!(alive(server.id()));
+        server.kill().expect("kill");
+        server.wait().expect("wait");
+    }
+
+    #[test]
+    fn a_tracked_server_that_does_not_listen_is_stopped() {
+        let directory = private_directory();
+        let (_, text) = socket_in(directory.path());
+        let server = fake_server(&text);
+        let pid = server.id();
+        track(directory.path(), &pid.to_string());
+        let reaper = reap(server);
+        assert_eq!(reclaim(&text, 0.0), json!("free"));
+        reaper.join().expect("join");
+        assert!(!alive(pid));
+    }
+
+    #[test]
+    fn a_linked_pid_file_is_not_followed() {
+        let directory = private_directory();
+        let (_, text) = socket_in(directory.path());
+        let mut server = fake_server(&text);
+        let target = directory.path().join("elsewhere");
+        fs::write(&target, server.id().to_string()).expect("target");
+        std::os::unix::fs::symlink(&target, directory.path().join("hol-guard-app-server.pid"))
+            .expect("link");
+        assert_eq!(reclaim(&text, 0.0), json!("free"));
+        assert!(alive(server.id()));
+        server.kill().expect("kill");
+        server.wait().expect("wait");
+    }
+
+    #[test]
+    fn a_pipe_at_the_pid_path_does_not_hold_the_worker() {
+        let directory = private_directory();
+        let (_, text) = socket_in(directory.path());
+        let fifo = directory.path().join("hol-guard-app-server.pid");
+        nix::unistd::mkfifo(&fifo, nix::sys::stat::Mode::S_IRWXU).expect("mkfifo");
+        assert_eq!(reclaim(&text, 0.0), json!("free"));
+    }
 }
 
 #[test]
@@ -179,8 +289,10 @@ fn refuses_malformed_requests() {
         json!({ "op": "wait", "socket": SOCKET, "seconds": "3" }),
         json!({ "op": "wait", "socket": "relative.sock", "seconds": 1.0 }),
         json!({ "op": "wait", "socket": SOCKET }),
-        json!({ "op": "tracked", "command": 1, "socket": SOCKET }),
-        json!({ "op": "tracked", "command": "x", "socket": SOCKET, "extra": 1 }),
+        json!({ "op": "reclaim", "socket": SOCKET }),
+        json!({ "op": "reclaim", "socket": "relative.sock", "seconds": 1.0 }),
+        json!({ "op": "reclaim", "socket": SOCKET, "seconds": 1.0, "extra": 1 }),
+        json!({ "op": "tracked", "command": "x", "socket": SOCKET }),
         json!({ "op": "start", "socket": SOCKET, "args": [] }),
     ] {
         assert_eq!(dispatch(&request), Err(ERR_INVALID), "{request}");

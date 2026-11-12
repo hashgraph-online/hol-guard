@@ -31312,14 +31312,16 @@ function approvalProofModalTitle(locked, recentlySatisfied, needsPassword) {
 function ApprovalPasswordModal(props) {
   const passwordRef = reactExports.useRef(null);
   const [now2, setNow] = reactExports.useState(() => Date.now());
-  const recentlySatisfied = approvalProofRecentlySatisfied(props.gate);
+  const requireFreshTotp = props.requireFreshTotp === true;
+  const recentlySatisfied = !requireFreshTotp && approvalProofRecentlySatisfied(props.gate);
   const needsPassword = approvalProofRequiresPassword(props.gate);
   const lockRemainingSeconds = approvalGateLockRemainingSeconds(props.gate, now2);
   const gateLocked = lockRemainingSeconds > 0;
   const submitDisabled = isApprovalProofSubmitDisabled(
     props.gate,
     { approvalPassword: props.approvalPassword, approvalTotpCode: props.approvalTotpCode },
-    props.busy === true
+    props.busy === true,
+    requireFreshTotp
   );
   reactExports.useEffect(() => {
     if (!gateLocked) return void 0;
@@ -31385,6 +31387,7 @@ function ApprovalPasswordModal(props) {
               approvalPassword: props.approvalPassword,
               approvalTotpCode: props.approvalTotpCode,
               passwordRef,
+              requireFreshTotp,
               onApprovalPasswordChange: props.onApprovalPasswordChange,
               onApprovalTotpCodeChange: props.onApprovalTotpCodeChange
             }
@@ -33873,7 +33876,10 @@ function resolvedStateForItem(state, item) {
 function approvalGateRefreshNeeded(err) {
   if (!(err instanceof GuardRequestResolutionError)) return false;
   const code = err.payload?.["error"];
-  return err.status === 423 && code === "approval_gate_locked" || code === "approval_gate_totp_required";
+  return err.status === 423 && code === "approval_gate_locked" || approvalGateDemandedCode(err);
+}
+function approvalGateDemandedCode(err) {
+  return err instanceof GuardRequestResolutionError && err.payload?.["error"] === "approval_gate_totp_required";
 }
 function useShownRequestCheck(requestId) {
   const shown = reactExports.useRef(requestId);
@@ -33945,6 +33951,7 @@ function useReviewDecisionResolve(params) {
   const [pendingContractKey, setPendingContractKey] = reactExports.useState(null);
   const [preflighting, setPreflighting] = reactExports.useState(false);
   const [effectiveApprovalGate, setEffectiveApprovalGate] = reactExports.useState(params.approvalGate);
+  const [freshCodeRequired, setFreshCodeRequired] = reactExports.useState(false);
   const approvalGate = effectiveApprovalGate;
   const useCooldown = defaultUseApprovalCooldown(approvalGate) && !cooldownOptOut;
   const decisionBusy = submitting !== null || preflighting;
@@ -33963,6 +33970,7 @@ function useReviewDecisionResolve(params) {
     setCooldownOptOut(false);
     setPendingAction(null);
     setPendingContractKey(null);
+    setFreshCodeRequired(false);
   }, [decisionSubjectKey]);
   const handleResolve = reactExports.useCallback(
     async (action, gateOverride) => {
@@ -33990,12 +33998,12 @@ function useReviewDecisionResolve(params) {
           requestedScope,
           action === "allow" ? rememberExactAction : watchOnlyObservation
         );
-        const includeGateFields = gateRequired && gate?.configured === true && requiresApprovalPasswordPrompt(
+        const includeGateFields = gateRequired && gate?.configured === true && (freshCodeRequired || requiresApprovalPasswordPrompt(
           gate.cooldown_active,
           gate.strict_all_decisions,
           requestedScope
-        );
-        const proof = includeGateFields ? buildApprovalProofCredentials(gate, { approvalPassword, approvalTotpCode }) : {};
+        ));
+        const proof = includeGateFields ? buildApprovalProofCredentials(gate, { approvalPassword, approvalTotpCode }, freshCodeRequired) : {};
         await onResolve({
           ...buildDecisionPayload({
             item,
@@ -34016,6 +34024,7 @@ function useReviewDecisionResolve(params) {
         setCooldownOptOut(false);
         setPendingAction(null);
         setPendingContractKey(null);
+        setFreshCodeRequired(false);
         if (gateRequired && (gate?.cooldown_seconds ?? 0) > 0) {
           void fetchResolvedApprovalGate().then((refreshed) => {
             if (isStillShown(requestId)) setEffectiveApprovalGate(refreshed);
@@ -34026,6 +34035,7 @@ function useReviewDecisionResolve(params) {
         if (!isStillShown(requestId)) return;
         const message = err instanceof Error ? err.message : "Something went wrong. Try again.";
         setErrorMessage(message);
+        if (approvalGateDemandedCode(err)) setFreshCodeRequired(true);
         if (approvalGateRefreshNeeded(err)) {
           setSubmitting(null);
           try {
@@ -34051,6 +34061,7 @@ function useReviewDecisionResolve(params) {
       approvalPassword,
       approvalTotpCode,
       cooldownOptOut,
+      freshCodeRequired,
       resolutionBlockReason,
       canSubmitAllow,
       hasAllowScope
@@ -34103,17 +34114,17 @@ function useReviewDecisionResolve(params) {
             );
             return;
           }
-          const gateEnabled = approvalGateRequiredForResolution(current, action, requestedScope) && current?.configured === true && requiresApprovalPasswordPrompt(
+          const gateEnabled = approvalGateRequiredForResolution(current, action, requestedScope) && current?.configured === true && (freshCodeRequired || requiresApprovalPasswordPrompt(
             current.cooldown_active,
             current.strict_all_decisions,
             requestedScope
-          );
+          ));
           if (!gateEnabled) {
             void handleResolve(action, current);
             return;
           }
           setErrorMessage(null);
-          if (!approvalProofRecentlySatisfied(current)) {
+          if (freshCodeRequired || !approvalProofRecentlySatisfied(current)) {
             setPendingAction(action);
             setPendingContractKey(decisionContractKey);
             return;
@@ -34138,6 +34149,7 @@ function useReviewDecisionResolve(params) {
       blockScopeOptions.length,
       decisionBusy,
       decisionContractKey,
+      freshCodeRequired,
       handleResolve,
       hasAllowScope,
       canSubmitAllow,
@@ -34225,6 +34237,7 @@ function useReviewDecisionResolve(params) {
     approvalPassword,
     approvalTotpCode,
     errorMessage,
+    freshCodeRequired,
     handleAllow,
     handleApprovalPasswordChange,
     handleApprovalTotpCodeChange,
@@ -34479,6 +34492,7 @@ function ReviewDecisionCard(props) {
     approvalPassword,
     approvalTotpCode,
     errorMessage,
+    freshCodeRequired,
     handleAllow,
     handleApprovalPasswordChange,
     handleApprovalTotpCodeChange,
@@ -34774,6 +34788,7 @@ function ReviewDecisionCard(props) {
         onUseCooldownChange: handleUseCooldownChange,
         onSubmit: handleModalSubmit,
         busy: submitting !== null,
+        requireFreshTotp: freshCodeRequired,
         onCancel: handleModalCancel,
         submitLabel: pendingAction === "allow" ? resolvedAllowButtonLabel : resolvedBlockButtonLabel
       }

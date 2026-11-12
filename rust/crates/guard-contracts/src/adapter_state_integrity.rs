@@ -12,7 +12,8 @@
 //! `adapters/adapter_state_integrity.py` computed and compared that MAC in
 //! Python, which made the Python edge the thing deciding whether a stored path
 //! was Guard's own. The runtime now owns the canonical message, the MAC and
-//! every field check; the caller resolves the key file and applies the answer.
+//! every field check, and reads or creates the key file named by `key_home`;
+//! the caller applies the answer.
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -78,6 +79,15 @@ pub struct AdapterStateIntegrityRequestV1 {
     /// Identifier of that key, compared against the manifest's stored one.
     #[serde(default)]
     pub integrity_key_id: Option<String>,
+    /// The Guard home whose `managed/adapter-state.key` signs the manifest.
+    /// When present the runtime reads the key itself and the caller sends no
+    /// key material. Absent from the wire, and from the digest, when unset.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub key_home: Option<String>,
+    /// Whether `authenticate` may create the key under `key_home` when there
+    /// is none yet. Absent means it may.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub create_key: Option<bool>,
 }
 
 /// The answer to one adapter state integrity request.

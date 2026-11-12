@@ -21107,6 +21107,75 @@
       "expect": "allow"
     },
     {
+      "id": "null-hooks-checkout-git-add",
+      "fix_area": "git",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git add docs/notes.md"
+      },
+      "cwd": "org_null_hooks",
+      "expect": "allow"
+    },
+    {
+      "id": "null-hooks-checkout-git-add-commit",
+      "fix_area": "git",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git add -A && git commit -m 'docs: add working notes'"
+      },
+      "cwd": "org_null_hooks",
+      "expect": "allow"
+    },
+    {
+      "id": "null-hooks-checkout-remove-scratch-file",
+      "fix_area": "git",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "rm docs/notes.md && echo removed"
+      },
+      "cwd": "org_null_hooks",
+      "expect": "allow",
+      "requires_sandbox": true
+    },
+    {
+      "id": "neg-null-hooks-checkout-hooks-path-rewrite",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git config core.hooksPath .githooks"
+      },
+      "cwd": "org_null_hooks",
+      "expect": "not_allow"
+    },
+    {
       "id": "neg-git-worktree-add-implied-branch-existing",
       "fix_area": "negative",
       "harnesses": [
@@ -35939,6 +36008,198 @@
       "expect": "not_allow"
     },
     {
+      "id": "jq-stdin-negated-sort-key",
+      "fix_area": "read",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "echo '[{\"number\":1,\"title\":\"a\"}]' | jq -r 'sort_by(-.number) | .[0:5][] | \"\\(.number) \\(.title)\"'"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "jq-stdin-arithmetic-average",
+      "fix_area": "read",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "echo '[{\"size\":2}]' | jq 'map(.size) | add / length'"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "jq-stdin-zero-arity-def",
+      "fix_area": "read",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "echo '[{\"login\":\"bot\"}]' | jq -r 'def internal: .login == \"bot\"; map(select(internal | not)) | length'"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "jq-stdin-reduce-sum",
+      "fix_area": "read",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "echo '[1,2]' | jq 'reduce .[] as $x (0; . + $x)'"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "jq-stdin-if-then-else",
+      "fix_area": "read",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "echo '[{\"draft\":false,\"state\":\"open\"}]' | jq -r '.[] | if .draft then \"draft\" else .state end'"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "jq-stdin-test-with-flags",
+      "fix_area": "read",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "echo '[{\"title\":\"Fix\"}]' | jq '[.[] | select(.title | test(\"fix\"; \"i\"))] | length'"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "jq-stdin-update-assignment",
+      "fix_area": "read",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "echo '{\"version\":\"1\"}' | jq '.version |= \"2.0.0\"'"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "neg-jq-stdin-reduce-reads-env",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "gh pr list --json number | jq 'reduce .[] as $row (0; env)'"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-jq-stdin-def-reads-env-var",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "gh pr list --json number | jq -r 'def home: $ENV.HOME; home'"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-jq-stdin-arithmetic-reads-input",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "gh pr list --json number | jq '.[0].number + input'"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-jq-stdin-if-branch-reads-env",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "gh pr list --json number | jq 'if length > 0 then env.GH_TOKEN else 1 end'"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-jq-stdin-assignment-reads-input-filename",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "gh pr list --json number | jq '.[] |= input_filename'"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
       "id": "neg-inert-yarn-silent-workspaces-focus-installs",
       "fix_area": "negative",
       "harnesses": [
@@ -47890,7 +48151,7 @@
         "command": "gh pr list --json number | jq 'reduce .[] as $row (0; . + $row.number)'"
       },
       "cwd": "worktree",
-      "expect": "not_allow"
+      "expect": "allow"
     },
     {
       "id": "jq-stdin-select-decimal",
@@ -47938,7 +48199,7 @@
         "command": "gh pr list --json number | jq '.[] | .number - 1'"
       },
       "cwd": "worktree",
-      "expect": "not_allow"
+      "expect": "allow"
     },
     {
       "id": "jq-stdin-limit-two-arguments",
@@ -47954,7 +48215,7 @@
         "command": "gh pr list --json number | jq 'limit(1; .[])'"
       },
       "cwd": "worktree",
-      "expect": "not_allow"
+      "expect": "allow"
     },
     {
       "id": "observed-git-01",

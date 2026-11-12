@@ -1,8 +1,9 @@
 """Launch Codex through its local app-server for same-thread continuation.
 
 The native runtime (``codex_remote_launch``) decides which argv a launch may
-use, whether the control socket is trusted and live, and whether a tracked
-process is the app-server on it. Python keeps the processes. A resident that
+use, whether the control socket is trusted and live, and whether the
+app-server Guard started before can be kept, or is stopped or gone. Python
+starts processes and records the direct app-server's pid. A resident that
 cannot answer leaves the ordinary launch.
 """
 
@@ -10,16 +11,16 @@ from __future__ import annotations
 
 import functools
 import os
-import signal
 import subprocess
-import time
 from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Any
 
 _REMOTE_CONTROL_START_TIMEOUT_SECONDS = 10
 _REMOTE_CONTROL_READY_TIMEOUT_SECONDS = 3.0
-_REMOTE_CONTROL_STOP_TIMEOUT_SECONDS = 1.0
+# Beyond the ready wait, the resident may spend a second reading the tracked
+# command line and a second stopping it.
+_RECLAIM_BUDGET_SECONDS = _REMOTE_CONTROL_READY_TIMEOUT_SECONDS + 4.0
 
 
 def codex_home_for_user(home_dir: Path) -> Path:
@@ -163,20 +164,15 @@ def _start_direct_app_server(
     try:
         socket_path.parent.mkdir(parents=True, exist_ok=True)
         socket_path.parent.chmod(0o700)
-        pid_path = socket_path.parent / "hol-guard-app-server.pid"
-        tracked_pid = _tracked_process_pid(pid_path)
-        if tracked_pid is not None:
-            tracked_command = _tracked_process_command(tracked_pid)
-            if tracked_command is None:
-                return False
-            ours = _ask("tracked", {"command": tracked_command, "socket": str(socket_path)}).get("ours")
-            if not isinstance(ours, bool):
-                return False
-            if ours:
-                if _wait_for_socket(socket_path):
-                    return True
-                if not _stop_tracked_process(tracked_pid):
-                    return False
+    except OSError:
+        return False
+    seconds = _REMOTE_CONTROL_READY_TIMEOUT_SECONDS
+    state = _ask("reclaim", {"socket": str(socket_path), "seconds": seconds}, _RECLAIM_BUDGET_SECONDS).get("state")
+    if state == "ready":
+        return True
+    if state != "free":
+        return False
+    try:
         process = subprocess.Popen(
             [*executable_prefix, "app-server", "--listen", f"unix://{socket_path}"],
             stdin=subprocess.DEVNULL,
@@ -185,66 +181,9 @@ def _start_direct_app_server(
             env=dict(environment),
             start_new_session=True,
         )
+        pid_path = socket_path.parent / "hol-guard-app-server.pid"
         pid_path.write_text(str(process.pid), encoding="utf-8")
         pid_path.chmod(0o600)
     except OSError:
         return False
     return _wait_for_socket(socket_path)
-
-
-def _tracked_process_pid(pid_path: Path) -> int | None:
-    try:
-        pid_text = pid_path.read_text(encoding="utf-8").strip()
-        if not pid_text.isascii() or not pid_text.isdecimal():
-            return None
-        pid = int(pid_text)
-    except (OSError, ValueError):
-        return None
-    try:
-        os.kill(pid, 0)
-    except PermissionError:
-        return pid
-    except OSError:
-        return None
-    return pid
-
-
-def _tracked_process_command(pid: int) -> str | None:
-    proc_cmdline = Path("/proc") / str(pid) / "cmdline"
-    try:
-        command = proc_cmdline.read_bytes().replace(b"\0", b"\n").decode("utf-8", errors="replace").strip()
-        if command:
-            return command
-    except OSError:
-        pass
-    try:
-        result = subprocess.run(
-            ["ps", "-p", str(pid), "-o", "command="],
-            capture_output=True,
-            text=True,
-            timeout=1,
-            check=False,
-        )
-    except (OSError, subprocess.TimeoutExpired):
-        return None
-    command = result.stdout.strip()
-    return command if result.returncode == 0 and command else None
-
-
-def _stop_tracked_process(pid: int) -> bool:
-    try:
-        os.kill(pid, signal.SIGTERM)
-    except ProcessLookupError:
-        return True
-    except OSError:
-        return False
-    deadline = time.monotonic() + _REMOTE_CONTROL_STOP_TIMEOUT_SECONDS
-    while time.monotonic() < deadline:
-        try:
-            os.kill(pid, 0)
-        except ProcessLookupError:
-            return True
-        except OSError:
-            return False
-        time.sleep(0.05)
-    return False

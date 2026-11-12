@@ -44,6 +44,14 @@
   },
   {
    "verdict": "windows-equivalent",
+   "note": "Contained runs are planned only on Unix (`restricted_pytest` is Unix-only), so no Windows plan ever puts `--no-env-file` in front of a Bun argv. Returning the argv unchanged is the same answer the Unix arm gives every argv that is not a planned Bun run, so a sink asking off Unix re-authorizes exactly the argv it runs. Proven by the Windows native-runtime build compiling this operation and by `contained_argv` tests on the Unix arm.",
+   "file": "rust/crates/guard-command/src/contained_argv.rs",
+   "item": "fn planned_route_argv(command: &[String]) -> Vec<String>",
+   "cfg": "not(unix)",
+   "body": "0911781b1f15"
+  },
+  {
+   "verdict": "windows-equivalent",
    "note": "`runtime/harness_attribution.py` returns `None` on `os.name == \"nt\"` before it ever reaches `/bin/ps`, so there is no Windows behaviour to keep parity with rather than an absent one. A Windows harness is still attributed by its environment markers, which every supported harness sets; only the fallback parent walk is missing, and its absence leaves the origin unknown rather than wrong. The slug is receipt and display identity, never a policy selector, so an unknown origin softens nothing.",
    "file": "rust/crates/guard-command/src/harness_attribution.rs",
    "item": "fn read_process_table() -> Option<String>",
@@ -225,6 +233,14 @@
    "note": "Unix proves an existing compaction note has one link and no execute bit before Cursor overwrites it. The link count is unstable on Windows, so an existing note fails closed and keeps its review; a write to a new segment name still passes because nothing exists to alias.",
    "cfg": "not(unix)",
    "body": "ff97d5ea05af"
+  },
+  {
+   "verdict": "windows-unsupported",
+   "note": "Git Bash resolves `/dev/null` against the directory where the hook runs, so a `core.hooksPath` of `/dev/null` does not name an empty device there. The local-write proof keeps treating that setting as unproven off Unix, and those writes stay reviewed as before.",
+   "file": "rust/crates/guard-command/src/pretool/git_hook_files.rs",
+   "item": "fn null_device() -> bool",
+   "cfg": "not(unix)",
+   "body": "3e06527b43b4"
   },
   {
    "file": "rust/crates/guard-command/src/pretool/git_hook_files.rs",
@@ -721,6 +737,22 @@
    "item": "fn ignorable_code(_code: i32) -> bool",
    "cfg": "not(any(unix, windows))",
    "body": "d73c3f0622bf"
+  },
+  {
+   "verdict": "windows-equivalent",
+   "note": "Reads and creates the adapter state key by path without owner-only mode checks or `openat`, since Windows has no POSIX modes: the key lives under the account's own Guard home, the `managed` folder and key must not be links, and creation is still exclusive. The Windows unit tests in `adapter_state_key_tests.rs` run create-once, reload and malformed-file cases through this arm.",
+   "file": "rust/crates/guard-runtime/src/adapters/adapter_state_key.rs",
+   "item": "mod platform",
+   "cfg": "not(unix)",
+   "body": "218162a319c3"
+  },
+  {
+   "verdict": "windows-unsupported",
+   "note": "Codex's app-server control socket is a Unix socket and `_start_direct_app_server` returns before asking on Windows, so no tracked app-server exists to reclaim there; answering `busy` keeps any launch on the ordinary argv.",
+   "file": "rust/crates/guard-runtime/src/adapters/codex_remote_launch.rs",
+   "item": "fn reclaim_state(_socket: &str, _seconds: f64) -> &'static str",
+   "cfg": "not(unix)",
+   "body": "a04ac213d091"
   },
   {
    "verdict": "windows-unsupported",
