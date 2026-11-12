@@ -1,6 +1,7 @@
-//! Screens of the prompt and file text a tool call carries: a subagent brief
-//! admitted only when no prompt detector flags it, and file writes that hold
-//! a live-looking credential or plant instructions for a later session.
+//! Screens of the prompt, file and program text a tool call carries: a
+//! subagent brief admitted only when no prompt detector flags it, file writes
+//! that hold a live-looking credential or plant instructions for a later
+//! session, and inline programs the read-only sandbox cannot make safe.
 
 use guard_contracts::{PreToolActionTypeV1, PreToolResultV1};
 use serde_json::Value;
@@ -65,4 +66,22 @@ pub(super) fn review_written_content(
     );
     }
     result
+}
+
+/// Keeps the review of a program the read-only evaluation sandbox cannot
+/// make safe: it neither hides system files nor stops a child git from
+/// discarding the work tree.
+pub(super) fn keeps_unsandboxed_program_review(
+    result: &mut PreToolResultV1,
+    model: &crate::CanonicalCommandV1,
+    command_text: Option<&str>,
+    context: crate::pretool::PathContext<'_>,
+) -> bool {
+    crate::pretool::script_content::keeps_system_file_review(result, model, command_text, context)
+        || crate::pretool::script_content::keeps_destructive_git_review(
+            result,
+            model,
+            command_text,
+            context,
+        )
 }

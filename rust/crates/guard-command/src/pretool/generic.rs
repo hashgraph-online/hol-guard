@@ -1275,6 +1275,22 @@ fn evaluate_envelope(
                 },
             )
         })
+        // The sandbox neither hides system files nor protects uncommitted
+        // work, so a program that names one or discards the other keeps its
+        // review. Last, so the reason only changes on a review this route
+        // would otherwise have contained.
+        && !command_model.is_some_and(|model| {
+            content_reviews::keeps_unsandboxed_program_review(
+                &mut result,
+                model,
+                signals.command.as_deref(),
+                super::PathContext {
+                    home_dir,
+                    cwd,
+                    ..context
+                },
+            )
+        })
     {
         result.minimum_action = "sandbox-required".into();
         result.policy_action = "sandbox-required".into();
