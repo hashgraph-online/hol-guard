@@ -77,6 +77,7 @@ pub(crate) fn benign_command_segments(
         ripgrep_config_absent: context.ripgrep_config_absent,
         gem_config_absent: context.gem_config_absent,
         http_config_absent: context.http_config_absent,
+        openssl_config_absent: context.openssl_config_absent,
         psql_environment: context.psql_environment,
         creates_nothing: super::search::command_creates_nothing(model),
         cwd: cwd.as_deref().or(context.cwd),
@@ -135,6 +136,7 @@ pub(crate) fn benign_command_segments(
             // home/cwd context retain the bounded path proof below.
             let requires_path_context = !path_free
                 && (super::digest_reads::digest_program(basename)
+                    || basename == "openssl"
                     || matches!(
                         basename,
                     "ls" | "cat"
@@ -595,6 +597,16 @@ pub(super) fn exact_safe_segment_with_context(
             segment.pipeline_index > 0,
             context,
         ),
+        // An unquoted Windows drive path loses its backslashes to the shell,
+        // so the file `openssl` opens is not the one the proof screened.
+        "openssl" => {
+            super::directory_targets::drive_targets_quoted(segment)
+                && super::digest_reads::safe_openssl_digest_arguments(
+                    &segment.arguments,
+                    segment.pipeline_index > 0,
+                    context,
+                )
+        }
         name if super::digest_reads::digest_program(name) => {
             super::digest_reads::safe_digest_arguments(
                 &segment.arguments,
