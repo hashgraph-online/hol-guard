@@ -351,11 +351,15 @@ fn runs_network_tool(segment: &str) -> bool {
     })
 }
 
-/// True when this segment runs a command named by a variable (`$CURL ...`).
+/// True when this segment runs a command named by a variable and passes a
+/// curl-style body or upload flag (`$CURL -d "$(cat .env)" ...`).
 fn runs_variable_command(segment: &str) -> bool {
-    command_words(segment)
-        .first()
-        .is_some_and(|word| word.starts_with('$'))
+    command_words(segment).first().is_some_and(|word| {
+        word.starts_with('$')
+            && ["-d ", "--data", "-F ", "--form", "-T ", "--upload-file"]
+                .iter()
+                .any(|flag| segment.contains(flag))
+    })
 }
 
 /// True when one command line sends a credential file to a network host.
