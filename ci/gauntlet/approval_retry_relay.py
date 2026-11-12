@@ -41,6 +41,7 @@ _HANDOFF_CODE = re.compile(r"/(?P<code>[0-9]{1,12}-[0-9a-f]{32})(?![0-9a-zA-Z])"
 _SESSION_TOKEN = re.compile(r"#(?:[^\s#]*&)?guard-token=(?P<token>gld1\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+)")
 _DESKTOP_LINK = re.compile(r"hol-guard-desktop://requests/(?P<rest>[^\s<>()\[\]\"'`]*)", re.IGNORECASE)
 _SESSION_AUDIENCE = "guard-local-daemon"
+_APPROVAL_SURFACE = "approval-center"
 # What a sentence can put right after a link, such as a full stop or Markdown emphasis.
 _PROSE_PUNCTUATION = ".,;:!?*_"
 
@@ -87,8 +88,13 @@ def omp_final_text(events: Iterable[dict[str, Any]]) -> str:
     return final
 
 
-def _session_token_valid(token: str, auth_token: str, now: float) -> bool:
-    """Whether a ``gld1`` dashboard session token is Guard's own and unexpired."""
+def _session_token_valid(token: str, auth_token: str, request_id: str, now: float) -> bool:
+    """Whether a ``gld1`` session token is Guard's own, unexpired and can decide this request.
+
+    Only an approval-center session decides a request. A protection-repair session
+    is signed by the same key but the daemon refuses its decisions, and an
+    approval-center session bound to another request cannot decide this one.
+    """
     try:
         _, payload, signature = token.split(".")
         expected = hmac.new(auth_token.encode("utf-8"), payload.encode("ascii"), hashlib.sha256).digest()
@@ -99,7 +105,13 @@ def _session_token_valid(token: str, auth_token: str, now: float) -> bool:
         expires = datetime.fromisoformat(str(claims["expires_at"])).timestamp()
     except (KeyError, TypeError, ValueError, UnicodeError, binascii.Error):
         return False
-    return claims.get("aud") == _SESSION_AUDIENCE and expires > now
+    bound = claims.get("request_id")
+    return (
+        claims.get("aud") == _SESSION_AUDIENCE
+        and claims.get("surface") == _APPROVAL_SURFACE
+        and (bound is None or bound == request_id)
+        and expires > now
+    )
 
 
 def _ends_link(rest: str) -> bool:
@@ -130,7 +142,7 @@ def _browser_link(rest: str, request_ids: set[str], auth_token: str | None, now:
         valid = (
             (_ends_link(rest_of_link) or rest_of_link.startswith("&"))
             and auth_token is not None
-            and _session_token_valid(token.group("token"), auth_token, now)
+            and _session_token_valid(token.group("token"), auth_token, request_id, now)
         )
         return {"form": "signed" if valid else "invalid", "request": request}
     # Anything after the id other than its signed code, like a cut-off code, still

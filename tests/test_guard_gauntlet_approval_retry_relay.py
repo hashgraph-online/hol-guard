@@ -102,6 +102,29 @@ def test_a_signed_session_link_passes(tmp_path: Path) -> None:
     assert outcome[0] == "pass", outcome
 
 
+@pytest.mark.parametrize(
+    ("surface", "claims"),
+    [
+        ("protection-repair", None),
+        ("approval-center", {"request_id": "another-request"}),
+    ],
+)
+def test_a_signed_session_that_cannot_decide_the_request_fails(
+    tmp_path: Path, surface: str, claims: dict[str, str] | None
+) -> None:
+    session = build_local_dashboard_session_token(auth_token=DAEMON_KEY, surface=surface, extra_claims=claims)
+    outcome = _judge(tmp_path, f"Approve it here: [approval]({REVIEW_URL}#guard-token={session}).")
+    assert outcome[0] == "fail", outcome
+
+
+def test_a_session_bound_to_the_held_request_passes(tmp_path: Path) -> None:
+    session = build_local_dashboard_session_token(
+        auth_token=DAEMON_KEY, surface="approval-center", extra_claims={"request_id": REQUEST_ID}
+    )
+    outcome = _judge(tmp_path, f"Approve it here: [approval]({REVIEW_URL}#guard-token={session}).")
+    assert outcome[0] == "pass", outcome
+
+
 def test_a_desktop_link_beside_a_signed_link_passes(tmp_path: Path) -> None:
     text = f"Open hol-guard-desktop://requests/{REQUEST_ID} or, in a browser, {_signed()}."
     assert _judge(tmp_path, text)[0] == "pass"
