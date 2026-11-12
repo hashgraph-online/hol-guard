@@ -88,3 +88,43 @@ fn only_a_whole_readable_first_line_is_read() {
     long.extend(vec![b'a'; SHEBANG_BYTES]);
     assert_eq!(read(&long), Shebang::Unclear);
 }
+
+/// The sole interpreter a script holding exactly `body` names.
+fn sole(body: &[u8]) -> Option<String> {
+    let path = std::env::temp_dir().join(format!(
+        "guard-shebang-sole-{}-{}",
+        std::process::id(),
+        NEXT.fetch_add(1, std::sync::atomic::Ordering::SeqCst)
+    ));
+    fs::write(&path, body).unwrap();
+    let named = sole_interpreter(&path);
+    let _ = fs::remove_file(path);
+    named
+}
+
+#[test]
+fn only_a_space_or_a_tab_ends_the_interpreter_the_kernel_starts() {
+    // A script written with CRLF endings names an interpreter whose last byte
+    // is the carriage return, because the kernel ends the name at a space or
+    // a tab and nowhere else. Reading the name without that byte would admit
+    // the file beside it while the kernel starts one a sibling can plant.
+    assert_eq!(
+        read(b"#!/opt/lane/bin/python3\r\nprint()\n"),
+        programs(&["/opt/lane/bin/python3\r"])
+    );
+    assert_eq!(
+        sole(b"#!/opt/lane/bin/python3\r\nprint()\n").as_deref(),
+        Some("/opt/lane/bin/python3\r")
+    );
+    assert_eq!(
+        read(b"#!/usr/bin/env\x0bsh\n"),
+        programs(&["/usr/bin/env\x0bsh"])
+    );
+    // What the kernel does separate still separates.
+    assert_eq!(
+        sole(b"#!/opt/lane/bin/python3\nprint()\n").as_deref(),
+        Some("/opt/lane/bin/python3")
+    );
+    assert_eq!(sole(b"#!/opt/lane/bin/python3 -I\n"), None);
+    assert_eq!(read(b"#!\t/bin/sh\t-e\n"), programs(&["/bin/sh"]));
+}

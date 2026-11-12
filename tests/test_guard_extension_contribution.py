@@ -8,10 +8,10 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.runtime import extension_contribution as contribution_module
 from codex_plugin_scanner.guard.runtime.extension_contribution import (
     validate_contribution,
 )
+from tests import extension_contribution_loader as contribution_loader
 
 _NOODLE = Path(__file__).resolve().parents[1] / "contributions/extensions/command.noodle.json"
 
@@ -81,9 +81,9 @@ def test_frozen_packaged_payloads_fail_closed_without_package_data(
     def missing_package(_name: str) -> object:
         raise ModuleNotFoundError("missing packaged extensions")
 
-    monkeypatch.setattr(contribution_module.resources, "files", missing_package)
+    monkeypatch.setattr(contribution_loader.resources, "files", missing_package)
     with pytest.raises(FileNotFoundError, match="contributions"):
-        contribution_module._load_packaged_payloads()
+        contribution_loader._load_packaged_payloads()
 
 
 def test_legacy_detector_descriptor_requires_explicit_conversion() -> None:

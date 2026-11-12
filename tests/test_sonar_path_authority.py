@@ -315,7 +315,7 @@ def test_missing_protected_authority_key_is_treated_as_tampering(
 ) -> None:
     monkeypatch.setattr(
         "codex_plugin_scanner.guard.runtime.extension_control_proof._require_local_terminal_confirmation",
-        lambda _enrollment: None,
+        lambda _guard_home, _enrollment: None,
     )
     store = _store(tmp_path, MemorySecretStore())
     protected = store.read_extension_control_authority_for_registry(BUILT_IN_COMMAND_EXTENSION_REGISTRY)

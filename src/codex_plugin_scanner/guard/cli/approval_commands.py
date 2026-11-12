@@ -10,6 +10,7 @@ from pathlib import Path
 
 from ..approval_gate import ApprovalGateError, require_high_risk, revoke_cooldown, unlock_cooldown
 from ..approval_gate import public_config as approval_gate_public_config
+from ..approval_hook_copy import authenticated_approval_review_url
 from ..approval_resolution import TERMINAL_POLICY_ACTION_NOT_RESOLVABLE
 from ..approval_scope_support import IneligibleApprovalScopeError, StaleApprovalScopeContractError
 from ..approvals import (
@@ -18,14 +19,16 @@ from ..approvals import (
     apply_approval_resolution,
     build_runtime_snapshot,
 )
-from ..browser_opener import open_browser_url
+from ..browser_opener import open_app_url, open_browser_url
 from ..codex_resume import retry_request_resume
 from ..config import load_guard_config
-from ..daemon import load_guard_daemon_url
+from ..desktop_review_link import desktop_review_url
+from ..native_daemon_manage import load_guard_daemon_url
 from ..runtime.decisions import AUTHORITATIVE_DECISION_INCONSISTENT
 from ..runtime.self_approval import SELF_APPROVAL_REASON, approval_resolution_invoked_from_agent
 from ..runtime.surface_server import GuardSurfaceRuntime
 from ..store import GuardStore
+from ..trusted_local_tools import LocalToolGrantUnavailableError
 from .approval_gate_prompt import approval_gate_cli_payload, prompt_for_approval_gate
 from .commands_parser_approvals import add_approval_parser as add_approval_parser
 
@@ -158,9 +161,10 @@ def run_approval_command(
             "next_action": "Open the original Guard request in the local approval center or native harness prompt.",
             "exit_code": 4,
         }
+    requested_scope = str(getattr(args, "scope", None) or "artifact")
     try:
         trust_local_tool = bool(getattr(args, "trust_local_tool", False))
-        if trust_local_tool and (args.scope != "artifact" or bool(getattr(args, "remember", False))):
+        if trust_local_tool and (requested_scope != "artifact" or bool(getattr(args, "remember", False))):
             return {
                 "resolved": False,
                 "error": "invalid_local_tool_trust_scope",
@@ -168,11 +172,11 @@ def run_approval_command(
                 "exit_code": 2,
             }
         gate_input = (
-            prompt_for_approval_gate(store.guard_home, strict=str(args.scope) == "global")
+            prompt_for_approval_gate(store.guard_home, strict=requested_scope == "global")
             if _approval_resolution_needs_gate(
                 store,
                 action=str(args.approval_action),
-                scope=str(args.scope),
+                scope=requested_scope,
             )
             else None
         )
@@ -196,7 +200,7 @@ def run_approval_command(
             store=store,
             request_id=args.request_id,
             action=args.approval_action,
-            scope=args.scope,
+            scope=requested_scope,
             workspace=str(workspace) if workspace is not None else None,
             reason=args.reason,
             now=_now(),
@@ -235,6 +239,12 @@ def run_approval_command(
         return {
             "resolved": False,
             "error": "already_resolved",
+            "exit_code": 4,
+        }
+    except LocalToolGrantUnavailableError as error:
+        return {
+            "resolved": False,
+            "error": str(error),
             "exit_code": 4,
         }
     except ValueError as error:
@@ -307,11 +317,26 @@ def run_approval_open_command(
         return {"error": "not_found", "request_id": request_id}, 1
     approval_url = str(item.get("approval_url", ""))
     repaired_url = _repaired_approval_url(approval_url, store.guard_home)
-    return {
+    payload: dict[str, object] = {
         "request_id": request_id,
         "approval_url": repaired_url,
         "repaired": repaired_url != approval_url,
-    }, 0
+        "opened": False,
+        "opened_in": None,
+    }
+    if getattr(args, "no_open", False):
+        return payload, 0
+    # The printed link stays unsigned: command output reaches agents and logs.
+    # Only the launch carries a session, in Desktop's own window or as a signed
+    # browser link, so the request opens signed in on this machine.
+    desktop_url = desktop_review_url(store.guard_home, request_id)
+    if desktop_url is not None and open_app_url(desktop_url):
+        payload.update(opened=True, opened_in="desktop")
+        return payload, 0
+    signed_url = authenticated_approval_review_url(repaired_url, guard_home=store.guard_home)
+    if signed_url and open_browser_url(signed_url):
+        payload.update(opened=True, opened_in="browser")
+    return payload, 0
 
 
 def run_approval_retry_hint_command(

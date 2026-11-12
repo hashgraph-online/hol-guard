@@ -39,6 +39,17 @@ then authenticates the installed release. It does not import arbitrary database
 rows or reset/re-enroll controls. Local controls, managed state and saved command
 approvals remain byte-for-byte unchanged.
 
+When an authenticated active pack belongs to another compiler engine, startup
+also prepares the same selected extensions from the installed release before
+taking the exclusive mutation lease. Rust verifies the installed version and
+engine, both authenticated activations, the unchanged selection and controls,
+and the new cache's release binding. It then binds the replacement activation
+to a catalog migration through the existing two-phase journal. Only catalog
+bindings advance; no approval proof is fabricated or saved decision removed.
+An interrupted anchored migration resumes through that same journal. A changed
+managed policy or activation during preparation refuses the commit. Compiler
+admission remains strict: an old engine's executable IR is never reused.
+
 Fresh enrollment and successful legacy migration write a separate scoped
 credential-store enrollment stamp before writing/readback of the floor. Retained
 floors are authenticated and preserved on repeated startup, including after SQLite

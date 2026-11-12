@@ -152,6 +152,38 @@ fn the_command_hash_holds_until_the_command_changes() {
     }
 }
 
+/// A Node launch held because its build has a known advisory keeps both
+/// choices, and an Always allow saved for it still answers after the advisory
+/// feed updates. The feed changes only the review's reason text; even a new
+/// rule digest or runtime identity on its policy binding is not part of the
+/// hash, so only a changed command, directory or workspace asks again.
+#[test]
+fn a_known_vulnerable_runtime_approval_survives_a_feed_update() {
+    let root = root();
+    let launch = |rule_digest: &str, runtime_identity: &str| {
+        let request = exact_request(&root, |query| {
+            query["command"] = json!("node server.js");
+            query["tool_input"] = json!([["command", "node server.js"]]);
+            query["facts"] = json!({
+                "decision": "deny", "minimum_action": "require-reapproval",
+                "policy_action": "require-reapproval",
+                "reason_code": "native_runtime_known_vulnerable", "action_type": "shell"
+            });
+            query["policy_binding"] = json!({"state": "bound", "value": {
+                "schema": "guard.native-review-policy-binding.v2",
+                "rule_digest": rule_digest, "runtime_identity": runtime_identity,
+                "command_extensions": {"uncertainty_count": 0}
+            }});
+        });
+        outcome(&request, Fallback::CommandHash)
+    };
+    let (saved, reason) = launch(&"a".repeat(64), "runtime-1");
+    assert!(saved.is_some(), "the review offers Always allow");
+    assert_eq!(reason, None);
+    let (updated, _) = launch(&"b".repeat(64), "runtime-2");
+    assert_eq!(updated, saved, "a feed update keeps the saved approval");
+}
+
 #[test]
 fn a_tool_called_with_no_input_can_be_approved() {
     let bare = token(&root(), |query| {

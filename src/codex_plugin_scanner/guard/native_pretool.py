@@ -1,8 +1,8 @@
 """Mechanical Python launcher for Rust PreToolUse authority.
 
 This module validates and returns the native decision. It does not parse,
-classify, or lower the semantic result. Command-model shadow comparison stays
-in native_command_model and is not a PreToolUse authority.
+classify, or lower the semantic result. native_command_model only projects
+the Rust command model into the Python type and is not a PreToolUse authority.
 """
 
 from __future__ import annotations
@@ -25,9 +25,6 @@ from .native_runtime_resilience import (
 _MAX_REQUEST_BYTES = 64 * 1024
 _MAX_RESULT_TEXT = 2_048
 _PRETOOL_AUTHORITY_FEATURE = "pre-tool-command-authority-v1"
-_PRETOOL_PATH_CONTEXT_FEATURE = "pre-tool-path-context-v1"
-_PRETOOL_EXECUTION_ENVIRONMENT_FEATURE = "pre-tool-execution-environment-v1"
-_RESIDENT_PROTOCOL_FEATURE = "resident-protocol-v2"
 _PRETOOL_RESULT_KEYS = {
     "schema",
     "version",
@@ -101,6 +98,9 @@ _POLICY_ACTIONS = {
     "block",
 }
 _ALLOWING_POLICY_ACTIONS = {"allow", "warn"}
+# The actions a command-string review may answer: its callers have no
+# containment or reapproval route.
+_LEGACY_REVIEW_ACTIONS = {"allow", "review", "block"}
 
 
 def _valid_generic_result_fields(payload: dict[str, Any]) -> bool:
@@ -179,7 +179,7 @@ def _decode_pre_tool(payload: object, *, command: str) -> dict[str, Any] | None:
         not isinstance(decision, str)
         or decision not in {"allow", "deny"}
         or not isinstance(action, str)
-        or action not in {"allow", "review", "block"}
+        or action not in _LEGACY_REVIEW_ACTIONS
         or not isinstance(reason_code, str)
         or not reason_code
         or not isinstance(reason, str)
@@ -203,6 +203,7 @@ def review_pre_tool_native(
     execution_environment: Mapping[str, object] | None = None,
     timeout_seconds: float = 0.5,
     record_health: bool = True,
+    extension_evidence: bool = False,
 ) -> dict[str, Any] | None:
     """Return the Rust PreToolUse decision, or None when native cannot decide.
 
@@ -221,6 +222,12 @@ def review_pre_tool_native(
     without it, because neither this process nor the resident runtime is that
     shell. A caller that cannot name the environment leaves it out and those
     rules keep their review.
+
+    ``extension_evidence=True`` asks the resident to decide under the extension
+    controls of the snapshot it admitted and to return the
+    ``command_extensions`` evidence with the decision. A caller that resolves
+    the review against those controls needs it, and fails closed on a reply
+    that carries none.
     """
     status = native_runtime_status()
     if (
@@ -242,22 +249,20 @@ def review_pre_tool_native(
         "transport": "shell_string",
         "extraction_provenance": "guard-shell",
     }
-    # An older runtime ignores the two fields and answers as it does today.
-    if _PRETOOL_PATH_CONTEXT_FEATURE in status.capabilities.features:
-        if cwd is not None:
-            request["cwd"] = str(cwd)
-        if home_dir is not None:
-            request["home_dir"] = str(home_dir)
+    if cwd is not None:
+        request["cwd"] = str(cwd)
+    if home_dir is not None:
+        request["home_dir"] = str(home_dir)
     # Several rules answer for what the command inherits from the shell: a
     # RIPGREP_CONFIG_PATH that prepends options to rg, an npm or rustup
     # variable that moves what a tool loads, the HOME a tilde expands from.
     # The runtime cannot read any of it: the resident daemon is started with
     # its own sanitized environment. This process is the hook, running in the
     # agent's shell, so it is the one that can say.
-    if _PRETOOL_EXECUTION_ENVIRONMENT_FEATURE in status.capabilities.features and isinstance(
-        execution_environment, Mapping
-    ):
+    if isinstance(execution_environment, Mapping):
         request["execution_environment"] = dict(execution_environment)
+    if extension_evidence:
+        request["extension_evidence"] = True
     encoded = json.dumps(request, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
     if len(encoded) > _MAX_REQUEST_BYTES:
         # A shell with many exported names can outgrow the request bound. The
@@ -269,71 +274,43 @@ def review_pre_tool_native(
         if len(encoded) > _MAX_REQUEST_BYTES:
             return record_native_hook_result("native_fail_safe", None)
     environment = _isolated_environment()
-    if _RESIDENT_PROTOCOL_FEATURE in status.capabilities.features:
-        resident = json.dumps(
-            {
-                "operation": "pre_tool_use",
-                "deadline_budget_ms": deadline_budget_ms,
-                "request": request,
-            },
-            separators=(",", ":"),
-            ensure_ascii=False,
-        ).encode("utf-8")
-        output = native_resident_client_request(
-            executable=status.identity.path,
-            guard_home=guard_home,
-            environment=environment,
-            payload=resident,
-            deadline_monotonic=deadline_monotonic,
+    resident = json.dumps(
+        {
+            "operation": "pre_tool_use",
+            "deadline_budget_ms": deadline_budget_ms,
+            "request": request,
+        },
+        separators=(",", ":"),
+        ensure_ascii=False,
+    ).encode("utf-8")
+    output = native_resident_client_request(
+        executable=status.identity.path,
+        guard_home=guard_home,
+        environment=environment,
+        payload=resident,
+        deadline_monotonic=deadline_monotonic,
+    )
+    if output is not None:
+        try:
+            payload = json.loads(output)
+        except (UnicodeDecodeError, json.JSONDecodeError):
+            payload = None
+        if _native_error(payload) == "native_overloaded":
+            if record_health:
+                native_record_overload(status.identity.sha256, guard_home)
+            return record_native_hook_result("native_fail_safe", None)
+        decoded = _decode_pre_tool(payload, command=command)
+        if decoded is not None:
+            if record_health:
+                native_record_resident_success(status.identity.sha256, guard_home)
+            return record_native_hook_result("native_resident", decoded)
+    if record_health:
+        native_record_resident_failure(
+            status.identity.sha256,
+            guard_home,
+            reason="native_pre_tool_resident_unavailable",
         )
-        if output is not None:
-            try:
-                payload = json.loads(output)
-            except (UnicodeDecodeError, json.JSONDecodeError):
-                payload = None
-            if _native_error(payload) == "native_overloaded":
-                if record_health:
-                    native_record_overload(status.identity.sha256, guard_home)
-                return record_native_hook_result("native_fail_safe", None)
-            decoded = _decode_pre_tool(payload, command=command)
-            if decoded is not None:
-                if record_health:
-                    native_record_resident_success(status.identity.sha256, guard_home)
-                return record_native_hook_result("native_resident", decoded)
-        if record_health:
-            native_record_resident_failure(
-                status.identity.sha256,
-                guard_home,
-                reason="native_pre_tool_resident_unavailable",
-            )
     return record_native_hook_result("native_fail_safe", None)
 
 
-def native_pre_tool_policy_floor(
-    command: str,
-    *,
-    guard_home: Path,
-    cwd: Path | None,
-    home_dir: Path | None,
-    execution_environment: Mapping[str, object] | None = None,
-) -> str | None:
-    """Return a native PreToolUse floor, or ``block`` when native is expected but absent."""
-    native = review_pre_tool_native(
-        command,
-        guard_home=guard_home,
-        cwd=cwd,
-        home_dir=home_dir,
-        execution_environment=execution_environment,
-    )
-    if native is not None:
-        action = native.get("minimum_action")
-        if action == "review" and native.get("reason_code") == "native_git_helper_context_review":
-            return None
-        return action if action in {"allow", "review", "block"} else "block"
-    return "block"
-
-
-__all__ = [
-    "native_pre_tool_policy_floor",
-    "review_pre_tool_native",
-]
+__all__ = ["review_pre_tool_native"]

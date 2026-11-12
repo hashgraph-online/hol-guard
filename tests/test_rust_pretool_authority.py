@@ -11,7 +11,7 @@ import pytest
 from codex_plugin_scanner.guard import native_pretool as pretool
 from codex_plugin_scanner.guard import native_route_receipt as routes
 from codex_plugin_scanner.guard import native_runtime as runtime
-from codex_plugin_scanner.guard.daemon.hook_worker import HookWorker
+from codex_plugin_scanner.guard.hook_review.hook_worker import HookWorker
 from codex_plugin_scanner.guard.store import GuardStore
 
 
@@ -117,92 +117,16 @@ def test_missing_pretool_feature_records_fail_safe_provenance(
     assert routes.native_hook_route() == "native_fail_safe"
 
 
-def test_policy_floor_uses_native_block(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.setattr(
-        "codex_plugin_scanner.guard.native_pretool.review_pre_tool_native",
-        lambda *_args, **_kwargs: _native_block("rm -rf /"),
-    )
-    assert (
-        pretool.native_pre_tool_policy_floor(
-            "rm -rf /",
-            guard_home=tmp_path,
-            cwd=tmp_path,
-            home_dir=tmp_path,
-        )
-        == "block"
-    )
-
-
-def test_policy_floor_defers_contextual_git_helper_review_to_python(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    native_review = _native_block("git diff --check")
-    native_review.update(
-        {
-            "decision": "deny",
-            "minimum_action": "review",
-            "policy_action": "review",
-            "reason_code": "native_git_helper_context_review",
-        }
-    )
-    monkeypatch.setattr(
-        "codex_plugin_scanner.guard.native_pretool.review_pre_tool_native",
-        lambda *_args, **_kwargs: native_review,
-    )
-
-    assert (
-        pretool.native_pre_tool_policy_floor(
-            "git diff --check",
-            guard_home=tmp_path,
-            cwd=tmp_path,
-            home_dir=tmp_path,
-        )
-        is None
-    )
-
-
-def test_policy_floor_fails_closed_when_native_is_forced_unavailable(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.setattr(
-        "codex_plugin_scanner.guard.native_pretool.review_pre_tool_native",
-        lambda *_args, **_kwargs: None,
-    )
-    monkeypatch.setattr(
-        "codex_plugin_scanner.guard.native_pretool.native_runtime_status",
-        lambda: runtime.NativeRuntimeStatus(
-            mode="force",
-            available=False,
-            compatible=False,
-            reason="missing",
-        ),
-    )
-    assert (
-        pretool.native_pre_tool_policy_floor(
-            "pwd",
-            guard_home=tmp_path,
-            cwd=tmp_path,
-            home_dir=tmp_path,
-        )
-        == "block"
-    )
-
-
 def test_hook_worker_fails_closed_when_forced_native_is_missing(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(
-        "codex_plugin_scanner.guard.daemon.hook_worker.review_raw_hook_native",
+        "codex_plugin_scanner.guard.hook_review.hook_worker.review_raw_hook_native",
         lambda *_args, **_kwargs: None,
     )
     monkeypatch.setattr(
-        "codex_plugin_scanner.guard.daemon.hook_worker.native_runtime_status",
+        "codex_plugin_scanner.guard.hook_review.hook_worker.native_runtime_status",
         lambda: runtime.NativeRuntimeStatus(
             mode="force",
             available=False,
@@ -227,11 +151,11 @@ def test_hook_worker_fails_closed_when_auto_pretool_native_is_unavailable(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(
-        "codex_plugin_scanner.guard.daemon.hook_worker.review_raw_hook_native",
+        "codex_plugin_scanner.guard.hook_review.hook_worker.review_raw_hook_native",
         lambda *_args, **_kwargs: None,
     )
     monkeypatch.setattr(
-        "codex_plugin_scanner.guard.daemon.hook_worker.native_runtime_status",
+        "codex_plugin_scanner.guard.hook_review.hook_worker.native_runtime_status",
         lambda: runtime.NativeRuntimeStatus(
             mode="auto",
             available=False,
@@ -256,7 +180,7 @@ def test_hook_worker_denies_unreviewed_non_command_pretool_without_native_result
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(
-        "codex_plugin_scanner.guard.daemon.hook_worker.review_raw_hook_native",
+        "codex_plugin_scanner.guard.hook_review.hook_worker.review_raw_hook_native",
         lambda *_args, **_kwargs: None,
     )
     worker = HookWorker(store=GuardStore(tmp_path / "guard-home"))
@@ -276,7 +200,7 @@ def test_hook_worker_leaves_out_of_scope_events_to_existing_handling(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(
-        "codex_plugin_scanner.guard.daemon.hook_worker.review_raw_hook_native",
+        "codex_plugin_scanner.guard.hook_review.hook_worker.review_raw_hook_native",
         lambda *_args, **_kwargs: None,
     )
     worker = HookWorker(store=GuardStore(tmp_path / "guard-home"))
@@ -330,6 +254,7 @@ def _sent_request(
     monkeypatch: pytest.MonkeyPatch,
     features: tuple[str, ...],
     execution_environment: dict[str, Any] | None = None,
+    **review_kwargs: Any,
 ) -> dict[str, Any]:
     monkeypatch.setattr(
         "codex_plugin_scanner.guard.native_pretool.native_runtime_status",
@@ -356,8 +281,28 @@ def _sent_request(
             cwd=tmp_path / "app-portal",
             home_dir=tmp_path,
             execution_environment=execution_environment,
+            **review_kwargs,
         )
     return sent
+
+
+_FEATURES = ("pre-tool-command-authority-v1",)
+
+
+def test_a_caller_that_resolves_extensions_asks_for_their_evidence(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    sent = _sent_request(tmp_path, monkeypatch, _FEATURES, extension_evidence=True)
+    assert sent["request"]["extension_evidence"] is True
+
+
+def test_the_enforcing_review_never_asks_for_extension_evidence(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    sent = _sent_request(tmp_path, monkeypatch, _FEATURES)
+    assert "extension_evidence" not in sent["request"]
 
 
 def test_pre_tool_request_carries_the_directories_the_command_runs_in(
@@ -367,7 +312,7 @@ def test_pre_tool_request_carries_the_directories_the_command_runs_in(
     sent = _sent_request(
         tmp_path,
         monkeypatch,
-        ("pre-tool-command-authority-v1", "resident-protocol-v2", "pre-tool-path-context-v1"),
+        _FEATURES,
     )
     assert sent["request"]["cwd"] == str(tmp_path / "app-portal")
     assert sent["request"]["home_dir"] == str(tmp_path)
@@ -390,12 +335,7 @@ def test_the_request_carries_the_shell_the_command_will_run_in(
     sent = _sent_request(
         tmp_path,
         monkeypatch,
-        (
-            "pre-tool-command-authority-v1",
-            "resident-protocol-v2",
-            "pre-tool-path-context-v1",
-            "pre-tool-execution-environment-v1",
-        ),
+        _FEATURES,
         execution_environment=stamp,
     )
     assert sent["request"]["execution_environment"] == stamp
@@ -415,24 +355,6 @@ def test_a_caller_that_cannot_name_the_shell_sends_no_environment(
     sent = _sent_request(
         tmp_path,
         monkeypatch,
-        (
-            "pre-tool-command-authority-v1",
-            "resident-protocol-v2",
-            "pre-tool-path-context-v1",
-            "pre-tool-execution-environment-v1",
-        ),
+        _FEATURES,
     )
     assert "execution_environment" not in sent["request"]
-
-
-def test_a_runtime_without_the_feature_is_asked_the_question_it_understands(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    sent = _sent_request(
-        tmp_path,
-        monkeypatch,
-        ("pre-tool-command-authority-v1", "resident-protocol-v2"),
-    )
-    assert "cwd" not in sent["request"]
-    assert "home_dir" not in sent["request"]

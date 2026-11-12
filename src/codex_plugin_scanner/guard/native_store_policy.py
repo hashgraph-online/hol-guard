@@ -23,10 +23,6 @@ from .native_runtime_resilience import native_record_resident_failure, native_re
 
 CLAIM_APPROVAL_REUSE_FEATURE = "claim-approval-reuse-v1"
 APPROVAL_REUSE_DIAGNOSTIC_FEATURE = "approval-reuse-diagnostic-v1"
-# The diagnostic request denies unknown fields, so ``current_action`` is sent
-# only to a runtime that advertises this; an older one gets the two-field
-# request and the caller composes the reuse decision itself.
-APPROVAL_REUSE_DIAGNOSTIC_REUSE_FEATURE = "approval-reuse-diagnostic-reuse-v1"
 _CLAIM_REQUEST_SCHEMA = "guard-claim-approval-reuse-request.v1"
 _CLAIM_RESULT_SCHEMA = "guard-claim-approval-reuse-result.v1"
 _DIAGNOSTIC_REQUEST_SCHEMA = "guard-approval-reuse-diagnostic-request.v1"
@@ -104,7 +100,11 @@ def claim_evidence_binding(
 
 
 def _payload(
-    response: dict[str, object] | None, request: dict[str, object], guard_home: Path
+    response: dict[str, object] | None,
+    request: dict[str, object],
+    guard_home: Path,
+    *,
+    failure_reason: str = "native_store_policy_binding",
 ) -> dict[str, object] | None:
     """The ``ok`` payload of a reply bound to ``request``, else ``None``.
 
@@ -113,7 +113,9 @@ def _payload(
     digest) is the resident's real answer and counts as a success, including a
     bound ``error`` such as store contention, which still yields ``None``. An
     unbound reply or an ``ok`` reply with a malformed payload counts as a
-    failure.
+    failure, recorded under ``failure_reason`` so resident health names the
+    bridge that saw it instead of blaming the store-policy ops for every
+    caller that shares this helper.
     """
 
     if response is None:
@@ -132,7 +134,7 @@ def _payload(
         if healthy:
             native_record_resident_success(identity.sha256, guard_home)
         else:
-            native_record_resident_failure(identity.sha256, guard_home, reason="native_store_policy_binding")
+            native_record_resident_failure(identity.sha256, guard_home, reason=failure_reason)
     return payload if bound and usable and isinstance(payload, dict) else None
 
 
@@ -175,35 +177,6 @@ def native_claim_approval_reuse_decisions(
     return payload is not None and payload.get("claimed") is True
 
 
-def native_approval_reuse_diagnostic(
-    *,
-    store_path: Path | str,
-    guard_home: Path,
-    harness: str,
-    artifact_id: str,
-    artifact_hash: str | None,
-    workspace: str | None,
-    publisher: str | None,
-    now: str,
-    evidence_provider: EvidenceProvider,
-) -> tuple[str | None, str | None]:
-    """Diagnose a saved-allow miss as ``(reason, stored_hash)``."""
-
-    reason, stored_hash, _reuse = native_approval_reuse_miss(
-        store_path=store_path,
-        guard_home=guard_home,
-        harness=harness,
-        artifact_id=artifact_id,
-        artifact_hash=artifact_hash,
-        workspace=workspace,
-        publisher=publisher,
-        now=now,
-        evidence_provider=evidence_provider,
-        current_action=None,
-    )
-    return reason, stored_hash
-
-
 def native_approval_reuse_miss(
     *,
     store_path: Path | str,
@@ -215,19 +188,12 @@ def native_approval_reuse_miss(
     publisher: str | None,
     now: str,
     evidence_provider: EvidenceProvider,
-    current_action: str | None,
-) -> tuple[str | None, str | None, Mapping[str, object] | None]:
-    """Diagnose a saved-allow miss as ``(reason, stored_hash, reuse)``.
+) -> tuple[str | None, str | None]:
+    """Diagnose a saved-allow miss as ``(reason, stored_hash)``.
 
     The first call carries no evidence; when the resident finds rows whose
     integrity it must verify it answers with a ``need`` naming the evidence, the
     provider supplies it, and the identical request is repeated with it.
-
-    Naming ``current_action`` also asks the resident what the miss means for
-    reuse, so the caller never has to name a saved action for a row it was
-    just told did not authorize the request. The composed ``reuse`` payload is
-    returned unparsed; ``None`` means the caller did not ask for one or the
-    running resident predates the composed reply.
     """
 
     request: dict[str, object] = {
@@ -243,11 +209,6 @@ def native_approval_reuse_miss(
         "now": now,
     }
     status = native_runtime_status()
-    features = set(status.capabilities.features) if status.capabilities is not None else set()
-    ask_reuse = current_action is not None and APPROVAL_REUSE_DIAGNOSTIC_REUSE_FEATURE in features
-    if ask_reuse:
-        request["current_action"] = current_action
-    expected = {"reason", "stored_hash", "reuse"} if ask_reuse else {"reason", "stored_hash"}
     for _attempt in range(2):
         try:
             response = _resident_request(
@@ -255,9 +216,7 @@ def native_approval_reuse_miss(
                 request=request,
                 guard_home=guard_home,
                 timeout_seconds=_TIMEOUT_SECONDS,
-                required_feature=(
-                    APPROVAL_REUSE_DIAGNOSTIC_REUSE_FEATURE if ask_reuse else APPROVAL_REUSE_DIAGNOSTIC_FEATURE
-                ),
+                required_feature=APPROVAL_REUSE_DIAGNOSTIC_FEATURE,
                 response_schema=_DIAGNOSTIC_RESULT_SCHEMA,
                 record_success=False,
                 status=status,
@@ -271,13 +230,12 @@ def native_approval_reuse_miss(
             evidence = evidence_provider(payload.get("policy") is True, payload.get("local_once") is True)
             request["evidence"] = {key: value for key, value in evidence.items() if value is not None}
             continue
-        reason, stored_hash, reuse = payload.get("reason"), payload.get("stored_hash"), payload.get("reuse")
+        reason, stored_hash = payload.get("reason"), payload.get("stored_hash")
         if (
-            set(payload) == expected
+            set(payload) == {"reason", "stored_hash"}
             and (reason is None or isinstance(reason, str))
             and (stored_hash is None or isinstance(stored_hash, str))
-            and (not ask_reuse or isinstance(reuse, dict))
         ):
-            return reason, stored_hash, reuse if ask_reuse and isinstance(reuse, dict) else None
+            return reason, stored_hash
         break
     raise ApprovalReuseDiagnosticUnavailableError

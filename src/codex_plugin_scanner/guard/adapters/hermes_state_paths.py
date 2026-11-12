@@ -83,21 +83,33 @@ def _safe_legacy_cleanup_values(
     if not isinstance(servers, dict):
         servers = {}
     managed: list[str] = []
-    marker = ["-m", "codex_plugin_scanner.cli", "hermes", "mcp-proxy", "--guard-home"]
     guard_home_values = {str(context.guard_home), str(context.guard_home.resolve())}
     for name, config in servers.items():
         args = config.get("args") if isinstance(config, dict) else None
-        guard_home_value = args[len(marker)] if isinstance(args, list) and len(args) > len(marker) else None
-        if (
-            isinstance(name, str)
-            and isinstance(args, list)
-            and args[: len(marker)] == marker
-            and isinstance(guard_home_value, str)
-            and guard_home_value in guard_home_values
-        ):
+        guard_home = _guard_proxy_home(args) if isinstance(args, list) else None
+        if isinstance(name, str) and isinstance(guard_home, str) and guard_home in guard_home_values:
             managed.append(name)
     current_guard = inspection.payload.get("guard")
     return managed, current_guard if isinstance(current_guard, dict) else None
+
+
+_PROXY_MARKERS = (
+    ["-m", "codex_plugin_scanner.cli", "hermes", "mcp-proxy", "--guard-home"],
+    ["-m", "codex_plugin_scanner.cli", "guard", "hermes-mcp-proxy", "--guard-home"],
+)
+
+
+def _guard_proxy_home(args: list[object]) -> object:
+    """The Guard home a generated Hermes proxy launch names, or None for any other argv.
+
+    The launch is either the Python argv or the native relay's ``mcp-relay <python>`` prefix over it.
+    """
+
+    for marker in _PROXY_MARKERS:
+        for start in (0, 2):
+            if args[start : start + len(marker)] == marker and len(args) > start + len(marker):
+                return args[start + len(marker)]
+    return None
 
 
 def remove_hermes_managed_files(context: HarnessContext, managed_root: Path) -> list[str]:

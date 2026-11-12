@@ -11,9 +11,9 @@ from pathlib import Path
 
 import pytest
 
+from ci.guard_daemon_harness import GuardDaemonServer
 from codex_plugin_scanner.guard import shims as shims_module
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
-from codex_plugin_scanner.guard.daemon.server import GuardDaemonServer
 from codex_plugin_scanner.guard.models import GUARD_ACTION_VALUES
 from codex_plugin_scanner.guard.native_shim_admin import probe_package_shim_intercepts as _probe_entry
 from codex_plugin_scanner.guard.shims import install_package_shims, probe_package_shim_intercepts
@@ -156,7 +156,7 @@ def _hold_probe_open(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("PYTHONPATH", str(startup))
 
 
-def test_package_shim_intercept_probe_marks_hung_manager_as_probe_failed(
+def test_package_shim_intercept_probe_marks_hung_manager_as_timed_out(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -181,7 +181,7 @@ def test_package_shim_intercept_probe_marks_hung_manager_as_probe_failed(
             "evaluator_invoked": False,
             "intercept_ran": False,
             "manager": "npm",
-            "skipped_reason": "probe_failed",
+            "skipped_reason": "probe_timed_out",
         },
     ]
 
@@ -211,7 +211,7 @@ def test_package_shim_intercept_probe_timeout_covers_store_busy_wait(
     assert default_timeout == int(SQLITE_CONNECT_TIMEOUT_SECONDS) + 5
     assert default_timeout > 15
     assert result["intercept_proved"] is False
-    assert result["manager_results"][0]["skipped_reason"] == "probe_failed"
+    assert result["manager_results"][0]["skipped_reason"] == "probe_timed_out"
 
 
 def test_package_shim_intercept_probe_omits_manager_stdout_secrets(

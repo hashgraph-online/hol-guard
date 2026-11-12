@@ -55,7 +55,7 @@ pub(crate) fn persisted_metadata(existing_json: &str, requested_json: &str) -> S
         .ok_or(StoreError::Invalid("native_guard_store_args_invalid"))
 }
 
-fn identifier(value: &Value) -> Option<&str> {
+pub(crate) fn identifier(value: &Value) -> Option<&str> {
     let text = value.as_str()?;
     let invalid = text.is_empty()
         || text != py_strip(text)
@@ -122,7 +122,7 @@ fn valid_lineage(value: &Value) -> bool {
 /// SHA-256 of `json.dumps(value, sort_keys=True, separators=(",", ":"),
 /// ensure_ascii=False)`. Validated lineage values are strings plus the
 /// integer version, so only string escaping needs spelling out.
-fn digest(map: &Map<String, Value>) -> String {
+pub(crate) fn digest(map: &Map<String, Value>) -> String {
     let mut out = String::from("{");
     for (index, (key, value)) in map.iter().enumerate() {
         if index > 0 {

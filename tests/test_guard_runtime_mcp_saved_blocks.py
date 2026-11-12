@@ -2614,3 +2614,78 @@ def test_runtime_mcp_quarantines_child_when_entrypoint_changes_during_spawn(
     assert sessions
     assert proxy._active_runtime_launch_identity is None
     assert proxy._active_executable_identity is None
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="symlinked shell launcher")
+def test_runtime_mcp_launches_canonical_executable_and_rejects_symlink_swap(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    context = _context(tmp_path)
+    assert context.workspace_dir is not None
+    workspace = context.workspace_dir
+    original = workspace / "original-server"
+    replacement = workspace / "replacement-server"
+    launcher = workspace / "server"
+    original.write_text("#!/bin/sh\nwhile :; do :; done\n", encoding="utf-8")
+    replacement.write_text("#!/bin/sh\n# replacement\nwhile :; do :; done\n", encoding="utf-8")
+    original.chmod(0o755)
+    replacement.chmod(0o755)
+    launcher.symlink_to(original)
+    proxy = CodexMcpGuardProxy(
+        server_name="symlink-swap",
+        command=[str(launcher)],
+        context=context,
+        store=GuardStore(context.guard_home),
+        config=GuardConfig(blocked_request_mode="ask", guard_home=context.guard_home, workspace=workspace),
+        source_scope="project",
+        config_path=str(workspace / ".codex" / "config.toml"),
+    )
+    real_open_native = runtime_mcp_module.mcp_stdio_session_open_native
+    observed: dict[str, Any] = {}
+
+    def swap_then_open(argv: list[str], *args: Any, **kwargs: Any) -> Any:
+        observed["argv"] = list(argv)
+        launcher.unlink()
+        launcher.symlink_to(replacement)
+        return real_open_native(argv, *args, **kwargs)
+
+    monkeypatch.setattr(runtime_mcp_module, "mcp_stdio_session_open_native", swap_then_open)
+
+    with pytest.raises(RuntimeError, match="launch identity changed"):
+        proxy._start_process()
+
+    assert observed["argv"][0] == str(original.resolve())
+    assert proxy._active_runtime_launch_identity is None
+    assert proxy._active_executable_identity is None
+
+
+def test_runtime_mcp_launch_identity_is_cleared_on_spawn_failure(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    context = _context(tmp_path)
+    assert context.workspace_dir is not None
+    server_script = context.workspace_dir / "server.py"
+    server_script.write_text("print('server')\n", encoding="utf-8")
+    proxy = CodexMcpGuardProxy(
+        server_name="spawn-failure",
+        command=[sys.executable, str(server_script)],
+        context=context,
+        store=GuardStore(context.guard_home),
+        config=GuardConfig(blocked_request_mode="ask", guard_home=context.guard_home, workspace=context.workspace_dir),
+        source_scope="project",
+        config_path=str(context.workspace_dir / ".codex" / "config.toml"),
+    )
+
+    def fail_open(*_args: object, **_kwargs: object) -> object:
+        raise OSError("spawn failed")
+
+    monkeypatch.setattr(runtime_mcp_module, "mcp_stdio_session_open_native", fail_open)
+
+    with pytest.raises(OSError, match="spawn failed"):
+        proxy._start_process()
+
+    assert proxy._active_runtime_launch_identity is None
+    assert proxy._active_executable_identity is None
+    assert proxy._active_server_env_values_hash is None

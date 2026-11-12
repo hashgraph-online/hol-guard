@@ -125,3 +125,23 @@ fn a_restricted_directory_is_created_for_its_owner_alone() {
     // An existing directory is left exactly as it is.
     create_restricted_directory(&nested).expect("again");
 }
+
+#[test]
+#[cfg(unix)]
+fn a_component_is_authority_only_when_root_alone_can_change_it() {
+    const FILE: u32 = 0o100_000;
+    const DIRECTORY: u32 = 0o040_000;
+    const LINK: u32 = 0o120_000;
+
+    assert!(component_is_restricted(false, true, 0, FILE | 0o644));
+    assert!(component_is_restricted(false, true, 0, DIRECTORY | 0o755));
+    // A symlink, a group- or world-writable file, an owner other than root
+    // and a writable parent each hand the policy to another account.
+    assert!(!component_is_restricted(true, true, 0, LINK | 0o777));
+    assert!(!component_is_restricted(false, true, 0, FILE | 0o666));
+    assert!(!component_is_restricted(false, true, 0, FILE | 0o664));
+    assert!(!component_is_restricted(false, true, 501, FILE | 0o644));
+    assert!(!component_is_restricted(false, true, 0, DIRECTORY | 0o777));
+    // So does a component that is not the kind the walk expects there.
+    assert!(!component_is_restricted(false, false, 0, FILE | 0o644));
+}

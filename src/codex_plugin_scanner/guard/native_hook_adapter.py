@@ -27,6 +27,7 @@ from __future__ import annotations
 
 import copy
 import json
+import math
 import os
 import re
 import time
@@ -45,8 +46,13 @@ from .native_context import (
 )
 from .native_execution import _resident_request
 from .native_hook_adapter_wire import _Tagger, _TooLargeError, _UnrepresentableError
-from .native_resident_client import native_resident_client_failure_code, record_native_resident_client_failure_code
-from .native_resident_revival import RESTART_BLOCKED_CODE
+from .native_resident_client import (
+    native_resident_client_failure_code,
+    native_resident_client_failure_hold_key,
+    record_native_resident_client_failure_code,
+    record_native_resident_client_failure_hold_key,
+)
+from .native_resident_revival import RESTART_BLOCKED_CODE, restart_hold_seconds_remaining
 
 HOOK_ADAPTER_FEATURE = "hook-adapter-v1"
 _REQUEST_SCHEMA = "guard-hook-adapter-request.v1"
@@ -58,43 +64,26 @@ _DEADLINE = "native_hook_adapter_deadline_expired"
 _REQUEST_TOO_LARGE = "native_hook_adapter_request_too_large"
 _TIMEOUT_SECONDS = 5.0
 _RETRY_MIN_SECONDS = 1.0
-_NO_RETRY_CODES = frozenset({"native_client_timed_out", RESTART_BLOCKED_CODE})
+_CLIENT_TIMED_OUT = "native_client_timed_out"
 _MAX_REQUEST_BYTES = 4 * 1024 * 1024
 # Transport framing around ``request`` (operation name, deadline budget).
 _ENVELOPE_OVERHEAD_BYTES = 256
+# A paused review's query is sent inside a Guard store call capped at the same
+# size; this leaves room for that call's own arguments (paths, hint, keys).
+_STORE_CALL_RESERVE_BYTES = 64 * 1024
 _MAX_PLAIN_BYTES = 1024 * 1024
 _MAX_PLAIN_CHARS = _MAX_PLAIN_BYTES // 4
 # Root keys the envelope redacts wholesale (``[redacted]``) and never parses.
 _PASS_THROUGH_ROOT_KEYS = frozenset({"output", "stderr", "stdout", "tool_response"})
 _REDACTED = "[redacted]"
 
-_ENVELOPE_KEYS = frozenset(
-    {
-        "schema_version",
-        "action_id",
-        "harness",
-        "event_name",
-        "action_type",
-        "workspace",
-        "workspace_hash",
-        "tool_name",
-        "command",
-        "prompt_excerpt",
-        "prompt_text",
-        "target_paths",
-        "network_hosts",
-        "mcp_server",
-        "mcp_tool",
-        "package_manager",
-        "package_name",
-        "command_category",
-        "package_intent_kind",
-        "package_targets",
-        "pre_execution_result",
-        "script_name",
-        "raw_payload_redacted",
-    }
+# The ``GuardActionEnvelope.to_dict`` fields an ``action_envelope`` answer sets.
+_ENVELOPE_FIELDS = (
+    "schema_version action_id harness event_name action_type workspace workspace_hash tool_name command"
+    " prompt_excerpt prompt_text target_paths network_hosts mcp_server mcp_tool package_manager package_name"
+    " command_category package_intent_kind package_targets pre_execution_result script_name raw_payload_redacted"
 )
+_ENVELOPE_KEYS = frozenset(_ENVELOPE_FIELDS.split())
 
 
 class NativeHookAdapterError(RuntimeError):
@@ -184,22 +173,22 @@ def _remaining_seconds(deadline: float | None) -> float:
     return min(_TIMEOUT_SECONDS, remaining)
 
 
-def _build_request(build: _Builder) -> tuple[dict[str, object], _Tagger]:
-    """Build the request, shrinking pass-through blobs only when it is over the cap."""
+def _build_request(build: _Builder, max_bytes: int = _MAX_REQUEST_BYTES) -> tuple[dict[str, object], _Tagger]:
+    """Build the request, shrinking pass-through blobs only when it is over ``max_bytes``."""
 
     built = build(False)
     if built is None:
         raise NativeHookAdapterError("native_hook_adapter_request_invalid")
     query, tagger = built
     request: dict[str, object] = {"schema": _REQUEST_SCHEMA, "request_id": "", "query": query}
-    if _request_bytes(request) <= _MAX_REQUEST_BYTES:
+    if _request_bytes(request) <= max_bytes:
         return request, tagger
     shrunk = build(True)
     if shrunk is None:
         raise NativeHookAdapterError(_REQUEST_TOO_LARGE)
     query, tagger = shrunk
     request = {"schema": _REQUEST_SCHEMA, "request_id": "", "query": query}
-    if _request_bytes(request) > _MAX_REQUEST_BYTES:
+    if _request_bytes(request) > max_bytes:
         raise NativeHookAdapterError(_REQUEST_TOO_LARGE)
     return request, tagger
 
@@ -230,10 +219,14 @@ def _call(
     if not ensure_resident_prerequisite(home):
         raise NativeHookAdapterError(_UNAVAILABLE)
     response, digest = _send(request, home, deadline)
-    if response is None and _worth_retrying(deadline):
+    if response is None:
         # Adapter calls have no side effects: a resident that dropped one round trip (a restart,
         # a busy socket) gets one more inside the caller's budget. A second miss fails closed.
-        response, digest = _send(request, home, deadline)
+        delay = _retry_delay(deadline)
+        if delay is not None:
+            if delay > 0.0:
+                time.sleep(delay)
+            response, digest = _send(request, home, deadline)
     if deadline is not None and time.monotonic() > deadline:
         # A late answer is as unusable as none: the caller's budget is spent.
         raise NativeHookAdapterError(_DEADLINE)
@@ -270,6 +263,7 @@ def _send(request: dict[str, object], home: Path, deadline: float | None) -> tup
     except (TypeError, ValueError):
         raise NativeHookAdapterError("native_hook_adapter_request_invalid") from None
     record_native_resident_client_failure_code(None)
+    record_native_resident_client_failure_hold_key(None)
     response = _resident_request(
         operation="hook_adapter",
         request=request,
@@ -282,11 +276,27 @@ def _send(request: dict[str, object], home: Path, deadline: float | None) -> tup
     return response, digest
 
 
-def _worth_retrying(deadline: float | None) -> bool:
-    # A timeout already spent the budget, and a held restart will not clear in time.
-    if native_resident_client_failure_code() in _NO_RETRY_CODES:
-        return False
-    return deadline is None or deadline - time.monotonic() >= _RETRY_MIN_SECONDS
+def _retry_delay(deadline: float | None) -> float | None:
+    """How long to wait before one more attempt, or ``None`` to fail closed.
+
+    A timeout already spent the budget, so it gets nothing. A refused respawn is
+    different from a dropped round trip: retrying inside the hold reads the same
+    refusal back, but the hold is bounded, so a caller with budget for the rest
+    of it plus an attempt waits it out instead of reporting the runtime
+    unavailable while seconds of its own budget are still unspent. That is what
+    a digest handoff looks like from here, and failing it closed costs a hook
+    its answer for no reason. The wait is measured against the hold this request
+    was refused under, which the client records with the code; another runtime's
+    pacing is none of this hook's business and must not spend its budget.
+    """
+
+    code = native_resident_client_failure_code()
+    if code == _CLIENT_TIMED_OUT:
+        return None
+    key = native_resident_client_failure_hold_key()
+    remaining = math.inf if deadline is None else deadline - time.monotonic()
+    hold = restart_hold_seconds_remaining(key) if code == RESTART_BLOCKED_CODE and key is not None else 0.0
+    return hold if remaining >= hold + _RETRY_MIN_SECONDS else None
 
 
 def _raise_rejection(code: object, payload: object, query: object) -> None:
@@ -319,30 +329,56 @@ def _without_pass_through_blobs(payload: Mapping[str, object]) -> dict[str, obje
     return {key: _REDACTED if key in _PASS_THROUGH_ROOT_KEYS else value for key, value in payload.items()}
 
 
-def native_prepare_payload(
+def _envelope_call(
     harness: str,
+    event_name: str,
     payload: Mapping[str, object],
+    query: Callable[[dict[str, object]], dict[str, object]],
+    keys: frozenset[str],
     *,
-    guard_home: Path | str | None = None,
+    workspace: Path | str | None,
+    home_dir: Path | str | None,
+    guard_home: Path | str | None,
+    deadline: float | None,
 ) -> dict[str, object]:
-    """Return the resident's prepared copy of one harness hook payload."""
+    """Send ``query(envelope)`` for one hook payload; the answer must carry exactly ``keys``."""
 
-    def build(shrunk: bool) -> _Built | None:
-        if shrunk:
-            return None  # the prepared copy echoes the payload; nothing is safely elidable
-        tagger = _Tagger()
-        query: dict[str, object] = {
-            "kind": "prepare_payload",
-            "harness": harness,
-            "payload": _tagged(tagger, payload),
-            "devin_project_dir": os.environ.get("DEVIN_PROJECT_DIR") or None,
-        }
-        return query, tagger
-
-    result = _call(build, guard_home=guard_home, deadline=None, shape="prepare")
-    if not isinstance(result, dict):
+    build = _envelope_builder(harness, event_name, payload, query, workspace=workspace, home_dir=home_dir)
+    result = _call(build, guard_home=guard_home, deadline=deadline, shape="envelope")
+    if not isinstance(result, dict) or set(result) != keys:
         raise NativeHookAdapterError(_INVALID)
     return result
+
+
+def _envelope_builder(
+    harness: str,
+    event_name: str,
+    payload: Mapping[str, object],
+    query: Callable[[dict[str, object]], dict[str, object]],
+    *,
+    workspace: Path | str | None,
+    home_dir: Path | str | None,
+) -> _Builder:
+    """Build ``query(envelope)`` for one hook payload, optionally without its pass-through blobs."""
+
+    def build(shrunk: bool) -> _Built | None:
+        source: Mapping[str, object] | None = _without_pass_through_blobs(payload) if shrunk else payload
+        if source is None:
+            return None
+        tagger = _Tagger()
+        envelope: dict[str, object] = {
+            "harness": harness,
+            "event_name": event_name,
+            "payload": _tagged(tagger, source),
+            "workspace": _optional_text(workspace),
+            "home_dir": _optional_text(home_dir),
+            "devin_project_dir": os.environ.get("DEVIN_PROJECT_DIR") or None,
+            "path_env": os.environ.get("PATH") or None,
+            "host": _host_facts(),
+        }
+        return query(envelope), tagger
+
+    return build
 
 
 def native_action_envelope(
@@ -357,28 +393,47 @@ def native_action_envelope(
 ) -> dict[str, object]:
     """Return the resident's typed action envelope (``GuardActionEnvelope.to_dict`` shape)."""
 
-    def build(shrunk: bool) -> _Built | None:
-        source: Mapping[str, object] | None = _without_pass_through_blobs(payload) if shrunk else payload
-        if source is None:
-            return None
-        tagger = _Tagger()
-        query: dict[str, object] = {
-            "kind": "action_envelope",
-            "harness": harness,
-            "event_name": event_name,
-            "payload": _tagged(tagger, source),
-            "workspace": _optional_text(workspace),
-            "home_dir": _optional_text(home_dir),
-            "devin_project_dir": os.environ.get("DEVIN_PROJECT_DIR") or None,
-            "path_env": os.environ.get("PATH") or None,
-            "host": _host_facts(),
-        }
-        return query, tagger
+    return _envelope_call(
+        harness,
+        event_name,
+        payload,
+        lambda envelope: {"kind": "action_envelope", **envelope},
+        _ENVELOPE_KEYS,
+        workspace=workspace,
+        home_dir=home_dir,
+        guard_home=guard_home,
+        deadline=deadline,
+    )
 
-    result = _call(build, guard_home=guard_home, deadline=deadline, shape="envelope")
-    if not isinstance(result, dict) or set(result) != _ENVELOPE_KEYS:
+
+def native_review_query(
+    harness: str,
+    payload: Mapping[str, object],
+    review: Mapping[str, object],
+    *,
+    workspace: Path | str | None,
+    home_dir: Path | str | None,
+) -> dict[str, object]:
+    """Return the ``review_request`` query the resident builds one paused ``PreToolUse``'s request from.
+
+    ``review`` carries the pause's own facts (native result, receipt, request ID, binding).
+    """
+
+    build = _envelope_builder(
+        harness,
+        "PreToolUse",
+        payload,
+        lambda envelope: {"envelope": envelope, **review},
+        workspace=workspace,
+        home_dir=home_dir,
+    )
+    # The query rides inside a Guard store request with the same byte cap, so
+    # it leaves room for the queue call's own arguments.
+    request, _tagger = _build_request(build, _MAX_REQUEST_BYTES - _STORE_CALL_RESERVE_BYTES)
+    query = request["query"]
+    if not isinstance(query, dict):
         raise NativeHookAdapterError(_INVALID)
-    return result
+    return query
 
 
 def _plain(query: dict[str, object]) -> _Builder:
@@ -396,21 +451,6 @@ def _plain(query: dict[str, object]) -> _Builder:
         return None if shrunk else (query, _Tagger())
 
     return build
-
-
-def native_command_detail(text: str, *, home_dir: Path | str | None, guard_home: Path | str | None = None) -> str:
-    """Return the redacted command text (secrets and absolute-path mentions)."""
-
-    query: dict[str, object] = {
-        "kind": "command_detail",
-        "text": text,
-        "home_dir": _optional_text(home_dir),
-        "host": _host_facts(),
-    }
-    result = _call(_plain(query), guard_home=guard_home, deadline=None, shape="plain")
-    if not isinstance(result, dict) or set(result) != {"text"} or not isinstance(result["text"], str):
-        raise NativeHookAdapterError(_INVALID)
-    return result["text"]
 
 
 def native_command_text(
@@ -465,26 +505,6 @@ def native_workspace_label(
     return result["text"]
 
 
-def native_apply_patch_paths(tool_input: object, *, guard_home: Path | str | None = None) -> tuple[str, ...]:
-    """Return the target paths named by an apply-patch tool input."""
-
-    if not isinstance(tool_input, Mapping):
-        return ()
-
-    def build(shrunk: bool) -> _Built | None:
-        if shrunk:
-            return None
-        tagger = _Tagger()
-        query: dict[str, object] = {"kind": "apply_patch_paths", "tool_input": _tagged(tagger, tool_input)}
-        return query, tagger
-
-    result = _call(build, guard_home=guard_home, deadline=None, shape="plain")
-    paths = result.get("paths") if isinstance(result, dict) and set(result) == {"paths"} else None
-    if not isinstance(paths, list) or not all(isinstance(item, str) for item in paths):
-        raise NativeHookAdapterError(_INVALID)
-    return tuple(paths)
-
-
 __all__ = [
     "HOOK_ADAPTER_FEATURE",
     "ClinePayloadError",
@@ -492,9 +512,7 @@ __all__ = [
     "UnsupportedHarnessError",
     "hook_adapter_memo",
     "native_action_envelope",
-    "native_apply_patch_paths",
-    "native_command_detail",
     "native_command_text",
-    "native_prepare_payload",
+    "native_review_query",
     "native_workspace_label",
 ]

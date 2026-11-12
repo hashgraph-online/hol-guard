@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import hashlib
+import io
 import json
 import os
 import subprocess
+import tarfile
 import zipfile
 from pathlib import Path
 
@@ -16,6 +18,10 @@ from scripts.verify_native_runtime_release import EXPECTED_TARGETS, NativeReleas
 from tests.release_workflow_helpers import load_workflow
 
 SOURCE = "a" * 40
+
+
+def core_metadata(version: str) -> str:
+    return f"Metadata-Version: 2.4\nName: hol-guard\nVersion: {version}\n"
 
 
 def distributions(directory: Path, version: str) -> None:
@@ -36,10 +42,12 @@ def distributions(directory: Path, version: str) -> None:
         )
         executable = "hol-guard-runtime.exe" if platform.startswith("win") else "hol-guard-runtime"
         with zipfile.ZipFile(path, "w") as archive:
+            archive.writestr(f"hol_guard-{version}.dist-info/METADATA", core_metadata(version))
             archive.writestr("codex_plugin_scanner/_native/runtime-manifest.json", json.dumps(manifest))
             archive.writestr("codex_plugin_scanner/_native/" + executable, runtime)
         digests[path.name] = hashlib.sha256(path.read_bytes()).hexdigest()
     with zipfile.ZipFile(directory / f"hol_guard-{version}-py3-none-any.whl", "w") as archive:
+        archive.writestr(f"hol_guard-{version}.dist-info/METADATA", core_metadata(version))
         archive.writestr(
             "codex_plugin_scanner/native-wheels.json",
             json.dumps(
@@ -50,7 +58,11 @@ def distributions(directory: Path, version: str) -> None:
                 )
             ),
         )
-    (directory / f"hol_guard-{version}.tar.gz").write_bytes(b"sdist")
+    pkg_info = core_metadata(version).encode()
+    with tarfile.open(directory / f"hol_guard-{version}.tar.gz", "w:gz") as archive:
+        member = tarfile.TarInfo(f"hol_guard-{version}/PKG-INFO")
+        member.size = len(pkg_info)
+        archive.addfile(member, io.BytesIO(pkg_info))
     (directory / f"hol-guard-v{version}.intoto.jsonl").write_bytes(b"provenance")
 
 
@@ -117,7 +129,7 @@ def test_missing_release_is_published_only_after_all_platform_downloads(tmp_path
     publisher.publish(directory)
     edits = [i for i, command in enumerate(commands) if command[:3] == ("gh", "release", "edit")]
     downloads = [i for i, command in enumerate(commands) if command[:3] == ("gh", "release", "download")]
-    assert len(downloads) == 8  # Five native wheels, pure wheel, sdist and provenance.
+    assert len(downloads) == 9  # Six native wheels, pure wheel, sdist and provenance.
     assert max(downloads) < edits[0]
     assert (tmp_path / "output").read_text() == "core_ready=true\n"
 

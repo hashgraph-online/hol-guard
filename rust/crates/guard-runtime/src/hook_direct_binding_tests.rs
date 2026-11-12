@@ -61,6 +61,7 @@ fn other_harnesses_and_homes_defer() {
         home_dir: Some(HOME.to_owned()),
         workspace: None,
         deadline_budget_ms: None,
+        emergency_safe_only: false,
         payload: allowed_payload(&lane),
     };
     let result: Value =

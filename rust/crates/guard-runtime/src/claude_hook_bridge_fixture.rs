@@ -204,6 +204,12 @@ pub(crate) enum Exchange {
     /// Answer one request without an identity challenge, as the daemon's
     /// approval endpoints do.
     Plain(u16, String),
+    /// Hold one plain request open this long before answering it, as a
+    /// daemon does for a read that asks to wait for a decision.
+    Held(Duration, u16, String),
+    /// Read one request and close the connection without answering, as a
+    /// daemon that lost its reply.
+    Drop,
 }
 
 /// Serve `script`, one connection per entry, recording each hook request
@@ -229,6 +235,16 @@ pub(crate) fn spawn_daemon(
             };
             if let Exchange::Plain(status, body) = &exchange {
                 write_response(&mut writer, *status, body, true);
+                hooks.push(challenge);
+                continue;
+            }
+            if let Exchange::Held(hold, status, body) = &exchange {
+                std::thread::sleep(*hold);
+                write_response(&mut writer, *status, body, true);
+                hooks.push(challenge);
+                continue;
+            }
+            if matches!(exchange, Exchange::Drop) {
                 hooks.push(challenge);
                 continue;
             }
@@ -261,7 +277,7 @@ pub(crate) fn spawn_daemon(
                         hooks.push(hook);
                     }
                 }
-                Exchange::Plain(..) => unreachable!(),
+                Exchange::Plain(..) | Exchange::Held(..) | Exchange::Drop => unreachable!(),
             }
         }
         hooks

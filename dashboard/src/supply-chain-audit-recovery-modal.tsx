@@ -8,11 +8,14 @@ import {
   HiMiniShieldCheck,
 } from "react-icons/hi2";
 import { ApprovalProofInline, buildApprovalProofCredentials } from "./approval-proof-inline";
+import { SUPPLY_CHAIN_SYNC_TIMEOUT_MS } from "./guard-api";
 import { ActionButton, Tag } from "./approval-center-primitives";
 import { GuardModalLayer } from "./guard-modal-layer";
 import type { GuardApprovalGatePublicConfig, PackageFirewallStatusResponse } from "./guard-types";
+import { SupplyChainAuditFailureNotice } from "./supply-chain-audit-failure-notice";
 import { ConnectFlowCard } from "./supply-chain-firewall-views";
-import type { SupplyChainAuditRecoveryGate } from "./supply-chain-audit-recovery";
+import { isStandaloneSyncRecoveryGate, type SupplyChainAuditRecoveryGate } from "./supply-chain-audit-recovery";
+import type { SupplyChainRecoveryOperation } from "./supply-chain-audit-failure";
 
 export type AuditRecoveryModalPhase =
   | "ready"
@@ -26,6 +29,8 @@ type AuditRecoveryModalProps = {
   gate: SupplyChainAuditRecoveryGate;
   phase: AuditRecoveryModalPhase;
   error: string | null;
+  /** Which step produced `error`, so the notice names the right one. */
+  errorOperation?: SupplyChainRecoveryOperation;
   connectError: string | null;
   connectStarting: boolean;
   connectFlow: PackageFirewallStatusResponse["connect_flow"];
@@ -101,6 +106,43 @@ function resolvePrimaryLabel(
   return gate.primaryLabel;
 }
 
+/** Seconds a step must run before the dialog explains what Guard is waiting on. */
+const BUSY_HINT_AFTER_SECONDS = 5;
+
+export function resolveBusyHint(phase: AuditRecoveryModalPhase, elapsedSeconds: number): string | null {
+  if (elapsedSeconds < BUSY_HINT_AFTER_SECONDS) {
+    return null;
+  }
+  if (phase === "syncing") {
+    const limitSeconds = Math.round(SUPPLY_CHAIN_SYNC_TIMEOUT_MS / 1000);
+    return `Downloading the signed bundle from Guard Cloud (${elapsedSeconds}s). Guard stops waiting after ${limitSeconds}s and rechecks the feed.`;
+  }
+  if (phase === "connecting") {
+    return `Waiting for you to approve Guard Cloud access in your browser (${elapsedSeconds}s).`;
+  }
+  if (phase === "auditing") {
+    return `Scanning workspace manifests and lockfiles (${elapsedSeconds}s).`;
+  }
+  return null;
+}
+
+/** Seconds spent in the current busy phase; restarts when the dialog moves to another step. */
+function useElapsedSeconds(busyPhase: AuditRecoveryModalPhase | null): number {
+  const [elapsedSeconds, setElapsedSeconds] = useState(0);
+  useEffect(() => {
+    setElapsedSeconds(0);
+    if (busyPhase === null) {
+      return;
+    }
+    const startedAt = Date.now();
+    const handle = window.setInterval(() => {
+      setElapsedSeconds(Math.floor((Date.now() - startedAt) / 1000));
+    }, 1000);
+    return () => window.clearInterval(handle);
+  }, [busyPhase]);
+  return elapsedSeconds;
+}
+
 function resolveActiveStepIndex(
   gate: SupplyChainAuditRecoveryGate,
   phase: AuditRecoveryModalPhase,
@@ -121,6 +163,7 @@ export function AuditRecoveryModal({
   gate,
   phase,
   error,
+  errorOperation = "sync",
   connectError,
   connectStarting,
   connectFlow,
@@ -149,8 +192,11 @@ export function AuditRecoveryModal({
   }, [phase]);
 
   const activeStep = resolveActiveStepIndex(gate, phase);
+  const standaloneSync = isStandaloneSyncRecoveryGate(gate);
   const primaryBusy = phase === "syncing" || phase === "connecting" || phase === "auditing";
   const PrimaryIcon = resolvePrimaryIcon(gate, phase);
+  const elapsedSeconds = useElapsedSeconds(primaryBusy ? phase : null);
+  const busyHint = primaryBusy ? resolveBusyHint(phase, elapsedSeconds) : null;
   const showConnectFlow =
     gate.primaryAction === "connect" && connectFlow !== null && phase !== "auditing";
   const showApprovalStep = phase === "approval";
@@ -176,14 +222,17 @@ export function AuditRecoveryModal({
   }, [approvalGate, approvalPassword, approvalTotpCode, onApprovalSubmit]);
 
   return (
-    <GuardModalLayer ariaLabel="Finish workspace audit setup" onClose={onClose}>
+    <GuardModalLayer
+      ariaLabel={standaloneSync ? "Approve supply-chain intel sync" : "Finish workspace audit setup"}
+      onClose={onClose}
+    >
       <div className="rounded-2xl border border-slate-200 bg-white shadow-xl">
         <div className="border-b border-slate-100 px-5 py-4">
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0 space-y-2">
               <div className="flex flex-wrap items-center gap-2">
                 <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-brand-blue">
-                  Workspace audit
+                  {standaloneSync ? "Supply-chain intel" : "Workspace audit"}
                 </p>
                 <Tag tone={resolvePhaseTone(phase)}>{resolvePhaseLabel(phase)}</Tag>
               </div>
@@ -203,24 +252,27 @@ export function AuditRecoveryModal({
         </div>
 
         {showConnectFlow ? (
-          <ConnectFlowCard
-            minimal
-            purpose="audit"
-            mode="repair"
-            connectFlow={connectFlow}
-            connectStarting={connectStarting}
-            connectError={connectError}
-            headline={gate.headline}
-            detail={gate.detail}
-            onStartConnect={onStartConnect}
-          />
+          <>
+            <ConnectFlowCard
+              minimal
+              purpose="audit"
+              mode="repair"
+              connectFlow={connectFlow}
+              connectStarting={connectStarting}
+              connectError={connectError}
+              headline={gate.headline}
+              detail={gate.detail}
+              onStartConnect={onStartConnect}
+            />
+            {busyHint !== null ? <p className="px-5 pb-4 text-xs leading-relaxed text-slate-500">{busyHint}</p> : null}
+          </>
         ) : showApprovalStep ? (
           <div className="px-5 py-5">
             <ApprovalProofInline
               approvalGate={approvalGate}
               approvalPassword={approvalPassword}
               approvalTotpCode={approvalTotpCode}
-              error={error}
+              error={error !== null ? <SupplyChainAuditFailureNotice message={error} approvalStep operation={errorOperation} /> : null}
               submitLabel="Sync supply-chain intel"
               submitBusy={approvalSubmitting}
               onApprovalPasswordChange={handleApprovalPasswordChange}
@@ -258,11 +310,7 @@ export function AuditRecoveryModal({
               })}
             </ol>
 
-            {error !== null ? (
-              <p className="text-sm text-brand-attention" role="alert">
-                {error}
-              </p>
-            ) : null}
+            {error !== null ? <SupplyChainAuditFailureNotice message={error} operation={errorOperation} /> : null}
 
             <div className="flex flex-wrap items-center gap-2">
               <ActionButton variant="primary" onClick={handlePrimaryClick} disabled={primaryBusy}>
@@ -280,6 +328,7 @@ export function AuditRecoveryModal({
                 </ActionButton>
               ) : null}
             </div>
+            {busyHint !== null ? <p className="text-xs leading-relaxed text-slate-500">{busyHint}</p> : null}
           </div>
         )}
       </div>

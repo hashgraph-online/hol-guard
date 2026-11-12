@@ -125,25 +125,26 @@ def _keyword_value(call: ast.Call, name: str) -> ast.AST | None:
 
 
 def _server_graph_failures(root: Path) -> list[str]:
+    # The native daemon owns the hook route; the resident library steps it
+    # calls must not hydrate a payload or answer without a fail-safe.
     failures: list[str] = []
-    server = root / "src/codex_plugin_scanner/guard/daemon/server.py"
-    server_ingress = _function_node_or_none(server, "_handle_runtime_hook", class_name="_GuardDaemonHandler")
-    server_execute = _function_node_or_none(server, "_execute_runtime_hook", class_name="_GuardDaemonHandler")
-    server_fast = _function_node_or_none(server, "_handle_runtime_hook_fast", class_name="_GuardDaemonHandler")
-    if server_ingress is None or server_execute is None or server_fast is None:
-        failures.append("server native hook fallback graph is incomplete")
+    calls = root / "src/codex_plugin_scanner/guard/routes/hook_calls.py"
+    prepare = _function_node_or_none(calls, "hook_prepare")
+    review = _function_node_or_none(calls, "hook_review")
+    if prepare is None or review is None:
+        failures.append("daemon hook library steps are incomplete")
         return failures
-    if _called_node(server_ingress, "hydrate_hook_payload_reference") is not None:
-        failures.append("daemon hook ingress hydrates a payload before native dispatch")
-    if _called_node(server_execute, "hydrate_hook_payload_reference") is not None:
-        failures.append("daemon hook execution hydrates a payload before native dispatch")
-    if _function_node_or_none(server, "_handle_runtime_hook_compatibility_cli", class_name="_GuardDaemonHandler"):
-        failures.append("server still carries the retired compatibility CLI hook path")
-    if "_native_mode_requires_rust" in function_calls(server_execute):
-        failures.append("server execute path still consults a retired native-mode predicate")
-    generic = _exception_handler(server_fast, "Exception")
-    if generic is None or "_runtime_hook_fail_safe_response" not in function_calls(generic):
-        failures.append("server fast path worker exception has no fail-safe response")
+    if _called_node(prepare, "hydrate_hook_payload_reference") is not None:
+        failures.append("daemon hook admission hydrates a payload before native dispatch")
+    if _called_node(review, "hydrate_hook_payload_reference") is not None:
+        failures.append("daemon hook review hydrates a payload before native dispatch")
+    if (root / "src/codex_plugin_scanner/guard/daemon/server_runtime_hook.py").exists():
+        failures.append("the retired Python hook route is back")
+    generic = _exception_handler(review, "Exception")
+    if generic is None or not any(
+        isinstance(node, ast.Constant) and node.value == "daemon_worker_exception" for node in ast.walk(generic)
+    ):
+        failures.append("daemon hook review worker exception has no fail-safe response")
     return failures
 
 
@@ -154,22 +155,8 @@ def _native_cli_graph_failures(root: Path) -> list[str]:
     if native_route is None:
         failures.append("CLI native route is missing")
         return failures
-    pipeline_call = _called_node(native_route, "run_native_hook_pipeline")
-    if pipeline_call is None and _called_node(native_route, "try_native_hook_authority") is None:
+    if _called_node(native_route, "try_native_hook_authority") is None:
         failures.append("CLI native route does not call native authority")
-    if pipeline_call is not None:
-        pipeline_module = root / "src/codex_plugin_scanner/guard/cli/commands_hook_native_pipeline.py"
-        pipeline = _function_node_or_none(pipeline_module, "run_native_hook_pipeline")
-        if pipeline is None:
-            failures.append("CLI native pipeline dispatcher is missing")
-        elif _called_node(pipeline, "native_hook_route") is None or _called_node(pipeline, "run_route_plan") is None:
-            failures.append("CLI native pipeline does not take its route from the resident")
-        else:
-            # The resident's route names the handlers; the native edge is the handler it names first.
-            handlers = root / "src/codex_plugin_scanner/guard/cli/commands_hook_native_route_handlers.py"
-            edge = _function_node_or_none(handlers, "native_edge")
-            if edge is None or _called_node(edge, "review_native_edge_decision") is None:
-                failures.append("CLI native pipeline does not reach the native edge authority")
     for retired in ("_try_source_ref_fast_path", "record_python_semantic_hook_route", "evaluate_source_file_ref"):
         if _called_node(native_route, retired) is not None:
             failures.append(f"CLI native route still calls retired Python route {retired}")
@@ -230,7 +217,7 @@ def _contract_failures(root: Path) -> list[str]:
     failures: list[str] = []
     checks = (
         (
-            root / "rust/crates/guard-command/src/pretool.rs",
+            root / "rust/crates/guard-command/src/pretool/mod.rs",
             ("pub fn evaluate_pre_tool", "PreToolDecisionV1", "pub mod generic", "~/.npmrc"),
         ),
         (
@@ -250,6 +237,11 @@ def _contract_failures(root: Path) -> list[str]:
             (
                 "pre-tool-command-authority-v1",
                 "pre-tool-generic-authority-v1",
+                # The edge checks its own answer; Python trusts it only then.
+                "edge-self-check-v1",
+                # The edge resolves the managed-policy view Python sends and
+                # answers the structured mediation itself.
+                "edge-structured-output-v1",
                 # The resident PreToolUse frame carries the command model
                 # request, now wrapped in the envelope that adds the path
                 # context the lane runs in.
@@ -258,7 +250,7 @@ def _contract_failures(root: Path) -> list[str]:
         ),
         (
             root / "rust/crates/guard-runtime/src/edge.rs",
-            ("evaluate_pre_tool_envelope", "guard-pre-tool-result.v1"),
+            ("evaluate_pre_tool_envelope", "edge_result_check::validate_pre_tool_result"),
         ),
         (
             # PostToolUse is decided by the same native edge: the Rust review,
@@ -297,7 +289,6 @@ def _bridge_failures(root: Path) -> list[str]:
                 "def review_pre_tool_native(",
                 "native_resident_client_request",
                 '"operation": "pre_tool_use"',
-                "def native_pre_tool_policy_floor(",
             ),
         )
     )
@@ -305,7 +296,14 @@ def _bridge_failures(root: Path) -> list[str]:
     failures.extend(
         required_tokens(
             root / "src/codex_plugin_scanner/guard/native_hook_edge.py",
-            ("guard-pre-tool-result.v1", "pre-tool-generic-authority-v1", "_decode_pre_tool_result"),
+            ("pre-tool-generic-authority-v1", "edge-self-check-v1", "edge-structured-output-v1"),
+        )
+    )
+    # The edge checks its own pre-tool result and receipt before it answers.
+    failures.extend(
+        required_tokens(
+            root / "rust/crates/guard-runtime/src/edge_result_check.rs",
+            ("guard-pre-tool-result.v1", "fn pre_tool_result(", "fn receipt_agrees("),
         )
     )
     command_review = function_node(command_bridge, "review_pre_tool_native")
@@ -318,7 +316,7 @@ def _bridge_failures(root: Path) -> list[str]:
     if "Python remains authoritative" in bridge_source:
         failures.append(f"{command_bridge.as_posix()} still describes Python as authoritative")
     review_start = bridge_source.find("def review_pre_tool_native(")
-    review_end = bridge_source.find("\ndef native_pre_tool_policy_floor(", review_start)
+    review_end = bridge_source.find("\n__all__", review_start)
     review_body = bridge_source[review_start:review_end] if review_start >= 0 and review_end > review_start else ""
     if "evaluate_command(" in review_body:
         failures.append("review_pre_tool_native invokes the Python command evaluator")
@@ -330,8 +328,8 @@ def _bridge_failures(root: Path) -> list[str]:
 
 def _worker_failures(root: Path) -> list[str]:
     failures: list[str] = []
-    hook_worker = root / "src/codex_plugin_scanner/guard/daemon/hook_worker.py"
-    native_hook = root / "src/codex_plugin_scanner/guard/daemon/hook_worker_native.py"
+    hook_worker = root / "src/codex_plugin_scanner/guard/hook_review/hook_worker.py"
+    native_hook = root / "src/codex_plugin_scanner/guard/hook_review/hook_worker_native.py"
     failures.extend(
         required_tokens(
             hook_worker,
@@ -339,7 +337,7 @@ def _worker_failures(root: Path) -> list[str]:
         )
     )
     failures.extend(required_tokens(native_hook, ("native_pre_tool_unavailable",)))
-    native_review = root / "src/codex_plugin_scanner/guard/daemon/hook_worker_native_review.py"
+    native_review = root / "src/codex_plugin_scanner/guard/hook_review/hook_worker_native_review.py"
     review_chain = (
         (native_hook, "_review_native_edge", "HookWorkerNativeMixin", "review_native_edge"),
         (native_review, "review_native_edge", None, "_review_native_edge_once"),

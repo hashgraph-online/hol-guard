@@ -14,67 +14,57 @@ either, and the install kind is derived from the path's shape.
 
 from __future__ import annotations
 
-import hashlib
 import sys
-from pathlib import PurePath
+from pathlib import Path
 from typing import TYPE_CHECKING, Final
 
 if TYPE_CHECKING:  # pragma: no cover - imported for typing only
     from .generated_command_catalog import GeneratedCommandCatalog
 
-_MAX_PATH_BYTES: Final = 4_096
-_ROOT_DIGEST_DOMAIN: Final = b"hol-guard.catalog-resource-root.v1\0"
-
-
-def _resource_root_digest(resource_path: str) -> str:
-    """A stable, non-identifying id for the directory an install loaded from."""
-
-    root = str(PurePath(resource_path).parent).encode("utf-8", "replace")[:_MAX_PATH_BYTES]
-    return hashlib.sha256(_ROOT_DIGEST_DOMAIN + root).hexdigest()
+_KIND: Final = "catalog_provenance"
 
 
 def _frozen() -> bool:
     return bool(getattr(sys, "frozen", False) or getattr(sys, "_MEIPASS", None))
 
 
-def _install_kind(resource_path: str) -> str:
-    """Classify the install from the shape of the path, never its contents."""
+def _attribution(resource_path: str, guard_home: Path | None) -> tuple[str, str | None]:
+    """The install kind and resource root digest the runtime derives from the path.
 
-    normalized = resource_path.replace("\\", "/")
-    if _frozen():
-        # A frozen bundle is what the Desktop app ships; the marker only refines
-        # which bundle produced it.
-        return "desktop-bundle" if "org.hol.guard.desktop" in normalized else "frozen-bundle"
-    if "/pipx/" in normalized:
-        return "pipx"
-    if "/uv/tools/" in normalized:
-        return "uv-tool"
-    if "/site-packages/" in normalized:
-        return "site-packages"
-    if "/src/codex_plugin_scanner/" in normalized:
-        return "source-checkout"
-    return "unknown"
-
-
-def version_ordinal(version: str) -> tuple[int, ...]:
-    """The leading numeric components of a version, for ordering only.
-
-    ``3.47.0a2`` orders as ``(3, 47, 0)``. Pre-release suffixes are dropped
-    rather than parsed: this only has to answer "is the writer older", and an
-    alpha of the same release is not a downgrade worth recording.
+    A runtime that cannot answer leaves the install unattributed rather than
+    guessed, and the migration it describes is still recorded.
     """
 
-    parts: list[int] = []
-    for component in version.split("."):
-        digits = ""
-        for character in component:
-            if not character.isdigit():
-                break
-            digits += character
-        if not digits:
-            break
-        parts.append(int(digits))
-    return tuple(parts)
+    from ..native_runner_authority import NativeRunnerAuthorityError, native_runner_authority
+
+    try:
+        answer = native_runner_authority(
+            _KIND, {"resource_path": resource_path, "frozen": _frozen()}, guard_home=guard_home
+        )
+    except NativeRunnerAuthorityError:
+        return "unavailable", None
+    kind, digest = answer.get("install_kind"), answer.get("resource_root_digest")
+    if not isinstance(kind, str) or not isinstance(digest, str):
+        return "unavailable", None
+    return kind, digest
+
+
+def is_downgrade(writer_version: str, previous_version: str, *, guard_home: Path | None = None) -> bool:
+    """Whether ``writer_version`` is an older release than ``previous_version``.
+
+    The runtime compares the leading numeric components only, so an alpha of
+    the same release is not a downgrade. One it cannot answer records none.
+    """
+
+    from ..native_runner_authority import NativeRunnerAuthorityError, native_runner_authority
+
+    try:
+        answer = native_runner_authority(
+            _KIND, {"writer_version": writer_version, "previous_version": previous_version}, guard_home=guard_home
+        )
+    except NativeRunnerAuthorityError:
+        return False
+    return answer.get("downgrade") is True
 
 
 def catalog_provenance(
@@ -83,6 +73,7 @@ def catalog_provenance(
     catalog: GeneratedCommandCatalog | None = None,
     trigger: str,
     writer: bool = False,
+    guard_home: Path | None = None,
 ) -> dict[str, object]:
     """Describe the catalog being written and the process doing the writing.
 
@@ -99,6 +90,7 @@ def catalog_provenance(
     ``writer_version`` recorded. A reader stamping its own version there would
     make an old revision look like the newest install's work, and the downgrade
     check reading it back would then miss the regression it exists to catch.
+    ``guard_home`` is the home whose resident attributes the install.
     """
 
     from ...version import __version__
@@ -133,9 +125,8 @@ def catalog_provenance(
     if resource_path is None or source is not built_in:
         provenance["install_kind"] = "in-process" if resource_path else "unresolved"
         return provenance
-    provenance["install_kind"] = _install_kind(resource_path)
-    provenance["resource_root_digest"] = _resource_root_digest(resource_path)
+    provenance["install_kind"], provenance["resource_root_digest"] = _attribution(resource_path, guard_home)
     return provenance
 
 
-__all__ = ["catalog_provenance", "version_ordinal"]
+__all__ = ["catalog_provenance", "is_downgrade"]

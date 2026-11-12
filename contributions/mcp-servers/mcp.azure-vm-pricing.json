@@ -1,0 +1,37 @@
+{
+  "schemaVersion": "guard.mcp-server-contribution.v1",
+  "id": "mcp.azure-vm-pricing",
+  "version": "1.0.0",
+  "name": "Azure VM Pricing",
+  "description": "Azure VM sizes and USD list prices for 24 regions, refreshed weekly: find the cheapest size for requirements, estimate monthly cost with reservations and savings plans, and read weekly price changes. Read-only, no credentials. Off until you turn it on.",
+  "trustClass": "external",
+  "activation": "opt-in",
+  "publisher": {
+    "id": "io.github.vdionisopoulos",
+    "displayName": "Vassilis Dionysopoulos",
+    "url": "https://github.com/vdionisopoulos/azure-vm-pricing"
+  },
+  "icon": { "kind": "react-icon", "name": "HiMiniCloud", "background": "#0F172A" },
+  "homepage": "https://cld2day.com",
+  "license": "MIT",
+  "launch": {
+    "kind": "package-launcher",
+    "command": "npx",
+    "package": "azure-vm-pricing-mcp"
+  },
+  "riskClasses": ["external-public-data-read", "local-cache-write"],
+  "tools": [
+    { "name": "find_vm_sizes", "state": "inherit" },
+    { "name": "get_vm_size", "state": "inherit" },
+    { "name": "estimate_vm_cost", "state": "inherit" },
+    { "name": "get_price_changes", "state": "inherit" },
+    { "name": "other", "state": "inherit" }
+  ],
+  "referenceUrls": [
+    "https://github.com/vdionisopoulos/azure-vm-pricing",
+    "https://www.npmjs.com/package/azure-vm-pricing-mcp"
+  ],
+  "saferAlternatives": [
+    "All tools are read-only. The server downloads the public dataset from raw.githubusercontent.com and caches it for 24 hours in the OS temp folder; set AZURE_VM_PRICING_CACHE_DIR to choose another folder or AZURE_VM_PRICING_DATA_URL to point at a mirror."
+  ]
+}

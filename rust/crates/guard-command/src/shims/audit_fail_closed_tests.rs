@@ -1,7 +1,6 @@
 //! Shipped audit stamps leave a blank or truncated manifest unchanged.
 
 use std::fs;
-use std::time::{SystemTime, UNIX_EPOCH};
 
 use super::super::{ShimContext, ShimFacts};
 use super::record_package_shim_audit_result;
@@ -26,10 +25,7 @@ fn facts() -> ShimFacts {
 }
 
 fn scratch(label: &str) -> std::path::PathBuf {
-    let stamp = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .expect("clock")
-        .as_nanos();
+    let stamp = crate::unique_nanos::unique_nanos();
     let root = fs::canonicalize(std::env::temp_dir())
         .expect("temp dir")
         .join(format!("hol-guard-shim-audit-{label}-{stamp}"));

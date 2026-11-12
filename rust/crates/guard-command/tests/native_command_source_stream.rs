@@ -46,11 +46,7 @@ fn stream(commands: &[Vec<u8>], servers: &[Vec<u8>], trust: &Value) -> Vec<u8> {
 fn raw_catalog_over_eight_mebibytes_matches_the_legacy_projection_exactly() {
     let mut commands = inventory("contributions/command-sources");
     let servers = inventory("contributions/mcp-servers");
-    let trust: Value = serde_json::from_slice(include_bytes!(concat!(
-        env!("OUT_DIR"),
-        "/trust-class-map.v1.json"
-    )))
-    .unwrap();
+    let trust: Value = serde_json::from_slice(guard_command_catalog_data::TRUST_MAP_JSON).unwrap();
     let values = |records: &[Vec<u8>]| -> Vec<Value> {
         records
             .iter()
@@ -95,11 +91,7 @@ fn unbound_source_keeps_public_identity_and_external_opt_in() {
     let mut commands = inventory("contributions/command-sources");
     commands.push(include_bytes!("fixtures/command-source-example.v1.json").to_vec());
     let servers = inventory("contributions/mcp-servers");
-    let trust: Value = serde_json::from_slice(include_bytes!(concat!(
-        env!("OUT_DIR"),
-        "/trust-class-map.v1.json"
-    )))
-    .unwrap();
+    let trust: Value = serde_json::from_slice(guard_command_catalog_data::TRUST_MAP_JSON).unwrap();
     let output = compile_source_stream(stream(&commands, &servers, &trust).as_slice()).unwrap();
     let descriptor = output
         .descriptors

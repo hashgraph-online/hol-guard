@@ -5,6 +5,11 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
+
+from codex_plugin_scanner.guard.native_extension_control_authority import (
+    NativeExtensionControlAuthorityUnavailableError,
+)
 from codex_plugin_scanner.guard.runtime.command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
 from codex_plugin_scanner.guard.runtime.extension_control_authority import AuthorityHealth
 from codex_plugin_scanner.guard.runtime.extension_control_contract import ControlLayerKind
@@ -90,6 +95,39 @@ def test_explicit_recovery_restores_before_resetting(tmp_path: Path) -> None:
     assert view.health is AuthorityHealth.PROTECTED
     assert view.revision == 1
     assert fresh.extension_control_recovery_warnings == ()
+
+
+def test_explicit_recovery_resets_when_the_resident_cannot_restore(tmp_path: Path, monkeypatch) -> None:
+    secrets = MemorySecretStore()
+    store = _store(tmp_path, secrets)
+    _commit(store)
+    with store._connect() as connection:
+        connection.execute("delete from extension_control_authority_snapshot")
+
+    def degraded(self, *, key):
+        raise RuntimeError("extension control authority store unavailable")
+
+    monkeypatch.setattr(GuardStore, "_restore_last_good_authority", degraded)
+    view = store.recover_extension_control_authority(catalog_digest=_CATALOG)
+
+    assert view.health is AuthorityHealth.PROTECTED
+    assert view.revision == 0
+
+
+def test_explicit_recovery_does_not_reset_while_the_resident_is_unavailable(tmp_path: Path, monkeypatch) -> None:
+    secrets = MemorySecretStore()
+    store = _store(tmp_path, secrets)
+    _commit(store)
+    with store._connect() as connection:
+        connection.execute("delete from extension_control_authority_snapshot")
+
+    def unavailable(self, *, key):
+        raise NativeExtensionControlAuthorityUnavailableError()
+
+    monkeypatch.setattr(GuardStore, "_restore_last_good_authority", unavailable)
+    with pytest.raises(NativeExtensionControlAuthorityUnavailableError):
+        store.recover_extension_control_authority(catalog_digest=_CATALOG)
+    assert (tmp_path / LAST_GOOD_FILE_NAME).is_file()
 
 
 def test_reset_keeps_unusable_export_aside_and_warns(tmp_path: Path) -> None:

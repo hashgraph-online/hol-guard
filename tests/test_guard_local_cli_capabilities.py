@@ -9,10 +9,9 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.guard.approval_gate import update_settings
-from codex_plugin_scanner.guard.daemon.local_cli_api import LocalCliApiError, LocalCliApiService
-from codex_plugin_scanner.guard.native_local_cli_grant import _decode_payload
+from codex_plugin_scanner.guard.local_clis.local_cli_api import LocalCliApiError, LocalCliApiService
 from codex_plugin_scanner.guard.runtime.local_cli_identity import UnlistedCliIdentity
-from codex_plugin_scanner.guard.sqlite_recovery import salvage_local_cli_state
+from codex_plugin_scanner.guard.sqlite_recovery import salvage_quarantined_state
 from codex_plugin_scanner.guard.store import GuardStore
 from codex_plugin_scanner.guard.store_local_cli_schema import (
     _V12_CHECKSUM,
@@ -39,7 +38,7 @@ def _identity(identity_hash: str = "a" * 64) -> UnlistedCliIdentity:
 def _service(tmp_path: Path, monkeypatch, *, surface: str = "cli") -> tuple[GuardStore, LocalCliApiService]:
     home = tmp_path / "home"
     home.mkdir()
-    monkeypatch.setattr("codex_plugin_scanner.guard.daemon.local_cli_api.Path.home", staticmethod(lambda: home))
+    monkeypatch.setattr("codex_plugin_scanner.guard.local_clis.local_cli_api.Path.home", staticmethod(lambda: home))
     store = GuardStore(home)
     store.record_local_cli_observation(_identity(), seen_at=_SEEN, surface=surface)
     update_settings(
@@ -185,7 +184,7 @@ def test_salvage_copies_capabilities_only_with_an_allowed_grant(tmp_path: Path, 
     destination = tmp_path / "fresh.db"
     with sqlite3.connect(destination) as connection:
         ensure_local_cli_schema(connection)
-    assert salvage_local_cli_state(source=source, destination=destination)
+    assert salvage_quarantined_state(source=source, destination=destination) == (False, True)
     with sqlite3.connect(destination) as connection:
         rows = connection.execute("select cli_id, capability from local_cli_grant_capability").fetchall()
     assert rows == [(_identity().cli_id, "loopback-network")]
@@ -200,32 +199,10 @@ def test_salvage_drops_capabilities_without_a_restored_cli_observation(tmp_path:
     destination = tmp_path / "fresh.db"
     with sqlite3.connect(destination) as connection:
         ensure_local_cli_schema(connection)
-    assert salvage_local_cli_state(source=source, destination=destination)
+    assert salvage_quarantined_state(source=source, destination=destination) == (False, True)
     with sqlite3.connect(destination) as connection:
         assert connection.execute("select count(*) from local_cli_grant").fetchone()[0] == 1
         assert connection.execute("select count(*) from local_cli_grant_capability").fetchone()[0] == 0
-
-
-_BASE = {"state": "allowed", "cli_id": "local-cli.lanectl-12345678", "identity_hash": "c" * 64}
-
-
-@pytest.mark.parametrize(
-    ("extra", "expected"),
-    [
-        ({}, ()),
-        ({"capabilities": []}, ()),
-        ({"capabilities": ["loopback-network", "state-dir-read"]}, ("loopback-network", "state-dir-read")),
-        ({"capabilities": ["state-dir-read", "loopback-network"]}, None),
-        ({"capabilities": ["state-dir-read", "state-dir-read"]}, None),
-        ({"capabilities": ["raw-network"]}, None),
-        ({"capabilities": "state-dir-read"}, None),
-        ({"state": "blocked", "capabilities": ["state-dir-read"]}, None),
-        ({"other": []}, None),
-    ],
-)
-def test_native_answer_decodes_capabilities(extra: dict, expected) -> None:
-    decoded = _decode_payload({**_BASE, **extra})
-    assert (None if decoded is None else decoded.capabilities) == expected
 
 
 def _calls(name: str) -> set[str]:
@@ -252,8 +229,7 @@ def test_only_the_authority_apply_writes_capabilities() -> None:
         for verb in ("insert into", "insert or", "update", "replace into"):
             if f"{verb} local_cli_grant_capability" in text:
                 writers.add(path.name)
-    assert writers == {"store_local_cli_capabilities.py"}
-    assert _calls("write_local_cli_capabilities") == {"store_custom_extension_continuity.py"}
+    assert writers == {"guard_store_continuity_choices.rs"}
     # The store forwards its own parameter; only the local mutation recorder sets it.
     assert _calls("capability_updates") == {
         "runtime/custom_extension_continuity.py",
@@ -261,4 +237,4 @@ def test_only_the_authority_apply_writes_capabilities() -> None:
     }
     callers = _calls("record_local_custom_extension_mutation") - {"runtime/custom_extension_continuity.py"}
     with_capabilities = {path for path in callers if "capabilities=" in (_SRC / path).read_text(encoding="utf-8")}
-    assert with_capabilities == {"daemon/local_cli_api.py"}
+    assert with_capabilities == {"local_clis/local_cli_api.py"}

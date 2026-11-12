@@ -18,6 +18,9 @@ for (const expected of [
   "Developer change identity",
   "Authenticate this exact change",
   "Apply ${count} reviewed change",
+  // The catalog's sample command reads as an example, not as something allowed.
+  "Example: ",
+  "props.permission.description",
 ]) {
   assert.ok(source.includes(expected), `missing friendly Protection Center copy: ${expected}`);
 }

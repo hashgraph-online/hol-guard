@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from codex_plugin_scanner.guard.managed_controls.authority import (
+from tests.managed_controls.authority import (
     AuthorityMode,
     AuthorityValidationError,
     ControlEffect,

@@ -11,10 +11,7 @@ struct Dirs {
 
 impl Dirs {
     fn new(label: &str) -> Self {
-        let nonce = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_nanos();
+        let nonce = crate::unique_nanos::unique_nanos();
         let root = std::env::temp_dir().join(format!(
             "hol-guard-config-{label}-{}-{nonce}",
             std::process::id()

@@ -1,8 +1,8 @@
 //! The verdict for a command whose settings a reviewed projection removed.
 //!
 //! Any program may read any name, so a setting that is not inert keeps the
-//! command from settling below review on the host. The read-only profiles
-//! are different: their launchers run the bare program under the restricted
+//! command from settling below review on the host. A contained profile is
+//! different: its launcher runs the bare program under the restricted
 //! environment allowlist, which drops every name it does not forward. A
 //! setting that only carries data (`REPORT_DIR=/tmp/report vitest run`) never
 //! reaches such a run, so the profile chosen for the command without it is
@@ -15,7 +15,22 @@ use guard_contracts::PreToolResultV1;
 
 /// Profiles whose launchers filter the environment through the restricted
 /// allowlist (`restricted_pytest::environment::filter`).
-const FILTERED_PROFILES: [&str; 10] = [
+///
+/// The workspace profile is on this list for a different reason, and it is
+/// worth stating plainly: its sink plans and runs the command's own text, so
+/// an inline assignment is applied by the shell inside containment and the
+/// allowlist never sees it. What makes it safe is the `data_only` test every
+/// entry here is gated on. A setting only counts as data once it is not a
+/// search path, not an endpoint or credential name, not `NODE_PATH` or a
+/// temporary-directory name, not a forwarded setting, and holds no expansion,
+/// separator or redirection, so what still reaches the contained run cannot
+/// change which program runs or where it connects -- and the sandbox's write
+/// and exec roots bound where it can point. Which of these profiles a host
+/// picks for one command varies -- the same sibling build settles as
+/// `node-build-output-v1` on one host and `workspace-contained-v1` on another
+/// -- and leaving the workspace profile off turned that into a review for the
+/// prefixed spelling alone.
+const FILTERED_PROFILES: [&str; 11] = [
     "native_bun_eval_readonly_containment_required",
     "native_git_readonly_containment_required",
     "native_node_build_output_containment_required",
@@ -26,6 +41,7 @@ const FILTERED_PROFILES: [&str; 10] = [
     "native_pytest_readonly_containment_required",
     "native_python_eval_readonly_containment_required",
     "native_vitest_readonly_containment_required",
+    "native_workspace_containment_required",
 ];
 
 const MAX_DATA_CHARS: usize = 512;
@@ -55,21 +71,47 @@ pub(super) fn record(reviewed: &mut Reviewed, name: &str, value: &str, search_pa
 }
 
 fn plain_data(name: &str, value: &str) -> bool {
-    !matches!(
-        name.to_ascii_uppercase().as_str(),
-        "NODE_PATH" | "TMPDIR" | "TMP" | "TEMP"
-    ) && !crate::command_compatibility::credential_routing_environment_name(name)
+    // A build or test setting whose value passed the closed screen carries no
+    // path, no program and no credential, so the profile keeps the same
+    // meaning whether its launcher forwards the setting or drops it: the run
+    // reports differently, repeats or refuses a lint. The option leader in
+    // `-Dwarnings` would otherwise fail the shape test below.
+    if super::settings::inert_tool_setting(name, value) {
+        return true;
+    }
+    // A name the endpoint screen owns decides whose server answers, and the
+    // value test below cannot tell `PORT=3000` from `PORT=99999` or
+    // `PORT=db.example.test:5432`. `inert_tool_setting` above already answered
+    // for the port numbers a run may carry, so what reaches here is a value
+    // that family does not accept and the contained launcher must not drop.
+    !crate::command_compatibility::environment::endpoint_steering_environment_name(name)
+        && !matches!(
+            name.to_ascii_uppercase().as_str(),
+            "NODE_PATH" | "TMPDIR" | "TMP" | "TEMP"
+        )
+        && !crate::command_compatibility::credential_routing_environment_name(name)
         && !forwarded(name)
         && value.len() <= MAX_DATA_CHARS
         && !value.starts_with('-')
-        && value
-            .chars()
-            .all(|character| character.is_ascii_alphanumeric() || "/._+@:,%-".contains(character))
+        && value.chars().all(data_character)
+}
+
+/// A character a value may hold and still be data the read-only launchers
+/// drop. The pathname and brace characters are in the set for the same
+/// reason `plain_project_value` holds them: a shell
+/// applies neither field splitting nor pathname expansion to an assignment's
+/// value, so `DEBUG=app:*` is the five characters `app:*` and nothing else,
+/// and the word reached here only after `literal_assignment_word`
+/// refused `$`, a backtick, an escape, a parenthesis, `~`, `!` and a
+/// redirection. A command separator, a redirection or an expansion in the
+/// value still falls outside the set, so such a setting keeps its review.
+fn data_character(character: char) -> bool {
+    character.is_ascii_alphanumeric() || "/._+@:,%-*?[]{}".contains(character)
 }
 
 #[cfg(unix)]
 fn forwarded(name: &str) -> bool {
-    crate::restricted_pytest::forwarded_setting(name)
+    crate::forwarded_settings::forwarded_setting(name)
 }
 
 /// Without the restricted launchers every setting counts as forwarded.
@@ -128,3 +170,7 @@ fn rank(action: &str) -> u8 {
         _ => 5,
     }
 }
+
+#[cfg(test)]
+#[path = "env_prefix_reviewed_tests.rs"]
+mod tests;

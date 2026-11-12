@@ -6,6 +6,7 @@ import hashlib
 
 import build_native_command_packs as packs
 from command_pack_store import PackReader
+from extension_delivery_containers import maximum, verify_inventory
 from extension_delivery_inventory_store import InventoryStore
 from extension_delivery_objects import entries
 from extension_delivery_policy_lookup import read_transport_page, validate_record
@@ -14,7 +15,6 @@ from extension_pack_archives import pack_objects, parts
 from extension_pack_directory import public_entry
 
 from codex_plugin_scanner.guard.catalog_delivery.authority import VerifiedDistribution, decode
-from codex_plugin_scanner.guard.catalog_delivery.containers import maximum, verify_inventory
 from codex_plugin_scanner.guard.extension_builder.io import checked_path, read_bytes
 
 

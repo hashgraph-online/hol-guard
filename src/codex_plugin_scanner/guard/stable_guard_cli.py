@@ -155,6 +155,18 @@ def frozen_cli_path_is_runnable(path: Path) -> bool:
     return os.access(path, os.X_OK)
 
 
+def _shim_is_launchable(shim: Path) -> bool:
+    """Whether a ``current-hol-guard`` shim can stand in as argv0 on this platform.
+
+    Windows cannot run the extensionless POSIX launcher, so it needs the
+    ``.cmd`` (or ``.bat``/``.exe``) form.
+    """
+
+    if not frozen_cli_path_is_runnable(shim):
+        return False
+    return sys.platform != "win32" or shim.suffix.lower() in {".cmd", ".bat", ".exe"}
+
+
 def resolve_frozen_guard_cli() -> str:
     """Return a prune-safe frozen launcher, then the process executable.
 
@@ -167,12 +179,35 @@ def resolve_frozen_guard_cli() -> str:
         return exact
     executable = Path(sys.executable)
     shim = desktop_core_shim_for_executable(executable)
-    if shim is not None and frozen_cli_path_is_runnable(shim):
+    if shim is not None and _shim_is_launchable(shim):
         return str(shim)
     versioned_desktop = shim is not None
     if versioned_desktop and sys.platform == "darwin" and frozen_cli_path_is_runnable(MACOS_BUNDLED_HOL_GUARD):
         return str(MACOS_BUNDLED_HOL_GUARD)
     return sys.executable
+
+
+def guard_cli_launcher() -> str:
+    """Return the argv0 Guard writes into harness hooks, MCP proxies and launchers.
+
+    A source install keeps the running interpreter. A frozen Core uses the
+    prune-safe launcher when one can be spawned directly, so a Desktop update
+    does not strand an installed hook on a removed ``versions/<release>/``
+    executable.
+
+    Harnesses spawn MCP servers and exec-form hooks without a command
+    interpreter, and Node refuses to spawn a batch file that way. Windows
+    Desktop only ships a ``current-hol-guard.cmd`` shim, so there this keeps
+    the Core executable, exactly as before; post-update harness repair rebinds
+    those entries to the new release.
+    """
+
+    if not bool(getattr(sys, "frozen", False)):
+        return sys.executable
+    launcher = resolve_frozen_guard_cli()
+    if sys.platform == "win32" and Path(launcher).suffix.lower() in {".cmd", ".bat"}:
+        return sys.executable
+    return launcher
 
 
 def resolve_guard_cli_argv0(baked_argv0: str) -> str:
@@ -210,23 +245,6 @@ def trusted_frozen_guard_cli_paths() -> frozenset[str]:
     return frozenset(trusted)
 
 
-def uses_top_level_hook_command(guard_cli: list[str]) -> bool:
-    """Return whether argv0 exposes `hook` without a `guard` prefix."""
-
-    if not guard_cli:
-        return False
-    name = Path(guard_cli[0]).name.lower()
-    return name in {
-        "hol-guard",
-        "hol-guard.exe",
-        "plugin-guard",
-        "plugin-guard.exe",
-        CURRENT_HOL_GUARD_SHIM,
-        f"{CURRENT_HOL_GUARD_SHIM}.cmd",
-        f"{CURRENT_HOL_GUARD_SHIM}.exe",
-    }
-
-
 def argv0_is_ephemeral_desktop_cli(argv0: str) -> bool:
     """Return whether argv0 lives under a pruneable Desktop `versions/` path."""
 
@@ -237,9 +255,7 @@ def prune_safe_cli_executable(executable: str) -> str:
     """Prefer the Desktop current-hol-guard shim over a pruneable versions path."""
 
     shim = desktop_core_shim_for_executable(Path(executable))
-    if shim is None or not frozen_cli_path_is_runnable(shim):
-        return executable
-    if sys.platform == "win32" and shim.suffix.lower() not in {".cmd", ".bat", ".exe"}:
+    if shim is None or not _shim_is_launchable(shim):
         return executable
     return str(shim)
 
@@ -258,11 +274,11 @@ __all__ = [
     "durable_desktop_current_hol_guard",
     "frozen_cli_path_is_runnable",
     "frozen_launcher_is_prune_safe",
+    "guard_cli_launcher",
     "prune_safe_cli_executable",
     "resolve_frozen_guard_cli",
     "resolve_guard_cli_argv0",
     "resolved_guard_cli",
     "trusted_frozen_guard_cli_paths",
-    "uses_top_level_hook_command",
     "versioned_launcher_release",
 ]

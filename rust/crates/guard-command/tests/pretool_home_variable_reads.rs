@@ -17,10 +17,7 @@ fn home(name: &str) -> PathBuf {
         .join(format!(
             "{name}-{}-{}",
             std::process::id(),
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
-                .as_nanos()
+            crate::unique_nanos::unique_nanos()
         ));
     let home = root.join("home");
     for directory in [
@@ -48,7 +45,7 @@ fn action(home: &Path, shell_home: &Path, command: &str) -> String {
         pager_disabled: false,
         xdg_config_home: None,
         git_config_no_system: true,
-        library_search_paths: Default::default(),
+        ..Default::default()
     };
     evaluate_pre_tool_envelope_with_execution_context(
         "omp",

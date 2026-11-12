@@ -1,0 +1,204 @@
+{
+  "native_test": {
+    "ready_observation": {
+      "availability": "ready",
+      "diagnostic": null,
+      "effective_enabled": true,
+      "effective_preferences": {
+        "enabled": true,
+        "features": {
+          "agent_context": false,
+          "review_briefs": true,
+          "shared_agents": false
+        },
+        "limits": {
+          "context_tokens": 2048,
+          "idle_shutdown_seconds": 600,
+          "max_active_workspaces": 2,
+          "reserve_tokens": 256
+        },
+        "resource_profile": "balanced",
+        "runtime_id": "candidate-314",
+        "schema_version": 1,
+        "sources": {
+          "native_policy_facts": true,
+          "sanitized_receipt_facts": true,
+          "source_set_id": "",
+          "workspace_documents": false
+        },
+        "storage": {
+          "mode": "memory",
+          "retention_hours": 24
+        }
+      },
+      "generation": "3",
+      "installation_options": null,
+      "job": null,
+      "last_check": {
+        "active": false,
+        "compile_verified": true,
+        "features": [
+          "answer_review.v1",
+          "context_graph.v1",
+          "context_views.v1",
+          "document_boundaries.v1",
+          "selection_explanation.v1",
+          "snapshot_integrity.v1",
+          "source_replace.v1"
+        ],
+        "interpreter": {
+          "abi": "cpython-314-darwin",
+          "debug_build": false,
+          "free_threaded": false,
+          "implementation": "cpython",
+          "platform": "darwin-arm64",
+          "release_level": "final",
+          "schema": "guard-cigar-interpreter.v1",
+          "version": [
+            3,
+            14,
+            7
+          ]
+        },
+        "package_fingerprint": "bd4d27349f01c4403a3e469e29d3785c4c8073e12c32744dfaa2304dcaf78a95",
+        "package_version": "0.14.1",
+        "protocol": "cigar.context-worker.v1",
+        "schema": "guard-cigar-runtime-status.v1",
+        "worker_fingerprint": "7aa51c67e42829b64b6c2dd9e98695e05ebbcc09c9bea155f163347a08e1d112"
+      },
+      "preferences": {
+        "enabled": true,
+        "features": {
+          "agent_context": false,
+          "review_briefs": true,
+          "shared_agents": false
+        },
+        "limits": {
+          "context_tokens": 2048,
+          "idle_shutdown_seconds": 600,
+          "max_active_workspaces": 2,
+          "reserve_tokens": 256
+        },
+        "resource_profile": "balanced",
+        "runtime_id": "candidate-314",
+        "schema_version": 1,
+        "sources": {
+          "native_policy_facts": true,
+          "sanitized_receipt_facts": true,
+          "source_set_id": "",
+          "workspace_documents": false
+        },
+        "storage": {
+          "mode": "memory",
+          "retention_hours": 24
+        }
+      },
+      "qualification": "local_candidate",
+      "requested_enabled": true,
+      "restriction": null,
+      "runtime": {
+        "active": true,
+        "compile_verified": true,
+        "features": [
+          "answer_review.v1",
+          "context_graph.v1",
+          "context_views.v1",
+          "document_boundaries.v1",
+          "selection_explanation.v1",
+          "snapshot_integrity.v1",
+          "source_replace.v1"
+        ],
+        "interpreter": {
+          "abi": "cpython-314-darwin",
+          "debug_build": false,
+          "free_threaded": false,
+          "implementation": "cpython",
+          "platform": "darwin-arm64",
+          "release_level": "final",
+          "schema": "guard-cigar-interpreter.v1",
+          "version": [
+            3,
+            14,
+            7
+          ]
+        },
+        "package_fingerprint": "bd4d27349f01c4403a3e469e29d3785c4c8073e12c32744dfaa2304dcaf78a95",
+        "package_version": "0.14.1",
+        "protocol": "cigar.context-worker.v1",
+        "schema": "guard-cigar-runtime-status.v1",
+        "worker_fingerprint": "7aa51c67e42829b64b6c2dd9e98695e05ebbcc09c9bea155f163347a08e1d112"
+      },
+      "schema": "guard-context-assistance-status.v2",
+      "verification_permitted": true
+    }
+  },
+  "restriction_observation": {
+    "availability": "unavailable",
+    "diagnostic": "policy_restricted",
+    "effective_enabled": false,
+    "effective_preferences": {
+      "enabled": false,
+      "features": {
+        "agent_context": false,
+        "review_briefs": true,
+        "shared_agents": false
+      },
+      "limits": {
+        "context_tokens": 2048,
+        "idle_shutdown_seconds": 600,
+        "max_active_workspaces": 2,
+        "reserve_tokens": 256
+      },
+      "resource_profile": "balanced",
+      "runtime_id": "selected-runtime",
+      "schema_version": 1,
+      "sources": {
+        "native_policy_facts": true,
+        "sanitized_receipt_facts": true,
+        "source_set_id": "",
+        "workspace_documents": false
+      },
+      "storage": {
+        "mode": "memory",
+        "retention_hours": 24
+      }
+    },
+    "generation": "2",
+    "installation_options": null,
+    "job": null,
+    "last_check": null,
+    "preferences": {
+      "enabled": true,
+      "features": {
+        "agent_context": false,
+        "review_briefs": true,
+        "shared_agents": false
+      },
+      "limits": {
+        "context_tokens": 2048,
+        "idle_shutdown_seconds": 600,
+        "max_active_workspaces": 2,
+        "reserve_tokens": 256
+      },
+      "resource_profile": "balanced",
+      "runtime_id": "selected-runtime",
+      "schema_version": 1,
+      "sources": {
+        "native_policy_facts": true,
+        "sanitized_receipt_facts": true,
+        "source_set_id": "",
+        "workspace_documents": false
+      },
+      "storage": {
+        "mode": "memory",
+        "retention_hours": 24
+      }
+    },
+    "qualification": null,
+    "requested_enabled": true,
+    "restriction": "managed_policy",
+    "runtime": null,
+    "schema": "guard-context-assistance-status.v2",
+    "verification_permitted": false
+  }
+}

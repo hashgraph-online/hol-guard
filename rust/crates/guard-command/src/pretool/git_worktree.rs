@@ -5,10 +5,15 @@ use std::time::Instant;
 
 #[path = "git_worktree_hooks.rs"]
 mod hooks;
+#[path = "git_worktree_links.rs"]
+mod links;
 #[path = "git_worktree_config.rs"]
 mod sources;
+#[path = "git_worktree_tracking.rs"]
+mod tracking;
 
 use hooks::{hooks_are_inert, repository_hooks_inert};
+pub(super) use links::tracked_directory_with_free_name;
 use sources::{expand_config_path, safe_worktree_config, ConfigFacts};
 
 /// The whole configuration listing, every entry of which the screen below
@@ -31,6 +36,7 @@ pub(super) fn worktree_add_execution_free(
     context: super::PathContext<'_>,
     deadline: Option<Instant>,
     execution_environment: Option<&guard_contracts::GuardExecutionEnvironmentV1>,
+    checked_out: &mut Option<String>,
 ) -> Option<bool> {
     let probe_deadline = Instant::now() + super::git_probe::PROBE_BUDGET;
     let deadline = deadline.unwrap_or(probe_deadline).min(probe_deadline);
@@ -92,9 +98,24 @@ pub(super) fn worktree_add_execution_free(
     {
         return Some(false);
     }
-    // Without `-b` no branch is created, so there is no name that could
-    // already exist.
-    if let Some(branch) = branch {
+    // Without `-b`, `--detach` or a reference Git creates a branch named
+    // after the destination's last component. `worktree.guessRemote` would
+    // start that branch from a remote-tracking branch of the same name
+    // instead of `HEAD`, which is not the tree the proof below reads.
+    let implied = if attach && reference.is_none() {
+        if facts.guess_remote {
+            return Some(false);
+        }
+        let Some(name) = destination.file_name().and_then(|value| value.to_str()) else {
+            return Some(false);
+        };
+        Some(name)
+    } else {
+        None
+    };
+    // Without `-b` and outside that form no branch is created, so there is no
+    // name that could already exist.
+    if let Some(branch) = branch.or(implied) {
         let branch_ref = format!("refs/heads/{branch}");
         let (status, output) = git_query_with_args(
             &base,
@@ -111,15 +132,19 @@ pub(super) fn worktree_add_execution_free(
         }
     }
     let branch_ref: String;
+    let tracking_ref: String;
     let mut reference = reference.unwrap_or("HEAD");
+    let mut local_branch = false;
     // Without `-b` or `--detach`, `git worktree add <path> <name>` checks
     // out `refs/heads/<name>` when that branch exists (Git never treats
     // `HEAD` as a branch name here), whatever the name would otherwise
     // resolve to. Read that branch's tip so the tree proven is the tree
     // checked out. Otherwise Git detaches at the commit the name resolves
-    // to, which the `rev-parse` below resolves the same way; a name that
-    // resolves to nothing would make Git create a tracking branch and fails
-    // the proof there.
+    // to, which the `rev-parse` below resolves the same way. A name that
+    // resolves to nothing makes Git create a branch of that name from the one
+    // remote-tracking branch that matches it, so that ref is proven instead.
+    // With no such branch Git stops before writing anything, unless a fetch
+    // earlier in the same command creates one first.
     if attach && reference != "HEAD" {
         branch_ref = format!("refs/heads/{reference}");
         let (status, output) = git_query_with_args(
@@ -131,20 +156,47 @@ pub(super) fn worktree_add_execution_free(
         )?;
         if status.success() {
             reference = branch_ref.as_str();
+            local_branch = true;
         } else if status.code() != Some(1) || !output.is_empty() {
             return None;
         }
     }
     let commit_ref = format!("{reference}^{{commit}}");
-    let (status, output) = git_query_with_args(
+    let (mut status, mut output) = git_query_with_args(
         &base,
         leading,
         &["rev-parse", "--verify", "--quiet", &commit_ref],
         deadline,
         WORKTREE_PROBE_LIMIT,
     )?;
+    if attach && !local_branch && reference != "HEAD" && !status.success() {
+        tracking_ref =
+            match tracking::resolve(&base, leading, reference, &facts, &common_dir, deadline)? {
+                tracking::Tracking::Unique(found) => found,
+                tracking::Tracking::Missing => {
+                    return Some(
+                        !reference_may_move && status.code() == Some(1) && output.is_empty(),
+                    )
+                }
+                tracking::Tracking::Unproven => return Some(false),
+            };
+        reference = tracking_ref.as_str();
+        let commit_ref = format!("{reference}^{{commit}}");
+        (status, output) = git_query_with_args(
+            &base,
+            leading,
+            &["rev-parse", "--verify", "--quiet", &commit_ref],
+            deadline,
+            WORKTREE_PROBE_LIMIT,
+        )?;
+    }
     if !status.success() || output.is_empty() {
         return Some(false);
+    }
+    // The commit read here is the one checked out unless a fetch earlier in
+    // the same command moves the reference.
+    if !reference_may_move {
+        *checked_out = commit_id(&output).map(str::to_owned);
     }
     // A hook manager's repository-relative hooks directory also runs from the
     // new tree, which the commit being checked out decides.

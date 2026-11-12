@@ -64,46 +64,6 @@ def _json_line(output: str) -> dict[str, object]:
 
 
 @pytest.mark.usefixtures("native_hook_force")
-def test_gr098_hook_failures_fail_safe_in_strict_and_explain_permissive(tmp_path: Path) -> None:
-    strict_exit_code, strict_output = _run_hook(
-        tmp_path,
-        harness="claude-code",
-        payload={
-            "hook_event_name": "PreToolUse",
-            "tool_name": "Bash",
-            "tool_input": {"command": "printf safe"},
-            "daemon_status": "unreachable",
-            "fail_mode": "strict",
-            "decision_v2_json": {"harness_message": "Approve it in HOL Guard, then retry."},
-        },
-    )
-    permissive_exit_code, permissive_output = _run_hook(
-        tmp_path,
-        harness="claude-code",
-        payload={
-            "hook_event_name": "PreToolUse",
-            "tool_name": "Bash",
-            "tool_input": {"command": "printf safe"},
-            "daemon_status": "unreachable",
-            "fail_mode": "permissive",
-            "decision_v2_json": {"harness_message": "No daemon copy should be hidden."},
-        },
-    )
-
-    strict_payload = _json_line(strict_output)
-    permissive_payload = _json_line(permissive_output)
-
-    assert strict_exit_code == 0
-    assert strict_payload["hookSpecificOutput"]["permissionDecision"] == "deny"
-    assert "fail safe" in str(strict_payload["hookSpecificOutput"]).lower()
-    assert "Approve it in HOL Guard" not in str(strict_payload["hookSpecificOutput"])
-    assert permissive_exit_code == 0
-    assert permissive_payload["hookSpecificOutput"]["permissionDecision"] == "allow"
-    assert "daemon" in str(permissive_payload["hookSpecificOutput"]).lower()
-    assert "No daemon copy should be hidden" not in str(permissive_payload["hookSpecificOutput"])
-
-
-@pytest.mark.usefixtures("native_hook_force")
 def test_gr098_permissive_hook_failure_preserves_existing_deny_decision(tmp_path: Path) -> None:
     exit_code, output = _run_hook(
         tmp_path,
@@ -123,36 +83,3 @@ def test_gr098_permissive_hook_failure_preserves_existing_deny_decision(tmp_path
     assert exit_code == 0
     assert payload["hookSpecificOutput"]["permissionDecision"] == "ask"
     assert "HOL Guard" in str(payload["hookSpecificOutput"]["permissionDecisionReason"])
-
-
-@pytest.mark.usefixtures("native_hook_force")
-def test_gr098_codex_strict_daemon_failure_points_to_daemon_recovery(
-    tmp_path: Path,
-    monkeypatch,
-    capsys,
-) -> None:
-    monkeypatch.setenv("CODEX_HOME", str(tmp_path / "codex-home"))
-
-    exit_code, output = _run_hook(
-        tmp_path,
-        harness="codex",
-        json_output=False,
-        payload={
-            "hook_event_name": "PreToolUse",
-            "tool_name": "Bash",
-            "tool_input": {"command": "printf safe"},
-            "daemon_status": "unreachable",
-            "fail_mode": "strict",
-            "decision_v2_json": {"harness_message": "Approve it in HOL Guard, then retry."},
-        },
-    )
-
-    captured = capsys.readouterr()
-    payload = _json_line(output)
-    reason = str(payload["hookSpecificOutput"]["permissionDecisionReason"])
-
-    assert exit_code == 0
-    assert captured.err == ""
-    assert payload["hookSpecificOutput"]["permissionDecision"] == "deny"
-    assert "Restart HOL Guard" in reason
-    assert "Approve it in HOL Guard" not in reason

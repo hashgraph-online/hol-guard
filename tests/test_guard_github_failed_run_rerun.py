@@ -4,15 +4,15 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.runtime.github_command_capabilities import classify_github_cli
 from codex_plugin_scanner.guard.runtime.secret_file_requests import extract_sensitive_tool_action_request
 from tests.native_command_test_support import real_native_review_fixture
+from tests.native_github_capability_support import github_cli_assessment
 
 
 def test_exact_failed_job_rerun_requires_confirmation() -> None:
     args = ("run", "rerun", "31707639186", "--repo", "hashgraph-online/hol-guard", "--failed")
 
-    assessment = classify_github_cli(args)
+    assessment = github_cli_assessment(args)
     match = extract_sensitive_tool_action_request("Bash", {"command": f"gh {' '.join(args)}"})
 
     assert assessment.capabilities == ("routine_workflow_remote",)
@@ -35,7 +35,7 @@ def test_exact_failed_job_rerun_requires_confirmation() -> None:
     ),
 )
 def test_failed_job_rerun_rejects_broader_variants(args: tuple[str, ...]) -> None:
-    assessment = classify_github_cli(args)
+    assessment = github_cli_assessment(args)
 
     assert assessment.capabilities != ("routine_workflow_remote",)
 

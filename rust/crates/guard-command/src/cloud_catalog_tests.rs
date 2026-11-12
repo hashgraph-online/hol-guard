@@ -140,6 +140,51 @@ fn retries_pin_time_and_durable_observation() {
 }
 
 #[test]
+fn reuse_returns_the_published_view_for_the_same_observation_only() {
+    let home = home();
+    let reuse = |o: &Observation| {
+        evaluate(&json!({"action":"reuse","guard_home":home.path(),"observation":o}))["payload"]
+            .clone()
+    };
+    assert_eq!(reuse(&observation(home.path())), json!({}));
+    let first = prepare(home.path(), 166);
+    let mut later = observation(home.path());
+    later.generated_at = "2026-10-19T00:00:00Z".into();
+    assert_eq!(reuse(&later), first);
+    let changes: [fn(&mut Observation); 4] = [
+        |o: &mut Observation| o.enforcement_catalog_digest = "d".repeat(64),
+        |o: &mut Observation| o.discovery_root = "d".repeat(64),
+        |o: &mut Observation| o.discovery_authority = "d".repeat(64),
+        |o: &mut Observation| o.guard_version = "3.50.0".into(),
+    ];
+    for change in changes {
+        let mut other = observation(home.path());
+        change(&mut other);
+        assert_eq!(reuse(&other), json!({}));
+    }
+    // A view whose pages no longer verify is prepared again, never reused.
+    let view = home
+        .path()
+        .join("native-runtime/cloud-catalog")
+        .join(first["token"].as_str().unwrap());
+    fs::write(view.join("0.json"), b"{}").unwrap();
+    assert_eq!(reuse(&later), json!({}));
+    // ...and preparing it replaces the damaged copy.
+    assert_eq!(prepare(home.path(), 166), first);
+    assert_eq!(reuse(&later), first);
+    let elsewhere = self::home();
+    let request = json!({"action":"reuse","guard_home":elsewhere.path(),"observation":later});
+    assert_eq!(evaluate(&request)["error"], "catalog_invalid");
+    let mut invalid = observation(home.path());
+    invalid.discovery_root = "not-a-digest".into();
+    assert_eq!(
+        evaluate(&json!({"action":"reuse","guard_home":home.path(),"observation":invalid}))
+            ["error"],
+        "catalog_invalid"
+    );
+}
+
+#[test]
 fn corrupted_missing_page_never_completes() {
     for missing in [true, false] {
         let home = home();

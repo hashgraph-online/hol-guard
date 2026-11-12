@@ -8,17 +8,12 @@ from __future__ import annotations
 
 import json
 import sqlite3
-import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import cast
 
 import pytest
 
-from codex_plugin_scanner.guard.cli.commands_support_command_activity import (
-    record_pre_hook_command_activity_best_effort,
-)
-from codex_plugin_scanner.guard.daemon.server import GuardDaemonServer
 from codex_plugin_scanner.guard.runtime.command_activity_api_contract import (
     COMMAND_ACTIVITY_API_SCHEMA_VERSION,
     CommandActivityFeedbackLabel,
@@ -39,7 +34,6 @@ from codex_plugin_scanner.guard.store_command_activity_privacy import (
     COMMAND_ACTIVITY_DIAGNOSTICS_SCHEMA_VERSION,
 )
 from tests.guard_command_activity_api_support import seed
-from tests.native_command_activity_test_support import use_real_native_activity_reviews
 
 _COMMAND_TABLES = (
     "command_activity",
@@ -145,15 +139,6 @@ def _seed_clear_state(store: GuardStore) -> None:
             where singleton = 1
             """
         )
-
-
-def _raw_get(daemon: GuardDaemonServer, path: str, *, token: str) -> bytes:
-    request = urllib.request.Request(
-        f"http://127.0.0.1:{daemon.port}{path}",
-        headers={"X-Guard-Token": token},
-    )
-    with urllib.request.urlopen(request, timeout=5) as response:
-        return response.read()
 
 
 def test_diagnostics_has_an_exact_bounded_allowlist(tmp_path: Path) -> None:
@@ -325,89 +310,3 @@ def test_clear_is_atomic_and_preserves_unrelated_state(tmp_path: Path) -> None:
             "occurred_at": "2026-07-18T22:00:00+00:00",
         }
     ]
-
-
-def test_forbidden_sentinels_never_reach_command_activity_surfaces(
-    tmp_path: Path,
-    caplog: pytest.LogCaptureFixture,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    use_real_native_activity_reviews(monkeypatch)
-    store = _store(tmp_path)
-    sentinels = (
-        "ghp_0123456789FORBIDDEN",
-        "/private/example/.env",
-        "alice-private@example.invalid",
-        "https://private.example.invalid/callback",
-        "2>/private/example/error.log",
-        "HEREDOC_PRIVATE_SENTINEL",
-        "AWS_SECRET_ACCESS_KEY=ENV_PRIVATE_SENTINEL",
-    )
-    commands = (
-        f"git push origin release/2.2 --force # {sentinels[0]}",
-        f"git push origin release/2.2 --force # {sentinels[1]}",
-        f"git push origin release/2.2 --force # {sentinels[2]}",
-        f"git push {sentinels[3]} release/2.2 --force",
-        f"git push origin release/2.2 --force {sentinels[4]}",
-        f"git push origin release/2.2 --force <<'EOF'\n{sentinels[5]}\nEOF",
-        f"{sentinels[6]} git push origin release/2.2 --force",
-    )
-    assert all(sentinel in json.dumps(commands) for sentinel in sentinels)
-    with caplog.at_level("DEBUG"):
-        for index, command in enumerate(commands):
-            payload: dict[str, object] = {
-                "tool_name": "Shell",
-                "tool_input": {"command": command},
-                "tool_call_id": f"toolcall_privacy_{index}_abcdef1234567890",
-            }
-            assert record_pre_hook_command_activity_best_effort(
-                store=store,
-                guard_home=store.guard_home,
-                harness="codex",
-                event="PreToolUse",
-                payload=payload,
-                policy_action="allow",
-                receipt_id=None,
-                prompted=True,
-            ), command
-
-    daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
-    daemon.start()
-    token = daemon._server.auth_token
-    response = None
-    try:
-        raw_activity = _raw_get(daemon, "/v1/command-activity", token=token)
-        raw_analytics = _raw_get(daemon, "/v1/command-activity/analytics?days=7", token=token)
-        raw_extensions = _raw_get(daemon, "/v1/command-extensions", token=token)
-        raw_diagnostics = _raw_get(daemon, "/v1/command-activity/diagnostics", token=token)
-        diagnostics = cast(dict[str, object], json.loads(raw_diagnostics))
-        response = urllib.request.urlopen(
-            urllib.request.Request(
-                f"http://127.0.0.1:{daemon.port}/v1/command-activity/events?cursor=0",
-                headers={"X-Guard-Token": token},
-            ),
-            timeout=5,
-        )
-        raw_sse = response.readline() + response.readline() + response.readline()
-    finally:
-        if response is not None:
-            response.close()
-        daemon.stop()
-
-    surfaces = {
-        "database": json.dumps(_all_command_rows(store), sort_keys=True).encode(),
-        "api": raw_activity + raw_analytics,
-        "sse": raw_sse,
-        "export": raw_diagnostics,
-        "logs": caplog.text.encode(),
-        "dashboard": raw_activity + raw_analytics + raw_extensions + raw_diagnostics,
-    }
-    assert store.count_command_activities() == len(commands)
-    stable_ids = cast(dict[str, list[str]], diagnostics["stable_ids"])
-    assert stable_ids["extensions"]
-    assert stable_ids["rules"]
-    for surface, serialized in surfaces.items():
-        for sentinel in sentinels:
-            assert sentinel.encode() not in serialized, f"{surface} leaked {sentinel}"
-        for command in commands:
-            assert command.encode() not in serialized, f"{surface} leaked the raw command"

@@ -13,9 +13,9 @@ from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.adapters.hermes import HermesHarnessAdapter
 from codex_plugin_scanner.guard.inventory_cisco import CiscoInventoryRun
 from codex_plugin_scanner.guard.inventory_contract import serialize_inventory_snapshot
-from codex_plugin_scanner.guard.risk import artifact_risk_signals
 from codex_plugin_scanner.guard.store import GuardStore
 from codex_plugin_scanner.models import Finding, Severity
+from tests.artifact_risk_support import artifact_risk_signals
 
 FIXTURES = Path(__file__).parent / "fixtures" / "hermes-plugin-evil"
 
@@ -97,7 +97,11 @@ def test_install_generates_guard_managed_overlay_and_pretool_files(
     assert pretool_payload["timeout_seconds"] == 5
     assert pretool_payload["fail_open"] is False
     assert overlay_payload["github"]["command"] == str(Path(sys.executable))
-    assert overlay_payload["github"]["args"][-3:] == ["--server", "yaml:github", "--stdio"]
+    github_args = overlay_payload["github"]["args"]
+    assert github_args[github_args.index("guard") + 1] == "hermes-mcp-proxy"
+    assert github_args[github_args.index("--command") + 1] == "npx"
+    assert github_args[-2:] == ["--arg=-y", "--arg=@modelcontextprotocol/server-github"]
+    assert "--server" not in github_args
     assert overlay_payload["remote-docs"]["command"] == str(Path(sys.executable))
     assert overlay_payload["remote-docs"]["args"][-3:] == ["--server", "yaml:remote-docs", "--stdio"]
     assert manifest["servers"]["yaml:remote-docs"]["env"] == {"GITHUB_TOKEN": "ghp_test_token"}

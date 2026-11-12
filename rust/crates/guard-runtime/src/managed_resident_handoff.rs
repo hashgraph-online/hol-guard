@@ -11,6 +11,86 @@ use crate::resident_state::{token_from_state, ResidentState};
 /// under the lease expiry so concurrent clients' heartbeats stay fresh.
 const HANDOFF_SHUTDOWN_TIMEOUT: Duration = Duration::from_millis(500);
 
+/// A handoff asks a resident to make way for another runtime; the resident
+/// may refuse it (see `refuses_shutdown`). Explicit stops always succeed.
+const HANDOFF_SHUTDOWN_REQUEST: &[u8] =
+    br#"{"operation":"shutdown","request":{"intent":"handoff"}}"#;
+pub(super) const STOP_SHUTDOWN_REQUEST: &[u8] =
+    br#"{"operation":"shutdown","request":{"intent":"stop"}}"#;
+/// Answered instead of stopping when a handoff would take the resident from
+/// live clients of the runtime the home publishes for.
+pub(crate) const SHUTDOWN_REFUSED_IN_USE: &str = "native_resident_in_use";
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum ShutdownIntent {
+    /// An operator or update stop: always honoured.
+    Stop,
+    /// Another client making way for its runtime. Older clients send a bare
+    /// request, which means the same.
+    Handoff,
+}
+
+fn shutdown_intent(request: &serde_json::Value) -> ShutdownIntent {
+    match request.get("intent").and_then(serde_json::Value::as_str) {
+        Some("stop") => ShutdownIntent::Stop,
+        _ => ShutdownIntent::Handoff,
+    }
+}
+
+/// Two installs can share one home: one whose publisher binds every snapshot
+/// to its runtime, and an older one whose hooks still run. The older client
+/// reaches the publisher's resident, has its request rejected and asks that
+/// resident to shut down while its own clients still use it; its own
+/// resident then exits at once on the snapshot bound to the other runtime,
+/// and the two restart each other until a restart budget opens. Shipped
+/// clients cannot be changed, so the resident refuses that handoff.
+///
+/// Refuse only a handoff, only while the latest published snapshot is bound
+/// to this resident's runtime, and only while a client of this runtime
+/// provably holds a live lease. Any doubt stops as before, so a resident is
+/// never left unstoppable: a resident the home no longer publishes for still
+/// makes way, and so does one nothing uses.
+pub(crate) fn refuses_shutdown(
+    request: &serde_json::Value,
+    policy_store: Option<&crate::policy_store::PolicySnapshotStore>,
+) -> bool {
+    policy_store.is_some_and(|store| {
+        refuses_handoff(
+            request,
+            store.state_base(),
+            store.runtime_identity(),
+            || store.published_runtime_identity(),
+        )
+    })
+}
+
+/// Answers an authenticated shutdown: refuses a handoff `refuses_shutdown`
+/// declines with `SHUTDOWN_REFUSED_IN_USE`, otherwise starts the stop.
+pub(crate) fn answer_shutdown(
+    request: &serde_json::Value,
+    policy_store: Option<&crate::policy_store::PolicySnapshotStore>,
+) -> Result<serde_json::Value, String> {
+    if refuses_shutdown(request, policy_store) {
+        return Err(SHUTDOWN_REFUSED_IN_USE.to_owned());
+    }
+    super::request_shutdown();
+    Ok(serde_json::json!({"status": "stopping"}))
+}
+
+/// `published_runtime` yields the runtime the publisher's latest snapshot is
+/// bound to, or `None` when that cannot be read. It runs only for a handoff,
+/// and the lease directory is probed only when it names this runtime.
+fn refuses_handoff(
+    request: &serde_json::Value,
+    state_base: &Path,
+    own_digest: &str,
+    published_runtime: impl FnOnce() -> Option<String>,
+) -> bool {
+    shutdown_intent(request) == ShutdownIntent::Handoff
+        && published_runtime().is_some_and(|runtime| runtime == own_digest)
+        && lease::definitely_live(state_base, own_digest)
+}
+
 /// A side-by-side update leaves the previous runtime's resident running after
 /// its clients exit. Older runtimes count every client lease in the home, so
 /// newer clients keep that resident alive while it holds the home-wide owner
@@ -67,7 +147,9 @@ pub(super) fn retire_orphaned_foreign_resident(
 /// resident is ours, the shutdown was not acknowledged or the resident did
 /// not exit, in which case the caller returns the rejection unchanged. A
 /// genuinely malformed request is answered the same way by our own resident,
-/// which is never retired, so it still fails closed.
+/// which is never retired, so it still fails closed. A resident the home
+/// still publishes for refuses this handoff while its clients are live
+/// (`native_resident_in_use`), which is likewise not an acknowledgement.
 pub(super) fn retire_foreign_resident_rejecting_request(
     scope: &Path,
     state: &ResidentState,
@@ -132,7 +214,7 @@ fn request_shutdown(state: &ResidentState, deadline: Instant) -> bool {
         &state.transport,
         &state.endpoint,
         &token,
-        br#"{"operation":"shutdown","request":{}}"#,
+        HANDOFF_SHUTDOWN_REQUEST,
         deadline.saturating_duration_since(Instant::now()),
         &identity,
     )

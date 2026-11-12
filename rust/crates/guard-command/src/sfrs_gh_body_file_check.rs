@@ -275,10 +275,7 @@ mod windows_tests {
         let root = std::env::temp_dir().join(format!(
             "guard-pr-body-{}-{}",
             std::process::id(),
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
-                .as_nanos()
+            crate::unique_nanos::unique_nanos()
         ));
         fs::create_dir(&root).unwrap();
         let path = root.join("pr-body.md");
@@ -304,7 +301,7 @@ mod windows_tests {
 #[cfg(all(test, unix))]
 mod unix_tests {
     use super::*;
-    use crate::codex_output_env::{GitCheck, GitRun, InspectionHost};
+    use crate::codex_output_env::{GitCheck, InspectionHost};
     use std::os::unix::fs::PermissionsExt;
 
     /// A host that answers the two questions this check asks of its caller:
@@ -341,9 +338,6 @@ mod unix_tests {
         fn git_binary_trusted(&self, _: &str, _: &str) -> bool {
             false
         }
-        fn run_git(&self, _: &str, _: &[String], _: &str) -> GitRun {
-            GitRun::Failed("body-file test host does not run git")
-        }
     }
 
     /// A fresh private directory, the shape `tmp_path` has in the retired
@@ -352,10 +346,7 @@ mod unix_tests {
         let root = std::env::temp_dir().join(format!(
             "guard-pr-body-{label}-{}-{}",
             std::process::id(),
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
-                .as_nanos()
+            crate::unique_nanos::unique_nanos()
         ));
         fs::create_dir_all(&root).unwrap();
         fs::set_permissions(&root, fs::Permissions::from_mode(0o700)).unwrap();

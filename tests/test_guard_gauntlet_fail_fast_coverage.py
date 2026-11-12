@@ -143,3 +143,101 @@ def test_a_complete_run_prints_no_never_executed_line() -> None:
     )
     assert "Cases executed: 2 of 2 selected" in markdown
     assert "Never executed" not in markdown
+
+
+def test_a_truncated_run_counts_only_the_cases_that_reached_their_decision() -> None:
+    # Three cases declare a decision, one reached it and one did not; the third
+    # never ran. Counting the reached cases as "everything but the unexercised"
+    # would report two of three and credit a case that never started.
+    markdown = render_summary_markdown(
+        _report(
+            {
+                "catalog_cases": 3,
+                "selected_cases": 3,
+                "executed_cases": 2,
+                "unexecuted_cases": ["never-ran"],
+                "decision_paths": {
+                    "declaring_cases": ["reached", "missed", "never-ran"],
+                    "exercised_cases": ["reached"],
+                    "unexercised_cases": [{"id": "missed", "missing": ["native_policy_block"]}],
+                },
+            }
+        ),
+        {"candidate_sha": "0" * 40},
+        "0" * 40,
+        "omp/1.0.0",
+    )
+    assert "Declared decisions reached: 1 of 3 declaring cases" in markdown
+    assert "Declared decisions never attempted: 1 of 3 declaring cases never ran" in markdown
+    assert "Declared decision not reached: missed (native_policy_block)" in markdown
+
+
+def test_a_complete_run_states_no_never_attempted_line() -> None:
+    markdown = render_summary_markdown(
+        _report(
+            {
+                "catalog_cases": 1,
+                "selected_cases": 1,
+                "executed_cases": 1,
+                "unexecuted_cases": [],
+                "decision_paths": {
+                    "declaring_cases": ["reached"],
+                    "exercised_cases": ["reached"],
+                    "unexercised_cases": [],
+                },
+            }
+        ),
+        {"candidate_sha": "0" * 40},
+        "0" * 40,
+        "omp/1.0.0",
+    )
+    assert "Declared decisions reached: 1 of 1 declaring cases" in markdown
+    assert "never attempted" not in markdown
+
+
+def test_the_summary_reports_decisions_observed_beyond_the_declaring_cases() -> None:
+    # Undeclared cases still record the codes their run drove; the run-level
+    # report aggregates them so a qualification states what it actually reached.
+    markdown = render_summary_markdown(
+        _report(
+            {
+                "catalog_cases": 2,
+                "selected_cases": 2,
+                "executed_cases": 2,
+                "unexecuted_cases": [],
+                "decision_paths": {
+                    "declaring_cases": ["reached"],
+                    "exercised_cases": ["reached"],
+                    "unexercised_cases": [],
+                    "observed_decisions": ["native_policy_block", "native_policy_warning"],
+                },
+            }
+        ),
+        {"candidate_sha": "0" * 40},
+        "0" * 40,
+        "omp/1.0.0",
+    )
+    assert "Observed decisions: native_policy_block, native_policy_warning" in markdown
+
+
+def test_the_summary_reports_observed_decisions_when_no_case_declares() -> None:
+    markdown = render_summary_markdown(
+        _report(
+            {
+                "catalog_cases": 1,
+                "selected_cases": 1,
+                "executed_cases": 1,
+                "unexecuted_cases": [],
+                "decision_paths": {
+                    "declaring_cases": [],
+                    "exercised_cases": [],
+                    "unexercised_cases": [],
+                    "observed_decisions": ["native_policy_warning"],
+                },
+            }
+        ),
+        {"candidate_sha": "0" * 40},
+        "0" * 40,
+        "omp/1.0.0",
+    )
+    assert "Observed decisions: native_policy_warning" in markdown

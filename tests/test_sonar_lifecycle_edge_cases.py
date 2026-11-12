@@ -344,3 +344,31 @@ def test_hermes_legacy_cleanup_ignores_non_string_guard_home_marker(tmp_path: Pa
     managed, _previous_guard = hermes_cleanup_values(context, {}, config_path)
 
     assert managed == []
+
+
+def test_hermes_legacy_cleanup_recognizes_the_relay_style_proxy_launch(tmp_path: Path) -> None:
+    guard_home = tmp_path / "guard-home"
+    context = HarnessContext(home_dir=tmp_path / "home", workspace_dir=None, guard_home=guard_home)
+    config_path = context.home_dir / ".hermes" / "config.yaml"
+    config_path.parent.mkdir(parents=True)
+    config_path.write_text(
+        "mcp_servers:\n"
+        "  guard-python:\n"
+        "    command: python\n"
+        f"    args: [-m, codex_plugin_scanner.cli, guard, hermes-mcp-proxy, --guard-home, {guard_home}]\n"
+        "  guard-native:\n"
+        "    command: /opt/guard/hol-guard-runtime\n"
+        "    args: [mcp-relay, python, -m, codex_plugin_scanner.cli, guard, hermes-mcp-proxy, --guard-home, "
+        f"{guard_home}]\n"
+        "  foreign:\n"
+        "    command: python\n"
+        "    args: [-m, codex_plugin_scanner.cli, guard, hermes-mcp-proxy, --guard-home, /elsewhere]\n"
+        "  unrelated:\n"
+        "    command: npx\n"
+        "    args: [some-server]\n",
+        encoding="utf-8",
+    )
+
+    managed, _previous_guard = hermes_cleanup_values(context, {}, config_path)
+
+    assert managed == ["guard-python", "guard-native"]

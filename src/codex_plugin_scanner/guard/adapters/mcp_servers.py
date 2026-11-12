@@ -3,22 +3,16 @@
 from __future__ import annotations
 
 import json
-import sys
-from dataclasses import dataclass, replace
-from hashlib import sha256
+from dataclasses import dataclass
 from pathlib import Path, PurePath
-from typing import cast
+from typing import Any, cast
 
 from ..launcher import merge_guard_launcher_env
 from ..models import GuardArtifact, HarnessDetection
-from ..runtime.mcp_protection import McpServerIdentity, build_mcp_server_identity
+from ..runtime.mcp_protection import McpServerIdentity
+from ..stable_guard_cli import guard_cli_launcher
 from .base import HarnessContext
-from .managed_mcp_upstream import (
-    MAX_PROXY_UNWRAP_LAYERS,
-    PROXY_LAUNCHER_ENV_KEYS,
-    proxy_argument_tail,
-    read_managed_mcp_upstream,
-)
+from .managed_mcp_upstream import PROXY_LAUNCHER_ENV_KEYS, proxy_argument_tail
 from .mcp_relay_native import mcp_proxy_launch
 
 
@@ -55,43 +49,23 @@ def is_verified_guard_mcp_companion(
 
 _GUARD_PROXY_COMMANDS = frozenset(
     {
+        "cline-mcp-proxy",
         "codex-mcp-proxy",
         "opencode-mcp-proxy",
         "copilot-mcp-proxy",
         "cursor-mcp-proxy",
+        "hermes-mcp-proxy",
         "mcp-proxy",
     }
 )
 
-_STABLE_SLASH_FLAG_TOKENS = frozenset(
-    {
-        "/?",
-        "/debug",
-        "/dry-run",
-        "/h",
-        "/help",
-        "/quiet",
-        "/read-only",
-        "/readonly",
-        "/ro",
-        "/safe",
-        "/trace",
-        "/verbose",
-    }
-)
 _PROXY_ENV_BLOCKLIST = PROXY_LAUNCHER_ENV_KEYS
 
 
 def managed_stdio_servers(detection: HarnessDetection) -> tuple[ManagedMcpServer, ...]:
     """Extract local stdio MCP servers from a harness detection payload."""
 
-    managed: list[ManagedMcpServer] = []
-    for artifact in detection.artifacts:
-        server = _managed_stdio_server(artifact)
-        if server is None:
-            continue
-        managed.append(server)
-    return tuple(managed)
+    return _kept(detection, include_guard_managed_proxy=False)
 
 
 def observable_stdio_servers_with_proxy(detection: HarnessDetection) -> tuple[ManagedMcpServer, ...]:
@@ -101,25 +75,17 @@ def observable_stdio_servers_with_proxy(detection: HarnessDetection) -> tuple[Ma
     continue excluding them so install never wraps a Guard proxy again.
     """
 
-    servers: list[ManagedMcpServer] = []
-    for artifact in detection.artifacts:
-        server = _managed_stdio_server(artifact, include_guard_managed_proxy=True)
-        if server is not None:
-            servers.append(server)
-    return tuple(servers)
+    return _kept(detection, include_guard_managed_proxy=True)
 
 
 def skipped_stdio_server_names(detection: HarnessDetection) -> tuple[str, ...]:
     """Return server names Guard cannot manage through the runtime proxy."""
 
-    skipped: list[str] = []
-    for artifact in detection.artifacts:
-        if artifact.artifact_type != "mcp_server" or not artifact.name.strip():
-            continue
-        if _managed_stdio_server(artifact) is not None:
-            continue
-        skipped.append(artifact.name)
-    return tuple(skipped)
+    named = [
+        artifact for artifact in detection.artifacts if artifact.artifact_type == "mcp_server" and artifact.name.strip()
+    ]
+    selected = _select(named, include_guard_managed_proxy=False)
+    return tuple(artifact.name for artifact, server in zip(named, selected, strict=True) if server is None)
 
 
 def proxy_cli_args(
@@ -167,19 +133,23 @@ def proxy_cli_args(
 def stable_mcp_server_identifier(server: ManagedMcpServer) -> str:
     """Build a Cloud-stable MCP server ID without local config path material."""
 
-    harness = server.harness.strip().lower()
-    source_scope = server.source_scope.strip().lower()
-    server_name = _stable_server_name(server.name)
-    payload = {
-        "harness": harness,
-        "source_scope": source_scope,
-        "name": server_name,
-        "command": _stable_command_name(server.command),
-        "args": [_stable_arg_token(value) for value in server.args],
-        "transport": server.transport,
+    request: dict[str, object] = {
+        "op": "server_id",
+        "servers": [
+            {
+                "harness": server.harness,
+                "name": server.name,
+                "source_scope": server.source_scope,
+                "command": server.command,
+                "args": list(server.args),
+                "transport": server.transport,
+            }
+        ],
     }
-    digest = sha256(json.dumps(payload, sort_keys=True).encode("utf-8")).hexdigest()[:20]
-    return f"mcp_server:{harness}:{source_scope}:{server_name}:{digest}"
+    ids = _native(request, "ids")
+    if len(ids) != 1 or not isinstance(ids[0], str):
+        raise ValueError("native_mcp_server_select_malformed")
+    return ids[0]
 
 
 def proxy_process_env(server_env: dict[str, str]) -> dict[str, str]:
@@ -209,7 +179,7 @@ def proxy_launcher_entry(
         home=str(context.home_dir) if context.home_dir.resolve() != Path.home().resolve() else None,
         workspace=str(context.workspace_dir) if context.workspace_dir is not None else None,
     )
-    command, launch_args = mcp_proxy_launch(sys.executable, args)
+    command, launch_args = mcp_proxy_launch(guard_cli_launcher(), args)
     entry: dict[str, object] = {
         "command": command,
         "args": launch_args,
@@ -220,145 +190,142 @@ def proxy_launcher_entry(
     return entry
 
 
-def _managed_stdio_server(
-    artifact: GuardArtifact, *, include_guard_managed_proxy: bool = False
-) -> ManagedMcpServer | None:
-    if artifact.artifact_type != "mcp_server":
-        return None
-    private_args = artifact.runtime_private_metadata.get("mcp_args")
-    if isinstance(private_args, tuple):
-        candidate_args = cast(tuple[object, ...], private_args)
-        if not all(isinstance(value, str) for value in candidate_args):
-            return None
-        artifact = replace(artifact, args=cast(tuple[str, ...], candidate_args))
-    if is_verified_guard_mcp_companion(artifact.name, artifact.command, artifact.args):
-        return None
-    if not include_guard_managed_proxy and _bool_metadata(artifact.metadata.get("guard_managed_proxy"), default=False):
-        return None
-    if artifact.command is None or not artifact.name.strip():
-        return None
-    for _ in range(MAX_PROXY_UNWRAP_LAYERS):
-        if not is_guard_proxy_command(artifact.command, artifact.args):
-            break
-        if not include_guard_managed_proxy:
-            return None
-        upstream = read_managed_mcp_upstream(artifact, _GUARD_PROXY_COMMANDS)
-        if upstream is None:
-            return None
-        recovered = replace(
-            artifact,
-            command=upstream.command,
-            args=upstream.args,
-            source_scope=upstream.source_scope,
-            config_path=upstream.config_path,
-            runtime_private_metadata={
-                key: value
-                for key, value in artifact.runtime_private_metadata.items()
-                if key not in {"mcp_args", "mcp_env"}
-            },
-            metadata={**artifact.metadata, "env": upstream.env, "guard_managed_proxy": True},
-        )
-        # Construct only descriptive identity here. A recovered connection
-        # retains its config and environment; no permission state is copied.
-        described = ManagedMcpServer(
-            harness=recovered.harness,
-            name=recovered.name,
-            source_scope=recovered.source_scope,
-            config_path=recovered.config_path,
-            command=upstream.command,
-            args=upstream.args,
-            transport=recovered.transport or "stdio",
-            env=upstream.env,
-            enabled=True,
-        )
-        if stable_mcp_server_identifier(described) != upstream.server_id:
-            return None
-        artifact = recovered
-    if artifact.command is None or is_guard_proxy_command(artifact.command, artifact.args):
-        return None
-    transport = artifact.transport or "stdio"
-    if transport not in {"stdio", "local"}:
-        return None
-    env = _string_env(artifact.runtime_private_metadata.get("mcp_env", artifact.metadata.get("env")))
-    enabled = _bool_metadata(artifact.metadata.get("enabled"), default=True)
-    return ManagedMcpServer(
-        harness=artifact.harness,
-        name=artifact.name,
-        source_scope=artifact.source_scope,
-        config_path=artifact.config_path,
-        command=artifact.command,
-        args=artifact.args,
-        transport=transport,
-        env=env,
-        enabled=enabled,
-        identity=build_mcp_server_identity(
-            config_path=artifact.config_path,
-            command=artifact.command,
-            args=artifact.args,
-            transport=transport,
-            env=env,
-        ),
+def _kept(detection: HarnessDetection, *, include_guard_managed_proxy: bool) -> tuple[ManagedMcpServer, ...]:
+    servers = [artifact for artifact in detection.artifacts if artifact.artifact_type == "mcp_server"]
+    selected = _select(servers, include_guard_managed_proxy=include_guard_managed_proxy)
+    return tuple(server for server in selected if server is not None)
+
+
+def _select(artifacts: list[GuardArtifact], *, include_guard_managed_proxy: bool) -> list[ManagedMcpServer | None]:
+    """Ask the native ``select`` op which ``mcp_server`` artifacts Guard can run behind its proxy.
+
+    One request carries every artifact. The answer names each one's server, or
+    null; a server recovered from a Guard proxy is inventory, never permission.
+    """
+
+    selected: list[ManagedMcpServer | None] = [None] * len(artifacts)
+    positions: list[int] = []
+    requests: list[dict[str, object]] = []
+    for index, artifact in enumerate(artifacts):
+        request = _select_request(artifact)
+        if request is not None:
+            positions.append(index)
+            requests.append(request)
+    if not requests:
+        return selected
+    answer = _native(
+        {"op": "select", "include_proxy": include_guard_managed_proxy, "artifacts": requests},
+        "servers",
     )
+    if len(answer) != len(requests):
+        raise ValueError("native_mcp_server_select_malformed")
+    for index, found in zip(positions, answer, strict=True):
+        if found is not None:
+            selected[index] = _selected_server(artifacts[index], found)
+    return selected
 
 
-def _stable_arg_token(value: str) -> str:
-    key, separator, item = value.partition("=")
-    if separator and (_looks_like_path_assignment(key, item) or _looks_like_path_token(item)):
-        return f"{key}=<path>"
-    if _looks_like_path_token(value):
-        return "<path>"
-    return value
-
-
-def _stable_server_name(value: str) -> str:
-    return value.strip().lower() or "unnamed"
-
-
-def _stable_command_name(value: str) -> str:
-    return PurePath(value.replace("\\", "/")).name.lower()
-
-
-def _looks_like_path_assignment(key: str, value: str) -> bool:
-    normalized_key = key.strip().lstrip("-/").lower().replace("_", "-")
-    path_keys = {
-        "cache",
-        "config",
-        "cwd",
-        "dir",
-        "directory",
-        "file",
-        "folder",
-        "path",
-        "root",
-        "workspace",
-        "workdir",
+def _select_request(artifact: GuardArtifact) -> dict[str, object] | None:
+    private = artifact.runtime_private_metadata
+    args: tuple[object, ...] = artifact.args
+    private_args = private.get("mcp_args")
+    if isinstance(private_args, tuple):
+        args = cast(tuple[object, ...], private_args)
+        if not all(isinstance(value, str) for value in args):
+            return None
+    env = private.get("mcp_env", artifact.metadata.get("env"))
+    saved = private.get("managed_mcp_origin")
+    saved_home = private.get("managed_guard_home")
+    request: dict[str, object] = {
+        "harness": artifact.harness,
+        "name": artifact.name,
+        "source_scope": artifact.source_scope,
+        "config_path": artifact.config_path,
+        "command": artifact.command,
+        "args": list(args),
+        "transport": artifact.transport,
+        "env": _env_pairs(env),
+        "guard_managed_proxy": artifact.metadata.get("guard_managed_proxy") is True,
+        "enabled": artifact.metadata.get("enabled") is not False,
+        "saved_origin": (
+            list(cast(tuple[str, ...], saved))
+            if isinstance(saved, tuple) and all(isinstance(value, str) for value in cast(tuple[object, ...], saved))
+            else None
+        ),
+        "saved_guard_home": saved_home if isinstance(saved_home, str) else None,
     }
-    return normalized_key in path_keys and value.strip().replace("\\", "/").startswith("/")
+    # The resident refuses a whole request holding text it cannot encode, so
+    # one such entry is left out rather than failing every other server.
+    try:
+        json.dumps(request, ensure_ascii=False).encode()
+    except UnicodeEncodeError:
+        return None
+    return request
 
 
-def _looks_like_path_token(value: str) -> bool:
-    normalized = value.strip().replace("\\", "/")
-    if normalized.startswith(("~/", "./", "../")):
-        return True
-    if normalized.startswith("/"):
-        return "/" in normalized[1:] or normalized.lower() not in _STABLE_SLASH_FLAG_TOKENS
-    return len(normalized) >= 3 and normalized[0].isalpha() and normalized[1:3] == ":/"
+def _env_pairs(env: object) -> list[list[str]] | None:
+    """The string pairs of a configured env mapping; None when it is not one."""
+
+    if not isinstance(env, dict):
+        return None
+    return [
+        [key, value]
+        for key, value in cast(dict[object, object], env).items()
+        if isinstance(key, str) and isinstance(value, str)
+    ]
 
 
-def _string_env(value: object) -> dict[str, str]:
-    if not isinstance(value, dict):
-        return {}
-    env: dict[str, str] = {}
-    for key, item in value.items():
-        if isinstance(key, str) and isinstance(item, str):
-            env[key] = item
-    return env
+def _selected_server(artifact: GuardArtifact, found: object) -> ManagedMcpServer:
+    try:
+        server = cast(dict[str, Any], found)
+        identity = cast(dict[str, Any], server["identity"])
+        return ManagedMcpServer(
+            harness=artifact.harness,
+            name=artifact.name,
+            source_scope=_text(server["source_scope"]),
+            config_path=_text(server["config_path"]),
+            command=_text(server["command"]),
+            args=tuple(_text(value) for value in server["args"]),
+            transport=_text(server["transport"]),
+            env={_text(key): _text(value) for key, value in server["env"]},
+            enabled=server["enabled"] is True,
+            identity=McpServerIdentity(
+                config_path=_text(identity["config_path"]),
+                command=_text(identity["command"]),
+                args_hash=_text(identity["args_hash"]),
+                package_name=identity["package_name"],
+                package_version=identity["package_version"],
+                package_source=_text(identity["package_source"]),
+                transport=_text(identity["transport"]),
+                env_values_hash=_text(identity["env_values_hash"]),
+                identity_hash=_text(identity["identity_hash"]),
+                env_keys=tuple(_text(key) for key in identity["env_keys"]),
+            ),
+        )
+    except (KeyError, TypeError, ValueError) as error:
+        raise ValueError("native_mcp_server_select_malformed") from error
 
 
-def _bool_metadata(value: object, *, default: bool) -> bool:
-    if isinstance(value, bool):
-        return value
-    return default
+def _native(request: dict[str, object], field: str) -> list[object]:
+    """One ``harness_mcp_discovery`` call; a native failure aborts as identity unavailable."""
+
+    from ..native_runner_authority import NativeRunnerAuthorityError, native_runner_authority
+
+    try:
+        answer = native_runner_authority("harness_mcp_discovery", request)[field]
+    except NativeRunnerAuthorityError as error:
+        raise ValueError(f"native_mcp_server_identity_unavailable:{error}") from error
+    except KeyError as error:
+        raise ValueError("native_mcp_server_select_malformed") from error
+    if not isinstance(answer, list):
+        raise ValueError("native_mcp_server_select_malformed")
+    return cast(list[object], answer)
+
+
+def _text(value: object) -> str:
+    if not isinstance(value, str):
+        raise TypeError("harness_mcp_discovery select field is malformed")
+    return value
 
 
 def _hol_guard_command_name(command: str) -> str | None:

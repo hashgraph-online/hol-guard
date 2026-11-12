@@ -18,8 +18,10 @@ def runner_result(result: BoundedHookProcessResult) -> Callable[..., BoundedHook
         timeout_seconds: float,
         deadline_monotonic: float | None = None,
         output_limit: int = 1_000_000,
+        allow_windows_breakaway: bool = False,
     ) -> BoundedHookProcessResult:
         del command, input_text, cwd, environment, timeout_seconds, output_limit, deadline_monotonic
+        del allow_windows_breakaway
         return result
 
     return run

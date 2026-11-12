@@ -8,13 +8,13 @@ from typing import cast
 import pytest
 
 from codex_plugin_scanner.cli import main
-from codex_plugin_scanner.guard.approvals import apply_approval_resolution
-from codex_plugin_scanner.guard.store import GuardStore
+from codex_plugin_scanner.guard import trusted_local_tools
 from codex_plugin_scanner.guard.trusted_local_tools import (
-    local_tool_approval_eligibility,
+    LocalToolGrantUnavailableError,
+    local_tool_approval_payload,
     parse_local_tool_grant_selection,
 )
-from tests.conftest import guard_commands_module
+from tests.local_tool_eligibility_support import local_tool_approval_eligibility
 
 pytestmark = pytest.mark.usefixtures("approval_questionnaire_mode")
 
@@ -161,19 +161,24 @@ def test_impeccable_local_scan_can_receive_conditional_package_trust(tmp_path: P
     assert eligibility.tool_name == "impeccable"
     assert eligibility.capability == "scan"
     assert eligibility.trust_basis == "package-profile"
-    assert eligibility.to_payload()["allowed_durations"] == [
+    offered = local_tool_approval_payload({"scanner_evidence": [eligibility.to_evidence()]})
+    assert offered is not None
+    assert offered["allowed_durations"] == [
         "once",
         "15m",
         "1h",
         "5h",
     ]
+    assert offered["allowed_targets"] == ["capability"]
     pinned = local_tool_approval_eligibility(
         command.replace("npx impeccable", "npx impeccable@3.3.1"),
         cwd=tmp_path,
         home_dir=tmp_path,
     )
     assert pinned is not None
-    assert "always" in cast(list[object], pinned.to_payload()["allowed_durations"])
+    pinned_offer = local_tool_approval_payload({"scanner_evidence": [pinned.to_evidence()]})
+    assert pinned_offer is not None
+    assert "always" in cast(list[object], pinned_offer["allowed_durations"])
     latest = local_tool_approval_eligibility(
         command.replace("npx impeccable ", "npx impeccable@latest "),
         cwd=tmp_path,
@@ -232,88 +237,9 @@ def test_indefinite_trust_is_limited_to_package_profiles(
             target="capability",
             duration="always",
             now="2026-08-02T12:00:00+00:00",
+            harness="codex",
+            reason=None,
         )
-
-
-@pytest.mark.usefixtures("native_hook_force")
-def test_impeccable_package_request_exposes_trust_controls_in_review(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-    capsys: pytest.CaptureFixture[str],
-    native_hook_force: Path,
-) -> None:
-    workspace = tmp_path / "workspace"
-    workspace.mkdir()
-    context = workspace / "docs"
-    context.mkdir()
-    target = workspace / "email.tsx"
-    _ = target.write_text("export const Email = () => null;\n")
-    guard_home = tmp_path / "guard-home"
-    guard_home.mkdir()
-    _ = (guard_home / "config.toml").write_text(
-        'mode = "enforce"\nsecurity_level = "balanced"\ndefault_action = "require-reapproval"\n'
-    )
-    monkeypatch.setenv("CODEX_MANAGED_BY_BUN", "1")
-
-    def schedule_daemon(_guard_home: Path, **_kwargs: object) -> str:
-        return "http://127.0.0.1:4455"
-
-    monkeypatch.setattr(guard_commands_module, "schedule_guard_daemon_ensure", schedule_daemon)
-
-    def unavailable_daemon(_guard_home: Path) -> object:
-        raise RuntimeError("daemon unavailable")
-
-    monkeypatch.setattr(guard_commands_module, "load_guard_surface_daemon_client", unavailable_daemon)
-    event = tmp_path / "impeccable.json"
-    _write_event(
-        event,
-        workspace=workspace,
-        command=f"IMPECCABLE_CONTEXT_DIR={context} npx impeccable@3.3.1 --json {target}",
-        call_id="impeccable",
-    )
-
-    assert _run_hook(guard_home=guard_home, workspace=workspace, event_path=event) == 0
-    _ = capsys.readouterr()
-    pending = GuardStore(guard_home).list_approval_requests(limit=5)
-    assert len(pending) == 1
-    assert pending[0]["artifact_type"] == "package_request"
-    assert "local_tool_approval" in pending[0], [
-        cast(Mapping[str, object], item).get("source")
-        for item in cast(list[object], pending[0].get("scanner_evidence", []))
-        if isinstance(item, Mapping)
-    ]
-    approval = cast(Mapping[str, object], pending[0]["local_tool_approval"])
-    assert approval["tool_name"] == "impeccable"
-    assert approval["capability"] == "scan"
-    assert approval["trust_basis"] == "package-profile"
-    assert "always" in cast(list[object], approval["allowed_durations"])
-
-    resolved = apply_approval_resolution(
-        store=GuardStore(guard_home),
-        request_id=str(pending[0]["request_id"]),
-        action="allow",
-        scope="artifact",
-        workspace=str(workspace),
-        reason="trusted local design scan",
-        now="2026-08-02T12:00:00+00:00",
-        local_tool_grant_target="capability",
-        local_tool_grant_duration="always",
-    )
-    grant = cast(Mapping[str, object], resolved["local_tool_grant"])
-    assert grant["expires_at"] is None
-
-    second_target = workspace / "second-email.tsx"
-    _ = second_target.write_text("export const SecondEmail = () => null;\n")
-    second_event = tmp_path / "impeccable-second.json"
-    _write_event(
-        second_event,
-        workspace=workspace,
-        command=f"IMPECCABLE_CONTEXT_DIR={context} npx impeccable@3.3.1 --json {second_target}",
-        call_id="impeccable-second",
-    )
-    assert _run_hook(guard_home=guard_home, workspace=workspace, event_path=second_event) == 0
-    assert capsys.readouterr().out == ""
-    assert GuardStore(guard_home).list_approval_requests(limit=5) == []
 
 
 @pytest.mark.parametrize(
@@ -363,138 +289,55 @@ def test_local_tool_trust_rejects_jq_file_inputs(
     )
 
 
-@pytest.mark.usefixtures("native_hook_force")
-def test_local_tool_trust_allows_variable_read_queries_and_invalidates_changed_bytes(
-    tmp_path: Path,
-    local_tool_workspace: tuple[Path, Path],
+def test_a_request_the_scanner_never_filed_asks_the_resident_nothing(
     monkeypatch: pytest.MonkeyPatch,
-    capsys: pytest.CaptureFixture[str],
-    native_hook_force: Path,
 ) -> None:
-    workspace, tool = local_tool_workspace
-    guard_home = tmp_path / "guard-home"
-    guard_home.mkdir()
-    _ = (guard_home / "config.toml").write_text(
-        'mode = "enforce"\nsecurity_level = "balanced"\ndefault_action = "require-reapproval"\n'
-        'blocked_request_mode = "ask"\n'
-    )
-    monkeypatch.setenv("CODEX_MANAGED_BY_BUN", "1")
+    """Evidence that never names the local-tool source carries no grant.
 
-    def schedule_daemon(_guard_home: Path, **_kwargs: object) -> str:
-        return "http://127.0.0.1:4455"
+    Every row of an approval queue passes through this call, so a request that
+    cannot possibly hold a grant must not cost a round-trip to say so.
+    """
 
-    def unavailable_daemon(_guard_home: Path) -> object:
-        raise RuntimeError("daemon unavailable")
+    def unreachable(*_args: object, **_kwargs: object) -> dict[str, object] | None:
+        raise AssertionError("the resident was asked about evidence it could not grant")
 
-    monkeypatch.setattr(guard_commands_module, "schedule_guard_daemon_ensure", schedule_daemon)
-    monkeypatch.setattr(guard_commands_module, "load_guard_surface_daemon_client", unavailable_daemon)
+    monkeypatch.setattr(trusted_local_tools, "_grant_payload", unreachable)
 
-    first_event = tmp_path / "first.json"
-    _write_event(
-        first_event,
-        workspace=workspace,
-        command="node xads.mjs request --method=GET --path=/stats --query='start_time=2026-07-28T13:00:00Z'",
-        call_id="first",
-    )
-    assert _run_hook(guard_home=guard_home, workspace=workspace, event_path=first_event) == 0
-    first_payload = _json_object(capsys.readouterr().out)
-    first_hook_output = cast(Mapping[str, object], first_payload["hookSpecificOutput"])
-    assert first_hook_output["permissionDecision"] == "deny"
+    assert local_tool_approval_payload({"scanner_evidence": [{"source": "package_profile"}]}) is None
+    assert local_tool_approval_payload({"scanner_evidence": []}) is None
+    assert local_tool_approval_payload({}) is None
 
-    store = GuardStore(guard_home)
-    pending = store.list_approval_requests(limit=5)
-    assert len(pending) == 1
-    assert pending[0]["artifact_type"] == "tool_action_request"
-    approval = cast(Mapping[str, object], pending[0]["local_tool_approval"])
-    assert approval["eligible"] is True
-    assert approval["capability"] == "request"
-    assert approval["allowed_targets"] == ["capability", "version"]
 
-    with pytest.raises(ValueError, match="local_tool_approval_cannot_be_remembered"):
-        _ = apply_approval_resolution(
-            store=store,
-            request_id=str(pending[0]["request_id"]),
-            action="allow",
-            scope="artifact",
-            workspace=str(workspace),
-            reason="invalid mixed approval",
-            now="2026-07-28T21:00:00+00:00",
-            persist_policy=True,
-            local_tool_grant_target="capability",
-            local_tool_grant_duration="version",
+def test_a_malformed_filed_row_is_refused_before_anything_is_written(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A reply whose policy row is unusable fails at the pick, not at the write.
+
+    Left until the resolution files it, the approval gate would already have
+    been required and a policy row may already exist while the request stayed
+    pending.
+    """
+
+    def half_formed(*_args: object, **_kwargs: object) -> dict[str, object]:
+        return {
+            "selection": {
+                "target": "capability",
+                "duration": "15m",
+                "expires_at": "2026-08-02T12:15:00+00:00",
+                # Neither an artifact scope nor an allow, so no policy row.
+                "decision": {"scope": "command", "action": "ask"},
+            },
+            "approval": {"tool_name": "xads", "capability": "read-only HTTP GET"},
+        }
+
+    monkeypatch.setattr(trusted_local_tools, "_grant_payload", half_formed)
+
+    with pytest.raises(LocalToolGrantUnavailableError):
+        _ = parse_local_tool_grant_selection(
+            {"scanner_evidence": [{"source": "trusted_local_tool"}]},
+            target="capability",
+            duration="15m",
+            now="2026-08-02T12:00:00+00:00",
+            harness="codex",
+            reason=None,
         )
-
-    with pytest.raises(ValueError, match="mixed_temporary_grant_modes"):
-        _ = apply_approval_resolution(
-            store=store,
-            request_id=str(pending[0]["request_id"]),
-            action="allow",
-            scope="artifact",
-            workspace=str(workspace),
-            reason="invalid mixed approval",
-            now="2026-07-28T21:00:00+00:00",
-            mcp_grant_target="server",
-            mcp_grant_duration="1h",
-            local_tool_grant_target="capability",
-            local_tool_grant_duration="version",
-        )
-
-    resolved = apply_approval_resolution(
-        store=store,
-        request_id=str(pending[0]["request_id"]),
-        action="allow",
-        scope="artifact",
-        workspace=str(workspace),
-        reason="trusted local analytics client",
-        now="2026-07-28T21:00:00+00:00",
-        local_tool_grant_target="capability",
-        local_tool_grant_duration="version",
-    )
-    local_tool_grant = cast(Mapping[str, object], resolved["local_tool_grant"])
-    assert local_tool_grant["expires_at"] is None
-
-    varied_event = tmp_path / "varied.json"
-    _write_event(
-        varied_event,
-        workspace=workspace,
-        command="node xads.mjs request --method=GET --path=/stats --query='start_time=2026-07-28T20:00:00Z'",
-        call_id="varied",
-    )
-    assert _run_hook(guard_home=guard_home, workspace=workspace, event_path=varied_event) == 0
-    assert capsys.readouterr().out == ""
-
-    explicit_review_event = tmp_path / "explicit-review.json"
-    _write_event(
-        explicit_review_event,
-        workspace=workspace,
-        command="node xads.mjs request --method=GET --path=/stats",
-        call_id="explicit-review",
-        policy_action="require-reapproval",
-    )
-    assert (
-        _run_hook(
-            guard_home=guard_home,
-            workspace=workspace,
-            event_path=explicit_review_event,
-        )
-        == 0
-    )
-    explicit_review_payload = _json_object(capsys.readouterr().out)
-    explicit_hook_output = cast(
-        Mapping[str, object],
-        explicit_review_payload["hookSpecificOutput"],
-    )
-    assert explicit_hook_output["permissionDecision"] == "deny"
-
-    _ = tool.write_text("export const version = 2;\n")
-    changed_event = tmp_path / "changed.json"
-    _write_event(
-        changed_event,
-        workspace=workspace,
-        command="node xads.mjs request --method=GET --path=/stats --query='start_time=2026-07-28T20:00:00Z'",
-        call_id="changed",
-    )
-    assert _run_hook(guard_home=guard_home, workspace=workspace, event_path=changed_event) == 0
-    changed_payload = _json_object(capsys.readouterr().out)
-    changed_hook_output = cast(Mapping[str, object], changed_payload["hookSpecificOutput"])
-    assert changed_hook_output["permissionDecision"] == "deny"

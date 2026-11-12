@@ -11,7 +11,7 @@
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
-use crate::codex_output_env::{Ctx, GitCheck};
+use crate::codex_output_env::{Ctx, GitCheck, GitProbe};
 use crate::codex_output_fs as pyfs;
 use crate::codex_output_py::{py_strip, PyPath};
 use crate::sfrs_developer_graph::git_segment;
@@ -160,13 +160,31 @@ pub(crate) fn looks_like_safe_git_branch_switch_command(
     walked && saw_switch
 }
 
+/// The branch `-` names: the one Git left last. `rev-parse` writes its full
+/// ref name, and writes nothing at all when `@{-1}` was a commit rather than a
+/// branch, which this proof does not read.
+pub(crate) fn previous_branch_name(result: &GitProbe) -> Option<String> {
+    if result.code != 0 {
+        return None;
+    }
+    let name = py_strip(&result.stdout).strip_prefix("refs/heads/")?;
+    (!name.is_empty() && !name.contains('\n')).then(|| name.to_owned())
+}
+
 /// `_git_local_branch_switch_is_safe`.
 pub(crate) fn git_local_branch_switch_is_safe(args: &[String], cwd: &Path, ctx: &Ctx) -> bool {
     if args.len() != 2 || !matches!(args[0].as_str(), "checkout" | "switch") {
         return false;
     }
-    let branch = &args[1];
-    if branch.is_empty() || branch.starts_with('-') || branch == "." || branch == ".." {
+    let requested = args[1].as_str();
+    // `-` is the branch Git left last, and the proof resolves it below. Every
+    // other leading dash is an option this proof does not read.
+    if requested != "-"
+        && (requested.is_empty()
+            || requested.starts_with('-')
+            || requested == "."
+            || requested == "..")
+    {
         return false;
     }
     let Some(git_path) = ctx.host.git_executable() else {
@@ -186,6 +204,17 @@ pub(crate) fn git_local_branch_switch_is_safe(args: &[String], cwd: &Path, ctx: 
     let probe = |args: &[&str]| {
         let owned: Vec<String> = args.iter().map(|arg| (*arg).to_owned()).collect();
         host.git_probe(&git, &owned, &cwd_text)
+    };
+    let branch = if requested == "-" {
+        let Some(previous) = probe(&["rev-parse", "--symbolic-full-name", "@{-1}"]) else {
+            return false;
+        };
+        let Some(name) = previous_branch_name(&previous) else {
+            return false;
+        };
+        name
+    } else {
+        requested.to_owned()
     };
     let verify = format!("refs/heads/{branch}^{{commit}}");
     let (Some(branch_result), Some(execution_config), Some(hook_result), Some(git_dir_result)) = (

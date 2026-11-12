@@ -20,26 +20,14 @@ stdout JSON for successful hook processes.
 
 from __future__ import annotations
 
-import json
-import sys
 from collections.abc import Mapping
-from typing import TextIO
 
-from ....native_hook_adapter import native_prepare_payload
+from ....action_lattice import normalize_guard_action
 
 # Review-tier actions become ZCode's ``ask`` so the native permission prompt
 # (allow once / always / deny) can satisfy them; hard denials stay ``deny``.
 _ZCODE_ASK_ACTIONS = frozenset({"review", "require-reapproval"})
 _ZCODE_BLOCKING_ACTIONS = frozenset({"review", "require-reapproval", "sandbox-required", "block"})
-
-# Reason text emitted by the native command control floor when the local
-# authority is degraded, tampered, or pending recovery. ZCode sessions see
-# this on every tool call until the control floor is restored, so the
-# remediation command must travel with the message.
-_AUTHORITY_BLOCK_REASON_MARKER = "native command extension policy"
-_AUTHORITY_BLOCK_REMEDIATION = (
-    " Run `hol-guard command controls recover-authority` in a terminal to restore the protected control floor."
-)
 
 
 def _raw_hook_event_name(payload: Mapping[str, object]) -> str:
@@ -65,92 +53,9 @@ def _canonical_zcode_event_name(raw_event: str) -> str:
     return mapping.get(normalized, raw_event or "PreToolUse")
 
 
-def prepare_zcode_hook_payload(payload: Mapping[str, object]) -> dict[str, object]:
-    """Map a ZCode hook stdin JSON object onto Guard's shared hook shape."""
-
-    return native_prepare_payload("zcode", payload)
-
-
 def _event_name_for_response(payload: Mapping[str, object]) -> str:
     raw_event = _raw_hook_event_name(payload)
     return _canonical_zcode_event_name(raw_event) if raw_event else "PreToolUse"
-
-
-def zcode_authority_block_reason(reason: str) -> str:
-    """Append the control-floor remediation hint to authority block reasons.
-
-    ZCode surfaces the deny reason directly to the user; without the hint a
-    degraded control floor reads as an unactionable brick on every tool call.
-    """
-
-    text = reason if isinstance(reason, str) else ""
-    if _AUTHORITY_BLOCK_REASON_MARKER in text and "hol-guard command controls" not in text:
-        return text + _AUTHORITY_BLOCK_REMEDIATION
-    return text
-
-
-def zcode_hook_response_from_guard(
-    *,
-    policy_action: str,
-    reason: str,
-    event_name: str | None = None,
-) -> dict[str, object]:
-    """Translate a Guard policy action into a ZCode-native stdout JSON response.
-
-    ZCode understands the Claude Code hook response shape. Hard blocks emit a
-    ``hookSpecificOutput`` envelope with ``permissionDecision: "deny"``; review
-    tier actions emit ``permissionDecision: "ask"`` so ZCode routes the call to
-    its native permission prompt instead of a terminal denial; everything else
-    emits ``allow`` so ZCode continues normally.
-    """
-
-    resolved_event = event_name or "PreToolUse"
-    if policy_action in _ZCODE_BLOCKING_ACTIONS:
-        cleaned_reason = zcode_authority_block_reason(reason.strip() if isinstance(reason, str) else "") or (
-            "Blocked by HOL Guard."
-        )
-        if resolved_event == "UserPromptSubmit":
-            return {
-                "decision": "block",
-                "reason": cleaned_reason,
-                "hookSpecificOutput": {
-                    "hookEventName": resolved_event,
-                    "additionalContext": cleaned_reason,
-                },
-            }
-        permission_decision = "ask" if policy_action in _ZCODE_ASK_ACTIONS else "deny"
-        return {
-            "hookSpecificOutput": {
-                "hookEventName": resolved_event,
-                "permissionDecision": permission_decision,
-                "permissionDecisionReason": cleaned_reason,
-            }
-        }
-    if resolved_event == "UserPromptSubmit":
-        return {"hookSpecificOutput": {"hookEventName": resolved_event}}
-    return {"hookSpecificOutput": {"hookEventName": resolved_event, "permissionDecision": "allow"}}
-
-
-def emit_zcode_hook_response(
-    *,
-    policy_action: str,
-    reason: str,
-    event_name: str | None = None,
-    payload: Mapping[str, object] | None = None,
-    output_stream: TextIO | None = None,
-) -> None:
-    resolved_event = event_name
-    if resolved_event is None and payload is not None:
-        resolved_event = _event_name_for_response(payload)
-    response = zcode_hook_response_from_guard(
-        policy_action=policy_action,
-        reason=reason,
-        event_name=resolved_event,
-    )
-    stream = output_stream if output_stream is not None else sys.stdout
-    # stdout is the harness delivery channel; approval payloads must reach the operator.
-    stream.write(json.dumps(response, separators=(",", ":")) + "\n")  # codeql[py/clear-text-logging-sensitive-data]
-    stream.flush()
 
 
 def zcode_hook_process_exit(
@@ -166,21 +71,22 @@ def zcode_hook_process_exit(
     therefore must exit ``0`` so ZCode parses the ``permissionDecision: "ask"``
     envelope and opens its native permission prompt; the user, not the exit
     code, decides whether the action proceeds.
+
+    An action outside the canonical lattice is normalized to the review tier
+    before either set is consulted, so an unrecognized producer value cannot
+    exit ``0`` as though ZCode had been told to allow the call.
     """
 
     resolved_event = event_name
     if resolved_event is None and payload is not None:
         resolved_event = _event_name_for_response(payload)
     compact = (resolved_event or "PreToolUse").replace("_", "").replace("-", "").lower()
-    if compact == "pretooluse" and policy_action in _ZCODE_ASK_ACTIONS:
+    normalized = normalize_guard_action(policy_action)
+    if compact == "pretooluse" and normalized in _ZCODE_ASK_ACTIONS:
         return 0
-    return 2 if policy_action in _ZCODE_BLOCKING_ACTIONS else 0
+    return 2 if normalized in _ZCODE_BLOCKING_ACTIONS else 0
 
 
 __all__ = [
-    "emit_zcode_hook_response",
-    "prepare_zcode_hook_payload",
-    "zcode_authority_block_reason",
     "zcode_hook_process_exit",
-    "zcode_hook_response_from_guard",
 ]

@@ -262,7 +262,9 @@ fn pulls_stay_refreshes_under_the_users_own_gpg_program() {
     // The program runs only when Git signs or checks a signature.
     assert_allowed(&session, &pull, &cwd, REFRESH);
     assert_allowed(&session, &fast_forward, &cwd, REFRESH);
-    // A program the repository picks keeps both reviewed.
+    // A program the repository picks keeps both reviewed: Git builds the
+    // merge message before it decides to fast-forward, and verifies a signed
+    // tag there with `gpg.program`.
     session.config(&["gpg.program", "/tmp/gpg"]);
     assert_reviewed(&session, &pull, &cwd);
     assert_reviewed(&session, &fast_forward, &cwd);
@@ -322,13 +324,21 @@ fn a_fast_forward_merge_of_origin_is_a_proven_refresh() {
         assert_allowed(&session, &command, &wt, REFRESH);
     }
     // A Git read after the merge falls to the read floor, which the local
-    // write proof settles; either way it runs without review.
-    assert!(reason(
-        &session,
+    // write proof settles, or the workspace sandbox runs it in the linked
+    // worktree; either way it runs without review.
+    let followed = session.evaluate_at(
         "git merge -q --ff-only origin/main && git log --oneline -1",
-        &wt
-    )
-    .is_some());
+        &wt,
+    );
+    assert!(
+        matches!(
+            followed.minimum_action.as_str(),
+            "allow" | "sandbox-required"
+        ),
+        "{} {}",
+        followed.minimum_action,
+        followed.reason_code
+    );
     // In the main checkout the proven merge runs directly, as the pull does,
     // rather than in the workspace sandbox that would cut the fetch off.
     for command in [merge, split] {

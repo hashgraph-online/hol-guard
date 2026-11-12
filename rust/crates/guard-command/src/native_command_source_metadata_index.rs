@@ -334,7 +334,7 @@ mod tests {
     fn global_inactive_metadata_rejection_matrix_and_publisher_boundary_remain_native() {
         use super::super::{baseline::ValidationBase, catalog};
         const EXAMPLE: &[u8] = include_bytes!("../tests/fixtures/command-source-example.v1.json");
-        let trust = include_bytes!(concat!(env!("OUT_DIR"), "/trust-class-map.v1.json"));
+        let trust = guard_command_catalog_data::TRUST_MAP_JSON;
         let ids = BTreeSet::from(["command.example-cli".to_owned()]);
         let permissions = BTreeSet::from(["command.example-cli.permission.destroy".to_owned()]);
         let pack = catalog::compile_pack(&[EXAMPLE], &[], trust, (&ids, &permissions)).unwrap();

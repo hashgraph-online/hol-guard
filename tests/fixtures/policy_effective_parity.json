@@ -54,7 +54,8 @@
      "package_script": "warn",
      "package_unknown": "allow",
      "persistence": "warn",
-     "prompt_injection": "warn"
+     "prompt_injection": "warn",
+     "runtime_known_vulnerable": "warn"
     },
     "sandbox_analysis": "off",
     "security_level": "relaxed",
@@ -121,7 +122,8 @@
      "package_script": "warn",
      "package_unknown": "allow",
      "persistence": "warn",
-     "prompt_injection": "warn"
+     "prompt_injection": "warn",
+     "runtime_known_vulnerable": "warn"
     },
     "sandbox_analysis": "off",
     "security_level": "relaxed",
@@ -188,7 +190,8 @@
      "package_script": "warn",
      "package_unknown": "allow",
      "persistence": "warn",
-     "prompt_injection": "warn"
+     "prompt_injection": "warn",
+     "runtime_known_vulnerable": "warn"
     },
     "sandbox_analysis": "off",
     "security_level": "relaxed",
@@ -255,7 +258,8 @@
      "package_script": "require-reapproval",
      "package_unknown": "allow",
      "persistence": "require-reapproval",
-     "prompt_injection": "require-reapproval"
+     "prompt_injection": "require-reapproval",
+     "runtime_known_vulnerable": "require-reapproval"
     },
     "sandbox_analysis": "off",
     "security_level": "relaxed",
@@ -322,7 +326,8 @@
      "package_script": "warn",
      "package_unknown": "allow",
      "persistence": "warn",
-     "prompt_injection": "warn"
+     "prompt_injection": "warn",
+     "runtime_known_vulnerable": "warn"
     },
     "sandbox_analysis": "off",
     "security_level": "relaxed",
@@ -389,7 +394,8 @@
      "package_script": "require-reapproval",
      "package_unknown": "require-reapproval",
      "persistence": "require-reapproval",
-     "prompt_injection": "require-reapproval"
+     "prompt_injection": "require-reapproval",
+     "runtime_known_vulnerable": "require-reapproval"
     },
     "sandbox_analysis": "off",
     "security_level": "relaxed",
@@ -456,7 +462,8 @@
      "package_script": "warn",
      "package_unknown": "allow",
      "persistence": "warn",
-     "prompt_injection": "warn"
+     "prompt_injection": "warn",
+     "runtime_known_vulnerable": "warn"
     },
     "sandbox_analysis": "off",
     "security_level": "gentle",
@@ -523,7 +530,8 @@
      "package_script": "warn",
      "package_unknown": "allow",
      "persistence": "warn",
-     "prompt_injection": "warn"
+     "prompt_injection": "warn",
+     "runtime_known_vulnerable": "warn"
     },
     "sandbox_analysis": "off",
     "security_level": "gentle",
@@ -590,7 +598,8 @@
      "package_script": "warn",
      "package_unknown": "allow",
      "persistence": "warn",
-     "prompt_injection": "warn"
+     "prompt_injection": "warn",
+     "runtime_known_vulnerable": "warn"
     },
     "sandbox_analysis": "off",
     "security_level": "gentle",
@@ -657,7 +666,8 @@
      "package_script": "require-reapproval",
      "package_unknown": "allow",
      "persistence": "require-reapproval",
-     "prompt_injection": "require-reapproval"
+     "prompt_injection": "require-reapproval",
+     "runtime_known_vulnerable": "require-reapproval"
     },
     "sandbox_analysis": "off",
     "security_level": "gentle",
@@ -724,7 +734,8 @@
      "package_script": "warn",
      "package_unknown": "allow",
      "persistence": "warn",
-     "prompt_injection": "warn"
+     "prompt_injection": "warn",
+     "runtime_known_vulnerable": "warn"
     },
     "sandbox_analysis": "off",
     "security_level": "gentle",
@@ -791,7 +802,8 @@
      "package_script": "require-reapproval",
      "package_unknown": "require-reapproval",
      "persistence": "require-reapproval",
-     "prompt_injection": "require-reapproval"
+     "prompt_injection": "require-reapproval",
+     "runtime_known_vulnerable": "require-reapproval"
     },
     "sandbox_analysis": "off",
     "security_level": "gentle",
@@ -858,7 +870,8 @@
      "package_script": "warn",
      "package_unknown": "allow",
      "persistence": "require-reapproval",
-     "prompt_injection": "require-reapproval"
+     "prompt_injection": "require-reapproval",
+     "runtime_known_vulnerable": "require-reapproval"
     },
     "sandbox_analysis": "off",
     "security_level": "balanced",
@@ -925,7 +938,8 @@
      "package_script": "warn",
      "package_unknown": "allow",
      "persistence": "require-reapproval",
-     "prompt_injection": "require-reapproval"
+     "prompt_injection": "require-reapproval",
+     "runtime_known_vulnerable": "require-reapproval"
     },
     "sandbox_analysis": "off",
     "security_level": "balanced",
@@ -992,7 +1006,8 @@
      "package_script": "warn",
      "package_unknown": "allow",
      "persistence": "require-reapproval",
-     "prompt_injection": "require-reapproval"
+     "prompt_injection": "require-reapproval",
+     "runtime_known_vulnerable": "require-reapproval"
     },
     "sandbox_analysis": "off",
     "security_level": "balanced",
@@ -1059,7 +1074,8 @@
      "package_script": "require-reapproval",
      "package_unknown": "allow",
      "persistence": "require-reapproval",
-     "prompt_injection": "require-reapproval"
+     "prompt_injection": "require-reapproval",
+     "runtime_known_vulnerable": "require-reapproval"
     },
     "sandbox_analysis": "off",
     "security_level": "balanced",
@@ -1126,7 +1142,8 @@
      "package_script": "warn",
      "package_unknown": "allow",
      "persistence": "require-reapproval",
-     "prompt_injection": "require-reapproval"
+     "prompt_injection": "require-reapproval",
+     "runtime_known_vulnerable": "require-reapproval"
     },
     "sandbox_analysis": "off",
     "security_level": "balanced",
@@ -1193,7 +1210,8 @@
      "package_script": "require-reapproval",
      "package_unknown": "require-reapproval",
      "persistence": "require-reapproval",
-     "prompt_injection": "require-reapproval"
+     "prompt_injection": "require-reapproval",
+     "runtime_known_vulnerable": "require-reapproval"
     },
     "sandbox_analysis": "off",
     "security_level": "balanced",
@@ -1260,7 +1278,8 @@
      "package_script": "require-reapproval",
      "package_unknown": "block",
      "persistence": "block",
-     "prompt_injection": "block"
+     "prompt_injection": "block",
+     "runtime_known_vulnerable": "block"
     },
     "sandbox_analysis": "off",
     "security_level": "strict",
@@ -1327,7 +1346,8 @@
      "package_script": "require-reapproval",
      "package_unknown": "block",
      "persistence": "block",
-     "prompt_injection": "block"
+     "prompt_injection": "block",
+     "runtime_known_vulnerable": "block"
     },
     "sandbox_analysis": "off",
     "security_level": "strict",
@@ -1394,7 +1414,8 @@
      "package_script": "require-reapproval",
      "package_unknown": "block",
      "persistence": "block",
-     "prompt_injection": "block"
+     "prompt_injection": "block",
+     "runtime_known_vulnerable": "block"
     },
     "sandbox_analysis": "off",
     "security_level": "strict",
@@ -1461,7 +1482,8 @@
      "package_script": "require-reapproval",
      "package_unknown": "allow",
      "persistence": "require-reapproval",
-     "prompt_injection": "require-reapproval"
+     "prompt_injection": "require-reapproval",
+     "runtime_known_vulnerable": "require-reapproval"
     },
     "sandbox_analysis": "off",
     "security_level": "strict",
@@ -1528,7 +1550,8 @@
      "package_script": "require-reapproval",
      "package_unknown": "block",
      "persistence": "block",
-     "prompt_injection": "block"
+     "prompt_injection": "block",
+     "runtime_known_vulnerable": "block"
     },
     "sandbox_analysis": "off",
     "security_level": "strict",
@@ -1595,7 +1618,8 @@
      "package_script": "require-reapproval",
      "package_unknown": "require-reapproval",
      "persistence": "require-reapproval",
-     "prompt_injection": "require-reapproval"
+     "prompt_injection": "require-reapproval",
+     "runtime_known_vulnerable": "require-reapproval"
     },
     "sandbox_analysis": "off",
     "security_level": "strict",
@@ -1662,7 +1686,8 @@
      "package_script": "block",
      "package_unknown": "block",
      "persistence": "block",
-     "prompt_injection": "block"
+     "prompt_injection": "block",
+     "runtime_known_vulnerable": "block"
     },
     "sandbox_analysis": "off",
     "security_level": "paranoid",
@@ -1729,7 +1754,8 @@
      "package_script": "block",
      "package_unknown": "block",
      "persistence": "block",
-     "prompt_injection": "block"
+     "prompt_injection": "block",
+     "runtime_known_vulnerable": "block"
     },
     "sandbox_analysis": "off",
     "security_level": "paranoid",
@@ -1796,7 +1822,8 @@
      "package_script": "block",
      "package_unknown": "block",
      "persistence": "block",
-     "prompt_injection": "block"
+     "prompt_injection": "block",
+     "runtime_known_vulnerable": "block"
     },
     "sandbox_analysis": "off",
     "security_level": "paranoid",
@@ -1863,7 +1890,8 @@
      "package_script": "require-reapproval",
      "package_unknown": "allow",
      "persistence": "require-reapproval",
-     "prompt_injection": "require-reapproval"
+     "prompt_injection": "require-reapproval",
+     "runtime_known_vulnerable": "require-reapproval"
     },
     "sandbox_analysis": "off",
     "security_level": "paranoid",
@@ -1930,7 +1958,8 @@
      "package_script": "block",
      "package_unknown": "block",
      "persistence": "block",
-     "prompt_injection": "block"
+     "prompt_injection": "block",
+     "runtime_known_vulnerable": "block"
     },
     "sandbox_analysis": "off",
     "security_level": "paranoid",
@@ -1997,7 +2026,8 @@
      "package_script": "require-reapproval",
      "package_unknown": "require-reapproval",
      "persistence": "require-reapproval",
-     "prompt_injection": "require-reapproval"
+     "prompt_injection": "require-reapproval",
+     "runtime_known_vulnerable": "require-reapproval"
     },
     "sandbox_analysis": "off",
     "security_level": "paranoid",
@@ -2064,7 +2094,8 @@
      "package_script": "warn",
      "package_unknown": "allow",
      "persistence": "require-reapproval",
-     "prompt_injection": "require-reapproval"
+     "prompt_injection": "require-reapproval",
+     "runtime_known_vulnerable": "require-reapproval"
     },
     "sandbox_analysis": "off",
     "security_level": "custom",
@@ -2131,7 +2162,8 @@
      "package_script": "warn",
      "package_unknown": "allow",
      "persistence": "require-reapproval",
-     "prompt_injection": "require-reapproval"
+     "prompt_injection": "require-reapproval",
+     "runtime_known_vulnerable": "require-reapproval"
     },
     "sandbox_analysis": "off",
     "security_level": "custom",
@@ -2198,7 +2230,8 @@
      "package_script": "warn",
      "package_unknown": "allow",
      "persistence": "require-reapproval",
-     "prompt_injection": "require-reapproval"
+     "prompt_injection": "require-reapproval",
+     "runtime_known_vulnerable": "require-reapproval"
     },
     "sandbox_analysis": "off",
     "security_level": "custom",
@@ -2265,7 +2298,8 @@
      "package_script": "require-reapproval",
      "package_unknown": "allow",
      "persistence": "require-reapproval",
-     "prompt_injection": "require-reapproval"
+     "prompt_injection": "require-reapproval",
+     "runtime_known_vulnerable": "require-reapproval"
     },
     "sandbox_analysis": "off",
     "security_level": "custom",
@@ -2332,7 +2366,8 @@
      "package_script": "warn",
      "package_unknown": "allow",
      "persistence": "require-reapproval",
-     "prompt_injection": "require-reapproval"
+     "prompt_injection": "require-reapproval",
+     "runtime_known_vulnerable": "require-reapproval"
     },
     "sandbox_analysis": "off",
     "security_level": "custom",
@@ -2399,7 +2434,8 @@
      "package_script": "require-reapproval",
      "package_unknown": "require-reapproval",
      "persistence": "require-reapproval",
-     "prompt_injection": "require-reapproval"
+     "prompt_injection": "require-reapproval",
+     "runtime_known_vulnerable": "require-reapproval"
     },
     "sandbox_analysis": "off",
     "security_level": "custom",
@@ -2468,7 +2504,8 @@
      "package_script": "warn",
      "package_unknown": "allow",
      "persistence": "warn",
-     "prompt_injection": "warn"
+     "prompt_injection": "warn",
+     "runtime_known_vulnerable": "warn"
     },
     "sandbox_analysis": "off",
     "security_level": "relaxed",
@@ -2538,7 +2575,8 @@
      "package_script": "warn",
      "package_unknown": "allow",
      "persistence": "require-reapproval",
-     "prompt_injection": "require-reapproval"
+     "prompt_injection": "require-reapproval",
+     "runtime_known_vulnerable": "require-reapproval"
     },
     "sandbox_analysis": "off",
     "security_level": "balanced",
@@ -2793,7 +2831,8 @@
      "package_script": "warn",
      "package_unknown": "allow",
      "persistence": "require-reapproval",
-     "prompt_injection": "require-reapproval"
+     "prompt_injection": "require-reapproval",
+     "runtime_known_vulnerable": "require-reapproval"
     },
     "sandbox_analysis": "strict",
     "security_level": "balanced",
@@ -2882,7 +2921,8 @@
      "package_script": "warn",
      "package_unknown": "allow",
      "persistence": "require-reapproval",
-     "prompt_injection": "require-reapproval"
+     "prompt_injection": "require-reapproval",
+     "runtime_known_vulnerable": "require-reapproval"
     },
     "sandbox_analysis": "off",
     "security_level": "balanced",
@@ -3001,7 +3041,8 @@
      "package_script": "warn",
      "package_unknown": "allow",
      "persistence": "require-reapproval",
-     "prompt_injection": "require-reapproval"
+     "prompt_injection": "require-reapproval",
+     "runtime_known_vulnerable": "require-reapproval"
     },
     "sandbox_analysis": "off",
     "security_level": "balanced",
@@ -3427,7 +3468,8 @@
       "package_script": "require-reapproval",
       "package_unknown": "allow",
       "persistence": "require-reapproval",
-      "prompt_injection": "require-reapproval"
+      "prompt_injection": "require-reapproval",
+      "runtime_known_vulnerable": "require-reapproval"
      },
      "codex": {
       "cloud_advisory": "require-reapproval",
@@ -3449,7 +3491,8 @@
       "package_script": "require-reapproval",
       "package_unknown": "require-reapproval",
       "persistence": "require-reapproval",
-      "prompt_injection": "require-reapproval"
+      "prompt_injection": "require-reapproval",
+      "runtime_known_vulnerable": "require-reapproval"
      }
     },
     "new_network_domain_action": "warn",
@@ -3476,7 +3519,8 @@
      "package_script": "warn",
      "package_unknown": "allow",
      "persistence": "require-reapproval",
-     "prompt_injection": "require-reapproval"
+     "prompt_injection": "require-reapproval",
+     "runtime_known_vulnerable": "require-reapproval"
     },
     "sandbox_analysis": "off",
     "security_level": "balanced",
@@ -3544,7 +3588,8 @@
       "package_script": "require-reapproval",
       "package_unknown": "allow",
       "persistence": "require-reapproval",
-      "prompt_injection": "require-reapproval"
+      "prompt_injection": "require-reapproval",
+      "runtime_known_vulnerable": "require-reapproval"
      },
      "codex": {
       "cloud_advisory": "require-reapproval",
@@ -3566,7 +3611,8 @@
       "package_script": "require-reapproval",
       "package_unknown": "require-reapproval",
       "persistence": "require-reapproval",
-      "prompt_injection": "require-reapproval"
+      "prompt_injection": "require-reapproval",
+      "runtime_known_vulnerable": "require-reapproval"
      }
     },
     "new_network_domain_action": "warn",
@@ -3593,7 +3639,8 @@
      "package_script": "warn",
      "package_unknown": "allow",
      "persistence": "require-reapproval",
-     "prompt_injection": "require-reapproval"
+     "prompt_injection": "require-reapproval",
+     "runtime_known_vulnerable": "require-reapproval"
     },
     "sandbox_analysis": "off",
     "security_level": "balanced",
@@ -3661,7 +3708,8 @@
       "package_script": "require-reapproval",
       "package_unknown": "allow",
       "persistence": "require-reapproval",
-      "prompt_injection": "require-reapproval"
+      "prompt_injection": "require-reapproval",
+      "runtime_known_vulnerable": "require-reapproval"
      },
      "codex": {
       "cloud_advisory": "require-reapproval",
@@ -3683,7 +3731,8 @@
       "package_script": "require-reapproval",
       "package_unknown": "require-reapproval",
       "persistence": "require-reapproval",
-      "prompt_injection": "require-reapproval"
+      "prompt_injection": "require-reapproval",
+      "runtime_known_vulnerable": "require-reapproval"
      }
     },
     "new_network_domain_action": "warn",
@@ -3710,7 +3759,8 @@
      "package_script": "warn",
      "package_unknown": "allow",
      "persistence": "require-reapproval",
-     "prompt_injection": "require-reapproval"
+     "prompt_injection": "require-reapproval",
+     "runtime_known_vulnerable": "require-reapproval"
     },
     "sandbox_analysis": "off",
     "security_level": "balanced",
@@ -3778,7 +3828,8 @@
       "package_script": "require-reapproval",
       "package_unknown": "require-reapproval",
       "persistence": "require-reapproval",
-      "prompt_injection": "require-reapproval"
+      "prompt_injection": "require-reapproval",
+      "runtime_known_vulnerable": "require-reapproval"
      }
     },
     "new_network_domain_action": "warn",
@@ -3805,7 +3856,8 @@
      "package_script": "warn",
      "package_unknown": "allow",
      "persistence": "require-reapproval",
-     "prompt_injection": "require-reapproval"
+     "prompt_injection": "require-reapproval",
+     "runtime_known_vulnerable": "require-reapproval"
     },
     "sandbox_analysis": "off",
     "security_level": "balanced",
@@ -3873,7 +3925,8 @@
       "package_script": "require-reapproval",
       "package_unknown": "allow",
       "persistence": "require-reapproval",
-      "prompt_injection": "require-reapproval"
+      "prompt_injection": "require-reapproval",
+      "runtime_known_vulnerable": "require-reapproval"
      },
      "codex": {
       "cloud_advisory": "require-reapproval",
@@ -3895,7 +3948,8 @@
       "package_script": "require-reapproval",
       "package_unknown": "require-reapproval",
       "persistence": "require-reapproval",
-      "prompt_injection": "require-reapproval"
+      "prompt_injection": "require-reapproval",
+      "runtime_known_vulnerable": "require-reapproval"
      }
     },
     "new_network_domain_action": "warn",
@@ -3922,7 +3976,8 @@
      "package_script": "warn",
      "package_unknown": "allow",
      "persistence": "require-reapproval",
-     "prompt_injection": "require-reapproval"
+     "prompt_injection": "require-reapproval",
+     "runtime_known_vulnerable": "require-reapproval"
     },
     "sandbox_analysis": "off",
     "security_level": "balanced",
@@ -3990,7 +4045,8 @@
       "package_script": "require-reapproval",
       "package_unknown": "require-reapproval",
       "persistence": "require-reapproval",
-      "prompt_injection": "require-reapproval"
+      "prompt_injection": "require-reapproval",
+      "runtime_known_vulnerable": "require-reapproval"
      }
     },
     "new_network_domain_action": "warn",
@@ -4017,7 +4073,8 @@
      "package_script": "warn",
      "package_unknown": "allow",
      "persistence": "require-reapproval",
-     "prompt_injection": "require-reapproval"
+     "prompt_injection": "require-reapproval",
+     "runtime_known_vulnerable": "require-reapproval"
     },
     "sandbox_analysis": "off",
     "security_level": "balanced",
@@ -4089,7 +4146,8 @@
      "package_script": "warn",
      "package_unknown": "allow",
      "persistence": "require-reapproval",
-     "prompt_injection": "require-reapproval"
+     "prompt_injection": "require-reapproval",
+     "runtime_known_vulnerable": "require-reapproval"
     },
     "sandbox_analysis": "off",
     "security_level": "balanced",
@@ -4157,7 +4215,8 @@
       "package_script": "require-reapproval",
       "package_unknown": "allow",
       "persistence": "require-reapproval",
-      "prompt_injection": "require-reapproval"
+      "prompt_injection": "require-reapproval",
+      "runtime_known_vulnerable": "require-reapproval"
      },
      "codex": {
       "cloud_advisory": "require-reapproval",
@@ -4179,7 +4238,8 @@
       "package_script": "require-reapproval",
       "package_unknown": "require-reapproval",
       "persistence": "require-reapproval",
-      "prompt_injection": "require-reapproval"
+      "prompt_injection": "require-reapproval",
+      "runtime_known_vulnerable": "require-reapproval"
      }
     },
     "new_network_domain_action": "warn",
@@ -4206,7 +4266,8 @@
      "package_script": "warn",
      "package_unknown": "allow",
      "persistence": "require-reapproval",
-     "prompt_injection": "require-reapproval"
+     "prompt_injection": "require-reapproval",
+     "runtime_known_vulnerable": "require-reapproval"
     },
     "sandbox_analysis": "off",
     "security_level": "balanced",
@@ -4278,7 +4339,8 @@
      "package_script": "warn",
      "package_unknown": "allow",
      "persistence": "require-reapproval",
-     "prompt_injection": "require-reapproval"
+     "prompt_injection": "require-reapproval",
+     "runtime_known_vulnerable": "require-reapproval"
     },
     "sandbox_analysis": "off",
     "security_level": "balanced",
@@ -4347,7 +4409,8 @@
       "package_script": "require-reapproval",
       "package_unknown": "require-reapproval",
       "persistence": "require-reapproval",
-      "prompt_injection": "require-reapproval"
+      "prompt_injection": "require-reapproval",
+      "runtime_known_vulnerable": "require-reapproval"
      }
     },
     "new_network_domain_action": "warn",
@@ -4374,7 +4437,8 @@
      "package_script": "warn",
      "package_unknown": "allow",
      "persistence": "require-reapproval",
-     "prompt_injection": "require-reapproval"
+     "prompt_injection": "require-reapproval",
+     "runtime_known_vulnerable": "require-reapproval"
     },
     "sandbox_analysis": "off",
     "security_level": "balanced",
@@ -4443,7 +4507,8 @@
       "package_script": "require-reapproval",
       "package_unknown": "allow",
       "persistence": "require-reapproval",
-      "prompt_injection": "require-reapproval"
+      "prompt_injection": "require-reapproval",
+      "runtime_known_vulnerable": "require-reapproval"
      }
     },
     "new_network_domain_action": "warn",
@@ -4470,7 +4535,8 @@
      "package_script": "warn",
      "package_unknown": "allow",
      "persistence": "require-reapproval",
-     "prompt_injection": "require-reapproval"
+     "prompt_injection": "require-reapproval",
+     "runtime_known_vulnerable": "require-reapproval"
     },
     "sandbox_analysis": "off",
     "security_level": "balanced",
@@ -4537,7 +4603,8 @@
      "package_script": "warn",
      "package_unknown": "allow",
      "persistence": "require-reapproval",
-     "prompt_injection": "require-reapproval"
+     "prompt_injection": "require-reapproval",
+     "runtime_known_vulnerable": "require-reapproval"
     },
     "sandbox_analysis": "off",
     "security_level": "balanced",
@@ -5192,7 +5259,8 @@
       "package_script": "require-reapproval",
       "package_unknown": "require-reapproval",
       "persistence": "require-reapproval",
-      "prompt_injection": "require-reapproval"
+      "prompt_injection": "require-reapproval",
+      "runtime_known_vulnerable": "require-reapproval"
      }
     },
     "mode": "enforce",
@@ -5220,7 +5288,8 @@
      "package_script": "require-reapproval",
      "package_unknown": "allow",
      "persistence": "require-reapproval",
-     "prompt_injection": "require-reapproval"
+     "prompt_injection": "require-reapproval",
+     "runtime_known_vulnerable": "require-reapproval"
     },
     "sandbox_analysis": "off",
     "security_level": "balanced",
@@ -5337,7 +5406,8 @@
      "package_script": "require-reapproval",
      "package_unknown": "block",
      "persistence": "block",
-     "prompt_injection": "block"
+     "prompt_injection": "block",
+     "runtime_known_vulnerable": "block"
     },
     "sandbox_analysis": "off",
     "security_level": "strict",

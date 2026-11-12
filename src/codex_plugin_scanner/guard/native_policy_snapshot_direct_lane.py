@@ -23,19 +23,9 @@ from pathlib import Path
 
 from .native_command_control_authority import AUTHORITY_FILE_NAME
 from .native_policy_snapshot_constants import NATIVE_RUNTIME_STATE_DIRECTORY
+from .native_policy_snapshot_direct_lane_owner import renewable
 from .native_policy_snapshot_direct_lane_windows import unlink_windows_ack, write_windows_ack
 
-DIRECT_LANE_PUSH_FEATURE = "policy-snapshot-direct-lane-v1"
-# The resident queues the evidence of each direct answer for the daemon to drain.
-DIRECT_HOOK_EVIDENCE_FEATURE = "hook-direct-evidence-v1"
-# The resident routes a Claude Code sandbox requirement with the bound sink command.
-DIRECT_HOOK_CONTAINED_ROUTE_FEATURE = "hook-direct-contained-route-v1"
-# The resident answers a Claude PermissionRequest from the session's notice,
-# verified and marked seen with the bound policy-integrity key.
-DIRECT_HOOK_PERMISSION_NOTICE_FEATURE = "hook-direct-permission-notice-v1"
-# The resident answers a reviewed PreToolUse from an exact-action decision
-# the user saved, verified with the bound policy-integrity key.
-DIRECT_HOOK_SAVED_DECISION_FEATURE = "hook-direct-saved-decision-v1"
 DIRECT_LANE_ACK_DIRECTORY = "direct-lane"
 DIRECT_LANE_ACK_FILE_NAME = "ack.json"
 DIRECT_LANE_ACK_SCHEMA = "guard-direct-lane-ack.v1"
@@ -153,11 +143,9 @@ def local_cli_block_rules_present(store: object) -> bool:
         return True
 
 
-def contained_sink_command(features: Iterable[str]) -> tuple[str, ...] | None:
-    """The sink command prefix for a resident that routes sandbox requirements."""
+def contained_sink_command() -> tuple[str, ...] | None:
+    """The sink command prefix the resident routes sandbox requirements to."""
 
-    if DIRECT_HOOK_CONTAINED_ROUTE_FEATURE not in set(features):
-        return None
     from .adapters.zcode_contained_tests import contained_sink_command_prefix
 
     try:
@@ -166,16 +154,14 @@ def contained_sink_command(features: Iterable[str]) -> tuple[str, ...] | None:
         return None
 
 
-def direct_lane_integrity_key(store: object, features: Iterable[str]) -> tuple[bytes, str] | None:
-    """The policy-integrity key for a resident that answers permission notices
-    or saved exact-action decisions.
+def direct_lane_integrity_key(store: object) -> tuple[bytes, str] | None:
+    """The policy-integrity key the resident answers permission notices and
+    saved exact-action decisions with.
 
     The key is read, never created: without one there is no notice or saved
     decision to verify.
     """
 
-    if not {DIRECT_HOOK_PERMISSION_NOTICE_FEATURE, DIRECT_HOOK_SAVED_DECISION_FEATURE} & set(features):
-        return None
     material = getattr(store, "_policy_integrity_secret_material", None)
     if not callable(material):
         return None
@@ -233,6 +219,8 @@ def with_direct_hook_state(
     evidence_drain: bool,
     contained_sink_command: Sequence[str] | None = None,
     integrity_key: tuple[bytes, str] | None = None,
+    connector_setup_notice: bool = False,
+    resident_activity: bool = False,
 ) -> dict[str, object] | None:
     """Add the daemon state a direct hook needs beyond the snapshot.
 
@@ -242,6 +230,11 @@ def with_direct_hook_state(
     Without ``contained_sink_command`` a Claude Code sandbox requirement
     defers to this daemon, which routes it. Without ``integrity_key`` a
     Claude PermissionRequest with a pending notice defers to this daemon.
+    ``connector_setup_notice`` is true only while the evidence drain raises
+    the setup notice of a connector review the resident queued; without it
+    such a review defers to this daemon. ``resident_activity`` is true only
+    while the evidence drain skips the command activity the resident queued
+    for a direct answer; without it the drain records every activity.
     """
 
     if binding is None:
@@ -262,6 +255,10 @@ def with_direct_hook_state(
         bound["contained_sink_command"] = list(contained_sink_command)
     if integrity_key is not None and (fields := _integrity_key_fields(integrity_key)) is not None:
         bound.update(fields)
+    if connector_setup_notice:
+        bound["connector_setup_notice"] = True
+    if resident_activity:
+        bound["resident_activity"] = True
     return bound
 
 
@@ -357,7 +354,7 @@ class NativePolicySnapshotDirectLaneAck:
                 self._direct_lane_evidence_bound = False
                 self._unlink_direct_lane_ack()
                 return
-            if self._acked_value and self._direct_lane_ack_target is not None:
+            if self._acked_value and renewable(self._direct_lane_ack_path(), self._direct_lane_ack_target):
                 self._write_direct_lane_ack_locked()
 
     def _recheck_direct_lane_local_cli(self, revision: int | None) -> None:
@@ -389,32 +386,43 @@ class NativePolicySnapshotDirectLaneAck:
         if not enabled:
             self._close_direct_lane_ack()
 
-    def direct_evidence_bound(self, features: Iterable[str]) -> bool:
-        """Whether a push to a resident with ``features`` may bind the drain."""
+    def direct_evidence_bound(self) -> bool:
+        """Whether the next push may bind the drain."""
 
-        return self._direct_evidence_drain_enabled and DIRECT_HOOK_EVIDENCE_FEATURE in set(features)
+        return self._direct_evidence_drain_enabled
+
+    def direct_hook_transport(self) -> tuple[Path, Callable[..., bytes | None]] | None:
+        """Skip optional hook RPCs when this publisher cannot bind a home.
+
+        This is only an eligibility check. Rust still validates the complete
+        binding and may defer; evidence draining does not require this home.
+        """
+        if not self._direct_lane_home_dir():
+            return None
+        return self.direct_evidence_transport()
 
     def direct_evidence_transport(self) -> tuple[Path, Callable[..., bytes | None]] | None:
         """The resident executable and client the evidence drain uses."""
 
         status = getattr(self, "_last_runtime_status", None)
         identity = getattr(status, "identity", None)
-        capabilities = getattr(status, "capabilities", None)
         path = getattr(identity, "path", None)
-        if path is None or DIRECT_HOOK_EVIDENCE_FEATURE not in set(getattr(capabilities, "features", ())):
+        if path is None:
             return None
         client = getattr(self, "_client_request", None)
         if client is None:
-            from .native_resident_client import native_resident_client_ready, native_resident_client_request
+            from .native_resident_client import native_resident_client_ready, native_resident_client_request_if_idle
 
             # The drain polls every 250 ms with a short deadline. A cold start
             # that misses it is aborted and still spends a restart, so a
             # Windows resident that starts slower than the poll deadline trips
             # the restart circuit before the daemon is up. Leave starting the
-            # resident to callers that budget for a spawn.
+            # client to callers that budget for a spawn. Readiness is only an
+            # optimization; the callable must atomically lease an idle stream.
+            # Resident recovery behind a live Rust client remains Rust-owned.
             if not native_resident_client_ready(Path(path), self.guard_home):
                 return None
-            client = native_resident_client_request
+            client = native_resident_client_request_if_idle
         return Path(path), client
 
     def _direct_lane_ack_path(self) -> Path:
@@ -423,7 +431,7 @@ class NativePolicySnapshotDirectLaneAck:
     def _unlink_direct_lane_ack(self) -> None:
         try:
             if os.name == "nt":
-                unlink_windows_ack(self._direct_lane_ack_path())
+                unlink_windows_ack(self.guard_home, self._direct_lane_ack_path())
             else:
                 self._direct_lane_ack_path().unlink()
         except FileNotFoundError:

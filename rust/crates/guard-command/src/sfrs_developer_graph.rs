@@ -26,6 +26,7 @@ use crate::sfrs_interpreter_scripts::{
     is_python_interpreter_command, script_interpreter_texts, script_is_read_only_observer,
 };
 use crate::sfrs_jq::github_jq_filter_args_are_safe;
+use crate::sfrs_path_word_lookups::resolved_path_operands_resolve_safely;
 use crate::sfrs_read_only_filters::{
     read_only_lookup_filter_segment_is_safe, read_only_lookup_may_be_primary,
 };
@@ -424,5 +425,12 @@ fn lookup_primary_is_safe(
     read_only_lookup_primary_segment_is_safe(command_name, args, Some(segment_root), ctx)
         && (command_name != "find"
             || find_exec_ls_resolves_safely(args, prefix, segment_root, home_dir, ctx))
+        && (!matches!(command_name, "readlink" | "realpath")
+            || resolved_path_operands_resolve_safely(
+                command_name,
+                args,
+                segment_root,
+                inspection_root,
+            ))
         && local_read_operands_resolve_safely(command_name, args, segment_root, inspection_root)
 }

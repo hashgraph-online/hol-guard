@@ -97,15 +97,28 @@ pub(crate) fn secure_open(_path: &Path, canonical_path: &Path) -> Result<File, S
     // Hold each canonical ancestor open without delete sharing while the leaf
     // is opened, the handle-bound equivalent of the Unix openat walk. Callers
     // compare the handle's file ID with the file they inspected.
-    guard_runtime_windows_process::open_bound_regular_file(canonical_path).map_err(|error| {
-        // A component that is now a reparse point, directory, or alias
-        // no longer names the canonical file the caller checked.
-        if error.kind() == io::ErrorKind::InvalidData {
-            SecureOpenError::PathChanged
-        } else {
-            SecureOpenError::Io(error)
-        }
-    })
+    guard_runtime_windows_process::open_bound_regular_file(canonical_path).map_err(windows_error)
+}
+
+/// `secure_open` for a reader that compares the file ID again after reading.
+/// The leaf also shares delete, so a writer's atomic rename can replace it
+/// mid-read as it can on Unix, and that later check reports the change.
+/// Writers stay excluded.
+#[cfg(windows)]
+pub(crate) fn secure_open_replaceable(canonical_path: &Path) -> Result<File, SecureOpenError> {
+    guard_runtime_windows_process::open_bound_replaceable_file(canonical_path)
+        .map_err(windows_error)
+}
+
+#[cfg(windows)]
+fn windows_error(error: io::Error) -> SecureOpenError {
+    // A component that is now a reparse point, directory, or alias
+    // no longer names the canonical file the caller checked.
+    if error.kind() == io::ErrorKind::InvalidData {
+        SecureOpenError::PathChanged
+    } else {
+        SecureOpenError::Io(error)
+    }
 }
 
 #[cfg(not(any(unix, windows)))]

@@ -7,10 +7,7 @@ const FIXTURE: &str = include_str!(concat!(
 ));
 
 fn scratch(label: &str) -> PathBuf {
-    let nonce = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap()
-        .as_nanos();
+    let nonce = crate::unique_nanos::unique_nanos();
     let root = std::env::temp_dir().join(format!(
         "hol-guard-config-load-{label}-{}-{nonce}",
         std::process::id()
@@ -61,6 +58,38 @@ fn python_parity_vectors_match() {
         let _ = fs::remove_dir_all(root);
     }
     assert!(mismatches.is_empty(), "{}", mismatches.join("\n"));
+}
+
+#[test]
+fn only_an_explicit_false_turns_the_workspace_assessment_worker_off() {
+    for (value, enabled) in [
+        ("false", false),
+        ("true", true),
+        ("\"false\"", true),
+        ("0", true),
+        ("\"no\"", true),
+    ] {
+        let root = scratch("assessment-setting");
+        fs::write(
+            root.join("home/config.toml"),
+            format!("workspace_assessment_enabled = {value}\n"),
+        )
+        .unwrap();
+        let request = LoadRequest {
+            schema: SCHEMA.to_owned(),
+            guard_home: root.join("home"),
+            workspace: None,
+            require_canonical_workspace: false,
+            managed: None,
+        };
+        let config = load(&request).unwrap();
+        assert_eq!(
+            config["workspace_assessment_enabled"],
+            json!(enabled),
+            "workspace_assessment_enabled = {value}"
+        );
+        let _ = fs::remove_dir_all(root);
+    }
 }
 
 #[test]

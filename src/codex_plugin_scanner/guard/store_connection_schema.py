@@ -17,8 +17,11 @@ from . import (
     store_review_event_outbox_schema,
     store_storage_gate,
 )
+from .advisory_lock_handoff import hold_advisory_file_lock
+from .cloud_sync_busy import GuardCloudSyncBusyError
 from .fork_safety import forget_in_child
 from .mcp.policy_store import ensure_mcp_policy_request_schema
+from .sqlite_connection_cache import close_idle_store_connections, open_store_connection, release_store_connection
 from .sqlite_deadline_connection import DeadlineConnection
 from .sqlite_errors import sqlite_error_is_fatal, sqlite_error_is_io
 from .sqlite_profile import (
@@ -29,13 +32,12 @@ from .sqlite_profile import (
 )
 from .sqlite_quarantine_forensics import (
     quarantine_file_stats,
-    sqlite_header_diagnosis,
     update_quarantine_forensics_outcome,
     write_quarantine_forensics,
 )
 from .sqlite_recovery import (
     restore_readable_sqlite_store,
-    salvage_local_cli_state,
+    salvage_quarantined_state,
     sqlite_store_probe_detail,
 )
 from .sqlite_tuning import sqlite_operation_deadline_monotonic
@@ -72,6 +74,12 @@ from .store_watch_only_approval_schema import WATCH_ONLY_APPROVAL_MIGRATION_VERS
 from .store_workflow_capabilities_schema import (
     WORKFLOW_CAPABILITY_RECEIPT_EVENT_INDEX_MIGRATION_VERSION,
     ensure_workflow_capability_schema,
+)
+from .store_workspace_assessment_schema import (
+    WORKSPACE_ASSESSMENT_MIGRATION_VERSION,
+    WORKSPACE_FIX_PROPOSAL_MIGRATION_VERSION,
+    ensure_workspace_assessment_schema,
+    ensure_workspace_fix_proposal_schema,
 )
 
 if TYPE_CHECKING:
@@ -195,6 +203,8 @@ _REQUIRED_SCHEMA_MIGRATION_VERSIONS = (  # Keep retired-index databases on the p
     BASH_OPERATION_MIGRATION_VERSION,
     BASH_REVIEW_MIGRATION_VERSION,
     BASH_INVOCATION_MIGRATION_VERSION,
+    WORKSPACE_ASSESSMENT_MIGRATION_VERSION,
+    WORKSPACE_FIX_PROPOSAL_MIGRATION_VERSION,
 )
 
 
@@ -217,6 +227,7 @@ class StoreConnectionSchemaMixin:
     )
     _startup_prefetched_policy_integrity_repair_failed = False
     _storage_recovery_local: ClassVar[threading.local] = threading.local()
+    _policy_integrity_generation_lock_local: ClassVar[threading.local] = threading.local()
     _last_sqlite_recovery = "skipped"
     _last_sqlite_recovery_details: dict[str, bool] | None = None
 
@@ -276,6 +287,8 @@ class StoreConnectionSchemaMixin:
             except OSError:
                 failed_identity = None
         with self._hold_storage_gate(exclusive=True):
+            # Kept connections still hold the failed file open.
+            close_idle_store_connections()
             # Another process may already have replaced the failed store.
             try:
                 current_stat = self.path.stat()
@@ -307,7 +320,7 @@ class StoreConnectionSchemaMixin:
                     error=error,
                     probe=probe_detail,
                     files=quarantine_file_stats(self.path),
-                    header=sqlite_header_diagnosis(self.path),
+                    store_path=self.path,
                 )
             except Exception as forensics_error:
                 _store_logger.warning(
@@ -335,10 +348,7 @@ class StoreConnectionSchemaMixin:
                     )
                 else:
                     self._initialize_schema()
-                    from .sqlite_cloud_review_recovery import salvage_cloud_review_state
-
-                    cloud_restored = salvage_cloud_review_state(source=quarantined, destination=self.path)
-                    cli_restored = salvage_local_cli_state(source=quarantined, destination=self.path)
+                    cloud_restored, cli_restored = salvage_quarantined_state(source=quarantined, destination=self.path)
                     # These independent stores recover atomically within their own
                     # authority boundary; a CLI failure must not discard Review.
                     self._last_sqlite_recovery_details = {"cloud_review": cloud_restored, "local_cli": cli_restored}
@@ -450,10 +460,11 @@ class StoreConnectionSchemaMixin:
         profiler = self._sqlite_profiler()
         connect_started = time.monotonic()
         try:
-            if sqlite_operation_deadline_monotonic() is None:
-                connection = sqlite3.connect(self.path, timeout=connect_timeout_seconds)
-            else:
-                connection = sqlite3.connect(self.path, timeout=connect_timeout_seconds, factory=DeadlineConnection)
+            connection, cache_key = open_store_connection(
+                self.path,
+                timeout=connect_timeout_seconds,
+                factory=sqlite3.Connection if sqlite_operation_deadline_monotonic() is None else DeadlineConnection,
+            )
         except sqlite3.OperationalError as error:
             profiler.record_connect((time.monotonic() - connect_started) * 1000)
             if sqlite_error_is_busy_locked(error):
@@ -463,6 +474,7 @@ class StoreConnectionSchemaMixin:
         connection.row_factory = sqlite3.Row
         start = time.monotonic()
         notification: dict[str, object] | None = None
+        completed = False
         try:
             connection.execute(f"pragma busy_timeout={int(connect_timeout_seconds * 1000)}")
             # WAL can use synchronous=NORMAL; rollback-journal and schema-init stay FULL.
@@ -480,6 +492,7 @@ class StoreConnectionSchemaMixin:
                 connection, initial_changes, profiler.record_commit
             )
             notification = self._take_policy_integrity_state_notification(connection)
+            completed = True
         except sqlite3.OperationalError as error:
             if sqlite_error_is_busy_locked(error):
                 profiler.record_busy_locked()
@@ -490,7 +503,7 @@ class StoreConnectionSchemaMixin:
                 # A failed transaction must drop the queued notice. Leaving it
                 # keyed by id(connection) lets a later connection publish it.
                 self._take_policy_integrity_state_notification(connection)
-            connection.close()
+            release_store_connection(connection, cache_key, reusable=completed)
             elapsed_ms = (time.monotonic() - start) * 1000
             self._repair_store_permissions()
             if elapsed_ms >= _slow_query_threshold_ms_compat():
@@ -533,6 +546,7 @@ class StoreConnectionSchemaMixin:
             timeout_seconds=timeout_seconds,
             poll_seconds=_CLOUD_SYNC_LOCK_POLL_SECONDS,
             timeout_message="Timed out waiting for Guard Cloud sync lock.",
+            timeout_error=GuardCloudSyncBusyError,
         ):
             yield
 
@@ -565,6 +579,52 @@ class StoreConnectionSchemaMixin:
             yield
 
     @contextmanager
+    def hold_policy_integrity_generation_lock(self) -> Iterator[None]:
+        """Serialize one policy integrity generation advance against the rest.
+
+        The advance reads the trusted control state, marks the next generation
+        pending and signs the rows. Those writes no longer share a single SQLite
+        transaction, so without this lock a second advance can read the same
+        generation and stamp its pending record over a finalized one, leaving
+        saved decisions signed above the generation the store trusts.
+
+        Take it before opening the store connection. Every holder acquires it in
+        that order, so it never waits on a connection that is waiting on it. An
+        open connection scope shares a connection without sharing a transaction,
+        so it serializes nothing here; a route that advanced the generation
+        under one would race the routes that take this lock, and taking the lock
+        under it would invert the order every other holder uses. Both are
+        refused rather than silently allowed.
+        """
+
+        if store_connection_scope.owns_scope(cast("GuardStore", self)):
+            raise RuntimeError("Guard policy integrity generation cannot advance inside an open connection scope.")
+        with suppress(OSError):
+            self.guard_home.mkdir(mode=_GUARD_STORE_PRIVATE_DIR_MODE, parents=True, exist_ok=True)
+        lock_path = self.guard_home / "policy-integrity-generation.lock"
+        held = getattr(self._policy_integrity_generation_lock_local, "held", None)
+        if held is None:
+            held = set()
+            self._policy_integrity_generation_lock_local.held = held
+        key = str(lock_path)
+        if key in held:
+            # One advance reaches several routes that each take the lock; flock
+            # would not block this thread anyway, so re-entry is explicit.
+            yield
+            return
+        with self._hold_advisory_file_lock(
+            path=lock_path,
+            timeout_seconds=_POLICY_INTEGRITY_GENERATION_LOCK_TIMEOUT_SECONDS,
+            poll_seconds=_POLICY_INTEGRITY_GENERATION_LOCK_POLL_SECONDS,
+            timeout_message="Timed out waiting for the Guard policy integrity generation lock.",
+        ):
+            held.add(key)
+            try:
+                yield
+            finally:
+                held.discard(key)
+
+    @contextmanager
     def hold_workflow_capability_authority_lock(self) -> Iterator[None]:
         with self._hold_advisory_file_lock(
             path=self.guard_home / "workflow-capability-authority.lock",
@@ -582,22 +642,16 @@ class StoreConnectionSchemaMixin:
         timeout_seconds: float,
         poll_seconds: float,
         timeout_message: str,
+        timeout_error: type[TimeoutError] = TimeoutError,
     ) -> Iterator[None]:
-        deadline = time.monotonic() + max(timeout_seconds, 0.0)
-        with path.open("a+b") as handle:
-            while True:
-                try:
-                    _acquire_advisory_file_lock(handle)
-                    break
-                except BlockingIOError:
-                    if time.monotonic() >= deadline:
-                        raise TimeoutError(timeout_message) from None
-                    time.sleep(poll_seconds)
-            try:
-                yield
-            finally:
-                with suppress(OSError):
-                    _release_advisory_file_lock(handle)
+        with hold_advisory_file_lock(
+            path=path,
+            timeout_seconds=timeout_seconds,
+            poll_seconds=poll_seconds,
+            timeout_message=timeout_message,
+            timeout_error=timeout_error,
+        ):
+            yield
 
     def cloud_sync_in_progress(self) -> bool:
         lock_path = self.guard_home / "cloud-sync.lock"
@@ -1093,6 +1147,8 @@ class StoreConnectionSchemaMixin:
             ensure_extension_control_authority_schema(connection, require_compatible=False)
             ensure_local_cli_schema(connection)
             ensure_bash_operation_schema(connection, applied_at=_now())
+            ensure_workspace_assessment_schema(connection, applied_at=_now())
+            ensure_workspace_fix_proposal_schema(connection, applied_at=_now())
             ensure_workflow_capability_schema(connection, applied_at=_now())
             ensure_command_shadow_schema(connection, applied_at=_now())
             ensure_mcp_policy_request_schema(connection)

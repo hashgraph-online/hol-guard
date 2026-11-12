@@ -28,8 +28,15 @@ pub(super) struct GenericSignals {
     pub(super) empty_read_request: bool,
     pub(super) url_values: Vec<String>,
     pub(super) request_body_or_method: bool,
+    /// The call's own arguments are retrieval arguments and nothing else: a
+    /// closed set of identifier and timeout keys holding scalars. See
+    /// `retrieval_arguments_only`.
+    pub(super) retrieval_arguments_only: bool,
     /// Set after extraction, from the tool's own input; see `generic_github`.
     pub(super) github_read_only: bool,
+    /// Set after extraction: Grok's camel-case copy of the call differs from
+    /// the snake-case one, or Grok marked the input truncated.
+    pub(super) mirrored_input_unproven: bool,
     pub(super) prompt_present: bool,
     pub(super) env_reference: bool,
     pub(super) benign_prompt: bool,
@@ -41,7 +48,55 @@ pub(super) struct GenericSignals {
     pub(super) content_sensitive: bool,
     pub(super) sensitive_target: bool,
     pub(super) independent_sensitive_target: bool,
+    /// Bypass intent or a credential word outside the path values.
+    pub(super) non_path_sensitive_target: bool,
+    /// A string in the call, such as an edit's new text, declares a
+    /// Kubernetes `Secret`.
+    pub(super) declares_secret_object: bool,
     pub(super) event_hint: Option<String>,
+}
+
+impl GenericSignals {
+    /// Replace the single read target with the local path a `file://` URL
+    /// denotes, so every later screen reads the path instead of the URL.
+    /// Resolution never relaxes a screen: the decoded path is re-tested for
+    /// credential and secret names and the sensitive flags only ever gain,
+    /// so a URL spelling cannot buy what the plain path cannot.
+    pub(super) fn resolve_read_url_path(&mut self, path: String) {
+        let sensitive = sensitive_text(std::slice::from_ref(&path));
+        self.path_values = vec![path];
+        self.content_sensitive |= sensitive;
+        self.sensitive_target |= sensitive;
+        self.independent_sensitive_target |= sensitive;
+    }
+}
+
+/// File bodies a host sends beside the path they belong to. Generic
+/// extraction reads none of these keys and the decision uses the path, so the
+/// command-size bound does not apply to them.
+const FILE_BODY_KEYS: [&str; 6] = [
+    "content",
+    "contents",
+    "old_string",
+    "new_string",
+    "oldString",
+    "newString",
+];
+
+/// A path key names a file when it holds a path, or a list that holds one.
+/// A blank string names nothing, and neither does a list of them, so the file
+/// bodies beside such a key keep their own size bound.
+fn names_path(value: &Value) -> bool {
+    match value {
+        Value::String(text) => !text.trim().is_empty(),
+        Value::Array(items) => {
+            items.iter().all(Value::is_string)
+                && items
+                    .iter()
+                    .any(|item| item.as_str().is_some_and(|text| !text.trim().is_empty()))
+        }
+        _ => false,
+    }
 }
 
 fn bounded_payload(
@@ -58,7 +113,13 @@ fn bounded_payload(
             if *keys > MAX_PRE_TOOL_KEYS {
                 return Err(GenericExtractionError::Bounds);
             }
-            for child in record.values() {
+            let names_file = signals::PATH_KEYS
+                .iter()
+                .any(|key| record.get(*key).is_some_and(names_path));
+            for (key, child) in record {
+                if names_file && child.is_string() && FILE_BODY_KEYS.contains(&key.as_str()) {
+                    continue;
+                }
                 bounded_payload(child, depth.saturating_add(1), keys)?;
             }
         }
@@ -111,12 +172,36 @@ fn bounded_string(value: &Value) -> Result<String, GenericExtractionError> {
     Ok(text.to_owned())
 }
 
+/// A structured field whose string is empty, or holds only whitespace, names
+/// nothing. Harnesses spell "no value here" that way: Oh My Pi's `glob` sends
+/// `path: ""` for a search that starts at the workspace root. The field is
+/// present and its type is right, so the payload parses; there is simply no
+/// target in it. `Ok(None)` says so. Anything that is not a string, or a
+/// string past the command bound, keeps the error it had.
+fn optional_bounded_string(value: &Value) -> Result<Option<String>, GenericExtractionError> {
+    let text = value
+        .as_str()
+        .ok_or(GenericExtractionError::Malformed)?
+        .trim();
+    if text.is_empty() {
+        return Ok(None);
+    }
+    if text.len() > MAX_COMMAND_BYTES || text.chars().count() > MAX_COMMAND_BYTES {
+        return Err(GenericExtractionError::Bounds);
+    }
+    Ok(Some(text.to_owned()))
+}
+
 fn append_strings(output: &mut Vec<String>, value: &Value) -> Result<(), GenericExtractionError> {
     if output.len() >= MAX_PRE_TOOL_STRINGS {
         return Err(GenericExtractionError::Bounds);
     }
     match value {
-        Value::String(_) => output.push(bounded_string(value)?),
+        // Only a blank string reads as absent. A null, like every other
+        // non-string value, stays malformed: the hosts this reading serves
+        // send an empty string, and a null target must not reach the
+        // read-nothing proof.
+        Value::String(_) => output.extend(optional_bounded_string(value)?),
         Value::Array(items) => {
             if items.len() > MAX_PRE_TOOL_ARRAY_ITEMS {
                 return Err(GenericExtractionError::Bounds);
@@ -125,7 +210,7 @@ fn append_strings(output: &mut Vec<String>, value: &Value) -> Result<(), Generic
                 if output.len() >= MAX_PRE_TOOL_STRINGS {
                     return Err(GenericExtractionError::Bounds);
                 }
-                output.push(bounded_string(item)?);
+                output.extend(optional_bounded_string(item)?);
             }
         }
         _ => return Err(GenericExtractionError::Malformed),
@@ -333,3 +418,6 @@ pub(super) use nested_json::parse_strict_nested_json;
 #[path = "generic_signals.rs"]
 mod signals;
 pub(super) use signals::{extract_generic_signals, EMBEDDED_ARGUMENT_KEYS};
+
+#[path = "generic_tracked_names.rs"]
+mod tracked_names;

@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Compatibility facade for the provider-neutral MDM Cloud lab."""
 
+from cloud_control import ContractError
 from lab_server import CloudServer
 from lab_store import Store
 from lab_support import (
@@ -18,8 +19,6 @@ from lab_support import (
     json_bytes,
     read_json,
 )
-
-from codex_plugin_scanner.guard.mdm.cloud_control import ContractError
 
 __all__ = [
     "ADMIN",

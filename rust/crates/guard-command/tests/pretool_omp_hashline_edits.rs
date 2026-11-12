@@ -16,10 +16,7 @@ fn oh_my_pi_hashline_edits_get_the_file_write_proof() {
         .join(format!(
             "case-{}-{}",
             std::process::id(),
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
-                .as_nanos()
+            crate::unique_nanos::unique_nanos()
         ));
     std::fs::create_dir_all(&root).unwrap();
     let _cleanup = fixture::FixtureCleanup(root.clone());
@@ -152,11 +149,43 @@ fn oh_my_pi_hashline_edits_get_the_file_write_proof() {
         patch(&["[~/.ssh/config]\nPUT >$:\n+Host *\n"]),
         patch(&["[~/project/.env#0AC4]\nPUT >$:\n+EXTRA=1\n"]),
         patch(&["[~/project/AGENTS.md#0AC4]\nPUT >$:\n+more rules\n"]),
-        patch(&["[*** Update File: src/a.ts#0AC4]\nPUT 1.=1:\n+x\n"]),
         "*** Begin Patch\n*** Update File: src/a.ts\n@@\n-export const a = 1;\n+export const a = 3;\n*** End Patch\n".to_owned(),
     ] {
         let result = evaluate("omp", &input);
         assert_eq!(result.minimum_action, "review", "{input}: {result:?}");
+    }
+    // A decorated header names no file Guard can prove. The edit keeps its
+    // review, so a person can still approve it, and the reason tells the
+    // agent how to write a header Guard can prove.
+    for (input, shown) in [
+        (
+            patch(&["[*** Update File: src/a.ts#0AC4]\nPUT 1.=1:\n+x\n"]),
+            "`[*** Update File: src/a.ts#0AC4]`",
+        ),
+        (
+            patch(&["[FILE: src/a.ts#0AC4]\nPUT 1.=1:\n+x\n"]),
+            "`[FILE: src/a.ts#0AC4]`",
+        ),
+        (
+            patch(&["[*** Begin Patch] [src/a.ts#0AC4]\nPUT 1.=1:\n+x\n"]),
+            "`[*** Begin Patch] [src/a.ts#0AC4]`",
+        ),
+        (
+            patch(&[put_a, "[src/a.ts#NOPE]\nPUT 1.=1:\n+x\n"]),
+            "`[src/a.ts#NOPE]`",
+        ),
+    ] {
+        let result = evaluate("omp", &input);
+        assert_eq!(
+            (result.minimum_action.as_str(), result.reason_code.as_str()),
+            ("review", "native_file_write_review"),
+            "{input}"
+        );
+        assert!(
+            result.reason.contains(shown) && result.reason.contains("[src/app.py#1A2B]"),
+            "{}",
+            result.reason
+        );
     }
     // Only Oh My Pi's edit tool takes a hashline patch.
     let result = evaluate("claude-code", &patch(&[put_a]));
@@ -170,10 +199,7 @@ fn oh_my_pi_header_copies_keep_the_file_write_proof() {
         .join(format!(
             "derived-{}-{}",
             std::process::id(),
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
-                .as_nanos()
+            crate::unique_nanos::unique_nanos()
         ));
     std::fs::create_dir_all(&root).unwrap();
     let _cleanup = fixture::FixtureCleanup(root.clone());
@@ -228,6 +254,46 @@ fn oh_my_pi_header_copies_keep_the_file_write_proof() {
             "paths": ["project-typo/src/a.ts"],
         })),
         ("block".to_owned(), "native_missing_path".to_owned())
+    );
+    // Oh My Pi trims the header before it cuts the tag, so a space before
+    // `#` stays in its copy. The header still names the trimmed file.
+    assert_eq!(
+        evaluate(json!({
+            "input": patch(&["[src/a.ts #0AC4]\nPUT 1.=1:\n+export const a = 3;\n"]),
+            "path": "src/a.ts ",
+            "paths": ["src/a.ts "],
+        })),
+        allowed
+    );
+    assert_eq!(
+        evaluate(json!({
+            "input": patch(&["[REQUEST #94FA]\nPUT 1.=1:\n+x\n"]),
+            "path": "REQUEST ",
+            "paths": ["REQUEST "],
+        })),
+        ("block".to_owned(), "native_missing_path".to_owned())
+    );
+    // A decorated header and its copies keep the review, and the reason still
+    // shows the agent the plain header.
+    let result = evaluate_pre_tool_envelope_with_context(
+        "omp",
+        "PreToolUse",
+        &json!({"tool_name": "edit", "tool_input": {
+            "input": patch(&["[*** Update File: src/a.ts#0AC4]\nPUT 1.=1:\n+x\n"]),
+            "path": "*** Update File: src/a.ts",
+            "paths": ["*** Update File: src/a.ts"],
+        }}),
+        None,
+        None,
+        root.to_str(),
+        workspace.to_str(),
+    );
+    assert_eq!(result.minimum_action, "review", "{result:?}");
+    assert!(
+        result.reason.contains("`[*** Update File: src/a.ts#0AC4]`")
+            && result.reason.contains("[src/app.py#1A2B]"),
+        "{}",
+        result.reason
     );
     // Fields that are not an exact copy of the headers keep the review.
     for tool_input in [

@@ -6,7 +6,7 @@ import json
 from pathlib import Path
 
 from ...adapter_safe_output import write_text_at_authorized_path
-from ...cursor_hook_config import _is_managed_hook_entry
+from ...cursor_hook_config import _managed_entry_flags
 
 
 def _remove_managed_hook_entries(*, hooks_path: Path, script_path: Path) -> bool:
@@ -40,12 +40,9 @@ def _render_without_managed_hook_entries(
     managed_command = str(script_path.resolve())
     for event, entries in hooks.items():
         if isinstance(entries, list):
-            filtered: list[object] = []
-            for entry in entries:
-                if _is_managed_hook_entry(entry, command=managed_command):
-                    has_managed_hooks = True
-                else:
-                    filtered.append(entry)
+            flags = _managed_entry_flags(entries, managed_command)
+            filtered = [entry for entry, managed in zip(entries, flags, strict=True) if not managed]
+            has_managed_hooks = has_managed_hooks or any(flags)
             if filtered:
                 cleaned_hooks[str(event)] = filtered
                 has_other_hooks = True

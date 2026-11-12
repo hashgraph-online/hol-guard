@@ -10,7 +10,7 @@ Guard-owned state lives below `~/.hol-guard/managed/cline/` unless `HOL_GUARD_HO
 - `native-hooks-state.json` records native hook paths, worker paths, and integrity digests.
 - `plugin-state.json` records the managed plugin path and integrity digest.
 - `proofs/native-*.json` and `proofs/plugin-*.json` contain bounded proof metadata only.
-- `hook-workers/` contains Guard-owned Python workers used by native Cline hooks.
+- `hook-workers/` contains the Guard-owned configuration each native Cline hook passes to the native runtime's `cline-hook-worker`.
 - `mcp-backups/*.json` stores the exact original MCP settings text plus the original and Guard-managed hashes needed for conservative restoration.
 
 Cline-facing Guard assets are written only to supported Guard-owned slots. The primary native hook root is `~/Documents/Cline/Hooks/`; the managed plugin root is `~/.cline/plugins/hol-guard/`. Guard refuses to overwrite user-owned files at managed slots.

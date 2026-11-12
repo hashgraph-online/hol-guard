@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import sqlite3
 from pathlib import Path
 
 import pytest
@@ -8,13 +9,13 @@ from codex_plugin_scanner.guard.runtime.custom_extension_continuity import (
     CUSTOM_EXTENSION_CONTINUITY_FIELD,
     CUSTOM_EXTENSION_CONTINUITY_SCHEMA,
     CustomExtensionContinuityError,
-    apply_verified_custom_extension_continuity,
     continuity_state_for_local_items,
     record_local_custom_extension_mutation,
 )
 from codex_plugin_scanner.guard.runtime.local_cli_commands import LocalCliCommand
 from codex_plugin_scanner.guard.runtime.local_cli_identity import UnlistedCliIdentity
 from codex_plugin_scanner.guard.store import GuardStore
+from tests.custom_extension_continuity_client import apply_verified_custom_extension_continuity
 
 _NOW = "2026-08-25T16:00:00Z"
 _FUTURE = "2026-08-25T17:00:00Z"
@@ -306,7 +307,23 @@ def test_signed_settings_exactly_replace_prior_command_states_without_touching_u
     assert store.read_local_cli_command_states(unrelated.cli_id) == {"deploy": "block"}
 
 
-@pytest.mark.parametrize("failure_stage", ("after_authority", "after_sync_state", "after_event"))
+# The native writer commits authority, continuity state and the receipt in one
+# transaction. A trigger fails the write after the grant rows (on the state
+# row) or after the state row (on the receipt), so the whole apply rolls back.
+_FAILING_WRITES = {
+    "after_authority": (
+        "create trigger fail_continuity_write before insert on sync_state "
+        "when new.state_key like 'custom_extension_continuity%' "
+        "begin select raise(abort, 'simulated process failure'); end"
+    ),
+    "after_sync_state": (
+        "create trigger fail_continuity_write before insert on guard_events "
+        "begin select raise(abort, 'simulated process failure'); end"
+    ),
+}
+
+
+@pytest.mark.parametrize("failure_stage", sorted(_FAILING_WRITES))
 def test_local_removal_is_crash_atomic_and_same_revision_cannot_recreate_after_retry(
     tmp_path: Path,
     failure_stage: str,
@@ -317,21 +334,19 @@ def test_local_removal_is_crash_atomic_and_same_revision_cannot_recreate_after_r
     _observe(initial, identity)
     apply_verified_custom_extension_continuity(initial, _bundle(identity), now=_NOW)
 
-    class FaultyStore(GuardStore):
-        def _custom_extension_continuity_transaction_boundary(self, stage: str) -> None:
-            if stage == failure_stage:
-                raise RuntimeError("simulated process failure")
-
-    faulty = FaultyStore(guard_home)
-    with pytest.raises(RuntimeError, match="simulated process failure"):
+    with initial._connect() as connection:
+        connection.execute(_FAILING_WRITES[failure_stage])
+    with pytest.raises(sqlite3.IntegrityError, match="simulated process failure"):
         record_local_custom_extension_mutation(
-            faulty,
+            initial,
             identity=identity,
             state="unset",
-            expected_revision=faulty.read_local_cli_revision(),
+            expected_revision=initial.read_local_cli_revision(),
             command_states={},
             now=_NOW,
         )
+    with initial._connect() as connection:
+        connection.execute("drop trigger fail_continuity_write")
 
     restarted = GuardStore(guard_home)
     assert restarted.read_local_cli_grant(identity.cli_id)["state"] == "allowed"
@@ -451,7 +466,13 @@ def test_native_outage_applies_nothing_and_hides_public_state(tmp_path: Path, mo
     assert continuity_state_for_local_items(store, now=_NOW) == {}
 
 
+def _state_write(state: dict[str, object], order: object, *roles: str) -> dict[str, object]:
+    return {"stores": list(roles or ("state",)), "payload": state, "item_order": order}
+
+
 def _fake_plan(monkeypatch, homes: list[object] | None = None, **overrides: object) -> None:
+    """Answer every resident call with a prepared commit, as the native runtime shapes it."""
+
     from codex_plugin_scanner.guard.runtime import custom_extension_continuity
 
     answer: dict[str, object] = {
@@ -459,11 +480,8 @@ def _fake_plan(monkeypatch, homes: list[object] | None = None, **overrides: obje
         "authority_updates": [],
         "events": [],
         "observation_preconditions": {},
-        "state": {"items": {}},
-        "state_item_order": [],
-        "write_last_good": False,
-        "removals": None,
-        "v2": False,
+        "writes": [_state_write({"items": {}}, [])],
+        "requirements": {"protected_authority": False, "capability": None},
         **overrides,
     }
 
@@ -501,7 +519,7 @@ def test_native_item_order_must_name_each_item_once(tmp_path: Path, monkeypatch,
     store = GuardStore(tmp_path / "guard-home")
     identity = _identity()
     _observe(store, identity)
-    _fake_plan(monkeypatch, state={"items": {"a": {}}}, state_item_order=order)
+    _fake_plan(monkeypatch, writes=[_state_write({"items": {"a": {}}}, order)])
     with pytest.raises(CustomExtensionContinuityError, match="malformed"):
         _ = apply_verified_custom_extension_continuity(store, _bundle(identity), now=_NOW)
 

@@ -8,6 +8,7 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.guard import native_mcp_runtime_evidence as module
+from codex_plugin_scanner.guard import native_resident_decision as resident
 from codex_plugin_scanner.guard.native_mcp_runtime_evidence import (
     argument_entries,
     native_receipt_evidence,
@@ -44,7 +45,7 @@ def test_python_key_sets_mirror_the_rust_contract() -> None:
 
 def _force_available(monkeypatch: pytest.MonkeyPatch) -> None:
     class Features:
-        features = frozenset({module._FEATURE, module._RESIDENT_PROTOCOL_FEATURE})
+        features = frozenset({module._FEATURE, resident._RESIDENT_PROTOCOL_FEATURE})
 
     class Identity:
         path = "/bin/true"
@@ -58,8 +59,8 @@ def _force_available(monkeypatch: pytest.MonkeyPatch) -> None:
         capabilities = Features()
 
     monkeypatch.setattr(module, "_native_runtime_status_memo", lambda: Status())
-    monkeypatch.setattr(module, "ensure_resident_prerequisite", lambda _home: True)
-    monkeypatch.setattr(module, "native_record_resident_failure", lambda *a, **k: None)
+    monkeypatch.setattr(resident, "ensure_resident_prerequisite", lambda _home: True)
+    monkeypatch.setattr(resident, "native_record_resident_failure", lambda *a, **k: None)
 
 
 def test_receipt_evidence_single_round_trip_end_to_end(tmp_path: Path) -> None:

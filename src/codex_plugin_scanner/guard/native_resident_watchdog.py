@@ -28,12 +28,14 @@ _MAX_STATE_BYTES = 64 * 1024
 _LINUX_MARKER_PREFIX = "linux:"
 
 
-def _state_process(path: Path) -> tuple[int, str | None] | None:
-    try:
-        with path.open("rb") as handle:
-            payload = json.loads(handle.read(_MAX_STATE_BYTES + 1)[:_MAX_STATE_BYTES])
-    except (OSError, ValueError):
-        return None
+def published_resident_process(payload: object) -> tuple[int, str | None] | None:
+    """The process a resident state file publishes, or None when it names none.
+
+    A state file that is not a mapping, or whose ``process_id`` is missing,
+    non-numeric or not a real pid, publishes no process: a zero or negative id
+    is damaged state, not a running resident.
+    """
+
     if not isinstance(payload, dict):
         return None
     pid = payload.get("process_id")
@@ -41,6 +43,15 @@ def _state_process(path: Path) -> tuple[int, str | None] | None:
         return None
     marker = payload.get("process_start_marker")
     return pid, marker if isinstance(marker, str) and marker else None
+
+
+def _state_process(path: Path) -> tuple[int, str | None] | None:
+    try:
+        with path.open("rb") as handle:
+            payload = json.loads(handle.read(_MAX_STATE_BYTES + 1)[:_MAX_STATE_BYTES])
+    except (OSError, ValueError):
+        return None
+    return published_resident_process(payload)
 
 
 def _pid_alive(pid: int) -> bool:
@@ -53,7 +64,9 @@ def _pid_alive(pid: int) -> bool:
     return True
 
 
-def _published_process_alive(pid: int, marker: str | None) -> bool:
+def published_process_alive(pid: int, marker: str | None) -> bool:
+    """True when ``pid`` is still the process the state file published."""
+
     if not _pid_alive(pid):
         return False
     # Only Linux markers share one format between the runtime and Python, so
@@ -81,7 +94,7 @@ def resident_provably_dead(state_dir: Path) -> bool:
         return False
     for path in files:
         published = _state_process(path)
-        if published is None or _published_process_alive(*published):
+        if published is None or published_process_alive(*published):
             return False
     return True
 
@@ -126,6 +139,8 @@ def start_native_resident_watchdog(
 
 __all__ = [
     "WATCHDOG_INTERVAL_SECONDS",
+    "published_process_alive",
+    "published_resident_process",
     "resident_provably_dead",
     "respawn_dead_resident",
     "start_native_resident_watchdog",

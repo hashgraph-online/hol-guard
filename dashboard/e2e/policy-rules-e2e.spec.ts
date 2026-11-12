@@ -83,7 +83,7 @@ test.describe("Rules & exceptions end to end", () => {
     await expect(page.getByText("1 broad allow deserves a second look")).toBeVisible();
 
     // Single removal through the row action clears exactly that decision.
-    const localSection = page.locator("section", { hasText: "Remembered on this device" }).last();
+    const localSection = page.locator("#remembered-rules-list");
     await page.getByRole("button", { name: "Remove rule" }).first().click();
     await expect(page.getByText(/Guard will allow "git push origin main"/)).toHaveCount(0);
     expect(state.clearCalls.length).toBe(1);
@@ -101,6 +101,7 @@ test.describe("Rules & exceptions end to end", () => {
     await expect(page.getByText(/Guard will allow "npm install left-pad"/).first()).toBeVisible();
 
     // Export downloads what the list shows: survivors in, removed rules out.
+    await page.getByRole("button", { name: /^More/ }).click();
     const [download] = await Promise.all([
       page.waitForEvent("download"),
       page.getByRole("button", { name: "Export CSV" }).click(),
@@ -123,7 +124,7 @@ test.describe("Rules & exceptions end to end", () => {
 
     await page.getByLabel("Search remembered rules").fill("left-pad");
     await expect(page.getByText(/Showing 1 of 4 remembered rules/)).toBeVisible();
-    await page.getByRole("button", { name: "Clear search and filters" }).click();
+    await page.getByRole("button", { name: "Clear", exact: true }).click();
     await expect(page.getByText(/Showing/)).toHaveCount(0);
 
     const actionSwitch = page.getByRole("group", { name: "Filter by action" });
@@ -131,9 +132,9 @@ test.describe("Rules & exceptions end to end", () => {
     await expect(page.getByText(/Guard will block/)).toHaveCount(0);
     await actionSwitch.getByRole("button", { name: /^All actions/ }).click();
 
-    await page.getByRole("button", { name: "Filters" }).click();
+    await page.getByRole("button", { name: /^More/ }).click();
     await page.getByLabel("Filter by app").selectOption("codex");
-    const localSection = page.locator("section", { hasText: "Remembered on this device" }).last();
+    const localSection = page.locator("#remembered-rules-list");
     await expect(localSection.getByText(/Guard will allow "git push origin main"/)).toHaveCount(0);
     await expect(localSection.getByText(/Guard will block "rm -rf build"/)).toBeVisible();
     await page.getByLabel("Filter by app").selectOption("");

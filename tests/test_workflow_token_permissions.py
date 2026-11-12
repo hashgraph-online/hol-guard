@@ -198,6 +198,17 @@ def test_non_mapping_or_unreadable_workflow_fails_closed(tmp_path: Path, text: s
                 "security-events": "write",
             },
         ),
+        (
+            "plugin-release.yml",
+            "release",
+            {
+                "contents": "read",
+                "id-token": "write",
+                "attestations": "write",
+                "artifact-metadata": "write",
+                "security-events": "write",
+            },
+        ),
         ("extension-claim-notice.yml", "notify", {"contents": "read", "pull-requests": "write"}),
         ("gitar-fork-access-notice.yml", "notify", {"pull-requests": "write"}),
         ("release-please.yml", "release-please", {"contents": "write", "pull-requests": "write"}),
@@ -222,17 +233,26 @@ def test_writer_workflows_start_empty_and_preserve_needed_job_grants(
         publish = workflow["jobs"][job]
         assert publish["needs"] == "verify"
         assert workflow["jobs"]["verify"]["permissions"] == {"actions": "read", "contents": "read"}
+        workflow_run_guard = " && ".join(
+            (
+                "github.event.workflow_run.conclusion == 'success'",
+                'contains(fromJSON(\'["push", "workflow_dispatch"]\'), github.event.workflow_run.event)',
+                "github.event.workflow_run.run_attempt == 1",
+                "github.event.workflow_run.head_repository.full_name == github.repository",
+                "( "
+                'contains(fromJSON(\'["main", "release/3.0"]\'), github.event.workflow_run.head_branch) || '
+                "(github.event.workflow_run.event == 'workflow_dispatch' && "
+                "startsWith(github.event.workflow_run.head_branch, 'v')) )",
+                "!contains(github.event.workflow_run.head_commit.message || '', '[skip release publish]')",
+            )
+        )
         expected_guard = " && ".join(
             (
                 "needs.verify.outputs.sha != ''",
                 "needs.verify.outputs.branch != ''",
                 "vars.RELEASE_PUBLISHING_ENABLED == 'true'",
-                "github.event.workflow_run.conclusion == 'success'",
-                'contains(fromJSON(\'["push", "workflow_dispatch"]\'), github.event.workflow_run.event)',
-                "github.event.workflow_run.run_attempt == 1",
-                "github.event.workflow_run.head_repository.full_name == github.repository",
-                'contains(fromJSON(\'["main", "release/3.0"]\'), github.event.workflow_run.head_branch)',
-                "!contains(github.event.workflow_run.head_commit.message || '', '[skip release publish]')",
+                "( (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main') || "
+                f"( {workflow_run_guard} ) )",
             )
         )
         assert " ".join(publish["if"].split()) == expected_guard

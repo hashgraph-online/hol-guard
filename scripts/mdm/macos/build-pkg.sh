@@ -21,6 +21,7 @@ uv run --no-sync python "${ROOT}/scripts/release/stage_guard_cloud_review_artifa
   --source-root "${ROOT}" --destination-root "${OUT}/contract-data"
 pyinstaller_args=(--clean --noconfirm --onedir --name hol-guard \
   --collect-submodules codex_plugin_scanner --collect-data codex_plugin_scanner \
+  --hidden-import sigstore._store --collect-data sigstore \
   --add-data "${ROOT}/src/codex_plugin_scanner/version.py:." \
   --add-data "${OUT}/contract-data:codex_plugin_scanner/guard/contracts/data" \
   --distpath "${RUNTIME}" --workpath "${OUT}/pyinstaller" --specpath "${OUT}" \

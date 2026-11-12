@@ -24,7 +24,6 @@ from codex_plugin_scanner.guard.runtime.execution_assurance_contract import (
 )
 
 _MAX_ATTEMPTS: Final = 5
-_BACKOFF_CAP_SECONDS: Final = 30.0
 
 _SHA256_HEX_LENGTH: Final = 64
 
@@ -36,18 +35,6 @@ class RecoveryPhase(str, Enum):
     DEGRADED = "degraded"
     RECOVERING = "recovering"
     UNAVAILABLE = "unavailable"
-
-
-_HEALTH_TO_RECOVERY: dict[ProviderHealthState, RecoveryPhase] = {
-    ProviderHealthState.HEALTHY: RecoveryPhase.HEALTHY,
-    ProviderHealthState.DEGRADED: RecoveryPhase.DEGRADED,
-    ProviderHealthState.UNAVAILABLE: RecoveryPhase.UNAVAILABLE,
-    # Unresolved transient/terminal states map into active recovery handling.
-    ProviderHealthState.UNKNOWN: RecoveryPhase.RECOVERING,
-    ProviderHealthState.VERIFYING: RecoveryPhase.RECOVERING,
-    ProviderHealthState.REVOKED: RecoveryPhase.UNAVAILABLE,
-    ProviderHealthState.INCOMPATIBLE: RecoveryPhase.UNAVAILABLE,
-}
 
 
 @dataclass(frozen=True, slots=True)

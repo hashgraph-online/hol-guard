@@ -4,72 +4,58 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.cli.commands_support_runtime_artifacts import _hook_runtime_artifact
+from tests.live_hook_review_support import LIVE_REVIEWS_RETIRED_ALLOW, live_shell_review, quietly_allowed
 
 
-@pytest.fixture(autouse=True)
-def _native_package_intents(package_intent_native, native_mcp_probe, tmp_path: Path) -> None:
-    native_mcp_probe(tmp_path / ".hol-guard")
+def _quiet(command: str, *, home: Path, workspace: Path) -> bool:
+    return quietly_allowed(live_shell_review(command, home_dir=home, cwd=workspace, guard_home=home / ".hol-guard"))
 
 
-def _artifact(command: str, *, home: Path, workspace: Path):
-    return _hook_runtime_artifact(
-        harness="codex",
-        payload={
-            "hook_event_name": "PreToolUse",
-            "tool_name": "Bash",
-            "tool_input": {"command": command},
-        },
-        action_envelope=None,
-        home_dir=home,
-        guard_home=home / ".hol-guard",
-        workspace=workspace,
-    )
-
-
-def test_command_lookup_does_not_execute_named_package_runner(tmp_path: Path) -> None:
-    workspace = tmp_path / "workspace"
+def test_command_lookup_does_not_execute_named_package_runner(live_hook_root: Path) -> None:
+    workspace = live_hook_root / "workspace"
     workspace.mkdir()
     (workspace / "README.md").write_text("viewport\n", encoding="utf-8")
 
-    artifact = _artifact(
+    quiet = _quiet(
         "command -v npx >/dev/null 2>&1 && rg -n 'viewport' README.md | head -20",
-        home=tmp_path,
+        home=live_hook_root,
         workspace=workspace,
     )
 
-    assert artifact is None
+    assert quiet
 
 
-def test_prefixed_command_lookup_does_not_execute_named_package_runner(tmp_path: Path) -> None:
-    workspace = tmp_path / "workspace"
+@pytest.mark.parametrize(
+    "lookup",
+    (
+        "CHECK=1 command -v npx",
+        pytest.param("time -p command -V npx", marks=LIVE_REVIEWS_RETIRED_ALLOW),
+        pytest.param("time -p CHECK=1 command -v npx", marks=LIVE_REVIEWS_RETIRED_ALLOW),
+    ),
+)
+def test_prefixed_command_lookup_does_not_execute_named_package_runner(live_hook_root: Path, lookup: str) -> None:
+    workspace = live_hook_root / "workspace"
     workspace.mkdir()
     (workspace / "README.md").write_text("viewport\n", encoding="utf-8")
 
-    for lookup in (
-        "CHECK=1 command -v npx",
-        "time -p command -V npx",
-        "time -p CHECK=1 command -v npx",
-    ):
-        artifact = _artifact(
-            f"{lookup} >/dev/null 2>&1 && rg -n 'viewport' README.md | head -20",
-            home=tmp_path,
-            workspace=workspace,
-        )
-        assert artifact is None
+    assert _quiet(
+        f"{lookup} >/dev/null 2>&1 && rg -n 'viewport' README.md | head -20",
+        home=live_hook_root,
+        workspace=workspace,
+    )
 
 
-def test_command_lookup_does_not_hide_actual_package_execution(tmp_path: Path) -> None:
-    workspace = tmp_path / "workspace"
+def test_command_lookup_does_not_hide_actual_package_execution(live_hook_root: Path) -> None:
+    workspace = live_hook_root / "workspace"
     workspace.mkdir()
 
     command = "command -v npx >/dev/null 2>&1 && npx --yes untrusted-package"
 
-    assert _artifact(command, home=tmp_path, workspace=workspace) is not None
+    assert not _quiet(command, home=live_hook_root, workspace=workspace)
 
 
-def test_prefixed_command_lookup_does_not_hide_shell_substitution(tmp_path: Path) -> None:
-    workspace = tmp_path / "workspace"
+def test_prefixed_command_lookup_does_not_hide_shell_substitution(live_hook_root: Path) -> None:
+    workspace = live_hook_root / "workspace"
     workspace.mkdir()
 
     for assignment in (
@@ -78,15 +64,15 @@ def test_prefixed_command_lookup_does_not_hide_shell_substitution(tmp_path: Path
         "CHECK=foo`npx --yes untrusted-package`",
     ):
         command = f"{assignment} command -v npx >/dev/null 2>&1"
-        assert _artifact(command, home=tmp_path, workspace=workspace) is not None
+        assert not _quiet(command, home=live_hook_root, workspace=workspace)
 
     timed_lookup = "time -p command -v `npx --yes untrusted-package`"
-    assert _artifact(timed_lookup, home=tmp_path, workspace=workspace) is not None
+    assert not _quiet(timed_lookup, home=live_hook_root, workspace=workspace)
 
     for wrapper in ("env", "command", "sudo"):
         command = f"time -p command -v `{wrapper} npx --yes untrusted-package`"
-        assert _artifact(command, home=tmp_path, workspace=workspace) is not None
+        assert not _quiet(command, home=live_hook_root, workspace=workspace)
 
     for outer_runner in ("npx --yes untrusted-package", "bunx untrusted-package"):
         command = f"CHECK=`date` {outer_runner}"
-        assert _artifact(command, home=tmp_path, workspace=workspace) is not None
+        assert not _quiet(command, home=live_hook_root, workspace=workspace)

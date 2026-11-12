@@ -1225,7 +1225,7 @@ def test_claude_prompt_hook_shows_hol_guard_branding(tmp_path, capsys):
 
 
 @pytest.mark.usefixtures("native_hook_force")
-def test_opencode_prompt_hook_queues_prompt_approval(monkeypatch, tmp_path, capsys):
+def test_opencode_prompt_hook_sends_sensitive_prompt_without_queueing(monkeypatch, tmp_path, capsys):
     home_dir = tmp_path / "home"
     workspace_dir = tmp_path / "workspace"
     _build_opencode_fixture(home_dir, workspace_dir)
@@ -1262,12 +1262,15 @@ def test_opencode_prompt_hook_queues_prompt_approval(monkeypatch, tmp_path, caps
         ]
     )
     output = json.loads(capsys.readouterr().out)
-    prompt_request = output["approval_requests"][0]
 
-    assert rc == 1
-    assert output["artifact_type"] == "prompt_request"
-    assert prompt_request["artifact_type"] == "prompt_request"
-    assert prompt_request["approval_url"].startswith("http://127.0.0.1:4455/requests/")
+    # A prompt that asks for local secrets is sent flagged; the read it leads
+    # to is reviewed at the tool stage, so nothing is queued for the prompt.
+    assert rc == 0
+    assert output.get("decision") != "block"
+    assert output["policy_action"] == "warn"
+    assert output["reason_code"] == "native_sensitive_prompt"
+    assert "approval_requests" not in output
+    assert GuardStore(home_dir).list_approval_requests(limit=5) == []
 
 
 def test_guard_run_allows_debug_prompt_with_quoted_publish_error(monkeypatch, tmp_path, capsys):

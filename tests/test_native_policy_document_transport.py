@@ -29,6 +29,7 @@ def _resident(monkeypatch, mutation=None, result=None):
     monkeypatch.setattr(client, "validate_native_binary", lambda _: identity)
     monkeypatch.setattr(client, "_resolve_digest_home", lambda _: Path("document-home").absolute())
     monkeypatch.setattr(client, "_isolated_environment", lambda: {})
+    monkeypatch.setattr(client, "ensure_resident_prerequisite", lambda home: True)
     calls = []
 
     def reply(**kwargs):
@@ -87,6 +88,23 @@ def test_document_preserves_one_absolute_deadline_and_expected_runtime_identity(
     request = json.loads(calls[0]["payload"])["request"]
     assert 0 < request["budget_ms"] <= 1000
     assert request["action"] == {"kind": "policy_document", "body": {"query": "canonical", "input": {"value": {}}}}
+
+
+def test_document_provisions_the_resident_prerequisite_for_a_new_home(monkeypatch):
+    calls, _ = _resident(monkeypatch)
+    homes = []
+    monkeypatch.setattr(client, "ensure_resident_prerequisite", lambda home: homes.append(home) or True)
+    assert client.policy_query("canonical", {"value": {}}) == {}
+    assert homes == [Path("document-home").absolute()]
+    assert len(calls) == 1
+
+
+def test_document_refuses_before_transport_when_the_prerequisite_cannot_be_provisioned(monkeypatch):
+    calls, _ = _resident(monkeypatch)
+    monkeypatch.setattr(client, "ensure_resident_prerequisite", lambda home: False)
+    with pytest.raises(client.NativePolicyDocumentError, match="native_policy_document_unavailable"):
+        client.policy_query("canonical", {"value": {}})
+    assert not calls
 
 
 @pytest.mark.parametrize("case", ["deadline", "runtime_change", "missing_binary", "nonfinite"])
@@ -177,11 +195,34 @@ def test_compiled_rows_reject_invalid_native_dto_fields(monkeypatch, mutation):
         compiler.compile_policy_document(source)
 
 
-def test_native_document_dto_never_runs_python_command_normalization(monkeypatch):
-    def forbidden(*args, **kwargs):
-        raise AssertionError("Python normalization called")
+def _review_rows(query, body, **kwargs):
+    return [
+        {
+            "rule_id": "ask-a-person",
+            "provenance_json": "{}",
+            "decision": {"harness": "pi", "scope": "harness", "action": "review"},
+        }
+    ]
 
-    monkeypatch.setattr(document.CommandCondition, "__post_init__", forbidden)
+
+def test_a_signed_bundle_review_rule_reaches_the_hook_as_a_review_row(monkeypatch):
+    monkeypatch.setattr(compiler, "policy_query", _review_rows)
+
+    rows = compiler.compile_policy_bundle_document({}, device_id="device-1", device_name="Workstation")
+
+    assert [(row.rule_id, row.decision.action) for row in rows] == [("ask-a-person", "review")]
+
+
+def test_a_local_policy_document_never_carries_a_review_row(monkeypatch):
+    source, _ = _compile_transport(monkeypatch)
+    monkeypatch.setattr(compiler, "policy_query", _review_rows)
+
+    with pytest.raises(client.NativePolicyDocumentError):
+        compiler.compile_policy_document(source)
+
+
+def test_native_document_dto_never_runs_python_command_normalization():
+    assert not hasattr(document.CommandCondition, "__post_init__")
     expression = {
         "combinator": "all",
         "conditions": [{"field": "command", "operator": "exact", "value": "native value", "case_sensitive": False}],

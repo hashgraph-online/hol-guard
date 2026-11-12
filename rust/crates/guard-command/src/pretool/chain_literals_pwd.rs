@@ -131,6 +131,8 @@ type Found = (usize, String, bool);
 /// absolute literal, a derived path is unknown or its producer is not
 /// allowed, or any step before a replaced use could change the directory.
 pub(super) fn project(command: &str, cwd: &str, allowed: impl Fn(&str) -> bool) -> Option<String> {
+    let spelled = host_spelling(cwd);
+    let cwd = spelled.as_str();
     let mut values = Values {
         cwd,
         allowed,
@@ -169,6 +171,8 @@ pub(super) fn project_uses(
     width: fn(&[char]) -> Option<usize>,
     changes: impl Fn(&str) -> bool,
 ) -> Option<String> {
+    let spelled = host_spelling(value);
+    let value = spelled.as_str();
     project_found(
         command,
         value,
@@ -301,6 +305,45 @@ fn sets_a_variable<'a>(operands: impl Iterator<Item = &'a [char]>) -> bool {
     false
 }
 
+/// The width of a `X:` drive prefix, or 0 when the path has none. A drive
+/// letter is the only text a path may carry before its absolute root.
+fn drive_prefix(path: &str) -> usize {
+    let mut chars = path.chars();
+    match (chars.next(), chars.next()) {
+        (Some(letter), Some(':')) if letter.is_ascii_alphabetic() => 2,
+        _ => 0,
+    }
+}
+
+/// The path as the request's shell would read it. The envelope declares a
+/// POSIX dialect, where a backslash escapes the character after it, so a
+/// drive path spelled `C:\Users\dev` would lex as `C:Usersdev`. Windows
+/// accepts the forward-slash spelling of the same directory, and that
+/// spelling survives the lexer unchanged.
+fn host_spelling(path: &str) -> String {
+    if drive_prefix(path) == 0 {
+        return path.to_owned();
+    }
+    path.replace('\\', "/")
+}
+
+/// A canonical directory in the spelling an agent writes. Canonicalizing on
+/// Windows hands back the system's final path, which carries the `\\\\?\\`
+/// prefix that lets a path outrun `MAX_PATH`. No shell reads that prefix, and
+/// only a drive path has a plain spelling to fall back on, so a volume reached
+/// by GUID and a UNC share stay unknown.
+#[cfg(windows)]
+fn agent_spelling(path: &Path) -> Option<String> {
+    let text = path.to_str()?;
+    let text = text.strip_prefix(r"\\?\").unwrap_or(text);
+    (drive_prefix(text) == 2).then(|| host_spelling(text))
+}
+
+#[cfg(not(windows))]
+fn agent_spelling(path: &Path) -> Option<String> {
+    Some(host_spelling(path.to_str()?))
+}
+
 /// An absolute path whose characters the shell never splits, globs, quotes
 /// or expands, and which still names a directory.
 fn literal_directory(cwd: &str) -> bool {
@@ -308,11 +351,16 @@ fn literal_directory(cwd: &str) -> bool {
 }
 
 /// An absolute path whose characters the shell never splits, globs, quotes
-/// or expands, with no `..` to climb out of what it names.
+/// or expands, with no `..` to climb out of what it names. A drive-qualified
+/// path is absolute only where the host reads it that way, so a POSIX host
+/// still refuses `a:/b`, which names a relative directory there.
 fn literal_path(path: &str) -> bool {
-    path.starts_with('/')
+    let root = drive_prefix(path);
+    let body = &path[root..];
+    body.starts_with('/')
+        && (root == 0 || Path::new(path).is_absolute())
         && path.len() <= MAX_DIRECTORY_CHARS
-        && !path.split('/').any(|part| part == "..")
+        && !body.split('/').any(|part| part == "..")
         && path.chars().all(|c| {
             c.is_ascii_alphanumeric()
                 || matches!(c, '_' | '.' | '/' | '@' | '%' | '+' | ':' | ',' | '-')
@@ -320,20 +368,27 @@ fn literal_path(path: &str) -> bool {
 }
 
 /// What `dirname` prints for an absolute path: the text before its last
-/// component, without trailing slashes, or `/`. The shell sets `$PWD` to a
-/// canonical spelling, so a path with a `.` component or a doubled slash,
-/// whose text differs from that spelling, has no known parent.
+/// component, without trailing slashes, or the root it sits under. The shell
+/// sets `$PWD` to a canonical spelling, so a path with a `.` component or a
+/// doubled slash, whose text differs from that spelling, has no known parent.
+/// A drive keeps its letter, because `C:` alone names that drive's current
+/// directory rather than its root.
 fn parent(path: &str) -> Option<String> {
     if path.split('/').any(|part| part == ".") || path.contains("//") {
         return None;
     }
-    let trimmed = path.trim_end_matches('/');
+    let (drive, body) = path.split_at(drive_prefix(path));
+    let trimmed = body.trim_end_matches('/');
     if trimmed.is_empty() {
-        return Some("/".to_owned());
+        return Some(format!("{drive}/"));
     }
     let (head, _) = trimmed.rsplit_once('/')?;
     let head = head.trim_end_matches('/');
-    Some(if head.is_empty() { "/" } else { head }.to_owned())
+    Some(if head.is_empty() {
+        format!("{drive}/")
+    } else {
+        format!("{drive}{head}")
+    })
 }
 
 /// The worktree root `git rev-parse --show-toplevel` prints for `cwd`: the
@@ -380,7 +435,7 @@ fn repository_root(cwd: &str) -> Option<String> {
         if !owned(directory) || !owned(&git_directory) || !plain_git_directory(&git_directory) {
             return None;
         }
-        let root = directory.to_str()?.to_owned();
+        let root = agent_spelling(directory)?;
         return literal_path(&root).then_some(root);
     }
     None
@@ -500,7 +555,15 @@ fn owned(path: &Path) -> bool {
     std::fs::metadata(path).is_ok_and(|metadata| metadata.uid() == nix::unistd::geteuid().as_raw())
 }
 
-#[cfg(not(unix))]
+/// Windows has no `st_uid`. Git compares the owner's SID instead, and counts
+/// an object owned by LocalSystem or the local Administrators group as the
+/// user's own, because either can already rewrite anything the user owns.
+#[cfg(windows)]
+fn owned(path: &Path) -> bool {
+    guard_runtime_windows_process::owned_by_current_user(path)
+}
+
+#[cfg(not(any(unix, windows)))]
 fn owned(_: &Path) -> bool {
     false
 }
@@ -512,7 +575,31 @@ fn filesystem(path: &Path) -> Option<u64> {
     std::fs::metadata(path).ok().map(|metadata| metadata.dev())
 }
 
-#[cfg(not(unix))]
+/// Windows names the volume in the path itself. `canonicalize` hands back the
+/// final path the system resolved, so a directory holding a mounted volume is
+/// already spelled with that volume's own prefix \u2014 a drive letter, a UNC
+/// share, or `\\\\?\\Volume{...}` when it has no letter \u2014 and every ancestor
+/// of one canonical path carries the prefix of the volume it sits on. Only
+/// equality between the values a single walk produces matters, so a hash of
+/// that prefix tells volumes apart as well as a device number does.
+///
+/// Git for Windows may not stop at a volume edge at all. Stopping here can
+/// therefore leave unknown a root Git would have printed, which keeps the
+/// substitution opaque and the command reviewed; it cannot invent a root Git
+/// would refuse.
+#[cfg(windows)]
+fn filesystem(path: &Path) -> Option<u64> {
+    use std::hash::{Hash, Hasher};
+    let prefix = path.components().find_map(|component| match component {
+        std::path::Component::Prefix(prefix) => Some(prefix),
+        _ => None,
+    })?;
+    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+    prefix.as_os_str().hash(&mut hasher);
+    Some(hasher.finish())
+}
+
+#[cfg(not(any(unix, windows)))]
 fn filesystem(_: &Path) -> Option<u64> {
     None
 }

@@ -18,6 +18,9 @@
 //! directory operand makes `diff` read the files inside it, so both operands
 //! then need the recursive content-search screen.
 //!
+//! `cmp` reads both file operands the same way, so each one gets the `diff`
+//! file proof. It has no recursive form.
+//!
 //! `file` reads the first bytes of each operand and prints a type label, never
 //! the content, so each operand gets the ordinary read proof (a directory is
 //! just labelled `directory`) or the absent-path proof. Options that load magic
@@ -116,7 +119,20 @@ pub(super) fn safe_df_arguments(arguments: &[String]) -> bool {
     operands <= MAX_OPERANDS
 }
 
-pub(super) fn safe_diff_arguments(arguments: &[String], context: super::PathContext<'_>) -> bool {
+/// `diff` of two readable files, or of two directories that pass the
+/// recursive search screen.
+///
+/// After a pipe one operand may be `-`, which compares what the proven
+/// producer printed against a file: `git show HEAD:a.rs | diff - a.rs`. The
+/// dash reads only that output, the way `sed` and `comm` read it, so the
+/// other operand takes the ordinary file proof. Both operands as `-`, or a
+/// dash with nothing piped into the segment, keeps the review.
+pub(super) fn safe_diff_arguments(
+    segment: &crate::CommandSegmentV1,
+    context: super::PathContext<'_>,
+) -> bool {
+    let arguments = &segment.arguments;
+    let piped_input = segment.pipeline_index > 0;
     let mut operands = Vec::new();
     let mut after_options = false;
     let mut values = arguments.iter();
@@ -137,6 +153,9 @@ pub(super) fn safe_diff_arguments(arguments: &[String], context: super::PathCont
     let [left, right] = operands.as_slice() else {
         return false;
     };
+    if let Some(file) = piped_comparison_file(left, right, piped_input) {
+        return compared_file_readable(file, context);
+    }
     if *left == "-" || *right == "-" {
         return false;
     }
@@ -190,6 +209,101 @@ fn diff_option(option: &str) -> bool {
         || option[1..]
             .bytes()
             .all(|flag| b"uqrNbwBiastpyEZ".contains(&flag))
+}
+
+/// `cmp FILE1 FILE2 [SKIP1 [SKIP2]]` reads both files and prints where they
+/// first differ, or with `-l`/`-b` the differing bytes. Each file needs the
+/// same proof as a `diff` file operand. Byte counts after the two files only
+/// skip input. A directory makes `cmp` fail, so there is no recursive form.
+///
+/// After a pipe one of the two files may be `-`, as for `diff`.
+pub(super) fn safe_cmp_arguments(
+    segment: &crate::CommandSegmentV1,
+    context: super::PathContext<'_>,
+) -> bool {
+    let arguments = &segment.arguments;
+    let piped_input = segment.pipeline_index > 0;
+    let mut operands = Vec::new();
+    let mut after_options = false;
+    let mut values = arguments.iter();
+    while let Some(argument) = values.next() {
+        let option = argument.as_str();
+        if after_options || !option.starts_with('-') || option == "-" {
+            operands.push(option);
+        } else if option == "--" {
+            after_options = true;
+        } else if matches!(option, "-i" | "-n") {
+            if !values.next().is_some_and(|count| cmp_count(count)) {
+                return false;
+            }
+        } else if !cmp_option(option) {
+            return false;
+        }
+    }
+    let (files, skips) = operands.split_at(operands.len().min(2));
+    let [left, right] = files else {
+        return false;
+    };
+    if !skips.iter().all(|skip| digits(skip)) {
+        return false;
+    }
+    if let Some(file) = piped_comparison_file(left, right, piped_input) {
+        return compared_file_readable(file, context);
+    }
+    if *left == "-" || *right == "-" {
+        return false;
+    }
+    [left, right]
+        .iter()
+        .all(|operand| compared_file_readable(operand, context))
+}
+
+/// The file operand of a two-operand comparison whose other operand is `-`
+/// reading a pipe. `None` when nothing is piped in, when neither or both
+/// operands are `-`, so the caller applies its ordinary proof.
+fn piped_comparison_file<'a>(left: &'a str, right: &'a str, piped_input: bool) -> Option<&'a str> {
+    if !piped_input {
+        return None;
+    }
+    match (left == "-", right == "-") {
+        (true, false) => Some(right),
+        (false, true) => Some(left),
+        _ => None,
+    }
+}
+
+/// The read proof a compared file takes. A chain may compare against a
+/// temporary copy it makes first, which is absent when the hook runs; reading
+/// it can only report a missing file.
+fn compared_file_readable(operand: &str, context: super::PathContext<'_>) -> bool {
+    safe_reads::bounded_read_target(operand, context.home_dir, context.cwd, false)
+        || super::chain_temporary::absent_temporary_read_target(
+            operand,
+            context.home_dir,
+            context.cwd,
+        )
+}
+
+/// Report-format options and byte limits. None of them names another file.
+fn cmp_option(option: &str) -> bool {
+    if let Some(long) = option.strip_prefix("--") {
+        return match long.split_once('=') {
+            Some(("bytes" | "ignore-initial", count)) => cmp_count(count),
+            Some(_) => false,
+            None => matches!(long, "print-bytes" | "verbose" | "quiet" | "silent"),
+        };
+    }
+    let flags = &option[1..];
+    flags.strip_prefix(['i', 'n']).is_some_and(cmp_count)
+        || flags.bytes().all(|flag| b"bls".contains(&flag))
+}
+
+/// A byte count, or `SKIP1:SKIP2` for `-i`.
+fn cmp_count(value: &str) -> bool {
+    match value.split_once(':') {
+        Some((left, right)) => digits(left) && digits(right),
+        None => digits(value),
+    }
 }
 
 pub(super) fn safe_stat_arguments(arguments: &[String], context: super::PathContext<'_>) -> bool {

@@ -23,7 +23,10 @@ from .native_hook_artifact_compose import _field_valid
 from .native_runtime import native_runtime_status
 from .native_runtime_resilience import native_record_resident_failure, native_record_resident_success
 
-CONSUMER_ARTIFACT_COMPOSE_FEATURE = "consumer-artifact-compose-v2"
+# v3 adds the `low_trust_floor` query. A resident that still advertises v2
+# cannot decode it, and a refused capability is the only way that shows up
+# before the artifact has already been composed without its review floor.
+CONSUMER_ARTIFACT_COMPOSE_FEATURE = "consumer-artifact-compose-v3"
 _REQUEST_SCHEMA = "guard-consumer-artifact-compose-request.v1"
 _RESULT_SCHEMA = "guard-consumer-artifact-compose-result.v1"
 _RESIDENT_CODE = re.compile(r"^native_consumer_artifact_compose_[a-z_]{1,64}$")
@@ -97,9 +100,24 @@ _ANSWERS: dict[str, dict[str, str]] = {
 }
 
 _FIELDS["runtime_authoritative"] = frozenset({"runtime", "signals"})
+_FIELDS["low_trust_floor"] = frozenset(
+    {
+        "risk_action_config",
+        "harness",
+        "artifact_type",
+        "artifact_id",
+        "artifact_name",
+        "configured_action",
+        "fresh_decision",
+        "trust_score",
+    }
+)
 # Fields a query may omit; the resident decodes an omitted one as null.
 _OPTIONAL_FIELDS: dict[str, frozenset[str]] = {"current_action": frozenset({"low_trust_action"})}
 _ANSWERS["runtime_authoritative"] = {**_ANSWERS["runtime_decision"], "authoritative_decision": "d"}
+# ``score_required`` asks for the registry lookup Python holds; the floor is
+# composed in a second query once the score is read.
+_ANSWERS["low_trust_floor"] = {"score_required": "b", "floor": "D"}
 
 
 def _answer_valid(kind: str, payload: dict[str, object]) -> bool:

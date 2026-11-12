@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import json
+import shutil
+import subprocess
 from copy import deepcopy
 
 import pytest
@@ -14,6 +16,7 @@ from ci.gauntlet.fixtures import create_fixture, filesystem_checks
 from ci.gauntlet.input_evidence import input_digest
 from ci.gauntlet.proofs import task_tools_match
 from ci.gauntlet.provider import InferenceRelay, canary_present, validate_endpoint
+from ci.gauntlet.workspace_runner_fixtures import WORKSPACE_JEST_CASE, workspace_node_bin
 
 
 def test_scenario_tool_inventory_matches_actual_task():
@@ -242,6 +245,31 @@ def test_sibling_copy_requires_bash_then_native_read_and_exact_bytes(tmp_path):
     assert task_tools_match(scenario, calls)
     assert filesystem_checks(fixture, scenario.oracle, scenario.id)["sibling-copy-exact"] is True
     assert not task_tools_match(scenario, list(reversed(calls)))
+
+
+@pytest.mark.skipif(shutil.which("node") is None, reason="the workspace runner fixture copies the host's Node")
+def test_workspace_jest_install_holds_the_shape_npm_leaves(tmp_path):
+    """The npx case gets the project's own Jest and a Node the fixture home owns."""
+    fixture = create_fixture(tmp_path / "jest", realistic=True, scenario_id=WORKSPACE_JEST_CASE)
+    entry = fixture.workspace / "node_modules/jest/bin/jest.js"
+    assert entry.is_file() and entry.resolve() == (fixture.workspace / "node_modules/.bin/jest").resolve()
+    assert (
+        json.loads((fixture.workspace / "package.json").read_text())["devDependencies"]["jest"]
+        == json.loads((fixture.workspace / "node_modules/jest/package.json").read_text())["version"]
+    )
+    node = workspace_node_bin(fixture.home)
+    assert node is not None and (node / "node").is_file()
+    assert (
+        node.parent.name
+        == subprocess.run([str(node / "node"), "--version"], capture_output=True, text=True, check=True).stdout.strip()
+    )
+
+
+def test_workspace_jest_install_is_scoped_to_its_own_case(tmp_path):
+    """Every other case keeps the shared fixture, so no other run carries a runner or a Node."""
+    other = create_fixture(tmp_path / "plain", realistic=True, scenario_id="ordinary")
+    assert not (other.workspace / "node_modules/jest").exists()
+    assert workspace_node_bin(other.home) is None
 
 
 def test_fixture_uses_only_synthetic_data_and_detects_deletion(tmp_path):

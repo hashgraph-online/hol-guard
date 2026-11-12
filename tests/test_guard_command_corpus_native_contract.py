@@ -124,11 +124,12 @@ def test_native_contract_rejects_changed_immutable_source_identity(
 
 
 @pytest.fixture(scope="module")
-def native_samples() -> dict[str, tuple[CommandCorpusCase, OracleRecord, NativeCommandEvaluation]]:
-    from codex_plugin_scanner.guard.runtime import (
-        github_command_capabilities,
-        package_protect_projection,
-    )
+def native_samples(
+    _native_context_home: Path,
+) -> dict[str, tuple[CommandCorpusCase, OracleRecord, NativeCommandEvaluation]]:
+    from codex_plugin_scanner.guard.native_context import bound_context_digest_home
+    from codex_plugin_scanner.guard.runtime import package_protect_projection
+    from tests import native_github_capability_support
     from tests.guard_command_corpus_native import evaluate_native_corpus_batch
     from tests.harness_attribution_env import HARNESS_ENV_MARKERS
     from tests.native_command_test_support import _native_binaries
@@ -141,7 +142,12 @@ def native_samples() -> dict[str, tuple[CommandCorpusCase, OracleRecord, NativeC
         if len(selected) == 58:
             break
     assert len(selected) == 58
-    with pytest.MonkeyPatch.context() as attribution:
+    # This module fixture runs before the function-scoped autouse home binding,
+    # so bind the session home here.  The extension control snapshot digest is a
+    # resident answer, and that resident only serves a home whose verifier key is
+    # already provisioned; the ambient home has none, and provisioning one needs
+    # a native launch the ambient mode does not permit.
+    with pytest.MonkeyPatch.context() as attribution, bound_context_digest_home(_native_context_home):
         for marker in HARNESS_ENV_MARKERS:
             attribution.delenv(marker, raising=False)
         attribution.setenv("__CFBundleIdentifier", "com.apple.Terminal")
@@ -156,7 +162,7 @@ def native_samples() -> dict[str, tuple[CommandCorpusCase, OracleRecord, NativeC
         # GitHub CLI classification is resident-only; answer it from the same Rust classifier
         # without leaking the stub module or its memoized answers into other tests.
         attribution.setitem(sys.modules, _MODULE, ModuleType(_MODULE))
-        attribution.setattr(github_command_capabilities, "_NATIVE_CACHE", {})
+        attribution.setattr(native_github_capability_support, "_ASSESSMENT_CACHE", {})
         install_offline_github_classifier(_native_binaries()[0])
         evaluated = evaluate_native_corpus_batch(
             [case for case, _ in selected.values()], cwd=contract.ROOT / "workspace", home_dir=contract.ROOT / "home"
@@ -209,7 +215,7 @@ def test_native_contract_rejects_missing_owned_uncertainty_even_when_action_is_s
     payload = copy.deepcopy(reviewed.payload)
     evidence = cast(dict[str, object], payload["command_extensions"])
     observations = cast(list[dict[str, object]], evidence["observations"])
-    assert len(observations) == 16
+    assert len(observations) == 20
     observations.pop()
     with pytest.raises(ValueError, match="uncertain_rules"):
         contract.validate_native_case(case, oracle, replace(reviewed, payload=payload))

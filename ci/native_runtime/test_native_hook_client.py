@@ -22,6 +22,7 @@ from native_hook_client_support import native_runtime as _native_runtime_fixture
 
 from ci.native_runtime.native_process_test_support import process_is_alive
 from codex_plugin_scanner.guard.native_command_control_binding import load_native_command_program_metadata
+from scripts.native_resident_stop_bound import RESIDENT_STOP_TIMEOUT_SECONDS
 
 
 def _read_stream_frame(client: subprocess.Popen[bytes], timeout: float = 3) -> bytes:
@@ -177,7 +178,7 @@ def test_native_hook_client_stop_reaps_managed_processes(
         (str(runtime), "resident-stop", "--state-dir", str(state_dir)),
         check=False,
         capture_output=True,
-        timeout=3,
+        timeout=RESIDENT_STOP_TIMEOUT_SECONDS,
     )
     assert result.returncode == 0, result.stderr
     deadline = time.monotonic() + 2
@@ -227,8 +228,10 @@ def test_native_hook_client_rejects_self_authenticated_forged_state(
     tmp_path: Path,
 ) -> None:
     runtime, state_dir = native_runtime
+    # Build the request first: its store read must not meet the forged state.
+    request = _request(runtime, state_dir.parent)
     _write_forged_state(runtime, state_dir)
-    response = _invoke(runtime, state_dir, _request(runtime, state_dir.parent))
+    response = _invoke(runtime, state_dir, request)
     assert response["authority"] == "rust"
     assert _result(response)["minimum_action"] == "allow"
     assert len(_state_files(state_dir)) == 1

@@ -6,6 +6,11 @@
 //! sends a store snapshot and commits the returned plan in one transaction
 //! guarded by the snapshot it sent.
 //!
+//! The planners say what should change; `commit` turns that into the commit the
+//! client runs: which sync-state records are written, whether the plan needs a
+//! protected extension authority and a negotiated capability, and the guard
+//! every authority update carries. The client decides none of that.
+//!
 //! Stored payloads come back with sorted keys. Item order inside `items`
 //! maps is returned separately so the client can keep the stored order.
 
@@ -37,6 +42,8 @@ const SETTINGS_FIELDS: &[&str] = &["commands", "state"];
 const PUBLIC_FIELDS: &[&str] = &["cloud_revision", "reason", "status", "surface"];
 const ERR_REQUEST: &str = "native_custom_extension_continuity_invalid_request";
 
+#[path = "custom_extension_continuity_commit.rs"]
+mod commit;
 #[path = "custom_extension_continuity_local.rs"]
 mod local;
 #[path = "custom_extension_continuity_support.rs"]
@@ -44,7 +51,8 @@ mod support;
 #[path = "custom_extension_continuity_v2.rs"]
 mod v2;
 
-use local::{local_mutation, public_state};
+use commit::{commit_local_mutation, commit_plan};
+use local::public_state;
 use support::{
     has_exact_keys, is_command_id, is_sha256, local_override_status, observation_precondition,
     observed, ordered_keys, override_matches, plan_exact_settings, py_int, require_monotonic,
@@ -67,12 +75,16 @@ fn refuse<T>(message: impl Into<String>) -> Planned<T> {
 /// (`{"error": message}`); only a malformed request is an error.
 pub(crate) fn evaluate(request: &Value) -> Result<Value, &'static str> {
     let operation = request.get("operation").and_then(Value::as_str);
-    let answer = match operation {
-        Some("plan") => plan(request),
-        Some("local_mutation") => local_mutation(request),
+    settle(match operation {
+        Some("plan") => commit_plan(request),
+        Some("local_mutation") => commit_local_mutation(request),
         Some("public_state") => public_state(request),
         _ => Err(Fail::Request),
-    };
+    })
+}
+
+/// A planner's outcome as the resident's answer.
+fn settle(answer: Planned<Value>) -> Result<Value, &'static str> {
     match answer {
         Ok(value) => Ok(value),
         Err(Fail::Refusal(message)) => Ok(json!({ "error": message })),

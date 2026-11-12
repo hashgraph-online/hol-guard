@@ -27,6 +27,14 @@ fn start_operands<'a>(words: &'a [&'a str]) -> Option<&'a [&'a str]> {
     }
 }
 
+/// Whether `words` is the `start` subcommand at all, however its operands are
+/// spelled. A caller that must keep container starts out of a proof asks this
+/// rather than [`safe_start_arguments`], which answers only for the starts
+/// this module admits.
+pub(super) fn start_shaped(words: &[&str]) -> bool {
+    start_operands(words).is_some()
+}
+
 /// Docker arguments that only start named existing containers.
 pub(super) fn safe_start_arguments(words: &[&str]) -> bool {
     start_operands(words).is_some_and(|operands| {

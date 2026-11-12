@@ -43,9 +43,8 @@
 //! bound receipt redaction level, which the daemon publishes together — plus
 //! the approval-context token the request hashed to.
 
-use guard_command::decisions::{decision_from_legacy_policy_action, parse_signals};
 use guard_command::package_intent_common::GuardArtifact;
-use guard_contracts::{GuardAction, McpCallProjectionQueryV1, McpPackageReasonSignalsQueryV1};
+use guard_contracts::{GuardAction, McpCallProjectionQueryV1};
 use serde_json::{json, Map, Value};
 
 use super::ask;
@@ -133,16 +132,27 @@ pub(super) fn queue(
         "reviewUrl": review_url,
         "supplyChainEvaluation": evaluation,
     });
+    // `_notify_pending_approval` once the row is written. A notice the
+    // resident cannot read stays on the record for the daemon to raise.
+    let notices = if crate::hook_direct_evidence::notice::raise_approval(
+        &request.guard_home,
+        oauth_source,
+        &notice,
+    ) {
+        json!([])
+    } else {
+        json!([notice])
+    };
     Ok(PackageAnswer {
         block: Some((message, data)),
-        // What `_notify_pending_approval` and `_maybe_open_approval_center`
-        // raise once the row is written, which the drain owns.
+        // What `_maybe_open_approval_center` reads once the row is written,
+        // and the notices left to the daemon.
         approval: Some(json!({
             "approval_center_url": center,
             "review_url": review_url,
             "request_id": request_id,
             "workspace": admitted.workspace,
-            "notices": [notice],
+            "notices": notices,
         })),
         ..answer.clone()
     })
@@ -209,39 +219,15 @@ fn launch_target(request: &McpRelayDecideRequestV1) -> Result<String, &'static s
         .to_owned())
 }
 
-/// `_package_decision_v2`: the decision the reasons' own V2 signals compose,
-/// with the evaluation's user copy written over its text.
+/// The queued package decision the proxy's `package_answer` check gives: what
+/// the reasons' own V2 signals compose, with the evaluation's user copy
+/// written over its text.
 pub(super) fn decision_v2(
     answer: &PackageAnswer,
     action: GuardAction,
 ) -> Result<Value, &'static str> {
-    let reasons = answer
-        .evaluation
-        .get("reasons")
-        .and_then(Value::as_array)
-        .cloned()
-        .unwrap_or_default();
-    let projected =
-        crate::mcp_proxy_signals::reason_signals(&McpPackageReasonSignalsQueryV1 { reasons });
-    let signals = parse_signals(&projected["signals"]).map_err(|_| PACKAGE_ASK_FAILED)?;
-    let mut payload =
-        decision_from_legacy_policy_action(action, action.as_str(), &signals).to_value();
-    let user_copy = answer
-        .evaluation
-        .get("user_copy")
-        .and_then(Value::as_object);
-    let copy = |key: &str| {
-        user_copy
-            .and_then(|copy| copy.get(key))
-            .cloned()
-            .unwrap_or(Value::Null)
-    };
-    let fields = payload.as_object_mut().ok_or(PACKAGE_ASK_FAILED)?;
-    fields.insert("user_title".to_owned(), copy("title"));
-    fields.insert("user_body".to_owned(), copy("summary"));
-    fields.insert("harness_message".to_owned(), copy("harness_message"));
-    fields.insert("dashboard_primary_detail".to_owned(), copy("summary"));
-    Ok(payload)
+    crate::mcp_proxy_package_answer::package_decision_v2(&answer.evaluation, action)
+        .map_err(|_| PACKAGE_ASK_FAILED)
 }
 
 /// `_queue_artifact` for a package-request artifact: the projection wire the

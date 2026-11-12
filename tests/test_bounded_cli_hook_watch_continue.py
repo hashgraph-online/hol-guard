@@ -2,32 +2,16 @@ from __future__ import annotations
 
 import io
 import json
-from collections.abc import Callable, Mapping, Sequence
 from contextlib import redirect_stdout
 from pathlib import Path
 from typing import cast
 
 import pytest
 
-from codex_plugin_scanner.guard.adapters import bounded_cli_hook_bridge
+from codex_plugin_scanner.guard.adapters import bounded_cli_hook_bridge, bounded_cli_hook_recovery
 from codex_plugin_scanner.guard.codex_hook_launch_runtime import BoundedHookProcessResult
 
-
-def _runner_result(result: BoundedHookProcessResult) -> Callable[..., BoundedHookProcessResult]:
-    def run(
-        command: Sequence[str],
-        *,
-        input_text: str,
-        cwd: Path,
-        environment: Mapping[str, str],
-        timeout_seconds: float,
-        deadline_monotonic: float | None = None,
-        output_limit: int = 1_000_000,
-    ) -> BoundedHookProcessResult:
-        del command, input_text, cwd, environment, timeout_seconds, output_limit, deadline_monotonic
-        return result
-
-    return run
+from .bounded_cli_hook_test_support import runner_result as _runner_result
 
 
 def _json_object(text: str) -> dict[str, object]:
@@ -61,7 +45,7 @@ def test_timeout_denies_grok_without_acknowledged_watch(
     tmp_path: Path,
 ) -> None:
     monkeypatch.setattr(
-        bounded_cli_hook_bridge,
+        bounded_cli_hook_recovery,
         "run_isolated_hook_process",
         _runner_result(BoundedHookProcessResult(None, "", False, True)),
     )
@@ -89,34 +73,12 @@ def test_timeout_denies_grok_without_acknowledged_watch(
     assert payload["decision"] == "deny"
 
 
-def test_pretty_printed_hook_json_is_accepted(
-    monkeypatch: pytest.MonkeyPatch,
-    tmp_path: Path,
-) -> None:
-    pretty = json.dumps({"decision": "allow", "policy_action": "warn"}, indent=2) + "\n"
-    monkeypatch.setattr(
-        bounded_cli_hook_bridge,
-        "run_isolated_hook_process",
-        _runner_result(BoundedHookProcessResult(0, pretty, False, False)),
-    )
-    output = io.StringIO()
-    with redirect_stdout(output):
-        returncode = bounded_cli_hook_bridge.run_bounded_cli_hook(
-            _config(tmp_path, harness="grok"),
-            input_text=json.dumps({"hook_event_name": "PreToolUse"}),
-        )
-
-    payload = _json_object(output.getvalue())
-    assert returncode == 0
-    assert payload == {"decision": "allow", "policy_action": "warn"}
-
-
 def test_timeout_denies_grok_with_expired_local_watch(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
     monkeypatch.setattr(
-        bounded_cli_hook_bridge,
+        bounded_cli_hook_recovery,
         "run_isolated_hook_process",
         _runner_result(BoundedHookProcessResult(None, "", False, True)),
     )
@@ -199,7 +161,7 @@ def test_timeout_continues_post_tool_for_grok(
     tmp_path: Path,
 ) -> None:
     monkeypatch.setattr(
-        bounded_cli_hook_bridge,
+        bounded_cli_hook_recovery,
         "run_isolated_hook_process",
         _runner_result(BoundedHookProcessResult(None, "", False, True)),
     )

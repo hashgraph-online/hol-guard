@@ -15,6 +15,41 @@ from tests.native_command_test_support import inspect_command_native_test as ins
 from tests.native_command_test_support import real_native_review_fixture
 
 
+def _isolate_command_cli(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Answer the CLI as the daemon of a fresh, default-enrolled home would.
+
+    The CLI otherwise asks the daemon of the runner's own Guard home, whose
+    enrollment depends on whatever ran before.
+    """
+    from codex_plugin_scanner.guard.cli import extension_controls_commands
+    from codex_plugin_scanner.guard.runtime import command_inspection
+    from codex_plugin_scanner.guard.runtime.command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
+    from codex_plugin_scanner.guard.runtime.extension_control_runtime import ExtensionControlRuntimeSnapshot
+    from codex_plugin_scanner.guard.store import GuardStore
+
+    from .guard_extension_control_authority_fixtures import MemorySecretStore
+
+    store = GuardStore(tmp_path / "guard-home", prime_policy_integrity=False)
+    store._extension_control_authority_secret_store = MemorySecretStore()
+    view = store.enroll_extension_control_authority_by_default(BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest)
+    snapshot = ExtensionControlRuntimeSnapshot.from_authority_view(view)
+
+    class DaemonInspectionClient:
+        def inspect_command(self, request: dict[str, str]) -> dict[str, object]:
+            return command_inspection.inspect_command(
+                request["command"],
+                cwd=Path(request["cwd"]),
+                home_dir=Path(request["home_dir"]),
+                guard_home=store.guard_home,
+                extension_control_snapshot=snapshot,
+            )
+
+    monkeypatch.setattr(extension_controls_commands, "_client", lambda _guard_home: DaemonInspectionClient())
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setenv("USERPROFILE", str(tmp_path))
+
+
 def _assert_native_unavailable(command: str) -> None:
     payload = real_native_review_fixture(command).payload
     extensions = payload["command_extensions"]
@@ -103,10 +138,12 @@ def test_unquoted_data_heredoc_expands_substitutions_despite_body_quotes(body: s
 def test_heredoc_substitution_shell_wrappers_feed_cli_and_runtime_classification(
     substitution: str,
     tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     command = f"cat <<EOF\n{substitution}\nEOF"
 
+    _isolate_command_cli(tmp_path, monkeypatch)
     exit_code = main(["guard", "command", "test", "--json", command])
     payload = json.loads(capsys.readouterr().out)
     assert exit_code == 2
@@ -134,8 +171,10 @@ def _assert_quoted_cat_heredoc_reviews_without_evaluation_failure(command: str) 
 def test_literal_shell_wrapped_heredoc_substitutions_remain_safe_at_cli_and_runtime_boundaries(
     command: str,
     tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
+    _isolate_command_cli(tmp_path, monkeypatch)
     exit_code = main(["guard", "command", "test", "--json", command])
     payload = json.loads(capsys.readouterr().out)
     assert exit_code == 2

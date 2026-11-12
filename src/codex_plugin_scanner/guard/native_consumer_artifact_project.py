@@ -2,8 +2,9 @@
 
 The consumer evaluation reads the store and the harness. The resident decides
 what that evidence means: the capability snapshot and its delta, the artifact
-diff, the history and provenance context, the receipt summaries, the incident
-copy and the per-artifact result rows. There is no Python evaluator:
+diff, the history and provenance context, the incident copy, and what the
+composed decision means for each artifact (result row, blocking, snapshot,
+receipt and change event). There is no Python evaluator:
 ``native_consumer_project`` raises ``NativeConsumerProjectError`` for anything
 but a bound, strictly decoded ``ok`` answer, so a missing resident fails the
 evaluation closed.
@@ -21,7 +22,7 @@ from .native_context import _canonical_request_sha256, _resolve_digest_home, ens
 from .native_execution import _resident_request
 from .native_hook_artifact_compose import _field_valid
 
-CONSUMER_ARTIFACT_PROJECT_FEATURE = "consumer-artifact-project-v1"
+CONSUMER_ARTIFACT_PROJECT_FEATURE = "consumer-artifact-project-v2"
 _REQUEST_SCHEMA = "guard-consumer-artifact-project-request.v1"
 _RESULT_SCHEMA = "guard-consumer-artifact-project-result.v1"
 _RESIDENT_CODE = re.compile(r"^native_consumer_artifact_project_[a-z_]{1,64}$")
@@ -44,38 +45,38 @@ _FIELDS: dict[str, frozenset[str]] = {
             "history",
         }
     ),
-    "artifact_result": frozenset(
+    "artifact_outcome": frozenset(
         {
             "harness",
             "artifact",
             "evidence",
-            "projection",
             "verdict",
             "scanner_action",
+            "configured_action",
             "runtime",
+            "compose_error",
             "signals",
-            "risk_signals",
-            "risk_summary",
+            "decision_signals",
+            "static_risk_summary",
+            "runtime_signals_present",
+            "user_override",
             "approval_context_hash",
             "effective_workspace",
-            "policy_action",
         }
     ),
-    "removed_result": frozenset(
+    "removed_outcome": frozenset(
         {
             "harness",
             "artifact_id",
             "previous",
             "previous_hash",
-            "projection",
+            "configured_action",
             "runtime",
-            "signals",
-            "risk_signals",
-            "has_runtime_authority",
-            "dashboard_detail",
+            "compose_error",
+            "decision_signals",
+            "user_override",
             "approval_context_hash",
             "effective_workspace",
-            "policy_action",
         }
     ),
     "incident_context": frozenset(
@@ -97,8 +98,16 @@ _FIELDS: dict[str, frozenset[str]] = {
 
 # The exact answer shape of each query kind. Spec letters: a action,
 # A action or null, b bool, s string, S string or null, d dict, D dict or
-# null, l list. A detected artifact's result row is checked for the fields
-# every consumer reads.
+# null, l list. An outcome's result row is checked for the fields every
+# consumer reads, and its receipt for the exact ``build_receipt`` fields.
+_OUTCOME: dict[str, str] = {
+    "result": "d",
+    "policy_action": "a",
+    "blocking": "b",
+    "snapshot_permitted": "b",
+    "receipt": "d",
+    "event": "D",
+}
 _ANSWERS: dict[str, dict[str, str]] = {
     "artifact_evidence": {
         "changed": "b",
@@ -116,7 +125,8 @@ _ANSWERS: dict[str, dict[str, str]] = {
         "history_context": "d",
         "provenance": "d",
     },
-    "removed_result": {"receipt": "d", "result": "d"},
+    "artifact_outcome": _OUTCOME,
+    "removed_outcome": _OUTCOME,
     "incident_context": {
         "artifact_label": "s",
         "source_label": "s",
@@ -126,13 +136,20 @@ _ANSWERS: dict[str, dict[str, str]] = {
         "risk_headline": "s",
     },
 }
-# The receipt strings ``evaluate_detection`` reads when an artifact is removed.
-_REMOVED_RECEIPT: dict[str, str] = {
-    "artifact_name": "s",
+_RECEIPT: dict[str, str] = {
+    "artifact_hash": "s",
+    "policy_decision": "a",
     "capabilities_summary": "s",
+    "changed_capabilities": "l",
     "provenance_summary": "s",
+    "artifact_name": "s",
     "source_scope": "S",
+    "user_override": "S",
+    "diff_summary": "S",
+    "approval_source": "s",
+    "scanner_evidence": "l",
 }
+_BLOCKING_ACTIONS = frozenset({"review", "require-reapproval", "sandbox-required", "block"})
 _RESULT_FIELDS: dict[str, str] = {
     "artifact_id": "s",
     "policy_action": "a",
@@ -151,32 +168,55 @@ _RESULT_FIELDS: dict[str, str] = {
 }
 
 
-def _answer_valid(kind: str, payload: dict[str, object]) -> bool:
-    if kind == "artifact_result":
-        # A fail-closed row (no native decision) carries its evaluation error in
-        # place of an authoritative decision; every other row must carry one.
-        fail_closed = (
-            "authoritative_decision" not in payload
-            and payload.get("policy_action") == "block"
-            and isinstance(payload.get("evaluation_error"), dict)
-        )
-        return all(
-            name in payload and _field_valid(spec, payload[name])
-            for name, spec in _RESULT_FIELDS.items()
-            if not (fail_closed and name == "authoritative_decision")
-        )
-    shape = _ANSWERS[kind]
-    valid = set(payload) == set(shape) and all(_field_valid(spec, payload[name]) for name, spec in shape.items())
-    if kind != "removed_result":
-        return valid
-    result, receipt = payload.get("result"), payload.get("receipt")
+def _exact(shape: Mapping[str, str], payload: object) -> bool:
     return (
-        valid
-        and isinstance(result, dict)
-        and result.get("removed") is True
-        and isinstance(receipt, dict)
-        and all(name in receipt and _field_valid(spec, receipt[name]) for name, spec in _REMOVED_RECEIPT.items())
+        isinstance(payload, dict)
+        and set(payload) == set(shape)
+        and all(_field_valid(spec, payload[name]) for name, spec in shape.items())
     )
+
+
+def _result_valid(row: dict[str, object]) -> bool:
+    # A fail-closed row (no native decision) carries its evaluation error in
+    # place of an authoritative decision; every other row must carry one.
+    fail_closed = (
+        "authoritative_decision" not in row
+        and row.get("policy_action") == "block"
+        and isinstance(row.get("evaluation_error"), dict)
+    )
+    return all(
+        name in row and _field_valid(spec, row[name])
+        for name, spec in _RESULT_FIELDS.items()
+        if not (fail_closed and name == "authoritative_decision")
+    )
+
+
+def _outcome_consistent(payload: dict[str, object], result: dict[str, object], receipt: dict[str, object]) -> bool:
+    # One decision: the row, the receipt and the enforcement flags agree on it,
+    # and nothing that blocks may advance the stored snapshot.
+    action = payload["policy_action"]
+    blocking = action in _BLOCKING_ACTIONS
+    return (
+        result.get("policy_action") == action
+        and receipt["policy_decision"] == action
+        and payload["blocking"] is blocking
+        and not (blocking and payload["snapshot_permitted"] is True)
+    )
+
+
+def _answer_valid(kind: str, payload: dict[str, object]) -> bool:
+    if not _exact(_ANSWERS[kind], payload):
+        return False
+    if kind not in {"artifact_outcome", "removed_outcome"}:
+        return True
+    result, receipt = payload["result"], payload["receipt"]
+    if not isinstance(result, dict) or not isinstance(receipt, dict) or not _exact(_RECEIPT, receipt):
+        return False
+    if not _outcome_consistent(payload, result, receipt):
+        return False
+    if kind == "removed_outcome":
+        return result.get("removed") is True and isinstance(payload["event"], dict)
+    return _result_valid(result)
 
 
 class NativeConsumerProjectError(RuntimeError):

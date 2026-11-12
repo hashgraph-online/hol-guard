@@ -77,7 +77,8 @@ class PreparedCommandPacks:
 def prepare(
     verified, enabled_external_ids, directory: Path, *, engine: str, retained_extension_ids=(), now=None, fetch=None
 ):
-    publication(verified)
+    # `_prepare` reads the publication inside the session below. Reading it here
+    # as well would start a second verified runtime for the same bytes.
     with lifecycle.verified_preparation() as invoke:
         return _prepare(
             verified,

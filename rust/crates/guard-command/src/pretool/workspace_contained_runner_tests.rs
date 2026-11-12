@@ -1,4 +1,4 @@
-use super::workspace_contained_tests::{host, reason, workspace, CONTAINED};
+use super::workspace_contained_tests::{claimed, host, reason, workspace, CONTAINED};
 use std::path::Path;
 
 fn install_tool(directory: &Path, tool: &str) {
@@ -14,6 +14,7 @@ fn runners_of_installed_project_tools_run_in_the_workspace_sandbox() {
     install_tool(&ws, "vitest");
     std::fs::create_dir_all(ws.join("app")).unwrap();
     install_tool(&ws.join("app"), "tsc");
+    std::fs::create_dir_all(ws.join("nested/deep")).unwrap();
     for command in [
         "bun x vite build",
         "bun x vite build 2>&1 | tail -20",
@@ -36,11 +37,20 @@ fn runners_of_installed_project_tools_run_in_the_workspace_sandbox() {
         "npx -- vite build",
         "npx --offline -- vite build",
         "cd app && npx tsc --noEmit",
+        // A workspace that hoists its dependencies to the root installs
+        // nothing under the package a run steps into, and the runner finds
+        // the root's binary from there, so the sandbox follows it up.
+        "cd app && npx vite build",
+        "cd nested/deep && npx vitest run",
+        "cd app && bunx vite build",
+        "cd app && npm exec vitest run",
     ] {
         let got = reason("omp", command, &ws, true);
-        // macOS claims some of these with narrower node profiles first.
+        // A host that runs Guard's sink claims some of these with the narrower
+        // profile of the tool the runner starts, before the general workspace
+        // one; either way the run never reaches the user as a review.
         if cfg!(target_os = "linux") && host() {
-            assert_eq!(got, CONTAINED, "{command}");
+            assert!(claimed(&got, command), "{command}: {got}");
         }
     }
 }
@@ -49,6 +59,8 @@ fn runners_of_installed_project_tools_run_in_the_workspace_sandbox() {
 fn runners_that_could_fetch_a_package_keep_their_review() {
     let ws = workspace("runner-fetch", true);
     install_tool(&ws, "vite");
+    std::fs::create_dir_all(ws.join("app")).unwrap();
+    std::fs::create_dir_all(ws.join("nested/deep")).unwrap();
     for command in [
         "npx cowsay hi",
         "bun x vite@5.0.0 build",
@@ -65,7 +77,10 @@ fn runners_that_could_fetch_a_package_keep_their_review() {
         "npx -- cowsay hi",
         "npx ./node_modules/.bin/vite build",
         "bun x vite build && npx cowsay hi",
-        "cd app && npx vite build",
+        // A tool no directory the runner reads has installed is still one it
+        // would fetch.
+        "cd app && npx cowsay hi",
+        "cd nested/deep && npx serve .",
         "bun add left-pad",
         "bun install left-pad",
         // A manager's own local verb beside a runner proves nothing about

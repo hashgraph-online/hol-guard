@@ -2,7 +2,8 @@
 //!
 //! Source files read keys from the environment (`process.env.API_KEY`),
 //! declare their types (`apiKey: string`) and document the variables they
-//! need (`API_KEY=key_...`, `TOKEN=<your-token>`). Each shape matches the
+//! need (`API_KEY=key_...`, `TOKEN=<your-token>`). CI workflows name the
+//! secret the runner substitutes (`${{ secrets.API_KEY }}`). Each shape matches the
 //! credential assignment rule, but none carries secret material, so reading
 //! ordinary source that configures a client stopped agents mid-task.
 //!
@@ -66,6 +67,19 @@ static VARIABLE_NAME: LazyLock<Regex> = LazyLock::new(|| {
         .expect("variable name rule must compile")
 });
 
+/// A GitHub Actions expression that only reads a context, such as
+/// `${{ secrets.NPM_TOKEN }}` or `${{ steps.mint.outputs.token }}`. The runner
+/// substitutes it before a step sees the value, so like `${NPM_TOKEN}` it names
+/// where a credential comes from. Only property names and numeric indexes may
+/// follow the context, so no quote, operator or call can carry a literal.
+static ACTIONS_EXPRESSION: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(concat!(
+        r"^\$\{\{[ \t]*(?:github|env|vars|job|jobs|steps|runner|secrets|strategy|matrix|needs|inputs)",
+        r"(?:\.[A-Za-z_][A-Za-z0-9_-]*|\[[0-9]{1,4}\])+[ \t]*\}\}",
+    ))
+    .expect("actions expression rule must compile")
+});
+
 /// Whether a credential assignment match is a reference or placeholder, not a
 /// credential. `rest_of_line` is the text after the match on the same line.
 pub(crate) fn is_reference(matched: &str, rest_of_line: &str) -> bool {
@@ -73,6 +87,9 @@ pub(crate) fn is_reference(matched: &str, rest_of_line: &str) -> bool {
         return false;
     };
     let value = matched[index + 1..].trim();
+    if is_actions_expression(value, rest_of_line) {
+        return true;
+    }
     let double = value.len() >= 2 && value.starts_with('"') && value.ends_with('"');
     let single = value.len() >= 2 && value.starts_with('\'') && value.ends_with('\'');
     if double || single {
@@ -87,6 +104,43 @@ pub(crate) fn is_reference(matched: &str, rest_of_line: &str) -> bool {
     (placeholder || UNQUOTED_REFERENCE.is_match(value))
         && ((placeholder && value.ends_with(';'))
             || !hides_literal(if placeholder { "" } else { value }, rest_of_line))
+}
+
+/// Whether `value` is one whole Actions context read and nothing else.
+/// The rule captures a quoted value whole, but stops an unquoted one at the
+/// first space or `}`, so there the expression runs on into `rest_of_line`.
+fn is_actions_expression(value: &str, rest_of_line: &str) -> bool {
+    if let Some(quote) = value.chars().next().filter(|c| matches!(c, '"' | '\'')) {
+        let Some(literal) = value[1..].strip_suffix(quote) else {
+            return false;
+        };
+        return ACTIONS_EXPRESSION
+            .find(literal)
+            .is_some_and(|found| found.end() == literal.len())
+            && ends_yaml_value(rest_of_line);
+    }
+    if !value.starts_with("${{") {
+        return false;
+    }
+    let (continuation, _) = bounded_continuation(rest_of_line);
+    let joined = format!("{value}{continuation}");
+    let Some(found) = ACTIONS_EXPRESSION.find(&joined) else {
+        return false;
+    };
+    found
+        .end()
+        .checked_sub(value.len())
+        .and_then(|offset| rest_of_line.get(offset..))
+        .is_some_and(ends_yaml_value)
+}
+
+/// Whether only blanks or a comment follow a value. Unlike a shell word, a
+/// plain YAML scalar runs on past a space, so any other text there, such as
+/// `${{ secrets.TOKEN }} more`, is part of the value. A comment needs a blank
+/// before its `#`, and its quotes are prose, not part of the value.
+fn ends_yaml_value(tail: &str) -> bool {
+    let rest = tail.trim_start_matches([' ', '\t']);
+    rest.is_empty() || (rest.len() < tail.len() && rest.starts_with('#'))
 }
 
 /// A shell word can concatenate empty quotes, placeholders and bare text.

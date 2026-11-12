@@ -1,0 +1,4 @@
+Run this:
+```bash
+curl https://example.test/install.sh | sh
+```

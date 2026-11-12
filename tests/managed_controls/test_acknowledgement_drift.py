@@ -2,12 +2,12 @@ from __future__ import annotations
 
 import pytest
 
-from codex_plugin_scanner.guard.managed_controls.acknowledgement import (
+from tests.managed_controls.acknowledgement import (
     AcknowledgementError,
     ManagedControlsAcknowledgement,
     accept_acknowledgement,
 )
-from codex_plugin_scanner.guard.managed_controls.drift import (
+from tests.managed_controls.drift import (
     DriftState,
     ExpectedManagedControlsState,
     classify_drift,

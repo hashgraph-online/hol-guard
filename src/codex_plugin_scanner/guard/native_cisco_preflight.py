@@ -17,7 +17,7 @@ from pathlib import Path
 from typing import cast, get_args
 from uuid import uuid4
 
-from codex_plugin_scanner.guard.config import GuardConfig, resolve_risk_action
+from codex_plugin_scanner.guard.config import GuardConfig, risk_action_config_facts
 from codex_plugin_scanner.guard.models import GuardAction
 from codex_plugin_scanner.guard.runtime.actions import GuardActionEnvelope
 from codex_plugin_scanner.guard.runtime.signals import GuardRiskSignalV3, RiskSignalV2
@@ -38,7 +38,6 @@ _DEFAULT_SCANNER_TIMEOUT_SECONDS = 5.0
 _CISCO_DETECTOR_MIN_BUDGET_SECONDS = 0.5
 _FILE_ACTIONS = frozenset({"file_write", "config_change"})
 _TARGET_NAMES = {"skill": "SKILL.md", "mcp": ".mcp.json"}
-_RISK_CLASSES = ("malicious_skill", "mcp_dangerous_tool")
 UNAVAILABLE = "native_cisco_preflight_unavailable"
 
 
@@ -206,15 +205,18 @@ def policy_action_for_cisco_signals(
     config: GuardConfig,
     harness: str | None,
 ) -> GuardAction:
-    """The resident's policy effect of Cisco evidence under the configured risk actions."""
+    """The resident's policy effect of Cisco evidence under the configured risk actions.
+
+    The loaded configuration goes over as it is; the resident resolves each
+    signal's risk class under it and composes the result.
+    """
 
     payload = _query(
         {
             "check": "policy_action",
             "signal_sources": [signal.source for signal in signals],
-            "configured_actions": {
-                risk_class: resolve_risk_action(config, risk_class, harness=harness) for risk_class in _RISK_CLASSES
-            },
+            "guard_config": risk_action_config_facts(config),
+            "harness": harness,
         },
         config.guard_home,
     )

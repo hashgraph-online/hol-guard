@@ -124,6 +124,25 @@ fn portable_identity(
         Value::Object(map) => {
             let mut normalized = crate::hook_adapter_value::OMap::new();
             for (key, item) in map {
+                // An `env` shebang records the PATH it searched. The resolved
+                // interpreter's path and digest already pin the result, so the
+                // raw PATH digest is left out, as in `executable_material`.
+                if key == "search_path_sha256" {
+                    continue;
+                }
+                // Inode numbers, device ids and the two timestamps say where a
+                // file sits on this host and when it was last written, not what
+                // it will run. `sha256`, `size`, `mode` and the resolved path
+                // already pin that. Keeping them would retire a saved package
+                // approval every time a reinstall, a corepack refresh or any
+                // other atomic rewrite put the same bytes back under a new
+                // inode, which is what made package approvals look unsaveable.
+                if matches!(
+                    key.as_str(),
+                    "change_time_ns" | "device" | "inode" | "modified_time_ns"
+                ) {
+                    continue;
+                }
                 let tracked = matches!(key.as_str(), "path" | "launch_cwd" | "command");
                 if let (true, Value::String(raw)) = (tracked, item) {
                     let replacement = if PyPath::new(raw).is_absolute() {
@@ -198,9 +217,18 @@ pub(super) fn executable_material(
     };
     let location = canonical_location(&candidate, input.workspace, input.repository_root);
     let search_path = input.environment.get("PATH").map(String::as_str);
+    // Reporting-only options are dropped before the argv is digested. `-q`
+    // changes nothing about which bytes the manager installs, so an approval
+    // saved for the quiet spelling has to cover the loud one and the other way
+    // round. Only the binding sees the stripped form; the review card still
+    // carries the command exactly as it was typed.
+    let bound_arguments = crate::package_manager_command::strip_manager_presentation_arguments(
+        manager,
+        input.arguments,
+    );
     let identity = ports.launch_identity(
         requested,
-        input.arguments,
+        &bound_arguments,
         search_path,
         input.workspace,
         input.environment,
@@ -217,6 +245,10 @@ pub(super) fn executable_material(
             Some(LAUNCH_UNAVAILABLE),
         ));
     }
+    // PATH itself is not bound. `location` and `content_digest` already pin the
+    // binary a bare name resolved to, so a different executable earlier in PATH
+    // still changes this material, while an unrelated directory added to PATH
+    // (agent shims, version managers) leaves a saved approval valid.
     let mut material = vec![
         ("content_digest", text(&content_digest)),
         (
@@ -227,10 +259,6 @@ pub(super) fn executable_material(
         ("manager", text(manager)),
         ("requested", text(&path_name(requested))),
     ];
-    if !(requested.contains('/') || requested.contains('\\')) {
-        let digest = ports.opaque_digest(search_path.unwrap_or(""));
-        material.push(("search_path_digest", text(&digest)));
-    }
     if !ports.launch_identity_reusable(&identity) {
         material.push(("status", text(LAUNCH_UNAVAILABLE)));
         return Ok((object(material), Some(LAUNCH_UNAVAILABLE)));

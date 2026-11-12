@@ -374,5 +374,7 @@ def test_native_pretool_keeps_ordinary_safe_command_prompt_free(
     )
 
     assert result == 0
-    assert capsys.readouterr().out == ""
+    output = json.loads(capsys.readouterr().out)
+    assert output["hookSpecificOutput"]["permissionDecision"] == "allow"
+    assert output["continue"] is True
     assert GuardStore(home_dir).list_approval_requests(limit=10) == []

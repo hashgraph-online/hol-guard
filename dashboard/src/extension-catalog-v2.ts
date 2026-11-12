@@ -4,7 +4,9 @@
  * The daemon's native read model owns filtering, paging, cursors and ETags.
  * This module issues requests, revalidates cached pages, verifies that every
  * multi-page traversal is complete and consistent, and falls back to the v1
- * catalog only when the daemon reports that v2 is absent. Catalog metadata is
+ * catalog when the daemon reports that v2 is absent or that it cannot prepare a
+ * verified catalog, so the page always has extensions to render and policies to
+ * edit. Catalog metadata is
  * never protection authority: effective state always comes from
  * /v1/extension-controls/effective.
  */
@@ -47,6 +49,16 @@ const UNAVAILABLE_RETRY_DELAYS_MS = [250, 500, 1_000, 2_000, 4_000, 4_000];
 // behind a legacy read. The daemon logs the cause to its daemon.log.
 export const CATALOG_PREPARATION_FAILED = "catalog_read_preparation_failed";
 
+/**
+ * Why the page is reading the legacy catalog instead of the v2 read model.
+ *
+ * Absent means nothing is wrong. The one value that exists today is the
+ * daemon's own failure to prepare a verified catalog: the extensions, their
+ * permissions and every policy edit still work from the legacy read, so the
+ * page says so in a notice and stays usable rather than becoming a dead end.
+ */
+export type CatalogDegradedReason = typeof CATALOG_PREPARATION_FAILED;
+
 export class CatalogV2UnsupportedError extends ExtensionControlApiError {}
 
 export type CatalogPermissionHit = { extension: ExtensionCatalogSummary; permission: ExtensionPermission };
@@ -62,6 +74,8 @@ export type CatalogReadModel = {
   searchPermissions(query: string, signal?: AbortSignal): Promise<CatalogPermissionHit[]>;
   /** Present when every permission is already in memory (legacy catalog). */
   localSearch?(query: string): CatalogPermissionHit[];
+  /** Set when this model stands in for a v2 read model the daemon could not serve. */
+  readonly degraded?: CatalogDegradedReason;
 };
 
 type Page = { snapshot_id: string; digest: string; total: number; items: Record<string, unknown>[]; next: string | null };
@@ -322,7 +336,10 @@ async function loadV2(): Promise<CatalogReadModel> {
 }
 
 /** A read model over a complete legacy catalog (v1 fallback). */
-export function catalogReadModelFromCatalog(catalog: ExtensionCatalogResponse): CatalogReadModel {
+export function catalogReadModelFromCatalog(
+  catalog: ExtensionCatalogResponse,
+  degraded?: CatalogDegradedReason,
+): CatalogReadModel {
   const byId = new Map(catalog.extensions.map((item) => [item.extension_id, item]));
   const localSearch = (query: string): CatalogPermissionHit[] => {
     // Same fields and term rule as the daemon's permissions?q= route.
@@ -340,6 +357,7 @@ export function catalogReadModelFromCatalog(catalog: ExtensionCatalogResponse): 
   };
   return {
     protocol: "v1",
+    ...(degraded ? { degraded } : {}),
     catalog_digest: catalog.catalog_digest,
     extensions: sortedByName(catalog.extensions),
     detail(extensionId) {
@@ -351,12 +369,30 @@ export function catalogReadModelFromCatalog(catalog: ExtensionCatalogResponse): 
   };
 }
 
-/** Read the catalog index, falling back to the legacy catalog only when v2 is absent. */
+/**
+ * Read the catalog index, falling back to the legacy catalog when the v2 read
+ * model is absent or the daemon cannot prepare one.
+ *
+ * A daemon that cannot prepare its verified catalog used to leave the page with
+ * nothing to render and nothing the reader could do, because waiting does not
+ * clear that failure. The legacy catalog is served from the registry the daemon
+ * already holds in memory and does not depend on preparation, so it still lists
+ * every extension and still accepts policy edits. Falling back to it keeps the
+ * page working and carries the reason forward as a notice; only a legacy read
+ * that fails too leaves the original preparation failure for the page to show.
+ */
 export async function loadCatalogReadModel(): Promise<CatalogReadModel> {
   try {
     return await loadV2();
   } catch (error) {
     if (error instanceof CatalogV2UnsupportedError) return catalogReadModelFromCatalog(await fetchExtensionCatalog());
+    if (error instanceof ExtensionControlApiError && error.code === CATALOG_PREPARATION_FAILED) {
+      try {
+        return catalogReadModelFromCatalog(await fetchExtensionCatalog(), CATALOG_PREPARATION_FAILED);
+      } catch {
+        throw error;
+      }
+    }
     throw error;
   }
 }

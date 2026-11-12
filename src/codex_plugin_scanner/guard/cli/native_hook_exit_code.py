@@ -10,14 +10,19 @@ Every verdict-bearing emit path, including structured JSON responses, uses
 - grok/zcode: preserve the adapter's event-aware or recording-mode contract.
 
 Missing event context never assumes that the host will consume an envelope.
+An action this build does not recognise is normalized to the review tier before
+any exit code is chosen, so a newer or malformed producer value can never leave
+the process on the allow path.
 """
 
 from __future__ import annotations
 
+from ..action_lattice import normalize_guard_action
+
 _BLOCKING_ACTIONS = frozenset({"review", "require-reapproval", "sandbox-required", "block"})
 _RC_BLOCK_IS_ONE = frozenset({"opencode", "superagent"})
 _RC_BLOCK_IS_TWO = frozenset({"cursor", "devin", "kimi", "hermes"})
-_RC_BLOCK_IS_ZERO_ENVELOPE = frozenset({"codex", "claude-code", "copilot", "pi", "omp"})
+_RC_BLOCK_IS_ZERO_ENVELOPE = frozenset({"codex", "claude-code", "copilot", "pi", "omp", "muse"})
 _PREEMPTIVE_EVENTS = frozenset({"PreToolUse", "UserPromptSubmit", "PermissionRequest"})
 
 
@@ -32,8 +37,13 @@ def native_hook_verdict_exit_code(
     ``"review"``, ``"require-reapproval"``, ``"sandbox-required"``, …), not the
     wire ``decision`` string.  Callers pass ``"block"`` for the unavailable /
     fail-closed deny and the adapter's own contract decides the rc.
+
+    An action outside the canonical lattice is not evidence of permission, so
+    it is normalized to the review tier rather than falling through to the
+    non-blocking exit code.
     """
 
+    policy_action = normalize_guard_action(policy_action)
     blocking = policy_action in _BLOCKING_ACTIONS
     if harness == "grok":
         from ..adapters.grok_hooks import grok_hook_process_exit

@@ -11,7 +11,6 @@ resident is unreachable or returns nothing, ``parse_package_intent`` returns
 from __future__ import annotations
 
 from collections.abc import Mapping
-from functools import partial
 from pathlib import Path
 
 from .command_model import CanonicalCommand
@@ -22,7 +21,6 @@ from .package_intent_common import (
     PackageIntent,
     PackageIntentTarget,
 )
-from .secret_file_requests import _SHELL_TOOL_NAMES, _candidate_command_texts, _normalize_tool_name
 
 __all__ = [
     "IntentKind",
@@ -125,6 +123,11 @@ def extract_package_intent_request(
 ) -> PackageIntent | None:
     """Parse the call's commands for package intent.
 
+    The resident reads a shell tool's arguments for command texts and parses
+    each until one names a package intent, then falls back to the action
+    envelope's command, all in one request. ``None`` is its "no intent" answer
+    or an unreachable resident; there is no Python parse to fall back to.
+
     ``environment`` is the environment the commands are resolved in, for a
     caller parsing on behalf of another process: the relay evidence drain runs
     in the daemon and parses a proxy's call, and the manager a command names
@@ -132,19 +135,19 @@ def extract_package_intent_request(
     passes none, and the resident binds the ambient one.
     """
 
-    normalized_tool_name = _normalize_tool_name(tool_name)
-    parse = partial(
-        parse_package_intent,
-        workspace=workspace,
-        home_dir=home_dir,
-        guard_home=guard_home,
-        environment=environment,
-    )
-    if normalized_tool_name in _SHELL_TOOL_NAMES:
-        for command_text in _candidate_command_texts(arguments):
-            intent = parse(command_text)
-            if intent is not None:
-                return intent
-    if action_envelope_command:
-        return parse(action_envelope_command)
-    return None
+    try:
+        from ..config import resolve_guard_home
+        from ..native_package_authority import package_intent_extract_native
+
+        intent = package_intent_extract_native(
+            tool_name,
+            arguments,
+            action_envelope_command=action_envelope_command,
+            workspace=workspace,
+            home_dir=home_dir,
+            environment=environment,
+            guard_home=guard_home if guard_home is not None else resolve_guard_home(),
+        )
+    except Exception:
+        return None
+    return intent if isinstance(intent, PackageIntent) else None

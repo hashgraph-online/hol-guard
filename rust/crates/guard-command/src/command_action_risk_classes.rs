@@ -1,12 +1,9 @@
-//! `risk_classes_for_command_action` and the merged action-class risk table
-//! (`command_extensions.py:32`, `command_action_risk_metadata.py`).
+//! `risk_classes_for_command_action` and the merged action-class risk table.
+//!
+//! This is the only copy; the Python table it was ported from is gone.
 
-/// `risk_classes_for_command_action` (command_extensions.py:32):
-/// `COMMAND_ACTION_RISK_CLASSES.get(action_class.strip().lower(), ())`.
-///
-/// The table is `_BASE_COMMAND_ACTION_RISK_CLASSES` +
-/// `BLITCP_ACTION_RISK_CLASSES` + `GITHUB_ACTION_RISK_CLASSES` +
-/// `OLLAMA_ACTION_RISK_CLASSES` (command_action_risk_metadata.py:12-112).
+/// The risk classes an action-class label carries, matched on the trimmed and
+/// lowercased label, empty for a label the table does not name.
 pub fn risk_classes_for_command_action(action_class: &str) -> &'static [&'static str] {
     let key = action_class.trim().to_lowercase();
     for (k, v) in COMMAND_ACTION_RISK_CLASSES {
@@ -18,7 +15,7 @@ pub fn risk_classes_for_command_action(action_class: &str) -> &'static [&'static
 }
 
 /// `COMMAND_ACTION_RISK_CLASSES` — the merged table. Ordered; linear scan is
-/// fine (84 entries, called once per composition).
+/// fine (80 entries, called once per composition).
 pub static COMMAND_ACTION_RISK_CLASSES: &[(&str, &[&str])] = &[
     ("local secret read shell command", &["local_secret_read"]),
     ("local script execution shell command", &["execution"]),

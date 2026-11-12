@@ -23,10 +23,7 @@ from codex_plugin_scanner.guard.extension_builder.listing import (
 )
 from codex_plugin_scanner.guard.runtime.extension_contribution import validate_contribution
 from codex_plugin_scanner.guard.runtime.extension_directory_operations import public_operations
-from codex_plugin_scanner.guard.runtime.mcp_server_contribution import (
-    catalog_id_for_mcp_id,
-    validate_mcp_contribution,
-)
+from codex_plugin_scanner.guard.runtime.mcp_server_contribution import validate_mcp_contribution
 
 ROOT = Path(__file__).resolve().parents[1]
 OUTPUT_V1 = ROOT / "docs/guard/extensions/catalog.v1.json"
@@ -58,6 +55,10 @@ def native_extensions():
     if compiled.get("catalog_projection_kind") != "complete":
         raise ValueError("Public directory requires a complete native source projection")
     return tuple(_extension(entry) for entry in compiled["catalog"])
+
+
+def catalog_id_for_mcp_id(mcp_id: str) -> str:
+    return f"command.mcp-{mcp_id.removeprefix('mcp.')}"
 
 
 def _sources(root: Path) -> dict[str, tuple[str, dict[str, object], str]]:

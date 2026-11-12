@@ -10,8 +10,8 @@ from types import SimpleNamespace
 
 import pytest
 
-from codex_plugin_scanner.guard.daemon.hook_policy_admission import _native_policy_not_ready_reason
-from codex_plugin_scanner.guard.daemon.hook_worker_readiness import prepare_workspace_policy
+from codex_plugin_scanner.guard.hook_review.hook_policy_admission import _native_policy_not_ready_reason
+from codex_plugin_scanner.guard.hook_review.hook_worker_readiness import prepare_workspace_policy
 from codex_plugin_scanner.guard.native_policy_snapshot import NativePolicySnapshotPublisher
 from codex_plugin_scanner.guard.native_policy_snapshot_resident_recovery import (
     RESIDENT_FAIL_FAST_STREAK,
@@ -259,7 +259,7 @@ def _publisher_with_flaky_resident(
             return _TIMED_OUT
         payload = kwargs["payload"]
         assert isinstance(payload, bytes)
-        return _ack(payload)
+        return _ack(payload, guard_home=kwargs.get("guard_home"))
 
     publisher = NativePolicySnapshotPublisher(
         store=store,
@@ -345,7 +345,7 @@ class _StuckPublisher:
 
 
 def test_closed_publisher_does_not_spin_during_hook_readiness() -> None:
-    from codex_plugin_scanner.guard.daemon.hook_worker_readiness import _wait_nudging_publisher
+    from codex_plugin_scanner.guard.hook_review.hook_worker_readiness import _wait_nudging_publisher
 
     class Retired:
         closed = True
@@ -369,7 +369,7 @@ def test_closed_publisher_does_not_spin_during_hook_readiness() -> None:
 
 
 def test_publisher_retired_while_waiting_stops_without_busy_spin() -> None:
-    from codex_plugin_scanner.guard.daemon.hook_worker_readiness import _wait_nudging_publisher
+    from codex_plugin_scanner.guard.hook_review.hook_worker_readiness import _wait_nudging_publisher
 
     class Retiring:
         closed = False

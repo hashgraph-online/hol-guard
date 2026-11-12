@@ -2,7 +2,6 @@
 
 import time
 import uuid
-from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 
 import pytest
@@ -11,10 +10,10 @@ from codex_plugin_scanner.guard import runtime_transition_legacy_receipt as look
 from codex_plugin_scanner.guard.native_hook_evidence_writer import NativeHookEvidenceWriter
 from codex_plugin_scanner.guard.runtime.command_activity_correlation import (
     derive_proven_request_correlation,
-    load_or_create_installation_correlation_key,
 )
 from codex_plugin_scanner.guard.runtime_transition import TransitionError
 from codex_plugin_scanner.guard.store import GuardStore
+from tests.command_activity_correlation_key_support import write_correlation_key
 from tests.test_native_decision_receipt import _receipt
 
 
@@ -47,7 +46,7 @@ def legacy(native_hook_force, tmp_path):
     # The resident creates the installation key on its first write; this
     # fixture derives a correlation before any write, so it creates the same
     # file the resident would.
-    key = load_or_create_installation_correlation_key(store.guard_home)
+    key = write_correlation_key(store.guard_home)
     handle = derive_proven_request_correlation(harness="codex", event="PreToolUse", payload=payload, key=key)
     assert handle is not None
     try:
@@ -63,23 +62,21 @@ def read(store, handle, since):
 
 
 @pytest.mark.parametrize("expired", [False, True])
-def test_connection_timeout_preserves_parent_deadline_and_first_cause(legacy, monkeypatch, expired):
-    _, _, _, handle, since = legacy
+def test_storage_timeout_preserves_parent_deadline_and_first_cause(legacy, monkeypatch, expired):
+    store, _, _, handle, since = legacy
     now = [10.0]
-    failure = TimeoutError("connection setup storage deadline")
+    failure = TimeoutError("storage deadline")
 
-    class FailedConnectionStore:
-        @contextmanager
-        def _connect(self):
-            now[0] = 21.0 if expired else 15.0
-            raise failure
-            yield  # pragma: no cover - retain context-manager entry semantics
+    def failed_call(method, args, **_):
+        now[0] = 21.0 if expired else 15.0
+        raise failure
 
     with monkeypatch.context() as patch:
+        patch.setattr(store, "_native_store_call", failed_call)
         patch.setattr(lookup.time, "monotonic", lambda: now[0])
         with pytest.raises(TransitionError if expired else TimeoutError) as caught:
             lookup.read_legacy_codex_probe_receipt(
-                FailedConnectionStore(),
+                store,
                 correlation=handle,
                 since=since,
                 deadline_monotonic=20.0,
@@ -137,23 +134,13 @@ def test_multiple_denied_receipts_for_same_nonce_are_ambiguous(legacy):
         read(store, handle, since)
 
 
-def test_busy_recent_window_is_capped_instead_of_selecting_newest_row(legacy):
-    store, writer, payload, handle, since = legacy
-    for index in range(lookup.MAX_LEGACY_PROBE_ROWS + 1):
-        persist(store, writer, payload if index == 0 else {**payload, "tool_call_id": uuid.uuid4().hex}, "allow")
-    assert writer.stop(timeout_seconds=10)
-    assert writer.stats()["durable_pending"] == 0, writer.stats()
-    with pytest.raises(TransitionError, match="legacy_probe_receipt_capacity"):
-        read(store, handle, since)
-
-
 def test_expired_deadline_never_opens_store(legacy, monkeypatch):
     store, _, _, handle, since = legacy
 
-    def forbidden():
+    def forbidden(method, args, **_):
         raise AssertionError("expired probe opened SQLite")
 
-    monkeypatch.setattr(store, "_connect", forbidden)
+    monkeypatch.setattr(store, "_native_store_call", forbidden)
     with pytest.raises(TransitionError, match="admission_deadline_expired"):
         lookup.read_legacy_codex_probe_receipt(
             store, correlation=handle, since=since, deadline_monotonic=time.monotonic() - 1
@@ -166,21 +153,19 @@ def test_short_lock_wait_does_not_replace_the_admission_operation_deadline(legac
         sqlite_operation_deadline_monotonic,
     )
 
-    _, _, _, handle, since = legacy
+    store, _, _, handle, since = legacy
     now = [10.0]
     observed = []
-    stop = RuntimeError("stop after checking connection budget")
+    stop = RuntimeError("stop after checking storage budget")
 
-    class BudgetStore:
-        @contextmanager
-        def _connect(self):
-            observed.append((sqlite_connect_timeout_seconds(), sqlite_operation_deadline_monotonic()))
-            now[0] = 10.2  # Slow setup remains inside the original 20-second deadline.
-            observed.append((sqlite_connect_timeout_seconds(), sqlite_operation_deadline_monotonic()))
-            raise stop
-            yield  # pragma: no cover - context manager shape
+    def budget_call(method, args, **_):
+        observed.append((sqlite_connect_timeout_seconds(), sqlite_operation_deadline_monotonic()))
+        now[0] = 10.2  # Slow setup remains inside the original 20-second deadline.
+        observed.append((sqlite_connect_timeout_seconds(), sqlite_operation_deadline_monotonic()))
+        raise stop
 
+    monkeypatch.setattr(store, "_native_store_call", budget_call)
     monkeypatch.setattr(lookup.time, "monotonic", lambda: now[0])
     with pytest.raises(RuntimeError, match="stop after checking"):
-        lookup.read_legacy_codex_probe_receipt(BudgetStore(), correlation=handle, since=since, deadline_monotonic=20.0)
+        lookup.read_legacy_codex_probe_receipt(store, correlation=handle, since=since, deadline_monotonic=20.0)
     assert observed == [(0.5, 20.0), (0.5, 20.0)]

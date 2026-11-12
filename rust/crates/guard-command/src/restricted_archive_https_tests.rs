@@ -313,3 +313,51 @@ fn managed_registry_redirect_is_refused_before_second_dns_or_tls() {
     assert_eq!(server.join().unwrap().len(), 1);
     assert_eq!(dns.0.load(std::sync::atomic::Ordering::SeqCst), 1);
 }
+
+#[test]
+fn cancellable_https_stops_during_headers_and_body_before_the_full_deadline() {
+    use std::sync::atomic::{AtomicBool, Ordering};
+    let _test_lock = crate::restricted_archive::ARCHIVE_TEST_LOCK.lock().unwrap();
+    for body_delay in [false, true] {
+        let (port, root, server) = delayed_server(
+            "packages.example.com",
+            vec![b"HTTP/1.1 200 OK\r\nContent-Length: 1\r\nConnection: close\r\n\r\na".to_vec()],
+            Duration::from_secs(2),
+            body_delay,
+        );
+        let destination = crate::restricted_archive::canonical_destination(&format!(
+            "https://packages.example.com:{port}/pinned.whl"
+        ))
+        .unwrap();
+        let cancel = Arc::new(AtomicBool::new(false));
+        let signal = Arc::clone(&cancel);
+        let thread = std::thread::spawn(move || {
+            std::thread::sleep(Duration::from_millis(200));
+            signal.store(true, Ordering::Release);
+        });
+        let started = Instant::now();
+        let roots =
+            ureq::tls::RootCerts::new_with_certs(&[
+                ureq::tls::Certificate::from_der(&root).to_owned()
+            ]);
+        let result = open_pinned(
+            &destination,
+            "127.0.0.1",
+            Instant::now() + Duration::from_secs(10),
+            Some(roots),
+            Some(cancel),
+        )
+        .and_then(|mut response| response.read(32));
+        assert_eq!(
+            result.unwrap_err().code,
+            "external_archive_cancelled",
+            "body_delay={body_delay}"
+        );
+        assert!(
+            started.elapsed() < Duration::from_secs(1),
+            "body_delay={body_delay}"
+        );
+        thread.join().unwrap();
+        assert_eq!(server.join().unwrap().len(), 1);
+    }
+}

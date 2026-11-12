@@ -22,7 +22,7 @@ def write_minimal_plugin(plugin_dir: Path) -> None:
                 "name": "trust-demo",
                 "version": "1.0.0",
                 "description": "Trust scoring demo plugin",
-                "author": {"name": "Hashgraph Online"},
+                "author": {"name": "HOL"},
                 "homepage": "https://example.com/plugin",
                 "repository": "https://github.com/hashgraph-online/hol-guard",
             }
@@ -101,7 +101,7 @@ def test_invalid_skill_frontmatter_reduces_manifest_integrity(tmp_path: Path):
                 "version": "1.0.0",
                 "description": "Trust scoring demo plugin",
                 "skills": "skills",
-                "author": {"name": "Hashgraph Online"},
+                "author": {"name": "HOL"},
                 "homepage": "https://example.com/plugin",
                 "repository": "https://github.com/hashgraph-online/hol-guard",
                 "interface": {"category": "developer-tools"},
@@ -216,7 +216,7 @@ def test_declared_invalid_interface_keeps_interface_integrity_applicable(tmp_pat
                 "version": "1.0.0",
                 "description": "Trust scoring demo plugin",
                 "interface": "invalid",
-                "author": {"name": "Hashgraph Online"},
+                "author": {"name": "HOL"},
                 "homepage": "https://example.com/plugin",
                 "repository": "https://github.com/hashgraph-online/hol-guard",
             }
@@ -258,7 +258,7 @@ def test_unsafe_skill_path_does_not_emit_skill_trust_domain(tmp_path: Path):
                 "version": "1.0.0",
                 "description": "Trust scoring demo plugin",
                 "skills": "../shared-skills",
-                "author": {"name": "Hashgraph Online"},
+                "author": {"name": "HOL"},
                 "homepage": "https://example.com/plugin",
                 "repository": "https://github.com/hashgraph-online/hol-guard",
             }

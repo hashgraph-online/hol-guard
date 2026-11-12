@@ -9,11 +9,10 @@ use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 
 use crate::daemon_lifecycle_facts::{as_int, Ctx};
+use crate::daemon_lifecycle_ports::post_update_start_timeout;
 
 const RESERVATION_SECONDS: f64 = 30.0;
 const EPHEMERAL_STALE_SECONDS: f64 = 30.0;
-const POST_UPDATE_START_TIMEOUT_SECONDS: f64 = 30.0;
-const START_TIMEOUT_MARGIN_SECONDS: f64 = 5.0;
 
 /// A reservation whose `created_at` is a number younger than the window.
 fn reservation_is_fresh(existing: &Value, now: f64) -> bool {
@@ -114,8 +113,7 @@ fn progress_is_live(ctx: &Ctx, query: &DaemonStartProgressQueryV1) -> bool {
     let Some(recorded_at_ns) = record.get("recorded_at_ns").and_then(as_int) else {
         return false;
     };
-    let timeout = POST_UPDATE_START_TIMEOUT_SECONDS
-        .max(query.worker_ready_floor + START_TIMEOUT_MARGIN_SECONDS);
+    let timeout = post_update_start_timeout(ctx.nt, query.worker_ready_floor);
     let limit_ns = (timeout * 1_000_000_000.0) as i64;
     let age_ns = query.now_ns.saturating_sub(recorded_at_ns);
     if age_ns < 0 || age_ns >= limit_ns {

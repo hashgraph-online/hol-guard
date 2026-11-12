@@ -12,7 +12,7 @@ from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from typing_extensions import override
 
-from codex_plugin_scanner.guard.runtime.linux_artifact_lifecycle import (
+from tests.linux_artifact_lifecycle import (
     LinuxArtifactLifecycleError,
     LinuxArtifactLifecycleOperation,
     LinuxArtifactLifecycleOutcome,
@@ -23,8 +23,8 @@ from codex_plugin_scanner.guard.runtime.linux_artifact_lifecycle import (
     repair_linux_artifact,
     upgrade_linux_artifact,
 )
-from codex_plugin_scanner.guard.runtime.linux_artifact_ownership import LinuxArtifactMetadata
-from codex_plugin_scanner.guard.runtime.linux_artifact_supply_chain import (
+from tests.linux_artifact_ownership import LinuxArtifactMetadata
+from tests.linux_artifact_supply_chain import (
     LinuxArtifactSupplyChainReceipt,
     create_linux_artifact_supply_chain_manifest,
     verify_linux_artifact_supply_chain,

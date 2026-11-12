@@ -27,39 +27,8 @@ pub(super) fn located(reference: &Value) -> Result<()> {
     location(&reference["location"], sha, "object")
 }
 pub(super) fn location(value: &Value, sha: &str, kind: &str) -> Result<()> {
-    use regex::Regex;
-    use std::sync::OnceLock;
-    static TAG: OnceLock<Regex> = OnceLock::new();
-    static CONTAINER: OnceLock<Regex> = OnceLock::new();
-    let tag = TAG.get_or_init(|| {
-        Regex::new(r"^extension-data-[0-9a-f]{40}-[0-9]{1,20}\.[0-9]{1,10}-[0-9]{6}$").unwrap()
-    });
-    let container =
-        CONTAINER.get_or_init(|| Regex::new(r"^(objects|packs)-[0-9]{6}\.zip$").unwrap());
-    let map = value.as_object().ok_or_else(invalid)?;
-    let expected = format!(
-        "{kind}-{sha}.{}",
-        if kind == "object" { "json" } else { "zip" }
-    );
-    if !tag.is_match(value["tag"].as_str().ok_or_else(invalid)?) {
-        return Err("delivery asset location invalid".into());
-    }
-    if map.len() == 2 && map.contains_key("tag") && value["asset"] == expected {
-        return Ok(());
-    }
-    let asset = value["asset"].as_str().ok_or_else(invalid)?;
-    if map.len() != 3
-        || value["member"] != expected
-        || !container.is_match(asset)
-        || !asset.starts_with(if kind == "object" {
-            "objects-"
-        } else {
-            "packs-"
-        })
-    {
-        return Err("delivery container location invalid".into());
-    }
-    Ok(())
+    crate::pack_lifecycle::location::check(value, sha, kind)
+        .map_err(|rejection| rejection.message().into())
 }
 pub(super) fn lookup(
     directory: &Path,

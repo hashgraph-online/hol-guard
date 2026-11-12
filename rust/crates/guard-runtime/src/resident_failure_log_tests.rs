@@ -1,12 +1,8 @@
 use super::*;
 use std::fs;
-use std::time::{SystemTime, UNIX_EPOCH};
 
 fn temp_scope(label: &str) -> PathBuf {
-    let nonce = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .expect("system clock is after the Unix epoch")
-        .as_nanos();
+    let nonce = crate::unique_nanos::unique_nanos();
     let scope = std::env::temp_dir().join(format!(
         "hol-guard-resident-failure-{label}-{}-{nonce}",
         std::process::id()

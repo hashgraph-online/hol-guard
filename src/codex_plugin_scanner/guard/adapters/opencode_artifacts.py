@@ -87,23 +87,6 @@ def runtime_config_path(context: HarnessContext) -> Path:
     return context.guard_home / "opencode" / "runtime-config.json"
 
 
-def runtime_overlay(
-    *,
-    permission_rules: dict[str, object] | None = None,
-    mcp_servers: dict[str, object] | None = None,
-) -> dict[str, object]:
-    permission: dict[str, object] = {}
-    if permission_rules:
-        permission.update(permission_rules)
-    overlay: dict[str, object] = {
-        "$schema": "https://opencode.ai/config.json",
-        "permission": permission,
-    }
-    if mcp_servers:
-        overlay["mcp"] = mcp_servers
-    return overlay
-
-
 def _command_parts(server_config: dict[str, object]) -> tuple[str | None, tuple[str, ...]]:
     command_value = server_config.get("command")
     args_value = server_config.get("args")

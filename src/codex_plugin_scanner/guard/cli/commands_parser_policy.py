@@ -437,7 +437,16 @@ def _configure_guard_policy_parsers(
         help="List all supported harnesses with their protection contract",
     )
     doctor_parser.add_argument("--perf", action="store_true", help="Include detector performance timings")
-    doctor_parser.add_argument(
+    # --native is read only and --repair changes local state, so the pair is
+    # refused here. Accepting it would run the lifecycle gate's repairs, which
+    # can revive a resident, before the read-only report the user asked for.
+    doctor_scope = doctor_parser.add_mutually_exclusive_group()
+    doctor_scope.add_argument(
+        "--native",
+        action="store_true",
+        help="Report only the native runtime: availability, a resident already running, and this process's counters",
+    )
+    doctor_scope.add_argument(
         "--repair",
         "--fix",
         action="store_true",

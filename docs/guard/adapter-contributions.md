@@ -25,7 +25,7 @@ Search [open adapter PRs](https://github.com/hashgraph-online/hol-guard/pulls?q=
 | --- | --- |
 | Public Python adapter classes and registrations | `src/codex_plugin_scanner/guard/adapters/<harness>.py` and `adapters/__init__.py` |
 | Shared adapter context and install ownership | `adapters/base.py` |
-| Static setup, event coverage, and known blind spots | `adapters/contract_registry.py`, `adapters/contracts.py`, `adapters/contract_*capabilities.py` |
+| Static setup, event coverage, and known blind spots | `guard/contracts/harness-protection-contracts.v1.json`, loaded by `adapters/contract_registry.py` and served by `adapters/contracts.py` |
 | Python helper modules grouped by harness | `adapters/_modules/<family>/` |
 | Native harness discovery | `rust/crates/guard-runtime/src/adapters/detection/<harness>_detect.rs` |
 | Native hook request handling | `rust/crates/guard-runtime/src/adapters/hook_adapter_op.rs` |
@@ -42,10 +42,10 @@ Begin with [Gemini](../../src/codex_plugin_scanner/guard/adapters/gemini.py) or 
 1. Implement a `HarnessAdapter` subclass in `src/codex_plugin_scanner/guard/adapters/<harness>.py`. Specify `harness`, executable, aliases, and `detect(context)` as appropriate. Return a `HarnessDetection` with observed paths, artifacts, and warnings; do not infer enforcement from an executable being present.
 2. Implement the bounded native discovery operation in `rust/crates/guard-runtime/src/adapters/detection/` and wire it into the resident's operation dispatch. Python calls it through `native_adapter_detection_with_warnings`, using `detection_request` to preserve home, workspace, and cwd boundaries.
 3. Add the class to `_ADAPTER_SPECS` in `adapters/__init__.py`. Use the exact import path and class name. Check that `get_adapter` resolves canonical names and aliases without collision.
-4. Add a `HarnessProtectionContract` to `adapters/contract_registry.py`: installation aliases, observed config paths, event surfaces, smoke command, and **specific** known blind spots. Declare real event capabilities in the relevant `contract_hook_capabilities.py` or `contract_agent_capabilities.py`. An aspirational hook is not a supported capability.
+4. Add a contract to `src/codex_plugin_scanner/guard/contracts/harness-protection-contracts.v1.json`: installation aliases, observed config paths, event surfaces, smoke command, and **specific** known blind spots. Declare real event capabilities in its `capability_events` list. An aspirational hook is not a supported capability.
 5. Update [harness support](harness-support.md) with tested behavior and limits. If the host has version-specific coverage, follow [version coverage](harness-version-coverage.md) rather than claiming support for untested versions.
 
-Public adapter entrypoints are stable. When relocating an internal helper, update its imports and callers, source-path references, and ownership manifests together. Files bound by authenticated manifests, including `codex_daemon_hook_resume.py`, stay at their established paths unless the complete identity and upgrade contract is migrated.
+Public adapter entrypoints are stable. When relocating an internal helper, update its imports and callers, source-path references, and ownership manifests together. Files bound by authenticated manifests, including `codex_daemon_hook_bridge.py`, stay at their established paths unless the complete identity and upgrade contract is migrated.
 
 ## 4. Implement protection safely
 
@@ -79,9 +79,9 @@ uv run --no-sync python -m ruff format --check src tests
 uv run --no-sync pytest tests/test_adapter_module_layout.py tests/test_adapter_packaged_manifest.py tests/test_guard_harness_contracts.py tests/test_guard_harness_setup.py tests/test_guard_harness_smoke.py --tb=short
 uv run --no-sync pytest tests/test_<harness>_adapter.py --tb=short
 
-cargo +1.88.0 fmt --manifest-path rust/Cargo.toml --all --check
-cargo +1.88.0 clippy --locked --manifest-path rust/Cargo.toml --workspace --all-targets -- -D warnings
-cargo +1.88.0 test --locked --manifest-path rust/Cargo.toml --workspace --all-targets
+cargo +1.89.0 fmt --manifest-path rust/Cargo.toml --all --check
+cargo +1.89.0 clippy --locked --manifest-path rust/Cargo.toml --workspace --all-targets -- -D warnings
+cargo +1.89.0 test --locked --manifest-path rust/Cargo.toml --workspace --all-targets
 ```
 
 Replace `<harness>` with the actual test module name and add event-specific tests. Test requirements and native projections are described in [CONTRIBUTING.md](../../CONTRIBUTING.md). For hook or policy behavior changes, run the [Guard Gauntlet](../../ci/gauntlet/README.md) live-agent acceptance workflow and attach verifiable benign/security-pair evidence for the final PR head. Unit tests alone do not constitute live enforcement proof.

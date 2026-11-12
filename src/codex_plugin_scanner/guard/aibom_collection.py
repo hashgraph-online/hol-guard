@@ -17,6 +17,7 @@ from .harness_tool_version import tool_version_from_detection
 from .inventory_contract import (
     GuardAgentInventorySnapshot,
 )
+from .native_context import bound_context_digest_home
 from .store import GuardStore
 
 
@@ -56,18 +57,21 @@ def collect_aibom_snapshots(
             home_dir=context.home_dir,
             workspace_dir=context.workspace_dir,
         )
-        snapshot = api.inventory_snapshot_from_detection(
-            detection,
-            generated_at=generated_at,
-            home_dir=context.home_dir,
-            workspace_dir=context.workspace_dir,
-            runtime_version=tool_version_from_detection(detection),
-            cisco_runs=cisco_runs,
-            include_symlinks=resolved.include_symlinks,
-            follow_unsafe_symlinks=resolved.follow_unsafe_symlinks,
-            trust_attestation_context=trust_attestation_context,
-            artifacts=artifacts,
-        )
+        # Redaction asks the resident of the home this inventory belongs to,
+        # not whichever home the calling thread last bound.
+        with bound_context_digest_home(getattr(context, "guard_home", None)):
+            snapshot = api.inventory_snapshot_from_detection(
+                detection,
+                generated_at=generated_at,
+                home_dir=context.home_dir,
+                workspace_dir=context.workspace_dir,
+                runtime_version=tool_version_from_detection(detection),
+                cisco_runs=cisco_runs,
+                include_symlinks=resolved.include_symlinks,
+                follow_unsafe_symlinks=resolved.follow_unsafe_symlinks,
+                trust_attestation_context=trust_attestation_context,
+                artifacts=artifacts,
+            )
         snapshots.append(snapshot)
         if primary_content_sources is not None:
             primary_content_sources.extend(

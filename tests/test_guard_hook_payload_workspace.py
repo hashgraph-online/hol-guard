@@ -8,11 +8,8 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.adapters._modules.zcode.zcode_hooks import prepare_zcode_hook_payload
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
-from codex_plugin_scanner.guard.adapters.grok_hooks import prepare_grok_hook_payload
 from codex_plugin_scanner.guard.cli import commands_hook
-from codex_plugin_scanner.guard.cli.commands_support_workspace import _workspace_from_hook_payload
 from codex_plugin_scanner.guard.config import GuardConfig
 from codex_plugin_scanner.guard.store import GuardStore
 
@@ -34,42 +31,8 @@ def _repository(root: Path) -> Path:
     return repository
 
 
-def test_hook_payload_cwd_resolves_workspace(tmp_path: Path) -> None:
-    repository = _repository(tmp_path)
-    other = tmp_path / "other"
-    other.mkdir()
-
-    assert _workspace_from_hook_payload({"cwd": str(repository)}) == repository.resolve()
-    assert _workspace_from_hook_payload({"workspaceRoot": str(repository)}) == repository.resolve()
-    assert _workspace_from_hook_payload({}) is None
-    assert _workspace_from_hook_payload({"workspaceRoot": str(repository), "cwd": str(other)}) == repository.resolve()
-    assert _workspace_from_hook_payload({"cwd": str(other)}, repository) == repository.resolve()
-
-
-def test_grok_and_zcode_payloads_keep_workspace_root_when_cwd_differs(tmp_path: Path) -> None:
-    root = tmp_path / "root"
-    cwd = tmp_path / "cwd"
-    root.mkdir()
-    cwd.mkdir()
-    payload = {
-        "hookEventName": "PreToolUse",
-        "toolName": "run_terminal_command",
-        "toolInput": {"command": "git status --short"},
-        "workspaceRoot": str(root),
-        "cwd": str(cwd),
-    }
-
-    grok = prepare_grok_hook_payload(payload)
-    zcode = prepare_zcode_hook_payload(payload)
-    assert grok["workspace_root"] == str(root)
-    assert zcode["workspace_root"] == str(root)
-
-
 @pytest.mark.usefixtures("native_hook_force")
-def test_run_guard_hook_uses_payload_cwd_when_cli_workspace_omitted(
-    tmp_path: Path,
-    capsys: pytest.CaptureFixture[str],
-) -> None:
+def test_run_guard_hook_uses_payload_cwd_when_cli_workspace_omitted(tmp_path: Path) -> None:
     home = tmp_path / "home"
     guard_home = tmp_path / "guard-home"
     home.mkdir()
@@ -82,6 +45,7 @@ def test_run_guard_hook_uses_payload_cwd_when_cli_workspace_omitted(
         "toolInput": {"command": "git rev-parse --show-toplevel"},
         "cwd": str(repository),
     }
+    output = io.StringIO()
 
     result = commands_hook._run_guard_hook_command(
         argparse.Namespace(
@@ -99,9 +63,9 @@ def test_run_guard_hook_uses_payload_cwd_when_cli_workspace_omitted(
         store=store,
         config=config,
         input_text=json.dumps(event),
-        output_stream=io.StringIO(),
+        output_stream=output,
     )
-    payload = json.loads(capsys.readouterr().out)
+    payload = json.loads(output.getvalue())
 
     assert result == 0
-    assert payload["policy_composition"]["configured_default_disposition"] == "relaxed_verified_benign"
+    assert payload["hookSpecificOutput"]["permissionDecision"] == "allow"

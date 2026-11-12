@@ -3,17 +3,18 @@
 from __future__ import annotations
 
 import json
-import sqlite3
 from collections.abc import Mapping, Sequence
-from contextlib import AbstractContextManager
 from typing import Protocol
 
 from .approval_gate import ApprovalGateGrant
 from .models import PolicyDecision
+from .runtime.extension_control_authority import ExtensionControlAuthorityError
 
 
 class _PolicyMemoryStore(Protocol):
-    def _connect(self) -> AbstractContextManager[sqlite3.Connection]: ...
+    def _authority_key(self, *, required: bool) -> bytes | None: ...
+
+    def _extension_control_authority_op(self, op: str, *, key: bytes | None, **fields: object) -> dict[str, object]: ...
 
     def _prepared_remote_policy_rows(
         self,
@@ -22,13 +23,8 @@ class _PolicyMemoryStore(Protocol):
         *,
         approval_gate_grant: ApprovalGateGrant | None,
         remote_write_authorized: bool,
+        signed_bundle: bool = False,
     ) -> tuple[str, list[tuple[object, ...]]]: ...
-
-    def _replace_remote_policy_rows_locked(
-        self,
-        connection: sqlite3.Connection,
-        rows: Sequence[tuple[object, ...]],
-    ) -> None: ...
 
 
 class StoreReviewPolicyMemoryMixin:
@@ -54,19 +50,16 @@ class StoreReviewPolicyMemoryMixin:
             "guard_review_memory_policy_version": json.dumps(dict(version), allow_nan=False),
             "guard_review_memory_last_ack": json.dumps(dict(acknowledgement), allow_nan=False),
         }
-        with self._connect() as connection:
-            connection.execute("begin immediate")
-            self._replace_remote_policy_rows_locked(connection, rows)
-            connection.executemany(
-                """
-                insert into sync_state (state_key, payload_json, updated_at)
-                values (?, ?, ?)
-                on conflict(state_key) do update set
-                  payload_json = excluded.payload_json,
-                  updated_at = excluded.updated_at
-                """,
-                [(key, payload, normalized_now) for key, payload in encoded_state.items()],
-            )
+        # The resident replaces the remote decisions and writes the memory
+        # state in one transaction.
+        reply = self._extension_control_authority_op(
+            "apply_review_memory",
+            key=self._authority_key(required=False),
+            now=normalized_now,
+            review_memory={"payloads": encoded_state, "rows": [list(row) for row in rows]},
+        )
+        if reply.get("applied") is not True:
+            raise ExtensionControlAuthorityError("invalid review memory reply")
 
 
 __all__ = ["StoreReviewPolicyMemoryMixin"]

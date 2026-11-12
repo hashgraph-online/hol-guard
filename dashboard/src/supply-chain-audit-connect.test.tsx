@@ -119,6 +119,10 @@ assert(
   supplyChainAuditUserMessage(invalidWorkspaceError)?.includes("could not use that project folder"),
   "invalid workspace errors should explain how to correct the selected folder",
 );
+assert(
+  supplyChainAuditUserMessage(invalidWorkspaceError)?.includes("inside your home folder"),
+  "invalid workspace errors should name where an auditable folder must live",
+);
 
 const auditConnectMarkup = renderToStaticMarkup(
   <ConnectFlowCard

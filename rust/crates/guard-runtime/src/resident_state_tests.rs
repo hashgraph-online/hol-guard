@@ -721,3 +721,55 @@ fn endpoint_identity_is_authenticated_with_generation_state() {
     assert!(validate_state(&scope, &changed, &digest).is_err());
     fs::remove_dir_all(scope).unwrap();
 }
+
+#[test]
+fn a_formatted_state_names_its_token_without_disclosing_it() {
+    let scope = test_scope("state-debug-redaction");
+    let digest = runtime_digest().unwrap();
+    let token = vec![0xab; crate::AUTH_TOKEN_BYTES];
+    let state = publish_state(
+        &scope,
+        1,
+        std::process::id(),
+        &digest,
+        "loopback",
+        "127.0.0.1:1".to_owned(),
+        &token,
+    )
+    .unwrap();
+
+    let rendered = format!("{state:?}");
+
+    // A diagnostic that formats a state must stay useful, so every other
+    // field survives; only the key the state publishes is withheld.
+    assert!(!rendered.contains(&hex_bytes(&token)));
+    assert!(rendered.contains("token_hex: \"<redacted>\""));
+    assert!(rendered.contains(&state.endpoint));
+    assert!(rendered.contains(&state.state_mac));
+    fs::remove_dir_all(scope).unwrap();
+}
+
+#[test]
+fn a_decoded_token_is_cleared_when_its_exchange_ends() {
+    let scope = test_scope("state-token-zeroized");
+    let digest = runtime_digest().unwrap();
+    let token = vec![0xcd; crate::AUTH_TOKEN_BYTES];
+    let state = publish_state(
+        &scope,
+        1,
+        std::process::id(),
+        &digest,
+        "loopback",
+        "127.0.0.1:1".to_owned(),
+        &token,
+    )
+    .unwrap();
+
+    let decoded = token_from_state(&state).unwrap();
+
+    // The decoded copy is a `Zeroizing` buffer, so the plaintext key cannot
+    // outlive the caller that authenticated with it.
+    assert_eq!(decoded.as_slice(), token.as_slice());
+    let _: &zeroize::Zeroizing<Vec<u8>> = &decoded;
+    fs::remove_dir_all(scope).unwrap();
+}

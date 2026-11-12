@@ -43,7 +43,10 @@ pub const DIRECT_LANE_MAX_INTEGRITY_DEGRADED_REASONS: usize = 16;
 /// every exact-action proof it asks the resident for, and
 /// `policy_integrity_state` is the policy-integrity state the daemon refreshed
 /// when it published. Without all three, a saved decision for an exact action
-/// stays with the daemon.
+/// stays with the daemon. The environment binds on its own, without the other
+/// two, because the resident also resolves a command's local CLI against the
+/// daemon's home and `PATH`; without it a workspace with a custom block rule
+/// sends every allowed `PreToolUse` back to the daemon.
 /// `blocked_request_mode`, `approval_center_origin`, `review_oauth_source` and
 /// `review_host_cwd` are what the daemon queues a reviewed `PreToolUse` for
 /// approval with: the blocked-request mode every bound config resolves to,
@@ -94,6 +97,16 @@ pub struct DirectLaneBindingV1 {
     /// daemon decides a relayed MCP tool call with.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub mcp_relay: Option<serde_json::Value>,
+    /// True while the daemon's evidence drain raises the desktop setup notice
+    /// for a connector-setup review the resident queued. Without it such a
+    /// review stays with the daemon, which raises the notice itself.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub connector_setup_notice: Option<bool>,
+    /// True while the daemon's evidence drain leaves a direct tool
+    /// answer's command activity to the resident once its record says the
+    /// resident queued it. Without it the drain records every activity.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub resident_activity: Option<bool>,
 }
 
 /// A process environment whose `Debug` output never shows the values.

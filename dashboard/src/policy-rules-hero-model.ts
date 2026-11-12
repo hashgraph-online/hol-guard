@@ -26,6 +26,16 @@ export function policyRiskScore(policy: GuardPolicyDecision): number {
   return score;
 }
 
+/**
+ * The widest broad allow, for the one line the attention strip shows: a
+ * global rule outranks a harness-scoped one whatever their risk scores are,
+ * and the score only separates rules of the same reach.
+ */
+export function widestBroadAllow(policies: GuardPolicyDecision[]): GuardPolicyDecision | undefined {
+  const breadth = (policy: GuardPolicyDecision) => (policy.scope === "global" ? 2 : policy.scope === "harness" ? 1 : 0);
+  return [...policies].sort((a, b) => breadth(b) - breadth(a) || policyRiskScore(b) - policyRiskScore(a))[0];
+}
+
 export function isBroadAllow(policy: GuardPolicyDecision): boolean {
   return policy.action === "allow" && (policy.scope === "global" || policy.scope === "harness");
 }
@@ -55,24 +65,6 @@ export function buildRuleAttention(
   };
 }
 
-/**
- * Spotlight picks: broad allows always lead (the hero calls them out by
- * name, so they must appear here), then highest risk score, then newest.
- */
-export function buildRulesSpotlight(
-  policies: readonly GuardPolicyDecision[],
-): GuardPolicyDecision[] {
-  const remembered = policies.filter((p) => p.action === "allow" || p.action === "block");
-  const sorted = [...remembered].sort((a, b) => {
-    const broadDelta = Number(isBroadAllow(b)) - Number(isBroadAllow(a));
-    if (broadDelta !== 0) return broadDelta;
-    const byRisk = policyRiskScore(b) - policyRiskScore(a);
-    if (byRisk !== 0) return byRisk;
-    return new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime();
-  });
-  return sorted.slice(0, 3);
-}
-
 export function buildRulesHeroModel(input: {
   counts: PolicyRuleCounts;
   attention: RuleAttention;
@@ -94,8 +86,7 @@ export function buildRulesHeroModel(input: {
       tone: "setup",
       badge: "Nothing remembered yet",
       headline: "Guard asks before it repeats anything",
-      subheadline:
-        "Approve a request in Inbox and choose how broadly to remember it — the decision lands here.",
+      subheadline: "approve in Inbox and it lands here.",
       facts,
     };
   }
@@ -105,17 +96,14 @@ export function buildRulesHeroModel(input: {
       tone: "review",
       badge: "Worth a second look",
       headline: n === 1 ? "1 broad allow deserves a second look" : `${n} broad allows deserve a second look`,
-      subheadline:
-        "These let an action through everywhere it matches. If one is wider than you meant, remove it and Guard asks again.",
+      subheadline: "remove one and Guard asks again.",
       facts,
     };
   }
   const provenance =
-    counts.cloud === 0
-      ? "Each one says where it came from and how to undo it."
-      : counts.local === 0
-        ? "Synced from Guard Cloud and read-only here — change them in Guard Cloud or their governing Extension."
-        : "Each one says where it came from and how it can be changed.";
+    counts.local === 0 && counts.cloud > 0
+      ? "read-only here — change them in Guard Cloud or their governing Extension."
+      : "";
   return {
     tone: "clear",
     badge: "Memory is tidy",

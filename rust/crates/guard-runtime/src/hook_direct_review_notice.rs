@@ -22,15 +22,15 @@ const APPROVAL_HEADER: &str = "HOL Guard";
 /// `_CLAUDE_GUARD_APPROVAL_OPTIONS` (`_commands_shared.py`).
 const APPROVAL_OPTIONS: [&str; 3] = ["Allow once", "Allow during this session", "Keep blocked"];
 /// `secrets.token_hex(6)`.
-const APPROVAL_CODE_BYTES: usize = 6;
+pub(crate) const APPROVAL_CODE_BYTES: usize = 6;
 
 /// The `claude_record_notice` call `_record_claude_permission_notice` makes.
 #[derive(Debug)]
-pub(super) struct Notice {
-    pub(super) session_id: String,
+pub(crate) struct Notice {
+    pub(crate) session_id: String,
     /// `_optional_string(payload.get("tool_name"))`.
-    pub(super) tool_name: Option<String>,
-    pub(super) payload: Map<String, Value>,
+    pub(crate) tool_name: Option<String>,
+    pub(crate) payload: Map<String, Value>,
 }
 
 /// `record_claude_permission_notice_for_native_review` followed by
@@ -46,6 +46,32 @@ pub(super) fn notice(
     saved_at: &str,
     approval_code: &str,
 ) -> Result<Option<Notice>, HookDirectDefer> {
+    review_notice(
+        harness,
+        payload,
+        result.get("reason"),
+        review_binding,
+        workspace,
+        "project",
+        saved_at,
+        approval_code,
+    )
+}
+
+/// [`notice`] for any review scope: `config_path` and `source_scope` are the
+/// workspace and `project`, or the Guard home and `harness` for a review
+/// outside any workspace. `reason` is the decision's own reason value.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn review_notice(
+    harness: &str,
+    payload: &Map<String, Value>,
+    reason: Option<&Value>,
+    review_binding: Option<&str>,
+    config_path: &str,
+    source_scope: &str,
+    saved_at: &str,
+    approval_code: &str,
+) -> Result<Option<Notice>, HookDirectDefer> {
     let Some(session_id) = optional_string(payload.get("session_id"))? else {
         return Ok(None);
     };
@@ -57,7 +83,7 @@ pub(super) fn notice(
         .filter(|binding| !binding.is_empty())
         .unwrap_or(artifact_id.as_str())
         .to_owned();
-    let reason = falsy_or_text(result.get("reason"), DEFAULT_REASON)?;
+    let reason = falsy_or_text(reason, DEFAULT_REASON)?;
     let tool_name = optional_string(payload.get("tool_name"))?;
     let mut notice = Map::new();
     notice.insert("session_id".to_owned(), json!(session_id));
@@ -66,8 +92,8 @@ pub(super) fn notice(
     notice.insert("artifact_hash".to_owned(), json!(artifact_hash));
     notice.insert("artifact_name".to_owned(), json!(artifact_name));
     notice.insert("artifact_type".to_owned(), json!("tool_call"));
-    notice.insert("config_path".to_owned(), json!(workspace));
-    notice.insert("source_scope".to_owned(), json!("project"));
+    notice.insert("config_path".to_owned(), json!(config_path));
+    notice.insert("source_scope".to_owned(), json!(source_scope));
     notice.insert("approval_header".to_owned(), json!(APPROVAL_HEADER));
     notice.insert(
         "approval_question".to_owned(),

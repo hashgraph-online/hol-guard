@@ -10,11 +10,13 @@ answer.
 from __future__ import annotations
 
 import json
+import time
 from pathlib import Path
 
 import pytest
 
 from codex_plugin_scanner.guard import native_directory_trust as module
+from codex_plugin_scanner.guard import native_resident_decision as resident
 from codex_plugin_scanner.guard.native_directory_trust import (
     NativeDirectoryTrustError,
     native_directory_trust,
@@ -23,7 +25,7 @@ from codex_plugin_scanner.guard.native_directory_trust import (
 
 def _force_available(monkeypatch: pytest.MonkeyPatch) -> None:
     class Features:
-        features = frozenset({module._FEATURE, module._RESIDENT_PROTOCOL_FEATURE})
+        features = frozenset({module._FEATURE, resident._RESIDENT_PROTOCOL_FEATURE})
 
     class Identity:
         path = "/bin/true"
@@ -37,10 +39,10 @@ def _force_available(monkeypatch: pytest.MonkeyPatch) -> None:
         capabilities = Features()
 
     monkeypatch.setattr(module, "_native_runtime_status_memo", lambda: Status())
-    monkeypatch.setattr(module, "ensure_resident_prerequisite", lambda _home: True)
-    monkeypatch.setattr(module, "native_record_resident_failure", lambda *a, **k: None)
-    monkeypatch.setattr(module, "native_record_resident_success", lambda *a, **k: None)
-    monkeypatch.setattr(module, "native_record_overload", lambda *a, **k: None)
+    monkeypatch.setattr(resident, "ensure_resident_prerequisite", lambda _home: True)
+    monkeypatch.setattr(resident, "native_record_resident_failure", lambda *a, **k: None)
+    monkeypatch.setattr(resident, "native_record_resident_success", lambda *a, **k: None)
+    monkeypatch.setattr(resident, "native_record_overload", lambda *a, **k: None)
 
 
 def _responder(results: list[dict[str, object]], **overrides: object):
@@ -51,7 +53,7 @@ def _responder(results: list[dict[str, object]], **overrides: object):
         document: dict[str, object] = {
             "schema": module._RESULT_SCHEMA,
             "request_id": request["request_id"],
-            "request_sha256": "sha256:" + module._canonical_request_sha256(request),
+            "request_sha256": "sha256:" + resident._canonical_request_sha256(request),
             "status": "ok",
             "code": "ok",
             "canonical_guard_home": request["guard_home"],
@@ -87,7 +89,7 @@ def test_a_runtime_that_cannot_be_reached_refuses_rather_than_trusts(monkeypatch
         def client(error: Exception = error, **_kwargs: object) -> bytes:
             raise error
 
-        monkeypatch.setattr(module, "native_resident_client_request", client)
+        monkeypatch.setattr(resident, "native_resident_client_request", client)
         with pytest.raises(NativeDirectoryTrustError, match="unavailable"):
             native_directory_trust([("workspace", "/tmp")], guard_home="/nowhere")
 
@@ -95,7 +97,7 @@ def test_a_runtime_that_cannot_be_reached_refuses_rather_than_trusts(monkeypatch
 def test_an_answer_bound_to_another_request_settles_nothing(monkeypatch: pytest.MonkeyPatch) -> None:
     _force_available(monkeypatch)
     monkeypatch.setattr(
-        module,
+        resident,
         "native_resident_client_request",
         _responder([{"parameter": "workspace", "trusted": True, "path": "/tmp"}], request_sha256="sha256:nope"),
     )
@@ -117,7 +119,7 @@ def test_a_result_that_does_not_answer_what_was_asked_settles_nothing(
     monkeypatch: pytest.MonkeyPatch, results: list[dict[str, object]]
 ) -> None:
     _force_available(monkeypatch)
-    monkeypatch.setattr(module, "native_resident_client_request", _responder(results))
+    monkeypatch.setattr(resident, "native_resident_client_request", _responder(results))
     with pytest.raises(NativeDirectoryTrustError, match="result_invalid"):
         native_directory_trust([("workspace", "/tmp")], guard_home="/nowhere")
 
@@ -136,7 +138,7 @@ def test_every_candidate_is_settled_in_one_call_and_read_back_in_order(monkeypat
             ]
         )(payload=payload, **kwargs)
 
-    monkeypatch.setattr(module, "native_resident_client_request", client)
+    monkeypatch.setattr(resident, "native_resident_client_request", client)
     verdicts = native_directory_trust(
         [("home", "~"), ("guard-home", "/elsewhere"), ("workspace", "~/work")],
         guard_home="/nowhere",
@@ -154,14 +156,14 @@ def test_every_candidate_is_settled_in_one_call_and_read_back_in_order(monkeypat
 
 def test_a_path_that_cannot_cross_the_transport_is_not_a_path_to_trust(monkeypatch: pytest.MonkeyPatch) -> None:
     _force_available(monkeypatch)
-    monkeypatch.setattr(module, "native_resident_client_request", _responder([]))
+    monkeypatch.setattr(resident, "native_resident_client_request", _responder([]))
     with pytest.raises(NativeDirectoryTrustError, match="component_unencodable"):
         native_directory_trust([("workspace", "/tmp/\udcff")], guard_home="/nowhere")
 
 
 def test_a_request_larger_than_the_runtime_accepts_is_refused(monkeypatch: pytest.MonkeyPatch) -> None:
     _force_available(monkeypatch)
-    monkeypatch.setattr(module, "native_resident_client_request", _responder([]))
+    monkeypatch.setattr(resident, "native_resident_client_request", _responder([]))
     oversized = [("workspace", "/tmp/" + "x" * 1024) for _ in range(128)]
     with pytest.raises(NativeDirectoryTrustError, match="request_too_large"):
         native_directory_trust(oversized, guard_home="/nowhere")
@@ -170,9 +172,9 @@ def test_a_request_larger_than_the_runtime_accepts_is_refused(monkeypatch: pytes
 def test_an_overloaded_runtime_is_recorded_as_overload(monkeypatch: pytest.MonkeyPatch) -> None:
     _force_available(monkeypatch)
     overloads: list[object] = []
-    monkeypatch.setattr(module, "native_record_overload", lambda *a, **k: overloads.append(a))
+    monkeypatch.setattr(resident, "native_record_overload", lambda *a, **k: overloads.append(a))
     monkeypatch.setattr(
-        module,
+        resident,
         "native_resident_client_request",
         lambda **_: json.dumps({"error": "native_overloaded"}).encode(),
     )
@@ -186,17 +188,17 @@ def test_an_expired_hook_deadline_skips_the_transport_and_health_accounting(
 ) -> None:
     _force_available(monkeypatch)
     failures: list[object] = []
-    monkeypatch.setattr(module, "native_record_resident_failure", lambda *args, **kwargs: failures.append(args))
+    monkeypatch.setattr(resident, "native_record_resident_failure", lambda *args, **kwargs: failures.append(args))
 
     def must_not_call(**_kwargs: object) -> bytes:
         raise AssertionError("expired requests must never reach the resident")
 
-    monkeypatch.setattr(module, "native_resident_client_request", must_not_call)
+    monkeypatch.setattr(resident, "native_resident_client_request", must_not_call)
     with pytest.raises(NativeDirectoryTrustError, match="unavailable"):
         native_directory_trust(
             [("workspace", "/tmp")],
             guard_home="/nowhere",
-            deadline_monotonic=module.time.monotonic() - 1,
+            deadline_monotonic=time.monotonic() - 1,
         )
     assert not failures
 
@@ -206,18 +208,18 @@ def test_caller_budget_timeout_does_not_count_as_resident_failure(
 ) -> None:
     _force_available(monkeypatch)
     failures: list[object] = []
-    monkeypatch.setattr(module, "native_record_resident_failure", lambda *args, **kwargs: failures.append(args))
+    monkeypatch.setattr(resident, "native_record_resident_failure", lambda *args, **kwargs: failures.append(args))
 
     def slow_client(**_kwargs: object) -> None:
-        module.time.sleep(0.1)
+        time.sleep(0.1)
         return None
 
-    monkeypatch.setattr(module, "native_resident_client_request", slow_client)
+    monkeypatch.setattr(resident, "native_resident_client_request", slow_client)
     with pytest.raises(NativeDirectoryTrustError, match="unavailable"):
         native_directory_trust(
             [("workspace", "/tmp")],
             guard_home="/nowhere",
-            deadline_monotonic=module.time.monotonic() + 0.05,
+            deadline_monotonic=time.monotonic() + 0.05,
         )
     assert not failures
 
@@ -248,7 +250,7 @@ def test_an_unchanged_directory_is_not_settled_twice(monkeypatch: pytest.MonkeyP
     home, guard_home, workspace = _install(tmp_path)
     asks = [0]
     monkeypatch.setattr(
-        module,
+        resident,
         "native_resident_client_request",
         _counting_responder([{"parameter": "workspace", "trusted": True, "path": str(workspace)}], asks),
     )
@@ -271,7 +273,7 @@ def test_a_replaced_directory_is_settled_again(monkeypatch: pytest.MonkeyPatch, 
     home, guard_home, workspace = _install(tmp_path)
     asks = [0]
     monkeypatch.setattr(
-        module,
+        resident,
         "native_resident_client_request",
         _counting_responder([{"parameter": "workspace", "trusted": True, "path": str(workspace)}], asks),
     )
@@ -291,7 +293,7 @@ def test_a_refused_directory_is_asked_about_every_time(monkeypatch: pytest.Monke
     home, guard_home, workspace = _install(tmp_path)
     asks = [0]
     monkeypatch.setattr(
-        module,
+        resident,
         "native_resident_client_request",
         _counting_responder([{"parameter": "workspace", "trusted": False, "reason": "unexpected_root"}], asks),
     )
@@ -310,7 +312,7 @@ def test_a_spelling_this_process_must_not_resolve_is_never_remembered(
     home, guard_home, workspace = _install(tmp_path)
     asks = [0]
     monkeypatch.setattr(
-        module,
+        resident,
         "native_resident_client_request",
         _counting_responder([{"parameter": "workspace", "trusted": True, "path": str(workspace)}], asks),
     )
@@ -334,7 +336,7 @@ def test_a_spelling_that_hides_a_component_is_never_remembered(monkeypatch: pyte
     spelling = f"{home}/link/../project"
     asks = [0]
     monkeypatch.setattr(
-        module,
+        resident,
         "native_resident_client_request",
         _counting_responder([{"parameter": "workspace", "trusted": True, "path": str(workspace)}], asks),
     )

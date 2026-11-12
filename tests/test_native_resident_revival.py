@@ -127,6 +127,36 @@ def test_hold_helpers_arm_expire_and_clear(tmp_path: Path) -> None:
     assert not revival.restart_hold_active(key)
 
 
+def test_hold_remaining_reports_only_the_named_key(tmp_path: Path) -> None:
+    mine = (str(tmp_path / "a"), str(tmp_path / "state"))
+    other = (str(tmp_path / "b"), str(tmp_path / "state"))
+    assert revival.restart_hold_seconds_remaining(mine) == 0.0
+    revival.arm_restart_hold(mine, now=100.0)
+    # A newer hold on another runtime must not lengthen this caller's wait.
+    revival.arm_restart_hold(other, now=100.5)
+    assert revival.restart_hold_seconds_remaining(mine, now=101.0) == pytest.approx(revival.RESTART_HOLD_SECONDS - 1.0)
+    assert revival.restart_hold_seconds_remaining(other, now=101.0) == pytest.approx(revival.RESTART_HOLD_SECONDS - 0.5)
+    # An unarmed key waits for nothing even while another hold is running.
+    assert revival.restart_hold_seconds_remaining((str(tmp_path / "c"), str(tmp_path / "state")), now=101.0) == 0.0
+    assert revival.restart_hold_seconds_remaining(mine, now=99.0) == revival.RESTART_HOLD_SECONDS
+    assert revival.restart_hold_seconds_remaining(mine, now=100.0 + revival.RESTART_HOLD_SECONDS) == 0.0
+
+
+def test_hold_remaining_drops_lapsed_entries_instead_of_keeping_history(tmp_path: Path) -> None:
+    stale = [(str(tmp_path / f"runtime-{index}"), str(tmp_path / "state")) for index in range(8)]
+    for key in stale:
+        revival.arm_restart_hold(key, now=100.0)
+    after = 100.0 + revival.RESTART_HOLD_SECONDS + 1.0
+    for key in stale:
+        assert revival.restart_hold_seconds_remaining(key, now=after) == 0.0
+    assert not revival._HOLDS
+
+    live = (str(tmp_path / "runtime-live"), str(tmp_path / "state"))
+    revival.arm_restart_hold(live, now=after)
+    assert revival.restart_hold_seconds_remaining(live, now=after) == revival.RESTART_HOLD_SECONDS
+    assert set(revival._HOLDS) == {live}
+
+
 def test_restart_blocked_frame_matches_only_the_exact_refusal() -> None:
     assert revival.is_restart_blocked_frame(_BLOCKED)
     assert not revival.is_restart_blocked_frame(b'{"error":"native_resident_restart_circuit_open","retryable":true}')
@@ -341,7 +371,7 @@ def test_watchdog_thread_respawns_repeatedly_and_survives_errors(tmp_path: Path)
 
 
 def _unavailable_denial(tmp_path: Path, failure_code: str | None, event_name: str = "PreToolUse") -> str:
-    from codex_plugin_scanner.guard.daemon.hook_worker_native import _record_unavailable_native
+    from codex_plugin_scanner.guard.hook_review.hook_worker_native import _record_unavailable_native
     from codex_plugin_scanner.guard.native_resident_client import record_native_resident_client_failure_code
 
     host = SimpleNamespace(metrics=SimpleNamespace(record_route=lambda _route: None), activity_writer=None)
@@ -353,10 +383,7 @@ def _unavailable_denial(tmp_path: Path, failure_code: str | None, event_name: st
             harness="codex",
             event_name=event_name,
             reason_code="native_pre_tool_unavailable",
-            workspace=None,
-            home_dir=tmp_path,
             guard_home=tmp_path,
-            recording_only=False,
         )
     finally:
         record_native_resident_client_failure_code(None)
@@ -373,4 +400,4 @@ def test_prompt_denial_names_repair_when_the_runtime_will_not_restart(tmp_path: 
     assert "hol-guard repair" in refused
     timed_out = _unavailable_denial(tmp_path, "native_client_timed_out", "UserPromptSubmit")
     assert "hol-guard repair" not in timed_out
-    assert "could not complete native prompt review safely" in timed_out
+    assert "could not check this prompt, so it was blocked" in timed_out

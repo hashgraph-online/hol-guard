@@ -47,6 +47,27 @@ fn transition_lock_rejects_concurrent_owner_and_recovers_on_release() {
     with_transition_lock(&root, || Ok::<(), String>(())).unwrap();
 }
 
+#[test]
+fn transition_lock_waits_out_a_holder_that_releases_promptly() {
+    let root = test_root();
+    let path = transition_lock_path(&root).unwrap();
+    #[cfg(unix)]
+    let directory = crate::state_directory_lock::acquire(&root).unwrap();
+    #[cfg(unix)]
+    let OpenedTransitionLock { file, .. } = open_transition_lock(&path, &directory).unwrap();
+    #[cfg(not(unix))]
+    let OpenedTransitionLock { file, .. } = open_transition_lock(&path).unwrap();
+    fs2::FileExt::try_lock_exclusive(&file).unwrap();
+
+    // A child forked without exec releases its descriptor copies this way.
+    let release = std::thread::spawn(move || {
+        std::thread::sleep(std::time::Duration::from_millis(40));
+        drop(file);
+    });
+    with_transition_lock(&root, || Ok::<(), String>(())).unwrap();
+    release.join().unwrap();
+}
+
 #[cfg(unix)]
 #[test]
 fn transition_directory_lock_survives_lock_path_replacement() {

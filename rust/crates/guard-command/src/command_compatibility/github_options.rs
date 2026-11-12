@@ -10,7 +10,7 @@ pub(super) fn has_option(arguments: &[String], expected: &str) -> bool {
     })
 }
 
-fn repository(value: &str) -> bool {
+pub(super) fn repository(value: &str) -> bool {
     let parts: Vec<&str> = value.split('/').collect();
     let components = if parts.len() == 3 && parts[0].eq_ignore_ascii_case("github.com") {
         &parts[1..]

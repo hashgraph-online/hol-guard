@@ -19,6 +19,7 @@ from extension_delivery_legacy import prepare as prepare_legacy
 from extension_delivery_located_store import LocatedStore
 from extension_delivery_objects import encoded, entries
 from extension_delivery_revocations import build as build_revocations
+from extension_delivery_runtime import pinned_runtime
 from extension_delivery_source import verify_sources
 from extension_pack_directory import public_entry
 from extension_policy_delivery import build_policy
@@ -218,4 +219,5 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    with pinned_runtime():
+        main()

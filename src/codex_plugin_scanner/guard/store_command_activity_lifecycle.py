@@ -18,13 +18,6 @@ from datetime import datetime
 from typing import Any, Final, Protocol, cast
 
 from .native_guard_store import NativeGuardStoreUnavailable
-from .runtime.command_activity_contract import (
-    CommandActivity,
-    CommandActivityEvidence,
-    CorrelationHandle,
-    CorrelationKind,
-)
-from .store_command_activity_wire import activity_from_wire, activity_wire, evidence_wire, handle_wire
 
 _ERROR_CODE: Final = re.compile(r"[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*")
 
@@ -60,17 +53,6 @@ def _count_failure_locally(owner: _ConnectionOwner, error_code: str, occurred_at
         connection.execute(f"update command_activity_health_active set {column} = 1 where singleton = 1")
 
 
-def _count_conflict_locally(owner: _ConnectionOwner, occurred_at: datetime) -> None:
-    with owner._connect() as connection:
-        connection.execute("begin immediate")
-        connection.execute(
-            "update command_activity_health "
-            "set dropped_event_count = min(dropped_event_count + 1, ?), "
-            "last_error_code = 'post_result_conflict', last_error_at = ? where singleton = 1",
-            (_MAX_COUNTER, occurred_at.isoformat()),
-        )
-
-
 class _ConnectionOwner(Protocol):
     def _connect(self) -> AbstractContextManager[sqlite3.Connection]: ...
 
@@ -88,44 +70,6 @@ class CommandActivityPersistenceHealth:
 
 
 class StoreCommandActivityLifecycleMixin:
-    def is_exact_command_activity_pre_replay(
-        self: _ConnectionOwner,
-        evidence: CommandActivityEvidence,
-    ) -> bool:
-        """Return true for one existing logical pre delivery; reject fact conflicts."""
-
-        correlation = evidence.activity.request_correlation
-        if correlation is None:
-            return False
-        _require_request_correlation(correlation)
-        return bool(
-            self._native_store_call("is_exact_command_activity_pre_replay", {"evidence": evidence_wire(evidence)})
-        )
-
-    def get_command_activity_by_request_correlation(
-        self: _ConnectionOwner,
-        correlation: CorrelationHandle,
-    ) -> CommandActivity | None:
-        """Resolve one logical command by an exact, strong request handle."""
-
-        _require_request_correlation(correlation)
-        row = self._native_store_call(
-            "command_activity_by_request_correlation",
-            {"correlation": handle_wire(correlation)},
-        )
-        return activity_from_wire(cast(Mapping[str, object], row)) if row is not None else None
-
-    def transition_command_activity(self: _ConnectionOwner, current: CommandActivity) -> bool:
-        """Atomically advance one correlated activity; return false for an exact replay."""
-
-        if not isinstance(cast(object, current), CommandActivity):
-            raise ValueError("current must be a CommandActivity")
-        correlation = current.request_correlation
-        if correlation is None:
-            raise ValueError("lifecycle transitions require request correlation")
-        _require_request_correlation(correlation)
-        return bool(self._native_store_call("transition_command_activity", {"current": activity_wire(current)}))
-
     def record_command_activity_persistence_failure(
         self: _ConnectionOwner,
         *,
@@ -145,24 +89,6 @@ class StoreCommandActivityLifecycleMixin:
             if error.reason.partition(":")[0] not in _PRE_SEND_REASONS:
                 raise
             _count_failure_locally(self, error_code, occurred_at)
-
-    def record_command_activity_observation_conflict(
-        self: _ConnectionOwner,
-        *,
-        occurred_at: datetime,
-    ) -> None:
-        """Retain one conflicting terminal observation without claiming a persistence outage."""
-
-        _require_utc_datetime(occurred_at)
-        try:
-            self._native_store_call(
-                "record_command_activity_observation_conflict",
-                {"occurred_at": occurred_at.isoformat()},
-            )
-        except NativeGuardStoreUnavailable as error:
-            if error.reason.partition(":")[0] not in _PRE_SEND_REASONS:
-                raise
-            _count_conflict_locally(self, occurred_at)
 
     def get_command_activity_persistence_health(
         self: _ConnectionOwner,
@@ -194,11 +120,6 @@ class StoreCommandActivityLifecycleMixin:
             last_error_at=datetime.fromisoformat(last_error_at) if last_error_at is not None else None,
             schema_version=str(row["schema_version"]),
         )
-
-
-def _require_request_correlation(correlation: CorrelationHandle) -> None:
-    if not isinstance(cast(object, correlation), CorrelationHandle) or correlation.kind is not CorrelationKind.REQUEST:
-        raise ValueError("correlation must be an exact request CorrelationHandle")
 
 
 def _require_error_code(value: str) -> None:

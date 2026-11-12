@@ -43,7 +43,7 @@ jobs:
       contents: read
       pull-requests: write
     if: github.event_name == 'workflow_dispatch' || github.event.pull_request.merged == true
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
       - name: Check out trusted workflow source

@@ -219,18 +219,6 @@ def test_native_outage_cannot_claim_a_root_is_absent(tmp_path: Path, monkeypatch
     assert discovery.issues[0].failure_reason == "native_unavailable"
 
 
-def test_incomplete_helper_keeps_the_caller_reason_without_a_runtime(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.setattr(transport, "_exchange", lambda *_args, **_kwargs: None)
-
-    identity = transport.native_incomplete_skill_directory_identity("unreadable_entry")
-
-    assert identity.failure_reason == "unreadable_entry"
-    assert identity.status == "incomplete"
-    assert identity.incomplete_state_hash == "sha256:bf09c846d64946fdeed2604edadb1ab6fa48c36020e3141b14066a5034f2ba73"
-
-
 def test_existing_root_without_a_runtime_is_one_unavailable_issue(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

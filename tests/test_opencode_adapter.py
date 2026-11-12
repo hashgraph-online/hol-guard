@@ -473,68 +473,6 @@ class TestOpenCodeUninstall:
         assert not state_path.is_file()
 
 
-class TestOpenCodePermissionRules:
-    def test_coerce_permission_payload_with_dict_returns_copy(self) -> None:
-        payload = {"*": "ask"}
-        result = OpenCodeHarnessAdapter._coerce_permission_payload(payload)
-        assert result == payload
-
-    def test_coerce_permission_payload_with_string_wraps_as_wildcard(self) -> None:
-        result = OpenCodeHarnessAdapter._coerce_permission_payload("allow")
-        assert result == {"*": "allow"}
-
-    def test_coerce_permission_payload_with_none_returns_empty_dict(self) -> None:
-        result = OpenCodeHarnessAdapter._coerce_permission_payload(None)
-        assert result == {}
-
-    def test_coerce_permission_payload_with_list_returns_empty_dict(self) -> None:
-        result = OpenCodeHarnessAdapter._coerce_permission_payload(["allow"])
-        assert result == {}
-
-    def test_coerce_permission_payload_drops_non_string_keys(self) -> None:
-        payload = {"valid": "allow", 1: "deny", None: "ask"}
-        result = OpenCodeHarnessAdapter._coerce_permission_payload(payload)
-        assert result == {"valid": "allow"}
-        assert 1 not in result
-
-    def test_proxy_permission_rules_adds_ask_rule_for_managed_server(self, tmp_path: Path) -> None:
-        ctx = _ctx(tmp_path)
-        config = ctx.home_dir / ".config" / "opencode" / "opencode.json"
-        _write_mcp_config(config, {"my-srv": {"type": "local", "command": ["node", "s.js"]}})
-        detection = OpenCodeHarnessAdapter().detect(ctx)
-        from codex_plugin_scanner.guard.adapters.mcp_servers import managed_stdio_servers
-
-        managed = managed_stdio_servers(detection)
-        rules = OpenCodeHarnessAdapter._proxy_permission_rules(ctx, managed, set())
-        assert any("my-srv" in k for k in rules)
-        assert all(v == "ask" for v in rules.values())
-
-    def test_managed_permission_payload_round_trips_existing_rules(self, tmp_path: Path) -> None:
-        ctx = _ctx(tmp_path)
-        existing_permission = {"some_tool": "allow"}
-        result = OpenCodeHarnessAdapter()._managed_permission_payload(
-            existing_permission,
-            context=ctx,
-            servers=(),
-            existing_workspace_server_names=set(),
-        )
-        assert result.get("some_tool") == "allow"
-
-    def test_permission_rules_use_ask_for_enabled_servers(self, tmp_path: Path) -> None:
-        ctx = _ctx(tmp_path)
-        config = ctx.home_dir / ".config" / "opencode" / "opencode.json"
-        _write_mcp_config(config, {"target-srv": {"type": "local", "command": ["python", "s.py"]}})
-        detection = OpenCodeHarnessAdapter().detect(ctx)
-        from codex_plugin_scanner.guard.adapters.mcp_servers import managed_stdio_servers
-
-        managed = managed_stdio_servers(detection)
-        rules = OpenCodeHarnessAdapter._proxy_permission_rules(ctx, managed, set())
-        target_rule_keys = [k for k in rules if "target-srv" in k]
-        assert len(target_rule_keys) == 2
-        assert rules["target-srv_*"] == "ask"
-        assert rules["hol-guard::target-srv_*"] == "ask"
-
-
 class TestOpenCodeLaunchEnvironment:
     def test_launch_environment_empty_when_no_runtime_config(self, tmp_path: Path) -> None:
         ctx = _ctx(tmp_path)
@@ -561,6 +499,21 @@ class TestOpenCodeLaunchEnvironment:
         env = OpenCodeHarnessAdapter().launch_environment(ctx)
         assert env == {}
 
+    def test_launch_environment_merges_over_the_callers_config_in_order(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        ctx = _ctx(tmp_path)
+        runtime_path = runtime_config_path(ctx)
+        runtime_path.parent.mkdir(parents=True, exist_ok=True)
+        runtime_path.write_text('{"mcp": {"b": {"enabled": false}}, "permission": "ask"}', encoding="utf-8")
+        monkeypatch.setenv("OPENCODE_CONFIG_CONTENT", '{"z": 1.0, "mcp": {"b": {"command": ["x"]}, "a": 2}}')
+        env = OpenCodeHarnessAdapter().launch_environment(ctx)
+        assert env == {
+            "OPENCODE_CONFIG_CONTENT": (
+                '{"z": 1.0, "mcp": {"b": {"command": ["x"], "enabled": false}, "a": 2}, "permission": "ask"}'
+            )
+        }
+
 
 class TestOpenCodeLaunchCommand:
     def test_launch_command_no_passthrough_args_uses_interactive(self, tmp_path: Path) -> None:
@@ -579,6 +532,12 @@ class TestOpenCodeLaunchCommand:
         ctx = _ctx(tmp_path)
         cmd = OpenCodeHarnessAdapter().launch_command(ctx, ["--model", "gpt-4"])
         assert "opencode" in cmd[0]
+
+    def test_a_prompt_wider_than_one_native_array_joins_whole(self, tmp_path: Path) -> None:
+        ctx = _ctx(tmp_path, workspace=True)
+        words = [f"w{index}" for index in range(5000)]
+        cmd = OpenCodeHarnessAdapter().launch_command(ctx, ["--port", "4096", *words])
+        assert cmd == ["opencode", str(ctx.workspace_dir), "--port", "4096", "--prompt", " ".join(words)]
 
 
 class TestOpenCodeResiliency:

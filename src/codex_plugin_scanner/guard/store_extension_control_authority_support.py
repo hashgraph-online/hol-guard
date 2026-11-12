@@ -6,84 +6,70 @@ from __future__ import annotations
 
 import base64
 import hashlib
-import hmac
+import logging
 import sqlite3
 import sys
-from collections.abc import Generator, Mapping
+from collections.abc import Generator
 from contextlib import contextmanager
 from dataclasses import replace
 from datetime import datetime, timezone
+from functools import lru_cache
 from pathlib import Path
-from typing import cast
+from typing import Final, cast
 
-from .edge_events import build_policy_event
-from .extension_control_events import extension_control_change_payload
+from .native_extension_control import NativeExtensionControlError, compose_control_layers
+from .native_extension_control_authority import anchor_from_wire
 from .runtime.extension_control_authority import (
     AuthorityAnchor,
     AuthorityHealth,
     ExtensionControlAuthorityError,
     ExtensionControlAuthorityView,
-    anchor_from_json,
-    anchor_to_json,
-    layers_from_json,
 )
 from .runtime.extension_control_contract import (
     ControlLayerKind,
-    ControlState,
-    ExtensionControl,
     ExtensionControlLayer,
 )
-from .runtime.extension_control_resolver import compose_control_layers
 from .store_base import (
     EncryptedFileSecretStore,
     MigratingFallbackSecretStore,
     SecretStore,
     SystemKeyringSecretStore,
 )
-from .store_extension_control_authority_schema import ensure_extension_control_authority_schema
+from .store_extension_control_authority_schema import require_compatible_extension_control_schema
 
+_LOGGER = logging.getLogger(__name__)
 _KEY_REF_SUFFIX = ":authentication-key"
 _ANCHOR_REF_SUFFIX = ":anchor"
 _MAX_TRANSITION_ID_LENGTH = 256
 _MAX_CONTROLS_PER_LAYER = 512
 _MAX_SERIALIZED_LAYERS_BYTES = 256 * 1024
+_LAYER_INVALID_CODE: Final = "native_extension_control_layer_invalid"
+# Composition is a pure function of the layers, so a layer set the native
+# runtime accepted once stays accepted: validating a transition chain then asks
+# the runtime once per distinct revision instead of once per read.
+_COMPOSABLE_LAYER_SETS: Final = 512
 
 
-def preserve_migrated_extension_control(
-    control: ExtensionControl,
-    *,
-    previous_manifest: Mapping[str, str],
-    current_manifest: Mapping[str, str],
-) -> bool:
-    """Keep disabled controls and unchanged/unknown enabled allows across catalog upgrades."""
+@lru_cache(maxsize=_COMPOSABLE_LAYER_SETS)
+def _require_composable(layers: tuple[ExtensionControlLayer, ...]) -> None:
+    """Raise unless the native runtime composes ``layers`` without a resolver failure.
 
-    key_name = f"{control.target.kind.value}:{control.target.target_id}"
-    if key_name not in current_manifest:
-        return False
-    previous_fingerprint = previous_manifest.get(key_name)
-    return control.state is ControlState.DISABLED or previous_fingerprint in {None, current_manifest[key_name]}
-
-
-def preserve_managed_extension_control(
-    control: ExtensionControl,
-    *,
-    previous_manifest: Mapping[str, str],
-    current_manifest: Mapping[str, str],
-) -> bool:
-    """Keep managed state only with an authenticated prior contract match.
-
-    Unlike local-admin migration, a missing previous manifest is intentionally
-    treated as no match so an enabled cloud allow fails closed until refreshed.
+    A layer set the runtime rejects is a verdict on the stored layers. A
+    runtime that cannot answer is an outage and never reads as one, so it
+    surfaces as the same unavailability the authority lease reports. Only an
+    accepted set is cached; a raised error is asked again.
     """
 
-    key_name = f"{control.target.kind.value}:{control.target.target_id}"
-    current_fingerprint = current_manifest.get(key_name)
-    if current_fingerprint is None:
-        # Keep unknown targets visible so the resolver emits its fail-closed error.
-        return True
-    if control.state is ControlState.DISABLED:
-        return True
-    return previous_manifest.get(key_name) == current_fingerprint
+    try:
+        composed = compose_control_layers(layers)
+    except NativeExtensionControlError as error:
+        if error.code == _LAYER_INVALID_CODE:
+            raise ExtensionControlAuthorityError("invalid extension control layers") from error
+        from .native_command_control_authority_io import NativeCommandControlAuthorityUnavailableError
+
+        raise NativeCommandControlAuthorityUnavailableError(shared=True) from error
+    if composed.failures:
+        raise ExtensionControlAuthorityError("invalid extension control layers")
 
 
 class _ExtensionControlAuthoritySupportMixin:
@@ -108,7 +94,7 @@ class _ExtensionControlAuthoritySupportMixin:
 
     def _require_compatible_extension_control_schema(self) -> None:
         with self._connect() as connection:
-            ensure_extension_control_authority_schema(connection)
+            require_compatible_extension_control_schema(connection)
 
     def read_persisted_extension_control_authority(self) -> ExtensionControlAuthorityView:
         """Read the authenticated authority using its persisted catalog identity."""
@@ -151,17 +137,35 @@ class _ExtensionControlAuthoritySupportMixin:
             raise ExtensionControlAuthorityError("invalid extension control authentication key")
         return key
 
+    def _read_anchor_json(self) -> str | None:
+        """The anchor exactly as the credential store holds it, unverified."""
+
+        return self._secret_store().get_secret(self._anchor_ref())
+
     def _read_anchor(self, *, key: bytes) -> AuthorityAnchor | None:
-        value = self._secret_store().get_secret(self._anchor_ref())
-        return None if value is None else anchor_from_json(value, key=key)
+        value = self._read_anchor_json()
+        if value is None:
+            return None
+        reply = self._extension_control_authority_op("anchor", key=key, anchor_json=value)
+        return anchor_from_wire(reply.get("anchor"))
 
     def _write_and_verify_anchor(self, anchor: AuthorityAnchor, *, key: bytes) -> None:
-        encoded = anchor_to_json(anchor, key=key)
-        self._secret_store().set_secret(self._anchor_ref(), encoded)
-        observed = self._secret_store().get_secret(self._anchor_ref())
-        if observed != encoded:
-            raise ExtensionControlAuthorityError("extension control anchor read-back mismatch")
-        self._export_last_good_authority(anchor)
+        """Have the resident write an anchor the store has earned, then mirror it."""
+
+        reply = self._extension_control_authority_op(
+            "write_anchor",
+            key=key,
+            anchor_json=self._read_anchor_json(),
+            revision=anchor.revision,
+            snapshot_digest=anchor.snapshot_digest,
+            phase=anchor.phase.value,
+        )
+        sealed = reply.get("anchor_json")
+        if not isinstance(sealed, str):
+            raise ExtensionControlAuthorityError("invalid extension control anchor seal")
+        self._mirror_resident_anchor(sealed)
+        if reply.get("last_good_exported") is False:
+            _LOGGER.warning("Guard could not refresh the extension-control last-good export.")
 
     def _secret_store(self) -> SecretStore:
         current = self._extension_control_authority_secret_store
@@ -187,7 +191,7 @@ class _ExtensionControlAuthoritySupportMixin:
         if sys.platform != "darwin":
             return False
         with self._connect() as connection:
-            ensure_extension_control_authority_schema(connection)
+            require_compatible_extension_control_schema(connection)
             snapshot_exists = (
                 connection.execute("select 1 from extension_control_authority_snapshot where singleton = 1").fetchone()
                 is not None
@@ -250,9 +254,7 @@ class _ExtensionControlAuthoritySupportMixin:
             raise ExtensionControlAuthorityError("too many extension controls in layer")
         if any(layer.catalog_digest != catalog_digest for layer in layers):
             raise ExtensionControlAuthorityError("extension control catalog digest mismatch")
-        composed = compose_control_layers(layers)
-        if composed.failures:
-            raise ExtensionControlAuthorityError("invalid extension control layers")
+        _require_composable(tuple(layers))
         if len({layer.kind for layer in layers}) != len(layers):
             raise ExtensionControlAuthorityError("duplicate extension control layer")
         if any(layer.kind not in {ControlLayerKind.LOCAL_ADMIN, ControlLayerKind.SIGNED_CLOUD} for layer in layers):
@@ -280,31 +282,6 @@ class _ExtensionControlAuthoritySupportMixin:
     def _validate_serialized_layers(layers_json: str) -> None:
         if len(layers_json.encode("utf-8")) > _MAX_SERIALIZED_LAYERS_BYTES:
             raise ExtensionControlAuthorityError("extension control layers exceed storage limit")
-
-    def _queue_extension_control_change_event(
-        self,
-        connection: sqlite3.Connection,
-        *,
-        revision: int,
-        previous_revision: int,
-        layers_json: str,
-        occurred_at: str,
-    ) -> None:
-        layers = layers_from_json(layers_json)
-        self._add_guard_event_v1(
-            connection,
-            build_policy_event(
-                policy_key=f"extension-controls:{revision}",
-                occurred_at=occurred_at,
-                device_id=None,
-                workspace_id=self._cloud_workspace_id_from_connection(connection),
-                payload=extension_control_change_payload(
-                    revision=revision,
-                    previous_revision=previous_revision,
-                    layers=layers,
-                ),
-            ),
-        )
 
     def _degraded_view(self, catalog_digest: str) -> ExtensionControlAuthorityView:
         health = (
@@ -340,13 +317,6 @@ def _row_str(row: sqlite3.Row, name: str) -> str:
     return value
 
 
-def _row_optional_str(row: sqlite3.Row, name: str) -> str | None:
-    value = cast(object, row[name])
-    if value is not None and not isinstance(value, str):
-        raise ExtensionControlAuthorityError("invalid extension control authority row")
-    return value
-
-
 def _row_int(row: sqlite3.Row, name: str) -> int:
     value = cast(object, row[name])
     if type(value) is not int:
@@ -354,10 +324,19 @@ def _row_int(row: sqlite3.Row, name: str) -> int:
     return value
 
 
-def _private_hash(value: str, *, key: bytes, purpose: str) -> str:
-    framed = b"hol-guard.extension-control.private-ref.v1\x00" + purpose.encode("ascii")
-    return hmac.new(key, framed + b"\x00" + value.encode("utf-8"), hashlib.sha256).hexdigest()
-
-
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
+
+
+def _plan_int(plan: dict[str, object], name: str) -> int:
+    value = plan.get(name)
+    if type(value) is not int:
+        raise ExtensionControlAuthorityError("invalid extension control authority plan")
+    return value
+
+
+def _plan_map(plan: dict[str, object], name: str) -> dict[str, object]:
+    value = plan.get(name)
+    if not isinstance(value, dict):
+        raise ExtensionControlAuthorityError("invalid extension control authority plan")
+    return cast(dict[str, object], value)

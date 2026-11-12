@@ -191,6 +191,19 @@ class StoreCloudEventsMixin:
 
             review_event_wake_signal(self.path).notify()
 
+    def insert_sync_payload_if_absent(self, state_key: str, payload: Mapping[str, object], now: str) -> None:
+        """Store ``payload`` only when ``state_key`` has no row; an existing row always wins."""
+
+        with self._connect() as connection:
+            connection.execute(
+                """
+                insert into sync_state (state_key, payload_json, updated_at)
+                values (?, ?, ?)
+                on conflict(state_key) do nothing
+                """,
+                (state_key, json.dumps(payload), now),
+            )
+
     def get_sync_payload(self, state_key: str) -> dict[str, object] | list[object] | None:
         with self._connect() as connection:
             row = connection.execute(
@@ -205,12 +218,8 @@ class StoreCloudEventsMixin:
         return None
 
     def list_cloud_exceptions(self, harness: str | None = None) -> list[dict[str, object]]:
-        from .cloud_exceptions import (
-            build_cloud_exceptions_from_policy_bundle,
-            cloud_exception_to_dict,
-            dedupe_cloud_exceptions,
-            list_active_cloud_exceptions,
-        )
+        from .native_runner_authority import NativeRunnerAuthorityError
+        from .runtime.runner_native_sync import cloud_exceptions
         from .synced_policy import SyncPayloadReader, validated_synced_policy_bundle
 
         policy_bundle = validated_synced_policy_bundle(cast(SyncPayloadReader, cast(object, self)))
@@ -222,13 +231,18 @@ class StoreCloudEventsMixin:
         except (KeyError, OSError, RuntimeError, TypeError, ValueError):
             return []
         acknowledgement = self.get_sync_payload("policy_bundle_ack")
-        parsed_items = build_cloud_exceptions_from_policy_bundle(
-            policy_bundle,
-            device_id=device_id,
-            policy_bundle_ack=acknowledgement if isinstance(acknowledgement, dict) else None,
-        )
-        active_items = list_active_cloud_exceptions(dedupe_cloud_exceptions(parsed_items), harness=harness)
-        return [cloud_exception_to_dict(item) for item in active_items]
+        try:
+            return cloud_exceptions(
+                policy_bundle,
+                device_id=device_id,
+                policy_bundle_ack=acknowledgement if isinstance(acknowledgement, dict) else None,
+                harness=harness,
+                active_at=datetime.now(timezone.utc).isoformat(),
+            )
+        except NativeRunnerAuthorityError:
+            # An exception only ever widens what runs, so one the runtime could
+            # not read is not listed as in force.
+            return []
 
     def delete_sync_payload(self, state_key: str) -> None:
         if state_key == _OAUTH_LOCAL_CREDENTIALS_STATE_KEY:
@@ -251,8 +265,14 @@ class StoreCloudEventsMixin:
             return int(cursor.rowcount if cursor.rowcount is not None else 0)
 
     def add_guard_event_v1(self, event: GuardEventV1) -> None:
-        with self._connect() as connection:
-            self._add_guard_event_v1(connection, event)
+        self._native_store_call(
+            "add_guard_event_v1",
+            {
+                "event": event.to_dict(),
+                "event_queue_limit": self._guard_event_queue_limit,
+                "now": datetime.now(timezone.utc).isoformat(),
+            },
+        )
 
     def _add_guard_event_v1(self, connection: sqlite3.Connection, event: GuardEventV1) -> None:
         payload = event.to_dict()
@@ -324,40 +344,13 @@ class StoreCloudEventsMixin:
         )
 
     def list_guard_events_v1(self, *, uploaded: bool | None = None, limit: int = 200) -> list[dict[str, object]]:
-        query = """
-            select event_id, idempotency_key, event_type, payload_json, occurred_at, uploaded_at
-            from guard_cloud_events
-        """
-        params: list[object] = []
-        if uploaded is True:
-            query += " where uploaded_at is not null"
-        elif uploaded is False:
-            query += " where uploaded_at is null"
-        query += " order by occurred_at asc, event_id asc limit ?"
-        params.append(limit)
-        self.reconcile_receipt_events()
-        with self._connect() as connection:
-            rows = connection.execute(query, tuple(params)).fetchall()
-        events: list[dict[str, object]] = []
-        for row in rows:
-            payload = json.loads(str(row["payload_json"]))
-            if not isinstance(payload, dict):
-                payload = {}
-            events.append(
-                {
-                    "event_id": str(row["event_id"]),
-                    "idempotency_key": str(row["idempotency_key"]),
-                    "event_type": str(row["event_type"]),
-                    "occurred_at": str(row["occurred_at"]),
-                    "uploaded_at": row["uploaded_at"],
-                    "payload": payload,
-                }
-            )
-        return events
+        return self._native_store_call(
+            "list_guard_events_v1",
+            {"uploaded": uploaded, "limit": limit, "now": datetime.now(timezone.utc).isoformat()},
+        )
 
     def count_guard_events_v1(self, *, uploaded: bool | None = None) -> int:
-        with self._connect() as connection:
-            return self._count_guard_events_v1_in_connection(connection, uploaded=uploaded)
+        return int(self._native_store_call("count_guard_events_v1", {"uploaded": uploaded}))
 
     @staticmethod
     def _count_guard_events_v1_in_connection(connection: sqlite3.Connection, *, uploaded: bool | None = None) -> int:
@@ -370,58 +363,19 @@ class StoreCloudEventsMixin:
         return int(row["count"]) if row is not None else 0
 
     def mark_guard_events_v1_uploaded(self, event_ids: list[str], uploaded_at: str) -> int:
-        clean_ids = [event_id for event_id in event_ids if event_id.strip()]
-        if not clean_ids:
-            return 0
-        placeholders = ", ".join("?" for _ in clean_ids)
-        with self._connect() as connection:
-            cursor = connection.execute(
-                f"update guard_cloud_events set uploaded_at = ? where event_id in ({placeholders})",
-                (uploaded_at, *clean_ids),
+        return int(
+            self._native_store_call(
+                "mark_guard_events_v1_uploaded",
+                {
+                    "event_ids": event_ids,
+                    "uploaded_at": uploaded_at,
+                    "event_queue_limit": self._guard_event_queue_limit,
+                },
             )
-            pending_count = self._count_guard_events_v1_in_connection(
-                connection,
-                uploaded=False,
-            )
-            if pending_count < self._guard_event_queue_limit:
-                capacity_row = connection.execute(
-                    "select payload_json from sync_state where state_key = ?",
-                    ("guard_event_queue_capacity",),
-                ).fetchone()
-                if capacity_row is not None:
-                    try:
-                        capacity_payload = json.loads(capacity_row["payload_json"])
-                    except (json.JSONDecodeError, TypeError, ValueError):
-                        capacity_payload = {}
-                    if not isinstance(capacity_payload, dict):
-                        capacity_payload = {}
-                    capacity_payload.update(
-                        {
-                            "exhausted": False,
-                            "pendingCount": pending_count,
-                            "recoveredAt": uploaded_at,
-                        }
-                    )
-                    connection.execute(
-                        """
-                        update sync_state
-                        set payload_json = ?, updated_at = ?
-                        where state_key = ?
-                        """,
-                        (
-                            json.dumps(capacity_payload, sort_keys=True),
-                            uploaded_at,
-                            "guard_event_queue_capacity",
-                        ),
-                    )
-            return int(cursor.rowcount)
+        )
 
     def add_event(self, event_name: str, payload: dict[str, object], now: str) -> None:
-        with self._connect() as connection:
-            connection.execute(
-                """
-                insert into guard_events (event_name, payload_json, occurred_at)
-                values (?, ?, ?)
-                """,
-                (event_name, json.dumps(payload), now),
-            )
+        self._native_store_call(
+            "add_event",
+            {"event_name": event_name, "payload_json": json.dumps(payload), "occurred_at": now},
+        )

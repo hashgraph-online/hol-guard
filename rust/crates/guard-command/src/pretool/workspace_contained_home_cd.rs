@@ -14,7 +14,7 @@ use crate::{CanonicalCommandV1, CommandModelRequestV1};
 
 /// A word the shell passes through unchanged, so the projected text lexes
 /// into the same words it was built from.
-fn plain(word: &str) -> bool {
+pub(in crate::pretool) fn plain(word: &str) -> bool {
     !word.is_empty()
         && word.bytes().all(|byte| {
             byte.is_ascii_alphanumeric()

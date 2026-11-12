@@ -106,10 +106,10 @@ fn harness_root<'a>(value: &'a str, home_dir: Option<&str>) -> Option<(&'a str, 
 
 /// A match is admitted exactly as the literal word, and only as a note.
 fn harness_note(word: &str, path: &Path, context: super::super::super::PathContext<'_>) -> bool {
-    let (Some((directory, name)), Some(base)) = (word.rsplit_once('/'), path.parent()) else {
+    let (Some((_, name)), Some(base)) = (word.rsplit_once('/'), path.parent()) else {
         return false;
     };
-    super::readable_match(directory, name, base, context)
+    super::readable_match(word, name, base, context)
         && std::fs::canonicalize(path)
             .is_ok_and(|canonical| notes::harness_home_document(&canonical, context.home_dir))
 }

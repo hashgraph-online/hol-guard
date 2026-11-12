@@ -19,7 +19,7 @@
 use guard_command::command_action_risk_classes::risk_classes_for_command_action;
 use guard_contracts::{
     normalize_guard_action_result, GuardAction, HookArtifactFactsRequestV1,
-    HookArtifactFactsResultV1, HookArtifactV1, PolicyArtifactFactsV1,
+    HookArtifactFactsResultV1, HookArtifactV1, MetadataStampV1, PolicyArtifactFactsV1,
     HOOK_ARTIFACT_FACTS_MAX_ARTIFACTS, HOOK_ARTIFACT_FACTS_MAX_BYTES,
     HOOK_ARTIFACT_FACTS_REQUEST_SCHEMA, HOOK_ARTIFACT_FACTS_RESULT_SCHEMA,
 };
@@ -89,8 +89,82 @@ pub(crate) fn evaluate(artifact: &HookArtifactV1) -> Value {
             .map(str::to_owned),
         skill_is_known_bad: skill_is_known_bad(metadata),
         skip_native_floor: skip_native_floor(&artifact.artifact_type, permission_allow),
+        content_sha256: artifact
+            .metadata_stamp
+            .as_ref()
+            .map(|stamp| content_sha256(artifact, metadata, stamp)),
     };
     serde_json::to_value(facts).unwrap_or(Value::Null)
+}
+
+/// `consumer.service.artifact_hash` over the artifact its caller asked about.
+///
+/// The digest covers the metadata as it stood before the caller's stamp, not
+/// the metadata the facts above are read from: a hook fixes the approval
+/// identity before it stamps its runtime posture onto the artifact, and a
+/// saved approval keyed by the stamped metadata would stop matching the
+/// moment a signal appeared.
+fn content_sha256(
+    artifact: &HookArtifactV1,
+    metadata: &Map<String, Value>,
+    stamp: &MetadataStampV1,
+) -> String {
+    let mut payload = Map::new();
+    for (field, value) in [
+        ("artifact_id", &artifact.artifact_id),
+        ("name", &artifact.name),
+        ("harness", &artifact.harness),
+        ("artifact_type", &artifact.artifact_type),
+        ("source_scope", &artifact.source_scope),
+        ("config_path", &artifact.config_path),
+    ] {
+        payload.insert(field.to_owned(), Value::String(value.clone()));
+    }
+    for (field, value) in [
+        ("command", &artifact.command),
+        ("url", &artifact.url),
+        ("transport", &artifact.transport),
+        ("publisher", &artifact.publisher),
+    ] {
+        payload.insert(
+            field.to_owned(),
+            value.clone().map_or(Value::Null, Value::String),
+        );
+    }
+    payload.insert(
+        "args".to_owned(),
+        Value::Array(
+            artifact
+                .args
+                .iter()
+                .map(|arg| Value::String(arg.clone()))
+                .collect(),
+        ),
+    );
+    payload.insert(
+        "metadata".to_owned(),
+        Value::Object(unstamped_metadata(metadata, stamp)),
+    );
+    guard_command::artifact_hash::artifact_hash(&payload)
+}
+
+/// The metadata the artifact carried before the caller stamped it.
+///
+/// Dropping the keys the stamp introduced and putting back the values it
+/// overwrote recovers that metadata from the copy already on the wire, so a
+/// large metadata is not sent twice to answer both questions.
+fn unstamped_metadata(
+    metadata: &Map<String, Value>,
+    stamp: &MetadataStampV1,
+) -> Map<String, Value> {
+    let mut identity = metadata.clone();
+    for key in &stamp.added {
+        identity.remove(key);
+    }
+    for (key, value) in &stamp.replaced {
+        identity.insert(key.clone(), value.clone());
+    }
+    identity
 }
 
 /// Whether the native command floor stays out of this artifact's verdict.

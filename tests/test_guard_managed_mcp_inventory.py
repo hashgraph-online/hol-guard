@@ -8,7 +8,8 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
-from codex_plugin_scanner.guard.adapters.cline_mcp import detect_cline_mcp, install_cline_mcp_proxies
+from codex_plugin_scanner.guard.adapters.cline import ClineHarnessAdapter
+from codex_plugin_scanner.guard.adapters.cline_mcp import install_cline_mcp_proxies
 from codex_plugin_scanner.guard.adapters.cursor import CursorHarnessAdapter
 from codex_plugin_scanner.guard.adapters.harness_mcp_discovery import discover_harness_mcp_servers
 from codex_plugin_scanner.guard.adapters.mcp_servers import (
@@ -397,10 +398,10 @@ def test_cline_installed_inventory_uses_private_launch_values(tmp_path: Path) ->
     before = discover_harness_mcp_servers(
         home_dir=context.home_dir,
         guard_home=context.guard_home,
-        detections=(detect_cline_mcp(context),),
+        detections=(ClineHarnessAdapter().detect(context),),
     )
     install_cline_mcp_proxies(context)
-    detection = detect_cline_mcp(context)
+    detection = ClineHarnessAdapter().detect(context)
     serialized = json.dumps([artifact.to_dict() for artifact in detection.artifacts])
     for secret in ("secret-token-value", "secret-env-value"):
         assert secret not in serialized and secret not in repr(detection)

@@ -12,6 +12,8 @@ build/
 *.egg-info/
 *.egg
 rust/target
+# The workspace-excluded host compiler crate resolves its own build directory.
+rust/crates/guard-command-build/target
 
 # Native binaries are staged only for wheel and frozen builds.
 /src/codex_plugin_scanner/_native/
@@ -66,6 +68,7 @@ Thumbs.db
 /docs/guard/extension-builder/*.[mM][dD]
 !/docs/guard/extension-builder/README.md
 !/docs/guard/extension-builder/VALIDATION.md
+!/docs/guard/extension-builder/HOSTED-ACTIONS.md
 # Native command projections are build outputs, never merge inputs.
 /contracts/extensions/command-catalog.v1.json
 /contracts/extensions/native-command-program.v1.json
@@ -85,3 +88,9 @@ src/codex_plugin_scanner/guard/contracts/data/extensions/trust-class-map.v1.json
 
 # per-session editor hook cache (local paths, never committed)
 dashboard/.impeccable/hook.cache.json
+
+# Dashboard integration run output can hold local session URLs.
+/dashboard/e2e/proofs/integration-output/
+
+# Scratch pull-request description written by the stacked-PR tooling.
+/pr-body.md

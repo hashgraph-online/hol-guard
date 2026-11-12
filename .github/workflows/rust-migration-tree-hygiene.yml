@@ -6,11 +6,15 @@ on:
     paths:
       - ".github/**"
       - "scripts/ci/**"
+      - "src/**"
+      - "tests/**"
   push:
     branches: [main]
     paths:
       - ".github/**"
       - "scripts/ci/**"
+      - "src/**"
+      - "tests/**"
   workflow_dispatch:
 
 permissions:

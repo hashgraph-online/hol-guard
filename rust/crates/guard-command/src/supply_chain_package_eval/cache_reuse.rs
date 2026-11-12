@@ -72,11 +72,11 @@ impl CacheContext<'_, '_> {
         };
         if draft.refresh_required
             || !resolved_targets.iter().all(|target| {
-                let identity = result_package_identity(self.deps, target);
+                let identity = result_package_identity(self.deps.identity, target);
                 draft
                     .packages
                     .iter()
-                    .any(|package| result_package_identity(self.deps, package) == identity)
+                    .any(|package| result_package_identity(self.deps.identity, package) == identity)
             })
         {
             return Ok(None);

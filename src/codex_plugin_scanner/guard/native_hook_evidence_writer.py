@@ -125,7 +125,6 @@ class NativeHookEvidenceWriter:
         self._store = store
         self._guard_home = Path(store.guard_home)
         self._source = store.guard_source
-        self._policy_mutations = 0
         # The failure this client still owes a recovery for, and the identifier
         # of the one it has finished with. Both outlive a single call: recovery
         # that fails is retried on the next reply, and the resident keeps the
@@ -281,9 +280,9 @@ class NativeHookEvidenceWriter:
     def stats(self) -> dict[str, Any]:
         """The writer's counters, with the two signals the resident hands back.
 
-        ``policy_mutations`` is read and cleared in the resident, so a second
-        reader cannot repeat the publisher wake. ``store_fatal`` stays there
-        until this client acknowledges it. Neither is reported as a counter.
+        ``policy_mutations`` is read and cleared in the resident and dropped
+        here. ``store_fatal`` stays there until this client acknowledges it.
+        Neither is reported as a counter.
         """
 
         payload = self._call({"action": "stats"}, timeout_seconds=_TIMEOUT_SECONDS)
@@ -315,16 +314,10 @@ class NativeHookEvidenceWriter:
             raise _unavailable("native_hook_evidence_writer_response_invalid")
         return drained
 
-    def take_policy_mutations(self) -> int:
-        """The mutations observed since the last read, for the caller's publishers."""
-
-        mutations, self._policy_mutations = self._policy_mutations, 0
-        return mutations
-
     def _consume_signals(self, payload: Mapping[str, object]) -> None:
-        mutations = payload.pop("policy_mutations", 0) if isinstance(payload, dict) else 0
-        if isinstance(mutations, int) and not isinstance(mutations, bool) and mutations > 0:
-            self._policy_mutations += mutations
+        if isinstance(payload, dict):
+            # The resident still reports a mutation count; nothing reads it.
+            payload.pop("policy_mutations", None)
         fatal = payload.pop("store_fatal", None) if isinstance(payload, dict) else None
         if isinstance(fatal, Mapping):
             identifier, code = fatal.get("id"), fatal.get("code")

@@ -12,6 +12,7 @@ use crate::claude_hook_bridge_auth::{private_file_text, LOOPBACK_HOSTS};
 use crate::claude_hook_bridge_http::{LoopbackConnection, ResponseHead, MAX_DAEMON_RESPONSE_BYTES};
 use crate::claude_hook_bridge_transport::OVERLOAD_MARKERS;
 use crate::claude_hook_bridge_url::assert_loopback_http_url;
+use crate::codex_hook_bridge_direct_resident::{DirectMiss, DIRECT_MISS_HEADER};
 use crate::pyjson::{self, PyVal, SurrogateMapped};
 
 /// The loopback daemon and the token a hook is sent with.
@@ -88,12 +89,14 @@ pub(crate) fn daemon_target(guard_home: &Path, harness: &str) -> Option<DaemonTa
 impl DaemonTarget {
     /// The daemon's status and body for a hook posted to `path`, or `None`
     /// when no complete answer of at most `MAX_DAEMON_RESPONSE_BYTES`
-    /// arrived in time. A refusal is returned as the daemon gave it.
+    /// arrived in time. A refusal is returned as the daemon gave it. `miss`
+    /// names why the resident did not answer the hook.
     pub(crate) fn post_status(
         &self,
         path: &str,
         data: &str,
         deadline: Instant,
+        miss: DirectMiss,
     ) -> Option<(u16, Vec<u8>)> {
         let mut connection = LoopbackConnection::new(&self.host, self.port);
         let head = connection
@@ -103,6 +106,7 @@ impl DaemonTarget {
                     ("Content-Type", "application/json"),
                     ("Connection", "close"),
                     ("X-Guard-Token", self.token.as_str()),
+                    (DIRECT_MISS_HEADER, miss.code()),
                 ],
                 data.as_bytes(),
                 deadline,
@@ -154,25 +158,26 @@ impl PostFailure {
 }
 
 /// The daemon's `200` body for a hook posted to `path`, as UTF-8 text
-/// without a BOM, or why there is none.
-pub(crate) fn post_hook_reply(
+/// without a BOM, or why there is none. `miss`, when set, names why the
+/// resident did not answer the hook.
+pub(crate) fn post_hook_reply_missed(
     target: &DaemonTarget,
     path: &str,
     data: &str,
     deadline: Instant,
+    miss: Option<DirectMiss>,
 ) -> Result<String, PostFailure> {
+    let mut headers = vec![
+        ("Content-Type", "application/json"),
+        ("Connection", "close"),
+        ("X-Guard-Token", target.token.as_str()),
+    ];
+    if let Some(miss) = miss {
+        headers.push((DIRECT_MISS_HEADER, miss.code()));
+    }
     let mut connection = LoopbackConnection::new(&target.host, target.port);
     let head = connection
-        .post(
-            path,
-            &[
-                ("Content-Type", "application/json"),
-                ("Connection", "close"),
-                ("X-Guard-Token", target.token.as_str()),
-            ],
-            data.as_bytes(),
-            deadline,
-        )
+        .post(path, &headers, data.as_bytes(), deadline)
         .map_err(|_| PostFailure::Transport)?;
     if head.status != 200 {
         return Err(refusal(&mut connection, &head, deadline));
@@ -217,14 +222,17 @@ fn refusal(
 }
 
 /// `post_hook_json`: the daemon's JSON object, lone surrogates mapped as
-/// `json.loads` keeps them, or `None` for any failure.
+/// `json.loads` keeps them, or `None` for any failure. `miss` names why the
+/// resident did not answer the hook.
 pub(crate) fn post_hook(
     target: &DaemonTarget,
     harness: &str,
     data: &str,
     deadline: Instant,
+    miss: Option<DirectMiss>,
 ) -> Option<SurrogateMapped> {
-    let text = post_hook_reply(target, &format!("/v1/hooks/{harness}"), data, deadline).ok()?;
+    let path = format!("/v1/hooks/{harness}");
+    let text = post_hook_reply_missed(target, &path, data, deadline, miss).ok()?;
     let parsed = pyjson::parse_mapping_lone_surrogates(&text).ok()?;
     parsed.value.as_dict().is_some().then_some(parsed)
 }

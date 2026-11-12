@@ -1,8 +1,7 @@
-"""Bound resident transport for verified local JavaScript execution contexts.
+"""Caller routing facts that native request contexts are built from.
 
-Python reports the caller's routing environment and presents the native shell
-DTO. Filesystem, toolchain identity, configuration and command verdicts belong
-to the resident. Missing or malformed replies cannot authorize a context.
+Python reports only the caller's routing environment. Filesystem, toolchain
+identity, configuration and command verdicts belong to the resident.
 """
 
 from __future__ import annotations
@@ -11,18 +10,10 @@ import os
 import sys
 import tempfile
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Literal
+from typing import Any
 
 from .native_git_execution_safety import _process_groups
-from .native_request_context import (
-    NativeRequestContextFailure,
-    _absolute_text,
-    _call,
-    _decode_build,
-)
-
-if TYPE_CHECKING:
-    from .runtime.shell_execution_context import ShellExecutionContext
+from .native_request_context import _absolute_text
 
 _ENVIRONMENT_NAMES = frozenset(
     {
@@ -58,7 +49,6 @@ _ENVIRONMENT_NAMES = frozenset(
     }
 )
 _ENVIRONMENT_PREFIXES = ("GIT_", "BASH_FUNC_", "DYLD_", "LD_")
-_BUDGET_MS = 9_000
 
 
 def _facts(cwd: Path, home_dir: Path) -> dict[str, Any]:
@@ -87,61 +77,3 @@ def _facts(cwd: Path, home_dir: Path) -> dict[str, Any]:
             "python_version": [sys.version_info.major, sys.version_info.minor],
         },
     }
-
-
-def native_direct_tool_context(
-    tool: Literal["vitest", "typescript"],
-    command_text: str,
-    *,
-    cwd: Path | None,
-    home_dir: Path,
-) -> ShellExecutionContext | None:
-    # Necessary literal fragments only: this avoids transport for impossible
-    # inputs without granting a command verdict. Native parsing and proofs
-    # still decide every candidate. Strip shell quoting/escaping conservatively.
-    fragments = command_text.translate(str.maketrans("", "", "'\"\\\n\r")).casefold()
-    if "cd" not in fragments or ("vitest" if tool == "vitest" else "tsc") not in fragments:
-        return None
-
-    from .runtime.shell_execution_context import _context_from_report
-
-    try:
-        payload = _call(
-            {
-                "kind": "direct_tool",
-                "body": {"tool": tool, "script": command_text, "facts": _facts(cwd or home_dir, home_dir)},
-            },
-            source="direct_command",
-            guard_home=None,
-            budget_ms=_BUDGET_MS,
-        )
-        if isinstance(payload, NativeRequestContextFailure):
-            return None
-        if set(payload) != {"kind", "accepted", "context"} or payload["kind"] != "direct_tool":
-            return None
-        if payload["accepted"] is not True or not isinstance(payload["context"], dict):
-            return None
-        context = _decode_build(payload["context"])
-        if context is None or context.shell is None:
-            return None
-        return _context_from_report(context.shell)
-    except (OSError, RuntimeError, TypeError, ValueError, KeyError):
-        return None
-
-
-def native_trusted_tool_command(command: str, *, cwd: Path, home_dir: Path) -> bool:
-    try:
-        payload = _call(
-            {"kind": "trusted_tool", "body": {"command": command, "facts": _facts(cwd, home_dir)}},
-            source="direct_command",
-            guard_home=None,
-            budget_ms=_BUDGET_MS,
-        )
-        return (
-            not isinstance(payload, NativeRequestContextFailure)
-            and set(payload) == {"kind", "trusted"}
-            and payload["kind"] == "trusted_tool"
-            and payload["trusted"] is True
-        )
-    except (OSError, RuntimeError, TypeError, ValueError):
-        return False

@@ -74,6 +74,11 @@ pub(crate) fn evaluate(
             probe.artifact_id = Some(artifact_id.to_owned());
             probe.artifact_hash = Some(artifact_hash.to_owned());
             probe.workspace = workspace.map(str::to_owned);
+            // A portable probe still matches Cloud exceptions on the checkout.
+            probe.exception_workspace = request
+                .exception_workspace
+                .clone()
+                .or_else(|| request.workspace.clone());
             evaluate_non_consuming(&probe, &connection)
         },
     )?;

@@ -1,0 +1,46 @@
+{
+  "schemaVersion": "guard.mcp-server-contribution.v1",
+  "id": "mcp.obsidian-kanban",
+  "version": "1.0.0",
+  "name": "Obsidian Kanban MCP",
+  "description": "Task board kept as Markdown files in an Obsidian vault: list boards and cards, add and move cards, add to descriptions, comment and set follow-ups through the local board server. Rewriting a whole description is the one tool that removes text and is gated on review. Off until you turn it on.",
+  "trustClass": "external",
+  "activation": "opt-in",
+  "publisher": {
+    "id": "io.github.sergi039",
+    "displayName": "Sergi Sinyugin",
+    "url": "https://github.com/sergi039"
+  },
+  "icon": { "kind": "react-icon", "name": "HiMiniFolder", "background": "#1E1B4B" },
+  "homepage": "https://github.com/sergi039/obsidian-kanban-app",
+  "launch": {
+    "kind": "direct-command",
+    "command": "obsidian-kanban-mcp"
+  },
+  "riskClasses": ["local-data-access", "local-file-write", "local-content-overwrite"],
+  "tools": [
+    { "name": "kanban_list_boards", "state": "inherit" },
+    { "name": "kanban_list_cards", "state": "inherit" },
+    { "name": "kanban_create_card", "state": "inherit" },
+    { "name": "kanban_update_card", "state": "inherit" },
+    { "name": "kanban_move_card", "state": "inherit" },
+    { "name": "kanban_add_comment", "state": "inherit" },
+    { "name": "kanban_follow_up", "state": "inherit" },
+    { "name": "kanban_replace_description", "state": "review" },
+    { "name": "other", "state": "review" }
+  ],
+  "referenceUrls": [
+    "https://github.com/sergi039/obsidian-kanban-app",
+    "https://github.com/sergi039/obsidian-kanban-app/blob/main/docs/desktop-mcp.md",
+    "https://github.com/sergi039/obsidian-kanban-app/blob/main/apps/mcp/src/tools.ts",
+    "https://github.com/sergi039/obsidian-kanban-app/blob/main/apps/mcp/package.json",
+    "https://github.com/sergi039/obsidian-kanban-app/blob/main/docs/decisions/0003-agent-access-through-local-mcp.md"
+  ],
+  "saferAlternatives": [
+    "Start with kanban_list_boards and kanban_list_cards; they only read the board.",
+    "kanban_update_card adds a paragraph and links without removing description text; prefer it to kanban_replace_description, which rewrites the whole description.",
+    "The MCP server writes no files itself: it calls the board server's HTTP API, the only writer of the vault's Markdown. Deleting cards or boards is not offered to agents.",
+    "The board server listens on 127.0.0.1 only. Set KANBAN_API_TOKEN only when the board runs with API_TOKEN.",
+    "This entry matches the obsidian-kanban-mcp executable. Launched as node <path>/dist/server.js, the server keeps Guard's normal handling; set it up on Guard's Protect page."
+  ]
+}

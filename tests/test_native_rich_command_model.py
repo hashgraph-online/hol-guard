@@ -12,7 +12,8 @@ from typing import Any
 import pytest
 
 from codex_plugin_scanner.guard import native_rich_command_model as client
-from codex_plugin_scanner.guard.runtime import command_model, command_tokens, env_wrapper
+from codex_plugin_scanner.guard.runtime import command_model, command_tokens
+from tests import env_wrapper_test_support as env_wrapper
 
 FIXTURE = json.loads((Path(__file__).parent / "fixtures/native_rich_command_model.json").read_text())
 
@@ -116,6 +117,28 @@ def test_shadow_native_identity_is_reused_without_another_transport(monkeypatch)
     monkeypatch.setattr(client, "ensure_resident_prerequisite", lambda _: False)
     assert projected.to_dict()["security_identity"] == rich.security_identity
     assert _canonical_command_from_native("echo hi", {**payload, "security_identity": "invalid"}) is None
+    malformed_segment = {key: value for key, value in payload["segments"][0].items() if key != "span"}
+    first = payload["segments"][0]
+    outside_span = {**first, "span": {**first["span"], "end": len("echo hi") + 1}}
+    non_string_text = {**first, "text": 7}
+    for damaged in (
+        {**payload, "segments": [malformed_segment]},
+        {**payload, "segments": []},
+        {**payload, "segments": [outside_span]},
+        {**payload, "segments": [non_string_text]},
+        {**payload, "segments": [first, first]},
+        {**payload, "confidence": "uncertain", "uncertainty_reason": "unsupported_syntax"},
+        {**payload, "uncertainty_reason": "unsupported_syntax"},
+        {**payload, "segments": "echo hi"},
+        {**payload, "dialect": "powershell"},
+        {**payload, "confidence": "guess"},
+        {**payload, "path_overridden": True},
+    ):
+        assert _canonical_command_from_native("echo hi", damaged) is None
+    # Rust rewrites `[[ ... ]]` to `[ ... ]` and keeps the span on the original
+    # characters, so the segment text need not equal its span.
+    rewritten = {**payload, "security_identity": None, "segments": [{**first, "text": "echo  hi"}]}
+    assert _canonical_command_from_native("echo hi", rewritten) is not None
 
 
 @pytest.mark.parametrize(
@@ -285,57 +308,20 @@ def test_explicit_inspection_home_identity_outage_returns_blocked_diagnostic(mon
     assert result["command_model"] is None
 
 
-@pytest.mark.parametrize("harness", ["codex", "codex-alias"])
-@pytest.mark.parametrize(
-    "error_type",
-    ["command-model", "sensitive-request", "artifact-identity"],
-)
-def test_runtime_artifact_native_outage_does_not_reparse_or_fabricate_identity(
-    monkeypatch, tmp_path, harness, error_type
-):
-    from codex_plugin_scanner.guard.cli import commands_support_runtime_artifacts as artifacts
-    from codex_plugin_scanner.guard.native_runtime_artifact_identity import NativeRuntimeArtifactIdentityError
-    from codex_plugin_scanner.guard.native_sensitive_request import NativeSensitiveRequestError
-
-    monkeypatch.setattr(artifacts, "_canonical_harness_name", lambda _: "codex")
-
-    def forbidden(*args, **kwargs):
-        if error_type == "artifact-identity":
-            raise NativeRuntimeArtifactIdentityError("native_runtime_artifact_identity_unavailable")
-        if error_type == "sensitive-request":
-            raise NativeSensitiveRequestError("native_sensitive_request_unavailable")
-        raise client.NativeCommandModelError("native_rich_command_model_unavailable")
-
-    monkeypatch.setattr(artifacts, "_hook_runtime_artifact_with_native", forbidden)
-    result = artifacts._hook_runtime_artifact(
-        harness=harness,
-        payload={"hook_event_name": "PreToolUse", "tool_name": "Shell", "tool_input": {"command": "echo hi"}},
-        workspace=tmp_path,
-        home_dir=tmp_path,
-        guard_home=tmp_path / "guard",
-        action_envelope=None,
-    )
-    assert result is not None
-    assert result.harness == "codex"
-    assert result.metadata["native_command_evaluation_status"] == "unavailable"
-    assert result.metadata["guard_default_action"] == "block"
-    assert "command_security_identity" not in result.metadata
-
-
 @pytest.mark.parametrize("error_type", [client.NativeCommandModelError, ValueError])
 def test_command_id_resolution_never_converts_parser_errors_to_root_tokens(monkeypatch, tmp_path, error_type):
     from types import SimpleNamespace
 
-    from codex_plugin_scanner.guard.runtime import local_cli_commands, package_json_scripts
+    from tests import local_cli_command_id_client
 
-    monkeypatch.setattr(package_json_scripts, "package_script_command_tokens", lambda *args, **kwargs: None)
+    monkeypatch.setattr(local_cli_command_id_client, "package_script_command_tokens", lambda *args, **kwargs: None)
 
     def unavailable(*args, **kwargs):
         raise error_type("parser_unavailable")
 
-    monkeypatch.setattr(local_cli_commands, "parse_shell_command", unavailable)
+    monkeypatch.setattr(local_cli_command_id_client, "parse_shell_command", unavailable)
     with pytest.raises(error_type):
-        local_cli_commands.command_tokens_for_invocation(
+        local_cli_command_id_client.command_tokens_for_invocation(
             "tool --version",
             cwd=tmp_path,
             home_dir=tmp_path,

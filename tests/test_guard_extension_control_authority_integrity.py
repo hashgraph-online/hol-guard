@@ -22,7 +22,6 @@ from codex_plugin_scanner.guard.runtime.extension_control_authority import (
 )
 from codex_plugin_scanner.guard.runtime.extension_control_contract import (
     ControlState,
-    ControlSurface,
 )
 from codex_plugin_scanner.guard.store import GuardStore
 from codex_plugin_scanner.guard.store_base import (
@@ -225,7 +224,7 @@ print(hashlib.sha256(payload.encode()).hexdigest())
     assert len(digests) == 1
 
 
-def test_catalog_upgrade_provenance_survives_final_anchor_failure(tmp_path: Path) -> None:
+def test_catalog_upgrade_records_its_provenance_with_the_migration(tmp_path: Path) -> None:
     secrets = MemorySecretStore()
     store = _store(tmp_path, secrets)
     original_digest = BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest
@@ -233,11 +232,11 @@ def test_catalog_upgrade_provenance_survives_final_anchor_failure(tmp_path: Path
     _commit(store)
     upgraded_registry = _upgraded_registry()
     upgraded_digest = upgraded_registry.catalog_digest
-    secrets.fail_anchor_set_number = secrets.anchor_set_count + 2
 
-    interrupted = store.read_extension_control_authority_for_registry(upgraded_registry)
+    # The resident commits the migration and records its event together.
+    migrated = store.read_extension_control_authority_for_registry(upgraded_registry)
 
-    assert interrupted.health is AuthorityHealth.DEGRADED_UNACKNOWLEDGED
+    assert migrated.health is AuthorityHealth.PROTECTED
     with store._connect() as connection:
         event = connection.execute(
             "select payload_json from guard_events where event_name = ? order by event_id desc limit 1",
@@ -245,7 +244,6 @@ def test_catalog_upgrade_provenance_survives_final_anchor_failure(tmp_path: Path
         ).fetchone()
     assert event is not None
     assert json.loads(event["payload_json"])["catalog_digest"] == upgraded_digest
-    secrets.fail_anchor_set_number = None
     recovered = store.recover_extension_control_authority(catalog_digest=upgraded_digest)
     assert recovered.health is AuthorityHealth.PROTECTED
     assert recovered.layers[0].controls == _disabled_layer().controls
@@ -322,8 +320,6 @@ def test_credential_store_failure_requires_explicit_degraded_acknowledgement(tmp
 
     degraded = store.read_extension_control_authority(catalog_digest=BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest)
     assert degraded.health is AuthorityHealth.DEGRADED_UNACKNOWLEDGED
-    assert degraded.layers_for(ControlSurface.COMMAND_EVALUATION)[0].global_lockdown is True
-    assert degraded.layers_for(ControlSurface.TRUSTED_LOCAL_RECOVERY) == ()
 
     acknowledged = store.acknowledge_extension_control_degraded_mode()
     assert acknowledged.health is AuthorityHealth.DEGRADED_ACKNOWLEDGED

@@ -13,25 +13,29 @@ import pytest
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import ec, rsa
 
+from codex_plugin_scanner.guard import aibom_trust_metadata
 from codex_plugin_scanner.guard.aibom_trust_metadata import trust_resolution_from_domain
 from codex_plugin_scanner.guard.cli.oauth_client import generate_dpop_key_pair
 from codex_plugin_scanner.guard.inventory_cisco import CiscoInventoryRun
 from codex_plugin_scanner.guard.inventory_contract import inventory_snapshot_from_detection
 from codex_plugin_scanner.guard.models import GuardArtifact, HarnessDetection
+from codex_plugin_scanner.guard.native_runner_authority import NativeRunnerAuthorityError
 from codex_plugin_scanner.guard.runtime.evidence_hash import guard_evidence_hash
 from codex_plugin_scanner.guard.runtime.trust_attestation import (
     GUARD_TRUST_ATTESTATION_SIGNATURE_ALGORITHM_ECDSA_P256,
     GuardTrustAttestationSigningConfig,
     GuardTrustAttestationVerificationKey,
     build_trust_attestation_payload,
-    build_trust_attestation_verification_key,
     resolve_guard_oauth_trust_attestation_signing_config,
     resolve_trust_attestation_signing_config,
     sign_trust_attestation,
-    verify_trust_attestation,
 )
 from codex_plugin_scanner.models import Finding, Severity
 from codex_plugin_scanner.trust_models import TrustDomainScore
+from tests.trust_attestation_verify_support import (
+    build_trust_attestation_verification_key,
+    verify_trust_attestation,
+)
 
 
 def _write_good_plugin(plugin_dir: Path) -> None:
@@ -43,7 +47,7 @@ def _write_good_plugin(plugin_dir: Path) -> None:
                 "name": "trust-demo",
                 "version": "1.0.0",
                 "description": "Trust scoring demo plugin",
-                "author": {"name": "Hashgraph Online"},
+                "author": {"name": "HOL"},
                 "homepage": "https://example.com/plugin",
                 "repository": "https://github.com/hashgraph-online/hol-guard",
                 "skills": "skills",
@@ -231,6 +235,34 @@ def test_inventory_snapshot_attaches_local_plugin_trust_resolution(tmp_path: Pat
     layer_evidence = layer_metadata.get("evidence")
     assert isinstance(layer_evidence, dict)
     assert layer_evidence.get("source") == "hol-guard-local-baseline"
+
+
+def test_inventory_snapshot_keeps_an_item_whose_trust_claims_are_unavailable(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    def unavailable(*_args: object, **_kwargs: object) -> dict[str, object]:
+        raise NativeRunnerAuthorityError("native_response_too_large")
+
+    monkeypatch.setattr(aibom_trust_metadata, "native_runner_authority", unavailable)
+    _write_good_plugin(tmp_path)
+    snapshot = _snapshot_for_artifact(
+        artifact=GuardArtifact(
+            artifact_id="codex:project:plugin:trust-demo",
+            name="trust-demo",
+            harness="codex",
+            artifact_type="plugin",
+            source_scope="project",
+            config_path=str(tmp_path),
+        ),
+        generated_at="2026-06-10T12:00:00+00:00",
+        home_dir=tmp_path,
+        workspace_dir=tmp_path,
+    )
+
+    plugin_item = next(item for item in snapshot.items if item.item_kind == "plugin")
+    assert "trustResolution" not in plugin_item.metadata
+    assert "trustLayers" not in plugin_item.metadata
 
 
 def test_inventory_snapshot_id_uses_stable_content_hash(tmp_path: Path) -> None:

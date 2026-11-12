@@ -13,6 +13,7 @@ use std::os::windows::fs::MetadataExt;
 use std::path::{Path, PathBuf};
 use std::sync::LazyLock;
 
+use hmac::{Hmac, Mac};
 use regex::Regex;
 use serde_json::{json, Map, Value};
 use sha2::{Digest, Sha256};
@@ -30,12 +31,18 @@ use crate::typescript_launch_evidence::*;
 mod routine_local_runner;
 use routine_local_runner::*;
 
+#[path = "package_intent_parser/npm_exec_config.rs"]
+mod npm_exec_config;
+pub(crate) use npm_exec_config::NPM_CONFIG_PACKAGE_UNIDENTIFIED;
+use npm_exec_config::*;
+
 #[path = "package_intent_parser/managers_js.rs"]
 mod managers_js;
 use managers_js::*;
 
 #[path = "package_intent_parser/execution_intent.rs"]
 mod execution_intent;
+pub use execution_intent::runner_packages;
 use execution_intent::*;
 
 #[path = "package_intent_parser/managers_python.rs"]
@@ -59,7 +66,7 @@ mod redaction_and_combination;
 use redaction_and_combination::*;
 
 #[path = "package_intent_parser/runner_options.rs"]
-mod runner_options;
+pub(crate) mod runner_options;
 use runner_options::*;
 
 #[path = "package_intent_parser/local_execution.rs"]
@@ -79,12 +86,24 @@ mod tests;
 mod uvx_value_options_tests;
 
 #[cfg(test)]
+#[path = "package_intent_parser/install_help_tests.rs"]
+mod install_help_tests;
+
+#[cfg(test)]
 #[path = "package_intent_parser/routine_local_runner_tests.rs"]
 mod routine_local_runner_tests;
 
 #[cfg(test)]
+#[path = "package_intent_parser/npm_exec_config_tests.rs"]
+mod npm_exec_config_tests;
+
+#[cfg(test)]
 #[path = "package_intent_parser/bun_value_options_tests.rs"]
 mod bun_value_options_tests;
+
+#[cfg(test)]
+#[path = "package_intent_parser/python_value_options_tests.rs"]
+mod python_value_options_tests;
 
 // ---------------------------------------------------------------------------
 // Module constants  (package_intent_parser.py :51-131)
@@ -151,10 +170,14 @@ static PACKAGE_COMMAND_NAMES: LazyLock<HashSet<&'static str>> = LazyLock::new(||
     .collect()
 });
 
-// package_intent_parser.py :104  `_LOCAL_EXECUTABLE_PACKAGE_ALIASES`
+/// The package a locally installed executable is published under, where the
+/// two differ: `tsc` ships inside `typescript` and `lab` inside `@hapi/lab`.
+/// An executable published under its own name is its own package.
 fn local_executable_package_alias(name: &str) -> &str {
     match name {
         "tsc" => "typescript",
+        "lab" => "@hapi/lab",
+        "cucumber-js" => "@cucumber/cucumber",
         other => other,
     }
 }
@@ -208,30 +231,10 @@ static PACKAGE_SOURCE_ENV_NAMES: LazyLock<HashSet<&'static str>> = LazyLock::new
 // ---------------------------------------------------------------------------
 
 fn hmac_sha256(key: &[u8; 32], message: &[u8]) -> [u8; 32] {
-    const BLOCK: usize = 64;
-    let mut block_key = [0u8; BLOCK];
-    if key.len() > BLOCK {
-        let digest = Sha256::digest(key);
-        block_key[..32].copy_from_slice(&digest);
-    } else {
-        block_key[..key.len()].copy_from_slice(key);
-    }
-    let mut ipad = [0u8; BLOCK];
-    let mut opad = [0u8; BLOCK];
-    for (i, b) in block_key.iter().enumerate() {
-        ipad[i] = b ^ 0x36;
-        opad[i] = b ^ 0x5c;
-    }
-    let mut inner = Sha256::new();
-    inner.update(ipad);
-    inner.update(message);
-    let inner_digest = inner.finalize();
-    let mut outer = Sha256::new();
-    outer.update(opad);
-    outer.update(inner_digest);
-    let result = outer.finalize();
+    let mut mac = <Hmac<Sha256>>::new_from_slice(key).expect("hmac accepts any key length");
+    mac.update(message);
     let mut out = [0u8; 32];
-    out.copy_from_slice(&result);
+    out.copy_from_slice(&mac.finalize().into_bytes());
     out
 }
 
@@ -250,11 +253,56 @@ struct CommandSegment {
     context_hash: String,
     context_complete: bool,
     context_reason_code: Option<String>,
+    /// Packages `npx` installs from npm configuration for this segment,
+    /// including assignments the wrapper strip removes before the runner
+    /// verdict. Absent for a segment that is not an `npx` launch.
+    npm_configured_packages: NpmConfiguredPackages,
 }
 
 // ---------------------------------------------------------------------------
 // Public entry points  (package_intent_parser.py :147-…)
 // ---------------------------------------------------------------------------
+
+/// `<manager> <install verb...> -h|--help`: the manager prints usage and
+/// exits. Only the install verbs themselves may come before the flag, so a
+/// runner such as `npx some-pkg --help`, which passes the flag to the package
+/// it runs, is still an install, and so is any form that names a package or
+/// carries an option whose value the flag could be.
+fn is_install_help(name: &str, tokens: &[String]) -> bool {
+    let Some((last, rest)) = tokens.split_last() else {
+        return false;
+    };
+    if !matches!(last.as_str(), "-h" | "--help") {
+        return false;
+    }
+    let lowered: Vec<String> = rest
+        .iter()
+        .skip(1)
+        .map(|token| token.to_lowercase())
+        .collect();
+    let verbs: Vec<&str> = lowered.iter().map(String::as_str).collect();
+    matches!(
+        (name, verbs.as_slice()),
+        ("uv", ["pip", "install"] | ["add"] | ["sync"])
+            | ("pip" | "pip3", ["install"])
+            | ("pipenv", ["install" | "sync"])
+            | ("poetry", ["install" | "add"])
+            | ("npm", ["install" | "i" | "add"])
+            | ("pnpm", ["add" | "install" | "i"])
+            | ("yarn", ["add" | "install"])
+            | ("bun", ["add" | "install" | "i"])
+            | ("go", ["get" | "install"])
+            | ("cargo", ["add" | "install"])
+            | ("composer", ["require" | "install" | "update"])
+            | ("bundle" | "bundler", ["install" | "add"])
+            | ("gem", ["install"])
+            | ("brew", ["install"])
+            | ("apt" | "apt-get" | "dnf" | "yum", ["install"])
+            | ("zypper", ["install" | "in"])
+            | ("apk", ["add"])
+            | ("pacman", ["-s" | "-sy" | "-syu" | "-suy"])
+    )
+}
 
 /// `parse_package_intent`  (package_intent_parser.py :147-…).
 pub fn parse_package_intent(
@@ -271,6 +319,10 @@ pub fn parse_package_intent(
             continue;
         }
         let name = command_name(&segment.tokens[0]);
+        if is_install_help(&name, &segment.tokens) {
+            // `uv pip install --help` prints usage and installs nothing.
+            continue;
+        }
         let segment_workspace = if segment.context_complete {
             segment.effective_cwd.clone()
         } else {
@@ -349,6 +401,7 @@ pub fn parse_package_intent(
                     .unwrap_or_default();
             }
             i.redacted_command = redacted_command(&segment.redacted_tokens);
+            apply_npm_configured_packages(&mut i, segment);
             intents.push(i);
         }
     }
@@ -356,8 +409,41 @@ pub fn parse_package_intent(
     // this parser already resolved, so it is computed here rather than sent
     // back for a second round trip.
     let mut intent = combine_package_intents(&intents)?;
-    intent.routine_local_runner = routine_local_runner(&intent);
+    if intent.package_manager == "npx" {
+        // A command-line `--package` replaces npm's config, so only a segment
+        // without one can make the configured package the thing that installs.
+        let config_supplies_package = segments.iter().any(|segment| {
+            !command_sets_package_option(&segment.tokens)
+                && !matches!(
+                    segment.npm_configured_packages,
+                    NpmConfiguredPackages::Absent
+                )
+        });
+        intent.routine_local_runner = !config_supplies_package && routine_local_runner(&intent);
+    } else {
+        intent.routine_local_runner = routine_local_runner(&intent);
+    }
     Some(intent)
+}
+
+/// npm's `package` setting makes `npx` install a package the command never
+/// names. A spec that was read becomes the review target. A spec that could
+/// not be read is not a review of the runner the command spelled. `--package`
+/// and `-p` on the command replace that setting, so they keep the targets
+/// `runner_packages` already recorded.
+fn apply_npm_configured_packages(intent: &mut PackageIntent, segment: &CommandSegment) {
+    if intent.package_manager != "npx" || command_sets_package_option(&segment.tokens) {
+        return;
+    }
+    match &segment.npm_configured_packages {
+        NpmConfiguredPackages::Absent => {}
+        NpmConfiguredPackages::Named(specs) => {
+            intent.targets = specs.iter().map(|spec| js_target(spec)).collect();
+        }
+        NpmConfiguredPackages::Unnamed => {
+            intent.targets = vec![unidentified_npm_package_target()];
+        }
+    }
 }
 
 /// Dispatch to the non-local-execution intent parsers.

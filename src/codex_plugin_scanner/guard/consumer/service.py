@@ -2,10 +2,7 @@
 
 from __future__ import annotations
 
-import hashlib
-import json
-import os
-from collections.abc import Mapping, Sequence
+from collections.abc import Mapping
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, TypedDict, TypeGuard, cast
@@ -23,12 +20,15 @@ from ..models import (
     HarnessDetection,
     PolicyDecision,
 )
-from ..native_consumer_artifact_compose import native_consumer_compose
+from ..native_artifact_content_hash import (
+    native_artifact_content_hash,
+    native_artifact_content_hashes,
+)
+from ..native_consumer_artifact_compose import NativeConsumerComposeError, native_consumer_compose
 from ..receipts import build_receipt
 from ..risk import NO_RISK_SIGNAL_SUMMARY, artifact_risk_profile
 from ..runtime.approval_context import (
-    build_approval_context_token,
-    build_runtime_launch_identity,
+    build_consumer_approval_context_token,
 )
 from ..runtime.decisions import (
     build_authoritative_decision,
@@ -42,6 +42,9 @@ from ..types import GuardSignal
 from . import projection
 from .low_trust import low_trust_floor
 from .native_decision_projection import (
+    _compose_unavailable as _compose_unavailable,
+)
+from .native_decision_projection import (
     _ConsumerAuthorityInputs as _ConsumerAuthorityInputs,
 )
 from .native_decision_projection import (
@@ -50,23 +53,7 @@ from .native_decision_projection import (
 from .native_decision_projection import (
     _native_runtime_decision as _native_runtime_decision,
 )
-from .native_decision_projection import (
-    _project_runtime_decision as _project_runtime_decision,
-)
-from .native_decision_projection import (
-    _runtime_artifact_projection as _runtime_artifact_projection,
-)
 
-_PROMPT_FILE_HASH_VOLATILE_METADATA_KEYS = frozenset(
-    {
-        "prompt_display_text",
-        "prompt_matched_text",
-        "prompt_signals",
-        "request_summary",
-        "runtime_request_reason",
-        "runtime_request_summary",
-    }
-)
 _CONSUMER_APPROVAL_POLICY_VERSION = "consumer-evaluation-v1"
 
 
@@ -93,55 +80,10 @@ def _serialize_artifact(artifact: GuardArtifact) -> dict[str, object]:
     return payload
 
 
-def _codex_hook_identity(artifact: GuardArtifact) -> str | None:
-    if artifact.harness != "codex" or artifact.artifact_type != "hook":
-        return None
-    identity = artifact.metadata.get("codex_hook_identity")
-    return identity if isinstance(identity, str) and identity else None
-
-
-def _hash_payload(artifact: GuardArtifact) -> dict[str, object]:
-    codex_hook_identity = _codex_hook_identity(artifact)
-    if codex_hook_identity is not None:
-        return {
-            "schema": "codex-hook-artifact-hash-v1",
-            "harness": artifact.harness,
-            "artifact_type": artifact.artifact_type,
-            "source_scope": artifact.source_scope,
-            "codex_hook_identity": codex_hook_identity,
-        }
-    payload = artifact.to_dict()
-    metadata = artifact.metadata
-    if (
-        isinstance(metadata, dict)
-        and artifact.artifact_type == "prompt_request"
-        and isinstance(metadata.get("normalized_path"), str)
-    ):
-        redacted_metadata = payload.get("metadata")
-        metadata = (
-            {
-                key: value
-                for key, value in redacted_metadata.items()
-                if key not in _PROMPT_FILE_HASH_VOLATILE_METADATA_KEYS
-            }
-            if isinstance(redacted_metadata, dict)
-            else {}
-        )
-        prompt_intent_hash = (
-            redacted_metadata.get("prompt_intent_hash") if isinstance(redacted_metadata, dict) else None
-        )
-        if isinstance(prompt_intent_hash, str) and prompt_intent_hash.strip():
-            metadata["prompt_intent_hash"] = prompt_intent_hash.strip()
-    payload["metadata"] = metadata
-    payload["env_keys"] = metadata.get("env_keys", []) if isinstance(metadata, dict) else []
-    return payload
-
-
 def artifact_hash(artifact: GuardArtifact) -> str:
-    """Hash a detected artifact definition."""
+    """Hash a detected artifact definition (the resident spells the digest)."""
 
-    payload = _hash_payload(artifact)
-    return hashlib.sha256(json.dumps(payload, sort_keys=True).encode("utf-8")).hexdigest()
+    return native_artifact_content_hash(artifact)
 
 
 def diff_artifact(
@@ -149,15 +91,22 @@ def diff_artifact(
     current: GuardArtifact,
     *,
     guard_home: Path | None = None,
+    content_hash: str | None = None,
 ) -> ArtifactDiff:
-    """Compare a stored snapshot to the current artifact (resident-decided)."""
+    """Compare a stored snapshot to the current artifact (resident-decided).
+
+    A caller diffing many artifacts passes each ``content_hash`` from one
+    batched request instead of paying a resident round trip per artifact.
+    """
 
     payload = _serialize_artifact(current)
     evidence = projection.artifact_evidence(
         None,
         current,
         payload=payload,
-        content_hash=artifact_hash(current),
+        content_hash=(
+            content_hash if content_hash is not None else native_artifact_content_hash(current, guard_home=guard_home)
+        ),
         previous=previous,
         with_history=False,
         guard_home=guard_home,
@@ -184,44 +133,6 @@ def _consumer_effective_cwd(config: GuardConfig) -> Path:
 
 def _consumer_policy_workspace(config: GuardConfig) -> str:
     return _normalized_consumer_path(_consumer_effective_cwd(config))
-
-
-def _consumer_execution_identity(
-    command: str | None,
-    *,
-    args: Sequence[object] = (),
-    cwd: Path,
-    structured_command: bool = False,
-) -> dict[str, object]:
-    requested = command.strip() if isinstance(command, str) else command
-    launch_identity = build_runtime_launch_identity(
-        command,
-        args=args,
-        structured_command=structured_command,
-        cwd=cwd,
-        launch_env=os.environ,
-    )
-    return {
-        "requested": requested,
-        "argv_sha256": launch_identity["argv_sha256"],
-        "entrypoint": launch_identity["entrypoint"],
-        "launch_cwd": launch_identity["launch_cwd"],
-        "resolved": launch_identity["executable"],
-    }
-
-
-def _consumer_context_metadata(artifact: GuardArtifact) -> dict[str, object]:
-    codex_hook_identity = _codex_hook_identity(artifact)
-    if codex_hook_identity is not None:
-        return {
-            "codex_hook_identity_schema": artifact.metadata.get("codex_hook_identity_schema"),
-            "codex_hook_identity": codex_hook_identity,
-        }
-    if artifact.artifact_type != "prompt_request":
-        return dict(artifact.metadata)
-    return {
-        key: value for key, value in artifact.metadata.items() if key not in _PROMPT_FILE_HASH_VOLATILE_METADATA_KEYS
-    }
 
 
 def _skill_directory_identity_reusable(
@@ -277,96 +188,91 @@ def _consumer_policy_context(
     }
 
 
+def _detector_telemetry(runtime_detector_context: Mapping[str, object] | None) -> list[object] | None:
+    """Each runtime detector's status fields, or ``None`` when none ran."""
+
+    telemetry = (runtime_detector_context or {}).get("telemetry")
+    if not isinstance(telemetry, list):
+        return None
+    return [
+        {key: item.get(key) for key in ("detector_id", "error_type", "status")}
+        for item in cast("list[object]", telemetry)
+        if isinstance(item, Mapping)
+    ]
+
+
+def _consumer_context_request(
+    subject: dict[str, object],
+    *,
+    config: GuardConfig,
+    policy: dict[str, object],
+    runtime_detector_context: Mapping[str, object] | None,
+) -> dict[str, object]:
+    """The native consumer approval-context request around one subject.
+
+    The runtime composes the identity, content, capability and sandbox
+    components and builds the launch identity from ``launch_cwd``.
+    """
+
+    effective_cwd = _consumer_effective_cwd(config)
+    return {
+        "subject": subject,
+        "launch_cwd": str(effective_cwd),
+        "cwd": _normalized_consumer_path(effective_cwd),
+        "workspace": _normalized_consumer_path(config.workspace) if config.workspace is not None else None,
+        "detector_telemetry": _detector_telemetry(runtime_detector_context),
+        "policy": policy,
+        "sandbox_analysis": config.sandbox_analysis,
+    }
+
+
 def _consumer_approval_context_token(
     *,
     detection: HarnessDetection,
     artifact: GuardArtifact,
     content_hash: str,
     capability_snapshot: Mapping[str, object],
-    structured_signals: tuple[GuardSignal, ...],
-    provenance: Mapping[str, object],
     config: GuardConfig,
     configured_action: GuardAction | None,
     effective_default_action: GuardAction | None,
     current_action: GuardAction,
     runtime_detector_context: Mapping[str, object] | None,
 ) -> str:
-    effective_cwd = _consumer_effective_cwd(config)
-    normalized_cwd = _normalized_consumer_path(effective_cwd)
-    normalized_workspace = _normalized_consumer_path(config.workspace) if config.workspace is not None else None
-    codex_hook_identity = _codex_hook_identity(artifact)
-    if codex_hook_identity is not None:
-        identity_payload: dict[str, object] = {
+    subject: dict[str, object] = {
+        "kind": "artifact",
+        "artifact": {
             "artifact_id": artifact.artifact_id,
-            "artifact_name": artifact.name,
+            "name": artifact.name,
             "artifact_type": artifact.artifact_type,
-            "codex_hook_identity": codex_hook_identity,
-            "config_path": f"codex-hook://{artifact.source_scope}",
-            "cwd": normalized_cwd,
-            "detection_harness": detection.harness,
-            "executable": {"codex_hook_identity": codex_hook_identity},
             "harness": artifact.harness,
             "publisher": artifact.publisher,
             "source_scope": artifact.source_scope,
-            "workspace": normalized_workspace,
-        }
-        content_payload: dict[str, object] = {
-            "artifact_hash": content_hash,
-            "codex_hook_identity": codex_hook_identity,
-            "metadata": _consumer_context_metadata(artifact),
-        }
-    else:
-        identity_payload = {
-            "artifact_id": artifact.artifact_id,
-            "artifact_name": artifact.name,
-            "artifact_type": artifact.artifact_type,
             "config_path": artifact.config_path,
-            "cwd": normalized_cwd,
-            "detection_harness": detection.harness,
-            "executable": _consumer_execution_identity(
-                artifact.command,
-                args=artifact.args,
-                cwd=effective_cwd,
-                structured_command=artifact.artifact_type == "mcp_server",
-            ),
-            "harness": artifact.harness,
-            "publisher": artifact.publisher,
-            "source_scope": artifact.source_scope,
-            "workspace": normalized_workspace,
-        }
-        content_payload = {
-            "args": list(artifact.args),
-            "artifact_hash": content_hash,
             "command": artifact.command,
-            "metadata": _consumer_context_metadata(artifact),
+            "args": list(artifact.args),
             "url": artifact.url,
-        }
-    return build_approval_context_token(
-        identity=identity_payload,
-        content=content_payload,
-        capabilities={
-            "artifact_capabilities": dict(capability_snapshot),
-            "command_available": detection.command_available,
-            "installed": detection.installed,
-            "provenance": dict(provenance),
-            "runtime_detector": dict(runtime_detector_context or {}),
-            "scanner_policy_version": _CONSUMER_APPROVAL_POLICY_VERSION,
-            "signals": [signal.to_dict() for signal in structured_signals],
             "transport": artifact.transport,
+            "metadata": dict(artifact.metadata),
         },
-        policy=_consumer_policy_context(
-            config,
-            harness=detection.harness,
-            artifact_id=artifact.artifact_id,
-            publisher=artifact.publisher,
-            configured_action=configured_action,
-            effective_default_action=effective_default_action,
-            current_action=current_action,
-        ),
-        sandbox={
-            "analysis": config.sandbox_analysis,
-            "required": current_action == "sandbox-required",
-        },
+        "detection_harness": detection.harness,
+        "command_available": detection.command_available,
+        "installed": detection.installed,
+        "content_hash": content_hash,
+        "capability_snapshot": dict(capability_snapshot),
+    }
+    policy = _consumer_policy_context(
+        config,
+        harness=detection.harness,
+        artifact_id=artifact.artifact_id,
+        publisher=artifact.publisher,
+        configured_action=configured_action,
+        effective_default_action=effective_default_action,
+        current_action=current_action,
+    )
+    return build_consumer_approval_context_token(
+        _consumer_context_request(
+            subject, config=config, policy=policy, runtime_detector_context=runtime_detector_context
+        )
     )
 
 
@@ -382,48 +288,29 @@ def _removed_consumer_approval_context_token(
     current_action: GuardAction,
     runtime_detector_context: Mapping[str, object] | None,
 ) -> str:
-    effective_cwd = _consumer_effective_cwd(config)
-    command = previous.get("command")
     publisher = previous.get("publisher")
     raw_args = previous.get("args")
-    previous_args = tuple(str(argument) for argument in raw_args) if isinstance(raw_args, (list, tuple)) else ()
-    return build_approval_context_token(
-        identity={
-            "artifact_id": artifact_id,
-            "artifact_name": previous.get("name"),
-            "artifact_type": previous.get("artifact_type"),
-            "config_path": previous.get("config_path"),
-            "cwd": _normalized_consumer_path(effective_cwd),
-            "executable": _consumer_execution_identity(
-                command if isinstance(command, str) else None,
-                args=previous_args,
-                cwd=effective_cwd,
-                structured_command=previous.get("artifact_type") == "mcp_server",
-            ),
-            "harness": harness,
-            "publisher": publisher if isinstance(publisher, str) else None,
-            "source_scope": previous.get("source_scope"),
-            "workspace": (_normalized_consumer_path(config.workspace) if config.workspace is not None else None),
-        },
-        content={"artifact_hash": previous_hash, "removed": True, "snapshot": dict(previous)},
-        capabilities={
-            "removed": True,
-            "runtime_detector": dict(runtime_detector_context or {}),
-            "snapshot": dict(previous),
-        },
-        policy=_consumer_policy_context(
-            config,
-            harness=harness,
-            artifact_id=artifact_id,
-            publisher=publisher if isinstance(publisher, str) else None,
-            configured_action=configured_action,
-            effective_default_action=effective_default_action,
-            current_action=current_action,
-        ),
-        sandbox={
-            "analysis": config.sandbox_analysis,
-            "required": current_action == "sandbox-required",
-        },
+    subject: dict[str, object] = {
+        "kind": "removed",
+        "harness": harness,
+        "artifact_id": artifact_id,
+        "previous": dict(previous),
+        "previous_hash": previous_hash,
+        "args": [str(argument) for argument in raw_args] if isinstance(raw_args, (list, tuple)) else [],
+    }
+    policy = _consumer_policy_context(
+        config,
+        harness=harness,
+        artifact_id=artifact_id,
+        publisher=publisher if isinstance(publisher, str) else None,
+        configured_action=configured_action,
+        effective_default_action=effective_default_action,
+        current_action=current_action,
+    )
+    return build_consumer_approval_context_token(
+        _consumer_context_request(
+            subject, config=config, policy=policy, runtime_detector_context=runtime_detector_context
+        )
     )
 
 
@@ -504,6 +391,67 @@ _REMOVED_SCORING: dict[str, object] = {
 }
 
 
+def _runtime_fields(runtime: dict[str, object] | str) -> dict[str, object]:
+    """The composed answer, or why there is none; the resident presents both."""
+
+    if isinstance(runtime, str):
+        return {"runtime": None, "compose_error": runtime}
+    return {"runtime": runtime, "compose_error": None}
+
+
+def _record_outcome(store: GuardStore, harness: str, artifact_id: str, outcome: Mapping[str, Any], now: str) -> int:
+    store.add_receipt(build_receipt(harness=harness, artifact_id=artifact_id, **outcome["receipt"]))
+    if isinstance(outcome["event"], dict):
+        store.add_event("changed_artifact_caught", outcome["event"], now)
+    return 1
+
+
+def _persist_detected(
+    store: GuardStore,
+    harness: str,
+    artifact: GuardArtifact,
+    evidence: Mapping[str, Any],
+    snapshot: dict[str, object],
+    *,
+    policy_action: GuardAction,
+    approved: bool,
+    advance_snapshot: bool,
+    cache_provenance: bool,
+    now: str,
+) -> None:
+    current_hash = str(evidence["current_hash"])
+    store.record_inventory_artifact(
+        artifact=artifact,
+        artifact_hash=current_hash,
+        policy_action=policy_action,
+        changed=bool(evidence["changed"]),
+        now=now,
+        approved=approved,
+    )
+    store.save_artifact_capability(
+        harness=harness,
+        artifact_id=artifact.artifact_id,
+        capability_snapshot=evidence["capability_snapshot"],
+        now=now,
+    )
+    if cache_provenance:
+        store.upsert_provenance_cache(artifact_hash=current_hash, payload=evidence["provenance"], now=now)
+    if evidence["changed"]:
+        previous_hash = evidence["previous_hash"]
+        store.record_diff(
+            harness,
+            artifact.artifact_id,
+            list(evidence["changed_fields"]),
+            previous_hash if isinstance(previous_hash, str) else None,
+            current_hash,
+            now,
+        )
+    if advance_snapshot:
+        store.save_snapshot(
+            harness, artifact.artifact_id, {**snapshot, "artifact_hash": current_hash}, current_hash, now
+        )
+
+
 def detect_all(context: HarnessContext) -> list[HarnessDetection]:
     """Run detection across all adapters."""
 
@@ -551,6 +499,8 @@ def evaluate_detection(
     prior_receipts = store.count_receipts(detection.harness) if persist else 0
     previous_snapshots = store.list_snapshots(detection.harness)
     runtime_risk_signals_v2 = _runtime_detector_risk_signals(runtime_detector_context)
+    # The resident records a label only when the trusted request decided.
+    override_labels = dict(trusted_request_override_labels or {})
     authority_inputs = _ConsumerAuthorityInputs(
         store=store,
         harness=detection.harness,
@@ -566,6 +516,17 @@ def evaluate_detection(
         pending_approval_claims=pending_approval_claims,
     )
     current_artifact_ids: set[str] = set()
+    # Each hash is the approval key its artifact's saved decision is stored
+    # under, and the resident spells it. A scan asks for the harness's whole
+    # detection at once rather than crossing once per artifact.
+    content_hashes = {
+        artifact.artifact_id: digest
+        for artifact, digest in zip(
+            detection.artifacts,
+            native_artifact_content_hashes(detection.artifacts),
+            strict=True,
+        )
+    }
     for artifact in detection.artifacts:
         current_artifact_ids.add(artifact.artifact_id)
         previous = previous_snapshots.get(artifact.artifact_id)
@@ -580,17 +541,10 @@ def evaluate_detection(
             store,
             artifact,
             payload=current_snapshot,
-            content_hash=artifact_hash(artifact),
+            content_hash=content_hashes[artifact.artifact_id],
             previous=previous,
             with_history=not inventory_only,
         )
-        diff = {
-            "changed": evidence["changed"],
-            "changed_fields": list(evidence["changed_fields"]),
-            "previous_hash": evidence["previous_hash"],
-            "current_hash": evidence["current_hash"],
-            "current_snapshot": current_snapshot,
-        }
         if inventory_only:
             inventory_decision = build_authoritative_decision(
                 "allow",
@@ -599,45 +553,26 @@ def evaluate_detection(
                 authority_finalized=False,
             )
             if persist:
-                store.record_inventory_artifact(
-                    artifact=artifact,
-                    artifact_hash=str(diff["current_hash"]),
-                    policy_action=inventory_decision.action,
-                    changed=bool(diff["changed"]),
-                    now=now,
-                    approved=False,
-                )
-                store.save_artifact_capability(
-                    harness=detection.harness,
-                    artifact_id=artifact.artifact_id,
-                    capability_snapshot=evidence["capability_snapshot"],
-                    now=now,
-                )
-                if diff["changed"]:
-                    previous_hash = diff["previous_hash"] if isinstance(diff["previous_hash"], str) else None
-                    store.record_diff(
-                        detection.harness,
-                        artifact.artifact_id,
-                        list(diff["changed_fields"]),
-                        previous_hash,
-                        str(diff["current_hash"]),
-                        now,
-                    )
-                store.save_snapshot(
+                _persist_detected(
+                    store,
                     detection.harness,
-                    artifact.artifact_id,
-                    {**current_snapshot, "artifact_hash": diff["current_hash"]},
-                    str(diff["current_hash"]),
-                    now,
+                    artifact,
+                    evidence,
+                    current_snapshot,
+                    policy_action=inventory_decision.action,
+                    approved=False,
+                    advance_snapshot=True,
+                    cache_provenance=False,
+                    now=now,
                 )
             results.append(
                 {
                     "artifact_id": artifact.artifact_id,
                     "artifact_name": artifact.name,
-                    "changed": diff["changed"],
-                    "changed_fields": diff["changed_fields"],
+                    "changed": evidence["changed"],
+                    "changed_fields": list(evidence["changed_fields"]),
                     **inventory_decision.to_artifact_projection(),
-                    "artifact_hash": diff["current_hash"],
+                    "artifact_hash": evidence["current_hash"],
                     "artifact_type": artifact.artifact_type,
                     "config_path": artifact.config_path,
                     "source_scope": artifact.source_scope,
@@ -654,14 +589,21 @@ def evaluate_detection(
         artifact_risk = artifact_risk_profile(artifact)
         structured_signals = artifact_risk.signals
         risk_signals_v2 = _merge_risk_signals(artifact_risk.signals_v2, runtime_risk_signals_v2)
-        low_trust = low_trust_floor(
-            getattr(store, "guard_home", None),
-            config,
-            harness=detection.harness,
-            artifact=artifact,
-            configured_action=configured_action,
-            fresh_decision=bool(is_first_seen or diff["changed"]),
-        )
+        try:
+            low_trust = low_trust_floor(
+                getattr(store, "guard_home", None),
+                config,
+                harness=detection.harness,
+                artifact=artifact,
+                configured_action=configured_action,
+                fresh_decision=bool(is_first_seen or evidence["changed"]),
+            )
+        except NativeConsumerComposeError as error:
+            # The floor only ever strengthens an action, so an unanswered floor
+            # query is not "no floor": the artifact blocks unscored.
+            low_trust, low_trust_unavailable = None, error.code
+        else:
+            low_trust_unavailable = None
         if low_trust is not None:
             risk_signals_v2 = _merge_risk_signals(risk_signals_v2, (low_trust.signal,))
         skill_directory_identity_reusable = _skill_directory_identity_reusable(
@@ -669,31 +611,32 @@ def evaluate_detection(
             metadata=artifact.metadata,
         )
         guard_default_action = artifact.metadata.get("guard_default_action")
-        current = _native_current_action(
-            store,
-            config,
-            composer=native_consumer_compose,
-            removed=False,
-            artifact_type=artifact.artifact_type,
-            configured_action=configured_action,
-            guard_default_action=guard_default_action if isinstance(guard_default_action, str) else None,
-            first_seen=is_first_seen,
-            changed=bool(diff["changed"]),
-            effective_default_action=effective_default_action,
-            skill_directory_identity_reusable=skill_directory_identity_reusable,
-            scoring=_scoring_inputs(structured_signals, evidence["scoring"]),
-            low_trust_action=low_trust.action if low_trust is not None else None,
-        )
+        if low_trust_unavailable is not None:
+            current = _compose_unavailable(low_trust_unavailable)
+        else:
+            current = _native_current_action(
+                store,
+                config,
+                composer=native_consumer_compose,
+                removed=False,
+                artifact_type=artifact.artifact_type,
+                configured_action=configured_action,
+                guard_default_action=guard_default_action if isinstance(guard_default_action, str) else None,
+                first_seen=is_first_seen,
+                changed=bool(evidence["changed"]),
+                effective_default_action=effective_default_action,
+                skill_directory_identity_reusable=skill_directory_identity_reusable,
+                scoring=_scoring_inputs(structured_signals, evidence["scoring"]),
+                low_trust_action=low_trust.action if low_trust is not None else None,
+            )
         current_policy_action = cast(GuardAction, current["current_action"])
-        scanner_action = cast(GuardAction, current["scanner_action"])
-        verdict = cast(dict[str, Any], current["verdict"])
+        scanner_action = cast("GuardAction | None", current["scanner_action"])
+        verdict = cast("dict[str, Any] | None", current["verdict"])
         approval_context_hash = _consumer_approval_context_token(
             detection=detection,
             artifact=artifact,
-            content_hash=str(diff["current_hash"]),
+            content_hash=str(evidence["current_hash"]),
             capability_snapshot=evidence["capability_snapshot"],
-            structured_signals=structured_signals,
-            provenance=evidence["provenance"],
             config=config,
             configured_action=configured_action,
             effective_default_action=effective_default_action,
@@ -712,122 +655,44 @@ def evaluate_detection(
             current_action=current_policy_action,
             configured_action=configured_action,
             scanner_action=scanner_action,
-            raw_scoring_recommendation=verdict["action"],
+            raw_scoring_recommendation=verdict["action"] if verdict is not None else None,
             skill_directory_identity_reusable=skill_directory_identity_reusable,
             compose_unavailable=current.get("compose_unavailable"),
             decision_signals=risk_signals_v2,
         )
-        approval_reuse = cast(dict[str, Any], runtime["approval_reuse"])
-        trusted_request_override = runtime["trusted_request_override"] is True
-        scanner_evidence = cast(list[dict[str, object]], runtime["scanner_evidence"])
-        policy_composition = cast(dict[str, object], runtime["policy_composition"])
-        authoritative_decision = _project_runtime_decision(runtime)
-        policy_action = authoritative_decision.action if authoritative_decision is not None else "block"
-        if authoritative_decision is None or authoritative_decision.enforcement.blocking:
-            blocked = True
-        projected_signals = authoritative_decision.signals if authoritative_decision is not None else risk_signals_v2
-        risk_signals = tuple(signal.plain_reason for signal in projected_signals)
-        snapshot_permitted = (
-            authoritative_decision is not None and authoritative_decision.enforcement.snapshot_permitted
-        )
-        has_runtime_authority = bool(runtime_risk_signals_v2) or "runtime_detector_action" in policy_composition
-        risk_summary = (
-            authoritative_decision.decision_v2.dashboard_primary_detail
-            if authoritative_decision is not None and has_runtime_authority
-            else artifact_risk.summary
-            if structured_signals
-            else NO_RISK_SIGNAL_SUMMARY
-        )
-        result = projection.artifact_result(
+        outcome = projection.artifact_outcome(
             store,
             detection.harness,
             artifact,
             evidence,
-            projection=_runtime_artifact_projection(runtime, authoritative_decision),
             verdict=verdict,
             scanner_action=scanner_action,
-            runtime=runtime,
+            configured_action=configured_action,
+            **_runtime_fields(runtime),
             signals=[signal.to_dict() for signal in structured_signals],
-            risk_signals=list(risk_signals),
-            risk_summary=risk_summary,
+            decision_signals=[signal.to_dict() for signal in risk_signals_v2],
+            static_risk_summary=artifact_risk.summary if structured_signals else NO_RISK_SIGNAL_SUMMARY,
+            runtime_signals_present=bool(runtime_risk_signals_v2),
+            user_override=override_labels.get(artifact.artifact_id),
             approval_context_hash=approval_context_hash,
             effective_workspace=workspace,
-            policy_action=policy_action,
         )
-        receipt = build_receipt(
-            harness=detection.harness,
-            artifact_id=artifact.artifact_id,
-            artifact_hash=str(diff["current_hash"]),
-            policy_decision=policy_action,
-            capabilities_summary=evidence["capabilities_summary"],
-            changed_capabilities=evidence["changed_capabilities"],
-            provenance_summary=evidence["provenance_summary"],
-            artifact_name=artifact.name,
-            source_scope=artifact.source_scope,
-            user_override=(
-                (trusted_request_override_labels or {}).get(artifact.artifact_id)
-                if trusted_request_override and not runtime_detector_block_reason
-                else None
-            ),
-            diff_summary=evidence["diff_summary"],
-            approval_source=cast(str, runtime["approval_source"]),
-            scanner_evidence=scanner_evidence,
-        )
+        blocked = blocked or outcome["blocking"] is True
         if persist:
-            store.record_inventory_artifact(
-                artifact=artifact,
-                artifact_hash=str(diff["current_hash"]),
-                policy_action=policy_action,
-                changed=bool(diff["changed"]),
-                now=now,
-                approved=snapshot_permitted,
-            )
-            store.save_artifact_capability(
-                harness=detection.harness,
-                artifact_id=artifact.artifact_id,
-                capability_snapshot=evidence["capability_snapshot"],
+            _persist_detected(
+                store,
+                detection.harness,
+                artifact,
+                evidence,
+                current_snapshot,
+                policy_action=outcome["policy_action"],
+                approved=outcome["snapshot_permitted"],
+                advance_snapshot=outcome["snapshot_permitted"],
+                cache_provenance=True,
                 now=now,
             )
-            store.upsert_provenance_cache(
-                artifact_hash=str(diff["current_hash"]),
-                payload=evidence["provenance"],
-                now=now,
-            )
-            if diff["changed"]:
-                previous_hash = diff["previous_hash"] if isinstance(diff["previous_hash"], str) else None
-                store.record_diff(
-                    detection.harness,
-                    artifact.artifact_id,
-                    list(diff["changed_fields"]),
-                    previous_hash,
-                    str(diff["current_hash"]),
-                    now,
-                )
-            if snapshot_permitted:
-                store.save_snapshot(
-                    detection.harness,
-                    artifact.artifact_id,
-                    {**current_snapshot, "artifact_hash": diff["current_hash"]},
-                    str(diff["current_hash"]),
-                    now,
-                )
-            store.add_receipt(receipt)
-            if diff["changed"] and not is_first_seen:
-                store.add_event(
-                    "changed_artifact_caught",
-                    {
-                        "harness": detection.harness,
-                        "artifact_id": artifact.artifact_id,
-                        "artifact_name": artifact.name,
-                        "policy_action": policy_action,
-                        "changed_fields": list(diff["changed_fields"]),
-                        "approval_reuse_status": approval_reuse["status"],
-                        "approval_reuse_reason_code": approval_reuse["reason_code"],
-                    },
-                    now,
-                )
-            receipts_recorded += 1
-        results.append(result)
+            receipts_recorded += _record_outcome(store, detection.harness, artifact.artifact_id, outcome, now)
+        results.append(outcome["result"])
     removed_artifact_ids = sorted(set(previous_snapshots) - current_artifact_ids)
     for artifact_id in removed_artifact_ids:
         previous = previous_snapshots[artifact_id]
@@ -895,68 +760,25 @@ def evaluate_detection(
             compose_unavailable=removed_current.get("compose_unavailable"),
             decision_signals=runtime_risk_signals_v2,
         )
-        approval_reuse = cast(dict[str, Any], runtime["approval_reuse"])
-        trusted_request_override = runtime["trusted_request_override"] is True
-        scanner_evidence = cast(list[dict[str, object]], runtime["scanner_evidence"])
-        policy_composition = cast(dict[str, object], runtime["policy_composition"])
-        authoritative_decision = _project_runtime_decision(runtime)
-        policy_action = authoritative_decision.action if authoritative_decision is not None else "block"
-        if authoritative_decision is None or authoritative_decision.enforcement.blocking:
-            blocked = True
-        projected_signals = (
-            authoritative_decision.signals if authoritative_decision is not None else runtime_risk_signals_v2
-        )
-        removed_risk_signals = tuple(signal.plain_reason for signal in projected_signals)
-        snapshot_permitted = (
-            authoritative_decision is not None and authoritative_decision.enforcement.snapshot_permitted
-        )
-        has_runtime_authority = bool(runtime_risk_signals_v2) or "runtime_detector_action" in policy_composition
-        removed = projection.removed_result(
+        outcome = projection.removed_outcome(
             store,
             detection.harness,
             artifact_id=artifact_id,
             previous=dict(previous),
             previous_hash=previous_hash,
-            projection=_runtime_artifact_projection(runtime, authoritative_decision),
-            runtime=runtime,
-            signals=[signal.to_dict() for signal in projected_signals],
-            risk_signals=list(removed_risk_signals),
-            has_runtime_authority=authoritative_decision is not None and has_runtime_authority,
-            dashboard_detail=(
-                authoritative_decision.decision_v2.dashboard_primary_detail
-                if authoritative_decision is not None
-                else None
-            ),
+            configured_action=configured_action,
+            **_runtime_fields(runtime),
+            decision_signals=authority_inputs.runtime_signals,
+            user_override=override_labels.get(artifact_id),
             approval_context_hash=approval_context_hash,
             effective_workspace=workspace,
-            policy_action=policy_action,
         )
-        removed_receipt = removed["receipt"]
-        artifact_name = removed_receipt["artifact_name"]
-        receipt = build_receipt(
-            harness=detection.harness,
-            artifact_id=artifact_id,
-            artifact_hash=previous_hash,
-            policy_decision=policy_action,
-            capabilities_summary=removed_receipt["capabilities_summary"],
-            changed_capabilities=["removed"],
-            provenance_summary=removed_receipt["provenance_summary"],
-            artifact_name=artifact_name,
-            source_scope=removed_receipt["source_scope"],
-            user_override=(
-                (trusted_request_override_labels or {}).get(artifact_id)
-                if trusted_request_override and not runtime_detector_block_reason
-                else None
-            ),
-            diff_summary="artifact removed",
-            approval_source=cast(str, runtime["approval_source"]),
-            scanner_evidence=scanner_evidence,
-        )
+        blocked = blocked or outcome["blocking"] is True
         if persist:
             store.mark_inventory_removed(
                 harness=detection.harness,
                 artifact_id=artifact_id,
-                policy_action=policy_action,
+                policy_action=outcome["policy_action"],
                 artifact_hash=previous_hash,
                 now=now,
             )
@@ -968,24 +790,10 @@ def evaluate_detection(
                 "removed",
                 now,
             )
-            if snapshot_permitted:
+            if outcome["snapshot_permitted"]:
                 store.delete_snapshot(detection.harness, artifact_id)
-            store.add_receipt(receipt)
-            store.add_event(
-                "changed_artifact_caught",
-                {
-                    "harness": detection.harness,
-                    "artifact_id": artifact_id,
-                    "artifact_name": artifact_name,
-                    "policy_action": policy_action,
-                    "changed_fields": ["removed"],
-                    "approval_reuse_status": approval_reuse["status"],
-                    "approval_reuse_reason_code": approval_reuse["reason_code"],
-                },
-                now,
-            )
-            receipts_recorded += 1
-        results.append(removed["result"])
+            receipts_recorded += _record_outcome(store, detection.harness, artifact_id, outcome, now)
+        results.append(outcome["result"])
     evaluation: dict[str, Any] = {
         "harness": detection.harness,
         "artifacts": results,

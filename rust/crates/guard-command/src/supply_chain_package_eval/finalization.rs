@@ -135,11 +135,14 @@ pub(super) fn finalize_evaluation(
         },
         policy_action,
     );
-    let evidence_ids: Vec<String> = draft
-        .packages
+    // An id is derived from the package as it is sent, support metadata and
+    // all, because an ecosystem Guard cannot name canonically falls back to a
+    // digest of the whole entry. Deriving it from the draft instead would name
+    // a package that never left the resident.
+    let evidence_ids: Vec<String> = packages
         .iter()
         .filter(|p| should_record_package(p, &draft.decision))
-        .map(|p| evidence_id(deps, package_intent_hash, p))
+        .map(|p| evidence_id(deps.identity, package_intent_hash, p))
         .collect();
     PackageEvalResult {
         decision: draft.decision.clone(),

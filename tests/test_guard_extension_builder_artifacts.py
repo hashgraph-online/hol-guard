@@ -107,7 +107,9 @@ def test_snapshot_replay_is_identical_across_python_hash_seeds(tmp_path: Path) -
             str(output),
             "--json",
         ]
-        result = subprocess.run(command, env=environment, capture_output=True, text=True, timeout=180, check=False)
+        # Each fresh interpreter compiles every command pack again. On a loaded
+        # Windows hosted runner one call has taken more than three minutes.
+        result = subprocess.run(command, env=environment, capture_output=True, text=True, timeout=600, check=False)
         assert result.returncode == 0, result.stdout + result.stderr
         assert json.loads(result.stdout)["generated"] is True
         assert (output / "manifest.json").read_bytes() == manifest

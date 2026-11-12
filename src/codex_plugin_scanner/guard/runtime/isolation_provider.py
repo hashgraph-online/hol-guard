@@ -8,20 +8,22 @@ workspace-controlled paths, sockets, or binaries can never register a provider.
 Plan and execution are separated: ``plan`` is pure and side-effect-free and
 receives no workspace action payload beyond digest-bound context; ``execute``
 is one fenced attempt returning a :class:`TerminalStatement`.
+
+The native runtime (``isolation_provider``) owns the trusted checks: the
+forbidden host set, the Guard-owned roots, artifact containment and digests,
+and the managed registry file. Python keeps the provider objects and spells
+each path with the host's own ``Path`` rules.
 """
 
 from __future__ import annotations
 
-import hashlib
 import hmac
-import json
 import os
 import platform
-import stat
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Final, Protocol, runtime_checkable
+from typing import Any, Final, Protocol, runtime_checkable
 
 from codex_plugin_scanner.guard.runtime.execution_assurance_contract import (
     AtomicGuarantee,
@@ -36,22 +38,17 @@ from codex_plugin_scanner.guard.runtime.execution_assurance_contract import (
 ISOLATION_PROVIDER_CONTRACT_VERSION: Final = "guard.isolation-provider.v1"
 
 _PROVIDER_PATH_ROOT: Final = "/usr/libexec/hol-guard/providers"
-_PROVIDER_REGISTRY_SCHEMA: Final = "guard.provider-registry.v1"
-# Path-name tokens that must never appear as a mounted input or declared output.
-_FORBIDDEN_PATH_NAMES: Final = frozenset({".env", ".ssh", ".git", ".gnupg", ".hg", ".svn", ".bzr"})
-# Exact host socket paths that must never be mounted.
-_FORBIDDEN_SOCKET_PATHS: Final = frozenset(
-    {
-        "/var/run/docker.sock",
-        "/run/docker.sock",
-        "/run/containerd/containerd.sock",
-        "/var/run/containerd/containerd.sock",
-        "/run/crio/crio.sock",
-        "/var/run/crio/crio.sock",
-    }
+_GUARD_OWNED_ROOTS: Final = (
+    "/usr/",
+    "/opt/hol-guard/",
+    "/library/application support/hol guard/",
+    "c:/programdata/hol guard/",
 )
-# Guard state directory names that must never be mounted.
-_GUARD_STATE_NAMES: Final = frozenset({".hol-guard", "guard-state"})
+_PLAN_REFUSALS: Final = {
+    "forbidden_path": "provider plan targets a forbidden host path",
+    "control_socket": "provider plan targets a host control socket",
+    "guard_state": "provider plan targets Guard state",
+}
 
 
 class ProviderPlanError(ValueError):
@@ -121,21 +118,30 @@ def validate_provider_plan_inputs(
     planning boundary, before the provider is asked to honor it.
     """
 
-    for raw in (*input_paths, *declared_outputs):
-        # Resolve symlinks so an indirection to a forbidden path cannot pass the
-        # lexical check while mounting the real target.
-        try:
-            path = Path(raw).expanduser().resolve(strict=False)
-        except OSError:
-            path = Path(raw).expanduser().absolute()
-        name = path.name.lower()
-        parts = {part.lower() for part in path.parts}
-        if name in _FORBIDDEN_PATH_NAMES or parts & _FORBIDDEN_PATH_NAMES:
-            raise ProviderPlanError(f"provider plan targets a forbidden host path: {raw!r}")
-        if raw in _FORBIDDEN_SOCKET_PATHS or str(path) in _FORBIDDEN_SOCKET_PATHS:
-            raise ProviderPlanError(f"provider plan targets a host control socket: {raw!r}")
-        if parts & _GUARD_STATE_NAMES:
-            raise ProviderPlanError(f"provider plan targets Guard state: {raw!r}")
+    raws = (*input_paths, *declared_outputs)
+    paths = [_spelled(raw) for raw in raws]
+    try:
+        answer = _ask("plan_inputs", {"paths": paths})
+    except ValueError as error:
+        raise ProviderPlanError("provider plan inputs could not be verified") from error
+    refusal = answer.get("refusal", "unanswered")
+    if refusal is None:
+        return
+    message = _PLAN_REFUSALS.get(str(refusal))
+    index = answer.get("index")
+    if message is None or not isinstance(index, int) or not 0 <= index < len(raws):
+        raise ProviderPlanError("provider plan inputs could not be verified")
+    raise ProviderPlanError(f"{message}: {raws[index]!r}")
+
+
+def _spelled(raw: str) -> dict[str, object]:
+    # Resolve symlinks so an indirection to a forbidden path cannot pass the
+    # lexical check while mounting the real target.
+    try:
+        path = Path(raw).expanduser().resolve(strict=False)
+    except OSError:
+        path = Path(raw).expanduser().absolute()
+    return {"raw": raw, "resolved": str(path), "name": path.name, "parts": list(path.parts)}
 
 
 class ProviderRegistry:
@@ -178,12 +184,21 @@ class ProviderRegistry:
         root_path = Path(self._provider_root).expanduser().resolve(strict=False)
         configured = Path(configured_path).expanduser()
         normalized_path = configured.resolve(strict=False)
-        try:
-            _ = normalized_path.relative_to(root_path)
-        except ValueError as error:
-            raise ValueError("provider path is outside the Guard-owned provider root") from error
-        if _path_has_symlink_below_root(configured, root_path):
+        refusal = _ask(
+            "locate",
+            {
+                "root": str(root_path),
+                "root_parts": [os.path.normcase(part) for part in root_path.parts],
+                "path_parts": [os.path.normcase(part) for part in normalized_path.parts],
+                "lexical": str(configured.absolute()),
+            },
+        ).get("refusal", "unanswered")
+        if refusal == "outside":
+            raise ValueError("provider path is outside the Guard-owned provider root")
+        if refusal == "symlink":
             raise ValueError("provider artifact path must not contain symlinks")
+        if refusal is not None:
+            raise ValueError("provider artifact path could not be verified")
         identity = provider.identity()
         if identity != trust_anchor:
             raise ValueError("provider identity does not match the configured trust anchor")
@@ -211,32 +226,24 @@ def load_managed_provider_registry() -> ProviderRegistry:
     registry = ProviderRegistry(provider_root=provider_root)
     if not config_path.exists():
         return registry
-    payload = _read_managed_provider_config(config_path)
-    if payload.get("schema") != _PROVIDER_REGISTRY_SCHEMA:
-        raise ValueError("managed provider registry schema is invalid")
-    providers = payload.get("providers")
-    if not isinstance(providers, list):
-        raise ValueError("managed provider registry providers are invalid")
-    for declaration in providers:
-        if not isinstance(declaration, dict):
-            raise ValueError("managed provider declaration is invalid")
-        kind = declaration.get("kind")
-        configured_path = declaration.get("path")
-        anchor = declaration.get("trustAnchor")
-        if kind != "oci-isolation" or not isinstance(configured_path, str) or not isinstance(anchor, dict):
-            raise ValueError("managed provider declaration is invalid")
-        from .oci_isolation_provider import OCIIsolationProvider
+    answer = _ask("registry", {"config": str(config_path)})
+    declarations = answer.get("declarations")
+    if not isinstance(declarations, list):
+        raise ValueError(str(answer.get("refusal") or "managed provider registry is invalid"))
+    from .oci_isolation_provider import OCIIsolationProvider
 
+    for declaration in declarations:
+        anchor = declaration["trustAnchor"]
         trust_anchor = ProviderIdentity(
-            provider_kind=_required_config_text(anchor, "providerKind"),
-            implementation_version=_required_config_text(anchor, "implementationVersion"),
-            binary_or_image_digest=_required_config_text(anchor, "binaryOrImageDigest"),
-            signing_identity=_required_config_text(anchor, "signingIdentity"),
-            trust_domain=_required_config_text(anchor, "trustDomain"),
+            provider_kind=anchor["providerKind"],
+            implementation_version=anchor["implementationVersion"],
+            binary_or_image_digest=anchor["binaryOrImageDigest"],
+            signing_identity=anchor["signingIdentity"],
+            trust_domain=anchor["trustDomain"],
         )
         registry.register(
             OCIIsolationProvider(version=trust_anchor.implementation_version),
-            configured_path=configured_path,
+            configured_path=declaration["path"],
             trust_anchor=trust_anchor,
         )
     return registry
@@ -253,72 +260,30 @@ def _managed_provider_locations() -> tuple[Path, str]:
     return Path("/etc/hol-guard/providers.json"), _PROVIDER_PATH_ROOT
 
 
-def _read_managed_provider_config(path: Path) -> dict[str, object]:
-    try:
-        descriptor = os.open(path, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0))
-    except OSError as error:
-        raise ValueError("managed provider registry is unreadable") from error
-    try:
-        metadata = os.fstat(descriptor)
-        if not stat.S_ISREG(metadata.st_mode) or (os.name != "nt" and metadata.st_mode & 0o022):
-            raise ValueError("managed provider registry is not admin-owned")
-        with os.fdopen(descriptor, encoding="utf-8") as handle:
-            payload = json.load(handle)
-    except (OSError, UnicodeError, json.JSONDecodeError) as error:
-        raise ValueError("managed provider registry is invalid") from error
-    if not isinstance(payload, dict):
-        raise ValueError("managed provider registry is invalid")
-    return payload
-
-
-def _required_config_text(payload: dict[str, object], key: str) -> str:
-    value = payload.get(key)
-    if not isinstance(value, str) or not value:
-        raise ValueError("managed provider trust anchor is invalid")
-    return value
-
-
 def _sha256_regular_file(path: Path) -> str:
-    try:
-        descriptor = os.open(path, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0))
-    except OSError as error:
-        raise ValueError("provider artifact is missing or unreadable") from error
-    try:
-        with os.fdopen(descriptor, "rb") as artifact:
-            metadata = os.fstat(artifact.fileno())
-            if not stat.S_ISREG(metadata.st_mode):
-                raise ValueError("provider artifact must be a regular non-symlink file")
-            digest = hashlib.sha256()
-            for chunk in iter(lambda: artifact.read(1024 * 1024), b""):
-                digest.update(chunk)
-    except OSError as error:
-        raise ValueError("provider artifact is missing or unreadable") from error
-    return digest.hexdigest()
+    answer = _ask("digest", {"path": str(path)})
+    digest = answer.get("digest")
+    if isinstance(digest, str):
+        return digest
+    if answer.get("refusal") == "not_regular":
+        raise ValueError("provider artifact must be a regular non-symlink file")
+    raise ValueError("provider artifact is missing or unreadable")
 
 
 def _provider_root_is_guard_owned(path: str) -> bool:
+    # Checked in-process: a daemon without a provider registry builds its empty
+    # registry at startup and must not wait on the resident for it.
     normalized = path.replace("\\", "/").casefold()
-    return (
-        normalized.startswith("/usr/")
-        or normalized.startswith("/opt/hol-guard/")
-        or normalized.startswith("/library/application support/hol guard/")
-        or normalized.startswith("c:/programdata/hol guard/")
-    )
+    return normalized.startswith(_GUARD_OWNED_ROOTS)
 
 
-def _path_has_symlink_below_root(path: Path, root: Path) -> bool:
-    lexical = path.absolute()
-    while lexical != root:
-        try:
-            if lexical.is_symlink():
-                return True
-        except OSError:
-            return True
-        parent = lexical.parent
-        if parent == lexical:
-            break
-        lexical = parent
-    return False
+def _ask(op: str, fields: Mapping[str, object]) -> dict[str, Any]:
+    from ..native_runner_authority import NativeRunnerAuthorityError, native_runner_authority
+
+    try:
+        return native_runner_authority("isolation_provider", {**fields, "op": op})
+    except NativeRunnerAuthorityError as error:
+        raise ValueError("isolation provider checks are unavailable") from error
 
 
 __all__ = [

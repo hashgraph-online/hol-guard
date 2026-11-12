@@ -15,10 +15,7 @@ fn unique(prefix: &str) -> String {
     format!(
         "{prefix}-{}-{}",
         std::process::id(),
-        std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_nanos()
+        crate::unique_nanos::unique_nanos()
     )
 }
 
@@ -60,7 +57,7 @@ fn shell(home: &str, cwd: &str, command: &str) -> String {
         pager_disabled: false,
         xdg_config_home: None,
         git_config_no_system: true,
-        library_search_paths: Default::default(),
+        ..Default::default()
     };
     let [omp, zcode] = ["omp", "zcode"].map(|harness| {
         evaluate_pre_tool_envelope_with_execution_context(

@@ -11,10 +11,7 @@ fn windows_drive_cwd_targets_bind_only_the_exact_workspace_spelling() {
         .join(format!(
             "{}-{}",
             std::process::id(),
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
-                .as_nanos()
+            crate::unique_nanos::unique_nanos()
         ));
     let _cleanup = fixture::FixtureCleanup(root.clone());
     std::fs::create_dir_all(&root).unwrap();
@@ -58,6 +55,7 @@ fn windows_drive_cwd_targets_bind_only_the_exact_workspace_spelling() {
         // An unquoted backslash is removed by the shell, so it never proves a path.
         (format!("cd {cwd} && mkdir -p output"), false),
         (format!("cd \"{cwd}\\\\src\" && cat one.ts"), false),
+        (format!("openssl dgst -sha256 {cwd}\\src\\one.ts"), false),
         (format!("git --no-pager -C '{cwd}' status --short"), true),
         (format!("git --no-pager -C \"{cwd}\" status --short"), true),
         (format!("git --no-pager -C {cwd} status --short"), false),

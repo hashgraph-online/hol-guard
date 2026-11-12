@@ -5,6 +5,7 @@ from __future__ import annotations
 from ._modules.grok.grok_hook_invocation_template import GROK_HOOK_INVOCATION_TEMPLATE
 from ._modules.grok.grok_hook_readiness_template import GROK_HOOK_READINESS_TEMPLATE
 from .bounded_cli_hook_script_native import BOUNDED_HOOK_NATIVE_TEMPLATE
+from .hook_execution_stamp import HOOK_EXECUTION_STAMP_TEMPLATE
 from .hook_http_deadline import HOOK_HTTP_DEADLINE_TEMPLATE
 from .hook_input_reader import HOOK_INPUT_READER_TEMPLATE
 
@@ -20,6 +21,7 @@ _HOOK_STARTED_MONOTONIC = time.monotonic()
 import json
 import os
 import re
+import shlex
 import stat
 import sys
 import urllib.error
@@ -30,13 +32,17 @@ from urllib.parse import quote, urlparse
 GUARD_HOME = __GUARD_HOME__
 HARNESS = __HARNESS__
 TIMEOUT_SECONDS = __TIMEOUT_SECONDS__
-_HOOK_DEADLINE_MONOTONIC = _HOOK_STARTED_MONOTONIC + TIMEOUT_SECONDS
+_HOOK_REMAINING_SECONDS = TIMEOUT_SECONDS
 # The native runtime hands over a hook it did not answer with the time it
 # already spent; that time comes out of this client's budget, never added.
 _NATIVE_ELAPSED_MS = os.environ.pop("HOL_GUARD_BOUNDED_NATIVE_ELAPSED_MS", "")
 _NATIVE_DAEMON_TRIED = os.environ.pop("HOL_GUARD_BOUNDED_NATIVE_DAEMON_TRIED", None) == "1"
 if _NATIVE_ELAPSED_MS.isascii() and _NATIVE_ELAPSED_MS.isdigit():
-    _HOOK_DEADLINE_MONOTONIC -= min(int(_NATIVE_ELAPSED_MS) / 1000.0, float(TIMEOUT_SECONDS))
+    try:
+        _HOOK_REMAINING_SECONDS -= min(int(_NATIVE_ELAPSED_MS) / 1000.0, float(TIMEOUT_SECONDS))
+    except (ValueError, OverflowError):
+        _HOOK_REMAINING_SECONDS = 0.0
+_HOOK_DEADLINE_MONOTONIC = _HOOK_STARTED_MONOTONIC + _HOOK_REMAINING_SECONDS
 __HOOK_INPUT_READER__
 __HOOK_HTTP_DEADLINE__
 _MAX_RESPONSE_BYTES = 1_000_000
@@ -83,6 +89,11 @@ _APPROVAL_KEYS = (
     "guardApprovalUrl",
     "approval_requests",
 )
+# Muse sizes its own hook timeout from this client's budget: the configured
+# approval wait plus this margin, twice the grace the adapter adds on each
+# side. Holding the margin back lets the wait run for as long as the user
+# configured instead of the fraction the other harnesses use.
+_MUSE_WAIT_BUDGET_MARGIN_SECONDS = 10.0
 _FAILURE_REASON = "HOL Guard could not complete a trusted hook decision. Retry or repair Guard from a terminal."
 _AUTHORITY_MARKER = "native command extension policy"
 _AUTHORITY_REMEDIATION = (
@@ -96,13 +107,67 @@ def _git_config_no_system_enabled(value: str | None) -> bool:
     return value is not None and value.casefold() in _GIT_TRUE_VALUES
 
 
+# `home` written the way the shell it is pasted into reads it. POSIX quoting
+# puts `C:\\guards\\ci` inside single quotes, which `cmd.exe` hands on as part
+# of the path, so a Windows person pastes a command that repairs nothing. A
+# Windows path needing no quoting stays bare, and one that merely needs holding
+# together is double-quoted, which both shells read literally, backslashes
+# included. A Windows path cannot hold a `"`, so nothing inside has to be
+# escaped. Double quotes are not literal to either shell, though: PowerShell
+# expands `$name` inside them and reads a backtick as an escape, and `cmd.exe`
+# expands `%VAR%` and, with delayed expansion, `!name!`. Single quotes would
+# hold those in PowerShell but become part
+# of the path in `cmd.exe`, so no one rendering reaches such a store and the
+# block keeps the short command instead of naming a path the shell rewrote.
+def _quote_home(home: str, windows: bool) -> str | None:
+    if not windows:
+        return shlex.quote(home)
+    plain = home != "" and all(
+        character.isascii() and (character.isalnum() or character in "_-.:\\\\/")
+        for character in home
+    )
+    if plain:
+        return home
+    if any(character in home for character in "$%`!"):
+        return None
+    return '"' + home + '"'
+
+
+# The block names the home this hook read its authority from. Pasting the bare
+# command into a shell pointing elsewhere recovers a different install while
+# this one stays blocked, so a home the command would not find on its own is
+# named, quoted for the terminal it is pasted into. The default home is left
+# out: the short command is the one almost everyone needs. `--guard-home` is
+# the flag that names a store: `--home` also reaches it, but it moves the home
+# directory too, to a directory nobody lives in. It goes on `command`; the
+# `recover-authority` leaf takes no options. This copy of the decision has to
+# match `zcode_hooks._authority_block_remediation` and the native bridge's
+# `remediation_for_home`, because the script cannot import either; the three
+# are pinned to each other in tests/test_zcode_hooks.py.
+def _authority_remediation() -> str:
+    try:
+        home_dir = Path.home()
+    except RuntimeError:
+        return _AUTHORITY_REMEDIATION
+    guard_home = Path(GUARD_HOME)
+    if home_dir / ".hol-guard" == guard_home:
+        return _AUTHORITY_REMEDIATION
+    quoted = _quote_home(str(guard_home), os.name == "nt")
+    if quoted is None:
+        return _AUTHORITY_REMEDIATION
+    return _AUTHORITY_REMEDIATION.replace(
+        "command controls recover-authority",
+        f"command --guard-home {quoted} controls recover-authority",
+    )
+
+
 def _stderr_reason(reason: str) -> str:
     if (
         HARNESS == "zcode"
         and _AUTHORITY_MARKER in reason
         and "hol-guard command controls" not in reason
     ):
-        return reason + _AUTHORITY_REMEDIATION
+        return reason + _authority_remediation()
     return reason
 
 
@@ -128,51 +193,7 @@ def _json_object(text: str) -> dict[str, object] | None:
     return raw if isinstance(raw, dict) else None
 
 
-def _loader_value_fits(value: str | None) -> bool:
-    if not value:
-        return False
-    try:
-        return len(value.encode()) <= 32 * 1024
-    except UnicodeEncodeError:
-        return False
-
-
-def _stamp_hook_input(text: str) -> str:
-    payload = _json_object(text)
-    if payload is None:
-        return text
-    active = {key: value for key, value in os.environ.items() if value}
-    # Git pages through `less` by default; flags taking a file argument are excluded.
-    pager_ok = re.compile(r"(?:cat|less(?: -[ABCEFGIJKLMNQRSUVWXacdefgimnqrsuw~]+)*)?").fullmatch
-    payload["guard_execution_environment"] = {
-        "path": os.environ.get("PATH", ""),
-        "environment_names": sorted(set(active) | {n for n in ("GIT_PAGER", "PAGER") if n in os.environ}),
-        "environment_digest": hashlib.sha256(
-            json.dumps(active, sort_keys=True, separators=(",", ":")).encode()
-        ).hexdigest(),
-        "xdg_config_home": os.environ.get("XDG_CONFIG_HOME") or None,
-        "git_config_no_system": _git_config_no_system_enabled(
-            os.environ.get("GIT_CONFIG_NOSYSTEM")
-        ),
-        "home": os.environ.get("HOME"),
-        "git_pager_disabled": pager_ok(os.environ.get("GIT_PAGER", "-")) is not None,
-        "pager_disabled": pager_ok(os.environ.get("PAGER", "-")) is not None,
-        "library_search_paths": {
-            name: value
-            for name in (
-                "LD_LIBRARY_PATH",
-                "DYLD_LIBRARY_PATH",
-                "DYLD_FALLBACK_LIBRARY_PATH",
-                "DYLD_FRAMEWORK_PATH",
-                "DYLD_FALLBACK_FRAMEWORK_PATH",
-            )
-            if (value := os.environ.get(name)) and _loader_value_fits(value)
-        },
-    }
-    stamped = json.dumps(payload, ensure_ascii=True, separators=(",", ":"))
-    return stamped if len(stamped) <= 1_000_000 else text
-
-
+__HOOK_EXECUTION_STAMP__
 def _compact(event_name: str) -> str:
     return event_name.replace("_", "").replace("-", "").lower()
 
@@ -298,6 +319,13 @@ def _approval_wait_seconds() -> float:
         else:
             if parsed >= 0:
                 configured = parsed
+    if HARNESS == "muse":
+        # The Muse adapter sizes this client's budget from the same configured
+        # wait, so the wait only has to leave the adapter's margin back. The
+        # fraction below is tuned for a harness whose hook timeout is fixed,
+        # and it stays the floor for a budget too small to hold the margin.
+        budget = float(TIMEOUT_SECONDS)
+        return min(max(configured, 0.0), max(budget - _MUSE_WAIT_BUDGET_MARGIN_SECONDS, budget * 0.4))
     return min(max(configured, 0.0), min(float(TIMEOUT_SECONDS) * 0.4, 80.0))
 
 
@@ -455,6 +483,76 @@ def _apply_grok_wait(input_text: str, native: tuple[str, str, int]) -> tuple[str
     return text, stderr, 0 if allowed else exit_code
 
 
+def _rewrite_muse_decision(
+    payload: dict[str, object], *, allowed: bool, tool_input: object
+) -> dict[str, object]:
+    updated = dict(payload)
+    updated["decision"] = "allow" if allowed else "deny"
+    updated["policy_action"] = "allow" if allowed else "block"
+    if allowed:
+        updated.pop("reason", None)
+    hook_specific = updated.get("hookSpecificOutput")
+    rewritten = dict(hook_specific) if isinstance(hook_specific, dict) else {"hookEventName": "PreToolUse"}
+    rewritten["permissionDecision"] = "allow" if allowed else "deny"
+    if allowed:
+        rewritten.pop("permissionDecisionReason", None)
+        # Muse rejects a bare allow without updatedInput; echoing the
+        # reviewed input resumes the exact approved call.
+        if isinstance(tool_input, dict):
+            rewritten["updatedInput"] = tool_input
+    updated["hookSpecificOutput"] = rewritten
+    return updated
+
+
+def _apply_muse_wait(input_text: str, native: tuple[str, str, int]) -> tuple[str, str, int]:
+    stdout, stderr, exit_code = native
+    if HARNESS != "muse" or _event_name(input_text) != "PreToolUse":
+        return native
+    payload = _json_object(stdout)
+    if payload is None:
+        return native
+    if str(payload.get("policy_action") or "") not in {"review", "require-reapproval"}:
+        return native
+    request_ids = _approval_request_ids(payload)
+    if not request_ids:
+        return native
+    auth = _daemon_auth()
+    if auth is None:
+        return native
+    host, port, token = auth
+    wait_seconds = _approval_wait_seconds()
+    if wait_seconds <= 0:
+        return native
+    deadline = min(time.monotonic() + wait_seconds, _HOOK_DEADLINE_MONOTONIC)
+    resolved: dict[str, str] = {}
+    while time.monotonic() < deadline and len(resolved) < len(request_ids):
+        for request_id in request_ids:
+            if request_id in resolved:
+                continue
+            url = _loopback_url(host, port, "/v1/requests/" + quote(request_id, safe=""))
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                break
+            status = _http_json(url, token, data=None, timeout=min(remaining, 1.0))
+            if status is None:
+                continue
+            action = status.get("resolution_action")
+            if isinstance(action, str) and action.strip():
+                resolved[request_id] = action.strip().lower()
+        if len(resolved) < len(request_ids):
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                break
+            time.sleep(min(0.2, remaining))
+    if len(resolved) != len(request_ids):
+        return native
+    allowed = all(action == "allow" for action in resolved.values())
+    input_payload = _json_object(input_text) or {}
+    rewritten = _rewrite_muse_decision(payload, allowed=allowed, tool_input=input_payload.get("tool_input"))
+    text = json.dumps(rewritten, ensure_ascii=True, separators=(",", ":"))
+    return text, stderr, 0
+
+
 __GROK_HOOK_READINESS__
 __GROK_HOOK_INVOCATION__
 
@@ -487,7 +585,7 @@ def _post_hook(input_text: str) -> tuple[str, str, int] | None:
     parsed = _http_json(url, token, data=input_text.encode("utf-8"), timeout=timeout)
     if parsed is None:
         return None
-    return _apply_grok_wait(input_text, _to_native(parsed, _event_name(input_text)))
+    return _apply_muse_wait(input_text, _apply_grok_wait(input_text, _to_native(parsed, _event_name(input_text))))
 
 
 def main() -> int:
@@ -526,4 +624,5 @@ if __name__ == "__main__":
     .replace("__GROK_HOOK_READINESS__", GROK_HOOK_READINESS_TEMPLATE)
     .replace("__GROK_HOOK_INVOCATION__", GROK_HOOK_INVOCATION_TEMPLATE)
     .replace("__HOOK_NATIVE_RESPONSES__\n", BOUNDED_HOOK_NATIVE_TEMPLATE)
+    .replace("__HOOK_EXECUTION_STAMP__\n", HOOK_EXECUTION_STAMP_TEMPLATE)
 )

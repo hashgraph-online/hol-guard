@@ -217,3 +217,119 @@ fn api_jq_filters_that_read_the_environment_are_no_static_reads() {
         );
     }
 }
+
+/// A trailing `--help` prints the subcommand's help and runs nothing. Two rows
+/// of the oracle above recorded the opposite, and that is the false positive
+/// this fix removes rather than a behaviour worth keeping.
+#[test]
+fn a_trailing_help_flag_keeps_the_command_local() {
+    for command in [
+        "repo delete owner/name --help",
+        "release delete v1 --help",
+        "secret set FIXTURE --help",
+        "issue view --help",
+        "secret --help",
+        "auth switch --help",
+        "workflow run release.yml --help",
+        "--help",
+        "-h",
+        // The option and its value are gh's, and what is left is a name gh
+        // owns, so gh is still the one reading the flag.
+        "issue -R owner/name --help",
+        "issue -R owner/name list --help",
+        "issue --repo=owner/name view 1 --help",
+        // A subcommand that is a group itself still prints its own help, and
+        // the names underneath it are gh's too.
+        "repo deploy-key --help",
+        "repo deploy-key add key.pub --help",
+        "codespace ports forward 8080:8080 --help",
+    ] {
+        let argv: Vec<String> = command.split(' ').map(String::from).collect();
+        let got = classify_github_cli(&argv);
+        assert_eq!(
+            (got.capability, got.reason_code.as_str()),
+            (
+                crate::github_capability_contract::GitHubCommandCapability::ReadLocal,
+                "github.command.local-help"
+            ),
+            "{command}"
+        );
+    }
+}
+
+/// The trailing `--help` is only gh's own help when gh is the one reading it.
+/// After `--` the flag is a positional, and aliases, installed extensions and
+/// `gh extension exec` are registered with flag parsing disabled, so gh hands
+/// the flag to the command it runs. An alias can also sit under a built-in
+/// group, where only the group's own subcommands are safe from it.
+#[test]
+fn a_help_gh_itself_does_not_print_still_classifies_the_command() {
+    use crate::github_capability_contract::GitHubCommandCapability as C;
+    for command in [
+        // Uploads a file named `--help` and publishes the release.
+        "release create v1.0.0 -- notes.txt --help",
+        // An alias set with `--shell` runs its shell command.
+        "nuke --help",
+        // An installed extension runs its binary.
+        "my-ext purge --help",
+        "extension exec my-ext delete target --help",
+        // `gh alias set --shell "issue mine" …` is accepted, and gh then runs
+        // the alias's shell command with `--help` as an argument.
+        "issue mine --help",
+        "run teardown --help",
+        // Cobra takes an option and its value out of the way before it matches
+        // a subcommand, so a written option in front of the alias does not stop
+        // gh from expanding it: these all run the `issue mine` alias.
+        "issue -R owner/name mine --help",
+        "issue --repo owner/name mine --help",
+        "issue --repo=owner/name mine --help",
+        "issue -Rowner/name mine --help",
+        // An option gh does not publish an arity for here could take the next
+        // word or leave it as the name of an alias.
+        "issue --json state mine --help",
+        // An alias can sit under a subcommand that is a group itself.
+        "repo deploy-key zap --help",
+        "repo autolink zap --help",
+        "repo gitignore zap --help",
+        "repo license zap --help",
+        "codespace ports zap --help",
+        // gh matches a name byte for byte, so a differently cased spelling is
+        // an alias lookup rather than the built-in command it resembles.
+        "ISSUE delete owner/name --help",
+        "issue VIEW 1 --help",
+    ] {
+        let argv: Vec<String> = command.split(' ').map(String::from).collect();
+        let got = classify_github_cli(&argv);
+        assert_ne!(got.capability, C::ReadLocal, "{command}");
+        assert_ne!(got.reason_code, "github.command.local-help", "{command}");
+    }
+    // An unrecognised top-level name keeps the unknown-command floor.
+    for command in ["nuke --help", "my-ext purge --help"] {
+        let argv: Vec<String> = command.split(' ').map(String::from).collect();
+        assert_eq!(
+            classify_github_cli(&argv).capability,
+            C::Unknown,
+            "{command}"
+        );
+    }
+}
+
+/// The two readings a trailing `--help` does not have: an option's value, and
+/// the `--hostname` that `gh` reads `-h` as past the first token.
+#[test]
+fn a_help_flag_that_is_not_help_still_classifies_the_command() {
+    use crate::github_capability_contract::GitHubCommandCapability as C;
+    for command in [
+        // `gh issue create --title --help` opens an issue titled `--help`.
+        "issue create --title --help",
+        "secret set FIXTURE --body --help",
+        // Past the first token `-h` names an alternate host, not help.
+        "repo delete owner/name -h",
+        "pr list -h ghes.com",
+    ] {
+        let argv: Vec<String> = command.split(' ').map(String::from).collect();
+        let got = classify_github_cli(&argv);
+        assert_ne!(got.capability, C::ReadLocal, "{command}");
+        assert_ne!(got.reason_code, "github.command.local-help", "{command}");
+    }
+}

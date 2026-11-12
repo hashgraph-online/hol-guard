@@ -20,7 +20,7 @@ from itertools import product
 from typing import Any
 
 from .catalog import Scenario
-from .connector_fixtures import CONNECTOR_PROFILE, ECHO_TEXT
+from .connector_fixtures import CONNECTOR_PROFILE, ECHO_TEXT, GRANTED_SCRIPT_CASES
 
 # Runtime reason codes for "set this connector up first". Some land with the connector
 # runtime change, so they are spelled here as plain strings rather than imported.
@@ -212,11 +212,16 @@ def connector_setup_outcome(
 def ungranted_stop(scenario: Scenario, decisions: list[dict[str, Any]]) -> tuple[str, str] | None:
     """A case that needs a granted connector, stopped for setup, was never exercised.
 
-    The lane stages the connector but does not seed a Guard grant for it yet, so Guard's
-    connector-setup stop on a case that expects the connector to run (or its own protection
-    to stop it) says the precondition is missing, not that Guard misbehaved.
+    The lane seeds a Guard grant only for the custom script in ``GRANTED_SCRIPT_CASES``, so
+    Guard's connector-setup stop on any other case that expects the connector to run (or its
+    own protection to stop it) says the precondition is missing, not that Guard misbehaved.
+    A stop on the granted script is a failure: Guard ignored the allow the fixture saved.
     """
-    if scenario.expectation == "setup" or CONNECTOR_PROFILE not in scenario.profiles:
+    if (
+        scenario.expectation == "setup"
+        or CONNECTOR_PROFILE not in scenario.profiles
+        or scenario.id in GRANTED_SCRIPT_CASES
+    ):
         return None
     stop = next(
         (d for d in decisions if d["decision"] != "allow" and d["reason_code"] in CONNECTOR_SETUP_REASONS), None

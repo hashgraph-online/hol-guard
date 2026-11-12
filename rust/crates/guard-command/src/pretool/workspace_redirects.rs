@@ -140,6 +140,13 @@ fn project_scan(raw: &str) -> Option<(String, Vec<usize>, bool)> {
     }
     let lead = out.len() - out.trim_start().len();
     let projected = out.trim();
+    // The `&` that backgrounds the whole command is read off here too.
+    // Backgrounding starts exactly the programs the foreground text names, and
+    // the sandbox runs the raw bytes either way, so the text this projection
+    // hands the classifier is the foreground one. Keeping the `&` left the
+    // projection unmodelled, which cost a redirect beside it the workspace
+    // route the same command keeps without the redirect.
+    let projected = crate::pretool::script_content::foreground_job(projected).unwrap_or(projected);
     let map = map[lead..lead + projected.len()].to_vec();
     Some((projected.to_owned(), map, names_files))
 }
@@ -217,7 +224,7 @@ pub(super) fn contained(
     context: crate::pretool::PathContext<'_>,
     execution_environment: Option<&GuardExecutionEnvironmentV1>,
 ) -> Option<PreToolResultV1> {
-    if !crate::pretool::workspace_contained::host_eligible(harness, event) {
+    if !crate::pretool::workspace_contained::host_eligible(harness, event, payload) {
         return None;
     }
     // A command the bounded-write projection takes runs directly instead: a
@@ -265,13 +272,14 @@ pub(super) fn contained(
         && !projected.action.sensitive_target
         && !runs_directly
         && stays_offline(&projected_text, single);
-    // macOS claims package and Node tool commands with narrower profiles
-    // before the workspace route runs. The redirect disqualifies those, so the
-    // workspace sandbox takes the command once it passes that route's gate.
+    // macOS claims package, Node tool and pytest commands with narrower
+    // profiles before the workspace route runs. The redirect disqualifies
+    // those, so the workspace sandbox takes the command once it passes that
+    // route's gate.
     // A trailing `2>&1` before bounded output filters is not such a redirect:
     // the narrower sink peels it itself, so that command keeps its profile.
     let home = context.home_dir.map(Path::new);
-    let narrower = super::redirect_projection::package_profile(&projected.reason_code)
+    let narrower = super::redirect_projection::redirected_profile(&projected.reason_code)
         && projected.minimum_action == "sandbox-required"
         && !projected.action.sensitive_target
         && !narrower_sink_runs(command, context)
@@ -421,12 +429,17 @@ fn remove_redirect(
     let input = chars[start] == '<';
     let mut index = start + 1;
     let descriptor = trailing_word(out).to_owned();
+    let merged_streams = !input && descriptor == "&";
     match descriptor.as_str() {
         "" => {}
         "1" | "2" if !input => out.truncate(out.len() - 1),
         "0" if input => out.truncate(out.len() - 1),
         _ if descriptor.chars().all(|value| value.is_ascii_digit()) => return None,
-        // `&>` means background-then-redirect under POSIX `sh`.
+        // `&>` sends both streams to the file. POSIX `sh` reads it as the
+        // job separator followed by a redirect, which writes the same file
+        // after starting the same program, so both readings name the same
+        // write and the spelling decides with `> f 2>&1`.
+        "&" if !input => out.truncate(out.len() - 1),
         _ if descriptor.ends_with('&') => return None,
         _ => {}
     }
@@ -459,6 +472,22 @@ fn remove_redirect(
     let target: String = chars[target_start..index].iter().collect();
     if !literal_target(&target) {
         return None;
+    }
+    if merged_streams {
+        // The two readings of `&>` only name the same work while the
+        // redirect ends its segment. A word after the target is an argument
+        // to the same program in `bash` and the start of a second command in
+        // POSIX `sh`, which runs it after backgrounding the first. The
+        // sandbox runs the raw bytes, so a projection that modelled only the
+        // `bash` reading would hand the classifier a command the other shell
+        // never runs and hide the one it does.
+        let mut after = index;
+        while matches!(chars.get(after), Some(' ' | '\t')) {
+            after += 1;
+        }
+        if !matches!(chars.get(after), None | Some(';' | '|' | '&' | '\n' | ')')) {
+            return None;
+        }
     }
     *names_files |= target != "/dev/null";
     out.push(' ');

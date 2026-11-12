@@ -1,6 +1,6 @@
 //! Paths that climb out of the session's checkout into a linked worktree of
 //! the same repository, such as `cd ../report-wt` after `git worktree add
-//! ../report-wt`.
+//! ../report-wt`, or into the plain directory a leading `..` names.
 //!
 //! The worktree shares the session repository's objects, configuration and
 //! hooks, so entering it reaches nothing the workspace does not already
@@ -28,6 +28,75 @@ pub(crate) fn linked_root(value: &str, cwd: &Path) -> Option<PathBuf> {
     }
     let target = resolved(value, cwd)?;
     same_repository_root(&target, cwd).then_some(target)
+}
+
+/// The directory a relative `cd` operand made of a leading run of `..` and
+/// then plain names reaches from `cwd`, as in `cd ..` or `cd ../app`. It is
+/// the same directory the absolute spelling of that path names, which the
+/// caller proves an unaliased, readable directory. Only read-only steps are
+/// proved after it: a write or Git write route reached through a relative
+/// `cd` assumes a target in the workspace or a linked worktree of it.
+///
+/// In its default logical mode, `cd ..` is `cd "$(dirname "$PWD")"`. The
+/// `$PWD` projection (see `chain_literals_pwd`) already reads `$PWD` as the
+/// reported cwd and `$(dirname "$PWD")` as its lexical parent, so the
+/// climb rests on the same assumption, and the residual described above is
+/// the one that projection and a linked worktree accept. A cwd that is not
+/// its own canonical path is refused, since its lexical parent need not be
+/// its physical one.
+pub(crate) fn climbed(value: &str, cwd: &Path) -> Option<PathBuf> {
+    if value.len() > 4096
+        || !(value == ".." || value.starts_with("../"))
+        || !cwd.is_absolute()
+        || !own_canonical_spelling(cwd)
+    {
+        return None;
+    }
+    let mut target = cwd.to_path_buf();
+    let mut named = false;
+    for component in Path::new(value).components() {
+        match component {
+            Component::ParentDir if !named => {
+                if !target.pop() {
+                    return None;
+                }
+            }
+            Component::Normal(name) if name.to_str().is_some_and(plain) => {
+                named = true;
+                target.push(name);
+            }
+            _ => return None,
+        }
+    }
+    // Later operand proofs expect the separator the harness reports, and the
+    // spelling check below compares a drive path written one way.
+    #[cfg(windows)]
+    let target = PathBuf::from(target.to_str()?.replace('/', "\\"));
+    Some(target)
+}
+
+/// Whether `path` is spelled exactly as the directory it resolves to, so a
+/// differently cased name, an 8.3 short name, a junction or a symlinked
+/// component cannot stand in for the directory a climb proof names.
+///
+/// `canonicalize` answers with the `\\?\` verbatim form on Windows, which no
+/// reported directory and no `cd` operand is ever written as, so there the
+/// drive spelling is compared instead. That is the same comparison an
+/// absolute `cd` target passes (see `exact_drive_spelling`), and it refuses a
+/// UNC share, whose canonical form carries no drive letter.
+pub(crate) fn own_canonical_spelling(path: &Path) -> bool {
+    let Ok(canonical) = std::fs::canonicalize(path) else {
+        return false;
+    };
+    #[cfg(windows)]
+    {
+        path.to_str()
+            .is_some_and(|text| super::exact_drive_spelling(text, &canonical))
+    }
+    #[cfg(not(windows))]
+    {
+        canonical == path
+    }
 }
 
 /// `rm` of a symbolic link that sits directly in the root of a linked
@@ -213,4 +282,72 @@ fn session_common(cwd: &Path) -> Option<PathBuf> {
         return std::fs::canonicalize(marker).ok();
     }
     super::super::worktree_writes::linked_worktree_dirs(cwd).map(|(common, _)| common)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{climbed, own_canonical_spelling};
+    use std::path::PathBuf;
+
+    struct Cleanup(PathBuf);
+
+    impl Drop for Cleanup {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.0);
+        }
+    }
+
+    /// `<root>/project` beside `<root>/other-project`, in the spelling a
+    /// harness reports rather than the `\\?\` form `canonicalize` answers
+    /// with on Windows.
+    fn siblings(label: &str) -> (PathBuf, Cleanup) {
+        let root = std::env::temp_dir().join(format!(
+            "guard-climb-{label}-{}-{}",
+            std::process::id(),
+            crate::unique_nanos::unique_nanos()
+        ));
+        std::fs::create_dir_all(root.join("project")).unwrap();
+        std::fs::create_dir_all(root.join("other-project")).unwrap();
+        std::fs::create_dir_all(root.join(".hidden")).unwrap();
+        let canonical = std::fs::canonicalize(&root).unwrap();
+        let reported = canonical
+            .to_str()
+            .unwrap()
+            .strip_prefix(r"\\?\")
+            .map_or(canonical.clone(), PathBuf::from);
+        (reported, Cleanup(root))
+    }
+
+    /// The checkout beside the session's is the directory `cd ../other-project`
+    /// names, on every platform. Windows refused every climb, so a `git status`
+    /// after one fell through to the execution-context review there while the
+    /// same command was proved on unix.
+    #[test]
+    fn a_climb_to_a_sibling_names_that_sibling() {
+        let (root, _cleanup) = siblings("sibling");
+        let cwd = root.join("project");
+        assert_eq!(
+            climbed("../other-project", &cwd),
+            Some(root.join("other-project"))
+        );
+        assert_eq!(climbed("..", &cwd), Some(root.clone()));
+    }
+
+    /// What the climb still refuses: a hidden name, a `..` that follows a
+    /// name, and a working directory that is not spelled as the directory it
+    /// resolves to, whose lexical parent need not be its physical one.
+    #[test]
+    fn a_climb_refuses_a_hidden_name_an_inner_parent_and_an_aliased_cwd() {
+        let (root, _cleanup) = siblings("refused");
+        let cwd = root.join("project");
+        assert_eq!(climbed("../.hidden", &cwd), None);
+        assert_eq!(climbed("../other-project/../project", &cwd), None);
+        assert_eq!(climbed("other-project", &cwd), None);
+        assert_eq!(climbed("../other project", &cwd), None);
+
+        let aliased = root.join("project").join("..").join("project");
+        assert!(!own_canonical_spelling(&aliased));
+        assert_eq!(climbed("..", &aliased), None);
+        assert!(!own_canonical_spelling(&root.join("absent-entirely")));
+    }
 }

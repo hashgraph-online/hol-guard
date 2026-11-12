@@ -28,10 +28,7 @@ fn staged_scratch_output_in_the_private_temporary_directory_reads() {
         "expected the per-user temporary directory, got {}",
         temporary.display()
     );
-    let nonce = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap()
-        .as_nanos();
+    let nonce = crate::unique_nanos::unique_nanos();
     let staged = temporary.join(format!("guard-temp-scratch-{}-{nonce}", std::process::id()));
     let project = staged.join("org/signup-funnel");
     std::fs::create_dir(&staged).unwrap();

@@ -33,16 +33,25 @@ const SYNC_RECOVERY_STEPS = [
 export function createSupplyChainSyncApprovalGate(options?: {
   autoRetryAuditAfterPrimary?: boolean;
 }): SupplyChainAuditRecoveryGate {
+  const autoRetryAuditAfterPrimary = options?.autoRetryAuditAfterPrimary ?? false;
   return {
     obstacle: "sync_required",
-    headline: "Sync supply-chain intel before auditing",
+    headline: autoRetryAuditAfterPrimary
+      ? "Sync supply-chain intel before auditing"
+      : "Approve supply-chain intel sync",
     detail:
       "Enter your local approval password so Guard can download the latest signed supply-chain bundle on this device.",
-    steps: [...SYNC_RECOVERY_STEPS],
+    // A standalone sync does not run an audit afterwards, so it must not promise one.
+    steps: autoRetryAuditAfterPrimary ? [...SYNC_RECOVERY_STEPS] : [SYNC_RECOVERY_STEPS[0]],
     primaryAction: "sync",
     primaryLabel: "Sync supply-chain intel",
-    autoRetryAuditAfterPrimary: options?.autoRetryAuditAfterPrimary ?? false,
+    autoRetryAuditAfterPrimary,
   };
+}
+
+/** True when the gate only syncs intel and no workspace audit follows it. */
+export function isStandaloneSyncRecoveryGate(gate: SupplyChainAuditRecoveryGate): boolean {
+  return gate.primaryAction === "sync" && !gate.autoRetryAuditAfterPrimary;
 }
 
 export function resolveSupplyChainAuditRecoveryGate(

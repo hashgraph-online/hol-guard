@@ -6,7 +6,7 @@ HOL Guard detects and blocks credential-exfiltration patterns before any
 network request leaves the machine.
 
 The API key below is a fake sentinel value. The endpoint is a canary
-domain controlled by Hashgraph Online for testing purposes only.
+domain controlled by HOL for testing purposes only.
 """
 
 import urllib.request

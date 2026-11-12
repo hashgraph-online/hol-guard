@@ -1,0 +1,2794 @@
+{
+  "cases": [
+    {
+      "config_toml": "",
+      "export": {
+        "privacy_warning": "Exports include local Guard preferences but not secrets or receipt evidence.",
+        "schema_version": 1,
+        "settings": {
+          "approval_browser_delay_seconds": 20,
+          "approval_browser_immediate_severity": "critical",
+          "approval_gate": {
+            "configured": false,
+            "cooldown_active": false,
+            "cooldown_expires_at": null,
+            "cooldown_seconds": 0,
+            "enabled": false,
+            "fail_closed": false,
+            "locked_until": null,
+            "strict_all_decisions": false,
+            "totp_enabled": false,
+            "totp_pending": false,
+            "totp_recent_satisfied": false
+          },
+          "approval_surface_policy": "attention-aware",
+          "approval_wait_timeout_seconds": 120,
+          "billing": false,
+          "blocked_request_mode": "safe-alternative",
+          "changed_hash_action": "require-reapproval",
+          "default_action": "warn",
+          "desktop_notifications": true,
+          "harness_posture_status": [
+            {
+              "harness": "codex",
+              "inherited": true,
+              "override": null,
+              "posture": "protected",
+              "watch_entered_at": null
+            },
+            {
+              "harness": "claude-code",
+              "inherited": true,
+              "override": null,
+              "posture": "protected",
+              "watch_entered_at": null
+            },
+            {
+              "harness": "opencode",
+              "inherited": true,
+              "override": null,
+              "posture": "protected",
+              "watch_entered_at": null
+            },
+            {
+              "harness": "copilot",
+              "inherited": true,
+              "override": null,
+              "posture": "protected",
+              "watch_entered_at": null
+            },
+            {
+              "harness": "cursor",
+              "inherited": true,
+              "override": null,
+              "posture": "protected",
+              "watch_entered_at": null
+            },
+            {
+              "harness": "cline",
+              "inherited": true,
+              "override": null,
+              "posture": "protected",
+              "watch_entered_at": null
+            },
+            {
+              "harness": "gemini",
+              "inherited": true,
+              "override": null,
+              "posture": "protected",
+              "watch_entered_at": null
+            },
+            {
+              "harness": "hermes",
+              "inherited": true,
+              "override": null,
+              "posture": "protected",
+              "watch_entered_at": null
+            },
+            {
+              "harness": "openclaw",
+              "inherited": true,
+              "override": null,
+              "posture": "protected",
+              "watch_entered_at": null
+            },
+            {
+              "harness": "antigravity",
+              "inherited": true,
+              "override": null,
+              "posture": "protected",
+              "watch_entered_at": null
+            },
+            {
+              "harness": "kimi",
+              "inherited": true,
+              "override": null,
+              "posture": "protected",
+              "watch_entered_at": null
+            },
+            {
+              "harness": "grok",
+              "inherited": true,
+              "override": null,
+              "posture": "protected",
+              "watch_entered_at": null
+            },
+            {
+              "harness": "pi",
+              "inherited": true,
+              "override": null,
+              "posture": "protected",
+              "watch_entered_at": null
+            },
+            {
+              "harness": "omp",
+              "inherited": true,
+              "override": null,
+              "posture": "protected",
+              "watch_entered_at": null
+            },
+            {
+              "harness": "zcode",
+              "inherited": true,
+              "override": null,
+              "posture": "protected",
+              "watch_entered_at": null
+            },
+            {
+              "harness": "devin",
+              "inherited": true,
+              "override": null,
+              "posture": "protected",
+              "watch_entered_at": null
+            },
+            {
+              "harness": "muse",
+              "inherited": true,
+              "override": null,
+              "posture": "protected",
+              "watch_entered_at": null
+            },
+            {
+              "harness": "paseo",
+              "inherited": true,
+              "override": null,
+              "posture": "protected",
+              "watch_entered_at": null
+            }
+          ],
+          "harness_postures": {},
+          "harness_postures_effective": {
+            "antigravity": "protected",
+            "claude-code": "protected",
+            "cline": "protected",
+            "codex": "protected",
+            "copilot": "protected",
+            "cursor": "protected",
+            "devin": "protected",
+            "gemini": "protected",
+            "grok": "protected",
+            "hermes": "protected",
+            "kimi": "protected",
+            "muse": "protected",
+            "omp": "protected",
+            "openclaw": "protected",
+            "opencode": "protected",
+            "paseo": "protected",
+            "pi": "protected",
+            "zcode": "protected"
+          },
+          "harness_postures_locked": false,
+          "harness_risk_actions": {},
+          "harness_watch_entered_at": {},
+          "install_owner": "user",
+          "managed_locked_settings": [],
+          "managed_policy_hash": null,
+          "managed_policy_status": "absent",
+          "mode": "prompt",
+          "new_network_domain_action": "warn",
+          "presentation": {
+            "diagnostic": null,
+            "explicit": false,
+            "revision": 0,
+            "schema_version": 1,
+            "source": "default",
+            "value": "everyday",
+            "writable": true
+          },
+          "presentation_diagnostic": null,
+          "presentation_mode": "everyday",
+          "presentation_mode_explicit": false,
+          "presentation_revision": 0,
+          "presentation_schema_version": 1,
+          "protection_posture": "protected",
+          "protection_posture_explicit": false,
+          "receipt_redaction_level": "full",
+          "risk_action_overrides": {},
+          "risk_actions": {
+            "cloud_advisory": "warn",
+            "credential_exfiltration": "require-reapproval",
+            "data_flow_exfiltration": "require-reapproval",
+            "destructive_shell": "require-reapproval",
+            "encoded_execution": "require-reapproval",
+            "encoded_exfiltration": "require-reapproval",
+            "guard_bypass": "block",
+            "local_secret_read": "require-reapproval",
+            "low_trust_artifact": "require-reapproval",
+            "malicious_skill": "require-reapproval",
+            "mcp_dangerous_tool": "require-reapproval",
+            "network_egress": "warn",
+            "package_custom_registry": "allow",
+            "package_direct_source": "allow",
+            "package_install": "allow",
+            "package_lockfile_drift": "allow",
+            "package_script": "warn",
+            "package_unknown": "allow",
+            "persistence": "require-reapproval",
+            "prompt_injection": "require-reapproval",
+            "runtime_known_vulnerable": "require-reapproval"
+          },
+          "security_level": "balanced",
+          "subprocess_action": "warn",
+          "sync": false,
+          "telemetry": false,
+          "unknown_publisher_action": "review",
+          "update_channel": "stable",
+          "watch_auto_revert_hours": 24
+        }
+      },
+      "name": "defaults",
+      "settings": {
+        "config_path": "{HOME}/config.toml",
+        "guard_home": "{HOME}",
+        "protection_capabilities": [
+          {
+            "can_ask_inline": true,
+            "can_pre_block": true,
+            "can_pre_block_limited": false,
+            "display_name": "Codex",
+            "fail_open_on_hook_failure": false,
+            "harness": "codex",
+            "has_native_remember": false,
+            "honesty_sentence": "Codex asks in chat, then remembers.",
+            "limited": false
+          },
+          {
+            "can_ask_inline": true,
+            "can_pre_block": true,
+            "can_pre_block_limited": false,
+            "display_name": "Claude Code",
+            "fail_open_on_hook_failure": false,
+            "harness": "claude-code",
+            "has_native_remember": false,
+            "honesty_sentence": "Claude Code asks in chat, then remembers.",
+            "limited": false
+          },
+          {
+            "can_ask_inline": true,
+            "can_pre_block": true,
+            "can_pre_block_limited": false,
+            "display_name": "OpenCode",
+            "fail_open_on_hook_failure": false,
+            "harness": "opencode",
+            "has_native_remember": true,
+            "honesty_sentence": "OpenCode uses this app's prompt when it can.",
+            "limited": false
+          },
+          {
+            "can_ask_inline": true,
+            "can_pre_block": true,
+            "can_pre_block_limited": false,
+            "display_name": "Copilot",
+            "fail_open_on_hook_failure": false,
+            "harness": "copilot",
+            "has_native_remember": false,
+            "honesty_sentence": "Copilot asks in chat, then remembers.",
+            "limited": false
+          },
+          {
+            "can_ask_inline": true,
+            "can_pre_block": true,
+            "can_pre_block_limited": false,
+            "display_name": "Cursor",
+            "fail_open_on_hook_failure": false,
+            "harness": "cursor",
+            "has_native_remember": true,
+            "honesty_sentence": "Cursor uses this app's prompt when it can.",
+            "limited": false
+          },
+          {
+            "can_ask_inline": false,
+            "can_pre_block": true,
+            "can_pre_block_limited": false,
+            "display_name": "Cline",
+            "fail_open_on_hook_failure": false,
+            "harness": "cline",
+            "has_native_remember": false,
+            "honesty_sentence": "Cline stops the action and opens Guard. This app cannot ask in chat.",
+            "limited": false
+          },
+          {
+            "can_ask_inline": false,
+            "can_pre_block": true,
+            "can_pre_block_limited": true,
+            "display_name": "Gemini",
+            "fail_open_on_hook_failure": false,
+            "harness": "gemini",
+            "has_native_remember": false,
+            "honesty_sentence": "Limited in Gemini. Guard stops what it can see and opens Guard for the rest.",
+            "limited": true
+          },
+          {
+            "can_ask_inline": false,
+            "can_pre_block": true,
+            "can_pre_block_limited": false,
+            "display_name": "Hermes",
+            "fail_open_on_hook_failure": false,
+            "harness": "hermes",
+            "has_native_remember": false,
+            "honesty_sentence": "Hermes stops the action and opens Guard. This app cannot ask in chat.",
+            "limited": false
+          },
+          {
+            "can_ask_inline": false,
+            "can_pre_block": true,
+            "can_pre_block_limited": false,
+            "display_name": "OpenClaw",
+            "fail_open_on_hook_failure": false,
+            "harness": "openclaw",
+            "has_native_remember": false,
+            "honesty_sentence": "OpenClaw stops the action and opens Guard. This app cannot ask in chat.",
+            "limited": false
+          },
+          {
+            "can_ask_inline": false,
+            "can_pre_block": true,
+            "can_pre_block_limited": true,
+            "display_name": "Antigravity",
+            "fail_open_on_hook_failure": false,
+            "harness": "antigravity",
+            "has_native_remember": false,
+            "honesty_sentence": "Limited in Antigravity. Guard stops what it can see and opens Guard for the rest.",
+            "limited": true
+          },
+          {
+            "can_ask_inline": false,
+            "can_pre_block": true,
+            "can_pre_block_limited": false,
+            "display_name": "Kimi",
+            "fail_open_on_hook_failure": true,
+            "harness": "kimi",
+            "has_native_remember": false,
+            "honesty_sentence": "Limited in Kimi. This app cannot ask in chat. If Guard is down, this app continues.",
+            "limited": true
+          },
+          {
+            "can_ask_inline": false,
+            "can_pre_block": true,
+            "can_pre_block_limited": false,
+            "display_name": "Grok",
+            "fail_open_on_hook_failure": true,
+            "harness": "grok",
+            "has_native_remember": false,
+            "honesty_sentence": "Limited in Grok. This app cannot ask in chat. If Guard is down, this app continues.",
+            "limited": true
+          },
+          {
+            "can_ask_inline": false,
+            "can_pre_block": true,
+            "can_pre_block_limited": false,
+            "display_name": "Pi",
+            "fail_open_on_hook_failure": true,
+            "harness": "pi",
+            "has_native_remember": false,
+            "honesty_sentence": "Limited in Pi. This app cannot ask in chat. If Guard is down, this app continues.",
+            "limited": true
+          },
+          {
+            "can_ask_inline": false,
+            "can_pre_block": true,
+            "can_pre_block_limited": false,
+            "display_name": "Oh My Pi",
+            "fail_open_on_hook_failure": true,
+            "harness": "omp",
+            "has_native_remember": false,
+            "honesty_sentence": "Limited in Oh My Pi. This app cannot ask in chat. If Guard is down, this app continues.",
+            "limited": true
+          },
+          {
+            "can_ask_inline": false,
+            "can_pre_block": true,
+            "can_pre_block_limited": false,
+            "display_name": "ZCode",
+            "fail_open_on_hook_failure": true,
+            "harness": "zcode",
+            "has_native_remember": false,
+            "honesty_sentence": "Limited in ZCode. This app cannot ask in chat. If Guard is down, this app continues.",
+            "limited": true
+          },
+          {
+            "can_ask_inline": false,
+            "can_pre_block": true,
+            "can_pre_block_limited": false,
+            "display_name": "Devin",
+            "fail_open_on_hook_failure": true,
+            "harness": "devin",
+            "has_native_remember": false,
+            "honesty_sentence": "Limited in Devin. This app cannot ask in chat. If Guard is down, this app continues.",
+            "limited": true
+          },
+          {
+            "can_ask_inline": true,
+            "can_pre_block": true,
+            "can_pre_block_limited": false,
+            "display_name": "Muse",
+            "fail_open_on_hook_failure": false,
+            "harness": "muse",
+            "has_native_remember": false,
+            "honesty_sentence": "Muse asks in chat, then remembers.",
+            "limited": false
+          },
+          {
+            "can_ask_inline": false,
+            "can_pre_block": true,
+            "can_pre_block_limited": true,
+            "display_name": "Paseo",
+            "fail_open_on_hook_failure": true,
+            "harness": "paseo",
+            "has_native_remember": false,
+            "honesty_sentence": "Paseo uses each provider's native Guard hooks; some providers continue if a hook fails. Other Paseo actions are not covered.",
+            "limited": true
+          }
+        ],
+        "settings": {
+          "approval_browser_delay_seconds": 20,
+          "approval_browser_immediate_severity": "critical",
+          "approval_gate": {
+            "configured": false,
+            "cooldown_active": false,
+            "cooldown_expires_at": null,
+            "cooldown_seconds": 0,
+            "enabled": false,
+            "fail_closed": false,
+            "locked_until": null,
+            "strict_all_decisions": false,
+            "totp_enabled": false,
+            "totp_pending": false,
+            "totp_recent_satisfied": false
+          },
+          "approval_surface_policy": "attention-aware",
+          "approval_wait_timeout_seconds": 120,
+          "billing": false,
+          "blocked_request_mode": "safe-alternative",
+          "changed_hash_action": "require-reapproval",
+          "context_assistance": null,
+          "context_assistance_diagnostic": null,
+          "context_assistance_requested": null,
+          "default_action": "warn",
+          "desktop_notifications": true,
+          "harness_posture_status": [
+            {
+              "harness": "codex",
+              "inherited": true,
+              "override": null,
+              "posture": "protected",
+              "watch_entered_at": null
+            },
+            {
+              "harness": "claude-code",
+              "inherited": true,
+              "override": null,
+              "posture": "protected",
+              "watch_entered_at": null
+            },
+            {
+              "harness": "opencode",
+              "inherited": true,
+              "override": null,
+              "posture": "protected",
+              "watch_entered_at": null
+            },
+            {
+              "harness": "copilot",
+              "inherited": true,
+              "override": null,
+              "posture": "protected",
+              "watch_entered_at": null
+            },
+            {
+              "harness": "cursor",
+              "inherited": true,
+              "override": null,
+              "posture": "protected",
+              "watch_entered_at": null
+            },
+            {
+              "harness": "cline",
+              "inherited": true,
+              "override": null,
+              "posture": "protected",
+              "watch_entered_at": null
+            },
+            {
+              "harness": "gemini",
+              "inherited": true,
+              "override": null,
+              "posture": "protected",
+              "watch_entered_at": null
+            },
+            {
+              "harness": "hermes",
+              "inherited": true,
+              "override": null,
+              "posture": "protected",
+              "watch_entered_at": null
+            },
+            {
+              "harness": "openclaw",
+              "inherited": true,
+              "override": null,
+              "posture": "protected",
+              "watch_entered_at": null
+            },
+            {
+              "harness": "antigravity",
+              "inherited": true,
+              "override": null,
+              "posture": "protected",
+              "watch_entered_at": null
+            },
+            {
+              "harness": "kimi",
+              "inherited": true,
+              "override": null,
+              "posture": "protected",
+              "watch_entered_at": null
+            },
+            {
+              "harness": "grok",
+              "inherited": true,
+              "override": null,
+              "posture": "protected",
+              "watch_entered_at": null
+            },
+            {
+              "harness": "pi",
+              "inherited": true,
+              "override": null,
+              "posture": "protected",
+              "watch_entered_at": null
+            },
+            {
+              "harness": "omp",
+              "inherited": true,
+              "override": null,
+              "posture": "protected",
+              "watch_entered_at": null
+            },
+            {
+              "harness": "zcode",
+              "inherited": true,
+              "override": null,
+              "posture": "protected",
+              "watch_entered_at": null
+            },
+            {
+              "harness": "devin",
+              "inherited": true,
+              "override": null,
+              "posture": "protected",
+              "watch_entered_at": null
+            },
+            {
+              "harness": "muse",
+              "inherited": true,
+              "override": null,
+              "posture": "protected",
+              "watch_entered_at": null
+            },
+            {
+              "harness": "paseo",
+              "inherited": true,
+              "override": null,
+              "posture": "protected",
+              "watch_entered_at": null
+            }
+          ],
+          "harness_postures": {},
+          "harness_postures_effective": {
+            "antigravity": "protected",
+            "claude-code": "protected",
+            "cline": "protected",
+            "codex": "protected",
+            "copilot": "protected",
+            "cursor": "protected",
+            "devin": "protected",
+            "gemini": "protected",
+            "grok": "protected",
+            "hermes": "protected",
+            "kimi": "protected",
+            "muse": "protected",
+            "omp": "protected",
+            "openclaw": "protected",
+            "opencode": "protected",
+            "paseo": "protected",
+            "pi": "protected",
+            "zcode": "protected"
+          },
+          "harness_postures_locked": false,
+          "harness_risk_actions": {},
+          "harness_watch_entered_at": {},
+          "install_owner": "user",
+          "managed_locked_settings": [],
+          "managed_policy_hash": null,
+          "managed_policy_status": "absent",
+          "mode": "prompt",
+          "new_network_domain_action": "warn",
+          "presentation": {
+            "diagnostic": null,
+            "explicit": false,
+            "revision": 0,
+            "schema_version": 1,
+            "source": "default",
+            "value": "everyday",
+            "writable": true
+          },
+          "presentation_diagnostic": null,
+          "presentation_mode": "everyday",
+          "presentation_mode_explicit": false,
+          "presentation_revision": 0,
+          "presentation_schema_version": 1,
+          "protection_posture": "protected",
+          "protection_posture_explicit": false,
+          "receipt_redaction_level": "full",
+          "risk_action_overrides": {},
+          "risk_actions": {
+            "cloud_advisory": "warn",
+            "credential_exfiltration": "require-reapproval",
+            "data_flow_exfiltration": "require-reapproval",
+            "destructive_shell": "require-reapproval",
+            "encoded_execution": "require-reapproval",
+            "encoded_exfiltration": "require-reapproval",
+            "guard_bypass": "block",
+            "local_secret_read": "require-reapproval",
+            "low_trust_artifact": "require-reapproval",
+            "malicious_skill": "require-reapproval",
+            "mcp_dangerous_tool": "require-reapproval",
+            "network_egress": "warn",
+            "package_custom_registry": "allow",
+            "package_direct_source": "allow",
+            "package_install": "allow",
+            "package_lockfile_drift": "allow",
+            "package_script": "warn",
+            "package_unknown": "allow",
+            "persistence": "require-reapproval",
+            "prompt_injection": "require-reapproval",
+            "runtime_known_vulnerable": "require-reapproval"
+          },
+          "security_level": "balanced",
+          "subprocess_action": "warn",
+          "sync": false,
+          "telemetry": false,
+          "unknown_publisher_action": "review",
+          "update_channel": "stable",
+          "watch_auto_revert_hours": 24
+        }
+      }
+    },
+    {
+      "config_toml": "protection_posture = \"watch\"\nwatch_entered_at = \"2999-01-01T00:00:00+00:00\"\nwatch_auto_revert_hours = 0\n",
+      "export": {
+        "privacy_warning": "Exports include local Guard preferences but not secrets or receipt evidence.",
+        "schema_version": 1,
+        "settings": {
+          "approval_browser_delay_seconds": 20,
+          "approval_browser_immediate_severity": "critical",
+          "approval_gate": {
+            "configured": false,
+            "cooldown_active": false,
+            "cooldown_expires_at": null,
+            "cooldown_seconds": 0,
+            "enabled": false,
+            "fail_closed": false,
+            "locked_until": null,
+            "strict_all_decisions": false,
+            "totp_enabled": false,
+            "totp_pending": false,
+            "totp_recent_satisfied": false
+          },
+          "approval_surface_policy": "attention-aware",
+          "approval_wait_timeout_seconds": 120,
+          "billing": false,
+          "blocked_request_mode": "safe-alternative",
+          "changed_hash_action": "require-reapproval",
+          "default_action": "warn",
+          "desktop_notifications": true,
+          "harness_posture_status": [
+            {
+              "harness": "codex",
+              "inherited": true,
+              "override": null,
+              "posture": "watch",
+              "watch_entered_at": null
+            },
+            {
+              "harness": "claude-code",
+              "inherited": true,
+              "override": null,
+              "posture": "watch",
+              "watch_entered_at": null
+            },
+            {
+              "harness": "opencode",
+              "inherited": true,
+              "override": null,
+              "posture": "watch",
+              "watch_entered_at": null
+            },
+            {
+              "harness": "copilot",
+              "inherited": true,
+              "override": null,
+              "posture": "watch",
+              "watch_entered_at": null
+            },
+            {
+              "harness": "cursor",
+              "inherited": true,
+              "override": null,
+              "posture": "watch",
+              "watch_entered_at": null
+            },
+            {
+              "harness": "cline",
+              "inherited": true,
+              "override": null,
+              "posture": "watch",
+              "watch_entered_at": null
+            },
+            {
+              "harness": "gemini",
+              "inherited": true,
+              "override": null,
+              "posture": "watch",
+              "watch_entered_at": null
+            },
+            {
+              "harness": "hermes",
+              "inherited": true,
+              "override": null,
+              "posture": "watch",
+              "watch_entered_at": null
+            },
+            {
+              "harness": "openclaw",
+              "inherited": true,
+              "override": null,
+              "posture": "watch",
+              "watch_entered_at": null
+            },
+            {
+              "harness": "antigravity",
+              "inherited": true,
+              "override": null,
+              "posture": "watch",
+              "watch_entered_at": null
+            },
+            {
+              "harness": "kimi",
+              "inherited": true,
+              "override": null,
+              "posture": "watch",
+              "watch_entered_at": null
+            },
+            {
+              "harness": "grok",
+              "inherited": true,
+              "override": null,
+              "posture": "watch",
+              "watch_entered_at": null
+            },
+            {
+              "harness": "pi",
+              "inherited": true,
+              "override": null,
+              "posture": "watch",
+              "watch_entered_at": null
+            },
+            {
+              "harness": "omp",
+              "inherited": true,
+              "override": null,
+              "posture": "watch",
+              "watch_entered_at": null
+            },
+            {
+              "harness": "zcode",
+              "inherited": true,
+              "override": null,
+              "posture": "watch",
+              "watch_entered_at": null
+            },
+            {
+              "harness": "devin",
+              "inherited": true,
+              "override": null,
+              "posture": "watch",
+              "watch_entered_at": null
+            },
+            {
+              "harness": "muse",
+              "inherited": true,
+              "override": null,
+              "posture": "watch",
+              "watch_entered_at": null
+            },
+            {
+              "harness": "paseo",
+              "inherited": true,
+              "override": null,
+              "posture": "watch",
+              "watch_entered_at": null
+            }
+          ],
+          "harness_postures": {},
+          "harness_postures_effective": {
+            "antigravity": "watch",
+            "claude-code": "watch",
+            "cline": "watch",
+            "codex": "watch",
+            "copilot": "watch",
+            "cursor": "watch",
+            "devin": "watch",
+            "gemini": "watch",
+            "grok": "watch",
+            "hermes": "watch",
+            "kimi": "watch",
+            "muse": "watch",
+            "omp": "watch",
+            "openclaw": "watch",
+            "opencode": "watch",
+            "paseo": "watch",
+            "pi": "watch",
+            "zcode": "watch"
+          },
+          "harness_postures_locked": false,
+          "harness_risk_actions": {},
+          "harness_watch_entered_at": {},
+          "install_owner": "user",
+          "managed_locked_settings": [],
+          "managed_policy_hash": null,
+          "managed_policy_status": "absent",
+          "mode": "observe",
+          "new_network_domain_action": "warn",
+          "presentation": {
+            "diagnostic": null,
+            "explicit": false,
+            "revision": 0,
+            "schema_version": 1,
+            "source": "default",
+            "value": "everyday",
+            "writable": true
+          },
+          "presentation_diagnostic": null,
+          "presentation_mode": "everyday",
+          "presentation_mode_explicit": false,
+          "presentation_revision": 0,
+          "presentation_schema_version": 1,
+          "protection_posture": "watch",
+          "protection_posture_explicit": true,
+          "receipt_redaction_level": "full",
+          "risk_action_overrides": {},
+          "risk_actions": {
+            "cloud_advisory": "warn",
+            "credential_exfiltration": "require-reapproval",
+            "data_flow_exfiltration": "require-reapproval",
+            "destructive_shell": "require-reapproval",
+            "encoded_execution": "require-reapproval",
+            "encoded_exfiltration": "require-reapproval",
+            "guard_bypass": "block",
+            "local_secret_read": "require-reapproval",
+            "low_trust_artifact": "require-reapproval",
+            "malicious_skill": "require-reapproval",
+            "mcp_dangerous_tool": "require-reapproval",
+            "network_egress": "warn",
+            "package_custom_registry": "allow",
+            "package_direct_source": "allow",
+            "package_install": "allow",
+            "package_lockfile_drift": "allow",
+            "package_script": "warn",
+            "package_unknown": "allow",
+            "persistence": "require-reapproval",
+            "prompt_injection": "require-reapproval",
+            "runtime_known_vulnerable": "require-reapproval"
+          },
+          "security_level": "balanced",
+          "subprocess_action": "warn",
+          "sync": false,
+          "telemetry": false,
+          "unknown_publisher_action": "review",
+          "update_channel": "stable",
+          "watch_auto_revert_hours": 0
+        }
+      },
+      "name": "watch_stamped",
+      "settings": {
+        "config_path": "{HOME}/config.toml",
+        "guard_home": "{HOME}",
+        "protection_capabilities": [
+          {
+            "can_ask_inline": true,
+            "can_pre_block": true,
+            "can_pre_block_limited": false,
+            "display_name": "Codex",
+            "fail_open_on_hook_failure": false,
+            "harness": "codex",
+            "has_native_remember": false,
+            "honesty_sentence": "Codex asks in chat, then remembers.",
+            "limited": false
+          },
+          {
+            "can_ask_inline": true,
+            "can_pre_block": true,
+            "can_pre_block_limited": false,
+            "display_name": "Claude Code",
+            "fail_open_on_hook_failure": false,
+            "harness": "claude-code",
+            "has_native_remember": false,
+            "honesty_sentence": "Claude Code asks in chat, then remembers.",
+            "limited": false
+          },
+          {
+            "can_ask_inline": true,
+            "can_pre_block": true,
+            "can_pre_block_limited": false,
+            "display_name": "OpenCode",
+            "fail_open_on_hook_failure": false,
+            "harness": "opencode",
+            "has_native_remember": true,
+            "honesty_sentence": "OpenCode uses this app's prompt when it can.",
+            "limited": false
+          },
+          {
+            "can_ask_inline": true,
+            "can_pre_block": true,
+            "can_pre_block_limited": false,
+            "display_name": "Copilot",
+            "fail_open_on_hook_failure": false,
+            "harness": "copilot",
+            "has_native_remember": false,
+            "honesty_sentence": "Copilot asks in chat, then remembers.",
+            "limited": false
+          },
+          {
+            "can_ask_inline": true,
+            "can_pre_block": true,
+            "can_pre_block_limited": false,
+            "display_name": "Cursor",
+            "fail_open_on_hook_failure": false,
+            "harness": "cursor",
+            "has_native_remember": true,
+            "honesty_sentence": "Cursor uses this app's prompt when it can.",
+            "limited": false
+          },
+          {
+            "can_ask_inline": false,
+            "can_pre_block": true,
+            "can_pre_block_limited": false,
+            "display_name": "Cline",
+            "fail_open_on_hook_failure": false,
+            "harness": "cline",
+            "has_native_remember": false,
+            "honesty_sentence": "Cline stops the action and opens Guard. This app cannot ask in chat.",
+            "limited": false
+          },
+          {
+            "can_ask_inline": false,
+            "can_pre_block": true,
+            "can_pre_block_limited": true,
+            "display_name": "Gemini",
+            "fail_open_on_hook_failure": false,
+            "harness": "gemini",
+            "has_native_remember": false,
+            "honesty_sentence": "Limited in Gemini. Guard stops what it can see and opens Guard for the rest.",
+            "limited": true
+          },
+          {
+            "can_ask_inline": false,
+            "can_pre_block": true,
+            "can_pre_block_limited": false,
+            "display_name": "Hermes",
+            "fail_open_on_hook_failure": false,
+            "harness": "hermes",
+            "has_native_remember": false,
+            "honesty_sentence": "Hermes stops the action and opens Guard. This app cannot ask in chat.",
+            "limited": false
+          },
+          {
+            "can_ask_inline": false,
+            "can_pre_block": true,
+            "can_pre_block_limited": false,
+            "display_name": "OpenClaw",
+            "fail_open_on_hook_failure": false,
+            "harness": "openclaw",
+            "has_native_remember": false,
+            "honesty_sentence": "OpenClaw stops the action and opens Guard. This app cannot ask in chat.",
+            "limited": false
+          },
+          {
+            "can_ask_inline": false,
+            "can_pre_block": true,
+            "can_pre_block_limited": true,
+            "display_name": "Antigravity",
+            "fail_open_on_hook_failure": false,
+            "harness": "antigravity",
+            "has_native_remember": false,
+            "honesty_sentence": "Limited in Antigravity. Guard stops what it can see and opens Guard for the rest.",
+            "limited": true
+          },
+          {
+            "can_ask_inline": false,
+            "can_pre_block": true,
+            "can_pre_block_limited": false,
+            "display_name": "Kimi",
+            "fail_open_on_hook_failure": true,
+            "harness": "kimi",
+            "has_native_remember": false,
+            "honesty_sentence": "Limited in Kimi. This app cannot ask in chat. If Guard is down, this app continues.",
+            "limited": true
+          },
+          {
+            "can_ask_inline": false,
+            "can_pre_block": true,
+            "can_pre_block_limited": false,
+            "display_name": "Grok",
+            "fail_open_on_hook_failure": true,
+            "harness": "grok",
+            "has_native_remember": false,
+            "honesty_sentence": "Limited in Grok. This app cannot ask in chat. If Guard is down, this app continues.",
+            "limited": true
+          },
+          {
+            "can_ask_inline": false,
+            "can_pre_block": true,
+            "can_pre_block_limited": false,
+            "display_name": "Pi",
+            "fail_open_on_hook_failure": true,
+            "harness": "pi",
+            "has_native_remember": false,
+            "honesty_sentence": "Limited in Pi. This app cannot ask in chat. If Guard is down, this app continues.",
+            "limited": true
+          },
+          {
+            "can_ask_inline": false,
+            "can_pre_block": true,
+            "can_pre_block_limited": false,
+            "display_name": "Oh My Pi",
+            "fail_open_on_hook_failure": true,
+            "harness": "omp",
+            "has_native_remember": false,
+            "honesty_sentence": "Limited in Oh My Pi. This app cannot ask in chat. If Guard is down, this app continues.",
+            "limited": true
+          },
+          {
+            "can_ask_inline": false,
+            "can_pre_block": true,
+            "can_pre_block_limited": false,
+            "display_name": "ZCode",
+            "fail_open_on_hook_failure": true,
+            "harness": "zcode",
+            "has_native_remember": false,
+            "honesty_sentence": "Limited in ZCode. This app cannot ask in chat. If Guard is down, this app continues.",
+            "limited": true
+          },
+          {
+            "can_ask_inline": false,
+            "can_pre_block": true,
+            "can_pre_block_limited": false,
+            "display_name": "Devin",
+            "fail_open_on_hook_failure": true,
+            "harness": "devin",
+            "has_native_remember": false,
+            "honesty_sentence": "Limited in Devin. This app cannot ask in chat. If Guard is down, this app continues.",
+            "limited": true
+          },
+          {
+            "can_ask_inline": true,
+            "can_pre_block": true,
+            "can_pre_block_limited": false,
+            "display_name": "Muse",
+            "fail_open_on_hook_failure": false,
+            "harness": "muse",
+            "has_native_remember": false,
+            "honesty_sentence": "Muse asks in chat, then remembers.",
+            "limited": false
+          },
+          {
+            "can_ask_inline": false,
+            "can_pre_block": true,
+            "can_pre_block_limited": true,
+            "display_name": "Paseo",
+            "fail_open_on_hook_failure": true,
+            "harness": "paseo",
+            "has_native_remember": false,
+            "honesty_sentence": "Paseo uses each provider's native Guard hooks; some providers continue if a hook fails. Other Paseo actions are not covered.",
+            "limited": true
+          }
+        ],
+        "settings": {
+          "approval_browser_delay_seconds": 20,
+          "approval_browser_immediate_severity": "critical",
+          "approval_gate": {
+            "configured": false,
+            "cooldown_active": false,
+            "cooldown_expires_at": null,
+            "cooldown_seconds": 0,
+            "enabled": false,
+            "fail_closed": false,
+            "locked_until": null,
+            "strict_all_decisions": false,
+            "totp_enabled": false,
+            "totp_pending": false,
+            "totp_recent_satisfied": false
+          },
+          "approval_surface_policy": "attention-aware",
+          "approval_wait_timeout_seconds": 120,
+          "billing": false,
+          "blocked_request_mode": "safe-alternative",
+          "changed_hash_action": "require-reapproval",
+          "context_assistance": null,
+          "context_assistance_diagnostic": null,
+          "context_assistance_requested": null,
+          "default_action": "warn",
+          "desktop_notifications": true,
+          "harness_posture_status": [
+            {
+              "harness": "codex",
+              "inherited": true,
+              "override": null,
+              "posture": "watch",
+              "watch_entered_at": null
+            },
+            {
+              "harness": "claude-code",
+              "inherited": true,
+              "override": null,
+              "posture": "watch",
+              "watch_entered_at": null
+            },
+            {
+              "harness": "opencode",
+              "inherited": true,
+              "override": null,
+              "posture": "watch",
+              "watch_entered_at": null
+            },
+            {
+              "harness": "copilot",
+              "inherited": true,
+              "override": null,
+              "posture": "watch",
+              "watch_entered_at": null
+            },
+            {
+              "harness": "cursor",
+              "inherited": true,
+              "override": null,
+              "posture": "watch",
+              "watch_entered_at": null
+            },
+            {
+              "harness": "cline",
+              "inherited": true,
+              "override": null,
+              "posture": "watch",
+              "watch_entered_at": null
+            },
+            {
+              "harness": "gemini",
+              "inherited": true,
+              "override": null,
+              "posture": "watch",
+              "watch_entered_at": null
+            },
+            {
+              "harness": "hermes",
+              "inherited": true,
+              "override": null,
+              "posture": "watch",
+              "watch_entered_at": null
+            },
+            {
+              "harness": "openclaw",
+              "inherited": true,
+              "override": null,
+              "posture": "watch",
+              "watch_entered_at": null
+            },
+            {
+              "harness": "antigravity",
+              "inherited": true,
+              "override": null,
+              "posture": "watch",
+              "watch_entered_at": null
+            },
+            {
+              "harness": "kimi",
+              "inherited": true,
+              "override": null,
+              "posture": "watch",
+              "watch_entered_at": null
+            },
+            {
+              "harness": "grok",
+              "inherited": true,
+              "override": null,
+              "posture": "watch",
+              "watch_entered_at": null
+            },
+            {
+              "harness": "pi",
+              "inherited": true,
+              "override": null,
+              "posture": "watch",
+              "watch_entered_at": null
+            },
+            {
+              "harness": "omp",
+              "inherited": true,
+              "override": null,
+              "posture": "watch",
+              "watch_entered_at": null
+            },
+            {
+              "harness": "zcode",
+              "inherited": true,
+              "override": null,
+              "posture": "watch",
+              "watch_entered_at": null
+            },
+            {
+              "harness": "devin",
+              "inherited": true,
+              "override": null,
+              "posture": "watch",
+              "watch_entered_at": null
+            },
+            {
+              "harness": "muse",
+              "inherited": true,
+              "override": null,
+              "posture": "watch",
+              "watch_entered_at": null
+            },
+            {
+              "harness": "paseo",
+              "inherited": true,
+              "override": null,
+              "posture": "watch",
+              "watch_entered_at": null
+            }
+          ],
+          "harness_postures": {},
+          "harness_postures_effective": {
+            "antigravity": "watch",
+            "claude-code": "watch",
+            "cline": "watch",
+            "codex": "watch",
+            "copilot": "watch",
+            "cursor": "watch",
+            "devin": "watch",
+            "gemini": "watch",
+            "grok": "watch",
+            "hermes": "watch",
+            "kimi": "watch",
+            "muse": "watch",
+            "omp": "watch",
+            "openclaw": "watch",
+            "opencode": "watch",
+            "paseo": "watch",
+            "pi": "watch",
+            "zcode": "watch"
+          },
+          "harness_postures_locked": false,
+          "harness_risk_actions": {},
+          "harness_watch_entered_at": {},
+          "install_owner": "user",
+          "managed_locked_settings": [],
+          "managed_policy_hash": null,
+          "managed_policy_status": "absent",
+          "mode": "observe",
+          "new_network_domain_action": "warn",
+          "presentation": {
+            "diagnostic": null,
+            "explicit": false,
+            "revision": 0,
+            "schema_version": 1,
+            "source": "default",
+            "value": "everyday",
+            "writable": true
+          },
+          "presentation_diagnostic": null,
+          "presentation_mode": "everyday",
+          "presentation_mode_explicit": false,
+          "presentation_revision": 0,
+          "presentation_schema_version": 1,
+          "protection_posture": "watch",
+          "protection_posture_explicit": true,
+          "receipt_redaction_level": "full",
+          "risk_action_overrides": {},
+          "risk_actions": {
+            "cloud_advisory": "warn",
+            "credential_exfiltration": "require-reapproval",
+            "data_flow_exfiltration": "require-reapproval",
+            "destructive_shell": "require-reapproval",
+            "encoded_execution": "require-reapproval",
+            "encoded_exfiltration": "require-reapproval",
+            "guard_bypass": "block",
+            "local_secret_read": "require-reapproval",
+            "low_trust_artifact": "require-reapproval",
+            "malicious_skill": "require-reapproval",
+            "mcp_dangerous_tool": "require-reapproval",
+            "network_egress": "warn",
+            "package_custom_registry": "allow",
+            "package_direct_source": "allow",
+            "package_install": "allow",
+            "package_lockfile_drift": "allow",
+            "package_script": "warn",
+            "package_unknown": "allow",
+            "persistence": "require-reapproval",
+            "prompt_injection": "require-reapproval",
+            "runtime_known_vulnerable": "require-reapproval"
+          },
+          "security_level": "balanced",
+          "subprocess_action": "warn",
+          "sync": false,
+          "telemetry": false,
+          "unknown_publisher_action": "review",
+          "update_channel": "stable",
+          "watch_auto_revert_hours": 0
+        }
+      }
+    },
+    {
+      "config_toml": "mode = \"enforce\"\nsecurity_level = \"strict\"\n[harness_postures]\ncodex = \"strict\"\ncursor = \"watch\"\n[harness_watch_entered_at]\ncursor = \"2999-01-01T00:00:00+00:00\"\n[risk_actions]\nsecret_read = \"block\"\n",
+      "export": {
+        "privacy_warning": "Exports include local Guard preferences but not secrets or receipt evidence.",
+        "schema_version": 1,
+        "settings": {
+          "approval_browser_delay_seconds": 20,
+          "approval_browser_immediate_severity": "critical",
+          "approval_gate": {
+            "configured": false,
+            "cooldown_active": false,
+            "cooldown_expires_at": null,
+            "cooldown_seconds": 0,
+            "enabled": false,
+            "fail_closed": false,
+            "locked_until": null,
+            "strict_all_decisions": false,
+            "totp_enabled": false,
+            "totp_pending": false,
+            "totp_recent_satisfied": false
+          },
+          "approval_surface_policy": "attention-aware",
+          "approval_wait_timeout_seconds": 120,
+          "billing": false,
+          "blocked_request_mode": "safe-alternative",
+          "changed_hash_action": "require-reapproval",
+          "default_action": "warn",
+          "desktop_notifications": true,
+          "harness_posture_status": [
+            {
+              "harness": "codex",
+              "inherited": true,
+              "override": null,
+              "posture": "extra_careful",
+              "watch_entered_at": null
+            },
+            {
+              "harness": "claude-code",
+              "inherited": true,
+              "override": null,
+              "posture": "extra_careful",
+              "watch_entered_at": null
+            },
+            {
+              "harness": "opencode",
+              "inherited": true,
+              "override": null,
+              "posture": "extra_careful",
+              "watch_entered_at": null
+            },
+            {
+              "harness": "copilot",
+              "inherited": true,
+              "override": null,
+              "posture": "extra_careful",
+              "watch_entered_at": null
+            },
+            {
+              "harness": "cursor",
+              "inherited": false,
+              "override": "watch",
+              "posture": "watch",
+              "watch_entered_at": "2999-01-01T00:00:00+00:00"
+            },
+            {
+              "harness": "cline",
+              "inherited": true,
+              "override": null,
+              "posture": "extra_careful",
+              "watch_entered_at": null
+            },
+            {
+              "harness": "gemini",
+              "inherited": true,
+              "override": null,
+              "posture": "extra_careful",
+              "watch_entered_at": null
+            },
+            {
+              "harness": "hermes",
+              "inherited": true,
+              "override": null,
+              "posture": "extra_careful",
+              "watch_entered_at": null
+            },
+            {
+              "harness": "openclaw",
+              "inherited": true,
+              "override": null,
+              "posture": "extra_careful",
+              "watch_entered_at": null
+            },
+            {
+              "harness": "antigravity",
+              "inherited": true,
+              "override": null,
+              "posture": "extra_careful",
+              "watch_entered_at": null
+            },
+            {
+              "harness": "kimi",
+              "inherited": true,
+              "override": null,
+              "posture": "extra_careful",
+              "watch_entered_at": null
+            },
+            {
+              "harness": "grok",
+              "inherited": true,
+              "override": null,
+              "posture": "extra_careful",
+              "watch_entered_at": null
+            },
+            {
+              "harness": "pi",
+              "inherited": true,
+              "override": null,
+              "posture": "extra_careful",
+              "watch_entered_at": null
+            },
+            {
+              "harness": "omp",
+              "inherited": true,
+              "override": null,
+              "posture": "extra_careful",
+              "watch_entered_at": null
+            },
+            {
+              "harness": "zcode",
+              "inherited": true,
+              "override": null,
+              "posture": "extra_careful",
+              "watch_entered_at": null
+            },
+            {
+              "harness": "devin",
+              "inherited": true,
+              "override": null,
+              "posture": "extra_careful",
+              "watch_entered_at": null
+            },
+            {
+              "harness": "muse",
+              "inherited": true,
+              "override": null,
+              "posture": "extra_careful",
+              "watch_entered_at": null
+            },
+            {
+              "harness": "paseo",
+              "inherited": true,
+              "override": null,
+              "posture": "extra_careful",
+              "watch_entered_at": null
+            }
+          ],
+          "harness_postures": {
+            "cursor": "watch"
+          },
+          "harness_postures_effective": {
+            "antigravity": "extra_careful",
+            "claude-code": "extra_careful",
+            "cline": "extra_careful",
+            "codex": "extra_careful",
+            "copilot": "extra_careful",
+            "cursor": "watch",
+            "devin": "extra_careful",
+            "gemini": "extra_careful",
+            "grok": "extra_careful",
+            "hermes": "extra_careful",
+            "kimi": "extra_careful",
+            "muse": "extra_careful",
+            "omp": "extra_careful",
+            "openclaw": "extra_careful",
+            "opencode": "extra_careful",
+            "paseo": "extra_careful",
+            "pi": "extra_careful",
+            "zcode": "extra_careful"
+          },
+          "harness_postures_locked": false,
+          "harness_risk_actions": {},
+          "harness_watch_entered_at": {
+            "cursor": "2999-01-01T00:00:00+00:00"
+          },
+          "install_owner": "user",
+          "managed_locked_settings": [],
+          "managed_policy_hash": null,
+          "managed_policy_status": "absent",
+          "mode": "enforce",
+          "new_network_domain_action": "warn",
+          "presentation": {
+            "diagnostic": null,
+            "explicit": false,
+            "revision": 0,
+            "schema_version": 1,
+            "source": "default",
+            "value": "everyday",
+            "writable": true
+          },
+          "presentation_diagnostic": null,
+          "presentation_mode": "everyday",
+          "presentation_mode_explicit": false,
+          "presentation_revision": 0,
+          "presentation_schema_version": 1,
+          "protection_posture": "extra_careful",
+          "protection_posture_explicit": false,
+          "receipt_redaction_level": "full",
+          "risk_action_overrides": {},
+          "risk_actions": {
+            "cloud_advisory": "require-reapproval",
+            "credential_exfiltration": "require-reapproval",
+            "data_flow_exfiltration": "block",
+            "destructive_shell": "require-reapproval",
+            "encoded_execution": "require-reapproval",
+            "encoded_exfiltration": "block",
+            "guard_bypass": "block",
+            "local_secret_read": "require-reapproval",
+            "low_trust_artifact": "require-reapproval",
+            "malicious_skill": "block",
+            "mcp_dangerous_tool": "block",
+            "network_egress": "require-reapproval",
+            "package_custom_registry": "allow",
+            "package_direct_source": "require-reapproval",
+            "package_install": "allow",
+            "package_lockfile_drift": "require-reapproval",
+            "package_script": "require-reapproval",
+            "package_unknown": "block",
+            "persistence": "block",
+            "prompt_injection": "block",
+            "runtime_known_vulnerable": "block"
+          },
+          "security_level": "strict",
+          "subprocess_action": "warn",
+          "sync": false,
+          "telemetry": false,
+          "unknown_publisher_action": "review",
+          "update_channel": "stable",
+          "watch_auto_revert_hours": 24
+        }
+      },
+      "name": "harness_overrides",
+      "settings": {
+        "config_path": "{HOME}/config.toml",
+        "guard_home": "{HOME}",
+        "protection_capabilities": [
+          {
+            "can_ask_inline": true,
+            "can_pre_block": true,
+            "can_pre_block_limited": false,
+            "display_name": "Codex",
+            "fail_open_on_hook_failure": false,
+            "harness": "codex",
+            "has_native_remember": false,
+            "honesty_sentence": "Codex asks in chat, then remembers.",
+            "limited": false
+          },
+          {
+            "can_ask_inline": true,
+            "can_pre_block": true,
+            "can_pre_block_limited": false,
+            "display_name": "Claude Code",
+            "fail_open_on_hook_failure": false,
+            "harness": "claude-code",
+            "has_native_remember": false,
+            "honesty_sentence": "Claude Code asks in chat, then remembers.",
+            "limited": false
+          },
+          {
+            "can_ask_inline": true,
+            "can_pre_block": true,
+            "can_pre_block_limited": false,
+            "display_name": "OpenCode",
+            "fail_open_on_hook_failure": false,
+            "harness": "opencode",
+            "has_native_remember": true,
+            "honesty_sentence": "OpenCode uses this app's prompt when it can.",
+            "limited": false
+          },
+          {
+            "can_ask_inline": true,
+            "can_pre_block": true,
+            "can_pre_block_limited": false,
+            "display_name": "Copilot",
+            "fail_open_on_hook_failure": false,
+            "harness": "copilot",
+            "has_native_remember": false,
+            "honesty_sentence": "Copilot asks in chat, then remembers.",
+            "limited": false
+          },
+          {
+            "can_ask_inline": true,
+            "can_pre_block": true,
+            "can_pre_block_limited": false,
+            "display_name": "Cursor",
+            "fail_open_on_hook_failure": false,
+            "harness": "cursor",
+            "has_native_remember": true,
+            "honesty_sentence": "Cursor uses this app's prompt when it can.",
+            "limited": false
+          },
+          {
+            "can_ask_inline": false,
+            "can_pre_block": true,
+            "can_pre_block_limited": false,
+            "display_name": "Cline",
+            "fail_open_on_hook_failure": false,
+            "harness": "cline",
+            "has_native_remember": false,
+            "honesty_sentence": "Cline stops the action and opens Guard. This app cannot ask in chat.",
+            "limited": false
+          },
+          {
+            "can_ask_inline": false,
+            "can_pre_block": true,
+            "can_pre_block_limited": true,
+            "display_name": "Gemini",
+            "fail_open_on_hook_failure": false,
+            "harness": "gemini",
+            "has_native_remember": false,
+            "honesty_sentence": "Limited in Gemini. Guard stops what it can see and opens Guard for the rest.",
+            "limited": true
+          },
+          {
+            "can_ask_inline": false,
+            "can_pre_block": true,
+            "can_pre_block_limited": false,
+            "display_name": "Hermes",
+            "fail_open_on_hook_failure": false,
+            "harness": "hermes",
+            "has_native_remember": false,
+            "honesty_sentence": "Hermes stops the action and opens Guard. This app cannot ask in chat.",
+            "limited": false
+          },
+          {
+            "can_ask_inline": false,
+            "can_pre_block": true,
+            "can_pre_block_limited": false,
+            "display_name": "OpenClaw",
+            "fail_open_on_hook_failure": false,
+            "harness": "openclaw",
+            "has_native_remember": false,
+            "honesty_sentence": "OpenClaw stops the action and opens Guard. This app cannot ask in chat.",
+            "limited": false
+          },
+          {
+            "can_ask_inline": false,
+            "can_pre_block": true,
+            "can_pre_block_limited": true,
+            "display_name": "Antigravity",
+            "fail_open_on_hook_failure": false,
+            "harness": "antigravity",
+            "has_native_remember": false,
+            "honesty_sentence": "Limited in Antigravity. Guard stops what it can see and opens Guard for the rest.",
+            "limited": true
+          },
+          {
+            "can_ask_inline": false,
+            "can_pre_block": true,
+            "can_pre_block_limited": false,
+            "display_name": "Kimi",
+            "fail_open_on_hook_failure": true,
+            "harness": "kimi",
+            "has_native_remember": false,
+            "honesty_sentence": "Limited in Kimi. This app cannot ask in chat. If Guard is down, this app continues.",
+            "limited": true
+          },
+          {
+            "can_ask_inline": false,
+            "can_pre_block": true,
+            "can_pre_block_limited": false,
+            "display_name": "Grok",
+            "fail_open_on_hook_failure": true,
+            "harness": "grok",
+            "has_native_remember": false,
+            "honesty_sentence": "Limited in Grok. This app cannot ask in chat. If Guard is down, this app continues.",
+            "limited": true
+          },
+          {
+            "can_ask_inline": false,
+            "can_pre_block": true,
+            "can_pre_block_limited": false,
+            "display_name": "Pi",
+            "fail_open_on_hook_failure": true,
+            "harness": "pi",
+            "has_native_remember": false,
+            "honesty_sentence": "Limited in Pi. This app cannot ask in chat. If Guard is down, this app continues.",
+            "limited": true
+          },
+          {
+            "can_ask_inline": false,
+            "can_pre_block": true,
+            "can_pre_block_limited": false,
+            "display_name": "Oh My Pi",
+            "fail_open_on_hook_failure": true,
+            "harness": "omp",
+            "has_native_remember": false,
+            "honesty_sentence": "Limited in Oh My Pi. This app cannot ask in chat. If Guard is down, this app continues.",
+            "limited": true
+          },
+          {
+            "can_ask_inline": false,
+            "can_pre_block": true,
+            "can_pre_block_limited": false,
+            "display_name": "ZCode",
+            "fail_open_on_hook_failure": true,
+            "harness": "zcode",
+            "has_native_remember": false,
+            "honesty_sentence": "Limited in ZCode. This app cannot ask in chat. If Guard is down, this app continues.",
+            "limited": true
+          },
+          {
+            "can_ask_inline": false,
+            "can_pre_block": true,
+            "can_pre_block_limited": false,
+            "display_name": "Devin",
+            "fail_open_on_hook_failure": true,
+            "harness": "devin",
+            "has_native_remember": false,
+            "honesty_sentence": "Limited in Devin. This app cannot ask in chat. If Guard is down, this app continues.",
+            "limited": true
+          },
+          {
+            "can_ask_inline": true,
+            "can_pre_block": true,
+            "can_pre_block_limited": false,
+            "display_name": "Muse",
+            "fail_open_on_hook_failure": false,
+            "harness": "muse",
+            "has_native_remember": false,
+            "honesty_sentence": "Muse asks in chat, then remembers.",
+            "limited": false
+          },
+          {
+            "can_ask_inline": false,
+            "can_pre_block": true,
+            "can_pre_block_limited": true,
+            "display_name": "Paseo",
+            "fail_open_on_hook_failure": true,
+            "harness": "paseo",
+            "has_native_remember": false,
+            "honesty_sentence": "Paseo uses each provider's native Guard hooks; some providers continue if a hook fails. Other Paseo actions are not covered.",
+            "limited": true
+          }
+        ],
+        "settings": {
+          "approval_browser_delay_seconds": 20,
+          "approval_browser_immediate_severity": "critical",
+          "approval_gate": {
+            "configured": false,
+            "cooldown_active": false,
+            "cooldown_expires_at": null,
+            "cooldown_seconds": 0,
+            "enabled": false,
+            "fail_closed": false,
+            "locked_until": null,
+            "strict_all_decisions": false,
+            "totp_enabled": false,
+            "totp_pending": false,
+            "totp_recent_satisfied": false
+          },
+          "approval_surface_policy": "attention-aware",
+          "approval_wait_timeout_seconds": 120,
+          "billing": false,
+          "blocked_request_mode": "safe-alternative",
+          "changed_hash_action": "require-reapproval",
+          "context_assistance": null,
+          "context_assistance_diagnostic": null,
+          "context_assistance_requested": null,
+          "default_action": "warn",
+          "desktop_notifications": true,
+          "harness_posture_status": [
+            {
+              "harness": "codex",
+              "inherited": true,
+              "override": null,
+              "posture": "extra_careful",
+              "watch_entered_at": null
+            },
+            {
+              "harness": "claude-code",
+              "inherited": true,
+              "override": null,
+              "posture": "extra_careful",
+              "watch_entered_at": null
+            },
+            {
+              "harness": "opencode",
+              "inherited": true,
+              "override": null,
+              "posture": "extra_careful",
+              "watch_entered_at": null
+            },
+            {
+              "harness": "copilot",
+              "inherited": true,
+              "override": null,
+              "posture": "extra_careful",
+              "watch_entered_at": null
+            },
+            {
+              "harness": "cursor",
+              "inherited": false,
+              "override": "watch",
+              "posture": "watch",
+              "watch_entered_at": "2999-01-01T00:00:00+00:00"
+            },
+            {
+              "harness": "cline",
+              "inherited": true,
+              "override": null,
+              "posture": "extra_careful",
+              "watch_entered_at": null
+            },
+            {
+              "harness": "gemini",
+              "inherited": true,
+              "override": null,
+              "posture": "extra_careful",
+              "watch_entered_at": null
+            },
+            {
+              "harness": "hermes",
+              "inherited": true,
+              "override": null,
+              "posture": "extra_careful",
+              "watch_entered_at": null
+            },
+            {
+              "harness": "openclaw",
+              "inherited": true,
+              "override": null,
+              "posture": "extra_careful",
+              "watch_entered_at": null
+            },
+            {
+              "harness": "antigravity",
+              "inherited": true,
+              "override": null,
+              "posture": "extra_careful",
+              "watch_entered_at": null
+            },
+            {
+              "harness": "kimi",
+              "inherited": true,
+              "override": null,
+              "posture": "extra_careful",
+              "watch_entered_at": null
+            },
+            {
+              "harness": "grok",
+              "inherited": true,
+              "override": null,
+              "posture": "extra_careful",
+              "watch_entered_at": null
+            },
+            {
+              "harness": "pi",
+              "inherited": true,
+              "override": null,
+              "posture": "extra_careful",
+              "watch_entered_at": null
+            },
+            {
+              "harness": "omp",
+              "inherited": true,
+              "override": null,
+              "posture": "extra_careful",
+              "watch_entered_at": null
+            },
+            {
+              "harness": "zcode",
+              "inherited": true,
+              "override": null,
+              "posture": "extra_careful",
+              "watch_entered_at": null
+            },
+            {
+              "harness": "devin",
+              "inherited": true,
+              "override": null,
+              "posture": "extra_careful",
+              "watch_entered_at": null
+            },
+            {
+              "harness": "muse",
+              "inherited": true,
+              "override": null,
+              "posture": "extra_careful",
+              "watch_entered_at": null
+            },
+            {
+              "harness": "paseo",
+              "inherited": true,
+              "override": null,
+              "posture": "extra_careful",
+              "watch_entered_at": null
+            }
+          ],
+          "harness_postures": {
+            "cursor": "watch"
+          },
+          "harness_postures_effective": {
+            "antigravity": "extra_careful",
+            "claude-code": "extra_careful",
+            "cline": "extra_careful",
+            "codex": "extra_careful",
+            "copilot": "extra_careful",
+            "cursor": "watch",
+            "devin": "extra_careful",
+            "gemini": "extra_careful",
+            "grok": "extra_careful",
+            "hermes": "extra_careful",
+            "kimi": "extra_careful",
+            "muse": "extra_careful",
+            "omp": "extra_careful",
+            "openclaw": "extra_careful",
+            "opencode": "extra_careful",
+            "paseo": "extra_careful",
+            "pi": "extra_careful",
+            "zcode": "extra_careful"
+          },
+          "harness_postures_locked": false,
+          "harness_risk_actions": {},
+          "harness_watch_entered_at": {
+            "cursor": "2999-01-01T00:00:00+00:00"
+          },
+          "install_owner": "user",
+          "managed_locked_settings": [],
+          "managed_policy_hash": null,
+          "managed_policy_status": "absent",
+          "mode": "enforce",
+          "new_network_domain_action": "warn",
+          "presentation": {
+            "diagnostic": null,
+            "explicit": false,
+            "revision": 0,
+            "schema_version": 1,
+            "source": "default",
+            "value": "everyday",
+            "writable": true
+          },
+          "presentation_diagnostic": null,
+          "presentation_mode": "everyday",
+          "presentation_mode_explicit": false,
+          "presentation_revision": 0,
+          "presentation_schema_version": 1,
+          "protection_posture": "extra_careful",
+          "protection_posture_explicit": false,
+          "receipt_redaction_level": "full",
+          "risk_action_overrides": {},
+          "risk_actions": {
+            "cloud_advisory": "require-reapproval",
+            "credential_exfiltration": "require-reapproval",
+            "data_flow_exfiltration": "block",
+            "destructive_shell": "require-reapproval",
+            "encoded_execution": "require-reapproval",
+            "encoded_exfiltration": "block",
+            "guard_bypass": "block",
+            "local_secret_read": "require-reapproval",
+            "low_trust_artifact": "require-reapproval",
+            "malicious_skill": "block",
+            "mcp_dangerous_tool": "block",
+            "network_egress": "require-reapproval",
+            "package_custom_registry": "allow",
+            "package_direct_source": "require-reapproval",
+            "package_install": "allow",
+            "package_lockfile_drift": "require-reapproval",
+            "package_script": "require-reapproval",
+            "package_unknown": "block",
+            "persistence": "block",
+            "prompt_injection": "block",
+            "runtime_known_vulnerable": "block"
+          },
+          "security_level": "strict",
+          "subprocess_action": "warn",
+          "sync": false,
+          "telemetry": false,
+          "unknown_publisher_action": "review",
+          "update_channel": "stable",
+          "watch_auto_revert_hours": 24
+        }
+      }
+    },
+    {
+      "config_toml": "presentation_mode = \"simple\"\npresentation_mode_explicit = true\npresentation_revision = 3\napproval_wait_timeout_seconds = 45\ndesktop_notifications = false\nupdate_channel = \"beta\"\ntelemetry = true\n[context_assistance]\nenabled = true\n",
+      "export": {
+        "privacy_warning": "Exports include local Guard preferences but not secrets or receipt evidence.",
+        "schema_version": 1,
+        "settings": {
+          "approval_browser_delay_seconds": 20,
+          "approval_browser_immediate_severity": "critical",
+          "approval_gate": {
+            "configured": false,
+            "cooldown_active": false,
+            "cooldown_expires_at": null,
+            "cooldown_seconds": 0,
+            "enabled": false,
+            "fail_closed": false,
+            "locked_until": null,
+            "strict_all_decisions": false,
+            "totp_enabled": false,
+            "totp_pending": false,
+            "totp_recent_satisfied": false
+          },
+          "approval_surface_policy": "attention-aware",
+          "approval_wait_timeout_seconds": 45,
+          "billing": false,
+          "blocked_request_mode": "safe-alternative",
+          "changed_hash_action": "require-reapproval",
+          "context_assistance": {
+            "enabled": false,
+            "features": {
+              "agent_context": false,
+              "execution_context": false,
+              "review_briefs": true,
+              "shared_agents": false
+            },
+            "limits": {
+              "context_tokens": 2048,
+              "idle_shutdown_seconds": 600,
+              "max_active_workspaces": 2,
+              "reserve_tokens": 256
+            },
+            "resource_profile": "balanced",
+            "runtime_id": "",
+            "schema_version": 1,
+            "sources": {
+              "native_policy_facts": true,
+              "sanitized_receipt_facts": true,
+              "source_set_id": "",
+              "workspace_documents": false
+            },
+            "storage": {
+              "mode": "memory",
+              "retention_hours": 24
+            }
+          },
+          "default_action": "warn",
+          "desktop_notifications": false,
+          "harness_posture_status": [
+            {
+              "harness": "codex",
+              "inherited": true,
+              "override": null,
+              "posture": "protected",
+              "watch_entered_at": null
+            },
+            {
+              "harness": "claude-code",
+              "inherited": true,
+              "override": null,
+              "posture": "protected",
+              "watch_entered_at": null
+            },
+            {
+              "harness": "opencode",
+              "inherited": true,
+              "override": null,
+              "posture": "protected",
+              "watch_entered_at": null
+            },
+            {
+              "harness": "copilot",
+              "inherited": true,
+              "override": null,
+              "posture": "protected",
+              "watch_entered_at": null
+            },
+            {
+              "harness": "cursor",
+              "inherited": true,
+              "override": null,
+              "posture": "protected",
+              "watch_entered_at": null
+            },
+            {
+              "harness": "cline",
+              "inherited": true,
+              "override": null,
+              "posture": "protected",
+              "watch_entered_at": null
+            },
+            {
+              "harness": "gemini",
+              "inherited": true,
+              "override": null,
+              "posture": "protected",
+              "watch_entered_at": null
+            },
+            {
+              "harness": "hermes",
+              "inherited": true,
+              "override": null,
+              "posture": "protected",
+              "watch_entered_at": null
+            },
+            {
+              "harness": "openclaw",
+              "inherited": true,
+              "override": null,
+              "posture": "protected",
+              "watch_entered_at": null
+            },
+            {
+              "harness": "antigravity",
+              "inherited": true,
+              "override": null,
+              "posture": "protected",
+              "watch_entered_at": null
+            },
+            {
+              "harness": "kimi",
+              "inherited": true,
+              "override": null,
+              "posture": "protected",
+              "watch_entered_at": null
+            },
+            {
+              "harness": "grok",
+              "inherited": true,
+              "override": null,
+              "posture": "protected",
+              "watch_entered_at": null
+            },
+            {
+              "harness": "pi",
+              "inherited": true,
+              "override": null,
+              "posture": "protected",
+              "watch_entered_at": null
+            },
+            {
+              "harness": "omp",
+              "inherited": true,
+              "override": null,
+              "posture": "protected",
+              "watch_entered_at": null
+            },
+            {
+              "harness": "zcode",
+              "inherited": true,
+              "override": null,
+              "posture": "protected",
+              "watch_entered_at": null
+            },
+            {
+              "harness": "devin",
+              "inherited": true,
+              "override": null,
+              "posture": "protected",
+              "watch_entered_at": null
+            },
+            {
+              "harness": "muse",
+              "inherited": true,
+              "override": null,
+              "posture": "protected",
+              "watch_entered_at": null
+            },
+            {
+              "harness": "paseo",
+              "inherited": true,
+              "override": null,
+              "posture": "protected",
+              "watch_entered_at": null
+            }
+          ],
+          "harness_postures": {},
+          "harness_postures_effective": {
+            "antigravity": "protected",
+            "claude-code": "protected",
+            "cline": "protected",
+            "codex": "protected",
+            "copilot": "protected",
+            "cursor": "protected",
+            "devin": "protected",
+            "gemini": "protected",
+            "grok": "protected",
+            "hermes": "protected",
+            "kimi": "protected",
+            "muse": "protected",
+            "omp": "protected",
+            "openclaw": "protected",
+            "opencode": "protected",
+            "paseo": "protected",
+            "pi": "protected",
+            "zcode": "protected"
+          },
+          "harness_postures_locked": false,
+          "harness_risk_actions": {},
+          "harness_watch_entered_at": {},
+          "install_owner": "user",
+          "managed_locked_settings": [],
+          "managed_policy_hash": null,
+          "managed_policy_status": "absent",
+          "mode": "prompt",
+          "new_network_domain_action": "warn",
+          "presentation": {
+            "diagnostic": "migrated_legacy_simple_presentation_mode",
+            "explicit": true,
+            "revision": 3,
+            "schema_version": 1,
+            "source": "migrated",
+            "value": "everyday",
+            "writable": true
+          },
+          "presentation_diagnostic": "migrated_legacy_simple_presentation_mode",
+          "presentation_mode": "everyday",
+          "presentation_mode_explicit": true,
+          "presentation_revision": 3,
+          "presentation_schema_version": 1,
+          "protection_posture": "protected",
+          "protection_posture_explicit": false,
+          "receipt_redaction_level": "full",
+          "risk_action_overrides": {},
+          "risk_actions": {
+            "cloud_advisory": "warn",
+            "credential_exfiltration": "require-reapproval",
+            "data_flow_exfiltration": "require-reapproval",
+            "destructive_shell": "require-reapproval",
+            "encoded_execution": "require-reapproval",
+            "encoded_exfiltration": "require-reapproval",
+            "guard_bypass": "block",
+            "local_secret_read": "require-reapproval",
+            "low_trust_artifact": "require-reapproval",
+            "malicious_skill": "require-reapproval",
+            "mcp_dangerous_tool": "require-reapproval",
+            "network_egress": "warn",
+            "package_custom_registry": "allow",
+            "package_direct_source": "allow",
+            "package_install": "allow",
+            "package_lockfile_drift": "allow",
+            "package_script": "warn",
+            "package_unknown": "allow",
+            "persistence": "require-reapproval",
+            "prompt_injection": "require-reapproval",
+            "runtime_known_vulnerable": "require-reapproval"
+          },
+          "security_level": "balanced",
+          "subprocess_action": "warn",
+          "sync": false,
+          "telemetry": true,
+          "unknown_publisher_action": "review",
+          "update_channel": "stable",
+          "watch_auto_revert_hours": 24
+        }
+      },
+      "name": "presentation_and_assistance",
+      "settings": {
+        "config_path": "{HOME}/config.toml",
+        "guard_home": "{HOME}",
+        "protection_capabilities": [
+          {
+            "can_ask_inline": true,
+            "can_pre_block": true,
+            "can_pre_block_limited": false,
+            "display_name": "Codex",
+            "fail_open_on_hook_failure": false,
+            "harness": "codex",
+            "has_native_remember": false,
+            "honesty_sentence": "Codex asks in chat, then remembers.",
+            "limited": false
+          },
+          {
+            "can_ask_inline": true,
+            "can_pre_block": true,
+            "can_pre_block_limited": false,
+            "display_name": "Claude Code",
+            "fail_open_on_hook_failure": false,
+            "harness": "claude-code",
+            "has_native_remember": false,
+            "honesty_sentence": "Claude Code asks in chat, then remembers.",
+            "limited": false
+          },
+          {
+            "can_ask_inline": true,
+            "can_pre_block": true,
+            "can_pre_block_limited": false,
+            "display_name": "OpenCode",
+            "fail_open_on_hook_failure": false,
+            "harness": "opencode",
+            "has_native_remember": true,
+            "honesty_sentence": "OpenCode uses this app's prompt when it can.",
+            "limited": false
+          },
+          {
+            "can_ask_inline": true,
+            "can_pre_block": true,
+            "can_pre_block_limited": false,
+            "display_name": "Copilot",
+            "fail_open_on_hook_failure": false,
+            "harness": "copilot",
+            "has_native_remember": false,
+            "honesty_sentence": "Copilot asks in chat, then remembers.",
+            "limited": false
+          },
+          {
+            "can_ask_inline": true,
+            "can_pre_block": true,
+            "can_pre_block_limited": false,
+            "display_name": "Cursor",
+            "fail_open_on_hook_failure": false,
+            "harness": "cursor",
+            "has_native_remember": true,
+            "honesty_sentence": "Cursor uses this app's prompt when it can.",
+            "limited": false
+          },
+          {
+            "can_ask_inline": false,
+            "can_pre_block": true,
+            "can_pre_block_limited": false,
+            "display_name": "Cline",
+            "fail_open_on_hook_failure": false,
+            "harness": "cline",
+            "has_native_remember": false,
+            "honesty_sentence": "Cline stops the action and opens Guard. This app cannot ask in chat.",
+            "limited": false
+          },
+          {
+            "can_ask_inline": false,
+            "can_pre_block": true,
+            "can_pre_block_limited": true,
+            "display_name": "Gemini",
+            "fail_open_on_hook_failure": false,
+            "harness": "gemini",
+            "has_native_remember": false,
+            "honesty_sentence": "Limited in Gemini. Guard stops what it can see and opens Guard for the rest.",
+            "limited": true
+          },
+          {
+            "can_ask_inline": false,
+            "can_pre_block": true,
+            "can_pre_block_limited": false,
+            "display_name": "Hermes",
+            "fail_open_on_hook_failure": false,
+            "harness": "hermes",
+            "has_native_remember": false,
+            "honesty_sentence": "Hermes stops the action and opens Guard. This app cannot ask in chat.",
+            "limited": false
+          },
+          {
+            "can_ask_inline": false,
+            "can_pre_block": true,
+            "can_pre_block_limited": false,
+            "display_name": "OpenClaw",
+            "fail_open_on_hook_failure": false,
+            "harness": "openclaw",
+            "has_native_remember": false,
+            "honesty_sentence": "OpenClaw stops the action and opens Guard. This app cannot ask in chat.",
+            "limited": false
+          },
+          {
+            "can_ask_inline": false,
+            "can_pre_block": true,
+            "can_pre_block_limited": true,
+            "display_name": "Antigravity",
+            "fail_open_on_hook_failure": false,
+            "harness": "antigravity",
+            "has_native_remember": false,
+            "honesty_sentence": "Limited in Antigravity. Guard stops what it can see and opens Guard for the rest.",
+            "limited": true
+          },
+          {
+            "can_ask_inline": false,
+            "can_pre_block": true,
+            "can_pre_block_limited": false,
+            "display_name": "Kimi",
+            "fail_open_on_hook_failure": true,
+            "harness": "kimi",
+            "has_native_remember": false,
+            "honesty_sentence": "Limited in Kimi. This app cannot ask in chat. If Guard is down, this app continues.",
+            "limited": true
+          },
+          {
+            "can_ask_inline": false,
+            "can_pre_block": true,
+            "can_pre_block_limited": false,
+            "display_name": "Grok",
+            "fail_open_on_hook_failure": true,
+            "harness": "grok",
+            "has_native_remember": false,
+            "honesty_sentence": "Limited in Grok. This app cannot ask in chat. If Guard is down, this app continues.",
+            "limited": true
+          },
+          {
+            "can_ask_inline": false,
+            "can_pre_block": true,
+            "can_pre_block_limited": false,
+            "display_name": "Pi",
+            "fail_open_on_hook_failure": true,
+            "harness": "pi",
+            "has_native_remember": false,
+            "honesty_sentence": "Limited in Pi. This app cannot ask in chat. If Guard is down, this app continues.",
+            "limited": true
+          },
+          {
+            "can_ask_inline": false,
+            "can_pre_block": true,
+            "can_pre_block_limited": false,
+            "display_name": "Oh My Pi",
+            "fail_open_on_hook_failure": true,
+            "harness": "omp",
+            "has_native_remember": false,
+            "honesty_sentence": "Limited in Oh My Pi. This app cannot ask in chat. If Guard is down, this app continues.",
+            "limited": true
+          },
+          {
+            "can_ask_inline": false,
+            "can_pre_block": true,
+            "can_pre_block_limited": false,
+            "display_name": "ZCode",
+            "fail_open_on_hook_failure": true,
+            "harness": "zcode",
+            "has_native_remember": false,
+            "honesty_sentence": "Limited in ZCode. This app cannot ask in chat. If Guard is down, this app continues.",
+            "limited": true
+          },
+          {
+            "can_ask_inline": false,
+            "can_pre_block": true,
+            "can_pre_block_limited": false,
+            "display_name": "Devin",
+            "fail_open_on_hook_failure": true,
+            "harness": "devin",
+            "has_native_remember": false,
+            "honesty_sentence": "Limited in Devin. This app cannot ask in chat. If Guard is down, this app continues.",
+            "limited": true
+          },
+          {
+            "can_ask_inline": true,
+            "can_pre_block": true,
+            "can_pre_block_limited": false,
+            "display_name": "Muse",
+            "fail_open_on_hook_failure": false,
+            "harness": "muse",
+            "has_native_remember": false,
+            "honesty_sentence": "Muse asks in chat, then remembers.",
+            "limited": false
+          },
+          {
+            "can_ask_inline": false,
+            "can_pre_block": true,
+            "can_pre_block_limited": true,
+            "display_name": "Paseo",
+            "fail_open_on_hook_failure": true,
+            "harness": "paseo",
+            "has_native_remember": false,
+            "honesty_sentence": "Paseo uses each provider's native Guard hooks; some providers continue if a hook fails. Other Paseo actions are not covered.",
+            "limited": true
+          }
+        ],
+        "settings": {
+          "approval_browser_delay_seconds": 20,
+          "approval_browser_immediate_severity": "critical",
+          "approval_gate": {
+            "configured": false,
+            "cooldown_active": false,
+            "cooldown_expires_at": null,
+            "cooldown_seconds": 0,
+            "enabled": false,
+            "fail_closed": false,
+            "locked_until": null,
+            "strict_all_decisions": false,
+            "totp_enabled": false,
+            "totp_pending": false,
+            "totp_recent_satisfied": false
+          },
+          "approval_surface_policy": "attention-aware",
+          "approval_wait_timeout_seconds": 45,
+          "billing": false,
+          "blocked_request_mode": "safe-alternative",
+          "changed_hash_action": "require-reapproval",
+          "context_assistance": {
+            "enabled": false,
+            "features": {
+              "agent_context": false,
+              "execution_context": false,
+              "review_briefs": true,
+              "shared_agents": false
+            },
+            "limits": {
+              "context_tokens": 2048,
+              "idle_shutdown_seconds": 600,
+              "max_active_workspaces": 2,
+              "reserve_tokens": 256
+            },
+            "resource_profile": "balanced",
+            "runtime_id": "",
+            "schema_version": 1,
+            "sources": {
+              "native_policy_facts": true,
+              "sanitized_receipt_facts": true,
+              "source_set_id": "",
+              "workspace_documents": false
+            },
+            "storage": {
+              "mode": "memory",
+              "retention_hours": 24
+            }
+          },
+          "context_assistance_diagnostic": "context_assistance_runtime_id_invalid",
+          "context_assistance_requested": {
+            "enabled": false,
+            "features": {
+              "agent_context": false,
+              "execution_context": false,
+              "review_briefs": true,
+              "shared_agents": false
+            },
+            "limits": {
+              "context_tokens": 2048,
+              "idle_shutdown_seconds": 600,
+              "max_active_workspaces": 2,
+              "reserve_tokens": 256
+            },
+            "resource_profile": "balanced",
+            "runtime_id": "",
+            "schema_version": 1,
+            "sources": {
+              "native_policy_facts": true,
+              "sanitized_receipt_facts": true,
+              "source_set_id": "",
+              "workspace_documents": false
+            },
+            "storage": {
+              "mode": "memory",
+              "retention_hours": 24
+            }
+          },
+          "default_action": "warn",
+          "desktop_notifications": false,
+          "harness_posture_status": [
+            {
+              "harness": "codex",
+              "inherited": true,
+              "override": null,
+              "posture": "protected",
+              "watch_entered_at": null
+            },
+            {
+              "harness": "claude-code",
+              "inherited": true,
+              "override": null,
+              "posture": "protected",
+              "watch_entered_at": null
+            },
+            {
+              "harness": "opencode",
+              "inherited": true,
+              "override": null,
+              "posture": "protected",
+              "watch_entered_at": null
+            },
+            {
+              "harness": "copilot",
+              "inherited": true,
+              "override": null,
+              "posture": "protected",
+              "watch_entered_at": null
+            },
+            {
+              "harness": "cursor",
+              "inherited": true,
+              "override": null,
+              "posture": "protected",
+              "watch_entered_at": null
+            },
+            {
+              "harness": "cline",
+              "inherited": true,
+              "override": null,
+              "posture": "protected",
+              "watch_entered_at": null
+            },
+            {
+              "harness": "gemini",
+              "inherited": true,
+              "override": null,
+              "posture": "protected",
+              "watch_entered_at": null
+            },
+            {
+              "harness": "hermes",
+              "inherited": true,
+              "override": null,
+              "posture": "protected",
+              "watch_entered_at": null
+            },
+            {
+              "harness": "openclaw",
+              "inherited": true,
+              "override": null,
+              "posture": "protected",
+              "watch_entered_at": null
+            },
+            {
+              "harness": "antigravity",
+              "inherited": true,
+              "override": null,
+              "posture": "protected",
+              "watch_entered_at": null
+            },
+            {
+              "harness": "kimi",
+              "inherited": true,
+              "override": null,
+              "posture": "protected",
+              "watch_entered_at": null
+            },
+            {
+              "harness": "grok",
+              "inherited": true,
+              "override": null,
+              "posture": "protected",
+              "watch_entered_at": null
+            },
+            {
+              "harness": "pi",
+              "inherited": true,
+              "override": null,
+              "posture": "protected",
+              "watch_entered_at": null
+            },
+            {
+              "harness": "omp",
+              "inherited": true,
+              "override": null,
+              "posture": "protected",
+              "watch_entered_at": null
+            },
+            {
+              "harness": "zcode",
+              "inherited": true,
+              "override": null,
+              "posture": "protected",
+              "watch_entered_at": null
+            },
+            {
+              "harness": "devin",
+              "inherited": true,
+              "override": null,
+              "posture": "protected",
+              "watch_entered_at": null
+            },
+            {
+              "harness": "muse",
+              "inherited": true,
+              "override": null,
+              "posture": "protected",
+              "watch_entered_at": null
+            },
+            {
+              "harness": "paseo",
+              "inherited": true,
+              "override": null,
+              "posture": "protected",
+              "watch_entered_at": null
+            }
+          ],
+          "harness_postures": {},
+          "harness_postures_effective": {
+            "antigravity": "protected",
+            "claude-code": "protected",
+            "cline": "protected",
+            "codex": "protected",
+            "copilot": "protected",
+            "cursor": "protected",
+            "devin": "protected",
+            "gemini": "protected",
+            "grok": "protected",
+            "hermes": "protected",
+            "kimi": "protected",
+            "muse": "protected",
+            "omp": "protected",
+            "openclaw": "protected",
+            "opencode": "protected",
+            "paseo": "protected",
+            "pi": "protected",
+            "zcode": "protected"
+          },
+          "harness_postures_locked": false,
+          "harness_risk_actions": {},
+          "harness_watch_entered_at": {},
+          "install_owner": "user",
+          "managed_locked_settings": [],
+          "managed_policy_hash": null,
+          "managed_policy_status": "absent",
+          "mode": "prompt",
+          "new_network_domain_action": "warn",
+          "presentation": {
+            "diagnostic": "migrated_legacy_simple_presentation_mode",
+            "explicit": true,
+            "revision": 3,
+            "schema_version": 1,
+            "source": "migrated",
+            "value": "everyday",
+            "writable": true
+          },
+          "presentation_diagnostic": "migrated_legacy_simple_presentation_mode",
+          "presentation_mode": "everyday",
+          "presentation_mode_explicit": true,
+          "presentation_revision": 3,
+          "presentation_schema_version": 1,
+          "protection_posture": "protected",
+          "protection_posture_explicit": false,
+          "receipt_redaction_level": "full",
+          "risk_action_overrides": {},
+          "risk_actions": {
+            "cloud_advisory": "warn",
+            "credential_exfiltration": "require-reapproval",
+            "data_flow_exfiltration": "require-reapproval",
+            "destructive_shell": "require-reapproval",
+            "encoded_execution": "require-reapproval",
+            "encoded_exfiltration": "require-reapproval",
+            "guard_bypass": "block",
+            "local_secret_read": "require-reapproval",
+            "low_trust_artifact": "require-reapproval",
+            "malicious_skill": "require-reapproval",
+            "mcp_dangerous_tool": "require-reapproval",
+            "network_egress": "warn",
+            "package_custom_registry": "allow",
+            "package_direct_source": "allow",
+            "package_install": "allow",
+            "package_lockfile_drift": "allow",
+            "package_script": "warn",
+            "package_unknown": "allow",
+            "persistence": "require-reapproval",
+            "prompt_injection": "require-reapproval",
+            "runtime_known_vulnerable": "require-reapproval"
+          },
+          "security_level": "balanced",
+          "subprocess_action": "warn",
+          "sync": false,
+          "telemetry": true,
+          "unknown_publisher_action": "review",
+          "update_channel": "stable",
+          "watch_auto_revert_hours": 24
+        }
+      }
+    }
+  ]
+}

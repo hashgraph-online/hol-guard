@@ -81,6 +81,7 @@ fn run_as(lane: &Lane, harness: &str, home_dir: Option<&str>, payload: Value) ->
         home_dir: home_dir.map(str::to_owned),
         workspace: None,
         deadline_budget_ms: None,
+        emergency_safe_only: false,
         payload,
     };
     serde_json::from_slice(&evaluate(request, &lane.fixture.store).unwrap()).unwrap()
@@ -127,7 +128,8 @@ fn drain(lane: &Lane, acked: Option<&Value>) -> Value {
         ack_epoch: acked.and_then(|page| page["epoch"].as_str().map(str::to_owned)),
     };
     let page =
-        crate::hook_direct_evidence::drain(&request, lane.fixture.store.direct_evidence()).unwrap();
+        crate::hook_direct_evidence::drain(&request, lane.fixture.store.direct_evidence(), None)
+            .unwrap();
     serde_json::from_slice(&page).unwrap()
 }
 
@@ -168,8 +170,14 @@ mod evidence_drain;
 #[path = "hook_direct_prompt_tests.rs"]
 mod prompts;
 
+#[path = "hook_direct_emergency_lane_tests.rs"]
+mod emergency_lane;
+
 #[path = "hook_direct_lifecycle_tests.rs"]
 mod lifecycle;
+
+#[path = "hook_direct_lifecycle_wake_tests.rs"]
+mod lifecycle_wake;
 
 #[path = "hook_direct_counters_evaluate_tests.rs"]
 mod counters;

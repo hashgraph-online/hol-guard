@@ -12,15 +12,6 @@ from collections.abc import Mapping
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from .native_policy_snapshot_codec import _valid_bounded_string_v3
-from .native_policy_snapshot_constants import (
-    _ACTION_SEVERITY,
-    _VALID_ACTIONS,
-    POLICY_SNAPSHOT_MAX_MAP_ENTRIES,
-    POLICY_SNAPSHOT_MAX_MCP_TOOL_ACTIONS,
-    NativePolicySnapshotError,
-)
-
 if TYPE_CHECKING:
     from .config import GuardConfig
 
@@ -55,36 +46,3 @@ def _config_value(config: GuardConfig | Mapping[str, object], name: str, default
     if isinstance(config, Mapping):
         return config.get(name, default)
     return getattr(config, name, default)
-
-
-def _string_map(value: object, *, max_entries: int = POLICY_SNAPSHOT_MAX_MAP_ENTRIES) -> dict[str, str]:
-    if value is None:
-        return {}
-    if not isinstance(value, Mapping) or len(value) > max_entries:
-        raise NativePolicySnapshotError("native_policy_snapshot_policy_invalid")
-    result: dict[str, str] = {}
-    for key, action in value.items():
-        if not _valid_bounded_string_v3(key) or not isinstance(action, str) or action not in _VALID_ACTIONS:
-            raise NativePolicySnapshotError("native_policy_snapshot_policy_invalid")
-        assert isinstance(key, str)
-        result[key] = action
-    return result
-
-
-def _provider_action_map(value: object) -> dict[str, str]:
-    from .runtime.mcp_provider_permissions import valid_provider_action_selector
-
-    actions = _string_map(value, max_entries=POLICY_SNAPSHOT_MAX_MCP_TOOL_ACTIONS)
-    if any(
-        action not in {"review", "block"} or not valid_provider_action_selector(key) for key, action in actions.items()
-    ):
-        raise NativePolicySnapshotError("native_policy_snapshot_provider_actions_invalid")
-    return actions
-
-
-def _stricter_action(left: object, right: object) -> str:
-    if not isinstance(left, str) or left not in _ACTION_SEVERITY:
-        raise NativePolicySnapshotError("native_policy_snapshot_policy_invalid")
-    if not isinstance(right, str) or right not in _ACTION_SEVERITY:
-        raise NativePolicySnapshotError("native_policy_snapshot_policy_invalid")
-    return left if _ACTION_SEVERITY[left] >= _ACTION_SEVERITY[right] else right

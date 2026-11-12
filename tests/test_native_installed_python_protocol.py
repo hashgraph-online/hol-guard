@@ -15,8 +15,7 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.daemon.hook_native_exact_action import native_launch_evidence
-from tests.native_launch_evidence_helpers import _inventory, _permission
+from tests.native_launch_evidence_helpers import _inventory, _permission, native_launch_evidence
 from tests.test_native_review_exact_action_always import _verdict
 
 pytestmark = pytest.mark.skipif(sys.platform != "darwin", reason="isolated macOS CPython layout fixture")

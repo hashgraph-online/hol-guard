@@ -1,0 +1,69 @@
+{
+  "schemaVersion": "guard.mcp-server-contribution.v1",
+  "id": "mcp.flowstate",
+  "version": "1.0.0",
+  "name": "FlowState",
+  "description": "Local-first shared project memory for AI apps: an MIT MCP server that stores todos, changes, decisions, problems and learnings in SQLite on the user's machine. Reads keep Guard's usual handling; writes that reshape memory, rules, projects or the review queue are gated on review. Off until you turn it on.",
+  "trustClass": "external",
+  "activation": "opt-in",
+  "publisher": {
+    "id": "com.dialectforge",
+    "displayName": "DialectForge LLC",
+    "url": "https://github.com/dialectforge"
+  },
+  "icon": {
+    "kind": "react-icon",
+    "name": "HiMiniCube",
+    "background": "#0F172A"
+  },
+  "homepage": "https://github.com/dialectforge/FlowState",
+  "license": "MIT",
+  "launch": {
+    "kind": "package-launcher",
+    "command": "uvx",
+    "package": "flowstatemcp"
+  },
+  "riskClasses": [
+    "local-sqlite-write",
+    "local-data-access",
+    "local-file-write",
+    "external-content-deletion",
+    "external-network-read"
+  ],
+  "tools": [
+    { "name": "start_here", "state": "inherit" },
+    { "name": "search", "state": "inherit" },
+    { "name": "log_work", "state": "review" },
+    { "name": "manage_todos", "state": "review" },
+    { "name": "manage_problems", "state": "review" },
+    { "name": "manage_review", "state": "review" },
+    { "name": "manage_handoffs", "state": "review" },
+    { "name": "manage_rules", "state": "review" },
+    { "name": "manage_links", "state": "review" },
+    { "name": "manage_history", "state": "review" },
+    { "name": "manage_projects", "state": "review" },
+    { "name": "manage_memory", "state": "review" },
+    { "name": "manage_sessions", "state": "review" },
+    { "name": "manage_files", "state": "review" },
+    { "name": "manage_data_git", "state": "review" },
+    { "name": "manage_variables", "state": "review" },
+    { "name": "manage_methods", "state": "review" },
+    { "name": "manage_skills", "state": "review" },
+    { "name": "other", "state": "review" }
+  ],
+  "referenceUrls": [
+    "https://github.com/dialectforge/FlowState",
+    "https://pypi.org/project/flowstatemcp/",
+    "https://github.com/dialectforge/FlowState/blob/main/mcp-server/flowstate/tooldefs.py",
+    "https://github.com/dialectforge/FlowState/blob/main/llms.txt",
+    "https://dialectforge.com/flowstate/"
+  ],
+  "saferAlternatives": [
+    "This entry matches uvx flowstatemcp over stdio, the usual install from PyPI. Configs that run the flowstate or flowstatemcp console script directly (pip install or a git clone) or python -m flowstate keep Guard's normal handling.",
+    "start_here and search are read-oriented. log_work stays on review because it writes decisions, changes, problems, learnings and todos to project memory; manage_sessions stays on review because start and end change project state.",
+    "manage_review (approve/reject/set_mode) stays on review so an agent cannot silently clear the human review queue or change review mode.",
+    "manage_projects delete, manage_memory delete/import and manage_data_git clone/sync/set_remote stay on review; FlowState already safety-copies before deletes.",
+    "DialectForge FlowState is published on PyPI as flowstatemcp (uvx flowstatemcp or pipx run flowstatemcp). The unrelated PyPI package named flowstate is not this server; do not uvx or pipx that name for it.",
+    "A separate paid Hosted endpoint (hosted.flowstatemcp.com/mcp) is remote HTTP and is not covered by this local uvx entry."
+  ]
+}

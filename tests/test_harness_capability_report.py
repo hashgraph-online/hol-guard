@@ -9,14 +9,14 @@ import pytest
 from jsonschema import Draft202012Validator
 from jsonschema.exceptions import ValidationError
 
-from codex_plugin_scanner.guard.adapters.capability_report import (
+from codex_plugin_scanner.guard.adapters.contracts import contract_for
+from scripts.harness_capability_report import (
     CAPABILITY_REPORT_SCHEMA,
     build_capability_report,
     render_capability_report_json,
     render_capability_report_markdown,
     validate_capability_report,
 )
-from codex_plugin_scanner.guard.adapters.contracts import contract_for
 
 
 def _report_payload() -> dict[str, object]:
@@ -90,16 +90,15 @@ def test_missing_hook_rows_are_explicit_and_not_claimed_by_legacy_surfaces() -> 
     claude = contract_for("claude-code")
     cursor = contract_for("cursor")
     assert claude is not None and cursor is not None
-    assert "prompt" not in claude.event_surfaces
+    assert "prompt" in claude.event_surfaces
     assert "prompt submission" in cursor.known_blind_spots.lower()
 
     payload = build_capability_report(requested_host="claude-code").to_dict()
     claude_prompt = [row for row in _rows(payload) if row["event"] == "UserPromptSubmit"]
     assert len(claude_prompt) == 1
-    assert claude_prompt[0]["transport"] == "none"
-    assert claude_prompt[0]["mode"] == "unsupported"
-    assert claude_prompt[0]["declared_actions"] == ["unavailable"]
-    assert "not intercepted" in str(claude_prompt[0]["known_blind_spots"])
+    assert claude_prompt[0]["transport"] == "native_hook"
+    assert claude_prompt[0]["mode"] == "screening"
+    assert claude_prompt[0]["declared_actions"] == ["observe", "block", "approval"]
 
     cursor_payload = build_capability_report(requested_host="cursor").to_dict()
     cursor_prompt = [row for row in _rows(cursor_payload) if row["event"] == "UserPromptSubmit"]

@@ -157,7 +157,7 @@ pub(crate) fn resolve_native_workspace_review_request(
 /// The reply goes out after the commit. One too large to send fails here, so
 /// the caller's transaction rolls the resolution back instead of committing a
 /// decision the dashboard never hears about.
-fn fits(reply: Value) -> StoreResult<Value> {
+pub(crate) fn fits(reply: Value) -> StoreResult<Value> {
     if serde_json::to_vec(&reply).map_or(usize::MAX, |bytes| bytes.len()) > REPLY_LIMIT_BYTES {
         return value_error("approval_queue_result_too_large");
     }
@@ -167,7 +167,7 @@ fn fits(reply: Value) -> StoreResult<Value> {
 /// The Python `resolve_request_with_queue_result` body: resolve the pending
 /// request, then every resolvable pending duplicate of its queue group and
 /// OAuth source, and report the queue that remains.
-fn queue_result(
+pub(crate) fn queue_result(
     connection: &Connection,
     guard_home: &str,
     request_id: &str,
@@ -218,7 +218,7 @@ fn queue_result(
 }
 
 /// `_unresolved_queue_result`.
-fn unresolved(
+pub(crate) fn unresolved(
     connection: &Connection,
     guard_home: &str,
     cwd: Option<&str>,
@@ -243,7 +243,7 @@ fn unresolved(
 
 /// `get_approval_request(connection, request_id)`: the derived payload, or
 /// null when no row has the id.
-fn request(
+pub(crate) fn request(
     connection: &Connection,
     guard_home: &str,
     request_id: &str,
@@ -307,7 +307,7 @@ fn pending_summaries(connection: &Connection, guard_home: &str) -> StoreResult<(
 }
 
 /// `approval_resolution_block_reason` for a request payload.
-fn block_reason(request: &Value) -> Option<&'static str> {
+pub(crate) fn block_reason(request: &Value) -> Option<&'static str> {
     resolution_block_reason(&json!({
         "contract_error": request.get("decision_contract_error").cloned().unwrap_or(Value::Null),
         "policy_action": request.get("policy_action").cloned().unwrap_or(Value::Null),

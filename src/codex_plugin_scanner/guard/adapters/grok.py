@@ -36,7 +36,6 @@ from .grok_config import (
     SYSTEM_REQUIREMENTS,
     build_observe_hook_json,
     build_pretool_hook_json,
-    remove_managed_block,
 )
 from .grok_executable import (
     GrokExecutableResolution,
@@ -286,7 +285,7 @@ class GrokHarnessAdapter(HarnessAdapter):
             pretool_path: (json.dumps(build_pretool_hook_json(hook_command), indent=2) + "\n").encode("utf-8"),
             prompt_path: (json.dumps(build_observe_hook_json(hook_command), indent=2) + "\n").encode("utf-8"),
             self._state_path(context): (json.dumps(state, indent=2) + "\n").encode("utf-8"),
-            legacy_path: remove_legacy_settings(snapshots[legacy_path], self._state_path(context), state_payload),
+            legacy_path: remove_legacy_settings(snapshots[legacy_path], state_payload),
         }
         files = [*prepared_shim.files, *hook_files]
         for path in paths[:3]:
@@ -384,6 +383,4 @@ class GrokHarnessAdapter(HarnessAdapter):
         }
 
 
-_remove_managed_block = remove_managed_block
-
-__all__ = ["GrokHarnessAdapter", "_remove_managed_block", "grok_runtime_hooks_verified"]
+__all__ = ["GrokHarnessAdapter", "grok_runtime_hooks_verified"]

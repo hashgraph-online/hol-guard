@@ -27,10 +27,29 @@ from ..group_write_trust import writable_only_by_owner
 from ..runtime.extension_control_limits import MAX_NATIVE_COMMAND_PROGRAM_BYTES
 from .native_executable_root import ExecutableMaterializationError, verified_executable
 
+# Mirrors `MAX_SOURCE_INPUT_BYTES` in rust/crates/guard-command, which is what
+# the compiler front end's own stdin readers enforce. Every subcommand this
+# module spawns is dispatched by `source_cli` before the runtime's resident
+# path, so the smaller `MAX_NATIVE_REQUEST_BYTES` the resident protocol uses is
+# not the bound these requests are read against.
 _MAX_REQUEST_BYTES = 8 * 1024 * 1024
+# Mirrors `MAX_NATIVE_REQUEST_BYTES` in rust/crates/guard-contracts. The pack
+# lifecycle subcommand is read by the runtime's own `read_stdin_bounded`, not
+# by `source_cli`, so it is held to this smaller frame. Keeping both numbers
+# here is what lets one transport refuse each request against the bound the
+# process it is about to spawn will actually read it against.
+_MAX_NATIVE_REQUEST_BYTES = 6 * 1024 * 1024
+# The token the runtime writes to stderr, with an empty stdout, when a request
+# it reads on the resident path is past the bound that path enforces. A
+# compiler subcommand refuses an oversized request with a token it also uses
+# for malformed input, so that one cannot be read as a size refusal; the
+# pre-spawn check below is what classifies these.
+_REQUEST_TOO_LARGE_CODE = "native_request_too_large"
 _MAX_OUTPUT_BYTES = 64 * 1024 * 1024
 _MAX_MANIFEST_BYTES = 64 * 1024
-_MAX_COMPILER_BYTES = 128 * 1024 * 1024
+# The packaged compiler is the runtime itself, so it takes the runtime's bound,
+# including the larger runtime a Gauntlet development wheel carries.
+_MAX_COMPILER_BYTES = 512 * 1024 * 1024
 _MAX_STDERR_BYTES = 64 * 1024
 _DEFAULT_TIMEOUT_SECONDS = 30.0
 _SHA40 = 40
@@ -64,6 +83,19 @@ class NativeSourceCompilerError(RuntimeError):
         self.returncode = returncode
 
 
+class NativeRequestTooLargeError(NativeSourceCompilerError):
+    """The request Guard built is larger than the native runtime will read.
+
+    Carried as its own type so callers classify it structurally. Nothing about
+    the installed files is wrong here: the request is assembled from local
+    Guard state, so reinstalling the package cannot change its size and a
+    retry rebuilds the identical, identically oversized request.
+    """
+
+    def __init__(self, message: str, *, returncode: int | None = None) -> None:
+        super().__init__(message, code=_REQUEST_TOO_LARGE_CODE, returncode=returncode)
+
+
 def _read_regular(path: Path, *, limit: int, label: str) -> bytes:
     try:
         before = path.lstat()
@@ -82,19 +114,15 @@ def _read_regular(path: Path, *, limit: int, label: str) -> bytes:
         opened = os.fstat(descriptor)
         if not stat.S_ISREG(opened.st_mode) or opened.st_size != before.st_size:
             raise NativeSourceCompilerError(f"{label} changed while being opened")
-        content = bytearray()
+        # One read of a byte past the size the bound already admitted: a file
+        # that grew shows up as too long, and no second copy of a large
+        # executable is built.
         with os.fdopen(descriptor, "rb") as handle:
             descriptor = -1
-            while True:
-                chunk = handle.read(min(64 * 1024, limit + 1 - len(content)))
-                if not chunk:
-                    break
-                content.extend(chunk)
-                if len(content) > limit:
-                    raise NativeSourceCompilerError(f"{label} exceeds the accepted bound")
+            content = handle.read(before.st_size + 1)
         if len(content) != before.st_size:
             raise NativeSourceCompilerError(f"{label} could not be read completely")
-        return bytes(content)
+        return content
     finally:
         if descriptor >= 0:
             os.close(descriptor)
@@ -213,15 +241,6 @@ def find_packaged_source_compiler() -> Path:
     return _NATIVE_PACKAGE / _COMPILER_NAME
 
 
-def installed_compiler_identity() -> tuple[str, str]:
-    """Return release-bound source and implementation floors for data activation."""
-    manifest = _verify_manifest(_NATIVE_PACKAGE / _MANIFEST_NAME)
-    return (
-        _hex(manifest["source_sha"], length=_SHA40, field="source SHA"),
-        _hex(manifest["implementation_digest"], length=_SHA64, field="implementation digest"),
-    )
-
-
 def _canonical_request(request: Mapping[str, object]) -> bytes:
     if not isinstance(request, Mapping):
         raise NativeSourceCompilerError("compiler request must be an object")
@@ -234,8 +253,7 @@ def _canonical_request(request: Mapping[str, object]) -> bytes:
         )
     except (TypeError, ValueError) as exc:
         raise NativeSourceCompilerError("compiler request is not canonical JSON") from exc
-    if len(encoded) > _MAX_REQUEST_BYTES:
-        raise NativeSourceCompilerError("compiler request exceeds the native input bound")
+    _reject_oversized_request(encoded)
     return encoded
 
 
@@ -251,6 +269,13 @@ def _decode_output(
         value = json.loads(stdout.decode("utf-8"))
     except (UnicodeDecodeError, json.JSONDecodeError) as exc:
         detail = stderr[:512].decode("utf-8", errors="replace")
+        # A runtime that refused the request as oversized answers with an empty
+        # stdout and this token on stderr. Without it the failure reads as
+        # unparseable output, which a caller cannot tell from a broken install.
+        if _REQUEST_TOO_LARGE_CODE in detail:
+            raise NativeRequestTooLargeError(
+                "source compiler refused the request as too large", returncode=returncode
+            ) from exc
         raise NativeSourceCompilerError(
             f"source compiler returned invalid JSON{(': ' + detail) if detail else ''}", returncode=returncode
         ) from exc
@@ -278,12 +303,46 @@ def _verified_executable(raw: bytes):  # type: ignore[no-untyped-def]
         raise NativeSourceCompilerError("source compiler could not be started") from exc
 
 
+def _reject_oversized_request(
+    payload: bytes,
+    limit: int = _MAX_REQUEST_BYTES,
+    *,
+    subcommand: str | None = None,
+) -> None:
+    """Refuse a request the runtime would refuse, before spawning it.
+
+    The two numbers go in the message because they are the only thing that
+    tells an operator anything: the refusal is reported to them as local Guard
+    data having outgrown one request, and `failure_detail` carries this text
+    into the daemon log. A cause code alone would say that it grew without
+    saying which request carried it or how far past the bound it got. Neither
+    number is a path or a secret.
+    """
+    if len(payload) > limit:
+        raise NativeRequestTooLargeError(
+            f"{subcommand or 'compiler'} request is {len(payload)} bytes, past the {limit} byte native input bound"
+        )
+
+
+def _spawned_subcommand(arguments: list[str]) -> str | None:
+    """Name the subcommand about to be spawned, for the refusal message."""
+    return arguments[1] if len(arguments) > 1 else None
+
+
 def _run_bounded(
     arguments: list[str],
     payload: bytes,
     *,
     timeout: float,
+    limit: int = _MAX_REQUEST_BYTES,
 ) -> tuple[int, bytes, bytes]:
+    # Every caller reaches the runtime through here, including the pack
+    # lifecycle adapter, which encodes its own JSON and never passes through
+    # `_canonical_request`. Checking the bytes here is the only place that
+    # covers all of them, and it happens before `Popen`. `limit` is the bound
+    # the chosen subcommand is read against, which is not the same number for
+    # the compiler front end and the resident protocol.
+    _reject_oversized_request(payload, limit, subcommand=_spawned_subcommand(arguments))
     if not isinstance(timeout, (int, float)) or isinstance(timeout, bool) or not math.isfinite(timeout) or timeout <= 0:
         raise NativeSourceCompilerError("source compiler timeout must be positive and finite")
     try:
@@ -381,14 +440,14 @@ def run_source_compiler(
         compiler_bytes = _verify_compiler(_NATIVE_PACKAGE / _COMPILER_NAME, manifest)
     else:
         compiler_path = Path(compiler)
-        compiler_bytes = _read_regular(compiler_path, limit=_MAX_COMPILER_BYTES, label="source compiler")
-        compiler_bytes = _verify_compiler(
-            compiler_path,
-            {
-                "compiler_size": len(compiler_bytes),
-                "compiler_sha256": hashlib.sha256(compiler_bytes).hexdigest(),
-            },
-        )
+        first_read = _read_regular(compiler_path, limit=_MAX_COMPILER_BYTES, label="source compiler")
+        expected = {
+            "compiler_size": len(first_read),
+            "compiler_sha256": hashlib.sha256(first_read).hexdigest(),
+        }
+        # Release the first copy before verification reads the file again.
+        del first_read
+        compiler_bytes = _verify_compiler(compiler_path, expected)
     payload = b""
     with (
         _verified_executable(compiler_bytes) as executable,
@@ -492,6 +551,7 @@ def validate_source(request: Mapping[str, object], *, compiler: Path | None = No
 
 
 __all__ = [
+    "NativeRequestTooLargeError",
     "NativeSourceCompilerError",
     "compile_source",
     "find_packaged_source_compiler",

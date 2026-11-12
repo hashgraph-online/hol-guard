@@ -20,6 +20,13 @@ fn bounded_byte_inspection_preserves_secret_and_pipeline_floors() {
         "wc -c src/lib.rs && od -c src/lib.rs | tail -2",
         "cat src/lib.rs | od -An -tx1",
         "cat src/lib.rs | od -c -",
+        "od -An -tx1 -N 4 src/lib.rs",
+        "od -A x -t x1z -N 16 -j 0x10 src/lib.rs",
+        "wc -c src/lib.rs; od -An -tx1 -N4 src/lib.rs",
+        "od -t u2 -w8 src/lib.rs",
+        "cat src/lib.rs | od -An -t d4 -N 8",
+        "od -N 010 -j 0 src/lib.rs",
+        "od -t fF -t fD -t dL -t cz src/lib.rs",
     ] {
         let decision =
             evaluate_pre_tool_with_context(&request(command), Some(root), Some(root)).unwrap();
@@ -36,6 +43,17 @@ fn bounded_byte_inspection_preserves_secret_and_pipeline_floors() {
         "od -c",
         "od --unknown src/lib.rs",
         "od -c $(echo src/lib.rs)",
+        "od -An -tx1 -N 4 .env",
+        "od -N src/lib.rs src/lib.rs",
+        "od -An -tx1 -N",
+        "od -A src/lib.rs",
+        "od -t x1 -j 4k src/lib.rs",
+        "od --read-bytes=4 src/lib.rs",
+        "od -N 08 src/lib.rs",
+        "od -j 0x src/lib.rs",
+        "od -t z src/lib.rs",
+        "od -t q src/lib.rs",
+        "od -t x123 src/lib.rs",
     ] {
         let decision = evaluate_pre_tool_with_context(&request(command), Some(root), Some(root));
         assert!(
@@ -91,6 +109,11 @@ fn bounded_find_listings_do_not_admit_actions_or_sensitive_targets() {
     );
 }
 
+/// `[[ -f NAME ]]` is read as the `[ -f NAME ]` it asks: inside `[[ ]]` the
+/// shell splits no word and expands no glob, so the modeled form stands for
+/// at least the work the command does. Only a closed pair is read that way;
+/// an unclosed `[[`, a pair `&&` has already split, and an unmodeled
+/// predicate each keep their review.
 #[test]
 fn bounded_file_predicates_preserve_compound_path_and_command_risks() {
     let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -105,6 +128,9 @@ fn bounded_file_predicates_preserve_compound_path_and_command_risks() {
         "test -x src && echo searchable || echo closed",
         "test -s src/lib.rs && echo non-empty",
         "[ -f src/lib.rs ] && echo present || echo missing",
+        "[[ -f src/lib.rs ]] && echo present || echo missing",
+        "[[ -d src ]] && ls src",
+        "if [[ -f src/lib.rs ]]; then cat src/lib.rs; fi",
     ] {
         let decision =
             evaluate_pre_tool_with_context(&request(command), Some(root), Some(root)).unwrap();
@@ -125,6 +151,10 @@ fn bounded_file_predicates_preserve_compound_path_and_command_risks() {
         "test -w src/lib.rs",
         "[ -f .env ] && echo set",
         "[ -f src/lib.rs",
+        "[[ -f .env ]] && echo set",
+        "[[ -f src/lib.rs",
+        "[[ -f src/lib.rs && -f .env ]]",
+        "[[ -w src/lib.rs ]]",
     ] {
         let decision = evaluate_pre_tool_with_context(&request(command), Some(root), Some(root));
         assert!(
@@ -190,11 +220,16 @@ fn read_only_github_predecessor_counts_as_benign_for_git_context() {
                 cwd: Some("/tmp"),
                 cdpath_unset: false,
                 rustup_override_absent: false,
+                cargo_config_inert: false,
                 npm_config_inert: false,
                 pip_config_inert: false,
                 shell_home_matches: false,
                 ripgrep_config_absent: false,
+                gem_config_absent: false,
+                http_config_absent: false,
+                openssl_config_absent: false,
                 psql_environment: Default::default(),
+                creates_nothing: false,
             },
         ),
         vec![0, 1]
@@ -297,10 +332,7 @@ fn git_c_rejects_external_gitfile_pointers() {
     let base = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../target/gitfile-pointer-fixtures");
     std::fs::create_dir_all(&base).unwrap();
-    let nonce = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap()
-        .as_nanos();
+    let nonce = crate::unique_nanos::unique_nanos();
     let fixture = base.join(format!("fixture-{}-{nonce}", std::process::id()));
     let workspace = fixture.join("workspace");
     let external = fixture.join("external-admin");
@@ -328,10 +360,7 @@ fn git_c_rejects_forged_external_linked_worktree_metadata() {
     let base = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../target/gitfile-pointer-fixtures");
     std::fs::create_dir_all(&base).unwrap();
-    let nonce = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap()
-        .as_nanos();
+    let nonce = crate::unique_nanos::unique_nanos();
     let fixture = base.join(format!("linked-fixture-{}-{nonce}", std::process::id()));
     let workspace = fixture.join("workspace");
     let common = fixture.join("external-common/.git");
@@ -443,6 +472,12 @@ fn allows_bounded_exact_commands() {
         "uname -a",
         "git status --short",
         "git status --short --branch",
+        // Bare `git remote` prints the configured names, which the verbose
+        // form already prints beside their URLs, and `show -n` prints what
+        // the configuration holds without asking the remote itself.
+        "git remote",
+        "git remote show -n",
+        "git remote show -n origin",
         "git remote -v",
         "git remote --verbose",
         "git remote -v --",
@@ -493,6 +528,9 @@ fn allows_bounded_pipeline_consumers() {
         "git status --short | tail -n 2",
         "cat README.md | head -2 | tail -n 1",
         "git status --short | head",
+        // `|&` is the same pipe with stderr merged into it, so the bounded
+        // consumer on its right keeps the allow the plain `|` form gets.
+        "git status --short |& head -2",
     ] {
         let decision = evaluate_pre_tool(&request(command)).unwrap();
         assert_eq!(decision.minimum_action, "allow", "{command}");
@@ -505,7 +543,6 @@ fn allows_bounded_pipeline_consumers() {
     for command in [
         "head -2",
         "git status --short && head -2",
-        "git status --short |& head -2",
         "git status --short | head -2; tail -n 1",
         "git status --short | head -2 || tail -n 1",
         "cat ~/.ssh/id_ed25519 | head -2",
@@ -514,6 +551,13 @@ fn allows_bounded_pipeline_consumers() {
         "git status --short | tail -f",
         "git status --short | head -n",
         "git status --short | head -n $(whoami)",
+        // The Korn shell reads `|&` as a coprocess rather than as a pipe with
+        // standard error merged into it. Naming a shell keeps the command out
+        // of this allow either way: the text it is handed is not the text this
+        // scan read, so no spelling of the pipe inside it is benign here.
+        "ksh -c 'git status --short |& head -2'",
+        "ksh -c 'git status --short 2>&1 | head -2'",
+        "ksh ./build.sh |& head -2",
     ] {
         let decision = evaluate_pre_tool(&request(command)).unwrap();
         assert!(!decision.explicitly_benign, "{command}");
@@ -537,8 +581,11 @@ fn reviews_date_mutations_and_unbounded_file_reads() {
         "date +%s +%N",
         "date -f timestamps.txt",
         "date -d tomorrow",
-        "git remote",
         "git remote add origin example",
+        // Without `-n` Git opens the connection to the remote, which is a
+        // different question than a read of the local configuration.
+        "git remote show origin",
+        "git remote show -n origin upstream",
         "git remote -v -- add origin example",
         "git remote -v -- remove origin",
         "git remote -v -- set-url origin example",
@@ -572,6 +619,12 @@ fn reviews_only_materially_risky_variants_of_safe_commands() {
     let inert_pattern = evaluate_pre_tool(&request("rg -e '.env.local' src")).unwrap();
     assert_eq!(inert_pattern.decision, "allow");
     assert_eq!(inert_pattern.minimum_action, "allow");
+    // An ordinary project setting in front of a proven read is a value that
+    // read takes for itself. Every name that could steer lookup, loading,
+    // configuration, a home, a credential, the trust anchor or an endpoint
+    // keeps its review, and the cases below still cover those families.
+    let ordinary_setting = evaluate_pre_tool(&request("FOO=bar git status --short")).unwrap();
+    assert_eq!(ordinary_setting.decision, "allow");
     for command in [
             "rg --pre /opt/guard-test/payload authority src",
             "rg --hostname-bin=/opt/guard-test/payload --hyperlink-format='file://{host}{path}' TOKEN src",
@@ -614,7 +667,6 @@ fn reviews_only_materially_risky_variants_of_safe_commands() {
             "rg --hidd TOKEN .",
             "rg --globx '*.ts' TOKEN .",
             "/opt/guard-test/rg authority src",
-            "FOO=bar git status --short",
             "GIT_EXTERNAL_DIFF=/opt/guard-test/payload git diff --ext-diff README.md",
             "git diff --output=/opt/guard-test/diff README.md",
             "git log -1 --output=/opt/guard-test/log",
@@ -716,6 +768,76 @@ fn magic_pathspecs_are_screened_by_the_path_they_name() {
     }
     for ordinary in [":(top)src/*.ts", ":!readme.md", ":(exclude)src"] {
         assert!(!sensitive_read_path_argument(ordinary), "{ordinary}");
+    }
+}
+
+/// A `git config --get-regexp` operand is matched against the keys in the
+/// configuration file, so the fixed floor asks of it only what a search
+/// pattern is asked: does the glob's own text name a private file? The wider
+/// questions a path operand faces -- could some longer string this glob
+/// matches hold a credential marker? -- refuse every pattern carrying a `.*`,
+/// and `remote.*url` is the spelling a read of the configured remotes uses.
+#[test]
+fn a_configuration_pattern_is_screened_as_a_pattern_not_a_path() {
+    let model = |command: &str| {
+        crate::parse_command(
+            &serde_json::from_value(serde_json::json!({"command": command})).unwrap(),
+        )
+        .unwrap()
+    };
+    for command in [
+        "git config --get-regexp remote.*url",
+        "git config --get-regexp '^remote\\..*\\.url$'",
+        "git config --get-regexp 'remote.*url' github",
+        "git config get --regexp remote.*url",
+        "git --no-pager config --get-regexp 'branch.*remote'",
+        "git config --get-regexp 'cookie.*name'",
+        // A bracket class writes its members down, so a class that cannot
+        // produce a leading dash is read as the pattern it spells.
+        "git config --get-regexp '[r]emote.*url'",
+        "git config --get-regexp '[Rr]emote.*url'",
+        "git config --get-regexp '[a-z]emote.*url'",
+        "git config --get-regexp '[^-]emote.*url'",
+        // An unterminated class is literal, so the word opens with `[`.
+        "git config --get-regexp '[remote.*url'",
+    ] {
+        assert!(!fixed_command_floor(&model(command)), "{command}");
+    }
+    for command in [
+        // The pattern's own text still names a private file.
+        "git config --get-regexp '.en*'",
+        "git config --get-regexp '.ssh/*'",
+        // Only a `--get-regexp` operand is a pattern. The shell expands
+        // every other argument before Git sees it.
+        "git config --get-all 'remote.*url'",
+        "git config --get 'remote.*url'",
+        "git config *",
+        // An operand opening with a glob is a pattern here and whatever the
+        // shell expands it to by the time Git reads it, so it keeps the path
+        // screen that refuses a file of the caller's choosing.
+        "git config --get-regexp '[-]-file=*' x",
+        "git config --get-regexp '[+--]-file=*' x",
+        "git config --get-regexp '[^a]-file=*' x",
+        "git config --get-regexp '[[:punct:]]-file=*' x",
+        "git config --get-regexp '[\\-]-file=*' x",
+        // The shell runs an expansion before the class is a class, so these
+        // members are not the ones that run: bash turns the first into
+        // `[!a]-file=*`, which matches a `--file=secret` in the checkout, and
+        // the parameter and substitution forms carry whatever they expand to.
+        "git config --get-regexp '[!{a,-}]-file=*' x",
+        "git config --get-regexp '[{a}]-file=*' x",
+        "git config --get-regexp '[$x]-file=*' x",
+        "git config --get-regexp '[!$x]-file=*' x",
+        "git config --get-regexp '[${x}]-file=*' x",
+        "git config --get-regexp '[$(printf -)]-file=*' x",
+        "git config --get-regexp '[`printf -`]-file=*' x",
+        // Only an ASCII alphanumeric span holds the characters between its
+        // ends whatever the shell's collation. glibc's table puts `-` inside
+        // `[_-z]`, so such a range keeps the path screen.
+        "git config --get-regexp '[_-z]-file=*' x",
+        "git config --get-regexp '[!_-z]-file=*' x",
+    ] {
+        assert!(fixed_command_floor(&model(command)), "{command}");
     }
 }
 

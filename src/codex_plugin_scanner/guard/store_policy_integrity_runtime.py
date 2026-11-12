@@ -9,6 +9,7 @@ import logging
 
 from .native_guard_store import NativeGuardStoreUnavailable
 from .native_policy_integrity_rows import PolicyRowVerifyItem, discard_row_signing_verifier_key
+from .native_store_policy import encode_key
 from .store_base import *
 
 _LOGGER = logging.getLogger(__name__)
@@ -139,6 +140,8 @@ class StorePolicyIntegrityAdminMixin:
                 "artifact_hash": _optional_text(item.get("artifact_hash")),
                 "workspace": _optional_text(item.get("workspace")),
                 "reason": _optional_text(item.get("reason")),
+                "action": _optional_text(item.get("action")),
+                "updated_at": _optional_text(item.get("updated_at")),
             }
             for item in items
         ]
@@ -376,6 +379,7 @@ class StorePolicyIntegrityAdminMixin:
         self.add_event("policy_integrity.autorepair_failed", {"steps": attempts}, current_time)
         return final
 
+    @serialize_policy_integrity_generation
     def repair_policy_integrity(
         self,
         *,
@@ -450,6 +454,7 @@ class StorePolicyIntegrityAdminMixin:
             **({"items": invalid_items} if include_items else {}),
         }
 
+    @serialize_policy_integrity_generation
     def migrate_local_policy_integrity(
         self,
         *,
@@ -563,6 +568,7 @@ class StorePolicyIntegrityAdminMixin:
             "items": [item for item in items if item.get("integrity_status") != "valid"],
         }
 
+    @serialize_policy_integrity_generation
     def setup_policy_integrity(
         self,
         *,
@@ -637,6 +643,7 @@ class StorePolicyIntegrityAdminMixin:
             )
         return self.verify_policy_integrity(harness=harness)
 
+    @serialize_policy_integrity_generation
     def clear_policy_decisions(
         self,
         harness: str | None = None,
@@ -653,94 +660,54 @@ class StorePolicyIntegrityAdminMixin:
         approval_gate_grant: ApprovalGateGrant | None = None,
     ) -> int:
         require_policy_clear(self.guard_home, approval_gate_grant=approval_gate_grant)
+        if decision_ids is not None and not decision_ids:
+            return 0
         current_time = _now()
-        conditions: list[str] = []
-        params: list[object] = []
-        if artifact_id is not None and decision_ids is None:
-            from .store_policy_list import remembered_artifact_decision_ids
-
-            sibling_ids = remembered_artifact_decision_ids(
-                self.list_policy_decisions(harness),
-                artifact_id=artifact_id,
-            )
-            if sibling_ids:
-                decision_ids = sibling_ids
-                artifact_id = None
-                artifact_hash = None
-                artifact_id_is_null = False
-                artifact_hash_is_null = False
-        if decision_ids is not None:
-            if not decision_ids:
-                return 0
-            placeholders = ",".join("?" for _ in decision_ids)
-            conditions.append(f"decision_id in ({placeholders})")
-            params.extend(sorted(decision_ids))
-        if harness is not None:
-            conditions.append("harness = ?")
-            params.append(harness)
-        if source is not None:
-            conditions.append("source = ?")
-            params.append(source)
-        if scope is not None:
-            if scope not in _POLICY_SCOPES:
-                msg = f"Invalid policy scope: {scope}"
-                raise ValueError(msg)
-            conditions.append("scope = ?")
-            params.append(scope)
-        if artifact_id is not None:
-            conditions.append("artifact_id = ?")
-            params.append(artifact_id)
-        elif artifact_id_is_null:
-            conditions.append("artifact_id is null")
-        if artifact_hash is not None:
-            conditions.append("artifact_hash = ?")
-            params.append(artifact_hash)
-        elif artifact_hash_is_null:
-            conditions.append("artifact_hash is null")
-        if workspace is not None:
-            conditions.append("(workspace = ? or workspace = ?)")
-            params.extend((_stored_workspace_policy_key(workspace), _normalized_workspace_path(workspace)))
-        if publisher is not None:
-            conditions.append("publisher = ?")
-            params.append(publisher)
-        query = "delete from policy_decisions"
-        if conditions:
-            query += " where " + " and ".join(conditions)
-        next_control_state: dict[str, object] | None = None
+        fields: dict[str, object] = {
+            "harness": harness,
+            "source": source,
+            "scope": scope,
+            "artifact_id": artifact_id,
+            "artifact_hash": artifact_hash,
+            "decision_ids": sorted(decision_ids) if decision_ids is not None else None,
+            "artifact_id_is_null": artifact_id_is_null,
+            "artifact_hash_is_null": artifact_hash_is_null,
+            "workspace": workspace,
+            "publisher": publisher,
+            "now": current_time,
+        }
+        # The resident owns the filters and the delete. A clear that removes
+        # a local row must advance the integrity generation, so the first call
+        # deletes only when no local row matches; otherwise it reports
+        # `needs_signing` and the second call carries the key.
+        secret_material = self._policy_integrity_secret_material(create=True)
         with self._connect() as connection:
-            local_query = (
-                f"select decision_id from policy_decisions where source not in {_REMOTE_POLICY_SOURCE_PLACEHOLDERS}"
-            )
-            local_params: list[object] = list(_REMOTE_POLICY_SOURCE_PARAMS)
-            if conditions:
-                local_query += " and " + " and ".join(conditions)
-                local_params.extend(params)
-            local_ids = {
-                int(row["decision_id"]) for row in connection.execute(local_query, tuple(local_params)).fetchall()
-            }
             state = self._refresh_policy_integrity_state(
                 connection,
                 now=current_time,
                 create_key=True,
+                secret_material=secret_material,
                 allow_cutover_resign=False,
             )
-            cursor = connection.execute(query, tuple(params))
-            cleared = int(cursor.rowcount if cursor.rowcount is not None else 0)
-            if local_ids and state.get("mode") == "protected":
-                key, key_id = self._policy_integrity_secret_material(create=True)
+        payload = self._native_store_call("clear_policy_decisions", {**fields, "unsigned_only": True})
+        if isinstance(payload, dict) and payload.get("needs_signing") is True:
+            integrity: dict[str, object] = {}
+            key, key_id = secret_material
+            if state.get("mode") == "protected" and key is not None and key_id is not None:
                 trusted_state = self._load_policy_integrity_control_state(create=True)
-                if key is not None and key_id is not None and trusted_state is not None:
-                    next_control_state = self._advance_policy_integrity_generation(
-                        connection,
-                        now=current_time,
-                        key=key,
-                        key_id=key_id,
-                        trusted_state=trusted_state,
-                    )
-                    connection.commit()
+                if trusted_state is not None:
+                    integrity["current_generation"] = self._begin_policy_integrity_generation(trusted_state)
+                    integrity["integrity_key_b64"] = encode_key(key)
+                    integrity["integrity_key_id"] = key_id
+            payload = self._native_store_call("clear_policy_decisions", {**fields, **integrity})
+        if not isinstance(payload, dict) or not isinstance(payload.get("cleared"), int):
+            raise RuntimeError("Guard policy decisions were not cleared.")
+        next_control_state = payload.get("next_control_state")
         if next_control_state is not None:
+            if not isinstance(next_control_state, dict):
+                raise RuntimeError("Guard policy integrity control state is invalid.")
             self._finalize_policy_integrity_control_state(next_control_state)
-        return cleared
+        return int(payload["cleared"])
 
     def get_latest_diff(self, harness: str, artifact_id: str) -> dict[str, object] | None:
         diff = self._native_store_call("artifact_latest_diff", {"harness": harness, "artifact_id": artifact_id})

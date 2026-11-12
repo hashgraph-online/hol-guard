@@ -255,6 +255,13 @@ pub enum ContextDigestKindV1 {
         #[serde(default)]
         request: Value,
     },
+    /// Validate a hook decision receipt; with an edge result, also require the
+    /// receipt to record exactly that pre-tool result.
+    NativeDecisionReceiptValidation {
+        receipt: Value,
+        #[serde(default)]
+        edge: Value,
+    },
     McpLaunchEnvironment {
         inherited: BTreeMap<String, String>,
         configured: BTreeMap<String, String>,
@@ -267,9 +274,10 @@ pub enum ContextDigestKindV1 {
     PackageExecutionContextFromScannerEvidence {
         material: Value,
     },
-    /// Plan signed custom-Extension continuity, record a local override, or
-    /// project stored continuity state. The request carries the store
-    /// snapshot; the answer is in `custom_extension_continuity`.
+    /// Plan signed custom-Extension continuity and answer the commit that
+    /// applies it, record a local override the same way, or project stored
+    /// continuity state. The request carries the store snapshot; the answer is
+    /// in `custom_extension_continuity`.
     CustomExtensionContinuity {
         request: Value,
     },
@@ -367,6 +375,11 @@ pub enum ContextDigestKindV1 {
         home_dir: Option<String>,
         #[serde(default)]
         launch_env: Option<BTreeMap<String, String>>,
+        /// The caller is launching a package manager, so the identity also
+        /// carries `binding_argv_sha256`: the digest the approval binds, taken
+        /// over the argv with the manager's presentation-only options removed.
+        #[serde(default)]
+        package_manager_binding: bool,
     },
     /// `runtime_launch_identity_matches` — rebuild the current identity and
     /// compare verification digests.
@@ -435,6 +448,19 @@ pub enum ContextDigestKindV1 {
     GenericHookApprovalContext {
         inputs: Value,
     },
+    /// Compose a consumer artifact's saved-approval context (identity and
+    /// launch, content, capabilities, sandbox) for a detected or removed
+    /// artifact and return its token. The caller supplies the normalized
+    /// paths, the policy component and the detector telemetry.
+    ConsumerApprovalContextToken {
+        request: Value,
+    },
+    /// The bin a package-runner command launches (`npx wrangler` names
+    /// `wrangler`). `None` for anything that is not a runner launch, and for
+    /// every selector form that runs something other than the named bin.
+    PackageRunnerTarget {
+        tokens: Vec<String>,
+    },
 }
 
 // `deny_unknown_fields` cannot combine with `flatten` (serde rejects the
@@ -499,6 +525,8 @@ pub struct ContextDigestResultV1 {
     pub mcp_redacted_value: Option<Value>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub native_bash_reply_valid: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub native_decision_receipt_valid: Option<bool>,
     /// `build_runtime_executable_identity` / `build_runtime_launch_identity`
     /// output — the full launch-identity object, verbatim Python dict shape.
     /// These kinds always produce it; `Option` keeps it absent on other kinds.
@@ -535,8 +563,9 @@ pub struct ContextDigestResultV1 {
     /// an identifiable CLI.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub local_cli_identity: Option<LocalCliIdentityV1>,
-    /// `custom_extension_continuity` answer: a plan, a refusal
-    /// (`{"error": message}`), a local override, or public state.
+    /// `custom_extension_continuity` answer: a commit (`writes`,
+    /// `requirements`, and the guards it carries), a refusal
+    /// (`{"error": message}`), a local override commit, or public state.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub custom_extension_continuity: Option<Value>,
     /// `managed_controls_policy_fields` answer: `{"ok": projection}` or
@@ -557,6 +586,10 @@ pub struct ContextDigestResultV1 {
     /// `memory_pattern` answer.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub memory_pattern: Option<MemoryPatternVerdictV1>,
+    /// `package_runner_target` answer; absent when the tokens name no
+    /// package-runner launch of a plain bin.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub package_runner_target: Option<String>,
 }
 
 /// A remembered decision's behavior fingerprint and lookup candidates.

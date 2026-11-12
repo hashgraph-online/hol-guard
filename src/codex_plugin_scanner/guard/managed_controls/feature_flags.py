@@ -27,6 +27,12 @@ def _enabled(value: str | None) -> bool:
     return value is not None and value.strip().lower() == "true"
 
 
+def _enabled_unless_opted_out(value: str | None) -> bool:
+    """A shipped default: unset means on, and anything but an explicit true turns it off."""
+
+    return value is None or value.strip().lower() == "true"
+
+
 @dataclass(frozen=True, slots=True)
 class ManagedControlsFeatureFlags:
     catalog_sync: bool = False
@@ -42,7 +48,9 @@ class ManagedControlsFeatureFlags:
     @classmethod
     def from_environment(cls) -> ManagedControlsFeatureFlags:
         return cls(
-            catalog_sync=_enabled(os.environ.get(GUARD_EXTENSION_CATALOG_SYNC_V1)),
+            # Catalog sync only answers a digest-bound request from the connected
+            # Cloud, so a connected install does it without a manual switch.
+            catalog_sync=_enabled_unless_opted_out(os.environ.get(GUARD_EXTENSION_CATALOG_SYNC_V1)),
             policy_extension_targets=_enabled(os.environ.get(GUARD_POLICY_EXTENSION_TARGETS_V1)),
             managed_extension_controls=_enabled(os.environ.get(GUARD_MANAGED_EXTENSION_CONTROLS_V1)),
             atomic_apply=_enabled(os.environ.get(GUARD_MANAGED_CONTROLS_ATOMIC_APPLY_V1)),

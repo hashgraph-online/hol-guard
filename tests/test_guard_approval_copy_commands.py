@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import urllib.parse
 from pathlib import Path
+from typing import cast
 
 import pytest
 
@@ -14,7 +15,6 @@ from codex_plugin_scanner.guard.approvals import (
     approval_center_hint,
     attach_primary_approval_link,
     build_approval_browser_url,
-    build_approval_request_url,
     first_approval_url,
     primary_approval_request,
     primary_approval_url,
@@ -491,6 +491,40 @@ def test_attach_primary_approval_link_prefers_artifact_over_operation_ids() -> N
     assert payload["primary_approval_url"] == "http://127.0.0.1:5474/requests/bound-req"
 
 
+def test_protect_receipt_binds_its_only_request_when_the_runtime_cannot_link(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from codex_plugin_scanner.guard import native_runner_authority
+    from codex_plugin_scanner.guard.cli.protect_approvals import _bind_protect_receipt_approval
+
+    def unavailable(*_args: object, **_kwargs: object) -> dict[str, object]:
+        raise native_runner_authority.NativeRunnerAuthorityError("native_runner_authority_unavailable")
+
+    class Store:
+        def __init__(self) -> None:
+            self.bound: list[tuple[str, str]] = []
+
+        def update_receipt_approval_context(
+            self, receipt_id: str, *, approval_source: str, approval_request_id: str
+        ) -> None:
+            self.bound.append((receipt_id, approval_request_id))
+
+    monkeypatch.setattr(native_runner_authority, "native_runner_authority", unavailable)
+    for request_ids, expected in ((["only-req"], [("receipt-1", "only-req")]), (["a-req", "b-req"], [])):
+        payload: dict[str, object] = {
+            "receipt": {"receipt_id": "receipt-1"},
+            "approval_request_ids": request_ids,
+            "approval_requests": [{"request_id": request_id, "harness": "codex"} for request_id in request_ids],
+        }
+        attach_primary_approval_link(payload, harness="codex", approval_center_url="http://127.0.0.1:5474")
+        assert "primary_approval_request_id" not in payload
+        store = Store()
+
+        _bind_protect_receipt_approval(payload, store=cast(GuardStore, cast(object, store)))
+
+        assert store.bound == expected
+
+
 def test_attach_primary_approval_link_uses_operation_request_id() -> None:
     payload: dict[str, object] = {
         "artifact_id": "cursor:project:shell-b",
@@ -521,10 +555,6 @@ def test_attach_primary_approval_link_uses_operation_request_id() -> None:
     assert payload["primary_approval_url"] == "http://127.0.0.1:5474/requests/bound-req"
 
 
-def test_build_approval_request_url_uses_requests_route() -> None:
-    assert build_approval_request_url("http://127.0.0.1:5474", "abc123") == "http://127.0.0.1:5474/requests/abc123"
-
-
 class TestApprovalsOpenCommand:
     """T734-T735: 'hol-guard approvals open <request_id>' command."""
 
@@ -550,6 +580,93 @@ class TestApprovalsOpenCommand:
 
         assert rc != 0
         assert "error" in output
+
+
+_QUEUE_REQUEST_ID = "2c79d707370b453886adf5b2e7e622ec"
+
+
+def _write_desktop_marker(home_dir: Path, *, app_path: Path) -> None:
+    home_dir.chmod(0o700)
+    marker = home_dir / "desktop-deep-link.json"
+    marker.write_text(
+        json.dumps({"version": 1, "scheme": "hol-guard-desktop", "routes": ["requests"], "app_path": str(app_path)}),
+        encoding="utf-8",
+    )
+    marker.chmod(0o600)
+
+
+class TestApprovalsOpenLaunch:
+    """`approvals open` launches the request signed in and never prints the session."""
+
+    def _open(
+        self, home_dir: Path, monkeypatch, capsys, *extra: str, desktop_takes_link: bool = True
+    ) -> tuple[int, dict[str, object], list[str]]:
+        opened: list[str] = []
+        monkeypatch.setattr(approval_commands_module, "open_browser_url", lambda url: opened.append(url) or True)
+        monkeypatch.setattr(
+            approval_commands_module,
+            "open_app_url",
+            lambda url: opened.append(url) or desktop_takes_link,
+        )
+        monkeypatch.setattr(
+            approval_commands_module,
+            "authenticated_approval_review_url",
+            lambda url, *, guard_home: f"{url}#guard-token=gld1.payload.signature",
+        )
+        rc = main(["guard", "approvals", "open", _QUEUE_REQUEST_ID, "--home", str(home_dir), "--json", *extra])
+        return rc, json.loads(capsys.readouterr().out), opened
+
+    def test_desktop_user_gets_the_request_in_hol_guard_desktop(self, tmp_path: Path, monkeypatch, capsys) -> None:
+        home_dir = tmp_path / "guard-home"
+        GuardStore(home_dir).add_approval_request(_make_request(request_id=_QUEUE_REQUEST_ID), "2026-01-01T00:00:00Z")
+        _write_desktop_marker(home_dir, app_path=tmp_path)
+
+        rc, output, opened = self._open(home_dir, monkeypatch, capsys)
+
+        assert rc == 0
+        assert opened == [f"hol-guard-desktop://requests/{_QUEUE_REQUEST_ID}"]
+        assert output["opened_in"] == "desktop"
+
+    def test_browser_user_gets_a_signed_tab_and_output_stays_unsigned(
+        self, tmp_path: Path, monkeypatch, capsys
+    ) -> None:
+        home_dir = tmp_path / "guard-home"
+        GuardStore(home_dir).add_approval_request(_make_request(request_id=_QUEUE_REQUEST_ID), "2026-01-01T00:00:00Z")
+        _write_desktop_marker(home_dir, app_path=tmp_path / "uninstalled.app")
+
+        rc, output, opened = self._open(home_dir, monkeypatch, capsys)
+
+        assert rc == 0
+        assert opened == [f"http://127.0.0.1:5474/requests/{_QUEUE_REQUEST_ID}#guard-token=gld1.payload.signature"]
+        assert output["opened_in"] == "browser"
+        assert "guard-token" not in json.dumps(output)
+
+    def test_a_desktop_link_no_app_takes_falls_back_to_the_signed_tab(
+        self, tmp_path: Path, monkeypatch, capsys
+    ) -> None:
+        home_dir = tmp_path / "guard-home"
+        GuardStore(home_dir).add_approval_request(_make_request(request_id=_QUEUE_REQUEST_ID), "2026-01-01T00:00:00Z")
+        _write_desktop_marker(home_dir, app_path=tmp_path)
+
+        rc, output, opened = self._open(home_dir, monkeypatch, capsys, desktop_takes_link=False)
+
+        assert rc == 0
+        assert opened == [
+            f"hol-guard-desktop://requests/{_QUEUE_REQUEST_ID}",
+            f"http://127.0.0.1:5474/requests/{_QUEUE_REQUEST_ID}#guard-token=gld1.payload.signature",
+        ]
+        assert output["opened_in"] == "browser"
+
+    def test_no_open_only_prints_the_link(self, tmp_path: Path, monkeypatch, capsys) -> None:
+        home_dir = tmp_path / "guard-home"
+        GuardStore(home_dir).add_approval_request(_make_request(request_id=_QUEUE_REQUEST_ID), "2026-01-01T00:00:00Z")
+
+        rc, output, opened = self._open(home_dir, monkeypatch, capsys, "--no-open")
+
+        assert rc == 0
+        assert opened == []
+        assert output["opened"] is False
+        assert output["approval_url"] == f"http://127.0.0.1:5474/requests/{_QUEUE_REQUEST_ID}"
 
 
 class TestApprovalsAutoOpenCommand:

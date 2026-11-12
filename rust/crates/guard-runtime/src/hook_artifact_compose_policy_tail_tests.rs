@@ -63,6 +63,7 @@ fn skip_native_floor_matches_the_recorded_python() {
                 .to_owned(),
             metadata: vector["artifact"]["metadata"].clone(),
             configured_override: None,
+            ..HookArtifactV1::default()
         };
         let facts = evaluate(&artifact);
         assert_eq!(facts["skip_native_floor"], vector["expected"], "{vector}");
@@ -89,6 +90,7 @@ fn a_package_request_skips_the_floor_whatever_its_metadata_says() {
             artifact_type: "package_request".to_owned(),
             metadata,
             configured_override: None,
+            ..HookArtifactV1::default()
         };
         assert_eq!(evaluate(&artifact)["skip_native_floor"], json!(true));
     }

@@ -2,7 +2,6 @@ use super::*;
 use std::fs;
 #[cfg(unix)]
 use std::os::unix::fs::PermissionsExt;
-use std::time::{SystemTime, UNIX_EPOCH};
 
 #[test]
 fn generation_parser_rejects_zero_and_non_numeric() {
@@ -14,15 +13,10 @@ fn generation_parser_rejects_zero_and_non_numeric() {
 #[cfg(unix)]
 #[test]
 fn startup_wait_honors_remaining_caller_budget() {
-    use std::time::{SystemTime, UNIX_EPOCH};
-
     let root = std::env::temp_dir().join(format!(
         "hol-guard-startup-budget-{}-{}",
         std::process::id(),
-        SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_nanos()
+        crate::unique_nanos::unique_nanos()
     ));
     fs::create_dir(&root).unwrap();
     fs::set_permissions(&root, fs::Permissions::from_mode(0o700)).unwrap();
@@ -56,10 +50,7 @@ fn zero_client_timeout_rejects_before_state_mutation() {
     let root = std::env::temp_dir().join(format!(
         "hol-guard-managed-zero-timeout-{}-{}",
         std::process::id(),
-        SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .expect("system clock must be after the Unix epoch")
-            .as_nanos()
+        crate::unique_nanos::unique_nanos()
     ));
 
     assert_eq!(
@@ -74,10 +65,7 @@ fn expired_client_deadline_rejects_before_request_setup() {
     let root = std::env::temp_dir().join(format!(
         "hol-guard-managed-expired-deadline-{}-{}",
         std::process::id(),
-        SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .expect("system clock must be after the Unix epoch")
-            .as_nanos()
+        crate::unique_nanos::unique_nanos()
     ));
     fs::create_dir(&root).expect("test state directory should be created");
     let client_lease = lease::acquire(&root).expect("test lease should be acquired");
@@ -104,10 +92,7 @@ fn client_request_cannot_spawn_while_update_barrier_is_held() {
     let root = std::env::temp_dir().join(format!(
         "hol-guard-managed-update-barrier-{}-{}",
         std::process::id(),
-        SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_nanos()
+        crate::unique_nanos::unique_nanos()
     ));
     fs::create_dir(&root).expect("test state directory should be created");
     fs::set_permissions(&root, fs::Permissions::from_mode(0o700)).unwrap();
@@ -190,10 +175,7 @@ fn client_leases_keep_shared_resident_alive_until_last_client_closes() {
     let root = std::env::temp_dir().join(format!(
         "hol-guard-managed-client-lease-{}-{}",
         std::process::id(),
-        SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_nanos()
+        crate::unique_nanos::unique_nanos()
     ));
     fs::create_dir(&root).unwrap();
     let digest = runtime_digest().unwrap();
@@ -241,10 +223,7 @@ fn retire_clients_for_update_terminates_exact_process() {
     let root = std::env::temp_dir().join(format!(
         "hol-guard-managed-lease-retire-{}-{}",
         std::process::id(),
-        SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_nanos()
+        crate::unique_nanos::unique_nanos()
     ));
     fs::create_dir(&root).unwrap();
     fs::set_permissions(&root, fs::Permissions::from_mode(0o700)).unwrap();
@@ -301,10 +280,7 @@ fn stale_lease_cleanup_requires_a_dead_process_identity() {
     let root = std::env::temp_dir().join(format!(
         "hol-guard-managed-stale-lease-{}-{}",
         std::process::id(),
-        SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_nanos()
+        crate::unique_nanos::unique_nanos()
     ));
     fs::create_dir(&root).unwrap();
     let directory = root.join("resident-client-leases.v1");
@@ -347,10 +323,7 @@ fn lease_directory_overflow_fails_closed_without_unbounded_collection() {
     let root = std::env::temp_dir().join(format!(
         "hol-guard-managed-lease-overflow-{}-{}",
         std::process::id(),
-        std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_nanos()
+        crate::unique_nanos::unique_nanos()
     ));
     fs::create_dir_all(root.join("resident-client-leases.v1")).unwrap();
     #[cfg(unix)]
@@ -389,15 +362,12 @@ fn lease_directory_overflow_fails_closed_without_unbounded_collection() {
 #[test]
 fn owner_liveness_expires_after_launcher_and_all_clients_disappear() {
     use std::fs;
-    use std::time::{Duration, SystemTime, UNIX_EPOCH};
+    use std::time::Duration;
 
     let root = std::env::temp_dir().join(format!(
         "hol-guard-managed-owner-liveness-{}-{}",
         std::process::id(),
-        SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_nanos()
+        crate::unique_nanos::unique_nanos()
     ));
     fs::create_dir(&root).unwrap();
     let lease = lease::acquire(&root).unwrap();
@@ -415,6 +385,9 @@ fn owner_liveness_expires_after_launcher_and_all_clients_disappear() {
     assert!(!alive.load(Ordering::Acquire));
     fs::remove_dir_all(root).unwrap();
 }
+
+#[path = "managed_resident_supervised_exit_tests.rs"]
+mod supervised_exit_tests;
 
 #[path = "managed_resident_owner_lock_tests.rs"]
 mod owner_lock_tests; // includes managed_owner_lock_rejects_second_process contention proof

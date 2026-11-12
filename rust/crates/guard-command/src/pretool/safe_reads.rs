@@ -4,6 +4,10 @@ mod command_sequences;
 mod jq_filter;
 #[path = "read_globs.rs"]
 mod read_globs;
+#[path = "safe_reads_sed.rs"]
+mod sed_reads;
+#[path = "test_predicates.rs"]
+mod test_predicates;
 pub(super) use super::directory_targets::verified_cwd_target;
 pub(super) use super::read_paths::{
     bounded_file_read_target, bounded_omp_directory_read_target, bounded_omp_file_read_target,
@@ -18,13 +22,20 @@ pub(super) use super::safe_writes::{
 };
 pub(crate) use command_sequences::proven_created_file_removal;
 pub(super) use command_sequences::{exact_safe_sequence, leading_and_cd, leading_semicolon_cd};
+pub(crate) use jq_filter::rendering_format as jq_rendering_format;
+pub(crate) use jq_filter::variables_bound as jq_variables_bound;
 pub(super) use read_globs::glob_file_matches;
+pub(super) use sed_reads::{safe_sed_arguments, safe_sed_stdin_arguments};
 
 pub(super) fn safe_file_predicate_arguments(
     arguments: &[String],
+    text: &str,
     context: super::PathContext<'_>,
 ) -> bool {
-    let [predicate, target] = arguments else {
+    if test_predicates::answers_from_operands(arguments, text) {
+        return true;
+    }
+    let [predicate, target] = test_predicates::without_negation(arguments) else {
         return false;
     };
     // Each predicate reads only the target's metadata: its type, permission
@@ -80,7 +91,7 @@ pub(super) fn safe_listing_arguments(
                 context.cwd,
             )
             || super::read_paths::home_hidden_directory(argument, context.home_dir, context.cwd)
-            || (super::search::skill_listing_root(argument, context)
+            || (super::search::skill_listing_root(argument, context, false)
                 && !super::search::skill_link_resolves_over_home(argument, context))
             || super::listing_reads::absent_listing_operand(argument, context)
             || super::tool_bin_listing::tool_bin_listing_operand(argument, context)
@@ -120,116 +131,20 @@ pub(super) fn command_read_target(
             // guessed inside the workspace.
             || (!allow_directory
                 && super::search::sibling_repository_named_file(value, context, true))
+            // A read of an absolute path with nothing at it prints the same
+            // error the workspace-relative spelling already prints, as long
+            // as no step of the command can put a file or a link there
+            // first.
+            || (!allow_directory
+                && context.creates_nothing
+                && super::read_paths::bounded_missing_absolute_read_target(
+                    value,
+                    context.home_dir,
+                    context.cwd,
+                ))
     } else {
         safe_read_target(value)
     }
-}
-
-/// Leading `-n`, `-E` and `-r` flags (alone or joined, as in `-nE`), then one
-/// script or one or more `-e SCRIPT` pairs, then the targets.
-fn sed_programs_and_targets(arguments: &[String]) -> Option<(bool, Vec<&str>, &[String])> {
-    let mut quiet = false;
-    let mut rest = arguments;
-    while let Some((flag, tail)) = rest.split_first() {
-        let Some(letters) = flag.strip_prefix('-').filter(|letters| {
-            !letters.is_empty() && letters.bytes().all(|b| matches!(b, b'n' | b'E' | b'r'))
-        }) else {
-            break;
-        };
-        quiet |= letters.contains('n');
-        rest = tail;
-    }
-    let mut programs = Vec::new();
-    if rest.first().is_some_and(|arg| arg == "-e") {
-        while let [flag, program, tail @ ..] = rest {
-            if flag != "-e" {
-                break;
-            }
-            programs.push(program.as_str());
-            rest = tail;
-        }
-    } else {
-        let (program, targets) = rest.split_first()?;
-        programs.push(program.as_str());
-        rest = targets;
-    }
-    if programs.is_empty() {
-        return None;
-    }
-    Some((quiet, programs, rest))
-}
-
-pub(super) fn safe_sed_stdin_arguments(arguments: &[String]) -> bool {
-    let Some((_, _, targets)) = sed_programs_and_targets(arguments) else {
-        return false;
-    };
-    (targets.is_empty() || matches!(targets, [target] if target == "-"))
-        && safe_sed_arguments(arguments, true, super::PathContext::default())
-}
-
-/// Upper bound on `;`-separated range prints in one `sed -n` program.
-const MAX_PRINT_RANGES: usize = 16;
-
-pub(super) fn safe_sed_arguments(
-    arguments: &[String],
-    piped_input: bool,
-    context: super::PathContext<'_>,
-) -> bool {
-    let Some((quiet, programs, targets)) = sed_programs_and_targets(arguments) else {
-        return false;
-    };
-    if programs
-        .iter()
-        .any(|program| program.len() > 256 || program.contains(['\n', '\r']))
-    {
-        return false;
-    }
-    // `1,12p;28,40p` prints several line ranges, as the Codex output proof
-    // already allows, and `-e 5p -e 9p` is the same program. Every statement
-    // must be a numeric or `$` range print, so no w/W/e/r command, label or
-    // regex address can join it.
-    let statements: Vec<&str> = programs
-        .iter()
-        .flat_map(|program| program.split(';'))
-        .collect();
-    let bounded_print = quiet
-        && statements.len() <= MAX_PRINT_RANGES
-        && statements
-            .iter()
-            .all(|statement| bounded_print_statement(statement));
-    // Exactly one substitution with inert flags. No e/w commands, program
-    // files, in-place edits, or additional statements can enter this proof.
-    let substitution = !quiet
-        && matches!(programs.as_slice(), [program]
-        if !program.contains(';')
-            && program.strip_prefix("s/").is_some_and(|body| {
-                let parts: Vec<_> = body.split('/').collect();
-                parts.len() == 3 && matches!(parts[2], "" | "g")
-            }));
-    (bounded_print || substitution)
-        && (matches!(targets, [target] if (target == "-" && piped_input) || (!target.starts_with('-') && command_read_target(target, context, false)))
-            || (targets.is_empty() && piped_input))
-}
-
-/// One `sed -n` statement that only names lines: `5p`, `$p`, `36,39p`,
-/// `36, 39p`. A range with no command, such as `36,37`, is a sed syntax error
-/// that prints nothing, so it reads no more than the print does.
-fn bounded_print_statement(statement: &str) -> bool {
-    let statement = statement.trim_matches([' ', '\t']);
-    let range = statement
-        .strip_suffix('p')
-        .unwrap_or(statement)
-        .trim_end_matches([' ', '\t']);
-    let counts: Vec<_> = range.split(',').collect();
-    (1..=2).contains(&counts.len())
-        && counts.iter().all(|count| {
-            let count = count.trim_matches([' ', '\t']);
-            count == "$"
-                || (!count.is_empty()
-                    && count.len() <= 6
-                    && count.bytes().all(|byte| byte.is_ascii_digit())
-                    && count.parse::<u32>().is_ok_and(|count| count > 0))
-        })
 }
 
 /// Upper bound on `cat` file operands. Each operand needs its own path proof,
@@ -343,7 +258,14 @@ fn safe_byte_dump_with_targets(
 ) -> bool {
     let mut options = true;
     let mut target = false;
+    let mut pending: Option<char> = None;
     for argument in arguments {
+        if let Some(option) = pending.take() {
+            if !byte_dump_option_value(option, argument) {
+                return false;
+            }
+            continue;
+        }
         if options && argument == "--" {
             options = false;
             continue;
@@ -351,23 +273,27 @@ fn safe_byte_dump_with_targets(
         if options
             && matches!(
                 argument.as_str(),
-                "-a" | "-b"
-                    | "-c"
-                    | "-d"
-                    | "-f"
-                    | "-o"
-                    | "-s"
-                    | "-v"
-                    | "-x"
-                    | "-An"
-                    | "-Ad"
-                    | "-Ao"
-                    | "-Ax"
-                    | "-tc"
-                    | "-tx1"
+                "-a" | "-b" | "-c" | "-d" | "-f" | "-o" | "-s" | "-v" | "-x"
             )
         {
             continue;
+        }
+        if options {
+            if let Some(option @ ('A' | 'j' | 'N' | 't' | 'w')) = argument
+                .strip_prefix('-')
+                .and_then(|rest| rest.chars().next())
+            {
+                let value = &argument[2..];
+                if value.is_empty() {
+                    // `-w` alone takes no value; the others read the next word.
+                    if option != 'w' {
+                        pending = Some(option);
+                    }
+                } else if !byte_dump_option_value(option, value) {
+                    return false;
+                }
+                continue;
+            }
         }
         if target {
             return false;
@@ -386,7 +312,77 @@ fn safe_byte_dump_with_targets(
         options = false;
         target = true;
     }
-    target || piped_input
+    pending.is_none() && (target || piped_input)
+}
+
+/// The value of an `od` option that only shapes the dump: an address radix,
+/// a byte count or offset, an output type, or a line width. None of them
+/// names a file, so the dumped file is still the one operand checked below.
+fn byte_dump_option_value(option: char, value: &str) -> bool {
+    match option {
+        'A' => matches!(value, "n" | "d" | "o" | "x"),
+        'j' | 'N' => byte_dump_count(value),
+        't' => value.len() <= 16 && byte_dump_types(value),
+        'w' => {
+            !value.is_empty() && value.len() <= 6 && value.bytes().all(|byte| byte.is_ascii_digit())
+        }
+        _ => false,
+    }
+}
+
+/// A byte count or offset as `od` parses it: decimal, `0x` hexadecimal, or
+/// octal after a leading zero. `08` is not a number to `od`, so it is not
+/// one here either.
+fn byte_dump_count(value: &str) -> bool {
+    let (digits, radix) = if let Some(hex) = value
+        .strip_prefix("0x")
+        .or_else(|| value.strip_prefix("0X"))
+    {
+        (hex, 16)
+    } else if value.len() > 1 && value.starts_with('0') {
+        (&value[1..], 8)
+    } else {
+        (value, 10)
+    };
+    !digits.is_empty() && digits.len() <= 20 && digits.chars().all(|digit| digit.is_digit(radix))
+}
+
+/// An `od -t` type list: `a` and `c` stand alone, `d`, `o`, `u` and `x` take
+/// an optional byte size or one of `C`, `S`, `I`, `L`, and `f` an optional
+/// size or one of `F`, `D`, `L`. Each type may end in `z`.
+fn byte_dump_types(value: &str) -> bool {
+    let bytes = value.as_bytes();
+    let mut index = 0;
+    while index < bytes.len() {
+        let size_letters: &[u8] = match bytes[index] {
+            b'a' | b'c' => b"",
+            b'd' | b'o' | b'u' | b'x' => b"CSIL",
+            b'f' => b"FDL",
+            _ => return false,
+        };
+        let kind = bytes[index];
+        index += 1;
+        if kind != b'a' && kind != b'c' {
+            if bytes
+                .get(index)
+                .is_some_and(|byte| size_letters.contains(byte))
+            {
+                index += 1;
+            } else {
+                let start = index;
+                while bytes.get(index).is_some_and(u8::is_ascii_digit) {
+                    index += 1;
+                }
+                if index - start > 2 {
+                    return false;
+                }
+            }
+        }
+        if bytes.get(index) == Some(&b'z') {
+            index += 1;
+        }
+    }
+    !bytes.is_empty()
 }
 
 fn safe_word_count_with_targets(
@@ -459,37 +455,60 @@ pub(super) fn jq_filter_position(arguments: &[String], piped_input: bool) -> Opt
     } else {
         last.checked_sub(1)?
     };
-    if piped_input && !arguments[index].starts_with('.') {
-        return None;
-    }
     jq_filter::safe_filter(&arguments[index]).then_some(index)
 }
 
+/// `... | jq <filter>` reads the value the pipeline already produced.
+///
+/// Stdin may come from a network read the sandbox cannot contain, so the
+/// filter still has to clear the grammar in full. It no longer has to open
+/// with a projection: `length`, `map(.name)` and `select(.draft)` read the
+/// same value `.items | length` does, and the grammar — not the leading
+/// character — is what keeps a filter from reaching the environment, further
+/// input, files or modules.
 pub(super) fn safe_jq_stdin_arguments(arguments: &[String]) -> bool {
-    // Stdin may come from a network/API command, so retain the pre-existing
-    // projection-first requirement. Standalone builtins and object output are
-    // admitted only when jq reads a separately screened file operand.
-    arguments
-        .last()
-        .is_some_and(|filter| filter.starts_with('.'))
-        && safe_jq_filter_arguments(arguments)
+    safe_jq_filter_arguments(arguments)
+}
+
+/// jq's options that only shape how the value read is parsed and printed.
+/// Every option that names a file, a module directory or a variable binding
+/// — `-f`, `--from-file`, `-L`, `--library-path`, `--argfile`, `--rawfile`,
+/// `--slurpfile`, `--arg`, `--args`, `--jsonargs` — is absent, so one of
+/// those is read as the filter instead and fails the grammar.
+const READ_ONLY_LONG_OPTIONS: &[&str] = &[
+    "--ascii-output",
+    "--compact-output",
+    "--exit-status",
+    "--join-output",
+    "--monochrome-output",
+    "--null-input",
+    "--raw-input",
+    "--raw-output",
+    "--slurp",
+    "--sort-keys",
+    "--tab",
+];
+
+/// The short spellings of those options. jq accepts them clustered, as in
+/// `jq -rc`, so each letter of a cluster is checked against this set.
+const READ_ONLY_SHORT_OPTIONS: &str = "acejMnrRsS";
+
+fn read_only_option(argument: &str) -> bool {
+    match argument.strip_prefix('-') {
+        Some(cluster) if !cluster.starts_with('-') => {
+            !cluster.is_empty()
+                && cluster
+                    .chars()
+                    .all(|flag| READ_ONLY_SHORT_OPTIONS.contains(flag))
+        }
+        _ => READ_ONLY_LONG_OPTIONS.contains(&argument),
+    }
 }
 
 fn safe_jq_filter_arguments(arguments: &[String]) -> bool {
     let mut filter = None;
     for argument in arguments {
-        if filter.is_none()
-            && matches!(
-                argument.as_str(),
-                "-r" | "-c"
-                    | "-e"
-                    | "-M"
-                    | "--raw-output"
-                    | "--compact-output"
-                    | "--exit-status"
-                    | "--monochrome-output"
-            )
-        {
+        if filter.is_none() && read_only_option(argument) {
             continue;
         }
         if filter.replace(argument.as_str()).is_some() {
@@ -576,22 +595,12 @@ fn safe_head_tail_with_targets(
 }
 
 #[cfg(test)]
-mod jq_stdin_boundary_tests {
-    use super::{jq_filter_position, safe_jq_filter_arguments, safe_jq_stdin_arguments};
+#[path = "safe_reads_jq_tests.rs"]
+mod jq_stdin_boundary_tests;
 
-    #[test]
-    fn object_filters_and_bare_builtins_do_not_expand_stdin_authority() {
-        for filter in ["keys", "length", "{tests: .tests, total: .total}"] {
-            let args = vec!["-r".to_owned(), filter.to_owned()];
-            assert!(safe_jq_filter_arguments(&args), "{filter}");
-            assert!(!safe_jq_stdin_arguments(&args), "{filter}");
-            assert_eq!(jq_filter_position(&args, true), None, "{filter}");
-        }
-        let projection = vec!["-r".to_owned(), ".tests | keys".to_owned()];
-        assert!(safe_jq_stdin_arguments(&projection));
-        assert_eq!(jq_filter_position(&projection, true), Some(1));
-    }
-}
+#[cfg(test)]
+#[path = "safe_reads_sed_tests.rs"]
+mod sed_context_address_read_tests;
 
 #[cfg(test)]
 mod head_tail_plus_filename_tests {

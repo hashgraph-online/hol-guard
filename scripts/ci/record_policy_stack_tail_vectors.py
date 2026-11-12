@@ -18,8 +18,7 @@ oracle never calls the code it checks:
 
 Each vector names its ``kind`` and holds the inputs the resident is sent and the
 answer the old Python produced.  The Rust ``hook_artifact_compose_policy_tail_tests``
-replays every vector; ``tests/test_policy_stack_tail_parity.py`` replays them
-through the Python bridge against the resident.
+replays every vector.
 
 ``approval_source`` and ``policy_composition`` are written into the persisted
 receipt and the hook response, so the vectors pin them exactly: the same

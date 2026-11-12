@@ -24,14 +24,15 @@
 //! native bridge never decides a verdict, and Python never decides one for
 //! it.
 
-use std::io::{self, Write};
+use std::path::Path;
 use std::time::{Duration, Instant};
 
 use crate::bounded_hook_bridge_render::{
-    daemon_response_to_native, event_name, failure_output, failure_output_for, Rendered,
-    FAILURE_REASON,
+    daemon_response_to_native, emergency_safe_output, event_name, event_pauses_when_unavailable,
+    Rendered, FAILURE_REASON,
 };
 use crate::claude_hook_bridge_http::remaining;
+use crate::codex_hook_bridge_direct_resident::DirectMiss;
 use crate::hook_bridge_daemon_start::{await_daemon, start_daemon, Attempt, TRANSPORT_FAILURE};
 use crate::hook_env_stamp::{current_environment, stamp_hook_input_text, Stamp};
 use crate::pyjson::{self, PyVal, SurrogateMapped};
@@ -47,8 +48,12 @@ pub(crate) use input::read_hook_input;
 mod daemon;
 use daemon::post_hook;
 pub(crate) use daemon::{
-    daemon_target, post_hook_reply, transport_deadline, DaemonTarget, PostFailure,
+    daemon_target, post_hook_reply_missed, transport_deadline, DaemonTarget, PostFailure,
 };
+#[path = "bounded_hook_bridge_output.rs"]
+mod output;
+pub(crate) use output::write_stdout;
+use output::{emit, fail};
 
 pub(crate) const BRIDGE_COMMAND: &str = "bounded-hook-bridge";
 pub(crate) const BRIDGE_FEATURE: &str = "bounded-hook-bridge-v1";
@@ -68,8 +73,13 @@ const HOOK_DEADLINE: &str = "daemon hook deadline exhausted";
 
 #[path = "bounded_hook_bridge_config.rs"]
 mod config;
+#[cfg(unix)]
+#[path = "bounded_hook_bridge_successor.rs"]
+mod successor;
 pub(crate) use config::{config_argument, parse_launch_config, BridgeConfig};
 use config::{frozen_launch, positive_seconds};
+#[cfg(unix)]
+use successor::successor_route;
 
 #[derive(Debug, PartialEq)]
 pub(crate) enum Input {
@@ -99,7 +109,15 @@ impl Prepared {
 
     /// `_daemon_response_to_native` for `answer`, `None` for an answer that
     /// is not an object or whose lone surrogates cannot be told apart.
-    fn render(&self, harness: &str, answer: &SurrogateMapped) -> Option<Rendered> {
+    ///
+    /// `guard_home` is the home this bridge was launched against, which an
+    /// authority block names in the recovery command it offers.
+    fn render(
+        &self,
+        harness: &str,
+        answer: &SurrogateMapped,
+        guard_home: &Path,
+    ) -> Option<Rendered> {
         let PyVal::Dict(entries) = &answer.value else {
             return None;
         };
@@ -107,7 +125,7 @@ impl Prepared {
         if unmap && (self.collision || answer.collision) {
             return None;
         }
-        daemon_response_to_native(entries, harness, &self.event_name, unmap)
+        daemon_response_to_native(entries, harness, &self.event_name, unmap, Some(guard_home))
     }
 }
 
@@ -184,8 +202,22 @@ pub(crate) enum Route {
     },
 }
 
-/// The daemon path of `run_bounded_cli_hook` after the input was read.
+/// [`route_hook_from`] for a bridge that never hands its hook on.
+#[cfg(all(test, unix))]
 pub(crate) fn route_hook(config: &BridgeConfig, raw: &[u8], deadline: Instant) -> Route {
+    route_hook_from(config, raw, deadline, None)
+}
+
+/// The daemon path of `run_bounded_cli_hook` after the input was read: a
+/// live resident's answer, else the answer of the newer bridge the resident
+/// runs, else the daemon's. `python_argv` is the hook's command, which a
+/// newer bridge is run with.
+pub(crate) fn route_hook_from(
+    config: &BridgeConfig,
+    raw: &[u8],
+    deadline: Instant,
+    python_argv: Option<&[String]>,
+) -> Route {
     let prepared = match prepare(raw) {
         Ok(prepared) => prepared,
         Err(refused) => return refused,
@@ -198,8 +230,14 @@ pub(crate) fn route_hook(config: &BridgeConfig, raw: &[u8], deadline: Instant) -
     } else {
         DAEMON_BUDGET
     };
-    if let Some(route) = direct_route(config, &prepared, deadline, budget) {
-        return route;
+    let miss = match direct_route(config, &prepared, deadline, budget) {
+        Ok(route) => return route,
+        Err(miss) => miss,
+    };
+    if let (DirectMiss::NoResident, Some(python_argv)) = (miss, python_argv) {
+        if let Some(route) = successor_route(config, &prepared, python_argv, raw, deadline) {
+            return route;
+        }
     }
     let left = remaining(deadline);
     let failed = match daemon_target(&config.guard_home, &config.harness) {
@@ -209,16 +247,33 @@ pub(crate) fn route_hook(config: &BridgeConfig, raw: &[u8], deadline: Instant) -
             let Some(transport) = transport_deadline(deadline, left, budget) else {
                 return prepared.failed();
             };
-            match post_hook(&target, &config.harness, &prepared.data, transport) {
+            match post_hook(
+                &target,
+                &config.harness,
+                &prepared.data,
+                transport,
+                Some(miss),
+            ) {
                 Some(answer) => {
-                    let rendered = prepared.render(&config.harness, &answer);
+                    let rendered = prepared.render(&config.harness, &answer, &config.guard_home);
                     return answered_route(rendered, &prepared, deadline);
                 }
                 None => Some(target),
             }
         }
     };
-    restarted_route(config, prepared, deadline, budget, failed.as_ref())
+    restarted_route(config, prepared, deadline, budget, failed.as_ref(), miss)
+}
+
+#[cfg(not(unix))]
+fn successor_route(
+    _config: &BridgeConfig,
+    _prepared: &Prepared,
+    _python_argv: &[String],
+    _raw: &[u8],
+    _deadline: Instant,
+) -> Option<Route> {
+    None
 }
 
 /// The route once no daemon answered: start one with the configured
@@ -230,12 +285,18 @@ fn restarted_route(
     deadline: Instant,
     budget: Duration,
     failed: Option<&DaemonTarget>,
+    miss: DirectMiss,
 ) -> Route {
     // An empty command (no home to start the daemon for) fails closed.
     if config.start_command.is_empty()
-        || !start_daemon(&config.start_command, TRANSPORT_FAILURE, deadline)
+        || !start_daemon(
+            &config.start_command,
+            TRANSPORT_FAILURE,
+            deadline,
+            Some(&config.guard_home),
+        )
     {
-        return prepared.failed();
+        return paused_route(config, &prepared, deadline, budget);
     }
     let started = await_daemon(deadline, || {
         match daemon_target(&config.guard_home, &config.harness) {
@@ -247,13 +308,91 @@ fn restarted_route(
     });
     let answer = started.and_then(|target| {
         let transport = transport_deadline(deadline, remaining(deadline), budget)?;
-        post_hook(&target, &config.harness, &prepared.data, transport)
+        post_hook(
+            &target,
+            &config.harness,
+            &prepared.data,
+            transport,
+            Some(miss),
+        )
     });
     let Some(answer) = answer else {
-        return prepared.failed();
+        return paused_route(config, &prepared, deadline, budget);
     };
-    let rendered = prepared.render(&config.harness, &answer);
+    let rendered = prepared.render(&config.harness, &answer, &config.guard_home);
     answered_route(rendered, &prepared, deadline)
+}
+
+/// The route for a hook no daemon answered: the pause, unless a live
+/// resident continues the call under the ratified emergency-safe profile.
+///
+/// The pause is the right default, and it stays the default: the resident is
+/// asked only here, once the daemon has failed and the bridge is about to
+/// write the fail-closed payload, and only about a hook that payload would
+/// pause. The resident holds the proofs the profile requires and continues
+/// nothing outside it, so anything else comes back a defer and the hook
+/// pauses as it did before this ask existed.
+fn paused_route(
+    config: &BridgeConfig,
+    prepared: &Prepared,
+    deadline: Instant,
+    budget: Duration,
+) -> Route {
+    emergency_safe_route(config, prepared, deadline, budget).unwrap_or_else(|| prepared.failed())
+}
+
+/// The continue a live resident answered under the emergency-safe profile,
+/// or `None` to pause the hook.
+///
+/// The resident answers the finished harness payload, so it is written as it
+/// stands. Half the time left bounds the ask, which leaves the pause its own
+/// room: a resident that does not answer in that time costs the hook nothing
+/// but the wait.
+fn emergency_safe_route(
+    config: &BridgeConfig,
+    prepared: &Prepared,
+    deadline: Instant,
+    budget: Duration,
+) -> Option<Route> {
+    if !event_pauses_when_unavailable(&prepared.event_name) {
+        return None;
+    }
+    let rpc_deadline = deadline.min(Instant::now() + (remaining(deadline) / 2).min(budget));
+    let answer = crate::codex_hook_bridge_direct::bounded_emergency_safe_answer(
+        &config.harness,
+        &config.guard_home,
+        &prepared.event_name,
+        &prepared.data,
+        rpc_deadline,
+    )
+    .ok()?;
+    emergency_safe_response(prepared, &answer, deadline)
+}
+
+/// The route for what the resident continued with, or `None` to pause.
+///
+/// A resident that answered something other than a mapping, or a lone
+/// surrogate this bridge cannot write back as Python does, is read as no
+/// answer at all. So is one that answered after the deadline: the hook is
+/// out of time either way, and the pause is what the caller writes.
+fn emergency_safe_response(prepared: &Prepared, answer: &str, deadline: Instant) -> Option<Route> {
+    let parsed = pyjson::parse_mapping_lone_surrogates(answer).ok()?;
+    let PyVal::Dict(response) = &parsed.value else {
+        return None;
+    };
+    let unmap = prepared.mapped || parsed.mapped;
+    if unmap && (prepared.collision || parsed.collision) {
+        return None;
+    }
+    if Instant::now() >= deadline {
+        return None;
+    }
+    let rendered = emergency_safe_output(response, unmap);
+    Some(Route::Respond {
+        stdout: rendered.stdout,
+        stderr: rendered.stderr,
+        exit_code: rendered.exit_code,
+    })
 }
 
 /// The route for an answer the daemon or its resident gave. An answer the
@@ -271,13 +410,13 @@ fn answered_route(rendered: Option<Rendered>, prepared: &Prepared, deadline: Ins
 }
 
 /// The route for a hook a live resident answered directly, rendered as the
-/// daemon's identical answer would be, or `None` to ask the daemon.
+/// daemon's identical answer would be, or why the daemon is asked instead.
 fn direct_route(
     config: &BridgeConfig,
     prepared: &Prepared,
     deadline: Instant,
     budget: Duration,
-) -> Option<Route> {
+) -> Result<Route, DirectMiss> {
     let rpc_deadline = deadline.min(Instant::now() + (remaining(deadline) / 2).min(budget));
     let answer = crate::codex_hook_bridge_direct::bounded_direct_answer(
         &config.harness,
@@ -290,35 +429,8 @@ fn direct_route(
     // never reaches the daemon.
     let rendered = pyjson::parse_mapping_lone_surrogates(&answer)
         .ok()
-        .and_then(|parsed| prepared.render(&config.harness, &parsed));
-    Some(answered_route(rendered, prepared, deadline))
-}
-
-pub(crate) fn write_stdout(text: &str) {
-    let mut stdout = io::stdout().lock();
-    let _ = stdout
-        .write_all(text.as_bytes())
-        .and_then(|()| stdout.flush());
-}
-
-fn write_stderr_line(text: &str) {
-    let mut stderr = io::stderr().lock();
-    let _ = stderr
-        .write_all(text.as_bytes())
-        .and_then(|()| stderr.write_all(b"\n"))
-        .and_then(|()| stderr.flush());
-}
-
-fn fail(harness: &str, event_name: &str, unmap: bool) -> i32 {
-    let (payload, code) = failure_output(harness, event_name, unmap);
-    write_stdout(&payload);
-    code
-}
-
-fn refuse(harness: &str, event_name: &str, reason: &str, unmap: bool) -> i32 {
-    let (payload, code) = failure_output_for(harness, event_name, reason, unmap);
-    write_stdout(&payload);
-    code
+        .and_then(|parsed| prepared.render(&config.harness, &parsed, &config.guard_home));
+    Ok(answered_route(rendered, prepared, deadline))
 }
 
 pub(crate) fn run(python_argv: &[String]) -> i32 {
@@ -338,7 +450,10 @@ pub(crate) fn run(python_argv: &[String]) -> i32 {
     let Input::Read(raw) = read_hook_input(deadline) else {
         return fail(&config.harness, DEFAULT_EVENT, false);
     };
-    emit(&config.harness, route_hook(&config, &raw, deadline))
+    emit(
+        &config.harness,
+        route_hook_from(&config, &raw, deadline, Some(python_argv)),
+    )
 }
 
 /// `main_from_argv` for a config the native bridge does not serve: the
@@ -370,29 +485,6 @@ fn refuse_config(argument: Option<&str>, started: Instant) -> i32 {
         Err(refused) => refused,
     };
     emit(&harness, route)
-}
-
-/// Write the answer for `route` and return its exit code.
-fn emit(harness: &str, route: Route) -> i32 {
-    match route {
-        Route::Respond {
-            stdout,
-            stderr,
-            exit_code,
-        } => {
-            write_stdout(&stdout);
-            if !stderr.is_empty() {
-                write_stderr_line(&stderr);
-            }
-            exit_code
-        }
-        Route::Fail { event_name, unmap } => fail(harness, &event_name, unmap),
-        Route::Refuse {
-            event_name,
-            reason,
-            unmap,
-        } => refuse(harness, &event_name, reason, unmap),
-    }
 }
 
 #[cfg(all(test, unix))]

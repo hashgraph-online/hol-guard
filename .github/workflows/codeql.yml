@@ -27,7 +27,7 @@ permissions:
 jobs:
   analyze:
     name: Analyze (${{ matrix.language }})
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     strategy:
       fail-fast: false
       matrix:
@@ -43,7 +43,7 @@ jobs:
           LEGACY_ROOT="/home/runner/work/codex-plugin-scanner"
           mkdir -p "$LEGACY_ROOT"
           ln -sfn "$GITHUB_WORKSPACE" "$LEGACY_ROOT/codex-plugin-scanner"
-      - uses: github/codeql-action/init@8aad20d150bbac5944a9f9d289da16a4b0d87c1e
+      - uses: github/codeql-action/init@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2
         with:
           languages: ${{ matrix.language }}
           build-mode: none
@@ -51,7 +51,7 @@ jobs:
           config: |
             paths-ignore:
               - src/codex_plugin_scanner/guard/stable_digest.py
-      - uses: github/codeql-action/analyze@8aad20d150bbac5944a9f9d289da16a4b0d87c1e
+      - uses: github/codeql-action/analyze@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2
         with:
           category: /language:${{ matrix.language }}
           # SARIF results and the incremental analysis cache are still uploaded
@@ -62,7 +62,7 @@ jobs:
     name: CodeQL
     if: ${{ always() }}
     needs: analyze
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - name: Require every CodeQL analysis to pass
         env:

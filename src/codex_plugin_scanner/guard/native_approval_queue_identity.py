@@ -54,17 +54,6 @@ class QueueIdentity(NamedTuple):
 _CONNECTION_HOME_FUNCTION = "guard_connection_home_v1"
 
 
-def bind_connection_guard_home(connection: sqlite3.Connection, guard_home: Path) -> None:
-    """Address ``connection`` at ``guard_home`` when the database has no file path."""
-
-    home = Path(guard_home)
-
-    def read_home() -> str:
-        return str(home)
-
-    connection.create_function(_CONNECTION_HOME_FUNCTION, 0, read_home)
-
-
 def connection_guard_home(connection: sqlite3.Connection) -> Path | None:
     """The Guard home bound to ``connection``, or the file-backed database directory."""
 

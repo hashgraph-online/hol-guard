@@ -655,10 +655,7 @@ mod tests {
         h
     }
     fn nanos() -> u128 {
-        std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_nanos()
+        crate::unique_nanos::unique_nanos()
     }
 
     fn enabled_state() -> Value {

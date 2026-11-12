@@ -57,7 +57,9 @@ def authoring_request(operation, request, compiler, *, installed, cache_director
 
 
 def validation_base(request, compiler, *, installed, directory, fixture=False, admission=None, development=None):
+    from ..catalog_delivery import lifecycle
     from .metadata_index import exchange
+    from .native_source_compiler import NativeSourceCompilerError
 
     if directory is None:
         raise ValueError("authoring cache lifetime must enclose native compilation")
@@ -97,17 +99,32 @@ def validation_base(request, compiler, *, installed, directory, fixture=False, a
         return read_bytes(objects / (identity + ".json"), limit=64 * 1024)
 
     def archive(reference):
-        from ..catalog_delivery.pack_archives import ingest
+        from ..catalog_delivery.cache_io import stage_archive
 
         if bundle is None:
             raise ValueError("authoring archive requires a verified bundle")
-        ingest(
-            bundle.fetch(reference["location"], reference["length"]), reference["sha256"], reference["length"], objects
-        )
+        # Native admits the whole archive before any member reaches the cache.
+        stage_archive(directory, reference, bundle.fetch, objects=objects)
 
-    result = exchange(
-        compiler, "authoring-context", [native_request], directory / "authoring-index", fetch=fetch, archive=archive
-    )
+    # Every installed fetch and archive member is read through the runtime. One
+    # session verifies and copies it once for the exchange rather than once per
+    # object, which over a whole authoring context outlasts the compiler deadline.
+    # A compiler refusal leaves the session as raised, keeping its code.
+    failure = result = None
+    with lifecycle.session():
+        try:
+            result = exchange(
+                compiler,
+                "authoring-context",
+                [native_request],
+                directory / "authoring-index",
+                fetch=fetch,
+                archive=archive,
+            )
+        except NativeSourceCompilerError as exc:
+            failure = exc
+    if failure is not None or result is None:
+        raise failure or ValueError("native authoring context is incomplete")
     if admission is not None:
         return result
     return {"metadata_index": result["metadata_index"], "programs": result["programs"]}

@@ -1,36 +1,26 @@
-import { Surface, SectionLabel } from "../../approval-center-primitives";
 import { ABOUT_STANDARDS_NODES } from "../about-content";
+import { AboutSectionHeading } from "./about-section-heading";
 
 export function OpenStandardsMap() {
+  // The heading sits beside the list on wide screens so this section breaks
+  // the stacked heading-then-grid rhythm of its neighbours.
   return (
-    <div>
-      <SectionLabel>Open standards map</SectionLabel>
-      <p className="mt-2 max-w-2xl text-base leading-relaxed text-brand-dark/75">
-        HOL builds directional infrastructure for the agent internet. These are the areas we are working on.
-      </p>
-      <div className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-        {ABOUT_STANDARDS_NODES.map((node, index) => (
-          <Surface
-            key={node.id}
-            className="relative overflow-hidden"
-            tone={index === 0 ? "accent" : "default"}
-          >
-            <div className="flex items-start gap-3">
-              <span className="mt-0.5 inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-brand-blue/10 text-brand-blue font-mono text-xs font-bold">
-                {String(index + 1).padStart(2, "0")}
-              </span>
-              <div>
-                <h3 className="text-sm font-semibold text-brand-dark">
-                  {node.label}
-                </h3>
-                <p className="mt-1 text-xs leading-relaxed text-brand-dark/60">
-                  {node.body}
-                </p>
-              </div>
-            </div>
-          </Surface>
+    <div className="lg:grid lg:grid-cols-[minmax(0,18rem)_minmax(0,1fr)] lg:gap-x-12">
+      <AboutSectionHeading
+        id="about-open-standards-heading"
+        title="Open standards map"
+        lead="HOL builds directional infrastructure for the agent internet. These are the areas we are working on."
+      />
+      {/* Six areas of one programme, read in any order: a plain grid
+          rather than numbered steps or six identical boxes. */}
+      <ul className="mt-6 grid gap-x-10 border-t border-brand-dark/10 sm:grid-cols-2 lg:mt-1">
+        {ABOUT_STANDARDS_NODES.map((node) => (
+          <li key={node.id} className="border-b border-brand-dark/10 py-3">
+            <h3 className="text-sm font-semibold text-brand-dark">{node.label}</h3>
+            <p className="mt-0.5 text-sm leading-6 text-brand-dark/75">{node.body}</p>
+          </li>
         ))}
-      </div>
+      </ul>
     </div>
   );
 }

@@ -152,6 +152,10 @@ pub(in crate::pretool) fn bounded_omp_directory_read_target(
     bounded_omp_directory_read_target_without_selector(value, home_dir, cwd)
 }
 
+#[path = "directory_read_tools.rs"]
+mod tools;
+pub(in crate::pretool) use tools::bounded_directory_read_tool_target;
+
 fn bounded_omp_directory_read_target_without_selector(
     value: &str,
     home_dir: Option<&str>,
@@ -222,10 +226,19 @@ fn bounded_selector_path(
     home_dir: Option<&str>,
     cwd: Option<&str>,
 ) -> BoundedSelectorPath {
+    let path = value.strip_prefix(r"\\?\").unwrap_or(value);
+    // A URL is never a selector. Split at its last colon, `file://host/a.md`
+    // reads as base `file` plus a "selector" that only looked like one when
+    // the path held a digit; otherwise the URL text passed as a project path.
+    let file_url = path
+        .split_once(':')
+        .is_some_and(|(scheme, rest)| scheme.eq_ignore_ascii_case("file") && rest.starts_with('/'));
+    if path.contains("://") || file_url {
+        return BoundedSelectorPath::Unsupported;
+    }
     if value.trim() != value || !verified_path_context(home_dir, cwd) {
         return BoundedSelectorPath::NotSelector;
     }
-    let path = value.strip_prefix(r"\\?\").unwrap_or(value);
     let Some((base, selector)) = path.rsplit_once(':') else {
         return BoundedSelectorPath::NotSelector;
     };
@@ -264,7 +277,7 @@ fn bounded_selector_path(
         Err(_) => {}
     }
 
-    if base.is_empty() || base.contains("://") || path.split(['/', '\\']).any(|part| part == "..") {
+    if base.is_empty() || path.split(['/', '\\']).any(|part| part == "..") {
         return if selector_like {
             BoundedSelectorPath::Unsupported
         } else {

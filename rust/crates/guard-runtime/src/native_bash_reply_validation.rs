@@ -4,7 +4,7 @@
 use guard_contracts::{
     native_bash_operation_id_is_valid, NativeBashAuthorizationKindV1 as Authorization,
     NativeBashExecuteResultV1, NativeBashOperationStateV1 as State, NativeBashReviewLineageV1,
-    NATIVE_BASH_ARTIFACT_ID,
+    ReviewRequestQueryV1, NATIVE_BASH_ARTIFACT_ID,
 };
 use serde_json::Value;
 
@@ -36,6 +36,95 @@ pub(crate) fn lineage(value: &Value) -> bool {
         && value.expires_at_ms.checked_sub(value.created_at_ms) == Some(86_400_000)
 }
 
+/// The execution assurances a prepared Bash subject may carry.
+fn supported_assurance(value: &Value) -> bool {
+    matches!(
+        value.as_str(),
+        Some(
+            "macos-readonly-root-framed-outputs-v1"
+                | "macos-readonly-root-http-read-v1"
+                | "macos-hardened-broker-v1"
+        )
+    )
+}
+
+/// The input hook each bound-bash host routes a script through.
+fn bound_host(harness: &str) -> Option<&'static str> {
+    match harness {
+        "omp" => Some("omp-input-rewrite-v1"),
+        "pi" => Some("pi-input-mutation-v1"),
+        _ => None,
+    }
+}
+
+/// Whether a review queued from a bound-bash sink is the one the native
+/// owner prepared: the prepared reply, its lineage, the queue's exact token
+/// and review binding, and the edge decision with its receipt must all name
+/// the same artifact. The receipt must record that decision for the host.
+fn queued_review(prepared: &Value, request: &Value) -> bool {
+    let Some(host) = request["harness"].as_str().and_then(bound_host) else {
+        return false;
+    };
+    let exact_token = &request["exact_token"];
+    let decision = &request["decision"];
+    let receipt = &request["native_receipt"];
+    let review = &prepared["review"];
+    let subject = &prepared["subject"];
+    if !lineage(&prepared["review_lineage"])
+        || prepared["artifact_id"] != NATIVE_BASH_ARTIFACT_ID
+        || !exact_token.as_str().is_some_and(token)
+        || prepared["artifact_hash"] != *exact_token
+        || request["review_binding"] != *exact_token
+        || prepared["review_lineage"]["artifact_hash"] != *exact_token
+        || !review.is_object()
+        || review["decision"] != *decision
+        || review["receipt"] != *receipt
+        || !subject.is_object()
+        || subject["schema"] != "guard.bash-subject.v1"
+        || !supported_assurance(&subject["execution_assurance"])
+        || !subject["context"].is_object()
+        || subject["context"]["host"] != host
+        || !decision.is_object()
+        || !receipt.is_object()
+    {
+        return false;
+    }
+    let mut edge = serde_json::json!({
+        "harness": request["harness"],
+        "event_name": "PreToolUse",
+        "result": decision,
+    });
+    if !receipt["payload_kind"].is_null() {
+        edge["payload_kind"] = receipt["payload_kind"].clone();
+    }
+    crate::edge::standalone_receipt(receipt, &edge)
+}
+
+/// Whether a review `queue_bound_bash_review` queues is the one the native
+/// Bash owner prepared, and its receipt holds the policy binding its verdict
+/// claims. The query's `bound_bash` carries the whole prepared reply with
+/// its lineage.
+pub(crate) fn queued_bound_bash(query: &ReviewRequestQueryV1) -> bool {
+    let Some(prepared) = &query.bound_bash else {
+        return false;
+    };
+    let request = serde_json::json!({
+        "harness": query.envelope.harness,
+        "exact_token": query.exact_token,
+        "review_binding": query.review_binding,
+        "decision": query.result,
+        "native_receipt": query.native_receipt,
+    });
+    queued_review(prepared, &request)
+        && query.result.as_object().is_some_and(|result| {
+            crate::native_exact_action_op::policy_binding_holds(
+                &query.envelope.harness,
+                result,
+                query.native_receipt.as_ref().and_then(Value::as_object),
+            )
+        })
+}
+
 pub(crate) fn prepared(value: &Value) -> bool {
     let expected = [
         "subject",
@@ -60,14 +149,7 @@ pub(crate) fn prepared(value: &Value) -> bool {
         || !value["review"]["decision"].is_object()
         || !value["review"]["receipt"].is_object()
         || value["subject"]["schema"] != "guard.bash-subject.v1"
-        || !matches!(
-            value["subject"]["execution_assurance"].as_str(),
-            Some(
-                "macos-readonly-root-framed-outputs-v1"
-                    | "macos-readonly-root-http-read-v1"
-                    | "macos-hardened-broker-v1"
-            )
-        )
+        || !supported_assurance(&value["subject"]["execution_assurance"])
     {
         return false;
     }
@@ -75,10 +157,8 @@ pub(crate) fn prepared(value: &Value) -> bool {
         return true;
     };
     let metadata = &artifact["metadata"];
-    let host = match artifact["harness"].as_str() {
-        Some("omp") => "omp-input-rewrite-v1",
-        Some("pi") => "pi-input-mutation-v1",
-        _ => return false,
+    let Some(host) = artifact["harness"].as_str().and_then(bound_host) else {
+        return false;
     };
     artifact["artifact_type"] == "package_request"
         && metadata["assessment_only"] == true

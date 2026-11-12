@@ -27,6 +27,7 @@ runs:
       # reported, so it is trusted without requiring the whole run to be green.
       # A red main must not pin planning to timings older than the suite.
       run: |
+        timeout --signal=KILL 5s bash --noprofile --norc -e -o pipefail -s <<'DURATION_TELEMETRY'
         # Walk this branch's own push runs newest first. Pull request runs
         # upload an artifact with the same name, so a repository-wide artifact
         # page can be filled by them and hide the newest main manifest.
@@ -52,6 +53,7 @@ runs:
           > /tmp/pytest-duration-manifest.json.gz
         gzip -t /tmp/pytest-duration-manifest.json.gz
         mv /tmp/pytest-duration-manifest.json.gz pytest-duration-manifest.latest.json.gz
+        DURATION_TELEMETRY
     - name: Collect and build affinity-aware pytest shards
       shell: bash
       env:

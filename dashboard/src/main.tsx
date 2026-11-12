@@ -9,6 +9,8 @@ import "./open-guard-cloud-action.css";
 import "./shell-navigation-status.css";
 import "./extensions-presence.css";
 import "./home-hero.css";
+import "./context-assistance/workspace.css";
+import "./context-assistance/tutorials.css";
 import "./responsive-layout.css";
 
 const container = document.getElementById("guard-dashboard-root");

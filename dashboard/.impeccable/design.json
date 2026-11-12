@@ -1,8 +1,197 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-09-26T17:17:22.564Z",
+  "generatedAt": "2026-10-24T03:00:02.000Z",
   "title": "Design System: HOL Guard Dashboard",
   "extensions": {
+    "colorMeta": {
+      "brand-blue": {
+        "role": "primary",
+        "displayName": "Signal Blue",
+        "canonical": "oklch(69% 0.165 258)",
+        "tonalRamp": [
+          "#030b1a",
+          "#102543",
+          "#214172",
+          "#3360a3",
+          "#4781d8",
+          "#69a5ff",
+          "#a7cbff",
+          "#e4efff"
+        ]
+      },
+      "brand-dark": {
+        "role": "neutral",
+        "displayName": "Indigo Ink",
+        "canonical": "oklch(40% 0.085 280)",
+        "tonalRamp": [
+          "#090918",
+          "#202140",
+          "#3a3c6c",
+          "#595d89",
+          "#7b7fa4",
+          "#a0a3be",
+          "#c6c8d9",
+          "#edeef3"
+        ]
+      },
+      "brand-white": {
+        "role": "neutral",
+        "displayName": "Page White",
+        "canonical": "oklch(100% 0.000 90)",
+        "tonalRamp": [
+          "#0b0b0b",
+          "#252525",
+          "#424242",
+          "#616161",
+          "#828282",
+          "#a5a5a5",
+          "#c9c9c9",
+          "#eeeeee"
+        ]
+      },
+      "surface-1": {
+        "role": "neutral",
+        "displayName": "Pale Surface",
+        "canonical": "oklch(98% 0.007 269)",
+        "tonalRamp": [
+          "#0b0b0c",
+          "#252526",
+          "#414243",
+          "#606163",
+          "#818285",
+          "#a3a5a8",
+          "#c7c9cd",
+          "#eceef3"
+        ]
+      },
+      "surface-2": {
+        "role": "neutral",
+        "displayName": "Deeper Pale Surface",
+        "canonical": "oklch(96% 0.010 267)",
+        "tonalRamp": [
+          "#0b0b0c",
+          "#242526",
+          "#414244",
+          "#606164",
+          "#818286",
+          "#a3a5aa",
+          "#c6c9cf",
+          "#ebeef5"
+        ]
+      },
+      "brand-attention": {
+        "role": "secondary",
+        "displayName": "Attention Periwinkle",
+        "canonical": "oklch(68% 0.166 275)",
+        "tonalRamp": [
+          "#07091a",
+          "#1c2144",
+          "#343c72",
+          "#4e59a5",
+          "#6a78da",
+          "#8b9cff",
+          "#b9c5ff",
+          "#e9eeff"
+        ]
+      },
+      "brand-attention-bg": {
+        "role": "secondary",
+        "displayName": "Attention Wash",
+        "canonical": "oklch(96% 0.020 280)",
+        "tonalRamp": [
+          "#0b0b0c",
+          "#242528",
+          "#414246",
+          "#606167",
+          "#80828a",
+          "#a3a4af",
+          "#c6c8d5",
+          "#ebedfc"
+        ]
+      },
+      "ink-secondary": {
+        "role": "neutral",
+        "displayName": "Secondary Ink (75%)",
+        "canonical": "rgb(63 65 116 / 0.75)",
+        "tonalRamp": [
+          "#090918",
+          "#202140",
+          "#3a3c6c",
+          "#595d89",
+          "#7b7fa4",
+          "#a0a3be",
+          "#c6c8d9",
+          "#edeef3"
+        ]
+      },
+      "hairline": {
+        "role": "neutral",
+        "displayName": "Hairline (10%)",
+        "canonical": "rgb(63 65 116 / 0.10)",
+        "tonalRamp": [
+          "#090918",
+          "#202140",
+          "#3a3c6c",
+          "#595d89",
+          "#7b7fa4",
+          "#a0a3be",
+          "#c6c8d9",
+          "#edeef3"
+        ]
+      },
+      "frame": {
+        "role": "neutral",
+        "displayName": "Boundary Outline (25%)",
+        "canonical": "rgb(63 65 116 / 0.25)",
+        "tonalRamp": [
+          "#090918",
+          "#202140",
+          "#3a3c6c",
+          "#595d89",
+          "#7b7fa4",
+          "#a0a3be",
+          "#c6c8d9",
+          "#edeef3"
+        ]
+      }
+    },
+    "typographyMeta": {
+      "display": {
+        "displayName": "Display",
+        "purpose": "The one page title."
+      },
+      "title": {
+        "displayName": "Title",
+        "purpose": "Every section heading, one shape for all."
+      },
+      "lead": {
+        "displayName": "Lead",
+        "purpose": "The sentence after a title or heading, in secondary ink."
+      },
+      "body-sm": {
+        "displayName": "Body",
+        "purpose": "Node, claim and row descriptions."
+      },
+      "label": {
+        "displayName": "Label",
+        "purpose": "Node titles, claim titles, button text."
+      },
+      "caption": {
+        "displayName": "Caption",
+        "purpose": "Figure captions, gate notes, disclosures."
+      },
+      "micro": {
+        "displayName": "Micro",
+        "purpose": "The number inside a callout marker only."
+      }
+    },
+    "shadows": [
+      {
+        "name": "primary-action-lift",
+        "value": "0 10px 15px -3px rgb(85 153 254 / 0.2), 0 4px 6px -4px rgb(85 153 254 / 0.2)",
+        "purpose": "The shared primary button's soft blue lift. Figures and panels carry no shadow."
+      }
+    ],
     "motion": [
       {
         "name": "ease-out-quart",
@@ -13,6 +202,34 @@
         "name": "ease-out-quint",
         "value": "cubic-bezier(0.22, 1, 0.36, 1)",
         "purpose": "Existing dashboard easing."
+      },
+      {
+        "name": "rail-draw",
+        "value": "500ms cubic-bezier(0.65, 0, 0.35, 1)",
+        "purpose": "The figure rail drawing once on load, scale on its axis, staggered by segment (300ms, 850ms). Only under prefers-reduced-motion: no-preference."
+      },
+      {
+        "name": "rail-landing",
+        "value": "200ms ease-out",
+        "purpose": "Ticks and arrowheads fading in as the rail reaches them (150ms, 750ms, 1300ms delays)."
+      }
+    ],
+    "breakpoints": [
+      {
+        "name": "sm",
+        "value": "640px"
+      },
+      {
+        "name": "md",
+        "value": "768px"
+      },
+      {
+        "name": "lg",
+        "value": "1024px"
+      },
+      {
+        "name": "xl",
+        "value": "1280px"
       }
     ]
   },
@@ -30,16 +247,63 @@
       "description": "Truthful unavailable/recovery status for an unconnected native business review.",
       "html": "<aside class=\"ds-readonly-review-status\" role=\"status\"><strong>Review is not connected yet</strong><p>This saved business request is read-only. Review decisions and execution are not connected yet.</p></aside>",
       "css": ".ds-readonly-review-status { display: grid; gap: 4px; border: 1px solid rgb(124 140 253 / 0.3); border-radius: 12px; background: rgb(124 140 253 / 0.06); padding: 16px; color: #3f4174; font-family: system-ui, -apple-system, BlinkMacSystemFont, \"Segoe UI\", sans-serif; } .ds-readonly-review-status strong { color: #7c8cfd; font-size: 14px; font-weight: 600; } .ds-readonly-review-status p { margin: 0; font-size: 14px; line-height: 1.55; }"
+    },
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "The one primary action on an explanatory surface.",
+      "html": "<a class=\"ds-btn-primary\" href=\"#\">Read Guard docs</a>",
+      "css": ".ds-btn-primary { display: inline-flex; align-items: center; justify-content: center; min-height: 44px; padding: 8px 16px; border-radius: 8px; background: var(--brand-blue, #5599fe); color: #fff; font: 600 14px/1.43 system-ui, -apple-system, BlinkMacSystemFont, \"Segoe UI\", sans-serif; text-decoration: none; box-shadow: 0 10px 15px -3px rgb(85 153 254 / 0.2), 0 4px 6px -4px rgb(85 153 254 / 0.2); transition: background-color 150ms; } .ds-btn-primary:hover { background: rgb(85 153 254 / 0.9); } .ds-btn-primary:focus-visible { outline: none; box-shadow: 0 0 0 2px #fff, 0 0 0 4px rgb(85 153 254 / 0.4); }"
+    },
+    {
+      "name": "Secondary Button",
+      "kind": "button",
+      "refersTo": "button-secondary",
+      "description": "A quiet outbound action beside or after the primary one.",
+      "html": "<a class=\"ds-btn-secondary\" href=\"#\">Become a partner</a>",
+      "css": ".ds-btn-secondary { display: inline-flex; align-items: center; gap: 6px; min-height: 44px; padding: 10px 16px; border: 1px solid rgb(63 65 116 / 0.15); border-radius: 8px; background: #fff; color: #3f4174; font: 600 14px/1.43 system-ui, -apple-system, BlinkMacSystemFont, \"Segoe UI\", sans-serif; text-decoration: none; transition: background-color 150ms, border-color 150ms; } .ds-btn-secondary:hover { border-color: rgb(63 65 116 / 0.25); background: #f5f7fc; } .ds-btn-secondary:focus-visible { outline: none; box-shadow: 0 0 0 2px #fff, 0 0 0 4px rgb(85 153 254 / 0.4); }"
+    },
+    {
+      "name": "Numbered Callout",
+      "kind": "custom",
+      "refersTo": "figure-callout",
+      "description": "A 20px dark circle with a number that ties a part of a figure to the claim carrying the same number.",
+      "html": "<span class=\"ds-callout\"><span class=\"ds-sr\">Claim </span>1</span>",
+      "css": ".ds-callout { display: inline-flex; width: 20px; height: 20px; align-items: center; justify-content: center; border-radius: 9999px; background: #3f4174; color: #fff; font: 600 11px/1 system-ui, -apple-system, BlinkMacSystemFont, \"Segoe UI\", sans-serif; font-variant-numeric: tabular-nums; } .ds-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }"
+    },
+    {
+      "name": "Figure Node",
+      "kind": "card",
+      "refersTo": "figure-node",
+      "description": "A step inside a device boundary: title left, claim callout right, one plain sentence below. The working node takes a blue outline.",
+      "html": "<div class=\"ds-figure-node\"><span class=\"ds-figure-node__head\"><span class=\"ds-figure-node__title\">Your decision</span><span class=\"ds-callout-s\">1</span></span><span class=\"ds-figure-node__body\">Clear actions run. Unclear ones wait for you.</span></div>",
+      "css": ".ds-figure-node { border: 1px solid rgb(63 65 116 / 0.12); border-radius: 12px; background: #f5f7fc; padding: 14px; color: #3f4174; font-family: system-ui, -apple-system, BlinkMacSystemFont, \"Segoe UI\", sans-serif; } .ds-figure-node__head { display: flex; align-items: center; justify-content: space-between; gap: 8px; } .ds-figure-node__title { font-size: 14px; font-weight: 600; } .ds-figure-node__body { display: block; margin-top: 4px; color: rgb(63 65 116 / 0.75); font-size: 14px; line-height: 24px; } .ds-callout-s { display: inline-flex; width: 20px; height: 20px; align-items: center; justify-content: center; border-radius: 9999px; background: #3f4174; color: #fff; font-size: 11px; font-weight: 600; }"
+    },
+    {
+      "name": "Sync Gate",
+      "kind": "custom",
+      "refersTo": "sync-gate",
+      "description": "The gate on a boundary edge. Open is a solid blue border; closed or unavailable is dashed and neutral.",
+      "html": "<div class=\"ds-gate\"><span class=\"ds-gate__head\"><span class=\"ds-gate__title\">Sync gate</span></span><span class=\"ds-gate__row\"><span>Sync</span><strong>Off</strong></span><span class=\"ds-gate__note\">Would carry policy summaries and receipt history.</span></div>",
+      "css": ".ds-gate { max-width: 240px; border: 1px dashed rgb(63 65 116 / 0.4); border-radius: 12px; background: #fff; padding: 12px; color: #3f4174; font-family: system-ui, -apple-system, BlinkMacSystemFont, \"Segoe UI\", sans-serif; } .ds-gate__title { font-size: 14px; font-weight: 600; } .ds-gate__row { display: flex; justify-content: space-between; gap: 12px; margin-top: 8px; font-size: 12px; } .ds-gate__row span { color: rgb(63 65 116 / 0.75); } .ds-gate__row strong { font-weight: 600; font-variant-numeric: tabular-nums; } .ds-gate__note { display: block; margin-top: 8px; color: rgb(63 65 116 / 0.75); font-size: 12px; line-height: 20px; }"
+    },
+    {
+      "name": "Divider Row Claim",
+      "kind": "custom",
+      "description": "Peer content as a ruled row, not a card: marker and title on one line, body, then a proof label. Hairline above the list and below each row.",
+      "html": "<ol class=\"ds-claims\"><li class=\"ds-claim\"><div class=\"ds-claim__head\"><span class=\"ds-callout-s\">1</span><h3>Decisions stay here</h3></div><p>Approvals and policy are stored on this device.</p><p class=\"ds-claim__proof\">Visible in the figure</p></li></ol>",
+      "css": ".ds-claims { margin: 0; padding: 0; list-style: none; border-top: 1px solid rgb(63 65 116 / 0.1); color: #3f4174; font-family: system-ui, -apple-system, BlinkMacSystemFont, \"Segoe UI\", sans-serif; } .ds-claim { border-bottom: 1px solid rgb(63 65 116 / 0.1); padding: 16px 0; } .ds-claim__head { display: flex; align-items: center; gap: 10px; } .ds-claim h3 { margin: 0; font-size: 14px; font-weight: 600; } .ds-claim p { margin: 8px 0 0; color: rgb(63 65 116 / 0.75); font-size: 14px; line-height: 24px; } .ds-claim .ds-claim__proof { color: #3f4174; font-size: 12px; font-weight: 600; } .ds-callout-s { display: inline-flex; width: 20px; height: 20px; align-items: center; justify-content: center; border-radius: 9999px; background: #3f4174; color: #fff; font-size: 11px; font-weight: 600; }"
     }
   ],
   "narrative": {
-    "northStar": "Operational clarity",
-    "overview": "Trustworthy, precise and calm controls for local protection decisions.",
+    "northStar": "Operational Clarity",
+    "overview": "The dashboard follows the product's commitment to trustworthy, precise and calm operational clarity. Protection decisions use plain consequence statements, readable controls and a clear next action. Explanatory surfaces such as About prove a claim with a labeled figure of the device boundary, drawn in the same flat, hairline-and-ink system, with state read from the install.",
     "keyCharacteristics": [
-      "Readable permission scope",
-      "Quiet grouped controls",
-      "Touch-friendly responsive rows",
-      "Display-only native business review facts"
+      "Brand-dark ink on white and pale surfaces; brand blue reserved for the one active path or primary action.",
+      "Depth from hairline borders and tonal surfaces, never from shadow.",
+      "System type with a short ramp; hierarchy from size and weight.",
+      "Explanatory surfaces prove a claim with a labeled figure and state read from the install, not decoration."
     ],
     "rules": [
       {
@@ -51,15 +315,44 @@
         "name": "Native review boundary",
         "body": "Keep the native business review display-only: show saved facts and truthful unavailable or recovery status without claiming provider-account verification or execution.",
         "section": "components"
+      },
+      {
+        "name": "The One Active Path Rule",
+        "body": "In a diagram, brand blue draws only the path that is live: the rail, its arrowheads, an open gate and the line that crosses it. Everything inert, closed or outside the boundary is dashed brand dark at 30-40%. Blue never encodes risk.",
+        "section": "colors"
+      },
+      {
+        "name": "The Name-Once Rule",
+        "body": "A section says its name once, in the title style, and its landmark is labelled by that heading. A small label line standing above or in place of a heading is not a heading.",
+        "section": "typography"
+      },
+      {
+        "name": "The Divider Row Rule",
+        "body": "Peer content is a heading over ruled rows: a top hairline on the list, a bottom hairline per row, and hairline column dividers on wide screens. Do not box each item as a card.",
+        "section": "layout"
+      },
+      {
+        "name": "The Truthful Figure Rule",
+        "body": "Every state a figure shows is read from the install. A state Guard cannot report claims nothing: the gate is drawn closed and the caption says Guard could not report it.",
+        "section": "components"
       }
     ],
     "dos": [
-      "Keep tool choices visible and keyboard accessible.",
-      "Keep the Inbox mobile scroll pane above fixed bottom navigation."
+      "**Do** describe the scope and consequence of each permission plainly.",
+      "**Do** distinguish detected tool catalogs from complete server inventories.",
+      "**Do** keep exact identifiers available without allowing long names to widen a phone layout.",
+      "**Do** show where data lives with a labeled boundary figure, and tie each numbered callout to a stated claim.",
+      "**Do** keep a figure's live state truthful, and dash everything that is closed, outside or unknown.",
+      "**Do** put a phone's figure before its actions, and wrap any entrance motion in a reduced-motion guard."
     ],
     "donts": [
-      "Do not imply that an observed catalog is a complete remote inventory.",
-      "Do not add a Saved request kicker or imply connected decision or execution surfaces to the native business review."
+      "**Don't** imply that unlisted tools inherit an approval.",
+      "**Don't** replace product explanations with protocol or transport details.",
+      "**Don't** use decorative security chrome to communicate a decision that needs a clear label.",
+      "**Don't** use blue to rank or color-code risk; it marks only the active path, the selected choice or the primary action.",
+      "**Don't** box peer items into a grid of identical cards; use divider rows.",
+      "**Don't** put a kicker, eyebrow or small caps label line above a heading.",
+      "**Don't** animate layout properties, or let a figure show a state it did not read."
     ]
   }
 }

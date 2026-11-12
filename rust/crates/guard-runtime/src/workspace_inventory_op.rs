@@ -4,115 +4,30 @@
 //! before/after manifest diff and the lockfile warnings. The caller supplies
 //! only the workspace paths; every derived field is decided here.
 
-use std::collections::HashMap;
 use std::path::Path;
 
-use guard_command::dep_map::DepMap;
-use guard_command::package_manifest_diff::{
-    parse_manifest_dependencies_ordered, parse_manifest_dependency_changes,
-};
+use guard_command::package_manifest_diff::parse_manifest_dependency_changes;
 use guard_command::workspace_inventory::{
-    inventory_from_sbom_payload, merge_inventory_item, python_strip, split_namespace_name,
+    dependency_name, inventory_from_sbom_payload, merge_inventory_item, DirectDependencies,
     InventoryMap, ECOSYSTEM_BY_LOCKFILE, ECOSYSTEM_BY_MANIFEST,
 };
 use guard_contracts::{
     SupplyChainEvalResultV1, WorkspaceInventoryRequestV1, PACKAGE_AUTHORITY_REQUEST_SCHEMA,
     PACKAGE_AUTHORITY_RESULT_SCHEMA,
 };
-use serde_json::{json, Map, Value};
+use serde_json::{json, Value};
 
 use crate::package_authority_op::request_digest;
+use crate::workspace_inventory_dependencies::{
+    item, merge_dependencies, DependencyReader, MANIFEST_BYTE_LIMIT, MANIFEST_DEADLINE_MS,
+};
 use crate::workspace_inventory_files::{
-    basename, expanduser, read_sbom_text, read_text, read_workspace_audit_text, resolve_sbom_paths,
-    workspace_files,
+    basename, expanduser, read_sbom_text, read_text, resolve_sbom_paths, workspace_files,
 };
 use crate::workspace_scan_targets::{scan_targets, target_for_spec};
 
-const MANIFEST_BYTE_LIMIT: usize = 2_097_152;
-const MANIFEST_DEADLINE_MS: u64 = 50;
-
 fn invalid() -> String {
     "native_workspace_inventory_invalid".to_owned()
-}
-
-fn item(
-    ecosystem: &str,
-    namespace: Option<String>,
-    name: String,
-    direct: bool,
-    range: Option<String>,
-    version: Option<String>,
-) -> Map<String, Value> {
-    let mut entry = Map::new();
-    entry.insert("ecosystem".into(), json!(ecosystem));
-    entry.insert("namespace".into(), json!(namespace));
-    entry.insert("name".into(), json!(name));
-    entry.insert("direct".into(), json!(direct));
-    entry.insert("range".into(), json!(range));
-    entry.insert("version".into(), json!(version));
-    entry
-}
-
-fn stripped_or_none(version: &str) -> Option<String> {
-    let stripped = python_strip(version);
-    (!stripped.is_empty()).then(|| stripped.to_owned())
-}
-
-/// Dependency maps keyed by workspace-relative path, parsed at most once.
-struct DependencyReader<'a> {
-    workspace: &'a Path,
-    cache: HashMap<String, Option<DepMap>>,
-}
-
-impl<'a> DependencyReader<'a> {
-    fn new(workspace: &'a Path) -> Self {
-        Self {
-            workspace,
-            cache: HashMap::new(),
-        }
-    }
-
-    /// `None` when the file cannot be read for audit; otherwise the parse.
-    fn dependencies(&mut self, path: &str) -> Option<&DepMap> {
-        let workspace = self.workspace;
-        self.cache
-            .entry(path.to_owned())
-            .or_insert_with(|| {
-                let text = read_workspace_audit_text(workspace, path)?;
-                Some(parse_manifest_dependencies_ordered(
-                    path,
-                    &text,
-                    MANIFEST_BYTE_LIMIT,
-                    MANIFEST_DEADLINE_MS,
-                ))
-            })
-            .as_ref()
-    }
-}
-
-fn merge_dependencies(
-    inventory: &mut InventoryMap,
-    reader: &mut DependencyReader<'_>,
-    path: &str,
-    ecosystem: &str,
-    direct: bool,
-) {
-    let Some(dependencies) = reader.dependencies(path) else {
-        return;
-    };
-    for (package_name, version) in dependencies.iter() {
-        let (namespace, name) = split_namespace_name(package_name);
-        let stripped = stripped_or_none(version);
-        let (range, version) = if direct {
-            (stripped, None)
-        } else {
-            (None, stripped)
-        };
-        merge_inventory_item(
-            inventory,
-            &item(ecosystem, namespace, name, direct, range, version),
-        );
-    }
 }
 
 /// `_workspace_inventory_from_paths`.
@@ -122,16 +37,25 @@ fn inventory_from_paths(
     lockfile_paths: &[String],
 ) -> InventoryMap {
     let mut inventory = InventoryMap::new();
+    let mut direct = DirectDependencies::default();
     for path in manifest_paths {
         if let Some(ecosystem) = ECOSYSTEM_BY_MANIFEST.get(basename(path)) {
-            merge_dependencies(&mut inventory, reader, path, ecosystem, true);
+            merge_dependencies(&mut inventory, reader, path, ecosystem, true, &mut direct);
         }
     }
     for path in lockfile_paths {
         if let Some(ecosystem) = ECOSYSTEM_BY_LOCKFILE.get(basename(path)) {
-            merge_dependencies(&mut inventory, reader, path, ecosystem, false);
+            merge_dependencies(&mut inventory, reader, path, ecosystem, false, &mut direct);
         }
     }
+    for (ecosystem, package_name, range) in direct.unresolved() {
+        let (namespace, name) = dependency_name(ecosystem, package_name);
+        merge_inventory_item(
+            &mut inventory,
+            &item(ecosystem, namespace, name, true, range, None),
+        );
+    }
+    inventory.lead_with(direct.listed_keys());
     inventory
 }
 
@@ -192,7 +116,7 @@ fn diff_inventory(
             let Some(after_value) = &change.after else {
                 continue;
             };
-            let (namespace, package) = split_namespace_name(&change.package_name);
+            let (namespace, package) = dependency_name(ecosystem, &change.package_name);
             changed_packages.push(change.package_name.clone());
             let (range, version) = if direct {
                 (Some(after_value.clone()), None)
@@ -247,16 +171,16 @@ fn lockfile_warnings(
         if !ECOSYSTEM_BY_LOCKFILE.contains_key(name) {
             continue;
         }
-        match reader.dependencies(path) {
+        match reader.parsed(path) {
             None => warnings.push(warning(
                 "lockfile_unreadable",
                 format!("Guard could not read {name} for workspace audit."),
             )),
-            Some(map) if map.is_empty() => warnings.push(warning(
+            Some(false) => warnings.push(warning(
                 "lockfile_parse_warning",
                 format!("Guard could not parse {name} for workspace audit."),
             )),
-            Some(_) => {}
+            Some(true) => {}
         }
     }
     warnings

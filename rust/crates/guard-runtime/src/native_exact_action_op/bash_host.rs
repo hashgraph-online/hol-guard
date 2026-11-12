@@ -43,6 +43,8 @@ fn restamp(
     let mut names = Vec::new();
     let mut selected = BTreeMap::new();
     let mut context = BTreeMap::new();
+    let mut node_options_inert = false;
+    let mut cargo_home = None;
     for (name, value) in environment {
         let name = name.into_string().map_err(|_| invalid())?;
         if name.is_empty()
@@ -56,6 +58,17 @@ fn restamp(
             return Err(invalid());
         }
         names.push(name.clone());
+        if name == "NODE_OPTIONS" {
+            // Only the verdict leaves this process, never the value.
+            node_options_inert = value
+                .to_str()
+                .is_some_and(guard_contracts::node_options_inert);
+        }
+        if name == "CARGO_HOME" {
+            // Kept only long enough to compare with HOME below; the value
+            // itself never leaves this process either.
+            cargo_home = value.to_str().map(str::to_owned);
+        }
         if NATIVE_BASH_SELECTED_ENVIRONMENT_NAMES.contains(&name.as_str())
             || matches!(name.as_str(), "HOME" | "PATH")
         {
@@ -79,13 +92,26 @@ fn restamp(
     observed.home_dir = home.clone();
     observed.environment = selected;
     observed.file_creation_mask = None; // A previous hook's value cannot survive restamping.
+    let cargo_home_default =
+        guard_contracts::cargo_home_default(Some(home.as_str()), cargo_home.as_deref());
     let mut material = b"hol.guard.bash.final-environment.v1\0".to_vec();
     material.extend(serde_json::to_vec(&(&names, &context)).map_err(|_| invalid())?);
+    if node_options_inert {
+        // A switch to a preloading value must not reuse an inert decision.
+        material.extend(b"\0node_options_inert");
+    }
+    if cargo_home_default {
+        // A switch to a relocated Cargo configuration must not reuse a
+        // decision taken while the file was where Cargo reads it anyway.
+        material.extend(b"\0cargo_home_default");
+    }
     observed.execution_environment = GuardExecutionEnvironmentV1 {
         path: context.get("PATH").cloned().unwrap_or_default(),
         home: Some(home.clone()),
         environment_names: names,
         environment_digest: guard_policy_snapshot::digest_bytes(&material),
+        node_options_inert,
+        cargo_home_default,
         ..GuardExecutionEnvironmentV1::unavailable()
     };
     if !observed.execution_environment.has_valid_shape() {

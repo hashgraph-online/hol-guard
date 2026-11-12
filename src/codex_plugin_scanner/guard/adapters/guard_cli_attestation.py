@@ -46,7 +46,7 @@ class GuardCliAttestation:
                 "package_file": None,
                 "package_root": None,
                 "hol_distribution_root": None,
-                "interpreter": _executable_identity_payload(identity),
+                "interpreter": executable_identity_payload(identity),
             }
         return {
             "schema": 1,
@@ -58,11 +58,11 @@ class GuardCliAttestation:
             "hol_distribution_root": (
                 str(self.python.hol_distribution_root) if self.python.hol_distribution_root is not None else None
             ),
-            "interpreter": _executable_identity_payload(identity),
+            "interpreter": executable_identity_payload(identity),
         }
 
 
-def _executable_identity_payload(identity: HookPythonExecutableIdentity) -> dict[str, object]:
+def executable_identity_payload(identity: HookPythonExecutableIdentity) -> dict[str, object]:
     return {
         "invocation_path": str(identity.invocation_path),
         "invocation_type": identity.invocation_type,
@@ -126,4 +126,4 @@ def guard_hook_command(attestation: GuardCliAttestation, *, harness: str) -> lis
     return [*prefix, "hook", "--harness", harness, "--json"]
 
 
-__all__ = ["GuardCliAttestation", "guard_hook_command", "resolve_attested_guard_cli"]
+__all__ = ["GuardCliAttestation", "executable_identity_payload", "guard_hook_command", "resolve_attested_guard_cli"]

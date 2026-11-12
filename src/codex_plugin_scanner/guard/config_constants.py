@@ -27,4 +27,5 @@ VALID_RISK_ACTION_KEYS = {
     "package_custom_registry",
     "package_install",
     "low_trust_artifact",
+    "runtime_known_vulnerable",
 }

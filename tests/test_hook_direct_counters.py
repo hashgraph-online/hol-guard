@@ -7,19 +7,18 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.daemon import hook_direct_evidence_drain
-from codex_plugin_scanner.guard.daemon.hook_direct_counters import (
+from codex_plugin_scanner.guard.evidence_drains import hook_direct_evidence_drain
+from codex_plugin_scanner.guard.evidence_drains.hook_direct_evidence_drain import DirectHookEvidenceDrain, _decode_page
+from codex_plugin_scanner.guard.hook_review.hook_direct_counters import (
     HARNESS_SLOTS,
     HookCounterLog,
     bind_hook_counter_sink,
     decode_resident_counters,
-    harness_slot,
-    note_hook_received,
 )
-from codex_plugin_scanner.guard.daemon.hook_direct_evidence_drain import DirectHookEvidenceDrain, _decode_page
 
 EPOCH = "1f-2e-0"
 RESIDENT = {"by_harness": {"codex": {"answer": 3, "direct_lane_workspace_unknown": 1}}}
+LOGGED = ("hook_direct_counters", {"epoch": EPOCH, "resident": RESIDENT["by_harness"]})
 
 
 class _Clock:
@@ -73,20 +72,8 @@ def _log(clock: _Clock, sink: _Sink) -> HookCounterLog:
 def test_harness_slots_match_the_direct_harnesses() -> None:
     direct = hook_direct_evidence_drain._DIRECT_HARNESSES  # pyright: ignore[reportPrivateUsage]
     assert frozenset(HARNESS_SLOTS[:-1]) == direct
+    assert HARNESS_SLOTS[-1] == "other"
     assert len(set(HARNESS_SLOTS)) == len(HARNESS_SLOTS)
-    for name in HARNESS_SLOTS:
-        assert harness_slot(name) == name
-    for name in ("", "gemini", "Codex", "/usr/bin/codex", None, 7):
-        assert harness_slot(name) == "other"
-
-
-def test_the_daemon_counts_received_hooks_by_slot_only() -> None:
-    log = HookCounterLog()
-    worker = type("Worker", (), {"hook_counters": log})()
-    for harness in ("codex", "codex", "/home/user/bin/tool --flag", "grok"):
-        note_hook_received(worker, harness)
-    note_hook_received(None, "codex")
-    assert log.snapshot() == {"epoch": None, "resident": {}, "received": {"codex": 2, "grok": 1, "other": 1}}
 
 
 def test_malformed_resident_counters_are_ignored() -> None:
@@ -111,10 +98,10 @@ def test_the_log_is_change_only_and_rate_limited() -> None:
     clock, sink = _Clock(), _Sink()
     log = _log(clock, sink)
     assert not log.maybe_log()
-    log.note_received("codex")
+    log.observe_page(EPOCH, RESIDENT)
     assert log.maybe_log()
-    assert sink.lines == [("hook_direct_counters", {"epoch": None, "resident": {}, "received": {"codex": 1}})]
-    log.note_received("codex")
+    assert sink.lines == [LOGGED]
+    log.observe_page(EPOCH, {"by_harness": {"codex": {"answer": 4}}})
     clock.now += 299.0
     assert not log.maybe_log()
     clock.now += 1.0
@@ -122,7 +109,7 @@ def test_the_log_is_change_only_and_rate_limited() -> None:
     clock.now += 300.0
     assert not log.maybe_log()
     assert len(sink.lines) == 2
-    assert sink.lines[-1][1]["received"] == {"codex": 2}
+    assert sink.lines[-1][1]["resident"] == {"codex": {"answer": 4}}
 
 
 def test_a_failed_delivery_is_retried_after_the_interval() -> None:
@@ -136,14 +123,14 @@ def test_a_failed_delivery_is_retried_after_the_interval() -> None:
 
     log = HookCounterLog(clock=clock)
     log.bind_sink(flaky)
-    log.note_received("codex")
+    log.observe_page(EPOCH, RESIDENT)
     with pytest.raises(OSError):
         log.maybe_log()
     failing["on"] = False
     assert not log.maybe_log()
     clock.now += 300.0
     assert log.maybe_log()
-    assert sink.lines == [("hook_direct_counters", {"epoch": None, "resident": {}, "received": {"codex": 1}})]
+    assert sink.lines == [LOGGED]
 
 
 def test_a_dropped_line_is_retried_after_the_interval() -> None:
@@ -156,50 +143,43 @@ def test_a_dropped_line_is_retried_after_the_interval() -> None:
 
     log = HookCounterLog(clock=clock)
     log.bind_sink(queue)
-    log.note_received("codex")
+    log.observe_page(EPOCH, RESIDENT)
     assert not log.maybe_log()
     accepting["on"] = True
     assert not log.maybe_log()
     clock.now += 300.0
     assert log.maybe_log()
-    assert sink.lines == [("hook_direct_counters", {"epoch": None, "resident": {}, "received": {"codex": 1}})]
+    assert sink.lines == [LOGGED]
 
 
-def test_receipts_are_logged_without_a_drain_transport(tmp_path: Path) -> None:
+def test_a_drain_without_a_transport_logs_the_counts_it_holds(tmp_path: Path) -> None:
     clock, sink = _Clock(), _Sink()
     host = _Host(tmp_path, _log(clock, sink))
-    host.hook_counters.note_received("codex")
+    host.hook_counters.observe_page(EPOCH, RESIDENT)
     drain = DirectHookEvidenceDrain(host, transport=lambda: None)
 
     assert drain.drain_once() is False
-    assert sink.lines == [("hook_direct_counters", {"epoch": None, "resident": {}, "received": {"codex": 1}})]
+    assert sink.lines == [LOGGED]
 
 
 def test_a_new_page_feeds_the_log_through_the_drain(tmp_path: Path) -> None:
     clock, sink = _Clock(), _Sink()
     host = _Host(tmp_path, _log(clock, sink))
-    host.hook_counters.note_received("codex")
     drain = DirectHookEvidenceDrain(host, transport=lambda: (tmp_path, lambda **_: _page(counters=RESIDENT)))
 
     assert drain.drain_once() is False
     assert drain.failures == 0
-    assert sink.lines == [
-        (
-            "hook_direct_counters",
-            {"epoch": EPOCH, "resident": RESIDENT["by_harness"], "received": {"codex": 1}},
-        )
-    ]
+    assert sink.lines == [LOGGED]
 
 
 def test_a_new_daemon_drains_an_old_resident_page(tmp_path: Path) -> None:
     clock, sink = _Clock(), _Sink()
     host = _Host(tmp_path, _log(clock, sink))
-    host.hook_counters.note_received("cursor")
     drain = DirectHookEvidenceDrain(host, transport=lambda: (tmp_path, lambda **_: _page()))
 
     assert drain.drain_once() is False
     assert drain.failures == 0
-    assert sink.lines == [("hook_direct_counters", {"epoch": None, "resident": {}, "received": {"cursor": 1}})]
+    assert sink.lines == []
 
 
 def test_an_old_shaped_decoder_reads_a_new_page_unchanged() -> None:
@@ -214,7 +194,7 @@ def test_an_old_shaped_decoder_reads_a_new_page_unchanged() -> None:
 def test_a_counter_log_without_diagnostics_stays_silent(diagnostics: object) -> None:
     log = HookCounterLog()
     bind_hook_counter_sink(type("Worker", (), {"hook_counters": log})(), diagnostics)
-    log.note_received("codex")
+    log.observe_page(EPOCH, RESIDENT)
     assert not log.maybe_log()
 
 
@@ -222,6 +202,6 @@ def test_a_counter_log_binds_the_daemon_diagnostics() -> None:
     clock, sink = _Clock(), _Sink()
     log = HookCounterLog(clock=clock)
     bind_hook_counter_sink(type("Worker", (), {"hook_counters": log})(), sink)
-    log.note_received("pi")
+    log.observe_page(EPOCH, RESIDENT)
     assert log.maybe_log()
-    assert sink.lines[0][1]["received"] == {"pi": 1}
+    assert sink.lines == [LOGGED]

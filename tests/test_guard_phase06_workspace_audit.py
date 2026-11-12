@@ -3,18 +3,21 @@
 from __future__ import annotations
 
 import json
+import os
 import threading
 from pathlib import Path
 
 import pytest
 
+from ci.guard_daemon_harness import GuardDaemonServer
 from codex_plugin_scanner.guard import supply_chain_cloud_audit as cloud_audit_module
+from codex_plugin_scanner.guard import supply_chain_workspace_audit as workspace_audit_module
 from codex_plugin_scanner.guard.config import load_guard_config
-from codex_plugin_scanner.guard.daemon import GuardDaemonServer
 from codex_plugin_scanner.guard.local_supply_chain import (
     evaluate_package_request_artifact,
     managed_install_audit_workspace_dirs,
 )
+from codex_plugin_scanner.guard.native_runner_authority import NativeRunnerAuthorityError
 from codex_plugin_scanner.guard.store import GuardStore
 from codex_plugin_scanner.guard.supply_chain_workspace_audit import (
     audit_receipt_metadata,
@@ -362,6 +365,26 @@ def test_workspace_audit_inference_uses_current_directory_with_markers(
     assert resolved == workspace_dir.resolve()
 
 
+def test_workspace_audit_inference_prefers_the_callers_cursor_project(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    cursor_dir = tmp_path / "cursor-project"
+    cursor_dir.mkdir()
+    _write_text(cursor_dir / "package.json", '{"name":"cursor"}')
+    cwd_dir = tmp_path / "cwd-project"
+    cwd_dir.mkdir()
+    _write_text(cwd_dir / "package.json", '{"name":"cwd"}')
+    monkeypatch.chdir(cwd_dir)
+    monkeypatch.setenv("CURSOR_PROJECT_DIR", f" {cursor_dir} ")
+    resolved = resolve_supply_chain_audit_workspace_dir(
+        workspace_dir_value=None,
+        workspace_value=None,
+        allowed_roots=(tmp_path.resolve(),),
+    )
+    assert resolved == cursor_dir.resolve()
+
+
 def test_workspace_audit_inference_accepts_workspace_alias(
     tmp_path: Path,
 ) -> None:
@@ -617,7 +640,7 @@ def test_daemon_workspace_audit_persists_receipt_and_queues_cloud_sync(
     sync_finished = threading.Event()
 
     def fake_sync_local_guard_cloud_proof(current_store: GuardStore) -> dict[str, object]:
-        assert current_store is store
+        assert current_store.guard_home == store.guard_home
         sync_finished.set()
         return {"synced_at": WORKSPACE_AUDIT_NOW, "receipts_stored": 1}
 
@@ -758,6 +781,69 @@ def test_daemon_workspace_audit_rejects_invalid_explicit_folder_instead_of_fallb
 
     assert status == 400
     assert payload["error"] == "workspace_dir_invalid"
+
+
+def test_daemon_workspace_audit_reports_an_unavailable_resolver_as_a_service_failure(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def unavailable(**_kwargs: object) -> Path | None:
+        raise NativeRunnerAuthorityError("native runner authority unavailable")
+
+    patch_daemon_global(monkeypatch, "resolve_supply_chain_audit_workspace_dir", unavailable)
+    store = GuardStore(tmp_path / "guard-home")
+    _seed_premium_entitlement(store)
+    daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+    daemon.start()
+    try:
+        token = _dashboard_token_for(store)
+        status, payload = _read_json_response(
+            _request(
+                daemon.port,
+                "/v1/supply-chain/audit",
+                token=token,
+                payload={"workspace_dir": str(tmp_path)},
+            ),
+        )
+    finally:
+        daemon.stop()
+
+    assert status == 503
+    assert payload["error"] == "supply_chain_workspace_unavailable"
+    assert payload["operation"] == "audit"
+
+
+def test_workspace_audit_expands_a_named_user_folder_before_asking_the_runtime(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    named_home = tmp_path / "alice"
+    real_expanduser = os.path.expanduser
+
+    def expanduser(value: str) -> str:
+        if value.startswith("~alice"):
+            return str(named_home) + value[len("~alice") :]
+        return real_expanduser(value)
+
+    requests: list[dict[str, object]] = []
+
+    def native(kind: str, args: dict[str, object], guard_home: Path | None = None) -> dict[str, object]:
+        requests.append(args)
+        return {"workspace_dir": str(named_home / "projects" / "app")}
+
+    monkeypatch.setattr(workspace_audit_module.os.path, "expanduser", expanduser)
+    monkeypatch.setattr(workspace_audit_module, "native_runner_authority", native)
+
+    resolved = resolve_supply_chain_audit_workspace_dir(
+        workspace_dir_value=" ~alice/projects/app ",
+        workspace_value="relative/app",
+        allowed_roots=(tmp_path.resolve(),),
+        managed_workspace_dirs=("~alice/managed",),
+    )
+
+    assert resolved == named_home / "projects" / "app"
+    assert requests[0]["explicit"] == [str(named_home / "projects" / "app"), "relative/app"]
+    assert requests[0]["managed_workspace_dirs"] == [str(named_home / "managed")]
 
 
 def test_audit_receipt_metadata_includes_prioritized_package_findings() -> None:

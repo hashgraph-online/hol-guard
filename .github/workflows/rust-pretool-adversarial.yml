@@ -7,7 +7,7 @@ on:
       - "rust/**"
       - "src/codex_plugin_scanner/guard/native_command_model.py"
       - "src/codex_plugin_scanner/guard/native_pretool.py"
-      - "src/codex_plugin_scanner/guard/daemon/hook_worker.py"
+      - "src/codex_plugin_scanner/guard/hook_review/hook_worker.py"
       - "scripts/integration/rust_pretool_adversarial.py"
       - ".github/workflows/rust-pretool-adversarial.yml"
       - ".github/actions/setup-rust/**"
@@ -17,7 +17,7 @@ on:
       - "rust/**"
       - "src/codex_plugin_scanner/guard/native_command_model.py"
       - "src/codex_plugin_scanner/guard/native_pretool.py"
-      - "src/codex_plugin_scanner/guard/daemon/hook_worker.py"
+      - "src/codex_plugin_scanner/guard/hook_review/hook_worker.py"
       - "scripts/integration/rust_pretool_adversarial.py"
       - ".github/workflows/rust-pretool-adversarial.yml"
       - ".github/actions/setup-rust/**"
@@ -45,7 +45,7 @@ jobs:
       - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
         with:
           python-version: "3.12"
-      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2
         with:
           version: "0.9.26"
           enable-cache: true

@@ -74,7 +74,7 @@ def _trust_with_external(root: Path, extension_id: str) -> dict:
     return {
         "schemaVersion": "guard.extension-trust-class-map.v1",
         "publishers": {
-            "hol": {"id": "hol", "displayName": "Hashgraph Online"},
+            "hol": {"id": "hol", "displayName": "HOL"},
             "hol-curated": {"id": "hol-curated", "displayName": "HOL curated library"},
         },
         "classes": classes,
@@ -130,7 +130,7 @@ def exercise(root: Path, target: Path, results: list[dict[str, object]]) -> None
     env = acceptance_environment(root, target, compiler)
     build_command = [
         "cargo",
-        "+1.88.0",
+        "+1.89.0",
         "build",
         "--locked",
         "--manifest-path",

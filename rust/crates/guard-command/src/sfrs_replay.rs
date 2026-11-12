@@ -12,7 +12,7 @@ use guard_contracts::CompoundGitSegmentV1;
 use serde_json::{json, Map, Value};
 
 use crate::benign_request_api::ovalue_from_json;
-use crate::codex_output_env::{Ctx, GitCheck, GitRun, InspectionHost};
+use crate::codex_output_env::{Ctx, GitCheck, InspectionHost};
 use crate::hook_adapter_value::OValue;
 use crate::sfrs_read_only_filters::read_only_lookup_target_is_safe;
 use crate::sfrs_requests::{
@@ -245,10 +245,6 @@ impl InspectionHost for ReplayHost {
     fn git_binary_trusted(&self, _: &str, _: &str) -> bool {
         self.resident_requested.set(true);
         false
-    }
-    fn run_git(&self, _: &str, _: &[String], _: &str) -> GitRun {
-        self.resident_requested.set(true);
-        GitRun::Failed("replay host does not run git")
     }
     fn compound_git_chain(&self, _: &[CompoundGitSegmentV1], _: bool) -> bool {
         self.resident_requested.set(true);

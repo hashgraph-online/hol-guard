@@ -1,5 +1,5 @@
-//! Replays Gemini, Antigravity, Devin, Grok, Kimi, OpenCode and Cursor detection
-//! vectors recorded from the original Python implementation (see
+//! Replays Gemini, Antigravity, Devin, Grok, Kimi, OpenCode, Cursor and Cline
+//! detection vectors recorded from the original Python implementation (see
 //! `testdata/gemini/record_adapter_vectors.py`).
 //! Fixture trees and expected artifacts, paths and warnings come from Python,
 //! never from Rust output. `<ROOT>` is the fixture root.
@@ -17,6 +17,7 @@ const GROK: &str = include_str!("../../testdata/grok/vectors.json");
 const KIMI: &str = include_str!("../../testdata/kimi/vectors.json");
 const OPENCODE: &str = include_str!("../../testdata/opencode/vectors.json");
 const CURSOR: &str = include_str!("../../testdata/cursor/vectors.json");
+const CLINE: &str = include_str!("../../testdata/cline/vectors.json");
 
 fn check(case: &Value, name: &str, root_text: &str, result: KindResult) -> Result<(), String> {
     if case["refused"] == true {
@@ -114,6 +115,11 @@ fn replays_every_recorded_cursor_detection_case() {
     );
 }
 
+#[test]
+fn replays_every_recorded_cline_detection_case() {
+    replay_all(CLINE, "guard-cline-vectors.v1", crate::cline_detect::detect);
+}
+
 fn valid_request(harness: &str) -> Value {
     let mut valid = json!({"harness": harness, "home": "/nonexistent/home", "workspace": null});
     if harness == "grok" {
@@ -122,6 +128,9 @@ fn valid_request(harness: &str) -> Value {
     }
     if harness == "opencode" || harness == "cursor" {
         valid["configs"] = json!([]);
+    }
+    if harness == "cline" {
+        valid["mcp_settings"] = json!([]);
     }
     if harness == "opencode" {
         valid["skip_verified_mcp_companions"] = json!(true);
@@ -169,6 +178,7 @@ fn malformed_requests_are_refused() {
         ("kimi", crate::kimi_detect::detect),
         ("opencode", crate::opencode_detect::detect),
         ("cursor", crate::cursor_detect::detect),
+        ("cline", crate::cline_detect::detect),
     ] {
         let valid = valid_request(harness);
         assert!(detect(&valid).is_ok(), "{harness}");
@@ -284,4 +294,41 @@ fn malformed_grok_fields_are_refused() {
         detect(&relative).is_ok(),
         "a relative grok_home reads from cwd"
     );
+}
+
+/// `.gemini/extensions` that cannot be examined is a refusal, not an empty
+/// inventory. The link reaches a locked directory, so only the extension root
+/// fails its `stat`: `settings.json` and `skills` beside it stay readable.
+#[cfg(unix)]
+#[test]
+fn an_unexaminable_gemini_extension_root_is_refused_not_empty() {
+    use std::os::unix::fs::{symlink, PermissionsExt};
+    let nonce = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_nanos();
+    let root = std::env::temp_dir().join(format!(
+        "guard-gemini-extension-root-{}-{nonce}",
+        std::process::id()
+    ));
+    let gemini = root.join("home/.gemini");
+    let locked = root.join("locked");
+    std::fs::create_dir_all(&gemini).unwrap();
+    std::fs::create_dir_all(locked.join("extensions")).unwrap();
+    let mut args = valid_request("gemini");
+    args["home"] = json!(root.join("home").to_string_lossy());
+    assert!(crate::gemini_detect::detect(&args).is_ok(), "absent root");
+    symlink(locked.join("extensions"), gemini.join("extensions")).unwrap();
+    std::fs::set_permissions(&locked, std::fs::Permissions::from_mode(0o000)).unwrap();
+    // Permission bits do not bind a privileged user, who can still stat it.
+    let privileged = std::fs::metadata(gemini.join("extensions")).is_ok();
+    let result = crate::gemini_detect::detect(&args);
+    std::fs::set_permissions(&locked, std::fs::Permissions::from_mode(0o755)).unwrap();
+    std::fs::remove_dir_all(&root).unwrap();
+    if !privileged {
+        assert_eq!(
+            result.unwrap_err(),
+            "native_runner_authority_adapter_path_unexaminable"
+        );
+    }
 }

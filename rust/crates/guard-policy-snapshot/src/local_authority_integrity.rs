@@ -14,7 +14,10 @@ use crate::crypto::{constant_time_eq, digest_bytes, hmac_sha256_raw};
 pub const LOCAL_AUTHORITY_INTEGRITY_VERSION: u32 = 1;
 pub const LOCAL_AUTHORITY_INTEGRITY_MAC_ALGORITHM: &str = "hmac-sha256";
 pub const LOCAL_AUTHORITY_INTEGRITY_DOMAIN: &[u8] = b"hol-guard.local-authority-integrity.v1";
-const LOCAL_AUTHORITY_CANONICAL_MAX_BYTES: usize = 256 * 1024;
+/// Runtime-transition inverses carry whole restored files, and their records
+/// may reach 32 MiB, so the envelope bound sits above that with room for
+/// `\uXXXX` escaping.
+const LOCAL_AUTHORITY_CANONICAL_MAX_BYTES: usize = 64 * 1024 * 1024;
 
 /// `PolicyIntegrityVerificationResult` (:31-35) projected to the local
 /// authority surface.

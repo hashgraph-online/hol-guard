@@ -12,10 +12,7 @@ struct Layout {
 
 impl Layout {
     fn new(tag: &str) -> Self {
-        let nonce = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_nanos();
+        let nonce = crate::unique_nanos::unique_nanos();
         let root =
             std::env::temp_dir().join(format!("guard-grant-{tag}-{}-{nonce}", std::process::id()));
         std::fs::create_dir_all(&root).unwrap();

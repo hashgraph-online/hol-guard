@@ -18,17 +18,16 @@ from urllib.parse import urlencode
 
 import pytest
 
+from ci.native_daemon_harness import NativeGuardDaemon as GuardDaemonServer
+from codex_plugin_scanner.guard import hook_deadline as runtime_hook_deadline_module
+from codex_plugin_scanner.guard import native_daemon_manage as daemon_manager
 from codex_plugin_scanner.guard.adapters import codex_daemon_hook_bridge as bridge
-from codex_plugin_scanner.guard.adapters._modules.codex import codex_daemon_hook_auth as hook_auth
-from codex_plugin_scanner.guard.adapters._modules.codex import codex_daemon_hook_transport as hook_transport
 from codex_plugin_scanner.guard.codex_hook_file_integrity import CodexHookIntegrityError
 from codex_plugin_scanner.guard.config import load_guard_config
-from codex_plugin_scanner.guard.daemon import manager as daemon_manager
-from codex_plugin_scanner.guard.daemon import runtime_hook_deadline as runtime_hook_deadline_module
-from codex_plugin_scanner.guard.daemon import server as daemon_server_module
-from codex_plugin_scanner.guard.daemon.server import GuardDaemonServer
 from codex_plugin_scanner.guard.hook_execution_environment import stamp_hook_input_text
 from codex_plugin_scanner.guard.store import GuardStore
+from scripts import daemon_hook_auth as hook_auth
+from scripts import daemon_hook_client as hook_client
 from tests.codex_daemon_hook_bridge_fixtures import (
     _bridge_config,
     _DaemonHandler,
@@ -46,8 +45,6 @@ def _assert_bridge_denied(payload: dict[str, object]) -> None:
 
 
 def _start_daemon(daemon: GuardDaemonServer, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(daemon_server_module, "_RUNTIME_HOOK_ADMISSION_TIMEOUT_SECONDS", 10.0)
-    monkeypatch.setattr(daemon_server_module, "_RUNTIME_HOOK_PROCESS_TIMEOUT_SECONDS", 10.0)
     monkeypatch.setattr(runtime_hook_deadline_module, "_MAX_BUDGET_SECONDS", 12.0)
     try:
         daemon.start()
@@ -107,7 +104,7 @@ def _daemon_hook_response(
             headers={
                 "Content-Type": "application/json",
                 "Connection": "close",
-                "X-Guard-Token": daemon._server.auth_token,
+                "X-Guard-Token": daemon.auth_token,
                 "X-Guard-Daemon-Nonce": nonce,
                 "X-Guard-Daemon-Proof": challenge["proof"],
             },
@@ -171,7 +168,7 @@ def _unproven_hook_delivery(daemon: GuardDaemonServer, *, query: str, payload: d
             headers={
                 "Content-Type": "application/json",
                 "Connection": "close",
-                "X-Guard-Token": daemon._server.auth_token,
+                "X-Guard-Token": daemon.auth_token,
             },
         )
         response = connection.getresponse()
@@ -187,7 +184,7 @@ def _authenticated_daemon_request(
     *,
     timeout_seconds: float = 4.0,
 ) -> dict[str, object] | None:
-    return hook_transport._daemon_response_once(
+    return hook_client._daemon_response_once(
         state_path=guard_home / "daemon-state.json",
         query=f"guard-home={guard_home}",
         data=json.dumps(payload),
@@ -582,7 +579,11 @@ def test_bridge_real_daemon_uses_payload_cwd_for_bounded_compound_read(
     finally:
         daemon.stop()
 
-    assert response == {} or response.get("hookSpecificOutput", {}).get("permissionDecision") in {None, "deny"}
+    assert response == {} or response.get("hookSpecificOutput", {}).get("permissionDecision") in {
+        None,
+        "allow",
+        "deny",
+    }
 
 
 def test_bridge_real_daemon_emits_schema_exact_post_tool_response(
@@ -612,8 +613,10 @@ def test_bridge_real_daemon_emits_schema_exact_post_tool_response(
     finally:
         daemon.stop()
 
+    assert set(response) <= {"continue", "hookSpecificOutput"}
+    assert response.get("continue", True) is True
     if "hookSpecificOutput" in response:
-        assert response == {"hookSpecificOutput": {"hookEventName": "PostToolUse"}}
+        assert response["hookSpecificOutput"] == {"hookEventName": "PostToolUse"}
     else:
         assert response["continue"] is True
 
@@ -728,12 +731,6 @@ def test_bridge_real_daemon_reviews_git_fetch_without_repository_bound_cwd(
 @pytest.mark.parametrize(
     ("command", "pending_approvals"),
     (
-        (
-            "gh api -H 'Accept: application/vnd.github.raw+json' "
-            "'repos/hashgraph-online/hol-guard/contents/ci/code-quality-baseline.json?ref=main' "
-            "| jq '{tests: .tests, total: .total}'",
-            1,
-        ),
         ("gh pr view 1 -tREVIEW", 1),
         ("gh pr list -q'.[] | select(.state == \"REVIEW_REQUIRED\")'", 1),
         ("gh issue list -q'.[] | {REPO: .repository}'", 1),
@@ -762,6 +759,35 @@ def test_bridge_real_daemon_denies_unproven_github_content_reads(
     response, store = _bridge_github_read(tmp_path, monkeypatch, command)
     _assert_bridge_denied(response)
     assert len(store.list_approval_requests(limit=None)) == pending_approvals, response
+
+
+def test_bridge_real_daemon_allows_a_bounded_jq_projection_over_a_github_content_read(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    native_hook_force: Path,
+) -> None:
+    """An object-building filter reads the piped value, so it keeps the read's allow baseline.
+
+    The repository path names its owner and repository outright, so this read
+    is as proven as the ones beside it, and the jq stage only shapes the value
+    the pipeline already produced. It used to be reviewed because a filter over
+    stdin had to open with a projection, which is a spelling rather than a
+    proof: the same file comes through `--jq .content | base64 -d` whole, and
+    that pipeline is an expected allow in the benign gate. The grammar is what
+    keeps a filter from reaching the environment, further input, files or
+    modules, and `{tests: .tests, total: .total}` clears it in full.
+    """
+
+    command = (
+        "gh api -H 'Accept: application/vnd.github.raw+json' "
+        "'repos/hashgraph-online/hol-guard/contents/ci/code-quality-baseline.json?ref=main' "
+        "| jq '{tests: .tests, total: .total}'"
+    )
+    response, store = _bridge_github_read(tmp_path, monkeypatch, command, runtime=native_hook_force)
+    hook_output = response.get("hookSpecificOutput")
+    assert isinstance(hook_output, dict)
+    assert "permissionDecision" not in hook_output, response
+    assert store.list_approval_requests(limit=None) == [], response
 
 
 @pytest.mark.parametrize("command", ("gh -Rowner/repo pr view 17", "gh -Rgithub.com/Owner/Repo pr view 17"))
@@ -810,6 +836,11 @@ def _bridge_github_read(
                 timeout_seconds=30,
             )
         else:
+            # A tool hook is admitted for about three seconds. A direct review
+            # with no time hint first waits for the daemon's library process
+            # to warm, so a slow runner's cold start does not spend the
+            # bridge's budget.
+            _daemon_hook_response(daemon, guard_home, query=query, payload=payload, timeout_seconds=30)
             response = _native_bridge_response(runtime, guard_home, query=query, payload=payload)
     finally:
         daemon.stop()

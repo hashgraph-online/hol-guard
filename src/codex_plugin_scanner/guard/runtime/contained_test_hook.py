@@ -2,34 +2,29 @@
 
 from __future__ import annotations
 
-import hashlib
-import json
-import os
-import re
 import shlex
-import stat
 import sys
 from collections.abc import Callable, Mapping
 from pathlib import Path
 
 from ..desktop_core_currency import OUT_OF_SYNC_REASON, superseded_desktop_core
-from ..native_restricted_pytest import venv_activation_target
-from ..windows_paths import trusted_windows_local_temp
+from ..native_restricted_pytest import contained_target
 from . import restricted_git, restricted_node_test, restricted_node_tool, restricted_vitest
 from .contained_authority import authority_unavailable, settled_authority
 from .contained_command_prefix import (
     _assignments_applied,
     _peel_for_receipt,
     _split_command_prefix,
-    peel_timeout_clock,
+    command_words,
+    peel_run_prefixes,
 )
 from .contained_run_directory import as_directory_change, as_run_root
 from .contained_wrapper import anchored_sibling_root, bounded_output, peel_contained_wrapper, sibling_project_root
 from .restricted_inline_eval import prepare_restricted_inline_eval, run_restricted_inline_eval
 from .restricted_package_test import (
+    KIND_NAMES,
     PACKAGE_TEST_PROFILE,
     PACKAGE_TEST_REASON,
-    is_package_test,
     resolve_package_test,
 )
 from .restricted_pytest import RestrictedPytestError, prepare_restricted_pytest, run_restricted_pytest
@@ -44,10 +39,7 @@ from .restricted_pytest_model import (
 from .restricted_pytest_validation import _path_is_within
 from .restricted_workspace import receipt_matches, run_workspace_contained
 
-_MAX_REQUEST_BYTES = 1_048_576
 _FAILURE = "contained_run_authorization_failed"
-_PYTEST_EXECUTABLE_NAMES = frozenset({"pytest", "py.test", "pytest.exe", "py.test.exe"})
-_PYTHON_EXECUTABLE = re.compile(r"(?i)^(?:python|pythonw)(?:\d+(?:\.\d+)*)?(?:\.exe)?$")
 
 
 def _reject(response: object = None) -> RestrictedPytestError:
@@ -67,161 +59,46 @@ def _reject(response: object = None) -> RestrictedPytestError:
     return RestrictedPytestError(_FAILURE, "Guard could not authorize this contained run.")
 
 
-def _command_names_pytest(command: list[str]) -> bool:
-    """Whether `command` is a pytest executable or a `python -m pytest` form."""
+def _names_pytest(command: list[str] | None) -> bool:
+    """Whether native authority reads `command` as a pytest run.
+
+    Only the wording of a refusal turns on this, and the planners' own reading
+    is what chose that wording, so the question goes back to them rather than to
+    a second copy of their grammar here. The copy that stood here read `python
+    -Im pytest -q` as something other than pytest, because it looked for `-m` as
+    a whole word while the planners read the `m` inside the cluster.
+
+    A command the planners never reached, or an answer native authority cannot
+    give, reports the authorization that failed, exactly as an unrecognized
+    command does.
+    """
     if not command:
         return False
-    name = command[0].replace("\\", "/").rsplit("/", 1)[-1].lower()
-    if name in _PYTEST_EXECUTABLE_NAMES:
-        return True
-    if _PYTHON_EXECUTABLE.fullmatch(name) is None:
+    from ..native_restricted_pytest import restricted_native
+
+    try:
+        return restricted_native("pytest_command", {"command": command}, bool) is True
+    except RestrictedPytestError:
         return False
-    return _python_args_name_pytest(command[1:])
-
-
-def _python_args_name_pytest(args: list[str]) -> bool:
-    """Match the native planner's `python -m pytest` recognition, flags included."""
-    index = 0
-    while index < len(args):
-        item = args[index]
-        if item == "--":
-            return False
-        if item in {"-c", "--command"} or item.startswith("-c") or item.startswith("--command="):
-            return False
-        if item == "-m":
-            module = args[index + 1] if index + 1 < len(args) else ""
-            return module.split(".", 1)[0] == "pytest"
-        if item.startswith("-m") and len(item) > 2:
-            return item[2:].split(".", 1)[0] == "pytest"
-        if item in {"-W", "-X", "--check-hash-based-pycs"}:
-            index += 2
-            continue
-        if item.startswith(("-W", "-X")) or item.startswith("--check-hash-based-pycs="):
-            index += 1
-            continue
-        if not item.startswith("-"):
-            return False
-        index += 1
-    return False
-
-
-def _unique_object(pairs: list[tuple[str, object]]) -> dict[str, object]:
-    result: dict[str, object] = {}
-    for key, value in pairs:
-        if key in result:
-            raise _reject()
-        result[key] = value
-    return result
 
 
 def read_contained_test_request(path: Path, expected_sha256: str, *, workspace: Path) -> dict[str, object]:
-    """Read one bounded private adapter snapshot, without following its leaf."""
-    if os.name == "nt":
-        return _read_windows_request(path, expected_sha256, workspace=workspace)
-    if (
-        os.name != "posix"
-        or path.name != "request.json"
-        or not path.parent.name.startswith("hol-guard-contained-test-")
-        or len(expected_sha256) != 64
-        or any(character not in "0123456789abcdef" for character in expected_sha256)
-    ):
-        raise _reject()
+    """Read one bounded private adapter snapshot, without following its leaf.
+
+    Native authority reads it where and as the hook wrote it, at the digest
+    the rewritten command pins; any other answer refuses the run.
+    """
+    from ..native_restricted_pytest import restricted_native
+
     try:
-        parent_descriptor = os.open(path.parent, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC)
-        try:
-            parent = os.fstat(parent_descriptor)
-            if stat.S_IMODE(parent.st_mode) != 0o700 or parent.st_uid != os.getuid():
-                raise _reject()
-            descriptor = os.open(path.name, os.O_RDONLY | os.O_NOFOLLOW | os.O_CLOEXEC, dir_fd=parent_descriptor)
-        finally:
-            os.close(parent_descriptor)
-        with os.fdopen(descriptor, "rb") as stream:
-            metadata = os.fstat(stream.fileno())
-            if (
-                not stat.S_ISREG(metadata.st_mode)
-                or stat.S_IMODE(metadata.st_mode) != 0o600
-                or metadata.st_uid != os.getuid()
-                or metadata.st_size > _MAX_REQUEST_BYTES
-            ):
-                raise _reject()
-            raw = stream.read(_MAX_REQUEST_BYTES + 1)
-        return _decode_request(raw, expected_sha256, workspace=workspace)
-    except (OSError, ValueError, RuntimeError, RecursionError) as error:
-        if isinstance(error, RestrictedPytestError):
-            raise
-        raise _reject() from error
-
-
-def _read_windows_request(path: Path, expected_sha256: str, *, workspace: Path) -> dict[str, object]:
-    """Windows has no owner-mode bits; the snapshot must sit directly in this
-    user's temporary directory, reached without links or junctions. The
-    directory comes from the profile, not TEMP, which the hook that wrote the
-    snapshot and the shell that runs this sink may set differently."""
-    if (
-        path.name != "request.json"
-        or not path.parent.name.startswith("hol-guard-contained-test-")
-        or not path.is_absolute()
-        or len(expected_sha256) != 64
-        or any(character not in "0123456789abcdef" for character in expected_sha256)
-    ):
-        raise _reject()
-    try:
-        temporary = trusted_windows_local_temp()
-        if os.path.normcase(path.parent.parent) != os.path.normcase(temporary):
-            raise _reject()
-        for candidate, regular in ((path.parent, False), (path, True)):
-            metadata = os.lstat(candidate)
-            if (
-                getattr(metadata, "st_file_attributes", 0) & stat.FILE_ATTRIBUTE_REPARSE_POINT
-                or (stat.S_ISREG(metadata.st_mode) if regular else stat.S_ISDIR(metadata.st_mode)) is not True
-            ):
-                raise _reject()
-        if metadata.st_nlink != 1 or metadata.st_size > _MAX_REQUEST_BYTES:
-            raise _reject()
-        with open(path, "rb") as stream:
-            opened = os.fstat(stream.fileno())
-            if (opened.st_dev, opened.st_ino) != (metadata.st_dev, metadata.st_ino):
-                raise _reject()
-            raw = stream.read(_MAX_REQUEST_BYTES + 1)
-        return _decode_request(raw, expected_sha256, workspace=workspace)
-    except (OSError, ValueError, RuntimeError, RecursionError) as error:
-        if isinstance(error, RestrictedPytestError):
-            raise
-        raise _reject() from error
-
-
-def _decode_request(raw: bytes, expected_sha256: str, *, workspace: Path) -> dict[str, object]:
-    if len(raw) > _MAX_REQUEST_BYTES or hashlib.sha256(raw).hexdigest() != expected_sha256:
-        raise _reject()
-    try:
-        value = json.loads(raw, object_pairs_hook=_unique_object)
-        if (
-            not isinstance(value, dict)
-            or set(value) != {"schema", "workspace", "payload"}
-            or value["schema"] != "guard-contained-test-request.v1"
-            or not isinstance(value["workspace"], str)
-            or Path(value["workspace"]).resolve(strict=True) != workspace.resolve(strict=True)
-            or not isinstance(value["payload"], dict)
-        ):
-            raise _reject()
-        payload = value["payload"]
-        if "cwd" in payload and (
-            not isinstance(payload["cwd"], str)
-            or Path(payload["cwd"]).resolve(strict=True) != workspace.resolve(strict=True)
-        ):
-            raise _reject()
-        tool_input = payload.get("tool_input")
-        if (
-            payload.get("hook_event_name") != "PreToolUse"
-            or payload.get("tool_name") != "bash"
-            or not isinstance(tool_input, dict)
-            or not isinstance(tool_input.get("command"), str)
-        ):
-            raise _reject()
-        return payload
-    except (OSError, ValueError, RuntimeError, RecursionError) as error:
-        if isinstance(error, RestrictedPytestError):
-            raise
+        return restricted_native(
+            "contained_test_request",
+            {"path": path, "sha256": expected_sha256, "workspace": workspace},
+            dict,
+        )
+    except RestrictedPytestError as error:
+        if error.reason_code != _FAILURE and (superseded := superseded_desktop_core()) is not None:
+            raise RestrictedPytestError(OUT_OF_SYNC_REASON, superseded.message()) from error
         raise _reject() from error
 
 
@@ -298,12 +175,13 @@ def run_authorized_contained_test(
             merge_stderr=merge_stderr,
         )
 
-    projected = venv_activation_target(tool_input["command"], cwd=cwd, home_dir=home_dir)
+    projected = contained_target(tool_input["command"], cwd=cwd, home_dir=home_dir)
     if projected is not None:
-        # A virtualenv activation hands its verdict to the command after it,
-        # and the pre-tool pass answered for that command. The activation as
-        # issued must carry the receipt; the projected command is then
-        # re-authorized on its own and planned from the text the answer named.
+        # A trailing group runs the command list inside it, and a virtualenv
+        # activation hands its verdict to the command after it; the pre-tool
+        # pass answered for that command. The call as issued must carry the
+        # receipt; the projected command is then re-authorized on its own and
+        # planned from the text the answer named.
         receipt = settled_authority(authorize, payload)
         if not _contained_receipt(receipt):
             raise _reject(receipt)
@@ -400,10 +278,27 @@ def run_authorized_contained_test(
             timeout_seconds=timeout_seconds,
             merge_stderr=merge_stderr,
         )
+    words: list[str] | None = None
+    unreadable: Exception | None = None
     try:
-        core, assignments, dropped = _peel_for_receipt(shlex.split(tool_input["command"], posix=True))
-    except ValueError:
+        # One reading serves both the receipt peel below and the planner split
+        # further down: the text between them does not change, and every
+        # resident round trip here is on the hook's hot path.
+        words = command_words(tool_input["command"])
+    except (ValueError, RestrictedPytestError) as error:
+        unreadable = error
+    if words is None:
+        # A transport failure, or a resident too old to know the operation,
+        # leaves the command unread: nothing is peeled, no receipt is drawn
+        # over words native authority never gave, and the command goes on to
+        # the guarded planner block, which answers that failure the way it
+        # answers one from `run_prefix_peel`.
         core, assignments, dropped = [], {}, False
+    else:
+        try:
+            core, assignments, dropped = _peel_for_receipt(words)
+        except (ValueError, RestrictedPytestError):
+            core, assignments, dropped = [], {}, False
     if assignments or dropped:
         # Like a wrapper: the original carries the receipt, then the core is
         # authorized again and runs with the assignments exported (a dropped
@@ -425,31 +320,39 @@ def run_authorized_contained_test(
                 merge_stderr=merge_stderr,
             )
 
-    names_pytest = False
+    planned_command: list[str] | None = None
     try:
-        try:
-            command, _ = _split_command_prefix(shlex.split(tool_input["command"], posix=True))
-        except ValueError as error:
-            raise _reject() from error
-        # Native authority reads a system `timeout` through to the program it
-        # bounds, so the planners below are handed that program. The clock
-        # still bounds this run: it only ever shortens the deadline.
-        timed, clock = peel_timeout_clock(command)
-        if timed != command:
-            command, _ = _split_command_prefix(timed)
+        # Both the words and the split are native authority's reading. A
+        # command it could not read raises here, and the handler below answers
+        # that the way it answers an unreadable split: only a live workspace
+        # receipt still runs the command.
+        if words is None:
+            raise unreadable or _reject()
+        command, _ = _split_command_prefix(words)
+        # Native authority reads a system `timeout` and each launcher it
+        # knows through to the program they run, so the planners below are
+        # handed that program. A clock still bounds this run: it only ever
+        # shortens the deadline.
+        command, clock = peel_run_prefixes(command)
         if clock is not None:
             timeout_seconds = min(timeout_seconds, clock)
-        package_test = is_package_test(command)
-        if package_test:
-            command = list(resolve_package_test(command, workspace=workspace, cwd=cwd))
-        names_pytest = _command_names_pytest(command)
         from ..native_restricted_pytest import restricted_native
 
-        kinds = restricted_native("contained_kind", {"command": command}, dict)
-        if set(kinds) != {"inline_eval", "node_test", "vitest", "git", "node_tool"} or any(
-            type(value) is not bool for value in kinds.values()
-        ):
-            raise _reject()
+        def _kinds(words: list[str]) -> dict[str, bool]:
+            answer = restricted_native("contained_kind", {"command": words}, dict)
+            if set(answer) != KIND_NAMES or any(type(value) is not bool for value in answer.values()):
+                raise _reject()
+            return answer
+
+        # The package-test alias travels with the other kinds, so an ordinary
+        # contained run asks native authority once. Only the alias pays for a
+        # second reading, of the words its script actually spells.
+        kinds = _kinds(command)
+        package_test = kinds["package_test"]
+        if package_test:
+            command = list(resolve_package_test(command, workspace=workspace, cwd=cwd))
+            kinds = _kinds(command)
+        planned_command = command
         inline_eval, node_test, vitest, git, node_tool = (
             kinds[key] for key in ("inline_eval", "node_test", "vitest", "git", "node_tool")
         )
@@ -490,7 +393,7 @@ def run_authorized_contained_test(
             # in the command, so a command that did not name pytest reports
             # the authorization that failed. A command that did name pytest
             # keeps the planner error, including a refused flag or argument.
-            if error.reason_code == PYTEST_INVALID_COMMAND_REASON_CODE and not names_pytest:
+            if error.reason_code == PYTEST_INVALID_COMMAND_REASON_CODE and not _names_pytest(planned_command):
                 raise _reject(receipt) from error
             raise
         return exit_code

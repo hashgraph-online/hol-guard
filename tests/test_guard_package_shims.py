@@ -14,7 +14,7 @@ import time
 from datetime import datetime, timedelta, timezone
 from http.server import HTTPServer
 from io import StringIO
-from multiprocessing import Event, Process, Queue
+from multiprocessing import Event, Process, Queue, get_context
 from pathlib import Path
 
 import pytest
@@ -44,6 +44,7 @@ from codex_plugin_scanner.guard.store import GuardStore
 from tests.cloud_exception_bundle_fixtures import build_cloud_exception_policy_bundle
 from tests.package_review_settings import review_package_signals
 from tests.policy_bundle_signing_helpers import policy_bundle_test_keyring, sign_policy_bundle
+from tests.policy_store_support import replace_remote_policies
 from tests.shim_execution_helpers import build_shim_content_hash, write_fake_manager_script
 from tests.test_guard_protect import _seed_bundle_cache_only, _SyncAndEvaluateHandler
 from tests.test_guard_supply_chain_evaluator import _cloud_response, _EvaluateHandler, _force_unpaid_entitlement
@@ -391,7 +392,8 @@ def _hold_guard_db_writer_lock(
     hold_seconds: int,
     ready_event: Event | None = None,
 ) -> None:
-    connection = sqlite3.connect(database_path, timeout=1)
+    # Wait out a writer the shim install left behind; the test needs this process to hold the lock.
+    connection = sqlite3.connect(database_path, timeout=30)
     try:
         connection.execute("BEGIN IMMEDIATE")
         connection.execute(
@@ -822,10 +824,12 @@ def test_package_manager_shim_waits_out_transient_store_writer_lock(tmp_path: Pa
         manager="bun",
         capsys=capsys,
     )
-    ready_event = Event()
-    lock_process = Process(target=_hold_guard_db_writer_lock, args=(str(home_dir / "guard.db"), 13, ready_event))
+    # A fresh interpreter: a forked child can inherit a lock a parent thread held at fork time.
+    spawn = get_context("spawn")
+    ready_event = spawn.Event()
+    lock_process = spawn.Process(target=_hold_guard_db_writer_lock, args=(str(home_dir / "guard.db"), 13, ready_event))
     lock_process.start()
-    assert ready_event.wait(timeout=5)
+    assert ready_event.wait(timeout=60), f"lock holder never took the lock (exitcode={lock_process.exitcode})"
     env = dict(os.environ)
     env["HOME"] = str(home_dir)
     env["PATH"] = f"{shim_path.parent}{os.pathsep}{fake_bin}{os.pathsep}{env.get('PATH', '')}"
@@ -852,6 +856,13 @@ def test_package_manager_shim_waits_out_transient_store_writer_lock(tmp_path: Pa
     ("manager", "argv", "expected"),
     [
         ("bun", ("add", "minimist@1.2.9"), True),
+        ("bun", ("add", "--help"), False),
+        ("bun", ("add", "-h"), False),
+        ("bun", ("install", "--help"), False),
+        ("bun", ("install", "-h"), False),
+        ("bun", ("i", "--help"), False),
+        ("bun", ("i", "-h"), False),
+        ("bun", ("add", "minimist@1.2.9", "--help"), True),
         ("bun", ("run", "build"), True),
         ("bun", ("run", "build", "--watch"), True),
         ("bun", ("run", "dev"), True),
@@ -1906,7 +1917,8 @@ def test_guard_protect_keeps_matcher_only_policy_bundle_package_family_block(
     )
     try:
         store = GuardStore(home_dir)
-        store.replace_remote_policies(
+        replace_remote_policies(
+            store,
             [
                 PolicyDecision(
                     harness="*",
@@ -1980,7 +1992,8 @@ def test_guard_protect_ignores_package_family_row_when_signed_matcher_omits_pack
     )
     try:
         store = GuardStore(home_dir)
-        store.replace_remote_policies(
+        replace_remote_policies(
+            store,
             [
                 PolicyDecision(
                     harness="*",
@@ -2051,7 +2064,8 @@ def test_guard_protect_ignores_stale_policy_bundle_package_family_on_cloud_allow
     monkeypatch.setattr(guard_commands_module, "ensure_guard_daemon", lambda _home: "http://127.0.0.1:5474")
     try:
         store = GuardStore(home_dir)
-        store.replace_remote_policies(
+        replace_remote_policies(
+            store,
             [
                 PolicyDecision(
                     harness="*",

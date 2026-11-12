@@ -6,6 +6,26 @@ use serde_json::{json, Value};
 
 const VECTORS: &str = include_str!("../tests/fixtures/daemon_route_vectors.json");
 
+#[test]
+fn context_assistance_control_routes_require_existing_dashboard_or_header_authorization() {
+    for path in [
+        "/v1/context-assistance",
+        "/v1/context-assistance/installations",
+        "/v1/context-assistance/recheck",
+        "/v1/context-assistance/activate",
+        "/v1/context-assistance/stop",
+        "/v1/context-assistance/workspace",
+        "/v1/context-assistance/workspace-access",
+        "/v1/context-assistance/workspace-grant",
+        "/v1/context-assistance/folders",
+        "/v1/context-assistance/codex-lean",
+    ] {
+        assert!(crate::daemon_route_paths::requires_header_token(path));
+        assert!(crate::daemon_route_paths::session_path("GET", path));
+        assert!(!crate::daemon_route_paths::protection_repair_session_allowed("POST", path));
+    }
+}
+
 fn request_with(schema: &str, query: &Value) -> Value {
     json!({
         "operation": "daemon_route",
@@ -181,6 +201,122 @@ fn harness_version_writes_require_the_header_token() {
         assert_eq!(
             crate::daemon_route_paths::route_class(path),
             "none",
+            "{path}"
+        );
+    }
+}
+
+#[test]
+fn the_releases_screen_reads_are_session_paths() {
+    // The dashboard tab carries a minted session token, not the daemon auth
+    // token. Without these two reads on the session table the Releases screen
+    // renders and then 401s on every request it makes.
+    for path in ["/v1/releases/index", "/v1/releases/release"] {
+        assert!(
+            crate::daemon_route_paths::session_path("GET", path),
+            "{path}"
+        );
+        // The archive is read-only: nothing on it is posted.
+        assert!(
+            !crate::daemon_route_paths::session_path("POST", path),
+            "{path}"
+        );
+    }
+    // A neighbouring release route is not opened by accident.
+    assert!(!crate::daemon_route_paths::session_path(
+        "GET",
+        "/v1/releases/contributors"
+    ));
+}
+
+#[test]
+fn plugin_update_prompts_are_token_gated_session_paths() {
+    use crate::daemon_route_paths::{requires_header_token, session_path};
+    // The check downloads HOL's public indexes, so a page without the
+    // dashboard session must not be able to start one.
+    assert!(requires_header_token("/v1/plugins/updates"));
+    assert!(requires_header_token("/v1/plugins/updates/dismiss"));
+    assert!(session_path("GET", "/v1/plugins/updates"));
+    assert!(!session_path("POST", "/v1/plugins/updates"));
+    assert!(session_path("POST", "/v1/plugins/updates/dismiss"));
+    assert!(!session_path("GET", "/v1/plugins/updates/dismiss"));
+    // Reset stays a CLI action; the dashboard cannot clear every dismissal.
+    assert!(!session_path("POST", "/v1/plugins/updates/reset"));
+}
+
+fn approval_session(request_id: Option<&str>, method: &str, path: &str) -> Value {
+    let claims = json!({"surface": "approval-center", "request_id": request_id});
+    payload(
+        &json!({"kind": "session_authorize", "method": method, "path": path,
+                    "claims": claims, "payload": null}),
+    )
+}
+
+#[test]
+fn a_link_bound_session_decides_only_its_own_request() {
+    let own = "0123456789abcdef0123456789abcdef";
+    let other = "fedcba9876543210fedcba9876543210";
+    let bound =
+        |method: &str, path: &str| approval_session(Some(own), method, path)["allowed"].clone();
+    for action in ["approve", "block", "resume"] {
+        assert_eq!(
+            bound("POST", &format!("/v1/requests/{own}/{action}")),
+            true,
+            "{action}"
+        );
+        assert_eq!(
+            bound("POST", &format!("/v1/requests/{other}/{action}")),
+            false,
+            "{action}"
+        );
+    }
+    assert_eq!(
+        bound("POST", &format!("/v1/mcp-policy/requests/{own}/decision")),
+        true
+    );
+    assert_eq!(
+        bound("POST", &format!("/v1/mcp-policy/requests/{other}/decision")),
+        false
+    );
+    // The page still loads and marks what the user has seen.
+    assert_eq!(bound("GET", "/v1/requests"), true);
+    assert_eq!(bound("GET", &format!("/v1/requests/{own}")), true);
+    assert_eq!(bound("POST", "/v1/read-state"), true);
+    // Bulk exports are not part of the page.
+    for path in ["/v1/evidence/export", "/v1/settings/export"] {
+        assert_eq!(bound("GET", path), false, "{path}");
+    }
+    // Nothing else the approval center can change is open to it.
+    for path in [
+        "/v1/requests/bulk-allow-once",
+        "/v1/settings/reset",
+        "/v1/policy/clear",
+        "/v1/update",
+    ] {
+        assert_eq!(bound("POST", path), false, "{path}");
+    }
+}
+
+#[test]
+fn an_unbound_approval_session_keeps_every_approval_center_route() {
+    let other = "fedcba9876543210fedcba9876543210";
+    for path in [
+        format!("/v1/requests/{other}/approve"),
+        "/v1/requests/bulk-allow-once".to_string(),
+        "/v1/settings/reset".to_string(),
+        "/v1/policy/clear".to_string(),
+        "/v1/update".to_string(),
+    ] {
+        assert_eq!(
+            approval_session(None, "POST", &path)["allowed"],
+            true,
+            "{path}"
+        );
+    }
+    for path in ["/v1/evidence/export", "/v1/settings/export"] {
+        assert_eq!(
+            approval_session(None, "GET", path)["allowed"],
+            true,
             "{path}"
         );
     }

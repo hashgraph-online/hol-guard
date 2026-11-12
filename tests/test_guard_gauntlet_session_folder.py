@@ -86,6 +86,35 @@ def test_seeding_makes_a_private_session_folder_and_stage(tmp_path: Path) -> Non
     assert {path.name: path.read_text(encoding="utf-8") for path in stage.iterdir()} == STAGED_FILES
 
 
+def test_every_case_that_writes_into_the_stage_gets_the_directory(tmp_path: Path) -> None:
+    """A redirect into the stage cannot complete when nothing created the directory.
+
+    The target's only existing ancestor would be world-writable /tmp, which Guard
+    refuses, and the shell would fail with ENOENT even with Guard out of the way.
+    So the seeding and the catalog have to agree: every case naming the token in a
+    command needs the directory in place before that command runs.
+    """
+    naming_stage = [item for item in load_catalog() if any("{{stage}}" in command for command in item.commands)]
+    assert {item.id for item in naming_stage} >= {
+        SHELL_CASE,
+        "omp-native-ls-temporary-scratch-probes",
+        "omp-native-shell-tee-stage-listing",
+        "omp-native-shell-merge-stream-listing",
+    }
+    for index, scenario in enumerate(naming_stage):
+        home, stage = tmp_path / f"home{index}", tmp_path / f"stage{index}"
+        (home / "other-project/src").mkdir(parents=True)
+        seed_session_folder(home, stage, scenario.id)
+        assert stage.is_dir(), scenario.id
+        assert stat.S_IMODE(stage.stat().st_mode) & 0o077 == 0, scenario.id
+
+
+def test_a_stage_only_case_gets_no_staged_sources(tmp_path: Path) -> None:
+    home, stage = _home(tmp_path)
+    seed_session_folder(home, stage, "omp-native-shell-tee-stage-listing")
+    assert stage.is_dir() and list(stage.iterdir()) == []
+
+
 def test_stage_keeps_one_name_while_the_fixture_root_gains_children(tmp_path: Path) -> None:
     """A case seeds, renders, redacts and removes the stage directory at four moments.
 
@@ -93,12 +122,13 @@ def test_stage_keeps_one_name_while_the_fixture_root_gains_children(tmp_path: Pa
     name derived from the root's changing metadata would point somewhere new every
     time: the prompt would name a directory nothing had seeded.
     """
+    scratch = scratch_checkout(tmp_path)
     seeded = stage_directory(tmp_path)
     (tmp_path / "private-evidence").mkdir()
     rendered = stage_directory(tmp_path)
     (tmp_path / "guard-home").mkdir()
     assert seeded == rendered == stage_directory(tmp_path)
-    assert scratch_checkout(tmp_path) == scratch_checkout(tmp_path)
+    assert scratch == scratch_checkout(tmp_path)
 
 
 def test_stage_is_removed_with_the_scratch_checkout(tmp_path: Path) -> None:
@@ -176,7 +206,7 @@ def test_shell_case_runs_only_its_listed_commands() -> None:
     assert native_tools_scope_error(scenario, _shell(scenario)[:-1], {})
     assert native_tools_scope_error(scenario, _shell(scenario)[:-1], {}, guard_denied=True) is None
     all_steps = _shell(scenario)
-    assert native_tools_scope_error(scenario, all_steps + [all_steps[0]], {}) == (
+    assert native_tools_scope_error(scenario, [*all_steps, all_steps[0]], {}) == (
         "the shell commands were duplicated or out of order"
     )
     assert native_tools_scope_error(scenario, list(reversed(all_steps)), {}) == (

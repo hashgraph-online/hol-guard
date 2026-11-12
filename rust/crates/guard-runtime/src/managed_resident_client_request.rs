@@ -4,7 +4,11 @@ use std::path::Path;
 use std::thread;
 use std::time::{Duration, Instant};
 
-use super::{containment, handoff, lease, restart_budget, CLIENT_RETRY_DELAY};
+#[path = "managed_resident_start_wait.rs"]
+mod start_wait;
+
+use super::handoff_record::Retirement;
+use super::{containment, handoff, handoff_record, lease, restart_budget, CLIENT_RETRY_DELAY};
 use crate::resident_diagnostics::{note, observe, Phase};
 use crate::resident_state::{
     acquire_startup_lock, clear_stale_startup_lock, discover_home_states_prefer, next_generation,
@@ -18,6 +22,12 @@ use crate::resident_state::{
 const CLIENT_START_TIMEOUT: Duration = Duration::from_millis(9_000);
 const DAEMON_LIFECYCLE_START_TIMEOUT: Duration =
     Duration::from_millis(super::DAEMON_LIFECYCLE_TIMEOUT_CEILING_MS);
+// Each owner-lock probe also runs discovery, so poll the exiting owner more
+// slowly than the live-state retry loop.
+const OWNER_RELEASE_POLL: Duration = Duration::from_millis(25);
+// An exiting owner releases the lock within about a second of retiring its
+// state, even with diagnostics draining; a holder past this is not exiting.
+const OWNER_RELEASE_WAIT: Duration = Duration::from_secs(2);
 
 fn startup_limit(payload: &[u8]) -> Duration {
     let value = crate::strict_json_value(payload).ok();
@@ -28,6 +38,19 @@ fn startup_limit(payload: &[u8]) -> Duration {
         Some("daemon_lifecycle_decide") => DAEMON_LIFECYCLE_START_TIMEOUT,
         _ => CLIENT_START_TIMEOUT,
     }
+}
+
+/// Operations that only observe a resident, and so must never cause one to
+/// exist. A resident that is not already serving answers nothing, and the
+/// caller reads that silence as the whole answer: starting one to produce a
+/// reply would make the diagnostic the event it is reporting on, and would
+/// spend restart budget that belongs to real work.
+fn observes_only(payload: &[u8]) -> bool {
+    crate::strict_json_value(payload)
+        .ok()
+        .as_ref()
+        .and_then(|value| value.get("operation")?.as_str())
+        .is_some_and(|operation| operation == "resident_health")
 }
 
 fn try_live_or_restart(
@@ -79,6 +102,12 @@ fn try_home_states(
             deadline,
         ) {
             note("client_state_foreign_retired", 1);
+            handoff_record::record(
+                state_base,
+                &runtime_digest,
+                &state.runtime_sha256,
+                Retirement::Orphaned,
+            );
             continue;
         }
         let same_runtime = runtime_digest == state.runtime_sha256;
@@ -132,6 +161,12 @@ fn try_home_states(
                 ) =>
             {
                 note("client_state_foreign_rejected", 1);
+                handoff_record::record(
+                    state_base,
+                    &runtime_digest,
+                    &state.runtime_sha256,
+                    Retirement::Rejected,
+                );
             }
             Ok(response) => return Ok(Some(response)),
             Err(error)
@@ -156,19 +191,87 @@ fn try_home_states(
     Ok(None)
 }
 
-/// Whether discovery finds a live resident that runs `digest`.
-fn live_resident_of_runtime(state_base: &Path, digest: &str) -> bool {
-    // An unreadable state keeps the old behaviour of spending the budget.
-    // Discovery also returns this runtime's states whose process has exited,
-    // so a state counts as dead only when its process is provably gone or its
-    // PID now belongs to a process with another start marker. A process that
-    // cannot be inspected still counts as live.
-    match discover_home_states_prefer(state_base, Some(digest)) {
-        Ok(states) => states
-            .iter()
-            .any(|(_, _, state)| state.runtime_sha256 == digest && state_may_be_live(state)),
-        Err(_) => true,
+/// What holds the home-wide owner lock, as far as discovery can tell.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum OwnerHolder {
+    /// A live resident of this runtime, or discovery could not say.
+    ThisRuntime,
+    /// A live resident of another Guard install.
+    OtherRuntime,
+    /// No live resident: the holder already retired its generation file.
+    Exiting,
+}
+
+/// Return once a spawned resident can take the home-wide owner lock.
+///
+/// A live resident from another Guard install holds the owner lock. A spawn
+/// here could only fail on that lock, so name the owner at once instead of
+/// spending the restart budget on it. A live resident of this runtime holding
+/// the lock is unhealthy, not foreign: it keeps spending the budget so the
+/// restart circuit still opens.
+///
+/// This client holds the startup lock, so the holder may also be a resident
+/// that has retired its generation file and not yet released the lock on its
+/// way out. A successor spawned in that window fails on the lock at once, and
+/// the spawn wait then spends the whole startup limit on a resident that never
+/// publishes. Only that holder is waited for, and for at most
+/// `OWNER_RELEASE_WAIT` within `deadline`, before the owner is named.
+fn await_owner_release(state_base: &Path, digest: &str, deadline: Instant) -> Result<(), String> {
+    await_owner_release_with(
+        state_base,
+        deadline.min(Instant::now() + OWNER_RELEASE_WAIT),
+        || owner_holder(state_base, digest),
+    )
+}
+
+fn await_owner_release_with(
+    state_base: &Path,
+    release_deadline: Instant,
+    mut holder: impl FnMut() -> OwnerHolder,
+) -> Result<(), String> {
+    loop {
+        match super::acquire_managed_owner_lock(state_base) {
+            Err(error) if error == "native_resident_owner_busy" => match holder() {
+                OwnerHolder::ThisRuntime => return Ok(()),
+                OwnerHolder::OtherRuntime => return Err(error),
+                OwnerHolder::Exiting if Instant::now() >= release_deadline => return Err(error),
+                OwnerHolder::Exiting => {}
+            },
+            probe => {
+                drop(probe);
+                return Ok(());
+            }
+        }
+        thread::sleep(
+            OWNER_RELEASE_POLL.min(release_deadline.saturating_duration_since(Instant::now())),
+        );
     }
+}
+
+fn owner_holder(state_base: &Path, digest: &str) -> OwnerHolder {
+    // An unreadable state keeps the old behaviour of spending the budget.
+    match discover_home_states_prefer(state_base, Some(digest)) {
+        Ok(states) => classify_owner_holder(states.iter().map(|(_, _, state)| state), digest),
+        Err(_) => OwnerHolder::ThisRuntime,
+    }
+}
+
+/// Discovery also returns states whose process has exited, so a state counts
+/// as dead only when its process is provably gone or its PID now belongs to a
+/// process with another start marker. A process that cannot be inspected
+/// still counts as live.
+fn classify_owner_holder<'a>(
+    states: impl IntoIterator<Item = &'a crate::resident_state::ResidentState>,
+    digest: &str,
+) -> OwnerHolder {
+    let mut holder = OwnerHolder::Exiting;
+    for state in states.into_iter().filter(|state| state_may_be_live(state)) {
+        if state.runtime_sha256 == digest {
+            return OwnerHolder::ThisRuntime;
+        }
+        holder = OwnerHolder::OtherRuntime;
+    }
+    holder
 }
 
 fn state_may_be_live(state: &crate::resident_state::ResidentState) -> bool {
@@ -181,6 +284,7 @@ fn state_may_be_live(state: &crate::resident_state::ResidentState) -> bool {
     })
 }
 
+/// Send within the caller's budget and retain bounded prior recovery diagnostics.
 pub(super) fn client_request_with_deadline(
     state_base: &Path,
     payload: &[u8],
@@ -206,6 +310,7 @@ pub(super) fn client_request_with_deadline(
     })
 }
 
+/// Discover or start a resident, giving failed containment precedence over request errors.
 fn client_request_with_deadline_inner(
     state_base: &Path,
     payload: &[u8],
@@ -229,6 +334,11 @@ fn client_request_with_deadline_inner(
         try_live_or_restart(state_base, payload, overall_deadline, &digest, last_failure)
     })? {
         return Ok(response);
+    }
+    if observes_only(payload) {
+        // Nothing is serving, which is the answer. Stop before the startup
+        // lock, the restart budget and the spawn below them.
+        return Err("native_resident_not_serving".to_owned());
     }
     if Instant::now() >= overall_deadline {
         return Err("native_client_deadline_exceeded".to_owned());
@@ -283,20 +393,11 @@ fn client_request_with_deadline_inner(
         return Ok(response);
     }
     let (generation, token, mut spawned) = observe(Phase::ClientSpawn, || -> Result<_, String> {
-        // A resident from another Guard install holds the home-wide owner
-        // lock. A spawn here could only fail on that lock, so name the owner
-        // instead of spending the restart budget on it. A live resident of
-        // this runtime holding the lock is unhealthy, not foreign: it keeps
-        // spending the budget so the restart circuit still opens.
-        match super::acquire_managed_owner_lock(state_base) {
-            Err(error)
-                if error == "native_resident_owner_busy"
-                    && !live_resident_of_runtime(state_base, &digest) =>
-            {
-                return Err(error)
-            }
-            probe => drop(probe),
-        }
+        await_owner_release(
+            state_base,
+            &digest,
+            overall_deadline.min(Instant::now() + startup_limit(payload)),
+        )?;
         restart_budget::consume_for_spawn(state_base, &scope, overall_deadline)?;
         let generation = next_generation(&scope, &digest)?;
         let mut token = [0u8; crate::AUTH_TOKEN_BYTES];
@@ -309,42 +410,69 @@ fn client_request_with_deadline_inner(
             std::process::id(),
             overall_deadline,
         )?;
+        // There is a resident now, so this is the point where the day gains a
+        // start. Recorded without waiting for the journal's lock: the client's
+        // deadline still has the startup wait to pay for, and a lost count is
+        // worth less than the wait it would have cost.
+        super::lifecycle_journal::record_without_waiting(
+            &scope,
+            super::lifecycle_journal::Event::Started,
+        );
         Ok((generation, token, spawned))
     })?;
     let deadline = overall_deadline.min(Instant::now() + startup_limit(payload));
-    let request_result = observe(Phase::ClientSpawnWait, || loop {
-        if Instant::now() >= deadline {
-            break Err("native_resident_start_timeout".to_owned());
-        }
-        match try_live_or_restart(state_base, payload, overall_deadline, &digest, last_failure) {
-            Ok(Some(response)) => break Ok(response),
-            Ok(None) => {}
-            Err(error) => break Err(error),
-        }
-        thread::sleep(CLIENT_RETRY_DELAY.min(deadline.saturating_duration_since(Instant::now())));
+    let request_result = observe(Phase::ClientSpawnWait, || {
+        start_wait::wait_for_response(&mut spawned, deadline, || {
+            try_live_or_restart(state_base, payload, overall_deadline, &digest, last_failure)
+        })
     });
-    match request_result {
-        Ok(response) => Ok(response),
-        Err(error) => {
-            // Cleanup retries share the request deadline. A failed containment
-            // check must remain visible rather than be hidden by the request error.
-            containment::abort_spawned_managed(
-                &mut spawned,
-                &scope,
-                &digest,
-                generation,
-                &token,
-                overall_deadline,
-            )?;
-            Err(error)
-        }
-    }
+    start_wait::finish_request(request_result, || {
+        containment::abort_spawned_managed(
+            &mut spawned,
+            &scope,
+            &digest,
+            generation,
+            &token,
+            overall_deadline,
+        )
+    })
 }
 
 #[cfg(test)]
 mod startup_limit_tests {
-    use super::startup_limit;
-    use std::time::Duration;
+    use super::{client_request_with_deadline, lease, observes_only, startup_limit};
+    use std::time::{Duration, Instant};
+
+    #[test]
+    fn only_the_health_question_observes_without_starting_anything() {
+        assert!(observes_only(br#"{"operation":"resident_health"}"#));
+        assert!(!observes_only(br#"{"operation":"prompt_analyze"}"#));
+        assert!(!observes_only(br"{}"));
+        assert!(!observes_only(br"not json"));
+    }
+
+    #[test]
+    fn a_health_question_with_no_resident_serving_is_answered_by_the_silence() {
+        let root = std::env::temp_dir().join(format!(
+            "hol-guard-observe-{}-{}",
+            std::process::id(),
+            crate::unique_nanos::unique_nanos()
+        ));
+        std::fs::create_dir(&root).unwrap();
+        let client_lease = lease::acquire(&root).unwrap();
+        let result = client_request_with_deadline(
+            &root,
+            br#"{"operation":"resident_health"}"#,
+            Instant::now() + Duration::from_secs(4),
+            &client_lease,
+        );
+        drop(client_lease);
+        std::fs::remove_dir_all(&root).unwrap();
+        // A work request on this empty root reaches the spawn admission gate
+        // and fails there with `native_policy_verifier_key_missing`. The health
+        // question stops earlier, before the startup lock and the budget.
+        assert_eq!(result.unwrap_err(), "native_resident_not_serving");
+    }
 
     #[test]
     fn daemon_lifecycle_startup_keeps_the_cold_start_budget() {

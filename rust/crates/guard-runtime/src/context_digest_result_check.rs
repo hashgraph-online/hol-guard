@@ -36,6 +36,7 @@ pub(crate) fn kind_name(kind: &Kind) -> &'static str {
         Kind::OpaqueMaterialDigest { .. } => "opaque_material_digest",
         Kind::McpRedactJson { .. } => "mcp_redact_json",
         Kind::NativeBashReplyValidation { .. } => "native_bash_reply_validation",
+        Kind::NativeDecisionReceiptValidation { .. } => "native_decision_receipt_validation",
         Kind::McpLaunchEnvironment { .. } => "mcp_launch_environment",
         Kind::PackageExecutionContextFromEvidence { .. } => {
             "package_execution_context_from_evidence"
@@ -63,13 +64,15 @@ pub(crate) fn kind_name(kind: &Kind) -> &'static str {
         Kind::McpToolCatalogFingerprint { .. } => "mcp_tool_catalog_fingerprint",
         Kind::RuntimeHookApprovalContext { .. } => "runtime_hook_approval_context",
         Kind::GenericHookApprovalContext { .. } => "generic_hook_approval_context",
+        Kind::ConsumerApprovalContextToken { .. } => "consumer_approval_context_token",
+        Kind::PackageRunnerTarget { .. } => "package_runner_target",
     }
 }
 
 /// Output a successful result of this kind must carry, truthy.
 fn required_output(kind: &str) -> Option<&'static str> {
     Some(match kind {
-        "build_approval_context_token" => "token",
+        "build_approval_context_token" | "consumer_approval_context_token" => "token",
         "configured_environment_hash"
         | "configured_headers_hash"
         | "launch_argv_digest"
@@ -96,13 +99,18 @@ fn nullable_output(kind: &str) -> Option<&'static str> {
         | "package_execution_context_from_scanner_evidence" => "package_context",
         "local_cli_identify" => "local_cli_identities",
         "native_bash_reply_validation" => "native_bash_reply_valid",
+        "native_decision_receipt_validation" => "native_decision_receipt_valid",
         _ => return None,
     })
 }
 
 /// Fields that only make sense for exactly one request kind.
-const KIND_GATED_FIELDS: [(&str, &str); 10] = [
+const KIND_GATED_FIELDS: [(&str, &str); 12] = [
     ("native_bash_reply_valid", "native_bash_reply_validation"),
+    (
+        "native_decision_receipt_valid",
+        "native_decision_receipt_validation",
+    ),
     (
         "approval_context_token_well_formed",
         "approval_context_token_well_formed",
@@ -118,6 +126,7 @@ const KIND_GATED_FIELDS: [(&str, &str); 10] = [
     ("custom_extension_continuity", "custom_extension_continuity"),
     ("claude_guard_question", "claude_guard_question"),
     ("memory_pattern", "memory_pattern"),
+    ("package_runner_target", "package_runner_target"),
 ];
 
 fn is_sha256(value: &Value) -> bool {
@@ -175,6 +184,12 @@ fn present<'a>(payload: &'a Map<String, Value>, field: &str) -> Option<&'a Value
 fn fields_valid(kind: &str, payload: &Map<String, Value>) -> bool {
     if payload
         .get("native_bash_reply_valid")
+        .is_some_and(|value| !value.is_boolean())
+    {
+        return false;
+    }
+    if payload
+        .get("native_decision_receipt_valid")
         .is_some_and(|value| !value.is_boolean())
     {
         return false;

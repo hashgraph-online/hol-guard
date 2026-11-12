@@ -5,8 +5,6 @@ from __future__ import annotations
 from pathlib import Path
 from urllib.parse import parse_qs
 
-from ....daemon.discovery import load_authenticated_daemon_state
-
 
 def canonical_daemon_state_path(state_path: str | Path) -> Path:
     raw_path = str(state_path)
@@ -30,15 +28,3 @@ def state_path_for_query(state_path: str | Path, query: str) -> Path:
     if not guard_home.is_absolute() or path.parent.resolve() != guard_home.resolve():
         raise ValueError("daemon state path does not match the hook Guard home")
     return path
-
-
-def daemon_port_from_state(state_path: str | Path) -> int | None:
-    path = canonical_daemon_state_path(state_path)
-    payload = load_authenticated_daemon_state(path.parent)
-    if payload is None:
-        return None
-    expected_home = str(path.parent.resolve())
-    if payload.get("guard_home") != expected_home or payload.get("host") not in {"127.0.0.1", "localhost", "::1"}:
-        return None
-    port = payload.get("port")
-    return port if isinstance(port, int) and 0 < port <= 65535 else None

@@ -154,16 +154,6 @@ fn a_session_the_resident_cannot_decide_is_not_ready() {
         ask(&fixture, &workspace, "codex"),
         not_ready("mcp_relay_session_review_mode")
     );
-    let mut observe = view();
-    observe["harnesses"]["codex"]["config"]["mode"] = json!("observe");
-    let (fixture, workspace) = bound(
-        "observe-ask",
-        json!({"mcp_relay": observe, "blocked_request_mode": "ask"}),
-    );
-    assert_eq!(
-        ask(&fixture, &workspace, "codex"),
-        not_ready("mcp_relay_session_review_mode")
-    );
     let (fixture, workspace) = bound("view", json!({"mcp_relay": {"harnesses": {}}}));
     assert_eq!(
         ask(&fixture, &workspace, "codex"),

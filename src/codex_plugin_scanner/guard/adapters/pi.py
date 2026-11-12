@@ -9,7 +9,7 @@ from pathlib import Path
 from ..aibom_detection import extend_detection_with_workspace_aibom, native_adapter_detection_with_warnings
 from ..models import HarnessDetection
 from ..shims import prepare_guard_shim, remove_guard_shim
-from .base import HarnessAdapter, HarnessContext, PreparedHarnessInstall, _resolve_command
+from .base import HarnessAdapter, HarnessContext, PreparedHarnessInstall, _resolve_command, _which_from_user_directories
 from .omp_code_mode import with_omp_code_mode_warnings
 from .pi_extension_pinned_core import with_pinned_core_warning
 from .pi_extension_previous_source import previous_managed_extension_source
@@ -103,7 +103,10 @@ class _PiFamilyHarnessAdapter(HarnessAdapter):
         if not all(root.is_absolute() for root, _ in roots):
             request["cwd"] = os.getcwd()
         artifacts, found_paths, warnings = native_adapter_detection_with_warnings("pi_detect", request)
-        command_available = self.resolved_executable(context) is not None
+        command_available = (
+            self.resolved_executable(context) is not None
+            or _which_from_user_directories(self.executable, context.home_dir) is not None
+        )
         detection = HarnessDetection(
             harness=self.harness,
             installed=bool(found_paths) or command_available,

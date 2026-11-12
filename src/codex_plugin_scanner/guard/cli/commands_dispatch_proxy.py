@@ -89,6 +89,37 @@ def _run_guard_cursor_mcp_proxy_command(
     return proxy.serve()
 
 
+def _run_guard_cline_mcp_proxy_command(
+    args: argparse.Namespace,
+    *,
+    guard_home: Path | None = None,
+    workspace: Path | None = None,
+    context: HarnessContext | None = None,
+    store: GuardStore | None = None,
+    config: GuardConfig | None = None,
+    input_text: str | None = None,
+    output_stream: TextIO | None = None,
+) -> int:
+    context = _require_guard_context(context)
+    store = _require_guard_store(store)
+    config = _require_guard_config(config)
+    proxy = ElicitationMcpGuardProxy(
+        harness="cline",
+        server_name=args.server_name,
+        command=[args.server_command, *list(args.server_args)],
+        context=context,
+        store=store,
+        config=config,
+        source_scope=args.source_scope,
+        config_path=args.config_path,
+        transport=args.transport,
+        server_id=args.server_id,
+        server_env_keys=tuple(args.server_env_keys),
+        current_config_provider=lambda: _current_proxy_config(context, store),
+    )
+    return proxy.serve()
+
+
 def _run_guard_opencode_mcp_proxy_command(
     args: argparse.Namespace,
     *,
@@ -390,6 +421,7 @@ def _run_guard_run_command(
 
 
 __all__ = [
+    "_run_guard_cline_mcp_proxy_command",
     "_run_guard_codex_mcp_proxy_command",
     "_run_guard_copilot_mcp_proxy_command",
     "_run_guard_cursor_mcp_proxy_command",

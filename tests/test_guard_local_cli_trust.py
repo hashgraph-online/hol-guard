@@ -2,12 +2,12 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from codex_plugin_scanner.guard.local_cli_hook import observe_unlisted_cli
-from codex_plugin_scanner.guard.local_cli_trust import matching_local_cli_grant, utc_now
+from codex_plugin_scanner.guard.local_cli_trust import utc_now
 from codex_plugin_scanner.guard.runtime.local_cli_identity import identify_unlisted_cli
 from codex_plugin_scanner.guard.store import GuardStore
+from tests.runtime_wrapper_support import native_local_cli_hook
 
-from .local_cli_native_fixture import native_local_cli_grant_resident  # noqa: F401
+from .local_cli_native_fixture import native_local_cli_grant_resident, review_rule_verdict  # noqa: F401
 
 
 def test_grant_allows_matching_args_and_not_changed_script(tmp_path: Path) -> None:
@@ -26,50 +26,14 @@ def test_grant_allows_matching_args_and_not_changed_script(tmp_path: Path) -> No
         updated_at=utc_now(),
     )
     assert revision == 1
-    matched = matching_local_cli_grant(
-        store=store,
-        command=f"python3 {script} --by deviceType --days 3",
-        cwd=tmp_path,
-        home_dir=tmp_path,
-        current_action="review",
+    matched = review_rule_verdict(
+        store, command=f"python3 {script} --by deviceType --days 3", cwd=tmp_path, home_dir=tmp_path
     )
     assert matched is not None
-    assert matched[1] == "allowed"
+    assert matched[0] == "allowed"
     script.write_text("print('changed')\n", encoding="utf-8")
-    stale = matching_local_cli_grant(
-        store=store,
-        command=f"python3 {script} --by url",
-        cwd=tmp_path,
-        home_dir=tmp_path,
-        current_action="review",
-    )
+    stale = review_rule_verdict(store, command=f"python3 {script} --by url", cwd=tmp_path, home_dir=tmp_path)
     assert stale is None
-
-
-def test_grant_does_not_override_block(tmp_path: Path) -> None:
-    home = tmp_path / "home"
-    home.mkdir()
-    store = GuardStore(home)
-    script = tmp_path / "cwv.py"
-    script.write_text("print('ok')\n", encoding="utf-8")
-    identity = identify_unlisted_cli(f"python3 {script}", cwd=tmp_path, home_dir=tmp_path)
-    assert identity is not None
-    store.upsert_local_cli_grant(
-        identity=identity,
-        state="allowed",
-        expected_revision=0,
-        updated_at=utc_now(),
-    )
-    assert (
-        matching_local_cli_grant(
-            store=store,
-            command=f"python3 {script}",
-            cwd=tmp_path,
-            home_dir=tmp_path,
-            current_action="block",
-        )
-        is None
-    )
 
 
 def test_blocked_grant_applies_to_review(tmp_path: Path) -> None:
@@ -86,15 +50,9 @@ def test_blocked_grant_applies_to_review(tmp_path: Path) -> None:
         expected_revision=0,
         updated_at=utc_now(),
     )
-    matched = matching_local_cli_grant(
-        store=store,
-        command=f"python3 {script}",
-        cwd=tmp_path,
-        home_dir=tmp_path,
-        current_action="review",
-    )
+    matched = review_rule_verdict(store, command=f"python3 {script}", cwd=tmp_path, home_dir=tmp_path)
     assert matched is not None
-    assert matched[1] == "blocked"
+    assert matched[0] == "blocked"
 
 
 def test_list_merges_observation_and_grant(tmp_path: Path) -> None:
@@ -129,7 +87,9 @@ def test_grant_does_not_allow_compound_source_and_ssh(tmp_path: Path) -> None:
     helper.write_text("#!/bin/sh\necho access\n", encoding="utf-8")
     helper.chmod(0o755)
     command = f"source {helper} && ssh -o BatchMode=yes host 'echo ok'"
-    observe_unlisted_cli(store=store, command=command, cwd=tmp_path, home_dir=tmp_path)
+    native_local_cli_hook(
+        store, command=command, cwd=tmp_path, home_dir=tmp_path, current_action="allow", grant_allowed=False
+    )
     identity = identify_unlisted_cli(f"bash {helper}", cwd=tmp_path, home_dir=tmp_path)
     assert identity is not None
     store.upsert_local_cli_grant(
@@ -138,20 +98,33 @@ def test_grant_does_not_allow_compound_source_and_ssh(tmp_path: Path) -> None:
         expected_revision=0,
         updated_at=utc_now(),
     )
-    matched = matching_local_cli_grant(
-        store=store,
-        command=command,
-        cwd=tmp_path,
-        home_dir=tmp_path,
-        current_action="review",
-    )
+    matched = review_rule_verdict(store, command=command, cwd=tmp_path, home_dir=tmp_path)
     assert matched is None
-    direct = matching_local_cli_grant(
-        store=store,
-        command=f"bash {helper} ssh 1",
-        cwd=tmp_path,
-        home_dir=tmp_path,
-        current_action="review",
-    )
+    direct = review_rule_verdict(store, command=f"bash {helper} ssh 1", cwd=tmp_path, home_dir=tmp_path)
     assert direct is not None
-    assert direct[1] == "allowed"
+    assert direct[0] == "allowed"
+
+
+def test_listing_restarts_when_the_inventory_changes_between_pages(tmp_path: Path, monkeypatch) -> None:
+    store = GuardStore(tmp_path)
+    sent: list[dict[str, object]] = []
+    replies: list[dict[str, object]] = [
+        {"items": [{"cli_id": "alpha"}], "next_offset": 1, "snapshot": "one"},
+        {"restart": True, "snapshot": "two"},
+        {"items": [{"cli_id": "beta"}], "next_offset": 1, "snapshot": "two"},
+        {"items": [{"cli_id": "alpha"}], "next_offset": None, "snapshot": "two"},
+    ]
+
+    def native(method: str, args: dict[str, object]) -> dict[str, object]:
+        assert method == "list_local_cli_items"
+        sent.append(dict(args))
+        return replies.pop(0)
+
+    monkeypatch.setattr(store, "_native_store_call", native)
+    assert [item["cli_id"] for item in store.list_local_cli_items()] == ["beta", "alpha"]
+    assert sent == [
+        {"offset": 0},
+        {"offset": 1, "snapshot": "one"},
+        {"offset": 0, "snapshot": "two"},
+        {"offset": 1, "snapshot": "two"},
+    ]

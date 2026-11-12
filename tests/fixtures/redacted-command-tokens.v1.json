@@ -1,0 +1,251 @@
+{
+  "schema": "redacted-command-tokens-parity.v1",
+  "cases": [
+    {
+      "name": "an empty command",
+      "command": [],
+      "redacted": []
+    },
+    {
+      "name": "a plain install keeps every token",
+      "command": [
+        [
+          "npm"
+        ],
+        [
+          "install"
+        ],
+        [
+          "left-pad"
+        ]
+      ],
+      "redacted": [
+        "npm",
+        "install",
+        "left-pad"
+      ]
+    },
+    {
+      "name": "an empty token",
+      "command": [
+        [
+          ""
+        ]
+      ],
+      "redacted": [
+        ""
+      ]
+    },
+    {
+      "name": "an assignment whose key names an api key",
+      "command": [
+        [
+          "API_KEY=",
+          "abc123"
+        ]
+      ],
+      "redacted": [
+        "API_KEY=*****"
+      ]
+    },
+    {
+      "name": "a colon assignment whose key names an api key",
+      "command": [
+        [
+          "api-key: ",
+          "secretval"
+        ]
+      ],
+      "redacted": [
+        "api-key: *****"
+      ]
+    },
+    {
+      "name": "a key fragment is matched without regard to case",
+      "command": [
+        [
+          "My_Token=",
+          "abc"
+        ]
+      ],
+      "redacted": [
+        "My_Token=*****"
+      ]
+    },
+    {
+      "name": "an option whose key names a password",
+      "command": [
+        [
+          "--password=",
+          "hunter2"
+        ]
+      ],
+      "redacted": [
+        "--password=*****"
+      ]
+    },
+    {
+      "name": "an equals key is checked before a colon key",
+      "command": [
+        [
+          "token:a=",
+          "b"
+        ]
+      ],
+      "redacted": [
+        "token:a=*****"
+      ]
+    },
+    {
+      "name": "a colon key when the token has no equals",
+      "command": [
+        [
+          "secret:",
+          "value"
+        ]
+      ],
+      "redacted": [
+        "secret: *****"
+      ]
+    },
+    {
+      "name": "a key naming nothing sensitive falls through to the text rules",
+      "command": [
+        [
+          "Authorization=Bearer ",
+          "abcdefghij"
+        ]
+      ],
+      "redacted": [
+        "Authorization=Bearer *****"
+      ]
+    },
+    {
+      "name": "a bare provider token falls through to the text rules",
+      "command": [
+        [
+          "ghp_",
+          "AAAABBBBCCCC"
+        ]
+      ],
+      "redacted": [
+        "gh*****"
+      ]
+    },
+    {
+      "name": "an https source loses its credentials, query and fragment",
+      "command": [
+        [
+          "https://user:",
+          "pass",
+          "@registry.example.com/pkg.tgz?token=abc#frag"
+        ]
+      ],
+      "redacted": [
+        "https://registry.example.com/pkg.tgz"
+      ]
+    },
+    {
+      "name": "a git source keeps its path once the userinfo goes",
+      "command": [
+        [
+          "git+ssh://git@github.com/owner/repo.git#semver:^1"
+        ]
+      ],
+      "redacted": [
+        "git+ssh://github.com/owner/repo.git"
+      ]
+    },
+    {
+      "name": "a slashless http specifier is redacted whole",
+      "command": [
+        [
+          "http:registry.example.com/pkg"
+        ]
+      ],
+      "redacted": [
+        "http:<redacted-source>"
+      ]
+    },
+    {
+      "name": "a pinned hash is left readable",
+      "command": [
+        [
+          "--hash=sha256:",
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        ]
+      ],
+      "redacted": [
+        "--hash=sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      ]
+    },
+    {
+      "name": "a registry assignment carrying credentials",
+      "command": [
+        [
+          "NPM_CONFIG_REGISTRY=https://user:",
+          "pass",
+          "@registry.example.com/"
+        ]
+      ],
+      "redacted": [
+        "NPM_CONFIG_REGISTRY=https://registry.example.com/"
+      ]
+    },
+    {
+      "name": "a pip index option keeps its flag once the credentials go",
+      "command": [
+        [
+          "--index-url=https://user:",
+          "pw",
+          "@pypi.example.test/simple"
+        ]
+      ],
+      "redacted": [
+        "--index-url=https://pypi.example.test/simple"
+      ]
+    },
+    {
+      "name": "a database url loses its userinfo and is then masked whole",
+      "command": [
+        [
+          "postgres://user:",
+          "pw",
+          "@db.example.test/app"
+        ]
+      ],
+      "redacted": [
+        "*****"
+      ]
+    },
+    {
+      "name": "every rule applies to its own token in one command",
+      "command": [
+        [
+          "pip"
+        ],
+        [
+          "install"
+        ],
+        [
+          "--index-url"
+        ],
+        [
+          "https://user:",
+          "pw",
+          "@pypi.example.test/simple"
+        ],
+        [
+          "left-pad"
+        ]
+      ],
+      "redacted": [
+        "pip",
+        "install",
+        "--index-url",
+        "https://pypi.example.test/simple",
+        "left-pad"
+      ]
+    }
+  ]
+}

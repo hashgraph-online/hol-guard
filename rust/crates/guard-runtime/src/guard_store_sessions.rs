@@ -3,7 +3,7 @@
 //! columns and Python shapes them for its callers.
 
 use rusqlite::Connection;
-use serde_json::Value;
+use serde_json::{json, Value};
 
 use crate::guard_store_args::Args;
 use crate::guard_store_db::{
@@ -150,6 +150,42 @@ pub(crate) fn upsert_operation(connection: &Connection, args: &Args) -> StoreRes
         )),
         row => Ok(row),
     }
+}
+
+/// `link_codex_live_wait`: the session and operation for a Codex hook that
+/// is holding its tool call open on `request_id`, written in one transaction.
+/// The operation names the waiting bridge (its `metadata_json`), so it must
+/// exist before the request is stored or an approval would find no live wait.
+pub(crate) fn link_codex_live_wait(connection: &Connection, args: &Args) -> StoreResult<Value> {
+    let request_id = args.str("request_id")?;
+    let id = format!("codex-hook-{request_id}");
+    let now = args.str("now")?;
+    let session = json!({
+        "session_id": id,
+        "harness": "codex",
+        "surface": "harness-adapter",
+        "status": "waiting_on_approval",
+        "client_name": "codex-hook",
+        "client_title": "Codex hook",
+        "workspace": args.opt_str("workspace")?,
+        "capabilities_json": json!(["approval-resolution"]).to_string(),
+        "now": now,
+    });
+    let operation = json!({
+        "operation_id": id,
+        "session_id": id,
+        "harness": "codex",
+        "operation_type": "tool_call",
+        "status": "waiting_on_approval",
+        "approval_request_ids_json": json!([request_id]).to_string(),
+        "metadata_json": args.str("metadata_json")?,
+        "now": now,
+    });
+    let (Value::Object(session), Value::Object(operation)) = (session, operation) else {
+        return runtime_error("Codex live wait arguments were not objects.");
+    };
+    upsert_session(connection, &Args(&session))?;
+    upsert_operation(connection, &Args(&operation))
 }
 
 pub(crate) fn get_operation(connection: &Connection, args: &Args) -> StoreResult<Value> {

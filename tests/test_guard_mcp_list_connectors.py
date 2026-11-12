@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import cast
 
 import pytest
 
@@ -11,11 +12,10 @@ from codex_plugin_scanner.cli import main
 from codex_plugin_scanner.guard.adapters.harness_mcp_discovery import (
     discover_remote_mcp_servers,
     persist_discovered_harness_mcp_servers,
-    remote_mcp_origin,
 )
 from codex_plugin_scanner.guard.cli.inventory_list_commands import mcp_list_payload
 from codex_plugin_scanner.guard.cli.render_connectors import connector_setup_line
-from codex_plugin_scanner.guard.daemon.local_cli_api import LocalCliApiService
+from codex_plugin_scanner.guard.local_clis.local_cli_api import LocalCliApiService
 from codex_plugin_scanner.guard.models import GuardArtifact, HarnessDetection
 from codex_plugin_scanner.guard.runtime.connector_setup_items import connector_setup_href, connector_setup_status
 from codex_plugin_scanner.guard.runtime.observed_mcp_tools import observed_mcp_tool
@@ -75,23 +75,6 @@ def _remote_detection(harness: str, name: str, url: str) -> HarnessDetection:
             ),
         ),
     )
-
-
-def test_remote_origin_keeps_scheme_host_and_path_only() -> None:
-    assert remote_mcp_origin("HTTPS://user:pw@MCP.Example.Test:8443/v1/mcp?key=secret#frag") == (
-        "https://mcp.example.test:8443/v1/mcp"
-    )
-    assert remote_mcp_origin("https://mcp.example.test/mcp") == "https://mcp.example.test/mcp"
-    for rejected in ("${MCP_URL}", "file:///tmp/sock", "ftp://mcp.example.test/", "https:///path", ""):
-        assert remote_mcp_origin(rejected) is None
-
-
-def test_remote_origin_masks_path_segments_that_look_like_keys() -> None:
-    assert remote_mcp_origin("https://mcp.example.test/api/mcp/s/a1b2c3d4e5/mcp") == (
-        "https://mcp.example.test/api/mcp/s/[masked]/mcp"
-    )
-    assert remote_mcp_origin("https://mcp.example.test/v1/" + "k" * 24) == "https://mcp.example.test/v1/[masked]"
-    assert remote_mcp_origin("https://mcp.example.test/2025-06-18/mcp") == "https://mcp.example.test/2025-06-18/mcp"
 
 
 def test_a_server_name_is_read_as_the_namespace_its_calls_carry(tmp_path: Path) -> None:
@@ -215,6 +198,39 @@ def test_status_line_counts_connectors_needing_setup(tmp_path: Path) -> None:
     assert connector_setup_line({**status, "url": None}).endswith("→ hol-guard dashboard")
     assert connector_setup_line({**status, "needing_setup": 0}) is None
     assert connector_setup_line(None) is None
+
+
+@pytest.mark.parametrize("answer", [{}, {"rows": [{"cli_id": "x"}]}, {"rows": [{"declared_sources": 1}]}])
+def test_status_line_is_dropped_when_the_runtime_cannot_list_connectors(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, answer: dict[str, object]
+) -> None:
+    from codex_plugin_scanner.guard import native_runner_authority as authority
+
+    store = GuardStore(tmp_path / "home")
+    _observe(store, "codex", "alpha")
+    monkeypatch.setattr(authority, "native_runner_authority", lambda *_args, **_kwargs: answer)
+
+    assert connector_setup_status(store, None) is None
+
+
+def test_the_setup_check_receives_only_the_fields_it_reads(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from codex_plugin_scanner.guard import native_runner_authority as authority
+
+    store = GuardStore(tmp_path / "home")
+    _observe(store, "codex", "alpha")
+    sent: list[dict[str, object]] = []
+
+    def answer(_kind: str, request: dict[str, object], **_kwargs: object) -> dict[str, object]:
+        sent.extend(cast("list[dict[str, object]]", request["items"]))
+        return {"rows": []}
+
+    monkeypatch.setattr(authority, "native_runner_authority", answer)
+
+    assert connector_setup_status(store, None) == {"needing_setup": 0, "mcp_servers": 0, "local_clis": 0, "url": None}
+    allowed = {"cli_id", "display_name", "name", "surface", "state", "suggestable", "stale", "source_label"}
+    allowed |= {"remote_origin", "declared_sources", "mcp_catalog"}
+    assert sent
+    assert all(set(item) <= allowed for item in sent)
 
 
 def test_status_json_carries_the_connector_count(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:

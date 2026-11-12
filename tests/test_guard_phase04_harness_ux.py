@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 from contextlib import redirect_stdout
 from io import StringIO
 from pathlib import Path
@@ -16,6 +17,7 @@ from codex_plugin_scanner.guard.cli.commands import add_guard_root_parser, run_g
 from codex_plugin_scanner.guard.store import GuardStore
 from tests.conftest import guard_commands_module
 from tests.guard_signed_approval_fixtures import write_synthetic_daemon_auth_token
+from tests.package_review_settings import review_package_signals
 
 pytestmark = pytest.mark.usefixtures("approval_questionnaire_mode")
 
@@ -138,7 +140,7 @@ def _answer_claude_guard_question(tmp_path: Path, *, session_id: str, answer: st
 
 
 @pytest.mark.usefixtures("native_hook_force")
-def test_gr076_codex_prompt_secret_read_returns_branded_approval_context(tmp_path: Path) -> None:
+def test_gr076_codex_prompt_secret_read_returns_branded_terminal_block(tmp_path: Path) -> None:
     guard_home = tmp_path / "guard-home"
     guard_home.mkdir(parents=True, exist_ok=True)
     (guard_home / "config.toml").write_text("approval_wait_timeout_seconds = 0\n", encoding="utf-8")
@@ -159,9 +161,11 @@ def test_gr076_codex_prompt_secret_read_returns_branded_approval_context(tmp_pat
     assert exit_code == 0
     assert payload["decision"] == "block"
     assert payload["continue"] is False
-    assert "HOL Guard stopped this Codex prompt" in str(payload["reason"])
-    assert "/requests/" in str(payload["reason"])
-    assert payload["stopReason"] == payload["reason"]
+    assert payload["reason_code"] == "native_prompt_exfiltration_block"
+    assert str(payload["reason"]).startswith("HOL Guard did not send this prompt")
+    assert "Nothing is waiting for approval" in str(payload["reason"])
+    assert "/requests/" not in str(payload["reason"])
+    assert GuardStore(guard_home).list_approval_requests(limit=5) == []
     assert payload["hookSpecificOutput"] == {
         "hookEventName": "UserPromptSubmit",
         "additionalContext": payload["reason"],
@@ -190,11 +194,11 @@ def test_codex_prompt_secret_read_json_hook_exits_zero_with_native_block(tmp_pat
     assert payload["decision"] == "block"
     assert payload["continue"] is False
     assert payload["hookSpecificOutput"]["hookEventName"] == "UserPromptSubmit"
-    assert "HOL Guard stopped this Codex prompt" in str(payload["reason"])
+    assert payload["reason_code"] == "native_prompt_exfiltration_block"
 
 
 @pytest.mark.usefixtures("native_hook_force")
-def test_gr076b_codex_prompt_secret_read_caps_browser_approval_wait(
+def test_gr076b_codex_prompt_secret_read_blocks_without_browser_approval_wait(
     tmp_path: Path,
     monkeypatch,
 ) -> None:
@@ -228,13 +232,14 @@ def test_gr076b_codex_prompt_secret_read_caps_browser_approval_wait(
     assert exit_code == 0
     assert payload["decision"] == "block"
     assert payload["continue"] is False
-    assert observed_timeouts == [8]
-    assert "Open HOL Guard" in str(payload["reason"])
-    assert "/requests/" in str(payload["reason"])
+    # The daemon answers a prompt exfiltration terminally: nothing to wait on.
+    assert observed_timeouts == []
+    assert payload["reason_code"] == "native_prompt_exfiltration_block"
+    assert "/requests/" not in str(payload["reason"])
 
 
 @pytest.mark.usefixtures("native_hook_force")
-def test_codex_post_tool_secret_output_caps_browser_approval_wait(
+def test_codex_post_tool_secret_output_blocks_without_browser_approval_wait(
     tmp_path: Path,
     monkeypatch,
 ) -> None:
@@ -270,9 +275,11 @@ def test_codex_post_tool_secret_output_caps_browser_approval_wait(
     assert exit_code == 1
     assert payload["decision"] == "block"
     assert payload["continue"] is True
-    assert observed_timeouts == [8]
-    assert "Open HOL Guard" in str(payload["reason"])
-    assert "/requests/" in str(payload["reason"])
+    # The daemon withholds secret output terminally: nothing to wait on.
+    assert observed_timeouts == []
+    assert payload["reason_code"] == "output_secret_match"
+    assert payload["model_output_action"] == "block"
+    assert "npm_secret_fixture_value" not in output
 
 
 @pytest.mark.usefixtures("native_hook_force")
@@ -317,10 +324,12 @@ def test_gr077b_codex_read_secret_file_gets_native_denial(tmp_path: Path) -> Non
     assert isinstance(hook_output, dict)
     assert hook_output["hookEventName"] == "PreToolUse"
     assert hook_output["permissionDecision"] == "deny"
+    assert payload["policy_action"] == "review"
+    assert payload["reason_code"] == "native_policy_reapproval_required"
     assert "HOL Guard" in str(hook_output["permissionDecisionReason"])
-    assert "Codex" in str(hook_output["permissionDecisionReason"])
     assert "Claude" not in str(hook_output["permissionDecisionReason"])
-    assert "secret" in str(hook_output["permissionDecisionReason"]).lower()
+    assert "secret read setting" in str(hook_output["permissionDecisionReason"]).lower()
+    assert payload["approval_requests"]
 
 
 @pytest.mark.usefixtures("native_hook_force")
@@ -332,16 +341,19 @@ def test_gr078_codex_safe_read_allows_without_native_denial(tmp_path: Path) -> N
             "hook_event_name": "PreToolUse",
             "tool_name": "Read",
             "tool_input": {"file_path": ".nvmrc"},
-            "policy_action": "allow",
         },
     )
 
+    payload = _json_line(output)
+
     assert exit_code == 0
-    assert output == ""
+    assert payload["hookSpecificOutput"]["permissionDecision"] == "allow"
+    assert payload["continue"] is True
+    assert "approval_requests" not in payload
 
 
 @pytest.mark.usefixtures("native_hook_force")
-def test_gr080_codex_permission_request_uses_native_review_message(tmp_path: Path) -> None:
+def test_gr080_codex_permission_request_defers_to_the_harness_prompt(tmp_path: Path) -> None:
     exit_code, output = _run_hook(
         tmp_path,
         harness="codex",
@@ -350,15 +362,15 @@ def test_gr080_codex_permission_request_uses_native_review_message(tmp_path: Pat
             "hook_event_name": "PermissionRequest",
             "tool_name": "Bash",
             "tool_input": {"command": "cat ~/.npmrc"},
-            "policy_action": "require-reapproval",
         },
     )
 
     payload = _json_line(output)
 
+    # PreToolUse already reviewed the command; the permission prompt carries no
+    # Guard decision, so the harness's own prompt asks the user.
     assert exit_code == 0
-    assert "Codex approval request" in str(payload["systemMessage"])
-    assert "HOL Guard" in str(payload["systemMessage"])
+    assert payload == {"hookSpecificOutput": {"hookEventName": "PermissionRequest"}}
 
 
 @pytest.mark.usefixtures("native_hook_force")
@@ -397,45 +409,9 @@ def test_gr081_codex_native_runtime_returns_json_denial_for_yolo_shell_exfil(
     assert hook_output["hookEventName"] == "PreToolUse"
     assert hook_output["permissionDecision"] == "deny"
     assert "HOL Guard" in str(hook_output["permissionDecisionReason"])
-    assert "terminal policy decision" in str(hook_output["permissionDecisionReason"]).lower()
-
-
-def test_gr081b_codex_reviewable_pretooluse_is_live_wait_candidate() -> None:
-    assert guard_commands_module._codex_hook_waits_for_browser_approval(
-        argparse.Namespace(harness="codex", json=False),
-        event_name="PreToolUse",
-        policy_action="review",
-        payload={
-            "hook_event_name": "PreToolUse",
-            "tool_name": "Read",
-            "tool_input": {"path": "/workspace/project/.env"},
-        },
-    )
-
-
-def test_gr081c_codex_live_wait_opens_and_prints_approval_url(monkeypatch, capsys) -> None:
-    opened_urls: list[str] = []
-
-    monkeypatch.setattr(
-        "codex_plugin_scanner.guard.cli.commands_support_interaction.open_browser_url",
-        lambda url: opened_urls.append(url) or True,
-    )
-
-    guard_commands_module._open_codex_live_approval(
-        {
-            "approval_requests": [
-                {
-                    "request_id": "req-1",
-                    "approval_url": "https://example.invalid/requests/req-1",
-                }
-            ]
-        }
-    )
-
-    captured = capsys.readouterr()
-
-    assert opened_urls == ["https://example.invalid/requests/req-1"]
-    assert "https://example.invalid/requests/req-1" in captured.err
+    assert payload["policy_action"] == "block"
+    assert payload["reason_code"] == "native_secret_exfiltration"
+    assert "combines sensitive data access with network transfer" in str(hook_output["permissionDecisionReason"])
 
 
 @pytest.mark.usefixtures("native_hook_force")
@@ -454,7 +430,8 @@ def test_gr082_claude_pretooluse_brands_native_prompt(tmp_path: Path) -> None:
     hook_output = payload["hookSpecificOutput"]
 
     assert exit_code == 0
-    assert "HOL Guard" in str(payload["systemMessage"])
+    # The daemon brands Claude's own permission prompt through the decision
+    # reason; it sends no separate system message.
     assert isinstance(hook_output, dict)
     assert hook_output["permissionDecision"] == "ask"
     assert "HOL Guard" in str(hook_output["permissionDecisionReason"])
@@ -495,7 +472,7 @@ def test_gr083_claude_permission_request_routes_to_ask_user_question(tmp_path: P
 
 
 @pytest.mark.usefixtures("native_hook_force")
-def test_gr084_claude_keep_blocked_persists_for_repeated_sensitive_read(tmp_path: Path) -> None:
+def test_gr084_claude_keep_blocked_answer_leaves_repeat_under_review(tmp_path: Path) -> None:
     event = _claude_sensitive_read_event("session-gr084")
 
     first_exit_code, first_output = _run_hook(tmp_path, harness="claude-code", payload=event)
@@ -526,8 +503,10 @@ def test_gr084_claude_keep_blocked_persists_for_repeated_sensitive_read(tmp_path
     assert answer_exit_code == 0
     assert answer_output == ""
     assert repeat_exit_code == 0
-    assert repeat_payload["hookSpecificOutput"]["permissionDecision"] == "deny"
-    assert "HOL Guard blocked Claude" in str(repeat_payload["hookSpecificOutput"])
+    # Keep blocked settles the pending prompt without saving a rule, so the
+    # repeat is reviewed again rather than allowed.
+    assert repeat_payload["hookSpecificOutput"]["permissionDecision"] == "ask"
+    assert repeat_payload["policy_action"] == "review"
 
 
 @pytest.mark.usefixtures("native_hook_force")
@@ -633,15 +612,36 @@ def test_gr089_copilot_autopilot_shell_exfil_returns_terminal_stop(tmp_path: Pat
 
     payload = _json_line(output)
 
+    # Same shape the installed bounded bridge answers Copilot with.
+    hook_output = payload["hookSpecificOutput"]
     assert exit_code == 0
-    assert payload["permissionDecision"] == "deny"
-    assert "HOL Guard" in str(payload["permissionDecisionReason"])
-    assert "network" in str(payload["permissionDecisionReason"]).lower()
+    assert hook_output["permissionDecision"] == "deny"
+    assert payload["policy_action"] == "block"
+    assert payload["reason_code"] == "native_secret_exfiltration"
+    assert "HOL Guard" in str(hook_output["permissionDecisionReason"])
+    assert "network" in str(hook_output["permissionDecisionReason"]).lower()
 
 
-def test_gr097_hook_reason_deduplicates_duplicate_copy() -> None:
-    from codex_plugin_scanner.guard.cli.commands import _native_hook_reason
-
-    reason = _native_hook_reason("HOL Guard blocked this action.", "HOL Guard blocked this action.", "Retry.")
-
-    assert reason == "HOL Guard blocked this action. Retry."
+@pytest.mark.usefixtures("native_hook_force")
+def test_codex_json_pretool_package_install_names_its_request(tmp_path: Path) -> None:
+    review_package_signals(tmp_path / "guard-home")
+    exit_code, output = _run_hook(
+        tmp_path,
+        harness="codex",
+        json_output=True,
+        payload={
+            "hook_event_name": "PreToolUse",
+            "tool_name": "Bash",
+            "tool_input": {"command": "npm install is-even@1.0.0"},
+        },
+    )
+    payload = _json_line(output)
+    request_id = payload["guardApprovalRequestId"]
+    approval_url = payload["guardApprovalUrl"]
+    assert exit_code == 0
+    assert payload["hookSpecificOutput"]["permissionDecision"] == "deny"
+    assert isinstance(request_id, str)
+    assert re.fullmatch(r"[A-Za-z0-9_-]{8,128}", request_id)
+    assert isinstance(approval_url, str)
+    assert re.match(r"https?://", approval_url)
+    assert request_id in approval_url

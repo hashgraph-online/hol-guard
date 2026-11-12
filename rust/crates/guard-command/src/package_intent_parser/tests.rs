@@ -226,3 +226,80 @@ fn path_for_resolution_keeps_windows_drive_letter_entries() {
         r"C:\tools\node;D:\bin"
     );
 }
+
+#[test]
+fn runner_launches_fetch_the_selected_package() {
+    let spec = |command: &str| {
+        let tokens: Vec<String> = command.split_whitespace().map(str::to_owned).collect();
+        exec_package_spec(&tokens)
+    };
+    for (command, package) in [
+        (
+            "npx -p flagged-package@1.0.0 node --version",
+            "flagged-package@1.0.0",
+        ),
+        (
+            "npx --package flagged-package@1.0.0 node",
+            "flagged-package@1.0.0",
+        ),
+        (
+            "npx --package=flagged-package@1.0.0 node",
+            "flagged-package@1.0.0",
+        ),
+        ("npx --yes flagged-package@1.0.0", "flagged-package@1.0.0"),
+        ("bunx --bun flagged-package@1.0.0", "flagged-package@1.0.0"),
+        ("bunx -p flagged-package@1.0.0 run", "flagged-package@1.0.0"),
+        // Options after the executable are its own, not the runner's.
+        ("npx tsc -p tsconfig.json", "tsc"),
+        ("bunx vitest --package other", "vitest"),
+        // A runner option's value names a registry or a directory.
+        (
+            "npx --registry https://registry.example flagged-package",
+            "flagged-package",
+        ),
+        (
+            "npx --cache /tmp/npm-cache flagged-package",
+            "flagged-package",
+        ),
+        ("bunx --cwd app flagged-package", "flagged-package"),
+    ] {
+        assert_eq!(spec(command).as_deref(), Some(package), "{command}");
+    }
+    assert_eq!(spec("npx --yes"), None);
+    assert_eq!(spec("npx -p"), None);
+    assert_eq!(spec("npx --registry"), None);
+    let packages = |command: &str| {
+        let tokens: Vec<String> = command.split_whitespace().map(str::to_owned).collect();
+        runner_packages(&tokens)
+    };
+    assert_eq!(
+        packages("npx -p left-pad -p flagged-package node"),
+        ["left-pad", "flagged-package"]
+    );
+}
+
+fn binding_hex(key: &[u8; 32], message: &[u8]) -> String {
+    hmac_sha256(key, message)
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect()
+}
+
+/// The unresolved-context binding has to match what Python computes for the
+/// same key and message, so pin the primitive to a published HMAC-SHA256
+/// value rather than to whatever this crate happens to compute.
+#[test]
+fn the_context_binding_matches_the_published_hmac_sha256_vector() {
+    let mut key = [0u8; 32];
+    for (index, byte) in key.iter_mut().enumerate() {
+        *byte = u8::try_from(index).expect("the key is 32 bytes long");
+    }
+    assert_eq!(
+        binding_hex(&key, b"hol-guard-intent"),
+        "48479d2f6d4728899d9811123ff36b85020fc16dda72a451af9447bd936017dd"
+    );
+    assert_ne!(
+        binding_hex(&key, b"hol-guard-inten7"),
+        binding_hex(&key, b"hol-guard-intent")
+    );
+}

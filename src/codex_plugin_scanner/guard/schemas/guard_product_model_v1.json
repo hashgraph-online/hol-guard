@@ -60,7 +60,8 @@
         "omp",
         "zcode",
         "devin",
-        "paseo"
+        "paseo",
+        "muse"
     ],
     "action_categories": [
         "secrets",

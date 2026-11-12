@@ -59,7 +59,7 @@ fn review_reasons_match_the_daemon() {
 }
 
 #[test]
-fn links_python_would_rewrite_are_left_to_the_daemon() {
+fn links_it_cannot_reproduce_are_left_unlinked() {
     for url in [
         "http://127.0.0.1:4781/requests/r1?x=1",
         "http://127.0.0.1:4781/requests/r1#guard-token=old",
@@ -113,4 +113,141 @@ fn loopback_links_the_client_would_sign_are_never_shown_unsigned() {
     }
     let signed = live_review_url("http://127.0.0.1:4781/approvals/a", Some("key"), 0).unwrap();
     assert!(signed.starts_with("http://127.0.0.1:4781/approvals/a#guard-token=gld1."));
+}
+
+/// The strip the Python fail-closed fallback replays, recorded in
+/// `tests/fixtures/guard-review-link-strip.v1.json` and read by
+/// `tests/test_review_link_strip_parity.py` as well. The fallback composes the
+/// agent's deny text without the resident, so the two must not drift.
+mod review_link_strip_parity {
+    use serde_json::Value;
+
+    use crate::native_review_link::without_raw_url;
+
+    const STRIP_VECTORS: &str =
+        include_str!("../../../../tests/fixtures/guard-review-link-strip.v1.json");
+
+    fn field<'a>(case: &'a Value, key: &str) -> &'a str {
+        case[key]
+            .as_str()
+            .unwrap_or_else(|| panic!("{key} is text"))
+    }
+
+    #[test]
+    fn without_raw_url_matches_the_recorded_strip() {
+        let document: Value = serde_json::from_str(STRIP_VECTORS).expect("strip vectors parse");
+        assert_eq!(document["schema"], "guard-review-link-strip-parity.v1");
+        let cases = document["cases"].as_array().expect("cases is a list");
+        assert!(!cases.is_empty(), "the fixture records at least one case");
+        for case in cases {
+            let name = field(case, "name");
+            assert_eq!(
+                without_raw_url(field(case, "reason"), field(case, "approval_url")),
+                field(case, "stripped"),
+                "{name}"
+            );
+        }
+    }
+}
+
+#[test]
+fn a_loopback_approval_link_opens_only_once_it_is_signed() {
+    let document = document();
+    let vector = &document["sessions"][0];
+    let url = "http://127.0.0.1:5475/requests/req-1";
+    let auth_token = text(vector, "auth_token");
+    let surface = text(vector, "surface");
+    let expected = session_token(auth_token, surface, micros(vector))
+        .map(|session| format!("{url}#guard-token={session}"));
+    assert!(expected.is_some());
+    assert_eq!(
+        approval_browser_url(url, || Some(auth_token.to_owned()), surface, micros(vector)),
+        expected
+    );
+    // No daemon auth token: there is no signed link to open, and the
+    // unsigned one is never handed to the browser.
+    assert_eq!(
+        approval_browser_url(url, || None, surface, micros(vector)),
+        None
+    );
+}
+
+const HANDOFF_REVIEW_URL: &str = "http://127.0.0.1:5474/requests/20fce09561634ecab2055b539113c618";
+
+#[test]
+fn a_request_link_gets_the_short_signed_path_the_daemon_checks() {
+    // `build_approval_handoff_url(url, auth_token="vector-auth", now=1800000000)`.
+    let expected = format!("{HANDOFF_REVIEW_URL}/1800043200-7c3d07b3dee665161df59cb58f93bcdf");
+    let now = 1_800_000_000 * 1_000_000 + 999_999;
+
+    let signed = approval_browser_url(
+        HANDOFF_REVIEW_URL,
+        || Some("vector-auth".to_owned()),
+        APPROVAL_CENTER_SURFACE,
+        now,
+    );
+
+    assert_eq!(signed.as_deref(), Some(expected.as_str()));
+    assert!(!expected.contains('#'));
+}
+
+#[test]
+fn only_a_bare_request_link_on_the_approval_surface_gets_the_short_path() {
+    let now = 1_800_000_000 * 1_000_000;
+    let nested = "http://127.0.0.1:5474/base/requests/20fce09561634ecab2055b539113c618";
+    for (url, surface) in [
+        (nested, APPROVAL_CENTER_SURFACE),
+        (HANDOFF_REVIEW_URL, "protection-repair"),
+    ] {
+        let signed = approval_browser_url(url, || Some("vector-auth".to_owned()), surface, now)
+            .expect("loopback link is signed");
+        assert!(
+            signed.starts_with(&format!("{url}#guard-token=gld1.")),
+            "{signed}"
+        );
+    }
+}
+
+#[test]
+fn only_an_exact_short_code_counts_as_an_already_signed_link() {
+    let url = HANDOFF_REVIEW_URL;
+    let mac = "7c3d07b3dee665161df59cb58f93bcdf";
+    for signed in [
+        format!("Open HOL Guard: {url}/1800043200-{mac}."),
+        format!("{url}/1800043200-{mac}"),
+        format!("({url}/1-{mac})"),
+    ] {
+        assert!(carries_handoff_link(&signed, url), "{signed}");
+    }
+    for unsigned in [
+        format!("Open HOL Guard: {url}."),
+        format!("{url}/details"),
+        format!("{url}/1800043200-{}", &mac[..31]),
+        format!("{url}/1800043200-{mac}0"),
+        format!("{url}/1800043200-{mac}/more"),
+        format!("{url}/1800043200-{}", mac.to_uppercase()),
+        format!("{url}/1234567890123-{mac}"),
+        format!("{url}/-{mac}"),
+        format!("{url}/1800043200{mac}"),
+    ] {
+        assert!(!carries_handoff_link(&unsigned, url), "{unsigned}");
+    }
+}
+
+#[test]
+fn a_reason_that_already_has_a_short_link_is_not_signed_twice() {
+    let earlier = format!("{HANDOFF_REVIEW_URL}/1800000100-7c3d07b3dee665161df59cb58f93bcdf");
+    let reason = format!("Review this. Open HOL Guard: {earlier}.");
+    let later = 1_800_000_000 * 1_000_000;
+    for harness in ["codex", "claude-code"] {
+        let signed = native_review_reason(
+            harness,
+            &reason,
+            HANDOFF_REVIEW_URL,
+            Some("vector-auth"),
+            later,
+        )
+        .expect("reason");
+        assert_eq!(signed, reason, "{harness}");
+    }
 }

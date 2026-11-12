@@ -10,8 +10,8 @@ project:
   name: HOL Guard
   homepage: https://hol.org/guard
   administrators:
-    - name: Hashgraph Online Maintainers
-      affiliation: Hashgraph Online
+    - name: HOL Maintainers
+      affiliation: HOL
       email: security@hol.org
       social: https://github.com/hashgraph-online
       primary: true
@@ -25,8 +25,8 @@ project:
     reports-accepted: true
     bug-bounty-available: false
     contact:
-      name: Hashgraph Online Security
-      affiliation: Hashgraph Online
+      name: HOL Security
+      affiliation: HOL
       email: security@hol.org
       primary: true
     policy: https://github.com/hashgraph-online/hol-guard/blob/main/SECURITY.md
@@ -43,8 +43,8 @@ repository:
   accepts-change-request: true
   accepts-automated-change-request: false
   core-team:
-    - name: Hashgraph Online Maintainers
-      affiliation: Hashgraph Online
+    - name: HOL Maintainers
+      affiliation: HOL
       email: security@hol.org
       social: https://github.com/hashgraph-online
       primary: true

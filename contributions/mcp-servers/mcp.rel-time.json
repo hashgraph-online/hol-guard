@@ -1,0 +1,85 @@
+{
+  "schemaVersion": "guard.mcp-server-contribution.v1",
+  "id": "mcp.rel-time",
+  "version": "1.2.11",
+  "name": "Rel-Time Protocol",
+  "description": "Reviews Rel-Time tools that spend hash credits, provision API keys, link Passkeys, or write proof files: reltime_anchor_file, reltime_anchor_hash, reltime_provision_agent_key, reltime_link_passkey, and reltime_stamp_file. reltime_get_sun_stamp, reltime_check_proof, reltime_account_status, and reltime_audit_trail retain Guard's usual handling. Off until enabled.",
+  "trustClass": "external",
+  "activation": "opt-in",
+  "publisher": {
+    "id": "io.github.relsun369-dev",
+    "displayName": "Rel-Time Protocol",
+    "url": "https://github.com/relsun369-dev/reltime-mcp"
+  },
+  "icon": {
+    "kind": "react-icon",
+    "name": "HiMiniBolt",
+    "background": "#0F172A"
+  },
+  "homepage": "https://rel-time.com",
+  "license": "MIT",
+  "launch": {
+    "kind": "package-launcher",
+    "command": "npx",
+    "package": "@rel-time/mcp-server"
+  },
+  "riskClasses": [
+    "local-file-read",
+    "local-file-write",
+    "external-credit-spend",
+    "external-metered-payment",
+    "external-ledger-anchor"
+  ],
+  "tools": [
+    {
+      "name": "reltime_anchor_file",
+      "state": "review"
+    },
+    {
+      "name": "reltime_anchor_hash",
+      "state": "review"
+    },
+    {
+      "name": "reltime_provision_agent_key",
+      "state": "review"
+    },
+    {
+      "name": "reltime_link_passkey",
+      "state": "review"
+    },
+    {
+      "name": "reltime_stamp_file",
+      "state": "review"
+    },
+    {
+      "name": "reltime_get_sun_stamp",
+      "state": "inherit"
+    },
+    {
+      "name": "reltime_check_proof",
+      "state": "inherit"
+    },
+    {
+      "name": "reltime_account_status",
+      "state": "inherit"
+    },
+    {
+      "name": "reltime_audit_trail",
+      "state": "inherit"
+    },
+    {
+      "name": "other",
+      "state": "inherit"
+    }
+  ],
+  "referenceUrls": [
+    "https://github.com/relsun369-dev/reltime-mcp",
+    "https://www.npmjs.com/package/@rel-time/mcp-server",
+    "https://rel-time.com",
+    "https://rel-time.com/docs/api"
+  ],
+  "saferAlternatives": [
+    "All file hashing in reltime_anchor_file, reltime_stamp_file, reltime_check_proof and reltime_audit_trail runs locally via SHA-256; raw file contents never leave the machine.",
+    "Use reltime_account_status, reltime_check_proof, reltime_get_sun_stamp and reltime_audit_trail to inspect credit balance, download 64-ray Sun-Stamps and verify Bitcoin ledger proofs before anchoring new files or provisioning credits."
+  ]
+}

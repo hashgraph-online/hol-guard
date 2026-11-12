@@ -6,10 +6,14 @@ import pytest
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
-from codex_plugin_scanner.guard.runtime.linux_tcp_enforcement import (
+from codex_plugin_scanner.guard.runtime.network_policy_contract import (
+    EnforcementGrade,
+    NetworkAction,
+)
+from tests.linux_tcp_enforcement import (
     compile_linux_tcp_policy,
 )
-from codex_plugin_scanner.guard.runtime.linux_udp_dns_enforcement import (
+from tests.linux_udp_dns_enforcement import (
     DnsBindingLease,
     LinuxResolverRoute,
     LinuxSocketHook,
@@ -19,11 +23,9 @@ from codex_plugin_scanner.guard.runtime.linux_udp_dns_enforcement import (
     create_linux_resolver_route,
     evaluate_linux_udp_dns_artifact,
 )
-from codex_plugin_scanner.guard.runtime.network_policy_contract import (
+from tests.network_policy_model import (
     Destination,
     DestinationKind,
-    EnforcementGrade,
-    NetworkAction,
     NetworkPolicy,
     NetworkProtocol,
     NetworkRule,

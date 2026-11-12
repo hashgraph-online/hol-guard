@@ -11,7 +11,6 @@ import pytest
 
 from codex_plugin_scanner.guard.continuation_runtime import (
     continue_request_after_application,
-    record_live_hook_completion,
 )
 from codex_plugin_scanner.guard.live_process_identity import current_process_identity
 from codex_plugin_scanner.guard.models import GuardApprovalRequest
@@ -19,8 +18,8 @@ from codex_plugin_scanner.guard.review_event_integrity import review_event_paylo
 from codex_plugin_scanner.guard.runtime import cloud_review_sync
 from codex_plugin_scanner.guard.runtime.cloud_review_event_projection import project_cloud_review_event
 from codex_plugin_scanner.guard.store import GuardStore
-from codex_plugin_scanner.guard.store_review_event_outbox_writes import append_request_snapshot_event
 from tests.guard_review_event_outbox_test_support import as_int
+from tests.review_event_outbox_append_support import append_request_snapshot_event
 
 # pyright: reportAny=false, reportPrivateUsage=false, reportUnknownMemberType=false
 # pyright: reportUnusedCallResult=false
@@ -254,7 +253,10 @@ def test_terminal_continuation_projects_as_a_distinct_authenticated_event(
         timeout_seconds=30.0,
     )
     assert waiting["continuationStatus"] == "waiting", waiting
-    completed = record_live_hook_completion(store, request_id=request.request_id, action="allow", now=_LATER)
+    completed = store._native_store_call(
+        "record_codex_live_completion",
+        {"request_id": request.request_id, "action": "allow", "now": _LATER},
+    )
     assert completed is not None and completed["continuationStatus"] == "resumed"
     captured: list[dict[str, object]] = []
     monkeypatch.setattr(cloud_review_sync, "post_review_events", _accepting_transport(captured))

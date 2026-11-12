@@ -18,9 +18,7 @@ exactly which output the old routing produced:
 Each vector holds the resident's inputs (``facts``), the extra transport facts
 (``extra``), the directive fields the recorded output exhibits
 (``directive``), and the stubbed ``stdout``, ``stderr`` and ``rc``. The Rust
-``hook_decision_artifact_directive_tests`` replays the directive fields;
-``tests/test_artifact_directive_parity.py`` re-renders every vector through
-the new transport with the same stubs and compares the output.
+``hook_decision_artifact_directive_tests`` replays the directive fields.
 """
 
 from __future__ import annotations
@@ -37,13 +35,13 @@ from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
 
-from codex_plugin_scanner.guard.cli.commands_support_prompts import (
-    _claude_prompt_system_message,
-    _codex_prompt_block_system_message,
-)
 from codex_plugin_scanner.guard.cli.commands_support_runtime_resolution import _canonical_harness_name
 from codex_plugin_scanner.guard.cli.native_hook_exit_code import native_hook_verdict_exit_code
-from codex_plugin_scanner.guard.runtime.embedded_script_evidence import EMBEDDED_SCRIPT_REMEDIATION_GUIDANCE
+
+if __package__ is None:
+    sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+
+from scripts.ci.claude_prompt_oracle import _claude_prompt_system_message, _codex_prompt_block_system_message
 
 OUTPUT = Path("rust/crates/guard-runtime/tests/fixtures/artifact_directive_vectors.json.gz")
 
@@ -100,7 +98,7 @@ CTX = "CTX approval context"
 HINT = "HINT review hint"
 WHY = "WHY now"
 RISK = "RISK headline"
-REMEDIATION = EMBEDDED_SCRIPT_REMEDIATION_GUIDANCE
+REMEDIATION = "Put the script in a workspace file and run it by path so HOL Guard can audit it."
 GROK_EXIT = 77
 JSON_DOCUMENT_EXIT = 5
 _TAGS = {RAW: "raw (open hol guard)", CTX: "ctx", HINT: "hint", WHY: "why", RISK: "risk", REMEDIATION: "rem"}
@@ -306,6 +304,7 @@ def stub_native_hook_json_document(
     event_name: str,
     policy_action: str,
     reason: str,
+    exit_code: Callable[[], int] | None = None,
     envelope: object,
     system_message: str | None = None,
     generic_path: bool = False,
@@ -336,18 +335,19 @@ def stub_emit_native_hook_json_document(
     _out("json_emit", compact, output_stream is not None)
 
 
+POST_TOOL_BLOCKING_ACTIONS = {"review", "require-reapproval", "sandbox-required", "block"}
+
+
 def stub_emit_native_post_tool_envelope(
     harness: str,
     *,
-    policy_action: str,
+    blocking: bool,
     reason: str,
     response_payload: object,
     output_stream: object = None,
     as_json: bool = False,
 ) -> None:
-    _out(
-        "post_tool", harness, policy_action, reason, _payload_tag(response_payload), output_stream is not None, as_json
-    )
+    _out("post_tool", harness, blocking, reason, _payload_tag(response_payload), output_stream is not None, as_json)
 
 
 def stub_emit(command: str, payload: Mapping[str, object], as_json: bool) -> None:
@@ -594,7 +594,10 @@ def _recorded_finalize(case: Case) -> int:
     if event_name == "PostToolUse":
         stub_emit_native_post_tool_envelope(
             harness,
-            policy_action=policy_action,
+            # The recording keeps deriving this from the policy action, which is
+            # what Python did before the renderer started reading the native
+            # envelope decision.
+            blocking=policy_action in POST_TOOL_BLOCKING_ACTIONS,
             reason=runtime_reason(),
             response_payload=response_payload,
             output_stream=output_stream,
@@ -717,6 +720,12 @@ def observed_directive(case: Case, stdout: str, stderr: str, rc: int) -> dict[st
             _reason_fields(document[3], directive)
         directive["system_message"] = _system_message_kind(document[5])
         if case.json_document_owns:
+            # The stub owns the document route's status, so the recording
+            # carries the exit code the real route took: the harness table,
+            # before the replayed fallback envelope relaxes it to 0.
+            directive["json_exit_code"] = (
+                None if case.canonical == "grok" else _recorded_exit_code(case.canonical, case.action, case.event)
+            )
             return directive
     post = [line for line in out if line[0] == "post_tool"]
     envelope = [line for line in out if line[0] == "envelope"]
@@ -724,6 +733,10 @@ def observed_directive(case: Case, stdout: str, stderr: str, rc: int) -> dict[st
         directive["after_json"] = "native_response"
     elif post:
         directive["after_json"] = "post_tool_envelope"
+        # The post-tool envelope carries a verdict of its own, and the renderer
+        # now reads it off the directive instead of re-deriving it from the
+        # policy action, so the recording has to carry it as well.
+        directive["envelope_decision"] = "block" if post[0][2] else "allow"
         _reason_fields(post[0][3], directive)
     else:
         directive["after_json"] = "fallback_envelope"

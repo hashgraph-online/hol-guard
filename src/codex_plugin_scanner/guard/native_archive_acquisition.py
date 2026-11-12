@@ -32,7 +32,12 @@ _MAX_REQUEST_BYTES = 2 * 1024 * 1024
 _MAX_TIMEOUT_MS = 8_000
 
 
-def _request(query: dict[str, object], *, deadline: float, guard_home: Path | None = None) -> dict[str, Any] | None:
+def _request(
+    query: dict[str, object],
+    *,
+    deadline: float,
+    guard_home: Path | None = None,
+) -> dict[str, Any] | None:
     try:
         deadline = min(deadline, time.monotonic() + _MAX_TIMEOUT_MS / 1000)
         home = _resolve_digest_home(guard_home)
@@ -138,6 +143,68 @@ def canonical_external_https_archive_source(source_url: str) -> str | None:
     return payload["canonical_url"] if payload is not None else None
 
 
+def _spooled_fetch(
+    source_url: str,
+    *,
+    action: str,
+    max_bytes: int,
+    max_redirects: int,
+    timeout_seconds: float,
+    temp_dir: Path | None,
+) -> tuple[dict[str, Any] | None, tempfile.TemporaryDirectory[str]]:
+    from .mdm.network_transport import managed_ssl_context, resolved_network_policy
+    from .mdm.network_trust import export_managed_trust_roots
+
+    # Invalid limits still reach native validation with a usable RPC budget.
+    deadline = time.monotonic() + (timeout_seconds if timeout_seconds > 0 else 3.0)
+    policy, _managed = resolved_network_policy(None)
+    # Trust selection stays in the existing platform/managed service.
+    # The native TLS implementation verifies the chain and hostname.
+    roots = export_managed_trust_roots(managed_ssl_context(policy))
+    # This is transport lifetime management, not a blob verdict. Removing
+    # the parent on failure prevents a late resident from publishing a file.
+    spool = tempfile.TemporaryDirectory(prefix="hol-guard-acquisition-", dir=temp_dir, ignore_cleanup_errors=True)
+    try:
+        query = {
+            **_query(source_url, action),
+            "max_bytes": max_bytes,
+            "max_redirects": max_redirects,
+            "timeout_ms": int(timeout_seconds * 1000),
+            "temp_dir": str(Path(spool.name).resolve()),
+            "trust_roots_der_hex": [root.hex() for root in roots],
+            "allow_public_registries": policy.allow_public_registries,
+        }
+        return _request(query, deadline=deadline), spool
+    except BaseException:
+        with suppress(OSError):
+            spool.cleanup()
+        raise
+
+
+def _native_failure(payload: dict[str, Any]) -> RestrictedArchiveFailure | None:
+    if set(payload) != {"kind", "code", "message"} or not all(
+        isinstance(payload[key], str) for key in ("code", "message")
+    ):
+        return None
+    return RestrictedArchiveFailure(payload["code"], payload["message"])
+
+
+def _valid_blob(payload: dict[str, Any], *, kind: str, source_url: str, max_bytes: int, spool: str) -> bool:
+    return (
+        set(payload) == {"kind", "path", "sha256", "size", "source_url", "final_url"}
+        and payload["kind"] == kind
+        and all(isinstance(payload[key], str) for key in ("path", "sha256", "source_url", "final_url"))
+        and not isinstance(payload["size"], bool)
+        and isinstance(payload["size"], int)
+        and 0 <= payload["size"] <= max_bytes
+        and Path(payload["path"]).is_absolute()
+        and Path(payload["path"]).parent.samefile(spool)
+        and payload["source_url"] == source_url
+        and len(payload["sha256"]) == 64
+        and all(character in "0123456789abcdef" for character in payload["sha256"])
+    )
+
+
 def download_restricted_archive(
     source_url: str,
     *,
@@ -146,55 +213,24 @@ def download_restricted_archive(
     timeout_seconds: float = 3.0,
     temp_dir: Path | None = None,
 ) -> RestrictedArchiveDownloadResult:
-    from .mdm.network_transport import managed_ssl_context, resolved_network_policy
-    from .mdm.network_trust import export_managed_trust_roots
-
     unavailable = RestrictedArchiveFailure(
         "native_archive_acquisition_unavailable", "Native archive acquisition is unavailable."
     )
     spool: tempfile.TemporaryDirectory[str] | None = None
     try:
-        # Invalid limits still reach native validation with a usable RPC budget.
-        deadline = time.monotonic() + (timeout_seconds if timeout_seconds > 0 else 3.0)
-        policy, _managed = resolved_network_policy(None)
-        # Trust selection stays in the existing platform/managed service.
-        # The native TLS implementation verifies the chain and hostname.
-        roots = export_managed_trust_roots(managed_ssl_context(policy))
-        # This is transport lifetime management, not a blob verdict. Removing
-        # the parent on failure prevents a late resident from publishing a file.
-        spool = tempfile.TemporaryDirectory(prefix="hol-guard-acquisition-", dir=temp_dir, ignore_cleanup_errors=True)
-        query = {
-            **_query(source_url, "download"),
-            "max_bytes": max_bytes,
-            "max_redirects": max_redirects,
-            "timeout_ms": int(timeout_seconds * 1000),
-            "temp_dir": str(Path(spool.name).resolve()),
-            "trust_roots_der_hex": [root.hex() for root in roots],
-            "allow_public_registries": policy.allow_public_registries,
-        }
-        payload = _request(query, deadline=deadline)
+        payload, spool = _spooled_fetch(
+            source_url,
+            action="download",
+            max_bytes=max_bytes,
+            max_redirects=max_redirects,
+            timeout_seconds=timeout_seconds,
+            temp_dir=temp_dir,
+        )
         if payload is None:
             return unavailable
         if payload.get("kind") == "failure":
-            if set(payload) != {"kind", "code", "message"} or not all(
-                isinstance(payload[key], str) for key in ("code", "message")
-            ):
-                return unavailable
-            return RestrictedArchiveFailure(payload["code"], payload["message"])
-        if set(payload) != {"kind", "path", "sha256", "size", "source_url", "final_url"}:
-            return unavailable
-        if (
-            payload["kind"] != "download"
-            or not all(isinstance(payload[key], str) for key in ("path", "sha256", "source_url", "final_url"))
-            or isinstance(payload["size"], bool)
-            or not isinstance(payload["size"], int)
-            or not 0 <= payload["size"] <= max_bytes
-            or not Path(payload["path"]).is_absolute()
-            or not Path(payload["path"]).parent.samefile(spool.name)
-            or payload["source_url"] != source_url
-            or len(payload["sha256"]) != 64
-            or any(character not in "0123456789abcdef" for character in payload["sha256"])
-        ):
+            return _native_failure(payload) or unavailable
+        if not _valid_blob(payload, kind="download", source_url=source_url, max_bytes=max_bytes, spool=spool.name):
             return unavailable
         download = RestrictedArchiveDownload(
             path=Path(payload["path"]),

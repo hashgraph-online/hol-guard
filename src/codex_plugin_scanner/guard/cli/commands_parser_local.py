@@ -52,7 +52,7 @@ def _configure_guard_local_parsers(
     _add_guard_common_args(contained_hook_parser)
     contained_hook_parser.add_argument(
         "--harness",
-        choices=("omp", "pi", "zcode", "claude-code", "codex"),
+        choices=("omp", "pi", "zcode", "claude-code", "codex", "cursor"),
         default="omp",
     )
     contained_hook_parser.add_argument("--request-file", required=True)
@@ -100,6 +100,23 @@ def _configure_guard_local_parsers(
     )
     _add_guard_common_args(network_status_parser, suppress_defaults=True)
     network_status_parser.add_argument("--json", action="store_true", default=argparse.SUPPRESS)
+    network_sync_parser = network_subparsers.add_parser(
+        "sync",
+        help="Fetch the workspace's signed network rules and known-bad URL indicators",
+    )
+    _add_guard_common_args(network_sync_parser, suppress_defaults=True)
+    network_sync_parser.add_argument("--json", action="store_true", default=argparse.SUPPRESS)
+    network_check_parser = network_subparsers.add_parser(
+        "check",
+        help="Show what the saved network rules and known-bad URL indicators decide for a URL",
+    )
+    network_check_parser.add_argument("url", help="URL to check, for example https://example.com/path")
+    _add_guard_common_args(network_check_parser, suppress_defaults=True)
+    network_check_parser.add_argument("--json", action="store_true", default=argparse.SUPPRESS)
+
+    from .runtime_posture_command import configure_runtime_parser
+
+    configure_runtime_parser(guard_subparsers)
 
     dashboard_parser = guard_subparsers.add_parser(
         "dashboard",
@@ -324,7 +341,7 @@ def _configure_guard_local_parsers(
         inspect_parser.add_argument("--json", action="store_true")
     extensions_parser = command_subparsers.add_parser(
         "extensions",
-        help="List or inspect built-in command safety extensions",
+        help="List or inspect the command safety extensions this device has, delivered ones included",
     )
     extensions_parser.add_argument("extension_id", nargs="?")
     extensions_parser.add_argument("--json", action="store_true")

@@ -7,6 +7,9 @@
 use serde::{Deserialize, Serialize};
 
 pub const ARCHIVE_ACQUISITION_FEATURE: &str = "archive-acquisition-v1";
+/// The `content` action: a managed fetch whose raw body goes to the contained
+/// `content-decode` worker, never to an in-process decoder.
+pub const MANAGED_CONTENT_FETCH_FEATURE: &str = "managed-content-fetch-v1";
 pub const ARCHIVE_ACQUISITION_REQUEST_SCHEMA: &str = "hol-guard.archive-acquisition-request.v1";
 pub const ARCHIVE_ACQUISITION_RESULT_SCHEMA: &str = "hol-guard.archive-acquisition-result.v1";
 pub const ARCHIVE_ACQUISITION_MAX_REQUEST_BYTES: usize = 2 * 1024 * 1024;
@@ -39,6 +42,9 @@ impl std::fmt::Debug for ArchiveAcquisitionRequestV1 {
 pub enum ArchiveAcquisitionActionV1 {
     Destination,
     Download,
+    /// Fetch a managed response body raw, refusing any hop whose
+    /// `Content-Encoding` the contained decoder does not support.
+    Content,
 }
 
 #[derive(Clone, Serialize, Deserialize)]

@@ -17,7 +17,7 @@ def _configure_guard_desktop_parser(
         dest="desktop_command",
         required=True,
         parser_class=FriendlyArgumentParser,
-        metavar="{bootstrap,qualify,dashboard-update}",
+        metavar="{bootstrap,qualify,dashboard-update,converge,library-call}",
     )
     bootstrap_parser = desktop_subparsers.add_parser("bootstrap", help=argparse.SUPPRESS)
     _add_guard_common_args(bootstrap_parser, suppress_defaults=True)
@@ -48,6 +48,10 @@ def _configure_guard_desktop_parser(
         if command == "transition-activate":
             transition_parser.add_argument("--request", required=True)
             transition_parser.add_argument("--request-sha256", required=True)
+    converge_parser = desktop_subparsers.add_parser("converge", help=argparse.SUPPRESS)
+    _add_guard_common_args(converge_parser, suppress_defaults=True)
+    converge_parser.add_argument("--json", action="store_true")
+    converge_parser.add_argument("--dry-run", action="store_true")
     dashboard_update_parser = desktop_subparsers.add_parser("dashboard-update", help=argparse.SUPPRESS)
     _add_guard_common_args(dashboard_update_parser, suppress_defaults=True)
     dashboard_update_parser.add_argument("--daemon-pid", type=int, required=True)
@@ -55,6 +59,12 @@ def _configure_guard_desktop_parser(
     dashboard_update_parser.add_argument("--update-token", required=True)
     dashboard_update_parser.add_argument("--force-pypi-reinstall", action="store_true")
     dashboard_update_parser.add_argument("--alpha", action="store_true")
+    library_call_parser = desktop_subparsers.add_parser("library-call", help=argparse.SUPPRESS)
+    _add_guard_common_args(library_call_parser, suppress_defaults=True)
+    library_serve_parser = desktop_subparsers.add_parser("library-serve", help=argparse.SUPPRESS)
+    _add_guard_common_args(library_serve_parser, suppress_defaults=True)
+    daemon_workers_parser = desktop_subparsers.add_parser("daemon-workers", help=argparse.SUPPRESS)
+    _add_guard_common_args(daemon_workers_parser, suppress_defaults=True)
 
 
 __all__ = ["_configure_guard_desktop_parser"]

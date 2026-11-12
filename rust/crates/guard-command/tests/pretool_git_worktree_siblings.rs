@@ -48,10 +48,7 @@ fn worktree_add_admits_fresh_temporary_siblings_only() {
     let unique = format!(
         "{}-{}",
         std::process::id(),
-        std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_nanos()
+        crate::unique_nanos::unique_nanos()
     );
     let root = std::fs::canonicalize("/tmp")
         .unwrap()
@@ -166,10 +163,7 @@ fn worktree_add_judges_a_symlinked_parent_where_it_leads() {
     let unique = format!(
         "{}-{}",
         std::process::id(),
-        std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_nanos()
+        crate::unique_nanos::unique_nanos()
     );
     let root = std::fs::canonicalize("/tmp")
         .unwrap()
@@ -241,10 +235,7 @@ fn worktree_add_keeps_repository_filters_reviewed() {
     let unique = format!(
         "{}-{}",
         std::process::id(),
-        std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_nanos()
+        crate::unique_nanos::unique_nanos()
     );
     let root = std::fs::canonicalize("/tmp")
         .unwrap()
@@ -293,10 +284,7 @@ fn worktree_add_attaches_an_existing_branch_beside_the_checkout() {
     let unique = format!(
         "{}-{}",
         std::process::id(),
-        std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_nanos()
+        crate::unique_nanos::unique_nanos()
     );
     let base = if cfg!(target_os = "macos") {
         std::path::PathBuf::from("/tmp")
@@ -381,9 +369,6 @@ fn worktree_add_attaches_an_existing_branch_beside_the_checkout() {
             "git worktree add {} feat/other-branch",
             code.join("linked/wt").display()
         ),
-        // Git would create a tracking branch from a remote-tracking ref or
-        // fail, so a name with no local branch is not proven.
-        "git worktree add ../wt-missing feat/missing-branch".to_owned(),
     ] {
         let result = evaluate(&home, &session, &command);
         assert_ne!(result.minimum_action, "allow", "{command}");

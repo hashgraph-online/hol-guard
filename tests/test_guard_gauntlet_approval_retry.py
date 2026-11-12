@@ -40,20 +40,34 @@ def test_lane_catalog_carries_retry_and_bash_lifecycle_cases():
     scenarios = load_catalog(APPROVAL_RETRY_CATALOG)
     by_id = {scenario.id: scenario for scenario in scenarios}
     assert set(by_id) == {
+        "approved-retry-marker-command",
         "approved-retry-identical-command",
         "approved-retry-env-prefixed-command",
         "approved-retry-reworded-command",
         "approved-retry-unbindable-command",
+        "approved-retry-persistent-shell-command",
+        "approved-retry-persistent-package-install",
+        "approved-retry-persistent-hooked-install-worktree",
         *BASH_LIFECYCLE_CASES,
         "approved-retry-environment-dump",
+        "approved-retry-sourced-toolchain-init",
+        "approved-retry-identical-file-read",
     }
     ordinary = [scenario for scenario in scenarios if scenario.oracle == "approved-retry"]
     lifecycle = [scenario for scenario in scenarios if scenario.oracle == BASH_LIFECYCLE_ORACLE]
     for scenario in ordinary:
         assert scenario.oracle == "approved-retry"
         assert scenario.expectation == "allow"
-        assert scenario.required_tools == ("bash",)
         assert scenario.profiles == ("approval-retry",)
+        # The lane's repeated action is a shell command everywhere but the file-tool
+        # case, which drives a file tool with no shell at all and pins the file it
+        # comes back to instead of a command.
+        if scenario.id == "approved-retry-identical-file-read":
+            assert scenario.required_tools == ("read",)
+            assert scenario.commands == ()
+            assert scenario.path == "README.md"
+        else:
+            assert scenario.required_tools == ("bash",)
     assert {scenario.id for scenario in lifecycle} == BASH_LIFECYCLE_CASES
     for scenario in lifecycle:
         assert scenario.expectation == ("block" if scenario.id in {MUTATION_CASE, DENIAL_CASE} else "allow")
@@ -79,6 +93,12 @@ def test_lane_catalog_carries_retry_and_bash_lifecycle_cases():
     # this lane's transcripts are packed into the public evidence bundle, so
     # the case must not ask a model to print the environment it runs in.
     assert by_id["approved-retry-environment-dump"].commands == ("env -i",)
+    # Sourcing a version manager's init file and then calling one of the
+    # functions it defines is the first line of every Node project's setup. The
+    # file lives outside the workspace and carries no marker of its own, so the
+    # scan may not read it; the row it queues is what the lane proves can be
+    # approved and retried.
+    assert by_id["approved-retry-sourced-toolchain-init"].commands == ("source ~/.nvm/nvm.sh && nvm_latest_version",)
 
 
 def test_core_catalog_never_carries_the_lane_oracle():
@@ -451,7 +471,7 @@ def test_a_later_action_approved_twice_fails_even_when_an_earlier_one_passed():
     ],
 )
 def test_the_action_key_is_the_program_and_subcommand(command: str, expected: tuple):
-    from ci.gauntlet.approval_retry import action_key
+    from ci.gauntlet.approval_retry_action import action_key
 
     assert action_key(command) == expected
 

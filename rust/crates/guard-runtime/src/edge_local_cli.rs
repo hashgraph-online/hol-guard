@@ -1,0 +1,243 @@
+//! The daemon's custom extension rules, settled in the edge answer.
+//!
+//! The daemon sends where its rules live and the home and environment a
+//! command's launch resolves against; the edge reads the rule for a
+//! `PreToolUse` and returns the response the rule leaves, so the daemon no
+//! longer asks for it in a second request.
+//!
+//! An allowed call is checked only while some custom block rule exists: its
+//! grant can block it, and a launch or grant the edge cannot check blocks it
+//! as unverified. A review is checked outside Watch: a block applies to any
+//! review, and an allow lifts only an overridable review due to
+//! non-recognition alone, so a review is read only while some CLI grant
+//! exists. A rule the edge cannot read leaves the review standing, and so
+//! does one it cannot read in time: the check runs beside the edge and is
+//! abandoned at its wait, so a slow launch never costs the review its
+//! answer. The daemon still applies each answer where it did before:
+//! a granted containment answers an allowed call first, and a saved
+//! exact-action block wins over a custom allow.
+
+use std::path::Path;
+use std::sync::mpsc;
+use std::time::Duration;
+
+use guard_contracts::{
+    GuardHookEdgeResultV2, GuardHookEnvelopeV2, GuardHookLocalCliRuleV1, HookLocalCliRuleRequestV1,
+};
+use serde_json::{json, Map, Value};
+
+use crate::hook_direct::local_cli::block;
+use crate::hook_direct::local_cli::rule_op::{self, RuleVerdict};
+
+/// How long the check waits for a writer's exclusive storage hold.
+const STORAGE_GATE_WAIT: Duration = Duration::from_secs(2);
+/// How long the edge waits for the rule after its review. The daemon allows
+/// the edge five seconds past the review's budget for it; the rest is the
+/// answer's way back.
+const RULE_WAIT: Duration = Duration::from_secs(4);
+const REVIEW_ACTIONS: [&str; 2] = ["review", "require-reapproval"];
+
+/// The custom extension rule the daemon asked for, or `None` when it asked
+/// for none or none applies. `Err` only when the response cannot be rendered.
+pub(super) fn settle(
+    envelope: &GuardHookEnvelopeV2,
+    harness: &str,
+    event_name: &str,
+    result: &Value,
+) -> Result<Option<GuardHookLocalCliRuleV1>, String> {
+    settle_within(envelope, harness, event_name, result, RULE_WAIT)
+}
+
+fn settle_within(
+    envelope: &GuardHookEnvelopeV2,
+    harness: &str,
+    event_name: &str,
+    result: &Value,
+    wait: Duration,
+) -> Result<Option<GuardHookLocalCliRuleV1>, String> {
+    let (Some(rules), "PreToolUse", Some(result)) = (
+        envelope.local_cli_rules.as_ref(),
+        event_name,
+        result.as_object(),
+    ) else {
+        return Ok(None);
+    };
+    let text = |key: &str| result.get(key).and_then(Value::as_str);
+    let recording_only = envelope.recording_only;
+    let (blocked, harness_response) = if text("minimum_action") == Some("allow") {
+        // Watch records only a call the edge fully allowed.
+        if (recording_only && text("decision") != Some("allow"))
+            || !crate::local_cli_hook_contained::has_block_rules_at(
+                &rules.store_path,
+                &envelope.source.guard_home,
+            )
+        {
+            return Ok(None);
+        }
+        let verdict = checked(envelope, result, "allowed", wait).unwrap_or(RuleVerdict::Unverified);
+        let response = match verdict {
+            RuleVerdict::Blocked(name) => custom_block(harness, result, &name, recording_only),
+            RuleVerdict::Unverified => block::unverified_response(harness, result, recording_only)
+                .or_else(|| block::unverified_response(harness, &Map::new(), recording_only)),
+            RuleVerdict::None | RuleVerdict::Allowed => return Ok(None),
+        };
+        (true, response)
+    } else if !recording_only
+        && text("minimum_action").is_some_and(|action| REVIEW_ACTIONS.contains(&action))
+        // Only a CLI with a grant row has a custom rule to read, so a store
+        // without one derives no launch.
+        && crate::local_cli_hook_contained::has_grant_rows_at(
+            &rules.store_path,
+            &envelope.source.guard_home,
+        )
+    {
+        match checked(envelope, result, "review", wait) {
+            Some(RuleVerdict::Blocked(name)) => (true, custom_block(harness, result, &name, false)),
+            Some(RuleVerdict::Allowed) => {
+                let mut allowed = result.clone();
+                for key in ["decision", "minimum_action", "policy_action"] {
+                    allowed.insert(key.to_owned(), json!("allow"));
+                }
+                // An allow too large to render leaves the review standing.
+                let Some(response) =
+                    crate::hook_direct::saved_decision::render(harness, &allowed, "accepted")
+                else {
+                    return Ok(None);
+                };
+                (false, Some(response))
+            }
+            _ => return Ok(None),
+        }
+    } else {
+        return Ok(None);
+    };
+    let harness_response =
+        harness_response.ok_or_else(|| "native_hook_edge_response_invalid".to_owned())?;
+    Ok(Some(GuardHookLocalCliRuleV1 {
+        blocked,
+        harness_response,
+    }))
+}
+
+/// Whether a saved block may name the exact command of a `PreToolUse` the
+/// daemon sent its rules for, outside Watch, where the daemon looks such a
+/// block up after the edge. `None` when the edge did not read the store: the
+/// daemon asked for no rules, the call is recorded only, or the edge found no
+/// command in the payload it holds. The daemon's lookup then decides.
+pub(super) fn exact_command_block(
+    envelope: &GuardHookEnvelopeV2,
+    harness: &str,
+    event_name: &str,
+) -> Option<bool> {
+    let rules = envelope.local_cli_rules.as_ref()?;
+    if event_name != "PreToolUse" || envelope.recording_only {
+        return None;
+    }
+    let command = crate::local_store_read::pre_tool_command(envelope.raw_payload.as_object()?)?;
+    // The daemon's own store, the one its lookup would read, checked the way
+    // every other rule read is. A path it refuses may still name a block, so
+    // the daemon's lookup decides.
+    let Ok(store_path) =
+        crate::local_store_read::require_store_path(&rules.store_path, &envelope.source.guard_home)
+    else {
+        return Some(true);
+    };
+    Some(crate::local_store_read::exact_command_block_hint(
+        &store_path,
+        harness,
+        command,
+    ))
+}
+
+/// The action types the daemon's saved exact-command block lookup reads
+/// (`_SHELL_ACTION_TYPES`, `hook_native_saved_approval.py`).
+const SHELL_ACTION_TYPES: [&str; 6] = [
+    "command",
+    "package",
+    "process_service",
+    "network",
+    "shell",
+    "shell_command",
+];
+
+/// Answer `edge.exact_command_block` only where the daemon reads it: a shell
+/// action no custom rule already blocked. Anything else never opens the store.
+pub(super) fn attach_exact_command_block(
+    envelope: &GuardHookEnvelopeV2,
+    edge: &mut GuardHookEdgeResultV2,
+) {
+    edge.exact_command_block = read_by_daemon(&edge.result, edge.local_cli_rule.as_ref())
+        .then(|| exact_command_block(envelope, &edge.harness, &edge.event_name))
+        .flatten();
+}
+
+fn read_by_daemon(result: &Value, local_cli_rule: Option<&GuardHookLocalCliRuleV1>) -> bool {
+    let action_type = result
+        .pointer("/action/action_type")
+        .and_then(Value::as_str);
+    !local_cli_rule.is_some_and(|rule| rule.blocked)
+        && action_type.is_some_and(|kind| SHELL_ACTION_TYPES.contains(&kind))
+}
+
+/// The custom block for `result`, or, when the call is too large to render
+/// with it, the same block over none of the edge's own fields.
+fn custom_block(
+    harness: &str,
+    result: &Map<String, Value>,
+    name: &str,
+    recording_only: bool,
+) -> Option<Value> {
+    block::block_response(harness, result, name, recording_only)
+        .or_else(|| block::block_response(harness, &Map::new(), name, recording_only))
+}
+
+/// The rule's verdict under the shared storage hold, or `None` when the hold
+/// cannot be taken or the verdict does not arrive within `wait`.
+fn checked(
+    envelope: &GuardHookEnvelopeV2,
+    result: &Map<String, Value>,
+    mode: &'static str,
+    wait: Duration,
+) -> Option<RuleVerdict> {
+    let rules = envelope.local_cli_rules.as_ref()?;
+    let request = HookLocalCliRuleRequestV1 {
+        schema: guard_contracts::HOOK_LOCAL_CLI_RULE_REQUEST_SCHEMA.to_owned(),
+        request_id: "edge-local-cli-rule".to_owned(),
+        store_path: rules.store_path.clone(),
+        guard_home: envelope.source.guard_home.clone(),
+        mode: mode.to_owned(),
+        payload: envelope
+            .raw_payload
+            .as_object()
+            .cloned()
+            .unwrap_or_default(),
+        native_result: result.clone(),
+        workspace: envelope.source.cwd.clone(),
+        home_dir: envelope.source.home_dir.clone(),
+        user_home: Some(rules.user_home.clone()),
+        env: Some(rules.env.clone()),
+    };
+    let (sender, receiver) = mpsc::sync_channel(1);
+    // An abandoned check finishes on its own and its answer is dropped.
+    std::thread::Builder::new()
+        .name("edge-local-cli-rule".to_owned())
+        .spawn(move || {
+            let Ok(_hold) = crate::hook_evidence_store_gate::hold_storage_gate(
+                Path::new(&request.guard_home),
+                STORAGE_GATE_WAIT,
+            ) else {
+                return;
+            };
+            let _ = sender.send(match mode {
+                // `settle` already found a block rule.
+                "allowed" => rule_op::allowed_verdict_with_block_rules(&request),
+                _ => rule_op::review_verdict(&request),
+            });
+        })
+        .ok()?;
+    receiver.recv_timeout(wait).ok()
+}
+
+#[cfg(test)]
+#[path = "edge_local_cli_tests.rs"]
+mod tests;

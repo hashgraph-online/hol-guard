@@ -15,6 +15,7 @@ from pathlib import Path
 
 import pytest
 
+from ci.guard_daemon_harness import GuardDaemonServer
 from codex_plugin_scanner.guard import local_supply_chain as local_supply_chain_module
 from codex_plugin_scanner.guard import package_firewall_entitlement as package_firewall_entitlement_module
 from codex_plugin_scanner.guard import store as guard_store_module
@@ -22,18 +23,13 @@ from codex_plugin_scanner.guard import supply_chain_cloud_audit as cloud_audit_m
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.approval_gate import update_settings as update_approval_gate_settings
 from codex_plugin_scanner.guard.cli.connect_flow import GuardOAuthTokenExchangeResult
-from codex_plugin_scanner.guard.daemon import GuardDaemonServer
-from codex_plugin_scanner.guard.daemon import server as daemon_server
-from codex_plugin_scanner.guard.daemon import server_control_connect_state as _ctl_connect_state
-from codex_plugin_scanner.guard.daemon.manager import load_guard_daemon_auth_token
+from codex_plugin_scanner.guard.cloud_control import server_control_connect_state as _ctl_connect_state
 from codex_plugin_scanner.guard.local_dashboard_session import LOCAL_DASHBOARD_SESSION_AUDIENCE
 from codex_plugin_scanner.guard.models import PolicyDecision
 from codex_plugin_scanner.guard.native_daemon_handler import native_headless_action_error
+from codex_plugin_scanner.guard.native_daemon_manage import load_guard_daemon_auth_token
 from codex_plugin_scanner.guard.native_hook_artifact_compose import NativeHookComposeError
-from codex_plugin_scanner.guard.policy_bundle_parser import (
-    computed_policy_bundle_hash,
-    payload_hash_for_policy_bundle,
-)
+from codex_plugin_scanner.guard.routes import request_handler as daemon_server
 from codex_plugin_scanner.guard.runtime import runner as guard_runner_module
 from codex_plugin_scanner.guard.runtime.runner import (
     GuardSyncAuthorizationExpiredError,
@@ -46,10 +42,12 @@ from tests.daemon_control_patching import patch_daemon_global
 from tests.guard_review_signing_helpers import (
     review_trusted_keyring_payload,
 )
+from tests.policy_bundle_parser_support import computed_policy_bundle_hash, payload_hash_for_policy_bundle
 from tests.policy_bundle_signing_helpers import (
     policy_bundle_test_keyring,
     sign_policy_bundle,
 )
+from tests.policy_store_support import replace_remote_policies, resolve_policy
 from tests.test_guard_supply_chain_evaluator import WORKSPACE_ID, _bundle_response, _package
 
 
@@ -574,7 +572,7 @@ def test_supply_chain_package_firewall_connect_repairs_local_auth_and_unlocks_pa
         state: dict[str, object] | None,
     ) -> None:
         set_guard_cloud_connect_state(server, state)
-        if server.store is not store:
+        if server.store.guard_home != store.guard_home:
             return
         if state is None:
             if connect_started.is_set():
@@ -1349,7 +1347,7 @@ def test_supply_chain_package_firewall_status_self_heals_connected_cloud_auth_wi
     calls: list[str] = []
 
     def fake_sync_local_guard_cloud_proof(current_store: GuardStore) -> dict[str, object]:
-        assert current_store is store
+        assert current_store.guard_home == store.guard_home
         calls.append("proof")
         current_store.record_latest_guard_connect_sync_success(
             sync_payload={"synced_at": "2026-06-05T01:41:00+00:00", "receipts_stored": 1},
@@ -1358,7 +1356,7 @@ def test_supply_chain_package_firewall_status_self_heals_connected_cloud_auth_wi
         return {"synced_at": "2026-06-05T01:41:00+00:00", "receipts_stored": 1}
 
     def fake_sync_supply_chain_bundle(current_store: GuardStore) -> dict[str, object]:
-        assert current_store is store
+        assert current_store.guard_home == store.guard_home
         calls.append("bundle")
         current_store.set_sync_payload(
             "supply_chain_bundle_entitlement",
@@ -1432,7 +1430,7 @@ def test_supply_chain_package_firewall_install_self_heals_retry_required_cloud_a
     )
 
     def fake_sync_local_guard_cloud_proof(current_store: GuardStore) -> dict[str, object]:
-        assert current_store is store
+        assert current_store.guard_home == store.guard_home
         current_store.record_latest_guard_connect_sync_success(
             sync_payload={"synced_at": "2026-06-05T01:41:00+00:00", "receipts_stored": 1},
             now="2026-06-05T01:41:00+00:00",
@@ -1440,7 +1438,7 @@ def test_supply_chain_package_firewall_install_self_heals_retry_required_cloud_a
         return {"synced_at": "2026-06-05T01:41:00+00:00", "receipts_stored": 1}
 
     def fake_sync_supply_chain_bundle(current_store: GuardStore) -> dict[str, object]:
-        assert current_store is store
+        assert current_store.guard_home == store.guard_home
         current_store.set_sync_payload(
             "supply_chain_bundle_entitlement",
             {
@@ -2395,10 +2393,9 @@ def test_headless_app_scan_syncs_receipt_to_cloud_when_connected(
     )
 
     def fake_sync_local_guard_cloud_proof(current_store: GuardStore) -> dict[str, object]:
-        assert current_store is store
+        assert current_store.guard_home == store.guard_home
         sync_calls.append("runtime")
         sync_calls.append("receipts")
-        sync_finished.set()
         summary = {
             "synced_at": "2026-05-23T17:18:40.061Z",
             "receipts_stored": 1,
@@ -2410,6 +2407,8 @@ def test_headless_app_scan_syncs_receipt_to_cloud_when_connected(
             sync_payload=summary,
             now="2026-05-23T17:18:40.061Z",
         )
+        # Signal once the success is stored: the sync runs on another store.
+        sync_finished.set()
         return summary
 
     patch_daemon_global(monkeypatch, "sync_local_guard_cloud_proof", fake_sync_local_guard_cloud_proof, raising=False)
@@ -2466,7 +2465,7 @@ def test_headless_app_scan_does_not_spawn_unbounded_cloud_sync_threads(
     sync_release = threading.Event()
 
     def blocking_sync_local_guard_cloud_proof(current_store: GuardStore) -> dict[str, object]:
-        assert current_store is store
+        assert current_store.guard_home == store.guard_home
         sync_calls.append(1)
         sync_started.set()
         sync_release.wait(timeout=5)
@@ -2643,7 +2642,7 @@ def test_headless_policy_sync_accepts_policy_bundle_and_returns_bundle_metadata(
     assert payload["bundle_version"] == "policy-2026-04-19.3"
     assert payload["bundle_hash"] == bundle["bundleHash"]
     assert store.get_sync_payload("policy_bundle")["bundleVersion"] == "policy-2026-04-19.3"
-    assert store.resolve_policy("codex", "codex:project:package-request:abc", "hash") == "block"
+    assert resolve_policy(store, "codex", "codex:project:package-request:abc", "hash") == "block"
     policy_bundle_ack = store.get_sync_payload("policy_bundle_ack")
     assert isinstance(policy_bundle_ack, dict)
     assert policy_bundle_ack["bundleHash"] == bundle["bundleHash"]
@@ -2740,7 +2739,7 @@ def test_headless_policy_sync_passes_approval_gate_grant_to_atomic_activation(tm
         daemon.stop()
 
     assert status == 200, payload
-    assert store.resolve_policy("codex", "codex:project:package-request:abc", "hash") == "allow"
+    assert resolve_policy(store, "codex", "codex:project:package-request:abc", "hash") == "allow"
 
 
 @pytest.mark.parametrize("rollout_state", ["draft", "simulated", "pending_approval"])
@@ -2785,6 +2784,45 @@ def test_headless_policy_sync_rejects_authenticated_inactive_rollout(
     assert store.list_policy_decisions() == []
 
 
+def test_headless_policy_sync_explains_rejected_downgrade(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from codex_plugin_scanner.guard.runtime import runner as runner_module
+
+    store = GuardStore(tmp_path / "guard-home")
+    _seed_guard_cloud(store, workspace_id="workspace-1")
+    store.set_sync_payload(
+        "policy_bundle_keyring",
+        policy_bundle_test_keyring(),
+        "2026-05-19T00:00:00Z",
+    )
+    bundle = sign_policy_bundle(build_cloud_exception_policy_bundle(workspace_id="workspace-1"))
+    monkeypatch.setattr(runner_module, "_policy_bundle_is_version_downgrade", lambda *_args: True)
+
+    daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+    daemon.start()
+    try:
+        token = _dashboard_token_for(store)
+        status, payload = _read_json_response(
+            _request(
+                daemon.port,
+                "/v1/policy/sync",
+                token=token,
+                payload={
+                    "harness": "codex",
+                    "operation": "policy_sync",
+                    "policy_bundle": json.dumps(bundle),
+                },
+            )
+        )
+    finally:
+        daemon.stop()
+
+    assert status == 400
+    assert payload["error"] == "bundle_version_downgrade"
+    assert "keeps the policy it already had" in str(payload["message"])
+    assert "Publish the policy again in Guard Cloud" in str(payload["message"])
+    assert store.get_sync_payload("policy_bundle") is None
+
+
 def test_headless_signed_empty_policy_bundle_clears_stale_remote_authority(tmp_path: Path) -> None:
     store = GuardStore(tmp_path / "guard-home")
     _seed_guard_cloud(store, workspace_id="workspace-1")
@@ -2793,7 +2831,8 @@ def test_headless_signed_empty_policy_bundle_clears_stale_remote_authority(tmp_p
         policy_bundle_test_keyring(),
         "2026-07-17T00:00:00Z",
     )
-    store.replace_remote_policies(
+    replace_remote_policies(
+        store,
         [
             PolicyDecision(
                 harness="codex",
@@ -2889,23 +2928,18 @@ def test_headless_policy_sync_does_not_ack_failed_policy_replacement(
 
     monkeypatch.setattr(store, "apply_policy_bundle_authority", _fail_policy_replacement)
 
-    class _Server:
-        store: GuardStore
-
-        def __init__(self, guard_store: GuardStore) -> None:
-            self.store = guard_store
-
-    server = _Server(store)
-    handler = object.__new__(daemon_server._GuardDaemonHandler)
-    object.__setattr__(handler, "server", server)
+    from codex_plugin_scanner.guard.routes.policy_sync_call import policy_sync
 
     with pytest.raises(RuntimeError, match="injected policy replacement failure"):
-        handler._handle_headless_policy_sync(
+        policy_sync(
+            store,
             {
-                "harness": "codex",
-                "operation": "policy_sync",
-                "policy_bundle": json.dumps(bundle),
-            }
+                "payload": {
+                    "harness": "codex",
+                    "operation": "policy_sync",
+                    "policy_bundle": json.dumps(bundle),
+                }
+            },
         )
 
     assert store.get_sync_payload("policy_bundle") is None

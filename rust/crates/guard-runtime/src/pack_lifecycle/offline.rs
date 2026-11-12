@@ -6,6 +6,7 @@ use std::{collections::BTreeMap, path::Path};
 mod archive;
 mod cleanup;
 mod copy;
+mod fresh;
 mod graph;
 #[cfg(test)]
 mod tests;
@@ -109,8 +110,17 @@ pub(super) fn evaluate(input: &Value) -> Result<Value> {
         .map_err(|code| format!("offline_pack_admission:{code}"))?;
     if matches!(
         input["operation"].as_str(),
-        Some("export-copy" | "import-copy")
+        Some("export-copy" | "export-fresh-copy" | "import-copy")
     ) {
+        if input["operation"] == "export-fresh-copy" {
+            return fresh::batch(
+                input,
+                directory,
+                data.as_bytes(),
+                &graph.objects,
+                &graph.archives,
+            );
+        }
         return copy::batch(
             input,
             directory,

@@ -25,7 +25,8 @@ pub fn trust_class_for<'a>(catalog: &'a CommandCatalog, extension_id: &str) -> &
         .unwrap_or("first-party")
 }
 
-/// `extension_is_active` (extension_trust.py:158).
+/// Whether an extension is active for the layers; the retired Python
+/// `extension_is_active` asks the resident for it.
 ///
 /// `required` mirrors `item.extension.required`. On the native path the
 /// observation's extension identity is registry-validated upstream, so
@@ -38,7 +39,26 @@ pub fn extension_is_active(
     required: bool,
     layers: &[ExtensionControlLayer],
 ) -> bool {
-    if required || trust_class_for(catalog, extension_id) != "external" {
+    extension_is_active_for_class(
+        trust_class_for(catalog, extension_id),
+        extension_id,
+        required,
+        layers,
+    )
+}
+
+/// `extension_is_active` for a caller that already holds the trust class.
+///
+/// Required and non-external extensions are always active. An external one
+/// is active only when no layer disables it and the local-admin layer
+/// explicitly enables it.
+pub fn extension_is_active_for_class(
+    trust_class: &str,
+    extension_id: &str,
+    required: bool,
+    layers: &[ExtensionControlLayer],
+) -> bool {
+    if required || trust_class != "external" {
         return true;
     }
     let composed = compose_control_layers(layers);

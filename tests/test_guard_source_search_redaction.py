@@ -9,10 +9,8 @@ import pytest
 
 from codex_plugin_scanner.guard.runtime.cloud_request_native import cloud_scrub_text as _cloud_scrub_text
 from codex_plugin_scanner.guard.runtime.cloud_review_sync import build_cloud_review_event
-from codex_plugin_scanner.guard.runtime.shell_command_wrappers import (
-    normalize_transparent_shell_command,
-)
 from codex_plugin_scanner.guard.store import GuardStore
+from tests.shell_wrapper_test_support import native_shell_normalization
 
 pytestmark = pytest.mark.usefixtures("native_approval_reuse_runtime")
 
@@ -188,7 +186,7 @@ def test_cloud_scrub_keeps_search_pattern_and_redacts_pipeline_credential() -> N
 def test_cloud_scrub_preserves_normalized_shell_wrapper_source_search() -> None:
     wrapped = 'bash -lc \'grep -n "access_token = os.getenv(\\"TOKEN\\")" src/config.py\''
 
-    normalized = normalize_transparent_shell_command(wrapped).normalized_command
+    normalized = native_shell_normalization(wrapped).normalized_command
 
     assert _cloud_scrub_text(normalized) == normalized
 

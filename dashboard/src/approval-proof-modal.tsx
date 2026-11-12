@@ -5,6 +5,7 @@ import {
   buildApprovalProofCredentials,
   isApprovalProofSubmitDisabled,
 } from "./approval-proof-inline";
+import { closeOnEscape } from "./dialog-escape";
 import type { GuardApprovalGatePublicConfig } from "./guard-types";
 import { useFocusTrap } from "./use-focus-trap";
 
@@ -66,6 +67,12 @@ export function ApprovalProofModal(props: ApprovalProofModalProps) {
     ));
   }, [approvalGate, confirmDisabled, onConfirm, password, requireFreshTotp, totpCode]);
 
+  const handleEscape = useCallback(() => {
+    if (!busy) {
+      onCancel();
+    }
+  }, [busy, onCancel]);
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-brand-dark/30 px-4">
       <form
@@ -76,6 +83,7 @@ export function ApprovalProofModal(props: ApprovalProofModalProps) {
         aria-describedby="approval-proof-modal-detail"
         className="w-full max-w-md rounded-xl border border-slate-200 bg-white p-5 shadow-xl"
         onSubmit={handleSubmit}
+        onKeyDown={closeOnEscape(handleEscape)}
       >
         <SectionLabel>Approval required</SectionLabel>
         <h2 id="approval-proof-modal-title" className="mt-2 text-base font-semibold text-brand-dark">{title}</h2>

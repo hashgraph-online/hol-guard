@@ -112,7 +112,7 @@ fn evaluate_with_path(
         pager_disabled: false,
         xdg_config_home: None,
         git_config_no_system: true,
-        library_search_paths: Default::default(),
+        ..Default::default()
     };
     guard_command::pretool::evaluate_pre_tool_envelope_with_execution_context(
         "omp",
@@ -125,11 +125,16 @@ fn evaluate_with_path(
             cwd: repository.to_str(),
             cdpath_unset: false,
             rustup_override_absent: false,
+            cargo_config_inert: false,
             npm_config_inert: false,
             pip_config_inert: false,
             shell_home_matches: false,
             ripgrep_config_absent: false,
+            gem_config_absent: false,
+            http_config_absent: false,
+            openssl_config_absent: false,
             psql_environment: Default::default(),
+            creates_nothing: false,
         },
         Some(&context),
     )
@@ -168,10 +173,7 @@ fn native_worktree_proof_admits_only_fresh_local_branch_creation() {
     let root = std::fs::canonicalize(root_directory).unwrap().join(format!(
         "guard-git-worktree-proof-{}-{}",
         std::process::id(),
-        std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_nanos()
+        crate::unique_nanos::unique_nanos()
     ));
     let repository = root.join("repository");
     let _cleanup = FixtureCleanup(root.clone());
@@ -207,6 +209,17 @@ fn native_worktree_proof_admits_only_fresh_local_branch_creation() {
             .effective_segment_indexes,
         vec![0]
     );
+
+    // Git's option parser permutes, so a branch named after the start point
+    // creates the same checkout as one named before the destination.
+    let trailing_destination = root.join("trailing-child");
+    let trailing_command = format!(
+        "git worktree add --quiet {} HEAD -b trailing-worktree",
+        trailing_destination.display()
+    );
+    let trailing = evaluate(&repository, &enabled, &trailing_command);
+    assert_eq!(trailing.minimum_action, "allow", "{trailing_command}");
+    assert_eq!(trailing.reason_code, "native_exact_safe_worktree_add");
 
     git(
         &repository,
@@ -524,13 +537,26 @@ fn native_worktree_proof_admits_only_fresh_local_branch_creation() {
     assert_eq!(extension_result.minimum_action, "block");
     assert!(extension_result.reason_code.ends_with("disabled"));
 
+    // Git runs a credential helper when it needs a credential, and this
+    // checkout resolves its starting point out of the refs this repository
+    // already holds, so it asks for none. A repository helper is the
+    // developer's own configuration here, exactly as `core.hooksPath` is;
+    // where a fetch or push does authenticate, `transport_proven` keeps
+    // refusing one. A helper this very invocation names stays doubt.
     git(&repository, &["config", "credential.helper", "!false"]);
     let helper = evaluate(
         &repository,
         &enabled,
         "git worktree add --quiet -b helper-worktree helper-child HEAD",
     );
-    assert_ne!(helper.minimum_action, "allow");
+    assert_eq!(helper.minimum_action, "allow", "{}", helper.reason_code);
+    assert_eq!(helper.reason_code, "native_exact_safe_worktree_add");
+    let invocation_helper = evaluate(
+        &repository,
+        &enabled,
+        "git -c credential.helper=!false worktree add --quiet -b invocation-helper-worktree invocation-helper-child HEAD",
+    );
+    assert_ne!(invocation_helper.minimum_action, "allow");
     git(&repository, &["config", "--unset", "credential.helper"]);
 
     git(

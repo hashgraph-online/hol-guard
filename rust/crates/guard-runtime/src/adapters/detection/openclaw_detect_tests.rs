@@ -111,17 +111,15 @@ fn malformed_requests_are_refused() {
         "home": "/nonexistent/home",
         "workspace": null,
         "config_path": "/nonexistent/home/.openclaw/openclaw.json",
-        "payload": "{}",
+        "user_home": "/nonexistent/home",
     });
     assert!(detect(&valid).is_ok(), "the valid request is answered");
     for (key, value) in [
         ("harness", json!("opencode")),
         ("config_path", Value::Null),
         ("config_path", json!("relative/openclaw.json")),
-        ("payload", Value::Null),
-        ("payload", json!({})),
-        ("payload", json!("[]")),
-        ("payload", json!("{not json")),
+        ("user_home", json!(5)),
+        ("user_home", json!(["/home"])),
     ] {
         let mut request = valid.clone();
         request[key] = value.clone();

@@ -57,6 +57,24 @@ pub(super) fn initializes(arguments: &[String]) -> bool {
     }
 }
 
+/// Subcommands that keep their progress in admin-entry state the linked
+/// worktree grant does not cover: `rebase-merge/`, `rebase-apply/`,
+/// `sequencer/`, `CHERRY_PICK_HEAD`, `REVERT_HEAD`, `REBASE_HEAD`, `BISECT_*`
+/// and `SQUASH_MSG`. In a linked worktree they would fail partway, so they
+/// keep their review there. `pull` can rebase.
+const LINKED_STATE_SUBCOMMANDS: &[&str] =
+    &["rebase", "cherry-pick", "revert", "bisect", "am", "pull"];
+
+/// Whether the command writes admin-entry state a linked worktree's grant
+/// leaves out. Without a recognizable subcommand it counts.
+pub(super) fn writes_linked_admin_state(arguments: &[String]) -> bool {
+    match subcommand(arguments) {
+        Some(("merge", rest)) => rest.iter().any(|argument| argument == "--squash"),
+        Some((name, _)) => LINKED_STATE_SUBCOMMANDS.contains(&name),
+        None => true,
+    }
+}
+
 /// The subcommand after Git's global options, and the arguments after it.
 fn subcommand(arguments: &[String]) -> Option<(&str, &[String])> {
     let mut index = 0;

@@ -1,1 +1,0 @@
-"""Internal cline adapter helpers."""

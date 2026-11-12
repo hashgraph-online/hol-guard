@@ -1,7 +1,7 @@
 use super::*;
 use crate::mcp_tool_policy_decision::Current;
 use guard_command::effect_decision::GuardAction;
-use serde_json::Map;
+use serde_json::{json, Map};
 
 const VECTORS: &str =
     include_str!("../../../../tests/fixtures/mcp_relay/safe_alternative_block_vectors.json");
@@ -52,13 +52,32 @@ fn route_queues_a_decided_call_with_its_policy_action() {
 #[test]
 fn only_a_bound_safe_alternative_mode_blocks_in_place() {
     let blocked = |mode: Option<&str>, level: Option<&str>| {
-        safe_alternative(mode, level, "require-reapproval".to_owned())
+        safe_alternative(
+            mode,
+            level,
+            Some("http://127.0.0.1:4781"),
+            "require-reapproval".to_owned(),
+        )
     };
     assert_eq!(
         blocked(Some("safe-alternative"), Some("partial")),
         Ok(Routed::SafeAlternative {
             policy_action: "require-reapproval".to_owned(),
             redaction_level: "partial".to_owned(),
+            center: Some("http://127.0.0.1:4781".to_owned()),
+        })
+    );
+    assert_eq!(
+        safe_alternative(
+            Some("safe-alternative"),
+            Some("full"),
+            None,
+            "review".to_owned()
+        ),
+        Ok(Routed::SafeAlternative {
+            policy_action: "review".to_owned(),
+            redaction_level: "full".to_owned(),
+            center: None,
         })
     );
     assert_eq!(blocked(Some("ask"), Some("full")), Err(ROUTE_UNSUPPORTED));

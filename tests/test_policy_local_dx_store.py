@@ -160,6 +160,117 @@ def test_status_includes_cloud_delivery_for_this_device(tmp_path: Path, monkeypa
     assert "This device: rejected (signature)" in text
 
 
+def test_status_names_cloud_version_for_an_applied_v1_bundle(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    store = GuardStore(tmp_path / "home")
+    store.set_sync_payload("policy_bundle", {"bundleVersion": "policy-1793516302845-a", "bundleHash": "ab" * 32}, NOW)
+    store.set_sync_payload(
+        "policy_bundle_ack", {"status": "applied", "appliedAt": NOW, "bundleVersion": "policy-1793516302845-a"}, NOW
+    )
+    applied = {"id": "a", "name": "laptop", "state": "applied", "reason": None}
+    delivery = {"available": True, "versionNumber": 1, "devices": [applied], "thisDevice": applied}
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.policy_delivery_status.fetch_policy_delivery", lambda _store: delivery
+    )
+
+    text = format_policy_status(policy_status_payload(store, offline=False))
+
+    assert "Live version: 1 (bundle policy-1793516302845-a)" in text
+
+    delivery["thisDevice"] = {**applied, "state": "pending"}
+    text = format_policy_status(policy_status_payload(store, offline=False))
+
+    assert "Live version: policy-1793516302845-a\n" in text
+
+    # A bundle activated before its acknowledgement reached Cloud keeps its id:
+    # Cloud's applied state may still describe the bundle before it.
+    delivery["thisDevice"] = applied
+    store.set_sync_payload(
+        "policy_bundle_ack", {"status": "applied", "appliedAt": NOW, "bundleVersion": "policy-1793516000000-z"}, NOW
+    )
+    text = format_policy_status(policy_status_payload(store, offline=False))
+
+    assert "Live version: policy-1793516302845-a\n" in text
+
+
+def test_status_keeps_the_number_of_an_applied_v2_bundle(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    store = GuardStore(tmp_path / "home")
+    store.set_sync_payload("policy_bundle", {"bundleVersion": 8, "bundleHash": "ab" * 32}, NOW)
+    applied = {"id": "a", "name": "laptop", "state": "applied", "reason": None}
+    delivery = {"available": True, "versionNumber": 1, "devices": [applied], "thisDevice": applied}
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.policy_delivery_status.fetch_policy_delivery", lambda _store: delivery
+    )
+
+    text = format_policy_status(policy_status_payload(store, offline=False))
+
+    assert "Live version: 8\n" in text
+
+
+def test_status_names_cloud_version_for_a_legacy_bundle_id_made_of_digits(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    store = GuardStore(tmp_path / "home")
+    store.set_sync_payload("policy_bundle", {"bundleVersion": "7", "bundleHash": "ab" * 32}, NOW)
+    store.set_sync_payload("policy_bundle_ack", {"status": "applied", "appliedAt": NOW, "bundleVersion": "7"}, NOW)
+    applied = {"id": "a", "name": "laptop", "state": "applied", "reason": None}
+    delivery = {"available": True, "versionNumber": 1, "devices": [applied], "thisDevice": applied}
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.policy_delivery_status.fetch_policy_delivery", lambda _store: delivery
+    )
+
+    text = format_policy_status(policy_status_payload(store, offline=False))
+
+    assert "Live version: 1 (bundle 7)\n" in text
+
+
+def test_status_counts_listed_devices_when_fleet_counts_are_malformed(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    store = GuardStore(tmp_path / "home")
+    delivery = {
+        "available": True,
+        "versionNumber": 4,
+        "devices": [{"id": "a", "name": "laptop", "state": "applied", "reason": None}],
+        "stateCounts": {"applied": "many", "pending": 1},
+    }
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.policy_delivery_status.fetch_policy_delivery", lambda _store: delivery
+    )
+
+    text = format_policy_status(policy_status_payload(store, offline=False))
+
+    assert "Cloud version 4: 1 applied, 0 pending, 0 rejected" in text
+
+
+def test_status_counts_the_whole_fleet_beyond_the_listed_devices(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from codex_plugin_scanner.guard.policy_delivery_status import fetch_policy_delivery
+    from codex_plugin_scanner.guard.runtime import runner
+
+    store = GuardStore(tmp_path / "home")
+    response = {
+        "versionNumber": 3,
+        "devices": [{"id": "a", "name": "laptop", "state": "applied", "reason": None}],
+        "deviceCount": 620,
+        "stateCounts": {"applied": 600, "pending": 18, "rejected": 2},
+    }
+    monkeypatch.setattr(
+        runner, "_resolve_guard_sync_auth_context", lambda _store: {"sync_url": "https://hol.example/api/guard/receipts/sync"}
+    )
+    monkeypatch.setattr(runner, "_guard_sync_request", lambda *_args, **_kwargs: object())
+    monkeypatch.setattr(runner, "_urlopen_json_with_timeout_retry", lambda **_kwargs: response)
+
+    delivery = fetch_policy_delivery(store)
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.policy_delivery_status.fetch_policy_delivery", lambda _store: delivery
+    )
+    text = format_policy_status(policy_status_payload(store, offline=False))
+
+    assert delivery["deviceCount"] == 620
+    assert "Cloud version 3: 600 applied, 18 pending, 2 rejected" in text
+
+
 def test_delivery_url_follows_the_receipts_sync_host() -> None:
     assert (
         normalized_policy_delivery_url("https://hol.example/api/guard/receipts/sync")

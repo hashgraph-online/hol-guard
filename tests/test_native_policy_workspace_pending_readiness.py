@@ -9,7 +9,7 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.daemon import hook_worker as worker_module
+from codex_plugin_scanner.guard.hook_review import hook_worker as worker_module
 from codex_plugin_scanner.guard.native_policy_snapshot import NativePolicySnapshotPublisher
 from codex_plugin_scanner.guard.store import GuardStore
 
@@ -32,7 +32,7 @@ class _Resident:
         if self.hold:
             self.entered.set()
             assert self.release.wait(2.0)
-        return _ack(payload)
+        return _ack(payload, guard_home=kwargs.get("guard_home"))
 
 
 def _published(

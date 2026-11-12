@@ -11,6 +11,7 @@ import re
 import shutil
 import stat
 import sys
+import tarfile
 import zipfile
 from collections.abc import Mapping, Sequence
 from pathlib import Path
@@ -21,6 +22,7 @@ from packaging.utils import InvalidWheelFilename, parse_wheel_filename
 from packaging.version import InvalidVersion, Version
 
 if __package__:
+    from .ci.core_metadata import core_metadata_version_error
     from .release_artifact_sets import (
         ARTIFACT_SETS,
         ArtifactSetError,
@@ -30,6 +32,7 @@ if __package__:
     from .release_registry_types import Registry, RegistryVerificationError, ReleaseInspection
     from .verify_release_registry import compute_local_distribution_hashes, inspect_release
 else:
+    from ci.core_metadata import core_metadata_version_error  # pyright: ignore[reportImplicitRelativeImport]
     from release_artifact_sets import (  # pyright: ignore[reportImplicitRelativeImport]
         ARTIFACT_SETS,
         ArtifactSetError,
@@ -57,14 +60,15 @@ BUNDLE_ROOT_PATH: Final = (
 )
 EXPECTED_TARGETS: Final[Mapping[str, str]] = {
     "manylinux_2_17_x86_64": "x86_64-unknown-linux-musl",
+    "manylinux_2_17_aarch64": "aarch64-unknown-linux-musl",
     "macosx_13_0_x86_64": "x86_64-apple-darwin",
     "macosx_11_0_arm64": "aarch64-apple-darwin",
     "win_amd64": "x86_64-pc-windows-msvc",
     "win_arm64": "aarch64-pc-windows-msvc",
 }
 EXPECTED_PLATFORMS: Final = frozenset(EXPECTED_TARGETS)
-# Pull request canaries skip the Windows ARM64 runner; alpha and stable releases always carry it.
-CANARY_OPTIONAL_PLATFORMS: Final = frozenset({"win_arm64"})
+# Pull request canaries skip the ARM64 Windows and Linux runners; alpha and stable releases always carry them.
+CANARY_OPTIONAL_PLATFORMS: Final = frozenset({"manylinux_2_17_aarch64", "win_arm64"})
 NATIVE_WHEEL_MANIFEST_PATH: Final = "codex_plugin_scanner/native-wheels.json"
 NATIVE_WHEEL_MANIFEST_SCHEMA: Final = "hol-guard-native-wheels.v1"
 _MAX_NATIVE_WHEEL_BYTES: Final = 256 * 1024 * 1024
@@ -222,6 +226,69 @@ def _wheel_identity(
     return name, next(iter(tags))
 
 
+_MAX_CORE_METADATA_BYTES: Final[int] = 1024 * 1024
+
+
+def _assert_publishable_core_metadata(metadata: bytes, *, label: str) -> None:
+    try:
+        text = metadata.decode("utf-8")
+    except UnicodeDecodeError as exc:
+        raise NativeReleaseError(f"{label} core metadata is not readable UTF-8") from exc
+    error = core_metadata_version_error(text, label=label)
+    if error is not None:
+        raise NativeReleaseError(error)
+
+
+def _assert_wheel_core_metadata(wheel: Path) -> None:
+    """Require a wheel to declare a core metadata version the upload can parse.
+
+    A build backend that moves its default past what PyPI reads produces a
+    wheel every upload rejects.  The release path stages these wheels before
+    either registry sees them, so the version is checked here, where a rebuild
+    is still cheap.
+    """
+
+    try:
+        with zipfile.ZipFile(wheel) as archive:
+            names = [
+                name for name in archive.namelist() if name.endswith(".dist-info/METADATA") and name.count("/") == 1
+            ]
+            if len(names) != 1:
+                raise NativeReleaseError(f"Release wheel does not carry exactly one METADATA: {wheel.name}")
+            payload = _read_zip_member_bounded(
+                archive,
+                archive.getinfo(names[0]),
+                max_bytes=_MAX_CORE_METADATA_BYTES,
+                label="METADATA",
+            )
+    except (OSError, zipfile.BadZipFile, KeyError) as exc:
+        raise NativeReleaseError(f"Release wheel metadata could not be read: {wheel.name}") from exc
+    _assert_publishable_core_metadata(payload, label=f"Release wheel {wheel.name}")
+
+
+def _assert_sdist_core_metadata(sdist: Path) -> None:
+    """Require the source distribution to declare a publishable core metadata version."""
+
+    try:
+        with tarfile.open(sdist, mode="r:gz") as archive:
+            names = [name for name in archive.getnames() if name.endswith("/PKG-INFO") and name.count("/") == 1]
+            if len(names) != 1:
+                raise NativeReleaseError(f"Release sdist does not carry exactly one PKG-INFO: {sdist.name}")
+            member = archive.getmember(names[0])
+            if not member.isfile() or member.size <= 0 or member.size > _MAX_CORE_METADATA_BYTES:
+                raise NativeReleaseError(f"Release sdist PKG-INFO is outside the accepted bound: {sdist.name}")
+            handle = archive.extractfile(member)
+            if handle is None:
+                raise NativeReleaseError(f"Release sdist PKG-INFO could not be read: {sdist.name}")
+            with handle:
+                payload = handle.read(_MAX_CORE_METADATA_BYTES + 1)
+            if len(payload) != member.size:
+                raise NativeReleaseError(f"Release sdist PKG-INFO expanded past its declared size: {sdist.name}")
+    except (OSError, tarfile.TarError, KeyError) as exc:
+        raise NativeReleaseError(f"Release sdist metadata could not be read: {sdist.name}") from exc
+    _assert_publishable_core_metadata(payload, label=f"Release sdist {sdist.name}")
+
+
 def _assert_regular_distribution(path: Path, *, label: str) -> None:
     try:
         metadata = path.lstat()
@@ -253,6 +320,7 @@ def local_native_hashes(
     pure_projects: set[str] = set()
     for wheel in sorted(dist_dir.glob("*.whl")):
         name, tag = _wheel_identity(wheel, version=version)
+        _assert_wheel_core_metadata(wheel)
         if tag.platform == "any":
             if name not in PURE_WHEEL_PROJECTS or tag.interpreter != "py3" or tag.abi != "none":
                 raise NativeReleaseError(f"Unexpected pure release wheel: {wheel.name}")
@@ -361,6 +429,7 @@ def local_guard_hashes(
         raise NativeReleaseError(f"Guard release artifact set is not exact: missing={missing}, extra={extra}")
     _assert_regular_distribution(dist_dir / pure_wheel, label="Guard pure wheel")
     _assert_regular_distribution(dist_dir / sdist, label="Guard source distribution")
+    _assert_sdist_core_metadata(dist_dir / sdist)
     _assert_native_wheel_manifest(dist_dir / pure_wheel, version=version, native=native)
     return {filename: complete[filename] for filename in sorted(expected)}
 

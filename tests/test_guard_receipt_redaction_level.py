@@ -2,10 +2,7 @@
 
 from __future__ import annotations
 
-from codex_plugin_scanner.guard.config import (
-    VALID_RECEIPT_REDACTION_LEVELS,
-    _coerce_loaded_receipt_redaction_level,
-)
+from codex_plugin_scanner.guard.config import VALID_RECEIPT_REDACTION_LEVELS
 from codex_plugin_scanner.guard.runtime.actions import GuardActionEnvelope
 
 
@@ -45,12 +42,3 @@ def _make_envelope(
 class TestRedactionLevelConfig:
     def test_valid_levels(self):
         assert frozenset({"full", "partial", "none"}) == VALID_RECEIPT_REDACTION_LEVELS
-
-    def test_coerce_loaded_default(self):
-        assert _coerce_loaded_receipt_redaction_level(None) == "full"
-        assert _coerce_loaded_receipt_redaction_level("invalid") == "full"
-
-    def test_coerce_loaded_valid(self):
-        assert _coerce_loaded_receipt_redaction_level("full") == "full"
-        assert _coerce_loaded_receipt_redaction_level("partial") == "partial"
-        assert _coerce_loaded_receipt_redaction_level("none") == "none"

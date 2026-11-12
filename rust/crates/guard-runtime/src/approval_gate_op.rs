@@ -153,7 +153,7 @@ pub(crate) fn evaluate_approval_gate_request(
     crate::encode_response(&result)
 }
 
-fn request_digest(request: &ApprovalGateRequestV1) -> Result<String, &'static str> {
+pub(crate) fn request_digest(request: &ApprovalGateRequestV1) -> Result<String, &'static str> {
     let material = serde_json::to_value(request).map_err(|_| "native_approval_gate_invalid")?;
     let mut bytes = Vec::new();
     super::context_digest_json::write_canonical_json_with_limit(&material, &mut bytes, usize::MAX)
@@ -410,10 +410,7 @@ mod tests {
             "approval_gate_op_test_{}_{}_{}",
             std::process::id(),
             tag,
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
-                .as_nanos()
+            crate::unique_nanos::unique_nanos()
         ));
         std::fs::create_dir_all(&dir).unwrap();
         dir

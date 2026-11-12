@@ -143,10 +143,6 @@ fn run_step(home: &Path, source: &str, step: &Value, blob: &mut Blob, label: &st
             return failed(unavailable());
         }
     }
-    if step["op"] == "issue" {
-        // Python returns the signed claim it was handed.
-        result = serde_json::from_str(step["wire"]["signed_json"].as_str().unwrap()).unwrap();
-    }
     Outcome {
         result,
         error: Value::Null,

@@ -9,6 +9,17 @@ Imports the reference Python implementation and writes JSON fixtures consumed
 by the Rust tests in rust/crates/guard-command. Deterministic output. The
 Python skill content detector is retired, so the skill vectors need a snapshot
 from before that retirement (55e051a711 or earlier).
+
+The Rust detector has since moved on from that snapshot, and these vectors
+were edited by hand to match: `skill.shell-in-frontmatter` reads only the
+block that opens the file and later blocks that open with a YAML `key:` line
+(plain, dotted or quoted). Blocks do not overlap, so a block's closing `---`
+never opens another. `fm-two-blocks-second` is clean, and the
+`fm-thematic-breaks-around-fence`, `fm-opening-after-blank-lines`,
+`fm-key-block-after-thematic-break`, `fm-closing-delimiter-before-key-line`,
+`fm-dotted-key-block-after-thematic-break` and
+`fm-quoted-key-block-after-thematic-break` vectors were added. Re-recording
+from the snapshot would undo those edits.
 """
 
 from __future__ import annotations

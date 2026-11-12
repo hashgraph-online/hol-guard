@@ -7,8 +7,7 @@ from pathlib import Path
 from codex_plugin_scanner.guard.models import GuardApprovalRequest
 from codex_plugin_scanner.guard.runtime.cloud_review_sync import build_cloud_review_event
 from codex_plugin_scanner.guard.store import GuardStore
-from codex_plugin_scanner.guard.store_approvals import get_approval_request
-from tests.native_approval_writes import add_approval_request, native_approval_connection
+from tests.native_approval_writes import add_approval_request, get_approval_request, native_approval_connection
 
 
 def _request(version: str) -> GuardApprovalRequest:

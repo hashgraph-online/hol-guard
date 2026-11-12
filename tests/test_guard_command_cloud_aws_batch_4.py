@@ -101,9 +101,7 @@ def test_aws_batch_4_operations_feed_inspection_and_runtime_hooks(tmp_path: Path
 def test_aws_batch_4_help_and_request_skeletons_remain_safe(tmp_path: Path, case_start: int) -> None:
     # Exercise every original command through the same real native security path.
     # Bounded nodes can be scheduled across different CI shards and xdist workers.
-    assert_safe_command_cases(
-        AWS_BATCH_4_SAFE_CASES[case_start : case_start + _SAFE_CASE_CHUNK_SIZE], tmp_path
-    )
+    assert_safe_command_cases(AWS_BATCH_4_SAFE_CASES[case_start : case_start + _SAFE_CASE_CHUNK_SIZE], tmp_path)
 
 
 def test_aws_batch_4_global_option_positions_and_native_launchers(tmp_path: Path) -> None:
@@ -196,7 +194,7 @@ def test_aws_batch_4_quoted_examples_remain_data(tmp_path: Path) -> None:
     # alone does not attest the interpreter executable or its startup code.
     reviewed = real_native_command_evaluation(f"python -c \"print('aws {first}')\"", cwd=tmp_path)
     assert not reviewed.evaluation.extension_observations
-    assert reviewed.native_minimum_action == "review"
+    assert reviewed.payload["minimum_action"] == "review"
     assert reviewed.evaluation.minimum_action == "review"
     assert reviewed.payload["explicitly_benign"] is False
     assert not reviewed.evaluation.decision_plane.proof_routes

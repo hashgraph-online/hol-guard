@@ -309,7 +309,7 @@ pub(super) fn merge(base: &mut Value, addition: &Value) -> Result<(), &'static s
 mod tests {
     use super::*;
     const EXAMPLE: &[u8] = include_bytes!("../tests/fixtures/command-source-example.v1.json");
-    const TRUST: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/trust-class-map.v1.json"));
+    const TRUST: &[u8] = guard_command_catalog_data::TRUST_MAP_JSON;
 
     fn core_catalog() -> Vec<Value> {
         serde_json::from_slice::<Value>(crate::native_command_catalog::embedded_catalog_bytes())

@@ -1,5 +1,4 @@
-//! The native Codex bridge's browser approval wait: a port of
-//! `apply_browser_approval_wait` in `codex_daemon_hook_resume.py`.
+//! The native Codex bridge's browser approval wait.
 //!
 //! A `PreToolUse` deny that names a pending approval request is held while
 //! the bridge opens the signed approval link, polls the daemon until the
@@ -22,12 +21,15 @@ use crate::codex_hook_response::{codex_hook_response, PRE_TOOL_USE};
 use crate::hook_env_stamp::{dumps, json_string};
 use crate::pyjson::PyVal;
 
-/// `GUARD_APPROVAL_REQUEST_ID_KEY` in `codex_daemon_hook_resume.py`.
+/// Hook output key naming the pending approval request.
 const APPROVAL_REQUEST_ID_KEY: &str = "guardApprovalRequestId";
 /// `GUARD_APPROVAL_URL_KEY`.
 const APPROVAL_URL_KEY: &str = "guardApprovalUrl";
 const POLL_INTERVAL: Duration = Duration::from_millis(200);
 const GET_TIMEOUT_CAP: Duration = Duration::from_millis(1500);
+/// How long the daemon may hold one resolution read open. It stays below
+/// `GET_TIMEOUT_CAP`, so a held read is answered before the bridge gives up.
+const RESOLUTION_WAIT: Duration = Duration::from_millis(1000);
 const FINALIZE_TIMEOUT_CAP: Duration = Duration::from_secs(5);
 const FINALIZE_MAX_ATTEMPTS: usize = 3;
 /// `/requests/`, the fixed segment of `_REQUEST_URL_RE`.
@@ -240,12 +242,47 @@ fn guard_home(state_path: &Path) -> &Path {
 }
 
 /// `_open_pending_approval(approval_url, state_path=...)`. A link this port
-/// cannot sign byte for byte is reported as unavailable, never opened.
+/// cannot sign byte for byte is reported as unavailable, never opened. A user
+/// whose HOL Guard Desktop opens request links gets the request there, in a
+/// window that is already signed in, and the browser link when it does not.
 fn open_pending(approval_url: Option<&str>, state_path: &Path) {
+    let source = crate::managed_policy_load::ManagedPolicySource::native();
+    open_pending_with_source(
+        approval_url,
+        state_path,
+        crate::browser_open::open_browser_url,
+        &source,
+    );
+}
+
+fn open_pending_with_source(
+    approval_url: Option<&str>,
+    state_path: &Path,
+    opener: impl FnOnce(&str) -> bool,
+    source: &crate::managed_policy_load::ManagedPolicySource,
+) {
     let Some(url) = approval_url else {
         return;
     };
     let home = guard_home(state_path);
+    // A marker can outlive the scheme registration; when no app takes the
+    // Desktop link, the signed browser link below still opens.
+    if let Some(desktop_url) = crate::desktop_review_link::desktop_review_url(home, url) {
+        if crate::browser_open::open_app_url(&desktop_url) {
+            notify(
+                &mut std::io::stderr(),
+                &format!("HOL Guard is waiting for approval in HOL Guard Desktop: {desktop_url}"),
+            );
+            return;
+        }
+    }
+    if !crate::guard_config_load::approval_browser_allowed_under(home, source).unwrap_or(true) {
+        notify(
+            &mut std::io::stderr(),
+            "HOL Guard is waiting for approval; automatic browser opening is disabled. Open the request from Guard when ready.",
+        );
+        return;
+    }
     let browser_url = now_micros().and_then(|now| {
         crate::native_review_link::approval_browser_url(
             url,
@@ -258,11 +295,17 @@ fn open_pending(approval_url: Option<&str>, state_path: &Path) {
         )
     });
     let Some(browser_url) = browser_url else {
-        eprintln!("{}", crate::native_review_link::SIGNED_LINK_UNAVAILABLE);
+        notify(
+            &mut std::io::stderr(),
+            crate::native_review_link::SIGNED_LINK_UNAVAILABLE,
+        );
         return;
     };
-    eprintln!("HOL Guard is waiting for approval in your browser: {browser_url}");
-    crate::browser_open::open_browser_url(&browser_url);
+    notify(
+        &mut std::io::stderr(),
+        &format!("HOL Guard is waiting for approval in your browser: {browser_url}"),
+    );
+    opener(&browser_url);
 }
 
 /// `_resolution_action(payload)`.
@@ -301,31 +344,44 @@ fn pause(deadline: Instant) {
 
 /// `_poll_resolution(request_id=..., state_path=..., deadline=...)`. The
 /// id is `[A-Za-z0-9_-]`, which `quote(request_id, safe='')` keeps as is.
+///
+/// Each read asks the daemon to hold it open until the request is decided,
+/// for at most `RESOLUTION_WAIT`, so a decision reaches the hook as soon as it
+/// is committed rather than on the next poll. A read the daemon held open has
+/// already waited, and the next one is sent at once; a daemon that ignores
+/// `wait_ms` answers immediately and is polled as before.
 fn poll_resolution(state_path: &Path, request_id: &str, deadline: Instant) -> Option<Action> {
-    let path = format!("/v1/requests/{request_id}");
+    let path = format!(
+        "/v1/requests/{request_id}?wait_ms={}",
+        RESOLUTION_WAIT.as_millis()
+    );
     loop {
         if remaining(deadline) < POLL_INTERVAL {
             return None;
         }
+        let asked = Instant::now();
         let payload = approval_request(state_path, &path, None, capped(deadline, GET_TIMEOUT_CAP));
         if let Ok(Some(payload)) = payload {
             if let Some(action) = resolution_action(&payload) {
                 return Some(action);
             }
         }
-        pause(deadline);
+        if asked.elapsed() < POLL_INTERVAL {
+            pause(deadline);
+        }
     }
 }
 
 /// `_complete_resolution(...)`: the action the daemon recorded for this
-/// hook, when it is the one the browser chose.
+/// hook, when it is the one the browser chose. `Err` carries the daemon's
+/// rejection code when it refused to record the decision.
 fn complete_resolution(
     state_path: &Path,
     request_id: &str,
     action: Action,
     hook_input: &str,
     deadline: Instant,
-) -> Option<Action> {
+) -> Result<Option<Action>, String> {
     let path = format!("/v1/requests/{request_id}/live-decision");
     let body = format!(
         "{{\"hook_input\":{}}}",
@@ -333,7 +389,7 @@ fn complete_resolution(
     );
     for attempt in 0..FINALIZE_MAX_ATTEMPTS {
         if remaining(deadline) < POLL_INTERVAL {
-            return None;
+            return Ok(None);
         }
         let sent = approval_request(
             state_path,
@@ -342,8 +398,9 @@ fn complete_resolution(
             capped(deadline, FINALIZE_TIMEOUT_CAP),
         );
         let payload = match sent {
-            Ok(payload) => payload?,
-            Err(ApprovalFailure::Refused) => return None,
+            Ok(Some(payload)) => payload,
+            Ok(None) | Err(ApprovalFailure::Refused) => return Ok(None),
+            Err(ApprovalFailure::Rejected(code)) => return Err(code),
             Err(ApprovalFailure::Retry) => {
                 // Completion may already be committed. Replaying this exact
                 // request still requires daemon authentication and fresh
@@ -355,15 +412,33 @@ fn complete_resolution(
             }
         };
         if !matches!(payload.get("completed"), Some(PyVal::Bool(true))) {
-            return None;
+            return Ok(None);
         }
         let recorded = matches!(
             payload.get("action"),
             Some(PyVal::Str(recorded)) if recorded == action.as_str()
         );
-        return recorded.then_some(action);
+        return Ok(recorded.then_some(action));
     }
-    None
+    Ok(None)
+}
+
+/// What the bridge prints when the daemon will not apply an approval the
+/// reviewer gave: a sentence for the person, then a stable line tools can
+/// match. The deny the agent sees is unchanged.
+fn rejected_allow_notice(code: &str) -> String {
+    format!(
+        "HOL Guard kept this action blocked: the approval could not be applied ({code}). \
+         Run the action again to ask for a new approval.\n\
+         guard_live_decision_rejection {code}"
+    )
+}
+
+/// Writes one notice line for the person and ignores a failed write. The
+/// bridge must still answer with the original deny when stderr is closed or
+/// broken, and `eprintln!` would panic before it could.
+fn notify(out: &mut impl std::io::Write, text: &str) {
+    let _ = writeln!(out, "{text}");
 }
 
 /// Wait for the browser's decision on `pending`: whether the daemon
@@ -378,13 +453,21 @@ pub(crate) fn approved(
     let Some(action) = poll_resolution(state_path, &pending.request_id, deadline) else {
         return false;
     };
-    complete_resolution(
+    match complete_resolution(
         state_path,
         &pending.request_id,
         action,
         hook_input,
         deadline,
-    ) == Some(Action::Allow)
+    ) {
+        Ok(recorded) => recorded == Some(Action::Allow),
+        Err(code) => {
+            if action == Action::Allow {
+                notify(&mut std::io::stderr(), &rejected_allow_notice(&code));
+            }
+            false
+        }
+    }
 }
 
 /// `allow_pretool_response()` as the bridge writes it.

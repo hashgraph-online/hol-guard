@@ -1,0 +1,87 @@
+{
+  "schemaVersion": "guard.mcp-server-contribution.v1",
+  "id": "mcp.padam-nocturne",
+  "version": "1.0.0",
+  "name": "PADAM NOCTURNE",
+  "description": "Local memory for AI agents in one SQLite file on the user's machine, with sleep-style consolidation and verifiable forgetting. Search, history and stats keep Guard's usual handling; every tool that changes memory or exports all of it is gated on review. Off until you turn it on.",
+  "trustClass": "external",
+  "activation": "opt-in",
+  "publisher": {
+    "id": "maksimgalatin",
+    "displayName": "Maksim Galatin",
+    "url": "https://github.com/MaksimGalatin"
+  },
+  "icon": {
+    "kind": "react-icon",
+    "name": "HiMiniCube",
+    "background": "#0B1020"
+  },
+  "homepage": "https://github.com/MaksimGalatin/padam-nocturne",
+  "license": "AGPL-3.0-only",
+  "launch": {
+    "kind": "package-launcher",
+    "command": "uvx",
+    "package": "padam-nocturne"
+  },
+  "riskClasses": [
+    "local-sqlite-write",
+    "local-data-access",
+    "local-file-write"
+  ],
+  "tools": [
+    {
+      "name": "padam_search",
+      "state": "inherit"
+    },
+    {
+      "name": "padam_timeline",
+      "state": "inherit"
+    },
+    {
+      "name": "padam_stats",
+      "state": "inherit"
+    },
+    {
+      "name": "padam_write",
+      "state": "review"
+    },
+    {
+      "name": "padam_confirm",
+      "state": "review"
+    },
+    {
+      "name": "padam_refute",
+      "state": "review"
+    },
+    {
+      "name": "padam_sleep",
+      "state": "review"
+    },
+    {
+      "name": "padam_export",
+      "state": "review"
+    },
+    {
+      "name": "other",
+      "state": "review"
+    }
+  ],
+  "referenceUrls": [
+    "https://github.com/MaksimGalatin/padam-nocturne",
+    "https://github.com/MaksimGalatin/padam-nocturne/blob/main/docs/SECURITY_REVIEW.md",
+    "https://github.com/MaksimGalatin/padam-nocturne/blob/main/SECURITY.md",
+    "https://github.com/MaksimGalatin/padam-nocturne/tree/main/redteam",
+    "https://pypi.org/project/padam-nocturne/",
+    "https://github.com/MaksimGalatin/padam-nocturne/blob/main/padam/mcp_server.py"
+  ],
+  "saferAlternatives": [
+    "Tools read and write only the local SQLite file. Memory text leaves the machine only if OLLAMA_URL is set to another host (default: localhost) for embeddings; the optional [embed] model is fetched once from Hugging Face and gets no memory.",
+    "No erase tool over MCP: forgetting, Arweave anchoring and inheritance are owner-only CLI commands (padam forget, l3, legacy, panic).",
+    "padam_write stays on review: command recognition is a help, not the wall, and injected commands can still pass it. Sealed Red Team results with every failure: docs/SECURITY_REVIEW.md.",
+    "PADAM holds command-like text and identity changes for the owner (padam review); outside text is held only when the agent labels it external, which PADAM cannot verify. PADAM_STRICT=1 holds every agent write.",
+    "Secret-looking values are masked before storing; recalled memory is fenced as data with a fresh 128-bit marker that stored text cannot predict (docs/FENCING_SPEC.md).",
+    "padam_export returns active and, by default, superseded records as JSON, so it stays on review; padam_search returns only matching records, fenced.",
+    "This entry matches uvx padam-nocturne. Other launches (pip install, python -m padam.mcp_server, a git checkout) keep Guard's normal handling.",
+    "Give each project its own memory file with PADAM_DB; run padam_sleep with dry_run first to see what a cycle would change."
+  ]
+}

@@ -11,9 +11,10 @@ account can swap the bytes between the write and the exec.
 The copy is kept for the life of the process. Writing and first running a
 new executable of over 100 MB takes seconds on Windows, where every new image
 is scanned, and one control change asks native several times. Before each
-run the copy is compared byte for byte with the freshly verified bytes; a copy
-that differs, is missing or sits in a directory that is no longer private is
-replaced, never run. A replaced copy is removed as soon as no run is using
+run the copy is compared byte for byte with the freshly verified bytes, or
+hashed against the digest a verification of unchanged packaged files admitted;
+a copy that differs, is missing or sits in a directory that is no longer
+private is replaced, never run. A replaced copy is removed as soon as no run is using
 it.
 
 Windows keeps an executable's image locked for a moment after its process
@@ -27,6 +28,7 @@ without running their exit handlers.
 from __future__ import annotations
 
 import atexit
+import hashlib
 import logging
 import os
 import shutil
@@ -34,10 +36,11 @@ import stat
 import tempfile
 import threading
 import time
-from collections.abc import Generator
+from collections.abc import Callable, Generator
 from contextlib import contextmanager, suppress
 from dataclasses import dataclass
 from pathlib import Path
+from typing import BinaryIO
 
 _PRIVATE_ROOT_NAME = "native-exec"
 _LOGGER = logging.getLogger(__name__)
@@ -218,8 +221,8 @@ def _remove_abandoned(parent: Path) -> None:
             shutil.rmtree(entry.path, ignore_errors=True)
 
 
-def _holds_exactly(copy: _Copy, raw: bytes) -> bool:
-    """Whether a kept copy is still private, executable and exactly the verified bytes."""
+def _holds(copy: _Copy, size: int, same: Callable[[BinaryIO], bool]) -> bool:
+    """Whether a kept copy is still private, executable, of this size and passes `same`."""
     path = copy.path
     try:
         if os.name != "nt":
@@ -231,17 +234,40 @@ def _holds_exactly(copy: _Copy, raw: bytes) -> bool:
         flags = os.O_RDONLY | getattr(os, "O_BINARY", 0) | getattr(os, "O_NOFOLLOW", 0)
         with os.fdopen(os.open(path, flags), "rb") as handle:
             metadata = os.fstat(handle.fileno())
-            if not stat.S_ISREG(metadata.st_mode) or metadata.st_size != len(raw):
+            if not stat.S_ISREG(metadata.st_mode) or metadata.st_size != size:
                 return False
-            view = memoryview(raw)
-            offset = 0
-            while chunk := handle.read(_COMPARE_CHUNK):
-                if view[offset : offset + len(chunk)] != chunk:
-                    return False
-                offset += len(chunk)
-            return offset == len(raw)
+            return same(handle)
     except OSError:
         return False
+
+
+def _holds_exactly(copy: _Copy, raw: bytes) -> bool:
+    """Whether a kept copy is still private, executable and exactly the verified bytes."""
+
+    def same(handle: BinaryIO) -> bool:
+        view = memoryview(raw)
+        offset = 0
+        while chunk := handle.read(_COMPARE_CHUNK):
+            if view[offset : offset + len(chunk)] != chunk:
+                return False
+            offset += len(chunk)
+        return offset == len(raw)
+
+    return _holds(copy, len(raw), same)
+
+
+def _holds_digest(copy: _Copy, size: int, sha256: str) -> bool:
+    """Whether a kept copy is still private, executable and the bytes with this SHA-256."""
+
+    def same(handle: BinaryIO) -> bool:
+        digest = hashlib.sha256()
+        read = 0
+        while read <= size and (chunk := handle.read(_COMPARE_CHUNK)):
+            digest.update(chunk)
+            read += len(chunk)
+        return read == size and digest.hexdigest() == sha256
+
+    return _holds(copy, size, same)
 
 
 def _materialize(raw: bytes) -> _Copy:
@@ -298,6 +324,29 @@ def verified_executable(raw: bytes) -> Generator[Path]:
         copy.users += 1
         idle = _take_idle_retired()
     _remove(idle)
+    try:
+        yield copy.path
+    finally:
+        with _copies_lock:
+            copy.users -= 1
+            idle = _take_idle_retired()
+        _remove(idle)
+
+
+@contextmanager
+def reused_executable(size: int, sha256: str) -> Generator[Path | None]:
+    """Yield the kept copy if it still holds exactly the bytes with this size and SHA-256.
+
+    It yields None instead of writing a copy, so the caller verifies the
+    packaged bytes again and hands them to `verified_executable`.
+    """
+    with _copies_lock:
+        copy = _current if _current is not None and _holds_digest(_current, size, sha256) else None
+        if copy is not None:
+            copy.users += 1
+    if copy is None:
+        yield None
+        return
     try:
         yield copy.path
     finally:

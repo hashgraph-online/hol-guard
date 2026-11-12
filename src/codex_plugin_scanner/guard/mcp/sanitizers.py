@@ -1,90 +1,92 @@
 """Default-deny sanitizers for guard-mcp.v1 MCP output.
 
-Every field not in the explicit allowlist is dropped. All values are
-length-capped, control-characters removed, Unicode normalized, and
-enum-validated before being included in any MCP response.
+The native runtime owns the allowlist: every field not in it is dropped, and
+each value is length-capped, stripped of control characters, Unicode
+normalized, and enum-validated before it reaches an MCP response. Fetch text
+is also held to ``MAX_FETCH_TEXT_BYTES`` of UTF-8.
 """
 
 from __future__ import annotations
 
-import re
-import unicodedata
 from typing import Any
 
-from .schemas import (
-    MAX_FETCH_TEXT_BYTES,
-    VALID_DECISIONS,
-    VALID_HARNESSES,
-    VALID_KINDS,
+from .schemas import MAX_FETCH_TEXT_BYTES
+
+_KIND = "mcp_output"
+_FIELDS = frozenset(
+    {
+        "id",
+        "title",
+        "kind",
+        "harness",
+        "decision",
+        "changedSinceLastApproval",
+        "text",
+        "truncated",
+        "cliAvailable",
+        "receiptCount",
+        "inventoryCount",
+        "cliVersion",
+    }
 )
 
-_MAX_FIELD_LENGTH = 1024
-_MAX_TITLE_LENGTH = 256
-_CONTROL_CHARS = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]")
+
+class MCPOutputUnavailableError(RuntimeError):
+    """The native runtime could not sanitize MCP output, so none is returned."""
 
 
-def _normalize_text(value: Any, max_length: int) -> str:
-    if value is None:
-        return ""
-    text = str(value)
-    text = unicodedata.normalize("NFKC", text)
-    text = _CONTROL_CHARS.sub("", text)
-    return text[:max_length]
+def _bounded_value(key: str, value: object) -> object:
+    # Text is cut well past each output limit before it crosses to the runtime,
+    # so normalization still sees enough characters to fill the field. Enum
+    # values are never normalized, and a cut this long stays an invalid name.
+    if not isinstance(value, str):
+        return value
+    if key == "text":
+        return value[: 8 * MAX_FETCH_TEXT_BYTES]
+    return value[:4096]
 
 
-def _sanitized_common_fields(raw: dict[str, object]) -> dict[str, object]:
-    allowed: dict[str, object] = {}
+def _bounded(raw: dict[str, object]) -> dict[str, object]:
+    bounded = {
+        key: _bounded_value(key, value)
+        for key, value in raw.items()
+        if key in _FIELDS and isinstance(value, (str, bool, int, float))
+    }
+    if isinstance(text := raw.get("text"), str) and len(text) > 8 * MAX_FETCH_TEXT_BYTES:
+        bounded["truncated"] = True
+    return bounded
 
-    raw_id = _normalize_text(raw.get("id"), 256)
-    if raw_id:
-        allowed["id"] = raw_id
 
-    allowed["title"] = _normalize_text(raw.get("title"), _MAX_TITLE_LENGTH)
-    allowed["kind"] = _validate_enum(raw.get("kind"), VALID_KINDS, "receipt")
-    allowed["harness"] = _validate_enum(raw.get("harness"), VALID_HARNESSES, "")
-    allowed["decision"] = _validate_enum(raw.get("decision"), VALID_DECISIONS, "unknown")
+def _sanitized(field: str, raw: object, answer_key: str) -> Any:
+    from ..native_runner_authority import NativeRunnerAuthorityError, native_runner_authority
 
-    changed = raw.get("changedSinceLastApproval")
-    if isinstance(changed, bool):
-        allowed["changedSinceLastApproval"] = changed
+    try:
+        answer = native_runner_authority(_KIND, {field: raw})
+    except NativeRunnerAuthorityError as error:
+        raise MCPOutputUnavailableError(_KIND) from error
+    return answer.get(answer_key)
 
-    return allowed
+
+def _checked_object(value: object) -> dict[str, object]:
+    if not isinstance(value, dict):
+        raise MCPOutputUnavailableError(_KIND)
+    return value
+
+
+def sanitize_search_results(raw: list[dict[str, object]]) -> list[dict[str, object]]:
+    results = _sanitized("search", [_bounded(item) for item in raw], "results")
+    if not isinstance(results, list) or len(results) != len(raw):
+        raise MCPOutputUnavailableError(_KIND)
+    return [_checked_object(item) for item in results]
 
 
 def sanitize_search_result(raw: dict[str, object]) -> dict[str, object]:
-    return _sanitized_common_fields(raw)
+    return sanitize_search_results([raw])[0]
 
 
 def sanitize_fetch_result(raw: dict[str, object]) -> dict[str, object]:
-    allowed = _sanitized_common_fields(raw)
-
-    text = _normalize_text(raw.get("text"), MAX_FETCH_TEXT_BYTES)
-    allowed["text"] = text
-    allowed["truncated"] = bool(raw.get("truncated", False))
-
-    return allowed
+    return _checked_object(_sanitized("fetch", _bounded(raw), "result"))
 
 
 def sanitize_status_result(raw: dict[str, object]) -> dict[str, object]:
-    allowed: dict[str, object] = {}
-
-    allowed["cliAvailable"] = bool(raw.get("cliAvailable", True))
-    receipt_count = raw.get("receiptCount")
-    allowed["receiptCount"] = int(receipt_count) if isinstance(receipt_count, (int, float)) else 0
-    inventory_count = raw.get("inventoryCount")
-    allowed["inventoryCount"] = int(inventory_count) if isinstance(inventory_count, (int, float)) else 0
-
-    version = _normalize_text(raw.get("cliVersion"), _MAX_FIELD_LENGTH)
-    if version:
-        allowed["cliVersion"] = version
-
-    return allowed
-
-
-def _validate_enum(value: Any, valid: frozenset[str], default: str) -> str:
-    if value is None:
-        return default
-    text = str(value)
-    if text in valid:
-        return text
-    return default
+    return _checked_object(_sanitized("status", _bounded(raw), "status"))

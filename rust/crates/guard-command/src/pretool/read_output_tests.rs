@@ -7,10 +7,7 @@ fn output_logs_are_read_only_and_do_not_open_application_state() {
         .join(format!(
             "guard-output-read-{}-{}",
             std::process::id(),
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
-                .as_nanos()
+            crate::unique_nanos::unique_nanos()
         ));
     let output = root.join(".agent-state/cli/exec/sess_6f77a76f-0997-4644-b4db-19dae37b96a4/call_fd767b64352243ab8094f19b-stdout.log");
     std::fs::create_dir_all(output.parent().unwrap()).unwrap();

@@ -25,6 +25,7 @@ fn workspace_includes_and_outside_hooks_keep_the_command_at_review() {
     );
     assert_eq!(denials("[core]\n\thooksPath = /outside/hooks\n", ws), None);
     assert_eq!(denials("[core]\n\thooksPath = ~/hooks\n", ws), None);
+    assert_eq!(denials("[core]\n\thooksPath = ../hooks\n", ws), None);
     // An include outside the workspace is not writable from the sandbox.
     assert_eq!(
         denials("[include]\n\tpath = /etc/gitconfig.d/team\n", ws),
@@ -267,6 +268,13 @@ fn hook_directories_are_denied_where_their_links_lead() {
         workspace_write_denials(&app, Some(&home)),
         Some(vec![app.join(".hooks"), app.join("real")])
     );
+    // So does a `..` after a folder that does not exist yet: the sandbox could
+    // create that folder as a link before host Git follows it.
+    let text = "[core]\n\thooksPath = app/missing/../.hooks\n";
+    std::fs::write(repo.join(".git/config"), text).unwrap();
+    assert_eq!(workspace_write_denials(&app, Some(&home)), None);
+    let text = "[core]\n\thooksPath = app/.hooks\n";
+    std::fs::write(repo.join(".git/config"), text).unwrap();
     // A dangling link keeps the command at review: the sandbox could create
     // its target. So does a global file linked to a missing workspace file.
     std::fs::remove_dir(app.join("real")).unwrap();
@@ -410,3 +418,42 @@ fn large_repository_config_is_read_within_the_bound() {
     assert!(super::repository_config(&root).is_err());
     let _ = std::fs::remove_dir_all(&root);
 }
+
+#[test]
+fn repository_hooks_below_home_are_read_like_global_ones() {
+    let root = scratch("repo-home-hooks");
+    let (home, repo) = (root.join("home"), root.join("repo"));
+    std::fs::create_dir_all(repo.join(".git")).unwrap();
+    std::fs::create_dir_all(home.join("empty-hooks")).unwrap();
+    let absolute = format!("{}/empty-hooks", home.display());
+    for value in ["~/empty-hooks", "~/missing/hooks", absolute.as_str()] {
+        let text = format!("[core]\n\thooksPath = {value}\n");
+        std::fs::write(repo.join(".git/config"), text).unwrap();
+        assert_eq!(
+            workspace_write_denials(&repo, Some(&home)),
+            Some(vec![]),
+            "{value}"
+        );
+    }
+    let inside = format!("[core]\n\thooksPath = {}/.hooks\n", repo.display());
+    std::fs::write(repo.join(".git/config"), inside).unwrap();
+    assert_eq!(
+        workspace_write_denials(&repo, Some(&home)),
+        Some(vec![repo.join(".hooks")])
+    );
+    for value in [
+        "../hooks",
+        "~other/hooks",
+        "~/hooks # note",
+        "/tmp/hooks",
+        "~",
+    ] {
+        let text = format!("[core]\n\thooksPath = {value}\n");
+        std::fs::write(repo.join(".git/config"), text).unwrap();
+        assert_eq!(workspace_write_denials(&repo, Some(&home)), None, "{value}");
+    }
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+#[path = "workspace_git_config_shell_tests.rs"]
+mod shell;

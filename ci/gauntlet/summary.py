@@ -41,6 +41,38 @@ def inference_usage(case_dir: Path, case_ids: Iterable[str], superseded: Path | 
     return {**totals, "rounds": rounds, "rounds_with_usage": rounds_with_usage}
 
 
+def _decision_lines(coverage: dict[str, Any]) -> list[str]:
+    """State the Guard decisions this run reached, declared or observed.
+
+    The declared lines cover only cases that name a decision; the observed line
+    aggregates every completed case, so a run also states the decisions it drove
+    that no case was written to reach.
+    """
+    declaring = coverage.get("declaring_cases") or []
+    exercised = coverage.get("exercised_cases") or []
+    unexercised = coverage.get("unexercised_cases") or []
+    observed = coverage.get("observed_decisions") or []
+    lines = []
+    if declaring:
+        # Count what ran and reached its decision, never what did not fail to. A run
+        # that stopped early leaves its remaining cases in neither list, so deriving
+        # the reached count from the unexercised ones credits every case that never
+        # ran with the coverage it was selected to drive.
+        lines.append(f"Declared decisions reached: {len(exercised)} of {len(declaring)} declaring cases")
+        if (never_ran := len(declaring) - len(exercised) - len(unexercised)) > 0:
+            lines.append(
+                f"Declared decisions never attempted: {never_ran} of {len(declaring)} declaring cases never ran"
+            )
+        lines.extend(
+            f"Declared decision not reached: {row['id']} ({', '.join(row['missing'])})"
+            for row in unexercised
+            if isinstance(row, dict)
+        )
+    if observed:
+        lines.append(f"Observed decisions: {', '.join(observed)}")
+    return lines
+
+
 def render_summary_markdown(report: dict[str, Any], binding: dict[str, Any], build_sha: str, version: str) -> str:
     """Render the public summary; it depends only on report contents, never completion order."""
     usage = report.get("inference_usage")
@@ -58,6 +90,7 @@ def render_summary_markdown(report: dict[str, Any], binding: dict[str, Any], bui
                 f"({coverage['catalog_cases']} in catalog)"
             ]
             + ([f"Never executed: {', '.join(coverage['unexecuted_cases'])}"] if coverage["unexecuted_cases"] else [])
+            + _decision_lines(coverage.get("decision_paths") or {})
             if (coverage := report.get("case_coverage"))
             else []
         ),

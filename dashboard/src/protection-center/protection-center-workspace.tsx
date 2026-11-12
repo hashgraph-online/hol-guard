@@ -19,9 +19,9 @@ import {
   type EffectiveExtensionControls,
   type ExtensionCatalogSummary,
 } from "../extension-controls-api";
-import { loadCatalogReadModel, type CatalogReadModel } from "../extension-catalog-v2";
+import { CATALOG_PREPARATION_FAILED, loadCatalogReadModel, type CatalogReadModel } from "../extension-catalog-v2";
 import { CatalogExtensionDetail } from "./catalog-extension-detail";
-import { loadConsistentProtectionData } from "./consistent-protection-load";
+import { CATALOG_PREPARATION_DEGRADED_MESSAGE, PROTECTION_DATA_UNSETTLED_MESSAGE, PROTECTION_SAVE_UNSETTLED_MESSAGE, loadConsistentProtectionData, reusableCatalogModel } from "./consistent-protection-load";
 import { buildExtensionMutation, randomToken } from "./extension-mutation";
 
 export { buildExtensionMutation };
@@ -38,11 +38,11 @@ import {
 } from "./protection-workspace-states";
 import { deriveProtectionStatus } from "./model/protection-presentation";
 import { ReviewModal, type ProtectionPendingChange } from "./protection-change-review";
-import { isRetryableProtectionChangeError, protectionChangeErrorMessage } from "./protection-change-error";
+import { isRetryableProtectionChangeError, isStaleProtectionDataError, protectionChangeErrorMessage } from "./protection-change-error";
 type LoadState =
   | { kind: "loading" }
   | { kind: "error"; message: string }
-  | { kind: "ready"; catalog: CatalogReadModel; effective: EffectiveExtensionControls };
+  | { kind: "ready"; catalog: CatalogReadModel; effective: EffectiveExtensionControls; unsettled: boolean };
 type RouteState = { route: ProtectionRoute; detail: ExtensionDetailUrlState };
 
 // Long enough for a transport retry or a busy cache to clear, short enough
@@ -113,22 +113,26 @@ export function ProtectionCenterWorkspace(props: {
   const aliasRedirected = useRef<string | null>(null);
   const overviewKeepAlive = useRef(false);
   const loadInFlightRef = useRef<Promise<EffectiveExtensionControls | null> | null>(null);
+  const unsettledRef = useRef(false);
   const catalogRef = useRef<CatalogReadModel | null>(null);
   const refreshInFlightRef = useRef<Promise<void> | null>(null);
   const localClis = useLocalCliCatalog();
-  const load = useCallback((): Promise<EffectiveExtensionControls | null> => {
-    if (loadInFlightRef.current !== null) return loadInFlightRef.current;
+  const startLoad = useCallback((): Promise<EffectiveExtensionControls | null> => {
     const request = (async (): Promise<EffectiveExtensionControls | null> => {
       // Keep the already-rendered protection data mounted while a refresh is in
       // flight so an applied change's confirmation toast survives the reload.
       setState((current) => (current.kind === "ready" ? current : { kind: "loading" }));
       try {
-        const { catalog: fresh, effective } = await loadConsistentProtectionData(loadCatalogReadModel, fetchEffectiveExtensionControls);
+        const { catalog: fresh, effective, consistent } = await loadConsistentProtectionData(loadCatalogReadModel, fetchEffectiveExtensionControls);
         // An unchanged catalog keeps its model (and loaded details); effective state always refreshes.
         const previous = catalogRef.current;
-        const catalog = previous?.catalog_digest === fresh.catalog_digest && previous.protocol === fresh.protocol ? previous : fresh;
+        const catalog = reusableCatalogModel(previous, fresh);
         catalogRef.current = catalog;
-        setState({ kind: "ready", catalog, effective });
+        // A pair that never agreed still renders. The daemon refuses a mutation
+        // carrying the wrong catalog digest, so the list is shown with a notice
+        // rather than withheld behind a retry the user cannot win.
+        unsettledRef.current = !consistent;
+        setState({ kind: "ready", catalog, effective, unsettled: !consistent });
         return effective;
       } catch (error) {
         // A failed refresh after an authority action must not unmount the page
@@ -145,6 +149,17 @@ export function ProtectionCenterWorkspace(props: {
     );
     return request;
   }, []);
+  // Callers share a read already in flight. One that must see state newer
+  // than an event it just observed (a refusal on stale grounds) asks for a
+  // fresh read: a read that started before that event cannot vouch for it, so
+  // it waits that read out and then joins or starts one that began after.
+  const load = useCallback(async (options: { fresh?: boolean } = {}): Promise<EffectiveExtensionControls | null> => {
+    const inFlight = loadInFlightRef.current;
+    if (inFlight === null) return startLoad();
+    if (!options.fresh) return inFlight;
+    await inFlight;
+    return loadInFlightRef.current ?? startLoad();
+  }, [startLoad]);
 
   useEffect(() => { void load(); }, [load]);
   useEffect(() => {
@@ -243,6 +258,12 @@ export function ProtectionCenterWorkspace(props: {
 
   const confirm = useCallback(async (credentials: { approval_password?: string; approval_totp_code?: string }) => {
     if (state.kind !== "ready" || !pending) return;
+    // A split catalog/controls pair builds a payload the daemon is certain to
+    // refuse, so the save is held back rather than sent to fail.
+    if (state.unsettled) {
+      setMutationError(PROTECTION_SAVE_UNSETTLED_MESSAGE);
+      return;
+    }
     setBusy(true);
     setMutationError(null);
     const submit = async () => {
@@ -268,6 +289,20 @@ export function ProtectionCenterWorkspace(props: {
       setPending(null);
       await load();
     } catch (error) {
+      // A refusal on stale catalog or revision grounds leaves the page holding
+      // data the daemon has already moved past. Reload it here, so the sentence
+      // the operator reads is true by the time they read it and their next
+      // attempt is made against current data. The change itself is never
+      // replayed: what they approved was approved against the old catalog.
+      if (isStaleProtectionDataError(error)) {
+        const reloaded = (await load({ fresh: true })) !== null;
+        setMutationError(
+          reloaded && unsettledRef.current
+            ? PROTECTION_SAVE_UNSETTLED_MESSAGE
+            : protectionChangeErrorMessage(error, recoveryCommand, recoveryShell, { reloaded }),
+        );
+        return;
+      }
       setMutationError(protectionChangeErrorMessage(error, recoveryCommand, recoveryShell));
     } finally {
       setBusy(false);
@@ -371,6 +406,11 @@ export function ProtectionCenterWorkspace(props: {
   const loadError = state.kind === "error" ? protectionCenterLoadError(state.message) : null;
   const status = state.kind === "ready" ? deriveProtectionStatus(state.effective) : null;
   const healthBroken = state.kind === "ready" && state.effective.health !== "protected";
+  const dataUnsettled = state.kind === "ready" && state.unsettled;
+  // The daemon could not prepare its verified catalog, so this page is reading
+  // the catalog the daemon already holds. Everything on it still works, so the
+  // reader gets a notice rather than a page they cannot get past.
+  const catalogDegraded = state.kind === "ready" && state.catalog.degraded === CATALOG_PREPARATION_FAILED;
 
   return (
     <div className="w-full" data-testid="extensions-workspace">
@@ -394,6 +434,24 @@ export function ProtectionCenterWorkspace(props: {
           onCheckAgain={handleCheckAgain}
           onOpenApprovalSettings={handleOpenApprovalSettings}
         />
+      ) : null}
+      {catalogDegraded ? (
+        <p
+          role="status"
+          data-testid="catalog-preparation-degraded"
+          className="mb-3 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900"
+        >
+          {CATALOG_PREPARATION_DEGRADED_MESSAGE}
+        </p>
+      ) : null}
+      {dataUnsettled ? (
+        <p
+          role="status"
+          data-testid="protection-data-unsettled"
+          className="mb-3 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900"
+        >
+          {PROTECTION_DATA_UNSETTLED_MESSAGE}
+        </p>
       ) : null}
       {state.kind === "ready" && recoveryStatus && !healthBroken && !showOverview ? (
         <p role="status" className="mb-3 text-sm font-medium text-emerald-800">{recoveryStatus}</p>

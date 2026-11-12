@@ -27,10 +27,7 @@ fn fixture() -> Fixture {
         .join(format!(
             "home-{}-{}",
             std::process::id(),
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
-                .as_nanos()
+            crate::unique_nanos::unique_nanos()
         ));
     std::fs::create_dir_all(&root).unwrap();
     let root = std::fs::canonicalize(root).unwrap();
@@ -249,6 +246,60 @@ fn proc_references_are_reads_of_the_sessions_own_jobs() {
     assert_ne!(
         run(&f, "codex", "read", json!({"path": "proc://bg_1"})).reason_code,
         "native_omp_proc_read"
+    );
+}
+
+#[test]
+fn local_references_are_reads_of_the_sessions_scratch_files() {
+    let f = fixture();
+    for path in [
+        "local://",
+        "local://paste-1.md",
+        "local://paste-1.md:150-230",
+        "local://paste-12.md:raw",
+        "local://paste-1.md:1-40:raw",
+        "local://PLAN.md",
+        "local://plans/release_notes-plan.md",
+        "local://pasted-image-1f2e3d4c.png",
+    ] {
+        let result = omp(&f, "read", json!({"path": path}));
+        assert!(allowed(&result), "{path}: {}", result.reason_code);
+        assert_eq!(result.reason_code, "native_omp_local_read", "{path}");
+    }
+    for path in [
+        "local://../paste-1.md",
+        "local://plans/../../.ssh/id_rsa",
+        "local:///etc/passwd",
+        "local://.env",
+        "local://plans/.hidden.md",
+        "local://plans//x.md",
+        "local://plans/",
+        "local://~/x.md",
+        "local://%2e%2e/secret",
+        "local://paste 1.md",
+        "local://paste-1.md:5",
+        "local://paste-1.md:a-b",
+        "local://paste-1.md:1-2:3-4",
+        "local://paste-1.md?x=1",
+        "local://paste-1.md#frag",
+        "local://:1-5",
+        "local:/paste-1.md",
+        "LOCAL://paste-1.md",
+    ] {
+        let result = omp(&f, "read", json!({"path": path}));
+        assert_ne!(result.reason_code, "native_omp_local_read", "{path}");
+    }
+    for tool in ["write", "edit"] {
+        let result = omp(
+            &f,
+            tool,
+            json!({"path": "local://paste-1.md", "content": "x"}),
+        );
+        assert_ne!(result.reason_code, "native_omp_local_read", "{tool}");
+    }
+    assert_ne!(
+        run(&f, "codex", "read", json!({"path": "local://paste-1.md"})).reason_code,
+        "native_omp_local_read"
     );
 }
 
@@ -1284,9 +1335,23 @@ fn eval_scalar_options_are_preserved_or_reviewed() {
         "display(await tool.glob({path:'.', depth: 3}))",
         "display(await tool.read({path:'calc.py', limit: 1000000}))",
         "display(await tool.read({path:'calc.py', limit: 1.5}))",
-        "display(await tool.bash({command:'cat calc.py', timeout: 5}))",
+        // A timeout is a bounded whole number of seconds or it is not
+        // modeled at all.
+        "display(await tool.bash({command:'cat calc.py', timeout: 1.5}))",
+        "display(await tool.bash({command:'cat calc.py', timeout: 500000}))",
+        "display(await tool.bash({command:'cat calc.py', timeout: '5'}))",
     ] {
         assert!(!allowed(&eval_code(&f, code)), "{code}");
+    }
+    // The session-tool wrapper puts its own bounded `timeout` on every call
+    // it wraps. It bounds how long the call may run and changes nothing
+    // about what runs, so the call keeps the verdict it has without it.
+    for code in [
+        "display(await tool.bash({command:'cat calc.py', timeout: 5}))",
+        "display(await tool.read({path:'calc.py', timeout: 300}))",
+    ] {
+        let result = eval_code(&f, code);
+        assert!(allowed(&result), "{code}: {}", result.reason_code);
     }
 }
 

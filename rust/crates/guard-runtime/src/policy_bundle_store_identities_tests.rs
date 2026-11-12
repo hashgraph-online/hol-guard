@@ -1,0 +1,324 @@
+use serde_json::json;
+
+use super::*;
+
+const NOW: &str = "2026-01-01T00:00:00+00:00";
+
+fn store() -> Connection {
+    let connection = Connection::open_in_memory().unwrap();
+    connection
+        .execute_batch(
+            "create table sync_state (state_key text primary key, payload_json text not null, \
+             updated_at text not null);
+             create table guard_devices (device_key text primary key, installation_id text, \
+             device_label text);",
+        )
+        .unwrap();
+    connection
+}
+
+fn sync_state(connection: &Connection, key: &str, payload: &str) {
+    connection
+        .execute(
+            "insert or replace into sync_state values (?1, ?2, ?3)",
+            rusqlite::params![key, payload, NOW],
+        )
+        .unwrap();
+}
+
+fn identities(connection: &Connection, now: &str) -> Option<Vec<Identity>> {
+    cached_bundle_authority(connection, now).map(|(identities, _bundle)| identities)
+}
+
+#[test]
+fn a_missing_or_empty_bundle_authorizes_nothing() {
+    let connection = store();
+    assert_eq!(identities(&connection, NOW), Some(Vec::new()));
+    for payload in ["{}", "[1]", "\"text\"", "null"] {
+        sync_state(&connection, "policy_bundle", payload);
+        assert_eq!(identities(&connection, NOW), Some(Vec::new()), "{payload}");
+    }
+}
+
+#[test]
+fn a_bundle_the_store_cannot_parse_defers() {
+    let connection = store();
+    sync_state(&connection, "policy_bundle", "not json");
+    assert_eq!(identities(&connection, NOW), None);
+    sync_state(&connection, "policy_bundle", "{}");
+    assert_eq!(identities(&connection, "not a time"), Some(Vec::new()));
+    sync_state(&connection, "policy_bundle", r#"{"bundleVersion": 1}"#);
+    assert_eq!(identities(&connection, "not a time"), None);
+}
+
+#[cfg(unix)]
+#[test]
+fn an_unsigned_bundle_authorizes_nothing() {
+    let connection = store();
+    sync_state(
+        &connection,
+        "policy_bundle",
+        r#"{"bundleVersion": 1, "decisions": [{"harness": "codex"}]}"#,
+    );
+    assert_eq!(identities(&connection, NOW), Some(Vec::new()));
+}
+
+#[test]
+fn an_identity_is_keyed_the_way_the_store_saves_the_row() {
+    let decision = |scope: &str, expires: Value| {
+        json!({
+            "harness": "codex",
+            "scope": scope,
+            "action": "block",
+            "artifact_id": "codex:project:server",
+            "workspace": "/work/space",
+            "reason": "managed",
+            "owner": "team",
+            "source": "policy-bundle",
+            "expires_at": expires,
+        })
+    };
+    let artifact = identity(decision("artifact", Value::Null).as_object().unwrap()).unwrap();
+    assert_eq!(
+        artifact,
+        vec![
+            json!("codex"),
+            json!("artifact"),
+            json!("codex:project:server"),
+            Value::Null,
+            Value::Null,
+            Value::Null,
+            json!("block"),
+            json!("managed"),
+            json!("team"),
+            json!("policy-bundle"),
+            Value::Null,
+        ]
+    );
+    let harness = identity(decision("harness", Value::Null).as_object().unwrap()).unwrap();
+    assert_eq!(
+        harness[2],
+        json!(artifact_family_key(Some("codex:project:server")))
+    );
+    let workspace = identity(
+        decision("workspace", json!("2026-02-01T00:00:00Z"))
+            .as_object()
+            .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(
+        workspace[4],
+        json!(workspace_policy_key(Some("/work/space")))
+    );
+    assert_eq!(
+        workspace[10],
+        json!(canonical_utc_timestamp("2026-02-01T00:00:00Z").unwrap())
+    );
+    let global = identity(decision("global", Value::Null).as_object().unwrap()).unwrap();
+    assert_eq!(global[4], Value::Null);
+    let publisher = identity(decision("publisher", Value::Null).as_object().unwrap()).unwrap();
+    assert_eq!(publisher[2], Value::Null);
+    // An expiry the store cannot canonicalize defers.
+    assert_eq!(
+        identity(decision("artifact", json!("tomorrow")).as_object().unwrap()),
+        None
+    );
+}
+
+#[cfg(any(unix, windows))]
+#[test]
+fn the_host_name_a_generic_label_yields_to_is_read() {
+    // Off Unix this was unknown, which left the bundle's identities to the
+    // Python store.
+    let name = device_display_name(&store(), "localhost").expect("host name");
+    assert!(!name.is_empty());
+}
+
+#[test]
+fn a_generic_label_yields_to_the_host_name() {
+    assert_eq!(
+        machine_display_name("Dev-Box.example.com").as_deref(),
+        Some("Dev-Box")
+    );
+    assert_eq!(machine_display_name(" localhost.local "), None);
+    assert_eq!(machine_display_name(""), None);
+    assert_eq!(
+        machine_display_name(&"h".repeat(200)).map(|name| name.chars().count()),
+        Some(DEVICE_NAME_CHARS)
+    );
+    assert!(generic_label(" Local Machine "));
+    assert!(!generic_label("build-agent"));
+
+    let connection = store();
+    assert_eq!(
+        device_display_name(&connection, "build-agent").as_deref(),
+        Some("build-agent")
+    );
+    // A generic label the user chose stays.
+    sync_state(
+        &connection,
+        DEVICE_LABEL_CHOICE_KEY,
+        r#"{"label": "localhost"}"#,
+    );
+    assert_eq!(
+        device_display_name(&connection, "localhost").as_deref(),
+        Some("localhost")
+    );
+}
+
+#[test]
+fn chunks_split_compact_json_by_characters() {
+    assert_eq!(chunks(&json!({})), Some(vec!["{}".to_owned()]));
+    let long = json!("é".repeat(CHUNK_CHARS));
+    let parts = chunks(&long).unwrap();
+    assert_eq!(parts.len(), 2);
+    assert_eq!(parts[0].chars().count(), CHUNK_CHARS);
+    assert_eq!(parts.concat(), serde_json::to_string(&long).unwrap());
+}
+
+#[test]
+fn the_ordering_view_keeps_only_the_ordering_keys() {
+    assert_eq!(
+        ordering_view(&json!({"bundleVersion": 2, "issuedAt": "t", "decisions": []})),
+        json!({"bundleVersion": 2, "issuedAt": "t"})
+    );
+}
+
+/// A document past the store's limit is refused, as `policy_bundle_chunks`
+/// refuses it, so the bundle authorizes nothing.
+#[test]
+fn a_document_past_the_limit_is_not_chunked() {
+    let at_limit = json!("é".repeat(MAX_DOCUMENT_CHARS - 2));
+    assert_eq!(
+        chunks(&at_limit).map(|chunks| chunks.concat().chars().count()),
+        Some(MAX_DOCUMENT_CHARS)
+    );
+    assert_eq!(chunks(&json!("é".repeat(MAX_DOCUMENT_CHARS - 1))), None);
+}
+
+fn policy_row(connection: &Connection, source: &str) {
+    connection
+        .execute_batch("create table if not exists policy_decisions (source text not null)")
+        .unwrap();
+    connection
+        .execute(
+            "insert into policy_decisions (source) values (?1)",
+            [source],
+        )
+        .unwrap();
+}
+
+#[test]
+fn a_lookup_derives_identities_only_for_a_store_with_bundle_rows() {
+    let connection = store();
+    sync_state(&connection, "policy_bundle", "not json");
+    assert_eq!(lookup_bundle_authority(&connection, NOW), Ok(None));
+    policy_row(&connection, "local");
+    assert_eq!(lookup_bundle_authority(&connection, NOW), Ok(None));
+    policy_row(&connection, "policy-bundle");
+    assert_eq!(lookup_bundle_authority(&connection, NOW), Err(()));
+}
+
+#[cfg(unix)]
+#[test]
+fn a_bundle_that_authorizes_nothing_ships_no_identities() {
+    let connection = store();
+    policy_row(&connection, "policy-bundle");
+    sync_state(
+        &connection,
+        "policy_bundle",
+        r#"{"bundleVersion": 1, "decisions": [{"harness": "codex"}]}"#,
+    );
+    assert_eq!(
+        lookup_bundle_authority(&connection, NOW),
+        Ok(Some((Vec::new(), None)))
+    );
+}
+
+fn canonical_bundle(mode: &str, rules: Value) -> Map<String, Value> {
+    json!({
+        "contractVersion": CANONICAL_CONTRACT,
+        "payload": {
+            "apiVersion": "guard.hashgraphonline.com/v1alpha1",
+            "kind": "GuardPolicy",
+            "metadata": {"id": "managed-policy", "name": "Managed policy", "revision": 0},
+            "spec": {"defaults": {"mode": mode}, "rules": rules},
+        },
+    })
+    .as_object()
+    .unwrap()
+    .clone()
+}
+
+fn allow_command(id: &str, command: &str) -> Value {
+    json!({
+        "id": id,
+        "enabled": true,
+        "effect": "allow",
+        "match": {"commands": [command]},
+        "lifetime": {"mode": "permanent", "expiresAt": null},
+        "provenance": {"source": "cloud", "createdAt": "2026-01-01T00:00:00Z"},
+    })
+}
+
+fn this_device(connection: &Connection) {
+    connection
+        .execute(
+            "insert into guard_devices values ('local-device', 'device-1', 'Workstation')",
+            [],
+        )
+        .unwrap();
+}
+
+#[test]
+fn a_canonical_bundle_authorizes_the_rows_it_compiles_to_for_this_device() {
+    let connection = store();
+    this_device(&connection);
+    let rules = json!([allow_command("allow-publish", "npm publish --tag next")]);
+    let identities = canonical_identities(&connection, &canonical_bundle("prompt", rules)).unwrap();
+    assert!(!identities.is_empty());
+    for identity in &identities {
+        assert_eq!(identity[1], json!("artifact"));
+        assert!(identity[2]
+            .as_str()
+            .unwrap()
+            .starts_with("memory:exact-shell-command:"));
+        assert_eq!(identity[6], json!("allow"));
+        assert_eq!(identity[8], json!("allow-publish"));
+        assert_eq!(identity[9], json!("policy-bundle-canonical"));
+    }
+}
+
+#[test]
+fn a_canonical_bundle_authorizes_nothing_it_does_not_enforce_here() {
+    let connection = store();
+    this_device(&connection);
+    let watched = json!([allow_command("allow-publish", "npm publish --tag next")]);
+    assert_eq!(
+        canonical_identities(&connection, &canonical_bundle("observe", watched)),
+        Some(Vec::new())
+    );
+    let mut elsewhere = allow_command("allow-publish", "npm publish --tag next");
+    elsewhere["match"]["devices"] = json!(["device-2"]);
+    assert_eq!(
+        canonical_identities(&connection, &canonical_bundle("prompt", json!([elsewhere]))),
+        Some(Vec::new())
+    );
+    let mut v1 = canonical_bundle("prompt", json!([]));
+    v1.remove("contractVersion");
+    assert_eq!(canonical_identities(&connection, &v1), Some(Vec::new()));
+}
+
+#[test]
+fn a_canonical_bundle_without_this_device_or_a_compile_authorizes_nothing() {
+    let connection = store();
+    let rules = json!([allow_command("allow-publish", "npm publish --tag next")]);
+    assert_eq!(
+        canonical_identities(&connection, &canonical_bundle("prompt", rules)),
+        None
+    );
+    this_device(&connection);
+    let mut broken = canonical_bundle("prompt", json!([]));
+    broken["payload"]["spec"] = json!("not a spec");
+    assert_eq!(canonical_identities(&connection, &broken), None);
+}

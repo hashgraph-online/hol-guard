@@ -12,34 +12,6 @@ from .runtime.command_expression import CommandCondition, CommandExpression
 POLICY_API_VERSION = "guard.hashgraphonline.com/v1alpha1"
 POLICY_KIND = "GuardPolicy"
 NETWORK_POLICY_SPEC_FIELD = "networkPolicy"
-POLICY_MATCH_FIELDS = (
-    "operations",
-    "actors",
-    "agents",
-    "artifacts",
-    "commands",
-    "devices",
-    "domains",
-    "ecosystems",
-    "environments",
-    "harnesses",
-    "locations",
-    "mcps",
-    "packages",
-    "paths",
-    "publishers",
-    "repositories",
-    "secretTypes",
-    "skills",
-    "tools",
-    "workspaces",
-    "browserIntents",
-    "browserOperations",
-    "browserProfiles",
-    "origins",
-    "pathPrefixes",
-    "sensitiveSurfaces",
-)
 
 JsonValue: TypeAlias = None | bool | int | float | str | list["JsonValue"] | dict[str, "JsonValue"]
 EncodedExtensions: TypeAlias = tuple[tuple[str, str], ...]

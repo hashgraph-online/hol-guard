@@ -14,7 +14,7 @@ mod catalog;
 #[path = "command_compatibility/domains.rs"]
 mod domains;
 #[path = "command_compatibility/environment.rs"]
-mod environment;
+pub(crate) mod environment;
 #[path = "command_compatibility/git.rs"]
 mod git;
 #[path = "command_compatibility/github.rs"]
@@ -25,10 +25,10 @@ mod settles;
 pub use catalog::compatibility_rule_ids;
 pub(crate) use domains::docker_segment_settles_uncertainty;
 pub(crate) use environment::{
-    code_or_redirect_environment_name, credential_routing_environment_name, inert_environment_name,
-    plain_printed_name,
+    code_or_redirect_environment_name, credential_routing_environment_name, plain_printed_name,
 };
 pub(crate) use git::{
+    command_index as git_command_index,
     repository_routes_verified as git_repository_routes_verified,
     rooted_hooks_inert as git_rooted_hooks_inert,
     runs_configured_program as git_runs_configured_program,
@@ -45,6 +45,11 @@ pub(crate) fn github_arguments_are_read_only(arguments: &[String], text: &str) -
     github::arguments_are_read_only(arguments, text)
 }
 
+/// A `gh --repo` value that names a GitHub repository as `owner/name`.
+pub(crate) fn github_repository_selector(value: &str) -> bool {
+    github::repository_selector(value)
+}
+
 pub(crate) fn git_inspection_arguments<'a>(
     arguments: &'a [String],
     context: crate::pretool::PathContext<'_>,
@@ -52,9 +57,32 @@ pub(crate) fn git_inspection_arguments<'a>(
     git::inspection_arguments(arguments, context)
 }
 
+/// Whether a `symbolic-ref` form only prints where a symbolic ref points. A
+/// second operand writes that ref instead.
+pub(crate) fn git_symbolic_ref_read(rest: &[String]) -> bool {
+    git::symbolic_ref_read(rest)
+}
+
+/// Whether a `check-mailmap` form reads only the repository's own mailmap.
+pub(crate) fn git_mailmap_read(rest: &[String]) -> bool {
+    git::mailmap_read(rest)
+}
+
+/// Whether an `interpret-trailers` form only filters the message on its stdin.
+pub(crate) fn git_trailers_read(rest: &[String]) -> bool {
+    git::trailers_read(rest)
+}
+
 /// `origin` followed by quiet/prune flags and simple named refs.
 pub(crate) fn git_fetch_origin_shaped(arguments: &[String]) -> bool {
     git::fetch_origin_shaped(arguments)
+}
+
+/// A refresh whose operands the proof can follow, reported as whether it
+/// reaches every configured remote. `None` is a refresh the proof cannot
+/// follow at all.
+pub(crate) fn git_fetch_every_remote(arguments: &[String]) -> Option<bool> {
+    git::fetch_reach(arguments)
 }
 
 /// The arguments after leading `-C` routes that stay within the workspace,
@@ -190,9 +218,45 @@ pub(crate) fn basename(segment: &CommandSegmentV1) -> String {
 /// Neither is a reviewable steer of that program.
 fn assignment_prefix_is_unsupported(segment: &CommandSegmentV1) -> bool {
     segment.environment_names.iter().any(|name| {
-        environment::code_loading_environment_name(name)
-            || environment::credential_routing_environment_name(name)
+        environment::credential_routing_environment_name(name)
+            || (environment::code_loading_environment_name(name)
+                && !screened_build_setting(segment, name))
     })
+}
+
+/// A build or test setting whose value passed the closed screen in
+/// [`crate::pretool::generic::inert_tool_settings`].
+///
+/// `GOFLAGS`, `RUSTFLAGS`, `RUSTDOCFLAGS` and `PYTEST_ADDOPTS` are spelled
+/// like loader settings, so the fragment test above refuses them although a
+/// screened value names no program: it only chooses how the run reports, how
+/// often it repeats or which lint it refuses. Refusing them left the command
+/// no reviewable form at all, because the rescue below this error reads only
+/// an uncertain command, so `GOFLAGS=-count=1 go test ./...` blocked outright
+/// while the same run without the prefix passed. A value the screen does not
+/// hold (`-toolexec=./x`, `-Clinker=./ld`, `-pevil`) still fails here.
+///
+/// Only the prefix the shell applies to the run is read, and every assignment
+/// of the name in it has to pass. A word spelled like the setting after the
+/// program is an argument to that program, not the setting in effect, and a
+/// second assignment of the same name is the value the run actually gets, so
+/// reading either as the screened one would clear
+/// `GOFLAGS=-v GOFLAGS=-toolexec=./x go test ./...` on the strength of a value
+/// the run never sees.
+fn screened_build_setting(segment: &CommandSegmentV1, name: &str) -> bool {
+    let prefix = crate::command_tokens::leading_environment(&segment.tokens).1;
+    let mut values = segment.tokens[..prefix.min(segment.tokens.len())]
+        .iter()
+        .filter_map(|token| {
+            token
+                .strip_prefix(name)
+                .and_then(|rest| rest.strip_prefix('='))
+        })
+        .peekable();
+    values.peek().is_some()
+        && values.all(|value| {
+            crate::pretool::generic::inert_tool_settings::inert_tool_setting(name, value)
+        })
 }
 
 /// A list item such as `OUT=build/report.json` only sets shell variables, so
@@ -200,18 +264,81 @@ fn assignment_prefix_is_unsupported(segment: &CommandSegmentV1) -> bool {
 /// since an expansion such as `${GIT_DIR:=x}` sets another variable, and every
 /// name is inert or ordinary. A variable the session already exported passes
 /// its new value to later commands, so a name that steers the shell, lookup,
-/// loading, configuration or credentials keeps the evaluation failure.
-fn sets_ordinary_variables(segment: &CommandSegmentV1) -> bool {
+/// loading, configuration, credentials, the trust anchor or the endpoint of
+/// a later fetch keeps the evaluation failure.
+pub(crate) fn sets_ordinary_variables(segment: &CommandSegmentV1) -> bool {
     !segment.environment_names.is_empty()
         && segment.tokens.len() == segment.environment_names.len()
         && segment.arguments.is_empty()
         && segment.wrapper_chain.is_empty()
         && !segment.text.contains(['$', '`'])
-        && segment.environment_names.iter().all(|name| {
-            environment::inert_environment_name(name)
-                || (crate::pretool::generic::chain_literals::ordinary_name(name)
-                    && !environment::code_or_redirect_environment_name(name))
-        })
+        && segment
+            .environment_names
+            .iter()
+            .all(|name| environment::ordinary_setting_name(name))
+}
+
+/// A list item such as `status=$?` or `dir=$ROOT` binds a name to another
+/// parameter's value. Plain `$NAME`, `${NAME}` and the special parameters
+/// expand to text and run nothing, so the item still runs no program. It is
+/// not literal, so it is no proof of its own: it reaches the compatibility
+/// pass instead of failing it. Command substitution, arithmetic, subscripts
+/// and the `${...}` operator forms can run code or set other names, and a
+/// read of a steering name such as `$GIT_DIR` carries that setting into an
+/// ordinary one, so any of them keeps the evaluation failure.
+fn binds_plain_parameters(segment: &CommandSegmentV1) -> bool {
+    !segment.environment_names.is_empty()
+        && segment.tokens.len() == segment.environment_names.len()
+        && segment.arguments.is_empty()
+        && segment.wrapper_chain.is_empty()
+        && plain_parameter_expansions(&segment.text)
+        && segment
+            .environment_names
+            .iter()
+            .all(|name| environment::ordinary_setting_name(name))
+}
+
+fn plain_parameter_expansions(text: &str) -> bool {
+    let characters: Vec<char> = text.chars().collect();
+    let name = |character: &char| *character == '_' || character.is_ascii_alphanumeric();
+    let special = |character: &char| {
+        character.is_ascii_digit() || matches!(character, '?' | '#' | '$' | '!' | '-' | '@' | '*')
+    };
+    let mut index = 0;
+    while index < characters.len() {
+        match characters[index] {
+            '`' => return false,
+            '\\' => index += 2,
+            '$' => {
+                let rest = &characters[index + 1..];
+                let braced = rest.first() == Some(&'{');
+                let inner = &rest[usize::from(braced)..];
+                let length = match inner.first() {
+                    // `${10}` names the tenth positional parameter; unbraced,
+                    // `$10` is `$1` followed by a literal `0`.
+                    Some(character) if braced && character.is_ascii_digit() => {
+                        inner.iter().take_while(|c| c.is_ascii_digit()).count()
+                    }
+                    Some(character) if special(character) => 1,
+                    Some(character) if name(character) => {
+                        let length = inner.iter().take_while(|c| name(c)).count();
+                        let referenced: String = inner[..length].iter().collect();
+                        if !environment::ordinary_setting_name(&referenced) {
+                            return false;
+                        }
+                        length
+                    }
+                    _ => return false,
+                };
+                if braced && inner.get(length) != Some(&'}') {
+                    return false;
+                }
+                index += 1 + length + 2 * usize::from(braced);
+            }
+            _ => index += 1,
+        }
+    }
+    true
 }
 
 pub fn compatibility_observations(
@@ -298,7 +425,8 @@ pub(crate) fn compatibility_observations_in(
         if assigned {
             steered.push(index);
         }
-        if (segment.executable.is_none() && !sets_ordinary_variables(segment))
+        if (segment.executable.is_none()
+            && !(sets_ordinary_variables(segment) || binds_plain_parameters(segment)))
             || segment.path_overridden
             || segment
                 .wrapper_chain

@@ -50,7 +50,17 @@ fn dependency_link_chains_keep_every_boundary_of_the_single_link() {
         format!("{link} && echo x > {worktree}/node_modules/pkg/index.js"),
         format!("{link} && cd {worktree} && ls"),
         format!("{link} && ln -s {primary}/node_modules {worktree}/node_modules/pkg/inner"),
+        // A Git read that walks the working tree could resolve the fresh
+        // link, and a listing can start a pager; only the current-branch
+        // read joins the chain.
         format!("{link} && git -C {worktree} status"),
+        format!("{link} && git -C {worktree} status --short"),
+        format!("{link} && git -C {worktree} diff"),
+        format!("{link} && git -C {worktree} grep -n x"),
+        format!("{link} && git -C {worktree} ls-files"),
+        format!("{link} && git -C {worktree} branch weekly-report"),
+        format!("{link} && git -C {worktree} branch -a"),
+        format!("{link} && git -C {worktree} tag --list"),
         // A search operand could read through the fresh link.
         format!("ln -s {primary}/node_modules {worktree}/cfg && grep -rn . {worktree}/cfg/"),
         format!("ln -s {primary}/node_modules {worktree}/cfg && grep -n x {worktree}/cfg/pkg/a.js"),
@@ -78,6 +88,82 @@ fn a_directory_created_earlier_in_the_chain_is_not_a_proven_missing_root() {
         format!("mkdir {worktree}/cfg && grep -n x {worktree}/cfg/a.json"),
     ] {
         for cwd in [&session.org, &session.worktree] {
+            assert_ne!(action(&session, &command, cwd), "allow", "{command}");
+        }
+    }
+}
+
+#[test]
+fn the_current_branch_read_beside_the_link_is_quiet() {
+    let session = session("link-chain-branch");
+    let primary = session.primary.display();
+    let worktree = session.worktree.display();
+    let link = format!("ln -s {primary}/node_modules {worktree}/node_modules");
+    for cwd in [&session.org, &session.primary, &session.worktree] {
+        for command in [
+            format!("{link} && git -C {worktree} branch --show-current"),
+            format!("git -C {worktree} branch --show-current && {link}"),
+        ] {
+            assert_eq!(action(&session, &command, cwd), "allow", "{command}");
+        }
+    }
+}
+
+/// The reported shape: a dependency directory shared with the relative
+/// spelling an agent writes, then the branch the sibling checkout is on. The
+/// link writes no Git configuration, so the Git read keeps its own proof
+/// instead of falling to the execution-context floor.
+#[test]
+fn a_relative_dependency_link_leaves_a_branch_read_quiet() {
+    let session = session("link-chain-relative");
+    let worktree = session.worktree.display();
+    let link = format!("ln -s ../org/app-portal/node_modules {worktree}/node_modules");
+    let command = format!("{link} && git -C {worktree} branch --show-current");
+    for cwd in [&session.org, &session.primary, &session.worktree] {
+        assert_eq!(action(&session, &command, cwd), "allow", "{command}");
+    }
+}
+
+/// Agents share a dependency directory into a package folder of the new
+/// worktree, then check the link with `test` or a listing whose errors are
+/// discarded. The peers read metadata or print, and a redirect into
+/// `/dev/null` writes nothing the link could reach.
+#[test]
+fn a_link_into_a_worktree_folder_with_checking_peers_is_quiet() {
+    let session = session("link-chain-peers");
+    std::fs::create_dir(session.worktree.join("web")).unwrap();
+    let primary = session.primary.display();
+    let worktree = session.worktree.display();
+    let link = format!("ln -s {primary}/node_modules {worktree}/node_modules");
+    for cwd in [&session.org, &session.primary, &session.worktree] {
+        for command in [
+            format!("ln -s {primary}/node_modules {worktree}/web/node_modules && echo linked"),
+            format!("{link} && test -e {worktree}/node_modules/pkg && echo linked"),
+            format!("{link} && [ -d {worktree}/node_modules/pkg ] && echo linked"),
+            format!("{link} && ls {worktree}/node_modules/pkg 2>/dev/null && echo ok"),
+            format!("{link} && ls {worktree}/node_modules >/dev/null && echo ok"),
+        ] {
+            assert_eq!(action(&session, &command, cwd), "allow", "{command}");
+        }
+    }
+}
+
+#[test]
+fn a_checked_link_still_keeps_redirects_and_hidden_folders_out() {
+    let session = session("link-chain-peers-deny");
+    std::fs::create_dir(session.worktree.join(".cache")).unwrap();
+    std::fs::create_dir_all(session.worktree.join("web/.bin")).unwrap();
+    let primary = session.primary.display();
+    let worktree = session.worktree.display();
+    let link = format!("ln -s {primary}/node_modules {worktree}/node_modules");
+    for command in [
+        format!("{link} && ls {worktree} 2>{worktree}/node_modules/err.log"),
+        format!("{link} && ls {worktree} >{worktree}/node_modules/pkg/out"),
+        format!("{link} && test -e {worktree}/node_modules/pkg > {worktree}/x"),
+        format!("ln -s {primary}/node_modules {worktree}/.cache/node_modules && echo linked"),
+        format!("ln -s {primary}/node_modules {worktree}/web/.bin/node_modules && echo linked"),
+    ] {
+        for cwd in [&session.org, &session.primary] {
             assert_ne!(action(&session, &command, cwd), "allow", "{command}");
         }
     }

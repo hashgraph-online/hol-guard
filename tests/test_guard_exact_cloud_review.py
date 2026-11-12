@@ -5,7 +5,7 @@ from __future__ import annotations
 import argparse
 import json
 import sqlite3
-import threading
+from dataclasses import replace
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -14,9 +14,8 @@ import pytest
 from codex_plugin_scanner.cli import _build_parser, _resolve_legacy_args, main
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.cli import commands_dispatch_cloud_review as cloud_review_dispatch
-from codex_plugin_scanner.guard.daemon import command_queue_worker as queue_worker_module
-from codex_plugin_scanner.guard.daemon import server as daemon_server_module
-from codex_plugin_scanner.guard.daemon.server import GuardDaemonServer
+from codex_plugin_scanner.guard.codex_live_decision import resolve_codex_live_allow_authority
+from codex_plugin_scanner.guard.native_command_capability import CommandCapabilityUnavailableError
 from codex_plugin_scanner.guard.review_contracts import (
     GuardReviewContractError,
     _anchored_review_verification_keys,
@@ -103,6 +102,38 @@ def test_review_sync_keys_reject_unanchored_key_material(tmp_path: Path) -> None
         )
 
 
+def test_exact_cloud_review_resolves_a_request_whose_scope_comes_from_the_working_directory(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A request with no stored workspace resolves its scope from the caller's directory.
+
+    Nothing about the request changes between the read that builds the expected
+    snapshot and the recheck inside the write transaction, so the signed verdict
+    must apply. It only does when both reads resolve the relative config path
+    from the same directory.
+    """
+
+    monkeypatch.chdir(tmp_path)
+    store = _connected_store(tmp_path)
+    target = replace(
+        _request("exact-relative"),
+        config_path=".guard/config.toml",
+        workspace=None,
+    )
+    _add_request(store, target)
+    enable_exact_cloud_review(store)
+
+    resolution = apply_exact_cloud_review(
+        store,
+        remote_approval=_remote_approval(store, target.request_id, receipt_id="exact-receipt-relative"),
+        expected_harness="codex",
+    )
+
+    assert resolution.request_id == target.request_id
+    target_row = store.get_approval_request(target.request_id)
+    assert target_row is not None and target_row["status"] == "resolved"
+
+
 def test_exact_cloud_review_resolves_one_request_without_policy_or_memory(tmp_path: Path) -> None:
     store = _connected_store(tmp_path)
     target = _request("exact-target")
@@ -129,7 +160,9 @@ def test_exact_cloud_review_resolves_one_request_without_policy_or_memory(tmp_pa
     resolved_at = resolution.resolved_request["resolved_at"]
     assert isinstance(resolved_at, str)
     assert target_row is not None
-    authority = store.peek_exact_cloud_local_once_approval(request_id=target.request_id, now=resolved_at)
+    authority = resolve_codex_live_allow_authority(
+        store, request=target_row, request_id=target.request_id, now=resolved_at
+    )
     assert authority is not None
     assert authority["request_id"] == target.request_id
     assert authority["source"] == "approval-gate-once"
@@ -540,6 +573,53 @@ def test_cloud_review_enable_reports_retained_capability_when_requeue_retry_fail
     assert exact_cloud_review_operations(store) == (EXACT_CLOUD_REVIEW_OPERATION,)
 
 
+def test_unavailable_replay_check_rejects_the_exact_job(monkeypatch: pytest.MonkeyPatch) -> None:
+    job = {
+        "operation": EXACT_CLOUD_REVIEW_OPERATION,
+        "protocolVersion": 2,
+        "id": "exact-job-1",
+        "deviceId": "device-1",
+        "workspaceId": "workspace-1",
+        "nonce": "nonce-1",
+        "expiresAt": "2026-10-26T18:00:00+00:00",
+        "idempotencyKey": "idem-1",
+        "payload": {"remoteApproval": {"grantId": "grant-1", "capabilityId": "cap-1"}},
+    }
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.runtime.native_workspace_review_queue.native_workspace_review_payload",
+        lambda _payload: None,
+    )
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.runtime.exact_cloud_review.remote_approval_uses_workspace_admin_mfa",
+        lambda _approval: False,
+    )
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.runtime.exact_cloud_review._verified_capability",
+        lambda _store, now=None: {
+            "deviceId": "device-1",
+            "workspaceId": "workspace-1",
+            "grantId": "grant-1",
+        },
+    )
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.runtime.exact_cloud_review._capability_digest",
+        lambda _capability, _store=None: "cap-1",
+    )
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.runtime.command_capability._command_job_seen",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(CommandCapabilityUnavailableError()),
+    )
+
+    with pytest.raises(CommandCapabilityError, match="native_command_capability_unavailable"):
+        authorize_command_queue_job(
+            object(),
+            job,
+            schema_versions=COMMAND_OPERATION_SCHEMA_VERSIONS,
+            now="2026-10-26T12:00:00+00:00",
+        )
+
+
+@pytest.mark.usefixtures("native_command_capability_runtime")
 def test_exact_cloud_review_queue_job_requires_no_generic_capability_or_local_approval(tmp_path: Path) -> None:
     store = _connected_store(tmp_path)
     credentials = store.get_oauth_local_credentials(allow_primary=False)
@@ -634,53 +714,3 @@ def test_exact_cloud_review_queue_job_requires_no_generic_capability_or_local_ap
     persisted = restarted.get_sync_payload("oauth_local_credentials")
     assert isinstance(persisted, dict)
     assert "dpop_public_jwk_thumbprint" not in persisted
-
-
-def test_command_queue_worker_refresh_serializes_with_shutdown(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    store = _connected_store(tmp_path)
-    enable_exact_cloud_review(store)
-    starts: list[str] = []
-    monkeypatch.setattr(
-        daemon_server_module,
-        "start_command_queue_worker",
-        lambda *_args: starts.append("start") or None,
-    )
-    lifecycle_daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
-    lifecycle_daemon.start()
-    lifecycle_daemon._finish_service_lock.acquire()
-    entered = threading.Event()
-    refresh_result: dict[str, object] = {}
-
-    def _refresh_during_shutdown() -> None:
-        entered.set()
-        refresh_result.update(lifecycle_daemon.refresh_command_queue_worker())
-
-    refresh_thread = threading.Thread(target=_refresh_during_shutdown)
-    refresh_thread.start()
-    assert entered.wait(timeout=1)
-    lifecycle_daemon._shutdown_started.set()
-    lifecycle_daemon._finish_service_lock.release()
-    refresh_thread.join(timeout=2)
-    try:
-        assert refresh_thread.is_alive() is False
-        assert refresh_result["running"] is False
-        assert starts == ["start"]
-    finally:
-        lifecycle_daemon.stop()
-
-    old_release = threading.Event()
-    old_thread = threading.Thread(target=old_release.wait)
-    old_thread.start()
-    old_stop = threading.Event()
-    old_stop.set()
-    old_worker = queue_worker_module.CommandQueueWorker(thread=old_thread, stop_event=old_stop)
-    monkeypatch.setattr(queue_worker_module, "command_queue_enabled", lambda _store: True)
-    monkeypatch.setattr(queue_worker_module, "_COMMAND_QUEUE_THREAD_JOIN_TIMEOUT_SECONDS", 0.01)
-    try:
-        assert queue_worker_module.start_command_queue_worker(store, old_worker) is old_worker
-    finally:
-        old_release.set()
-        old_thread.join(timeout=1)

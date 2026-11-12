@@ -132,14 +132,13 @@ def test_record_extraction_owner_never_propagates(
     assert not _marker(extraction2).exists()
 
 
-def test_entry_records_owner_before_bridge_and_guard_imports() -> None:
+def test_entry_records_owner_before_guard_imports() -> None:
     source = _ENTRY_SCRIPT.read_text(encoding="utf-8")
     main = source[source.index('if __name__ == "__main__":') :]
     bootstrap = main.index("_try_proxy_running_desktop_bootstrap()")
     record = main.index("_record_extraction_owner()\n")
-    bridge = main.index("_try_codex_daemon_bridge()")
     heavy = main.index("from codex_plugin_scanner.guard.frozen_daemon_runtime import")
-    assert record < bootstrap < bridge < heavy
+    assert record < bootstrap < heavy
 
 
 def test_entry_marker_literals_match_module_constants() -> None:
@@ -148,3 +147,56 @@ def test_entry_marker_literals_match_module_constants() -> None:
     source = _ENTRY_SCRIPT.read_text(encoding="utf-8")
     assert f'"{onefile_extraction.OWNER_MARKER_NAME}"' in source
     assert f'"{onefile_extraction._OWNER_MARKER_SCHEMA}"' in source  # pyright: ignore[reportPrivateUsage]
+
+
+def test_start_heartbeat_names_this_process_privately(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, entry: types.ModuleType
+) -> None:
+    """The daemon launcher keeps a slow cold start alive only on this record."""
+
+    heartbeat = tmp_path / "daemon-start-heartbeat"
+    nonce = "ab" * 32
+    monkeypatch.setenv("HOL_GUARD_DAEMON_START_HEARTBEAT", str(heartbeat))
+    monkeypatch.setenv("HOL_GUARD_DAEMON_LAUNCH_NONCE", nonce)
+    entry._write_start_heartbeat()  # pyright: ignore[reportPrivateUsage]
+
+    pid, recorded_at_ns, launch_nonce = heartbeat.read_text(encoding="ascii").split()
+    assert int(pid) == os.getpid()
+    assert int(recorded_at_ns) > 0
+    assert launch_nonce == nonce
+    if os.name != "nt":
+        assert stat.S_IMODE(heartbeat.stat().st_mode) == 0o600
+    assert "HOL_GUARD_DAEMON_START_HEARTBEAT" not in os.environ
+    assert os.environ["HOL_GUARD_DAEMON_LAUNCH_NONCE"] == nonce
+    assert sorted(path.name for path in tmp_path.iterdir()) == ["daemon-start-heartbeat"]
+
+
+def test_start_heartbeat_is_skipped_outside_a_daemon_launch(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, entry: types.ModuleType
+) -> None:
+    monkeypatch.delenv("HOL_GUARD_DAEMON_START_HEARTBEAT", raising=False)
+    monkeypatch.chdir(tmp_path)
+    entry._write_start_heartbeat()  # pyright: ignore[reportPrivateUsage]
+    assert list(tmp_path.iterdir()) == []
+
+
+@pytest.mark.parametrize("nonce", (None, "", "AB" * 32, "ab" * 31, "zz" * 32))
+def test_start_heartbeat_needs_this_launchs_nonce(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, entry: types.ModuleType, nonce: str | None
+) -> None:
+    heartbeat = tmp_path / "daemon-start-heartbeat"
+    monkeypatch.setenv("HOL_GUARD_DAEMON_START_HEARTBEAT", str(heartbeat))
+    if nonce is None:
+        monkeypatch.delenv("HOL_GUARD_DAEMON_LAUNCH_NONCE", raising=False)
+    else:
+        monkeypatch.setenv("HOL_GUARD_DAEMON_LAUNCH_NONCE", nonce)
+    entry._write_start_heartbeat()  # pyright: ignore[reportPrivateUsage]
+    assert list(tmp_path.iterdir()) == []
+
+
+def test_entry_writes_start_heartbeat_before_guard_imports() -> None:
+    source = _ENTRY_SCRIPT.read_text(encoding="utf-8")
+    main = source[source.index('if __name__ == "__main__":') :]
+    heartbeat = main.index("_write_start_heartbeat()\n")
+    heavy = main.index("from codex_plugin_scanner.guard.frozen_daemon_runtime import")
+    assert main.index("freeze_support()\n") < heartbeat < heavy

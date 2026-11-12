@@ -58,21 +58,17 @@ fn posix_path_is_root_owned_and_restricted(path: &Path, leaf: Leaf) -> bool {
         let Ok(metadata) = fs::symlink_metadata(&current) else {
             return false;
         };
-        if metadata.file_type().is_symlink() {
-            return false;
-        }
-        if current == path {
-            let expected = match leaf {
-                Leaf::File => metadata.is_file(),
-                Leaf::Directory => metadata.is_dir(),
-            };
-            if !expected {
-                return false;
-            }
-        } else if !metadata.is_dir() {
-            return false;
-        }
-        if metadata.uid() != 0 || metadata.mode() & 0o022 != 0 {
+        let expected_kind = match leaf {
+            _ if current != path => metadata.is_dir(),
+            Leaf::File => metadata.is_file(),
+            Leaf::Directory => metadata.is_dir(),
+        };
+        if !component_is_restricted(
+            metadata.file_type().is_symlink(),
+            expected_kind,
+            metadata.uid(),
+            metadata.mode(),
+        ) {
             return false;
         }
         match current.parent() {
@@ -80,6 +76,13 @@ fn posix_path_is_root_owned_and_restricted(path: &Path, leaf: Leaf) -> bool {
             _ => return true,
         }
     }
+}
+
+/// One component of the walk: never a link, the kind the walk expects at that
+/// depth, owned by root and writable by root alone.
+#[cfg(unix)]
+fn component_is_restricted(is_symlink: bool, expected_kind: bool, uid: u32, mode: u32) -> bool {
+    !is_symlink && expected_kind && uid == 0 && mode & 0o022 == 0
 }
 
 #[cfg(not(unix))]

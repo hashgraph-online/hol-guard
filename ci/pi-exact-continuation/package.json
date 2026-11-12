@@ -7,11 +7,13 @@
   },
   "dependencies": {
     "@earendil-works/pi-coding-agent": "0.87.1",
-    "@oh-my-pi/pi-coding-agent": "18.11.3"
+    "@oh-my-pi/pi-coding-agent": "18.18.6"
   },
   "overrides": {
     "sharp": "0.35.5",
     "lucide-react": "1.50.0",
+    "undici": "8.12.3",
+    "zod": "4.6.6",
     "@earendil-works/pi-coding-agent": {
       "brace-expansion": "5.0.12"
     }

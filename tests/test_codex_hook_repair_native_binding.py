@@ -150,8 +150,8 @@ def test_real_configured_hook_native_protection_commits_repair(
     monkeypatch,
     boundary,
 ):
+    from ci.guard_daemon_harness import GuardDaemonServer
     from codex_plugin_scanner.guard import codex_hook_recovery as recovery
-    from codex_plugin_scanner.guard.daemon.server import GuardDaemonServer
     from codex_plugin_scanner.guard.native_resident_client import close_native_residents
     from codex_plugin_scanner.guard.native_runtime import native_runtime_status
     from codex_plugin_scanner.guard.runtime_transition_admission import verified_admission_payload

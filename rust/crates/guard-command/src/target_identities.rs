@@ -18,7 +18,7 @@
 //!   the same helper behind a trait seam; `protect.py`'s copy
 //!   (`protect.py` :1023 `ProtectTargetIdentity` construction) is out of this
 //!   module's scope.
-//! - `python_strip` / `py_str_repr` / `py_float_repr` are local copies of the
+//! - `py_str_repr` / `py_float_repr` are local copies of the
 //!   private helpers in `mcp_decision.rs` (:82-101) and
 //!   `package_manifest_diff.rs` (:285-303). Receipt projection shares this
 //!   module's `py_str` and `py_truthy`; `py_float_repr` here is stricter than the
@@ -27,6 +27,7 @@
 
 use std::borrow::Cow;
 
+use guard_contracts::python_strip;
 use serde_json::{json, Map, Value};
 
 use crate::package_intent_common::GuardArtifact;
@@ -35,30 +36,6 @@ use crate::redacted_command_tokens::redact_text;
 // ---------------------------------------------------------------------------
 // CPython scalar/repr shims (private; see duplicate note above).
 // ---------------------------------------------------------------------------
-
-/// CPython `str.strip()` whitespace set: the ASCII controls 0x09-0x0d and
-/// 0x1c-0x1f plus every Unicode code point whose `isspace` is true.
-/// `char::is_whitespace` misses 0x1c-0x1f, so `str::trim` is NOT equivalent.
-fn is_python_space(ch: char) -> bool {
-    matches!(
-        ch,
-        '\u{09}'..='\u{0d}'
-            | ' '
-            | '\u{1c}'..='\u{1f}'
-            | '\u{85}'
-            | '\u{a0}'
-            | '\u{1680}'
-            | '\u{2000}'..='\u{200a}'
-            | '\u{2028}'..='\u{2029}'
-            | '\u{202f}'
-            | '\u{205f}'
-            | '\u{3000}'
-    )
-}
-
-fn python_strip(text: &str) -> &str {
-    text.trim_matches(is_python_space)
-}
 
 /// Python truthiness for JSON values (`or`/`if` semantics): `None`, `False`,
 /// `0`, `0.0`, `""`, `[]`, `{}` are falsy.

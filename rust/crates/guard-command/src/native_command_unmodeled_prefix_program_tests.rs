@@ -1,7 +1,7 @@
 //! Walking a launcher's own options to the program it runs.
 use super::{
     command_reads_a_program_file, is_launcher, launch_only, prefix_reads_a_program_file,
-    program_index,
+    program_index, Handover,
 };
 
 fn program(command: &str) -> Option<&str> {
@@ -10,7 +10,51 @@ fn program(command: &str) -> Option<&str> {
 }
 
 fn reads(command: &str) -> bool {
-    prefix_reads_a_program_file(&command.split_whitespace().collect::<Vec<&str>>())
+    prefix_reads_a_program_file(
+        &command.split_whitespace().collect::<Vec<&str>>(),
+        Handover::Floor,
+    )
+}
+
+/// The same question as the parser asks it, where the program the launcher
+/// hands over is read by the parser's own routes.
+fn reads_for_the_parser(command: &str) -> bool {
+    prefix_reads_a_program_file(
+        &command.split_whitespace().collect::<Vec<&str>>(),
+        Handover::Parsed,
+    )
+}
+
+/// A program spelled as a path is a file this scan never opened, so the floor,
+/// which has no route left to read it, keeps the failure. The parser hands it
+/// over: what comes out is `<program> <arguments>`, which its routes read
+/// exactly as they read those words written without the launcher, so
+/// `nice -n 10 .venv/bin/pytest -q` reaches the route `.venv/bin/pytest -q`
+/// already reaches. A script file stays unread under either reading, because
+/// its own text names the programs it runs and nothing opened it.
+#[test]
+fn the_parser_reads_a_path_behind_a_launcher_as_the_bare_command() {
+    for command in [
+        "nice -n 10 .venv/bin/pytest -q",
+        "stdbuf -oL .venv/bin/pytest -q",
+        "exec .venv/bin/pytest -q",
+        "nice -n 10 ./node_modules/.bin/eslint src",
+        "stdbuf -oL /usr/local/bin/cargo test",
+    ] {
+        assert!(reads(command), "{command}");
+        assert!(!reads_for_the_parser(command), "{command}");
+    }
+    for command in [
+        "nice ./deploy.sh",
+        "nice -n 10 ../tools/build.sh",
+        "stdbuf -oL ./release.py",
+        "nice -n 10 sh -c 'npm run build'",
+        "stdbuf -oL python3 deploy.py",
+        "nice -n 10 xargs rm -f",
+    ] {
+        assert!(reads(command), "{command}");
+        assert!(reads_for_the_parser(command), "{command}");
+    }
 }
 
 /// Each launcher's documented options, counted through to the program.
@@ -157,6 +201,14 @@ fn an_env_without_a_program_launches_nothing() {
         "env -u NODE_OPTIONS bash -lc 'id'",
         "env -- bash -lc 'id'",
         "env ./deploy.sh",
+        // A written name walks the prefix, and the words behind it are asked
+        // the same question any other handover asks. Without that, a setting
+        // in front of the script read as a dump while the script on its own,
+        // one line up, kept its failure.
+        "env CI=1 ./deploy.sh",
+        "env CI=1 ./scripts/run.sh",
+        "env CI=1 deploy.sh",
+        "env CI=1 bash -lc 'id'",
     ] {
         assert!(dumps(command), "{command}");
     }

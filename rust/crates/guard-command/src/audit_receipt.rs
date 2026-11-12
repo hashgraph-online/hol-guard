@@ -782,10 +782,7 @@ mod tests {
             let dir = std::env::temp_dir().join(format!(
                 "rtm019-audit-receipt-{}-{}",
                 std::process::id(),
-                std::time::SystemTime::now()
-                    .duration_since(std::time::UNIX_EPOCH)
-                    .unwrap()
-                    .as_nanos()
+                crate::unique_nanos::unique_nanos()
             ));
             std::fs::create_dir_all(&dir).unwrap();
             std::fs::write(dir.join("package.json"), br#"{"name": "fixture"}"#).unwrap();

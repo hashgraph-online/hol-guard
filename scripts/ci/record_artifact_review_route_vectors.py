@@ -18,8 +18,7 @@ exactly which effects the old ladder ran, in order:
 Each vector holds the resident's inputs (``facts``), the route fields the
 recorded trace exhibits (``route``), the trace itself and the return code.
 The Rust ``hook_decision_artifact_review_route_tests`` replays the route
-fields; ``tests/test_artifact_review_route_parity.py`` runs the new executor
-with the same stubs and checks that it runs the same effects.
+fields and pins the approval invariant on them.
 
 One deliberate difference from the old ladder: it composed the native reason
 before every branch, though only the Claude notice and the native response read
@@ -32,17 +31,19 @@ from __future__ import annotations
 import gzip
 import itertools
 import json
+import sys
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
 
-from codex_plugin_scanner.guard.cli.commands_support_prompts import (
-    _claude_prompt_additional_context,
-    _claude_prompt_system_message,
-)
 from codex_plugin_scanner.guard.cli.commands_support_runtime_resolution import _canonical_harness_name
+
+if __package__ is None:
+    sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+
+from scripts.ci.claude_prompt_oracle import _claude_prompt_additional_context, _claude_prompt_system_message
 
 OUTPUT = Path("rust/crates/guard-runtime/tests/fixtures/artifact_review_route_vectors.json.gz")
 

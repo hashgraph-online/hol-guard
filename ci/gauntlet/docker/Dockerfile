@@ -1,17 +1,17 @@
 # Full-task Gauntlet image: the agent and the policy gateway run from this one image.
 # Everything is pinned: base images by digest, gh and Bun by checksum, Oh My Pi by the
 # repository lockfile in ci/pi-exact-continuation. Guard itself is supplied at run time.
-FROM node:22-bookworm-slim@sha256:c3de60bf2f9dd0ac6370e6117950ff62d6e339527e7472301c9c78a017978392 AS node
+FROM node:22.23.4-bookworm-slim@sha256:de170b39439eb0e5a3444ad7d60b015614a381e10fecae2e30ec9e735122f38d AS node
 
 FROM python:3.12-slim-trixie@sha256:a6e34c598f2467ed0e9a8d349809fcd8b5c603269512df273a0bb1784edc11b1
 ARG TARGETARCH
 ARG GH_VERSION=2.102.0
 ARG GH_SHA256_AMD64=7e54a307f90afdc59796c325ec0c49fb09e6c18537727207a8ac7513584ea5b0
 ARG GH_SHA256_ARM64=5006962696f01e1624b3fcf1f9d8e1a11547f24bf067dd2a0371b7b421945237
-ARG BUN_VERSION=1.3.14
+ARG BUN_VERSION=1.4.4
 # The amd64 build uses the baseline Bun, which runs under emulation without AVX2.
-ARG BUN_SHA256_AMD64=a063908ae08b7852ca10939bbdc6ceed3ddabce8fb9402dce83d65d73b36e6c7
-ARG BUN_SHA256_ARM64=a27ffb63a8310375836e0d6f668ae17fa8d8d18b88c37c821c65331973a19a3b
+ARG BUN_SHA256_AMD64=e0446eb55995772eb9894bebae9a6be368d985a8b9271ee124486f9946eedd76
+ARG BUN_SHA256_ARM64=baa6bb36f51d6e58561e02bbea825038a9df454f673d6d776e8bbf86f8c7850e
 
 # Bubblewrap runs Guard's Linux workspace containment. Its overlay mounts need
 # bubblewrap 0.10 or newer, which is why the base is trixie rather than bookworm.

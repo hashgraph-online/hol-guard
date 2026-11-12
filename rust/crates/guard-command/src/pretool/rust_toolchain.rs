@@ -11,7 +11,12 @@
 //! one names an official channel and nothing else that can select a binary.
 //! Any file that cannot be read or parsed, is a symlink, or is unusually large
 //! keeps the normal review path. So does an inherited `RUSTUP_TOOLCHAIN` or
-//! `RUSTUP_HOME`, which rustup reads before any toolchain file.
+//! `RUSTUP_HOME`, which rustup reads before any toolchain file, and
+//! `RUSTUP_DIST_SERVER` or `RUSTUP_UPDATE_ROOT`, which name where a channel
+//! the file selects but the host has not installed is downloaded from.
+//!
+//! A `cargo search` query also contacts a registry, so it carries a second
+//! proof of which one: see [`registry_is_official`].
 
 use std::fs;
 use std::io::ErrorKind;
@@ -20,10 +25,93 @@ use std::path::Path;
 const TOOLCHAIN_FILES: [&str; 2] = ["rust-toolchain", "rust-toolchain.toml"];
 const MAX_TOOLCHAIN_FILE_BYTES: u64 = 4096;
 const TOOLCHAIN_KEYS: [&str; 4] = ["channel", "components", "targets", "profile"];
+const MAX_CARGO_CONFIG_BYTES: u64 = 64 * 1024;
 
 pub(super) fn safe_version_probe(arguments: &[String], context: super::PathContext<'_>) -> bool {
     matches!(arguments, [flag] if matches!(flag.as_str(), "--version" | "-V"))
         && proxy_selects_official_toolchain(context)
+}
+
+/// `cargo --version` or a `cargo search` query of the registry.
+///
+/// The query reads an endpoint, so it also needs proof of which endpoint.
+/// The version banner contacts nothing and keeps the toolchain proof alone.
+pub(super) fn safe_cargo_probe(arguments: &[String], context: super::PathContext<'_>) -> bool {
+    if !proxy_selects_official_toolchain(context) {
+        return false;
+    }
+    if matches!(arguments, [flag] if matches!(flag.as_str(), "--version" | "-V")) {
+        return true;
+    }
+    registry_query(arguments) && registry_is_official(context)
+}
+
+/// `cargo search <term>`, optionally bounded by `--limit`.
+///
+/// The subcommand asks the registry which crates match a word and prints the
+/// answer. It resolves nothing, writes no lockfile, unpacks no crate and runs
+/// no `build.rs`, which is the whole reason the package review exists for
+/// `cargo`. `npm search`, `npm view` and `brew search` already read their
+/// registries without review; this is the same reading.
+///
+/// A user alias cannot turn the word into another subcommand: Cargo ignores
+/// an `[alias]` entry that shadows a built-in command, and `search` is built
+/// in. The endpoint the query contacts is proven separately, by
+/// [`registry_is_official`].
+///
+/// Only `--limit` and plain search words are read. A `+toolchain` word makes
+/// the rustup proxy install a toolchain before the query, and every other
+/// option -- `--registry`, `--index`, `--config`, `-Z` -- either names a
+/// different endpoint or sets configuration the review should still see.
+fn registry_query(arguments: &[String]) -> bool {
+    let Some((subcommand, rest)) = arguments.split_first() else {
+        return false;
+    };
+    if subcommand.as_str() != "search" {
+        return false;
+    }
+    let mut rest = rest.iter();
+    while let Some(argument) = rest.next() {
+        match argument.as_str() {
+            "--limit" => {
+                if !rest
+                    .next()
+                    .is_some_and(|value| bounded_limit(value.as_str()))
+                {
+                    return false;
+                }
+            }
+            value if value.starts_with("--limit=") => {
+                if !bounded_limit(&value["--limit=".len()..]) {
+                    return false;
+                }
+            }
+            value if value.starts_with(['-', '+']) => return false,
+            value if !word_stays_one_word(value) => return false,
+            _ => {}
+        }
+    }
+    true
+}
+
+/// Whether the shell hands Cargo this word as written.
+///
+/// A search term is read as a term because it carries no leading dash, but
+/// the shell decides what Cargo actually receives. `{--config,evil.toml}`
+/// is one word here and two words -- an option and its value -- by the time
+/// Cargo parses them, which is how a workspace file would be loaded and its
+/// credential provider started. A pathname wildcard is the same story
+/// wherever a matching name begins with a dash. Both spellings, and the
+/// expansions this proof never resolves, keep their review.
+fn word_stays_one_word(value: &str) -> bool {
+    !value.is_empty() && !value.contains(['$', '`', '\n', '\r', '{', '}', '*', '?', '[', ']', '~'])
+}
+
+/// The value `--limit` accepts: Cargo refuses anything outside 1..=100.
+fn bounded_limit(value: &str) -> bool {
+    value
+        .parse::<u32>()
+        .is_ok_and(|limit| (1..=100).contains(&limit))
 }
 
 /// Whether the rustup proxy started from the working directory can only pick
@@ -31,6 +119,17 @@ pub(super) fn safe_version_probe(arguments: &[String], context: super::PathConte
 /// file above the directory that could select another binary.
 pub(super) fn proxy_selects_official_toolchain(context: super::PathContext<'_>) -> bool {
     if !context.rustup_override_absent {
+        return false;
+    }
+    // rustup reads its own settings before it looks for a toolchain file, and
+    // a `default_toolchain` or directory override there can name a toolchain
+    // `rustup toolchain link` pointed at any directory. A host with no rustup
+    // home has nothing to read, so the proxy is whatever `cargo` the session
+    // already found on `PATH`.
+    let Some(home) = context.home_dir.map(Path::new) else {
+        return false;
+    };
+    if !home.is_absolute() || matches!(rustup_settings(home), RustupSettings::Unproven) {
         return false;
     }
     let Some(cwd) = context.cwd.map(Path::new) else {
@@ -58,38 +157,183 @@ pub(super) fn rustfmt_proxy_is_official(context: super::PathContext<'_>) -> bool
             .is_some_and(rustup_settings_only_official)
 }
 
+/// What rustup's persistent settings select, as far as reading them can tell.
+enum RustupSettings {
+    /// There is no rustup home, or the home carries no settings file. Nothing
+    /// stored selects a toolchain, so the proxy runs whichever toolchain the
+    /// rest of this proof accounts for.
+    Absent,
+    /// A settings file whose default, where it names one, and whose every
+    /// directory override are official channels. `default_named` says
+    /// whether a default was there at all, because a file that names none
+    /// selects no toolchain: rustup stops with its own error instead of
+    /// running one, which answers a query but is not the positive proof a
+    /// command that writes files asks for.
+    Official { default_named: bool },
+    /// Anything else: a custom default, a directory override naming a custom
+    /// toolchain, or a file this proof could not read or parse.
+    Unproven,
+}
+
+/// Read `<home>/.rustup/settings.toml`.
+///
+/// Only a file that is absent answers [`RustupSettings::Absent`]. A directory
+/// or file that exists but cannot be read, a symlink, and an oversized file
+/// are all [`RustupSettings::Unproven`], because what they select is exactly
+/// what this read failed to learn.
+fn rustup_settings(home: &Path) -> RustupSettings {
+    let rustup = home.join(".rustup");
+    match fs::symlink_metadata(&rustup) {
+        Ok(metadata) if metadata.is_dir() => {}
+        Err(error) if error.kind() == ErrorKind::NotFound => return RustupSettings::Absent,
+        _ => return RustupSettings::Unproven,
+    }
+    let path = rustup.join("settings.toml");
+    match fs::symlink_metadata(&path) {
+        Ok(metadata) if metadata.is_file() && metadata.len() <= 32 * 1024 => {}
+        Err(error) if error.kind() == ErrorKind::NotFound => return RustupSettings::Absent,
+        _ => return RustupSettings::Unproven,
+    }
+    let Ok(contents) = fs::read_to_string(&path) else {
+        return RustupSettings::Unproven;
+    };
+    let Ok(settings) = contents.parse::<toml::Table>() else {
+        return RustupSettings::Unproven;
+    };
+    // A settings file with no default names no toolchain either: rustup stops
+    // with its own error rather than running one.
+    let default = settings.get("default_toolchain");
+    let default_is_official = match default {
+        None => true,
+        Some(value) => value.as_str().is_some_and(official_channel),
+    };
+    // `rustup override set` stores a toolchain name per directory. Which
+    // entry wins for the working directory does not matter when every entry
+    // names an official channel: rustup will not link a custom toolchain
+    // under such a name, so whichever one applies is downloaded and verified
+    // by rustup, exactly like the default above. A custom name, or a value
+    // that is not a name, keeps the review.
+    let overrides_are_official = match settings.get("overrides") {
+        None => true,
+        Some(toml::Value::Table(paths)) => paths
+            .values()
+            .all(|value| value.as_str().is_some_and(official_channel)),
+        _ => false,
+    };
+    if default_is_official && overrides_are_official {
+        RustupSettings::Official {
+            default_named: default.is_some(),
+        }
+    } else {
+        RustupSettings::Unproven
+    }
+}
+
+/// Whether rustup carries a settings file that names an official default.
+///
+/// `rustfmt` writes the files it is given, so unlike a query it asks for the
+/// stronger answer: a rustup home that is there and names a channel, not a
+/// host where the file's absence leaves nothing to read.
 fn rustup_settings_only_official(home: &Path) -> bool {
+    home.is_absolute()
+        && fs::symlink_metadata(home.join(".rustup").join("settings.toml"))
+            .is_ok_and(|metadata| metadata.is_file())
+        && matches!(
+            rustup_settings(home),
+            RustupSettings::Official {
+                default_named: true
+            }
+        )
+}
+
+/// Whether the registry a query contacts is still crates.io, and whether
+/// reaching it can start a program.
+///
+/// Cargo merges every `.cargo/config.toml` from the working directory up to
+/// the filesystem root with the one in `CARGO_HOME`, so the nearest file is
+/// not the whole answer -- each one is read. A `[source]` replacement or a
+/// `registry.default` entry sends `cargo search` somewhere else, and an index
+/// that answers `auth-required` makes Cargo fetch a token by running the
+/// `credential-provider` the same file names. That is a workspace file
+/// choosing a program to run, which is the outcome the package review exists
+/// to catch, so any of those tables keeps the review.
+///
+/// `[build]`, `[target]` and `[profile]` are read and left alone: a search
+/// compiles nothing, links nothing and starts no build program, so the
+/// settings they carry never reach a process. Refusing them would cost the
+/// reading in most real workspaces and buy nothing.
+fn registry_is_official(context: super::PathContext<'_>) -> bool {
+    if !context.cargo_config_inert {
+        return false;
+    }
+    let Some(cwd) = context.cwd.map(Path::new) else {
+        return false;
+    };
+    let Ok(physical) = fs::canonicalize(cwd) else {
+        return false;
+    };
+    // `CARGO_HOME` is either unset or names `<home>/.cargo` -- the context
+    // flag proves that -- so Cargo's own configuration lives at its default
+    // place under the home directory either way.
+    let Some(home) = context.home_dir.map(Path::new) else {
+        return false;
+    };
     if !home.is_absolute() {
         return false;
     }
-    let rustup = home.join(".rustup");
-    if !fs::symlink_metadata(&rustup).is_ok_and(|metadata| metadata.is_dir()) {
-        return false;
+    cwd.ancestors()
+        .chain(physical.ancestors())
+        .chain(std::iter::once(home))
+        .all(cargo_config_inert)
+}
+
+/// The tables that can move the endpoint, name the index behind it, or pick
+/// the credential program Cargo starts for it.
+const REDIRECTING_TABLES: [&str; 6] = [
+    "registry",
+    "registries",
+    "source",
+    "http",
+    "net",
+    "credential-alias",
+];
+
+/// Whether this directory's `.cargo` configuration leaves the query alone.
+fn cargo_config_inert(directory: &Path) -> bool {
+    for name in ["config.toml", "config"] {
+        let path = directory.join(".cargo").join(name);
+        let metadata = match fs::symlink_metadata(&path) {
+            Ok(metadata) => metadata,
+            Err(error) if error.kind() == ErrorKind::NotFound => continue,
+            Err(_) => return false,
+        };
+        if !metadata.is_file() || metadata.len() > MAX_CARGO_CONFIG_BYTES {
+            return false;
+        }
+        let Ok(contents) = fs::read_to_string(&path) else {
+            return false;
+        };
+        let Ok(table) = contents.parse::<toml::Table>() else {
+            return false;
+        };
+        if REDIRECTING_TABLES
+            .iter()
+            .any(|name| table.contains_key(*name))
+        {
+            return false;
+        }
+        // `[env]` sets variables for the processes Cargo starts, and the
+        // same names this proof screens in the inherited environment.
+        if table.contains_key("env") {
+            return false;
+        }
+        // An unstable table can turn on a feature whose behaviour this
+        // reading has not been written against.
+        if table.contains_key("unstable") {
+            return false;
+        }
     }
-    let path = rustup.join("settings.toml");
-    if !fs::symlink_metadata(&path)
-        .is_ok_and(|metadata| metadata.is_file() && metadata.len() <= 32 * 1024)
-    {
-        return false;
-    }
-    let Ok(contents) = fs::read_to_string(&path) else {
-        return false;
-    };
-    let Ok(settings) = contents.parse::<toml::Table>() else {
-        return false;
-    };
-    let default_is_official = settings
-        .get("default_toolchain")
-        .and_then(toml::Value::as_str)
-        .is_some_and(official_channel);
-    // Directory overrides live outside the repository. Until their exact
-    // precedence and destination can be proven, any override keeps review.
-    let no_directory_overrides = match settings.get("overrides") {
-        None => true,
-        Some(toml::Value::Table(paths)) => paths.is_empty(),
-        _ => false,
-    };
-    default_is_official && no_directory_overrides
+    true
 }
 
 fn ancestors_inert(cwd: &Path) -> bool {
@@ -221,12 +465,20 @@ fn host_triple(tail: &str) -> bool {
     })
 }
 
+/// rustup's channel grammar for a release: a one-digit major, a one- to
+/// three-digit minor and an optional one- or two-digit patch. Any other
+/// numeric name, such as `10.0` or `1.85.100`, is a valid custom toolchain
+/// name that `rustup toolchain link` can point at a local directory.
 fn release_version(version: &str) -> bool {
     let parts: Vec<&str> = version.split('.').collect();
-    (2..=3).contains(&parts.len())
-        && parts
-            .iter()
-            .all(|part| !part.is_empty() && part.chars().all(|c| c.is_ascii_digit()))
+    let lengths: &[(usize, usize)] = match parts.len() {
+        2 => &[(1, 1), (1, 3)],
+        3 => &[(1, 1), (1, 3), (1, 2)],
+        _ => return false,
+    };
+    parts.iter().zip(lengths).all(|(part, (low, high))| {
+        (*low..=*high).contains(&part.len()) && part.chars().all(|c| c.is_ascii_digit())
+    })
 }
 
 fn digits(value: &str, length: usize) -> bool {
@@ -234,90 +486,5 @@ fn digits(value: &str, length: usize) -> bool {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::{inert_toolchain, rustup_settings_only_official};
-    use std::path::Path;
-
-    #[test]
-    fn admits_plain_channels_only() {
-        for contents in [
-            "stable",
-            "1.85.0\n",
-            "nightly-2025-01-01",
-            "1.85",
-            "stable-aarch64-apple-darwin",
-            "nightly-2025-01-01-x86_64-unknown-linux-gnu",
-            "stable-x86_64-pc-windows-msvc",
-            "1.85.0-aarch64-unknown-linux-musl",
-            "[toolchain]\nchannel = \"1.85.0\"\n",
-            "[toolchain]\nchannel = \"stable\"\ncomponents = [\"clippy\", \"rustfmt\"]\nprofile = \"minimal\"\n",
-        ] {
-            assert!(inert_toolchain(contents), "{contents}");
-        }
-        for contents in [
-            "",
-            "../toolchain",
-            "/opt/toolchain",
-            "C:\\toolchain",
-            "[toolchain]\npath = \"/opt/toolchain\"\n",
-            "[toolchain]\nchannel = \"stable\"\npath = \"tools\"\n",
-            "[toolchain]\nchannel = \"../tools\"\n",
-            "my-toolchain",
-            "custom",
-            "stable-",
-            "1",
-            "1.85.0.1",
-            "nightly-2025-01-01-Evil",
-            // Lowercase tails that are not known triples are valid custom
-            // names that rustup can link to a local directory.
-            "stable-evil-thing",
-            "nightly-2025-01-01-my-build",
-            "stable-x86_64-evil",
-            "stable-x86_64-unknown-linux-evil",
-            "stable-x86_64-unknown-linux-gnu-extra",
-            "[toolchain]\nchannel = \"workspace-linked\"\n",
-            "[toolchain]\ncomponents = [\"clippy\"]\n",
-            "[toolchain]\nchannel = \"stable\"\n[other]\nkey = 1\n",
-            "path = \"/opt/toolchain\"\n",
-            "[toolchain\n",
-        ] {
-            assert!(!inert_toolchain(contents), "{contents}");
-        }
-    }
-
-    #[test]
-    fn formatter_requires_official_default_and_no_directory_overrides() {
-        let root = std::env::temp_dir().join(format!(
-            "guard-rustfmt-settings-{}-{}",
-            std::process::id(),
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
-                .as_nanos(),
-        ));
-        let directory = root.join(".rustup");
-        std::fs::create_dir_all(&directory).unwrap();
-        let settings = directory.join("settings.toml");
-        std::fs::write(
-            &settings,
-            "version = \"12\"\ndefault_toolchain = \"stable-x86_64-unknown-linux-gnu\"\n[overrides]\n",
-        )
-        .unwrap();
-        assert!(rustup_settings_only_official(Path::new(&root)));
-        std::fs::write(
-            &settings,
-            "default_toolchain = \"custom-formatter\"\n[overrides]\n",
-        )
-        .unwrap();
-        assert!(!rustup_settings_only_official(Path::new(&root)));
-        std::fs::write(
-            &settings,
-            "default_toolchain = \"stable\"\n[overrides]\n\"/tmp/project\" = \"custom-formatter\"\n",
-        )
-        .unwrap();
-        assert!(!rustup_settings_only_official(Path::new(&root)));
-        std::fs::write(&settings, "default_toolchain = \"stable\"\n").unwrap();
-        assert!(rustup_settings_only_official(Path::new(&root)));
-        std::fs::remove_dir_all(root).unwrap();
-    }
-}
+#[path = "rust_toolchain_tests.rs"]
+mod tests;

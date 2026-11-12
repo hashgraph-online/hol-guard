@@ -2,20 +2,20 @@
 
 from __future__ import annotations
 
+import json
 import logging
 import os
-import shlex
 import sqlite3
-import subprocess
 from collections.abc import Sequence
 from dataclasses import dataclass, replace
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 from ..models import HarnessDetection
+from ..native_runner_authority import NativeRunnerAuthorityError
 from ..runtime.local_cli_identity import UnlistedCliIdentity
 from ..runtime.local_mcp_probe import mcp_launch_tokens
-from ..runtime.mcp_connection_identity import McpConnectionIdentity, build_mcp_connection_identity
+from ..runtime.mcp_connection_identity import McpConnectionIdentity
 from ..runtime.mcp_protection import McpServerIdentity, build_mcp_server_identity
 from .contracts import display_name_for
 from .harness_mcp_remote import (
@@ -25,7 +25,6 @@ from .harness_mcp_remote import (
     remote_scan_harnesses,
 )
 from .mcp_servers import ManagedMcpServer, observable_stdio_servers_with_proxy, proxy_process_env
-from .remote_mcp_origin import remote_mcp_origin as remote_mcp_origin
 
 if TYPE_CHECKING:
     from .base import HarnessContext
@@ -69,7 +68,7 @@ def discover_remote_mcp_servers(
     """Return unique remote MCP servers from harness configs. Never connects."""
 
     loaded = detections if detections is not None else _safe_detections(home_dir, guard_home, workspace_dir)
-    return _remote_servers(loaded)
+    return _remote_servers(loaded, guard_home)
 
 
 def configured_mcp_server_names(loaded: Sequence[HarnessDetection]) -> dict[str, tuple[str, ...]]:
@@ -84,59 +83,127 @@ def configured_mcp_server_names(loaded: Sequence[HarnessDetection]) -> dict[str,
 
 
 def configured_harness_detections(
-    home_dir: Path, guard_home: Path, workspace_dir: Path | None = None
+    home_dir: Path, guard_home: Path, workspace_dir: Path | None = None, *, skipped: list[str] | None = None
 ) -> list[HarnessDetection]:
-    """One detection pass that both ``discover_*`` functions can share."""
+    """One detection pass both ``discover_*`` functions share; unreadable harnesses are named in ``skipped``."""
 
-    return _safe_detections(home_dir, guard_home, workspace_dir)
+    return _safe_detections(home_dir, guard_home, workspace_dir, skipped)
+
+
+_GROUP_KEYS = frozenset(
+    {
+        "index",
+        "cli_id",
+        "name",
+        "identity_hash",
+        "configuration_hash",
+        "example_label",
+        "launch_command",
+        "source_label",
+    }
+)
 
 
 def _stdio_servers(loaded: Sequence[HarnessDetection]) -> tuple[DiscoveredHarnessMcpServer, ...]:
-    groups: dict[str, _DiscoveryGroup] = {}
+    """Group every harness's stdio servers in one native call; labels are redacted there."""
+
+    servers: list[ManagedMcpServer] = []
+    entries: list[dict[str, object]] = []
     for detection in loaded:
-        for server in observable_stdio_servers_with_proxy(detection):
-            built = _identity_for(server)
-            if built is None:
-                continue
-            identity, server_identity, connection_identity = built
-            key = identity.identity_hash
-            label = display_name_for(server.harness)
-            current = groups.get(key)
-            launch_command = _raw_launch_label(server.command, server.args)
-            env = tuple(sorted(proxy_process_env(server.env).items()))
-            if current is None:
-                groups[key] = _DiscoveryGroup(
-                    identity=identity,
-                    server_identity=server_identity,
-                    launch_command=launch_command,
-                    labels=[label],
-                    env=env,
-                    connection_identity=connection_identity,
-                    harness=server.harness,
-                )
-                continue
-            if label not in current.labels:
-                current.labels.append(label)
-    ranked = sorted(
-        groups.values(),
-        key=lambda group: (
-            _join_labels(group.labels).lower(),
-            group.identity.name.lower(),
-            group.server_identity.command,
-            group.server_identity.args_hash,
+        # One harness whose entries cannot be read must not hide every other
+        # harness's connections. Safe to skip one harness here because stdio
+        # persistence only adds observations. The remote list in
+        # `harness_mcp_remote` stays all or nothing: `remote_scan_harnesses`
+        # promises a full read, and a partial one would make reconciliation
+        # forget the entries it could not parse.
+        try:
+            for server in observable_stdio_servers_with_proxy(detection):
+                if server.identity is None:
+                    continue
+                entry = _group_entry(server, server.identity)
+                _ = json.dumps(entry, ensure_ascii=False).encode("utf-8")
+                servers.append(server)
+                entries.append(entry)
+        except (OSError, RuntimeError, TypeError, ValueError, KeyError, UnicodeError, sqlite3.Error) as exc:
+            logger.warning(
+                "MCP inventory skipped %s servers after invalid data (%s)",
+                detection.harness,
+                type(exc).__name__,
+            )
+            continue
+    if not entries:
+        return ()
+    from ..native_runner_authority import native_runner_authority
+
+    request = {"op": "group", "windows": os.name == "nt", "limit": MAX_DISCOVERED_MCP_SERVERS, "servers": entries}
+    # A refused answer raises: an explicit scan reports it instead of caching an empty list.
+    answer = native_runner_authority("harness_mcp_discovery", request)
+    return tuple(_grouped_server(servers[index], item) for index, item in _group_items(answer, len(servers)))
+
+
+def _group_entry(server: ManagedMcpServer, identity: McpServerIdentity) -> dict[str, object]:
+    return {
+        "harness": server.harness,
+        "label": display_name_for(server.harness),
+        "name": server.name,
+        "command": server.command,
+        "args": list(server.args),
+        "source_scope": server.source_scope,
+        "config_path": server.config_path,
+        "identity_hash": identity.identity_hash,
+        "package_name": identity.package_name,
+        "server_command": identity.command,
+        "args_hash": identity.args_hash,
+    }
+
+
+def _group_items(answer: object, count: int) -> list[tuple[int, dict[str, str]]]:
+    servers = _exact(answer, frozenset({"servers"}))["servers"]
+    if not isinstance(servers, list) or len(cast(list[object], servers)) > MAX_DISCOVERED_MCP_SERVERS:
+        raise ValueError("harness_mcp_discovery group answer is malformed")
+    items: list[tuple[int, dict[str, str]]] = []
+    seen: set[int] = set()
+    for raw in cast(list[object], servers):
+        item = _exact(raw, _GROUP_KEYS)
+        index = item.pop("index")
+        texts = {key: value for key, value in item.items() if isinstance(value, str)}
+        if type(index) is not int or not 0 <= index < count or index in seen or len(texts) != len(item):
+            raise ValueError("harness_mcp_discovery group item is malformed")
+        seen.add(index)
+        items.append((index, texts))
+    return items
+
+
+def _exact(value: object, keys: frozenset[str]) -> dict[str, object]:
+    if not isinstance(value, dict) or frozenset(cast(dict[object, object], value)) != keys:
+        raise ValueError("harness_mcp_discovery answer is malformed")
+    return cast(dict[str, object], value)
+
+
+def _grouped_server(server: ManagedMcpServer, item: dict[str, str]) -> DiscoveredHarnessMcpServer:
+    server_identity = server.identity
+    if server_identity is None:
+        raise ValueError("harness_mcp_discovery group index names no identity")
+    return DiscoveredHarnessMcpServer(
+        identity=UnlistedCliIdentity(
+            cli_id=item["cli_id"],
+            name=item["name"],
+            kind="executable",
+            identity_hash=item["identity_hash"],
+            example_label=item["example_label"],
         ),
-    )
-    return tuple(
-        DiscoveredHarnessMcpServer(
-            identity=group.identity,
-            server_identity=group.server_identity,
-            source_label=_join_labels(group.labels),
-            launch_command=group.launch_command,
-            env=group.env,
-            connection_identity=group.connection_identity,
-            harness=group.harness,
-        )
-        for group in ranked[:MAX_DISCOVERED_MCP_SERVERS]
+        server_identity=server_identity,
+        source_label=item["source_label"],
+        launch_command=item["launch_command"],
+        env=tuple(sorted(proxy_process_env(server.env).items())),
+        connection_identity=McpConnectionIdentity(
+            host=server.harness,
+            source_scope=server.source_scope,
+            configuration_hash=item["configuration_hash"],
+            server_identity_hash=server_identity.identity_hash,
+            identity_hash=item["identity_hash"],
+        ),
+        harness=server.harness,
     )
 
 
@@ -210,13 +277,25 @@ def observe_configured_mcp_servers(store: object, *, context: HarnessContext, se
 
     try:
         detections = _safe_detections(context.home_dir, context.guard_home, context.workspace_dir)
-        remote = _remote_servers(detections)
+        try:
+            remote = _remote_servers(detections, context.guard_home)
+            remote_harnesses = remote_scan_harnesses(detections, remote)
+        except NativeRunnerAuthorityError as exc:
+            # Local servers still record; with no remote read nothing is forgotten.
+            logger.debug("configured remote MCP servers not read after %s", type(exc).__name__)
+            remote, remote_harnesses = (), None
+        try:
+            stdio_servers = _stdio_servers(detections) if stdio else ()
+        except (OSError, RuntimeError, ValueError) as exc:
+            # Remote servers still record when the local grouping is refused.
+            logger.debug("configured stdio MCP servers not read after %s", type(exc).__name__)
+            stdio_servers = ()
         labels = persist_discovered_harness_mcp_servers(
             store,
-            _stdio_servers(detections) if stdio else (),
+            stdio_servers,
             seen_at=seen_at,
             remote=remote,
-            remote_harnesses=remote_scan_harnesses(detections, remote),
+            remote_harnesses=remote_harnesses,
         )
     except (OSError, RuntimeError, TypeError, ValueError, KeyError, UnicodeError, sqlite3.Error) as exc:
         logger.debug("configured MCP servers not recorded after %s", type(exc).__name__)
@@ -235,41 +314,36 @@ def discovered_server_for_observation(
 ) -> DiscoveredHarnessMcpServer | None:
     """Return the live discovered server for a stored observation. Does not persist."""
 
-    if cli_id:
-        matches = [
-            server
-            for server in servers
-            if server.identity.cli_id == cli_id
-            and (not server_identity_hash or server.server_identity.identity_hash == server_identity_hash)
-        ]
-        if (
-            not matches
-            and server_identity_hash
-            and server_command
-            and args_hash
-            and source_label
-            and cli_id == f"local-cli.mcp-{server_identity_hash[:8]}"
-        ):
-            matches = [
-                server
-                for server in servers
-                if server.server_identity.identity_hash == server_identity_hash
-                and server.server_identity.command == server_command
-                and server.server_identity.args_hash == args_hash
-                and server.source_label == source_label
-            ]
-    elif server_identity_hash:
-        matches = [server for server in servers if server.server_identity.identity_hash == server_identity_hash]
-    else:
-        matches = [
-            server
-            for server in servers
-            if server_command
-            and args_hash
-            and server.server_identity.command == server_command
-            and server.server_identity.args_hash == args_hash
-        ]
-    return matches[0] if len(matches) == 1 else None
+    if not servers:
+        return None
+    from ..native_runner_authority import native_runner_authority
+
+    observed = [
+        {
+            "cli_id": server.identity.cli_id,
+            "identity_hash": server.server_identity.identity_hash,
+            "command": server.server_identity.command,
+            "args_hash": server.server_identity.args_hash,
+            "source_label": server.source_label,
+        }
+        for server in servers
+    ]
+    query = {
+        "cli_id": cli_id,
+        "server_command": server_command,
+        "args_hash": args_hash,
+        "server_identity_hash": server_identity_hash,
+        "source_label": source_label,
+    }
+    answer: object = native_runner_authority(
+        "harness_mcp_discovery", {"op": "match", "servers": observed, "query": query}
+    )
+    index = _exact(answer, frozenset({"index"}))["index"]
+    if index is None:
+        return None
+    if type(index) is not int or not 0 <= index < len(servers):
+        raise ValueError("harness_mcp_discovery match index is malformed")
+    return servers[index]
 
 
 def extra_env_for_mcp_launch(
@@ -280,8 +354,10 @@ def extra_env_for_mcp_launch(
 ) -> dict[str, str]:
     """Return harness-configured env for a listing probe. Values stay in memory."""
 
-    matched = discovered_server_for_observation(servers, cli_id=cli_id)
-    if matched is None and not cli_id:
+    matched = None
+    if cli_id:
+        matched = discovered_server_for_observation(servers, cli_id=cli_id)
+    else:
         tokens = mcp_launch_tokens(command, cwd=Path.home(), home_dir=Path.home())
         if tokens is not None:
             identity = build_mcp_server_identity(
@@ -323,18 +399,9 @@ def apply_source_labels(items: list[dict[str, object]], labels: dict[str, str]) 
     return items
 
 
-@dataclass
-class _DiscoveryGroup:
-    identity: UnlistedCliIdentity
-    server_identity: McpServerIdentity
-    launch_command: str
-    labels: list[str]
-    env: tuple[tuple[str, str], ...]
-    connection_identity: McpConnectionIdentity
-    harness: str
-
-
-def _safe_detections(home_dir: Path, guard_home: Path, workspace_dir: Path | None) -> list[HarnessDetection]:
+def _safe_detections(
+    home_dir: Path, guard_home: Path, workspace_dir: Path | None, skipped: list[str] | None = None
+) -> list[HarnessDetection]:
     from . import list_adapters
     from .base import HarnessContext
 
@@ -357,115 +424,14 @@ def _safe_detections(home_dir: Path, guard_home: Path, workspace_dir: Path | Non
             except (OSError, RuntimeError, UnicodeError) as exc:
                 logger.debug("MCP inventory skipped %s adapter after %s", adapter.harness, type(exc).__name__)
                 continue
-            except (TypeError, ValueError, KeyError) as exc:
+            except (TypeError, ValueError, KeyError, sqlite3.Error) as exc:
                 logger.warning(
                     "MCP inventory skipped %s adapter after invalid data (%s)",
                     adapter.harness,
                     type(exc).__name__,
                 )
                 continue
+        else:
+            if skipped is not None:
+                skipped.append(adapter.harness)
     return detections
-
-
-def _identity_for(
-    server: ManagedMcpServer,
-) -> tuple[UnlistedCliIdentity, McpServerIdentity, McpConnectionIdentity] | None:
-    server_identity = server.identity
-    if server_identity is None or not server.command.strip():
-        return None
-    name = server.name.strip() or server_identity.package_name or Path(server.command).name or "mcp-server"
-    connection = build_mcp_connection_identity(
-        host=server.harness,
-        source_scope=server.source_scope,
-        config_path=server.config_path,
-        server_name=server.name,
-        server_identity_hash=server_identity.identity_hash,
-    )
-    return (
-        UnlistedCliIdentity(
-            cli_id=f"local-cli.mcp-{connection.identity_hash}",
-            name=name[:120],
-            kind="executable",
-            identity_hash=connection.identity_hash,
-            example_label=_launch_label(server.command, server.args),
-        ),
-        server_identity,
-        connection,
-    )
-
-
-def _join_labels(labels: Sequence[str]) -> str:
-    unique = list(dict.fromkeys(label for label in labels if label.strip()))
-    if len(unique) <= 3:
-        return ", ".join(unique)
-    return f"{unique[0]}, {unique[1]}, and {len(unique) - 2} more"
-
-
-def _launch_label(command: str, args: tuple[str, ...]) -> str:
-    return _join_tokens(_redact_launch_tokens((command, *args)))
-
-
-def _raw_launch_label(command: str, args: tuple[str, ...]) -> str:
-    # Only presentation labels may be truncated; discovery must launch exact argv.
-    if os.name == "nt":
-        return subprocess.list2cmdline([command, *args])
-    return shlex.join((command, *args))
-
-
-def _join_tokens(tokens: Sequence[str]) -> str:
-    values = list(tokens)
-    if os.name == "nt":
-        return subprocess.list2cmdline(values)[:160]
-    return shlex.join(values)[:160]
-
-
-_SECRET_FLAG_NAMES = frozenset(
-    {
-        "access-token",
-        "api-key",
-        "apikey",
-        "auth",
-        "authorization",
-        "bearer",
-        "client-secret",
-        "password",
-        "passwd",
-        "secret",
-        "token",
-    }
-)
-
-
-def _redact_launch_tokens(tokens: Sequence[str]) -> list[str]:
-    redacted: list[str] = []
-    hide_next = False
-    for token in tokens:
-        if hide_next:
-            redacted.append("*****")
-            hide_next = False
-            continue
-        key, separator, _value = token.partition("=")
-        if separator and _is_secret_flag(key):
-            redacted.append(f"{key}=*****")
-            continue
-        if token.startswith("-") and _is_secret_flag(token):
-            redacted.append(token)
-            hide_next = True
-            continue
-        redacted.append(_redact_embedded_assignment(token))
-    return redacted
-
-
-def _redact_embedded_assignment(value: str) -> str:
-    lower = value.lower()
-    if any(token in lower for token in ("apikey=", "api_key=", "api-key=", "token=", "secret=")):
-        key, separator, _rest = value.partition("=")
-        return f"{key}{separator}*****" if separator else value
-    return value
-
-
-def _is_secret_flag(value: str) -> bool:
-    name = value.strip().lstrip("-").lower().replace("_", "-")
-    if name in _SECRET_FLAG_NAMES:
-        return True
-    return name.endswith("-token") or name.endswith("-secret") or name.endswith("-password")

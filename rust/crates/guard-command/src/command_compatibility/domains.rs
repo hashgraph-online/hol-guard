@@ -7,43 +7,10 @@ use super::{basename, CanonicalCommandV1, CommandSegmentV1, CompatibilityObserva
 mod interpreter;
 #[path = "redirects.rs"]
 mod redirects;
+#[path = "source_names.rs"]
+mod source_names;
 use redirects::Redirect;
-
-const SENSITIVE_PATHS: [&str; 9] = [
-    ".aws/",
-    ".ssh/",
-    ".docker/",
-    ".kube/",
-    ".env",
-    ".netrc",
-    ".npmrc",
-    ".pypirc",
-    ".git-credentials",
-];
-
-/// A credential location named anywhere in the value, even inside prose.
-fn sensitive_path(value: &str) -> bool {
-    let value = value.to_ascii_lowercase().replace('\\', "/");
-    // A dotted read of a port variable (`process.env.PORT`) names no `.env` file.
-    let value = crate::environment_secret_dump::without_node_port_reads(&value);
-    SENSITIVE_PATHS.iter().any(|needle| value.contains(needle))
-}
-
-fn sensitive(value: &str) -> bool {
-    let lowered = value.to_ascii_lowercase();
-    sensitive_path(value)
-        || [
-            "credential",
-            "secret",
-            "password",
-            "api_key",
-            "api-key",
-            "token",
-            "private_key",
-        ]
-        .iter()
-        .any(|needle| lowered.contains(needle))
-}
+use source_names::{sensitive, sensitive_path};
 
 /// A harness or Guard configuration location named anywhere in the value.
 fn names_managed_config(value: &str) -> bool {
@@ -330,9 +297,18 @@ pub(super) fn observe(
         // A proven read takes no option that sends stdin or a file, so a
         // pipe after it only filters the response. A zero-I/O loopback
         // `nc -z` probe reads no stdin and sends nothing.
+        // A proven local `rsync` copy names two host paths, takes no option
+        // that reaches another host and redirects nothing but to `/dev/null`,
+        // so it sends nothing anywhere. A lone usage or version probe prints
+        // the program's own text and exits before it opens a connection or
+        // reads a transfer source, so it names no host and no path either.
         let proven_read = (executable == "curl"
             && crate::pretool::curl_reads::proven_read_segment(command, segment, context))
-            || crate::pretool::port_probes::proven_probe_segment(command, segment, context);
+            || (executable == "wget"
+                && crate::pretool::wget_reads::proven_read_segment(command, segment, context))
+            || crate::pretool::port_probes::proven_probe_segment(command, segment, context)
+            || (executable == "rsync" && crate::pretool::rsync_local::local_copy_segment(segment))
+            || lone_usage_probe(segment, &executable, arguments, context);
         if (upload || pipeline) && !proven_read {
             output.rule("command.data-protection.file-upload", index, true);
         }
@@ -468,15 +444,21 @@ pub(super) fn observe(
         // Multi-word prose, such as a comment body, still counts when it names
         // a credential location, but words like "token" in it are just text.
         let output_write = write_command || redirect == Redirect::Output || interpreter_write;
-        if (output_write && sensitive(&segment.text))
-            || (redirect == Redirect::Stderr
-                && segment.tokens.iter().any(|token| {
-                    if token.contains(char::is_whitespace) {
-                        sensitive_path(token)
-                    } else {
-                        sensitive(token)
-                    }
-                }))
+        // A write to a project file whose name only reads like a credential,
+        // such as `src/tokenizer.ts` or a tracked catalog, is the edit the
+        // agent was asked to make, also beside a stderr redirect: `vitest run
+        // src/token.test.ts 2>&1` reads the test file it was asked to run.
+        let text = crate::pretool::search_scope_tracked::screen(command, segment, context.cwd);
+        let stderr_names_credential = redirect == Redirect::Stderr
+            && segment.tokens.iter().any(|token| {
+                if token.contains(char::is_whitespace) {
+                    sensitive_path(token)
+                } else {
+                    sensitive(token)
+                }
+            });
+        if ((output_write && sensitive(&text)) || stderr_names_credential)
+            && !source_names::only_source_file_names(&text, &segment.tokens, &executable)
         {
             output.rule("command.shell-mutations.sensitive-file-write", index, true);
         }
@@ -544,5 +526,89 @@ pub(super) fn observe(
             index,
             true,
         );
+    }
+}
+
+/// Whether this segment is a lone usage or version probe of the program its
+/// bare name picks out.
+///
+/// [`crate::pretool::help_probes`] and [`crate::pretool::version_probes`]
+/// answer for a basename, and the segment proof that normally asks them has
+/// already established which program that basename reaches. Here nothing has,
+/// so the same preconditions are required first: a bare name spelled exactly
+/// as the comparison reads it, no wrapper and no overridden `PATH`.
+/// `./curl --help` or a shadowed `nc --help` runs a program the workspace
+/// chose, and that program can read whatever is piped into it. An assignment
+/// prefix needs no test here: a loader or credential name has already made
+/// the context unsupported, and every other non-inert name is uncertainty no
+/// observation can clear.
+fn lone_usage_probe(
+    segment: &CommandSegmentV1,
+    executable: &str,
+    arguments: &[String],
+    context: crate::pretool::PathContext<'_>,
+) -> bool {
+    segment.executable.as_deref() == Some(executable)
+        && segment.wrapper_chain.is_empty()
+        && !segment.path_overridden
+        && (crate::pretool::version_probes::safe_version_probe(executable, arguments)
+            || crate::pretool::help_probes::safe_help_probe(executable, arguments, context))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{basename, lone_usage_probe, CommandSegmentV1};
+
+    fn segment(text: &str) -> CommandSegmentV1 {
+        let model = crate::parse_command(
+            &serde_json::from_value(serde_json::json!({"command": text})).unwrap(),
+        )
+        .unwrap();
+        model.segments.into_iter().next().unwrap()
+    }
+
+    fn probe(text: &str) -> bool {
+        let segment = segment(text);
+        let executable = basename(&segment);
+        let arguments = segment.arguments.clone();
+        lone_usage_probe(
+            &segment,
+            &executable,
+            &arguments,
+            crate::pretool::PathContext::default(),
+        )
+    }
+
+    #[test]
+    fn a_bare_transfer_tool_printing_its_own_text_is_a_probe() {
+        for text in [
+            "rsync --help",
+            "rsync --version",
+            "scp --help",
+            "sftp --help",
+            "scp --version",
+        ] {
+            assert!(probe(text), "{text}");
+        }
+    }
+
+    /// The basename alone does not say which program runs. A directory, a
+    /// wrapper or an overridden `PATH` each picks a different one, and the
+    /// upload rule this exemption clears is what keeps that program away
+    /// from the piped stdin.
+    ///
+    /// A transparent wrapper such as `env` and an executor such as `xargs`
+    /// are absent on purpose: the parser models neither, so they reach no
+    /// segment and no observation at all.
+    #[test]
+    fn a_probe_of_another_spelling_is_not_admitted() {
+        for text in [
+            "./rsync --help",
+            "/tmp/tools/rsync --help",
+            "bin/scp --version",
+            "sudo rsync --help",
+        ] {
+            assert!(!probe(text), "{text}");
+        }
     }
 }

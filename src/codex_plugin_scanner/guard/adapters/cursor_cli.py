@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from functools import lru_cache
 
-from .base import HarnessContext, _resolve_command, _run_command_probe
+from .base import HarnessContext, _resolve_command, _run_command_probe, _which_from_user_directories
 
 CURSOR_AGENT_EXECUTABLE = "cursor-agent"
 CURSOR_EXECUTABLE = "cursor"
@@ -52,7 +52,10 @@ def resolve_cursor_cli_entry(context: HarnessContext) -> CursorCliLaunchEntry | 
 
 
 def cursor_cli_command_available(context: HarnessContext) -> bool:
-    return resolve_cursor_cli_entry(context) is not None
+    return (
+        resolve_cursor_cli_entry(context) is not None
+        or _which_from_user_directories(CURSOR_AGENT_EXECUTABLE, context.home_dir) is not None
+    )
 
 
 def cursor_cli_shim_installed(context: HarnessContext) -> bool:

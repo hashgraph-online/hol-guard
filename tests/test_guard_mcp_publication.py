@@ -11,6 +11,7 @@ from codex_plugin_scanner.guard.runtime.composio_discovery import ComposioAction
 from codex_plugin_scanner.guard.runtime.local_cli_identity import UnlistedCliIdentity
 from codex_plugin_scanner.guard.runtime.observed_mcp_tools import observed_mcp_tool
 from codex_plugin_scanner.guard.store import GuardStore
+from tests.native_store_shims import record_composio_discovery
 
 from .native_policy_snapshot_test_fixtures import _ack, _status
 
@@ -85,7 +86,8 @@ def test_provider_schema_changed_during_ack_keeps_barrier_closed(tmp_path: Path,
     store = _fixture_key(GuardStore(tmp_path / "home"), monkeypatch)
     source = observed_mcp_tool("codex", "mcp__codex_apps__composio__composio_search_tools")
     assert source is not None
-    store.record_composio_discovery(
+    record_composio_discovery(
+        store,
         source,
         (ComposioActionSchema("slack", "SLACK_SEARCH_MESSAGES", "Search", {"type": "object"}, True),),
         seen_at="2026-09-27T12:00:00Z",
@@ -94,7 +96,8 @@ def test_provider_schema_changed_during_ack_keeps_barrier_closed(tmp_path: Path,
     def client(**kwargs):
         policy = json.loads(kwargs["payload"])["request"]["snapshot"]["effective_policy"]
         assert policy["mcp_provider_catalog_hash"] == store.read_mcp_provider_authority_hash()
-        store.record_composio_discovery(
+        record_composio_discovery(
+            store,
             source,
             (
                 ComposioActionSchema(

@@ -6,7 +6,9 @@
 //! spellings keep their review.
 #![cfg(unix)]
 
-use crate::pretool_home_layout_reads::{assert_decision, layout, repository, write};
+use crate::pretool_home_layout_reads::{
+    assert_decision, decide_with_shell_home, layout, repository, write,
+};
 
 #[test]
 fn naming_a_file_in_a_sibling_repository_is_allowed() {
@@ -42,8 +44,35 @@ fn naming_a_missing_file_in_a_sibling_repository_is_allowed() {
         "rg -n fixture ~/Code/org/service-api/src/lib.rs",
         "rg -n fixture ~/Code/org/service-api/src/journey/runner.ts | head -6",
         "rg -n fixture ~/Code/org/service-api/src/main.rs ~/Code/org/service-api/src/lib.rs",
+        // No repository below home holds this one, so the sibling route
+        // declines it and the absent-root proof answers instead: `~/Code/org`
+        // is a plain readable directory and `notes` is not there, so the
+        // search only prints an error.
+        "rg -n fixture ~/Code/org/notes/todo.md",
     ] {
         assert_decision(&cwd, &layout.home, command, true);
+    }
+}
+
+/// The shell expands `~` from its own `HOME` while the absent-root proof
+/// reads the declared one. Where the two name different directories the
+/// search could walk a tree that is there under the shell's home although the
+/// proof measured a name that is not there under the declared one, so the
+/// same spelling keeps its review.
+#[test]
+fn a_missing_name_outside_every_repository_waits_for_the_shell_home() {
+    let layout = layout("rg-sibling-missing-shell-home");
+    let cwd = layout.org.join("app-portal");
+    let command = "rg -n fixture ~/Code/org/notes/todo.md";
+    for (shell_home_matches, allowed) in [(false, false), (true, true)] {
+        let result = decide_with_shell_home(&cwd, &layout.home, command, shell_home_matches);
+        assert_eq!(
+            result.decision == "allow",
+            allowed,
+            "{command} with shell_home_matches={shell_home_matches}: {} {}",
+            result.decision,
+            result.reason_code
+        );
     }
 }
 
@@ -91,8 +120,6 @@ fn a_named_path_that_could_reach_a_secret_is_reviewed() {
         // name is not a credential's, as it does inside the project.
         "rg -n fixture ~/Code/org/service-api/src/.env.local",
         "rg -n fixture ~/Code/org/service-api/src/secrets/prod.pem",
-        // Nothing below home that is not a repository gets this route.
-        "rg -n fixture ~/Code/org/notes/todo.md",
     ] {
         assert_decision(&cwd, &layout.home, command, false);
     }

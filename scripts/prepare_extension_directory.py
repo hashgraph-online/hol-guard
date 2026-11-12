@@ -15,13 +15,14 @@ import export_extension_directory as legacy
 import render_command_extension_directory as markdown
 from extension_delivery_legacy import UNAVAILABLE, preflight, unavailable_marker
 from extension_pack_directory import public_entry
-from native_directory_inventory import ROOT, catalog_rows, compiled_inventory
+from native_directory_inventory import ROOT, catalog_rows, compiled_inventory, source_compiler
+from native_projection_inventory import ProjectionInventory
 
 
-def prepare(compiler: Path | None = None, *, check: bool = False, root: Path = ROOT):
+def prepare(compiler: Path | None = None, *, check: bool = False, root: Path = ROOT, inventory=None):
     from codex_plugin_scanner.guard.runtime.generated_command_catalog_loader import _extension
 
-    with compiled_inventory(compiler, root=root) as (directory, reader, release):
+    with compiled_inventory(compiler, root=root, inventory=inventory) as (directory, reader, release):
         extensions, public_ids = [], set()
         for identity, _, row in catalog_rows(reader, release):
             entry = public_entry(root, [row])
@@ -82,12 +83,23 @@ def prepare(compiler: Path | None = None, *, check: bool = False, root: Path = R
     return {"extensions": len(extensions), "legacy": code or "available"}
 
 
-def main():
+def prepare_and_check(compiler: Path | None = None, *, root: Path = ROOT):
+    """Run both directory gates with one private, revalidated pack inventory."""
+    compiler = compiler or source_compiler()
+    with ProjectionInventory(root, compiler) as inventory:
+        prepare(compiler, root=root, check=False, inventory=inventory)
+        return prepare(compiler, root=root, check=True, inventory=inventory)
+
+
+def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--compiler", type=Path)
-    parser.add_argument("--check", action="store_true")
-    args = parser.parse_args()
-    print(json.dumps(prepare(args.compiler, check=args.check), sort_keys=True))
+    mode = parser.add_mutually_exclusive_group()
+    mode.add_argument("--check", action="store_true")
+    mode.add_argument("--write-and-check", action="store_true")
+    args = parser.parse_args(argv)
+    result = prepare_and_check(args.compiler) if args.write_and_check else prepare(args.compiler, check=args.check)
+    print(json.dumps(result, sort_keys=True))
 
 
 if __name__ == "__main__":

@@ -92,16 +92,12 @@ mod tests {
     use super::{acquire_shared, read_marker, RESIDENT_UPDATE_LOCK_FILE_NAME};
     use std::fs::{self, OpenOptions};
     use std::io::{Seek, SeekFrom, Write};
-    use std::time::{SystemTime, UNIX_EPOCH};
 
     fn temp_root() -> std::path::PathBuf {
         std::env::temp_dir().join(format!(
             "hol-guard-resident-update-lock-{}-{}",
             std::process::id(),
-            SystemTime::now()
-                .duration_since(UNIX_EPOCH)
-                .unwrap()
-                .as_nanos()
+            crate::unique_nanos::unique_nanos()
         ))
     }
 

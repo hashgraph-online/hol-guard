@@ -61,6 +61,7 @@ impl Saved<'_> {
                     workspace: None,
                     publisher: None,
                     exact_match_context: None,
+                    exception_workspace: None,
                 })?;
                 Ok(json!({"decision": field(&lookup, "decision")}))
             }
@@ -80,6 +81,7 @@ impl Saved<'_> {
             workspace: optional(need, "workspace")?,
             publisher: optional(need, "publisher")?,
             exact_match_context: optional(need, "runtime_exact_match_context")?,
+            exception_workspace: None,
         };
         let memory = verdict(&MemoryRequest {
             command: optional(need, "memory_command")?,
@@ -123,6 +125,7 @@ impl Saved<'_> {
         };
         let preview = without_permission_elevation(self.probe(&Probe {
             workspace: Some(portable),
+            exception_workspace: probe.workspace,
             ..*probe
         })?);
         if probe.workspace.map(python_strip) == Some(portable) {
@@ -190,6 +193,7 @@ impl Saved<'_> {
             // The diagnostic selects on the saved row, not on an exact
             // command match, so it reads no exact-match context.
             exact_match_context: None,
+            exception_workspace: None,
         })
         .map(|(reason, _)| reason)
     }

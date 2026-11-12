@@ -5,24 +5,22 @@
 from __future__ import annotations
 
 import base64
+import contextlib
 import secrets
+import time
+from collections.abc import Mapping
 
+from .native_extension_control_authority import view_to_wire
 from .runtime.command_extensions import CommandSafetyExtensionRegistry
 from .runtime.extension_control_authority import (
-    SNAPSHOT_PURPOSE,
-    TRANSITION_PURPOSE,
     AuthorityAnchor,
     AuthorityHealth,
     AuthorityPhase,
     ExtensionControlAuthorityError,
     ExtensionControlAuthorityView,
-    authenticated_record,
     layers_to_json,
 )
-from .runtime.extension_control_contract import (
-    ControlLayerKind,
-    ExtensionControlLayer,
-)
+from .runtime.extension_control_contract import ControlLayerKind, ExtensionControlLayer
 from .runtime.extension_control_proof import (
     ExtensionControlEnrollment,
     ExtensionControlEnrollmentProof,
@@ -33,12 +31,12 @@ from .runtime.extension_control_proof import (
     validate_extension_control_enrollment_proof,
     validate_extension_control_proof,
 )
-from .store_extension_control_authority_schema import ensure_extension_control_authority_schema
-from .store_extension_control_authority_support import (
-    _now,
-    _private_hash,
-    _row_int,
-)
+from .store_extension_control_authority_schema import require_compatible_extension_control_schema
+from .store_extension_control_authority_support import _now, _plan_int, _plan_map
+
+# A commit re-reads at most once to roll back another request's abandoned
+# transition and once after abandoning its own; the resident decides each round.
+_MAX_COMMIT_ROUNDS = 4
 
 
 class ExtensionControlAuthorityCommitMixin:
@@ -53,14 +51,25 @@ class ExtensionControlAuthorityCommitMixin:
 
         installed = load_installed_bundle()
         if installed is None:
+            # `None` means this install advertises no bundle at all (a legacy
+            # or source install); a bundle that is advertised but fails
+            # verification raises instead. There is nothing to admit, but the
+            # floor then stays absent and every later pack-lifecycle read
+            # fails, so record the absence; a silent return left no trace.
+            from .runtime_health.background_diagnostics import record_background_event
+
+            record_background_event("installed_authority_release_absent", "detail=installed bundle not advertised")
             return
         with self._extension_control_authority_lock(shared=True):
-            if lifecycle_store.migration_retained(self):
-                return
-        with self._extension_control_authority_lock():
-            with self._connect() as connection:
-                ensure_extension_control_authority_schema(connection)
-            lifecycle_store.migrate_installed(self, installed)
+            retained = lifecycle_store.migration_retained(self)
+        if not retained:
+            with self._extension_control_authority_lock():
+                with self._connect() as connection:
+                    require_compatible_extension_control_schema(connection)
+                lifecycle_store.migrate_installed(self, installed)
+        from .catalog_delivery.installed_upgrade import migrate_active
+
+        migrate_active(self, installed)
 
     def enroll_extension_control_authority(
         self,
@@ -74,6 +83,7 @@ class ExtensionControlAuthorityCommitMixin:
             catalog_digest=catalog_digest,
             actor_id=actor_id,
             nonce=nonce,
+            guard_home=self.guard_home,
         )
         validate_extension_control_enrollment_proof(proof, enrollment)
         with self._extension_control_authority_lock():
@@ -81,13 +91,57 @@ class ExtensionControlAuthorityCommitMixin:
             if current.health is not AuthorityHealth.UNENROLLED:
                 raise ExtensionControlAuthorityError("extension control authority already enrolled")
             consume_extension_control_enrollment_proof(self.guard_home, proof, enrollment)
-            from .catalog_delivery import lifecycle_store
-            from .catalog_delivery.preparation_authority import load_installed_bundle
+            return self._enroll_unenrolled_authority(catalog_digest)
 
-            installed = load_installed_bundle()
-            if installed is not None:
-                lifecycle_store.enroll_installed(self, installed)
+    def enroll_extension_control_authority_by_default(self, catalog_digest: str) -> ExtensionControlAuthorityView:
+        """Enroll a never-enrolled authority at daemon startup, with no layers.
+
+        Only a home with neither a snapshot nor a vault anchor reads as
+        unenrolled; a home that lost one of them reads as tampered or restores
+        from its export, so this never re-enrolls over existing controls. The
+        authority starts at revision 0 with no layers, which grants nothing the
+        packaged defaults do not already allow; every later control change
+        still needs an approval-gated proof. Any other health is returned as is.
+        """
+
+        with self._extension_control_authority_lock():
+            current = self._read_extension_control_authority_locked(catalog_digest)
+            if current.health is not AuthorityHealth.UNENROLLED:
+                return current
+            return self._enroll_unenrolled_authority(catalog_digest)
+
+    def _enroll_unenrolled_authority(self, catalog_digest: str) -> ExtensionControlAuthorityView:
+        """Enroll the installed floor if it is missing, then bootstrap revision 0.
+
+        The caller holds the authority lease and has read the home as
+        unenrolled. Startup migration usually enrolled the floor already, and
+        enrolling it twice is refused; a floor without its stamp still goes
+        through that refusal. Bootstrap commits the snapshot before its vault
+        anchor, so a failure in between would leave a snapshot the next read
+        calls tampered. Removing the revision-0 row and anchor this call wrote
+        returns the home to unenrolled, and the next attempt starts over. The
+        anchor goes only once the resident has removed the row.
+        """
+
+        from .catalog_delivery import lifecycle_store
+        from .catalog_delivery.preparation_authority import load_installed_bundle
+
+        installed = load_installed_bundle()
+        if installed is not None and not lifecycle_store.floor_enrolled(self):
+            lifecycle_store.enroll_installed(self, installed)
+        try:
             return self._bootstrap_extension_control_authority(catalog_digest, key=None)
+        except Exception:
+            abandoned = False
+            with contextlib.suppress(Exception):
+                self._extension_control_authority_op("abandon_bootstrap", key=None)
+                abandoned = True
+            # A snapshot the resident could not remove keeps its anchor, so a
+            # bootstrap that did commit both still reads as protected.
+            if abandoned:
+                with contextlib.suppress(Exception):
+                    self._secret_store().delete_secret(self._anchor_ref())
+            raise
 
     def commit_extension_control_layers(
         self,
@@ -168,275 +222,134 @@ class ExtensionControlAuthorityCommitMixin:
             current = self._read_extension_control_authority_locked(
                 catalog_digest,
                 migration_registry=migration_registry,
-                _healed=True,
+                roll_back_abandoned=False,
                 allow_migration=pack_activation is None,
             )
             key = self._authority_key(required=True)
             assert key is not None
-            actor_hash = _private_hash(actor_id, key=key, purpose="actor")
-            idempotency_hash = _private_hash(idempotency_key, key=key, purpose="idempotency")
-            nonce_hash = _private_hash(nonce, key=key, purpose="nonce")
-            proof_hash = _private_hash(proof.proof_id, key=key, purpose="proof")
-            proof_already_consumed = False
+            # An unknown schema version must refuse the write by name rather
+            # than surface as a generic unavailable authority.
             with self._connect() as connection:
-                ensure_extension_control_authority_schema(connection)
-                proof_record = connection.execute(
-                    "select * from extension_control_authority_proof where proof_id_hash = ?",
-                    (proof_hash,),
-                ).fetchone()
-                replay = connection.execute(
-                    "select * from extension_control_authority_transition where idempotency_key_hash = ?",
-                    (idempotency_hash,),
-                ).fetchone()
-                if proof_record is not None and (
-                    replay is None or AuthorityPhase(str(replay["phase"])) is AuthorityPhase.COMMITTED
-                ):
-                    raise ExtensionControlAuthorityError("extension control authority proof replay")
-                if (
-                    proof_record is not None
-                    and replay is not None
-                    and (
-                        str(proof_record["mutation_digest"]) != mutation.canonical_digest
-                        or int(proof_record["transition_revision"]) != _row_int(replay, "revision")
-                    )
-                ):
-                    raise ExtensionControlAuthorityError("extension control authority proof state conflict")
-                if replay is not None:
-                    resumed = self._resume_idempotent_transition(
-                        connection,
-                        replay,
-                        current=current,
-                        catalog_digest=catalog_digest,
-                        layers_json=layers_json,
-                        actor_hash=actor_hash,
-                        idempotency_hash=idempotency_hash,
-                        nonce_hash=nonce_hash,
-                        expected_revision=expected_revision,
-                        key=key,
-                    )
-                    if resumed is not None:
-                        consumed_at = _now()
-                        if proof_record is None:
-                            consume_extension_control_proof(self.guard_home, proof, mutation)
-                            connection.execute(
-                                """
-                                insert into extension_control_authority_proof (
-                                    proof_id_hash, mutation_digest, transition_revision,
-                                    reserved_at, consumed_at
-                                ) values (?, ?, ?, ?, ?)
-                                """,
-                                (
-                                    proof_hash,
-                                    mutation.canonical_digest,
-                                    _row_int(replay, "revision"),
-                                    consumed_at,
-                                    consumed_at,
-                                ),
-                            )
-                        else:
-                            connection.execute(
-                                """
-                                update extension_control_authority_proof
-                                set consumed_at = coalesce(consumed_at, ?)
-                                where proof_id_hash = ?
-                                """,
-                                (consumed_at, proof_hash),
-                            )
-                        return resumed
-                    connection.commit()
-                    if proof_record is not None:
-                        connection.execute(
-                            "delete from extension_control_authority_proof where proof_id_hash = ?",
-                            (proof_hash,),
-                        )
-                        proof_already_consumed = True
+                require_compatible_extension_control_schema(connection)
+            commit = {
+                "actor_id": actor_id,
+                "idempotency_key": idempotency_key,
+                "nonce": nonce,
+                "proof_id": proof.proof_id,
+                "mutation_digest": mutation.canonical_digest,
+                "layers_json": layers_json,
+                "expected_revision": expected_revision,
+                # The resident binds its reply to the request it re-serializes,
+                # which omits an absent digest rather than sending null.
+                **({"pack_record_digest": pack_activation.digest} if pack_activation is not None else {}),
+            }
+            reservation: Mapping[str, object] | None = None
+            if pack_activation is not None:
+                from .catalog_delivery.activation_journal import reserve_request
+
+                with self._connect() as connection:
+                    reservation = reserve_request(self, connection, pack_activation, recorded_at=_now())
+            proof_already_consumed = False
+            rollback_attempted = False
+            for _ in range(_MAX_COMMIT_ROUNDS):
+                # The resident prepares the row, reserves the proof and any
+                # staged pack activation in the transaction that plans them.
+                # Each round checks the activation's admission at the time it
+                # reserves, so one that expired since an earlier round is refused.
+                pack_reserve: dict[str, object] = (
+                    {} if reservation is None else {"pack_reserve": {**reservation, "admitted_at": int(time.time())}}
+                )
+                plan = self._authority_plan(
+                    "commit_prepare",
+                    key=key,
+                    catalog_digest=catalog_digest,
+                    view=view_to_wire(current),
+                    commit=commit,
+                    now=_now(),
+                    rollback_attempted=rollback_attempted,
+                    **pack_reserve,
+                )
+                outcome = str(plan["outcome"])
+                if outcome == "prepare":
+                    break
+                if outcome == "reread":
+                    # A different request abandoned its prepared transition
+                    # before anchoring it; a read rolls that back so this
+                    # request can proceed.
                     current = self._read_extension_control_authority_locked(
                         catalog_digest, migration_registry=migration_registry, allow_migration=pack_activation is None
                     )
-            if current.health is AuthorityHealth.RECOVERY_REQUIRED:
-                # A different request abandoned its prepared transition before
-                # anchoring it; roll that back so this request can proceed.
+                    rollback_attempted = True
+                    continue
+                # A retry of this request found its own prepared transition.
+                # The resident applies the verdict and settles the proof in
+                # the same transaction.
+                revision = _plan_int(plan, "revision")
+                proof_recorded = plan.get("proof_recorded") is True
+                self._invalidate_native_extension_control_policy()
+                reply = self._resume_extension_control_op(
+                    revision,
+                    key=key,
+                    now=_now(),
+                    view=view_to_wire(current),
+                    retry_proof={
+                        "proof_hash": str(_plan_map(plan, "hashes")["proof"]),
+                        "mutation_digest": mutation.canonical_digest,
+                    },
+                )
+                if reply.get("outcome") == "current":
+                    resumed = current
+                else:
+                    resumed = self._adopt_resumed_transition(reply, revision)
+                if resumed is not None:
+                    if not proof_recorded:
+                        consume_extension_control_proof(self.guard_home, proof, mutation)
+                    return resumed
+                if proof_recorded:
+                    proof_already_consumed = True
                 current = self._read_extension_control_authority_locked(
                     catalog_digest, migration_registry=migration_registry, allow_migration=pack_activation is None
                 )
-            if current.health is not AuthorityHealth.PROTECTED:
+            else:
                 raise ExtensionControlAuthorityError("extension control authority unavailable")
-            with self._connect() as connection:
-                ensure_extension_control_authority_schema(connection)
-                if current.revision != expected_revision:
-                    raise ExtensionControlAuthorityError("extension control authority revision conflict")
-                if (
-                    connection.execute(
-                        "select 1 from extension_control_authority_transition where nonce_hash = ?",
-                        (nonce_hash,),
-                    ).fetchone()
-                    is not None
-                ):
-                    raise ExtensionControlAuthorityError("extension control authority nonce replay")
-                if (
-                    connection.execute(
-                        "select 1 from extension_control_authority_proof where proof_id_hash = ?",
-                        (proof_hash,),
-                    ).fetchone()
-                    is not None
-                ):
-                    raise ExtensionControlAuthorityError("extension control authority proof replay")
-                snapshot_row = connection.execute(
-                    "select snapshot_digest from extension_control_authority_snapshot where singleton = 1"
-                ).fetchone()
-                if snapshot_row is None:
-                    raise ExtensionControlAuthorityError("extension control authority snapshot missing")
-                previous_digest = str(snapshot_row["snapshot_digest"])
 
-            revision = current.revision + 1
-            created_at = _now()
-            snapshot_json, snapshot_digest, snapshot_mac = authenticated_record(
-                {
-                    "revision": revision,
-                    "catalog_digest": catalog_digest,
-                    "layers_json": layers_json,
-                    "previous_digest": previous_digest,
-                    "committed_at": created_at,
-                    **({"command_pack_record_digest": pack_activation.digest} if pack_activation is not None else {}),
-                },
-                key=key,
-                purpose=SNAPSHOT_PURPOSE,
-            )
-            transition_json, transition_digest, transition_mac = authenticated_record(
-                {
-                    "revision": revision,
-                    "previous_revision": current.revision,
-                    "previous_digest": previous_digest,
-                    "snapshot_digest": snapshot_digest,
-                    "catalog_digest": catalog_digest,
-                    "actor_id_hash": actor_hash,
-                    "idempotency_key_hash": idempotency_hash,
-                    "nonce_hash": nonce_hash,
-                    "created_at": created_at,
-                    "phase": AuthorityPhase.PREPARED.value,
-                    **({"command_pack_record_digest": pack_activation.digest} if pack_activation is not None else {}),
-                },
-                key=key,
-                purpose=TRANSITION_PURPOSE,
-            )
-            with self._connect() as connection:
-                ensure_extension_control_authority_schema(connection)
-                connection.execute(
-                    """
-                    insert into extension_control_authority_proof (
-                        proof_id_hash, mutation_digest, transition_revision, reserved_at
-                    ) values (?, ?, ?, ?)
-                    """,
-                    (proof_hash, mutation.canonical_digest, revision, created_at),
-                )
-                connection.execute(
-                    """
-                    insert into extension_control_authority_transition (
-                        revision, previous_revision, phase, actor_id_hash, idempotency_key_hash,
-                        nonce_hash, catalog_digest, layers_json, snapshot_json, snapshot_digest,
-                        snapshot_mac, transition_json, transition_digest, transition_mac, created_at
-                    ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                    """,
-                    (
-                        revision,
-                        current.revision,
-                        AuthorityPhase.PREPARED.value,
-                        actor_hash,
-                        idempotency_hash,
-                        nonce_hash,
-                        catalog_digest,
-                        layers_json,
-                        snapshot_json,
-                        snapshot_digest,
-                        snapshot_mac,
-                        transition_json,
-                        transition_digest,
-                        transition_mac,
-                        created_at,
-                    ),
-                )
-                if pack_activation is not None:
-                    from .catalog_delivery.activation_journal import reserve
-
-                    reserve(
-                        self,
-                        connection,
-                        pack_activation,
-                        control_revision=revision,
-                        snapshot_digest=snapshot_digest,
-                        catalog_digest=catalog_digest,
-                        recorded_at=created_at,
+            revision = _plan_int(plan, "revision")
+            previous_revision = _plan_int(plan, "previous_revision")
+            previous_digest = str(plan["previous_digest"])
+            hashes = _plan_map(plan, "hashes")
+            proof_hash = str(hashes["proof"])
+            snapshot, transition = _plan_map(plan, "snapshot"), _plan_map(plan, "transition")
+            snapshot_digest, transition_digest = str(snapshot["digest"]), str(transition["digest"])
+            created_at = str(plan["created_at"])
+            if plan.get("prepared") is not True:
+                raise ExtensionControlAuthorityError("extension control authority unavailable")
+            try:
+                if not proof_already_consumed:
+                    consume_extension_control_proof(self.guard_home, proof, mutation)
+                anchored = AuthorityAnchor(revision, snapshot_digest, AuthorityPhase.ANCHORED)
+                try:
+                    self._write_and_verify_anchor(anchored, key=key)
+                except Exception as exc:
+                    raise ExtensionControlAuthorityError("extension control authority anchor unavailable") from exc
+            except Exception:
+                # The row prepared above never reached the anchor. Left in
+                # place it refuses every later save, so take it back now; the
+                # resident keeps it if the anchor did move.
+                with contextlib.suppress(Exception):
+                    self._roll_back_abandoned_transition(
+                        previous_revision,
+                        snapshot_digest=previous_digest,
+                        key=key,
+                        own_transition_digest=transition_digest,
                     )
-            if not proof_already_consumed:
-                consume_extension_control_proof(self.guard_home, proof, mutation)
-            anchored = AuthorityAnchor(revision, snapshot_digest, AuthorityPhase.ANCHORED)
-            try:
-                self._write_and_verify_anchor(anchored, key=key)
-            except Exception as exc:
-                raise ExtensionControlAuthorityError("extension control authority anchor unavailable") from exc
-            with self._connect() as connection:
-                from .catalog_delivery.activation_journal import finish
-
-                pending = connection.execute(
-                    "select * from extension_control_authority_transition where revision=?", (revision,)
-                ).fetchone()
-                finish(self, connection, pending)
-                connection.execute(
-                    "update extension_control_authority_transition set phase = ? where revision = ?",
-                    (AuthorityPhase.ANCHORED.value, revision),
-                )
-                connection.execute(
-                    """
-                    update extension_control_authority_snapshot
-                    set revision = ?, catalog_digest = ?, layers_json = ?, previous_digest = ?,
-                        snapshot_json = ?, snapshot_digest = ?, snapshot_mac = ?, committed_at = ?
-                    where singleton = 1 and revision = ? and snapshot_digest = ?
-                    """,
-                    (
-                        revision,
-                        catalog_digest,
-                        layers_json,
-                        previous_digest,
-                        snapshot_json,
-                        snapshot_digest,
-                        snapshot_mac,
-                        created_at,
-                        current.revision,
-                        previous_digest,
-                    ),
-                )
-                if connection.execute("select changes()").fetchone()[0] != 1:
-                    raise ExtensionControlAuthorityError("extension control authority concurrent update")
-                connection.execute(
-                    """
-                    update extension_control_authority_proof
-                    set consumed_at = ?
-                    where proof_id_hash = ? and transition_revision = ? and consumed_at is null
-                    """,
-                    (created_at, proof_hash, revision),
-                )
-                if connection.execute("select changes()").fetchone()[0] != 1:
-                    raise ExtensionControlAuthorityError("extension control authority proof state conflict")
-                connection.execute(
-                    "update extension_control_authority_transition set phase = ?, committed_at = ? where revision = ?",
-                    (AuthorityPhase.COMMITTED.value, created_at, revision),
-                )
-            try:
-                self._write_and_verify_anchor(
-                    AuthorityAnchor(revision, snapshot_digest, AuthorityPhase.COMMITTED),
-                    key=key,
-                )
-            except Exception as exc:
-                raise ExtensionControlAuthorityError("extension control authority final anchor unavailable") from exc
-            with self._connect() as connection:
-                self._queue_extension_control_change_event(
-                    connection,
-                    revision=revision,
-                    previous_revision=current.revision,
-                    layers_json=layers_json,
-                    occurred_at=created_at,
-                )
-            return self._read_extension_control_authority_locked(catalog_digest)
+                raise
+            # The resident commits the row and its proof, installs the command
+            # pack it reserved, seals the committed anchor and queues the event.
+            reply = self._resume_extension_control_op(revision, key=key, now=created_at, proof_hash=proof_hash)
+            committed = self._adopt_resumed_transition(reply, revision)
+            if committed is None:
+                raise ExtensionControlAuthorityError("extension control authority concurrent update")
+            return committed
 
     def _bootstrap_extension_control_authority(
         self, catalog_digest: str, *, key: bytes | None
@@ -445,33 +358,9 @@ class ExtensionControlAuthorityCommitMixin:
         if key is None:
             key = secrets.token_bytes(32)
             self._secret_store().set_secret(self._key_ref(), base64.urlsafe_b64encode(key).decode())
-        committed_at = _now()
-        layers_json = layers_to_json(())
-        snapshot_json, digest, mac = authenticated_record(
-            {
-                "revision": 0,
-                "catalog_digest": catalog_digest,
-                "layers_json": layers_json,
-                "previous_digest": None,
-                "committed_at": committed_at,
-            },
-            key=key,
-            purpose=SNAPSHOT_PURPOSE,
-        )
-        with self._connect() as connection:
-            existing = connection.execute(
-                "select 1 from extension_control_authority_snapshot where singleton = 1"
-            ).fetchone()
-            if existing is not None:
-                raise ExtensionControlAuthorityError("extension control authority already exists")
-            connection.execute(
-                """
-                insert into extension_control_authority_snapshot (
-                    singleton, revision, catalog_digest, layers_json, previous_digest,
-                    snapshot_json, snapshot_digest, snapshot_mac, committed_at
-                ) values (1, 0, ?, ?, null, ?, ?, ?, ?)
-                """,
-                (catalog_digest, layers_json, snapshot_json, digest, mac, committed_at),
-            )
-        self._write_and_verify_anchor(AuthorityAnchor(0, digest, AuthorityPhase.COMMITTED), key=key)
+        reply = self._extension_control_authority_op("bootstrap", key=key, catalog_digest=catalog_digest, now=_now())
+        sealed = reply.get("anchor_json")
+        if not isinstance(sealed, str):
+            raise ExtensionControlAuthorityError("invalid extension control anchor seal")
+        self._mirror_resident_anchor(sealed)
         return ExtensionControlAuthorityView(AuthorityHealth.PROTECTED, 0, catalog_digest, ())

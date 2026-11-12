@@ -84,6 +84,7 @@ fn args_for(
         home_dir: "/home/user",
         guard_home: "/home/user/.hol-guard",
         binding,
+        hint: None,
     };
     store_args(&context, result.as_object().unwrap(), Some("rb-1"))
 }
@@ -104,6 +105,7 @@ fn only_a_keyed_binding_records_a_session_notice() {
         home_dir: "/home/user",
         guard_home: "/home/user/.hol-guard",
         binding: &binding,
+        hint: None,
     };
     let result = json!({"decision": "review"});
     assert!(store_args(&unkeyed, result.as_object().unwrap(), None).is_err());

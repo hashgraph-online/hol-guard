@@ -40,6 +40,7 @@ fn an_answer_queues_the_evidence_the_daemon_records() {
         record["receipt"],
         edge.get("receipt").cloned().unwrap_or(Value::Null)
     );
+    assert_eq!(record["receipt_valid"], json!(true));
     let mut expected = json!({
         "hook_event_name": "PreToolUse",
         "toolName": "read_file",

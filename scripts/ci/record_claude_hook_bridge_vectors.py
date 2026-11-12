@@ -2,8 +2,9 @@
 """Record Claude hook bridge vectors from the Python bridge.
 
 Run at a commit that still carries the Python Claude daemon hook bridge
-(``claude_daemon_hook_bridge.py``, ``claude_daemon_hook_transport.py`` and
-``hook_execution_environment.py``):
+(``claude_daemon_hook_bridge.py`` and ``hook_execution_environment.py``; the
+hook-event and remaining-time helpers now live in
+``scripts/daemon_hook_client.py``):
 
     .venv/bin/python scripts/ci/record_claude_hook_bridge_vectors.py
 
@@ -25,13 +26,11 @@ from types import SimpleNamespace
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "src"))
+sys.path.insert(1, str(ROOT))
 
 from codex_plugin_scanner.guard import hook_execution_environment  # noqa: E402
 from codex_plugin_scanner.guard.adapters import claude_daemon_hook_bridge as bridge  # noqa: E402
-from codex_plugin_scanner.guard.adapters._modules.claude import claude_daemon_hook_transport as transport  # noqa: E402
-from codex_plugin_scanner.guard.adapters._modules.codex import (
-    codex_daemon_hook_transport as codex_transport,
-)
+from scripts import daemon_hook_client as hook_client  # noqa: E402
 
 OUTPUT = ROOT / "rust/crates/guard-runtime/testdata/claude_hook_bridge/vectors.json.gz"
 
@@ -251,24 +250,24 @@ def _stamp_vectors() -> list[dict[str, object]]:
 
 
 def _hint_vectors() -> list[dict[str, object]]:
-    original = codex_transport.time
-    codex_transport.time = SimpleNamespace(monotonic=lambda: 0.0)
+    original = hook_client.time
+    hook_client.time = SimpleNamespace(monotonic=lambda: 0.0)
     try:
         return [
             {
                 "data": data,
                 "raw_ms": int(deadline * 1000),
-                "hinted": _outcome(codex_transport._with_remaining_hint, data, deadline),
+                "hinted": _outcome(hook_client._with_remaining_hint, data, deadline),
             }
             for data in HINT_INPUTS
             for deadline in HINT_DEADLINES
         ]
     finally:
-        codex_transport.time = original
+        hook_client.time = original
 
 
 def _transport_event(data: str) -> str:
-    return json.dumps(transport._event_name(data))
+    return json.dumps(hook_client._claude_event_name(data))
 
 
 def _render_vectors() -> list[dict[str, object]]:

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import time
 from collections.abc import Mapping
 from typing import TYPE_CHECKING, cast
 
@@ -163,6 +164,27 @@ def validated_managed_controls_candidate(
     return (None if error is not None else policy_bundle), candidate, delivery, error, True
 
 
+# Discovery readiness lives in the process that asks for it. A one-shot
+# `hol-guard sync` asks once, before the preparation that call starts has
+# finished, so without a short wait it always advertised no catalog.
+DISCOVERY_READY_WAIT_SECONDS = 10.0
+_DISCOVERY_READY_POLL_SECONDS = 0.1
+
+
+def _prepare_view_when_discovery_ready(prepare, guard_home, **kwargs):
+    from ..catalog_delivery.discovery import PREPARING
+
+    deadline = time.monotonic() + DISCOVERY_READY_WAIT_SECONDS
+    while True:
+        try:
+            return prepare(guard_home, **kwargs)
+        except ValueError as error:
+            # A failing preparation is terminal; only a pending one is worth waiting for.
+            if str(error) != PREPARING or time.monotonic() >= deadline:
+                raise
+        time.sleep(_DISCOVERY_READY_POLL_SECONDS)
+
+
 def managed_controls_runtime_sync_posture(
     store: GuardStore,
     *,
@@ -178,7 +200,8 @@ def managed_controls_runtime_sync_posture(
 
     try:
         registry = current_catalog_registry(store)
-        view = prepare_installed_catalog_view(
+        view = _prepare_view_when_discovery_ready(
+            prepare_installed_catalog_view,
             store.guard_home,
             registry=registry,
             guard_version=__version__,

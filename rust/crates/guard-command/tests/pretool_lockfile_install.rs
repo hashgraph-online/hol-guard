@@ -95,10 +95,7 @@ impl Lab {
         let unique = format!(
             "{}-{}",
             std::process::id(),
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
-                .as_nanos()
+            crate::unique_nanos::unique_nanos()
         );
         let root = std::fs::canonicalize("/tmp")
             .unwrap()
@@ -138,7 +135,7 @@ impl Lab {
             pager_disabled: false,
             xdg_config_home: None,
             git_config_no_system: true,
-            library_search_paths: Default::default(),
+            ..Default::default()
         };
         evaluate_pre_tool_envelope_with_execution_context(
             "codex",
@@ -154,6 +151,9 @@ impl Lab {
                 pip_config_inert: true,
                 shell_home_matches: true,
                 ripgrep_config_absent: false,
+                gem_config_absent: false,
+                http_config_absent: false,
+                openssl_config_absent: false,
                 psql_environment: Default::default(),
                 ..PathContext::default()
             },

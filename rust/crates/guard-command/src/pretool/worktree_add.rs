@@ -4,11 +4,20 @@ use std::time::Instant;
 
 #[path = "worktree_add_chain.rs"]
 pub(super) mod chain;
+#[path = "worktree_add_chain_route.rs"]
+mod chain_route;
+#[path = "worktree_add_search_path.rs"]
+mod search_path;
+pub(crate) use chain::entered_checkouts;
 pub(crate) use chain::new_checkout_route;
 #[path = "worktree_add_destination.rs"]
 mod destination;
+#[path = "worktree_add_links.rs"]
+mod links;
 #[path = "worktree_add_names.rs"]
 mod names;
+#[path = "worktree_add_spec.rs"]
+mod spec;
 
 pub(in crate::pretool) use destination::fresh_temporary_parent;
 use destination::resolve_chdir;
@@ -16,20 +25,7 @@ pub(in crate::pretool) use destination::{fresh_destination, MissingParents};
 
 pub(in crate::pretool) use names::{valid_branch_name, valid_destination_text};
 use names::{valid_local_reference, valid_path_text};
-
-struct WorktreeAdd<'a> {
-    leading: Vec<String>,
-    /// The single `-C <dir>` value, applied by changing the proof's cwd
-    /// (as Git does) instead of being passed on to the probes.
-    chdir: Option<&'a str>,
-    /// `None` for the detached form, which creates no branch.
-    branch: Option<&'a str>,
-    destination: &'a str,
-    reference: Option<&'a str>,
-    /// Neither `-b` nor `--detach`: Git checks out the local branch the
-    /// reference names when one exists, and detaches otherwise.
-    attach: bool,
-}
+use spec::{parse, WorktreeAdd};
 
 const MAX_DESTINATION_BYTES: usize = 4096;
 
@@ -58,15 +54,20 @@ pub(super) fn exact_safe_command(
         home_dir: context.home_dir,
         cdpath_unset: context.cdpath_unset,
         rustup_override_absent: context.rustup_override_absent,
+        cargo_config_inert: context.cargo_config_inert,
         npm_config_inert: context.npm_config_inert,
         pip_config_inert: context.pip_config_inert,
         shell_home_matches: context.shell_home_matches,
         ripgrep_config_absent: context.ripgrep_config_absent,
+        gem_config_absent: context.gem_config_absent,
+        http_config_absent: context.http_config_absent,
+        openssl_config_absent: context.openssl_config_absent,
         psql_environment: context.psql_environment,
         cwd: cwd_proof
             .as_ref()
             .map(|proof| proof.cwd.as_str())
             .or(context.cwd),
+        creates_nothing: false,
     };
     let mut worktree_seen = false;
     let mut fetch_before = false;
@@ -205,7 +206,7 @@ pub(super) fn outside_home_reason(
         return None;
     }
     let home = std::fs::canonicalize(Path::new(context.home_dir?)).ok()?;
-    let supplied = Path::new(spec.destination);
+    let supplied = Path::new(spec.destination.as_ref());
     let target = if supplied.is_absolute() {
         supplied.to_path_buf()
     } else {
@@ -294,20 +295,22 @@ pub(super) fn separator_between(
     )
 }
 
-/// The checkout a proven `git worktree add` segment creates, and the `-C`
-/// directory it runs in when one is given.
+/// The checkout a proven `git worktree add` segment creates, the `-C`
+/// directory it runs in when one is given, and the commit it checks out
+/// when the proof read it.
 fn proven_checkout(
     segment: &CommandSegmentV1,
     reference_may_move: bool,
     context: super::PathContext<'_>,
     deadline: Option<Instant>,
     execution_environment: Option<&guard_contracts::GuardExecutionEnvironmentV1>,
-) -> Option<(PathBuf, Option<String>)> {
+) -> Option<(PathBuf, Option<String>, Option<String>)> {
     let (spec, destination, chdir_cwd) = planned_checkout(segment, context)?;
     let context = super::PathContext {
         cwd: chdir_cwd.as_deref().or(context.cwd),
         ..context
     };
+    let mut commit = None;
     super::git_worktree::worktree_add_execution_free(
         segment.executable.as_deref().unwrap_or("git"),
         &spec.leading,
@@ -319,9 +322,10 @@ fn proven_checkout(
         context,
         deadline,
         execution_environment,
+        &mut commit,
     )
     .unwrap_or(false)
-    .then_some((destination, chdir_cwd))
+    .then_some((destination, chdir_cwd, commit))
 }
 
 /// The checkout `git worktree add` would create, with the directory its
@@ -333,13 +337,24 @@ fn planned_checkout<'a>(
     if !segment.environment_names.is_empty() {
         return None;
     }
+    // A `$HOME` destination is proved in its `~` spelling, which the shell
+    // never splits. The expansion is split, so a home path holding
+    // whitespace would hand Git other arguments than the ones proved.
+    if segment
+        .arguments
+        .iter()
+        .any(|argument| super::directory_targets::home_variable::tilde_spelling(argument).is_some())
+        && !super::directory_targets::home_variable::home_expands_to_one_word(context.home_dir)
+    {
+        return None;
+    }
     let spec = parse(segment)?;
     let chdir_cwd = match spec.chdir {
         Some(directory) => Some(resolve_chdir(directory, context)?),
         None => None,
     };
     let destination = fresh_destination(
-        spec.destination,
+        &spec.destination,
         super::PathContext {
             cwd: chdir_cwd.as_deref().or(context.cwd),
             ..context
@@ -349,102 +364,19 @@ fn planned_checkout<'a>(
     Some((spec, destination, chdir_cwd))
 }
 
-fn parse(segment: &CommandSegmentV1) -> Option<WorktreeAdd<'_>> {
-    let arguments = if segment
-        .arguments
-        .last()
-        .is_some_and(|argument| argument == "2>&1")
-    {
-        &segment.arguments[..segment.arguments.len() - 1]
-    } else {
-        &segment.arguments
-    };
-    let mut index = 0;
-    let mut leading = Vec::new();
-    let mut chdir = None;
-    loop {
-        match arguments.get(index).map(String::as_str) {
-            Some(flag @ ("-P" | "--no-pager" | "--no-optional-locks")) => {
-                leading.push(flag.to_owned());
-                index += 1;
-            }
-            Some("-C") if chdir.is_none() => {
-                let value = arguments.get(index + 1)?.as_str();
-                if value.is_empty()
-                    || value.starts_with('-')
-                    || value.contains(['\0', '\n', '\r'])
-                    || value.len() > MAX_DESTINATION_BYTES
-                {
-                    return None;
-                }
-                chdir = Some(value);
-                index += 2;
-            }
-            _ => break,
-        }
-    }
-    if arguments.get(index).map(String::as_str) != Some("worktree") {
-        return None;
-    }
-    index += 1;
-    if arguments.get(index).map(String::as_str) != Some("add") {
-        return None;
-    }
-    index += 1;
-    let mut branch = None;
-    let mut detach = false;
-    let mut destination = None;
-    let mut reference = None;
-    while let Some(argument) = arguments.get(index) {
-        match argument.as_str() {
-            "-q" | "--quiet" => index += 1,
-            "-d" | "--detach" => {
-                detach = true;
-                index += 1;
-            }
-            "-b" if branch.is_none() && reference.is_none() => {
-                branch = Some(arguments.get(index + 1)?.as_str());
-                index += 2;
-            }
-            _ if argument.starts_with('-') => return None,
-            _ if destination.is_none() => {
-                destination = Some(argument.as_str());
-                index += 1;
-            }
-            _ if reference.is_none() => {
-                reference = Some(argument.as_str());
-                index += 1;
-            }
-            _ => return None,
-        }
-    }
-    // With neither a reference nor `--detach` Git would create a branch
-    // named after the destination, which stays reviewed.
-    match branch {
-        Some(value) if detach || !valid_branch_name(value) => return None,
-        None if !detach && reference.is_none() => return None,
-        _ => {}
-    }
-    let destination = destination.filter(|value| valid_destination_text(value))?;
-    // A quoted or escaped `~` stays a literal directory name.
-    if destination.starts_with('~') && !super::directory_targets::home_targets_unquoted(segment) {
-        return None;
-    }
-    // A bare name such as `main` or `feat/x` is accepted in every form.
-    // Without `-b` and `--detach` Git checks out the existing branch of that
-    // name (or detaches at what the name resolves to); with either flag it
-    // starts from the commit the name resolves to, exactly as the probe's
-    // `rev-parse` resolves it. The tree proven is the tree checked out.
-    let attach = branch.is_none() && !detach;
-    if reference.is_some_and(|value| !(valid_local_reference(value) || valid_branch_name(value))) {
-        return None;
-    }
-    Some(WorktreeAdd {
-        leading,
-        chdir,
-        branch,
-        destination,
-        reference,
-        attach,
-    })
+/// The canonical checkout a `git worktree add` segment creates and the
+/// canonical directory its `-C` enters, as the proof plans them.
+pub(in crate::pretool) fn planned(
+    segment: &CommandSegmentV1,
+    context: super::PathContext<'_>,
+) -> Option<(PathBuf, Option<String>)> {
+    planned_checkout(segment, context).map(|(_, checkout, chdir)| (checkout, chdir))
+}
+
+/// The checkout a `git worktree add` segment creates, as the proof reads it,
+/// and whether a `-C` moves where a relative checkout lands.
+pub(in crate::pretool) fn destination(
+    segment: &CommandSegmentV1,
+) -> Option<(std::borrow::Cow<'_, str>, bool)> {
+    parse(segment).map(|spec| (spec.destination, spec.chdir.is_some()))
 }

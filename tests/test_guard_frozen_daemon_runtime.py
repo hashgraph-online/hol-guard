@@ -15,7 +15,7 @@ from types import ModuleType
 import pytest
 
 from codex_plugin_scanner.guard import frozen_daemon_runtime, frozen_runtime_commands
-from codex_plugin_scanner.guard.daemon import manager
+from codex_plugin_scanner.guard import native_daemon_manage as manager
 
 ROOT = Path(__file__).resolve().parents[1]
 FROZEN_ENTRYPOINT = ROOT / "scripts" / "mdm" / "hol-guard-entry.py"
@@ -207,66 +207,6 @@ def test_frozen_runtime_gate_fails_closed_on_stream_runtime_error(tmp_path: Path
     assert exit_info.value.code == 70
 
 
-def test_frozen_runtime_proves_same_executable_bootloader_parent(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    executable = tmp_path / "Application Support" / "hol-guard"
-    executable.parent.mkdir()
-    executable.write_bytes(b"guard")
-    home = tmp_path / "home"
-    guard_home = home / ".hol-guard"
-    guard_home.mkdir(parents=True)
-    command = _daemon_command(executable, guard_home, home)
-
-    monkeypatch.setattr(frozen_daemon_runtime.sys, "frozen", True, raising=False)
-    monkeypatch.setattr(frozen_daemon_runtime.sys, "executable", str(executable))
-    monkeypatch.setattr(frozen_daemon_runtime.os, "getpid", lambda: 4243)
-    monkeypatch.setattr(frozen_daemon_runtime.os, "getppid", lambda: 4242)
-    monkeypatch.setattr(manager, "_guard_daemon_command_for_pid", lambda pid: command if pid == 4242 else None)
-
-    assert frozen_daemon_runtime._trusted_frozen_bootloader_parent_pid(guard_home) == 4242
-
-
-def test_frozen_runtime_rejects_different_parent_executable(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    executable = tmp_path / "hol-guard"
-    executable.write_bytes(b"guard")
-    other_executable = tmp_path / "other-hol-guard"
-    other_executable.write_bytes(b"other")
-    home = tmp_path / "home"
-    guard_home = home / ".hol-guard"
-    guard_home.mkdir(parents=True)
-    command = _daemon_command(other_executable, guard_home, home)
-
-    monkeypatch.setattr(frozen_daemon_runtime.sys, "frozen", True, raising=False)
-    monkeypatch.setattr(frozen_daemon_runtime.sys, "executable", str(executable))
-    monkeypatch.setattr(frozen_daemon_runtime.os, "getpid", lambda: 4243)
-    monkeypatch.setattr(frozen_daemon_runtime.os, "getppid", lambda: 4242)
-    monkeypatch.setattr(manager, "_guard_daemon_command_for_pid", lambda pid: command if pid == 4242 else None)
-
-    assert frozen_daemon_runtime._trusted_frozen_bootloader_parent_pid(guard_home) is None
-
-
-def test_frozen_inventory_filters_only_proven_bootloader_parent(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    guard_home = tmp_path / ".hol-guard"
-    monkeypatch.setattr(
-        frozen_daemon_runtime,
-        "_trusted_frozen_bootloader_parent_pid",
-        lambda _guard_home: 4242,
-    )
-
-    assert frozen_daemon_runtime._filter_frozen_bootloader_parent(
-        guard_home,
-        [(4242, 4781), (4243, 4781), (9000, 4782)],
-    ) == [(4243, 4781), (9000, 4782)]
-
-
 def test_frozen_runtime_source_root_uses_stable_executable_path(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -291,76 +231,6 @@ def test_frozen_runtime_fingerprint_binds_exact_executable_bytes(
     assert frozen_daemon_runtime._frozen_runtime_fingerprint() == hashlib.sha256(payload).hexdigest()
 
 
-def test_frozen_runtime_accepts_same_release_from_same_macos_publisher(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    current = tmp_path / "desktop-core"
-    peer = tmp_path / "managed-core"
-    current.write_bytes(b"desktop-wrapper")
-    peer.write_bytes(b"managed-wrapper")
-    monkeypatch.setattr(frozen_daemon_runtime.sys, "executable", str(current))
-    monkeypatch.setattr(frozen_daemon_runtime, "_cached_macos_signing_team", lambda _path: "TEAM123")
-    monkeypatch.setattr(frozen_daemon_runtime, "_frozen_runtime_state_matcher", lambda _payload: False)
-
-    assert frozen_daemon_runtime._frozen_runtime_state_matches(
-        {
-            "compatibility_version": manager.GUARD_DAEMON_COMPATIBILITY_VERSION,
-            "package_version": manager.__version__,
-            "source_root": str(peer),
-            "runtime_fingerprint": hashlib.sha256(peer.read_bytes()).hexdigest(),
-        }
-    )
-
-
-def test_frozen_runtime_rejects_same_release_from_different_macos_publisher(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    current = tmp_path / "desktop-core"
-    peer = tmp_path / "untrusted-core"
-    current.write_bytes(b"desktop-wrapper")
-    peer.write_bytes(b"different-wrapper")
-    monkeypatch.setattr(frozen_daemon_runtime.sys, "executable", str(current))
-    monkeypatch.setattr(
-        frozen_daemon_runtime,
-        "_cached_macos_signing_team",
-        lambda path: "TEAM123" if path == current else "OTHER456",
-    )
-    monkeypatch.setattr(frozen_daemon_runtime, "_frozen_runtime_state_matcher", lambda _payload: False)
-
-    assert not frozen_daemon_runtime._frozen_runtime_state_matches(
-        {
-            "compatibility_version": manager.GUARD_DAEMON_COMPATIBILITY_VERSION,
-            "package_version": manager.__version__,
-            "source_root": str(peer),
-            "runtime_fingerprint": hashlib.sha256(peer.read_bytes()).hexdigest(),
-        }
-    )
-
-
-def test_frozen_runtime_rejects_same_team_peer_with_mismatched_fingerprint(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    current = tmp_path / "desktop-core"
-    peer = tmp_path / "managed-core"
-    current.write_bytes(b"desktop-wrapper")
-    peer.write_bytes(b"managed-wrapper")
-    monkeypatch.setattr(frozen_daemon_runtime.sys, "executable", str(current))
-    monkeypatch.setattr(frozen_daemon_runtime, "_cached_macos_signing_team", lambda _path: "TEAM123")
-    monkeypatch.setattr(frozen_daemon_runtime, "_frozen_runtime_state_matcher", lambda _payload: False)
-
-    assert not frozen_daemon_runtime._frozen_runtime_state_matches(
-        {
-            "compatibility_version": manager.GUARD_DAEMON_COMPATIBILITY_VERSION,
-            "package_version": manager.__version__,
-            "source_root": str(peer),
-            "runtime_fingerprint": hashlib.sha256(b"other-bytes").hexdigest(),
-        }
-    )
-
-
 def test_frozen_runtime_caches_verified_team_until_executable_changes(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -382,26 +252,6 @@ def test_frozen_runtime_caches_verified_team_until_executable_changes(
     executable.write_bytes(b"second-version")
     assert frozen_daemon_runtime._cached_macos_signing_team(executable) == "TEAM123"
     assert calls == [executable, executable]
-
-
-def test_frozen_runtime_consumes_pyinstaller_reset_environment(monkeypatch: pytest.MonkeyPatch) -> None:
-    inventory = manager._guard_daemon_process_inventory_for_guard_home
-    source_root = manager._current_guard_daemon_source_root
-    fingerprint = manager._current_guard_daemon_runtime_fingerprint
-    state_matcher = manager._guard_daemon_state_matches_current_runtime
-    monkeypatch.setattr(frozen_daemon_runtime.sys, "frozen", True, raising=False)
-    monkeypatch.setattr(frozen_daemon_runtime, "_frozen_runtime_installed", False)
-    monkeypatch.setenv("PYINSTALLER_RESET_ENVIRONMENT", "1")
-
-    try:
-        frozen_daemon_runtime.install_frozen_daemon_runtime()
-
-        assert "PYINSTALLER_RESET_ENVIRONMENT" not in frozen_daemon_runtime.os.environ
-    finally:
-        manager._guard_daemon_process_inventory_for_guard_home = inventory
-        manager._current_guard_daemon_source_root = source_root
-        manager._current_guard_daemon_runtime_fingerprint = fingerprint
-        manager._guard_daemon_state_matches_current_runtime = state_matcher
 
 
 def test_frozen_daemon_launcher_preserves_pyinstaller_reset(
@@ -448,99 +298,5 @@ def test_non_frozen_daemon_launcher_drops_desktop_environment(
     assert "HOL_GUARD_DESKTOP" not in child_env
 
 
-def test_non_frozen_runtime_does_not_patch_daemon_inventory(monkeypatch: pytest.MonkeyPatch) -> None:
-    inventory = manager._guard_daemon_process_inventory_for_guard_home
-    monkeypatch.setattr(frozen_daemon_runtime.sys, "frozen", False, raising=False)
-    monkeypatch.delenv("PYINSTALLER_RESET_ENVIRONMENT", raising=False)
-
-    frozen_daemon_runtime.install_frozen_daemon_runtime()
-
-    assert manager._guard_daemon_process_inventory_for_guard_home is inventory
-    assert "PYINSTALLER_RESET_ENVIRONMENT" not in frozen_daemon_runtime.os.environ
 
 
-def test_spawned_launch_accepts_the_pyinstaller_onefile_child(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.setattr(manager, "_guard_daemon_parent_pid", lambda pid: 4242 if pid == 4243 else None)
-    monkeypatch.setattr(manager, "_guard_daemon_pid_is_running", lambda pid: pid in {4242, 4243})
-
-    assert manager._guard_daemon_pid_is_spawned_launch(4242, 4242) is True
-    assert manager._guard_daemon_pid_is_spawned_launch(4243, 4242) is True
-    assert manager._guard_daemon_pid_is_spawned_launch(4243, 9999) is False
-    assert manager._guard_daemon_pid_is_spawned_launch(4243, 0) is False
-    monkeypatch.setattr(manager, "_guard_daemon_pid_is_running", lambda _pid: False)
-    assert manager._guard_daemon_pid_is_spawned_launch(4243, 4242) is False
-
-
-def test_guard_daemon_parent_pid_parses_posix_ps_output(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.setattr(manager.os, "name", "posix")
-    monkeypatch.setattr(manager, "_trusted_posix_ps_path", lambda: "/bin/ps")
-    monkeypatch.setattr(manager, "_bounded_process_query_stdout", lambda _command: " 4242\n")
-    assert manager._guard_daemon_parent_pid(4243) == 4242
-
-    monkeypatch.setattr(manager, "_bounded_process_query_stdout", lambda _command: "not-a-pid")
-    assert manager._guard_daemon_parent_pid(4243) is None
-    monkeypatch.setattr(manager, "_bounded_process_query_stdout", lambda _command: "0")
-    assert manager._guard_daemon_parent_pid(4243) is None
-    monkeypatch.setattr(manager, "_bounded_process_query_stdout", lambda _command: None)
-    assert manager._guard_daemon_parent_pid(4243) is None
-    monkeypatch.setattr(manager, "_trusted_posix_ps_path", lambda: None)
-    assert manager._guard_daemon_parent_pid(4243) is None
-    assert manager._guard_daemon_parent_pid(0) is None
-    monkeypatch.setattr(manager.os, "name", "nt")
-    assert manager._guard_daemon_parent_pid(4243) is None
-
-
-def test_live_identity_accepts_expected_pid_as_the_frozen_bootloader_parent(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.setattr(
-        manager,
-        "_load_authenticated_daemon_identity",
-        lambda _home: (
-            {
-                "compatibility_version": manager.GUARD_DAEMON_COMPATIBILITY_VERSION,
-                "port": 4781,
-                "pid": 4243,
-            },
-            "token",
-        ),
-    )
-    monkeypatch.setattr(manager, "_guard_daemon_pid_is_running", lambda pid: pid in {4242, 4243})
-    monkeypatch.setattr(manager, "_guard_daemon_parent_pid", lambda pid: 4242 if pid == 4243 else None)
-    monkeypatch.setattr(manager, "_guard_daemon_state_matches_current_runtime", lambda _payload: True)
-
-    class _Response:
-        status = 200
-
-        def read(self) -> bytes:
-            return b'{"compatibility_version":%d}' % manager.GUARD_DAEMON_COMPATIBILITY_VERSION
-
-        def __enter__(self) -> _Response:
-            return self
-
-        def __exit__(self, *_args: object) -> None:
-            return None
-
-    monkeypatch.setattr(manager.urllib.request, "urlopen", lambda *_args, **_kwargs: _Response())
-    monkeypatch.setattr(manager, "_guard_daemon_pid_matches_command", lambda *_args, **_kwargs: True)
-
-    identity = manager._live_guard_daemon_identity(
-        tmp_path,
-        require_current_runtime=False,
-        expected_pid=4242,
-    )
-    assert identity is not None
-    assert identity[0] == "http://127.0.0.1:4781"
-    assert (
-        manager._live_guard_daemon_identity(
-            tmp_path,
-            require_current_runtime=False,
-            expected_pid=9999,
-        )
-        is None
-    )

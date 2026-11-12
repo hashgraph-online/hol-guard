@@ -158,8 +158,50 @@ def test_vttforge_source_declares_three_writing_rules() -> None:
     assert all(url.startswith("https://") for url in extension["reference_urls"])
 
 
+# The suffixes the parser reads as a script file rather than a program it can
+# name, so `exec` keeps the run rather than handing it to the word behind it.
+_SCRIPT_SUFFIXES = (
+    ".sh",
+    ".bash",
+    ".zsh",
+    ".ksh",
+    ".py",
+    ".rb",
+    ".pl",
+    ".js",
+    ".mjs",
+    ".cjs",
+    ".ts",
+    ".ps1",
+    ".bat",
+    ".cmd",
+)
+
+
+def _exec_keeps_the_run(command: str) -> bool:
+    """Report whether `exec` here is still the command's own executable.
+
+    `exec` hands the run to the program the text names, and the parser reads
+    that program as the executable whenever the word behind `exec` is one it
+    can name. An option word, a script file, a path or no program at all leaves
+    `exec` in place, and `exec` there is a nested command executor.
+    """
+    words = command.split()
+    if len(words) < 2:
+        return True
+    program = words[1]
+    return (
+        program.startswith("-")
+        or "/" in program
+        or "\\" in program
+        or program.lower().endswith(_SCRIPT_SUFFIXES)
+    )
+
+
 def _expected_uncertainty(command: str) -> str | None:
-    if command.startswith(("exec ", "xargs ")):
+    if command.startswith("exec ") and _exec_keeps_the_run(command):
+        return "nested_command_executor_not_yet_supported"
+    if command.startswith("xargs "):
         return "nested_command_executor_not_yet_supported"
     if "$(" in command or "`" in command:
         return "command_substitution_not_yet_supported"

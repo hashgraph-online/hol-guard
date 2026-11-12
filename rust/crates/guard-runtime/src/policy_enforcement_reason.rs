@@ -10,12 +10,20 @@ An install of the committed lockfile with scripts turned off is not held by it: 
 manager whose lockfile the project commits (`bun.lock`, `package-lock.json` or `pnpm-lock.yaml`), \
 then run tests or builds as separate commands.";
 
+/// Whether the raised result is a prompt and, if so, whether the native
+/// detector found wording that asks to override or reveal its instructions.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(super) enum PromptStop {
+    NotPrompt,
+    Prompt { injection_detected: bool },
+}
+
 /// The reason code and text for a result the installed policy raised, naming
 /// the policy setting that raised it when it is known.
 pub(super) fn policy_override_reason(
     action: &str,
     cause: Option<FloorCause>,
-    prompt: bool,
+    prompt: PromptStop,
 ) -> (&'static str, String) {
     let (code, outcome) = match action {
         "block" => ("native_policy_block", "blocked this hook action"),
@@ -30,8 +38,10 @@ pub(super) fn policy_override_reason(
         "review" => ("native_policy_review_required", "requires review"),
         _ => ("native_policy_warning", "raised this action"),
     };
-    if prompt && action != "warn" {
-        return (code, prompt_stop_reason(cause));
+    if let PromptStop::Prompt { injection_detected } = prompt {
+        if action != "warn" {
+            return (code, prompt_stop_reason(cause, injection_detected));
+        }
     }
     let Some(cause) = cause else {
         return (
@@ -79,6 +89,7 @@ fn risk_label(risk: &str) -> &'static str {
         "package_custom_registry" => "custom package registry",
         "package_install" => "package install",
         "low_trust_artifact" => "low trust score",
+        "runtime_known_vulnerable" => "known vulnerable runtime",
         "execution" => "command execution",
         "supply_chain" => "supply chain",
         "policy_bypass" => "policy bypass",
@@ -88,7 +99,9 @@ fn risk_label(risk: &str) -> &'static str {
 
 /// Prompts never create an approval request, so the text says the prompt was
 /// not sent and what to change instead of pointing at an approval inbox.
-fn prompt_stop_reason(cause: Option<FloorCause>) -> String {
+/// The prompt injection setting also covers prompts that only failed the
+/// benign check, so the text claims an override only when one was detected.
+fn prompt_stop_reason(cause: Option<FloorCause>, injection_detected: bool) -> String {
     let (kind, setting) = match cause {
         Some(FloorCause::Risk(risk)) => (
             match risk {
@@ -97,7 +110,12 @@ fn prompt_stop_reason(cause: Option<FloorCause>) -> String {
                     "asks to send data to an external place"
                 }
                 "destructive_shell" => "asks to delete or overwrite local files",
-                "prompt_injection" => "asks to override trusted instructions",
+                "prompt_injection" if injection_detected => {
+                    "asks to override or reveal trusted instructions"
+                }
+                "prompt_injection" => {
+                    "uses wording Guard holds for review, such as a delete, transfer, download or elevated command"
+                }
                 "execution" | "encoded_execution" => "asks to run commands or a subprocess",
                 "guard_bypass" | "policy_bypass" => "asks to disable Guard protection",
                 _ => "matches a guarded request type",

@@ -207,7 +207,8 @@ pub(crate) const PYTHON_MODULE_MUTATING_SUBCOMMANDS: &[(&str, &[&str])] = &[("ru
 pub(crate) const PYTHON_MODULE_OPTIONS_WITH_VALUES: &[(&str, &[&str])] =
     &[("ruff", &["--cache-dir", "--color", "--config"])];
 pub(crate) const READ_ONLY_LOOKUP_COMMANDS: &[&str] = &[
-    "cat", "date", "egrep", "fd", "fgrep", "find", "grep", "head", "ls", "pwd", "rg", "sed", "tail",
+    "basename", "cat", "date", "dirname", "egrep", "fd", "fgrep", "find", "grep", "head", "ls",
+    "pwd", "readlink", "realpath", "rg", "sed", "tail",
 ];
 pub(crate) const READ_ONLY_LOOKUP_FILTERS: &[&str] =
     &["cat", "egrep", "fgrep", "grep", "head", "rg", "sed", "tail"];

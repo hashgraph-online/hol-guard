@@ -65,3 +65,60 @@ fn event_names_match_python() {
         );
     }
 }
+
+#[test]
+fn approval_aliases_never_reach_the_hook_response() {
+    let response = r#"{"policy_action": "review",
+      "reason_code": "native_pre_tool_review",
+      "reason": "Open HOL Guard: https://example.test/a?sig=x.",
+      "approval_url": "https://example.test/a",
+      "approval_request_id": "req-native-codex-bridge",
+      "primary_approval_url": "https://example.test/a",
+      "guardApprovalUrl": "https://example.test/a",
+      "approval_requests": [{"request_id": "req-native-codex-bridge"}],
+      "guard_transition_observation": {"probe_id": "p-1"},
+      "hookSpecificOutput": {"hookEventName": "PreToolUse",
+        "permissionDecision": "deny",
+        "permissionDecisionReason": "Open HOL Guard: https://example.test/a?sig=x."}}"#;
+    let mut rendered = String::new();
+    dumps(
+        &codex_hook_response(&entries(response), PRE_TOOL_USE),
+        true,
+        false,
+        &mut rendered,
+    );
+    for alias in [
+        "approval_url",
+        "approval_request_id",
+        "primary_approval_url",
+        "guardApprovalUrl",
+        "approval_requests",
+        "policy_action",
+        "reason_code",
+        "guard_transition_observation",
+    ] {
+        assert!(!rendered.contains(alias), "{alias} leaked: {rendered}");
+    }
+    assert!(rendered.contains("permissionDecisionReason"), "{rendered}");
+}
+
+#[test]
+fn a_policy_deny_overrides_an_updated_input_allow() {
+    // A contained-sink rewrite answers `allow` with `updatedInput`. A policy
+    // deny must still win, and the rewritten input must not reach the hook.
+    let response = r#"{"policy_action": "deny",
+      "hookSpecificOutput": {"hookEventName": "PreToolUse",
+        "permissionDecision": "allow",
+        "updatedInput": {"command": "true"}}}"#;
+    let mut rendered = String::new();
+    dumps(
+        &codex_hook_response(&entries(response), PRE_TOOL_USE),
+        true,
+        false,
+        &mut rendered,
+    );
+    let shaped: Value = serde_json::from_str(&rendered).unwrap();
+    let output = &shaped["hookSpecificOutput"];
+    assert_eq!(output["permissionDecision"], "deny", "{rendered}");
+    assert!(output.get("updatedInput").is_none(), "{rendered}");
+}

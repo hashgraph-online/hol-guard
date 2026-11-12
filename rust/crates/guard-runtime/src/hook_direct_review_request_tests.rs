@@ -44,6 +44,7 @@ fn input<'a>(vector: &'a Value, environment: &'a BTreeMap<String, String>) -> Re
         approval_center_url: text(vector, "approval_center_url"),
         review_binding: vector["review_binding"].as_str(),
         exact: exact(vector),
+        hint: None,
     }
 }
 
@@ -103,8 +104,40 @@ fn request_matches_the_daemon() {
         if vector["hint_candidate"].as_bool() == Some(true) {
             assert_eq!(request, None, "{name}");
         } else {
-            assert_eq!(request.as_ref(), Some(&vector["request"]), "{name}");
+            let mut expected = vector["request"].clone();
+            stamp_guard_version(&mut expected);
+            assert_eq!(request.as_ref(), Some(&expected), "{name}");
         }
+    }
+}
+
+const VERSION_FIELDS: [&str; 3] = [
+    "guard_version",
+    "first_seen_guard_version",
+    "last_seen_guard_version",
+];
+
+/// The recorded daemon left the version unset; the resident stamps its own.
+fn stamp_guard_version(request: &mut Value) {
+    for key in VERSION_FIELDS {
+        assert_eq!(request[key], Value::Null, "{key}");
+        request[key] = Value::String(crate::PACKAGE_VERSION.to_owned());
+    }
+}
+
+#[test]
+fn a_queued_review_records_the_guard_version_that_queued_it() {
+    let vector = vectors()
+        .into_iter()
+        .find(|vector| vector["hint_candidate"].as_bool() != Some(true))
+        .expect("a queued vector");
+    let environment = environment(&vector);
+    let input = input(&vector, &environment);
+    let result = vector["result"].as_object().expect("result");
+    let receipt = Some(&vector["receipt"]).filter(|receipt| !receipt.is_null());
+    let request = finish(&input, result, receipt, vector["envelope"].clone()).expect("request");
+    for key in VERSION_FIELDS {
+        assert_eq!(request[key], crate::PACKAGE_VERSION, "{key}");
     }
 }
 
@@ -247,6 +280,23 @@ fn false_and_float_zero_uncertainty_are_hint_candidates() {
         });
         let result = result.as_object().expect("result");
         assert_eq!(allow_hint_candidate(payload, result), Some(true));
+    }
+}
+
+#[test]
+fn the_working_directory_cursor_sends_is_a_hint_candidate() {
+    // Cursor copies the hook's cwd into every shell tool input it forwards,
+    // so rejecting that key left Cursor reviews with no Extension to name.
+    for key in ["working_directory", "workingDirectory"] {
+        let payload = json!({"tool_name": "Bash", "tool_input": {"command": "ls", key: "/w"}});
+        let payload = payload.as_object().expect("payload");
+        let result = json!({
+            "minimum_action": "review",
+            "reason_code": "native_command_review_required",
+            "command_extensions": {"binding": {"uncertainty_count": 0, "observations_digest": "d"}},
+        });
+        let result = result.as_object().expect("result");
+        assert_eq!(allow_hint_candidate(payload, result), Some(true), "{key}");
     }
 }
 

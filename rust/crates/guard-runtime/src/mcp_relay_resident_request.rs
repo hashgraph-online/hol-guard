@@ -180,10 +180,7 @@ pub(super) fn decide_request(
     let name = params
         .get("name")
         .and_then(Value::as_str)
-        .filter(|name| !name.is_empty() && name.is_ascii())?;
-    if delegated_tool(name) {
-        return None;
-    }
+        .filter(|name| crate::mcp_relay_servers::sendable_name(name))?;
     let arguments = arguments(params.get("arguments"), order)?;
     let expected = catalog.snapshot();
     let catalog_fingerprint = expected.fingerprint.clone()?;
@@ -209,7 +206,7 @@ pub(super) fn decide_request(
         "tool_catalog_fingerprint".to_owned(),
         Value::String(catalog_fingerprint),
     );
-    let request = json!({
+    let mut request = json!({
         "guard_home": facts.guard_home,
         "workspace": facts.workspace,
         "hash_workspace": facts.hash_workspace,
@@ -235,6 +232,13 @@ pub(super) fn decide_request(
         "params": params,
         "inline": inline,
     });
+    if provider_catalog_tool(name) {
+        // Only a Composio call names the field, so every other request still
+        // reads the same to a resident that predates it.
+        request
+            .as_object_mut()?
+            .insert("resident_provider_catalog".to_owned(), Value::Bool(true));
+    }
     Some((request, expected))
 }
 
@@ -288,10 +292,10 @@ pub(super) fn process_environment() -> Option<Map<String, Value>> {
         .collect()
 }
 
-/// Tools the proxy routes through a Composio provider lookup, which the
-/// resident does not answer. Every other call reaches the resident, which
-/// defers one the proxy's package parser finds an intent in.
-pub(super) fn delegated_tool(name: &str) -> bool {
+/// Tools whose identity binds the provider catalog hash, which the relay
+/// leaves to the resident: it reads the hash from the store the call is
+/// decided against, as the proxy did (`read_mcp_provider_authority_hash`).
+pub(super) fn provider_catalog_tool(name: &str) -> bool {
     crate::mcp_relay_servers::composio_tool(name)
 }
 

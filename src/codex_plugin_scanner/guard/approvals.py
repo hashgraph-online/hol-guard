@@ -11,11 +11,11 @@ import time
 import uuid
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, replace
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from functools import wraps
 from pathlib import Path
-from typing import ParamSpec, TypeVar, cast
-from urllib.parse import ParseResult, parse_qsl, urlencode, urlparse, urlunparse
+from typing import Any, ParamSpec, TypeGuard, TypeVar, cast
+from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
 
 from ..version import __version__
 from .action_lattice import normalize_guard_action_result
@@ -23,29 +23,24 @@ from .adapters import get_adapter
 from .adapters.base import HarnessContext
 from .approval_gate import ApprovalGateGrant, ApprovalGateInput, require_approval_decision
 from .approval_once_eligibility import requires_local_once_approval
-from .approval_persist_select_support import resolve_request_persistence_selection
 from .approval_resolution import require_resolvable_approval_request
+from .approval_scope_selection import resolve_request_scope_selection
 from .approval_scope_support import (
     RETRY_CANNOT_REUSE_APPROVAL,
     apply_scope_surfaces,
     package_request_portable_workspace_scope,
-    request_scope_observation,
-    resolve_request_scope_selection,
     resolve_request_workspace_scope,
     scope_payload_for_request,
 )
 from .cli.connect_flow import (
-    connect_retry_refresh_race_from_reason,
     connect_retry_refresh_race_from_state,
     connect_retry_required_from_state,
-    resolve_guard_cloud_repair_detail,
     resolve_guard_cloud_state,
 )
 from .config import load_guard_config, maybe_auto_revert_watch
 from .consumer.projection import wire_artifact
 from .continuation_payload import parse_aware_timestamp
 from .continuation_runtime import continuation_offer_facts
-from .daemon.manager import load_guard_daemon_auth_token
 from .desktop_notifications import (
     DesktopApprovalNotification,
     notify_pending_approval_once,
@@ -72,6 +67,9 @@ from .native_approval_resolution import (
 )
 from .native_approval_scope import UNAVAILABLE as APPROVAL_SCOPE_UNAVAILABLE
 from .native_approval_scope import ApprovalScopeUnavailableError
+from .native_daemon_manage import load_guard_daemon_auth_token
+from .native_package_workspace_scope import NativePackageWorkspaceScopeError
+from .native_protection_health import NativeProtectionHealthError
 from .package_execution_context import package_execution_context_from_scanner_evidence
 from .protection_capabilities import protection_capability_payloads
 from .risk import artifact_risk_profile
@@ -97,6 +95,27 @@ from .trusted_local_tools import (
 from .value_coercion import coerce_non_negative_int
 
 _LOGGER = logging.getLogger(__name__)
+_EVENT_SUMMARY_FIELDS = ("status", "sync_skipped", "sync_reason", "next_retry_after")
+_GUARD_URL_FIELDS = ("dashboard_url", "inbox_url", "fleet_url", "connect_url")
+_CLOUD_STATUS_UNAVAILABLE = "HOL Guard could not load the Guard Cloud status from its native runtime."
+_HEADLINE_UNAVAILABLE = {
+    "headline_state": "degraded",
+    "headline_label": "Degraded",
+    "headline_detail": "HOL Guard could not load the protection headline from its native runtime.",
+}
+# The two headlines that need no protection report keep their copy when the
+# native runtime is out, so an offline runtime or a waiting decision is never
+# hidden behind the degraded fallback.
+_HEADLINE_SETUP = {
+    "headline_state": "setup",
+    "headline_label": "Setup required",
+    "headline_detail": "The local Guard runtime is offline. Start the daemon or rerun hol-guard bootstrap.",
+}
+_HEADLINE_NEEDS_DECISION = {
+    "headline_state": "needs_decision",
+    "headline_label": "Decision needed",
+    "headline_detail": "One or more actions are waiting for a decision in the current review queue.",
+}
 # Artifact metadata the resident reads for a queued request.
 _QUEUE_METADATA_KEYS = ("raw_command_text", "command_text", "command_rule_matches", "extension_allow_hint")
 
@@ -139,27 +158,32 @@ class ApprovalRequestAlreadyResolvedError(ValueError):
     """Raised when an approval request was already resolved."""
 
 
-def build_approval_request_url(approval_center_url: str, request_id: str) -> str:
-    """Build the canonical local dashboard deep link for one approval request."""
-
-    return f"{approval_center_url.rstrip('/')}/requests/{request_id.strip()}"
+_LINK_FIELDS = ("request_id", "artifact_id", "approval_url")
 
 
-def _normalize_harness_slug(harness: str | None) -> str | None:
-    if not isinstance(harness, str):
+def _link_item(item: object) -> dict[str, str] | None:
+    if not isinstance(item, Mapping):
         return None
-    normalized = harness.strip().lower()
-    if normalized in {"claude", "claude-code"}:
-        return "claude-code"
-    return normalized or None
+    fields = {key: value for key in _LINK_FIELDS if isinstance(value := item.get(key), str)}
+    return {**fields, "harness": str(item.get("harness") or "")}
 
 
-def _queued_request_dicts(queued: Sequence[object]) -> list[dict[str, object]]:
-    items: list[dict[str, object]] = []
-    for item in queued:
-        if isinstance(item, Mapping):
-            items.append(dict(item))
-    return items
+def _text(value: object) -> str | None:
+    return value if isinstance(value, str) else None
+
+
+def _approval_link(mode: str, queued: Sequence[object] | None, **fields: object) -> dict[str, object]:
+    """Ask the native runtime which queued request and review link a block binds to.
+
+    The link is display only, so an unavailable runtime yields no link.
+    """
+    from .native_runner_authority import NativeRunnerAuthorityError, native_runner_authority
+
+    items = None if queued is None else [_link_item(item) for item in queued]
+    try:
+        return native_runner_authority("approval_link", {"mode": mode, "queued": items, **fields})
+    except NativeRunnerAuthorityError:
+        return {}
 
 
 def primary_approval_request(
@@ -171,35 +195,10 @@ def primary_approval_request(
 ) -> dict[str, object] | None:
     """Return the approval request created for this blocked action."""
 
-    items = _queued_request_dicts(queued)
-    if not items:
-        return None
-
-    bound_request_id = _string_or_none(request_id)
-    if bound_request_id is not None:
-        for item in items:
-            if _string_or_none(item.get("request_id")) == bound_request_id:
-                return item
-        return None
-
-    bound_artifact_id = _string_or_none(artifact_id)
-    if bound_artifact_id is not None:
-        for item in reversed(items):
-            if _string_or_none(item.get("artifact_id")) == bound_artifact_id:
-                return item
-        return None
-
-    if len(items) == 1:
-        return items[0]
-
-    normalized_harness = _normalize_harness_slug(harness)
-    if normalized_harness is not None:
-        for item in reversed(items):
-            item_harness = _normalize_harness_slug(str(item.get("harness") or ""))
-            if item_harness == normalized_harness:
-                return item
-
-    return None
+    fields = {"harness": _text(harness), "request_id": _text(request_id), "artifact_id": _text(artifact_id)}
+    index = _approval_link("primary", queued, **fields).get("index")
+    item = queued[index] if isinstance(index, int) and 0 <= index < len(queued) else None
+    return dict(item) if isinstance(item, Mapping) else None
 
 
 def primary_approval_url(
@@ -210,66 +209,37 @@ def primary_approval_url(
     request_id: str | None = None,
     artifact_id: str | None = None,
 ) -> str | None:
-    request = primary_approval_request(
-        queued,
-        harness=harness,
-        request_id=request_id,
-        artifact_id=artifact_id,
-    )
-    if request is None:
-        return None
-    approval_url = request.get("approval_url")
-    if isinstance(approval_url, str) and approval_url.strip():
-        return canonical_local_approval_url(
-            approval_url,
-            approval_center_url=approval_center_url,
-        )
-    resolved_request_id = request.get("request_id")
-    if isinstance(resolved_request_id, str) and resolved_request_id.strip() and isinstance(approval_center_url, str):
-        center = approval_center_url.strip()
-        if center:
-            return build_approval_request_url(center, resolved_request_id.strip())
-    return None
+    fields = {"harness": _text(harness), "request_id": _text(request_id), "artifact_id": _text(artifact_id)}
+    return _text(_approval_link("primary", queued, approval_center_url=_text(approval_center_url), **fields).get("url"))
 
 
-def canonical_local_approval_url(approval_url: str, *, approval_center_url: str | None) -> str:
-    """Rewrite stale loopback approval links to the active approval center."""
-
-    approval_url = approval_url.strip()
-    try:
-        parsed_approval = urlparse(approval_url)
-    except ValueError:
-        return approval_url
-    loopback_hosts = {"127.0.0.1", "::1", "localhost"}
-    approval_host = _parsed_url_host(parsed_approval)
-    if parsed_approval.scheme not in {"http", "https"} or approval_host not in loopback_hosts:
-        return approval_url
-    if not isinstance(approval_center_url, str) or not approval_center_url.strip():
-        return approval_url
-    try:
-        parsed_center = urlparse(approval_center_url.strip())
-    except ValueError:
-        return approval_url
-    center_host = _parsed_url_host(parsed_center)
-    if parsed_center.scheme not in {"http", "https"} or center_host not in loopback_hosts:
-        return approval_url
-    return urlunparse(
-        parsed_approval._replace(
-            scheme=parsed_center.scheme,
-            netloc=parsed_center.netloc,
-        )
-    )
+first_approval_url = primary_approval_url
 
 
-def _parsed_url_host(parsed: ParseResult) -> str:
-    host_port = parsed.netloc.rsplit("@", 1)[-1]
-    if host_port.startswith("["):
-        host, _separator, _rest = host_port[1:].partition("]")
-        return host
-    if host_port.count(":") == 1:
-        host, _port = host_port.rsplit(":", 1)
-        return host
-    return host_port
+def primary_approval_browser_url(
+    queued: Sequence[object],
+    *,
+    browser_url: str | None,
+    harness: str | None = None,
+    approval_center_url: str | None = None,
+    request_id: str | None = None,
+) -> str | None:
+    """The link the approval surface opens: the review link, carrying the
+    browser session's token when both point at the same approval center."""
+
+    fields = {"harness": _text(harness), "request_id": _text(request_id), "browser_url": _text(browser_url)}
+    link = _approval_link("primary", queued, approval_center_url=_text(approval_center_url), **fields)
+    return _text(link.get("browser_url", browser_url))
+
+
+def preferred_approval_review_url(payload: Mapping[str, object], *, harness: str) -> str | None:
+    """Return the review link for a hook payload, else its approval center."""
+
+    queued = payload.get("approval_requests")
+    keys = ("approval_center_url", "primary_approval_request_id", "artifact_id", "primary_approval_url")
+    fields = {key: _text(payload.get(key)) for key in keys}
+    link = _approval_link("preferred", queued if isinstance(queued, list) else None, harness=harness, **fields)
+    return _text(link.get("url")) or (fields["approval_center_url"] or "").strip() or None
 
 
 def queue_blocked_approvals(
@@ -394,7 +364,7 @@ class _QueuedNotice:
 def silent_review_center_url(guard_home: Path) -> str:
     """Loopback origin stored on a silent review. Does not start the daemon."""
 
-    from .daemon.manager import guard_daemon_url_for_home
+    from .native_daemon_manage import guard_daemon_url_for_home
 
     return guard_daemon_url_for_home(guard_home)
 
@@ -463,7 +433,9 @@ def apply_approval_resolution(
     from .native_bash_review_preflight import require_verified_bash_review
 
     require_verified_bash_review(store, request, require_execution=action == "allow" or persist_policy is True)
-    resolved_at = now or _now()
+    from .store_base import _canonical_utc_timestamp
+
+    resolved_at = _canonical_utc_timestamp(now or _now())
     temporary_mcp_selection: TemporaryMcpGrantSelection | None = None
     if (mcp_grant_target is None) != (mcp_grant_duration is None):
         raise ValueError("incomplete_temporary_mcp_approval")
@@ -477,6 +449,7 @@ def apply_approval_resolution(
             target=mcp_grant_target,
             duration=mcp_grant_duration,
             now=resolved_at,
+            guard_home=store.guard_home,
         )
     local_tool_selection: LocalToolGrantSelection | None = None
     if (local_tool_grant_target is None) != (local_tool_grant_duration is None):
@@ -491,46 +464,54 @@ def apply_approval_resolution(
             target=local_tool_grant_target,
             duration=local_tool_grant_duration,
             now=resolved_at,
+            harness=str(request["harness"]),
+            reason=reason,
         )
-    contract, exact_token = (
-        request_scope_observation(request, guard_home=store.guard_home)
-        if request.get("artifact_type") == "native_bash_request"
-        else request_scope_observation(request)
-    )
+    # One resident ask settles the whole resolution: the scope the choice
+    # resolves to, whether it may be remembered against the request's exact
+    # action, and whether an allow has any binding left to run under. The
+    # contract and exact-action token it resolved against ride back with it.
     selection = resolve_request_scope_selection(
         request,
         action=action,
         requested_scope=scope,
         contract_version=scope_contract_version,
         contract_digest=scope_contract_digest,
+        persist_policy=persist_policy,
+        ask_persistence=True,
         guard_home=store.guard_home,
     )
+    if selection.contract is None:
+        raise ApprovalScopeUnavailableError
+    contract = selection.contract
+    exact_token = selection.exact_token
     requested_scope = selection.requested_scope
     scope = selection.applied_scope
-    # The resident owns both eligibility gates: whether this resolution may be
-    # remembered against the request's exact action, and whether an allow has
-    # any binding left to run under.
-    persist_policy = resolve_request_persistence_selection(
-        request,
-        action=action,
-        applied_scope=scope,
-        persist_policy=persist_policy,
-        scope_narrowed=selection.warning is not None,
-        contract_version=scope_contract_version,
-        contract_digest=scope_contract_digest,
-        guard_home=store.guard_home,
-    )
+    persist_policy = selection.persist_policy
     request_artifact_id = _string_or_none(request.get("artifact_id"))
     request_artifact_hash = _string_or_none(request.get("artifact_hash"))
     resolved_workspace = resolve_request_workspace_scope(request, workspace) if scope == "workspace" else None
-    portable_package_workspace = package_request_portable_workspace_scope(
-        artifact_id=request_artifact_id,
-        artifact_hash=request_artifact_hash,
-        artifact_type=_string_or_none(request.get("artifact_type")),
-        execution_context=package_execution_context_from_scanner_evidence(request.get("scanner_evidence")),
-    )
-    if scope == "workspace" and portable_package_workspace is not None:
-        resolved_workspace = portable_package_workspace
+    # Only a workspace-scoped decision is stored under a package workspace key,
+    # so only that scope asks the resident for one.  Every other scope ignored
+    # the answer, and asking anyway made each one depend on a resident it never
+    # needed - a shell "allow once" cannot fail because a package key could not
+    # be derived.
+    if scope == "workspace":
+        try:
+            portable_package_workspace = package_request_portable_workspace_scope(
+                artifact_id=request_artifact_id,
+                artifact_hash=request_artifact_hash,
+                artifact_type=_string_or_none(request.get("artifact_type")),
+                execution_context=package_execution_context_from_scanner_evidence(request.get("scanner_evidence")),
+                guard_home=store.guard_home,
+            )
+        except NativePackageWorkspaceScopeError as error:
+            # Every other resident scope failure here is an unavailable scope, and
+            # the callers catch it as one.  This one is a ``RuntimeError``, so left
+            # alone it would walk past those handlers and out of the CLI.
+            raise ApprovalScopeUnavailableError from error
+        if portable_package_workspace is not None:
+            resolved_workspace = portable_package_workspace
     # The resident owns the decision identity, persistence mode, local-once row
     # and sibling selector; this function only executes the plan against the store.
     from .native_policy_snapshot_constants import NativePolicySnapshotError
@@ -629,8 +610,6 @@ def apply_approval_resolution(
             harness=str(request["harness"]),
             selection=temporary_mcp_selection,
             reason=reason,
-            artifact_id=request_artifact_id or "",
-            artifact_hash=request_artifact_hash or "",
         )
         store.ensure_policy_integrity_ready_for_write(
             harness=temporary_decision.harness,
@@ -639,7 +618,7 @@ def apply_approval_resolution(
         )
         temporary_mcp_result, temporary_mcp_resolved_ids = store.apply_temporary_mcp_grant_resolution(
             request_id=request_id,
-            decisions=[temporary_decision],
+            decision=temporary_decision,
             selection=temporary_mcp_selection,
             reason=reason,
             resolved_at=resolved_at,
@@ -654,11 +633,7 @@ def apply_approval_resolution(
             if isinstance(error, str) and error:
                 raise ValueError(error)
     if local_tool_selection is not None:
-        local_tool_decision = local_tool_grant_decision(
-            harness=str(request["harness"]),
-            selection=local_tool_selection,
-            reason=reason,
-        )
+        local_tool_decision = local_tool_grant_decision(local_tool_selection)
         store.ensure_policy_integrity_ready_for_write(
             harness=local_tool_decision.harness,
             approval_gate_grant=resolved_gate_grant,
@@ -714,7 +689,7 @@ def apply_approval_resolution(
             retry_cannot_reuse_approval=RETRY_CANNOT_REUSE_APPROVAL in contract.restrictions,
         )
         issue_github_workflow_capability_for_resolution(store, request_id, resolved_at)
-        result.update(scope_payload_for_request(request, contract))
+        result.update(scope_payload_for_request(request, contract, guard_home=store.guard_home))
         result["requested_scope"] = requested_scope
         result["applied_scope"] = scope
         if selection.warning is not None:
@@ -757,7 +732,7 @@ def apply_approval_resolution(
         retry_cannot_reuse_approval=RETRY_CANNOT_REUSE_APPROVAL in contract.restrictions,
     )
     issue_github_workflow_capability_for_resolution(store, request_id, resolved_at)
-    updated.update(scope_payload_for_request(request, contract))
+    updated.update(scope_payload_for_request(request, contract, guard_home=store.guard_home))
     apply_scope_surfaces(updated)
     updated["requested_scope"] = requested_scope
     updated["applied_scope"] = scope
@@ -775,8 +750,8 @@ def _temporary_mcp_grant_result(selection: TemporaryMcpGrantSelection) -> dict[s
         "target": selection.target,
         "duration": selection.duration,
         "expires_at": selection.expires_at,
-        "server_name": selection.eligibility.server_name,
-        "category": selection.eligibility.category,
+        "server_name": selection.server_name,
+        "category": selection.category,
     }
 
 
@@ -785,8 +760,8 @@ def _local_tool_grant_result(selection: LocalToolGrantSelection) -> dict[str, ob
         "target": selection.target,
         "duration": selection.duration,
         "expires_at": selection.expires_at,
-        "tool_name": selection.eligibility.tool_name,
-        "capability": selection.eligibility.capability,
+        "tool_name": selection.tool_name,
+        "capability": selection.capability,
     }
 
 
@@ -1043,63 +1018,6 @@ def approval_center_hint(
     )
 
 
-def first_approval_url(
-    queued: Sequence[object],
-    *,
-    harness: str | None = None,
-    approval_center_url: str | None = None,
-    request_id: str | None = None,
-    artifact_id: str | None = None,
-) -> str | None:
-    return primary_approval_url(
-        queued,
-        harness=harness,
-        approval_center_url=approval_center_url,
-        request_id=request_id,
-        artifact_id=artifact_id,
-    )
-
-
-def _primary_request_id_candidates(
-    payload: Mapping[str, object],
-    *,
-    request_id: str | None = None,
-) -> list[str]:
-    candidates: list[str] = []
-    seen: set[str] = set()
-
-    def add(value: object) -> None:
-        normalized = _string_or_none(value)
-        if normalized is not None and normalized not in seen:
-            seen.add(normalized)
-            candidates.append(normalized)
-
-    add(request_id)
-    add(payload.get("primary_approval_request_id"))
-    operation_ids = payload.get("approval_request_ids")
-    if isinstance(operation_ids, list):
-        for item in operation_ids:
-            add(item)
-    operation = payload.get("operation")
-    if isinstance(operation, Mapping):
-        nested_ids = operation.get("approval_request_ids")
-        if isinstance(nested_ids, list):
-            for item in nested_ids:
-                add(item)
-    return candidates
-
-
-def _queued_request_ids(queued: Sequence[object]) -> set[str]:
-    request_ids: set[str] = set()
-    for item in queued:
-        if not isinstance(item, Mapping):
-            continue
-        normalized = _string_or_none(item.get("request_id"))
-        if normalized is not None:
-            request_ids.add(normalized)
-    return request_ids
-
-
 def attach_primary_approval_link(
     payload: dict[str, object],
     *,
@@ -1113,49 +1031,25 @@ def attach_primary_approval_link(
     queued = payload.get("approval_requests")
     if not isinstance(queued, list):
         return
-
-    bound_artifact_id = _string_or_none(artifact_id)
-    if bound_artifact_id is None:
-        bound_artifact_id = _string_or_none(payload.get("artifact_id"))
-
-    queued_ids = _queued_request_ids(queued)
-    bound_request_id = next(
-        (
-            candidate
-            for candidate in _primary_request_id_candidates(payload, request_id=request_id)
-            if candidate in queued_ids
-        ),
-        None,
-    )
-
-    primary = None
-    if bound_artifact_id is not None:
-        primary = primary_approval_request(
-            queued,
-            harness=harness,
-            artifact_id=bound_artifact_id,
-        )
-    if primary is None:
-        primary = primary_approval_request(
-            queued,
-            harness=harness,
-            request_id=bound_request_id,
-            artifact_id=bound_artifact_id,
-        )
-    if primary is None:
-        return
-    resolved_request_id = _string_or_none(primary.get("request_id"))
-    if resolved_request_id is not None:
-        payload["primary_approval_request_id"] = resolved_request_id
-    review_url = primary_approval_url(
+    operation = payload.get("operation")
+    operation_ids = operation.get("approval_request_ids") if isinstance(operation, Mapping) else None
+    request_ids = [
+        item for ids in (payload.get("approval_request_ids"), operation_ids) if isinstance(ids, list) for item in ids
+    ]
+    link = _approval_link(
+        "attach",
         queued,
-        harness=harness,
-        approval_center_url=approval_center_url,
-        request_id=resolved_request_id,
-        artifact_id=bound_artifact_id,
+        harness=_text(harness),
+        approval_center_url=_text(approval_center_url),
+        request_id=_text(request_id),
+        artifact_id=_text(artifact_id),
+        payload_artifact_id=_text(payload.get("artifact_id")),
+        primary_approval_request_id=_text(payload.get("primary_approval_request_id")),
+        approval_request_ids=[item for item in request_ids if isinstance(item, str)],
     )
-    if review_url is not None:
-        payload["primary_approval_url"] = review_url
+    for key, field in (("primary_approval_request_id", "request_id"), ("primary_approval_url", "url")):
+        if (value := _text(link.get(field))) is not None:
+            payload[key] = value
 
 
 def _live_hook_verification(
@@ -1277,6 +1171,7 @@ def _build_runtime_snapshot(
         latest_connect_state=latest_connect_state,
         oauth_storage_health=oauth_storage_health,
     )
+    proof_status = cloud_context.pop("proof_status")
     trust_status = store.get_cached_policy_trust_status()
     managed_installs = store.list_managed_installs()
     health_managed_installs = _canonical_managed_installs_for_health(managed_installs)
@@ -1293,18 +1188,30 @@ def _build_runtime_snapshot(
             health_runtime_state["approval_center_url"] = approval_center_url
     if health_runtime_state is not None and containment_health is not None:
         health_runtime_state["containment_health"] = containment_health
-    protection_health = build_runtime_protection_health(
-        store=store,
-        runtime_state=health_runtime_state,
-        managed_installs=health_managed_installs,
-        hook_verification=hook_verification,
-        trust_status=trust_status,
-        now=datetime.fromisoformat(snapshot_now.replace("Z", "+00:00")),
-    )
-    headline_state = _resolve_runtime_headline_state(
+    try:
+        protection_health: dict[str, object] | None = build_runtime_protection_health(
+            store=store,
+            guard_home=store.guard_home,
+            runtime_state=health_runtime_state,
+            managed_installs=health_managed_installs,
+            hook_verification=hook_verification,
+            trust_status=trust_status,
+            now=datetime.fromisoformat(snapshot_now.replace("Z", "+00:00")),
+        )
+    except NativeProtectionHealthError as error:
+        # Only the native runtime says whether this machine is protected. With
+        # it unreachable there is no report to show and no state to claim, so
+        # the snapshot carries neither and the headline falls to degraded. The
+        # reason code is the only thing that tells a missing runtime apart from
+        # one that answered something unusable, and snapshots are polled, so it
+        # goes to the log at debug.
+        _LOGGER.debug("protection health report unavailable: %s", error)
+        protection_health = None
+    headline = _runtime_headline(
+        store,
         pending_count=pending_count,
-        runtime_state=health_runtime_state,
-        protection_state=str(protection_health["state"]),
+        runtime_state_present=health_runtime_state is not None,
+        protection_state=str(protection_health["state"]) if protection_health is not None else "",
     )
     return {
         "generated_at": snapshot_now,
@@ -1313,7 +1220,7 @@ def _build_runtime_snapshot(
         "oauth_storage_health": oauth_storage_health,
         "device": _build_runtime_device_context(store),
         "latest_connect_state": latest_connect_state,
-        "proof_status": _build_runtime_proof_status(latest_connect_state),
+        "proof_status": proof_status,
         "pending_count": pending_count,
         "queue_summary": {
             "active_request_id": active_request_id if active_is_pending else None,
@@ -1323,9 +1230,7 @@ def _build_runtime_snapshot(
         },
         "next_request_id": next_request_id,
         "receipt_count": store.count_receipts(),
-        "headline_state": headline_state,
-        "headline_label": _runtime_headline_label(headline_state),
-        "headline_detail": _runtime_headline_detail(headline_state),
+        **headline,
         "thread_count": threading.active_count(),
         "items": pending_requests,
         "latest_receipts": latest_receipts,
@@ -1374,6 +1279,7 @@ def wait_for_approval_requests(
     request_ids: list[str],
     timeout_seconds: int,
     poll_interval: float = 0.01,
+    stop_on_missing: bool = False,
 ) -> dict[str, object]:
     if not request_ids:
         return {
@@ -1385,6 +1291,10 @@ def wait_for_approval_requests(
     deadline = time.monotonic() + max(timeout_seconds, 0)
     while True:
         items = [store.get_approval_request(request_id) for request_id in request_ids]
+        if stop_on_missing:
+            missing = [request_id for request_id, item in zip(request_ids, items, strict=True) if item is None]
+            if missing:
+                return {"resolved": False, "missing_request_ids": missing, "items": []}
         resolved_items = [item for item in items if isinstance(item, dict) and item.get("status") == "resolved"]
         pending_ids = [
             request_id
@@ -1478,7 +1388,6 @@ def _build_runtime_cloud_context(
     policy_defaults = policy_bundle.get("policyDefaults")
     remote_policy = policy_defaults if isinstance(policy_defaults, dict) else {}
     policy_bundle_last_error = _sync_payload_dict(store, "policy_bundle_last_error")
-    cloud_policy_last_ack_at = _cloud_policy_last_ack_at(store, policy_bundle)
     remote_payload_active = any((sync_summary, remote_policy, alert_preferences))
     cloud_state = resolve_guard_cloud_state(
         sync_configured=cloud_profile is not None,
@@ -1487,15 +1396,19 @@ def _build_runtime_cloud_context(
         oauth_repair_required=oauth_repair_required,
         connect_retry_required=connect_retry_required,
     )
-    dashboard_url, inbox_url, fleet_url, connect_url = _resolve_guard_urls(sync_url)
-    sync_health = _build_cloud_sync_health(
+    cloud_status = _runtime_cloud_status(
         store,
-        cloud_profile is not None,
-        cloud_state,
+        latest_connect_state,
+        cloud_state=cloud_state,
+        sync_configured=cloud_profile is not None,
         oauth_repair_required=oauth_repair_required,
         connect_retry_required=connect_retry_required,
         connect_retry_refresh_race=connect_retry_refresh_race,
+        shared_proof_recorded=bool(sync_summary) or remote_payload_active,
+        policy_ack=_policy_ack_facts(store, policy_bundle),
+        sync_url=sync_url if isinstance(sync_url, str) else None,
     )
+    guard_urls = {key: cloud_status[key] for key in _GUARD_URL_FIELDS}
     oauth_credentials = store.get_oauth_local_credentials(allow_primary=True)
     cloud_user_profile: dict[str, str] | None = None
     cloud_plan_id: str | None = None
@@ -1512,46 +1425,140 @@ def _build_runtime_cloud_context(
         "cloud_user_profile": cloud_user_profile,
         "cloud_workspace_id": cloud_workspace_id,
         "cloud_state": cloud_state,
-        "cloud_state_label": _runtime_cloud_state_label(cloud_state),
-        "cloud_state_detail": _runtime_cloud_state_detail(
-            cloud_state,
-            oauth_repair_required=oauth_repair_required,
-            connect_retry_required=connect_retry_required,
-            connect_retry_refresh_race=connect_retry_refresh_race,
-            shared_proof_recorded=bool(sync_summary) or remote_payload_active,
-        ),
-        "cloud_sync_health": sync_health,
+        "cloud_state_label": cloud_status["cloud_state_label"],
+        "cloud_state_detail": cloud_status["cloud_state_detail"],
+        "cloud_sync_health": cloud_status["cloud_sync_health"],
         "cloud_pairing_state": {
             "state": cloud_state,
-            "label": _runtime_cloud_state_label(cloud_state),
-            "detail": _runtime_cloud_state_detail(
-                cloud_state,
-                oauth_repair_required=oauth_repair_required,
-                connect_retry_required=connect_retry_required,
-                connect_retry_refresh_race=connect_retry_refresh_race,
-                shared_proof_recorded=bool(sync_summary) or remote_payload_active,
-            ),
+            "label": cloud_status["cloud_state_label"],
+            "detail": cloud_status["cloud_state_detail"],
             "sync_configured": cloud_profile is not None,
             "cloud_user_profile": cloud_user_profile,
             "workspace_id": cloud_workspace_id,
             "plan_id": cloud_plan_id,
-            "dashboard_url": dashboard_url,
-            "inbox_url": inbox_url,
-            "fleet_url": fleet_url,
-            "connect_url": connect_url,
+            **guard_urls,
         },
-        "dashboard_url": dashboard_url,
-        "inbox_url": inbox_url,
-        "fleet_url": fleet_url,
-        "connect_url": connect_url,
+        **guard_urls,
         "cloud_policy_bundle_hash": _optional_string(policy_bundle.get("bundleHash")),
         "cloud_policy_bundle_version": _optional_string(policy_bundle.get("bundleVersion")),
         "cloud_policy_rollout_state": _optional_string(policy_bundle.get("rolloutState")),
         "cloud_policy_sync_error": cached_policy_bundle_error
         or _optional_string(policy_bundle_last_error.get("reason")),
-        "cloud_policy_last_ack_at": cloud_policy_last_ack_at,
-        "team_policy_active": False,
+        "cloud_policy_last_ack_at": cloud_status["cloud_policy_last_ack_at"],
+        "proof_status": cloud_status["proof_status"],
     }
+
+
+def _runtime_cloud_status(
+    store: GuardStore,
+    latest_connect_state: dict[str, object] | None,
+    *,
+    cloud_state: str,
+    sync_configured: bool,
+    oauth_repair_required: bool,
+    connect_retry_required: bool,
+    connect_retry_refresh_race: bool,
+    shared_proof_recorded: bool,
+    policy_ack: dict[str, object],
+    sync_url: str | None,
+) -> dict[str, Any]:
+    """Ask the native runtime for the snapshot's Guard Cloud status copy.
+
+    The copy is display only, so an unavailable runtime reports the status as
+    unavailable rather than guessing one.
+    """
+    from .native_runner_authority import NativeRunnerAuthorityError, native_runner_authority
+
+    pending_events = store.count_guard_events_v1(uploaded=False)
+    event_summary = _sync_payload_dict(store, "guard_events_v1_summary")
+    proof = _connect_state_proof(latest_connect_state.get("proof") if latest_connect_state is not None else None)
+    reply: object = None
+    try:
+        reply = native_runner_authority(
+            "runtime_cloud_status",
+            {
+                "connect_state": latest_connect_state,
+                "cloud_state": cloud_state,
+                "sync_configured": sync_configured,
+                "oauth_repair_required": oauth_repair_required,
+                "connect_retry_required": connect_retry_required,
+                "connect_retry_refresh_race": connect_retry_refresh_race,
+                "shared_proof_recorded": shared_proof_recorded,
+                "pending_events": pending_events,
+                "event_summary": {key: event_summary[key] for key in _EVENT_SUMMARY_FIELDS if key in event_summary},
+                "synced_at": [
+                    event_summary.get("synced_at"),
+                    _sync_payload_dict(store, "sync_summary").get("synced_at"),
+                    _sync_payload_dict(store, "runtime_session_summary").get("synced_at"),
+                ],
+                "policy_ack": policy_ack,
+                "sync_url": sync_url,
+            },
+            guard_home=store.guard_home,
+        )
+    except NativeRunnerAuthorityError as error:
+        _LOGGER.debug("runtime cloud status unavailable: %s", error)
+    status: dict[str, Any]
+    if _is_runtime_cloud_status(reply):
+        status = reply
+    else:
+        # `failed` is a state every status surface already shows with its own
+        # label and detail, so the load error stays visible.
+        unavailable = {"state": "failed", "label": "Cloud status unavailable", "detail": _CLOUD_STATUS_UNAVAILABLE}
+        request_id = latest_connect_state.get("request_id") if latest_connect_state is not None else None
+        status = {
+            "proof_status": {**unavailable, "request_id": request_id},
+            "cloud_state_label": unavailable["label"],
+            "cloud_state_detail": _CLOUD_STATUS_UNAVAILABLE,
+            "cloud_sync_health": {
+                **unavailable,
+                "pending_events": pending_events,
+                "last_synced_at": None,
+                "next_retry_after": None,
+            },
+            "cloud_policy_last_ack_at": None,
+            **_fallback_guard_urls(sync_url),
+        }
+    status["proof_status"] = {**status["proof_status"], **proof}
+    return status
+
+
+def _fallback_guard_urls(sync_url: str | None) -> dict[str, str]:
+    """The Guard page links on the configured sync origin when the runtime is out.
+
+    The published links are the fallback only without a usable sync URL, so a
+    machine paired with another Guard Cloud never links to the public one.
+    """
+
+    parsed = urlparse(sync_url or "")
+    if not parsed.scheme or not parsed.netloc:
+        return {
+            "dashboard_url": GUARD_DASHBOARD_URL,
+            "inbox_url": GUARD_INBOX_URL,
+            "fleet_url": GUARD_FLEET_URL,
+            "connect_url": GUARD_CONNECT_URL,
+        }
+    dashboard_url = f"{parsed.scheme}://{parsed.netloc}/guard"
+    return {
+        "dashboard_url": dashboard_url,
+        "inbox_url": f"{dashboard_url}/inbox",
+        "fleet_url": f"{dashboard_url}/protect",
+        "connect_url": f"{dashboard_url}/connect",
+    }
+
+
+def _is_runtime_cloud_status(status: object) -> TypeGuard[dict[str, Any]]:
+    """Whether a native reply carries every field the snapshot reads."""
+
+    return (
+        isinstance(status, dict)
+        and isinstance(status.get("proof_status"), dict)
+        and isinstance(status.get("cloud_state_label"), str)
+        and isinstance(status.get("cloud_state_detail"), str)
+        and isinstance(status.get("cloud_sync_health"), dict)
+        and isinstance(status.get("cloud_policy_last_ack_at", 0), (str, type(None)))
+        and all(isinstance(status.get(key), str) for key in _GUARD_URL_FIELDS)
+    )
 
 
 def _sync_payload_dict(store: GuardStore, key: str) -> dict[str, object]:
@@ -1559,27 +1566,19 @@ def _sync_payload_dict(store: GuardStore, key: str) -> dict[str, object]:
     return payload if isinstance(payload, dict) else {}
 
 
-def _cloud_policy_last_ack_at(store: GuardStore, policy_bundle: dict[str, object]) -> str | None:
-    acknowledgement = _sync_payload_dict(store, "policy_bundle_ack")
-    bundle_hash = _optional_string(policy_bundle.get("bundleHash"))
-    bundle_version = _optional_string(policy_bundle.get("bundleVersion"))
-    if bundle_hash is None or bundle_version is None:
-        return None
+def _policy_ack_facts(store: GuardStore, policy_bundle: dict[str, object]) -> dict[str, object]:
+    """The facts the native runtime checks the policy bundle acknowledgement against."""
+
     try:
-        device_id = str(store.get_device_metadata()["installation_id"])
+        device_id: str | None = str(store.get_device_metadata()["installation_id"])
     except (KeyError, OSError, RuntimeError, TypeError, ValueError):
-        return None
-    applied_at = _optional_string(acknowledgement.get("appliedAt"))
-    if (
-        acknowledgement.get("bundleHash") != bundle_hash
-        or acknowledgement.get("bundleVersion") != bundle_version
-        or acknowledgement.get("deviceId") != device_id
-        or acknowledgement.get("status") != "synced"
-        or applied_at is None
-        or _parse_timestamp(applied_at) is None
-    ):
-        return None
-    return applied_at
+        device_id = None
+    return {
+        "acknowledgement": _sync_payload_dict(store, "policy_bundle_ack"),
+        "bundle_hash": _optional_string(policy_bundle.get("bundleHash")),
+        "bundle_version": _optional_string(policy_bundle.get("bundleVersion")),
+        "device_id": device_id,
+    }
 
 
 def _build_runtime_device_context(store: GuardStore) -> dict[str, object]:
@@ -1620,360 +1619,41 @@ def _connect_state_proof(value: object) -> dict[str, object]:
     }
 
 
-def _build_runtime_proof_status(latest_state: dict[str, object] | None) -> dict[str, object]:
-    proof = _connect_state_proof(latest_state.get("proof") if latest_state is not None else None)
-    if latest_state is None:
-        status = "not_connected"
-        return _runtime_proof_status_payload(
-            state=status,
-            label=_runtime_proof_status_label(status),
-            detail=_runtime_proof_status_detail(status),
-            request_id=None,
-            proof=proof,
-        )
-    status = _runtime_proof_status_name(
-        status=_optional_string(latest_state.get("status")),
-        milestone=_optional_string(latest_state.get("milestone")),
-        reason=_optional_string(latest_state.get("reason")),
-        proof=proof,
-    )
-    return _runtime_proof_status_payload(
-        state=status,
-        label=_runtime_proof_status_label(status),
-        detail=_runtime_proof_status_detail(status),
-        request_id=_optional_string(latest_state.get("request_id")),
-        proof=proof,
-    )
-
-
-def _runtime_proof_status_payload(
-    *,
-    state: str,
-    label: str,
-    detail: str,
-    request_id: str | None,
-    proof: Mapping[str, object],
-) -> dict[str, object]:
-    return {
-        "state": state,
-        "label": label,
-        "detail": detail,
-        "request_id": request_id,
-        **proof,
-    }
-
-
-def _runtime_proof_status_name(
-    *,
-    status: str | None,
-    milestone: str | None,
-    reason: str | None,
-    proof: Mapping[str, object],
-) -> str:
-    if status == "retry_required" or milestone == "first_sync_failed":
-        if connect_retry_refresh_race_from_reason(reason):
-            return "stalled"
-        return "failed"
-    if milestone == "first_sync_pending":
-        return "pending"
-    if milestone == "expired" or status == "expired":
-        return "expired"
-    if milestone == "waiting_for_browser" or status == "waiting":
-        return "waiting"
-    if milestone == "first_sync_succeeded" or proof.get("first_synced_at"):
-        return "synced"
-    if milestone == "sync_not_available":
-        return "sync_unavailable"
-    return "not_connected"
-
-
-def _runtime_proof_status_label(state: str) -> str:
-    labels = {
-        "synced": "First proof synced",
-        "sync_unavailable": "Local connected, cloud sync gated",
-        "failed": "First proof needs retry",
-        "stalled": "First proof stalled",
-        "pending": "First proof pending",
-        "expired": "Sign-in expired",
-        "waiting": "Waiting for browser sign-in",
-        "not_connected": "Cloud proof not started",
-    }
-    return labels.get(state, "Cloud proof not started")
-
-
-def _runtime_proof_status_detail(state: str) -> str:
-    details = {
-        "synced": "This device completed its first Guard Cloud proof sync.",
-        "sync_unavailable": "Local Guard is connected. Shared cloud sync needs a paid Guard plan.",
-        "failed": "Guard Cloud sign-in on this machine needs repair. Run hol-guard connect again.",
-        "stalled": (
-            "Local Guard remains available. The first shared Guard Cloud proof stalled after a refresh-token race. "
-            "Run hol-guard connect once on this machine when you want shared proof restored."
-        ),
-        "pending": (
-            "Browser sign-in finished. Local Guard will retry the first proof sync automatically "
-            "while the daemon is running, or you can run hol-guard sync now."
-        ),
-        "expired": "The sign-in link expired. Run hol-guard connect again.",
-        "waiting": "Open the sign-in link to register this local Guard device.",
-        "not_connected": "Connect Guard Cloud to sync this device proof.",
-    }
-    return details.get(state, "Connect Guard Cloud to sync this device proof.")
-
-
-def _build_cloud_sync_health(
+def _runtime_headline(
     store: GuardStore,
-    sync_configured: bool,
-    cloud_state: str,
-    *,
-    oauth_repair_required: bool = False,
-    connect_retry_required: bool = False,
-    connect_retry_refresh_race: bool = False,
-) -> dict[str, object]:
-    pending_events = store.count_guard_events_v1(uploaded=False)
-    event_summary = _sync_payload_dict(store, "guard_events_v1_summary")
-    sync_summary = _sync_payload_dict(store, "sync_summary")
-    runtime_summary = _sync_payload_dict(store, "runtime_session_summary")
-    last_synced_at = _latest_sync_timestamp(
-        event_summary.get("synced_at"),
-        sync_summary.get("synced_at"),
-        runtime_summary.get("synced_at"),
-    )
-    if oauth_repair_required or connect_retry_required:
-        state = "failed"
-    elif not sync_configured:
-        state = "disabled"
-    elif isinstance(event_summary, dict) and event_summary.get("status") == "failed":
-        state = "failed"
-    elif (
-        isinstance(event_summary, dict)
-        and event_summary.get("sync_skipped") is True
-        and event_summary.get("sync_reason") == "guard_events_endpoint_unavailable"
-    ):
-        state = "degraded"
-    elif last_synced_at is not None and _timestamp_is_stale(last_synced_at):
-        state = "stale"
-    elif pending_events > 0 or cloud_state == "paired_waiting":
-        state = "pending"
-    else:
-        state = "healthy"
-    return {
-        "state": state,
-        "label": _cloud_sync_health_label(state),
-        "detail": _cloud_sync_health_detail(
-            state,
-            pending_events=pending_events,
-            oauth_repair_required=oauth_repair_required,
-            connect_retry_required=connect_retry_required,
-            connect_retry_refresh_race=connect_retry_refresh_race,
-        ),
-        "pending_events": pending_events,
-        "last_synced_at": last_synced_at,
-        "next_retry_after": event_summary.get("next_retry_after") if isinstance(event_summary, dict) else None,
-    }
-
-
-def _latest_sync_timestamp(*values: object) -> str | None:
-    parsed_values: list[tuple[datetime, str]] = []
-    for value in values:
-        if not isinstance(value, str) or not value.strip():
-            continue
-        parsed = _parse_timestamp(value)
-        if parsed is not None:
-            parsed_values.append((parsed, value))
-    if not parsed_values:
-        return None
-    return max(parsed_values, key=lambda item: item[0])[1]
-
-
-def _parse_timestamp(value: str) -> datetime | None:
-    try:
-        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
-    except ValueError:
-        return None
-    if parsed.tzinfo is None:
-        return parsed.replace(tzinfo=timezone.utc)
-    return parsed
-
-
-def _timestamp_is_stale(value: str) -> bool:
-    parsed = _parse_timestamp(value)
-    if parsed is None:
-        return False
-    return datetime.now(timezone.utc) - parsed > timedelta(hours=24)
-
-
-def _cloud_sync_health_label(state: str) -> str:
-    labels = {
-        "healthy": "Cloud sync healthy",
-        "pending": "Cloud sync pending",
-        "failed": "Cloud sync needs attention",
-        "degraded": "Cloud sync degraded",
-        "disabled": "Cloud optional",
-        "stale": "Cloud sync stale",
-    }
-    return labels.get(state, "Cloud sync pending")
-
-
-def _cloud_sync_health_detail(
-    state: str,
-    *,
-    pending_events: int,
-    oauth_repair_required: bool = False,
-    connect_retry_required: bool = False,
-    connect_retry_refresh_race: bool = False,
-) -> str:
-    if state == "healthy":
-        return "Guard Cloud has the latest local proof from this machine."
-    if state == "failed":
-        if connect_retry_refresh_race:
-            return (
-                "Local Guard remains available. The first shared Guard Cloud proof stalled after a refresh-token race. "
-                "Run hol-guard connect once to mint a fresh Cloud refresh token."
-            )
-        if oauth_repair_required or connect_retry_required:
-            return (
-                "Guard Cloud authorization on this machine needs repair. Run hol-guard connect again to restore sync."
-            )
-        return (
-            "Guard Cloud did not accept the last upload. Guard will retry automatically, "
-            "or run hol-guard sync to try again now."
-        )
-    if state == "degraded":
-        return (
-            "Cloud accepted legacy sync, but v1 Guard event ingest is unavailable. "
-            "Review local protection health separately."
-        )
-    if state == "disabled":
-        return "Local Guard is active. Cloud sync is optional and currently off; connect it for shared team proof."
-    if state == "stale":
-        return "Cloud has not seen fresh local proof recently. Keep this runtime open or run sync again."
-    if pending_events == 1:
-        return "One local proof event is queued for the next Cloud sync."
-    if pending_events > 1:
-        return f"{pending_events} local proof events are queued for the next Cloud sync."
-    return "Waiting for the first shared Cloud proof from this machine."
-
-
-def _runtime_cloud_state_label(cloud_state: str) -> str:
-    labels = {
-        "local_only": "Local only",
-        "paired_waiting": "Connected",
-        "paired_active": "Connected",
-    }
-    return labels.get(cloud_state, "Local only")
-
-
-def _runtime_cloud_state_detail(
-    cloud_state: str,
-    *,
-    oauth_repair_required: bool = False,
-    connect_retry_required: bool = False,
-    connect_retry_refresh_race: bool = False,
-    shared_proof_recorded: bool = False,
-) -> str:
-    if oauth_repair_required:
-        return (
-            "Guard Cloud sign-in on this machine is incomplete. "
-            "Run hol-guard connect again to repair local authorization and resume sync."
-        )
-    if connect_retry_refresh_race:
-        return (
-            "Local Guard remains available. "
-            "The first shared Guard Cloud proof stalled after a refresh-token race. "
-            "Run hol-guard connect once when you want shared proof restored."
-        )
-    if connect_retry_required:
-        return resolve_guard_cloud_repair_detail(
-            shared_proof_recorded=shared_proof_recorded,
-            first_sync_message=(
-                "Guard Cloud connection on this machine needs repair before the first shared proof can land. "
-                "Run hol-guard connect again."
-            ),
-            resume_message=(
-                "Guard Cloud connection on this machine needs repair before shared proof can resume. "
-                "Run hol-guard connect again."
-            ),
-        )
-    if cloud_state == "paired_waiting":
-        return (
-            "This machine is connected to Guard Cloud. Local Guard will finish the first shared proof "
-            "automatically while the daemon is running."
-        )
-    if cloud_state == "paired_active":
-        return (
-            "This machine is connected to Guard Cloud. Open Home, Inbox, or Fleet in the portal "
-            "to continue with shared review and proof."
-        )
-    return "Guard is running locally. Guard Cloud is optional; connect it for shared review, sync, and team memory."
-
-
-def _resolve_guard_urls(sync_url: object) -> tuple[str, str, str, str]:
-    if not isinstance(sync_url, str) or not sync_url:
-        return GUARD_DASHBOARD_URL, GUARD_INBOX_URL, GUARD_FLEET_URL, GUARD_CONNECT_URL
-    parsed = urlparse(sync_url)
-    if not parsed.scheme or not parsed.netloc:
-        return GUARD_DASHBOARD_URL, GUARD_INBOX_URL, GUARD_FLEET_URL, GUARD_CONNECT_URL
-    origin = f"{parsed.scheme}://{parsed.netloc}"
-    dashboard_url = f"{origin}/guard"
-    return (
-        dashboard_url,
-        f"{dashboard_url}/inbox",
-        f"{dashboard_url}/protect",
-        f"{dashboard_url}/connect",
-    )
-
-
-def _resolve_runtime_headline_state(
     *,
     pending_count: int,
-    runtime_state: dict[str, object] | None,
+    runtime_state_present: bool,
     protection_state: str,
-) -> str:
-    if runtime_state is None:
-        return "setup"
-    if pending_count > 0:
-        return "needs_decision"
-    if protection_state in {"protected", "partial"}:
-        return protection_state
-    return "degraded"
+) -> dict[str, object]:
+    """Ask the native runtime for the snapshot headline.
 
-
-def _runtime_headline_label(headline_state: str) -> str:
-    labels = {
-        "setup": "Setup required",
-        "protected": "Protected",
-        "partial": "Partial",
-        "degraded": "Degraded",
-        "needs_decision": "Decision needed",
-        "local_only": "Local only",
-        "connected": "Connected",
-    }
-    return labels.get(headline_state, "Local only")
-
-
-def _runtime_headline_detail(headline_state: str) -> str:
-    details = {
-        "setup": "The local Guard runtime is offline. Start the daemon or rerun hol-guard bootstrap.",
-        "protected": "This machine is protected and the local queue is clear.",
-        "partial": "Core protection checks pass, but complete local evidence health cannot be proven.",
-        "degraded": "One or more required protection checks failed or remain unproven.",
-        "needs_decision": "One or more actions are waiting for a decision in the current review queue.",
-        "local_only": "This machine is protected locally and can connect later when shared memory matters.",
-        "connected": "This machine is connected to Guard Cloud. Local Guard is sending the first shared proof now.",
-    }
-    return details.get(headline_state, "Complete local protection cannot be proven.")
-
-
-def is_bulk_allow_once_eligible(request: Mapping[str, object], *, guard_home: Path) -> bool:
-    """Whether a request can be approved once via the bulk approval flow.
-
-    The resident owns the decision; an unavailable resident raises rather than
-    approving.
+    The headline is display only, so an unavailable runtime still reports
+    setup and a waiting decision, and otherwise reports degraded rather than
+    claiming protection.
     """
-    from .native_approval_bulk_eligibility import native_bulk_allow_once_eligibility
+    from .native_runner_authority import NativeRunnerAuthorityError, native_runner_authority
 
-    return native_bulk_allow_once_eligibility([request], guard_home=guard_home)[0]
+    try:
+        reply = native_runner_authority(
+            "runtime_headline",
+            {
+                "pending_count": pending_count,
+                "runtime_state_present": runtime_state_present,
+                "protection_state": protection_state,
+            },
+            guard_home=store.guard_home,
+        )
+    except NativeRunnerAuthorityError as error:
+        _LOGGER.debug("runtime headline unavailable: %s", error)
+        reply = None
+    if isinstance(reply, dict) and all(isinstance(reply.get(key), str) for key in _HEADLINE_UNAVAILABLE):
+        return {key: reply[key] for key in _HEADLINE_UNAVAILABLE}
+    if not runtime_state_present:
+        return dict(_HEADLINE_SETUP)
+    if pending_count > 0:
+        return dict(_HEADLINE_NEEDS_DECISION)
+    return dict(_HEADLINE_UNAVAILABLE)
 
 
 def bulk_allow_read_only_once(
@@ -1984,8 +1664,9 @@ def bulk_allow_read_only_once(
     now: str | None = None,
 ) -> dict[str, object]:
     from .approval_gate import public_config
+    from .store_base import _canonical_utc_timestamp
 
-    resolved_at = now or _now()
+    resolved_at = _canonical_utc_timestamp(now or _now())
     gate = public_config(store.guard_home, now=resolved_at)
     if not gate.enabled or not gate.configured:
         raise ValueError("bulk_approve_gate_required")

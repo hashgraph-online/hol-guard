@@ -1,0 +1,852 @@
+{
+ "classify_endpoint_host": [
+  {
+   "expected": "none",
+   "value": null
+  },
+  {
+   "expected": "none",
+   "value": ""
+  },
+  {
+   "expected": "local_loopback",
+   "value": "https://localhost:3000/api"
+  },
+  {
+   "expected": "local_loopback",
+   "value": "http://127.0.0.1/api"
+  },
+  {
+   "expected": "local_loopback",
+   "value": "http://[::1]/api"
+  },
+  {
+   "expected": "local_loopback",
+   "value": "http://LOCALHOST/api"
+  },
+  {
+   "expected": "local_private",
+   "value": "http://10.0.0.5/api"
+  },
+  {
+   "expected": "local_private",
+   "value": "http://172.16.0.1/api"
+  },
+  {
+   "expected": "local_private",
+   "value": "http://192.168.1.1/api"
+  },
+  {
+   "expected": "remote_public",
+   "value": "http://192.0.0.9/api"
+  },
+  {
+   "expected": "remote_public",
+   "value": "http://192.0.0.10/api"
+  },
+  {
+   "expected": "remote_public",
+   "value": "http://8.8.8.8/api"
+  },
+  {
+   "expected": "local_private",
+   "value": "http://[fd00::1]/api"
+  },
+  {
+   "expected": "local_private",
+   "value": "http://[fe80::1]/api"
+  },
+  {
+   "expected": "local_private",
+   "value": "http://[::ffff:10.0.0.1]/api"
+  },
+  {
+   "expected": "remote_public",
+   "value": "http://[::ffff:8.8.8.8]/api"
+  },
+  {
+   "expected": "remote_public",
+   "value": "http://[2001:4860:4860::8888]/api"
+  },
+  {
+   "expected": "remote_public",
+   "value": "https://example.test/api"
+  },
+  {
+   "expected": "remote_public",
+   "value": "https://[::1/unclosed"
+  },
+  {
+   "expected": "remote_public",
+   "value": "http://127.0.0.01/leading-zero-octet"
+  },
+  {
+   "expected": "remote_public",
+   "value": "not-a-url"
+  },
+  {
+   "expected": "local_private",
+   "value": "http://[fe80::1%25eth0]/zone"
+  },
+  {
+   "expected": "remote_public",
+   "value": "https://user:pass@example.com/mcp?token=value"
+  },
+  {
+   "expected": "local_private",
+   "value": "http://172.20.4.5:8080/mcp"
+  },
+  {
+   "expected": "remote_public",
+   "value": "http://[not-an-ip]/mcp"
+  }
+ ],
+ "python_version": "3.12.12",
+ "redact_headers": [
+  {
+   "expected": [],
+   "names": []
+  },
+  {
+   "expected": [
+    [
+     "content-type",
+     "present"
+    ],
+    [
+     "accept",
+     "present"
+    ]
+   ],
+   "names": [
+    "Content-Type",
+    "Accept"
+   ]
+  },
+  {
+   "expected": [
+    [
+     "authorization",
+     "present_redacted"
+    ],
+    [
+     "x-api-key",
+     "present_redacted"
+    ],
+    [
+     "cookie",
+     "present"
+    ]
+   ],
+   "names": [
+    "Authorization",
+    "X-Api-Key",
+    "Cookie"
+   ]
+  },
+  {
+   "expected": [
+    [
+     "authorization",
+     "present_redacted"
+    ]
+   ],
+   "names": [
+    "Authorization",
+    "authorization"
+   ]
+  },
+  {
+   "expected": [
+    [
+     "x-auth-token",
+     "present_redacted"
+    ],
+    [
+     "x-bearer",
+     "present_redacted"
+    ],
+    [
+     "x-password",
+     "present_redacted"
+    ],
+    [
+     "x-credential",
+     "present_redacted"
+    ],
+    [
+     "x-secret",
+     "present_redacted"
+    ]
+   ],
+   "names": [
+    "X-Auth-Token",
+    "x-bearer",
+    "x-password",
+    "x-credential",
+    "x-secret"
+   ]
+  },
+  {
+   "expected": [
+    [
+     "apixkey",
+     "present"
+    ],
+    [
+     "api-key",
+     "present_redacted"
+    ],
+    [
+     "api_key",
+     "present_redacted"
+    ]
+   ],
+   "names": [
+    "apiXkey",
+    "api-key",
+    "api_key"
+   ]
+  },
+  {
+   "expected": [
+    [
+     "x-credentıal",
+     "present_redacted"
+    ],
+    [
+     "x-tıken",
+     "present"
+    ]
+   ],
+   "names": [
+    "X-Credentıal",
+    "X-Tıken"
+   ]
+  },
+  {
+   "expected": [
+    [
+     "authorization",
+     "present_redacted"
+    ],
+    [
+     "x-trace",
+     "present"
+    ]
+   ],
+   "names": [
+    "Authorization",
+    "X-Trace"
+   ]
+  }
+ ],
+ "redact_url": [
+  {
+   "expected": "https://example.test/path?token=redacted&page=2",
+   "url": "https://example.test/path?token=abc123&page=2"
+  },
+  {
+   "expected": "https://example.test/path?TOKEN=redacted",
+   "url": "https://example.test/path?TOKEN=abc123"
+  },
+  {
+   "expected": "https://example.test/path?api-key=redacted&api_key=redacted&apiXkey=ghi",
+   "url": "https://example.test/path?api-key=abc&api_key=def&apiXkey=ghi"
+  },
+  {
+   "expected": "https://example.test/path?authorization=redacted",
+   "url": "https://example.test/path?authorization=Bearer+abc"
+  },
+  {
+   "expected": "https://example.test/path",
+   "url": "https://user:hunter2@example.test/path"
+  },
+  {
+   "expected": "https://example.test:8443/path?a=1&b=2",
+   "url": "https://example.test:8443/path?a=1;b=2"
+  },
+  {
+   "expected": "https://example.test/path?blank=&novalue=&=orphan",
+   "url": "https://example.test/path?blank=&novalue&=orphan"
+  },
+  {
+   "expected": "https://example.test/path?credent%C4%B1al=redacted",
+   "url": "https://example.test/path?credent%C4%B1al=hunter2"
+  },
+  {
+   "expected": "https://example.test/path?t%C4%B1ken=hunter2",
+   "url": "https://example.test/path?t%C4%B1ken=hunter2"
+  },
+  {
+   "expected": "https://example.test/path?name=a+b%2Bc",
+   "url": "https://example.test/path?name=a%20b%2Bc"
+  },
+  {
+   "expected": "https://example.test/path?name=%C3%A9caf%C3%A9",
+   "url": "https://example.test/path?name=%C3%A9caf%C3%A9"
+  },
+  {
+   "expected": "https://example.test/path?name=%EF%BF%BD%C3%A9",
+   "url": "https://example.test/path?name=%C3é"
+  },
+  {
+   "expected": "https://example.test/path?name=%25zz",
+   "url": "https://example.test/path?name=%zz"
+  },
+  {
+   "expected": "https://example.test/path?name=a+b",
+   "url": "https://example.test/path?name=a+b"
+  },
+  {
+   "expected": "https://example.test/path?secret=redacted",
+   "url": "https://example.test/path?secret=%F0%9F%94%91"
+  },
+  {
+   "expected": "https://[::1]:9000/path?token=redacted",
+   "url": "https://[::1]:9000/path?token=x"
+  },
+  {
+   "expected": "https://example.test/path?token=redacted",
+   "url": "https://example.test:99999/path?token=x"
+  },
+  {
+   "expected": "malformed_url_redacted",
+   "url": "https://[::1/unclosed?token=x"
+  },
+  {
+   "expected": "malformed_url_redacted",
+   "url": "https://exam℀ple.test/path"
+  },
+  {
+   "expected": "ftp://example.test/pub",
+   "url": "ftp://example.test/pub"
+  },
+  {
+   "expected": "unknownscheme://example.test/path?token=redacted",
+   "url": "unknownscheme://example.test/path?token=x"
+  },
+  {
+   "expected": "mailto:person@example.test",
+   "url": "mailto:person@example.test"
+  },
+  {
+   "expected": "/relative/path?token=redacted",
+   "url": "/relative/path?token=x"
+  },
+  {
+   "expected": "//example.test/scheme-relative?token=redacted",
+   "url": "//example.test/scheme-relative?token=x"
+  },
+  {
+   "expected": "https://example.test/path#frag?not-a-query",
+   "url": "https://example.test/path#frag?not-a-query"
+  },
+  {
+   "expected": "https://example.test/sp ace?token=redacted",
+   "url": "https://example.test/sp ace?token=x"
+  },
+  {
+   "expected": "https:////double-slash-path?token=redacted",
+   "url": "https:////double-slash-path?token=x"
+  },
+  {
+   "expected": "https:relative-path?token=redacted",
+   "url": "https:relative-path?token=x"
+  },
+  {
+   "expected": "",
+   "url": ""
+  },
+  {
+   "expected": "http://",
+   "url": "http://user:private-value@"
+  },
+  {
+   "expected": "https:///api?token=redacted&mode=fast",
+   "url": "https://user:private-value@/api?token=private-value&mode=fast"
+  },
+  {
+   "expected": "https://example.test:8443/api",
+   "url": "https://user:private-value@example.test:8443/api"
+  },
+  {
+   "expected": "http://[::1]:8080/api",
+   "url": "http://user:private-value@[::1]:8080/api"
+  },
+  {
+   "expected": "http://[::1]:8080/api?token=redacted&mode=fast",
+   "url": "http://[::1]:8080/api?token=private-value&mode=fast"
+  },
+  {
+   "expected": "https://example.com/mcp?token=redacted&mode=safe",
+   "url": "https://user:pass@example.com/mcp?token=value&mode=safe"
+  },
+  {
+   "expected": "https://example.com/mcp?auth=redacted&mode=safe",
+   "url": "https://example.com/mcp?auth=value&mode=safe"
+  },
+  {
+   "expected": "https://example.com/mcp?mode=safe&token=redacted",
+   "url": "https://example.com/mcp?mode=safe;token=value"
+  },
+  {
+   "expected": "http://localhost/mcp?auth=redacted",
+   "url": "http://localhost:${PORT}/mcp?auth=value"
+  },
+  {
+   "expected": "http://[2001:db8::1]:8080/mcp?token=redacted",
+   "url": "http://[2001:db8::1]:8080/mcp?token=value"
+  },
+  {
+   "expected": "malformed_url_redacted",
+   "url": "http://[not-an-ip]/mcp?token=value"
+  }
+ ],
+ "urlsplit": [
+  {
+   "error": false,
+   "fragment": "frag",
+   "hostname": "example.test",
+   "netloc": "example.test",
+   "path": "/path",
+   "port": null,
+   "port_error": false,
+   "query": "a=1",
+   "scheme": "https",
+   "url": "https://example.test/path?a=1#frag"
+  },
+  {
+   "error": false,
+   "fragment": "",
+   "hostname": "example.test",
+   "netloc": "Example.TEST:8443",
+   "path": "/Path",
+   "port": 8443,
+   "port_error": false,
+   "query": "",
+   "scheme": "https",
+   "url": "HTTPS://Example.TEST:8443/Path"
+  },
+  {
+   "error": false,
+   "fragment": "",
+   "hostname": "example.test",
+   "netloc": "example.test",
+   "path": "/leading",
+   "port": null,
+   "port_error": false,
+   "query": "",
+   "scheme": "https",
+   "url": "  \t https://example.test/leading"
+  },
+  {
+   "error": false,
+   "fragment": "",
+   "hostname": "example.test",
+   "netloc": "example.test",
+   "path": "/trailing ",
+   "port": null,
+   "port_error": false,
+   "query": "",
+   "scheme": "https",
+   "url": "https://example.test/trailing "
+  },
+  {
+   "error": false,
+   "fragment": "",
+   "hostname": "example.test",
+   "netloc": "example.test",
+   "path": "/newline-in-scheme",
+   "port": null,
+   "port_error": false,
+   "query": "",
+   "scheme": "http",
+   "url": "ht\ntp://example.test/newline-in-scheme"
+  },
+  {
+   "error": false,
+   "fragment": "",
+   "hostname": "example.test",
+   "netloc": "example.test",
+   "path": "/tab-in-scheme",
+   "port": null,
+   "port_error": false,
+   "query": "",
+   "scheme": "https",
+   "url": "htt\tps://example.test/tab-in-scheme"
+  },
+  {
+   "error": false,
+   "fragment": "",
+   "hostname": null,
+   "netloc": "",
+   "path": "1http://example.test/digit-scheme",
+   "port": null,
+   "port_error": false,
+   "query": "",
+   "scheme": "",
+   "url": "1http://example.test/digit-scheme"
+  },
+  {
+   "error": false,
+   "fragment": "",
+   "hostname": null,
+   "netloc": "",
+   "path": "+http://example.test/plus-scheme",
+   "port": null,
+   "port_error": false,
+   "query": "",
+   "scheme": "",
+   "url": "+http://example.test/plus-scheme"
+  },
+  {
+   "error": false,
+   "fragment": "",
+   "hostname": null,
+   "netloc": "",
+   "path": "person@example.test",
+   "port": null,
+   "port_error": false,
+   "query": "",
+   "scheme": "mailto",
+   "url": "mailto:person@example.test"
+  },
+  {
+   "error": false,
+   "fragment": "",
+   "hostname": "example.test",
+   "netloc": "example.test",
+   "path": "/scheme-relative",
+   "port": null,
+   "port_error": false,
+   "query": "",
+   "scheme": "",
+   "url": "//example.test/scheme-relative"
+  },
+  {
+   "error": false,
+   "fragment": "",
+   "hostname": null,
+   "netloc": "",
+   "path": "/just/a/path",
+   "port": null,
+   "port_error": false,
+   "query": "",
+   "scheme": "",
+   "url": "/just/a/path"
+  },
+  {
+   "error": false,
+   "fragment": "",
+   "hostname": "example.test",
+   "netloc": "user:pw@example.test",
+   "path": "/userinfo",
+   "port": null,
+   "port_error": false,
+   "query": "",
+   "scheme": "https",
+   "url": "https://user:pw@example.test/userinfo"
+  },
+  {
+   "error": false,
+   "fragment": "",
+   "hostname": "example.test",
+   "netloc": "user@host@example.test",
+   "path": "/double-at",
+   "port": null,
+   "port_error": false,
+   "query": "",
+   "scheme": "https",
+   "url": "https://user@host@example.test/double-at"
+  },
+  {
+   "error": false,
+   "fragment": "",
+   "hostname": "::1",
+   "netloc": "[::1]:8080",
+   "path": "/bracketed",
+   "port": 8080,
+   "port_error": false,
+   "query": "",
+   "scheme": "https",
+   "url": "https://[::1]:8080/bracketed"
+  },
+  {
+   "error": false,
+   "fragment": "",
+   "hostname": "::1",
+   "netloc": "[::1]",
+   "path": "/bracketed-no-port",
+   "port": null,
+   "port_error": false,
+   "query": "",
+   "scheme": "https",
+   "url": "https://[::1]/bracketed-no-port"
+  },
+  {
+   "error": false,
+   "fragment": "",
+   "hostname": "v7.future",
+   "netloc": "[v7.future]",
+   "path": "/ipvfuture",
+   "port": null,
+   "port_error": false,
+   "query": "",
+   "scheme": "https",
+   "url": "https://[v7.future]/ipvfuture"
+  },
+  {
+   "error": true,
+   "url": "https://[::1/unclosed"
+  },
+  {
+   "error": true,
+   "url": "https://::1]/unopened"
+  },
+  {
+   "error": true,
+   "url": "https://[127.0.0.1]/bracketed-ipv4"
+  },
+  {
+   "error": true,
+   "url": "https://[not-an-address]/bracketed-name"
+  },
+  {
+   "error": true,
+   "url": "https://[::1]extra/trailing-after-bracket"
+  },
+  {
+   "error": false,
+   "fragment": "",
+   "hostname": "example.test",
+   "netloc": "example.test:port",
+   "path": "/non-numeric",
+   "port": null,
+   "port_error": true,
+   "query": "",
+   "scheme": "https",
+   "url": "https://example.test:port/non-numeric"
+  },
+  {
+   "error": false,
+   "fragment": "",
+   "hostname": "example.test",
+   "netloc": "example.test:99999",
+   "path": "/out-of-range",
+   "port": null,
+   "port_error": true,
+   "query": "",
+   "scheme": "https",
+   "url": "https://example.test:99999/out-of-range"
+  },
+  {
+   "error": false,
+   "fragment": "",
+   "hostname": "example.test",
+   "netloc": "example.test:",
+   "path": "/empty-port",
+   "port": null,
+   "port_error": false,
+   "query": "",
+   "scheme": "https",
+   "url": "https://example.test:/empty-port"
+  },
+  {
+   "error": false,
+   "fragment": "",
+   "hostname": "example.test",
+   "netloc": "example.test:0",
+   "path": "/zero-port",
+   "port": 0,
+   "port_error": false,
+   "query": "",
+   "scheme": "https",
+   "url": "https://example.test:0/zero-port"
+  },
+  {
+   "error": false,
+   "fragment": "",
+   "hostname": "example.test",
+   "netloc": "example.test:65535",
+   "path": "/max-port",
+   "port": 65535,
+   "port_error": false,
+   "query": "",
+   "scheme": "https",
+   "url": "https://example.test:65535/max-port"
+  },
+  {
+   "error": false,
+   "fragment": "",
+   "hostname": "example.test",
+   "netloc": "example.test:+80",
+   "path": "/signed-port",
+   "port": null,
+   "port_error": true,
+   "query": "",
+   "scheme": "https",
+   "url": "https://example.test:+80/signed-port"
+  },
+  {
+   "error": true,
+   "url": "https://exam℀ple.test/nfkc-grows-delimiter"
+  },
+  {
+   "error": false,
+   "fragment": "",
+   "hostname": "ümlaut.test",
+   "netloc": "ümlaut.test",
+   "path": "/plain-non-ascii",
+   "port": null,
+   "port_error": false,
+   "query": "",
+   "scheme": "https",
+   "url": "https://ümlaut.test/plain-non-ascii"
+  },
+  {
+   "error": false,
+   "fragment": "",
+   "hostname": "fe80",
+   "netloc": "fe80::1%25eth0",
+   "path": "/zone",
+   "port": null,
+   "port_error": true,
+   "query": "",
+   "scheme": "https",
+   "url": "https://fe80::1%25eth0/zone"
+  },
+  {
+   "error": false,
+   "fragment": "",
+   "hostname": "example.test",
+   "netloc": "example.test",
+   "path": "",
+   "port": null,
+   "port_error": false,
+   "query": "query-without-path",
+   "scheme": "https",
+   "url": "https://example.test?query-without-path"
+  },
+  {
+   "error": false,
+   "fragment": "fragment-without-path",
+   "hostname": "example.test",
+   "netloc": "example.test",
+   "path": "",
+   "port": null,
+   "port_error": false,
+   "query": "",
+   "scheme": "https",
+   "url": "https://example.test#fragment-without-path"
+  },
+  {
+   "error": false,
+   "fragment": "f",
+   "hostname": "example.test",
+   "netloc": "example.test",
+   "path": "/both",
+   "port": null,
+   "port_error": false,
+   "query": "a=1&a=2",
+   "scheme": "https",
+   "url": "https://example.test/both?a=1&a=2#f"
+  },
+  {
+   "error": false,
+   "fragment": "",
+   "hostname": "example.test",
+   "netloc": "example.test",
+   "path": "/path",
+   "port": null,
+   "port_error": false,
+   "query": "",
+   "scheme": "unknownscheme",
+   "url": "unknownscheme://example.test/path"
+  },
+  {
+   "error": false,
+   "fragment": "",
+   "hostname": "example.test",
+   "netloc": "example.test",
+   "path": "/repo.git",
+   "port": null,
+   "port_error": false,
+   "query": "",
+   "scheme": "git+ssh",
+   "url": "git+ssh://example.test/repo.git"
+  },
+  {
+   "error": false,
+   "fragment": "",
+   "hostname": null,
+   "netloc": "",
+   "path": "",
+   "port": null,
+   "port_error": false,
+   "query": "",
+   "scheme": "",
+   "url": ""
+  },
+  {
+   "error": false,
+   "fragment": "",
+   "hostname": null,
+   "netloc": "",
+   "path": "",
+   "port": null,
+   "port_error": false,
+   "query": "",
+   "scheme": "https",
+   "url": "https://"
+  },
+  {
+   "error": false,
+   "fragment": "",
+   "hostname": null,
+   "netloc": "",
+   "path": "/empty-netloc",
+   "port": null,
+   "port_error": false,
+   "query": "",
+   "scheme": "https",
+   "url": "https:///empty-netloc"
+  },
+  {
+   "error": false,
+   "fragment": "",
+   "hostname": null,
+   "netloc": "",
+   "path": "//double-slash-path",
+   "port": null,
+   "port_error": false,
+   "query": "",
+   "scheme": "https",
+   "url": "https:////double-slash-path"
+  },
+  {
+   "error": false,
+   "fragment": "",
+   "hostname": null,
+   "netloc": "",
+   "path": "relative-path",
+   "port": null,
+   "port_error": false,
+   "query": "",
+   "scheme": "https",
+   "url": "https:relative-path"
+  },
+  {
+   "error": false,
+   "fragment": "",
+   "hostname": null,
+   "netloc": "",
+   "path": "",
+   "port": null,
+   "port_error": false,
+   "query": "",
+   "scheme": "https",
+   "url": "https:"
+  }
+ ]
+}

@@ -1,0 +1,85 @@
+{
+  "schemaVersion": "guard.mcp-server-contribution.v1",
+  "id": "mcp.halflife",
+  "version": "1.0.0",
+  "name": "halflife-mcp",
+  "description": "Local, file-backed long-term memory for coding agents. Stores typed memories (preference, procedural, fact, episodic, trace) as Markdown files with a derived SQLite index; recall is keyword + graph, plus optional local vectors. Memories decay by half-life; inferred ones stay provisional until confirmed. It sees only explicit tool calls, never the transcript. Five tools are read-only; remember and reinforce write local files; forget deletes. Off until you turn it on.",
+  "trustClass": "external",
+  "activation": "opt-in",
+  "publisher": {
+    "id": "io.github.oleg67",
+    "displayName": "Oleh Yudin",
+    "url": "https://github.com/Oleg67"
+  },
+  "icon": {
+    "kind": "react-icon",
+    "name": "HiMiniFolder",
+    "background": "#0A0A0B"
+  },
+  "homepage": "https://github.com/Oleg67/halflife-mcp",
+  "license": "Apache-2.0",
+  "launch": {
+    "kind": "package-launcher",
+    "command": "uvx",
+    "package": "halflife-mcp"
+  },
+  "riskClasses": [
+    "local-data-access",
+    "local-file-write",
+    "local-sqlite-write",
+    "external-content-deletion",
+    "package-or-source-installation",
+    "external-network-read"
+  ],
+  "tools": [
+    {
+      "name": "memory_brief",
+      "state": "allow"
+    },
+    {
+      "name": "memory_recall",
+      "state": "allow"
+    },
+    {
+      "name": "memory_get",
+      "state": "allow"
+    },
+    {
+      "name": "memory_list",
+      "state": "allow"
+    },
+    {
+      "name": "memory_stats",
+      "state": "allow"
+    },
+    {
+      "name": "memory_remember",
+      "state": "review"
+    },
+    {
+      "name": "memory_reinforce",
+      "state": "review"
+    },
+    {
+      "name": "memory_forget",
+      "state": "review"
+    },
+    {
+      "name": "other",
+      "state": "review"
+    }
+  ],
+  "referenceUrls": [
+    "https://github.com/Oleg67/halflife-mcp",
+    "https://pypi.org/project/halflife-mcp/",
+    "https://github.com/Oleg67/halflife-mcp/blob/v0.1.2/src/halflife_mcp/server.py"
+  ],
+  "saferAlternatives": [
+    "memory_brief, memory_recall, memory_get, memory_list and memory_stats are read-only (readOnlyHint: true): from 0.1.2 they never write, move or delete memory files and only refresh the derived SQLite index.",
+    "memory_remember and memory_reinforce write Markdown files under HALFLIFE_HOME; writes that look like secrets are refused.",
+    "memory_forget permanently deletes one memory: its file, graph sidecar, archived copy and index rows; keep it on review.",
+    "Pin the release when launching (uvx halflife-mcp@0.1.2) so only the reviewed version runs; maintenance (archiving faded memories, expiring old traces) runs on the first write call.",
+    "The server makes no network calls of its own. For vector search, launch uvx --with fastembed --with numpy halflife-mcp@0.1.2 (keeps this package identity); the model downloads once; HALFLIFE_EMBED=off disables it.",
+    "Serve over stdio. The --http mode has no authentication and refuses non-loopback hosts unless --allow-network is passed."
+  ]
+}

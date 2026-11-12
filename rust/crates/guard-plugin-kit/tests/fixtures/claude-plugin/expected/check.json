@@ -1,0 +1,171 @@
+{
+  "diagnostics": [],
+  "passed": true,
+  "plugin": {
+    "agents": [
+      "agents/reviewer.md"
+    ],
+    "author": "Acme Labs",
+    "base": "",
+    "commands": [
+      "commands/summarize.md"
+    ],
+    "context_file": null,
+    "description": "Fill PDF forms and extract text from PDFs.",
+    "homepage": "https://acme.example/pdf-tools",
+    "hooks": "hooks/hooks.json",
+    "keywords": [
+      "pdf",
+      "forms"
+    ],
+    "license": "MIT",
+    "marketplaces": [
+      {
+        "kind": "claude-marketplace",
+        "name": "acme",
+        "path": ".claude-plugin/marketplace.json",
+        "plugins": [
+          "pdf-tools"
+        ]
+      }
+    ],
+    "mcp_servers": {
+      "docs": {
+        "transport": "http",
+        "url": "https://mcp.acme.example/docs"
+      },
+      "pdf": {
+        "args": [
+          "-y",
+          "@acme/pdf-mcp@1.4.0"
+        ],
+        "command": "npx",
+        "env": {
+          "PDF_API_KEY": "PDF_API_KEY"
+        }
+      }
+    },
+    "name": "pdf-tools",
+    "repository": "https://github.com/acme/pdf-tools",
+    "skills": [
+      {
+        "description": "Use when the user wants to fill a PDF form or pull text out of a PDF.",
+        "dir": "skills/pdf-tools",
+        "name": "pdf-tools"
+      }
+    ],
+    "version": "1.4.0"
+  },
+  "runtimes": [
+    {
+      "dropped": [],
+      "runtime": "claude-code",
+      "supported": true
+    },
+    {
+      "dropped": [
+        "commands",
+        "agents",
+        "hooks"
+      ],
+      "runtime": "codex",
+      "supported": true
+    },
+    {
+      "dropped": [
+        "skills",
+        "commands",
+        "agents",
+        "hooks"
+      ],
+      "runtime": "gemini-cli",
+      "supported": true
+    },
+    {
+      "dropped": [
+        "skills",
+        "commands",
+        "agents",
+        "hooks"
+      ],
+      "runtime": "cursor",
+      "supported": true
+    },
+    {
+      "dropped": [
+        "skills",
+        "commands",
+        "agents",
+        "hooks"
+      ],
+      "runtime": "vscode",
+      "supported": true
+    },
+    {
+      "dropped": [
+        "skills",
+        "commands",
+        "agents",
+        "hooks"
+      ],
+      "runtime": "opencode",
+      "supported": true
+    },
+    {
+      "dropped": [
+        "skills",
+        "commands",
+        "agents",
+        "hooks"
+      ],
+      "runtime": "mcp-registry",
+      "supported": false
+    },
+    {
+      "dropped": [
+        "mcp_servers",
+        "commands",
+        "agents",
+        "hooks"
+      ],
+      "runtime": "agent-skills",
+      "supported": true
+    },
+    {
+      "dropped": [
+        "commands",
+        "agents",
+        "hooks",
+        "mcp_env"
+      ],
+      "runtime": "agent-plugins",
+      "supported": true
+    }
+  ],
+  "sources": [
+    {
+      "kind": "claude-plugin",
+      "path": ".claude-plugin/plugin.json"
+    },
+    {
+      "kind": "claude-marketplace",
+      "path": ".claude-plugin/marketplace.json"
+    },
+    {
+      "kind": "mcp-config",
+      "path": ".mcp.json"
+    },
+    {
+      "kind": "agent-skill",
+      "path": "skills/pdf-tools/SKILL.md"
+    }
+  ],
+  "summary": {
+    "agents": 1,
+    "commands": 1,
+    "errors": 0,
+    "mcp_servers": 2,
+    "skills": 1,
+    "warnings": 0
+  }
+}

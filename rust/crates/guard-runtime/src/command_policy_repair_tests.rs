@@ -7,6 +7,12 @@ use serde_json::json;
 
 use crate::claude_hook_bridge_fixture::{write_private, GuardHome};
 
+/// The home directory of the person whose command was blocked. The fixture
+/// puts its Guard home nowhere near a real one, and most of these tests are
+/// not about which home the recovery command names, so they pass none; the
+/// two that are about it build the pair themselves.
+const NO_HOME_DIR: &str = "";
+
 fn authority_block() -> Value {
     json!({
         "decision": "deny",
@@ -20,7 +26,7 @@ fn authority_block() -> Value {
 fn without_locator(health: &str) -> Value {
     let home = GuardHome::new(&format!("repair-{health}"));
     let mut result = authority_block();
-    apply(&mut result, Some(health), &home.home);
+    apply(&mut result, Some(health), &home.home, NO_HOME_DIR);
     result
 }
 
@@ -64,6 +70,22 @@ fn a_tampered_authority_block_asks_for_a_repair() {
 }
 
 #[test]
+fn a_block_with_no_repair_page_keeps_the_terminal_command() {
+    // The link is absent exactly when the approval center is not running, so
+    // the page it would address cannot be opened. Naming only that page would
+    // leave the person holding a blocked command and nothing that works.
+    for health in ["tampered", "recovery-required"] {
+        let result = without_locator(health);
+        let reason = result["reason"].as_str().unwrap();
+        assert!(
+            reason.contains("hol-guard command controls recover-authority"),
+            "{health}: {reason}"
+        );
+        assert!(result.get("repair_url").is_none(), "{health}");
+    }
+}
+
+#[test]
 fn a_degraded_authority_block_keeps_the_recover_authority_hint() {
     for health in [
         "degraded-unacknowledged",
@@ -84,7 +106,7 @@ fn only_a_denied_authority_block_is_repaired() {
         json!({"decision": "deny", "minimum_action": "block"}),
     ] {
         let mut result = case.clone();
-        apply(&mut result, Some("tampered"), &home.home);
+        apply(&mut result, Some("tampered"), &home.home, NO_HOME_DIR);
         assert_eq!(result, case);
     }
 }
@@ -93,7 +115,7 @@ fn only_a_denied_authority_block_is_repaired() {
 fn an_unbound_snapshot_repairs_nothing() {
     let home = GuardHome::new("repair-unbound");
     let mut result = authority_block();
-    apply(&mut result, None, &home.home);
+    apply(&mut result, None, &home.home, NO_HOME_DIR);
     assert_eq!(result, authority_block());
 }
 
@@ -101,7 +123,7 @@ fn an_unbound_snapshot_repairs_nothing() {
 fn a_live_locator_signs_the_repair_page_for_its_own_surface() {
     let home = with_locator("repair-signed", 4310);
     let mut result = authority_block();
-    apply(&mut result, Some("tampered"), &home.home);
+    apply(&mut result, Some("tampered"), &home.home, NO_HOME_DIR);
 
     let url = result["repair_url"].as_str().expect("repair url");
     let (page, token) = url.split_once("#guard-token=").expect("signed fragment");
@@ -134,7 +156,7 @@ fn a_locator_the_state_does_not_vouch_for_is_ignored() {
     home.write_state(&state);
 
     let mut result = authority_block();
-    apply(&mut result, Some("tampered"), &home.home);
+    apply(&mut result, Some("tampered"), &home.home, NO_HOME_DIR);
     assert_eq!(result["reason"], APPROVAL_REASON_WITHOUT_URL);
     assert!(result.get("repair_url").is_none());
 }
@@ -158,7 +180,56 @@ fn a_stopped_daemon_leaves_no_link() {
     .unwrap();
 
     let mut result = authority_block();
-    apply(&mut result, Some("tampered"), &home.home);
+    apply(&mut result, Some("tampered"), &home.home, NO_HOME_DIR);
     assert_eq!(result["reason"], APPROVAL_REASON_WITHOUT_URL);
     assert!(result.get("repair_url").is_none());
+}
+
+#[test]
+fn the_recovery_command_names_a_home_the_cli_would_not_find() {
+    // The block names the home whose authority failed. Pasted into a shell
+    // that points somewhere else, the bare command recovers a different
+    // install and leaves this one blocked, so the home is named whenever it
+    // is not the one the CLI picks by itself, quoted for that shell.
+    let fixture = GuardHome::new("repair-named-home");
+    let home_dir = fixture.scratch("user");
+    let elsewhere = fixture.scratch("Guard Home");
+    std::fs::create_dir_all(&elsewhere).unwrap();
+
+    let mut result = authority_block();
+    apply(
+        &mut result,
+        Some("tampered"),
+        &elsewhere,
+        home_dir.to_str().unwrap(),
+    );
+
+    let reason = result["reason"].as_str().unwrap();
+    assert!(
+        reason.contains(&format!(
+            "`hol-guard command --guard-home '{}' controls recover-authority`",
+            elsewhere.display()
+        )),
+        "{reason}"
+    );
+}
+
+#[test]
+fn the_default_home_is_left_out_of_the_recovery_command() {
+    // `<home_dir>/.hol-guard` is where the command would land anyway, so
+    // naming it would only lengthen the line a person has to trust.
+    let fixture = GuardHome::new("repair-default-home");
+    let home_dir = fixture.scratch("user");
+    let guard_home = home_dir.join(".hol-guard");
+    std::fs::create_dir_all(&guard_home).unwrap();
+
+    let mut result = authority_block();
+    apply(
+        &mut result,
+        Some("tampered"),
+        &guard_home,
+        home_dir.to_str().unwrap(),
+    );
+
+    assert_eq!(result["reason"], APPROVAL_REASON_WITHOUT_URL);
 }

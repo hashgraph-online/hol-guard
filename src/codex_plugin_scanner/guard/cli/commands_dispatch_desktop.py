@@ -569,7 +569,12 @@ def _run_guard_desktop_command(
     input_text: str | None = None,
     output_stream: TextIO | None = None,
 ) -> int:
-    del workspace, input_text
+    del input_text
+    if getattr(args, "desktop_command", None) == "converge" and context is not None and store is not None:
+        from .desktop_converge import run_desktop_converge
+
+        out = output_stream or sys.stdout
+        return run_desktop_converge(args, context=context, store=store, workspace=workspace, output_stream=out)
     if getattr(args, "desktop_command", None) == "qualify-owned":
         from .desktop_owned_qualification import run_desktop_owned_qualification
 
@@ -603,23 +608,45 @@ def _run_guard_desktop_command(
         if context is None or store is None:
             raise RuntimeError("Guard candidate qualification requires local Guard context")
         return run_desktop_qualification(args, context=context, store=store, output_stream=output_stream or sys.stdout)
+    if getattr(args, "desktop_command", None) == "library-call":
+        from pathlib import Path as _Path
+
+        from .desktop_library_call import run_library_call
+
+        resolved_home = getattr(args, "guard_home", None) or guard_home
+        if resolved_home is None:
+            print("Guard library call requires --guard-home.", file=sys.stderr)
+            return 2
+        return run_library_call(_Path(resolved_home))
+    if getattr(args, "desktop_command", None) == "library-serve":
+        from pathlib import Path as _Path
+
+        from .desktop_library_call import serve_library_calls
+
+        resolved_home = getattr(args, "guard_home", None) or guard_home
+        if resolved_home is None:
+            print("Guard library calls require --guard-home.", file=sys.stderr)
+            return 2
+        return serve_library_calls(_Path(resolved_home))
+    if getattr(args, "desktop_command", None) == "daemon-workers":
+        from pathlib import Path as _Path
+
+        from ..workers.host import run_worker_host
+
+        resolved_home = getattr(args, "guard_home", None) or guard_home
+        if resolved_home is None:
+            print("Guard daemon workers require --guard-home.", file=sys.stderr)
+            return 2
+        return run_worker_host(_Path(resolved_home))
     if getattr(args, "desktop_command", None) == "dashboard-update":
-        from ..daemon.dashboard_update_runner import main as dashboard_update_main
+        from ..updates.dashboard_update_runner import main as dashboard_update_main
 
         resolved_home = getattr(args, "guard_home", None) or guard_home
         if resolved_home is None:
             print("Guard dashboard update requires --guard-home.", file=sys.stderr)
             return 2
-        argv = [
-            "--guard-home",
-            str(resolved_home),
-            "--daemon-pid",
-            str(args.daemon_pid),
-            "--daemon-port",
-            str(args.daemon_port),
-            "--update-token",
-            str(args.update_token),
-        ]
+        argv = ["--guard-home", str(resolved_home), "--daemon-pid", str(args.daemon_pid)]
+        argv += ["--daemon-port", str(args.daemon_port), "--update-token", str(args.update_token)]
         if bool(getattr(args, "force_pypi_reinstall", False)):
             argv.append("--force-pypi-reinstall")
         if bool(getattr(args, "alpha", False)):

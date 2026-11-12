@@ -342,7 +342,7 @@ pub fn direct_mcp_command_name(value: &str) -> Option<String> {
 }
 
 /// `normalized_remote_server_name`.
-fn normalized_remote_server_name(value: &str) -> Option<String> {
+pub fn normalized_remote_server_name(value: &str) -> Option<String> {
     let folded = caseless::default_case_fold_str(python_strip(value));
     let joined = folded
         .split(python_is_whitespace)

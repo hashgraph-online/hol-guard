@@ -9,6 +9,9 @@
 //! grammar refuses. Timestamp spellings outside `YYYY-MM-DD[T ]HH:MM[:SS[.f]]`
 //! plus `Z` or a numeric offset are refused too (fail closed).
 //!
+//! `settle_native_review_reuse` runs the block check and the spend together,
+//! so a retry pays for one store transaction instead of two.
+//!
 //! Parity vectors recorded from the original Python implementation live in
 //! `testdata/guard_store/native_review_consume_vectors.json`.
 
@@ -122,6 +125,104 @@ pub(crate) fn matching_block(connection: &Connection, args: &Args) -> StoreResul
     matching_decision(connection, args, "block", false)
 }
 
+/// `settle_native_review_reuse` — a retry's block check and, when the caller
+/// may spend one, its approve-once spend, in the one write transaction the
+/// `guard_store` op holds: `"blocked"`, `"allowed"` or `null`.
+///
+/// A matching block always wins, so a refusal keeps answering the retry
+/// window before any allow is considered. Without `spend` it only reads, and
+/// the op runs it without the write lock.
+pub(crate) fn settle(connection: &Connection, args: &Args) -> StoreResult<Value> {
+    settled(connection, args, args.flag("spend")?)
+}
+
+/// `settle` with `spend` given by the caller rather than read from `args`.
+pub(crate) fn settled(connection: &Connection, args: &Args, spend: bool) -> StoreResult<Value> {
+    if matching_block(connection, args)? == Value::Bool(true) {
+        return Ok(json!("blocked"));
+    }
+    if spend && consume(connection, args)? == Value::Bool(true) {
+        return Ok(json!("allowed"));
+    }
+    Ok(Value::Null)
+}
+
+/// Spends the retry authority of `request_id`'s Allow once on behalf of a
+/// live hook that resumed on it, under the write transaction the caller
+/// holds. The live hook and an identical retry are two ways of using the same
+/// approval: whichever comes first spends it, and the other is refused.
+///
+/// `false` when an earlier retry already spent the approval; `true` when this
+/// call spent it, or when the request carries no retry authority (no
+/// resolved allow, or a binding outside the native-review grammar).
+pub(crate) fn spend_for_live_resume(
+    connection: &Connection,
+    request_id: &str,
+    now: &str,
+) -> StoreResult<bool> {
+    let rows = query_all(
+        connection,
+        "select artifact_hash, resolved_at from approval_requests \
+         where request_id = ? and status = 'resolved' and resolution_action = 'allow' \
+           and resolution_scope in ('once', 'artifact')",
+        &[Value::from(request_id)],
+    )?;
+    let Some(row) = rows.first() else {
+        return Ok(true);
+    };
+    let artifact_hash = row
+        .get("artifact_hash")
+        .and_then(Value::as_str)
+        .unwrap_or("");
+    if !binding_pattern().is_match(artifact_hash) {
+        return Ok(true);
+    }
+    let (Some((_, approved_iso)), Some((_, current_iso))) = (
+        instant(row.get("resolved_at").and_then(Value::as_str)),
+        instant(Some(now)),
+    ) else {
+        // An approval Guard cannot place in time cannot be told apart from a
+        // spent one, so the resume is refused rather than reused.
+        return Ok(false);
+    };
+    insert_effect(
+        connection,
+        artifact_hash,
+        &approved_iso,
+        request_id,
+        &current_iso,
+    )
+}
+
+fn effect_key(artifact_hash: &str, approved_iso: &str) -> String {
+    hex::encode(Sha256::digest(
+        format!("native-review-once-v3\0{artifact_hash}\0{approved_iso}").as_bytes(),
+    ))
+}
+
+fn insert_effect(
+    connection: &Connection,
+    artifact_hash: &str,
+    approved_iso: &str,
+    request_id: &str,
+    current_iso: &str,
+) -> StoreResult<bool> {
+    let inserted = exec(
+        connection,
+        "insert or ignore into guard_continuation_effects \
+         (effect_key, request_id, evidence_id, event_name, created_at) \
+         values (?, ?, ?, ?, ?)",
+        &[
+            Value::from(effect_key(artifact_hash, approved_iso)),
+            Value::from(request_id),
+            Value::from(artifact_hash),
+            Value::from(EVENT_NAME),
+            Value::from(current_iso),
+        ],
+    )?;
+    Ok(inserted == 1)
+}
+
 fn matching_decision(
     connection: &Connection,
     args: &Args,
@@ -141,18 +242,23 @@ fn matching_decision(
     if !binding_pattern().is_match(artifact_hash) {
         return Ok(json!(false));
     }
+    // `tool_call` rows store the launch target with credentials masked; a row
+    // written before masking still holds it as sent, so either form matches.
+    // The exact binding is `artifact_hash`.
+    let masked_target = guard_command::redacted_command_tokens::redact_text(launch_target).text;
     let rows = query_all(
         connection,
         "select request_id, resolved_at, resolution_action, resolution_scope \
          from approval_requests \
          where status = 'resolved' and harness = ? and artifact_id = ? and artifact_name = ? \
-           and artifact_hash = ? and launch_target = ? and workspace is ?",
+           and artifact_hash = ? and launch_target in (?, ?) and workspace is ?",
         &[
             Value::from(harness),
             Value::from(artifact_id),
             Value::from(artifact_name),
             Value::from(artifact_hash),
             Value::from(launch_target),
+            Value::from(masked_target),
             workspace.map_or(Value::Null, Value::from),
         ],
     )?;
@@ -195,21 +301,11 @@ fn matching_decision(
         .unwrap_or_default();
     // All equivalent decisions at this instant are spent as one capability.
     let approved_iso = &latest[0].1;
-    let effect_key = hex::encode(Sha256::digest(
-        format!("native-review-once-v3\0{artifact_hash}\0{approved_iso}").as_bytes(),
-    ));
-    let inserted = exec(
+    Ok(json!(insert_effect(
         connection,
-        "insert or ignore into guard_continuation_effects \
-         (effect_key, request_id, evidence_id, event_name, created_at) \
-         values (?, ?, ?, ?, ?)",
-        &[
-            Value::from(effect_key),
-            Value::from(request_id),
-            Value::from(artifact_hash),
-            Value::from(EVENT_NAME),
-            Value::from(current_iso),
-        ],
-    )?;
-    Ok(json!(inserted == 1))
+        artifact_hash,
+        approved_iso,
+        request_id,
+        &current_iso
+    )?))
 }

@@ -2,21 +2,14 @@
 
 from __future__ import annotations
 
-import hashlib
-import hmac
 import os
-import shlex
-from collections.abc import Callable, Mapping
 from pathlib import Path
 
 import pytest
 
 from codex_plugin_scanner.guard.adapters.cursor_native_approval import (
-    compute_cursor_after_observer_proof,
-    cursor_after_observer_proof_message,
     cursor_hook_attestation_secret_path,
     ensure_cursor_hook_attestation_secret,
-    normalize_cursor_shell_command,
 )
 
 posix_only = pytest.mark.skipif(
@@ -86,82 +79,6 @@ def test_attestation_write_does_not_follow_a_symlink(tmp_path: Path) -> None:
         _write_attestation_secret(secret_path, b"replacement-key")
 
     assert target.read_bytes() == b"outside-key"
-
-
-def test_hook_template_proof_uses_the_same_passes_as_the_signer(tmp_path: Path) -> None:
-    from codex_plugin_scanner.guard.adapters._modules.cursor.cursor_hook_script_template_tail import (
-        HOOK_SCRIPT_TEMPLATE_TAIL,
-    )
-
-    raw = "lean-ctx -c \"lean-ctx -c 'lean-ctx -c git status'\""
-    once = normalize_cursor_shell_command(raw)
-    secret = b"k" * 32
-    secret_path = tmp_path / "secrets" / "cursor-hook-attestation.key"
-    secret_path.parent.mkdir(parents=True)
-    secret_path.write_bytes(secret)
-    start = HOOK_SCRIPT_TEMPLATE_TAIL.index("def _cursor_conversation_id")
-    end = HOOK_SCRIPT_TEMPLATE_TAIL.index("def _cursor_availability_response")
-    namespace: dict[str, object] = {
-        "GUARD_HOME": str(tmp_path),
-        "Mapping": Mapping,
-        "Path": Path,
-        "hashlib": hashlib,
-        "hmac": hmac,
-        "os": os,
-        "shlex": shlex,
-    }
-    exec(HOOK_SCRIPT_TEMPLATE_TAIL[start:end], namespace)
-    compute_hook = namespace["_compute_cursor_after_observer_proof"]
-    assert isinstance(compute_hook, Callable)
-    payload = {"conversation_id": "conversation", "command": raw}
-    hook_proof = compute_hook(payload, "afterShellExecution", "binding")
-    signer_proof = compute_cursor_after_observer_proof(
-        secret=secret,
-        conversation_id="conversation",
-        command=once,
-        approval_binding="binding",
-        observer_event="afterShellExecution",
-    )
-    thrice = normalize_cursor_shell_command(normalize_cursor_shell_command(once))
-
-    assert once != thrice
-    assert hook_proof == signer_proof
-    assert (
-        hook_proof
-        == hmac.new(
-            secret,
-            cursor_after_observer_proof_message(
-                conversation_id="conversation",
-                command=thrice,
-                approval_binding="binding",
-                observer_event="afterShellExecution",
-            ),
-            hashlib.sha256,
-        ).hexdigest()
-    )
-
-
-def test_observer_proof_signs_the_twice_normalised_command() -> None:
-    raw = "lean-ctx -c 'lean-ctx -c git status'"
-    once = normalize_cursor_shell_command(raw)
-    twice = normalize_cursor_shell_command(once)
-    assert once != twice
-    secret = b"k" * 32
-    proof = compute_cursor_after_observer_proof(
-        secret=secret,
-        conversation_id="conversation",
-        command=raw,
-        approval_binding="binding",
-        observer_event="afterShellExecution",
-    )
-    message = cursor_after_observer_proof_message(
-        conversation_id="conversation",
-        command=twice,
-        approval_binding="binding",
-        observer_event="afterShellExecution",
-    )
-
-    assert proof == hmac.new(secret, message, hashlib.sha256).hexdigest()
 
 
 def stat_mode(path: Path) -> int:

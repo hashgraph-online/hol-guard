@@ -17,10 +17,14 @@ use crate::target_identities::{advisory_matches_target, build_package_url, py_st
 use crate::workspace_inventory::python_strip;
 
 mod advisory;
+mod advisory_merge;
 mod package;
 mod registration;
 
 pub use advisory::{evaluate_protect_request, evaluate_protect_request_in};
+pub use advisory_merge::{
+    merge_cached_advisory, AdvisoryMerge, AdvisoryMergePayloadInvalid, CachedAdvisoryVerdict,
+};
 use package::*;
 use registration::*;
 

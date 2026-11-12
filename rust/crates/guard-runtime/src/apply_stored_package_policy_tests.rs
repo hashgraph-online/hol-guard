@@ -12,10 +12,7 @@ fn seed_store(home: &std::path::Path) {
 }
 
 fn temp_home(tag: &str) -> PathBuf {
-    let nonce = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap()
-        .as_nanos();
+    let nonce = crate::unique_nanos::unique_nanos();
     let home = std::env::temp_dir().join(format!(
         "hol-guard-apply-stored-{tag}-{}-{nonce}",
         std::process::id(),

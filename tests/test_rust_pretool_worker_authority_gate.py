@@ -10,7 +10,7 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
 GATE = runpy.run_path(str(ROOT / "scripts/ci/rust_pretool_no_python_gate.py"))
-WORKER_DIR = Path("src/codex_plugin_scanner/guard/daemon")
+WORKER_DIR = Path("src/codex_plugin_scanner/guard/hook_review")
 WORKER_FILES = ("hook_worker.py", "hook_worker_native.py", "hook_worker_native_review.py")
 
 
@@ -85,8 +85,9 @@ def test_missing_native_authority_link_fails_closed(
             "does not return the native edge harness response",
         ),
         (
-            "        response = _edge_harness_response(edge)\n        mediation =",
-            "        response = harness_json_from_native_post_tool(native_harness, native_result)\n        mediation =",
+            "        response = _edge_harness_response(edge)\n        if structured_view is not None:",
+            "        response = harness_json_from_native_post_tool(native_harness, native_result)\n"
+            "        if structured_view is not None:",
             "renders PostToolUse in Python",
         ),
     ],

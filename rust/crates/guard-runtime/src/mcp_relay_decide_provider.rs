@@ -88,6 +88,18 @@ fn choices(connection: Option<&Connection>) -> Result<Value, &'static str> {
     Ok(Value::Object(choices))
 }
 
+/// The provider authority hash a Composio wrapper's identity binds: `None`
+/// while no provider authority row covers it.
+pub(super) fn authority_hash(
+    connection: Option<&Connection>,
+) -> Result<Option<String>, &'static str> {
+    match authority(connection)?.get("hash") {
+        Some(Value::String(hash)) => Ok(Some(hash.clone())),
+        Some(Value::Null) => Ok(None),
+        _ => Err(PROVIDER_INVALID),
+    }
+}
+
 fn authority(connection: Option<&Connection>) -> Result<Value, &'static str> {
     let Some(connection) = readable(connection)? else {
         return Ok(json!({ "hash": Value::Null }));

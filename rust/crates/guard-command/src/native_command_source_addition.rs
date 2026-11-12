@@ -83,7 +83,7 @@ pub(in super::super) fn compile_with_base(
         .map(|extension| {
             serde_json::json!({
                 "extension_id":extension["extension_id"],"trust_class":extension["trust_class"],
-                "activation":extension["activation"],"publisher":extension["publisher"],
+                "activation":extension["activation"],"publisher":super::trust_identity(extension["trust_class"].as_str().unwrap_or(""), &extension["publisher"]),
             })
         })
         .collect();

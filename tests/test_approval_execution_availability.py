@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.daemon.server import GuardDaemonServer
+from ci.guard_daemon_harness import GuardDaemonServer
 from codex_plugin_scanner.guard.store import GuardStore
 from tests.test_guard_approval_scope_contract import _post, _request, _store_request, _v2_selection
 
@@ -14,13 +14,21 @@ from tests.test_guard_approval_scope_contract import _post, _request, _store_req
 @pytest.mark.parametrize("client", ["legacy", "current", "stale"])
 @pytest.mark.parametrize("remember", [False, True])
 def test_unavailable_native_approval_is_rejected_without_writing_consent(
-    tmp_path: Path, client: str, remember: bool,
+    tmp_path: Path,
+    client: str,
+    remember: bool,
 ) -> None:
     store = GuardStore(tmp_path / "guard-home")
-    row = _store_request(store, _request(
-        "unavailable-script", artifact_id="omp:native-pretool:bash",
-        artifact_type="tool_call", artifact_hash="unbound-request", policy_action="review",
-    ))
+    row = _store_request(
+        store,
+        _request(
+            "unavailable-script",
+            artifact_id="omp:native-pretool:bash",
+            artifact_type="tool_call",
+            artifact_hash="unbound-request",
+            policy_action="review",
+        ),
+    )
     payload: dict[str, object] = {"scope": "artifact", "persist_policy": remember}
     if client != "legacy":
         payload.update(_v2_selection(row, "artifact"))

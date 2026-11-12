@@ -14,26 +14,20 @@ ready.
 
 from __future__ import annotations
 
-import hashlib
 import logging
 from collections.abc import Mapping
 from dataclasses import replace
-from typing import Any
+from typing import Any, cast
 
 from .edge_events import build_memory_decision_event_envelope
 from .memory_decision_event import (
     MemoryDecisionSource,
     build_memory_decision_event,
     event_to_cloud_payload,
-    is_approval_wrapper,
 )
 from .receipts.manager import build_receipt
 
 _LOGGER = logging.getLogger(__name__)
-
-# The user approved once, but the agent's retry could not reuse that approval,
-# so the action stayed blocked. The dashboard reads this value.
-APPROVAL_RETRY_BLOCKED_OVERRIDE = "approval-approved-retry-blocked"
 
 
 def enqueue_memory_decision_event(
@@ -158,12 +152,24 @@ def _ensure_source_receipt_id(
     request_id = _request_string(request, "request_id")
     if request_id is None:
         return None
-    policy_decision = {
-        "approved": "allow",
-        "blocked": "block",
-        "dismissed_keep_asking": "require-reapproval",
-    }.get(decision_action)
-    if policy_decision is None:
+    from .native_runner_authority import native_runner_authority
+
+    # The runtime derives the receipt's fields: the policy decision, the
+    # command text it keeps, its artifact identity, the human override and the
+    # deterministic id.
+    fields = native_runner_authority(
+        "memory_decision_receipt",
+        {
+            "request_id": request_id,
+            "decision_action": decision_action,
+            "retry_blocked": retry_blocked,
+            "raw_command": _request_string(request, "raw_command_text", "review_command"),
+            "artifact_id": _request_string(request, "artifact_id"),
+            "artifact_hash": _request_string(request, "artifact_hash"),
+        },
+    )
+    policy_decision = fields.get("policy_decision")
+    if not isinstance(policy_decision, str):
         return None
 
     getter = getattr(store, "get_receipt_for_approval_request", None)
@@ -179,42 +185,22 @@ def _ensure_source_receipt_id(
     add_receipt = getattr(store, "add_receipt", None)
     if not callable(add_receipt):
         return None
-    # A tool call has no command text, and review_command then holds only the
-    # "hol-guard approvals approve <id>" wrapper, which is not the action.
-    raw_command = _request_string(request, "raw_command_text", "review_command")
-    if raw_command is not None and is_approval_wrapper(raw_command):
-        raw_command = None
-    artifact_id = _request_string(request, "artifact_id") or f"approval-request:{request_id}"
-    artifact_identity = raw_command or artifact_id
-    artifact_hash = _request_string(request, "artifact_hash") or (
-        "sha256:" + hashlib.sha256(artifact_identity.encode()).hexdigest()
-    )
     receipt = build_receipt(
         harness=_request_string(request, "harness") or "guard",
-        artifact_id=artifact_id,
-        artifact_hash=artifact_hash,
+        artifact_id=str(fields["artifact_id"]),
+        artifact_hash=str(fields["artifact_hash"]),
         policy_decision=policy_decision,
         capabilities_summary=_request_string(request, "capabilities_summary") or "approval decision",
         changed_capabilities=[],
         provenance_summary="Guard approval decision",
         artifact_name=_request_string(request, "artifact_name"),
         source_scope=scope,
-        # A person made this decision; without an override the receipt reads
-        # as "Guard allowed it automatically". A one-time approval the agent's
-        # retry cannot reuse records the decision but the action stays blocked.
-        user_override=(
-            APPROVAL_RETRY_BLOCKED_OVERRIDE
-            if retry_blocked and decision_action == "approved"
-            else f"approval-{decision_action}"
-        ),
+        user_override=str(fields["user_override"]),
         approval_source="memory_decision",
         approval_request_id=request_id,
-        raw_command_text=raw_command,
+        raw_command_text=cast("str | None", fields["raw_command"]),
     )
-    deterministic_receipt_id = (
-        "guard-receipt-memory-" + hashlib.sha256(f"{request_id}:{policy_decision}".encode()).hexdigest()[:32]
-    )
-    receipt = replace(receipt, receipt_id=deterministic_receipt_id)
+    receipt = replace(receipt, receipt_id=str(fields["receipt_id"]))
     add_receipt(receipt)
     _LOGGER.info(
         "Created durable receipt for memory decision",

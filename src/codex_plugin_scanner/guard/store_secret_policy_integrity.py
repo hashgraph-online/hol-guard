@@ -12,6 +12,7 @@ from .native_policy_integrity_rows import (
     PolicyRowSignItem,
     PolicyRowVerifyItem,
     native_prepare_policy_integrity_generation,
+    native_reconcile_policy_integrity_generation,
     native_sign_policy_rows,
     native_verify_policy_rows,
 )
@@ -664,6 +665,27 @@ class StoreSecretPolicyIntegrityMixin:
         ).fetchone()
         return int(row["total"]) if row is not None else 0
 
+    def _begin_policy_integrity_generation(self, trusted_state: Mapping[str, object]) -> int:
+        """Persist the pending generation; return the one it advances from.
+
+        The pending state lands before any row is signed, so an interrupted
+        advance leaves a generation the next start reconciles instead of a
+        trusted set that moved only halfway.
+        """
+
+        current_generation = _mapping_int(trusted_state, "generation")
+        if current_generation is None:
+            raise RuntimeError("Guard policy integrity control state is invalid.")
+        pending_state: dict[str, object] = {
+            "cutover_complete": True,
+            "generation": current_generation,
+            "pending_generation": current_generation + 1,
+            "version": _POLICY_INTEGRITY_CONTROL_VERSION,
+        }
+        if not self._store_policy_integrity_control_state(pending_state):
+            raise RuntimeError("Guard could not persist the policy integrity control state.")
+        return current_generation
+
     def _advance_policy_integrity_generation(
         self,
         connection: sqlite3.Connection,
@@ -675,19 +697,9 @@ class StoreSecretPolicyIntegrityMixin:
         force_sign_decision_ids: set[int] | None = None,
         harness: str | None = None,
     ) -> dict[str, object]:
-        current_generation = _mapping_int(trusted_state, "generation")
-        if current_generation is None:
-            raise RuntimeError("Guard policy integrity control state is invalid.")
+        current_generation = self._begin_policy_integrity_generation(trusted_state)
         next_generation = current_generation + 1
         sign_ids = force_sign_decision_ids or set()
-        pending_state: dict[str, object] = {
-            "cutover_complete": True,
-            "generation": current_generation,
-            "pending_generation": next_generation,
-            "version": _POLICY_INTEGRITY_CONTROL_VERSION,
-        }
-        if not self._store_policy_integrity_control_state(pending_state):
-            raise RuntimeError("Guard could not persist the policy integrity control state.")
         rows = [_row_mapping(row) for row in self._load_local_policy_rows(connection, harness=harness)]
         unforced = [row for row in rows if int(row["decision_id"]) not in sign_ids]
         verified = self._verify_policy_rows(
@@ -743,105 +755,27 @@ class StoreSecretPolicyIntegrityMixin:
         key_id: str,
         trusted_state: dict[str, object],
     ) -> dict[str, object]:
-        next_state = self._resolved_policy_integrity_pending_generation(
-            connection,
-            key=key,
-            key_id=key_id,
-            trusted_state=trusted_state,
-        )
-        if next_state is trusted_state:
-            return trusted_state
-        if not self._store_policy_integrity_control_state(next_state):
-            raise RuntimeError("Guard could not persist the policy integrity control state.")
-        return next_state
-
-    def _classify_policy_integrity_pending_generation_rows(
-        self,
-        rows: Sequence[sqlite3.Row],
-        *,
-        key: bytes,
-        key_id: str,
-        current_generation: int,
-        pending_generation: int,
-    ) -> tuple[bool, int, int, int]:
-        payloads = [_row_mapping(row) for row in rows]
-        legacy = [_mapping_int(row, "integrity_version") != POLICY_INTEGRITY_VERSION for row in payloads]
-        # Each row is checked at the current generation; signed rows also at the pending one.
-        items = [
-            PolicyRowVerifyItem(row, degraded_mode=False, trusted_generation=current_generation) for row in payloads
-        ]
-        items.extend(
-            PolicyRowVerifyItem(row, degraded_mode=False, trusted_generation=pending_generation)
-            for row, is_legacy in zip(payloads, legacy, strict=True)
-            if not is_legacy
-        )
-        results = iter(self._verify_policy_rows(items, key=key, key_id=key_id))
-        current_results = [next(results) for _ in payloads]
-        pending_candidates = 0
-        pending_valid = 0
-        current_valid = 0
-        for is_legacy, current_result in zip(legacy, current_results, strict=True):
-            if not is_legacy:
-                pending_candidates += 1
-                if next(results).status == "valid":
-                    pending_valid += 1
-                    continue
-            if current_result.status == "valid":
-                current_valid += 1
-        return any(legacy), pending_candidates, pending_valid, current_valid
-
-    def _resolved_policy_integrity_pending_generation(
-        self,
-        connection: sqlite3.Connection,
-        *,
-        key: bytes,
-        key_id: str,
-        trusted_state: dict[str, object],
-    ) -> dict[str, object]:
         current_generation = _mapping_int(trusted_state, "generation")
         if current_generation is None:
             raise RuntimeError("Guard policy integrity control state is invalid.")
         pending_generation = trusted_state.get("pending_generation")
         if not isinstance(pending_generation, int) or pending_generation <= current_generation:
+            # Nothing is pending, so there is no decision to put to the runtime,
+            # which refuses such a state rather than handing it back unchanged.
             return trusted_state
-        rows = self._load_local_policy_rows(connection)
-        next_state: dict[str, object]
-        if not rows:
-            next_state = {
-                "cutover_complete": True,
-                "generation": pending_generation,
-                "pending_generation": None,
-                "version": _POLICY_INTEGRITY_CONTROL_VERSION,
-            }
-        else:
-            (
-                has_legacy_rows,
-                pending_candidates,
-                pending_valid,
-                current_valid,
-            ) = self._classify_policy_integrity_pending_generation_rows(
-                rows,
-                key=key,
-                key_id=key_id,
-                current_generation=current_generation,
-                pending_generation=pending_generation,
-            )
-            if has_legacy_rows:
-                next_state = dict(trusted_state)
-                if pending_candidates > 0 and current_valid == len(rows):
-                    next_state["pending_generation"] = None
-            elif pending_valid == len(rows):
-                next_state = {
-                    "cutover_complete": True,
-                    "generation": pending_generation,
-                    "pending_generation": None,
-                    "version": _POLICY_INTEGRITY_CONTROL_VERSION,
-                }
-            elif current_valid == len(rows):
-                next_state = dict(trusted_state)
-                next_state["pending_generation"] = None
-            else:
-                next_state = dict(trusted_state)
+        # The rows travel with the request: this runs inside the caller's open
+        # transaction, which the runtime's own read-only connection cannot see.
+        next_state = native_reconcile_policy_integrity_generation(
+            guard_home=self.guard_home,
+            key=key,
+            key_id=key_id,
+            trusted_state=trusted_state,
+            rows=[_row_mapping(row) for row in self._load_local_policy_rows(connection)],
+        )
+        if next_state == trusted_state:
+            return trusted_state
+        if not self._store_policy_integrity_control_state(next_state):
+            raise RuntimeError("Guard could not persist the policy integrity control state.")
         return next_state
 
     def _refresh_policy_integrity_state(

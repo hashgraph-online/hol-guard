@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 import base64
+import hashlib
 import os
 import tempfile
 from pathlib import Path
 
 from ..extension_builder.io import checked_path, read_bytes
 from . import lifecycle
+from .pack_archives import MAX_ARCHIVE_BYTES
 from .pack_store import durable_directory, publish_object
 
 
@@ -84,23 +86,47 @@ def write_once(path: Path, data: bytes):
             temporary.unlink(missing_ok=True)
 
 
-def stage_archive(directory, reference, fetch, *, invoke=None):
+def stage_archive(directory, reference, fetch, *, invoke=None, objects=None):
     """Native validates the whole ZIP before any member is published."""
-    path = checked_path(directory / "archives" / (reference["sha256"] + ".zip"))
+    digest, length = reference["sha256"], reference["length"]
+    if not isinstance(digest, str) or len(digest) != 64 or any(c not in "0123456789abcdef" for c in digest):
+        raise ValueError("pack transfer identity invalid")
+    # Bound the transfer before fetching; native rechecks the exact bytes.
+    if type(length) is not int or not 0 < length <= MAX_ARCHIVE_BYTES:
+        raise ValueError("pack transfer length invalid")
+    path = checked_path(directory / "archives" / (digest + ".zip"))
+
+    def transfer():
+        data = fetch(reference["location"], length)
+        # Never cache a corrupt transfer under its expected name; a retry refetches.
+        if len(data) != length or hashlib.sha256(data).hexdigest() != digest:
+            raise ValueError("pack transfer integrity invalid")
+        write_once(path, data)
+
+    def admit():
+        return (lifecycle.invoke if invoke is None else invoke)(
+            "offline", operation="archive", path=str(path), sha256=digest, length=length, include_data=True
+        )
+
     if not path.exists():
-        write_once(path, fetch(reference["location"], reference["length"]))
-    admitted = (lifecycle.invoke if invoke is None else invoke)(
-        "offline",
-        operation="archive",
-        path=str(path),
-        sha256=reference["sha256"],
-        length=reference["length"],
-        include_data=True,
-    )
-    objects = checked_path(directory / "objects")
+        transfer()
+        admitted = admit()
+    else:
+        try:
+            admitted = admit()
+        except ValueError as error:
+            # Only a cached transfer native refuses is discarded and fetched
+            # once more, so one damaged file cannot fail every later refresh.
+            # An unavailable runtime says nothing about the bytes; the entry stays.
+            if "offline_pack_invalid" not in str(error):
+                raise
+            path.unlink(missing_ok=True)
+            transfer()
+            admitted = admit()
+    objects = checked_path(directory / "objects" if objects is None else objects)
     objects.mkdir(mode=0o700, parents=True, exist_ok=True)
-    for identity, data in admitted["objects"]:
-        publish_object(objects, identity, base64.b64decode(data, validate=True))
+    for identity, encoded in admitted["objects"]:
+        publish_object(objects, identity, base64.b64decode(encoded, validate=True))
 
 
 def cleanup(store, *, maximum_bytes=512 * 1024 * 1024):

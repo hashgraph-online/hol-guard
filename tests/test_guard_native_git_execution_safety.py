@@ -9,6 +9,7 @@ from types import SimpleNamespace
 import pytest
 
 from codex_plugin_scanner.guard import native_git_execution_safety as bridge
+from codex_plugin_scanner.guard import native_resident_decision as resident
 
 _FEATURES = ("resident-protocol-v2", "git-execution-safety-v1")
 
@@ -41,7 +42,7 @@ class _Recorder:
         envelope: dict[str, object] = {
             "schema": bridge._RESULT_SCHEMA,
             "request_id": request["request_id"],
-            "request_sha256": "sha256:" + bridge._canonical_request_sha256(request),
+            "request_sha256": "sha256:" + resident._canonical_request_sha256(request),
             "status": "ok",
             "code": "ok",
             "allowed": True,
@@ -54,21 +55,23 @@ class _Recorder:
 @pytest.fixture
 def recorder(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> _Recorder:
     state = _Recorder()
-    monkeypatch.setattr(bridge, "native_runtime_status", lambda **_kw: _status())
-    monkeypatch.setattr(bridge, "_resolve_digest_home", lambda _home: tmp_path)
-    monkeypatch.setattr(bridge, "ensure_resident_prerequisite", lambda _home: True)
-    monkeypatch.setattr(bridge, "native_runtime_health_snapshot", lambda *_a: SimpleNamespace(circuit_open=False))
-    monkeypatch.setattr(bridge, "native_record_resident_failure", lambda *_a, reason: state.failures.append(reason))
+    monkeypatch.setattr(resident, "native_runtime_status", lambda **_kw: _status())
+    monkeypatch.setattr(resident, "_resolve_digest_home", lambda _home: tmp_path)
+    monkeypatch.setattr(resident, "ensure_resident_prerequisite", lambda _home: True)
+    monkeypatch.setattr(resident, "native_runtime_health_snapshot", lambda *_a: SimpleNamespace(circuit_open=False))
+    monkeypatch.setattr(resident, "native_record_resident_failure", lambda *_a, reason: state.failures.append(reason))
     monkeypatch.setattr(
-        bridge, "native_record_resident_success", lambda *_a: setattr(state, "successes", state.successes + 1)
+        resident, "native_record_resident_success", lambda *_a: setattr(state, "successes", state.successes + 1)
     )
-    monkeypatch.setattr(bridge, "native_record_overload", lambda *_a: setattr(state, "overloads", state.overloads + 1))
+    monkeypatch.setattr(
+        resident, "native_record_overload", lambda *_a: setattr(state, "overloads", state.overloads + 1)
+    )
 
     def transport(*, payload: bytes, **_kw: object) -> bytes | None:
         state.payloads.append(json.loads(payload))
         return state.reply()
 
-    monkeypatch.setattr(bridge, "native_resident_client_request", transport)
+    monkeypatch.setattr(resident, "native_resident_client_request", transport)
     return state
 
 
@@ -96,11 +99,11 @@ def test_resident_denial_is_returned_without_a_path(recorder: _Recorder) -> None
     [
         (
             {"request_sha256": "sha256:" + hashlib.sha256(b"other").hexdigest()},
-            "native_git_execution_safety_schema_mismatch",
+            "native_git_execution_safety_result_invalid",
         ),
-        ({"request_id": "ges-other"}, "native_git_execution_safety_schema_mismatch"),
-        ({"schema": "other"}, "native_git_execution_safety_schema_mismatch"),
-        ({"allowed": "yes"}, "native_git_execution_safety_schema_mismatch"),
+        ({"request_id": "ges-other"}, "native_git_execution_safety_result_invalid"),
+        ({"schema": "other"}, "native_git_execution_safety_result_invalid"),
+        ({"allowed": "yes"}, "native_git_execution_safety_result_invalid"),
     ],
 )
 def test_mismatched_replies_are_refused_and_recorded(
@@ -116,7 +119,7 @@ def test_undecodable_reply_is_refused(recorder: _Recorder) -> None:
     recorder.raw_output = b"not json"
 
     assert bridge.git_execution_safety_native("config_environment_clean") is None
-    assert recorder.failures == ["native_git_execution_safety_decode_failed"]
+    assert recorder.failures == ["native_git_execution_safety_result_invalid"]
 
 
 def test_unavailable_transport_is_refused_and_recorded(recorder: _Recorder) -> None:
@@ -128,7 +131,7 @@ def test_unavailable_transport_is_refused_and_recorded(recorder: _Recorder) -> N
 
 
 def test_overloaded_resident_is_refused(recorder: _Recorder, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(bridge, "_native_error", lambda _envelope: "native_overloaded")
+    monkeypatch.setattr(resident, "_native_error", lambda _envelope: "native_overloaded")
     recorder.answer = False
     recorder.raw_output = b"{}"
 
@@ -147,7 +150,7 @@ def test_overloaded_resident_is_refused(recorder: _Recorder, monkeypatch: pytest
 def test_missing_capability_or_runtime_never_reaches_the_resident(
     recorder: _Recorder, monkeypatch: pytest.MonkeyPatch, status: SimpleNamespace
 ) -> None:
-    monkeypatch.setattr(bridge, "native_runtime_status", lambda **_kw: status)
+    monkeypatch.setattr(resident, "native_runtime_status", lambda **_kw: status)
 
     assert bridge.git_execution_safety_native("config_environment_clean") is None
     assert recorder.payloads == []
@@ -156,10 +159,10 @@ def test_missing_capability_or_runtime_never_reaches_the_resident(
 def test_open_circuit_or_missing_prerequisite_never_reaches_the_resident(
     recorder: _Recorder, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setattr(bridge, "ensure_resident_prerequisite", lambda _home: False)
+    monkeypatch.setattr(resident, "ensure_resident_prerequisite", lambda _home: False)
     assert bridge.git_execution_safety_native("config_environment_clean") is None
 
-    monkeypatch.setattr(bridge, "ensure_resident_prerequisite", lambda _home: True)
-    monkeypatch.setattr(bridge, "native_runtime_health_snapshot", lambda *_a: SimpleNamespace(circuit_open=True))
+    monkeypatch.setattr(resident, "ensure_resident_prerequisite", lambda _home: True)
+    monkeypatch.setattr(resident, "native_runtime_health_snapshot", lambda *_a: SimpleNamespace(circuit_open=True))
     assert bridge.git_execution_safety_native("config_environment_clean") is None
     assert recorder.payloads == []

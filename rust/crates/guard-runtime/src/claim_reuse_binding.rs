@@ -59,7 +59,10 @@ fn needs(members: &[(&Value, &'static str)]) -> Needs {
     needs
 }
 
-fn sync_state_payload(connection: &Connection, key: &str) -> rusqlite::Result<Option<String>> {
+pub(crate) fn sync_state_payload(
+    connection: &Connection,
+    key: &str,
+) -> rusqlite::Result<Option<String>> {
     Ok(connection
         .query_row(
             "select payload_json from sync_state where state_key = ?1",
@@ -103,7 +106,7 @@ fn policy_state_is_bound(
         .is_none_or(|state_key_id| state_key_id == key_id))
 }
 
-fn cloud_workspace_id(connection: &Connection) -> rusqlite::Result<Option<String>> {
+pub(crate) fn cloud_workspace_id(connection: &Connection) -> rusqlite::Result<Option<String>> {
     let Some(stored) = sync_state_payload(connection, OAUTH_STATE_KEY)? else {
         return Ok(None);
     };
@@ -118,7 +121,7 @@ fn cloud_workspace_id(connection: &Connection) -> rusqlite::Result<Option<String
         }))
 }
 
-fn local_device(connection: &Connection) -> rusqlite::Result<Option<(String, String)>> {
+pub(crate) fn local_device(connection: &Connection) -> rusqlite::Result<Option<(String, String)>> {
     connection
         .query_row(
             "select installation_id, device_label from guard_devices where device_key = ?1",

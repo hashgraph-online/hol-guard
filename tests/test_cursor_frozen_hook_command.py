@@ -329,10 +329,8 @@ def test_frozen_cursor_hook_runs_behind_the_durable_native_bridge(
     assert live_cursor_hooks_use_frozen_control_plane(_blocking_cursor_hooks(command)) is True
 
 
-def test_rebind_moves_direct_cursor_clients_behind_the_native_bridge(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    from codex_plugin_scanner.guard import cursor_hook_rebind
+def test_rebind_moves_direct_cursor_clients_behind_the_native_bridge(tmp_path: Path) -> None:
+    from codex_plugin_scanner.guard.adapters.cursor_hook_config import _ask, _live_managed_commands
 
     script = tmp_path / ".cursor" / "hooks" / HOOK_SCRIPT_NAME
     script.parent.mkdir(parents=True)
@@ -342,11 +340,19 @@ def test_rebind_moves_direct_cursor_clients_behind_the_native_bridge(
     bridged = shlex.join(
         [str(runtime), "cursor-hook-bridge", "/app/hol-guard", FROZEN_CURSOR_HOOK_COMMAND, str(script)]
     )
-    guard_home = tmp_path / "guard-home"
-    monkeypatch.setattr(cursor_hook_rebind, "native_cursor_hook_bridge", lambda home=None: runtime)
 
-    assert cursor_hook_rebind._live_hooks_skip_native_bridge(_blocking_cursor_hooks(direct), guard_home) is True
-    assert cursor_hook_rebind._live_hooks_skip_native_bridge(_blocking_cursor_hooks(bridged), guard_home) is False
+    def skips_bridge(command: str, *, bridge_ready: bool) -> object:
+        commands = _live_managed_commands(_blocking_cursor_hooks(command))
+        return _ask(
+            "rebind",
+            live="",
+            managed=None,
+            expected="",
+            commands=[[item, frozen] for item, frozen in commands],
+            isolated_python=False,
+            native_bridge=bridge_ready,
+        )["rebind"]
 
-    monkeypatch.setattr(cursor_hook_rebind, "native_cursor_hook_bridge", lambda home=None: None)
-    assert cursor_hook_rebind._live_hooks_skip_native_bridge(_blocking_cursor_hooks(direct), guard_home) is False
+    assert skips_bridge(direct, bridge_ready=True) is True
+    assert skips_bridge(bridged, bridge_ready=True) is False
+    assert skips_bridge(direct, bridge_ready=False) is False

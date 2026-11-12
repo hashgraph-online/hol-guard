@@ -14,6 +14,7 @@ import pytest
 
 from codex_plugin_scanner.guard.adapters import bounded_cli_hook_bridge as bridge
 from codex_plugin_scanner.guard.adapters import bounded_cli_hook_daemon as daemon
+from codex_plugin_scanner.guard.adapters import bounded_cli_hook_recovery as recovery
 from codex_plugin_scanner.guard.adapters.bounded_cli_hook_bridge import _render_bounded_hook_script
 from codex_plugin_scanner.guard.codex_hook_launch_runtime import BoundedHookProcessResult
 
@@ -24,7 +25,7 @@ from .bounded_cli_hook_test_support import config
 def test_timeout_cannot_grant_unreviewed_protected_action(tmp_path, monkeypatch, harness):
     monkeypatch.setattr(daemon, "try_daemon_hook", lambda **kwargs: None)
     monkeypatch.setattr(
-        bridge, "run_isolated_hook_process", lambda *args, **kwargs: BoundedHookProcessResult(None, "", False, True)
+        recovery, "run_isolated_hook_process", lambda *args, **kwargs: BoundedHookProcessResult(None, "", False, True)
     )
     output = io.StringIO()
     with redirect_stdout(output):
@@ -50,7 +51,7 @@ def test_timeout_cannot_grant_unreviewed_protected_action(tmp_path, monkeypatch,
     )
 
 
-def test_daemon_attempt_cannot_renew_cli_fallback_budget(tmp_path, monkeypatch):
+def test_daemon_attempt_cannot_renew_the_recovery_budget(tmp_path, monkeypatch):
     hook_config = config(tmp_path, harness="kimi")
     hook_config["timeout_seconds"] = 0.03
     spawned = []
@@ -64,13 +65,13 @@ def test_daemon_attempt_cannot_renew_cli_fallback_budget(tmp_path, monkeypatch):
         return BoundedHookProcessResult(None, "", False, True)
 
     monkeypatch.setattr(daemon, "try_daemon_hook", exhausted_daemon)
-    monkeypatch.setattr(bridge, "run_isolated_hook_process", unexpected_spawn)
+    monkeypatch.setattr(recovery, "run_isolated_hook_process", unexpected_spawn)
     with redirect_stdout(io.StringIO()):
         bridge.run_bounded_cli_hook(hook_config, input_text='{"hook_event_name":"PreToolUse"}')
     assert spawned == []
 
 
-@pytest.mark.parametrize("late_boundary", ["daemon", "cli"])
+@pytest.mark.parametrize("late_boundary", ["daemon", "recovery"])
 def test_late_allow_cannot_commit_after_original_deadline(tmp_path, monkeypatch, late_boundary):
     hook_config = config(tmp_path, harness="grok")
     hook_config["timeout_seconds"] = 0.02
@@ -81,12 +82,12 @@ def test_late_allow_cannot_commit_after_original_deadline(tmp_path, monkeypatch,
             return '{"decision":"allow"}', "", 0
         return None
 
-    def delayed_cli(*args, **kwargs):
+    def delayed_recovery(*args, **kwargs):
         time.sleep(0.04)
         return BoundedHookProcessResult(0, '{"decision":"allow"}', False, False)
 
     monkeypatch.setattr(daemon, "try_daemon_hook", delayed_daemon)
-    monkeypatch.setattr(bridge, "run_isolated_hook_process", delayed_cli)
+    monkeypatch.setattr(recovery, "run_isolated_hook_process", delayed_recovery)
     output = io.StringIO()
     with redirect_stdout(output):
         bridge.run_bounded_cli_hook(hook_config, input_text='{"hook_event_name":"PreToolUse"}')

@@ -1,8 +1,9 @@
 //! Native preparation for contained Node/Vitest and direct inline evaluation.
 use super::*;
 use crate::contained_argv::{
-    bun_vitest_invocation, inline_eval, node_runtime_args, node_script_index, python_runtime_args,
-    tsx_test_invocation, vitest_arguments,
+    bun_runner_entry_launch, bun_vitest_invocation, contained_runner_invocation, inline_eval,
+    node_runtime_args, node_script_index, python_runtime_args, tsx_runner_test_mode,
+    tsx_test_invocation, tsx_test_runner_flags,
 };
 use serde::Deserialize;
 use serde_json::{json, Value};
@@ -92,8 +93,116 @@ fn request_home(home: Option<&Path>) -> Option<PathBuf> {
         .or_else(host_home_directory)
 }
 
-fn nvm_versions_root(home: Option<&Path>) -> Option<PathBuf> {
-    request_home(home).map(|home| home.join(".nvm/versions/node"))
+/// Where a version manager keeps the Node releases it installed, relative to
+/// a home. Each entry is one manager's own tree and nothing else: nvm, fnm,
+/// Volta, asdf and mise. They are named one by one, rather than hidden
+/// directories below a home being admitted as a class, because that class
+/// holds the directories a contained run must never execute from.
+/// `~/.hol-guard/package-shims/bin` holds shims that hand a launch back to
+/// Guard instead of running the runtime, and `~/.claude`, `~/.codex` and
+/// `~/.omp` hold agent state; no entry here can spell any of them.
+pub(super) const NODE_MANAGER_ROOTS: &[&str] = &[
+    ".nvm/versions/node",
+    ".fnm/node-versions",
+    ".local/share/fnm/node-versions",
+    ".volta/tools/image/node",
+    ".asdf/installs/nodejs",
+    ".local/share/mise/installs/node",
+];
+/// Where Bun's own installer puts the runtime, relative to a home, and the
+/// version-manager trees that install Bun instead. The installer directory
+/// holds the binary itself; the others hold a release per version, like
+/// [`NODE_MANAGER_ROOTS`].
+const BUN_INSTALL_ROOT: &str = ".bun/bin";
+const BUN_MANAGER_ROOTS: &[&str] = &[".asdf/installs/bun", ".local/share/mise/installs/bun"];
+
+/// Every home a runtime may be installed under: the one the request names and
+/// this account's own, canonical and without repeats.
+///
+/// The request HOME is not always the account's. A session Guard supervises
+/// is started with the HOME its harness chose, while the runtime the caller
+/// actually runs was installed by nvm or Bun's installer under the account's
+/// home. Reading only the request's home refused that runtime and the
+/// contained run died with exit 126 before it executed anything, which is why
+/// both are read here, as `toolchains::homes` already does for every other
+/// root a contained run is granted.
+fn runtime_homes(home: Option<&Path>) -> Vec<PathBuf> {
+    let mut homes: Vec<PathBuf> = Vec::new();
+    for candidate in request_home(home).into_iter().chain(host_home_directory()) {
+        let canonical = candidate.canonicalize().unwrap_or(candidate);
+        if !homes.contains(&canonical) {
+            homes.push(canonical);
+        }
+    }
+    homes
+}
+
+/// `relatives` below each home, canonical where the directory resolves.
+///
+/// The executable a plan judges is canonical, so the roots it is compared
+/// against are canonical too: a home whose `.nvm` is a link, which is how
+/// several dotfile managers lay a profile out, otherwise never matched the
+/// path the runtime actually resolved to.
+pub(super) fn manager_roots(homes: &[PathBuf], relatives: &[&str]) -> Vec<PathBuf> {
+    let mut roots: Vec<PathBuf> = Vec::new();
+    for home in homes {
+        for relative in relatives {
+            let joined = home.join(relative);
+            let root = joined.canonicalize().unwrap_or(joined);
+            if !roots.contains(&root) {
+                roots.push(root);
+            }
+        }
+    }
+    roots
+}
+
+/// Whether `executable` is the runtime a version manager installed below one
+/// of `roots`: `<root>/<version>/bin/<name>`, or the extra `installation`
+/// level fnm writes. Only those two shapes, so a program that merely happens
+/// to sit somewhere inside a manager's tree is not reached through this rule.
+pub(super) fn managed_runtime(executable: &Path, roots: &[PathBuf]) -> bool {
+    static VERSION: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"^v?\d+(\.\d+){0,2}$").unwrap());
+    let Some(parent) = executable.parent() else {
+        return false;
+    };
+    if parent.file_name() != Some(OsStr::new("bin")) {
+        return false;
+    }
+    let Some(mut version) = parent.parent() else {
+        return false;
+    };
+    if version.file_name() == Some(OsStr::new("installation")) {
+        let Some(outer) = version.parent() else {
+            return false;
+        };
+        version = outer;
+    }
+    version
+        .file_name()
+        .and_then(OsStr::to_str)
+        .is_some_and(|name| VERSION.is_match(name))
+        && version
+            .parent()
+            .is_some_and(|root| roots.iter().any(|candidate| candidate == root))
+}
+
+/// Whether `executable` is a Node a version manager installed under one of
+/// the caller's homes.
+pub(super) fn managed_node(executable: &Path, home: Option<&Path>) -> bool {
+    let homes = runtime_homes(home);
+    managed_runtime(executable, &manager_roots(&homes, NODE_MANAGER_ROOTS))
+}
+
+/// Whether `executable` is a Bun that Bun's own installer, or a version
+/// manager, put under one of the caller's homes.
+pub(super) fn managed_bun(executable: &Path, home: Option<&Path>) -> bool {
+    let homes = runtime_homes(home);
+    let installed = executable.file_name() == Some(OsStr::new("bun"))
+        && manager_roots(&homes, &[BUN_INSTALL_ROOT])
+            .iter()
+            .any(|root| executable.parent() == Some(root.as_path()));
+    installed || managed_runtime(executable, &manager_roots(&homes, BUN_MANAGER_ROOTS))
 }
 
 fn approved_node(executable: &Path, workspace: &Path, home: Option<&Path>) -> bool {
@@ -109,10 +218,6 @@ fn approved_node(executable: &Path, workspace: &Path, home: Option<&Path>) -> bo
     {
         return false;
     }
-    let parent = executable.parent().unwrap_or(Path::new("/"));
-    let version = parent.parent().unwrap_or(Path::new("/"));
-    let nvm = nvm_versions_root(home);
-    static VERSION: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"^v\d+\.\d+\.\d+$").unwrap());
     let trusted = [
         workspace,
         Path::new("/usr/bin"),
@@ -121,12 +226,7 @@ fn approved_node(executable: &Path, workspace: &Path, home: Option<&Path>) -> bo
     ]
     .iter()
     .any(|root| path_is_within(executable, root))
-        || (parent.file_name() == Some(OsStr::new("bin"))
-            && version.parent() == nvm.as_deref()
-            && version
-                .file_name()
-                .and_then(OsStr::to_str)
-                .is_some_and(|v| VERSION.is_match(v)));
+        || managed_node(executable, home);
     trusted && native_image(executable)
 }
 
@@ -169,6 +269,11 @@ fn nearest_project_root(
 
 fn prepare_node(input: &Input) -> Result<Value, RestrictedPytestError> {
     let argv = normalized_command(&input.command)?;
+    // `bun test` shares this profile: the same read-only boundary, a
+    // different image approval.
+    if Path::new(&argv[0]).file_name().and_then(OsStr::to_str) == Some("bun") {
+        return bun::prepare_test(input, &argv);
+    }
     let runtime = node_runtime_args(&argv)?;
     let index = 1 + runtime.len();
     if argv.len() <= index
@@ -261,9 +366,9 @@ fn readonly_config_arguments(args: &[String], manifest: &Path) -> Vec<String> {
 fn prepare_vitest(input: &Input) -> Result<Value, RestrictedPytestError> {
     let argv = normalized_command(&input.command)?;
     if let Some((script, arguments)) = tsx_test_invocation(&argv)? {
-        return prepare_tsx(input, &argv, &script, &arguments);
+        return prepare_tsx(input, &argv, script.as_deref(), &arguments);
     }
-    let args = vitest_arguments(&input.command)?;
+    let (tool, args) = contained_runner_invocation(&input.command)?;
     let runtime = node_runtime_args(&input.command)?;
     let mut workspace = input.workspace.clone();
     let mut cwd = input.cwd.clone();
@@ -307,31 +412,129 @@ fn prepare_vitest(input: &Input) -> Result<Value, RestrictedPytestError> {
     let mut plan = prepare_node(&base)?;
     let workspace = Path::new(plan["workspace"].as_str().unwrap());
     let cwd = Path::new(plan["cwd"].as_str().unwrap());
-    let modules = nearest_project_root(cwd, workspace, "node_modules/vitest/vitest.mjs")?
+    // Each contained runner is the workspace's own installed entry point.
+    // Mocha publishes two spellings of its `bin` shim across the releases
+    // this route reads: `bin/mocha.js` from Mocha 10 on, and the
+    // extensionless `bin/mocha` of Mocha 8 and 9. The installed one decides
+    // which the run executes, so a project on either release runs rather than
+    // reporting the package it holds as missing, and the walk up to the
+    // project root looks for the manifest both spellings ship beside rather
+    // than for one of them.
+    let (installed, package_entries): (&str, &[&str]) = match tool {
+        "jest" => ("jest/bin/jest.js", &["jest/bin/jest.js"]),
+        "mocha" => (
+            "mocha/package.json",
+            &["mocha/bin/mocha.js", "mocha/bin/mocha"],
+        ),
+        // AVA moved its entry twice without renaming the package, so the
+        // manifest is the one spelling every release ships and the entries
+        // are read in the order the releases introduced them.
+        "ava" => (
+            "ava/package.json",
+            &[
+                "ava/entrypoints/cli.js",
+                "ava/entrypoints/cli.mjs",
+                "ava/cli.js",
+            ],
+        ),
+        "jasmine" => ("jasmine/package.json", &["jasmine/bin/jasmine.js"]),
+        "qunit" => ("qunit/package.json", &["qunit/bin/qunit.js"]),
+        "uvu" => ("uvu/package.json", &["uvu/bin.js"]),
+        "tape" => ("tape/package.json", &["tape/bin/tape"]),
+        "tsd" => ("tsd/package.json", &["tsd/dist/cli.js"]),
+        // tap moved its entry once without renaming the package: tap 21 ships
+        // the ESM runner, tap 16 through 20 the CommonJS one. The manifest is
+        // the spelling every release ships and the entries are read in the
+        // order the releases introduced them.
+        "tap" => (
+            "tap/package.json",
+            &["tap/dist/esm/run.mjs", "tap/bin/run.js"],
+        ),
+        "borp" => ("borp/package.json", &["borp/borp.js"]),
+        "poku" => ("poku/package.json", &["poku/lib/bin/index.js"]),
+        "lab" => ("@hapi/lab/package.json", &["@hapi/lab/bin/lab"]),
+        "cucumber-js" => (
+            "@cucumber/cucumber/package.json",
+            &["@cucumber/cucumber/bin/cucumber.js"],
+        ),
+        _ => ("vitest/vitest.mjs", &["vitest/vitest.mjs"]),
+    };
+    let modules = nearest_project_root(cwd, workspace, &format!("node_modules/{installed}"))?
         .join("node_modules");
-    let entry = modules
-        .join("vitest/vitest.mjs")
-        .canonicalize()
-        .ok()
-        .filter(|p| p.is_file() && path_is_within(p, &modules));
+    let entry = package_entries.iter().find_map(|package_entry| {
+        modules
+            .join(package_entry)
+            .canonicalize()
+            .ok()
+            .filter(|p| p.is_file() && path_is_within(p, &modules))
+    });
+    // A call that spelled the entry point has to run the file it spelled, so
+    // the resolved installed entry is checked against it. Bun spells one the
+    // same way Node does.
     let node = matches!(
         Path::new(&input.command[0])
             .file_name()
             .and_then(OsStr::to_str),
         Some("node" | "nodejs")
-    );
+    ) || bun_runner_entry_launch(&argv);
+    // Vitest's `bin` shim and the CLI module that shim imports name the same
+    // installed runner, so either spelling resolves to the entry point Guard
+    // runs; the plan below still executes the package's own `bin` entry.
+    let spelled: Vec<PathBuf> = entry
+        .iter()
+        .cloned()
+        .chain(
+            (tool == "vitest")
+                .then(|| {
+                    modules
+                        .join("vitest/dist/cli.js")
+                        .canonicalize()
+                        .ok()
+                        .filter(|p| p.is_file() && path_is_within(p, &modules))
+                })
+                .flatten(),
+        )
+        .collect();
     let matching = !node
         || input
             .command
             .get(1 + runtime.len())
             .and_then(|p| cwd.join(p).canonicalize().ok())
-            == entry;
+            .is_some_and(|p| spelled.contains(&p));
     if entry.is_none() || !matching {
-        return Err(RestrictedPytestError::new("vitest_restricted_dependency_unavailable",
-        "Vitest is not installed inside this workspace. Guard did not download or execute a replacement."));
+        return Err(RestrictedPytestError::new(
+            "vitest_restricted_dependency_unavailable",
+            match tool {
+                "jest" => "Jest is not installed inside this workspace. Guard did not download or execute a replacement.",
+                "mocha" => "Mocha is not installed inside this workspace. Guard did not download or execute a replacement.",
+                "ava" => "AVA is not installed inside this workspace. Guard did not download or execute a replacement.",
+                "jasmine" => "Jasmine is not installed inside this workspace. Guard did not download or execute a replacement.",
+                "qunit" => "QUnit is not installed inside this workspace. Guard did not download or execute a replacement.",
+                "uvu" => "uvu is not installed inside this workspace. Guard did not download or execute a replacement.",
+                "tape" => "tape is not installed inside this workspace. Guard did not download or execute a replacement.",
+                "tsd" => "tsd is not installed inside this workspace. Guard did not download or execute a replacement.",
+                "tap" => "tap is not installed inside this workspace. Guard did not download or execute a replacement.",
+                "borp" => "borp is not installed inside this workspace. Guard did not download or execute a replacement.",
+                "poku" => "poku is not installed inside this workspace. Guard did not download or execute a replacement.",
+                "lab" => "lab is not installed inside this workspace. Guard did not download or execute a replacement.",
+                "cucumber-js" => "cucumber-js is not installed inside this workspace. Guard did not download or execute a replacement.",
+                _ => "Vitest is not installed inside this workspace. Guard did not download or execute a replacement.",
+            },
+        ));
     }
     let entry = entry.unwrap();
-    let args = readonly_config_arguments(&args, &entry.parent().unwrap().join("package.json"));
+    // The config loader argument is Vitest's own. Mocha reads a watch mode
+    // out of a workspace `.mocharc` or `package.json` that the call itself
+    // never names, and a watching run never finishes inside the sink, so the
+    // run states the mode its admission was read as; Mocha's command line
+    // beats its configuration file. Jest takes its arguments as given.
+    let args = match tool {
+        "vitest" => readonly_config_arguments(&args, &entry.parent().unwrap().join("package.json")),
+        "mocha" => std::iter::once("--watch=false".to_owned())
+            .chain(args)
+            .collect(),
+        _ => args,
+    };
     let mut command = vec![plan["executable"].as_str().unwrap().to_owned()];
     command.extend(runtime);
     command.push(entry.to_string_lossy().into_owned());
@@ -344,7 +547,7 @@ fn prepare_vitest(input: &Input) -> Result<Value, RestrictedPytestError> {
 fn prepare_tsx(
     input: &Input,
     argv: &[String],
-    script: &str,
+    script: Option<&str>,
     arguments: &[String],
 ) -> Result<Value, RestrictedPytestError> {
     let mut plan = prepare_node(&Input {
@@ -386,11 +589,22 @@ fn prepare_tsx(
     let Some(loader) = loader.filter(|_| matching) else {
         return Err(RestrictedPytestError::new("vitest_restricted_dependency_unavailable", "tsx is not installed inside this workspace. Guard did not download or execute a replacement."));
     };
-    if !cwd
-        .join(script)
-        .canonicalize()
-        .is_ok_and(|path| path.is_file() && path_is_within(&path, workspace))
-    {
+    let flags = tsx_test_runner_flags(argv)?;
+    let test_mode = tsx_runner_test_mode(&flags);
+    // In test-runner mode every word after the flags is another path Node
+    // loads, so each one has to resolve inside the workspace. A run that names
+    // none leaves the discovery to Node, inside the same workspace.
+    let mut files: Vec<String> = script.map(ToOwned::to_owned).into_iter().collect();
+    if test_mode {
+        files.extend_from_slice(arguments);
+    }
+    if !files.iter().all(|file| {
+        cwd.join(file).canonicalize().is_ok_and(|path| {
+            // The test runner walks a directory for the files it runs; a
+            // script it is handed outside that mode has to be the file.
+            (path.is_file() || (test_mode && path.is_dir())) && path_is_within(&path, workspace)
+        })
+    }) {
         return Err(RestrictedPytestError::new(
             "vitest_restricted_invalid_command",
             "Test script is not in the workspace.",
@@ -400,7 +614,11 @@ fn prepare_tsx(
         .map_err(|_| invalid_node("Test loader is unavailable."))?;
     let mut command = vec![plan["executable"].as_str().unwrap().to_owned()];
     command.extend(runtime);
-    command.extend(["--import".to_owned(), uri.into(), script.to_owned()]);
+    command.extend(["--import".to_owned(), uri.into()]);
+    // Node reads its test-runner flags before the first file; behind it they
+    // are a word the run loads, so they go back in front of it.
+    command.extend(flags);
+    command.extend(script.map(ToOwned::to_owned));
     command.extend_from_slice(arguments);
     plan["profile_version"] = json!("vitest-readonly-v1");
     plan["command"] = json!(command);

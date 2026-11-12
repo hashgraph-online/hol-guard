@@ -156,17 +156,24 @@ def test_authorized_original_input_runs_only_with_readonly_profile(
     from codex_plugin_scanner.guard import native_restricted_pytest
 
     calls = []
-    monkeypatch.setattr(
-        native_restricted_pytest,
-        "restricted_native",
-        lambda *args, **kwargs: {
+
+    def native(operation: str, fields: dict[str, object], _expected: object) -> object:
+        # The sink reads every contained command's words through native
+        # authority. A kind mapping returned in its place is a mapping whose
+        # keys are strings, which a reader looking for words takes for the
+        # command itself, so this stand-in answers the operation.
+        if operation == "command_words":
+            return str(fields["command_text"]).split()
+        return {
             "inline_eval": False,
             "node_test": False,
             "vitest": False,
             "git": False,
             "node_tool": False,
-        },
-    )
+            "package_test": False,
+        }
+
+    monkeypatch.setattr(native_restricted_pytest, "restricted_native", native)
     monkeypatch.setattr(
         sink, "prepare_restricted_pytest", lambda *args, **kwargs: calls.append(("prepare", args, kwargs))
     )
@@ -234,25 +241,58 @@ def test_node_requires_its_own_fresh_profile(
         assert executed == []
 
 
+def test_the_sink_runs_the_prefix_split_native_authority_read(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The split is the parser's; the sink only carries its answer.
+
+    Which names stand transparently in front of a program, where each one's
+    operands end and which settings a prefix may carry are read in
+    `guard-command` (`contained_prefix_tests.rs`). A second copy here is what
+    drift looks like: the copy the sink once held knew `env` only as the bare
+    spelling, so `/usr/bin/env CI=1 pytest -q` reached the planners with
+    `/usr/bin/env` as its program and was refused, though native authority had
+    already read it as the `pytest -q` it runs.
+    """
+
+    from codex_plugin_scanner.guard import native_restricted_pytest
+
+    asked: list[object] = []
+
+    def native(operation: str, fields: dict[str, object], _expected: object) -> object:
+        asked.append((operation, fields["command"], fields["drop_data"]))
+        return {"core_index": 2, "assignments": [["CI", "1"]], "dropped_data": False}
+
+    monkeypatch.setattr(native_restricted_pytest, "restricted_native", native)
+    words = ["env", "CI=1", "bun", "run", "test"]
+
+    assert sink._split_command_prefix(words) == (["bun", "run", "test"], {"CI": "1"})
+    assert asked == [("command_prefix_split", words, False)]
+
+
 @pytest.mark.parametrize(
-    ("words", "expected", "assignments"),
+    "reply",
     [
-        (["command", "bun", "run", "build"], ["bun", "run", "build"], {}),
-        (["time", "command", "bun", "test"], ["bun", "test"], {}),
-        (["command", "-p", "bun"], ["command", "-p", "bun"], {}),
-        (["time", "-p", "bun"], ["time", "-p", "bun"], {}),
-        (["command"], ["command"], {}),
-        (["env", "CI=1", "bun"], ["bun"], {"CI": "1"}),
-        (["CI=1", "NODE_ENV=test", "bun", "run", "test"], ["bun", "run", "test"], {"CI": "1", "NODE_ENV": "test"}),
-        (["LC_ALL=C", "time", "bun"], ["bun"], {"LC_ALL": "C"}),
-        (["env", "-i", "CI=1", "bun"], ["env", "-i", "CI=1", "bun"], {}),
-        (["NODE_OPTIONS=--require=x", "bun"], ["NODE_OPTIONS=--require=x", "bun"], {}),
-        (["CI=1", "APP_FLAG=1", "bun"], ["APP_FLAG=1", "bun"], {"CI": "1"}),
-        (["CI=1"], [], {"CI": "1"}),
+        {"core_index": 6, "assignments": [], "dropped_data": False},
+        {"core_index": -1, "assignments": [], "dropped_data": False},
+        {"core_index": True, "assignments": [], "dropped_data": False},
+        {"core_index": 1, "assignments": [["CI"]], "dropped_data": False},
+        {"core_index": 1, "assignments": [["CI", 1]], "dropped_data": False},
+        {"core_index": 1, "assignments": {"CI": "1"}, "dropped_data": False},
+        {"core_index": 1, "assignments": []},
     ],
 )
-def test_command_prefixes_and_inert_assignments_peel_to_the_named_program(words, expected, assignments):
-    assert sink._split_command_prefix(words) == (expected, assignments)
+def test_an_answer_the_sink_cannot_read_peels_nothing(monkeypatch: pytest.MonkeyPatch, reply) -> None:
+    """A command native authority has not read reaches the planners whole.
+
+    They refuse it, so an unreadable answer costs a refusal rather than a run
+    the sink peeled on its own.
+    """
+
+    from codex_plugin_scanner.guard import native_restricted_pytest
+
+    monkeypatch.setattr(native_restricted_pytest, "restricted_native", lambda *_: reply)
+    words = ["env", "CI=1", "bun"]
+
+    assert sink._split_command_prefix(words) == (words, {})
 
 
 def test_inert_assignments_reach_the_runner_after_both_receipts(

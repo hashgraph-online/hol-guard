@@ -8,6 +8,8 @@ pub(crate) use discovery::{git_route_without_repository, reads_without_repositor
 use temporary::owned_below;
 pub(in crate::pretool) use temporary::owned_temporary_directory;
 pub(in crate::pretool) use temporary::owned_temporary_roots;
+#[cfg(unix)]
+pub(in crate::pretool) use temporary::private_temporary_base;
 pub(in crate::pretool) use temporary::private_temporary_parent;
 pub(in crate::pretool) use temporary::temporary_checkout_parent;
 
@@ -330,7 +332,7 @@ fn linked_worktree_git_entry_within_workspace(
         .is_some_and(|backlink| std::fs::canonicalize(entry).is_ok_and(|entry| backlink == entry))
 }
 
-fn bounded_git_metadata(path: &std::path::Path) -> Option<String> {
+pub(super) fn bounded_git_metadata(path: &std::path::Path) -> Option<String> {
     use std::io::Read;
     let mut contents = String::new();
     std::fs::File::open(path)

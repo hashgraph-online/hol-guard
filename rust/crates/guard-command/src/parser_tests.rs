@@ -22,7 +22,7 @@ fn parses_simple_command_without_execution() {
 
 #[cfg(unix)]
 #[test]
-fn parses_only_literal_stderr_null_sink_without_changing_quoted_arguments() {
+fn parses_only_literal_null_device_sinks_without_changing_quoted_arguments() {
     let parsed = parse_command(&request("ls -la src 2>/dev/null; echo done")).unwrap();
     assert_eq!(parsed.confidence, "exact");
     assert_eq!(parsed.segments[0].arguments, ["-la", "src"]);
@@ -33,13 +33,65 @@ fn parses_only_literal_stderr_null_sink_without_changing_quoted_arguments() {
         "ls 2>/dev/null.env",
         "ls 2>/dev/null/other",
         "ls 12>/dev/null",
-        "ls 2>>/dev/null",
-        "ls >/dev/null",
         "ls 2> .env",
         "ls src2>/dev/null",
         "cat foo\\ 2>/dev/null",
         "cat foo\\\n2>/dev/null",
         "cat foo\\ 2>&1",
+    ] {
+        assert_ne!(
+            parse_command(&request(command)).unwrap().confidence,
+            "exact",
+            "{command}"
+        );
+    }
+}
+
+/// A redirect whose target is the null device writes nowhere, so the command
+/// beside it is the command the agent asked for. Reading only `2>/dev/null`
+/// left `ls -la src > /dev/null` unparsed, and the read it names reviewed.
+#[cfg(unix)]
+#[test]
+fn a_redirect_to_the_null_device_leaves_the_command_it_follows() {
+    for command in [
+        "ls -la src >/dev/null",
+        "ls -la src > /dev/null",
+        "ls -la src 1>/dev/null",
+        "ls -la src 1> /dev/null",
+        "ls -la src &>/dev/null",
+        "ls -la src >>/dev/null",
+        "ls -la src 2>>/dev/null",
+        "ls -la src 2> /dev/null",
+    ] {
+        let parsed = parse_command(&request(command)).unwrap();
+        assert_eq!(parsed.confidence, "exact", "{command}");
+        assert_eq!(parsed.segments.len(), 1, "{command}");
+        assert_eq!(
+            parsed.segments[0].executable.as_deref(),
+            Some("ls"),
+            "{command}"
+        );
+        assert_eq!(parsed.segments[0].arguments, ["-la", "src"], "{command}");
+        assert_eq!(parsed.segments[0].text, command, "{command}");
+    }
+    // `2>&1` merges rather than redirects, so it stays the operand the
+    // argument pass already reads it as.
+    for command in ["ls -la src >/dev/null 2>&1", "ls -la src > /dev/null 2>&1"] {
+        let parsed = parse_command(&request(command)).unwrap();
+        assert_eq!(parsed.confidence, "exact", "{command}");
+        assert_eq!(
+            parsed.segments[0].arguments,
+            ["-la", "src", "2>&1"],
+            "{command}"
+        );
+    }
+    // A target that only reads like the null device still writes a file.
+    for command in [
+        "ls -la src > /dev/nullx",
+        "ls -la src > out.log",
+        "ls -la src >> notes.md",
+        "ls -la src 1> out.log",
+        "ls -la src &> out.log",
     ] {
         assert_ne!(
             parse_command(&request(command)).unwrap().confidence,
@@ -189,7 +241,14 @@ fn marks_complex_shell_forms_uncertain_without_partial_segments() {
         "sudo -s rm -rf /tmp/example",
         "eval 'rm -rf /tmp/example'",
         "if true; then echo yes; fi",
-        "[[ -f Cargo.toml ]]",
+        // A closed `[[ ... ]]` pair is not here: the parse surface reads it as
+        // the `[` test it asks. An unclosed one is some other shape.
+        "[[ -f Cargo.toml",
+        // `[[ ]]` evaluates an arithmetic operand and resolves a bare name
+        // through the value it holds, so `X='a[$(id)]'` runs `id` where the
+        // `[` this would otherwise rewrite to compares two words and stops.
+        "[[ $X -eq 0 ]]",
+        "[[ 1 -gt $LIMIT ]]",
         "echo $\"locale translation\"",
         "xargs rm -rf",
         "find . -exec rm {} ;",
@@ -198,6 +257,35 @@ fn marks_complex_shell_forms_uncertain_without_partial_segments() {
         assert_eq!(parsed.confidence, "uncertain", "{command}");
         assert!(parsed.segments.is_empty(), "{command}");
         assert!(parsed.uncertainty_reason.is_some(), "{command}");
+    }
+}
+
+/// Quote removal leaves `'[[' -f Cargo.toml ']]'` with the same words a bare
+/// `[[ ... ]]` carries, but that text runs a command named `[[`, whose
+/// operands the shell splits and globs. Only the bare reserved words are read
+/// as the `[ ... ]` test they ask; the quoted spelling keeps the review every
+/// other shell keyword gets.
+#[test]
+fn reads_only_bare_double_brackets_as_the_test_they_ask() {
+    let bare = parse_command(&request("[[ -f Cargo.toml ]]")).unwrap();
+    assert_eq!(bare.confidence, "exact");
+    assert_eq!(bare.segments[0].executable.as_deref(), Some("["));
+    assert_eq!(bare.segments[0].text, "[ -f Cargo.toml ]");
+
+    for command in [
+        "'[[' -f Cargo.toml ']]'",
+        "\"[[\" -f Cargo.toml \"]]\"",
+        "[['' -f Cargo.toml ]]",
+        "[[ -f Cargo.toml '']]",
+    ] {
+        let quoted = parse_command(&request(command)).unwrap();
+        assert_eq!(quoted.confidence, "uncertain", "{command}");
+        assert_eq!(
+            quoted.uncertainty_reason.as_deref(),
+            Some("compound_shell_not_yet_supported"),
+            "{command}"
+        );
+        assert!(quoted.segments.is_empty(), "{command}");
     }
 }
 

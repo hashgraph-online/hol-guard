@@ -7,15 +7,13 @@ import base64
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import padding, rsa
 
-from codex_plugin_scanner.guard.policy_bundle_parser import (
+from tests.policy_bundle_parser_support import (
     canonical_policy_bundle_payload,
     computed_policy_bundle_hash,
     payload_hash_for_policy_bundle,
     validated_policy_bundle_payload,
 )
-from codex_plugin_scanner.guard.policy_bundle_trusted_keys import (
-    policy_bundle_verification_key_from_public_key,
-)
+from tests.policy_bundle_signing_helpers import policy_bundle_verification_key_from_public_key
 
 
 def _signed_policy_bundle() -> tuple[dict[str, object], tuple[object, ...]]:

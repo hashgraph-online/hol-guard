@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import hashlib
+import sys
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 
 from codex_plugin_scanner.guard.workflow_capabilities import (
     WORKFLOW_CAPABILITY_ALGORITHM,
@@ -14,8 +16,13 @@ from codex_plugin_scanner.guard.workflow_capabilities import (
     WorkflowCapabilityError,
     WorkflowCapabilityRuleBinding,
     format_utc_timestamp,
-    sign_workflow_capability,
 )
+
+# The resident signs capabilities in production; these vectors need a local
+# signer to build the envelopes the resident must accept or reject.
+sys.path.insert(0, str(Path(__file__).resolve().parents[5] / "tests"))
+
+from workflow_capability_frame_support import sign_workflow_capability
 
 KEY = b"k" * 32
 KEY_ID = "guard-policy-integrity-key:test"
@@ -118,18 +125,32 @@ def claim_step(
     return step
 
 
-def revoke(capability_id: str = "wc-test-1", *, now: int = 3, reason_code: str = "operator.revoked") -> dict[str, object]:
-    return {"op": "revoke", "label": f"revoke {capability_id}", "capability_id": capability_id,
-            "reason_code": reason_code, "now": at(now)}
+def revoke(
+    capability_id: str = "wc-test-1", *, now: int = 3, reason_code: str = "operator.revoked"
+) -> dict[str, object]:
+    return {
+        "op": "revoke",
+        "label": f"revoke {capability_id}",
+        "capability_id": capability_id,
+        "reason_code": reason_code,
+        "now": at(now),
+    }
 
 
 def lookup(capability_id: str = "wc-test-1", *, now: int = 4) -> dict[str, object]:
     return {"op": "lookup", "label": f"lookup {capability_id}", "capability_id": capability_id, "now": at(now)}
 
 
-def receipt_lookup(*, receipt_id: str | None = None, invocation_id: str | None = None, now: int = 4) -> dict[str, object]:
-    return {"op": "receipt_lookup", "label": "receipt lookup", "receipt_id": receipt_id,
-            "invocation_id": invocation_id, "now": at(now)}
+def receipt_lookup(
+    *, receipt_id: str | None = None, invocation_id: str | None = None, now: int = 4
+) -> dict[str, object]:
+    return {
+        "op": "receipt_lookup",
+        "label": "receipt lookup",
+        "receipt_id": receipt_id,
+        "invocation_id": invocation_id,
+        "now": at(now),
+    }
 
 
 def sql(label: str, *statements: tuple[str, tuple[object, ...]]) -> dict[str, object]:

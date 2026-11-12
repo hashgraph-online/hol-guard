@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import base64
+import copy
+import hashlib
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import cast
@@ -12,23 +14,29 @@ from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import padding, rsa
 
 from codex_plugin_scanner.guard.models import PolicyDecision
+from codex_plugin_scanner.guard.policy_bundle_parser import (
+    policy_bundle_acceptance_checkpoint,
+    policy_bundle_cloud_exceptions_hash,
+)
 from codex_plugin_scanner.guard.policy_bundle_trusted_keys import (
     PolicyBundleVerificationKey,
-    policy_bundle_verification_key_from_public_key,
     validate_synced_policy_bundle,
 )
 from codex_plugin_scanner.guard.policy_bundle_v2 import (
     POLICY_BUNDLE_V2_CANONICALIZATION,
     POLICY_BUNDLE_V2_CONTRACT,
-    canonical_policy_bundle_v2_payload,
-    computed_policy_bundle_v2_hash,
-    payload_hash_for_policy_bundle_v2,
     validate_policy_bundle_v2_transition,
     validated_policy_bundle_v2_acknowledgement,
+)
+from codex_plugin_scanner.guard.policy_document import canonical_json_bytes, canonical_policy_document_bytes
+from codex_plugin_scanner.guard.policy_document_yaml import parse_policy_document_yaml
+from codex_plugin_scanner.guard.runtime import runner as guard_runner
+from tests.policy_bundle_signing_helpers import policy_bundle_verification_key_from_public_key
+from tests.policy_bundle_v2_support import (
+    canonical_policy_bundle_v2_payload,
+    computed_policy_bundle_v2_hash,
     validated_policy_bundle_v2_payload,
 )
-from codex_plugin_scanner.guard.policy_document_yaml import load_policy_document
-from codex_plugin_scanner.guard.runtime import runner as guard_runner
 
 _FIXTURE = Path(__file__).parents[1] / "spec" / "guard-policy" / "v1alpha1" / "fixtures" / "valid" / "basic.yaml"
 
@@ -54,6 +62,25 @@ def _verification_key(
     )
 
 
+def _reference_payload_hash(payload: dict[str, object]) -> str:
+    """The hash Guard Cloud binds: the payload's canonical JSON read as a policy document."""
+
+    document = parse_policy_document_yaml(canonical_json_bytes(payload))
+    return "sha256:" + hashlib.sha256(canonical_policy_document_bytes(document)).hexdigest()
+
+
+def _fixture_payload(**edits: object) -> dict[str, object]:
+    payload = copy.deepcopy(parse_policy_document_yaml(_FIXTURE.read_bytes()).to_mapping())
+    metadata = cast(dict[str, object], payload["metadata"])
+    spec = cast(dict[str, object], payload["spec"])
+    rule = cast(list[dict[str, object]], spec["rules"])[0]
+    if "description" in edits:
+        rule["description"] = edits["description"]
+    if "labels" in edits:
+        metadata["labels"] = edits["labels"]
+    return payload
+
+
 def _signed_bundle(
     private_key: rsa.RSAPrivateKey,
     verification_key: PolicyBundleVerificationKey,
@@ -62,8 +89,11 @@ def _signed_bundle(
     rollback: dict[str, object] | None = None,
     payload_base: dict[str, object] | None = None,
     payload_extensions: dict[str, object] | None = None,
+    payload_hash: str | None = None,
+    cloud_exceptions: list[dict[str, object]] | None = None,
+    cloud_exceptions_issued_at: str | None = None,
 ) -> dict[str, object]:
-    document = load_policy_document(_FIXTURE)
+    document = parse_policy_document_yaml(_FIXTURE.read_bytes())
     payload = dict(payload_base) if payload_base is not None else document.to_mapping()
     if payload_extensions is not None:
         payload.update(payload_extensions)
@@ -87,8 +117,16 @@ def _signed_bundle(
         "payload": payload,
         "rollback": rollback,
     }
-    bundle["payloadHash"] = payload_hash_for_policy_bundle_v2(bundle)
+    if cloud_exceptions is not None:
+        bundle["cloudExceptions"] = cloud_exceptions
+    if cloud_exceptions_issued_at is not None:
+        bundle["cloudExceptionsIssuedAt"] = cloud_exceptions_issued_at
+    bundle["payloadHash"] = payload_hash if payload_hash is not None else _reference_payload_hash(payload)
     bundle["bundleHash"] = computed_policy_bundle_v2_hash(bundle)
+    return _signed(private_key, bundle)
+
+
+def _signed(private_key: rsa.RSAPrivateKey, bundle: dict[str, object]) -> dict[str, object]:
     signature = private_key.sign(
         canonical_policy_bundle_v2_payload(bundle),
         padding.PSS(mgf=padding.MGF1(hashes.SHA256()), salt_length=padding.PSS.MAX_LENGTH),
@@ -342,6 +380,147 @@ def test_v2_transition_rejects_replay_and_same_version_substitution() -> None:
     )
 
 
+def _cloud_exception() -> dict[str, object]:
+    return {
+        "exceptionId": "artifact:codex:left-pad",
+        "effect": "allow",
+        "scope": "artifact",
+        "harness": "codex",
+        "artifactId": "codex:project:package-request:left-pad",
+        "owner": "owner@example.com",
+        "expiresAt": "2099-01-01T00:00:00+00:00",
+    }
+
+
+def test_v2_cloud_exceptions_are_signed_but_leave_the_bundle_hash_alone() -> None:
+    private_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    verification_key = _verification_key(private_key)
+    published = _signed_bundle(private_key, verification_key)
+    with_exceptions = _signed_bundle(
+        private_key,
+        verification_key,
+        cloud_exceptions=[_cloud_exception()],
+        cloud_exceptions_issued_at="2026-07-16T09:30:00Z",
+    )
+
+    assert with_exceptions["bundleHash"] == published["bundleHash"]
+    assert validated_policy_bundle_v2_payload(
+        with_exceptions,
+        trusted_verification_keys=(verification_key,),
+        anchored_verification_keys=(verification_key,),
+        now=datetime(2026, 7, 16, 12, tzinfo=timezone.utc),
+    ) == (with_exceptions, None)
+
+    widened = copy.deepcopy(with_exceptions)
+    cast(list[dict[str, object]], widened["cloudExceptions"])[0]["artifactId"] = "codex:project:package-request:*"
+    stripped = copy.deepcopy(with_exceptions)
+    stripped["cloudExceptions"] = []
+    for tampered in (widened, stripped):
+        assert validated_policy_bundle_v2_payload(
+            tampered,
+            trusted_verification_keys=(verification_key,),
+            anchored_verification_keys=(verification_key,),
+            now=datetime(2026, 7, 16, 12, tzinfo=timezone.utc),
+        ) == (None, "bundle_signature_invalid")
+
+
+@pytest.mark.parametrize(
+    "fields",
+    [
+        {"cloudExceptions": [{"exceptionId": "x"}], "cloudExceptionsIssuedAt": "2026-07-16T09:30:00Z"},
+        {"cloudExceptions": {}, "cloudExceptionsIssuedAt": "2026-07-16T09:30:00Z"},
+        {"cloudExceptions": []},
+        {"cloudExceptionsIssuedAt": "2026-07-16T09:30:00Z"},
+        {"cloudExceptions": [], "cloudExceptionsIssuedAt": "yesterday"},
+        *(
+            {
+                "cloudExceptions": [{**_cloud_exception(), "effect": effect}],
+                "cloudExceptionsIssuedAt": "2026-07-16T09:30:00Z",
+            }
+            for effect in (False, 0, None, "deny")
+        ),
+    ],
+)
+def test_v2_bundle_rejects_malformed_cloud_exceptions(fields: dict[str, object]) -> None:
+    private_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    verification_key = _verification_key(private_key)
+    bundle = _signed_bundle(private_key, verification_key)
+    bundle.update(fields)
+    bundle = _signed(private_key, bundle)
+
+    assert validated_policy_bundle_v2_payload(
+        bundle,
+        trusted_verification_keys=(verification_key,),
+        anchored_verification_keys=(verification_key,),
+        now=datetime(2026, 7, 16, 12, tzinfo=timezone.utc),
+    ) == (None, "invalid_cloud_exceptions")
+
+
+def test_v2_transition_rejects_an_older_or_missing_cloud_exception_set() -> None:
+    bundle_hash = "sha256:" + "a" * 64
+    accepted_at = "2026-07-16T09:30:00Z"
+
+    def transition(incoming: dict[str, object], accepted: str | None = accepted_at) -> str | None:
+        return validate_policy_bundle_v2_transition(
+            {"bundleVersion": 8, "bundleHash": bundle_hash, **incoming},
+            current_bundle_version=8,
+            current_bundle_hash=bundle_hash,
+            current_cloud_exceptions_issued_at=accepted,
+        )
+
+    assert transition({"cloudExceptionsIssuedAt": "2026-07-16T09:29:59Z"}) == "cloud_exceptions_replay"
+    assert transition({}) == "cloud_exceptions_replay"
+    assert transition({"cloudExceptionsIssuedAt": accepted_at}) is None
+    assert transition({"cloudExceptionsIssuedAt": "2026-07-16T10:00:00Z"}) is None
+    assert transition({}, accepted=None) is None
+    assert transition({"cloudExceptionsIssuedAt": "2026-07-16T09:00:00Z"}, accepted=None) is None
+    assert (
+        validate_policy_bundle_v2_transition(
+            {"bundleVersion": 9, "bundleHash": "sha256:" + "b" * 64},
+            current_bundle_version=8,
+            current_bundle_hash=bundle_hash,
+            current_cloud_exceptions_issued_at=accepted_at,
+        )
+        is None
+    )
+
+
+def test_v2_transition_binds_an_equal_issue_time_to_the_accepted_exception_set() -> None:
+    bundle_hash = "sha256:" + "a" * 64
+    issued_at = "2026-07-16T09:30:00Z"
+    accepted_set = [_cloud_exception()]
+    other_set = [{**_cloud_exception(), "artifactId": "npm:left-pad"}]
+    accepted_hash = policy_bundle_cloud_exceptions_hash({"cloudExceptions": accepted_set})
+    assert accepted_hash is not None
+    assert accepted_hash != policy_bundle_cloud_exceptions_hash({"cloudExceptions": other_set})
+    assert (
+        policy_bundle_acceptance_checkpoint(
+            {"bundleVersion": 8, "cloudExceptions": accepted_set, "cloudExceptionsIssuedAt": issued_at}
+        )["cloudExceptionsHash"]
+        == accepted_hash
+    )
+
+    def transition(exceptions: list[dict[str, object]], accepted: str | None = accepted_hash) -> str | None:
+        return validate_policy_bundle_v2_transition(
+            {
+                "bundleVersion": 8,
+                "bundleHash": bundle_hash,
+                "cloudExceptions": exceptions,
+                "cloudExceptionsIssuedAt": issued_at,
+            },
+            current_bundle_version=8,
+            current_bundle_hash=bundle_hash,
+            current_cloud_exceptions_issued_at=issued_at,
+            current_cloud_exceptions_hash=accepted,
+        )
+
+    assert transition(accepted_set) is None
+    assert transition(other_set) == "cloud_exceptions_replay"
+    # A checkpoint written before the set identity was kept still accepts the
+    # same issue time, then records the identity on the next acceptance.
+    assert transition(other_set, accepted=None) is None
+
+
 def test_v2_transition_accepts_only_authorized_monotonic_rollback() -> None:
     rollback: dict[str, object] = {
         "rollbackOfBundleHash": "sha256:current",
@@ -427,7 +606,7 @@ def test_v2_acknowledgement_rejects_sequence_conflicts_and_terminal_reapply() ->
     ) == (None, "acknowledgement_transition_rejected")
 
 
-def test_runtime_canonical_enforcement_compiles_signed_v2_payload() -> None:
+def test_runtime_compiles_signed_v2_payload_without_canonical_rollout() -> None:
     policy_bundle = {
         "contractVersion": POLICY_BUNDLE_V2_CONTRACT,
         "payload": {
@@ -463,19 +642,14 @@ def test_runtime_canonical_enforcement_compiles_signed_v2_payload() -> None:
         },
     }
 
-    legacy = guard_runner._build_policy_bundle_decisions(
-        policy_bundle,
-        device_id="device-1",
-        device_name="Mac",
-    )
+    # Cloud sends v2 only when v1 cannot carry the policy, so a device outside
+    # the canonical rollout still enforces it.
     canonical = guard_runner._build_policy_bundle_decisions(
         policy_bundle,
         device_id="device-1",
         device_name="Mac",
-        canonical_enforcement=True,
     )
 
-    assert legacy == []
     assert [decision.to_dict() for decision in canonical] == [
         {
             "harness": "codex",
@@ -491,6 +665,76 @@ def test_runtime_canonical_enforcement_compiles_signed_v2_payload() -> None:
             "expires_at": None,
         }
     ]
+
+
+def _device_scoped_bundle() -> dict[str, object]:
+    def rule(identifier: str, artifact: str, devices: list[str]) -> dict[str, object]:
+        return {
+            "id": identifier,
+            "enabled": True,
+            "effect": "block",
+            "match": {
+                "artifacts": [artifact],
+                "harnesses": ["codex"],
+                "devices": devices,
+            },
+            "lifetime": {"mode": "permanent", "expiresAt": None},
+            "provenance": {
+                "source": "local",
+                "createdAt": "2026-07-15T12:00:00Z",
+            },
+        }
+
+    return {
+        "contractVersion": POLICY_BUNDLE_V2_CONTRACT,
+        "payload": {
+            "apiVersion": "guard.hashgraphonline.com/v1alpha1",
+            "kind": "GuardPolicy",
+            "metadata": {
+                "id": "policy.devices",
+                "name": "Device policy",
+                "revision": 1,
+            },
+            "spec": {
+                "defaults": {"mode": "prompt", "defaultAction": "warn"},
+                "rules": [
+                    rule("rule.every-device", "command:npm-audit", []),
+                    rule("rule.by-id", "command:npm-test", ["device-1"]),
+                    rule("rule.by-name", "command:npm-run", ["Mac"]),
+                    rule("rule.another-device", "command:npm-ci", ["device-2"]),
+                ],
+            },
+        },
+    }
+
+
+def test_runtime_canonical_enforcement_keeps_only_this_devices_rules() -> None:
+    decisions = guard_runner._build_policy_bundle_decisions(
+        _device_scoped_bundle(),
+        device_id="device-1",
+        device_name="Mac",
+    )
+
+    assert [decision.owner for decision in decisions] == [
+        "rule.every-device",
+        "rule.by-id",
+        "rule.by-name",
+    ]
+    assert [decision.artifact_id for decision in decisions] == [
+        "command:npm-audit",
+        "command:npm-test",
+        "command:npm-run",
+    ]
+
+
+def test_runtime_canonical_enforcement_compiles_a_rule_no_device_claims() -> None:
+    decisions = guard_runner._build_policy_bundle_decisions(
+        _device_scoped_bundle(),
+        device_id="device-9",
+        device_name="Spare",
+    )
+
+    assert [decision.owner for decision in decisions] == ["rule.every-device"]
 
 
 @pytest.mark.usefixtures("native_approval_reuse_runtime")
@@ -536,4 +780,56 @@ def test_policy_shadow_comparison_uses_bounded_semantic_reason_codes() -> None:
         "row_count",
         "selector_set",
         "action",
+    )
+
+
+@pytest.mark.parametrize(
+    "edits",
+    [
+        {"description": "Block\x85untrusted\x85\x85installs"},
+        {"description": "Block  \x85  untrusted installs"},
+        {"description": "Line\u2028separator and\u2029paragraph\x85kept"},
+        {"description": "Trailing spaces   "},
+        {"description": 'Quotes " back\\slash\ttab\nnewline'},
+        {"description": "Unicode caf\u00e9 \U0001f600 \u00a0"},
+        {"description": "Marker\x85  --- not at line start"},
+        {"description": "x" * 4096},
+        # Over the schema's 4096 characters as JSON, within it once folded.
+        {"description": "x" * 4090 + "      \x85y"},
+    ],
+)
+def test_runtime_payload_hash_matches_the_policy_document_reading(edits: dict[str, object]) -> None:
+    private_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    verification_key = _verification_key(private_key)
+    bundle = _signed_bundle(private_key, verification_key, payload_base=_fixture_payload(**edits))
+
+    assert validated_policy_bundle_v2_payload(
+        bundle,
+        trusted_verification_keys=(verification_key,),
+        anchored_verification_keys=(verification_key,),
+        now=datetime(2026, 7, 16, tzinfo=timezone.utc),
+    ) == (bundle, None)
+
+
+@pytest.mark.parametrize(
+    "edits",
+    [
+        {"description": "Marker\x85--- at line start"},
+        {"description": "Document end\u2028... here"},
+        {"description": "Non-printable \x7f"},
+        {"labels": {"line\x85break": "v"}},
+        {"labels": {"<<": "v"}},
+    ],
+)
+def test_runtime_refuses_a_payload_the_policy_document_reading_refuses(edits: dict[str, object]) -> None:
+    payload = _fixture_payload(**edits)
+    with pytest.raises(Exception):  # noqa: B017 - any parser refusal
+        _reference_payload_hash(payload)
+    private_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    verification_key = _verification_key(private_key)
+    bundle = _signed_bundle(private_key, verification_key, payload_base=payload, payload_hash="sha256:" + "0" * 64)
+
+    assert validated_policy_bundle_v2_payload(bundle, trusted_verification_keys=(verification_key,)) == (
+        None,
+        "invalid_policy_document",
     )

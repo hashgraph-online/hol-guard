@@ -189,31 +189,6 @@ def claimed_approval_authorizes_postclaim_review(
     )
 
 
-def claimed_row_is_still_the_authority(
-    *,
-    claimed_decision: Mapping[str, object] | None,
-    current_decision: Mapping[str, object] | None,
-    guard_home: Path | None = None,
-) -> bool:
-    """Whether the claimed row is still the authority a fresh lookup selects.
-
-    A claim that consumed its row answers for itself. A retained one has to
-    still be selected unchanged, apart from the counters that unrelated
-    authority writes advance. No answer is no proof, so the caller treats a
-    false here as an invalid claim row.
-    """
-
-    return _accepted(
-        {
-            "kind": "claim_row_revalidated",
-            "claimed_decision": None if claimed_decision is None else dict(claimed_decision),
-            "current_decision": None if current_decision is None else dict(current_decision),
-        },
-        guard_home,
-        feature=APPROVAL_PROOF_CLAIM_ROW_FEATURE,
-    )
-
-
 __all__ = [
     "APPROVAL_PROOF_CLAIM_ROW_FEATURE",
     "APPROVAL_PROOF_FEATURE",
@@ -222,7 +197,6 @@ __all__ = [
     "NativeApprovalProofError",
     "approval_reuse_claim_disposition",
     "claimed_approval_authorizes_postclaim_review",
-    "claimed_row_is_still_the_authority",
     "fresh_claim_allows_reapproval",
     "native_approval_proof",
 ]

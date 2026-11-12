@@ -19,16 +19,17 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "src"))
+sys.path.insert(0, str(ROOT))
 
-from codex_plugin_scanner.guard.harness_versions.manifest import (  # noqa: E402
+from codex_plugin_scanner.version import __version__  # noqa: E402
+from scripts.ci.harness_version_manifest import (  # noqa: E402
     ELIGIBLE_SUITES,
     MAX_MANIFEST_BYTES,
     ManifestError,
     bundled_manifest_path,
     parse_manifest,
+    parse_version,
 )
-from codex_plugin_scanner.guard.harness_versions.versions import parse_version  # noqa: E402
-from codex_plugin_scanner.version import __version__  # noqa: E402
 
 
 def next_revision(current: str, today: str) -> str:
