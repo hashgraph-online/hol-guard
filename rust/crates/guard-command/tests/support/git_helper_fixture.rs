@@ -189,6 +189,7 @@ pub fn evaluate_on_path(
         controls,
         deadline,
         guard_command::pretool::PathContext {
+            literal_words: &[],
             home_dir: home,
             cwd,
             cdpath_unset: false,

@@ -121,6 +121,7 @@ fn evaluate_with_path(
         Some(controls),
         None,
         guard_command::pretool::PathContext {
+            literal_words: &[],
             home_dir: home.to_str(),
             cwd: repository.to_str(),
             cdpath_unset: false,

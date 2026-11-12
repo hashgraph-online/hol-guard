@@ -71,6 +71,7 @@ fn decide_in(
                 None,
                 None,
                 PathContext {
+                    literal_words: &[],
                     home_dir: home.to_str(),
                     cwd: project.to_str(),
                     cdpath_unset: false,

@@ -352,6 +352,7 @@ fn in_session(
         Some(&controls("default")),
         None,
         guard_command::pretool::PathContext {
+            literal_words: &[],
             home_dir: Some(home),
             cwd: repository.primary.to_str(),
             cdpath_unset: false,

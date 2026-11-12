@@ -26681,6 +26681,71 @@
       "expect": "allow"
     },
     {
+      "id": "grep-quoted-pattern-with-bracket-class",
+      "fix_area": "read",
+      "harnesses": [
+        "claude-code",
+        "codex",
+        "omp",
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "grep -o \"FAILED tests/[^ ]*\" docs/review-notes.md"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "grep-quoted-pattern-with-letter-range",
+      "fix_area": "read",
+      "harnesses": [
+        "claude-code",
+        "codex",
+        "omp",
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "grep -n \"s[a-z]*\" docs/review-notes.md"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "grep-quoted-star-pattern-on-piped-text",
+      "fix_area": "read",
+      "harnesses": [
+        "claude-code",
+        "codex",
+        "omp",
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "cat docs/review-notes.md | grep \"a*\""
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "neg-grep-unquoted-star-pattern",
+      "fix_area": "negative",
+      "harnesses": [
+        "claude-code",
+        "codex",
+        "omp",
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "grep a* docs/review-notes.md"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow",
+      "contained_ok": true
+    },
+    {
       "id": "docker-context-ls-quiet",
       "fix_area": "shell",
       "harnesses": [

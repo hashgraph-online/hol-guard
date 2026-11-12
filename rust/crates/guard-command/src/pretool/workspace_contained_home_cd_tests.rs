@@ -48,6 +48,7 @@ fn every_guard_the_home_projection_applies_admits_a_plain_cd() {
     let (home, main, _tree) = fixture();
     let command = "cd ~/projects/app-report && ./tools/report 2>&1 | tail -15";
     let context = PathContext {
+        literal_words: &[],
         home_dir: home.to_str(),
         cwd: main.to_str(),
         shell_home_matches: true,

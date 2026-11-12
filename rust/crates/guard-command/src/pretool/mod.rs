@@ -53,6 +53,10 @@ pub struct PathContext<'a> {
     /// read without `-X` runs, and the server libpq picks. Literal contexts
     /// leave both false.
     pub psql_environment: PsqlEnvironment,
+    /// Words of the segment being proven whose glob characters all sit
+    /// inside quotes, so the shell passes them through as written. Empty
+    /// when the segment text is beyond the simple quoting the lexer reads.
+    pub literal_words: &'a [String],
 }
 
 mod brace_group;

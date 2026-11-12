@@ -76,6 +76,7 @@ fn action(session: &Session, command: &str, spell: fn(&Path) -> String) -> Strin
         Some(&controls),
         None,
         guard_command::pretool::PathContext {
+            literal_words: &[],
             home_dir: Some(&home),
             cwd: Some(&cwd),
             cdpath_unset: false,

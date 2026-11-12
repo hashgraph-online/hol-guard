@@ -216,6 +216,7 @@ fn decide_environment(
         Some(&github_controls("enabled")),
         None,
         guard_command::pretool::PathContext {
+            literal_words: &[],
             home_dir: home.to_str(),
             cwd: cwd.to_str(),
             cdpath_unset: false,

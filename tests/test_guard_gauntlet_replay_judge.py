@@ -257,6 +257,10 @@ def test_only_the_marked_cases_may_pass_on_containment() -> None:
         # command line as the files beside it, so the second one becomes the file the
         # filter opens; a contained run has no home access and reads none of them.
         "neg-grep-credential-bare-wildcard-pattern",
+        # An unquoted wildcard pattern is expanded by the shell before grep sees it,
+        # so it may name files beside it rather than text; the read keeps its review,
+        # and a contained run reads only the workspace copy with no home or network.
+        "neg-grep-unquoted-star-pattern",
         # A worktree read whose wildcard directory also matches a directory keeps
         # its review. A contained run reads only the workspace copy the sandbox
         # already holds, with no home or network reach.

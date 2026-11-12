@@ -8,61 +8,10 @@
 
 use super::{safe_reads, search};
 
-struct Word {
-    value: String,
-    unquoted_glob: bool,
-    quoted_glob: bool,
-}
-
-/// Split segment text into shell words, tracking where glob characters sit.
-/// `None` for anything beyond plain words and simple quotes, which makes the
-/// caller treat every glob character as unquoted.
-fn quoted_words(text: &str) -> Option<Vec<Word>> {
-    let mut words = Vec::new();
-    let mut current: Option<Word> = None;
-    let mut quote: Option<char> = None;
-    for character in text.chars() {
-        match quote {
-            Some(open) if character == open => quote = None,
-            Some(open) => {
-                if character == '\\' || (open == '"' && matches!(character, '$' | '`')) {
-                    return None;
-                }
-                let word = current.get_or_insert_with(|| Word {
-                    value: String::new(),
-                    unquoted_glob: false,
-                    quoted_glob: false,
-                });
-                word.quoted_glob |= matches!(character, '*' | '?' | '[');
-                word.value.push(character);
-            }
-            None if matches!(character, '\'' | '"') => {
-                quote = Some(character);
-                current.get_or_insert_with(|| Word {
-                    value: String::new(),
-                    unquoted_glob: false,
-                    quoted_glob: false,
-                });
-            }
-            None if character == '\\' => return None,
-            None if character.is_whitespace() => words.extend(current.take()),
-            None => {
-                let word = current.get_or_insert_with(|| Word {
-                    value: String::new(),
-                    unquoted_glob: false,
-                    quoted_glob: false,
-                });
-                word.unquoted_glob |= matches!(character, '*' | '?' | '[');
-                word.value.push(character);
-            }
-        }
-    }
-    if quote.is_some() {
-        return None;
-    }
-    words.extend(current);
-    Some(words)
-}
+#[path = "listing_words.rs"]
+mod words;
+pub(super) use words::literal_words;
+use words::quoted_words;
 
 enum Operand {
     Plain,

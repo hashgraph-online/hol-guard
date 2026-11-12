@@ -308,6 +308,7 @@ fn decide_in_session(
         Some(controls),
         None,
         guard_command::pretool::PathContext {
+            literal_words: &[],
             home_dir: Some(&home),
             cwd: cwd.to_str(),
             cdpath_unset: false,

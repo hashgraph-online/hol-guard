@@ -67,6 +67,7 @@ pub(crate) fn benign_command_segments(
         return Vec::new();
     }
     let proof_context = crate::pretool::PathContext {
+        literal_words: &[],
         home_dir: context.home_dir,
         cdpath_unset: context.cdpath_unset,
         rustup_override_absent: context.rustup_override_absent,
@@ -277,8 +278,15 @@ pub(super) fn stdin_filter_segment(segment: &crate::CommandSegmentV1) -> bool {
             || (super::digest_reads::digest_program(basename)
                 && super::digest_reads::safe_digest_stdin_arguments(&segment.arguments))
             || (matches!(basename, "grep" | "egrep" | "fgrep")
-                && search::safe_grep_stdin_arguments(&segment.arguments))
-            || (basename == "rg" && search::safe_rg_stdin_arguments(&segment.arguments))
+                && search::safe_grep_stdin_arguments(
+                    &segment.arguments,
+                    &super::listing_reads::literal_words(&segment.text),
+                ))
+            || (basename == "rg"
+                && search::safe_rg_stdin_arguments(
+                    &segment.arguments,
+                    &super::listing_reads::literal_words(&segment.text),
+                ))
             || (basename == "sed" && safe_reads::safe_sed_stdin_arguments(&segment.arguments))
             || super::stdin_filters::safe_arguments(basename, &segment.arguments))
 }

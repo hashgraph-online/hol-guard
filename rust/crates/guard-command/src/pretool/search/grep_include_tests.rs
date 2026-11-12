@@ -87,7 +87,7 @@ fn an_include_without_an_operand_is_read_against_the_pipe() {
         "-n --include=*.md review",
     ] {
         let arguments: Vec<String> = command.split(' ').map(str::to_owned).collect();
-        assert!(super::safe_stdin_arguments(&arguments), "{command}");
+        assert!(super::safe_stdin_arguments(&arguments, &[]), "{command}");
         assert!(
             super::safe_grep_arguments(&arguments, crate::pretool::PathContext::default()),
             "{command}"

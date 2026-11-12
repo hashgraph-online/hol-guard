@@ -18,7 +18,7 @@ pub(super) fn safe_grep_arguments(arguments: &[String], context: ReadContext<'_>
         plain: true,
         recursive: true,
     };
-    safe_arguments(arguments, context, false, absent)
+    arguments_pass(arguments, context, false, absent, false)
 }
 
 /// A `grep` segment inside its command. A missing operand is proven only
@@ -45,7 +45,12 @@ pub(crate) fn safe_grep_segment(
         plain: unplanted,
         recursive: unplanted,
     };
-    safe_arguments(&segment.arguments, context, false, absent)
+    let words = crate::pretool::listing_reads::literal_words(&segment.text);
+    let context = ReadContext {
+        literal_words: &words,
+        ..context
+    };
+    arguments_pass(&segment.arguments, context, false, absent, false)
 }
 
 /// A peer that cannot create a filesystem entry: no output redirect beyond
@@ -113,26 +118,18 @@ fn pathless_builtin(executable: &str) -> bool {
     )
 }
 
-pub(super) fn safe_stdin_arguments(arguments: &[String]) -> bool {
+/// `literal_words` are the segment's quoted words, as
+/// `listing_reads::literal_words` reads them.
+pub(super) fn safe_stdin_arguments(arguments: &[String], literal_words: &[String]) -> bool {
     let absent = AbsentOperands {
         plain: false,
         recursive: false,
     };
-    safe_arguments(
-        arguments,
-        crate::pretool::PathContext::default(),
-        true,
-        absent,
-    )
-}
-
-fn safe_arguments(
-    arguments: &[String],
-    context: ReadContext<'_>,
-    stdin_only: bool,
-    absent: AbsentOperands,
-) -> bool {
-    arguments_pass(arguments, context, stdin_only, absent, false)
+    let context = crate::pretool::PathContext {
+        literal_words,
+        ..Default::default()
+    };
+    arguments_pass(arguments, context, true, absent, false)
 }
 
 mod exclusion;

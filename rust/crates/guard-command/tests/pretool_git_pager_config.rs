@@ -122,6 +122,7 @@ fn pager_checks_follow_the_actual_subcommand_and_global_override() {
             Some(&enabled),
             None,
             guard_command::pretool::PathContext {
+                literal_words: &[],
                 home_dir: home.to_str(),
                 cwd: repository.to_str(),
                 cdpath_unset: false,
@@ -161,6 +162,7 @@ fn pager_checks_follow_the_actual_subcommand_and_global_override() {
             Some(&enabled),
             None,
             guard_command::pretool::PathContext {
+                literal_words: &[],
                 home_dir: home.to_str(),
                 cwd: repository.to_str(),
                 cdpath_unset: false,
@@ -215,6 +217,7 @@ fn pager_checks_follow_the_actual_subcommand_and_global_override() {
             Some(&enabled),
             None,
             guard_command::pretool::PathContext {
+                literal_words: &[],
                 home_dir: home.to_str(),
                 cwd: repository.to_str(),
                 cdpath_unset: false,
@@ -285,6 +288,7 @@ fn empty_git_pager_overrides_a_custom_pager_variable() {
             Some(&enabled),
             None,
             guard_command::pretool::PathContext {
+                literal_words: &[],
                 home_dir: home.to_str(),
                 cwd: repository.to_str(),
                 cdpath_unset: false,
@@ -356,6 +360,7 @@ fn piped_git_output_never_starts_a_configured_pager() {
             Some(&enabled),
             None,
             guard_command::pretool::PathContext {
+                literal_words: &[],
                 home_dir: home.to_str(),
                 cwd: repository.to_str(),
                 cdpath_unset: false,

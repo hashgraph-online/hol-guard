@@ -216,6 +216,7 @@ fn read_only_github_predecessor_counts_as_benign_for_git_context() {
         benign_command_segments(
             &model,
             PathContext {
+                literal_words: &[],
                 home_dir: Some("/tmp"),
                 cwd: Some("/tmp"),
                 cdpath_unset: false,
