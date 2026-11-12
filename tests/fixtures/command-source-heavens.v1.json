@@ -1662,7 +1662,9 @@
         "command.heavens"
       ],
       "expected_action": "review",
-      "expected_effective_segments": [],
+      "expected_effective_segments": [
+        0
+      ],
       "id": "case-2",
       "rule_id": "command.heavens.flow-run"
     },
@@ -1673,7 +1675,9 @@
         "command.heavens"
       ],
       "expected_action": "review",
-      "expected_effective_segments": [],
+      "expected_effective_segments": [
+        0
+      ],
       "id": "case-3",
       "rule_id": "command.heavens.bench"
     },
