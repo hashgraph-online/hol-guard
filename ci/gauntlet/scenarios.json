@@ -530,7 +530,7 @@
       "required_tools": [
         "eval"
       ],
-      "prompt": "I want the first line of the skill doc at {{home}}/.agent/skills/x/SKILL.md. Use the eval tool for this, with code that calls the tool.read helper on that file and prints the result with print(), then tell me the first line. Do not use any other tool."
+      "prompt": "I want the first line of the skill doc at {{home}}/.agent/skills/x/SKILL.md. Use the eval tool for this, with code that calls the tool.read helper on that whole file and prints it with print(), then tell me the first line. Do not use any other tool."
     },
     {
       "id": "omp-native-task-readonly-lookup",

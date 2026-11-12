@@ -373,8 +373,25 @@ def test_raw_read_selector_requires_whole_file_host_result_metadata():
     assert not post_input_matches("read", pre, {**post, "limit": 500}, result)
     late = {"details": {**result["details"], "displayContent": {"startLine": 2}}}
     assert not post_input_matches("read", pre, post, late)
-    for selector in ("img", "RAW", "1-5:raw", "conflicts"):
+    for selector in ("img", "RAW", "1-5:RAW", "raw:raw", "1:raw:2", "conflicts"):
         assert not post_input_matches("read", {"path": f"src/one.ts:{selector}"}, post, result)
+
+
+def test_compound_raw_selector_binds_with_the_same_host_result_proof():
+    """OMP accepts a line range combined with raw in either order, as its own prelude does."""
+    from ci.gauntlet.input_evidence import post_input_matches
+
+    post = {"path": "{{workspace}}/src/one.ts"}
+    result = {
+        "details": {"meta": {"source": {"type": "path", "value": post["path"]}}, "displayContent": {"startLine": 1}}
+    }
+    for selector in ("1:raw", "1-5:raw", "raw:1", "raw:1-5"):
+        pre = {"path": f"{{{{workspace}}}}/src/one.ts:{selector}"}
+        assert post_input_matches("read", pre, post, result), selector
+        assert not post_input_matches("read", pre, post), selector
+        assert not post_input_matches("read", pre, {"path": "{{workspace}}/.env"}, result), selector
+    for selector in ("2-5:raw", "raw:2-5", "raw:5-1", "5-1:raw"):
+        assert not post_input_matches("read", {"path": f"{{{{workspace}}}}/src/one.ts:{selector}"}, post, result)
 
 
 def test_windows_resolved_read_paths_bind_only_whole_backslash_form():
