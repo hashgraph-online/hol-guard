@@ -15,7 +15,7 @@ use crate::extension_control::{
     compose_control_layers, ControlLayerKind, ControlState, ControlTargetKind,
     ExtensionControlLayer,
 };
-use crate::mcp_decision::package_launcher_name;
+use crate::mcp_decision::{package_launcher_name, split_package_token};
 use crate::native_command_program::{NativeCommandProgram, ProgramMcp, ProgramMcpLaunch};
 
 /// Source recorded on every contributed decision.
@@ -283,7 +283,8 @@ pub(crate) fn matching_contribution<'a, 'b>(
                 && launch
                     .package
                     .as_deref()
-                    .is_some_and(|declared| python_strip(declared).to_lowercase() == *package)
+                    .and_then(|declared| split_package_token(python_strip(declared)).0)
+                    .is_some_and(|declared| declared.to_lowercase() == *package)
         });
         if found.is_some() {
             return found;
@@ -392,7 +393,18 @@ fn matches_package_launch_for_allow(
     let Some(command) = as_str(identity.get("command")) else {
         return false;
     };
+    let Some(declared) = launch.package.as_deref().map(python_strip) else {
+        return false;
+    };
+    let (name, selector) = split_package_token(declared);
+    // Name recognition only tightens policy. Relaxation must also preserve a
+    // declared selector; an empty/malformed suffix is not an unversioned name.
+    let selector_matches = match selector {
+        Some(selector) => as_str(identity.get("package_version")) == Some(selector.as_str()),
+        None => name.as_deref() == Some(declared),
+    };
     !command.contains("://")
+        && selector_matches
         && package_launcher_name(command)
             .is_some_and(|name| Some(name.as_str()) == launch.command.as_deref())
         && as_str(identity.get("package_source")) == Some("default")

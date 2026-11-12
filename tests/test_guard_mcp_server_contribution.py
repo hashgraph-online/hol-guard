@@ -59,6 +59,23 @@ def test_rei_skills_launch_package_is_version_pinned() -> None:
     }
 
 
+def test_rei_skills_tool_defaults_preserve_review_boundary() -> None:
+    payload = _rei_skills_payload()
+    defaults = {tool["name"]: tool["state"] for tool in payload["tools"]}
+    assert defaults == {
+        "rei_recommend_skills": "inherit",
+        "rei_search_skills": "inherit",
+        "rei_get_skill": "inherit",
+        "rei_get_workflow": "inherit",
+        "rei_list_bundles": "inherit",
+        "rei_compile_skill": "inherit",
+        "rei_list_ai_targets": "inherit",
+        "rei_install_skill": "review",
+        "other": "review",
+    }
+    assert mcp_tool_state(payload, "unlisted_tool") == "review"
+
+
 def test_tether_contribution_is_external_opt_in() -> None:
     """Keep Tether bound to its published package and explicit local opt-in."""
     payload = _tether_payload()
