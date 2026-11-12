@@ -120,6 +120,36 @@ impl DaemonTarget {
     }
 }
 
+impl DaemonTarget {
+    /// The daemon's JSON object for an authenticated `GET` of `path`, or
+    /// `None` when no complete `200` object arrived before `deadline`.
+    pub(crate) fn get_object(&self, path: &str, deadline: Instant) -> Option<serde_json::Value> {
+        let mut connection = LoopbackConnection::new(&self.host, self.port);
+        let head = connection
+            .get(
+                path,
+                &[
+                    ("Connection", "close"),
+                    ("X-Guard-Token", self.token.as_str()),
+                ],
+                deadline,
+            )
+            .ok()?;
+        if head.status != 200 {
+            return None;
+        }
+        let body = connection
+            .read_body(&head, deadline, HOOK_DEADLINE, HOOK_DEADLINE)
+            .ok()?;
+        if Instant::now() >= deadline || body.len() > MAX_DAEMON_RESPONSE_BYTES {
+            return None;
+        }
+        serde_json::from_slice::<serde_json::Value>(&body)
+            .ok()
+            .filter(serde_json::Value::is_object)
+    }
+}
+
 /// The deadline for one daemon request: at most `budget` and half of the
 /// `left` the hook had, so the rest of the hook keeps the other half. `None`
 /// when no time is left for the request.

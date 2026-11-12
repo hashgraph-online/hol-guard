@@ -48,7 +48,7 @@ pub(super) fn frozen_launch(python_argv: &[String]) -> bool {
         .is_some_and(|command| command == FROZEN_COMMAND)
 }
 
-pub(super) fn positive_seconds(value: Option<&PyVal>) -> Option<Duration> {
+pub(crate) fn positive_seconds(value: Option<&PyVal>) -> Option<Duration> {
     let seconds = match value? {
         PyVal::Int(digits) => digits.parse::<f64>().ok()?,
         PyVal::Float(number) => *number,

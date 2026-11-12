@@ -476,12 +476,41 @@ fn client_unreadable_stdout(raw: &[u8]) -> String {
 
 /// Answer one Grok hook. `python_argv` is `[python, "-I", script, config]`.
 pub(crate) fn run(python_argv: &[String], started: Instant) -> i32 {
-    let client = read_client_constants(Path::new(&python_argv[2])).and_then(|constants| {
-        let invocation = invocation(&python_argv[3], &constants.guard_home)?;
-        let budget = Duration::try_from_secs_f64(constants.timeout_seconds).ok()?;
+    let constants = read_client_constants(Path::new(&python_argv[2]))
+        .map(|constants| (constants.guard_home, constants.timeout_seconds));
+    serve(constants, &python_argv[3], started)
+}
+
+/// A Grok hook registered as `<python> -I -c <bootstrap> <config>`, written
+/// when no isolated interpreter could run the generated client. The config
+/// names the Guard home and timeout the client would have held.
+pub(crate) fn run_config(argument: &str, started: Instant) -> i32 {
+    serve(config_constants(argument), argument, started)
+}
+
+/// Whether an install-time config is a Grok one.
+pub(crate) fn names_grok(argument: &str) -> bool {
+    json_object(argument)
+        .is_some_and(|config| member(&config, "harness").and_then(PyVal::as_str) == Some("grok"))
+}
+
+/// The Guard home and timeout a Grok config names.
+fn config_constants(argument: &str) -> Option<(String, f64)> {
+    let config = json_object(argument)?;
+    let guard_home = member(&config, "guard_home")?.as_str()?.to_owned();
+    let timeout = crate::bounded_hook_bridge::positive_seconds(member(&config, "timeout_seconds"))?;
+    Some((guard_home, timeout.as_secs_f64()))
+}
+
+/// Answer one Grok hook for the client `constants` name, a Guard home and
+/// a timeout, and the install-time `argument`.
+fn serve(constants: Option<(String, f64)>, argument: &str, started: Instant) -> i32 {
+    let client = constants.and_then(|(guard_home, timeout_seconds)| {
+        let invocation = invocation(argument, &guard_home)?;
+        let budget = Duration::try_from_secs_f64(timeout_seconds).ok()?;
         Some(Client {
-            guard_home: PathBuf::from(&constants.guard_home),
-            timeout_seconds: constants.timeout_seconds,
+            guard_home: PathBuf::from(&guard_home),
+            timeout_seconds,
             invocation,
             deadline: started.checked_add(budget)?,
         })

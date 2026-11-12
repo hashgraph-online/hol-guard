@@ -19,3 +19,24 @@ fn an_unreadable_client_fails_each_hook_as_its_own_event() {
         assert_eq!(client_unreadable_stdout(refused), failure_stdout("{}"));
     }
 }
+
+#[test]
+fn a_grok_config_without_a_client_names_the_home_and_timeout_it_would_hold() {
+    let config = r#"{"python_executable":"/usr/bin/python3","package_root":"/pkg","guard_home":"/home/g","cli_args":["guard","hook"],"harness":"grok","timeout_seconds":30,"frozen_launcher":false}"#;
+    assert_eq!(config_constants(config), Some(("/home/g".to_owned(), 30.0)));
+    for refused in [
+        r#"{"guard_home":"/home/g","timeout_seconds":0}"#,
+        r#"{"guard_home":"/home/g","timeout_seconds":true}"#,
+        r#"{"timeout_seconds":30}"#,
+        "[]",
+    ] {
+        assert_eq!(config_constants(refused), None, "{refused}");
+    }
+}
+
+#[test]
+fn only_a_grok_config_takes_the_grok_route() {
+    assert!(names_grok(r#"{"harness":"grok","timeout_seconds":30}"#));
+    assert!(!names_grok(r#"{"harness":"kimi","timeout_seconds":30}"#));
+    assert!(!names_grok("not json"));
+}

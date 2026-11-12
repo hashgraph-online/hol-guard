@@ -5,7 +5,6 @@ from __future__ import annotations
 import json
 import time
 from pathlib import Path
-from types import SimpleNamespace
 
 import pytest
 
@@ -414,73 +413,6 @@ class TestMuseHookRender:
             event_name=event_name,
             guard_home=tmp_path / "guard-home",
         ) == ("", "HOL Guard blocked this action.", 2)
-
-
-class TestMuseApprovalWaitBudget:
-    """The approval wait and the render share one hook budget."""
-
-    def test_the_wait_leaves_the_render_its_reserve(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-        from codex_plugin_scanner.guard import config as guard_config
-        from codex_plugin_scanner.guard import store as guard_store
-        from codex_plugin_scanner.guard.adapters import bounded_cli_hook_daemon
-
-        seen: dict[str, int] = {}
-
-        monkeypatch.setattr(
-            guard_config,
-            "load_guard_config",
-            lambda *_args, **_kwargs: SimpleNamespace(approval_wait_timeout_seconds=120),
-        )
-        monkeypatch.setattr(guard_store, "GuardStore", lambda *_args, **_kwargs: object())
-
-        def record(
-            answer: dict[str, object], *, event_name: str, store: object, timeout_seconds: int
-        ) -> dict[str, object]:
-            del event_name, store
-            seen["timeout_seconds"] = timeout_seconds
-            return answer
-
-        monkeypatch.setattr(muse_hook_render, "apply_muse_pretool_approval_wait", record)
-        monkeypatch.setattr(muse_hook_render, "muse_bridge_response", lambda *_args, **_kwargs: ("", "", 0))
-
-        bounded_cli_hook_daemon._rendered_bridge_answer(
-            {"policy_action": "review"},
-            harness="muse",
-            event_name="PreToolUse",
-            guard_home=tmp_path / "guard-home",
-            deadline=time.monotonic() + 10,
-        )
-
-        # The budget is truncated to whole seconds, so the wait gets one less
-        # than the deadline at most; what matters is that the reserve survives.
-        reserve = bounded_cli_hook_daemon._RENDER_RESERVE_SECONDS
-        assert 10 - reserve - 1 <= seen["timeout_seconds"] <= 10 - reserve
-
-    def test_a_spent_budget_skips_the_wait_entirely(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-        from codex_plugin_scanner.guard import config as guard_config
-        from codex_plugin_scanner.guard import store as guard_store
-        from codex_plugin_scanner.guard.adapters import bounded_cli_hook_daemon
-
-        monkeypatch.setattr(
-            guard_config,
-            "load_guard_config",
-            lambda *_args, **_kwargs: SimpleNamespace(approval_wait_timeout_seconds=120),
-        )
-        monkeypatch.setattr(guard_store, "GuardStore", lambda *_args, **_kwargs: object())
-
-        def forbidden(*_args: object, **_kwargs: object) -> None:
-            raise AssertionError("a budget this short must not start an approval wait")
-
-        monkeypatch.setattr(muse_hook_render, "apply_muse_pretool_approval_wait", forbidden)
-        monkeypatch.setattr(muse_hook_render, "muse_bridge_response", lambda *_args, **_kwargs: ("", "", 0))
-
-        assert bounded_cli_hook_daemon._rendered_bridge_answer(
-            {"policy_action": "review"},
-            harness="muse",
-            event_name="PreToolUse",
-            guard_home=tmp_path / "guard-home",
-            deadline=time.monotonic() + 1,
-        ) == ("", "", 0)
 
 
 class TestMuseApprovalResume:

@@ -45,10 +45,6 @@
         "surface": "hook_http_and_cli_events"
       },
       {
-        "module": "codex_plugin_scanner.guard.adapters.bounded_hook_http",
-        "surface": "hook_http_and_cli_events"
-      },
-      {
         "module": "codex_plugin_scanner.guard.adapters._modules.claude.claude_frozen_hook",
         "surface": "hook_http_and_cli_events"
       },
