@@ -1,0 +1,1087 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hol.org/schemas/guard/cloud-action-pack.v1.json",
+  "title": "HOL Guard cloud action pack",
+  "description": "One provider's cloud actions described as data: the hosts requests may reach, the sign-in mode, and for each action the request template, argument bounds, fact extractors, response projection, safety limits and fixtures. The language has no expressions, no free-form headers and no host outside the declared list. The Rust validator in guard-command checks further rules this schema cannot express, such as pattern compilation, placeholder use and fact consistency.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "provider",
+    "hosts",
+    "auth",
+    "actions"
+  ],
+  "properties": {
+    "schema": {
+      "const": "guard.cloud-action-pack.v1"
+    },
+    "provider": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "name",
+        "publisher"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9-]{1,31}$"
+        },
+        "name": {
+          "$ref": "#/$defs/displayText"
+        },
+        "publisher": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "name",
+            "verified"
+          ],
+          "properties": {
+            "name": {
+              "$ref": "#/$defs/displayText"
+            },
+            "verified": {
+              "type": "boolean"
+            }
+          }
+        }
+      }
+    },
+    "hosts": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 16,
+      "uniqueItems": true,
+      "items": {
+        "$ref": "#/$defs/host"
+      }
+    },
+    "auth": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "mode",
+        "scopes"
+      ],
+      "properties": {
+        "mode": {
+          "enum": [
+            "oauth2",
+            "github-app",
+            "api-key",
+            "none"
+          ]
+        },
+        "scopes": {
+          "type": "array",
+          "uniqueItems": true,
+          "maxItems": 64,
+          "items": {
+            "$ref": "#/$defs/scope"
+          }
+        }
+      }
+    },
+    "actions": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 256,
+      "items": {
+        "$ref": "#/$defs/action"
+      }
+    }
+  },
+  "$defs": {
+    "displayText": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 120,
+      "pattern": "^[^\\u0000-\\u001f\\u007f]*\\S[^\\u0000-\\u001f\\u007f]*$"
+    },
+    "host": {
+      "type": "string",
+      "maxLength": 253,
+      "pattern": "^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\\.)+[a-z0-9-]*[a-z][a-z0-9-]*$"
+    },
+    "scope": {
+      "type": "string",
+      "pattern": "^[!#-\\[\\]-~]{1,128}$"
+    },
+    "argumentName": {
+      "type": "string",
+      "pattern": "^[a-z_][a-z0-9_]{0,63}$"
+    },
+    "pattern": {
+      "type": "string",
+      "minLength": 2,
+      "maxLength": 512,
+      "pattern": "^\\^.*\\$$"
+    },
+    "regex": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 512
+    },
+    "action": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "actionId",
+        "title",
+        "executor",
+        "arguments",
+        "facts",
+        "response",
+        "safety"
+      ],
+      "properties": {
+        "actionId": {
+          "type": "string",
+          "maxLength": 128,
+          "pattern": "^[a-z][a-z0-9_-]*(?:\\.[a-z][a-z0-9_-]*)+$"
+        },
+        "title": {
+          "$ref": "#/$defs/displayText"
+        },
+        "link": {
+          "oneOf": [
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "permissionId"
+              ],
+              "properties": {
+                "permissionId": {
+                  "type": "string",
+                  "pattern": "^[!#-\\[\\]-~]{1,128}$"
+                }
+              }
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "tool"
+              ],
+              "properties": {
+                "tool": {
+                  "type": "string",
+                  "pattern": "^[!#-\\[\\]-~]{1,128}$"
+                }
+              }
+            }
+          ]
+        },
+        "executor": {
+          "$ref": "#/$defs/executor"
+        },
+        "arguments": {
+          "type": "object",
+          "maxProperties": 32,
+          "propertyNames": {
+            "type": "string",
+            "pattern": "^[a-z_][a-z0-9_]{0,63}$"
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/argument"
+          }
+        },
+        "facts": {
+          "$ref": "#/$defs/facts"
+        },
+        "response": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "maxBytes",
+            "fields"
+          ],
+          "properties": {
+            "maxBytes": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 1048576
+            },
+            "fields": {
+              "$ref": "#/$defs/responseFields"
+            }
+          }
+        },
+        "safety": {
+          "$ref": "#/$defs/safety"
+        },
+        "fixtures": {
+          "type": "array",
+          "maxItems": 32,
+          "items": {
+            "$ref": "#/$defs/fixture"
+          }
+        }
+      }
+    },
+    "executor": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "request"
+          ],
+          "properties": {
+            "kind": {
+              "const": "declarative-http"
+            },
+            "request": {
+              "$ref": "#/$defs/request"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "tool"
+          ],
+          "properties": {
+            "kind": {
+              "const": "remote-mcp"
+            },
+            "tool": {
+              "type": "string",
+              "pattern": "^[!#-\\[\\]-~]{1,128}$"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind"
+          ],
+          "properties": {
+            "kind": {
+              "const": "broker"
+            }
+          }
+        }
+      ]
+    },
+    "request": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "method",
+        "host",
+        "path",
+        "maxPages"
+      ],
+      "properties": {
+        "method": {
+          "enum": [
+            "GET",
+            "POST",
+            "PATCH",
+            "PUT",
+            "DELETE"
+          ]
+        },
+        "host": {
+          "$ref": "#/$defs/host"
+        },
+        "path": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512,
+          "pattern": "^/"
+        },
+        "query": {
+          "type": "array",
+          "maxItems": 32,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "name",
+              "value"
+            ],
+            "properties": {
+              "name": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9_.\\-\\[\\]]{1,64}$"
+              },
+              "value": {
+                "$ref": "#/$defs/valueSource"
+              }
+            }
+          }
+        },
+        "headers": {
+          "type": "array",
+          "maxItems": 16,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "name",
+              "value"
+            ],
+            "properties": {
+              "name": {
+                "allOf": [
+                  {
+                    "type": "string",
+                    "pattern": "^[a-z][a-z0-9-]{0,63}$"
+                  },
+                  {
+                    "not": {
+                      "type": "string",
+                      "pattern": "(?:auth|cookie|token|secret|key|session|password|credential)"
+                    }
+                  },
+                  {
+                    "not": {
+                      "type": "string",
+                      "pattern": "^(?:proxy-|x-forwarded)"
+                    }
+                  },
+                  {
+                    "not": {
+                      "enum": [
+                        "host",
+                        "content-length",
+                        "transfer-encoding",
+                        "connection",
+                        "upgrade",
+                        "te",
+                        "forwarded"
+                      ]
+                    }
+                  }
+                ]
+              },
+              "value": {
+                "type": "string",
+                "maxLength": 256,
+                "pattern": "^[ -~]*$"
+              }
+            }
+          }
+        },
+        "body": {
+          "$ref": "#/$defs/template"
+        },
+        "maxPages": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 10
+        }
+      }
+    },
+    "valueSource": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "arg"
+          ],
+          "properties": {
+            "arg": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "name"
+              ],
+              "properties": {
+                "name": {
+                  "$ref": "#/$defs/argumentName"
+                },
+                "default": {}
+              }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "const"
+          ],
+          "properties": {
+            "const": {
+              "type": [
+                "string",
+                "number",
+                "boolean"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "template": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "arg"
+          ],
+          "properties": {
+            "arg": {
+              "$ref": "#/$defs/argumentName"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "const"
+          ],
+          "properties": {
+            "const": {}
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "object"
+          ],
+          "properties": {
+            "object": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "name",
+                  "value"
+                ],
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 64
+                  },
+                  "value": {
+                    "$ref": "#/$defs/template"
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "array"
+          ],
+          "properties": {
+            "array": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/template"
+              }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "each"
+          ],
+          "properties": {
+            "each": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "arg",
+                "item"
+              ],
+              "properties": {
+                "arg": {
+                  "$ref": "#/$defs/argumentName"
+                },
+                "item": {
+                  "$ref": "#/$defs/template"
+                }
+              }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "element"
+          ],
+          "properties": {
+            "element": {
+              "const": true
+            }
+          }
+        }
+      ]
+    },
+    "textRule": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "maxLength"
+      ],
+      "properties": {
+        "pattern": {
+          "$ref": "#/$defs/pattern"
+        },
+        "maxLength": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 65536
+        },
+        "forbidden": {
+          "$ref": "#/$defs/regex"
+        }
+      }
+    },
+    "argument": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "required",
+            "maxLength"
+          ],
+          "properties": {
+            "type": {
+              "const": "string"
+            },
+            "required": {
+              "type": "boolean"
+            },
+            "pattern": {
+              "$ref": "#/$defs/pattern"
+            },
+            "maxLength": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 65536
+            },
+            "forbidden": {
+              "$ref": "#/$defs/regex"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "required",
+            "minimum",
+            "maximum"
+          ],
+          "properties": {
+            "type": {
+              "const": "integer"
+            },
+            "required": {
+              "type": "boolean"
+            },
+            "minimum": {
+              "type": "integer"
+            },
+            "maximum": {
+              "type": "integer"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "required"
+          ],
+          "properties": {
+            "type": {
+              "const": "boolean"
+            },
+            "required": {
+              "type": "boolean"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "required",
+            "minItems",
+            "maxItems",
+            "items"
+          ],
+          "properties": {
+            "type": {
+              "const": "array"
+            },
+            "required": {
+              "type": "boolean"
+            },
+            "minItems": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 1000
+            },
+            "maxItems": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 1000
+            },
+            "items": {
+              "$ref": "#/$defs/textRule"
+            }
+          }
+        }
+      ]
+    },
+    "extractor": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "const"
+          ],
+          "properties": {
+            "const": {}
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "flag"
+          ],
+          "properties": {
+            "flag": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "argument",
+                "whenTrue",
+                "whenFalse"
+              ],
+              "properties": {
+                "argument": {
+                  "$ref": "#/$defs/argumentName"
+                },
+                "whenTrue": {},
+                "whenFalse": {},
+                "whenAbsent": {}
+              }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "count"
+          ],
+          "properties": {
+            "count": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "arguments"
+              ],
+              "properties": {
+                "arguments": {
+                  "type": "array",
+                  "minItems": 1,
+                  "items": {
+                    "$ref": "#/$defs/argumentName"
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "argument"
+          ],
+          "properties": {
+            "argument": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "name",
+                "max"
+              ],
+              "properties": {
+                "name": {
+                  "$ref": "#/$defs/argumentName"
+                },
+                "max": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "default": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "domains"
+          ],
+          "properties": {
+            "domains": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "arguments"
+              ],
+              "properties": {
+                "arguments": {
+                  "type": "array",
+                  "minItems": 1,
+                  "items": {
+                    "$ref": "#/$defs/argumentName"
+                  }
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "facts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "class"
+      ],
+      "properties": {
+        "class": {
+          "enum": [
+            "read",
+            "draft",
+            "send",
+            "share",
+            "export",
+            "update",
+            "delete",
+            "execute",
+            "pay",
+            "admin"
+          ]
+        },
+        "object": {
+          "$ref": "#/$defs/extractor"
+        },
+        "reversibility": {
+          "$ref": "#/$defs/extractor"
+        },
+        "scope": {
+          "$ref": "#/$defs/extractor"
+        },
+        "recordCount": {
+          "$ref": "#/$defs/extractor"
+        },
+        "recipientCount": {
+          "$ref": "#/$defs/extractor"
+        },
+        "byteCount": {
+          "$ref": "#/$defs/extractor"
+        },
+        "audienceKind": {
+          "$ref": "#/$defs/extractor"
+        },
+        "recipientDomains": {
+          "$ref": "#/$defs/extractor"
+        },
+        "environment": {
+          "$ref": "#/$defs/extractor"
+        },
+        "sensitivity": {
+          "$ref": "#/$defs/extractor"
+        },
+        "countReadback": {
+          "type": "string",
+          "maxLength": 128
+        }
+      }
+    },
+    "responseFields": {
+      "type": "array",
+      "maxItems": 64,
+      "items": {
+        "$ref": "#/$defs/responseField"
+      }
+    },
+    "responseField": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "value"
+      ],
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "value": {
+          "oneOf": [
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "from"
+              ],
+              "properties": {
+                "from": {
+                  "type": "string",
+                  "maxLength": 256
+                }
+              }
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "exists"
+              ],
+              "properties": {
+                "exists": {
+                  "type": "string",
+                  "maxLength": 256
+                }
+              }
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "list"
+              ],
+              "properties": {
+                "list": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "from",
+                    "maxItems",
+                    "fields"
+                  ],
+                  "properties": {
+                    "from": {
+                      "type": "string",
+                      "maxLength": 256
+                    },
+                    "maxItems": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 1000
+                    },
+                    "fields": {
+                      "$ref": "#/$defs/responseFields"
+                    }
+                  }
+                }
+              }
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "object"
+              ],
+              "properties": {
+                "object": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "from",
+                    "fields"
+                  ],
+                  "properties": {
+                    "from": {
+                      "type": "string",
+                      "maxLength": 256
+                    },
+                    "fields": {
+                      "$ref": "#/$defs/responseFields"
+                    }
+                  }
+                }
+              }
+            }
+          ]
+        },
+        "untrusted": {
+          "type": "boolean"
+        },
+        "sensitivity": {
+          "enum": [
+            "public",
+            "personal",
+            "confidential",
+            "secret"
+          ]
+        }
+      }
+    },
+    "safety": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "effect",
+        "requiredCapabilities",
+        "idempotency",
+        "scopes",
+        "maxItems",
+        "minIntervalMs",
+        "timeoutMs"
+      ],
+      "properties": {
+        "effect": {
+          "enum": [
+            "read",
+            "write",
+            "destructive",
+            "admin"
+          ]
+        },
+        "requiredCapabilities": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "egress-pinned",
+              "resource-allowlist",
+              "provider-idempotency",
+              "bounded-output",
+              "no-filesystem",
+              "no-subprocess"
+            ]
+          }
+        },
+        "resource": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "argument"
+          ],
+          "properties": {
+            "kind": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64
+            },
+            "argument": {
+              "$ref": "#/$defs/argumentName"
+            }
+          }
+        },
+        "idempotency": {
+          "enum": [
+            "safe-read",
+            "provider-key",
+            "none"
+          ]
+        },
+        "scopes": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/scope"
+          }
+        },
+        "maxItems": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "minIntervalMs": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "timeoutMs": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    },
+    "fixture": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "kind",
+        "arguments",
+        "expect"
+      ],
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "kind": {
+          "enum": [
+            "safe",
+            "risky"
+          ]
+        },
+        "arguments": {
+          "type": "object"
+        },
+        "expect": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [],
+          "properties": {
+            "error": {
+              "type": "string",
+              "pattern": "^[a-z_]{1,64}$"
+            },
+            "facts": {
+              "type": "object"
+            },
+            "request": {
+              "type": "object"
+            },
+            "response": {
+              "type": "string"
+            },
+            "projection": {}
+          }
+        }
+      }
+    }
+  }
+}

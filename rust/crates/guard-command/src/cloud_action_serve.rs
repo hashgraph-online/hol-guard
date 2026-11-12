@@ -16,7 +16,7 @@ const MAX_BINDING_SET_BYTES: u64 = 16 * 1024 * 1024;
 const BINDING_SET_ENV: &str = "GUARD_CLOUD_ACTION_BINDING_SET";
 const ACTIVATION_KEY_ENV: &str = "GUARD_CLOUD_ACTION_ACTIVATION_PUBLIC_KEY";
 
-enum Line {
+pub(crate) enum Line {
     End,
     Request,
     Oversize,
@@ -28,15 +28,20 @@ enum Line {
 /// error on stderr.
 ///
 /// `inspect` as the first argument serves content inspection instead: it is
-/// stateless, so it takes no binding set and no flags.
+/// stateless, so it takes no binding set and no flags. `pack` serves the
+/// cloud action pack tools (see [`crate::cloud_pack_cli`]), stateless too.
 pub fn serve(program: &str, args: &[String]) -> i32 {
     if let [command, rest @ ..] = args {
-        if command == "inspect" {
+        if command == "inspect" || command == "pack" {
             if !rest.is_empty() {
                 eprintln!("{program}: usage");
                 return 2;
             }
-            answer_lines(inspect, |code| inspect_error(None, code));
+            if command == "inspect" {
+                answer_lines(inspect, |code| inspect_error(None, code));
+            } else {
+                crate::cloud_pack_cli::serve_lines();
+            }
             return 0;
         }
     }
@@ -106,7 +111,7 @@ fn startup(args: &[String]) -> Result<CloudActionEvaluator, &'static str> {
 
 /// One request line, capped at [`MAX_LINE_BYTES`]. The rest of an oversize
 /// line is discarded unread so the next request starts on a line boundary.
-fn read_line(input: &mut impl BufRead, bytes: &mut Vec<u8>) -> io::Result<Line> {
+pub(crate) fn read_line(input: &mut impl BufRead, bytes: &mut Vec<u8>) -> io::Result<Line> {
     let read = Read::take(&mut *input, MAX_LINE_BYTES as u64 + 1).read_until(b'\n', bytes)?;
     if read == 0 {
         return Ok(Line::End);

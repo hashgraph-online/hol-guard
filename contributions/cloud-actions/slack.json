@@ -1,0 +1,655 @@
+{
+  "schema": "guard.cloud-action-pack.v1",
+  "provider": {
+    "id": "slack",
+    "name": "Slack",
+    "publisher": {
+      "name": "HOL",
+      "verified": true
+    }
+  },
+  "hosts": [
+    "slack.com"
+  ],
+  "auth": {
+    "mode": "oauth2",
+    "scopes": [
+      "channels:history",
+      "channels:read",
+      "chat:write"
+    ]
+  },
+  "actions": [
+    {
+      "actionId": "slack.conversations.list",
+      "title": "List public channels",
+      "link": {
+        "tool": "slack_conversations_list"
+      },
+      "executor": {
+        "kind": "declarative-http",
+        "request": {
+          "method": "GET",
+          "host": "slack.com",
+          "path": "/api/conversations.list",
+          "query": [
+            {
+              "name": "limit",
+              "value": {
+                "arg": {
+                  "name": "limit",
+                  "default": 200
+                }
+              }
+            },
+            {
+              "name": "cursor",
+              "value": {
+                "arg": {
+                  "name": "cursor"
+                }
+              }
+            },
+            {
+              "name": "types",
+              "value": {
+                "const": "public_channel"
+              }
+            },
+            {
+              "name": "exclude_archived",
+              "value": {
+                "const": true
+              }
+            }
+          ],
+          "headers": [
+            {
+              "name": "accept",
+              "value": "application/json"
+            }
+          ],
+          "maxPages": 1
+        }
+      },
+      "arguments": {
+        "limit": {
+          "type": "integer",
+          "required": false,
+          "minimum": 1,
+          "maximum": 200
+        },
+        "cursor": {
+          "type": "string",
+          "required": false,
+          "maxLength": 512,
+          "pattern": "^[A-Za-z0-9+/=_-]{1,512}$"
+        }
+      },
+      "facts": {
+        "class": "read",
+        "object": {
+          "const": "channel"
+        },
+        "scope": {
+          "const": "query_selected"
+        },
+        "recordCount": {
+          "argument": {
+            "name": "limit",
+            "max": 200,
+            "default": 200
+          }
+        }
+      },
+      "response": {
+        "maxBytes": 262144,
+        "fields": [
+          {
+            "name": "channels",
+            "value": {
+              "list": {
+                "from": "channels",
+                "maxItems": 200,
+                "fields": [
+                  {
+                    "name": "id",
+                    "value": {
+                      "from": "id"
+                    }
+                  },
+                  {
+                    "name": "name",
+                    "value": {
+                      "from": "name"
+                    },
+                    "untrusted": true
+                  },
+                  {
+                    "name": "is_member",
+                    "value": {
+                      "from": "is_member"
+                    }
+                  }
+                ]
+              }
+            }
+          },
+          {
+            "name": "next_cursor",
+            "value": {
+              "from": "response_metadata.next_cursor"
+            }
+          }
+        ]
+      },
+      "safety": {
+        "effect": "read",
+        "requiredCapabilities": [
+          "bounded-output",
+          "egress-pinned"
+        ],
+        "idempotency": "safe-read",
+        "scopes": [
+          "channels:read"
+        ],
+        "maxItems": 200,
+        "minIntervalMs": 3000,
+        "timeoutMs": 10000
+      },
+      "fixtures": [
+        {
+          "name": "lists channels",
+          "kind": "safe",
+          "arguments": {
+            "limit": 2
+          },
+          "expect": {
+            "facts": {
+              "class": "read",
+              "record_count": {
+                "state": "known",
+                "value": 2
+              }
+            },
+            "response": "{\"ok\": true, \"channels\": [{\"id\": \"C0123456789\", \"name\": \"general\", \"is_member\": true, \"purpose\": {\"value\": \"x\"}}], \"response_metadata\": {\"next_cursor\": \"\"}}",
+            "projection": {
+              "channels": [
+                {
+                  "id": "C0123456789",
+                  "name": "general",
+                  "is_member": true
+                }
+              ],
+              "next_cursor": ""
+            },
+            "request": {
+              "body": null,
+              "headers": [
+                [
+                  "accept",
+                  "application/json"
+                ]
+              ],
+              "maxPages": 1,
+              "method": "GET",
+              "url": "https://slack.com/api/conversations.list?limit=2&types=public_channel&exclude_archived=true"
+            }
+          }
+        },
+        {
+          "name": "refuses a private channel listing",
+          "kind": "risky",
+          "arguments": {
+            "types": "private_channel"
+          },
+          "expect": {
+            "error": "unknown_argument"
+          }
+        },
+        {
+          "name": "refuses a cursor with a separator",
+          "kind": "risky",
+          "arguments": {
+            "cursor": "abc&types=im"
+          },
+          "expect": {
+            "error": "invalid_argument"
+          }
+        }
+      ]
+    },
+    {
+      "actionId": "slack.conversations.history",
+      "title": "Read a channel's recent messages",
+      "link": {
+        "tool": "slack_conversations_history"
+      },
+      "executor": {
+        "kind": "declarative-http",
+        "request": {
+          "method": "GET",
+          "host": "slack.com",
+          "path": "/api/conversations.history",
+          "query": [
+            {
+              "name": "channel",
+              "value": {
+                "arg": {
+                  "name": "channel"
+                }
+              }
+            },
+            {
+              "name": "limit",
+              "value": {
+                "arg": {
+                  "name": "limit",
+                  "default": 15
+                }
+              }
+            },
+            {
+              "name": "cursor",
+              "value": {
+                "arg": {
+                  "name": "cursor"
+                }
+              }
+            },
+            {
+              "name": "oldest",
+              "value": {
+                "arg": {
+                  "name": "oldest"
+                }
+              }
+            },
+            {
+              "name": "latest",
+              "value": {
+                "arg": {
+                  "name": "latest"
+                }
+              }
+            },
+            {
+              "name": "inclusive",
+              "value": {
+                "const": false
+              }
+            },
+            {
+              "name": "include_all_metadata",
+              "value": {
+                "const": false
+              }
+            }
+          ],
+          "headers": [
+            {
+              "name": "accept",
+              "value": "application/json"
+            }
+          ],
+          "maxPages": 1
+        }
+      },
+      "arguments": {
+        "channel": {
+          "type": "string",
+          "required": true,
+          "maxLength": 12,
+          "pattern": "^C[A-Z0-9]{8,11}$"
+        },
+        "limit": {
+          "type": "integer",
+          "required": false,
+          "minimum": 1,
+          "maximum": 15
+        },
+        "cursor": {
+          "type": "string",
+          "required": false,
+          "maxLength": 512,
+          "pattern": "^[A-Za-z0-9+/=_-]{1,512}$"
+        },
+        "oldest": {
+          "type": "string",
+          "required": false,
+          "maxLength": 17,
+          "pattern": "^\\d{10}\\.\\d{6}$"
+        },
+        "latest": {
+          "type": "string",
+          "required": false,
+          "maxLength": 17,
+          "pattern": "^\\d{10}\\.\\d{6}$"
+        }
+      },
+      "facts": {
+        "class": "read",
+        "object": {
+          "const": "message"
+        },
+        "scope": {
+          "const": "query_selected"
+        },
+        "recordCount": {
+          "argument": {
+            "name": "limit",
+            "max": 15,
+            "default": 15
+          }
+        }
+      },
+      "response": {
+        "maxBytes": 131072,
+        "fields": [
+          {
+            "name": "messages",
+            "value": {
+              "list": {
+                "from": "messages",
+                "maxItems": 15,
+                "fields": [
+                  {
+                    "name": "ts",
+                    "value": {
+                      "from": "ts"
+                    }
+                  },
+                  {
+                    "name": "text",
+                    "value": {
+                      "from": "text"
+                    },
+                    "untrusted": true
+                  },
+                  {
+                    "name": "user",
+                    "value": {
+                      "from": "user"
+                    }
+                  },
+                  {
+                    "name": "thread_ts",
+                    "value": {
+                      "from": "thread_ts"
+                    }
+                  }
+                ]
+              }
+            }
+          },
+          {
+            "name": "next_cursor",
+            "value": {
+              "from": "response_metadata.next_cursor"
+            }
+          }
+        ]
+      },
+      "safety": {
+        "effect": "read",
+        "requiredCapabilities": [
+          "bounded-output",
+          "egress-pinned",
+          "resource-allowlist"
+        ],
+        "idempotency": "safe-read",
+        "scopes": [
+          "channels:history"
+        ],
+        "maxItems": 15,
+        "minIntervalMs": 60000,
+        "timeoutMs": 10000,
+        "resource": {
+          "kind": "channel",
+          "argument": "channel"
+        }
+      },
+      "fixtures": [
+        {
+          "name": "reads recent messages",
+          "kind": "safe",
+          "arguments": {
+            "channel": "C0123456789"
+          },
+          "expect": {
+            "facts": {
+              "class": "read",
+              "record_count": {
+                "state": "known",
+                "value": 15
+              }
+            },
+            "response": "{\"ok\": true, \"messages\": [{\"type\": \"message\", \"ts\": \"1700000000.000100\", \"text\": \"deploy at 5\", \"user\": \"U012345678\"}], \"has_more\": false, \"response_metadata\": {\"next_cursor\": \"\"}}",
+            "projection": {
+              "messages": [
+                {
+                  "ts": "1700000000.000100",
+                  "text": "deploy at 5",
+                  "user": "U012345678"
+                }
+              ],
+              "next_cursor": ""
+            },
+            "request": {
+              "body": null,
+              "headers": [
+                [
+                  "accept",
+                  "application/json"
+                ]
+              ],
+              "maxPages": 1,
+              "method": "GET",
+              "url": "https://slack.com/api/conversations.history?channel=C0123456789&limit=15&inclusive=false&include_all_metadata=false"
+            }
+          }
+        },
+        {
+          "name": "refuses a direct message channel",
+          "kind": "risky",
+          "arguments": {
+            "channel": "D0123456789"
+          },
+          "expect": {
+            "error": "invalid_argument"
+          }
+        },
+        {
+          "name": "refuses a larger page",
+          "kind": "risky",
+          "arguments": {
+            "channel": "C0123456789",
+            "limit": 16
+          },
+          "expect": {
+            "error": "invalid_argument"
+          }
+        }
+      ]
+    },
+    {
+      "actionId": "slack.chat.post_message",
+      "title": "Post a message to a channel",
+      "link": {
+        "tool": "slack_chat_post_message"
+      },
+      "executor": {
+        "kind": "declarative-http",
+        "request": {
+          "method": "POST",
+          "host": "slack.com",
+          "path": "/api/chat.postMessage",
+          "query": [],
+          "headers": [
+            {
+              "name": "accept",
+              "value": "application/json"
+            }
+          ],
+          "maxPages": 1,
+          "body": {
+            "object": [
+              {
+                "name": "channel",
+                "value": {
+                  "arg": "channel"
+                }
+              },
+              {
+                "name": "text",
+                "value": {
+                  "arg": "text"
+                }
+              },
+              {
+                "name": "unfurl_links",
+                "value": {
+                  "const": false
+                }
+              },
+              {
+                "name": "unfurl_media",
+                "value": {
+                  "const": false
+                }
+              },
+              {
+                "name": "mrkdwn",
+                "value": {
+                  "const": true
+                }
+              }
+            ]
+          }
+        }
+      },
+      "arguments": {
+        "channel": {
+          "type": "string",
+          "required": true,
+          "maxLength": 12,
+          "pattern": "^C[A-Z0-9]{8,11}$"
+        },
+        "text": {
+          "type": "string",
+          "required": true,
+          "maxLength": 4000,
+          "forbidden": "(?i)<!(?:channel|here|everyone|subteam\\^)"
+        }
+      },
+      "facts": {
+        "class": "send",
+        "object": {
+          "const": "message"
+        },
+        "scope": {
+          "const": "single"
+        },
+        "reversibility": {
+          "const": "reversible"
+        },
+        "recordCount": {
+          "const": 1
+        }
+      },
+      "response": {
+        "maxBytes": 4096,
+        "fields": [
+          {
+            "name": "channel",
+            "value": {
+              "from": "channel"
+            }
+          },
+          {
+            "name": "ts",
+            "value": {
+              "from": "ts"
+            }
+          }
+        ]
+      },
+      "safety": {
+        "effect": "write",
+        "requiredCapabilities": [
+          "bounded-output",
+          "egress-pinned",
+          "resource-allowlist"
+        ],
+        "idempotency": "none",
+        "scopes": [
+          "chat:write"
+        ],
+        "maxItems": 1,
+        "minIntervalMs": 1500,
+        "timeoutMs": 15000,
+        "resource": {
+          "kind": "channel",
+          "argument": "channel"
+        }
+      },
+      "fixtures": [
+        {
+          "name": "posts a message",
+          "kind": "safe",
+          "arguments": {
+            "channel": "C0123456789",
+            "text": "Build is green."
+          },
+          "expect": {
+            "facts": {
+              "class": "send",
+              "scope": {
+                "state": "known",
+                "value": "single"
+              }
+            },
+            "request": {
+              "body": "{\"channel\":\"C0123456789\",\"text\":\"Build is green.\",\"unfurl_links\":false,\"unfurl_media\":false,\"mrkdwn\":true}",
+              "headers": [
+                [
+                  "accept",
+                  "application/json"
+                ],
+                [
+                  "content-type",
+                  "application/json; charset=utf-8"
+                ]
+              ],
+              "maxPages": 1,
+              "method": "POST",
+              "url": "https://slack.com/api/chat.postMessage"
+            }
+          }
+        },
+        {
+          "name": "refuses an @channel broadcast",
+          "kind": "risky",
+          "arguments": {
+            "channel": "C0123456789",
+            "text": "ping <!channel>"
+          },
+          "expect": {
+            "error": "forbidden_content"
+          }
+        },
+        {
+          "name": "refuses a user group mention",
+          "kind": "risky",
+          "arguments": {
+            "channel": "C0123456789",
+            "text": "<!subteam^S0123|@oncall> look"
+          },
+          "expect": {
+            "error": "forbidden_content"
+          }
+        }
+      ]
+    }
+  ]
+}

@@ -226,7 +226,7 @@ fn validate_v2(request: &RequestV2) -> Result<(), &'static str> {
     request.saved_consents.iter().try_for_each(validate_consent)
 }
 
-const fn effect_rank(effect: ActionEffect) -> u8 {
+pub(crate) const fn effect_rank(effect: ActionEffect) -> u8 {
     match effect {
         ActionEffect::Read => 0,
         ActionEffect::Write => 1,
