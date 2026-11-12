@@ -154,14 +154,21 @@ fn an_enabled_extension_permission_cannot_settle_a_spelled_out_secret() {
 #[test]
 fn a_key_spelled_in_unicode_escapes_is_still_a_key() {
     let key = joined(&["AKIA", "Q3EGRTL5", "KH7XWNP2"]);
-    let escaped: String = key.chars().map(|c| format!("\\u{:04x}", c as u32)).collect();
-    assert!(holds_literal_secret(&format!("{{\"aws_key\": \"{escaped}\"}}")));
+    let escaped: String = key
+        .chars()
+        .map(|c| format!("\\u{:04x}", c as u32))
+        .collect();
+    assert!(holds_literal_secret(&format!(
+        "{{\"aws_key\": \"{escaped}\"}}"
+    )));
     let write = json!({
         "tool_name": "Write",
         "tool_input": {"file_path": "/tmp/config.json", "content": format!("{{\"key\": \"{escaped}\"}}")}
     });
     assert!(writes_literal_secret(&write));
-    assert!(!holds_literal_secret("{\"greeting\": \"caf\\u00e9 \\u2014 open\"}"));
+    assert!(!holds_literal_secret(
+        "{\"greeting\": \"caf\\u00e9 \\u2014 open\"}"
+    ));
     assert!(!holds_literal_secret("printf '\\u0041'"));
 }
 

@@ -35,7 +35,6 @@ fn programs_scratch_space_and_workspace_paths_are_not_system_files() {
     }
 }
 
-
 #[test]
 fn a_program_fed_on_a_heredoc_is_read_for_system_files() {
     let home = std::env::temp_dir();
