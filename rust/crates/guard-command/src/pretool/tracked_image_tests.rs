@@ -89,9 +89,12 @@ fn images_carrying_text_the_walk_cannot_clear_keep_review() {
     stored.extend_from_slice(&(key.len() as u16).to_le_bytes());
     stored.extend_from_slice(&(!(key.len() as u16)).to_le_bytes());
     stored.extend_from_slice(key.as_bytes());
+    // An accented letter must not split the value away from its key.
+    let mut accented = b"XML:com.adobe.xmp\0\0\0\0\0schema password=\"".to_vec();
+    accented.extend_from_slice("\u{e9}7Qm2!vR9#kL4_xN8@pT6\"".as_bytes());
     let mut palette = b"names\0\x08".to_vec();
     palette.extend_from_slice(key.as_bytes());
-    let cases: [(&str, Vec<u8>); 7] = [
+    let cases: [(&str, Vec<u8>); 8] = [
         ("private chunk", png(&[header, (b"prVt", key.as_bytes())])),
         (
             "compressed text",
@@ -106,6 +109,10 @@ fn images_carrying_text_the_walk_cannot_clear_keep_review() {
         (
             "key in a palette",
             png(&[header, (b"PLTE", key.as_bytes())]),
+        ),
+        (
+            "accented password in XMP",
+            png(&[header, (b"iTXt", &accented)]),
         ),
         (
             "key in a suggested palette",

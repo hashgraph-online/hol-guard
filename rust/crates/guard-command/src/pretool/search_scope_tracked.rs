@@ -189,19 +189,37 @@ fn clean(text: &str, rendered: &[u8]) -> bool {
 /// reads one. No credential the detector flags is shorter.
 const MIN_PRINTABLE_RUN: usize = 4;
 
-/// The runs of printable ASCII in `bytes`, one per line. A credential a
-/// text-mode search could print from a binary file is such a run; the bytes
-/// between runs are compressed pixels the detector would only slow down on.
+/// The runs of readable text in `bytes`, one per line: well-formed UTF-8
+/// with no control characters but tab and line breaks. A credential a
+/// text-mode search could print from a binary file is such a run, accented
+/// letters included; the bytes between runs are compressed pixels the
+/// detector would only slow down on.
 fn printable_runs(bytes: &[u8]) -> String {
-    let printable = |byte: &u8| matches!(byte, b'\t' | b'\n' | b'\r' | b' '..=b'~');
     let mut text = String::new();
-    for run in bytes.split(|byte| !printable(byte)) {
-        if run.len() >= MIN_PRINTABLE_RUN {
-            // Every byte of the run is ASCII.
-            text.extend(run.iter().map(|byte| char::from(*byte)));
+    let mut run = String::new();
+    let mut length = 0;
+    let mut close = |run: &mut String, length: &mut usize| {
+        if *length >= MIN_PRINTABLE_RUN {
+            text.push_str(run);
             text.push('\n');
         }
+        run.clear();
+        *length = 0;
+    };
+    for chunk in bytes.utf8_chunks() {
+        for character in chunk.valid().chars() {
+            if matches!(character, '\t' | '\n' | '\r') || !character.is_control() {
+                run.push(character);
+                length += 1;
+            } else {
+                close(&mut run, &mut length);
+            }
+        }
+        if !chunk.invalid().is_empty() {
+            close(&mut run, &mut length);
+        }
     }
+    close(&mut run, &mut length);
     text
 }
 
