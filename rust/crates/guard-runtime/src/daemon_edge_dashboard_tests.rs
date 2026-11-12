@@ -2,7 +2,7 @@ use std::fs;
 use std::path::Path;
 
 use super::super::super::http::parse_request;
-use super::{owns, respond};
+use super::{build_id, owns, respond};
 
 fn bundle(dir: &Path) {
     fs::create_dir_all(dir.join("assets/chunks")).unwrap();
@@ -87,6 +87,68 @@ fn the_pinned_bundle_outlives_an_upgrade_on_disk() {
     assert!(get(Some(dir.path()), "/assets/guard-dashboard.js").ends_with("app()"));
     fs::write(dir.path().join("assets/guard-dashboard.js"), "new()").unwrap();
     assert!(get(Some(dir.path()), "/assets/guard-dashboard.js").ends_with("app()"));
+}
+
+/// The folder a daemon is launched with can be the launcher's temporary
+/// unpack folder, deleted once the launcher exits. The daemon pins the bundle
+/// at startup (its handshake asks for the build id), so every file it serves
+/// must still be there after the folder is gone.
+#[test]
+fn every_served_file_outlives_its_folder() {
+    let dir = tempfile::tempdir().unwrap();
+    let root = dir.path().join("static");
+    bundle(&root);
+    fs::create_dir_all(root.join("brand")).unwrap();
+    fs::write(root.join("brand/logo.png"), "logo").unwrap();
+    fs::write(root.join("favicon-32x32.png"), "icon").unwrap();
+    assert!(build_id(&root).is_some());
+    fs::remove_dir_all(&root).unwrap();
+    for (path, body) in [
+        ("/brand/logo.png", "logo"),
+        ("/favicon-32x32.png", "icon"),
+        ("/favicon.svg", "<svg/>"),
+        ("/assets/guard-dashboard.js", "app()"),
+    ] {
+        let answer = get(Some(&root), path);
+        assert!(
+            answer.starts_with("HTTP/1.0 200 OK\r\n"),
+            "{path}: {answer}"
+        );
+        assert!(answer.ends_with(body), "{path}: {answer}");
+    }
+    assert!(get(Some(&root), "/inbox").starts_with("HTTP/1.0 200 OK\r\n"));
+}
+
+#[test]
+fn brand_and_root_files_leave_the_build_id_alone() {
+    let plain = tempfile::tempdir().unwrap();
+    bundle(plain.path());
+    let branded = tempfile::tempdir().unwrap();
+    bundle(branded.path());
+    fs::create_dir_all(branded.path().join("brand")).unwrap();
+    fs::write(branded.path().join("brand/logo.png"), "logo").unwrap();
+    fs::write(branded.path().join("favicon.ico"), "ico").unwrap();
+    assert_eq!(build_id(plain.path()), build_id(branded.path()));
+    // Icons alone are not a dashboard.
+    let icons = tempfile::tempdir().unwrap();
+    fs::write(icons.path().join("favicon.svg"), "<svg/>").unwrap();
+    assert_eq!(build_id(icons.path()), None);
+    assert!(get(Some(icons.path()), "/").starts_with("HTTP/1.0 503 "));
+}
+
+#[cfg(unix)]
+#[test]
+fn a_link_out_of_the_folder_is_not_served() {
+    let dir = tempfile::tempdir().unwrap();
+    let root = dir.path().join("static");
+    bundle(&root);
+    fs::write(dir.path().join("outside.png"), "no").unwrap();
+    fs::create_dir_all(root.join("brand")).unwrap();
+    std::os::unix::fs::symlink(dir.path().join("outside.png"), root.join("brand/out.png")).unwrap();
+    std::os::unix::fs::symlink(dir.path().join("outside.png"), root.join("assets/out.png"))
+        .unwrap();
+    assert!(get(Some(&root), "/brand/out.png").starts_with("HTTP/1.0 404 "));
+    assert!(get(Some(&root), "/assets/out.png").starts_with("HTTP/1.0 404 "));
 }
 
 #[test]

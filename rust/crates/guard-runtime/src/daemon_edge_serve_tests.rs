@@ -141,6 +141,26 @@ fn the_handshake_is_one_the_native_reads_accept() {
     assert!(accepted.cli().is_some());
 }
 
+/// A frozen launcher's unpack folder is deleted once it sees the daemon
+/// answer, so the handshake pins the dashboard even when the launch already
+/// names its build.
+#[test]
+fn the_handshake_pins_the_dashboard_even_when_the_build_is_named() {
+    let dir = tempfile::tempdir().unwrap();
+    let dashboard = dir.path().join("static");
+    fs::create_dir_all(dashboard.join("assets")).unwrap();
+    fs::write(dashboard.join("index.html"), "<html><head></head></html>").unwrap();
+    fs::write(dashboard.join("assets/guard-dashboard.js"), "app()").unwrap();
+    let extra = json!({
+        "dashboard_dir": dashboard.to_str().unwrap(),
+        "dashboard_build": "named",
+    });
+    let config = LaunchConfig::parse(&launch(Path::new("/tmp/guard-home"), extra)).unwrap();
+    let _ = config.handshake("0123456789abcdef0123456789abcdef");
+    fs::remove_dir_all(&dashboard).unwrap();
+    assert!(dashboard_build_id(&dashboard).is_some());
+}
+
 #[test]
 fn a_standalone_daemon_answers_the_health_probe_itself() {
     let home = Path::new("/tmp/guard-home");

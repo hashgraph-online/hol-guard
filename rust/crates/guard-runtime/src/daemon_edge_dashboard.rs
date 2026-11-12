@@ -2,11 +2,14 @@
 //! the bundled static files and the short approval links, as
 //! `server_dashboard_support.py` and `dashboard_bundle.py` did.
 //!
-//! `index.html` and `assets/` are read into memory the first time they are
-//! asked for and kept for the life of the process, so an in-place upgrade
-//! never pairs a new dashboard with this daemon's API. The shell is stamped
-//! with the pinned bundle's fingerprint, so a tab left open across a restart
-//! can tell it is stale.
+//! Every file the dashboard serves (`index.html`, `assets/`, `brand/` and the
+//! root icons) is read into memory the first time the bundle is asked for and
+//! kept for the life of the process. So an in-place upgrade never pairs a new
+//! dashboard with this daemon's API. And once the daemon has started, serving
+//! never depends on the folder: a frozen launcher hands the daemon its own
+//! temporary unpack folder, which is deleted when that launcher exits. The
+//! shell is stamped with the fingerprint of `index.html` and `assets/`, so a
+//! tab left open across a restart can tell it is stale.
 
 use std::collections::HashMap;
 use std::fs;
@@ -113,39 +116,31 @@ fn pinned(static_dir: &Path) -> &'static Bundle {
         .or_insert_with(|| Box::leak(Box::new(read_bundle(static_dir))))
 }
 
-/// `_read_bundle` and `dashboard_build_id`.
+/// `_read_bundle` and `dashboard_build_id`: every file the dashboard serves.
 fn read_bundle(static_dir: &Path) -> Bundle {
     let mut files = HashMap::new();
-    let index = static_dir.join("index.html");
-    if let Ok(bytes) = fs::read(&index) {
-        files.insert("index.html".to_owned(), bytes);
-    }
-    let mut pending = vec![static_dir.join("assets")];
-    while let Some(dir) = pending.pop() {
-        let Ok(entries) = fs::read_dir(&dir) else {
-            continue;
-        };
-        for entry in entries.flatten() {
-            let path = entry.path();
-            let Ok(kind) = entry.file_type() else {
+    if let Ok(root) = fs::canonicalize(static_dir) {
+        let top_level =
+            std::iter::once("index.html").chain(ROOT_STATIC_FILES.iter().map(|path| &path[1..]));
+        for name in top_level {
+            insert_file(&root, &root.join(name), &mut files);
+        }
+        let mut pending = vec![root.join("assets"), root.join("brand")];
+        while let Some(dir) = pending.pop() {
+            let Ok(entries) = fs::read_dir(&dir) else {
                 continue;
             };
-            if kind.is_dir() {
-                pending.push(path);
-            } else if path.is_file() {
-                let relative = path
-                    .strip_prefix(static_dir)
-                    .ok()
-                    .and_then(|relative| relative.to_str())
-                    .map(|relative| relative.replace('\\', "/"));
-                if let (Some(relative), Ok(bytes)) = (relative, fs::read(&path)) {
-                    files.insert(relative, bytes);
+            for entry in entries.flatten() {
+                match entry.file_type() {
+                    Ok(kind) if kind.is_dir() => pending.push(entry.path()),
+                    Ok(_) => insert_file(&root, &entry.path(), &mut files),
+                    Err(_) => {}
                 }
             }
         }
     }
-    let build = (!files.is_empty()).then(|| {
-        let mut names: Vec<&String> = files.keys().collect();
+    let mut names: Vec<&String> = files.keys().filter(|name| is_fingerprinted(name)).collect();
+    let build = (!names.is_empty()).then(|| {
         names.sort();
         let mut digest = Sha256::new();
         for name in names {
@@ -158,18 +153,32 @@ fn read_bundle(static_dir: &Path) -> Bundle {
     Bundle { files, build }
 }
 
-fn is_pinned_path(relative: &str) -> bool {
-    relative == "index.html" || relative == "assets" || relative.starts_with("assets/")
+/// Reads one file into the bundle under its path relative to `root`, unless
+/// it resolves outside `root`, as a symbolic link can.
+fn insert_file(root: &Path, path: &Path, files: &mut HashMap<String, Vec<u8>>) {
+    let Ok(target) = fs::canonicalize(path) else {
+        return;
+    };
+    if !target.starts_with(root) || !target.is_file() {
+        return;
+    }
+    let Some(relative) = path.strip_prefix(root).ok().and_then(Path::to_str) else {
+        return;
+    };
+    if let Ok(bytes) = fs::read(&target) {
+        files.insert(relative.replace('\\', "/"), bytes);
+    }
+}
+
+/// The files the build id covers: the dashboard itself, not its images, so
+/// the id names the same build whichever icons sit beside it.
+fn is_fingerprinted(relative: &str) -> bool {
+    relative == "index.html" || relative.starts_with("assets/")
 }
 
 /// `_write_static_asset`.
 fn static_file(static_dir: &Path, relative: &str, dashboard_build: Option<&str>) -> Vec<u8> {
-    let body = if is_pinned_path(relative) {
-        pinned(static_dir).files.get(relative).cloned()
-    } else {
-        unpinned_file(static_dir, relative)
-    };
-    let Some(body) = body else {
+    let Some(body) = pinned(static_dir).files.get(relative).cloned() else {
         return head_only(404, "Not Found", dashboard_build);
     };
     let mut head = format!(
@@ -181,16 +190,6 @@ fn static_file(static_dir: &Path, relative: &str, dashboard_build: Option<&str>)
     let mut response = head.into_bytes();
     response.extend_from_slice(&body);
     response
-}
-
-/// A file under the static directory that is not part of the pinned bundle,
-/// such as a favicon; anything resolving outside the directory is not found.
-fn unpinned_file(static_dir: &Path, relative: &str) -> Option<Vec<u8>> {
-    let root = fs::canonicalize(static_dir).ok()?;
-    let target = fs::canonicalize(static_dir.join(relative)).ok()?;
-    (target.is_file() && target.starts_with(&root) && target != root)
-        .then(|| fs::read(&target).ok())
-        .flatten()
 }
 
 /// `_write_dashboard_shell`.

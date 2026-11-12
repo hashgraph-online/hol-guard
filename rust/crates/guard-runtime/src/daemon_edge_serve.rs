@@ -146,15 +146,19 @@ impl LaunchConfig {
         handshake.insert("store_path".into(), self.store_path.clone().into());
         handshake.insert("source".into(), self.source.clone().into());
         handshake.insert("busy_timeout_ms".into(), self.busy_timeout_ms.into());
+        // Pins the dashboard now, before the daemon answers anyone. The folder
+        // can be a frozen launcher's temporary unpack folder, deleted once the
+        // launcher sees this daemon answer and exits.
+        let pinned_build = self
+            .dashboard_dir
+            .as_deref()
+            .and_then(|dir| dashboard_build_id(Path::new(dir)));
         let optional = [
             (
                 "dashboard_build",
                 self.dashboard_build
                     .clone()
-                    .or_else(|| {
-                        let dir = self.dashboard_dir.as_deref()?;
-                        dashboard_build_id(Path::new(dir))
-                    })
+                    .or(pinned_build)
                     .map(Value::from),
             ),
             ("dashboard_dir", self.dashboard_dir.clone().map(Value::from)),
