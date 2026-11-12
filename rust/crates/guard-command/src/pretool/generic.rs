@@ -988,6 +988,20 @@ fn evaluate_envelope(
         let (reason_code, reason) = result::review_reason(PreToolActionTypeV1::FileWrite);
         result = generic_result(result.action.clone(), "review", reason_code, reason);
     }
+    // A CI workflow step runs on the forge with the repository's secrets,
+    // beyond any later Guard review, so planting a credential upload there is
+    // reviewed now rather than treated as an ordinary workspace edit.
+    if result.reason_code == "native_exact_safe_file_write"
+        && super::ci_workflow_writes::plants_credential_upload(&signals.path_values, payload)
+    {
+        let (reason_code, _) = result::review_reason(PreToolActionTypeV1::FileWrite);
+        result = generic_result(
+            result.action.clone(),
+            "review",
+            reason_code,
+            "This write adds a CI workflow step that uploads a local credential file to a network host. The workflow runs on the forge with the repository's secrets, where Guard cannot review it.",
+        );
+    }
     if harness == "omp"
         && signals.tool_name.as_deref() == Some("edit")
         && result.reason_code == "native_file_write_review"

@@ -55,6 +55,8 @@ FIXED = {
     "todo_write": "todo_write",
     "ls": "ls",
     "ask_user_question": "AskUserQuestion",
+    # Gate cases name this tool for Claude Code only, so one spelling is enough.
+    "web_fetch": "WebFetch",
 }
 # Abstract tools upstream Pi also ships; omp-only tools (eval, task, todo, glob, ...) are not mirrored.
 PI_TOOLS = frozenset({"shell", "read", "write", "grep", "ls"})
