@@ -17,6 +17,7 @@ from .contained_command_prefix import (
     _split_command_prefix,
     command_words,
     peel_run_prefixes,
+    planned_route_argv,
 )
 from .contained_run_directory import as_directory_change, as_run_root
 from .contained_wrapper import anchored_sibling_root, bounded_output, peel_contained_wrapper, sibling_project_root
@@ -478,7 +479,8 @@ def run_authorized_contained_test(
 
     # No shell and no unsandboxed retry: the required profile is the actual sink.
     if inline_plan is not None:
-        underlying = {**payload, "tool_input": {**tool_input, "command": shlex.join(inline_plan.command)}}
+        routed = shlex.join(planned_route_argv(inline_plan.command))
+        underlying = {**payload, "tool_input": {**tool_input, "command": routed}}
         underlying_receipt = settled_authority(authorize, underlying)
         if not required(underlying_receipt):
             raise _reject(underlying_receipt)
@@ -520,7 +522,8 @@ def run_authorized_contained_test(
             merge_stderr=merge_stderr,
         )
     if node_test_plan is not None:
-        underlying = {**payload, "tool_input": {**tool_input, "command": shlex.join(node_test_plan.command)}}
+        routed = shlex.join(planned_route_argv(node_test_plan.command))
+        underlying = {**payload, "tool_input": {**tool_input, "command": routed}}
         underlying_receipt = settled_authority(authorize, underlying)
         if not required(underlying_receipt):
             raise _reject(underlying_receipt)
