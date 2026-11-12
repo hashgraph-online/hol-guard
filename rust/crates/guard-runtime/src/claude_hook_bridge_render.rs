@@ -284,7 +284,6 @@ pub(crate) fn should_suppress_output(data: &str, response_body: &str) -> bool {
 
 /// `_valid_hook_json_or_degraded`. `Err` carries the failure CPython's
 /// `json.loads` would raise on the response instead of `JSONDecodeError`.
-#[cfg(test)]
 pub(crate) fn valid_hook_json_or_degraded(
     output: &str,
     reason: &str,
@@ -304,7 +303,7 @@ fn is_unmanaged_passthrough(entries: &[(String, PyVal)]) -> bool {
 
 /// The response trimmed when it is a decision Claude Code will honor for the
 /// hook event, or `None` when it is not one.
-pub(crate) fn checked_hook_json(output: &str, data: &str) -> Result<Option<String>, JsonFailure> {
+fn checked_hook_json(output: &str, data: &str) -> Result<Option<String>, JsonFailure> {
     let trimmed = py_strip(output);
     if trimmed.is_empty() {
         return Ok(None);
