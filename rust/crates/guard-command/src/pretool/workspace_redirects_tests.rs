@@ -60,7 +60,10 @@ fn a_quoted_heredoc_carries_a_commit_message() {
             "git commit -q --allow-empty -F - <<'MSG'\nchore(report): record the window\nMSG",
             "git commit -q --allow-empty -F -",
         ),
-        ("git commit --file=- <<'MSG'\nfeat: add\nMSG", "git commit --file=-"),
+        (
+            "git commit --file=- <<'MSG'\nfeat: add\nMSG",
+            "git commit --file=-",
+        ),
         (
             "git add -A && git commit -F- <<\"MSG\"\nfeat: add\nMSG",
             "git add -A && git commit -F-",

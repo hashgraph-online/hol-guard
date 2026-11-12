@@ -82,6 +82,25 @@ const RESERVED: &[&str] = &[
     "__proto__",
 ];
 
+/// String and array methods that only compute a new value from their
+/// receiver and plain arguments.
+const PURE_METHODS: &[&str] = &[
+    "split",
+    "slice",
+    "substring",
+    "trim",
+    "trimStart",
+    "trimEnd",
+    "toLowerCase",
+    "toUpperCase",
+    "join",
+    "includes",
+    "startsWith",
+    "endsWith",
+    "indexOf",
+    "at",
+];
+
 impl Parser {
     fn peek(&self) -> Option<&Token> {
         self.tokens.get(self.pos)
@@ -241,15 +260,46 @@ impl Parser {
             Token::Punct('{') => self.display_object(depth)?,
             _ => return None,
         }
-        // Only the `.text` and `.length` accessors may follow a value.
-        while self.at('.') {
-            self.pos += 1;
-            match self.ident()?.as_str() {
-                "text" | "length" => {}
-                _ => return None,
+        self.postfix(depth)
+    }
+
+    /// What may follow a value: the `.text` and `.length` accessors, a
+    /// numeric index, and the pure string and array methods in
+    /// `PURE_METHODS` called with plain values. No method takes a callback,
+    /// and an index is a number literal, so no member lookup can reach a
+    /// constructor or anything else that runs code.
+    fn postfix(&mut self, depth: usize) -> Option<()> {
+        loop {
+            if self.at('[') {
+                self.pos += 1;
+                match self.next()? {
+                    Token::Num(_) => {}
+                    _ => return None,
+                }
+                self.eat(']')?;
+            } else if self.at('.') {
+                self.pos += 1;
+                let name = self.ident()?;
+                if matches!(name.as_str(), "text" | "length") {
+                    continue;
+                }
+                if !PURE_METHODS.contains(&name.as_str()) {
+                    return None;
+                }
+                self.eat('(')?;
+                while !self.at(')') {
+                    self.value(depth + 1)?;
+                    if self.at(',') {
+                        self.pos += 1;
+                    } else {
+                        break;
+                    }
+                }
+                self.eat(')')?;
+            } else {
+                return Some(());
             }
         }
-        Some(())
     }
 
     fn display_object(&mut self, depth: usize) -> Option<()> {
@@ -436,74 +486,6 @@ pub(super) fn parse_python(code: &str) -> Option<Vec<Call>> {
     (!calls.is_empty()).then_some(calls)
 }
 
-#[test]
-fn python_read_lines_are_parsed_as_reads() {
-    let calls =
-        parse_python("print(read('calc.py'))\ndisplay(read(\"a.ts\"))\nread('b')\n").unwrap();
-    assert_eq!(calls.len(), 3);
-    for code in [
-        "import os",
-        "print(read('a'));import os",
-        "  print(read('a'))",
-        "print(read(r'a'))",
-        "print(read('a', 1, 5))",
-        "print(read('~/.ssh/id_rsa'))",
-        "print(read('a'))  # note",
-        "print(read('a'))\rimport os",
-        "print(read(\n'a'))",
-        "x = read('a')",
-        "",
-        "print(read('a\\b'))",
-        "print(read('a`b'))",
-        "read(`a`)",
-    ] {
-        assert!(parse_python(code).is_none(), "{code:?}");
-    }
-}
-
-#[test]
-fn literal_read_helper_is_parsed_as_one_read() {
-    let calls = parse_program("display(await read('README.md'))").unwrap();
-    assert_eq!(calls.len(), 1);
-    assert_eq!(calls[0].tool, "read");
-}
-
-/// The JavaScript prelude sets `globalThis.print = consoleBridge.log`, so an
-/// agent that prints what a tool returned only shows it, as `display` does.
-#[test]
-fn print_shows_a_tool_result_like_display() {
-    for code in [
-        "const content = await tool.read({path: \"notes/SKILL.md\"}); print(content);",
-        "const content = await tool.read({path: \"notes/SKILL.md\"}); display(content);",
-        "print(await read('README.md'))",
-    ] {
-        let calls = parse_program(code).unwrap_or_else(|| panic!("{code}"));
-        assert_eq!(calls.len(), 1, "{code}");
-        assert_eq!(calls[0].tool, "read", "{code}");
-    }
-    // `print` stays the prelude's: a program may not rebind it.
-    assert!(parse_program("const print = 1; print(await read('README.md'))").is_none());
-}
-
-/// The host shows a final top-level `return value;` as the cell's result, so
-/// returning what a tool read only shows it. A `return` before other
-/// statements would stop the cell early and is refused.
-#[test]
-fn a_final_return_shows_a_tool_result() {
-    for code in [
-        "const content = await tool.read({path: \"notes/SKILL.md\"}); return content;",
-        "return await read('README.md');",
-        "const content = await tool.read({path: \"notes/SKILL.md\"}); content;",
-    ] {
-        let calls = parse_program(code).unwrap_or_else(|| panic!("{code}"));
-        assert_eq!(calls.len(), 1, "{code}");
-        assert_eq!(calls[0].tool, "read", "{code}");
-    }
-    for code in [
-        "const a = await read('README.md'); return a; const b = await read('notes/x.md');",
-        "return;",
-        "const a = await read('README.md'); return a display(a)",
-    ] {
-        assert!(parse_program(code).is_none(), "{code}");
-    }
-}
+#[cfg(test)]
+#[path = "generic_omp_eval_parser_tests.rs"]
+mod tests;
