@@ -172,3 +172,31 @@ fn inspect_takes_no_flags() {
     assert_eq!(output.status.code(), Some(2));
     assert!(output.stdout.is_empty());
 }
+
+#[test]
+fn the_runtime_serves_the_pack_tools() {
+    let pack: Value = serde_json::from_str(include_str!(
+        "../../../../contributions/cloud-actions/slack.json"
+    ))
+    .unwrap();
+    let mut input = Vec::new();
+    for request in [
+        serde_json::json!({"op": "validate", "pack": pack}),
+        serde_json::json!({"op": "render", "pack": pack, "actionId": "slack.chat.post_message",
+            "arguments": {"channel": "C0123456789", "text": "<!channel>"}}),
+    ] {
+        input.extend(request.to_string().into_bytes());
+        input.push(b'\n');
+    }
+    let output = invoke(&["pack"], input);
+    assert!(output.status.success(), "{output:?}");
+    let lines: Vec<Value> = String::from_utf8(output.stdout)
+        .unwrap()
+        .lines()
+        .map(|line| serde_json::from_str(line).unwrap())
+        .collect();
+    assert_eq!(lines.len(), 2);
+    assert_eq!(lines[0]["ok"], true);
+    assert_eq!(lines[1]["error"]["code"], "forbidden_content");
+    assert!(!invoke(&["pack", "extra"], Vec::new()).status.success());
+}

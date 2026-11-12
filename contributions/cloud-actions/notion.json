@@ -1,0 +1,481 @@
+{
+  "schema": "guard.cloud-action-pack.v1",
+  "provider": {
+    "id": "notion",
+    "name": "Notion",
+    "publisher": {
+      "name": "HOL",
+      "verified": true
+    }
+  },
+  "hosts": [
+    "api.notion.com"
+  ],
+  "auth": {
+    "mode": "oauth2",
+    "scopes": [
+      "insert_content",
+      "read_content"
+    ]
+  },
+  "actions": [
+    {
+      "actionId": "notion.blocks.children.list",
+      "title": "Read a page's blocks",
+      "link": {
+        "tool": "notion_blocks_children_list"
+      },
+      "executor": {
+        "kind": "declarative-http",
+        "request": {
+          "method": "GET",
+          "host": "api.notion.com",
+          "path": "/v1/blocks/{page_id}/children",
+          "query": [
+            {
+              "name": "page_size",
+              "value": {
+                "arg": {
+                  "name": "page_size",
+                  "default": 50
+                }
+              }
+            },
+            {
+              "name": "start_cursor",
+              "value": {
+                "arg": {
+                  "name": "start_cursor"
+                }
+              }
+            }
+          ],
+          "headers": [
+            {
+              "name": "accept",
+              "value": "application/json"
+            },
+            {
+              "name": "notion-version",
+              "value": "2022-06-28"
+            }
+          ],
+          "maxPages": 1
+        }
+      },
+      "arguments": {
+        "page_id": {
+          "type": "string",
+          "required": true,
+          "maxLength": 36,
+          "pattern": "^(?i:[0-9a-f]{8}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{12})$"
+        },
+        "page_size": {
+          "type": "integer",
+          "required": false,
+          "minimum": 1,
+          "maximum": 50
+        },
+        "start_cursor": {
+          "type": "string",
+          "required": false,
+          "maxLength": 36,
+          "pattern": "^(?i:[0-9a-f]{8}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{12})$"
+        }
+      },
+      "facts": {
+        "class": "read",
+        "object": {
+          "const": "record"
+        },
+        "scope": {
+          "const": "query_selected"
+        },
+        "recordCount": {
+          "argument": {
+            "name": "page_size",
+            "max": 50,
+            "default": 50
+          }
+        }
+      },
+      "response": {
+        "maxBytes": 262144,
+        "fields": [
+          {
+            "name": "results",
+            "value": {
+              "list": {
+                "from": "results",
+                "maxItems": 50,
+                "fields": [
+                  {
+                    "name": "id",
+                    "value": {
+                      "from": "id"
+                    }
+                  },
+                  {
+                    "name": "type",
+                    "value": {
+                      "from": "type"
+                    }
+                  },
+                  {
+                    "name": "has_children",
+                    "value": {
+                      "from": "has_children"
+                    }
+                  }
+                ]
+              }
+            }
+          },
+          {
+            "name": "next_cursor",
+            "value": {
+              "from": "next_cursor"
+            }
+          },
+          {
+            "name": "has_more",
+            "value": {
+              "from": "has_more"
+            }
+          }
+        ]
+      },
+      "safety": {
+        "effect": "read",
+        "requiredCapabilities": [
+          "bounded-output",
+          "egress-pinned",
+          "resource-allowlist"
+        ],
+        "idempotency": "safe-read",
+        "scopes": [
+          "read_content"
+        ],
+        "maxItems": 50,
+        "minIntervalMs": 400,
+        "timeoutMs": 10000,
+        "resource": {
+          "kind": "page",
+          "argument": "page_id"
+        }
+      },
+      "fixtures": [
+        {
+          "name": "reads the first page",
+          "kind": "safe",
+          "arguments": {
+            "page_id": "0f3c9a1e2b4d4c6e8f0a1b2c3d4e5f60"
+          },
+          "expect": {
+            "facts": {
+              "class": "read",
+              "record_count": {
+                "state": "known",
+                "value": 50
+              }
+            },
+            "response": "{\"object\": \"list\", \"results\": [{\"id\": \"b1\", \"type\": \"paragraph\", \"has_children\": false, \"paragraph\": {\"rich_text\": []}}], \"next_cursor\": null, \"has_more\": false}",
+            "projection": {
+              "results": [
+                {
+                  "id": "b1",
+                  "type": "paragraph",
+                  "has_children": false
+                }
+              ],
+              "next_cursor": null,
+              "has_more": false
+            },
+            "request": {
+              "body": null,
+              "headers": [
+                [
+                  "accept",
+                  "application/json"
+                ],
+                [
+                  "notion-version",
+                  "2022-06-28"
+                ]
+              ],
+              "maxPages": 1,
+              "method": "GET",
+              "url": "https://api.notion.com/v1/blocks/0f3c9a1e2b4d4c6e8f0a1b2c3d4e5f60/children?page_size=50"
+            }
+          }
+        },
+        {
+          "name": "refuses a page id that is a path",
+          "kind": "risky",
+          "arguments": {
+            "page_id": "../users"
+          },
+          "expect": {
+            "error": "invalid_argument"
+          }
+        },
+        {
+          "name": "refuses a larger page",
+          "kind": "risky",
+          "arguments": {
+            "page_id": "0f3c9a1e2b4d4c6e8f0a1b2c3d4e5f60",
+            "page_size": 100
+          },
+          "expect": {
+            "error": "invalid_argument"
+          }
+        }
+      ]
+    },
+    {
+      "actionId": "notion.blocks.children.append",
+      "title": "Append paragraphs to a page",
+      "link": {
+        "tool": "notion_blocks_children_append"
+      },
+      "executor": {
+        "kind": "declarative-http",
+        "request": {
+          "method": "PATCH",
+          "host": "api.notion.com",
+          "path": "/v1/blocks/{page_id}/children",
+          "query": [],
+          "headers": [
+            {
+              "name": "accept",
+              "value": "application/json"
+            },
+            {
+              "name": "notion-version",
+              "value": "2022-06-28"
+            }
+          ],
+          "maxPages": 1,
+          "body": {
+            "object": [
+              {
+                "name": "children",
+                "value": {
+                  "each": {
+                    "arg": "paragraphs",
+                    "item": {
+                      "object": [
+                        {
+                          "name": "object",
+                          "value": {
+                            "const": "block"
+                          }
+                        },
+                        {
+                          "name": "type",
+                          "value": {
+                            "const": "paragraph"
+                          }
+                        },
+                        {
+                          "name": "paragraph",
+                          "value": {
+                            "object": [
+                              {
+                                "name": "rich_text",
+                                "value": {
+                                  "array": [
+                                    {
+                                      "object": [
+                                        {
+                                          "name": "type",
+                                          "value": {
+                                            "const": "text"
+                                          }
+                                        },
+                                        {
+                                          "name": "text",
+                                          "value": {
+                                            "object": [
+                                              {
+                                                "name": "content",
+                                                "value": {
+                                                  "element": true
+                                                }
+                                              }
+                                            ]
+                                          }
+                                        }
+                                      ]
+                                    }
+                                  ]
+                                }
+                              }
+                            ]
+                          }
+                        }
+                      ]
+                    }
+                  }
+                }
+              }
+            ]
+          }
+        }
+      },
+      "arguments": {
+        "page_id": {
+          "type": "string",
+          "required": true,
+          "maxLength": 36,
+          "pattern": "^(?i:[0-9a-f]{8}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{12})$"
+        },
+        "paragraphs": {
+          "type": "array",
+          "required": true,
+          "minItems": 1,
+          "maxItems": 10,
+          "items": {
+            "maxLength": 2000
+          }
+        }
+      },
+      "facts": {
+        "class": "update",
+        "object": {
+          "const": "record"
+        },
+        "scope": {
+          "const": "enumerated"
+        },
+        "reversibility": {
+          "const": "recoverable"
+        },
+        "recordCount": {
+          "count": {
+            "arguments": [
+              "paragraphs"
+            ]
+          }
+        }
+      },
+      "response": {
+        "maxBytes": 8192,
+        "fields": [
+          {
+            "name": "results",
+            "value": {
+              "list": {
+                "from": "results",
+                "maxItems": 10,
+                "fields": [
+                  {
+                    "name": "id",
+                    "value": {
+                      "from": "id"
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        ]
+      },
+      "safety": {
+        "effect": "write",
+        "requiredCapabilities": [
+          "bounded-output",
+          "egress-pinned",
+          "resource-allowlist"
+        ],
+        "idempotency": "none",
+        "scopes": [
+          "insert_content"
+        ],
+        "maxItems": 10,
+        "minIntervalMs": 1000,
+        "timeoutMs": 15000,
+        "resource": {
+          "kind": "page",
+          "argument": "page_id"
+        }
+      },
+      "fixtures": [
+        {
+          "name": "appends two paragraphs",
+          "kind": "safe",
+          "arguments": {
+            "page_id": "0f3c9a1e2b4d4c6e8f0a1b2c3d4e5f60",
+            "paragraphs": [
+              "First.",
+              "Second."
+            ]
+          },
+          "expect": {
+            "facts": {
+              "class": "update",
+              "record_count": {
+                "state": "known",
+                "value": 2
+              }
+            },
+            "request": {
+              "body": "{\"children\":[{\"object\":\"block\",\"type\":\"paragraph\",\"paragraph\":{\"rich_text\":[{\"type\":\"text\",\"text\":{\"content\":\"First.\"}}]}},{\"object\":\"block\",\"type\":\"paragraph\",\"paragraph\":{\"rich_text\":[{\"type\":\"text\",\"text\":{\"content\":\"Second.\"}}]}}]}",
+              "headers": [
+                [
+                  "accept",
+                  "application/json"
+                ],
+                [
+                  "notion-version",
+                  "2022-06-28"
+                ],
+                [
+                  "content-type",
+                  "application/json; charset=utf-8"
+                ]
+              ],
+              "maxPages": 1,
+              "method": "PATCH",
+              "url": "https://api.notion.com/v1/blocks/0f3c9a1e2b4d4c6e8f0a1b2c3d4e5f60/children"
+            }
+          }
+        },
+        {
+          "name": "refuses eleven paragraphs",
+          "kind": "risky",
+          "arguments": {
+            "page_id": "0f3c9a1e2b4d4c6e8f0a1b2c3d4e5f60",
+            "paragraphs": [
+              "x",
+              "x",
+              "x",
+              "x",
+              "x",
+              "x",
+              "x",
+              "x",
+              "x",
+              "x",
+              "x"
+            ]
+          },
+          "expect": {
+            "error": "invalid_argument"
+          }
+        },
+        {
+          "name": "refuses an empty append",
+          "kind": "risky",
+          "arguments": {
+            "page_id": "0f3c9a1e2b4d4c6e8f0a1b2c3d4e5f60",
+            "paragraphs": []
+          },
+          "expect": {
+            "error": "invalid_argument"
+          }
+        }
+      ]
+    }
+  ]
+}
