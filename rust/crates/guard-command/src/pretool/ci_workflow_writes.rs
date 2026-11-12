@@ -48,6 +48,9 @@ const WRAPPERS: [&str; 8] = [
     "sudo", "env", "exec", "command", "time", "nohup", "nice", "timeout",
 ];
 const SHELLS: [&str; 5] = ["sh", "bash", "zsh", "dash", "ksh"];
+/// Shell keywords that open a clause and run the command after them, as in
+/// `if true; then curl ...; fi`.
+const CONTROL_WORDS: [&str; 8] = ["if", "then", "elif", "else", "do", "while", "until", "!"];
 
 /// The file a network tool reads its request body from: `-d @path`,
 /// `-F field=@path`, `--data-binary @path`, `-T path`, `--upload-file path`,
@@ -179,9 +182,10 @@ fn command_words(segment: &str) -> Vec<String> {
     while let Some(word) = words.get(start) {
         let assignment = word.contains('=') && !word.starts_with('-');
         let wrapper = WRAPPERS.contains(&basename(word));
+        let control = CONTROL_WORDS.contains(&word.as_str());
         let wrapper_argument =
             wrapped && (word.starts_with('-') || word.bytes().all(|b| b.is_ascii_digit()));
-        if !(assignment || wrapper || wrapper_argument) {
+        if !(assignment || wrapper || control || wrapper_argument) {
             break;
         }
         wrapped |= wrapper;
@@ -241,37 +245,52 @@ fn reads_credential_file(segment: &str) -> bool {
             .any(|word| credential_file_operand(word))
 }
 
+/// True when this segment runs a network tool.
+fn runs_network_tool(segment: &str) -> bool {
+    command_words(segment)
+        .first()
+        .is_some_and(|word| NETWORK_TOOLS.contains(&basename(word)))
+}
+
 /// True when one command line sends a credential file to a network host.
 fn command_uploads(line: &str, depth: usize) -> bool {
     let line = YAML_PREFIX.replace(line, "");
-    let segments: Vec<&str> = line
+    // `||` separates commands and `|&` is a pipe, so only a lone `|` is left
+    // to join the stages of one pipeline.
+    let normalized = line.replace("||", ";").replace("|&", "|");
+    let pipelines: Vec<Vec<&str>> = normalized
         .split(['\n', ';', '&', '(', ')', '`'])
-        .flat_map(|part| part.split('|'))
+        .map(|part| part.split('|').collect())
         .collect();
-    if segments
+    if pipelines
         .iter()
+        .flatten()
         .any(|segment| segment_uploads(segment, depth))
     {
         return true;
     }
-    // The last network stage, so a read piped into a later call still counts
-    // when an earlier, unrelated call comes first.
-    let network = segments.iter().rposition(|segment| {
-        command_words(segment)
-            .first()
-            .is_some_and(|word| NETWORK_TOOLS.contains(&basename(word)))
+    // `cat .env | curl -d @- ...`: the read must feed a later network stage of
+    // the same pipeline. A read that ends at `&&` or `;` sends nothing.
+    let piped = pipelines.iter().any(|stages| {
+        stages
+            .iter()
+            .rposition(|segment| runs_network_tool(segment))
+            .is_some_and(|network| {
+                stages[..network]
+                    .iter()
+                    .any(|segment| reads_credential_file(segment))
+            })
     });
-    let Some(network) = network else {
-        return false;
-    };
-    // `cat .env | curl -d @- ...` and `curl -d "$(cat .env)" ...`.
-    segments[..network]
-        .iter()
-        .any(|segment| reads_credential_file(segment))
-        || SUBSTITUTED_READ
-            .captures_iter(&line)
-            .filter_map(|captures| captures.name("file"))
-            .any(|file| credential_file_operand(file.as_str()))
+    // `curl -d "$(cat .env)" ...`.
+    piped
+        || (pipelines
+            .iter()
+            .flatten()
+            .any(|segment| runs_network_tool(segment))
+            && SUBSTITUTED_READ
+                .captures_iter(&line)
+                .filter_map(|captures| captures.name("file"))
+                .any(|file| credential_file_operand(file.as_str())))
 }
 
 fn body_uploads_credential_file(body: &str) -> bool {
