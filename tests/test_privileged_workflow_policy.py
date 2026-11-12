@@ -127,9 +127,14 @@ jobs:
 
 
 def test_pull_request_target_rejects_pull_request_head_checkout(tmp_path: Path) -> None:
-    _write_workflow(
-        tmp_path,
-        f"""
+    for ref in (
+        "${{ github.event.pull_request.merge_commit_sha }}",
+        "${{ github.event.pull_request['head']['sha'] }}",
+        "${{ env.PR_SHA }}",
+    ):
+        _write_workflow(
+            tmp_path,
+            f"""
 on:
   pull_request_target:
 permissions: {{}}
@@ -140,14 +145,14 @@ jobs:
     steps:
       - uses: {PINNED_ACTION}
         with:
-          ref: ${{{{ github.event.pull_request.head.sha }}}}
+          ref: {ref}
 """,
-    )
+        )
 
-    violations = validate_privileged_workflows(tmp_path)
+        violations = validate_privileged_workflows(tmp_path)
 
-    assert [violation.code for violation in violations] == ["pull-request-target-untrusted-checkout"]
-    assert violations[0].job == "inspect"
+        assert [violation.code for violation in violations] == ["pull-request-target-untrusted-checkout"]
+        assert violations[0].job == "inspect"
 
 
 def test_pull_request_target_accepts_trusted_base_checkout(tmp_path: Path) -> None:

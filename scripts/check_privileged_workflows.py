@@ -15,11 +15,21 @@ _FULL_COMMIT_SHA = re.compile(r"^[0-9a-fA-F]{40}$")
 _EXACT_UV_VERSION = re.compile(r"^\d+\.\d+\.\d+$")
 _WORKFLOW_SUFFIXES = frozenset({".yml", ".yaml"})
 _PULL_REQUEST_TARGET_HEAD_MARKERS = (
-    "github.event.pull_request.head.sha",
-    "github.event.pull_request.head.ref",
-    "github.event.pull_request.head.repo",
+    "github.event.pull_request.head",
+    "github.event.pull_request.merge_commit_sha",
+    "pull_request['head']",
+    'pull_request["head"]',
     "github.head_ref",
     "refs/pull/",
+)
+_TRUSTED_PULL_REQUEST_TARGET_CHECKOUT_EXPRESSIONS = frozenset(
+    {
+        "${{github.sha}}",
+        "${{github.ref}}",
+        "${{github.event.repository.default_branch}}",
+        "${{github.event.repository.full_name}}",
+        "${{github.repository}}",
+    }
 )
 # GitHub Actions workflow-syntax permission table, checked 2026-09-12.
 # https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-syntax#permissions
@@ -244,14 +254,22 @@ def _validate_pull_request_target_job(
             value = checkout_with.get(field)
             if not isinstance(value, str):
                 continue
-            if any(marker in value for marker in _PULL_REQUEST_TARGET_HEAD_MARKERS):
+            normalized = "".join(value.lower().split())
+            has_untrusted_marker = any(marker in normalized for marker in _PULL_REQUEST_TARGET_HEAD_MARKERS)
+            has_untrusted_expression = (
+                "${{" in normalized and normalized not in _TRUSTED_PULL_REQUEST_TARGET_CHECKOUT_EXPRESSIONS
+            )
+            if has_untrusted_marker or has_untrusted_expression:
                 step_name = str(step.get("name") or f"step {index}")
                 violations.append(
                     WorkflowPolicyViolation(
                         workflow_path,
                         job_name,
                         "pull-request-target-untrusted-checkout",
-                        f"{step_name} checks out pull-request head data in a pull_request_target job; use the trusted base checkout instead.",
+                        (
+                            f"{step_name} checks out attacker-controlled data in a pull_request_target job; "
+                            "use the trusted base checkout instead."
+                        ),
                     )
                 )
     return violations
