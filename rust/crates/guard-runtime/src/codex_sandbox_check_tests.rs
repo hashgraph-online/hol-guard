@@ -33,7 +33,7 @@ fn a_malformed_call_is_refused() {
 fn a_process_outside_any_sandbox_is_refused() {
     let workspace = tempfile::tempdir().unwrap();
     let workspace = workspace.path().to_str().unwrap();
-    for profile in [WORKSPACE_PROFILE, "pytest-readonly-v2"] {
+    for profile in [WORKSPACE_PROFILE, PYTEST_PROFILE, SHARED_TMP_CHECK] {
         assert!(!confined(profile, workspace), "{profile}");
         let args = strings(&["--profile", profile, "--workspace", workspace]);
         assert_eq!(run(&args), REFUSED, "{profile}");
@@ -154,4 +154,63 @@ fn a_wider_sandbox_is_refused() {
             "{name}"
         );
     }
+}
+
+/// Codex's default sandbox: no network, writes to the workspace, `/tmp` and
+/// `$TMPDIR`.
+#[cfg(target_os = "macos")]
+#[test]
+fn codex_default_sandbox_holds_only_the_shared_tmp_check() {
+    let workspace = tempfile::tempdir().unwrap();
+    let workspace = std::fs::canonicalize(workspace.path()).unwrap();
+    let shared = temp_paths();
+    let mut writable: Vec<&std::path::Path> = vec![&workspace];
+    writable.extend(shared.iter().map(std::path::PathBuf::as_path));
+    let codex = sbpl(false, &writable);
+    assert_eq!(check_under(&codex, SHARED_TMP_CHECK, &workspace), 0);
+    for profile in [WORKSPACE_PROFILE, PYTEST_PROFILE] {
+        assert_eq!(
+            check_under(&codex, profile, &workspace),
+            REFUSED,
+            "{profile}"
+        );
+    }
+    let home = std::fs::canonicalize(std::env::var_os("HOME").unwrap()).unwrap();
+    let wider = [
+        ("network", sbpl(true, &writable)),
+        (
+            "home",
+            sbpl(false, &[writable.as_slice(), &[home.as_path()]].concat()),
+        ),
+        ("no sandbox rules", "(version 1)(allow default)".to_owned()),
+    ];
+    for (name, profile) in wider {
+        assert_eq!(
+            check_under(&profile, SHARED_TMP_CHECK, &workspace),
+            REFUSED,
+            "{name}"
+        );
+    }
+}
+
+/// A workspace outside the temporary directories keeps its parent denied.
+#[cfg(target_os = "macos")]
+#[test]
+fn the_shared_tmp_check_still_denies_the_workspace_parent() {
+    let deps = std::env::current_exe().unwrap();
+    let workspace = tempfile::tempdir_in(deps.parent().unwrap()).unwrap();
+    let workspace = std::fs::canonicalize(workspace.path()).unwrap();
+    let parent = workspace.parent().unwrap().to_path_buf();
+    let shared = temp_paths();
+    let mut writable: Vec<&std::path::Path> = vec![&workspace];
+    writable.extend(shared.iter().map(std::path::PathBuf::as_path));
+    assert_eq!(
+        check_under(&sbpl(false, &writable), SHARED_TMP_CHECK, &workspace),
+        0
+    );
+    writable.push(&parent);
+    assert_eq!(
+        check_under(&sbpl(false, &writable), SHARED_TMP_CHECK, &workspace),
+        REFUSED
+    );
 }

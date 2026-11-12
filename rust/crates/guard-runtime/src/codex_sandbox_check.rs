@@ -13,7 +13,9 @@
 //! The check passes when the sandbox denies outbound network and denies
 //! writes to the user's home, `/tmp`, the user's temporary directory and the
 //! directory around the workspace, and, for any profile but the workspace
-//! one, to the workspace too. Anything it cannot confirm fails it. Each
+//! one, to the workspace too. `SHARED_TMP_CHECK`, which a project's pytest
+//! asks for in Codex's default sandbox, also lets the sandbox write `/tmp`
+//! and the user's temporary directory. Anything it cannot confirm fails it. Each
 //! answer covers the named directory only, not a writable path nested below
 //! it, so the hook also requires a turn with no extra writable roots and
 //! never sends an escalated call here.
@@ -21,6 +23,12 @@
 pub(crate) const CHECK_COMMAND: &str = "codex-sandbox-check";
 /// The one contained profile that lets a call write in the workspace.
 pub(crate) const WORKSPACE_PROFILE: &str = "workspace-contained-v1";
+/// The read-only profile for a project's own pytest run.
+pub(crate) const PYTEST_PROFILE: &str = "pytest-readonly-v2";
+/// What a pytest run in Codex's default workspace-write sandbox must hold:
+/// no network and no writes to the home directory or the workspace's
+/// parent. The workspace, `/tmp` and `$TMPDIR` may be writable.
+pub(crate) const SHARED_TMP_CHECK: &str = "codex-workspace-write-shared-tmp";
 /// The shell's exit status for a command that was not run.
 pub(crate) const REFUSED: i32 = 126;
 
@@ -56,10 +64,17 @@ fn confined(profile: &str, workspace: &str) -> bool {
         // A workspace that is the home directory, or holds a temporary
         // directory, is the one place the workspace profile writes.
         denied.retain(|directory| !directory.starts_with(&workspace));
+    } else if profile == SHARED_TMP_CHECK {
+        let shared = temp_paths();
+        denied
+            .retain(|directory| !directory.starts_with(&workspace) && !shared.contains(directory));
     } else {
         denied.push(workspace);
     }
-    seatbelt::denies_network()
+    // A shared-tmp workspace inside a temporary directory still has the
+    // home directory to deny; a check with nothing left to ask fails.
+    !denied.is_empty()
+        && seatbelt::denies_network()
         && denied
             .iter()
             .all(|directory| seatbelt::denies_write(directory))
@@ -86,6 +101,21 @@ fn outside_paths(workspace: &std::path::Path) -> Option<Vec<std::path::PathBuf>>
         }
     }
     (paths.len() >= 3).then_some(paths)
+}
+
+/// `/tmp` and the per-user temporary directory from both the system and
+/// `$TMPDIR`, resolved: the directories Codex's default sandbox shares.
+fn temp_paths() -> Vec<std::path::PathBuf> {
+    let named = [
+        Some("/tmp".into()),
+        seatbelt::user_temp_dir(),
+        std::env::var_os("TMPDIR").map(Into::into),
+    ];
+    named
+        .into_iter()
+        .flatten()
+        .filter_map(|path: std::path::PathBuf| std::fs::canonicalize(path).ok())
+        .collect()
 }
 
 #[cfg(target_os = "macos")]
