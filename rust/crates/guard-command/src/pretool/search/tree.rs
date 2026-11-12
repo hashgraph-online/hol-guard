@@ -17,7 +17,7 @@
 //! blocks its non-source files.
 use super::ReadContext;
 use crate::pretool::search_pattern_clearance::PatternClearance;
-use glob_expand::expand_glob_matches;
+use glob_expand::GlobSearch;
 use std::path::PathBuf;
 #[path = "glob_expand.rs"]
 mod glob_expand;
@@ -293,12 +293,20 @@ pub(in crate::pretool) fn glob_matches_nothing(value: &str, context: ReadContext
 
 /// Content-search glob operand: every match is walked, and matches inside an
 /// Oh My Pi agent-state tree are refused as for a literal search root.
+///
+/// A glob whose expansion stops only at its cap, such as `src/*.ts` in a
+/// directory with more files than it lists, is proven by walking the literal
+/// directory it expands below, provided no link sits there: the search then
+/// reads no more than a recursive search of that directory, which the same
+/// walk admits.
 pub(in crate::pretool) fn safe_glob_search_operand(value: &str, context: ReadContext<'_>) -> bool {
-    expand_glob(value, context).is_some_and(|matches| {
-        matches
-            .into_iter()
-            .all(|path| !inside_agent_state(&path, context) && walk(path, &[], &[], false, false))
-    })
+    let searched =
+        |path: PathBuf| !inside_agent_state(&path, context) && walk(path, &[], &[], false, false);
+    match glob_expand::expand_glob_search(value, context) {
+        GlobSearch::Matches(matches) => !matches.is_empty() && matches.into_iter().all(searched),
+        GlobSearch::Capped(directory) => searched(directory),
+        GlobSearch::Refused => false,
+    }
 }
 
 pub(super) fn walk(
@@ -471,11 +479,6 @@ pub(super) fn walk_uncached(
         }
     }
     true
-}
-
-/// [`glob_expand::expand_glob_matches`] with at least one match.
-fn expand_glob(value: &str, context: ReadContext<'_>) -> Option<Vec<PathBuf>> {
-    expand_glob_matches(value, context).filter(|matches| !matches.is_empty())
 }
 
 /// [`glob_expand::expand_glob_matches_listing`] with at least one match.
