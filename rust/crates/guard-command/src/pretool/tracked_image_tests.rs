@@ -1,7 +1,7 @@
 //! Committed screenshots named for the screen they show, such as
 //! `auth-login.png`, pass a recursive search's walk only as plain PNGs whose
 //! bytes the secret detector clears.
-use super::super::MAX_TOTAL_BYTES;
+use super::super::{unescaped, MAX_TOTAL_BYTES};
 use super::tests::{fixture, write_index};
 use super::*;
 use std::path::PathBuf;
@@ -124,6 +124,50 @@ fn images_carrying_text_the_walk_cannot_clear_keep_review() {
         let shot = tracked(&project, SHOT, &bytes);
         write_index(&project.join(".git"), &[SHOT]);
         assert!(!committed_image(&shot), "{label}");
+    }
+}
+
+/// A text chunk holding a Kubernetes `Secret` keeps the review, kind spelled
+/// plainly or with escapes, while stray backslashes alone do not.
+#[test]
+fn an_image_carrying_a_secret_manifest_keeps_review() {
+    let header: (&[u8; 4], &[u8]) = (b"IHDR", &[0, 0, 0, 1, 0, 0, 0, 1, 8, 6, 0, 0, 0]);
+    let manifests: [&[u8]; 5] = [
+        b"Comment\0apiVersion: v1\nkind: Secret\ndata:\n  password: aHVudGVyMg==\n",
+        b"Comment\0{\"apiVersion\":\"v1\",\"kind\":\"Secret\",\"data\":{\"p\":\"aHVudGVyMg==\"}}",
+        b"Comment\0{\"apiVersion\":\"v1\",\"k\\u0069nd\":\"S\\u0065cret\",\"data\":{}}",
+        b"Comment\0\"k\\x69nd\": \"Sec\\\n    ret\"\ndata: {}\n",
+        b"Comment\0kind = \"S\\145cret\"\n",
+    ];
+    for manifest in manifests {
+        let (_, project) = fixture();
+        let shot = tracked(&project, SHOT, &png(&[header, (b"tEXt", manifest)]));
+        write_index(&project.join(".git"), &[SHOT]);
+        assert!(
+            !committed_image(&shot),
+            "{}",
+            String::from_utf8_lossy(manifest)
+        );
+    }
+    let (_, project) = fixture();
+    let paths = b"Comment\0saved to C:\\Users\\me\\shots\\x1 kind of \\u00e9 text\n";
+    let shot = tracked(&project, SHOT, &png(&[header, (b"tEXt", paths)]));
+    write_index(&project.join(".git"), &[SHOT]);
+    assert!(committed_image(&shot));
+}
+
+#[test]
+fn escapes_decode_as_yaml_json_and_toml_read_them() {
+    for (text, decoded) in [
+        (r"k\x69nd", "kind"),
+        (r"S\u0065cret", "Secret"),
+        (r"S\U00000065cret", "Secret"),
+        (r"S\145cret", "Secret"),
+        ("Sec\\\n   ret", "Secret"),
+        (r#"\"quoted\" \q"#, "\"quoted\" q"),
+        (r"bad \xZZ end\", "bad xZZ end"),
+    ] {
+        assert_eq!(unescaped(text), decoded, "{text}");
     }
 }
 

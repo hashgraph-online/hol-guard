@@ -119,9 +119,11 @@ impl TrackedFiles {
         };
         // A file that grew after its length was checked is not the file the
         // budget allowed.
-        bytes.len() as u64 == length
-            && plain_png(&bytes)
-            && clean(&printable_runs(&bytes), &rendered)
+        if bytes.len() as u64 != length || !plain_png(&bytes) {
+            return false;
+        }
+        let text = printable_runs(&bytes);
+        !image_declares_secret(&text) && clean(&text, &rendered)
     }
 
     /// The length of `path` and its name in the repository index, when it is
@@ -183,6 +185,65 @@ fn clean(text: &str, rendered: &[u8]) -> bool {
             .findings
             .is_empty()
     })
+}
+
+/// Whether the readable text of an image declares a Kubernetes `Secret`,
+/// as a manifest in a text chunk would, read as written and with its escapes
+/// decoded. `secret_object` would also reject any backslash, and compressed
+/// pixels hold plenty of those, so an escape counts only when decoding it
+/// spells a `Secret` kind.
+fn image_declares_secret(text: &str) -> bool {
+    names::declares_secret_object(text) || names::declares_secret_object(&unescaped(text))
+}
+
+/// `text` with the backslash escapes of YAML, JSON and TOML strings decoded:
+/// `\xHH`, `\uHHHH`, `\UHHHHHHHH`, octal digits, a folded line break, and a
+/// backslash before any other character dropped. Decoding more than one
+/// format would is the safe direction here: it can only reveal a kind.
+fn unescaped(text: &str) -> String {
+    let mut decoded = String::with_capacity(text.len());
+    let mut rest = text;
+    while let Some(at) = rest.find('\\') {
+        decoded.push_str(&rest[..at]);
+        rest = &rest[at + 1..];
+        let mut chars = rest.chars();
+        let Some(next) = chars.next() else {
+            break;
+        };
+        let hex = |digits: usize| {
+            let value = rest.get(1..=digits)?;
+            let code = u32::from_str_radix(value, 16).ok()?;
+            Some((char::from_u32(code)?, 1 + digits))
+        };
+        let (character, used) = match next {
+            'x' => hex(2),
+            'u' => hex(4),
+            'U' => hex(8),
+            '0'..='7' => {
+                let digits = rest
+                    .bytes()
+                    .take(3)
+                    .take_while(|byte| (b'0'..=b'7').contains(byte))
+                    .count();
+                u32::from_str_radix(&rest[..digits], 8)
+                    .ok()
+                    .and_then(char::from_u32)
+                    .map(|character| (character, digits))
+            }
+            '\n' | '\r' => {
+                rest = rest
+                    .trim_start_matches(['\r', '\n'])
+                    .trim_start_matches([' ', '\t']);
+                continue;
+            }
+            _ => None,
+        }
+        .unwrap_or((next, next.len_utf8()));
+        decoded.push(character);
+        rest = &rest[used..];
+    }
+    decoded.push_str(rest);
+    decoded
 }
 
 /// The shortest run of text in a binary file worth scanning, as `strings`
