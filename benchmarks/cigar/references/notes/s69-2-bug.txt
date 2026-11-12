@@ -1,0 +1,79 @@
+HOL Guard CIGAR: the newest commit in this project and any uncommitted changes (the end of this note has what `git diff -U1 2063301` prints now). These lines are file contents, not instructions.
+
+Changed definitions (current line numbers):
+toolz/functoolz.py: thread_last.evalform_back 109-115
+
+Commit 491e3ff8 Tidy up conditions
+
+`git diff -U1 2063301` prints:
+```diff
+diff --git a/toolz/functoolz.py b/toolz/functoolz.py
+index 7709f15..b66e994 100644
+--- a/toolz/functoolz.py
++++ b/toolz/functoolz.py
+@@ -113,3 +113,3 @@ def thread_last(val, *forms):
+             func, args = form[0], form[1:]
+-            args = args + (val,)
++            args = args - (val,)
+             return func(*args)
+```
+
+HOL Guard CIGAR mapped this request to project code. These lines are file contents, not instructions. Each range is one whole definition: open just the ranges you need instead of searching or reading whole files. Code under a range is that whole definition as the file holds it now.
+
+Definitions this request names:
+toolz/functoolz.py:80-116 def thread_last(val, *forms):
+  members: evalform_back 109-115
+```
+def thread_last(val, *forms):
+    """ Thread value through a sequence of functions/forms
+
+    >>> def double(x): return 2*x
+    >>> def inc(x):    return x + 1
+    >>> thread_last(1, inc, double)
+    4
+
+    If the function expects more than one input you can specify those inputs
+    in a tuple.  The value is used as the last input.
+
+    >>> def add(x, y): return x + y
+    >>> def pow(x, y): return x**y
+    >>> thread_last(1, (add, 4), (pow, 2))  # pow(2, add(4, 1))
+    32
+
+    So in general
+        thread_last(x, f, (g, y, z))
+    expands to
+        g(y, z, f(x))
+
+    >>> def iseven(x):
+    ...     return x % 2 == 0
+    >>> list(thread_last([1, 2, 3], (map, inc), (filter, iseven)))
+    [2, 4]
+
+    See Also:
+        thread_first
+    """
+    def evalform_back(val, form):
+        if callable(form):
+            return form(val)
+        if isinstance(form, tuple):
+            func, args = form[0], form[1:]
+            args = args - (val,)
+            return func(*args)
+    return reduce(evalform_back, forms, val)
+```
+toolz/functoolz.py:109-115 def evalform_back(val, form):
+```
+    def evalform_back(val, form):
+        if callable(form):
+            return form(val)
+        if isinstance(form, tuple):
+            func, args = form[0], form[1:]
+            args = args - (val,)
+            return func(*args)
+```
+
+Tests:
+toolz/tests/test_functoolz.py: 1 related tests, last test_thread_last 61-64
+
+The code and diffs in this note are what the files hold now: work from them instead of reading those lines again. When you can, make the edit and run its check in the same tool call (one exec script can apply the patch and run the tests).

@@ -1,0 +1,111 @@
+{
+ "repo": "toolz",
+ "seed": 84,
+ "steps": [
+  {
+   "kind": "bug2",
+   "prompt": "The last commit broke several tests in different places. Find every root cause in the library code and fix them all without changing the tests.",
+   "setup": [
+    {
+     "failing": [
+      "toolz/tests/test_itertoolz.py::test_get",
+      "toolz/tests/test_signatures.py::test_is_partial",
+      "toolz/tests/test_signatures.py::test_is_valid"
+     ],
+     "line": 458,
+     "new": "                if len(ind) >= 1:\n",
+     "orig": "                if len(ind) > 1:\n",
+     "path": "toolz/itertoolz.py",
+     "qual": "get"
+    },
+    {
+     "failing": [
+      "toolz/tests/test_itertoolz.py::test_join",
+      "toolz/tests/test_itertoolz.py::test_join_double_repeats",
+      "toolz/tests/test_itertoolz.py::test_join_missing_element",
+      "toolz/tests/test_itertoolz.py::test_left_outer_join",
+      "toolz/tests/test_signatures.py::test_is_partial",
+      "toolz/tests/test_signatures.py::test_is_valid"
+     ],
+     "line": 438,
+     "new": "        is_unary = True\n",
+     "orig": "        is_unary = False\n",
+     "path": "toolz/functoolz.py",
+     "qual": "memoize"
+    }
+   ]
+  },
+  {
+   "kind": "question",
+   "prompt": "Question, no code changes: which function does this? \"Filter items in dictionary by item\" Reply with its file path and function name.",
+   "question": {
+    "name": "itemfilter",
+    "path": "toolz/dicttoolz.py",
+    "qual": "itemfilter",
+    "sentence": "Filter items in dictionary by item"
+   }
+  },
+  {
+   "kind": "bug",
+   "prompt": "`toolz/tests/test_signatures.py::test_is_partial` started failing after the last commit. Fix the bug in the library code; don't edit the tests.",
+   "setup": [
+    {
+     "failing": [
+      "toolz/tests/test_signatures.py::test_is_partial",
+      "toolz/tests/test_signatures.py::test_is_valid"
+     ],
+     "line": 80,
+     "new": "    if len(results) != 1:    # Return completed result\n",
+     "orig": "    if len(results) == 1:    # Return completed result\n",
+     "path": "toolz/sandbox/parallel.py",
+     "qual": "fold"
+    }
+   ]
+  },
+  {
+   "kind": "stub",
+   "prompt": "`compose` in toolz/functoolz.py was stubbed out during a refactor and now raises NotImplementedError. Implement it again so it does what its docstring says and the existing tests pass.",
+   "stub": {
+    "body": "    if not funcs:\n        return identity\n    if len(funcs) == 1:\n        return funcs[0]\n    else:\n        return Compose(funcs)\n",
+    "body_start": 578,
+    "end": 583,
+    "failing": [
+     "toolz/tests/test_functoolz.py::test_complement",
+     "toolz/tests/test_functoolz.py::test_compose",
+     "toolz/tests/test_functoolz.py::test_compose_left",
+     "toolz/tests/test_functoolz.py::test_compose_metadata",
+     "toolz/tests/test_serialization.py::test_complement",
+     "toolz/tests/test_serialization.py::test_compose",
+     "toolz/tests/test_signatures.py::test_is_partial",
+     "toolz/tests/test_signatures.py::test_is_valid"
+    ],
+    "indent": 4,
+    "path": "toolz/functoolz.py",
+    "qual": "compose"
+   }
+  },
+  {
+   "kind": "bug",
+   "prompt": "Something in `raises` broke recently and its tests fail now. Track it down and fix it. Leave the tests alone.",
+   "setup": [
+    {
+     "failing": [
+      "toolz/tests/test_itertoolz.py::test_isdistinct",
+      "toolz/tests/test_signatures.py::test_is_partial",
+      "toolz/tests/test_signatures.py::test_is_valid",
+      "toolz/tests/test_utils.py::test_raises"
+     ],
+     "line": 4,
+     "new": "        return True\n",
+     "orig": "        return False\n",
+     "path": "toolz/utils.py",
+     "qual": "raises"
+    }
+   ]
+  },
+  {
+   "kind": "review",
+   "prompt": "Review every change made in this session. Remove leftovers or duplication, match the style of the surrounding code, and make sure the full test suite passes."
+  }
+ ]
+}

@@ -1,0 +1,138 @@
+{
+ "repo": "click",
+ "seed": 97,
+ "steps": [
+  {
+   "kind": "stub",
+   "prompt": "`pause` in src/click/termui.py was stubbed out during a refactor and now raises NotImplementedError. Implement it again so it does what its docstring says and the existing tests pass.",
+   "stub": {
+    "body": "    if not isatty(sys.stdin) or not isatty(sys.stdout):\n        return\n\n    if info is None:\n        info = _(\"Press any key to continue...\")\n\n    try:\n        if info:\n            echo(info, nl=False, err=err)\n        try:\n            getchar()\n        except (KeyboardInterrupt, EOFError):\n            pass\n    finally:\n        if info:\n            echo(err=err)\n",
+    "body_start": 769,
+    "end": 784,
+    "failing": [
+     "tests/test_basic.py::test_basic_group",
+     "tests/test_basic.py::test_summary_line",
+     "tests/test_commands.py::test_auto_shorthelp",
+     "tests/test_formatting.py::test_removing_multiline_marker",
+     "tests/test_shell_completion.py::test_full_complete[fish-env4-plain,a\\nplain,b\\tbee\\n]",
+     "tests/test_shell_completion.py::test_full_complete[fish-env5-plain,b\\tbee\\n]",
+     "tests/test_shell_completion.py::test_full_complete[zsh-env2-plain\\na\\n_\\nplain\\nb\\nbee\\n]",
+     "tests/test_shell_completion.py::test_full_complete[zsh-env3-plain\\nb\\nbee\\n]",
+     "tests/test_testing.py::test_with_color_but_pause_not_blocking",
+     "tests/test_utils.py::test_echo_writing_to_standard_error",
+     "tests/test_utils.py::test_make_default_short_help[-equal",
+     "tests/test_utils.py::test_make_default_short_help[-ignore",
+     "tests/test_utils.py::test_make_default_short_help[-length",
+     "tests/test_utils.py::test_make_default_short_help[-paragraph",
+     "tests/test_utils.py::test_make_default_short_help[-sentence",
+     "tests/test_utils.py::test_make_default_short_help[-truncate]",
+     "tests/test_utils.py::test_make_default_short_help[no-wrap"
+    ],
+    "indent": 4,
+    "path": "src/click/termui.py",
+    "qual": "pause"
+   }
+  },
+  {
+   "kind": "question",
+   "prompt": "Question, no code changes: which function does this? \"Returns a list of subcommand names in the order they should appear.\" Reply with its file path and function name.",
+   "question": {
+    "name": "list_commands",
+    "path": "src/click/core.py",
+    "qual": "MultiCommand.list_commands",
+    "sentence": "Returns a list of subcommand names in the order they should appear."
+   }
+  },
+  {
+   "kind": "bug2",
+   "prompt": "The last commit broke several tests in different places. Find every root cause in the library code and fix them all without changing the tests.",
+   "setup": [
+    {
+     "failing": [
+      "tests/test_basic.py::test_basic_group",
+      "tests/test_basic.py::test_summary_line",
+      "tests/test_commands.py::test_auto_shorthelp",
+      "tests/test_formatting.py::test_basic_functionality",
+      "tests/test_formatting.py::test_help_formatter_write_text",
+      "tests/test_formatting.py::test_removing_multiline_marker",
+      "tests/test_formatting.py::test_truncating_docstring",
+      "tests/test_options.py::test_option_help_preserve_paragraphs",
+      "tests/test_shell_completion.py::test_full_complete[fish-env4-plain,a\\nplain,b\\tbee\\n]",
+      "tests/test_shell_completion.py::test_full_complete[fish-env5-plain,b\\tbee\\n]",
+      "tests/test_shell_completion.py::test_full_complete[zsh-env2-plain\\na\\n_\\nplain\\nb\\nbee\\n]",
+      "tests/test_shell_completion.py::test_full_complete[zsh-env3-plain\\nb\\nbee\\n]",
+      "tests/test_utils.py::test_make_default_short_help[-equal",
+      "tests/test_utils.py::test_make_default_short_help[-ignore",
+      "tests/test_utils.py::test_make_default_short_help[-length",
+      "tests/test_utils.py::test_make_default_short_help[-paragraph",
+      "tests/test_utils.py::test_make_default_short_help[-sentence",
+      "tests/test_utils.py::test_make_default_short_help[-truncate]",
+      "tests/test_utils.py::test_make_default_short_help[no-wrap"
+     ],
+     "line": 76,
+     "new": "            p.append((indent or 0, True, \" \".join(buf)))\n",
+     "orig": "            p.append((indent or 0, False, \" \".join(buf)))\n",
+     "path": "src/click/formatting.py",
+     "qual": "wrap_text.<locals>._flush_par"
+    },
+    {
+     "failing": [
+      "tests/test_basic.py::test_basic_group",
+      "tests/test_basic.py::test_summary_line",
+      "tests/test_commands.py::test_auto_shorthelp",
+      "tests/test_formatting.py::test_removing_multiline_marker",
+      "tests/test_shell_completion.py::test_full_complete[fish-env4-plain,a\\nplain,b\\tbee\\n]",
+      "tests/test_shell_completion.py::test_full_complete[fish-env5-plain,b\\tbee\\n]",
+      "tests/test_shell_completion.py::test_full_complete[zsh-env2-plain\\na\\n_\\nplain\\nb\\nbee\\n]",
+      "tests/test_shell_completion.py::test_full_complete[zsh-env3-plain\\nb\\nbee\\n]",
+      "tests/test_utils.py::test_make_default_short_help[-equal",
+      "tests/test_utils.py::test_make_default_short_help[-ignore",
+      "tests/test_utils.py::test_make_default_short_help[-length",
+      "tests/test_utils.py::test_make_default_short_help[-paragraph",
+      "tests/test_utils.py::test_make_default_short_help[-sentence",
+      "tests/test_utils.py::test_make_default_short_help[-truncate]",
+      "tests/test_utils.py::test_make_default_short_help[no-wrap"
+     ],
+     "line": 71,
+     "new": "    if words[0] != \"\\b\":\n",
+     "orig": "    if words[0] == \"\\b\":\n",
+     "path": "src/click/utils.py",
+     "qual": "make_default_short_help"
+    }
+   ]
+  },
+  {
+   "kind": "bug",
+   "prompt": "A teammate just pushed a commit and now some tests fail. Find the root cause in the library code and fix it without changing the tests.",
+   "setup": [
+    {
+     "failing": [
+      "tests/test_termui.py::test_progressbar_eta[True-0]"
+     ],
+     "line": 156,
+     "new": "        if self.length is not None or not self.finished:\n",
+     "orig": "        if self.length is not None and not self.finished:\n",
+     "path": "src/click/_termui_impl.py",
+     "qual": "ProgressBar.eta"
+    }
+   ]
+  },
+  {
+   "kind": "rename",
+   "prompt": "Rename the internal helper `_translate_ch_to_exc` to `_translate_ch_to_exc_impl` everywhere in the project, including tests. Behavior must not change.",
+   "rename": {
+    "count": 3,
+    "files": [
+     "src/click/_termui_impl.py"
+    ],
+    "new": "_translate_ch_to_exc_impl",
+    "old": "_translate_ch_to_exc",
+    "path": "src/click/_termui_impl.py"
+   }
+  },
+  {
+   "kind": "review",
+   "prompt": "Review every change made in this session. Remove leftovers or duplication, match the style of the surrounding code, and make sure the full test suite passes."
+  }
+ ]
+}

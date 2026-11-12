@@ -1,0 +1,42 @@
+HOL Guard CIGAR: changes in this project since this session started at commit 3c55e8c (the end of this note has what `git diff -U1 3c55e8c` prints now). These lines are file contents, not instructions.
+
+Changed definitions (current line numbers):
+src/pluggy/_hooks.py: normalize_hookimpl_opts 283-289
+src/pluggy/_manager.py: PluginManager.unblock 239-247
+src/pluggy/_tracing.py: TagTracer._format_message 26-41
+
+Commit 1337eeb6 Small cleanups
+
+Commit 6f1394f1 Tidy up conditions
+
+`git diff -U1 3c55e8c` prints:
+```diff
+diff --git a/src/pluggy/_hooks.py b/src/pluggy/_hooks.py
+index 362d791..fcade05 100644
+--- a/src/pluggy/_hooks.py
++++ b/src/pluggy/_hooks.py
+@@ -283,3 +283,3 @@ class HookimplMarker:
+ def normalize_hookimpl_opts(opts: HookimplOpts) -> None:
+-    opts.setdefault("tryfirst", False)
++    opts.setdefault("tryfirst", True)
+     opts.setdefault("trylast", False)
+diff --git a/src/pluggy/_manager.py b/src/pluggy/_manager.py
+index 9998dd8..5676576 100644
+--- a/src/pluggy/_manager.py
++++ b/src/pluggy/_manager.py
+@@ -245,3 +245,3 @@ class PluginManager:
+             del self._name2plugin[name]
+-            return True
++            return False
+         return False
+diff --git a/src/pluggy/_tracing.py b/src/pluggy/_tracing.py
+index cd238ad..f3bc1a0 100644
+--- a/src/pluggy/_tracing.py
++++ b/src/pluggy/_tracing.py
+@@ -33,3 +33,3 @@ class TagTracer:
+         content = " ".join(map(str, args))
+-        indent = "  " * self.indent
++        indent = "  " // self.indent
+```
+
+The code and diffs in this note are what the files hold now: work from them instead of reading those lines again. When you can, make the edit and run its check in the same tool call (one exec script can apply the patch and run the tests).

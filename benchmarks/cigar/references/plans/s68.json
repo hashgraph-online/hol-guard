@@ -1,0 +1,69 @@
+{
+ "repo": "toolz",
+ "seed": 68,
+ "steps": [
+  {
+   "kind": "bug",
+   "prompt": "Something in `fold` broke recently and its tests fail now. Track it down and fix it. Leave the tests alone.",
+   "setup": [
+    {
+     "failing": [
+      "toolz/tests/test_signatures.py::test_is_partial",
+      "toolz/tests/test_signatures.py::test_is_valid"
+     ],
+     "line": 80,
+     "new": "    if len(results) != 1:    # Return completed result\n",
+     "orig": "    if len(results) == 1:    # Return completed result\n",
+     "path": "toolz/sandbox/parallel.py",
+     "qual": "fold"
+    }
+   ]
+  },
+  {
+   "doc": {
+    "module": "toolz.itertoolz",
+    "path": "toolz/itertoolz.py",
+    "qual": "getter"
+   },
+   "kind": "doc",
+   "prompt": "Add a short usage example to the docstring of `getter` in toolz/itertoolz.py, written as a doctest (`>>>` lines with their expected output). Make sure the example actually passes."
+  },
+  {
+   "doc": {
+    "module": "toolz._signatures",
+    "path": "toolz/_signatures.py",
+    "qual": "create_signature_registry"
+   },
+   "kind": "doc",
+   "prompt": "Add a short usage example to the docstring of `create_signature_registry` in toolz/_signatures.py, written as a doctest (`>>>` lines with their expected output). Make sure the example actually passes."
+  },
+  {
+   "kind": "question",
+   "prompt": "Question, no code changes: which function does this? \"The sequence following the first n elements\" Reply with its file path and function name.",
+   "question": {
+    "name": "drop",
+    "path": "toolz/itertoolz.py",
+    "qual": "drop",
+    "sentence": "The sequence following the first n elements"
+   }
+  },
+  {
+   "kind": "rename",
+   "prompt": "Rename the internal helper `_should_curry` to `_should_curry_impl` everywhere in the project, including tests. Behavior must not change.",
+   "rename": {
+    "count": 4,
+    "files": [
+     "toolz/functoolz.py",
+     "toolz/tests/test_functoolz.py"
+    ],
+    "new": "_should_curry_impl",
+    "old": "_should_curry",
+    "path": "toolz/functoolz.py"
+   }
+  },
+  {
+   "kind": "review",
+   "prompt": "Review every change made in this session. Remove leftovers or duplication, match the style of the surrounding code, and make sure the full test suite passes."
+  }
+ ]
+}
