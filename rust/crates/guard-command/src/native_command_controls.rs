@@ -239,7 +239,7 @@ impl CompiledNativeCommandControls {
         // override that decision. A disable that provably cannot reach the
         // command, such as a Kubernetes permission under `git diff`, leaves
         // the timeout reviewable.
-        let admin_disabled = || self.disabled_owner_in_reach(command, packages);
+        let admin_disabled = || self.disabled_owner_in_reach(command, tool, packages);
         let (mut batch, unmodeled) = match observed {
             Ok(observed) => observed,
             Err(error) => {

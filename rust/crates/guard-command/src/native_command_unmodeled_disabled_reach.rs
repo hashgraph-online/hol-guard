@@ -13,7 +13,10 @@
 //! check below keeps the block whenever it cannot show that: the command was
 //! not modeled exactly, a segment runs a program by path, through an
 //! expansion, a wrapper or an interpreter that runs other text, or a
-//! disabled extension's programs are unknown or named anywhere in the text.
+//! disabled extension's programs are unknown or named anywhere in the text or
+//! in the words the parser decoded from it. An MCP tool call is matched by
+//! its tool name, not its command, so a disabled extension with an MCP
+//! surface is always in reach of one.
 
 use super::{named_words, INTERPRETERS};
 use crate::native_command_controls::CompiledNativeCommandControls;
@@ -26,6 +29,7 @@ impl CompiledNativeCommandControls {
     pub(crate) fn disabled_owner_in_reach(
         &self,
         command: Option<&CanonicalCommandV1>,
+        tool: Option<&str>,
         packages: &[String],
     ) -> bool {
         if self.blocked_permissions.is_empty() && self.blocked_extensions.is_empty() {
@@ -60,7 +64,22 @@ impl CompiledNativeCommandControls {
         if opaque_segment {
             return true;
         }
-        let named = named_words(&command.normalized_text);
+        // The delegated gate matches an MCP extension by an `mcp__` tool name
+        // (or by package, handled above), whatever command the call carries.
+        let mcp_tool = tool.is_some_and(|tool| tool.to_ascii_lowercase().starts_with("mcp__"));
+        // The parser decodes spellings such as `$'\x6bubectl'`, so the words
+        // it read count as well as the text.
+        let mut named = named_words(&command.normalized_text);
+        for segment in &command.segments {
+            for word in segment
+                .executable
+                .iter()
+                .chain(&segment.tokens)
+                .chain(&segment.arguments)
+            {
+                named.extend(named_words(word));
+            }
+        }
         self.program
             .extensions
             .iter()
@@ -72,6 +91,9 @@ impl CompiledNativeCommandControls {
                     });
                 if !disabled {
                     return false;
+                }
+                if mcp_tool && extension.mcp.is_some() {
+                    return true;
                 }
                 let compatibility = super::compatibility_executables(&extension.extension_id);
                 self.program
