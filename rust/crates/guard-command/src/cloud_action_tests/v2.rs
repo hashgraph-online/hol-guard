@@ -140,6 +140,9 @@ fn version_fields_do_not_cross_schemas() {
     v2["facts"]["scope"] = json!({"state": "known", "value": "single"});
     assert_eq!(run(&evaluator, &v2)["error"]["code"], "facts_inconsistent");
     let mut v2 = v2_request(&evaluator);
+    v2["facts"]["scope"] = json!({"state": "bogus"});
+    assert_eq!(run(&evaluator, &v2)["error"]["code"], "facts_invalid");
+    let mut v2 = v2_request(&evaluator);
     v2["policy"]["fact_rules"] = json!([fact_rule("r", "allow", json!({}))]);
     assert_eq!(run(&evaluator, &v2)["error"]["code"], "invalid_request");
     let mut v2 = v2_request(&evaluator);
@@ -216,11 +219,13 @@ fn rule_order_never_changes_the_result() {
         request["policy"]["fact_rules"] =
             Value::Array(order.iter().map(|i| rules[*i].clone()).collect());
         let mut result = run(&evaluator, &request);
-        for key in [
-            "matched_rule_ids",
-            "unknown_fact_rule_ids",
-            "evaluation_provenance_digest",
-        ] {
+        // The provenance digest hashes the rule bytes in the order sent, so
+        // it is checked for presence and left out of the comparison.
+        let provenance = result
+            .as_object_mut()
+            .and_then(|object| object.remove("evaluation_provenance_digest"));
+        assert!(provenance.as_ref().is_some_and(Value::is_string));
+        for key in ["matched_rule_ids", "unknown_fact_rule_ids"] {
             let sorted = result[key].as_array().map(|ids| {
                 let mut ids = ids.clone();
                 ids.sort_by_key(|id| id.to_string());
@@ -285,6 +290,15 @@ fn intrinsic_blocks_hold_against_any_allow() {
     assert_eq!(
         raised["reason_codes"],
         json!(["effect_floor", "facts_effect"])
+    );
+
+    // A version 1 allow written for the read binding cannot lower the raised effect.
+    request["policy"]["rules"] = json!([rule("r", "allow", LIST)]);
+    let ruled = run(&evaluator, &request);
+    assert_eq!(ruled["action"], "require-reapproval");
+    assert_eq!(
+        ruled["reason_codes"],
+        json!(["policy_rule", "facts_effect", "facts_effect_floor"])
     );
 }
 

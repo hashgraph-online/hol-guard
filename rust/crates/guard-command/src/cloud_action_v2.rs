@@ -21,8 +21,8 @@
 use std::collections::BTreeMap;
 
 use guard_contracts::{
-    valid_fact_token, ActionClassV2, ActionFactsV2, FactSelectorV2, FactSubjectV2, Match3,
-    SessionFlowV2, MAX_ACTION_FACTS_BYTES, MAX_USAGE_WINDOWS,
+    valid_fact_token, ActionClassV2, ActionFactsErrorV2, ActionFactsV2, FactSelectorV2,
+    FactSubjectV2, Match3, SessionFlowV2, MAX_ACTION_FACTS_BYTES, MAX_USAGE_WINDOWS,
 };
 use serde::Deserialize;
 use serde_json::{json, Value};
@@ -35,8 +35,8 @@ use crate::cloud_action_activation::SignedActivation;
 use crate::cloud_action_binding::{ActionEffect, TargetCapability};
 use crate::cloud_action_canonical::{canonical_bytes, domain_digest};
 use crate::cloud_action_policy::{
-    decide_policy, rules_digest, specificity, valid_match, validate_rules, CloudPolicyMatch,
-    CloudPolicyRule, PolicyOutcome, PolicySubject, MAX_POLICY_RULES,
+    decide_policy, effect_floor, rules_digest, specificity, valid_match, validate_rules,
+    CloudPolicyMatch, CloudPolicyRule, PolicyOutcome, PolicySubject, MAX_POLICY_RULES,
 };
 use crate::cloud_action_v2_consent::{find_consent, validate_consent, SavedConsentV2};
 use crate::effect_decision::GuardAction;
@@ -174,6 +174,16 @@ pub(crate) fn evaluate_v2(
         Ok(digests) => digests,
         Err(code) => return error_result_v2(request_id, code),
     };
+    // Facts decode on their own first so a bad fact reports a facts code,
+    // not a generic request error.
+    if let Some(facts) = parsed.get("facts") {
+        let checked = serde_json::to_vec(facts)
+            .map_err(|_| ActionFactsErrorV2::Invalid)
+            .and_then(|bytes| ActionFactsV2::from_bounded_json(&bytes));
+        if let Err(error) = checked {
+            return error_result_v2(request_id, error.code());
+        }
+    }
     let request: RequestV2 = match serde_json::from_value(parsed) {
         Ok(request) => request,
         Err(_) => return error_result_v2(request_id, "invalid_request"),
@@ -333,10 +343,17 @@ fn decide_v2(
         connection_id: &request.connection.connection_id,
         resource_id: admission.resource_id.as_deref(),
     };
-    let policy = decide_policy(&request.policy.rules, &policy_subject, effect);
+    let mut policy = decide_policy(&request.policy.rules, &policy_subject, effect);
     let mut reason_codes = vec![policy.reason_code];
     if effect != binding.effect {
         reason_codes.push("facts_effect");
+        // A version 1 rule was written for the binding's declared effect. When
+        // the facts raise it, the rule cannot decide below the raised floor.
+        let floor = effect_floor(effect);
+        if policy.matched_rule_id.is_some() && policy.action.severity() < floor.severity() {
+            policy.action = floor;
+            reason_codes.push("facts_effect_floor");
+        }
     }
     let subject = FactSubjectV2 {
         provider: &request.connection.provider,

@@ -154,7 +154,9 @@ The policy step changes as follows. Everything else in the precedence list above
 1. **Effect.** The floor is the stricter of the binding's effect and the effect the fact class implies (`read`,
    `delete` is destructive, `admin` is admin, every other class is a write). When the facts raise it, the reason
    codes include `facts_effect`. An admin effect is still always `block`.
-2. **Version 1 rules** decide as before and give the default.
+2. **Version 1 rules** decide as before and give the default. A version 1 rule was written for the binding's
+   declared effect, so when the facts raise the effect a matched rule cannot decide below the raised effect's
+   floor; the reason codes then add `facts_effect_floor`.
 3. **Fact rules join.** A selector answers yes, no, or unknown. Let `D` be the rules that definitely match and `U`
    the rules whose answer depends on an unknown fact. The outcome is the stricter of `outcome(D)` and
    `outcome(D ∪ U)`, where `outcome(S)` is the most severe action among `S` and any matched version 1 rule, or the
