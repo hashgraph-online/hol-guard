@@ -111,6 +111,16 @@ def test_an_advertised_relay_wraps_the_unchanged_python_argv(tmp_path: Path, adv
     assert launch_args[launch_args.index("guard") + 1] == proxy
     assert python_proxy_launch(command, launch_args) == ("/venv/bin/python", tuple(args))
     assert mcp_proxy_command(["/venv/bin/python", *args]) == [command, *launch_args]
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="proxy recognition needs the resident runtime")
+@pytest.mark.parametrize("proxy", sorted(RELAY_PROXY_COMMANDS))
+def test_an_advertised_relay_launch_is_recognized_as_a_guard_proxy(
+    tmp_path: Path, advertised: set[str], proxy: str
+) -> None:
+    advertised.add(NATIVE_MCP_RELAY_FEATURE)
+    args = _python_args(tmp_path, proxy, proxy.removesuffix("-mcp-proxy"))
+    command, launch_args = mcp_proxy_launch("/venv/bin/python", args)
     assert is_guard_proxy_command(command, tuple(launch_args))
 
 

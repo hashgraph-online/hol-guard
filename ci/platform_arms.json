@@ -723,6 +723,22 @@
    "body": "d73c3f0622bf"
   },
   {
+   "verdict": "windows-equivalent",
+   "note": "Reads and creates the adapter state key by path without owner-only mode checks or `openat`, since Windows has no POSIX modes: the key lives under the account's own Guard home, the `managed` folder and key must not be links, and creation is still exclusive. The Windows unit tests in `adapter_state_key_tests.rs` run create-once, reload and malformed-file cases through this arm.",
+   "file": "rust/crates/guard-runtime/src/adapters/adapter_state_key.rs",
+   "item": "mod platform",
+   "cfg": "not(unix)",
+   "body": "218162a319c3"
+  },
+  {
+   "verdict": "windows-unsupported",
+   "note": "Codex's app-server control socket is a Unix socket and `_start_direct_app_server` returns before asking on Windows, so no tracked app-server exists to reclaim there; answering `busy` keeps any launch on the ordinary argv.",
+   "file": "rust/crates/guard-runtime/src/adapters/codex_remote_launch.rs",
+   "item": "fn reclaim_state(_socket: &str, _seconds: f64) -> &'static str",
+   "cfg": "not(unix)",
+   "body": "a04ac213d091"
+  },
+  {
    "verdict": "windows-unsupported",
    "note": "Codex's app-server control socket is a Unix socket, and `_start_direct_app_server` never starts one on Windows, so no socket is ever ready there and the launch keeps the ordinary argv, as the Python `getuid` guard did.",
    "file": "rust/crates/guard-runtime/src/adapters/codex_remote_launch.rs",
