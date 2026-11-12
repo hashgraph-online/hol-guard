@@ -475,4 +475,10 @@ fn null_hook_directory_names_no_hooks() {
         denials("[core]\n\thooksPath = \"/dev/null\"\n", ws),
         Some(Vec::new())
     );
+    // Git keeps quoted spaces, so this names a relative directory the
+    // sandbox could fill with hooks.
+    assert_ne!(
+        denials("[core]\n\thooksPath = \" /dev/null \"\n", ws),
+        Some(Vec::new())
+    );
 }

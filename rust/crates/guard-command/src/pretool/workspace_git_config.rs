@@ -319,27 +319,6 @@ fn normalize(path: &Path) -> PathBuf {
     result
 }
 
-/// `core.hooksPath = /dev/null`, the usual way to turn every hook off. Git
-/// looks for each hook below the null device, which holds no files, so it
-/// finds none, and nothing a sandboxed command writes can put one there.
-fn names_no_hooks(value: &str) -> bool {
-    value.trim().trim_matches('"') == "/dev/null" && null_device()
-}
-
-#[cfg(unix)]
-fn null_device() -> bool {
-    use std::os::unix::fs::FileTypeExt;
-    std::fs::symlink_metadata("/dev/null")
-        .is_ok_and(|metadata| metadata.file_type().is_char_device())
-}
-
-/// Git for Windows rewrites `/dev/null` against the directory a hook runs
-/// in, so the value names no device there.
-#[cfg(not(unix))]
-fn null_device() -> bool {
-    false
-}
-
 /// `value` as a path under `workspace`, resolving a relative value against
 /// `base`; `None` when it leaves the workspace or is not a plain path.
 fn inside(base: &Path, workspace: &Path, value: &str) -> Option<PathBuf> {
@@ -385,15 +364,13 @@ fn helper_denials(
                 return None;
             }
         } else if key == "hookspath" {
-            // A relative hook directory must stay inside the work tree. An
-            // absolute or `~/` one may also name a folder below home, which
-            // the sandbox cannot write, as global configuration often does.
-            // Anywhere else keeps the review, as does an inline comment or
-            // escape, which would move the path Git uses.
+            // A relative hook directory must stay in the work tree; an absolute
+            // or `~/` one may name a folder below home, which the sandbox cannot
+            // write. Elsewhere, or an inline comment or escape, keeps the review.
             if value.contains(['#', ';', '\\']) {
                 return None;
             }
-            if names_no_hooks(&value) {
+            if super::git_hook_files::names_no_hooks(&value) {
                 continue;
             }
             let relative = !value.trim().trim_matches('"').starts_with(['~', '/']);

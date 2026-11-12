@@ -56,6 +56,15 @@ pub(super) fn below_null_device(path: &str, hook: &str) -> bool {
     path.strip_prefix("/dev/null/") == Some(hook) && null_device()
 }
 
+/// `core.hooksPath = /dev/null`, the usual way to turn every hook off. Git
+/// looks for each hook below the null device, which holds no files, so it
+/// finds none, and nothing a sandboxed command writes can put one there.
+/// `value` is decoded already, so any other spelling, such as `" /dev/null "`
+/// with its quoted spaces, names a different directory.
+pub(super) fn names_no_hooks(value: &str) -> bool {
+    value == "/dev/null" && null_device()
+}
+
 #[cfg(unix)]
 fn null_device() -> bool {
     use std::os::unix::fs::FileTypeExt;
