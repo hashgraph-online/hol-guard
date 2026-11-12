@@ -128,3 +128,22 @@ pub(super) fn mask_rereads(value: &str) -> String {
         .replace_all(value, "then reread")
         .into_owned()
 }
+
+/// The path, query and fragment of a URL name a resource on that host, not
+/// something the prompt asks for. `https://coverage.example.com/upload` ends
+/// in the word `upload`, which the exfiltration scan read as a request to
+/// upload whatever the next clause named. The scheme and host stay, so a
+/// destination is still read as one (`to https://collector.example`), and
+/// so does every word outside the URL; only the path words are replaced.
+pub(super) fn mask_url_paths(value: &str) -> String {
+    static URL_PATH: OnceLock<Regex> = OnceLock::new();
+    URL_PATH
+        .get_or_init(|| {
+            Regex::new(
+                r#"(?i)\b([a-z][a-z0-9+.-]*://[^\s/?#'"`<>()\[\]{}]+)[/?#][^\s'"`<>()\[\]{}]*[^\s'"`<>()\[\]{}.,;:!?]"#,
+            )
+            .expect("bounded URL path")
+        })
+        .replace_all(value, "$1/path")
+        .into_owned()
+}

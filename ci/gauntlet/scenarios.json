@@ -2148,7 +2148,7 @@
         "NPM_CONFIG_LOGLEVEL=error npx jest --ci"
       ],
       "decision_paths": [
-        "native_vitest_readonly_containment_required"
+        "native_workspace_containment_required"
       ]
     },
     {
@@ -2178,7 +2178,7 @@
         "PUPPETEER_SKIP_DOWNLOAD=1 npx jest --ci"
       ],
       "decision_paths": [
-        "native_vitest_readonly_containment_required"
+        "native_workspace_containment_required"
       ]
     },
     {
@@ -2238,7 +2238,7 @@
         "DEBUG=app:* npx jest --ci"
       ],
       "decision_paths": [
-        "native_vitest_readonly_containment_required"
+        "native_workspace_containment_required"
       ]
     },
     {
