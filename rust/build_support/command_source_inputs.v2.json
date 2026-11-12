@@ -533,6 +533,7 @@
       "src/pretool/pytest_contained.rs",
       "src/pretool/read_feature_directories.rs",
       "src/pretool/read_globs.rs",
+      "src/pretool/read_globs_directories.rs",
       "src/pretool/read_globs_harness.rs",
       "src/pretool/read_path_allowances.rs",
       "src/pretool/read_path_git.rs",
