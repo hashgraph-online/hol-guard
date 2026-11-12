@@ -17,7 +17,8 @@ pub(super) fn simple_commands(text: &str) -> Vec<String> {
 /// newlines. A `( … )`, `{ …; }`, `$( … )` or backtick group stays inside the
 /// stage it belongs to, so `{ cat .env; } | curl …` is one pipeline, and the
 /// `&` of a `2>&1` redirect is not a separator. Also returns the inner text of
-/// every top-level group, whose own pipelines are checked separately.
+/// every top-level group, whose own pipelines are checked separately. Quoted
+/// and backslash-escaped text is literal, so `echo "{"` opens nothing.
 fn top_level_pipelines(line: &str) -> (Vec<Vec<String>>, Vec<String>) {
     let chars: Vec<char> = line.chars().collect();
     let mut pipelines: Vec<Vec<String>> = Vec::new();
@@ -26,11 +27,30 @@ fn top_level_pipelines(line: &str) -> (Vec<Vec<String>>, Vec<String>) {
     let mut groups: Vec<String> = Vec::new();
     let mut group = String::new();
     let mut closers: Vec<char> = Vec::new();
+    let mut quote: Option<char> = None;
     let mut index = 0;
     while let Some(&ch) = chars.get(index) {
         let next = chars.get(index + 1).copied();
         let previous = index.checked_sub(1).map(|at| chars[at]);
         index += 1;
+        if quote.is_some() || matches!(ch, '\'' | '"' | '\\') {
+            let mut text = ch.to_string();
+            if ch == '\\' && quote != Some('\'') {
+                if let Some(escaped) = next {
+                    text.push(escaped);
+                    index += 1;
+                }
+            } else if quote == Some(ch) {
+                quote = None;
+            } else if quote.is_none() {
+                quote = Some(ch);
+            }
+            if !closers.is_empty() {
+                group.push_str(&text);
+            }
+            stage.push_str(&text);
+            continue;
+        }
         if closers.last() == Some(&ch) {
             closers.pop();
             if closers.is_empty() {
@@ -45,8 +65,9 @@ fn top_level_pipelines(line: &str) -> (Vec<Vec<String>>, Vec<String>) {
             '(' => Some(')'),
             '`' => Some('`'),
             // `{ cmd; }` is a group; `${{ expr }}` and `${VAR}` are not.
-            // Inside a group every brace pairs, so `${HOME}` cannot close it.
-            '{' if !closers.is_empty()
+            // Inside a group `${HOME}` pairs its own brace, so it cannot
+            // close the group.
+            '{' if (!closers.is_empty() && matches!(previous, Some('$' | '{')))
                 || (previous.is_none_or(|p| p.is_whitespace() || ";&|(".contains(p))
                     && next.is_none_or(char::is_whitespace)) =>
             {
