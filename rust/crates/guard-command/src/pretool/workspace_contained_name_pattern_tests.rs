@@ -1,10 +1,10 @@
 //! A search that leaves Git's metadata out of its walk by name.
 //!
-//! The tree holds a `.env`, so no read-only proof admits a recursive search
-//! of it and the workspace sandbox is the route these commands take. Each one
-//! names `.git` only as a pattern to skip.
+//! The tree holds a `.env`, so on macOS no read-only proof admits a recursive
+//! search of it and the workspace sandbox is the route these commands take.
+//! Each one names `.git` only as a pattern to skip.
 
-use super::workspace_contained_tests::{reason, workspace, CONTAINED};
+use super::workspace_contained_tests::{host, reason, workspace, CONTAINED};
 
 fn searchable(name: &str) -> std::path::PathBuf {
     let ws = workspace(name, true);
@@ -22,9 +22,11 @@ fn searchable(name: &str) -> std::path::PathBuf {
 fn a_search_that_skips_git_metadata_by_name_runs_in_the_workspace_sandbox() {
     let ws = searchable("git-name-pattern");
     // The same search without the exclusion is the baseline: naming `.git`
-    // only to skip it must take the route the plain walk takes. Linux CI's
-    // bubblewrap does not contain every harness's plain walk, so the route is
-    // asserted outright only on macOS, where Seatbelt always runs.
+    // only to skip it must not leave the search under review where the plain
+    // walk is not. On Linux the plain walk can be proven read-only outright
+    // while an exclusion still sends the search to the sandbox, so there
+    // either route passes. On macOS, where Seatbelt always runs, both are
+    // contained.
     let baseline = "grep -rn match_case .";
     for command in [
         "grep -RIn --exclude-dir=.git 'match_case(' .",
@@ -39,10 +41,10 @@ fn a_search_that_skips_git_metadata_by_name_runs_in_the_workspace_sandbox() {
             if cfg!(target_os = "macos") {
                 assert_eq!(route, CONTAINED, "{harness}: {baseline}");
             }
-            assert_eq!(
-                reason(harness, command, &ws, true),
-                route,
-                "{harness}: {command}"
+            let got = reason(harness, command, &ws, true);
+            assert!(
+                got == route || (host() && got == CONTAINED),
+                "{harness}: {command}: {got} (plain walk: {route})"
             );
         }
     }
