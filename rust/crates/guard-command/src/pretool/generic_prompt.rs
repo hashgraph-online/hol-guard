@@ -364,7 +364,11 @@ pub(super) fn benign_prompt_text(text: &str) -> bool {
             .replace_all(&normalized, "human authentication")
             .into_owned()
     };
-    let sensitive_antecedent = sensitive_command(&remainder);
+    // Only preserve a reread as risky when the earlier text actually asks
+    // for a credential value. A catalog path or a sentence saying that a
+    // file is not a credential store may contain words such as "secrets"
+    // without making the later reread sensitive.
+    let sensitive_antecedent = prompt_requests_secret(&remainder);
     // Mask only the prohibited verb, never its targets or later instructions.
     remainder = mask_destructive_prohibitions(&remainder);
     let documents = [
