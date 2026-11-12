@@ -25,7 +25,7 @@ use crate::pyjson::{self, PyVal};
 /// SHA-256 of the current template with its placeholders in place.
 #[allow(dead_code)] // Read by `tests/test_grok_native_bridge.py`.
 pub(crate) const GROK_SCRIPT_SHA256: &str =
-    "b832bd3c0fdd12c887f05700252c50dde370f70aec6fb6b7d385928f708564b8";
+    "0bb71851408471c2a7f332be6745e71b273219c00add99fc60d3c3333cc2e34a";
 
 const MAX_SCRIPT_BYTES: u64 = 256 * 1024;
 const GUARD_HOME_LINE: &str = "GUARD_HOME = ";
@@ -132,6 +132,22 @@ pub(crate) struct Invocation {
 /// `str(Path(text))` for an absolute path. `None` for a relative path and
 /// for a leading `//`, which Python keeps and this port does not model.
 pub(crate) fn python_path(text: &str) -> Option<String> {
+    python_path_on(cfg!(windows), text)
+}
+
+/// [`python_path`] for POSIX or Windows paths. A Windows path must be
+/// drive-qualified; a UNC share is not modelled.
+pub(crate) fn python_path_on(windows: bool, text: &str) -> Option<String> {
+    if windows {
+        if !drive_absolute(text) {
+            return None;
+        }
+        let parts: Vec<&str> = text[3..]
+            .split(['\\', '/'])
+            .filter(|part| !part.is_empty() && *part != ".")
+            .collect();
+        return Some(format!("{}\\{}", &text[..2], parts.join("\\")));
+    }
     if !text.starts_with('/') || text.starts_with("//") {
         return None;
     }
@@ -142,12 +158,42 @@ pub(crate) fn python_path(text: &str) -> Option<String> {
     Some(format!("/{}", parts.join("/")))
 }
 
-/// `str(Path.home())` from `HOME`, which the client evaluates even when the
-/// hook names `--home`. `None` when `HOME` is unset or not a plain absolute
-/// path, so the client decides.
+/// `C:\` or `C:/`.
+fn drive_absolute(text: &str) -> bool {
+    let bytes = text.as_bytes();
+    bytes.len() >= 3
+        && bytes[0].is_ascii_alphabetic()
+        && bytes[1] == b':'
+        && matches!(bytes[2], b'\\' | b'/')
+}
+
+/// Whether a path option names an absolute path on this platform: rooted
+/// at `/`, or on Windows drive-qualified or a UNC share.
+pub(crate) fn native_absolute_on(windows: bool, value: &str) -> bool {
+    if windows {
+        drive_absolute(value) || value.starts_with("\\\\") || value.starts_with("//")
+    } else {
+        value.starts_with('/')
+    }
+}
+
+/// `str(Path.home())`, which the client evaluates even when the hook names
+/// `--home`: `HOME`, or `USERPROFILE` on Windows. `None` when it is unset or
+/// not a plain absolute path, so the client decides.
 pub(crate) fn python_home() -> Option<String> {
-    let home = std::env::var_os("HOME")?;
+    let home = std::env::var_os(if cfg!(windows) { "USERPROFILE" } else { "HOME" })?;
     python_path(home.to_str()?)
+}
+
+/// A canonical path as `Path.resolve()` prints it: without the verbatim
+/// `\\?\` prefix Windows canonicalization adds.
+fn resolved_text(path: &Path) -> Option<&str> {
+    let text = path.to_str()?;
+    Some(if cfg!(windows) {
+        text.strip_prefix("\\\\?\\").unwrap_or(text)
+    } else {
+        text
+    })
 }
 
 /// `_configure_grok_invocation` for the config argument. `None` wherever the
@@ -193,12 +239,12 @@ pub(crate) fn invocation(argument: &str, guard_home: &str) -> Option<Invocation>
             .any(|(name, _)| !INVOCATION_OPTIONS.contains(name))
         || pairs
             .iter()
-            .any(|(name, value)| *name != "--harness" && !value.starts_with('/'))
+            .any(|(name, value)| *name != "--harness" && !native_absolute_on(cfg!(windows), value))
     {
         return None;
     }
     let resolved = std::fs::canonicalize(guard_home_option).ok()?;
-    if resolved.to_str()? != python_path(guard_home)? {
+    if resolved_text(&resolved)? != python_path(guard_home)? {
         return None;
     }
     Some(Invocation {

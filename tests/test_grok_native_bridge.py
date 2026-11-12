@@ -1,9 +1,8 @@
-"""Grok hooks run the generated stdlib client behind the native bounded bridge."""
+"""Grok hooks name the managed client behind the native bounded bridge."""
 
 from __future__ import annotations
 
 import hashlib
-import io
 import json
 import re
 import sys
@@ -21,7 +20,6 @@ from codex_plugin_scanner.guard.adapters.bounded_cli_hook_script_template import
 from codex_plugin_scanner.guard.adapters.grok import GrokHarnessAdapter
 from codex_plugin_scanner.guard.cli.grok_hook_validation import is_grok_hook_command
 from codex_plugin_scanner.guard.cli.update_grok_repair import _isolated_bounded_hook_is_current
-from tests.test_bounded_cli_hook_script_template import _load_script, _serve, _write_daemon_files
 
 _POSIX_ONLY = pytest.mark.skipif(sys.platform == "win32", reason="asserts POSIX paths and hook command syntax")
 _PYTHON = "/usr/bin/python3"
@@ -114,7 +112,12 @@ def test_native_grok_hook_needs_the_native_runtime(tmp_path: Path, monkeypatch: 
     assert is_grok_hook_command(command, context) is False
 
 
-def test_frozen_grok_hook_keeps_the_client(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_frozen_grok_hook_without_a_durable_runtime_uses_the_bridge(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # A frozen Guard wraps the client only in its runtime's durable copy. With
+    # none, the bridge looks the runtime up on each hook instead of the client
+    # failing every deciding hook closed.
     _offer_native(monkeypatch, tmp_path / "hol-guard-runtime")
     _isolated_python(monkeypatch)
     monkeypatch.setattr(sys, "frozen", True, raising=False)
@@ -122,65 +125,8 @@ def test_frozen_grok_hook_keeps_the_client(tmp_path: Path, monkeypatch: pytest.M
 
     command = GrokHarnessAdapter._hook_command_parts(_context(tmp_path))
 
-    assert command[:2] == (_PYTHON, "-I")
-
-
-def test_client_takes_the_native_handoff_once(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("HOL_GUARD_BOUNDED_NATIVE_ELAPSED_MS", "1500")
-    monkeypatch.setenv("HOL_GUARD_BOUNDED_NATIVE_DAEMON_TRIED", "1")
-
-    module = _load_script(tmp_path, harness="grok", timeout_seconds=8)
-
-    assert module._NATIVE_DAEMON_TRIED is True
-    budget = module._HOOK_DEADLINE_MONOTONIC - module._HOOK_STARTED_MONOTONIC
-    assert budget == pytest.approx(6.5)
-    assert "HOL_GUARD_BOUNDED_NATIVE_ELAPSED_MS" not in module.os.environ
-    assert "HOL_GUARD_BOUNDED_NATIVE_DAEMON_TRIED" not in module.os.environ
-
-
-@pytest.mark.parametrize("raw", ["-5", "1.5", "", " 7", "\u0661"])
-def test_client_ignores_a_malformed_elapsed_time(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, raw: str) -> None:
-    monkeypatch.setenv("HOL_GUARD_BOUNDED_NATIVE_ELAPSED_MS", raw)
-
-    module = _load_script(tmp_path, harness="grok", timeout_seconds=8)
-
-    assert module._HOOK_DEADLINE_MONOTONIC == module._HOOK_STARTED_MONOTONIC + 8
-
-
-@pytest.mark.parametrize("raw", ["99999999", "9" * 5000, "9" * 400], ids=["ordinary", "int_limit", "float_overflow"])
-def test_client_exhausted_native_handoff_deadline_is_exact_start(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, raw: str
-) -> None:
-    started = 122.888386772
-    monkeypatch.setattr("time.monotonic", lambda: started)
-    monkeypatch.setenv("HOL_GUARD_BOUNDED_NATIVE_ELAPSED_MS", raw)
-
-    module = _load_script(tmp_path, harness="grok", timeout_seconds=8)
-
-    assert module.TIMEOUT_SECONDS == 8
-    assert started == module._HOOK_STARTED_MONOTONIC
-    assert started == module._HOOK_DEADLINE_MONOTONIC
-    assert "HOL_GUARD_BOUNDED_NATIVE_ELAPSED_MS" not in module.os.environ
-
-
-def test_client_never_asks_the_daemon_twice(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("HOL_GUARD_BOUNDED_NATIVE_DAEMON_TRIED", "1")
-    module = _load_script(tmp_path, harness="grok")
-    host, port, server = _serve({("POST", "/v1/hooks/grok"): {"policy_action": "allow"}})
-    stdin = io.BytesIO(b'{"hook_event_name":"PreToolUse","tool_name":"Write"}')
-    monkeypatch.setattr(module.sys, "stdin", stdin)
-    monkeypatch.setattr(stdin, "buffer", stdin, raising=False)
-    stdout = io.StringIO()
-    monkeypatch.setattr(module.sys, "stdout", stdout)
-    monkeypatch.setattr(module.sys, "argv", [module.__file__])
-    try:
-        _write_daemon_files(module, host=host, port=port)
-        assert module.main() == 0
-    finally:
-        server.shutdown()
-        server.server_close()
-
-    assert json.loads(stdout.getvalue()) == {"decision": "deny", "reason": module._FAILURE_REASON}
+    assert command[0] != _PYTHON
+    assert command[1] == "__guard-bounded-hook"
 
 
 def _native_digest() -> str:

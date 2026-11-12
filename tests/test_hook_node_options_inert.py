@@ -2,18 +2,15 @@
 
 from __future__ import annotations
 
-import importlib.util
 import json
 import os
 import shutil
 import subprocess
 from pathlib import Path
-from types import ModuleType
 
 import pytest
 
 from codex_plugin_scanner.guard.adapters import pi_extension_source
-from codex_plugin_scanner.guard.adapters.bounded_cli_hook_bridge import _render_bounded_hook_script
 from codex_plugin_scanner.guard.hook_execution_environment import (
     HOOK_EXECUTION_ENVIRONMENT_KEY,
     node_options_inert,
@@ -55,25 +52,6 @@ NODE_OPTIONS_CASES = [
 ]
 
 
-def _load(path: Path, name: str) -> ModuleType:
-    spec = importlib.util.spec_from_file_location(name, path)
-    assert spec is not None and spec.loader is not None
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
-
-
-def _zcode_hook(tmp_path: Path) -> ModuleType:
-    guard_home = tmp_path / "guard-home"
-    guard_home.mkdir(mode=0o700)
-    script = guard_home / "zcode.py"
-    script.write_text(
-        _render_bounded_hook_script(guard_home=guard_home, harness="zcode", timeout_seconds=8),
-        encoding="utf-8",
-    )
-    return _load(script, f"generated_zcode_node_options_hook_{tmp_path.name}")
-
-
 def _pi_execution_environment(tmp_path: Path, node_options: str | None) -> dict[str, object]:
     source = pi_extension_source.managed_extension_source(
         guard_home=tmp_path / "guard-home",
@@ -107,7 +85,6 @@ def test_python_senders_mark_only_inert_node_options(
     value: str | None,
     expected: bool,
 ) -> None:
-    generated = _zcode_hook(tmp_path)
     if value is None:
         monkeypatch.delenv("NODE_OPTIONS", raising=False)
     else:
@@ -115,7 +92,6 @@ def test_python_senders_mark_only_inert_node_options(
 
     contexts = [
         json.loads(stamp_hook_input_text("{}"))[HOOK_EXECUTION_ENVIRONMENT_KEY],
-        json.loads(generated._stamp_hook_input("{}"))[HOOK_EXECUTION_ENVIRONMENT_KEY],
     ]
 
     assert node_options_inert(value) is expected

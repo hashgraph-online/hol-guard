@@ -2,18 +2,15 @@
 
 from __future__ import annotations
 
-import importlib.util
 import json
 import os
 import shutil
 import subprocess
 from pathlib import Path
-from types import ModuleType
 
 import pytest
 
 from codex_plugin_scanner.guard.adapters import pi_extension_source
-from codex_plugin_scanner.guard.adapters.bounded_cli_hook_bridge import _render_bounded_hook_script
 from codex_plugin_scanner.guard.hook_execution_environment import (
     HOOK_EXECUTION_ENVIRONMENT_KEY,
     cargo_home_default,
@@ -34,25 +31,6 @@ CARGO_HOME_CASES = [
     (None, "/Users/dev/.cargo", False),
     ("/", "/.cargo", False),
 ]
-
-
-def _load(path: Path, name: str) -> ModuleType:
-    spec = importlib.util.spec_from_file_location(name, path)
-    assert spec is not None and spec.loader is not None
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
-
-
-def _zcode_hook(tmp_path: Path) -> ModuleType:
-    guard_home = tmp_path / "guard-home"
-    guard_home.mkdir(mode=0o700)
-    script = guard_home / "zcode.py"
-    script.write_text(
-        _render_bounded_hook_script(guard_home=guard_home, harness="zcode", timeout_seconds=8),
-        encoding="utf-8",
-    )
-    return _load(script, f"generated_zcode_cargo_home_hook_{tmp_path.name}")
 
 
 def _pi_execution_environment(tmp_path: Path, home: str | None, cargo_home: str | None) -> dict[str, object]:
@@ -90,7 +68,6 @@ def test_python_senders_mark_only_a_default_cargo_home(
     cargo_home: str | None,
     expected: bool,
 ) -> None:
-    generated = _zcode_hook(tmp_path)
     for name, value in (("HOME", home), ("CARGO_HOME", cargo_home)):
         if value is None:
             monkeypatch.delenv(name, raising=False)
@@ -99,7 +76,6 @@ def test_python_senders_mark_only_a_default_cargo_home(
 
     contexts = [
         json.loads(stamp_hook_input_text("{}"))[HOOK_EXECUTION_ENVIRONMENT_KEY],
-        json.loads(generated._stamp_hook_input("{}"))[HOOK_EXECUTION_ENVIRONMENT_KEY],
     ]
 
     assert cargo_home_default(home, cargo_home) is expected

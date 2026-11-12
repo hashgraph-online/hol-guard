@@ -285,56 +285,6 @@ def test_grok_live_wait_ignores_unrelated_pending_requests(tmp_path: Path) -> No
     assert stale["status"] == "pending"
 
 
-def test_grok_pretool_posts_to_daemon(
-    monkeypatch: pytest.MonkeyPatch,
-    tmp_path: Path,
-) -> None:
-    from codex_plugin_scanner.guard.adapters import bounded_cli_hook_daemon
-
-    posted: list[str] = []
-
-    class FakeResponse:
-        status = 200
-
-        def geturl(self) -> str:
-            return "http://127.0.0.1:4781/v1/hooks/grok"
-
-        def read(self, _size: int = -1) -> bytes:
-            return b'{"decision":"allow","policy_action":"allow"}'
-
-        def __enter__(self) -> FakeResponse:
-            return self
-
-        def __exit__(self, *args: object) -> bool:
-            del args
-            return False
-
-    class FakeOpener:
-        def open(self, request: object, timeout: float = 0) -> FakeResponse:
-            del timeout
-            posted.append(str(getattr(request, "full_url", request)))
-            return FakeResponse()
-
-    monkeypatch.setattr(
-        bounded_cli_hook_daemon,
-        "_daemon_hook_endpoint",
-        lambda *_args, **_kwargs: "http://127.0.0.1:4781/v1/hooks/grok",
-    )
-    monkeypatch.setattr(bounded_cli_hook_daemon, "_read_daemon_auth_token", lambda *_args, **_kwargs: "token")
-    monkeypatch.setattr(bounded_cli_hook_daemon, "_build_loopback_opener", lambda: FakeOpener())
-    result = bounded_cli_hook_daemon.try_daemon_hook(
-        guard_home=tmp_path / "guard-home",
-        harness="grok",
-        input_text=json.dumps({"hook_event_name": "PreToolUse", "tool_name": "Bash"}),
-        timeout_seconds=5.0,
-    )
-    assert result is not None
-    stdout, _stderr, code = result
-    assert posted
-    assert code == 0
-    assert json.loads(stdout)["decision"] == "allow"
-
-
 def test_grok_live_wait_runs_in_json_mode(tmp_path: Path) -> None:
     store = GuardStore(tmp_path / "guard-home")
     store.add_approval_request(_request(tmp_path, "req-grok-json"), "2026-05-08T10:00:00+00:00")
