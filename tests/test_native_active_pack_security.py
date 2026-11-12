@@ -382,3 +382,42 @@ def test_protected_write_requires_readback(device, delivery, monkeypatch):
     monkeypatch.setattr(device._policy_integrity_secret_store, "set_secret", lambda *args: None)
     with pytest.raises(ValueError, match="protected_write_mismatch"):
         observe(device, publication(delivery), delivery)
+
+
+def test_independent_missing_proofs_arrive_in_one_round(device, delivery, monkeypatch):
+    # After an upgrade every selected pack can miss proofs at once. Asking for
+    # them one per native round kept hooks failing closed for half a minute.
+    root = copy.deepcopy(delivery.value)
+    root["publication_id"] = "12.2"
+    identity = "command.core"
+    manifest = delivery.manifests[identity]["sha256"]
+    entries = {}
+    for kind in ("extension", "pack"):
+        record = dict(
+            schema="guard.extension-revocation.v1",
+            extension_id=identity,
+            kind=kind,
+            epoch=1,
+            state="revoked",
+            reason="Reviewed security change.",
+        )
+        if kind == "pack":
+            record["manifest_sha256"] = manifest
+        key = revocation_key(identity, kind, manifest if kind == "pack" else None)
+        entries[key] = delivery.store.put_json(record)
+    root["policy"]["revocations"] = dict(epoch=1, count=len(entries), index=delivery.store.index(entries))
+    delivery.plan.finish()
+    rounds = []
+    invoke = active_security.invoke
+
+    def counted(operation, store, **arguments):
+        result = invoke(operation, store, **arguments)
+        if operation == "complete":
+            rounds.append(len(result.get("needs", [result])) if "budget" in result else 0)
+        return result
+
+    monkeypatch.setattr(active_security, "invoke", counted)
+    result = observe(device, delivery.verified(root), delivery)
+    assert result["quarantine"] == [identity]
+    # The shared revocation index page, then both records together, then done.
+    assert rounds == [1, 2, 0]
