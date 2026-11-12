@@ -176,6 +176,54 @@ fn rejects_definitions_this_grammar_does_not_read() {
     ]);
 }
 
+/// Each definition that uses the one before twice doubles the inlined
+/// program, so a chain of them is refused once it passes the size bound
+/// instead of being expanded without limit.
+#[test]
+fn rejects_definition_chains_that_double_the_program() {
+    let mut chain = String::from("def a0: .;");
+    for index in 1..40 {
+        let previous = index - 1;
+        chain.push_str(&format!(" def a{index}: a{previous} | a{previous};"));
+    }
+    chain.push_str(" a39");
+    refused(&[chain.as_str()]);
+    let operands = vec!["a"; 16].join(" + ");
+    refused(&[&format!(
+        "def a: .x; def b: {operands}; def c: {}; def d: {}; d",
+        vec!["b"; 16].join(" + "),
+        vec!["c"; 16].join(" + ")
+    )]);
+}
+
+/// `range` counts only over small literal bounds or the input's length;
+/// `infinite` and `combinations` are not read at all.
+#[test]
+fn bounds_range_and_refuses_unbounded_generators() {
+    admitted(&[
+        "range(5)",
+        "[range(0; length)]",
+        "range(0; 100; 10)",
+        "[range(-3; 3)]",
+        "[limit(3; range(0; 10))]",
+    ]);
+    refused(&[
+        "range(0; infinite)",
+        "infinite",
+        "[limit(3; range(0; infinite))]",
+        "range(0; 1e18)",
+        "range(0; 1000000000)",
+        "range(.count)",
+        "range(0; .count)",
+        "range(0; 10; 0)",
+        "range(0; 10; 0.001)",
+        "range(0; 10; .step)",
+        "combinations",
+        "combinations(30)",
+        "range(0; nan)",
+    ]);
+}
+
 #[test]
 fn rejects_comments_and_stray_separators() {
     refused(&[".a # env", ".a;", ".a; .b", "(.a; .b)", "\"\\(.a; .b)\""]);

@@ -8,10 +8,12 @@
 //! of them reaches the environment, further input, files or modules.
 //! Builtins that read outside state (`env`, `$ENV`, `input`, `inputs`,
 //! `input_filename`, `debug`, `stderr`, `halt_error`, `@sh`, `import`,
-//! `include`, `label`) and the ones that can run without end on a finite
-//! value (`recurse(f)`, `while`, `until`, `repeat`) appear in no list here.
+//! `include`, `label`) and the ones that can run without end or blow up on
+//! a finite value (`recurse(f)`, `while`, `until`, `repeat`, `infinite`,
+//! `combinations`) appear in no list here. `range` is admitted only over
+//! small literal bounds or the input's `length`.
 
-use super::program::{closing, identifier_byte, keyword, literal, top_level};
+use super::program::{bounded_range, closing, identifier_byte, keyword, literal, top_level};
 use super::{
     alternative, call, pipeline, split_marker, stage, string_end, subscript, variable_name,
 };
@@ -28,7 +30,6 @@ const VALUE_BUILTINS: &[&str] = &[
     "any",
     "ascii",
     "ceil",
-    "combinations",
     "explode",
     "fabs",
     "fromdate",
@@ -36,7 +37,6 @@ const VALUE_BUILTINS: &[&str] = &[
     "fromjson",
     "gmtime",
     "implode",
-    "infinite",
     "isinfinite",
     "isnan",
     "isnormal",
@@ -69,7 +69,6 @@ const CALLS: &[(&str, &[usize])] = &[
     ("all", &[1, 2]),
     ("any", &[1, 2]),
     ("capture", &[1, 2]),
-    ("combinations", &[1]),
     ("contains", &[1]),
     ("del", &[1]),
     ("delpaths", &[1]),
@@ -261,6 +260,7 @@ fn call_builtin(stage: &str) -> bool {
         return false;
     };
     arities.contains(&arguments.len())
+        && (name != "range" || bounded_range(&arguments))
         && arguments
             .iter()
             .all(|argument| !argument.is_empty() && pipeline(argument))

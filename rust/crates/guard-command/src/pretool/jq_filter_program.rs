@@ -82,6 +82,8 @@ fn inline_definitions(text: &str) -> Option<String> {
         }
         let body = substitute(body, &bodies)?;
         if body.is_empty()
+            || body.len() > MAX_PROGRAM
+            || !nesting_bounded(&body)
             || !valid_characters(&body)
             || !variables_bound(&body)
             || !pipeline(&body)
@@ -115,7 +117,9 @@ pub(super) fn identifier_byte(byte: u8) -> bool {
 /// `text` with every use of a defined name replaced by its body. A name
 /// read as a field (`.name`), a variable, a format or an object key is not
 /// a use. A call with arguments refuses the filter, since only zero-arity
-/// definitions are inlined.
+/// definitions are inlined. Output past [`MAX_PROGRAM`] refuses it too, so
+/// definitions that each use the one before twice cannot double their way
+/// to an unbounded program.
 fn substitute(text: &str, bodies: &[(&str, String)]) -> Option<String> {
     if bodies.is_empty() {
         return Some(text.to_owned());
@@ -147,6 +151,9 @@ fn substitute(text: &str, bodies: &[(&str, String)]) -> Option<String> {
             Some(_) if next == Some(b'(') => return None,
             Some((_, body)) if next != Some(b':') => output.push_str(body),
             _ => output.push_str(word),
+        }
+        if output.len() > MAX_PROGRAM {
+            return None;
         }
         index = end;
     }
@@ -407,4 +414,40 @@ pub(super) fn closing(bytes: &[u8], open: usize) -> Option<usize> {
         index += 1;
     }
     None
+}
+
+/// The largest literal bound `range` may count to or from.
+const MAX_RANGE_BOUND: f64 = 100_000.0;
+
+/// `range(5)`, `range(1; length)`, `range(0; 100; 10)`: bounds that are
+/// plain decimal literals within [`MAX_RANGE_BOUND`] or the input's
+/// `length`, and a literal step of at least one. `range(0; infinite)`,
+/// `range(0; 1e18)` or a bound read from a field could count without end.
+pub(super) fn bounded_range(arguments: &[&str]) -> bool {
+    let literal = |text: &str| {
+        let text = text.trim();
+        !text.is_empty()
+            && text.len() <= 12
+            && text
+                .bytes()
+                .all(|byte| byte.is_ascii_digit() || matches!(byte, b'-' | b'.'))
+            && text
+                .parse::<f64>()
+                .is_ok_and(|value| value.abs() <= MAX_RANGE_BOUND)
+    };
+    let bound = |text: &str| text.trim() == "length" || literal(text);
+    match arguments {
+        [upto] => bound(upto),
+        [from, upto] => bound(from) && bound(upto),
+        [from, upto, by] => {
+            bound(from)
+                && bound(upto)
+                && literal(by)
+                && by
+                    .trim()
+                    .parse::<f64>()
+                    .is_ok_and(|value| value.abs() >= 1.0)
+        }
+        _ => false,
+    }
 }
