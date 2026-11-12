@@ -1583,8 +1583,8 @@
       "expect": "allow"
     },
     {
-      "id": "neg-cat-tracked-screenshot-named-for-auth",
-      "fix_area": "shell",
+      "id": "neg-grep-text-mode-over-env-backup",
+      "fix_area": "negative",
       "harnesses": [
         "codex",
         "zcode",
@@ -1594,14 +1594,14 @@
       ],
       "tool": "shell",
       "tool_input": {
-        "command": "cat docs/screens/auth-desktop-login.png"
+        "command": "grep -a -rln \"edge_session_marker\" ${HOME}/edge-clone/"
       },
       "cwd": "worktree",
       "expect": "not_allow"
     },
     {
-      "id": "neg-grep-names-tracked-screenshot-named-for-auth",
-      "fix_area": "shell",
+      "id": "neg-grep-text-mode-docs-beside-env-backup",
+      "fix_area": "negative",
       "harnesses": [
         "codex",
         "zcode",
@@ -1611,7 +1611,7 @@
       ],
       "tool": "shell",
       "tool_input": {
-        "command": "grep -a Phase docs/screens/auth-desktop-login.png"
+        "command": "grep -a -rn Phase docs ${HOME}/edge-clone/"
       },
       "cwd": "worktree",
       "expect": "not_allow"
