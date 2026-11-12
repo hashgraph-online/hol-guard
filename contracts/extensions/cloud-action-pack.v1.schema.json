@@ -1079,7 +1079,44 @@
             "response": {
               "type": "string"
             },
-            "projection": {}
+            "projection": {},
+            "decisions": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [],
+              "properties": {
+                "relaxed": {
+                  "enum": [
+                    "allow",
+                    "warn",
+                    "review",
+                    "require-reapproval",
+                    "sandbox-required",
+                    "block"
+                  ]
+                },
+                "balanced": {
+                  "enum": [
+                    "allow",
+                    "warn",
+                    "review",
+                    "require-reapproval",
+                    "sandbox-required",
+                    "block"
+                  ]
+                },
+                "strict": {
+                  "enum": [
+                    "allow",
+                    "warn",
+                    "review",
+                    "require-reapproval",
+                    "sandbox-required",
+                    "block"
+                  ]
+                }
+              }
+            }
           }
         }
       }

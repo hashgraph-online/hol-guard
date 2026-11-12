@@ -50,6 +50,11 @@ Every action in a source pack carries at least one `safe` and one `risky` fixtur
 and what must happen: the error code, the facts, the exact rendered request, or the projection of a recorded
 response. Compilation runs the fixtures and stops on any failure.
 
+A fixture may also name the decision each shipped preset reaches for its call, as
+`expect.decisions: {"relaxed": ..., "balanced": ..., "strict": ...}`. The fixture runner evaluates the extracted
+facts against each named preset with the action's declared effect, a clean session and empty windows, and fails on
+any difference. See [Cloud policy presets](cloud-policy-presets.md).
+
 ## Artifacts and digests
 
 `compile` validates the pack, runs its fixtures, strips them, and returns a
@@ -94,6 +99,8 @@ Both read one JSON request per line on standard input and write one JSON result 
 | `render` | `pack` or `artifact`, `actionId`, `arguments` | `request` |
 | `extract` | `pack` or `artifact`, `actionId`, `arguments` | `facts` |
 | `project` | `pack` or `artifact`, `actionId`, `response` | `projection` |
+| `policy` | `preset` name or `policyPack` | `preset`, `packDigest`, `factRules`, `unclassified` |
+| `classify` | `name`, optional `inputSchema`, optional `preset` or `policyPack` | `proposal`, and `action` when a preset is named |
 
 A result is `{"ok": true, ...}` or `{"ok": false, "error": {"code": ..., "pointer" | "argument": ...}}`.
 

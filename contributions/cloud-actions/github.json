@@ -263,6 +263,11 @@
               "maxPages": 1,
               "method": "GET",
               "url": "https://api.github.com/repos/octo-org/widgets/issues?per_page=30&page=1&state=open&sort=updated&direction=desc"
+            },
+            "decisions": {
+              "relaxed": "allow",
+              "balanced": "allow",
+              "strict": "allow"
             }
           }
         },
@@ -448,6 +453,11 @@
               "maxPages": 1,
               "method": "POST",
               "url": "https://api.github.com/repos/octo-org/widgets/issues/7/comments"
+            },
+            "decisions": {
+              "relaxed": "allow",
+              "balanced": "review",
+              "strict": "review"
             }
           }
         },

@@ -46,6 +46,7 @@ pub mod cloud_action;
 pub mod cloud_action_activation;
 pub mod cloud_action_binding;
 pub mod cloud_action_canonical;
+pub mod cloud_action_classifier;
 pub mod cloud_action_inspect;
 mod cloud_action_inspect_pii;
 #[cfg(test)]
@@ -73,6 +74,7 @@ mod cloud_pack_tests;
 pub mod cloud_pack_validate;
 mod cloud_pack_validate_facts;
 mod cloud_pack_validate_request;
+pub mod cloud_policy_pack;
 pub mod cloud_scrub;
 mod cloud_scrub_shell;
 mod cloud_scrub_source_search;

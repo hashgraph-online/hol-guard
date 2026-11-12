@@ -3,12 +3,15 @@
 //! Each fixture calls one action with recorded arguments and states what must
 //! come out: the argument error it is refused with, or the facts Guard derives,
 //! the exact request the executor sends, and the projection of a recorded
-//! provider response. A pack whose fixtures fail is not compiled.
+//! provider response, and the decision each shipped policy preset gives. A
+//! pack whose fixtures fail is not compiled.
 
-use crate::cloud_pack::{CloudActionPack, Fixture, FixtureKind, PackAction};
+use crate::cloud_pack::{CloudActionPack, Fixture, FixtureKind, PackAction, PresetDecisions};
 use crate::cloud_pack_facts::extract;
 use crate::cloud_pack_request::{check_arguments, render};
 use crate::cloud_pack_response::project;
+use crate::cloud_policy_pack::{shipped, FactCall, Preset};
+use guard_contracts::ActionFactsV2;
 use serde::Serialize;
 use serde_json::Value;
 
@@ -39,7 +42,7 @@ pub fn run(pack: &CloudActionPack) -> FixtureReport {
         .iter()
         .flat_map(|action| action.fixtures.iter().map(move |fixture| (action, fixture)))
         .map(|(action, fixture)| {
-            let failure = check(action, fixture).err();
+            let failure = check(&pack.provider.id, action, fixture).err();
             FixtureResult {
                 action_id: action.action_id.clone(),
                 fixture: fixture.name.clone(),
@@ -58,7 +61,7 @@ pub fn run(pack: &CloudActionPack) -> FixtureReport {
     }
 }
 
-fn check(action: &PackAction, fixture: &Fixture) -> Result<(), String> {
+fn check(provider: &str, action: &PackAction, fixture: &Fixture) -> Result<(), String> {
     let expect = &fixture.expect;
     let checked = check_arguments(action, &fixture.arguments);
     if let Some(code) = &expect.error {
@@ -75,9 +78,13 @@ fn check(action: &PackAction, fixture: &Fixture) -> Result<(), String> {
         };
     }
     let record = checked.map_err(|error| format!("arguments refused: {}", error.code))?;
+    let derived = extract(action, record);
+    if let Some(expected) = &expect.decisions {
+        check_decisions(provider, action, &derived, expected)?;
+    }
     if let Some(expected) = &expect.facts {
-        let facts = serde_json::to_value(extract(action, record))
-            .map_err(|_| "facts: unserializable".to_string())?;
+        let facts =
+            serde_json::to_value(&derived).map_err(|_| "facts: unserializable".to_string())?;
         for (key, value) in expected {
             if facts.get(key) != Some(value) {
                 return Err(format!(
@@ -103,6 +110,39 @@ fn check(action: &PackAction, fixture: &Fixture) -> Result<(), String> {
             return Err(format!(
                 "projection: expected {expected}, got {}",
                 projection.data
+            ));
+        }
+    }
+    Ok(())
+}
+
+fn check_decisions(
+    provider: &str,
+    action: &PackAction,
+    facts: &ActionFactsV2,
+    expected: &PresetDecisions,
+) -> Result<(), String> {
+    let call = FactCall {
+        provider,
+        action_id: &action.action_id,
+        effect: action.safety.effect,
+        facts,
+        session: None,
+        windows: None,
+    };
+    for (preset, want) in [
+        (Preset::Relaxed, expected.relaxed),
+        (Preset::Balanced, expected.balanced),
+        (Preset::Strict, expected.strict),
+    ] {
+        let Some(want) = want else { continue };
+        let got = shipped(preset).decide(&call);
+        if got != want {
+            return Err(format!(
+                "decisions.{}: expected {}, got {}",
+                preset.as_str(),
+                want.as_str(),
+                got.as_str()
             ));
         }
     }

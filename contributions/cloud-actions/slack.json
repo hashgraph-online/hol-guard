@@ -194,6 +194,11 @@
               "maxPages": 1,
               "method": "GET",
               "url": "https://slack.com/api/conversations.list?limit=2&types=public_channel&exclude_archived=true"
+            },
+            "decisions": {
+              "relaxed": "allow",
+              "balanced": "allow",
+              "strict": "allow"
             }
           }
         },
@@ -446,6 +451,11 @@
               "maxPages": 1,
               "method": "GET",
               "url": "https://slack.com/api/conversations.history?channel=C0123456789&limit=15&inclusive=false&include_all_metadata=false"
+            },
+            "decisions": {
+              "relaxed": "allow",
+              "balanced": "allow",
+              "strict": "allow"
             }
           }
         },
@@ -624,6 +634,11 @@
               "maxPages": 1,
               "method": "POST",
               "url": "https://slack.com/api/chat.postMessage"
+            },
+            "decisions": {
+              "relaxed": "allow",
+              "balanced": "review",
+              "strict": "review"
             }
           }
         },

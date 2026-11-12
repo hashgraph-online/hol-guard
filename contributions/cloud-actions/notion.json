@@ -206,6 +206,11 @@
               "maxPages": 1,
               "method": "GET",
               "url": "https://api.notion.com/v1/blocks/0f3c9a1e2b4d4c6e8f0a1b2c3d4e5f60/children?page_size=50"
+            },
+            "decisions": {
+              "relaxed": "allow",
+              "balanced": "allow",
+              "strict": "allow"
             }
           }
         },
@@ -438,6 +443,11 @@
               "maxPages": 1,
               "method": "PATCH",
               "url": "https://api.notion.com/v1/blocks/0f3c9a1e2b4d4c6e8f0a1b2c3d4e5f60/children"
+            },
+            "decisions": {
+              "relaxed": "allow",
+              "balanced": "allow",
+              "strict": "review"
             }
           }
         },

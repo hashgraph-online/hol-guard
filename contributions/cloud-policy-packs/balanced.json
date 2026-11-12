@@ -1,0 +1,797 @@
+{
+  "schema": "guard.cloud-policy-pack.v1",
+  "preset": "balanced",
+  "title": "Balanced",
+  "summary": "The default. Quiet for small reversible work inside the workspace; reviews bulk, external and destructive actions; blocks the irreversible ones.",
+  "windows": [
+    {
+      "id": "recoverable_deletes_1h",
+      "seconds": 3600,
+      "counts": "Records deleted recoverably on one connection."
+    }
+  ],
+  "unclassified": {
+    "action": "review",
+    "destructive_name_action": "require-reapproval"
+  },
+  "rules": [
+    {
+      "family": "base",
+      "summary": "Drafts are allowed. Reads are allowed by the read default.",
+      "rule": {
+        "rule_id": "balanced.r00.draft",
+        "action": "allow",
+        "match": {
+          "action_id": "*"
+        },
+        "facts": {
+          "classes": [
+            "draft"
+          ]
+        }
+      }
+    },
+    {
+      "family": "R1",
+      "summary": "Permanent delete.",
+      "rule": {
+        "rule_id": "balanced.r01.permanent_delete",
+        "action": "review",
+        "match": {
+          "action_id": "*"
+        },
+        "facts": {
+          "classes": [
+            "delete"
+          ],
+          "reversibility": [
+            "permanent"
+          ]
+        }
+      }
+    },
+    {
+      "family": "R1",
+      "summary": "Permanently deleting everything in scope.",
+      "rule": {
+        "rule_id": "balanced.r01.permanent_delete_all",
+        "action": "require-reapproval",
+        "match": {
+          "action_id": "*"
+        },
+        "facts": {
+          "classes": [
+            "delete"
+          ],
+          "reversibility": [
+            "permanent"
+          ],
+          "scopes": [
+            "all"
+          ]
+        }
+      }
+    },
+    {
+      "family": "R1",
+      "summary": "Permanently deleting 50 or more records. An unknown count counts as 50 or more.",
+      "rule": {
+        "rule_id": "balanced.r01.permanent_delete_bulk",
+        "action": "require-reapproval",
+        "match": {
+          "action_id": "*"
+        },
+        "facts": {
+          "classes": [
+            "delete"
+          ],
+          "reversibility": [
+            "permanent"
+          ],
+          "min_record_count": 50
+        }
+      }
+    },
+    {
+      "family": "R2",
+      "summary": "Recoverable delete of at most 25 records, and at most 100 in the last hour.",
+      "rule": {
+        "rule_id": "balanced.r02.recoverable_delete",
+        "action": "allow",
+        "match": {
+          "action_id": "*"
+        },
+        "facts": {
+          "classes": [
+            "delete"
+          ],
+          "reversibility": [
+            "recoverable",
+            "reversible"
+          ],
+          "max_record_count": 25,
+          "windows": [
+            {
+              "window": "recoverable_deletes_1h",
+              "at_most": 100
+            }
+          ]
+        }
+      }
+    },
+    {
+      "family": "R2",
+      "summary": "Recoverable delete of more than 25 records.",
+      "rule": {
+        "rule_id": "balanced.r02.recoverable_delete_bulk",
+        "action": "review",
+        "match": {
+          "action_id": "*"
+        },
+        "facts": {
+          "classes": [
+            "delete"
+          ],
+          "reversibility": [
+            "recoverable",
+            "reversible"
+          ],
+          "min_record_count": 26
+        }
+      }
+    },
+    {
+      "family": "R2",
+      "summary": "Recoverable deletes past 100 in the last hour. A missing counter counts as past the limit.",
+      "rule": {
+        "rule_id": "balanced.r02.recoverable_delete_rate",
+        "action": "review",
+        "match": {
+          "action_id": "*"
+        },
+        "facts": {
+          "classes": [
+            "delete"
+          ],
+          "reversibility": [
+            "recoverable",
+            "reversible"
+          ],
+          "windows": [
+            {
+              "window": "recoverable_deletes_1h",
+              "above": 100
+            }
+          ]
+        }
+      }
+    },
+    {
+      "family": "R3",
+      "summary": "Destroying or truncating a production database or table. An unknown environment counts as production.",
+      "rule": {
+        "rule_id": "balanced.r03.database_delete_production",
+        "action": "block",
+        "match": {
+          "action_id": "*"
+        },
+        "facts": {
+          "classes": [
+            "delete",
+            "admin"
+          ],
+          "objects": [
+            "database",
+            "table"
+          ],
+          "environments": [
+            "production"
+          ]
+        }
+      }
+    },
+    {
+      "family": "R3",
+      "summary": "Destroying or truncating a non-production database or table.",
+      "rule": {
+        "rule_id": "balanced.r03.database_delete_non_production",
+        "action": "require-reapproval",
+        "match": {
+          "action_id": "*"
+        },
+        "facts": {
+          "classes": [
+            "delete",
+            "admin"
+          ],
+          "objects": [
+            "database",
+            "table"
+          ],
+          "environments": [
+            "non_production"
+          ]
+        }
+      }
+    },
+    {
+      "family": "R3",
+      "summary": "Destroying or truncating a production database or table. An unknown environment counts as production.",
+      "rule": {
+        "rule_id": "balanced.r03.database_truncate_production",
+        "action": "block",
+        "match": {
+          "action_id": "*"
+        },
+        "facts": {
+          "classes": [
+            "execute"
+          ],
+          "reversibility": [
+            "permanent"
+          ],
+          "objects": [
+            "database",
+            "table"
+          ],
+          "environments": [
+            "production"
+          ]
+        }
+      }
+    },
+    {
+      "family": "R3",
+      "summary": "Destroying or truncating a non-production database or table.",
+      "rule": {
+        "rule_id": "balanced.r03.database_truncate_non_production",
+        "action": "require-reapproval",
+        "match": {
+          "action_id": "*"
+        },
+        "facts": {
+          "classes": [
+            "execute"
+          ],
+          "reversibility": [
+            "permanent"
+          ],
+          "objects": [
+            "database",
+            "table"
+          ],
+          "environments": [
+            "non_production"
+          ]
+        }
+      }
+    },
+    {
+      "family": "R4",
+      "summary": "Updating fewer than 100 named records.",
+      "rule": {
+        "rule_id": "balanced.r04.update",
+        "action": "allow",
+        "match": {
+          "action_id": "*"
+        },
+        "facts": {
+          "classes": [
+            "update"
+          ],
+          "scopes": [
+            "single",
+            "enumerated"
+          ],
+          "max_record_count": 99
+        }
+      }
+    },
+    {
+      "family": "R4",
+      "summary": "Updating 100 or more records.",
+      "rule": {
+        "rule_id": "balanced.r04.bulk_update",
+        "action": "review",
+        "match": {
+          "action_id": "*"
+        },
+        "facts": {
+          "classes": [
+            "update"
+          ],
+          "min_record_count": 100
+        }
+      }
+    },
+    {
+      "family": "R4",
+      "summary": "Updating records chosen by a query, or all of them.",
+      "rule": {
+        "rule_id": "balanced.r04.query_update",
+        "action": "review",
+        "match": {
+          "action_id": "*"
+        },
+        "facts": {
+          "classes": [
+            "update"
+          ],
+          "scopes": [
+            "query_selected",
+            "all"
+          ]
+        }
+      }
+    },
+    {
+      "family": "R5",
+      "summary": "Sending outside the workspace's own domains.",
+      "rule": {
+        "rule_id": "balanced.r05.external_send",
+        "action": "review",
+        "match": {
+          "action_id": "*"
+        },
+        "facts": {
+          "classes": [
+            "send"
+          ],
+          "external": true
+        }
+      }
+    },
+    {
+      "family": "R6",
+      "summary": "Sending to fewer than 20 people inside the workspace.",
+      "rule": {
+        "rule_id": "balanced.r06.internal_send",
+        "action": "allow",
+        "match": {
+          "action_id": "*"
+        },
+        "facts": {
+          "classes": [
+            "send"
+          ],
+          "external": false,
+          "max_recipient_count": 19
+        }
+      }
+    },
+    {
+      "family": "R6",
+      "summary": "Sending to 20 or more people.",
+      "rule": {
+        "rule_id": "balanced.r06.internal_send_wide",
+        "action": "review",
+        "match": {
+          "action_id": "*"
+        },
+        "facts": {
+          "classes": [
+            "send"
+          ],
+          "min_recipient_count": 20
+        }
+      }
+    },
+    {
+      "family": "R7",
+      "summary": "Sharing publicly or with anyone who has the link.",
+      "rule": {
+        "rule_id": "balanced.r07.public_share",
+        "action": "review",
+        "match": {
+          "action_id": "*"
+        },
+        "facts": {
+          "classes": [
+            "share"
+          ],
+          "audience_kinds": [
+            "public"
+          ]
+        }
+      }
+    },
+    {
+      "family": "R7",
+      "summary": "Sharing confidential or secret data publicly. Unknown sensitivity counts as confidential.",
+      "rule": {
+        "rule_id": "balanced.r07.public_share_sensitive",
+        "action": "block",
+        "match": {
+          "action_id": "*"
+        },
+        "facts": {
+          "classes": [
+            "share"
+          ],
+          "audience_kinds": [
+            "public"
+          ],
+          "sensitivity": [
+            "confidential",
+            "secret"
+          ]
+        }
+      }
+    },
+    {
+      "family": "R8",
+      "summary": "Sharing with people outside the workspace.",
+      "rule": {
+        "rule_id": "balanced.r08.external_share",
+        "action": "review",
+        "match": {
+          "action_id": "*"
+        },
+        "facts": {
+          "classes": [
+            "share"
+          ],
+          "external": true
+        }
+      }
+    },
+    {
+      "family": "R8",
+      "summary": "Sharing with people inside the workspace.",
+      "rule": {
+        "rule_id": "balanced.r08.internal_share",
+        "action": "allow",
+        "match": {
+          "action_id": "*"
+        },
+        "facts": {
+          "classes": [
+            "share"
+          ],
+          "external": false,
+          "audience_kinds": [
+            "private",
+            "named",
+            "domain"
+          ]
+        }
+      }
+    },
+    {
+      "family": "R9",
+      "summary": "Exports of at most 10 MiB and 1,000 records.",
+      "rule": {
+        "rule_id": "balanced.r09.export",
+        "action": "allow",
+        "match": {
+          "action_id": "*"
+        },
+        "facts": {
+          "classes": [
+            "export"
+          ],
+          "max_byte_count": 10485760,
+          "max_record_count": 1000
+        }
+      }
+    },
+    {
+      "family": "R9",
+      "summary": "Exports larger than 10 MiB.",
+      "rule": {
+        "rule_id": "balanced.r09.export_large_bytes",
+        "action": "review",
+        "match": {
+          "action_id": "*"
+        },
+        "facts": {
+          "classes": [
+            "export"
+          ],
+          "min_byte_count": 10485761
+        }
+      }
+    },
+    {
+      "family": "R9",
+      "summary": "Exports of more than 1,000 records.",
+      "rule": {
+        "rule_id": "balanced.r09.export_large_records",
+        "action": "review",
+        "match": {
+          "action_id": "*"
+        },
+        "facts": {
+          "classes": [
+            "export"
+          ],
+          "min_record_count": 1001
+        }
+      }
+    },
+    {
+      "family": "R10",
+      "summary": "Money out.",
+      "rule": {
+        "rule_id": "balanced.r10.money_out",
+        "action": "review",
+        "match": {
+          "action_id": "*"
+        },
+        "facts": {
+          "classes": [
+            "pay"
+          ],
+          "money_directions": [
+            "out"
+          ]
+        }
+      }
+    },
+    {
+      "family": "R12",
+      "summary": "A secret in the arguments of an action that sends, shares, updates or runs.",
+      "rule": {
+        "rule_id": "balanced.r12.secret_leaving",
+        "action": "block",
+        "match": {
+          "action_id": "*"
+        },
+        "facts": {
+          "findings": [
+            "secret_in_arguments"
+          ],
+          "classes": [
+            "send",
+            "share",
+            "update",
+            "execute"
+          ]
+        }
+      }
+    },
+    {
+      "family": "R13",
+      "summary": "The session read untrusted content and sensitive data, and this action can send data out.",
+      "rule": {
+        "rule_id": "balanced.r13.trifecta",
+        "action": "review",
+        "match": {
+          "action_id": "*"
+        },
+        "facts": {
+          "session": [
+            "untrusted_content_seen",
+            "sensitive_data_seen",
+            "egress"
+          ]
+        }
+      }
+    },
+    {
+      "family": "R14",
+      "summary": "An injection signal earlier in the session, then a permanent delete.",
+      "rule": {
+        "rule_id": "balanced.r14.injection_then_permanent_delete",
+        "action": "require-reapproval",
+        "match": {
+          "action_id": "*"
+        },
+        "facts": {
+          "session": [
+            "injection_signal_seen"
+          ],
+          "classes": [
+            "delete"
+          ],
+          "reversibility": [
+            "permanent"
+          ]
+        }
+      }
+    },
+    {
+      "family": "R14",
+      "summary": "An injection signal earlier in the session, then a database or table change.",
+      "rule": {
+        "rule_id": "balanced.r14.injection_then_database_change",
+        "action": "require-reapproval",
+        "match": {
+          "action_id": "*"
+        },
+        "facts": {
+          "session": [
+            "injection_signal_seen"
+          ],
+          "classes": [
+            "delete",
+            "admin"
+          ],
+          "objects": [
+            "database",
+            "table"
+          ]
+        }
+      }
+    },
+    {
+      "family": "R14",
+      "summary": "An injection signal earlier in the session, then a truncating execute.",
+      "rule": {
+        "rule_id": "balanced.r14.injection_then_truncate",
+        "action": "require-reapproval",
+        "match": {
+          "action_id": "*"
+        },
+        "facts": {
+          "session": [
+            "injection_signal_seen"
+          ],
+          "classes": [
+            "execute"
+          ],
+          "reversibility": [
+            "permanent"
+          ],
+          "objects": [
+            "database",
+            "table"
+          ]
+        }
+      }
+    },
+    {
+      "family": "R14",
+      "summary": "An injection signal earlier in the session, then money out.",
+      "rule": {
+        "rule_id": "balanced.r14.injection_then_money_out",
+        "action": "require-reapproval",
+        "match": {
+          "action_id": "*"
+        },
+        "facts": {
+          "session": [
+            "injection_signal_seen"
+          ],
+          "classes": [
+            "pay"
+          ],
+          "money_directions": [
+            "out"
+          ]
+        }
+      }
+    },
+    {
+      "family": "R15",
+      "summary": "A merge or push to a branch, or a repository change.",
+      "rule": {
+        "rule_id": "balanced.r15.branch_change",
+        "action": "review",
+        "match": {
+          "action_id": "*"
+        },
+        "facts": {
+          "classes": [
+            "update",
+            "execute"
+          ],
+          "objects": [
+            "branch",
+            "repository"
+          ]
+        }
+      }
+    },
+    {
+      "family": "R15",
+      "summary": "A production deployment. An unknown environment counts as production.",
+      "rule": {
+        "rule_id": "balanced.r15.production_deploy",
+        "action": "review",
+        "match": {
+          "action_id": "*"
+        },
+        "facts": {
+          "objects": [
+            "deployment"
+          ],
+          "environments": [
+            "production"
+          ]
+        }
+      }
+    },
+    {
+      "family": "R15",
+      "summary": "Writing or sharing a secret.",
+      "rule": {
+        "rule_id": "balanced.r15.secret_write",
+        "action": "review",
+        "match": {
+          "action_id": "*"
+        },
+        "facts": {
+          "classes": [
+            "update",
+            "share",
+            "execute",
+            "send"
+          ],
+          "objects": [
+            "secret"
+          ]
+        }
+      }
+    },
+    {
+      "family": "R15",
+      "summary": "Deleting a branch.",
+      "rule": {
+        "rule_id": "balanced.r15.branch_delete",
+        "action": "block",
+        "match": {
+          "action_id": "*"
+        },
+        "facts": {
+          "classes": [
+            "delete"
+          ],
+          "objects": [
+            "branch"
+          ]
+        }
+      }
+    },
+    {
+      "family": "R15",
+      "summary": "Rewriting branch history (a force push).",
+      "rule": {
+        "rule_id": "balanced.r15.force_push",
+        "action": "block",
+        "match": {
+          "action_id": "*"
+        },
+        "facts": {
+          "classes": [
+            "update",
+            "execute"
+          ],
+          "objects": [
+            "branch"
+          ],
+          "reversibility": [
+            "permanent"
+          ]
+        }
+      }
+    }
+  ],
+  "workspace_rules": [
+    {
+      "family": "R3",
+      "needs": "named approvers",
+      "summary": "Add an allow-with-approver rule for production databases a named person may change."
+    },
+    {
+      "family": "R5",
+      "needs": "trusted domains and first-contact history",
+      "summary": "Add an allow rule with recipient_domains for each trusted domain."
+    },
+    {
+      "family": "R8",
+      "needs": "trusted domains",
+      "summary": "Add an allow rule with recipient_domains for each trusted domain."
+    },
+    {
+      "family": "R10",
+      "needs": "the workspace money limit",
+      "summary": "Add a block rule with min_amount_minor set to the limit and the currency."
+    },
+    {
+      "family": "R11",
+      "needs": "an admin scope",
+      "summary": "Admin actions are an intrinsic block today; a scoped rule cannot lower it yet."
+    }
+  ]
+}
