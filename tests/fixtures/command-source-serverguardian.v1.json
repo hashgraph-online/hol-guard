@@ -1031,13 +1031,15 @@
       "rule_id": "command.serverguardian.docker-container-lifecycle"
     },
     {
-      "command": "server-guardian",
+      "command": "server-guardian --telemetry-only",
       "disabled_permissions": [],
       "enabled_extensions": [
         "command.serverguardian"
       ],
-      "expected_action": "review",
-      "expected_effective_segments": [],
+      "expected_action": "allow",
+      "expected_effective_segments": [
+        0
+      ],
       "id": "telemetry-free",
       "rule_id": "command.serverguardian.telemetry-startup"
     },
@@ -1047,7 +1049,7 @@
       "enabled_extensions": [
         "command.serverguardian"
       ],
-      "expected_action": "review",
+      "expected_action": "allow",
       "expected_effective_segments": [
         0
       ],
@@ -1060,7 +1062,7 @@
       "enabled_extensions": [
         "command.serverguardian"
       ],
-      "expected_action": "review",
+      "expected_action": "allow",
       "expected_effective_segments": [
         0
       ],
