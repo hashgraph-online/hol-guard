@@ -153,7 +153,10 @@ fn default_fits(spec: Option<&ArgumentSpec>, value: &Value) -> bool {
             .as_i64()
             .is_some_and(|n| (*minimum..=*maximum).contains(&n)),
         (Some(ArgumentSpec::Boolean { .. }), Value::Bool(_)) => true,
-        (Some(ArgumentSpec::String { .. }), Value::String(text)) => clean_text(text),
+        (Some(spec @ ArgumentSpec::String { .. }), Value::String(text)) => {
+            clean_text(text)
+                && crate::cloud_pack_request::check_text(spec.text_rule().as_ref(), value).is_ok()
+        }
         _ => false,
     }
 }

@@ -432,10 +432,22 @@ pub fn parse_pack(bytes: &[u8]) -> Result<CloudActionPack, PackError> {
 }
 
 pub fn pack_from_value(value: Value) -> Result<CloudActionPack, PackError> {
+    within_limit(&value)?;
     let pack: CloudActionPack = serde_json::from_value(value)
         .map_err(|_| PackError::new("cloud_pack_shape_invalid", ""))?;
     crate::cloud_pack_validate::validate(&pack)?;
     Ok(pack)
+}
+
+/// Refuse an already-parsed value whose serialized form exceeds [`MAX_PACK_BYTES`].
+pub(crate) fn within_limit(value: &Value) -> Result<(), PackError> {
+    let len = serde_json::to_vec(value)
+        .map_err(|_| PackError::new("cloud_pack_json_invalid", ""))?
+        .len();
+    if len > MAX_PACK_BYTES {
+        return Err(PackError::new("cloud_pack_too_large", ""));
+    }
+    Ok(())
 }
 
 impl CloudActionPack {

@@ -111,6 +111,7 @@ pub fn load(bytes: &[u8]) -> Result<PackArtifact, PackError> {
 
 /// [`load`] for an artifact that was already parsed strictly.
 pub fn load_value(value: Value) -> Result<PackArtifact, PackError> {
+    crate::cloud_pack::within_limit(&value)?;
     let artifact: PackArtifact = serde_json::from_value(value)
         .map_err(|_| PackError::new("cloud_pack_artifact_invalid", ""))?;
     if artifact.schema != ARTIFACT_SCHEMA {

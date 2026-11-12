@@ -176,7 +176,7 @@
                     "value": {
                       "list": {
                         "from": "labels",
-                        "maxItems": 20,
+                        "maxItems": 100,
                         "fields": [
                           {
                             "name": "name",

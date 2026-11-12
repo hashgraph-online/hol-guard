@@ -19,7 +19,8 @@ The language is small on purpose, so a pack from a third party can be reviewed a
   can fill only whole path segments.
 - No credential headers. Header names are lowercase constants. Names containing `auth`, `cookie`, `token`,
   `secret`, `key`, `session`, `password` or `credential`, and framing headers such as `host`, `content-length`,
-  `forwarded`, `proxy-*` and `x-forwarded-*`, are refused. The host adds the credential and the `user-agent`.
+  `forwarded`, `proxy-*` and `x-forwarded-*`, are refused. `content-type` is refused too, because rendering
+  always sets it for the JSON body. The host adds the credential and the `user-agent`.
 - No unbounded input. Every string has a `maxLength`, every integer a range, every array an item limit. Patterns
   must start with `^` and end with `$`, compile on the linear-time `regex` engine within 1 MiB, and are matched
   against the whole value, so an alternation such as `^a|b$` cannot match a value that only starts with `a`.

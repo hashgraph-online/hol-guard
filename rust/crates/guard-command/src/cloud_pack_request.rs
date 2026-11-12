@@ -88,7 +88,7 @@ fn check_value(spec: &ArgumentSpec, value: &Value) -> Result<(), &'static str> {
     }
 }
 
-fn check_text(rule: Option<&TextRule>, value: &Value) -> Result<(), &'static str> {
+pub(crate) fn check_text(rule: Option<&TextRule>, value: &Value) -> Result<(), &'static str> {
     let rule = rule.ok_or("invalid_argument")?;
     let text = value.as_str().ok_or("invalid_argument")?;
     if text.trim().is_empty() || text.chars().count() > rule.max_length as usize {

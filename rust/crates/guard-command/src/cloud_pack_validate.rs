@@ -30,9 +30,10 @@ const FORBIDDEN_HEADER_PARTS: [&str; 8] = [
     "password",
     "credential",
 ];
-const FORBIDDEN_HEADERS: [&str; 7] = [
+const FORBIDDEN_HEADERS: [&str; 8] = [
     "host",
     "content-length",
+    "content-type",
     "transfer-encoding",
     "connection",
     "upgrade",
@@ -172,7 +173,7 @@ fn validate_argument(spec: &ArgumentSpec) -> Result<(), &'static str> {
             minimum, maximum, ..
         } => {
             let safe = 1_i64 << 53;
-            if minimum > maximum || minimum.abs() > safe || maximum.abs() > safe {
+            if minimum > maximum || *minimum < -safe || *maximum > safe {
                 return Err("cloud_pack_argument_bounds_invalid");
             }
         }

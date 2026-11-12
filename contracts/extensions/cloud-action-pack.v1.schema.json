@@ -355,6 +355,7 @@
                       "enum": [
                         "host",
                         "content-length",
+                        "content-type",
                         "transfer-encoding",
                         "connection",
                         "upgrade",

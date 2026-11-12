@@ -8,7 +8,7 @@
 //! need a new review. Anything this module cannot order, such as a rewritten
 //! pattern, counts as widening.
 
-use crate::cloud_action_v2::{class_effect, effect_rank};
+use crate::cloud_action_v2::effect_rank;
 use crate::cloud_pack::*;
 use serde::Serialize;
 use std::collections::BTreeMap;
@@ -137,11 +137,13 @@ fn compare_action(changes: &mut Changes, old: &PackAction, new: &PackAction) {
     changes.when(old.link != new.link, "link_changed", None, true);
     changes.when(old.executor != new.executor, "executor_changed", None, true);
     compare_arguments(changes, &old.arguments, &new.arguments);
-    let old_class = effect_rank(class_effect(old.facts.class));
-    let new_class = effect_rank(class_effect(new.facts.class));
-    if old.facts.class != new.facts.class {
-        changes.push("class_changed", None, new_class <= old_class);
-    }
+    // Any class change can move the action into a different policy bucket.
+    changes.when(
+        old.facts.class != new.facts.class,
+        "class_changed",
+        None,
+        true,
+    );
     let mut old_rest = old.facts.clone();
     old_rest.class = new.facts.class;
     changes.when(old_rest != new.facts, "facts_changed", None, true);

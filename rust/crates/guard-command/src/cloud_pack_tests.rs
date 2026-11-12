@@ -465,3 +465,6 @@ fn artifact_digests_do_not_depend_on_key_order() {
         artifact.artifact_digest
     );
 }
+
+#[path = "cloud_pack_limits_tests.rs"]
+mod limits;
