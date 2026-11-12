@@ -77,6 +77,9 @@ export function parseContextBrief(value: unknown): ContextBrief {
 /** Plain words for a refused request. A refused pick names its likely cause:
  *  reading files again cannot help with a secret-looking, blocked or private file. */
 function refusal(code: string, action: string, status: number): string {
+  if (/runtime_(deadline_exceeded|not_verified|closed|crashed|cancelled|transport_failed)$/.test(code)) {
+    return "CIGAR stopped before it could finish. Restart CIGAR at the top of this page, then try again. Your saved project choices are kept.";
+  }
   if (code.endsWith("context_storage_repair_required")) return "CIGAR's saved notes need repair. Delete them in CIGAR → Privacy, then add the project again.";
   if (code.endsWith("context_storage_outcome_unknown")) return "CIGAR's saved notes may have changed before this finished. Check CIGAR → Privacy, then try again.";
   if (code.endsWith("context_resource_limit") && action === "authorize_agent") {

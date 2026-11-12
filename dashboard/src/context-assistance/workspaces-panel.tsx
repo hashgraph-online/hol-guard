@@ -3,6 +3,8 @@ import type { GuardApprovalGatePublicConfig } from "../guard-types";
 import { harnessDisplayName } from "../approval-center-utils";
 import { ContextAgentsPanel } from "./agents-panel";
 import { ContextNotesPanel } from "./notes-panel";
+import { setSwarmContextTarget, useSwarmContextTarget } from "./swarm-handoff";
+import { SwarmContextPanel } from "./swarm-context-panel";
 import type { SettingsSaveProofCredentials } from "../settings-save-proof-modal";
 import { AddProjectPanel, type AddProjectInput } from "./add-project-panel";
 import type { CigarAllowFiles } from "./allow-files";
@@ -16,15 +18,22 @@ import { compileWorkspaceContext, grantContextWorkspace, listContextWorkspaces, 
 const fieldLabel = "text-sm font-medium text-brand-dark";
 const empty = "rounded-2xl border border-dashed border-brand-dark/15 px-5 py-8 text-center text-sm text-brand-dark/70";
 const summary = "inline-flex min-h-11 cursor-pointer list-none items-center gap-1.5 text-sm font-semibold text-brand-dark/80 hover:text-brand-dark [&::-webkit-details-marker]:hidden";
+function projectCardClass(revoked: boolean, selected: boolean) {
+  if (revoked) return "border-amber-300/70 bg-amber-50/40";
+  if (selected) return "border-brand-blue/30 bg-white";
+  return "border-brand-dark/10 bg-white";
+}
 // `ready` means CIGAR is running and folders can change; `waking` lists saved folders read-only while it rests or starts.
 type Props = { ready: boolean; waking?: boolean; generation: string | null; dirty: boolean; documentsAllowed: boolean; agentsAllowed: boolean; sharingAllowed?: boolean; executionAllowed?: boolean; gate: GuardApprovalGatePublicConfig | null; allowFiles?: CigarAllowFiles };
 
 export function ContextWorkspacesPanel({ ready, waking = false, generation, dirty, documentsAllowed, agentsAllowed, sharingAllowed = false, executionAllowed = false, gate, allowFiles }: Props) {
+  const target = useSwarmContextTarget();
   const [scopes, setScopes] = useState<ContextWorkspaceScope[]>([]);
   const [loaded, setLoaded] = useState(false);
   const listable = ready || waking;
   const [query, setQuery] = useState("");
   const [brief, setBrief] = useState<{ scope: ContextWorkspaceScope; value: ContextBrief } | null>(null);
+  const briefPanel = useRef<HTMLElement>(null);
   const [previous, setPrevious] = useState<ContextBrief | null>(null);
   // Remounts the add panel so a cleared recent list is not shown again.
   const [cleared, setCleared] = useState(0);
@@ -35,6 +44,7 @@ export function ContextWorkspacesPanel({ ready, waking = false, generation, dirt
   // A list that failed while CIGAR started is asked again, not shown empty.
   const failed = useRef(false);
   const id = useId();
+  useEffect(() => { if (brief) { briefPanel.current?.focus({ preventScroll: true }); briefPanel.current?.scrollIntoView({ block: "start" }); } }, [brief]);
 
   useEffect(() => {
     const generation = ++revision.current;
@@ -86,6 +96,7 @@ export function ContextWorkspacesPanel({ ready, waking = false, generation, dirt
       const scope = await grantContextWorkspace(input.workspace, input.files, credentials, signal);
       if (signal.aborted) return;
       setScopes((values) => [...values, scope]); granted = true;
+      if (target) setSwarmContextTarget({ ...target, workspace: scope.workspace });
     });
     return granted;
   }
@@ -105,7 +116,15 @@ export function ContextWorkspacesPanel({ ready, waking = false, generation, dirt
 
   const refreshScopes = () => void perform(async (signal) => { const values = await listContextWorkspaces(signal); if (!signal.aborted) { setScopes(values); setLoaded(true); } });
   const locked = busy || !ready;
+  const targetScopes = target ? scopes.filter((scope) => !scope.revoked && scope.workspace === target.workspace) : [];
+  const targetScope = targetScopes.find((scope) => scope.app === "dashboard") ?? targetScopes.find((scope) => scope.app === target?.harness);
+  const orderedScopes = targetScope ? [targetScope, ...scopes.filter((scope) => scope !== targetScope)] : scopes;
   return <div className="space-y-8">
+    {target ? <SwarmContextPanel target={target} ready={ready} loaded={loaded} scope={targetScope}
+      filesAllowed={documentsAllowed && agentsAllowed} allowFiles={allowFiles} /> : null}
+    {ready && target && loaded && !targetScope ? <AddProjectPanel key={`${cleared}:${target.id}`} busy={busy} dirty={dirty} documentsAllowed={documentsAllowed} allowFiles={allowFiles}
+      executionAllowed={executionAllowed} gate={gate} error={error} first={scopes.length === 0} initialWorkspace={target.workspace}
+      active={scopes.filter((scope) => !scope.revoked).map((scope) => scope.workspace)} onGrant={grant} /> : null}
     <section className="space-y-4" aria-labelledby={`${id}-projects`} aria-busy={busy}>
       <div className="flex flex-wrap items-end justify-between gap-x-6 gap-y-2">
         <div><h3 id={`${id}-projects`} className={versionHeading}>Your projects</h3>
@@ -121,7 +140,7 @@ export function ContextWorkspacesPanel({ ready, waking = false, generation, dirt
         {!loaded ? <p role="status" className={empty}>Loading your folders…</p> : scopes.length === 0 ? !error && <div className={empty}><HiMiniFolderOpen aria-hidden="true" className="mx-auto mb-2 size-6 text-brand-dark/35" /><p>No projects yet.</p><p className="mt-1 text-xs text-brand-dark/60">Add one below only if you want to pick the exact files.</p></div> : <>
           <div><label htmlFor={`${id}-query`} className={fieldLabel}>Try it: what would you ask your AI?</label>
             <input id={`${id}-query`} className={versionField} maxLength={4096} value={query} onChange={(event) => setQuery(event.target.value)} placeholder="For example: how do releases work?" /></div>
-          <ul className="space-y-3">{scopes.map((scope) => <li key={scope.scope_id}><section className={"space-y-3 rounded-2xl border p-4 sm:p-5 " + (scope.revoked ? "border-amber-300/70 bg-amber-50/40" : "border-brand-dark/10 bg-white")} aria-label={`Project ${scope.workspace}`}>
+          <ul className="space-y-3">{orderedScopes.map((scope) => <li key={scope.scope_id}><section className={`space-y-3 rounded-2xl border p-4 sm:p-5 ${projectCardClass(scope.revoked, scope === targetScope)}`} aria-label={`Project ${scope.workspace}`}>
             <div className="flex flex-wrap items-start gap-3">
               <span aria-hidden="true" className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-brand-blue/10 text-brand-blue"><HiMiniFolder className="size-4" /></span>
               <div className="min-w-0 flex-1 space-y-1.5">
@@ -162,7 +181,7 @@ export function ContextWorkspacesPanel({ ready, waking = false, generation, dirt
               onChanged={() => { setBrief(null); setPrevious(null); refreshScopes(); }} /> : null}
           </section></li>)}</ul>
         </>}
-        {brief ? <section aria-label="What your AI would get" className="guard-surface-in space-y-3 rounded-2xl border border-brand-blue/20 bg-brand-blue/[0.03] p-4 sm:p-5">
+        {brief ? <section ref={briefPanel} tabIndex={-1} aria-label="What your AI would get" className="guard-surface-in space-y-3 rounded-2xl border border-brand-blue/20 bg-brand-blue/[0.03] p-4 sm:p-5">
           <h4 className="text-sm font-semibold text-brand-dark">What your AI would get</h4>
           <p className="text-sm text-brand-dark/70">Checked just now. Try again after you change files or projects.</p>
           <div className="max-h-96 space-y-3 overflow-auto rounded-xl bg-white p-3 text-sm leading-6 text-slate-700">
@@ -183,7 +202,7 @@ export function ContextWorkspacesPanel({ ready, waking = false, generation, dirt
         </section> : null}
       </>}
     </section>
-    {ready ? <AddProjectPanel key={cleared} busy={busy} dirty={dirty} documentsAllowed={documentsAllowed} allowFiles={allowFiles}
+    {ready && !target ? <AddProjectPanel key={cleared} busy={busy} dirty={dirty} documentsAllowed={documentsAllowed} allowFiles={allowFiles}
       executionAllowed={executionAllowed} gate={gate} error={error} first={scopes.length === 0}
       active={scopes.filter((scope) => !scope.revoked).map((scope) => scope.workspace)} onGrant={grant} /> : null}
     <ContextAgentsPanel ready={ready} enabled={agentsAllowed} dirty={dirty} generation={generation} scopes={scopes} gate={gate}

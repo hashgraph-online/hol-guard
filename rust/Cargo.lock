@@ -1073,6 +1073,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "guard-swarm"
+version = "0.1.0"
+dependencies = [
+ "getrandom 0.3.4",
+ "guard-runtime-windows-process",
+ "nix",
+ "serde",
+ "serde_json",
+ "sha2",
+ "sysinfo",
+ "tempfile",
+]
+
+[[package]]
 name = "guard-yanez-pulse"
 version = "0.1.0"
 dependencies = [
@@ -1171,6 +1185,7 @@ dependencies = [
  "guard-scanner",
  "guard-seatbelt",
  "guard-secure-fs",
+ "guard-swarm",
  "hex",
  "hmac",
  "landlock",

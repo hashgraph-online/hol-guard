@@ -407,6 +407,7 @@ pub(crate) fn drain_resident_workers(admission: ResidentAdmission) {
     } = admission;
     context_lane.close();
     if let Some(store) = &policy_store {
+        store.swarm().shutdown();
         store.context_assistance().shutdown();
     }
     drop(primary);
