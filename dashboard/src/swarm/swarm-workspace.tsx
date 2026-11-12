@@ -1,13 +1,15 @@
 import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { HiMiniArrowPath, HiMiniCircleStack, HiMiniFolder, HiMiniListBullet, HiMiniMagnifyingGlass, HiMiniPlus, HiMiniSquares2X2, HiMiniComputerDesktop, HiMiniCommandLine } from "react-icons/hi2";
 import type { GuardApprovalRequest } from "../guard-types";
+import { browserSessionStorage, loadWorkspaceModule } from "../lazy-workspace";
 import { filterAgents, isLive, projectsFor, UNKNOWN_PROJECT } from "./model";
 import { useSwarm } from "./use-swarm";
 import "./swarm.css";
 
-const AgentMap = lazy(() => import("./agent-map").then((module) => ({ default: module.AgentMap })));
-const AgentComposer = lazy(() => import("./composer").then((module) => ({ default: module.AgentComposer })));
-const AgentInspector = lazy(() => import("./inspector").then((module) => ({ default: module.AgentInspector })));
+const load = <T,>(id: string, loader: () => Promise<T>) => loadWorkspaceModule(loader, { moduleId: id, storage: browserSessionStorage() });
+const AgentMap = lazy(() => load("swarm-agent-map", () => import("./agent-map")).then((module) => ({ default: module.AgentMap })));
+const AgentComposer = lazy(() => load("swarm-composer", () => import("./composer")).then((module) => ({ default: module.AgentComposer })));
+const AgentInspector = lazy(() => load("swarm-inspector", () => import("./inspector")).then((module) => ({ default: module.AgentInspector })));
 
 type Props = { onNavigate: (path: string) => void; reviews?: GuardApprovalRequest[] | null; onOpenRequest: (id: string) => void };
 

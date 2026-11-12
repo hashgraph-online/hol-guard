@@ -1,5 +1,5 @@
-const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/chunks/agent-map-DufiFC3Q.js","assets/guard-dashboard.js","assets/index.css","assets/chunks/swarm-handoff-CPWKavP3.js","assets/chunks/composer-5Nje3MTa.js","assets/chunks/inspector-CbTXfCqN.js"])))=>i.map(i=>d[i]);
-import { f as fetchWithGuardAuth, r as reactExports, a as fetchContextAssistance, l as listContextWorkspaces, j as jsxRuntimeExports, H as HiMiniPlus, b as HiMiniCommandLine, c as HiMiniFolder, d as HiMiniCircleStack, e as HiMiniSquares2X2, g as HiMiniComputerDesktop, h as HiMiniMagnifyingGlass, i as HiMiniListBullet, k as HiMiniArrowPath, _ as __vitePreload } from "../guard-dashboard.js";
+const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/chunks/agent-map-C09p6Yow.js","assets/guard-dashboard.js","assets/index.css","assets/chunks/swarm-handoff-CPWKavP3.js","assets/chunks/composer-DW8UFbQG.js","assets/chunks/inspector-7BblDByV.js"])))=>i.map(i=>d[i]);
+import { f as fetchWithGuardAuth, r as reactExports, a as fetchContextAssistance, l as listContextWorkspaces, j as jsxRuntimeExports, H as HiMiniPlus, b as HiMiniCommandLine, c as HiMiniFolder, d as HiMiniCircleStack, e as HiMiniSquares2X2, g as HiMiniComputerDesktop, h as HiMiniMagnifyingGlass, i as HiMiniListBullet, k as HiMiniArrowPath, m as loadWorkspaceModule, n as browserSessionStorage, _ as __vitePreload } from "../guard-dashboard.js";
 import { w as workspaceForSwarmAgent, u as usesPromptContext } from "./swarm-handoff-CPWKavP3.js";
 const UNKNOWN_PROJECT = "@unknown";
 const stateLabel = {
@@ -194,9 +194,10 @@ function useSwarm() {
   }, [refresh]);
   return { snapshot, loading, error, stale: error !== null, context, refresh: refreshNow, acceptAgent };
 }
-const AgentMap = reactExports.lazy(() => __vitePreload(() => import("./agent-map-DufiFC3Q.js"), true ? __vite__mapDeps([0,1,2,3]) : void 0).then((module) => ({ default: module.AgentMap })));
-const AgentComposer = reactExports.lazy(() => __vitePreload(() => import("./composer-5Nje3MTa.js"), true ? __vite__mapDeps([4,1,2,3]) : void 0).then((module) => ({ default: module.AgentComposer })));
-const AgentInspector = reactExports.lazy(() => __vitePreload(() => import("./inspector-CbTXfCqN.js"), true ? __vite__mapDeps([5,1,2,3]) : void 0).then((module) => ({ default: module.AgentInspector })));
+const load = (id, loader) => loadWorkspaceModule(loader, { moduleId: id, storage: browserSessionStorage() });
+const AgentMap = reactExports.lazy(() => load("swarm-agent-map", () => __vitePreload(() => import("./agent-map-C09p6Yow.js"), true ? __vite__mapDeps([0,1,2,3]) : void 0)).then((module) => ({ default: module.AgentMap })));
+const AgentComposer = reactExports.lazy(() => load("swarm-composer", () => __vitePreload(() => import("./composer-DW8UFbQG.js"), true ? __vite__mapDeps([4,1,2,3]) : void 0)).then((module) => ({ default: module.AgentComposer })));
+const AgentInspector = reactExports.lazy(() => load("swarm-inspector", () => __vitePreload(() => import("./inspector-7BblDByV.js"), true ? __vite__mapDeps([5,1,2,3]) : void 0)).then((module) => ({ default: module.AgentInspector })));
 function SwarmWorkspace({ onNavigate, reviews = null, onOpenRequest }) {
   const { snapshot, loading, error, stale, context, refresh, acceptAgent } = useSwarm();
   const [selected, setSelected] = reactExports.useState(() => new URLSearchParams(window.location.search).get("agent"));

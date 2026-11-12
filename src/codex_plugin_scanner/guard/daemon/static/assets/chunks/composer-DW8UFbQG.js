@@ -1,5 +1,5 @@
-import { r as reactExports, j as jsxRuntimeExports, eb as GuardModalLayer, ai as HiMiniXMark, b as HiMiniCommandLine, F as HiMiniArrowRight, c as HiMiniFolder } from "../guard-dashboard.js";
-import { i as isLive, p as projectsFor, l as launchAgent, R as RejectedAction } from "./swarm-workspace-DtLnzDVB.js";
+import { r as reactExports, j as jsxRuntimeExports, ed as GuardModalLayer, ak as HiMiniXMark, b as HiMiniCommandLine, I as HiMiniArrowRight, c as HiMiniFolder } from "../guard-dashboard.js";
+import { i as isLive, p as projectsFor, l as launchAgent, R as RejectedAction } from "./swarm-workspace-bB_fFIag.js";
 import "./swarm-handoff-CPWKavP3.js";
 function AgentComposer({ snapshot, stale, initialProject, onClose, onLaunched, onNavigate }) {
   const available = snapshot.adapters.filter((a) => a.installed && a.launch_supported);
