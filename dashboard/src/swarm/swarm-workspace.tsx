@@ -28,6 +28,21 @@ export function SwarmWorkspace({ onNavigate, reviews = null, onOpenRequest }: Pr
   const needsAttention = agents.filter((a) => ["needs_attention", "failed", "interrupted"].includes(a.state)).length;
   const chosen = agents.find((a) => a.id === selected);
   const chosenReviews = chosen?.workspace ? (reviews ?? []).filter((r) => r.workspace === chosen.workspace && r.harness === chosen.harness && r.status === "pending") : [];
+  let connection = "Live on this computer";
+  if (loading) connection = "Connecting";
+  if (stale) connection = "Reconnecting";
+  let contextStatus = "Off · set up shared context";
+  if (context.enabled === null) contextStatus = "Checking availability";
+  else if (context.enabled) contextStatus = "Runtime enabled · access by project";
+  let emptyHeading = "Your next project starts here";
+  let emptyCopy = "Give an agent a task, follow its progress, and bring in more agents when the work grows.";
+  if (!snapshot) {
+    emptyHeading = "Connect to your local Guard";
+    emptyCopy = "Swarm needs the local agent service to show what is running.";
+  } else if (agents.length) {
+    emptyHeading = "No agents in this view";
+    emptyCopy = "Try another project or clear your search and attention filter.";
+  }
   useEffect(() => {
     if (snapshot && previousEpoch.current && previousEpoch.current !== snapshot.epoch) { setRestarted(true); setSelected(null); }
     if (snapshot) previousEpoch.current = snapshot.epoch;
@@ -38,12 +53,12 @@ export function SwarmWorkspace({ onNavigate, reviews = null, onOpenRequest }: Pr
   }
   return <div className="swarm-workspace">
     <header className="swarm-header"><div><div className="swarm-eyebrow"><span className="swarm-mark" aria-hidden="true"><i /><i /><i /></span>LOCAL AGENT WORKSPACE</div><h1>Swarm<span className="swarm-heading-dot">.</span></h1><p>One place to follow the work. Every agent, every project.</p></div>
-      <div className="swarm-header-actions"><span className={`swarm-connection ${stale ? "is-stale" : ""}`}><i aria-hidden="true" />{stale ? "Reconnecting" : loading ? "Connecting" : "Live on this computer"}</span><button type="button" className="swarm-button swarm-button--primary" disabled={!snapshot || stale} onClick={() => setComposing(true)}><HiMiniPlus aria-hidden="true" />New agent</button></div>
+      <div className="swarm-header-actions"><span className={`swarm-connection ${stale ? "is-stale" : ""}`}><i aria-hidden="true" />{connection}</span><button type="button" className="swarm-button swarm-button--primary" disabled={!snapshot || stale} onClick={() => setComposing(true)}><HiMiniPlus aria-hidden="true" />New agent</button></div>
     </header>
     <div className="swarm-overview"><div className="swarm-stat"><HiMiniCommandLine aria-hidden="true" /><strong>{snapshot ? active : "—"}</strong><span>Active agents</span></div>
       <button type="button" className={`swarm-stat ${attention ? "is-selected" : ""}`} aria-pressed={attention} onClick={() => setAttention(!attention)}><span className="swarm-attention-symbol" aria-hidden="true">!</span><strong>{snapshot ? needsAttention : "—"}</strong><span>Need attention</span></button>
       <div className="swarm-stat"><HiMiniFolder aria-hidden="true" /><strong>{snapshot ? projects.filter((p) => p.path && p.agents.some(isLive)).length : "—"}</strong><span>Active projects</span></div>
-      <button type="button" className="swarm-context-summary" onClick={() => onNavigate("/cigar")}><HiMiniCircleStack aria-hidden="true" /><span><strong>CIGAR context</strong><small>{context.enabled === null ? "Checking availability" : context.enabled ? "Runtime enabled · access by project" : "Off · set up shared context"}</small></span><span aria-hidden="true">↗</span></button>
+      <button type="button" className="swarm-context-summary" onClick={() => onNavigate("/cigar")}><HiMiniCircleStack aria-hidden="true" /><span><strong>CIGAR context</strong><small>{contextStatus}</small></span><span aria-hidden="true">↗</span></button>
     </div>
     {error ? <div className="swarm-banner swarm-banner--error" role="status"><span>{error}{snapshot ? " Showing the last confirmed agents." : ""}</span><button type="button" onClick={refresh}>Reconnect</button></div> : null}
     {restarted ? <div className="swarm-banner" role="status"><span>Guard restarted. Previous tasks have not been relaunched. Check each agent before sending new work.</span><button type="button" onClick={() => setRestarted(false)}>Dismiss</button></div> : null}
@@ -57,7 +72,7 @@ export function SwarmWorkspace({ onNavigate, reviews = null, onOpenRequest }: Pr
       </div>
       {attention ? <div className="swarm-filter-note">Showing agents that need attention<button type="button" onClick={() => setAttention(false)}>Show all</button></div> : null}
       <div ref={stageRef}>
-        {loading && !snapshot ? <div className="swarm-empty" role="status"><div className="swarm-empty-icon"><HiMiniArrowPath aria-hidden="true" /></div><h2>Finding your agents</h2><p>Checking recognized CLIs on this computer…</p></div> : visible.length ? <AgentMap agents={visible} selected={selected} onSelect={setSelected} context={context} mode={mode} /> : <div className="swarm-empty"><div className="swarm-empty-icon"><HiMiniCommandLine aria-hidden="true" /></div><span className="swarm-eyebrow">ROOM FOR YOUR NEXT IDEA</span><h2>{!snapshot ? "Connect to your local Guard" : agents.length ? "No agents in this view" : "Your next project starts here"}</h2><p>{!snapshot ? "Swarm needs the local agent service to show what is running." : agents.length ? "Try another project or clear your search and attention filter." : "Give an agent a task, follow its progress, and bring in more agents when the work grows."}</p>{snapshot ? agents.length ? <button type="button" className="swarm-button" onClick={() => { setSearch(""); setProject(null); setAttention(false); }}>Clear filters</button> : <button type="button" className="swarm-button swarm-button--primary" disabled={stale} onClick={() => setComposing(true)}><HiMiniPlus />Start your first agent</button> : <button type="button" className="swarm-button" onClick={refresh}>Reconnect</button>}</div>}
+        {loading && !snapshot ? <div className="swarm-empty" role="status"><div className="swarm-empty-icon"><HiMiniArrowPath aria-hidden="true" /></div><h2>Finding your agents</h2><p>Checking recognized CLIs on this computer…</p></div> : visible.length ? <AgentMap agents={visible} selected={selected} onSelect={setSelected} context={context} mode={mode} /> : <div className="swarm-empty"><div className="swarm-empty-icon"><HiMiniCommandLine aria-hidden="true" /></div><span className="swarm-eyebrow">ROOM FOR YOUR NEXT IDEA</span><h2>{emptyHeading}</h2><p>{emptyCopy}</p>{snapshot ? (agents.length ? <button type="button" className="swarm-button" onClick={() => { setSearch(""); setProject(null); setAttention(false); }}>Clear filters</button> : <button type="button" className="swarm-button swarm-button--primary" disabled={stale} onClick={() => setComposing(true)}><HiMiniPlus />Start your first agent</button>) : <button type="button" className="swarm-button" onClick={refresh}>Reconnect</button>}</div>}
       </div>
       {snapshot ? <footer className="swarm-coverage"><span><i aria-hidden="true" />{snapshot.discovery.detail}{snapshot.discovery.limited ? " Discovery is limited to the first 256 processes." : ""}</span><span>{visible.length} shown</span></footer> : null}
       </section>

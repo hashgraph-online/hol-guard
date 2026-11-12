@@ -124,6 +124,8 @@ pub(crate) fn run(registry: Arc<Mutex<Registry>>, id: String) {
         drop(process); // Reap the owned tree before advertising a stopped state.
         let mut again = false;
         update(&registry, &id, |run| {
+            // A stop or interrupt accepted after the output loop exits still wins.
+            cancel = cancel.max(run.cancel);
             run.agent.pid = None;
             run.agent.input_tokens = run.agent.input_tokens.saturating_add(usage.0);
             run.agent.output_tokens = run.agent.output_tokens.saturating_add(usage.1);

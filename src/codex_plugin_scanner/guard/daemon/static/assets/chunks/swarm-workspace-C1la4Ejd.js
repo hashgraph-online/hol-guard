@@ -342,6 +342,7 @@ function AgentInspector({ agent, epoch, stale, onClose, onRefresh, onNavigate, c
   const cigar = contextFor(agent, context.enabled, context.scopes);
   async function act(action) {
     if (busy || stale) return;
+    if (pending.current && pending.current.action !== action) return;
     setBusy(true);
     setError(null);
     setNotice(null);
@@ -352,7 +353,10 @@ function AgentInspector({ agent, epoch, stale, onClose, onRefresh, onNavigate, c
       if (!alive.current) return;
       pending.current = null;
       if (action === "message") setDraft("");
-      setNotice(action === "stop" ? "Stop requested. Waiting for the process to exit." : action === "interrupt" ? "Interruption requested." : "Instruction accepted by the agent service.");
+      let message = "Instruction accepted by the agent service.";
+      if (action === "stop") message = "Stop requested. Waiting for the process to exit.";
+      else if (action === "interrupt") message = "Interruption requested.";
+      setNotice(message);
       setConfirmStop(false);
       onRefresh();
     } catch (e) {
@@ -385,7 +389,11 @@ function AgentInspector({ agent, epoch, stale, onClose, onRefresh, onNavigate, c
     /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "swarm-detail-tabs", role: "tablist", "aria-label": "Agent information", onKeyDown: (e) => {
       const names = ["Activity", "Context", "Details"];
       const index = names.indexOf(tab);
-      const next = e.key === "ArrowRight" ? (index + 1) % 3 : e.key === "ArrowLeft" ? (index + 2) % 3 : e.key === "Home" ? 0 : e.key === "End" ? 2 : -1;
+      let next = -1;
+      if (e.key === "ArrowRight") next = (index + 1) % 3;
+      else if (e.key === "ArrowLeft") next = (index + 2) % 3;
+      else if (e.key === "Home") next = 0;
+      else if (e.key === "End") next = 2;
       if (next >= 0) {
         e.preventDefault();
         setTab(names[next]);
@@ -494,7 +502,7 @@ function AgentInspector({ agent, epoch, stale, onClose, onRefresh, onNavigate, c
     pending.current && !busy ? /* @__PURE__ */ jsxRuntimeExports.jsx("button", { className: "swarm-text-button", disabled: stale, type: "button", onClick: () => void act(pending.current.action), children: "Check unconfirmed action" }) : null,
     confirmStop ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "swarm-stop-confirm", role: "group", "aria-label": "Confirm stop", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: "Stop this agent and the work it is running? Changes already made to files will remain." }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("button", { className: "swarm-button swarm-button--danger", disabled: stale || busy, type: "button", onClick: () => void act("stop"), children: "Stop this agent" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("button", { className: "swarm-button swarm-button--danger", disabled: stale || busy || pending.current !== null && pending.current.action !== "stop", type: "button", onClick: () => void act("stop"), children: "Stop this agent" }),
       /* @__PURE__ */ jsxRuntimeExports.jsx("button", { className: "swarm-text-button", type: "button", disabled: busy, onClick: () => setConfirmStop(false), children: "Keep working" })
     ] }) : null
   ] });
@@ -593,6 +601,21 @@ function SwarmWorkspace({ onNavigate, reviews = null, onOpenRequest }) {
   const needsAttention = agents.filter((a) => ["needs_attention", "failed", "interrupted"].includes(a.state)).length;
   const chosen = agents.find((a) => a.id === selected);
   const chosenReviews = chosen?.workspace ? (reviews ?? []).filter((r) => r.workspace === chosen.workspace && r.harness === chosen.harness && r.status === "pending") : [];
+  let connection = "Live on this computer";
+  if (loading) connection = "Connecting";
+  if (stale) connection = "Reconnecting";
+  let contextStatus = "Off · set up shared context";
+  if (context.enabled === null) contextStatus = "Checking availability";
+  else if (context.enabled) contextStatus = "Runtime enabled · access by project";
+  let emptyHeading = "Your next project starts here";
+  let emptyCopy = "Give an agent a task, follow its progress, and bring in more agents when the work grows.";
+  if (!snapshot) {
+    emptyHeading = "Connect to your local Guard";
+    emptyCopy = "Swarm needs the local agent service to show what is running.";
+  } else if (agents.length) {
+    emptyHeading = "No agents in this view";
+    emptyCopy = "Try another project or clear your search and attention filter.";
+  }
   reactExports.useEffect(() => {
     if (snapshot && previousEpoch.current && previousEpoch.current !== snapshot.epoch) {
       setRestarted(true);
@@ -625,7 +648,7 @@ function SwarmWorkspace({ onNavigate, reviews = null, onOpenRequest }) {
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "swarm-header-actions", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: `swarm-connection ${stale ? "is-stale" : ""}`, children: [
           /* @__PURE__ */ jsxRuntimeExports.jsx("i", { "aria-hidden": "true" }),
-          stale ? "Reconnecting" : loading ? "Connecting" : "Live on this computer"
+          connection
         ] }),
         /* @__PURE__ */ jsxRuntimeExports.jsxs("button", { type: "button", className: "swarm-button swarm-button--primary", disabled: !snapshot || stale, onClick: () => setComposing(true), children: [
           /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniPlus, { "aria-hidden": "true" }),
@@ -653,7 +676,7 @@ function SwarmWorkspace({ onNavigate, reviews = null, onOpenRequest }) {
         /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniCircleStack, { "aria-hidden": "true" }),
         /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { children: [
           /* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: "CIGAR context" }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("small", { children: context.enabled === null ? "Checking availability" : context.enabled ? "Runtime enabled · access by project" : "Off · set up shared context" })
+          /* @__PURE__ */ jsxRuntimeExports.jsx("small", { children: contextStatus })
         ] }),
         /* @__PURE__ */ jsxRuntimeExports.jsx("span", { "aria-hidden": "true", children: "↗" })
       ] })
@@ -721,8 +744,8 @@ function SwarmWorkspace({ onNavigate, reviews = null, onOpenRequest }) {
         ] }) : visible.length ? /* @__PURE__ */ jsxRuntimeExports.jsx(AgentMap, { agents: visible, selected, onSelect: setSelected, context, mode }) : /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "swarm-empty", children: [
           /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "swarm-empty-icon", children: /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniCommandLine, { "aria-hidden": "true" }) }),
           /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "swarm-eyebrow", children: "ROOM FOR YOUR NEXT IDEA" }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { children: !snapshot ? "Connect to your local Guard" : agents.length ? "No agents in this view" : "Your next project starts here" }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: !snapshot ? "Swarm needs the local agent service to show what is running." : agents.length ? "Try another project or clear your search and attention filter." : "Give an agent a task, follow its progress, and bring in more agents when the work grows." }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { children: emptyHeading }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: emptyCopy }),
           snapshot ? agents.length ? /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", className: "swarm-button", onClick: () => {
             setSearch("");
             setProject(null);

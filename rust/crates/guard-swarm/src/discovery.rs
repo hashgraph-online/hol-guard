@@ -200,29 +200,35 @@ fn resolve(binary: &str, search_path: Option<&std::ffi::OsStr>) -> Option<PathBu
         if !folder.is_absolute() || !seen.insert(folder.clone()) {
             continue;
         }
-        let name = if cfg!(windows) {
-            format!("{binary}.exe")
+        let names: &[String] = if cfg!(windows) {
+            &[
+                format!("{binary}.exe"),
+                format!("{binary}.cmd"),
+                format!("{binary}.bat"),
+            ]
         } else {
-            binary.to_owned()
+            &[binary.to_owned()]
         };
-        let file = folder.join(name);
-        let Ok(real) = file.canonicalize() else {
-            continue;
-        };
-        let Ok(metadata) = real.metadata() else {
-            continue;
-        };
-        if !metadata.is_file() {
-            continue;
-        }
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::PermissionsExt;
-            if metadata.permissions().mode() & 0o111 == 0 {
+        for name in names {
+            let file = folder.join(name);
+            let Ok(real) = file.canonicalize() else {
+                continue;
+            };
+            let Ok(metadata) = real.metadata() else {
+                continue;
+            };
+            if !metadata.is_file() {
                 continue;
             }
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::PermissionsExt;
+                if metadata.permissions().mode() & 0o111 == 0 {
+                    continue;
+                }
+            }
+            return Some(real);
         }
-        return Some(real);
     }
     None
 }
@@ -301,5 +307,17 @@ mod tests {
         assert_eq!(agents.len(), MAX_AGENTS);
         assert!(limited);
         assert!(resolve("codex", Some(std::ffi::OsStr::new(".:relative"))).is_none());
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn windows_resolves_cmd_launchers_installed_by_npm() {
+        let directory = tempfile::tempdir().unwrap();
+        std::fs::write(directory.path().join("codex.cmd"), "@echo off\r\n").unwrap();
+        let path = std::ffi::OsString::from(directory.path());
+        assert_eq!(
+            resolve("codex", Some(&path)),
+            Some(directory.path().join("codex.cmd").canonicalize().unwrap())
+        );
     }
 }
