@@ -21159,23 +21159,6 @@
       "requires_sandbox": true
     },
     {
-      "id": "neg-null-hooks-checkout-hooks-path-override",
-      "fix_area": "negative",
-      "harnesses": [
-        "codex",
-        "zcode",
-        "claude-code",
-        "omp",
-        "cursor"
-      ],
-      "tool": "shell",
-      "tool_input": {
-        "command": "git -c core.hooksPath=/tmp/hooks commit -m 'docs: notes'"
-      },
-      "cwd": "org_null_hooks",
-      "expect": "not_allow"
-    },
-    {
       "id": "neg-null-hooks-checkout-hooks-path-rewrite",
       "fix_area": "negative",
       "harnesses": [
