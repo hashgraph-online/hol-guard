@@ -472,3 +472,36 @@ fn rejects_malformed_sequences_slices_and_optionals() {
         assert!(!safe_filter(filter), "expected refused: {filter}");
     }
 }
+
+#[test]
+fn refuses_stacked_ranges_and_runaway_work() {
+    // Each call is bounded on its own, but stacked calls multiply outputs.
+    for filter in [
+        "range(100000) | range(100000) | range(100000)",
+        "range(100000) as $x | range(100000)",
+        "def a: range(100000); a | a | a",
+        "[range(3), range(3)]",
+    ] {
+        assert!(!safe_filter(filter), "expected refused: {filter}");
+    }
+    assert!(safe_filter("[range(3)]"));
+    assert!(safe_filter(".[] | .range"));
+    assert!(safe_filter(".changes | length"));
+
+    // A refused argument nested deeply used to be read twice per level.
+    let nested = format!("{}env{}", "map(".repeat(32), ")".repeat(32));
+    let started = std::time::Instant::now();
+    assert!(!safe_filter(&nested));
+    assert!(started.elapsed() < std::time::Duration::from_secs(2));
+
+    // Unused definitions that grow sixteenfold per level stop at the budget.
+    let mut chain = String::from("def a0: .; ");
+    for level in 1..6 {
+        let body = vec![format!("a{}", level - 1); 16].join(",");
+        chain.push_str(&format!("def a{level}: {body}; "));
+    }
+    chain.push('.');
+    let started = std::time::Instant::now();
+    assert!(!safe_filter(&chain));
+    assert!(started.elapsed() < std::time::Duration::from_secs(2));
+}

@@ -40,61 +40,6 @@ pub(super) fn prepared(filter: &str) -> Option<String> {
     (program.len() <= MAX_PROGRAM && nesting_bounded(&program)).then_some(program)
 }
 
-/// Each admitted `range` call has its own emission bound. Refuse a filter with
-/// multiple calls after definitions are inlined, so composition cannot multiply
-/// those per-call bounds.
-pub(super) fn range_budget(program: &str) -> bool {
-    let mut calls = 0usize;
-    range_calls_within_budget(program, &mut calls)
-}
-
-fn range_calls_within_budget(program: &str, calls: &mut usize) -> bool {
-    let bytes = program.as_bytes();
-    let mut index = 0;
-    while index < bytes.len() {
-        if bytes[index] == b'"' {
-            let Some(end) = string_end(bytes, index) else {
-                return false;
-            };
-            let mut inner = index + 1;
-            while inner < end {
-                if bytes[inner] == b'\\' && bytes.get(inner + 1) == Some(&b'(') {
-                    let Some(close) = interpolation_end(bytes, inner + 1) else {
-                        return false;
-                    };
-                    if !range_calls_within_budget(&program[inner + 2..close], calls) {
-                        return false;
-                    }
-                    inner = close + 1;
-                } else if bytes[inner] == b'\\' {
-                    inner += 2;
-                } else {
-                    inner += 1;
-                }
-            }
-            index = end + 1;
-            continue;
-        }
-        if keyword(bytes, index, "range") {
-            let end = index + "range".len();
-            let mut next = end;
-            while bytes.get(next).is_some_and(u8::is_ascii_whitespace) {
-                next += 1;
-            }
-            if bytes.get(next) == Some(&b'(') {
-                *calls += 1;
-                if *calls > 1 {
-                    return false;
-                }
-            }
-            index = end;
-        } else {
-            index += 1;
-        }
-    }
-    true
-}
-
 fn plain_whitespace(filter: &str) -> Option<String> {
     let bytes = filter.as_bytes();
     let mut spaced = String::with_capacity(filter.len());
@@ -186,6 +131,9 @@ fn substitute(text: &str, bodies: &[(&str, String)]) -> Option<String> {
         let byte = bytes[index];
         if byte == b'"' {
             index = substitute_string(text, index, bodies, &mut output)?;
+            if output.len() > MAX_PROGRAM {
+                return None;
+            }
             continue;
         }
         let word_start = (byte.is_ascii_alphabetic() || byte == b'_')
@@ -202,14 +150,15 @@ fn substitute(text: &str, bodies: &[(&str, String)]) -> Option<String> {
             .map_or(text.len(), |offset| index + offset);
         let word = &text[index..end];
         let next = text[end..].trim_start().as_bytes().first().copied();
-        match bodies.iter().rev().find(|(name, _)| *name == word) {
+        let replacement = match bodies.iter().rev().find(|(name, _)| *name == word) {
             Some(_) if next == Some(b'(') => return None,
-            Some((_, body)) if next != Some(b':') => output.push_str(body),
-            _ => output.push_str(word),
-        }
-        if output.len() > MAX_PROGRAM {
+            Some((_, body)) if next != Some(b':') => body.as_str(),
+            _ => word,
+        };
+        if output.len() + replacement.len() > MAX_PROGRAM {
             return None;
         }
+        output.push_str(replacement);
         index = end;
     }
     Some(output)
@@ -232,6 +181,9 @@ fn substitute_string(
             let close = interpolation_end(bytes, index + 1)?;
             output.push_str(&text[copied..index + 2]);
             output.push_str(&substitute(&text[index + 2..close], bodies)?);
+            if output.len() > MAX_PROGRAM {
+                return None;
+            }
             copied = close;
             index = close + 1;
         } else {

@@ -31,6 +31,8 @@
 //! A shorthand object entry (`{number, title}`) names a field of the value
 //! read, so it is admitted under the same key rules as `{number: .number}`.
 
+#[path = "jq_filter_budget.rs"]
+mod budget;
 #[path = "jq_filter_program.rs"]
 mod program;
 #[path = "jq_filter_terms.rs"]
@@ -125,8 +127,9 @@ const FORMATS: &[&str] = &[
 const COMPARISONS: &[&str] = &["==", "!=", "<=", ">=", "<", ">"];
 
 pub(super) fn safe_filter(filter: &str) -> bool {
+    budget::reset();
     program::prepared(filter).is_some_and(|program| {
-        program::range_budget(&program)
+        budget::range_budget(&program)
             && valid_characters(&program)
             && variables_bound(&program)
             && pipeline(&program)
@@ -134,6 +137,9 @@ pub(super) fn safe_filter(filter: &str) -> bool {
 }
 
 fn pipeline(filter: &str) -> bool {
+    if !budget::spend() {
+        return false;
+    }
     let Some(stages) = split_marker(filter, b"|") else {
         return false;
     };
@@ -379,6 +385,9 @@ fn operand(part: &str) -> bool {
 }
 
 fn stage(part: &str) -> bool {
+    if !budget::spend() {
+        return false;
+    }
     // `map(.a)?`, `(.a)?`: the optional operator drops the error a stage
     // raises on a value of the wrong type, and reads nothing the stage did not.
     let part = part.strip_suffix('?').map_or(part, str::trim_end);

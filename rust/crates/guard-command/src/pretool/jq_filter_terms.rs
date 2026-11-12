@@ -260,6 +260,12 @@ fn call_builtin(stage: &str) -> bool {
     let Some(arguments) = split_marker(argument, b";") else {
         return false;
     };
+    // A one-argument call `filter_builtin` already read, such as `map(f)`,
+    // is not read again: a refused argument read twice at every level
+    // doubles the work with each nested call.
+    if arguments.len() == 1 && super::FILTER_BUILTINS.contains(&name) {
+        return false;
+    }
     arities.contains(&arguments.len())
         && (name != "range" || bounded_range(&arguments))
         && arguments
