@@ -50,6 +50,52 @@ fn quoted_heredocs_are_projected_only_when_they_feed_cat() {
     }
 }
 
+/// `git commit -F -` reads a quoted heredoc only as the message it records,
+/// the way the decision's own projection reads it. The sandbox has to read it
+/// the same way, or a commit the decision sends here has no plan to run.
+#[test]
+fn a_quoted_heredoc_carries_a_commit_message() {
+    for (raw, projected) in [
+        (
+            "git commit -q --allow-empty -F - <<'MSG'\nchore(report): record the window\nMSG",
+            "git commit -q --allow-empty -F -",
+        ),
+        (
+            "git commit --file=- <<'MSG'\nfeat: add\nMSG",
+            "git commit --file=-",
+        ),
+        (
+            "git add -A && git commit -F- <<\"MSG\"\nfeat: add\nMSG",
+            "git add -A && git commit -F-",
+        ),
+        // A separator or `#` inside quotes is part of the word.
+        (
+            "git commit --author 'Dev #1 (bot) <dev@example.test>' -F - <<'MSG'\nfeat: add\nMSG",
+            "git commit --author 'Dev #1 (bot) <dev@example.test>' -F -",
+        ),
+    ] {
+        assert_eq!(project(raw).as_deref(), Some(projected), "{raw:?}");
+    }
+    for raw in [
+        // An unquoted delimiter expands the body before Git sees it.
+        "git commit -F - <<MSG\n$(cat ~/.ssh/id_rsa)\nMSG",
+        // Only the commit's message reads standard input.
+        "git apply <<'MSG'\ndiff --git a/x b/x\nMSG",
+        "git hash-object -w --stdin <<'MSG'\npayload\nMSG",
+        "git commit -m 'subject' <<'MSG'\nunused\nMSG",
+        "git commit -F notes.txt <<'MSG'\nunused\nMSG",
+        // A global option chooses another repository or configuration.
+        "git -C ../other commit -F - <<'MSG'\nfeat: add\nMSG",
+        "GIT_DIR=../other/.git git commit -F - <<'MSG'\nfeat: add\nMSG",
+        "env git commit -F - <<'MSG'\nfeat: add\nMSG",
+        // A comment disables the operator, so the shell runs the body.
+        "git commit -F - # <<'MSG'\nrm -rf build\nMSG",
+        "cat #<<'MSG'\nrm -rf build\nMSG",
+    ] {
+        assert_eq!(project(raw), None, "{raw:?}");
+    }
+}
+
 #[test]
 fn a_quoted_heredoc_feeds_python_only_a_builtin_only_program() {
     let raw = "python3 - <<'EOF'\ns=open('a').read()\nopen('a','w').write(s.replace('if (a && import.meta.url) {', 'if (a) {'))\nEOF\nls";

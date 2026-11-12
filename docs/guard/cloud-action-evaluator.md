@@ -129,6 +129,62 @@ otherwise `null`), `action: "block"`, `dispatch_permitted: false`, and `error: {
 
 Severity runs `allow`, `warn`, `review`, `require-reapproval`, `sandbox-required`, `block`.
 
+## Version 2 requests
+
+A `guard.cloud-action-evaluation.v2` request carries everything a version 1 request does, plus:
+
+- `facts`: a `guard.action-facts.v2` description of the call (class, object, reversibility, scope, counts,
+  audience, environment, money, sensitivity, findings). Each fact is `known`, `unknown`, or `unsupported`. Facts
+  come from trusted extractors, provider read-backs, and detectors, never from model text.
+- `usage_windows`: authenticated counters per named window before this call, such as deletes in the last hour.
+- `session_flow`: what the host session has already seen (`untrusted_content_seen`, `sensitive_data_seen`,
+  `injection_signal_seen`), or `null` when the caller keeps no journal. With `null`, session flags read as unknown.
+- `supported_obligations`: the obligations this caller can carry out.
+- `policy.fact_rules`: rules with an action pattern (as in version 1) plus a `facts` selector and optional
+  `obligations`. `policy.pack_digest` names the policy pack the rules came from, or is `null`.
+- `saved_consents` with a `scope`: `{"exact": {"action_identity_sha256"}}`,
+  `{"resource": {"action_id", "connection_id", "resource_id"}}`, or
+  `{"bounded": {"action_id", "connection_id", "selector", "selector_sha256"}}`.
+
+The answer is a `guard.cloud-action-evaluation-result.v2` result. A version 2 request with no fact rules and a
+fact class that matches the binding's effect decides exactly as the same request in version 1.
+
+The policy step changes as follows. Everything else in the precedence list above stays the same.
+
+1. **Effect.** The floor is the stricter of the binding's effect and the effect the fact class implies (`read`,
+   `delete` is destructive, `admin` is admin, every other class is a write). When the facts raise it, the reason
+   codes include `facts_effect`. An admin effect is still always `block`.
+2. **Version 1 rules** decide as before and give the default. A version 1 rule was written for the binding's
+   declared effect, so when the facts raise the effect a matched rule cannot decide below the raised effect's
+   floor; the reason codes then add `facts_effect_floor`.
+3. **Fact rules join.** A selector answers yes, no, or unknown. Let `D` be the rules that definitely match and `U`
+   the rules whose answer depends on an unknown fact. The outcome is the stricter of `outcome(D)` and
+   `outcome(D ∪ U)`, where `outcome(S)` is the most severe action among `S` and any matched version 1 rule, or the
+   default when there is none. A fact rule can lower a default, such as allowing a recoverable delete of at
+   most 25 messages. An unknown fact never lowers anything, and rule order never matters. Reason codes add
+   `fact_rule` when a rule definitely matched and `fact_unknown` when an unknown fact made the result stricter.
+   `matched_rule_ids` lists definite matches. `unknown_fact_rule_ids` lists the rules that depended on an
+   unknown fact.
+4. **Windows.** A selector bound `{"window", "at_most" | "above"}` compares the counter plus this call's known
+   `record_count` with the bound. A missing counter counts as over the limit. An unknown record count is
+   unknown.
+5. **Obligations.** The `obligations` of every rule in `D ∪ U` are returned: `count_readback`,
+   `preview_required`, `redact_result_secrets`, `annotate_untrusted_result`. If any is missing from
+   `supported_obligations`, the action becomes `block`, the reason codes add `capability_unavailable`, and
+   `missing_obligations` names it.
+6. **Saved consent** still answers only `review` or `require-reapproval`, never `block` or `sandbox-required`.
+   `exact` matches the action identity. `resource` matches this action on this connection and resource.
+   `bounded` matches this action on this connection only when its selector answers yes, so an unknown fact never
+   satisfies it. `selector_sha256` must equal the digest of the selector's canonical JSON. Resource and bounded
+   scopes do not answer `require-reapproval` unless the facts say the change is reversible or recoverable. A
+   permanent or unknown change needs exact consent. When several match, `always` beats `once`, and then the
+   narrowest scope wins.
+
+Every reviewable result lists `consent_options`. Both kinds, Allow once and Always allow, are always offered for
+the exact call, and for the resource too when a resource scope could apply. The result also reports
+`consent_scope`, `facts_digest` and `pack_digest`. `evaluation_provenance_digest` additionally covers the fact
+rules, the facts, the windows, and the session flow.
+
 ## Action identity
 
 `action_identity_sha256` is a domain-separated SHA-256 over the workspace, connection, account digest, action id,
@@ -137,7 +193,8 @@ accepted subset: keys sorted by UTF-16 code units, minimal string escapes, integ
 exact code points with no Unicode normalization, so two spellings that look alike are two actions.
 
 Changing an argument, the account, the connection, the workspace, or the binding changes the identity and voids any
-saved consent. The principal's subject, grant, the request id, and the time do not.
+`exact` saved consent. `resource` and `bounded` consents match on their own keys, as described under version 2
+requests. The principal's subject, grant, the request id, and the time do not change the identity.
 
 ## Workspace activation
 
@@ -160,7 +217,8 @@ evaluator and does not change device-side controls.
 | `too_deep` | Nesting deeper than 32 levels |
 | `unsupported_number` | A non-integer, an exponent, or an integer outside +/-(2^53 - 1) |
 | `too_large` | Canonical arguments over 64 KiB |
-| `unsupported_version` | Request schema is not `guard.cloud-action-evaluation.v1` |
+| `unsupported_version` | Request schema is neither `guard.cloud-action-evaluation.v1` nor `.v2` |
+| `facts_invalid`, `facts_inconsistent`, `facts_unsupported_version`, `facts_limit` | Version 2 `facts` failed decoding, a consistency check, the version check, or the 32 KiB bound |
 | `invalid_request` | Unknown or missing field, bad label, timestamp, digest, rule, or resource argument |
 | `limit` | Too many rules, consents, or activation controls, or a request line over 4 MiB |
 | `binding_unavailable` | `binding_set_digest` is not the loaded set's digest |
@@ -188,3 +246,46 @@ Also:
 - Keep consent records and consume a `once` consent after it is used. The evaluator does not.
 - Record `evaluation_provenance_digest` and `action_identity_sha256` with the decision.
 - Restart the evaluator, and reload the binding set digest, whenever the binding set changes.
+
+## Content inspection
+
+`cloud-action inspect` reads what an action carries rather than deciding on it.
+It takes no flags and no binding set, and answers one line per request line:
+
+```bash
+hol-guard-runtime cloud-action inspect
+guard-cloud-action inspect
+```
+
+A request names the action's arguments and, after dispatch, its result. Either
+may be `null`.
+
+```json
+{"schema": "guard.cloud-action-inspection.v1", "request_id": "req-1",
+ "arguments": {"body": "..."}, "result": null}
+```
+
+The result reports what three deterministic detectors found:
+
+| Field | Meaning |
+| --- | --- |
+| `findings` | One entry per finding: `kind` (`secret` or `injection_signal`), `source` (`arguments` or `result`), `path` (a JSON Pointer into that source), and for a secret the matching rule's `rule_id`, `family`, `severity` and `confidence`. |
+| `fact_findings` | The `guard.action-facts.v2` findings to record: `secret_in_arguments`, `secret_in_result`, `injection_signal_in_result`. |
+| `pii_kinds`, `sensitivity_hints` | Personal-data shapes seen (`email_address`, `phone_number`, `payment_card` with a valid Luhn digit, `national_id`) and the sensitivity they suggest. Hints only; this is not data-loss prevention. |
+| `redactions` | Where each credential sits: `source`, `path`, and a `span` with `utf8` and `utf16` offsets into the string at `path`. A credential inside a base64 payload is covered by a span over the whole payload. A `null` span replaces the whole value at `path`; that is how a credential used as an object key is removed. |
+| `complete` | `false` when a finding or redaction limit was reached or a credential could not be located in one value. Treat an incomplete result like a refusal. |
+
+Nothing in the result repeats matched bytes. Secrets come from the same
+`guard-scanner` rules the local secret scan uses, including credentials inside
+base64 payloads; low-confidence entropy guesses are left out, because a secret
+in outbound arguments stops the action. The injection signal is read in result
+text only, from the native prompt-injection detection plus a short list of
+instructions aimed at whoever reads a result. It is a signal for the session
+ledger, never a verdict on its own.
+
+A request over 2 MiB, with more than 20,000 string and number values, or one
+that takes longer than 1.5 seconds is refused with `error.code` `limit` or
+`deadline`, `complete: false` and empty lists. A refusal means nothing is known
+about the content; the caller decides what that means for delivery. Malformed
+requests use the same codes as the evaluator, plus `invalid_request` for a
+missing `arguments` or `result` or an unknown field.
