@@ -20,7 +20,7 @@ use std::sync::LazyLock;
 
 #[path = "ci_workflow_shell.rs"]
 mod shell;
-use shell::{inline_scripts, pipes_credential_read, simple_commands};
+use shell::{inline_scripts, pipes_credential_read, runs_variable_sender, simple_commands};
 
 const BODY_KEYS: [&str; 4] = ["content", "contents", "new_string", "newString"];
 const PATCH_KEYS: [&str; 3] = ["command", "input", "_input"];
@@ -351,17 +351,6 @@ fn runs_network_tool(segment: &str) -> bool {
     })
 }
 
-/// True when this segment runs a command named by a variable and passes a
-/// curl-style body or upload flag (`$CURL -d "$(cat .env)" ...`).
-fn runs_variable_command(segment: &str) -> bool {
-    command_words(segment).first().is_some_and(|word| {
-        word.starts_with('$')
-            && ["-d ", "--data", "-F ", "--form", "-T ", "--upload-file"]
-                .iter()
-                .any(|flag| segment.contains(flag))
-    })
-}
-
 /// True when one command line sends a credential file to a network host.
 fn command_uploads(line: &str, depth: usize) -> bool {
     let line = YAML_PREFIX.replace(line, "");
@@ -381,9 +370,8 @@ fn command_uploads(line: &str, depth: usize) -> bool {
     }
     // `curl -d "$(cat .env)" ...`.
     pipes_credential_read(&line, 0)
-        || (commands
-            .iter()
-            .any(|command| runs_network_tool(command) || runs_variable_command(command))
+        || ((commands.iter().any(|command| runs_network_tool(command))
+            || runs_variable_sender(&line, &commands))
             && SUBSTITUTED_READ
                 .captures_iter(&line)
                 .filter_map(|captures| captures.name("file"))

@@ -1,7 +1,7 @@
 //! How a CI step's command line splits into pipelines and groups, so a
 //! credential read is tied to the network stage it actually feeds.
 
-use super::{reads_credential_file, runs_network_tool, INLINE_SCRIPT};
+use super::{command_words, reads_credential_file, runs_network_tool, INLINE_SCRIPT};
 
 /// A group the scanner is inside: the character that closes it, whether that
 /// is a `}` that closes only in command position, and the quoting to resume
@@ -242,4 +242,26 @@ pub(super) fn pipes_credential_read(line: &str, depth: usize) -> bool {
     }) || groups
         .iter()
         .any(|inner| pipes_credential_read(inner, depth + 1))
+}
+
+/// True when a line runs a command named by a variable that may send data:
+/// the line names a URL or passes a curl-style body, header or upload flag,
+/// attached or not (`$CURL -d"$(cat .env)" ...`, `$CURL "https://...?d=..."`).
+pub(super) fn runs_variable_sender(line: &str, commands: &[String]) -> bool {
+    let named = commands.iter().any(|command| {
+        command_words(command)
+            .first()
+            .is_some_and(|word| word.starts_with('$'))
+    });
+    let sends = line.contains("://")
+        || line.split_whitespace().any(|word| {
+            let word = word.trim_start_matches(['"', '\'']);
+            ["-d", "-F", "-T", "-H"]
+                .iter()
+                .any(|flag| word.starts_with(flag))
+                || ["--data", "--form", "--header", "--json", "--upload-file"]
+                    .iter()
+                    .any(|flag| word.starts_with(flag))
+        });
+    named && sends
 }
