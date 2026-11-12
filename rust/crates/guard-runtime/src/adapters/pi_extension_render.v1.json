@@ -32,7 +32,7 @@
 "    const flat = raw.split('\\\"\\\"\\\"').join('\\\"').split('\\'\\'\\'').join('\\'');",
 "    const head = flat.split(/^\\s*\\[/m)[0];",
 "    const token = (src, key) => {",
-"      const m = src.match(new RegExp('(?:^|\\\\n)\\\\s*' + key + '\\\\s*=\\\\s*([\"\\'])\\\\s*([A-Za-z_-]+)\\\\s*\\\\1', 'm'));",
+"      const m = src.match(new RegExp('(?:^|\\\\n)\\\\s*[\"\\']?' + key + '[\"\\']?\\\\s*=\\\\s*([\"\\'])\\\\s*([A-Za-z_-]+)\\\\s*\\\\1', 'm'));",
 "      return m?.[2];",
 "    };",
 "    const normPosture = (v) => v === undefined ? undefined : v.trim().replace(/-/g, '_').toLowerCase();",
