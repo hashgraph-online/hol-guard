@@ -1,12 +1,13 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { HiMiniArrowPath, HiMiniCircleStack, HiMiniFolder, HiMiniListBullet, HiMiniMagnifyingGlass, HiMiniPlus, HiMiniSquares2X2, HiMiniComputerDesktop, HiMiniCommandLine } from "react-icons/hi2";
 import type { GuardApprovalRequest } from "../guard-types";
-import { AgentMap } from "./agent-map";
-import { AgentComposer } from "./composer";
-import { AgentInspector } from "./inspector";
 import { filterAgents, isLive, projectsFor, UNKNOWN_PROJECT } from "./model";
 import { useSwarm } from "./use-swarm";
 import "./swarm.css";
+
+const AgentMap = lazy(() => import("./agent-map").then((module) => ({ default: module.AgentMap })));
+const AgentComposer = lazy(() => import("./composer").then((module) => ({ default: module.AgentComposer })));
+const AgentInspector = lazy(() => import("./inspector").then((module) => ({ default: module.AgentInspector })));
 
 type Props = { onNavigate: (path: string) => void; reviews?: GuardApprovalRequest[] | null; onOpenRequest: (id: string) => void };
 
@@ -72,13 +73,13 @@ export function SwarmWorkspace({ onNavigate, reviews = null, onOpenRequest }: Pr
       </div>
       {attention ? <div className="swarm-filter-note">Showing agents that need attention<button type="button" onClick={() => setAttention(false)}>Show all</button></div> : null}
       <div ref={stageRef}>
-        {loading && !snapshot ? <div className="swarm-empty" role="status"><div className="swarm-empty-icon"><HiMiniArrowPath aria-hidden="true" /></div><h2>Finding your agents</h2><p>Checking recognized CLIs on this computer…</p></div> : visible.length ? <AgentMap agents={visible} selected={selected} onSelect={setSelected} context={context} mode={mode} /> : <div className="swarm-empty"><div className="swarm-empty-icon"><HiMiniCommandLine aria-hidden="true" /></div><span className="swarm-eyebrow">ROOM FOR YOUR NEXT IDEA</span><h2>{emptyHeading}</h2><p>{emptyCopy}</p>{snapshot ? (agents.length ? <button type="button" className="swarm-button" onClick={() => { setSearch(""); setProject(null); setAttention(false); }}>Clear filters</button> : <button type="button" className="swarm-button swarm-button--primary" disabled={stale} onClick={() => setComposing(true)}><HiMiniPlus />Start your first agent</button>) : <button type="button" className="swarm-button" onClick={refresh}>Reconnect</button>}</div>}
+        <Suspense fallback={<div className="swarm-empty" role="status"><p>Loading Swarm…</p></div>}>{loading && !snapshot ? <div className="swarm-empty" role="status"><div className="swarm-empty-icon"><HiMiniArrowPath aria-hidden="true" /></div><h2>Finding your agents</h2><p>Checking recognized CLIs on this computer…</p></div> : visible.length ? <AgentMap agents={visible} selected={selected} onSelect={setSelected} context={context} mode={mode} /> : <div className="swarm-empty"><div className="swarm-empty-icon"><HiMiniCommandLine aria-hidden="true" /></div><span className="swarm-eyebrow">ROOM FOR YOUR NEXT IDEA</span><h2>{emptyHeading}</h2><p>{emptyCopy}</p>{snapshot ? (agents.length ? <button type="button" className="swarm-button" onClick={() => { setSearch(""); setProject(null); setAttention(false); }}>Clear filters</button> : <button type="button" className="swarm-button swarm-button--primary" disabled={stale} onClick={() => setComposing(true)}><HiMiniPlus />Start your first agent</button>) : <button type="button" className="swarm-button" onClick={refresh}>Reconnect</button>}</div>}</Suspense>
       </div>
       {snapshot ? <footer className="swarm-coverage"><span><i aria-hidden="true" />{snapshot.discovery.detail}{snapshot.discovery.limited ? " Discovery is limited to the first 256 processes." : ""}</span><span>{visible.length} shown</span></footer> : null}
       </section>
-      {chosen && snapshot ? <AgentInspector key={`${snapshot.epoch}:${chosen.id}`} agent={chosen} epoch={snapshot.epoch} stale={stale} onClose={closeDetails} onRefresh={refresh} onNavigate={onNavigate} context={context} reviews={chosenReviews} onOpenRequest={onOpenRequest} /> : null}
+      {chosen && snapshot ? <Suspense fallback={<aside className="swarm-inspector" aria-label="Agent details"><p>Loading agent details…</p></aside>}><AgentInspector key={`${snapshot.epoch}:${chosen.id}`} agent={chosen} epoch={snapshot.epoch} stale={stale} onClose={closeDetails} onRefresh={refresh} onNavigate={onNavigate} context={context} reviews={chosenReviews} onOpenRequest={onOpenRequest} /></Suspense> : null}
     </div>
     <div className="swarm-bottom-note"><span>Managed agents accept instructions here. Observed agents stay in their own apps.</span><button className="swarm-text-button" type="button" onClick={() => onNavigate("/inbox")}>{reviews === null ? "Open Guard reviews" : `${reviews.length} Guard reviews`} ↗</button></div>
-    {composing && snapshot ? <AgentComposer snapshot={snapshot} stale={stale} initialProject={project && project !== UNKNOWN_PROJECT ? project : ""} onClose={() => setComposing(false)} onNavigate={onNavigate} onLaunched={(agent) => { acceptAgent(agent); setSelected(agent.id); setComposing(false); setProject(null); setSearch(""); setAttention(false); refresh(); }} /> : null}
+    {composing && snapshot ? <Suspense fallback={null}><AgentComposer snapshot={snapshot} stale={stale} initialProject={project && project !== UNKNOWN_PROJECT ? project : ""} onClose={() => setComposing(false)} onNavigate={onNavigate} onLaunched={(agent) => { acceptAgent(agent); setSelected(agent.id); setComposing(false); setProject(null); setSearch(""); setAttention(false); refresh(); }} /></Suspense> : null}
   </div>;
 }
