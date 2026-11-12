@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import sqlite3
-from collections.abc import Sequence
 from pathlib import Path
 
 import pytest
@@ -104,10 +103,7 @@ def _activate_bundle(store: GuardStore, bundle: dict[str, object], now: str) -> 
     )
 
 
-def test_apply_policy_bundle_authority_rolls_back_every_authority_surface(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+def test_apply_policy_bundle_authority_rolls_back_every_authority_surface(tmp_path: Path) -> None:
     store = GuardStore(tmp_path / "guard-home")
     prior_now = "2026-07-17T00:00:00Z"
     prior_state: dict[str, dict[str, object] | list[object]] = {
@@ -157,20 +153,14 @@ def test_apply_policy_bundle_authority_rolls_back_every_authority_surface(
     rows_before = _sorted_policy_rows(store)
     state_before = {state_key: store.get_sync_payload(state_key) for state_key in prior_state}
 
-    original_replace = store._replace_remote_policy_rows_locked  # pyright: ignore[reportPrivateUsage]
-
-    def replace_rows_and_arm_failure(
-        connection: sqlite3.Connection,
-        rows: Sequence[tuple[object, ...]],
-    ) -> None:
-        original_replace(connection, rows)
-        # Fail only after apply_policy_bundle_authority has updated every
-        # authority-bearing state key above. The last-good write is deliberately
-        # ordered last when update_last_good=True, making this a mid-transaction
-        # failure instead of a pre-write validation failure.
+    # Fail after the activation has replaced the rows and written every other
+    # authority-bearing state key: the payloads land in key order, and the
+    # last-good bundle sorts after them, so this is a mid-transaction failure
+    # instead of a pre-write validation failure.
+    with store._connect() as connection:  # pyright: ignore[reportPrivateUsage]
         _ = connection.execute(
             """
-            create temp trigger inject_policy_bundle_activation_failure
+            create trigger inject_policy_bundle_activation_failure
             before insert on sync_state
             when new.state_key = 'policy_bundle_last_good'
             begin
@@ -179,9 +169,7 @@ def test_apply_policy_bundle_authority_rolls_back_every_authority_surface(
             """
         )
 
-    monkeypatch.setattr(store, "_replace_remote_policy_rows_locked", replace_rows_and_arm_failure)
-
-    with pytest.raises(sqlite3.IntegrityError, match="injected policy bundle activation failure"):
+    with pytest.raises(RuntimeError):
         store.apply_policy_bundle_authority(
             [
                 PolicyDecision(

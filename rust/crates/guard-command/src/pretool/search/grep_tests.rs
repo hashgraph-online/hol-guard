@@ -189,7 +189,11 @@ fn a_plain_pattern_clears_the_sensitive_files_it_cannot_match() {
         (&repo, "-rn ha.*er .", false),
         (&repo, "-rn ^handler .", false),
         (&repo, "-rn -ehandler .", false),
-        (&repo, "-rn -e handler -e other .", false),
+        (&repo, "-rn -e handler -e other .", true),
+        (&repo, "-rn -e handler -e cookie_name .", false),
+        (&repo, r"-rn foo\|handler .", true),
+        (&repo, r"-rn foo\|cookie_name .", false),
+        (&repo, r"-rn cookie\.name .", false),
         (&repo, "-rnv handler .", false),
         (&repo, "-rnL handler .", false),
         (&repo, "-rn --invert-match handler .", false),
@@ -297,6 +301,20 @@ fn a_wildcard_include_is_proven_by_what_it_selects_below_the_root() {
             "-rn x --include *.md --exclude notes.md docs".to_owned(),
             false,
         ),
+        // GNU grep reads a file matching neither list once an exclude comes
+        // first, so a wildcard exclude widens the include too.
+        (
+            "-rn x --exclude *.min.js --include *.md docs".to_owned(),
+            false,
+        ),
+        (
+            "-rn x --exclude=*.min.js --include=*.md docs".to_owned(),
+            false,
+        ),
+        // A value the shell expands can split into extra operands.
+        ("-rn x --exclude-dir=$X docs".to_owned(), false),
+        ("-rn x --exclude-dir $X docs".to_owned(), false),
+        ("-rn x --exclude=`pick` docs".to_owned(), false),
         // The root decides as it always did.
         (format!("-rn x --include *.md {h}/.ssh"), false),
     ] {

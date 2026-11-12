@@ -16,19 +16,18 @@ from urllib.parse import parse_qs, urlsplit
 
 import pytest
 
+from ci.guard_daemon_harness import GuardDaemonServer
 from codex_plugin_scanner.guard import native_catalog_read as transport
+from codex_plugin_scanner.guard import native_daemon_client
 from codex_plugin_scanner.guard.cli import extension_catalog_reads as reads
 from codex_plugin_scanner.guard.cli import extension_controls_commands
-from codex_plugin_scanner.guard.daemon import catalog_read_v2
-from codex_plugin_scanner.guard.daemon import server as server_module
-from codex_plugin_scanner.guard.daemon.catalog_v2_client import (
+from codex_plugin_scanner.guard.native_daemon_client import (
     CatalogTraversalError,
-    CatalogV2Client,
     CatalogV2UnsupportedError,
+    GuardDaemonRequestError,
+    GuardSurfaceDaemonClient,
 )
-from codex_plugin_scanner.guard.daemon.client import GuardDaemonRequestError, GuardSurfaceDaemonClient
-from codex_plugin_scanner.guard.daemon.manager import load_guard_daemon_auth_token
-from codex_plugin_scanner.guard.daemon.server import GuardDaemonServer
+from codex_plugin_scanner.guard.native_daemon_manage import load_guard_daemon_auth_token
 from codex_plugin_scanner.guard.runtime.command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
 from codex_plugin_scanner.guard.store import GuardStore
 
@@ -106,35 +105,6 @@ def serve() -> Iterator[Callable[[Responder], _Server]]:
         server.close()
 
 
-def test_get_revalidates_and_reuses_cached_body_on_304(serve: Callable[[Responder], _Server]) -> None:
-    def responder(_path: str, _query: dict[str, list[str]], validator: str | None) -> Reply:
-        if validator == '"cr1-x"':
-            return 304, {"ETag": '"cr1-x"'}, b""
-        return _json(200, {"value": 1}, '"cr1-x"')
-
-    server = serve(responder)
-    reader = CatalogV2Client(server.client())
-    assert reader.get("index") == {"value": 1}
-    assert reader.get("index") == {"value": 1}
-    assert [validator for _, validator in server.requests] == [None, '"cr1-x"']
-
-
-def test_unsatisfiable_304_gets_one_unconditional_retry(serve: Callable[[Responder], _Server]) -> None:
-    calls = {"count": 0}
-
-    def responder(_path: str, _query: dict[str, list[str]], validator: str | None) -> Reply:
-        calls["count"] += 1
-        if calls["count"] == 2:
-            return 304, {"ETag": '"cr1-other"'}, b""
-        return _json(200, {"value": calls["count"]}, f'"cr1-{calls["count"]}"')
-
-    server = serve(responder)
-    reader = CatalogV2Client(server.client())
-    assert reader.get("index") == {"value": 1}
-    assert reader.get("index") == {"value": 3}
-    assert [validator for _, validator in server.requests] == [None, '"cr1-1"', None]
-
-
 @pytest.mark.parametrize(
     "reply",
     [
@@ -146,7 +116,7 @@ def test_unsatisfiable_304_gets_one_unconditional_retry(serve: Callable[[Respond
 def test_protocol_absence_is_the_only_fallback_signal(serve: Callable[[Responder], _Server], reply: Reply) -> None:
     server = serve(lambda *_args: reply)
     with pytest.raises(CatalogV2UnsupportedError):
-        CatalogV2Client(server.client()).get("index")
+        server.client().catalog_get("index")
 
 
 @pytest.mark.parametrize(
@@ -162,7 +132,7 @@ def test_protocol_absence_is_the_only_fallback_signal(serve: Callable[[Responder
 def test_real_errors_never_fall_back(serve: Callable[[Responder], _Server], reply: Reply, code: str) -> None:
     server = serve(lambda *_args: reply)
     with pytest.raises(GuardDaemonRequestError) as raised:
-        CatalogV2Client(server.client()).get("index")
+        server.client().catalog_get("index")
     assert not isinstance(raised.value, CatalogV2UnsupportedError)
     assert raised.value.code == code
 
@@ -199,7 +169,7 @@ def _paged(pages: dict[str | None, dict[str, object]]) -> Responder:
 
 def test_traversal_collects_every_page_in_order(serve: Callable[[Responder], _Server]) -> None:
     server = serve(_paged({None: _page(["a", "b"], total=3, cursor="c1"), "c1": _page(["c"], total=3, cursor=None)}))
-    traversal = CatalogV2Client(server.client()).traverse("index", item_key="extension_id")
+    traversal = server.client().catalog_traverse("index", item_key="extension_id")
     assert [item["extension_id"] for item in traversal.items] == ["a", "b", "c"]
     assert all("limit=100" in path for path, _ in server.requests)
 
@@ -218,7 +188,7 @@ def test_traversal_rejects_duplicates_loops_and_incomplete_results(
 ) -> None:
     server = serve(_paged(pages))
     with pytest.raises(CatalogTraversalError):
-        CatalogV2Client(server.client()).traverse("index", item_key="extension_id")
+        server.client().catalog_traverse("index", item_key="extension_id")
 
 
 def test_traversal_restarts_once_when_snapshot_changes(serve: Callable[[Responder], _Server]) -> None:
@@ -235,7 +205,7 @@ def test_traversal_restarts_once_when_snapshot_changes(serve: Callable[[Responde
         return _json(200, _page(["b"], total=2, cursor=None, snapshot="cs1-new"), '"cr1-b"')
 
     server = serve(responder)
-    traversal = CatalogV2Client(server.client()).traverse("index", item_key="extension_id")
+    traversal = server.client().catalog_traverse("index", item_key="extension_id")
     assert traversal.snapshot_id == "cs1-new"
     assert [item["extension_id"] for item in traversal.items] == ["a", "b"]
 
@@ -248,7 +218,7 @@ def test_traversal_gives_up_after_a_second_snapshot_change(serve: Callable[[Resp
 
     server = serve(responder)
     with pytest.raises(CatalogTraversalError):
-        CatalogV2Client(server.client()).traverse("index", item_key="extension_id")
+        server.client().catalog_traverse("index", item_key="extension_id")
 
 
 @pytest.fixture
@@ -260,12 +230,7 @@ def native_daemon(
     # Debug builds construct the snapshot slowly on the first read; the default
     # 2s native budget is a production bound, not what parity tests measure.
     monkeypatch.setattr(
-        server_module,
-        "serve_catalog_read_v2",
-        functools.partial(
-            catalog_read_v2.serve_catalog_read_v2,
-            reader=functools.partial(transport.native_catalog_read, timeout_seconds=60.0),
-        ),
+        transport, "native_catalog_read", functools.partial(transport.native_catalog_read, timeout_seconds=60.0)
     )
     store = GuardStore(tmp_path / "guard-home")
     daemon = GuardDaemonServer(store, host="127.0.0.1", port=0, idle_timeout_seconds=0)
@@ -277,20 +242,16 @@ def native_daemon(
             # authenticated fixture seam while exercising real native metadata
             # preparation and transport; production retains its fixed factory.
             from codex_plugin_scanner.guard.catalog_delivery.discovery import prepare_discovery
-            from tests.test_catalog_discovery_backend import prepared_fixture
+            from tests.test_catalog_discovery_backend import prepared_fixture, provision
 
             entries = [extension.to_dict() for extension in BUILT_IN_COMMAND_EXTENSION_REGISTRY.extensions]
             verified, fetch, _, _ = prepared_fixture(tmp_path, monkeypatch, catalog_entries=entries)
+            provision(store.guard_home)
             handle = prepare_discovery(store.guard_home, verified, fetch=fetch)
             monkeypatch.setattr(
-                server_module,
-                "serve_catalog_read_v2",
-                functools.partial(
-                    catalog_read_v2.serve_catalog_read_v2,
-                    reader=functools.partial(
-                        transport.native_catalog_read, timeout_seconds=60.0, discovery_handle=handle
-                    ),
-                ),
+                transport,
+                "native_catalog_read",
+                functools.partial(transport.native_catalog_read, timeout_seconds=60.0, discovery_handle=handle),
             )
         token = load_guard_daemon_auth_token(store.guard_home)
         assert token is not None
@@ -299,7 +260,7 @@ def native_daemon(
         # while it also builds the snapshot; warm it with a bounded retry.
         for attempt in range(3):
             try:
-                CatalogV2Client(client, timeout=60.0).get("index")
+                client.catalog_get("index", timeout=60.0)
                 break
             except CatalogV2UnsupportedError:
                 if attempt == 2:
@@ -323,9 +284,8 @@ def test_real_native_v2_reproduces_every_v1_extension_exactly(native_daemon: Sim
     listed = listing["extensions"]
     assert isinstance(listed, list)
     assert [item["extension_id"] for item in listed] == sorted(expected)
-    reader = CatalogV2Client(client)
     for extension_id, legacy in expected.items():
-        assert reads.v1_extension_from_v2(reader, extension_id) == legacy, extension_id
+        assert client.catalog_extension(extension_id) == legacy, extension_id
 
 
 def _patterns_output(client: GuardSurfaceDaemonClient, query: str, tool: str | None) -> dict[str, object]:
@@ -354,18 +314,18 @@ def test_real_native_cli_patterns_output_matches_v1(
 
 
 def test_real_native_patterns_search_is_bounded_and_rust_filtered(native_daemon: SimpleNamespace) -> None:
-    requests: list[str] = []
-    original = CatalogV2Client._request
+    requests: list[tuple[str, object, object]] = []
+    original = native_daemon_client._exchange
 
-    def counting(self: CatalogV2Client, route: str, query: str, *, if_none_match: str | None):
-        requests.append(f"{route}?{query}")
-        return original(self, route, query, if_none_match=if_none_match)
+    def counting(daemon_url: str, auth: str, op: str, timeout: float, **fields: object) -> dict[str, object]:
+        requests.append((op, fields.get("route"), fields.get("params")))
+        return original(daemon_url, auth, op, timeout, **fields)
 
     with pytest.MonkeyPatch.context() as patch:
-        patch.setattr(CatalogV2Client, "_request", counting)
+        patch.setattr(native_daemon_client, "_exchange", counting)
         rows = reads.pattern_extensions(native_daemon.client, None, "git push")
-    assert len(requests) <= 4, requests
-    assert any(route.startswith("permissions?") and "q=git+push" in route for route in requests)
+    assert len(requests) <= 2, requests
+    assert ("catalog_traverse", "permissions", {"q": "git push"}) in requests
     assert rows and all(row["permissions"] for row in rows)
     assert reads.pattern_extensions(native_daemon.client, "command.missing") == []
     with pytest.raises(ValueError, match="unknown extension target"):
@@ -376,12 +336,14 @@ def test_patterns_search_skips_q_when_its_encoding_exceeds_the_query_cap() -> No
     sent: list[dict[str, str] | None] = []
 
     class _Reader:
-        def traverse(self, route: str, *, item_key: str, params: dict[str, str] | None = None) -> SimpleNamespace:
+        def catalog_traverse(
+            self, route: str, *, item_key: str, params: dict[str, str] | None = None
+        ) -> SimpleNamespace:
             if route == "permissions":
                 sent.append(params)
             return SimpleNamespace(items=[])
 
-    reader = cast(CatalogV2Client, _Reader())
+    reader = cast(GuardSurfaceDaemonClient, _Reader())
     reads._v2_permission_search(reader, "git push")
     # 220 CJK characters fit the character bound but percent-encode to 1,980 bytes.
     reads._v2_permission_search(reader, "推" * 220)
@@ -419,7 +381,7 @@ def test_show_restarts_when_a_collection_comes_from_another_snapshot(serve: Call
         return _json(200, _detail(snapshot, permissions=2), f'"cr1-{snapshot}"')
 
     server = serve(responder)
-    extension = reads.v1_extension_from_v2(CatalogV2Client(server.client()), "command.a")
+    extension = server.client().catalog_extension("command.a")
     assert [item["permission_id"] for item in extension["permissions"]] == ["p1", "p2"]  # type: ignore[index]
     assert sum(path.endswith("/command.a") for path, _ in server.requests) == 2
 
@@ -432,4 +394,4 @@ def test_show_rejects_a_collection_that_disagrees_with_its_detail(serve: Callabl
 
     server = serve(responder)
     with pytest.raises(CatalogTraversalError, match="does not match its detail"):
-        reads.v1_extension_from_v2(CatalogV2Client(server.client()), "command.a")
+        server.client().catalog_extension("command.a")

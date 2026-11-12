@@ -171,3 +171,83 @@ fn a_loopback_approval_link_opens_only_once_it_is_signed() {
         None
     );
 }
+
+const HANDOFF_REVIEW_URL: &str = "http://127.0.0.1:5474/requests/20fce09561634ecab2055b539113c618";
+
+#[test]
+fn a_request_link_gets_the_short_signed_path_the_daemon_checks() {
+    // `build_approval_handoff_url(url, auth_token="vector-auth", now=1800000000)`.
+    let expected = format!("{HANDOFF_REVIEW_URL}/1800043200-7c3d07b3dee665161df59cb58f93bcdf");
+    let now = 1_800_000_000 * 1_000_000 + 999_999;
+
+    let signed = approval_browser_url(
+        HANDOFF_REVIEW_URL,
+        || Some("vector-auth".to_owned()),
+        APPROVAL_CENTER_SURFACE,
+        now,
+    );
+
+    assert_eq!(signed.as_deref(), Some(expected.as_str()));
+    assert!(!expected.contains('#'));
+}
+
+#[test]
+fn only_a_bare_request_link_on_the_approval_surface_gets_the_short_path() {
+    let now = 1_800_000_000 * 1_000_000;
+    let nested = "http://127.0.0.1:5474/base/requests/20fce09561634ecab2055b539113c618";
+    for (url, surface) in [
+        (nested, APPROVAL_CENTER_SURFACE),
+        (HANDOFF_REVIEW_URL, "protection-repair"),
+    ] {
+        let signed = approval_browser_url(url, || Some("vector-auth".to_owned()), surface, now)
+            .expect("loopback link is signed");
+        assert!(
+            signed.starts_with(&format!("{url}#guard-token=gld1.")),
+            "{signed}"
+        );
+    }
+}
+
+#[test]
+fn only_an_exact_short_code_counts_as_an_already_signed_link() {
+    let url = HANDOFF_REVIEW_URL;
+    let mac = "7c3d07b3dee665161df59cb58f93bcdf";
+    for signed in [
+        format!("Open HOL Guard: {url}/1800043200-{mac}."),
+        format!("{url}/1800043200-{mac}"),
+        format!("({url}/1-{mac})"),
+    ] {
+        assert!(carries_handoff_link(&signed, url), "{signed}");
+    }
+    for unsigned in [
+        format!("Open HOL Guard: {url}."),
+        format!("{url}/details"),
+        format!("{url}/1800043200-{}", &mac[..31]),
+        format!("{url}/1800043200-{mac}0"),
+        format!("{url}/1800043200-{mac}/more"),
+        format!("{url}/1800043200-{}", mac.to_uppercase()),
+        format!("{url}/1234567890123-{mac}"),
+        format!("{url}/-{mac}"),
+        format!("{url}/1800043200{mac}"),
+    ] {
+        assert!(!carries_handoff_link(&unsigned, url), "{unsigned}");
+    }
+}
+
+#[test]
+fn a_reason_that_already_has_a_short_link_is_not_signed_twice() {
+    let earlier = format!("{HANDOFF_REVIEW_URL}/1800000100-7c3d07b3dee665161df59cb58f93bcdf");
+    let reason = format!("Review this. Open HOL Guard: {earlier}.");
+    let later = 1_800_000_000 * 1_000_000;
+    for harness in ["codex", "claude-code"] {
+        let signed = native_review_reason(
+            harness,
+            &reason,
+            HANDOFF_REVIEW_URL,
+            Some("vector-auth"),
+            later,
+        )
+        .expect("reason");
+        assert_eq!(signed, reason, "{harness}");
+    }
+}

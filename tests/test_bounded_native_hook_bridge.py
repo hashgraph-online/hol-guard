@@ -149,8 +149,9 @@ def test_native_copilot_devin_and_hermes_commands_stay_managed(tmp_path: Path, m
     # The Devin install recognizes its own native command by this verb and harness field.
     assert NATIVE_BOUNDED_HOOK_COMMAND in devin_command
     assert '"harness":"devin"' in devin_command
-    hermes_command = hermes_runtime_hooks.hermes_hook_command_string(_command(tmp_path, "hermes"))
-    assert hermes_runtime_hooks._legacy_guard_pretool_command(hermes_command)
+    # The Hermes install recognizes its own native command by the inline bridge bootstrap.
+    hermes_tokens = shlex.split(hermes_runtime_hooks.hermes_hook_command_string(_command(tmp_path, "hermes")))
+    assert "bounded_cli_hook_bridge" in hermes_tokens[hermes_tokens.index("-c") + 1]
 
 
 @pytest.mark.native_bounded_hook_bridge

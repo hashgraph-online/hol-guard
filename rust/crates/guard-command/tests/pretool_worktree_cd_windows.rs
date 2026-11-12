@@ -58,8 +58,9 @@ fn worktree_add_then_cd_into_it_is_proved_on_windows() {
     let cwd = spelled(&home.join("project"));
     let source = spelled(&repository);
     let fresh = spelled(&temporary.join("scratch-leaf"));
-    let environment = guard_contracts::GuardExecutionEnvironmentV1 {
-        path: std::env::var("PATH").unwrap(),
+    let host = std::env::var("PATH").unwrap();
+    let environment_on = |path: String| guard_contracts::GuardExecutionEnvironmentV1 {
+        path,
         environment_names: ["GIT_CONFIG_NOSYSTEM", "HOME", "PATH"]
             .iter()
             .map(|name| (*name).to_owned())
@@ -73,7 +74,8 @@ fn worktree_add_then_cd_into_it_is_proved_on_windows() {
         ..Default::default()
     };
     let controls = git_helper_fixture::github_controls("enabled");
-    let action = |command: &str| {
+    let action_on = |command: &str, path: String| {
+        let environment = environment_on(path);
         guard_command::pretool::evaluate_pre_tool_envelope_with_execution_context(
             "omp",
             "PreToolUse",
@@ -92,6 +94,7 @@ fn worktree_add_then_cd_into_it_is_proved_on_windows() {
                 ripgrep_config_absent: false,
                 gem_config_absent: false,
                 http_config_absent: false,
+                openssl_config_absent: false,
                 psql_environment: Default::default(),
                 creates_nothing: false,
             },
@@ -99,6 +102,7 @@ fn worktree_add_then_cd_into_it_is_proved_on_windows() {
         )
         .minimum_action
     };
+    let action = |command: &str| action_on(command, host.clone());
     let add = format!("git -C {source} worktree add -q --detach {fresh} HEAD");
     assert_eq!(
         action(&format!(
@@ -106,6 +110,12 @@ fn worktree_add_then_cd_into_it_is_proved_on_windows() {
         )),
         "allow"
     );
+    // Windows installers often leave an empty entry in the search path. Git
+    // Bash drops it and Git skips it, so it never names the new checkout and
+    // the proof stands. A `.` entry does name it once the `cd` has run.
+    let read = format!("{add} && cd {fresh} && git log -1 --format='%H %s'");
+    assert_eq!(action_on(&read, format!("{host};;{host}")), "allow");
+    assert_ne!(action_on(&read, format!(".;{host}")), "allow");
     for command in [
         // The chain proof covers reads in the checkout Git creates. A `cd`
         // anywhere else, even the agent's own source checkout, leaves the

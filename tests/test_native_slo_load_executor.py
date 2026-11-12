@@ -51,7 +51,7 @@ def test_capacity_proof_warms_resident_clients_before_isolated_c16_and_c64(
         def __init__(self) -> None:
             scheduler = SimpleNamespace(stats=lambda: {"active_limit": 2, "active": 0})
             worker = SimpleNamespace(metrics=SimpleNamespace(snapshot=lambda: {"routes": {}}))
-            self.daemon = SimpleNamespace(_server=SimpleNamespace(runtime_hook_scheduler=scheduler, hook_worker=worker))
+            self.daemon = SimpleNamespace(hook_capacity=scheduler.stats, _server=SimpleNamespace(hook_worker=worker))
 
         def native_overload_count(self) -> int:
             return 0
@@ -141,11 +141,7 @@ def test_native_capacity_warmup_initializes_sixteen_streams_with_two_python_work
     )
 
     class Session:
-        daemon = SimpleNamespace(
-            _server=SimpleNamespace(
-                runtime_hook_scheduler=SimpleNamespace(stats=lambda: {"active_limit": 2, "active": 0})
-            )
-        )
+        daemon = SimpleNamespace(hook_capacity=lambda: {"active_limit": 2, "active": 0})
 
         def observe(self, harness: str, event: str, size: str) -> Observation:
             assert pool.request(b"{}", deadline_monotonic=time.monotonic() + 3) == b"{}"

@@ -5,8 +5,8 @@ from __future__ import annotations
 from typing import Any, cast
 
 from ..models import PolicyDecision
-from ..review_contracts import (
-    guard_review_oauth_metadata,
+from ..review_contracts import guard_review_oauth_metadata
+from ..review_decision_memory import (
     validate_decision_memory_bundle_target,
     validated_decision_memory_bundle,
 )

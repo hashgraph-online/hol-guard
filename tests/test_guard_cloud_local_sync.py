@@ -23,6 +23,7 @@ from codex_plugin_scanner.guard.native_policy_snapshot_publisher import provisio
 from codex_plugin_scanner.guard.runtime import runner as guard_runner_module
 from codex_plugin_scanner.guard.runtime import runner_native_sync
 from codex_plugin_scanner.guard.shims import install_package_shims
+from codex_plugin_scanner.guard.sqlite_connection_cache import close_idle_store_connections
 from codex_plugin_scanner.guard.store import GuardStore
 from tests.cloud_exception_bundle_fixtures import build_cloud_exception_policy_bundle
 from tests.policy_bundle_parser_support import computed_policy_bundle_hash, payload_hash_for_policy_bundle
@@ -486,16 +487,24 @@ def test_build_runtime_snapshot_calls_oauth_health_once(tmp_path: Path, monkeypa
 
 
 def test_runtime_snapshot_reuses_one_store_connection(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    store = GuardStore(tmp_path / "guard-home")
+    guard_home = tmp_path / "guard-home"
+    store = GuardStore(guard_home)
     provision_native_verifier_key_for_store(store)
     opened = 0
     original = sqlite3.connect
 
+    # The patch is process wide, so count only this store's opens: a thread an
+    # earlier test on the same worker left running opens its own databases.
     def counted_connect(*args, **kwargs):
         nonlocal opened
-        opened += 1
+        database = args[0] if args else kwargs.get("database", "")
+        if str(guard_home) in os.fsdecode(database):
+            opened += 1
         return original(*args, **kwargs)
 
+    # Count from a cold start: a connection kept from setup would hide an
+    # extra open.
+    close_idle_store_connections()
     monkeypatch.setattr(sqlite3, "connect", counted_connect)
 
     snapshot = build_runtime_snapshot(store=store, approval_center_url=None)

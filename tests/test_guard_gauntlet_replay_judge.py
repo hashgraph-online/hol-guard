@@ -179,6 +179,10 @@ def test_only_the_marked_cases_may_pass_on_containment() -> None:
         # of that path, not of the repository's own mailmap, and a contained
         # run reaches only the sandbox's copy of it.
         "neg-git-check-mailmap-other-file",
+        # An index listing whose `-X` exclude file is named by the caller: the
+        # read keeps its review, and a contained run opens only the workspace
+        # copy of that file.
+        "neg-git-ls-files-glob-with-exclude-file",
         # `--in-place` makes the trailer filter edit the file it names, and a
         # contained run keeps that edit inside the sandbox.
         "neg-git-interpret-trailers-in-place",
@@ -240,10 +244,29 @@ def test_only_the_marked_cases_may_pass_on_containment() -> None:
         # names nothing the home keeps there.
         "neg-ls-home-dot-glob",
         "neg-ls-home-missing-hidden-store",
+        # A bare dot glob in the worktree: `.*` stands for the parent entry as
+        # well, so the listing reaches above the workspace. A contained run has
+        # nothing above the workspace to reach, so the pattern names only what
+        # the sandbox already holds.
+        "neg-hidden-glob-stands-for-dot-directories",
+        # A glob that matches only a dotfile, or names a directory that is not
+        # there, keeps its review; a contained run reads only the workspace copy.
+        "neg-read-glob-matching-only-dotfile",
+        "neg-read-glob-in-missing-directory",
         # A pattern that is a credential word and an unconstrained tail expands onto the
         # command line as the files beside it, so the second one becomes the file the
         # filter opens; a contained run has no home access and reads none of them.
         "neg-grep-credential-bare-wildcard-pattern",
+        # A second pattern, or an escaped alternative, that matches a plugin
+        # manifest keeps the review; a contained run reads only the workspace
+        # copy and has no home access.
+        "neg-grep-second-pattern-matching-plugin-manifest",
+        "neg-grep-escaped-alternative-matching-plugin-manifest",
+        # A recursive grep in the worktree whose late exclusion the scan does not
+        # prove keeps its review. A contained run reads only the workspace copy the
+        # sandbox already holds, with no home or network reach.
+        "neg-grep-late-exclude-dir-separated-value",
+        "neg-grep-late-exclude-beside-include",
         # The pattern exemption's own negatives: the producer opens a dotenv
         # file, dumps the environment, or names one as a pathspec, so the
         # credential word is never the only signal. A contained run has no home
@@ -253,6 +276,10 @@ def test_only_the_marked_cases_may_pass_on_containment() -> None:
         "neg-printenv-piped-into-grep",
         "neg-git-grep-pattern-with-dotenv-path",
         "neg-ls-home-missing-key-in-hidden-directory",
+        # A digest written to a file with -out keeps its review; a contained run
+        # writes only into a disposable workspace copy, so nothing the host
+        # keeps is created or overwritten.
+        "neg-openssl-dgst-writes-output",
         # A cache verb, a key write, a host this machine does not own and a
         # credential on the line: each keeps its review, and a contained run has
         # no network for any of them, so no server is reached, nothing it holds
@@ -274,6 +301,15 @@ def test_only_the_marked_cases_may_pass_on_containment() -> None:
         "neg-rg-files-no-ignore-service-lane",
         "neg-rg-path-before-files-flag-credential-store",
         "neg-rg-replace-widens-home-search",
+        # Sed writes aimed outside the workspace remain contained. The exec
+        # flag is intentionally excluded: it can damage the writable worktree.
+        "neg-sed-substitute-chained-write-command",
+        "neg-sed-substitute-second-expression-writes-a-file",
+        "neg-sed-delete-then-write-file",
+        "neg-sed-addressed-substitution-write-flag",
+        # A `cat` that names a private key after a sibling run: the review stands,
+        # and a contained run in the sibling root reaches no key at all.
+        "neg-sibling-cd-jest-cat-reads-private-key",
         # A sibling checkout's workflows and test runner: a contained run reads only the
         # workspace, so `-exec cat`, a preloaded module or a dotfile probe reaches no secret.
         "neg-sibling-find-github-exec-cat",
@@ -290,6 +326,12 @@ def test_only_the_marked_cases_may_pass_on_containment() -> None:
         "neg-stderr-credential-location-read",
         "neg-tr-file-operand",
         "neg-uniq-output-operand-in-worktree",
+        # An interpreter run that is more than a version probe: `perl -V` prints
+        # the build configuration and `ruby -v script.rb` runs the script after
+        # the banner. A contained run has no network and no home access, so the
+        # script reaches nothing outside the workspace copy.
+        "neg-perl-config-summary",
+        "neg-ruby-version-then-script",
         # A removal git reads as the trailing part of a sibling checkout's registration: the
         # checkout it would take away stands outside the workspace, so a contained run removes
         # nothing of it.

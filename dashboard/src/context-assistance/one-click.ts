@@ -159,7 +159,8 @@ export type CigarSetupDeps = {
   onSaved: (config: GuardContextAssistanceConfig, previous: GuardContextAssistanceConfig) => void;
 };
 
-const JOB_LIMIT_MS = 180_000, START_LIMIT_MS = 120_000, POLL_MS = 800;
+// A busy computer can leave Guard unable to answer for a while; the job keeps running meanwhile.
+const JOB_LIMIT_MS = 180_000, START_LIMIT_MS = 120_000, POLL_MS = 800, QUIET_LIMIT_MS = 30_000;
 const failedPhases = new Set(["failed", "cancelled", "recovery_required"]);
 export const isCigarProofError = (cause: unknown) => cause instanceof ContextAssistanceApiError
   && (cause.code.startsWith("approval_gate") || cause.code === "approval_required");
@@ -167,13 +168,34 @@ const transient = (cause: unknown) => !(cause instanceof ContextAssistanceApiErr
   || cause.code.endsWith("context_stale") || cause.code.endsWith("outcome_unknown") || cause.code === "context_assistance_unavailable";
 const missingJob = (cause: unknown) => cause instanceof ContextAssistanceApiError && cause.code.endsWith("job_missing");
 
+// The browser's own wording for a dropped or timed-out request ("Failed to fetch", "signal timed out") means nothing to people.
+const NO_ANSWER = "Guard did not answer. It may still be starting or busy. Try again in a minute.";
+export function cigarSetupReason(cause: unknown, fallback: string): string {
+  if (cause instanceof TypeError || cause instanceof DOMException) return NO_ANSWER;
+  return cause instanceof Error ? cause.message : fallback;
+}
+
 function guard(deps: CigarSetupDeps) {
   if (deps.stopped()) throw new CigarSetupStopped();
 }
 function failure(stage: CigarSetupStage, cause: unknown): never {
   if (cause instanceof CigarSetupStopped || cause instanceof CigarSetupError) throw cause;
   if (isCigarProofError(cause)) throw new CigarSetupError(stage, "Guard needs your approval password to continue.", true);
-  throw new CigarSetupError(stage, cause instanceof Error ? cause.message : "Guard did not confirm this step.");
+  throw new CigarSetupError(stage, cigarSetupReason(cause, "Guard did not confirm this step."));
+}
+
+function failedJobCopy(code: string): string {
+  if (code.endsWith("deadline_exceeded")) {
+    return "This computer took too long to finish this step, so Guard stopped it. Nothing was turned on. Try again when the computer is less busy.";
+  }
+  if (code.endsWith("fingerprint_mismatch")) {
+    return "The download did not match what Guard expected, so Guard threw it away. Nothing was turned on. Try again.";
+  }
+  if (code.endsWith("inputs_invalid")) {
+    return "Guard could not start this step with its current settings. Nothing was turned on. Update Guard, then try again.";
+  }
+  // The code stays in Updates > Job details for support; people get what happened and what to do.
+  return "Guard could not finish this step. Nothing was turned on. Try again, or open Updates to see what happened.";
 }
 
 /** Submit once, then follow the job by id. An unknown submit outcome is observed, never resent. */
@@ -185,6 +207,7 @@ async function follow(
   deps.onJob(input.job_id);
   // After an unknown submit outcome Guard may register the job late, so a missing job is not yet an answer.
   let uncertain = false;
+  let limit = JOB_LIMIT_MS;
   try {
     deps.onState((await deps.versions(input, proof)).state);
   } catch (cause) {
@@ -192,32 +215,35 @@ async function follow(
     uncertain = true;
   }
   const started = deps.now();
-  let misses = 0;
+  // Silence counts from Guard's last answer, so a slow failing poll cannot stretch it.
+  let heard = started;
   for (;;) {
     guard(deps);
     let reply: CigarVersionsReply | null = null;
     try {
       reply = await deps.versions({ action: "job", job_id: input.job_id });
-      misses = 0;
+      heard = deps.now();
       uncertain = false;
     } catch (cause) {
       const retry = transient(cause) || (uncertain && missingJob(cause));
       if (!retry) failure(stage, cause);
-      if (++misses > 5) {
+      if (deps.now() - heard > QUIET_LIMIT_MS) {
         throw new CigarSetupError(stage, "Guard did not confirm this step. Check Updates before trying again.");
       }
     }
     if (reply) {
       deps.onState(reply.state);
       const job = parseCigarVersionJob(reply.result);
+      // Some steps, such as setting up Python, get a longer window than others; wait as long as Guard does.
+      limit = Math.max(limit, job.deadline_at_ms - job.created_at_ms + 60_000);
       if (done(job, reply.state)) { deps.onJob(null); return { job, state: reply.state }; }
       if (failedPhases.has(job.phase)) {
         throw new CigarSetupError(stage, job.phase === "recovery_required"
           ? "Guard paused this step so nothing breaks. Open Updates to finish or undo it."
-          : "This step did not finish (" + job.code.replace(/_/g, " ") + "). Nothing was turned on.");
+          : failedJobCopy(job.code));
       }
     }
-    if (deps.now() - started > JOB_LIMIT_MS) throw new CigarSetupError(stage, "This is taking longer than expected. Guard is still working; check Updates in a minute.");
+    if (deps.now() - started > limit) throw new CigarSetupError(stage, "This is taking longer than expected. Guard is still working; check Updates in a minute.");
     await deps.sleep(POLL_MS);
   }
 }

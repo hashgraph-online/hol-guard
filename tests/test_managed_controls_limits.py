@@ -23,7 +23,7 @@ from tests.generated_command_catalog_test_support import generated_extension
 
 ROOT = Path(__file__).resolve().parents[1]
 LIMITS_PATH = ROOT / "contracts" / "managed-controls" / "v1" / "limits.json"
-API_PATH = ROOT / "src" / "codex_plugin_scanner" / "guard" / "daemon" / "extension_control_api.py"
+API_PATH = ROOT / "src" / "codex_plugin_scanner" / "guard" / "extension_controls" / "extension_control_api.py"
 MUTATION_OP_PATH = ROOT / "rust" / "crates" / "guard-runtime" / "src" / "extension_control_mutation_op.rs"
 NAVIGATION_PATH = ROOT / "dashboard" / "src" / "shell-navigation-model.ts"
 RULES_PAGE_PATH = ROOT / "dashboard" / "src" / "policy-workspace-page.tsx"

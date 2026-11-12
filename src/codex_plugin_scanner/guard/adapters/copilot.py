@@ -44,7 +44,7 @@ from .mcp_servers import (
     proxy_launcher_entry,
     skipped_stdio_server_names,
 )
-from .state_files import load_backup_payload
+from .state_files import restore_from_backup
 
 if TYPE_CHECKING:
     from ..runtime_transition import TransitionFile
@@ -616,21 +616,9 @@ class CopilotHarnessAdapter(HarnessAdapter):
         config_plan, workspace_plan = plan_copilot_hooks(context.guard_home, (hooks_payload, config_parts), workspace)
         uninstall_targets = self._uninstall_targets(context)
         for state_path, target_mcp_path, backup_path in uninstall_targets:
-            cleanup_complete = False
             if not backup_path.is_file():
                 continue
-            backup_payload = self._backup_payload(backup_path)
-            if backup_payload["readable"] is not True:
-                continue
-            if backup_payload["existed"] and isinstance(backup_payload["content"], str):
-                target_mcp_path.parent.mkdir(parents=True, exist_ok=True)
-                write_text_at_authorized_path(target_mcp_path, str(backup_payload["content"]))
-                cleanup_complete = True
-            elif backup_payload["existed"] is not True and target_mcp_path.is_file():
-                target_mcp_path.unlink()
-                cleanup_complete = True
-            elif backup_payload["existed"] is not True:
-                cleanup_complete = True
+            cleanup_complete = restore_from_backup(backup_path, target_mcp_path, write=write_text_at_authorized_path)
             if cleanup_complete:
                 backup_path.unlink()
             if cleanup_complete and state_path.is_file():
@@ -697,8 +685,6 @@ class CopilotHarnessAdapter(HarnessAdapter):
             f"@{cli_workspace_config}",
             *passthrough_args,
         ]
-
-    _backup_payload = staticmethod(load_backup_payload)
 
     @staticmethod
     def _state_path(target_path: Path, context: HarnessContext) -> Path:

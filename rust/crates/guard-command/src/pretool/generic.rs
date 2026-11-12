@@ -268,6 +268,7 @@ pub fn evaluate_pre_tool_envelope_with_context(
             ripgrep_config_absent: false,
             gem_config_absent: false,
             http_config_absent: false,
+            openssl_config_absent: false,
             psql_environment: Default::default(),
             creates_nothing: false,
         },
@@ -438,6 +439,21 @@ fn evaluate_envelope(
         Ok(value) => value,
         Err(error) => return generic_error_result(harness, event, error),
     };
+    // Oh My Pi's `read` addresses a file by `file://` URL as well as by path.
+    // The URL is a spelling of a local path, not a wider capability, so it is
+    // reduced to the path it denotes before any screen runs: the sensitive
+    // name, workspace and read rules then all read the same path the plain
+    // spelling would give them. A URL that names no local path -- another
+    // host's authority, a form this resolver cannot reduce -- is left alone
+    // and keeps the review it has today.
+    let resolved_read_url = (harness == "omp"
+        && signals.tool_name.as_deref() == Some("read")
+        && signals.path_values.len() == 1)
+        .then(|| super::omp_file_url::local_file_url_path(&signals.path_values[0]))
+        .flatten();
+    if let Some(resolved) = resolved_read_url {
+        signals.resolve_read_url_path(resolved);
+    }
     signals.mirrored_input_unproven = harness == "grok"
         && !payload
             .as_object()
@@ -972,6 +988,15 @@ fn evaluate_envelope(
         let (reason_code, reason) = result::review_reason(PreToolActionTypeV1::FileWrite);
         result = generic_result(result.action.clone(), "review", reason_code, reason);
     }
+    if harness == "omp"
+        && signals.tool_name.as_deref() == Some("edit")
+        && result.reason_code == "native_file_write_review"
+    {
+        let input = omp::strict_tool_input(payload).and_then(|input| input.get("input")?.as_str());
+        if let Some(reason) = input.and_then(super::omp_hashline_writes::unreadable_header_reason) {
+            result.reason = reason;
+        }
+    }
     if result.reason_code == "native_file_read_review" {
         if let Some(note) = omp::grep_review_note(payload, &signals, &omp_context) {
             result.reason = format!("{} {note}", result.reason);
@@ -1054,7 +1079,7 @@ fn evaluate_envelope(
             result.minimum_action.as_str(),
             "allow" | "warn" | "review"
         )
-        && !git_read_order_settled_by_allow(
+        && !git_read_settled_by_allow(
             controls,
             command_model,
             &result,
@@ -1073,6 +1098,29 @@ fn evaluate_envelope(
                 git_read_order_reason(model, floor_context, deadline, execution_environment)
             })
             .unwrap_or_else(|| "HOL Guard requires review because this Git read may execute a configured helper, or its effective configuration could not be verified.".into());
+    }
+    // The helper-context review has two causes behind one reason code: a
+    // helper the probe read out of the effective configuration, and a probe
+    // that could not answer at all. The first is a program Guard cannot see
+    // and keeps its review however much the user allowed. The second is the
+    // same open question the Git execution-context floor above settles -- the
+    // user who allowed this read answered it: run it as this checkout
+    // configures it. The block above skips this reason so a found helper
+    // cannot be delegated to read-only containment, so the unanswered half
+    // settles here, after it, where lowering can raise nothing.
+    if event == "PreToolUse"
+        && result.reason_code == "native_git_helper_context_review"
+        && result.minimum_action == "review"
+        && helper_context_settled_by_allow(
+            controls,
+            command_model,
+            &result,
+            floor_context,
+            deadline,
+            execution_environment,
+        )
+    {
+        crate::native_command_controls::settle_with_explicit_allow(&mut result);
     }
     let contained_test_reason = command_model.and_then(|model| {
         super::restricted_test_commands::package_script::contained_test_reason(
@@ -1203,9 +1251,9 @@ fn evaluate_envelope(
     {
         result.minimum_action = "sandbox-required".into();
         result.policy_action = "sandbox-required".into();
-        result.reason_code = contained_test_reason
-            .expect("checked required test profile")
-            .into();
+        if let Some(reason) = contained_test_reason {
+            result.reason_code = reason.into();
+        }
         result.reason = concat!(
             "HOL Guard requires protected read-only execution for this repository action. ",
             "Direct execution remains blocked.",
@@ -1229,6 +1277,21 @@ fn evaluate_envelope(
     // A cluster listing that names only inventory columns runs directly; the
     // rule that reviews it covers the whole `databases` group.
     super::doctl_reads::settle(&mut result, command_model, controls);
+    // A proven worktree chain that creates its branch in the checkout it
+    // just made: the catalog's own `checkout`/`switch` rule reviews over the
+    // allow `decide` already reached, so lift it before containment runs.
+    super::worktree_add::chain::settle(
+        &mut result,
+        command_model,
+        controls,
+        super::PathContext {
+            home_dir,
+            cwd,
+            ..context
+        },
+        deadline,
+        execution_environment,
+    );
     super::workspace_contained::convert(
         &mut result,
         &pre_floor,
@@ -1283,26 +1346,75 @@ fn extension_rule_matched(result: &PreToolResultV1) -> bool {
     })
 }
 
-/// Whether the user's extension permissions settle a Git floor that rests on
-/// the order of the command's steps alone.
+/// Whether the user's explicit extension permissions settle this Git read
+/// floor.
 ///
-/// That floor has two meanings. A Git read whose own configuration names a
-/// pager, diff driver or textconv helper, or whose configuration could not be
-/// read, has a program Guard cannot see waiting for it, and keeps its review
-/// however much the user allowed. The other meaning is narrower: every Git
-/// read in the command was proven helper-free against the configuration Guard
-/// read for it, and what is unproven is only that an earlier step leaves that
-/// configuration as the read found it. That is a judgment of the command's
-/// shape, which a user who allowed each of its steps has already settled, the
-/// same way an explicit Allow settles the shape judgments the controls
-/// themselves raise.
+/// The floor raises one review for two different questions, and the user's
+/// Allow answers both of them.
+///
+/// The first is the order of the command's steps: every Git read was proven
+/// helper-free against the configuration Guard read for it, and what is
+/// unproven is only that an earlier step leaves that configuration as the
+/// read found it. That is a judgment of the command's shape, which a user who
+/// allowed each of its steps has already settled, the same way an explicit
+/// Allow settles the shape judgments the controls themselves raise.
+///
+/// The second is a probe that could not answer. Guard asks the checkout what
+/// a read would run, and a loaded host, an unreadable configuration or an
+/// expired budget leaves the question open without anything having been found
+/// against the read. A user who allowed that read answered it: run it as this
+/// checkout configures it. Before this, every such read asked again however
+/// much the user had allowed, which is what made ordinary read-only Git work
+/// stall behind approvals.
+///
+/// What no Allow settles is a helper the probe actually read out of the
+/// configuration — a pager, diff driver, textconv or filter program Guard
+/// cannot see — or a Git binary this host does not trust. Those keep their
+/// review, and the floor reports them as `Other`.
 ///
 /// The floor is raised after the controls run, so it cannot read the Allow off
 /// the result's reason and asks the controls instead. `minimum_action` must
 /// still be plain allow: anything the controls or an earlier Rust proof raised
 /// — unsettled extension uncertainty among it — means the Allow did not carry
 /// the command, and the floor stands.
-fn git_read_order_settled_by_allow(
+/// Whether an explicit extension Allow settles a helper-context review that
+/// only an unanswered probe produced.
+///
+/// The review is Rust's own judgment of the command's shape, so the controls
+/// never raised it; a result still carrying its reason at a review is one the
+/// controls left where Rust put it, and the Allow has to reach every segment
+/// and every uncertainty before it may answer the question the probe could
+/// not.
+fn helper_context_settled_by_allow(
+    controls: Option<&CompiledNativeCommandControls>,
+    command_model: Option<&crate::CanonicalCommandV1>,
+    result: &PreToolResultV1,
+    context: super::PathContext<'_>,
+    deadline: Option<Instant>,
+    execution_environment: Option<&guard_contracts::GuardExecutionEnvironmentV1>,
+) -> bool {
+    let (Some(controls), Some(model), Some(observations)) =
+        (controls, command_model, result.command_extensions.as_ref())
+    else {
+        return false;
+    };
+    result.action.bounded
+        && !result.action.sensitive_target
+        && super::git_helper_context::probe_left_helpers_unproven(
+            model,
+            context,
+            deadline,
+            execution_environment,
+        )
+        && controls.explicit_allow_settles_command(
+            model,
+            observations,
+            context,
+            execution_environment,
+        )
+}
+
+fn git_read_settled_by_allow(
     controls: Option<&CompiledNativeCommandControls>,
     command_model: Option<&crate::CanonicalCommandV1>,
     result: &PreToolResultV1,
@@ -1319,26 +1431,31 @@ fn git_read_order_settled_by_allow(
     {
         return false;
     }
-    super::git_read_floor::unsettled_steps_before_reads(
+    let answerable = match super::git_read_floor::allowable_review(
         model,
         context,
         deadline,
         execution_environment,
-    )
-    .is_some_and(|steps| {
-        super::git_read_after_allow::allow_settles_read_order(
+    ) {
+        super::git_read_floor::AllowableReview::None => false,
+        super::git_read_floor::AllowableReview::EarlierSteps(steps)
+        | super::git_read_floor::AllowableReview::UnansweredProbe(steps) => {
+            super::git_read_after_allow::allow_settles_read_order(
+                model,
+                &steps,
+                context,
+                deadline,
+                execution_environment,
+            )
+        }
+    };
+    answerable
+        && controls.explicit_allow_covers_command(
             model,
-            &steps,
+            observations,
             context,
-            deadline,
             execution_environment,
         )
-    }) && controls.explicit_allow_covers_command(
-        model,
-        observations,
-        context,
-        execution_environment,
-    )
 }
 
 /// The Git floor's reason when every Git read was proven helper-free on its

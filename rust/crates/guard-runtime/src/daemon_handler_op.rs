@@ -41,6 +41,16 @@ impl Reply {
     }
 
     /// `body` is the success body the caller may complete with store facts.
+    /// Whether the request proceeds, then its status, body and fields.
+    pub(crate) fn into_parts(self) -> (bool, u16, Value, Value) {
+        (
+            self.outcome == "proceed",
+            self.status,
+            self.body,
+            self.fields,
+        )
+    }
+
     pub(crate) fn proceed(body: Value, fields: Value) -> Self {
         Self {
             outcome: "proceed",

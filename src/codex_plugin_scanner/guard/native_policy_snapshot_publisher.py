@@ -25,9 +25,6 @@ from .native_policy_snapshot_harness_postures import binding_with_harness_postur
 from .native_policy_snapshot_publication import NativePolicySnapshotPublicationMixin
 from .native_policy_snapshot_publisher_inputs import NativePolicySnapshotPublisherInputs
 from .native_policy_snapshot_publisher_transport import (
-    _decode_ack_v3 as _decode_ack_v3,
-)
-from .native_policy_snapshot_publisher_transport import (
     _publish_snapshot_v3 as _publish_snapshot_v3,
 )
 from .native_policy_snapshot_resident_recovery import NativePolicySnapshotResidentRecoveryMixin
@@ -138,7 +135,8 @@ class NativePolicySnapshotPublisher(
         self._monotonic_clock = monotonic_clock or time.monotonic
         self._condition = threading.Condition()
         self._publish_event = threading.Event()
-        self._closed = False
+        # Set once on close; also cancels the publisher thread's native helpers.
+        self._close_event = threading.Event()
         self._started = False
         self._thread: threading.Thread | None = None
         self._snapshot: dict[str, object] | None = None
@@ -213,7 +211,7 @@ class NativePolicySnapshotPublisher(
 
         # Retire before waiting for a contended condition. A failed bounded
         # close must not permit another publication or a new start.
-        self._closed = True
+        self._close_event.set()
         self._publish_event.set()
         if not self._condition.acquire(timeout=remaining()):
             return False

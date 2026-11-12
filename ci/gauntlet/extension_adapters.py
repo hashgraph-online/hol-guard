@@ -14,6 +14,13 @@ from typing import Any
 # build exports them (HOL_GUARD_BUNDLE_ASSET_OUTPUT) and this names that
 # directory, so enabling an optional extension prepares the candidate's own pack.
 RELEASE_ASSETS_ENV = "GUARD_GAUNTLET_RELEASE_ASSETS"
+# Only the qualification driver sets that variable. A bare `ci.gauntlet run`,
+# the documented way to reproduce one case, is started by hand and sets
+# nothing, so the same export is also found in the driver's wheel cache.
+CACHE_ROOT_ENV = "GUARD_GAUNTLET_CACHE_ROOT"
+DEFAULT_CACHE_ROOT = Path.home() / ".cache" / "hol-guard-gauntlet"
+RELEASE_ASSETS_DIRECTORY = "release-assets"
+PUBLICATION_PREFIX = "extension-data-"
 
 
 @dataclass(frozen=True)
@@ -77,15 +84,73 @@ def extension_adapter(command: str) -> ExtensionAdapter:
 
 
 @functools.cache
+def _installed_source_sha() -> str | None:
+    """The commit the installed native runtime was built from."""
+    from ci.native_runtime import probe_installed_pi_output as probe
+
+    try:
+        build_sha = probe._probe_native_identity()[2].build_sha
+    except Exception:
+        # No installed runtime to match a cached export against. The caller
+        # falls back to a live fetch, which is correct for a released build.
+        return None
+    return build_sha if isinstance(build_sha, str) and build_sha else None
+
+
+def _cache_roots() -> tuple[Path, ...]:
+    named = os.environ.get(CACHE_ROOT_ENV)
+    roots = [Path(named)] if named else []
+    roots.append(DEFAULT_CACHE_ROOT)
+    seen: list[Path] = []
+    for root in roots:
+        if root not in seen:
+            seen.append(root)
+    return tuple(seen)
+
+
+def _publishes(directory: Path, sha: str) -> bool:
+    """Whether this export holds the publication the installed build asks for."""
+    prefix = f"{PUBLICATION_PREFIX}{sha}-"
+    return any(child.is_dir() and child.name.startswith(prefix) for child in directory.iterdir())
+
+
+def _cached_release_assets() -> Path | None:
+    """The pack export the driver's wheel cache holds for the installed build.
+
+    The driver builds the candidate's wheel under
+    ``<cache root>/wheels/<sha>-<tag>[-dev]`` and keeps the build's exported
+    packs beside it. Matching on the installed build SHA means a stale export
+    from another candidate is never served.
+    """
+    sha = _installed_source_sha()
+    if sha is None:
+        return None
+    for root in _cache_roots():
+        wheels = root / "wheels"
+        if not wheels.is_dir():
+            continue
+        for store in sorted(wheels.glob(f"{sha}-*")):
+            assets = store / RELEASE_ASSETS_DIRECTORY
+            if assets.is_dir() and _publishes(assets, sha):
+                return assets
+    return None
+
+
+@functools.cache
 def _serve_candidate_release_assets() -> None:
     directory = os.environ.get(RELEASE_ASSETS_ENV)
-    if not directory:
-        return
+    if directory:
+        path = Path(directory)
+        if not path.is_dir():
+            raise RuntimeError(f"{RELEASE_ASSETS_ENV} is not a directory")
+    else:
+        path = _cached_release_assets()
+        if path is None:
+            # A released build fetches its optional packs from GitHub, so a
+            # missing export is not an error here.
+            return
     from ci.native_runtime.installed_extension_probe_support import serve_release_assets
 
-    path = Path(directory)
-    if not path.is_dir():
-        raise RuntimeError(f"{RELEASE_ASSETS_ENV} is not a directory")
     serve_release_assets(path)
 
 
@@ -124,6 +189,28 @@ def _required_extension_ids() -> frozenset[str]:
     )
 
 
+def _extension_controls(extension_id: str, permissions: tuple[tuple[str, bool], ...]) -> list[Any]:
+    """The controls that enable one extension and set each of its permissions.
+
+    A required extension is already enabled and the runtime refuses a local
+    control over its state, so ask only for the permissions. Asking to enable
+    it anyway is refused with `immutable_extension`, which no fixture can
+    recover from.
+    """
+    from ci.native_runtime.probe_installed_native_extensions import control
+    from codex_plugin_scanner.guard.runtime.extension_control_contract import ControlState, ControlTargetKind
+
+    required = extension_id in _required_extension_ids()
+    controls: list[Any] = [] if required else [control(ControlTargetKind.EXTENSION, extension_id, ControlState.ENABLED)]
+    controls += [
+        control(ControlTargetKind.PERMISSION, permission, ControlState.ENABLED if enabled else ControlState.DISABLED)
+        for permission, enabled in permissions
+    ]
+    if not controls:
+        raise RuntimeError(f"{extension_id} is required and no permission control was requested")
+    return controls
+
+
 def _commit_extension_controls(
     daemon: Any, password: str, extension_id: str, permissions: tuple[tuple[str, bool], ...]
 ) -> int:
@@ -131,34 +218,46 @@ def _commit_extension_controls(
 
     The commit goes through the daemon's control service, the path an installed
     enable takes, so it prepares the extension's optional pack first.
-
-    A required extension is already enabled and the runtime refuses a local
-    control over its state, so ask only for the permissions. Asking to enable
-    it anyway is refused with `immutable_extension`, which no fixture can
-    recover from.
     """
-    from ci.native_runtime.probe_installed_native_extensions import commit_controls, control
-    from codex_plugin_scanner.guard.runtime.extension_control_contract import ControlState, ControlTargetKind
+    from ci.native_runtime.probe_installed_native_extensions import commit_controls
 
-    required = extension_id in _required_extension_ids()
-    controls = [] if required else [control(ControlTargetKind.EXTENSION, extension_id, ControlState.ENABLED)]
-    controls += [
-        control(ControlTargetKind.PERMISSION, permission, ControlState.ENABLED if enabled else ControlState.DISABLED)
-        for permission, enabled in permissions
-    ]
-    if not controls:
-        raise RuntimeError(f"{extension_id} is required and no permission control was requested")
-    return commit_controls(daemon._server.extension_control_api, password, tuple(controls))
+    return commit_controls(
+        daemon._server.extension_control_api, password, tuple(_extension_controls(extension_id, permissions))
+    )
 
 
 def configure_extension_controls(
     daemon: Any, guard_home: Path, extension_id: str, *, enabled_permissions: list[str]
 ) -> int:
     """Enable an extension with every listed permission explicitly allowed."""
+    return configure_each_extension_controls(daemon, guard_home, {extension_id: enabled_permissions})[extension_id]
+
+
+def configure_each_extension_controls(
+    daemon: Any, guard_home: Path, enabled_permissions: dict[str, list[str]]
+) -> dict[str, int]:
+    """Enable several extensions, each with its permissions, in one committed layer.
+
+    Authorizing enrolls the control authority, which only a home still at
+    revision 0 accepts; once a layer is committed a second authorization is
+    refused with `fixture_not_new`. A case that needs more than one extension
+    therefore commits all of them from the single password.
+
+    A commit replaces the stored local-admin layers rather than adding to
+    them: `_effective_layers_for_local_mutation` builds the proposed state
+    from the mutation's own local layers plus the managed ones. Committing
+    one extension at a time would drop the extension committed before it, so
+    every extension's controls go into the single layer this commits, and
+    each extension reports the revision that layer landed at.
+    """
+    from ci.native_runtime.probe_installed_native_extensions import commit_controls
+
     password = _authorize_extension_controls(daemon, guard_home)
-    return _commit_extension_controls(
-        daemon, password, extension_id, tuple((permission, True) for permission in enabled_permissions)
-    )
+    controls: list[Any] = []
+    for extension_id, permissions in enabled_permissions.items():
+        controls += _extension_controls(extension_id, tuple((permission, True) for permission in permissions))
+    revision = commit_controls(daemon._server.extension_control_api, password, tuple(controls))
+    return {extension_id: revision for extension_id in enabled_permissions}
 
 
 def configure_extension_permission_denial(daemon: Any, guard_home: Path, adapter: ExtensionAdapter) -> dict[str, Any]:

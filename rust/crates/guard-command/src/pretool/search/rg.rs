@@ -542,6 +542,7 @@ mod tests {
             ripgrep_config_absent: true,
             gem_config_absent: true,
             http_config_absent: false,
+            openssl_config_absent: false,
             ..Default::default()
         };
         let r = repo.display();
@@ -622,6 +623,7 @@ mod tests {
                 ripgrep_config_absent: true,
                 gem_config_absent: true,
                 http_config_absent: false,
+                openssl_config_absent: false,
                 shell_home_matches,
                 ..Default::default()
             };
@@ -668,6 +670,7 @@ mod tests {
             ripgrep_config_absent: true,
             gem_config_absent: true,
             http_config_absent: false,
+            openssl_config_absent: false,
             shell_home_matches: true,
             ..Default::default()
         };

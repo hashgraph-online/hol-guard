@@ -88,6 +88,7 @@ fn shell(home: &Path, command: &str) -> String {
                 ripgrep_config_absent: false,
                 gem_config_absent: false,
                 http_config_absent: false,
+                openssl_config_absent: false,
                 psql_environment: Default::default(),
                 creates_nothing: false,
             },
@@ -155,6 +156,43 @@ fn unproven_size_and_comparison_reads_still_ask() {
         "cmp -n $N README.md src/one.ts",
         "cmp --ignore-initial=1K README.md src/one.ts",
         "cmp -x README.md src/one.ts",
+    ] {
+        assert!(!shell(&home, command).contains("allow"), "{command}");
+    }
+}
+
+/// `git show HEAD:a.ts | diff - a.ts` compares a committed copy against the
+/// working file. The dash reads only what the proven producer printed, so the
+/// file operand carries the whole proof.
+#[test]
+fn a_comparison_against_piped_output_proceeds() {
+    let home = home();
+    for command in [
+        "git show HEAD:src/one.ts | diff - src/one.ts",
+        "git show HEAD:README.md | diff -u README.md -",
+        "cat old/one.ts | diff -q - src/one.ts",
+        "git show HEAD:src/one.ts | cmp - old/one.ts",
+        "cat src/one.ts | cmp -s src/one.ts -",
+    ] {
+        assert_eq!(shell(&home, command), "allow", "{command}");
+    }
+}
+
+#[test]
+fn a_piped_comparison_still_proves_its_file_and_its_producer() {
+    let home = home();
+    write(home.join("project/src/.env"), "SYNTHETIC=1\n");
+    for command in [
+        "cat README.md | diff - src/.env",
+        "cat README.md | diff - ~/.ssh/id_ed25519",
+        "cat README.md | diff - -",
+        "cat README.md | diff -r - old",
+        "cat README.md | diff --from-file=README.md - src/one.ts",
+        "cat src/.env | diff - README.md",
+        "cat README.md | cmp - src/.env",
+        "cat README.md | cmp - -",
+        "cat README.md | cmp - README.md $N",
+        "cat src/.env | cmp - README.md",
     ] {
         assert!(!shell(&home, command).contains("allow"), "{command}");
     }

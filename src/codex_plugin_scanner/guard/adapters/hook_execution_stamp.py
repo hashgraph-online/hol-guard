@@ -19,7 +19,11 @@ def _stamp_hook_input(text: str) -> str:
         return text
     active = {key: value for key, value in os.environ.items() if value}
     # Git pages through `less` by default; flags taking a file argument are excluded.
-    pager_ok = re.compile(r"(?:cat|less(?: -[ABCEFGIJKLMNQRSUVWXacdefgimnqrsuw~]+)*)?").fullmatch
+    # Cursor's agent terminal pager is a fixed `head | cat` script.
+    pager_ok = re.compile(
+        r"(?:cat|less(?: -[ABCEFGIJKLMNQRSUVWXacdefgimnqrsuw~]+)*"
+        r'|sh -c "head -n 10000 [|] cat")?'
+    ).fullmatch
     stamp: dict[str, object] = {
         "path": os.environ.get("PATH", ""),
         "environment_names": sorted(set(active) | {n for n in ("GIT_PAGER", "PAGER") if n in os.environ}),

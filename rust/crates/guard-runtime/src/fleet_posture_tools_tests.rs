@@ -150,7 +150,7 @@ fn an_undetected_tool_is_reported_only_once_it_disappears() {
         Some(json!({"tools": ["codex"]})),
     ] {
         assert!(
-            rows(&[absent.clone()], last.as_ref(), true).is_empty(),
+            rows(std::slice::from_ref(&absent), last.as_ref(), true).is_empty(),
             "{last:?}"
         );
     }

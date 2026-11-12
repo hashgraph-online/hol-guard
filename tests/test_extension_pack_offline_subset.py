@@ -9,7 +9,6 @@ import pytest
 
 from codex_plugin_scanner.guard.catalog_delivery import (
     activation_baseline,
-    activation_journal,
     activation_record,
     activation_store,
     activation_transition,
@@ -23,6 +22,7 @@ from codex_plugin_scanner.guard.store_extension_control_authority_schema import 
 )
 from tests.native_activation_support import compiled_lifecycle as compiled_lifecycle
 from tests.native_activation_support import subset_store
+from tests.pack_activation_writer_support import write_in_transaction
 from tests.test_extension_pack_preparation import delivery as delivery
 
 KEY = b"offline-subset-authority-fixture"
@@ -94,51 +94,31 @@ def test_subset_writes_schema6_and_keeps_schema5_readable(delivery, monkeypatch)
     store._get_policy_integrity_secret_from_store = protected._get_policy_integrity_secret_from_store
     draft = activation_transition.stage(previous, subset, verifier_key=KEY, store=store, now=10000)
     with hold_command_control_authority_lock(store.guard_home), connection:
-        activation_store.write_in_transaction(store, connection, draft, verifier_key=KEY, recorded_at="unit", now=10000)
+        write_in_transaction(store, connection, draft, verifier_key=KEY, recorded_at="unit", now=10000)
     marker = connection.execute("select version,checksum from extension_control_schema_migration").fetchone()
     assert marker["version"] == 6
     assert extension_control_schema_marker_is_compatible(*marker)
     assert activation_store.read(store).selected == {"command.core"}
     # New readers preserve the floor and baseline reservation cannot overwrite it.
     with hold_command_control_authority_lock(store.guard_home), connection:
-        activation_baseline.reserve_legacy_baseline(store, connection, None, key=KEY, recorded_at="unit")
+        assert activation_baseline.baseline_request(connection, None, recorded_at="unit") is None
     assert activation_store.read(store).record_digest == draft.digest
     with (
         hold_command_control_authority_lock(store.guard_home),
         connection,
         pytest.raises(NativePolicySnapshotError, match="conflict"),
     ):
-        activation_store.write_in_transaction(store, connection, draft, verifier_key=KEY, recorded_at="unit", now=10000)
+        write_in_transaction(store, connection, draft, verifier_key=KEY, recorded_at="unit", now=10000)
 
 
-def test_subset_reservation_fences_old_writers_before_anchor(delivery, monkeypatch):
-    previous, sealed = committed(delivery, ["command.external"])
-    store = SimpleNamespace(guard_home=delivery.cache.parent / "device")
-    store.guard_home.mkdir(mode=0o700)
+def test_a_refused_first_activation_sends_the_baseline_again() -> None:
     connection = sqlite3.connect(":memory:")
     connection.row_factory = sqlite3.Row
     ensure_extension_control_authority_schema(connection, activate_packs=True)
-    connection.execute("insert into extension_command_pack_activation values (1,1,?,?,?,?)", (*sealed, "unit"))
-    connection.commit()
-    monkeypatch.setattr(activation_journal, "directory_for_store", lambda store: delivery.cache)
-    monkeypatch.setattr(activation_journal, "_key", lambda store: KEY)
-    subset = preparation.prepare(previous, [], delivery.cache, engine="1" * 64, now=10000)
-    protected = subset_store(previous)
-    store._policy_integrity_secret_material = protected._policy_integrity_secret_material
-    store._policy_integrity_secret_store = protected._policy_integrity_secret_store
-    store._should_skip_policy_integrity_keychain_access = protected._should_skip_policy_integrity_keychain_access
-    store._build_scoped_secret_ref = protected._build_scoped_secret_ref
-    store._get_policy_integrity_secret_from_store = protected._get_policy_integrity_secret_from_store
-    draft = activation_transition.stage(previous, subset, verifier_key=KEY, store=store, now=10000)
-    with hold_command_control_authority_lock(store.guard_home), connection:
-        activation_journal.reserve(
-            store,
-            connection,
-            draft,
-            control_revision=2,
-            snapshot_digest="a" * 64,
-            catalog_digest=subset.metadata.catalog_digest,
-            recorded_at="unit",
-            now=10000,
-        )
-    assert connection.execute("select version from extension_control_schema_migration").fetchone()[0] == 6
+    metadata = SimpleNamespace(program_digest="1" * 64, catalog_digest="2" * 64, trust_digest="3" * 64)
+    assert activation_baseline.baseline_request(connection, metadata, recorded_at="unit") == {
+        "program_digest": "1" * 64,
+        "catalog_digest": "2" * 64,
+        "trust_digest": "3" * 64,
+        "recorded_at": "unit",
+    }

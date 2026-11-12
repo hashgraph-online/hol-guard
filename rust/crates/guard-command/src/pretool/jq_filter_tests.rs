@@ -294,6 +294,83 @@ fn admits_bare_rendering_formats_and_shorthand_keys() {
     }
 }
 
+/// `"\(.a) \(.b)"`: a string that renders admitted filters into its text.
+/// Each interpolation reads the value jq already read, so the string reaches
+/// no further than `join` or `@tsv` does over the same value.
+#[test]
+fn admits_strings_that_render_the_value_read() {
+    for filter in [
+        "\"\\(.type)\"",
+        ".[] | \"\\(.type)\\t\\(.name)\"",
+        ".[] | \"\\(.name) is \\(.state)\"",
+        ".[] | \"\\(.source.path // .repo // \"?\") \\(.icon)\"",
+        ".[] | \"\\(.items | length) items\"",
+        ".[] | \"\\(.a)\" | length",
+        "[.[] | \"\\(.id)\"]",
+        "{line: \"\\(.a)/\\(.b)\"}",
+        ".[] | select(.draft == false) | \"\\(.number)\"",
+        ".a // \"\\(.b)\"",
+        ".a == \"\\(.b)\"",
+        ". as $x | \"\\($x.name)\"",
+        ".[] | \"\\(.a | keys | join(\",\"))\"",
+    ] {
+        assert!(safe_filter(filter), "expected admitted: {filter}");
+    }
+}
+
+/// An interpolation carries a filter, not text, so it is held to the same
+/// grammar as any other stage and a program that reaches the environment,
+/// another input or a module is refused inside one too.
+#[test]
+fn rejects_an_interpolation_that_reaches_outside_the_value_read() {
+    for filter in [
+        "\"\\(env)\"",
+        "\"\\(input)\"",
+        "\"\\($ENV)\"",
+        "\"\\($ENV.HOME)\"",
+        "\"\\(.a | @sh)\"",
+        "\"\\(.a; .b)\"",
+        "\"\\(.a\"",
+        "\"\\(\"",
+        "\"\\()\"",
+        "\"\\(   )\"",
+        // Text alone is a literal, which is an operand and not a stage.
+        "\"plain\"",
+        ".a | \"plain\"",
+        // The argument of a literal builtin is text, so a filter written in
+        // it is refused rather than read as one.
+        ".a | has(\"\\(.b)\")",
+        ".a | join(\"\\(.b)\")",
+        // A computed object key is refused however it is written.
+        "{\"\\(.a)\": .b}",
+        // Three backslashes are an escaped backslash and then an
+        // interpolation, which still carries a filter.
+        ".a | has(\"\\\\\\(.b)\")",
+        // A format applied to a template renders words, not a value read.
+        "@sh \"\\(.a)\"",
+        "@base64 \"\\(.a)\"",
+    ] {
+        assert!(!safe_filter(filter), "expected rejected: {filter}");
+    }
+}
+
+/// `has("\\(")`: the two backslashes are one escaped backslash, so the
+/// parenthesis that follows them is text and not the opening of an
+/// interpolation. Reading the escapes is what tells the two apart; a search
+/// for the characters alone takes the text for code and sends an ordinary
+/// filter to review.
+#[test]
+fn admits_an_escaped_backslash_before_a_parenthesis() {
+    for filter in [
+        ".a | has(\"\\\\(\")",
+        ".a | join(\"\\\\(\")",
+        ".a == \"\\\\(\"",
+        ".a // \"x\\\\(y\"",
+    ] {
+        assert!(safe_filter(filter), "expected admitted: {filter}");
+    }
+}
+
 #[test]
 fn rejects_shell_and_templated_formats() {
     for filter in [

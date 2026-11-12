@@ -112,6 +112,46 @@ fn cwd_list_context(
     Some(cwd)
 }
 
+/// The directory a leading `cd <dir>` names, read without the separator
+/// shape [`verified_cwd_compound_context`] needs to prove the steps after it.
+///
+/// A `;` anywhere after the `cd` leaves those steps unproven, because a
+/// failed `cd` would let the part after the `;` run in the directory the
+/// command started in. The `cd` itself is not in doubt: it is the first thing
+/// the list runs, it runs unconditionally, and a verified target neither
+/// reads nor creates anything. Only that one step is answered here; nothing
+/// after it is proved against the directory it names.
+///
+/// A target that climbs out of the cwd counts too, under the read screens
+/// [`directory_targets::verified_climb_target`] applies. `cd ../other` is the
+/// same single step as `cd /abs/other` or `cd ~/other`: it names a directory
+/// and stops. Holding the climb to a linked worktree would make the rules a
+/// user allowed cover `cd /abs/other && gh pr merge 1; gh pr view 1` while
+/// the same command spelled `cd ../other` kept a review, for the one step
+/// nobody doubts. The steps after it stay unproved either way, and the
+/// write, Git write and contained-run routes keep the stricter proof.
+pub(in crate::pretool) fn verified_leading_cd_target(
+    model: &CanonicalCommandV1,
+    context: PathContext<'_>,
+) -> Option<String> {
+    let first = model.segments.first()?;
+    if first.executable.as_deref() != Some("cd")
+        || !first.environment_names.is_empty()
+        || first.pipeline_index != 0
+        || !directory_targets::drive_targets_quoted(first)
+        || !directory_targets::home_targets_unquoted(first)
+    {
+        return None;
+    }
+    // A redirection reaches the parser as an argument, so a `cd` that also
+    // writes a file is not the single-target step this proves.
+    let [target] = first.arguments.as_slice() else {
+        return None;
+    };
+    safe_reads::verified_cwd_target(target, context)
+        .or_else(|| directory_targets::verified_climb_target(target, context))
+}
+
 /// `cd <dir> && <reads>`, then more of the same, with a read outside a group
 /// proved in the directory that group leaves behind.
 ///
@@ -334,6 +374,7 @@ pub(in crate::pretool) fn exact_safe_cwd_compound(
                 ripgrep_config_absent: context.ripgrep_config_absent,
                 gem_config_absent: context.gem_config_absent,
                 http_config_absent: context.http_config_absent,
+                openssl_config_absent: context.openssl_config_absent,
                 psql_environment: context.psql_environment,
                 cwd: Some(&cwd),
                 creates_nothing: false,
@@ -357,9 +398,10 @@ pub(in crate::pretool) fn exact_safe_cwd_compound(
                     ripgrep_config_absent: context.ripgrep_config_absent,
                     gem_config_absent: context.gem_config_absent,
                     http_config_absent: context.http_config_absent,
+                    openssl_config_absent: context.openssl_config_absent,
                     psql_environment: context.psql_environment,
                     cwd: Some(&cwd),
-                    creates_nothing: false,
+                    creates_nothing: context.creates_nothing,
                 },
             )
     })
@@ -429,7 +471,9 @@ fn cwd_effectful_executable(executable: Option<&str>) -> bool {
 /// name is missing here is refused for the name alone, so the spellings that
 /// read the way `grep` and `rg` do belong beside them.
 pub(in crate::pretool) fn cwd_read_executable(executable: Option<&str>) -> bool {
-    if executable.is_some_and(super::super::digest_reads::digest_program) {
+    if executable
+        .is_some_and(|name| super::super::digest_reads::digest_program(name) || name == "openssl")
+    {
         return true;
     }
     matches!(
@@ -487,8 +531,10 @@ pub(in crate::pretool) fn cwd_read_executable(executable: Option<&str>) -> bool 
 
 /// The command from its only `cd` onward, when everything before that `cd`
 /// is a proven read that neither depends on nor changes the directory or Git
-/// state the rest reads. `ls /tmp/a && cd /tmp/a/app && git status` then gets
-/// the same decision as `cd /tmp/a/app && git status`. The prefix keeps its
+/// state the rest reads. `ls /tmp/a && cd /tmp/a/app && git status` and
+/// `sleep 30; cd /tmp/a/app && git status` then get the same decision as
+/// `cd /tmp/a/app && git status`: after `;` the `cd` runs whatever the prefix
+/// returned, and the rest still runs only once it succeeded. The prefix keeps its
 /// own proof against the original directory; Git segments stay out of it so
 /// the Git execution floor always sees every Git read with its directory.
 pub(in crate::pretool) fn after_read_prefix(
@@ -516,7 +562,7 @@ pub(in crate::pretool) fn after_read_prefix(
             .take(length)
             .collect();
         let last = index + 2 == start + 1;
-        if (last && separator.trim() != "&&") || !matches!(separator.trim(), "&&" | "|") {
+        if (last && separator.trim() == "|") || !matches!(separator.trim(), "&&" | "|" | ";") {
             return None;
         }
     }
@@ -524,6 +570,9 @@ pub(in crate::pretool) fn after_read_prefix(
         segment.environment_names.is_empty()
             && segment.wrapper_chain.is_empty()
             && !segment.path_overridden
+            // `$((PATH=10))` assigns as it expands, which the steps after the
+            // `cd` would see.
+            && !super::super::shell_arithmetic::arithmetic_assigns(&segment.text)
             && segment
                 .executable
                 .as_deref()

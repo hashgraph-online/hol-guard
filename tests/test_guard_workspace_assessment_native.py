@@ -14,13 +14,13 @@ from pathlib import Path
 
 import pytest
 
+from ci.guard_daemon_harness import GuardDaemonServer
 from codex_plugin_scanner.guard import native_supply_chain_egress as egress_module
 from codex_plugin_scanner.guard import supply_chain_cloud_audit as cloud_audit_module
 from codex_plugin_scanner.guard import workspace_assessment_runner as runner
 from codex_plugin_scanner.guard import workspace_assessment_store as assessments
 from codex_plugin_scanner.guard import workspace_assessment_worker as worker
 from codex_plugin_scanner.guard.config import load_guard_config
-from codex_plugin_scanner.guard.daemon import GuardDaemonServer
 from codex_plugin_scanner.guard.store import GuardStore
 from tests.native_workspace import bind_workspace
 from tests.test_guard_headless_daemon_api import _dashboard_token_for, _read_json_response, _request

@@ -81,6 +81,7 @@ pub(super) fn bounded_native_temporary_write_target(
             ripgrep_config_absent: false,
             gem_config_absent: false,
             http_config_absent: false,
+            openssl_config_absent: false,
             psql_environment: Default::default(),
             creates_nothing: false,
         },
@@ -186,7 +187,7 @@ fn bounded_write_target(
     (inside || linked || verified_home.is_some())
         && resolved_location_allowed(&canonical, home_dir, workspace.to_str(), temporary_checkout)
         && (plan_note
-            || guard_secure_fs::hidden_read_parts_allowed(&canonical)
+            || guard_secure_fs::hidden_write_parts_allowed(&canonical)
             || screens::plain_dot_scratch_target(&canonical, home_dir)
             || super::read_paths::hidden_listing::repository_plugin_manifest(
                 &canonical,
@@ -390,7 +391,7 @@ fn bounded_temporary_copy_target(value: &str, context: super::PathContext<'_>) -
         return false;
     }
     resolved_path_allowed_in_scope(&target, context.home_dir, context.cwd, true)
-        && guard_secure_fs::hidden_read_parts_allowed(&target)
+        && guard_secure_fs::hidden_write_parts_allowed(&target)
         && !autostart_write_target(&target)
         && !hooks_path::configured_hooks_write(&target, context.home_dir, context.cwd)
 }
@@ -456,7 +457,7 @@ fn bounded_temporary_copy_target(value: &str, context: super::PathContext<'_>) -
     !inside_workspace
         && single_link_write_target(&target)
         && resolved_path_allowed_in_scope(&target, context.home_dir, context.cwd, true)
-        && guard_secure_fs::hidden_read_parts_allowed(&target)
+        && guard_secure_fs::hidden_write_parts_allowed(&target)
         && !autostart_write_target(&target)
         && !hooks_path::configured_hooks_write(&target, context.home_dir, context.cwd)
 }

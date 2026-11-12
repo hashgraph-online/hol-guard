@@ -3,7 +3,7 @@ import type { GuardApprovalGatePublicConfig, GuardContextAssistanceConfig } from
 import { controlContextAssistance, fetchContextAssistance } from "./api";
 import { saveCigarPreference } from "./one-click-api";
 import {
-  CigarSetupError, CigarSetupStopped, planCigarHeldJob, planCigarSetup, planCigarStart, runCigarSetup,
+  CigarSetupError, CigarSetupStopped, cigarSetupReason, planCigarHeldJob, planCigarSetup, planCigarStart, runCigarSetup,
   type CigarSetupPlan, type CigarSetupRun, type CigarSetupStage,
 } from "./one-click";
 import type { ContextAssistanceStatus } from "./types";
@@ -218,7 +218,7 @@ export function useCigarOneClick(options: Options) {
         setRun(planned ? { phase: "proof", plan: planned, error } : { phase: "failed", stages, stage, message: cause.message });
       } else {
         setRun({ phase: "failed", stages, stage: cause instanceof CigarSetupError ? cause.stage : stage,
-          message: cause instanceof Error ? cause.message : "CIGAR did not finish turning on. Nothing else changed." });
+          message: cigarSetupReason(cause, "CIGAR did not finish turning on. Nothing else changed.") });
       }
     } finally {
       running.current = false;

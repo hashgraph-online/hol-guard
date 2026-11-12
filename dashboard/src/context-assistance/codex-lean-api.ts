@@ -2,7 +2,7 @@ import { fetchWithGuardAuth } from "../guard-api";
 import { ContextAssistanceApiError } from "./api";
 import type { ContextProof } from "./workspaces-api";
 
-/** Whether Guard's compaction limit is in the Codex config, a limit the user set, or none. */
+/** Whether a summary size Guard wrote is in the Codex config, a size the user set, or none. */
 export type CodexLeanState = { state: "on" | "off" | "yours"; limit: number | null };
 
 const PATH = "/v1/context-assistance/codex-lean";
@@ -41,8 +41,9 @@ export function readCodexLean(signal?: AbortSignal): Promise<CodexLeanState> {
   return call({ method: "GET" }, signal);
 }
 
-export function saveCodexLean(enabled: boolean, proof?: ContextProof, signal?: AbortSignal): Promise<CodexLeanState> {
-  return call({ method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ enabled,
+/** Remove the summary size Guard wrote to the Codex config. A size the user set stays. */
+export function removeCodexLean(proof?: ContextProof, signal?: AbortSignal): Promise<CodexLeanState> {
+  return call({ method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ enabled: false,
     ...(proof?.currentPassword ? { approval_password: proof.currentPassword } : {}),
     ...(proof?.totpCode ? { approval_totp_code: proof.totpCode } : {}) }) }, signal);
 }

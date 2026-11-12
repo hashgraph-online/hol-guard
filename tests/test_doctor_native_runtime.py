@@ -240,7 +240,6 @@ def test_the_section_carries_availability_resident_and_this_process_counters(
 
     assert section["availability"]["reason_code"] == "native_ready"
     assert section["resident"] == {"live": False, "owner_lock_held": False, "generations": 0}
-    assert isinstance(section["daemon_http"], dict)
     assert "repair" not in section
 
 

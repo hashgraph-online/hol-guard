@@ -5,7 +5,7 @@ from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
-from codex_plugin_scanner.guard.daemon import hook_native_exact_action
+from codex_plugin_scanner.guard.hook_review import hook_native_exact_action
 from codex_plugin_scanner.guard.native_daemon_route import _decide
 from tests import native_review_evidence_support as review_support
 

@@ -371,7 +371,7 @@ def test_watchdog_thread_respawns_repeatedly_and_survives_errors(tmp_path: Path)
 
 
 def _unavailable_denial(tmp_path: Path, failure_code: str | None, event_name: str = "PreToolUse") -> str:
-    from codex_plugin_scanner.guard.daemon.hook_worker_native import _record_unavailable_native
+    from codex_plugin_scanner.guard.hook_review.hook_worker_native import _record_unavailable_native
     from codex_plugin_scanner.guard.native_resident_client import record_native_resident_client_failure_code
 
     host = SimpleNamespace(metrics=SimpleNamespace(record_route=lambda _route: None), activity_writer=None)
@@ -400,4 +400,4 @@ def test_prompt_denial_names_repair_when_the_runtime_will_not_restart(tmp_path: 
     assert "hol-guard repair" in refused
     timed_out = _unavailable_denial(tmp_path, "native_client_timed_out", "UserPromptSubmit")
     assert "hol-guard repair" not in timed_out
-    assert "could not complete native prompt review safely" in timed_out
+    assert "could not check this prompt, so it was blocked" in timed_out

@@ -20,10 +20,9 @@ from pathlib import Path
 
 import pytest
 
-from ci.gauntlet.approval_rows import approval_rows
 from ci.gauntlet.input_evidence import redact_value
-from codex_plugin_scanner.guard.daemon.hook_worker import HookWorker
 from codex_plugin_scanner.guard.hook_execution_environment import collect_hook_execution_environment
+from codex_plugin_scanner.guard.hook_review.hook_worker import HookWorker
 from codex_plugin_scanner.guard.store import GuardStore
 from tests.benign_fp_gate_connectors import allow_ready_cli
 from tests.benign_fp_gate_fixture import BenignFixture, build_fixture, route_codex
@@ -44,7 +43,13 @@ from tests.gauntlet_replay import (
     source_ref_payload,
     write_global_gitconfig,
 )
-from tests.native_gate_retry import review_with_unavailable_retry
+from tests.native_gate_retry import (
+    EXTENSION_TIMEOUT_REASON,
+    NativeUnavailableRetryWarning,
+    RetryApprovals,
+    approval_snapshot,
+    review_with_unavailable_retry,
+)
 
 _CASES = expand()
 # The benign gate already records, per Linux CI result, which ordinary cases still warn or review.
@@ -80,8 +85,9 @@ def replay_environment(
     # Git finds the fixture ~/.gitconfig through HOME, as on a real host. The native Git
     # proofs fail closed on any inherited GIT_*, LD_* or DYLD_* override, so the clean
     # lane starts without them; the realistic overlay adds back what developer shells carry.
+    # An inherited OPENSSL_* configuration keeps openssl digests on review the same way.
     for name in list(os.environ):
-        if name.upper().startswith(("GIT_", "LD_", "DYLD_")):
+        if name.upper().startswith(("GIT_", "LD_", "DYLD_", "OPENSSL_")):
             patch.delenv(name)
     patch.setenv("XDG_CONFIG_HOME", str(fixture.home / ".config"))
     patch.setenv("HOL_GUARD_NATIVE", "force")
@@ -107,8 +113,8 @@ def replay_environment(
             shutil.rmtree(root, ignore_errors=True)
 
 
-def _replay(case: ReplayCase, fixture: BenignFixture, worker: HookWorker) -> tuple[dict[str, object], list[dict]]:
-    known = {str(row.get("request_id")) for row in worker.store.list_approval_requests(status=None, limit=500)}
+def _payload(case: ReplayCase, fixture: BenignFixture) -> dict[str, object]:
+    """The hook payload this case replays, before any harness-specific routing."""
     resolved = redact_value(case.tool_input, fixture.tokens())
     assert isinstance(resolved, dict)
     payload: dict[str, object] = {
@@ -125,11 +131,21 @@ def _replay(case: ReplayCase, fixture: BenignFixture, worker: HookWorker) -> tup
     if case.source_ref:
         spelled = str(resolved.get("path") or resolved["file_path"])
         payload["guard_source_ref"] = source_ref_payload(spelled, fixture.cwd(case.cwd))
+    return payload
+
+
+def _replay(case: ReplayCase, fixture: BenignFixture, worker: HookWorker) -> tuple[dict[str, object], list[dict]]:
+    approvals = RetryApprovals(worker.store)
+    payload = _payload(case, fixture)
     if case.harness == "cursor" and case.tool == "shell" and case.event == "PreToolUse":
-        payload = cursor_route_probe(case.case_id, payload, fixture, worker, fixture.cwd(case.cwd))
+        payload = cursor_route_probe(
+            case.case_id, payload, fixture, worker, fixture.cwd(case.cwd), on_retry=approvals.mark_retry
+        )
     if case.harness == "cursor":
         payload.update(cursor_hook_fields(case.tool, payload))
-    # Approval baselines stay from before the first attempt, so a retry never hides a row.
+    # The baseline stays from before the first attempt, so an added row is never hidden, and a
+    # retried case sets aside what the interrupted attempt queued: those rows say nothing about
+    # the answer being judged.
     result = review_with_unavailable_retry(
         case.case_id,
         lambda: worker.review_http_payload(
@@ -140,10 +156,11 @@ def _replay(case: ReplayCase, fixture: BenignFixture, worker: HookWorker) -> tup
             guard_home=fixture.guard_home,
             workspace=fixture.cwd(case.cwd),
         ),
+        on_retry=approvals.mark_retry,
     )
     if case.harness == "codex":
         result = route_codex(result, payload, fixture)
-    return result, approval_rows(worker.store, known)
+    return result, approvals.rows()
 
 
 @pytest.mark.usefixtures("native_hook_force")
@@ -202,3 +219,76 @@ def test_known_gaps_name_real_cases() -> None:
     ids = {case.case_id for case in _CASES} | {case.base_id for case in _CASES}
     stripped = {key.rsplit("/", 1)[0] if key.rsplit("/", 1)[-1] in ENVIRONMENTS else key for key in _GAPS}
     assert stripped <= ids, sorted(stripped - ids)
+
+
+@pytest.mark.usefixtures("native_hook_force")
+def test_a_missed_budget_leaves_no_row_behind_for_the_retry_to_be_judged_on(
+    replay_environment: tuple[str, BenignFixture, HookWorker], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The gate judges a retried case on its retry's answer, not on the interruption's row.
+
+    A hook that runs out of clock can still have queued a review first. That stands in here
+    as a first attempt which reviews a case the catalog expects to be reviewed and then
+    reports the extension timeout; the retry reviews the quiet case itself. Judging the
+    interrupted attempt's row would fail ordinary work the retry allowed.
+    """
+    kind, fixture, worker = replay_environment
+
+    def behaves(case: ReplayCase) -> bool:
+        # A known gap already reviews on this product, so it could not show a row being set aside.
+        return not any(
+            k in _GAPS for k in (f"{case.case_id}/{kind}", case.case_id, f"{case.base_id}/{kind}", case.base_id)
+        )
+
+    quiet = next(c for c in _CASES if c.expect == "quiet" and c.harness == "claude-code" and behaves(c))
+    # This module replays every case on the same store before this test runs, so a case replayed
+    # again only deduplicates onto the row it already has: its id is in the baseline either way and
+    # the set-aside path would never run. The stand-in therefore carries a trailing comment, which
+    # leaves the command's meaning alone and gives the queue a request it has not seen. A review by
+    # design can still be contained or routed on a given host and queue nothing at all, so the
+    # stand-in is whichever candidate actually adds a request id here.
+    candidates = [
+        c
+        for c in _CASES
+        if c.expect in {"always", "block"}
+        and c.harness == "claude-code"
+        and isinstance(c.tool_input, dict)
+        and isinstance(c.tool_input.get("command"), str)
+        and behaves(c)
+    ]
+    answered = worker.review_http_payload
+    calls: list[int] = []
+    left_behind: list[str] = []
+
+    def interrupted_first(**kwargs: object) -> dict[str, object]:
+        calls.append(1)
+        if len(calls) > 1:
+            return answered(**kwargs)
+        before = approval_snapshot(worker.store)
+        for candidate in candidates[:12]:
+            payload = _payload(candidate, fixture)
+            tool_input = dict(payload["tool_input"])  # type: ignore[arg-type]
+            tool_input["command"] = f"{tool_input['command']} # interrupted gate attempt"
+            payload["tool_input"] = tool_input
+            payload["tool_call_id"] = f"{candidate.case_id}-interrupted"
+            answered(
+                payload=payload,
+                params={},
+                default_harness=candidate.harness,
+                home_dir=fixture.home,
+                guard_home=fixture.guard_home,
+                workspace=fixture.cwd(candidate.cwd),
+            )
+            if approval_snapshot(worker.store).keys() - before.keys():
+                left_behind.append(candidate.case_id)
+                break
+        return {"decision": "deny", "reason_code": EXTENSION_TIMEOUT_REASON}
+
+    monkeypatch.setattr(worker, "review_http_payload", interrupted_first)
+    with pytest.warns(NativeUnavailableRetryWarning):
+        result, rows = _replay(quiet, fixture, worker)
+    assert left_behind, "no review-by-design case added a request id for the interrupted attempt to leave behind"
+    assert len(calls) == 2
+    assert result.get("reason_code") != EXTENSION_TIMEOUT_REASON
+    assert rows == [], f"{quiet.case_id} judged the interrupted attempt's rows: {rows}"
+    assert judge(quiet, result, rows) is None

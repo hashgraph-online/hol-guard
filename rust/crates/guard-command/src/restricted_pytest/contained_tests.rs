@@ -509,3 +509,154 @@ fn bun_inline_eval_uses_the_node_eval_profile_with_an_installer_image() {
     launch["command"] = json!([bun, "run", "-e", "1"]);
     invalid(&launch);
 }
+
+/// A native runtime image at `path`, owned by this account and writable by
+/// nobody else, as a version manager leaves one on disk.
+fn plant_runtime(path: &Path) {
+    fs::create_dir_all(path.parent().unwrap()).unwrap();
+    fs::write(path, b"\x7fELFnative-fixture").unwrap();
+    fs::set_permissions(path, fs::Permissions::from_mode(0o755)).unwrap();
+}
+
+#[test]
+fn version_manager_node_installs_resolve_as_approved_runtimes() {
+    let fixture = fixture("guard-manager-node");
+    let home = fixture.0.join("caller-home");
+    let workspace = fixture.0.join("project");
+    fs::create_dir(&workspace).unwrap();
+    let approve = |node: &Path| {
+        evaluate(
+            "approved_node",
+            &json!({"path":node,"workspace":workspace,"home":home}),
+        )
+    };
+    // The layouts the managers most developers use actually write. Before
+    // this fix only nvm's was known, so every other manager's Node was
+    // refused and the contained run exited 126 without executing anything.
+    for relative in [
+        ".nvm/versions/node/v20.1.2/bin/node",
+        ".fnm/node-versions/v20.1.2/installation/bin/node",
+        ".local/share/fnm/node-versions/v22.3.0/installation/bin/node",
+        ".volta/tools/image/node/20.1.2/bin/node",
+        ".asdf/installs/nodejs/20.1.2/bin/node",
+        ".local/share/mise/installs/node/22.3.0/bin/node",
+    ] {
+        let node = home.join(relative);
+        plant_runtime(&node);
+        assert_eq!(approve(&node), json!({"value":true}), "{relative}");
+    }
+    // Agent and Guard state stays refused: Guard's own package shims hand a
+    // launch back to Guard instead of running the runtime, and no entry in
+    // the manager list can spell one of these directories.
+    for relative in [
+        ".hol-guard/package-shims/bin/node",
+        ".hol-guard/versions/node/v20.1.2/bin/node",
+        ".claude/versions/node/v20.1.2/bin/node",
+        ".codex/versions/node/v20.1.2/bin/node",
+        ".omp/versions/node/v20.1.2/bin/node",
+    ] {
+        let node = home.join(relative);
+        plant_runtime(&node);
+        assert_eq!(approve(&node), json!({"value":false}), "{relative}");
+    }
+    // A program that merely sits inside a manager's tree is not the runtime
+    // that tree installed, and a release directory with no version name is
+    // not a release.
+    for relative in [
+        ".nvm/versions/node/v20.1.2/lib/node",
+        ".nvm/versions/node/v20.1.2/bin/helpers/node",
+        ".nvm/versions/node/nightly/bin/node",
+    ] {
+        let node = home.join(relative);
+        plant_runtime(&node);
+        assert_eq!(approve(&node), json!({"value":false}), "{relative}");
+    }
+}
+
+#[test]
+fn linked_manager_root_resolves_as_an_approved_runtime() {
+    // A home whose `.nvm` is a link, the way several dotfile managers lay a
+    // profile out. The executable a plan judges is canonical, so the root it
+    // is compared against has to be canonical too; before this fix the
+    // spellings never met and the contained run exited 126.
+    let fixture = fixture("guard-linked-manager");
+    let home = fixture.0.join("caller-home");
+    let workspace = fixture.0.join("project");
+    fs::create_dir_all(&workspace).unwrap();
+    fs::create_dir_all(&home).unwrap();
+    let store = fixture.0.join("toolchains/nvm");
+    let node = store.join("versions/node/v20.1.2/bin/node");
+    plant_runtime(&node);
+    std::os::unix::fs::symlink(&store, home.join(".nvm")).unwrap();
+    assert_eq!(
+        evaluate(
+            "approved_node",
+            &json!({"path":node,"workspace":workspace,"home":home})
+        ),
+        json!({"value":true})
+    );
+}
+
+#[test]
+fn bun_installed_by_a_version_manager_runs_contained() {
+    let fixture = fixture("guard-manager-bun");
+    let home = fixture.0.join("caller-home");
+    let workspace = fixture.0.join("project");
+    fs::create_dir_all(&workspace).unwrap();
+    fs::write(workspace.join("package.json"), "{}").unwrap();
+    let launch = |bun: &Path| {
+        evaluate(
+            "prepare_inline",
+            &json!({"command":[bun,"-e","console.log(1)"],"workspace":workspace,"cwd":workspace,
+                "home":home,"platform":"darwin","backend_executable":"/usr/bin/true",
+                "search_path":""}),
+        )
+    };
+    // Bun's own installer directory, and the managers that install Bun.
+    for relative in [
+        ".bun/bin/bun",
+        ".asdf/installs/bun/1.1.30/bin/bun",
+        ".local/share/mise/installs/bun/1.1.30/bin/bun",
+    ] {
+        let bun = home.join(relative);
+        plant_runtime(&bun);
+        assert_eq!(
+            launch(&bun)["value"]["executable"],
+            json!(bun),
+            "{relative}"
+        );
+    }
+    // Guard's own shim directory is still refused, so a shim can never answer
+    // for Bun inside containment.
+    let shim = home.join(".hol-guard/package-shims/bin/bun");
+    plant_runtime(&shim);
+    assert_eq!(
+        launch(&shim)["reason_code"],
+        json!("inline_eval_invalid_command")
+    );
+}
+
+#[test]
+fn a_runtime_under_any_consulted_home_resolves() {
+    use super::contained::{managed_runtime, manager_roots, NODE_MANAGER_ROOTS};
+    // The request HOME and the account HOME are both consulted. A supervised
+    // session whose HOME is not the account's own was the reported failure:
+    // the only Node on the machine sat under the second home and the
+    // contained run exited 126. The account home comes from the password
+    // database and no test may write into it, so the list `runtime_homes`
+    // builds is exercised here directly.
+    let fixture = fixture("guard-second-home");
+    let request = fixture.0.join("request-home");
+    let account = fixture.0.join("account-home");
+    fs::create_dir_all(&request).unwrap();
+    let node = account.join(".nvm/versions/node/v20.1.2/bin/node");
+    plant_runtime(&node);
+    assert!(!managed_runtime(
+        &node,
+        &manager_roots(std::slice::from_ref(&request), NODE_MANAGER_ROOTS)
+    ));
+    assert!(managed_runtime(
+        &node,
+        &manager_roots(&[request, account], NODE_MANAGER_ROOTS)
+    ));
+}

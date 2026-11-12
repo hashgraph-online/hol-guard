@@ -43,6 +43,7 @@ use super::gemini_detect;
 use super::grok_detect;
 use super::grok_legacy_settings;
 use super::grok_user_config_op;
+use super::harness_backup_restore;
 use super::harness_hook_settings;
 use super::harness_settings_file;
 use super::hermes_detect;
@@ -127,6 +128,7 @@ pub(crate) fn dispatch(kind: &str, args: &Value) -> KindResult {
         "memory_decision_receipt" => crate::memory_decision_receipt::dispatch(args),
         "cli_profiles" => crate::cli_profiles::dispatch(args),
         "catalog_provenance" => crate::catalog_provenance::dispatch(args),
+        "evaluation_contract" => crate::evaluation_contract::dispatch(args),
         "connector_regroup" => crate::connector_regroup::dispatch(args),
         "cloud_actions_access" => crate::cloud_actions_access::dispatch(args),
         "mcp_policy_input" => crate::mcp_policy_input::dispatch(args),
@@ -223,6 +225,7 @@ pub(crate) fn dispatch(kind: &str, args: &Value) -> KindResult {
         "codex_host_inventory" => crate::codex_host_inventory::dispatch(args),
         "package_script_memory" => crate::package_script_memory::dispatch(args),
         "cloud_review_ack" => crate::cloud_review_ack::dispatch(args),
+        "cloud_review_batch" => crate::cloud_review_batch::dispatch(args),
         "copilot_detect" => copilot_detect::detect(args),
         "copilot_hook_config" => copilot_hook_config::dispatch(args),
         "copilot_lifecycle_state" => copilot_lifecycle_state::dispatch(args),
@@ -238,6 +241,7 @@ pub(crate) fn dispatch(kind: &str, args: &Value) -> KindResult {
         "harness_settings_file" => harness_settings_file::dispatch(args),
         "harness_diagnostics" => crate::harness_diagnostics::dispatch(args),
         "harness_mcp_discovery" => crate::harness_mcp_discovery::dispatch(args),
+        "hermes_hook_config" => crate::hermes_hook_config::dispatch(args),
         "opencode_command_replace" => crate::opencode_command_replace::dispatch(args),
         "local_cli_change_request" => crate::local_cli_change_request::dispatch(args),
         "omp_code_mode" => crate::omp_code_mode::dispatch(args),
@@ -264,6 +268,7 @@ pub(crate) fn dispatch(kind: &str, args: &Value) -> KindResult {
         | "fleet_policy_section"
         | "fleet_runtime_posture" => crate::fleet_posture_inventory::dispatch(kind, args),
         "cursor_hook_state" => cursor_hook_state::dispatch(args),
+        "harness_backup_restore" => harness_backup_restore::dispatch(args),
         "opencode_detect" => opencode_detect::detect(args),
         "opencode_plugin_render" => opencode_plugin_render::render(args),
         "opencode_config_normalize" => opencode_config_normalize::dispatch(args),

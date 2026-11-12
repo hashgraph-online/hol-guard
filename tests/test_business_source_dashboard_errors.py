@@ -2,8 +2,8 @@
 
 import pytest
 
+from ci.guard_daemon_harness import GuardDaemonServer
 from codex_plugin_scanner.guard.approval_gate import update_settings
-from codex_plugin_scanner.guard.daemon import GuardDaemonServer
 from codex_plugin_scanner.guard.mcp import policy_tools
 from codex_plugin_scanner.guard.native_policy_snapshot_constants import NativePolicySnapshotError
 from tests.guard_mcp_policy_test_support import env_flags as env_flags

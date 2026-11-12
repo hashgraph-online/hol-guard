@@ -5,7 +5,7 @@ from __future__ import annotations
 import threading
 from types import SimpleNamespace
 
-from codex_plugin_scanner.guard.daemon.hook_evidence_dispatch import (
+from codex_plugin_scanner.guard.evidence_drains.hook_evidence_dispatch import (
     HookEvidenceDispatch,
     run_hook_evidence,
 )

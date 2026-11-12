@@ -3,8 +3,6 @@
 from __future__ import annotations
 
 import json
-import subprocess
-import sys
 from collections.abc import Mapping
 from pathlib import Path
 
@@ -17,7 +15,7 @@ from codex_plugin_scanner.guard.cli.commands_support_hook_payload import (
     _hook_action_envelope,
 )
 from codex_plugin_scanner.guard.codex_live_decision_revalidation import revalidate_codex_live_allow
-from codex_plugin_scanner.guard.daemon.hook_worker import HookWorker
+from codex_plugin_scanner.guard.hook_review.hook_worker import HookWorker
 from codex_plugin_scanner.guard.native_hook_adapter import NativeHookAdapterError
 from codex_plugin_scanner.guard.store import GuardStore
 
@@ -44,25 +42,6 @@ def native_live_allow(
         lambda kind, fields, *, guard_home: compose(kind, fields, guard_home=_native_context_home),
     )
     return _native_context_home
-
-
-def test_daemon_server_import_is_order_independent() -> None:
-    completed = subprocess.run(
-        [
-            sys.executable,
-            "-c",
-            (
-                "from codex_plugin_scanner.guard.daemon.server import GuardDaemonServer; "
-                "print(GuardDaemonServer.__name__)"
-            ),
-        ],
-        check=False,
-        capture_output=True,
-        text=True,
-    )
-
-    assert completed.returncode == 0, completed.stderr
-    assert completed.stdout.strip() == "GuardDaemonServer"
 
 
 def _fixture(tmp_path: Path) -> tuple[dict[str, object], dict[str, object], Path]:

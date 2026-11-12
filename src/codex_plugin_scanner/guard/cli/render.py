@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import re
+import shlex
 import sys
 import textwrap
 from collections.abc import Callable, Mapping, Sequence
@@ -91,6 +92,7 @@ _rich_available = False
 if TYPE_CHECKING:
     from rich import box
     from rich.console import Console
+    from rich.markup import escape
     from rich.panel import Panel
     from rich.syntax import Syntax
     from rich.table import Table
@@ -101,6 +103,7 @@ else:
     try:
         from rich import box
         from rich.console import Console
+        from rich.markup import escape
         from rich.panel import Panel
         from rich.syntax import Syntax
         from rich.table import Table
@@ -108,6 +111,9 @@ else:
 
         _rich_available = True
     except ModuleNotFoundError:
+
+        def escape(markup: str) -> str:
+            return markup
 
         class _FallbackBox:
             SIMPLE_HEAD = "simple_head"
@@ -855,6 +861,30 @@ def _protection_panel_line(name: str, *, protection_off: bool, in_effect: bool) 
     return f"protection: {name}"
 
 
+def _watch_revert_line(payload: Mapping[str, object]) -> str:
+    """Say when machine-wide Watch ends, or that it will not end on its own."""
+
+    if str(payload.get("protection") or payload.get("protection_posture") or "") != "watch":
+        return ""
+    reverts_at = payload.get("watch_reverts_at")
+    if isinstance(reverts_at, str) and reverts_at:
+        return f"\nwatch ends: {escape(reverts_at)} (protection turns back on)"
+    # The panel parses Rich markup; a home path such as `~/[team]` must print as written.
+    return f"\nwatch ends: never on its own; run `{escape(_protection_restore_command(payload))}`"
+
+
+def _protection_restore_command(payload: Mapping[str, object]) -> str:
+    """The command that turns protection back on for the Guard home status reported."""
+
+    command = "hol-guard settings set protection protected"
+    home = payload.get("guard_home")
+    if not isinstance(home, str) or not home or home == "~/.hol-guard":
+        return command
+    # Status redacts the home under `~/`; keep the tilde outside the quotes so it expands.
+    quoted = f"~/{shlex.quote(home[2:])}" if home.startswith("~/") else shlex.quote(home)
+    return f"{command} --guard-home {quoted}"
+
+
 def _render_status(console: Console, payload: dict[str, object]) -> None:
     harnesses = _coerce_dict_list(payload.get("harnesses"))
     name, protection_off = _protection_status_copy(payload, "protected")
@@ -862,15 +892,20 @@ def _render_status(console: Console, payload: dict[str, object]) -> None:
     in_effect = reported if isinstance(reported, bool) else protection_is_in_effect(harnesses)
     protection_line = _protection_panel_line(name, protection_off=protection_off, in_effect=in_effect)
     protection_off = protection_off or not in_effect
+    protection_line += _watch_revert_line(payload)
     protection_line += harness_posture_line(payload)
+    body = (
+        f"[bold]HOL Guard status[/bold]\n"
+        f"{protection_line}\n"
+        f"{payload.get('managed_harnesses', 0)} managed harnesses {_bullet()} "
+        f"{payload.get('receipt_count', 0)} receipts {_bullet()} "
+        f"{payload.get('pending_approvals', 0)} approvals {_bullet()} "
+        f"sync {'connected' if payload.get('sync_configured') else 'local only'}"
+    )
+    # Markup escaping leaves emoji codes, so a home such as `/srv/:smile:` would print an emoji.
     console.print(
         Panel.fit(
-            f"[bold]HOL Guard status[/bold]\n"
-            f"{protection_line}\n"
-            f"{payload.get('managed_harnesses', 0)} managed harnesses {_bullet()} "
-            f"{payload.get('receipt_count', 0)} receipts {_bullet()} "
-            f"{payload.get('pending_approvals', 0)} approvals {_bullet()} "
-            f"sync {'connected' if payload.get('sync_configured') else 'local only'}",
+            Text.from_markup(body, emoji=False) if _rich_available else body,
             border_style="red" if protection_off else "cyan",
         )
     )
@@ -961,6 +996,9 @@ def _render_doctor(console: Console, payload: dict[str, object]) -> None:
                 border_style="red" if protection_off else "cyan",
             )
         )
+        health_note = payload.get("protection_health_note")
+        if isinstance(health_note, str) and health_note.strip():
+            console.print(f"Live health: {health_note}")
         console.print(build_doctor_harness_table(adapters))
         print_approval_gate_nudge(console, payload)
         print_connector_setup_line(console, payload)
@@ -1027,6 +1065,9 @@ def _render_doctor(console: Console, payload: dict[str, object]) -> None:
             else:
                 value = name
             summary.add_row("Protection", value)
+            health_note = payload.get("protection_health_note")
+            if isinstance(health_note, str) and health_note.strip():
+                summary.add_row("Live health", health_note)
             per_app = harness_posture_line(payload).strip()
             if per_app:
                 summary.add_row("Per app", per_app.removeprefix("per app: "))

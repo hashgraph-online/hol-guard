@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import sqlite3
-from collections.abc import Sequence
 from pathlib import Path
 
 import pytest
@@ -74,10 +73,7 @@ def test_atomic_activation_persists_complete_projection_and_runtime_composes_it(
     assert signed_layer.controls[0].state is ControlState.DISABLED
 
 
-def test_failed_partial_activation_retains_prior_complete_state(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+def test_failed_partial_activation_retains_prior_complete_state(tmp_path: Path) -> None:
     store = GuardStore(tmp_path / "guard-home")
     first = _bundle()
     assert _activate(store, first) is True
@@ -87,16 +83,10 @@ def test_failed_partial_activation_retains_prior_complete_state(
     second = _bundle()
     second["bundleVersion"] = 8
     second["bundleHash"] = "sha256:" + "c" * 64
-    original_replace = store._replace_remote_policy_rows_locked  # pyright: ignore[reportPrivateUsage]
-
-    def replace_and_fail(
-        connection: sqlite3.Connection,
-        rows: Sequence[tuple[object, ...]],
-    ) -> None:
-        original_replace(connection, rows)
+    with store._connect() as connection:  # pyright: ignore[reportPrivateUsage]
         _ = connection.execute(
             """
-            create temp trigger fail_managed_activation
+            create trigger fail_managed_activation
             before insert on sync_state
             when new.state_key = 'managed_controls_active'
             begin
@@ -105,9 +95,7 @@ def test_failed_partial_activation_retains_prior_complete_state(
             """
         )
 
-    monkeypatch.setattr(store, "_replace_remote_policy_rows_locked", replace_and_fail)
-
-    with pytest.raises(sqlite3.IntegrityError, match="injected managed activation failure"):
+    with pytest.raises(RuntimeError):
         _ = _activate(store, second)
 
     assert store.get_sync_payload(MANAGED_CONTROLS_ACTIVE_STATE_KEY) == active_before

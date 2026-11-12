@@ -91,7 +91,7 @@ def test_unbound_native_review_does_not_tell_the_agent_to_wait(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, exact_allowable: bool
 ) -> None:
     # git push and local scripts get no retry binding, so a one-time approval cannot let the agent's retry run.
-    from codex_plugin_scanner.guard.daemon import hook_native_review_approval
+    from codex_plugin_scanner.guard.hook_review import hook_native_review_approval
 
     exact = ("exact-token", None) if exact_allowable else (None, "no exact action")
     monkeypatch.setattr(hook_native_review_approval, "review_evidence_parts", lambda _evidence: (True, None, *exact))

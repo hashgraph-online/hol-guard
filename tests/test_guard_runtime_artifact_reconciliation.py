@@ -379,7 +379,12 @@ def test_a_source_install_never_repins_hook_configs(monkeypatch: pytest.MonkeyPa
     monkeypatch.delattr(reconciliation.sys, "frozen", raising=False)
 
     assert reconciliation._current_durable_runtime_digest() is None
-    assert not reconciliation._pins_stale_native_runtime({"manifest": {"config_path": "/missing"}}, None)
+    assert not _stale({"manifest": {"config_path": "/missing"}}, None)
+
+
+def _stale(install: dict[str, object], digest: str | None) -> bool:
+    entry = reconciliation._ScanEntry("zcode", install, (), True)
+    return reconciliation._scan_installs([entry], current_digest=digest, guard_home=Path("/nonexistent-guard"))["zcode"]
 
 
 def test_a_windows_escaped_pin_is_read(tmp_path: Path) -> None:
@@ -388,8 +393,8 @@ def test_a_windows_escaped_pin_is_read(tmp_path: Path) -> None:
         '{"command": "C:\\\\g\\\\native-runtime\\\\' + _OLD_DIGEST + '\\\\hol-guard-runtime.exe"}', encoding="utf-8"
     )
 
-    assert reconciliation._pins_stale_native_runtime({"manifest": {"config_path": str(config)}}, _NEW_DIGEST)
-    assert not reconciliation._pins_stale_native_runtime({"manifest": {"config_path": str(config)}}, _OLD_DIGEST)
+    assert _stale({"manifest": {"config_path": str(config)}}, _NEW_DIGEST)
+    assert not _stale({"manifest": {"config_path": str(config)}}, _OLD_DIGEST)
 
 
 def test_a_hook_artifact_outside_config_path_is_read(tmp_path: Path) -> None:
@@ -402,8 +407,8 @@ def test_a_hook_artifact_outside_config_path_is_read(tmp_path: Path) -> None:
         "files": [{"path": str(hook)}],
     }
 
-    assert reconciliation._pins_stale_native_runtime({"manifest": manifest}, _NEW_DIGEST)
-    assert not reconciliation._pins_stale_native_runtime({"manifest": {"config_path": str(yaml_config)}}, _NEW_DIGEST)
+    assert _stale({"manifest": manifest}, _NEW_DIGEST)
+    assert not _stale({"manifest": {"config_path": str(yaml_config)}}, _NEW_DIGEST)
 
 
 # The pin grammar and scan budget are covered by hook_launch_scan_tests.rs.

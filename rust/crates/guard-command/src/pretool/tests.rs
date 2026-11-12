@@ -20,6 +20,13 @@ fn bounded_byte_inspection_preserves_secret_and_pipeline_floors() {
         "wc -c src/lib.rs && od -c src/lib.rs | tail -2",
         "cat src/lib.rs | od -An -tx1",
         "cat src/lib.rs | od -c -",
+        "od -An -tx1 -N 4 src/lib.rs",
+        "od -A x -t x1z -N 16 -j 0x10 src/lib.rs",
+        "wc -c src/lib.rs; od -An -tx1 -N4 src/lib.rs",
+        "od -t u2 -w8 src/lib.rs",
+        "cat src/lib.rs | od -An -t d4 -N 8",
+        "od -N 010 -j 0 src/lib.rs",
+        "od -t fF -t fD -t dL -t cz src/lib.rs",
     ] {
         let decision =
             evaluate_pre_tool_with_context(&request(command), Some(root), Some(root)).unwrap();
@@ -36,6 +43,17 @@ fn bounded_byte_inspection_preserves_secret_and_pipeline_floors() {
         "od -c",
         "od --unknown src/lib.rs",
         "od -c $(echo src/lib.rs)",
+        "od -An -tx1 -N 4 .env",
+        "od -N src/lib.rs src/lib.rs",
+        "od -An -tx1 -N",
+        "od -A src/lib.rs",
+        "od -t x1 -j 4k src/lib.rs",
+        "od --read-bytes=4 src/lib.rs",
+        "od -N 08 src/lib.rs",
+        "od -j 0x src/lib.rs",
+        "od -t z src/lib.rs",
+        "od -t q src/lib.rs",
+        "od -t x123 src/lib.rs",
     ] {
         let decision = evaluate_pre_tool_with_context(&request(command), Some(root), Some(root));
         assert!(
@@ -209,6 +227,7 @@ fn read_only_github_predecessor_counts_as_benign_for_git_context() {
                 ripgrep_config_absent: false,
                 gem_config_absent: false,
                 http_config_absent: false,
+                openssl_config_absent: false,
                 psql_environment: Default::default(),
                 creates_nothing: false,
             },
@@ -749,6 +768,76 @@ fn magic_pathspecs_are_screened_by_the_path_they_name() {
     }
     for ordinary in [":(top)src/*.ts", ":!readme.md", ":(exclude)src"] {
         assert!(!sensitive_read_path_argument(ordinary), "{ordinary}");
+    }
+}
+
+/// A `git config --get-regexp` operand is matched against the keys in the
+/// configuration file, so the fixed floor asks of it only what a search
+/// pattern is asked: does the glob's own text name a private file? The wider
+/// questions a path operand faces -- could some longer string this glob
+/// matches hold a credential marker? -- refuse every pattern carrying a `.*`,
+/// and `remote.*url` is the spelling a read of the configured remotes uses.
+#[test]
+fn a_configuration_pattern_is_screened_as_a_pattern_not_a_path() {
+    let model = |command: &str| {
+        crate::parse_command(
+            &serde_json::from_value(serde_json::json!({"command": command})).unwrap(),
+        )
+        .unwrap()
+    };
+    for command in [
+        "git config --get-regexp remote.*url",
+        "git config --get-regexp '^remote\\..*\\.url$'",
+        "git config --get-regexp 'remote.*url' github",
+        "git config get --regexp remote.*url",
+        "git --no-pager config --get-regexp 'branch.*remote'",
+        "git config --get-regexp 'cookie.*name'",
+        // A bracket class writes its members down, so a class that cannot
+        // produce a leading dash is read as the pattern it spells.
+        "git config --get-regexp '[r]emote.*url'",
+        "git config --get-regexp '[Rr]emote.*url'",
+        "git config --get-regexp '[a-z]emote.*url'",
+        "git config --get-regexp '[^-]emote.*url'",
+        // An unterminated class is literal, so the word opens with `[`.
+        "git config --get-regexp '[remote.*url'",
+    ] {
+        assert!(!fixed_command_floor(&model(command)), "{command}");
+    }
+    for command in [
+        // The pattern's own text still names a private file.
+        "git config --get-regexp '.en*'",
+        "git config --get-regexp '.ssh/*'",
+        // Only a `--get-regexp` operand is a pattern. The shell expands
+        // every other argument before Git sees it.
+        "git config --get-all 'remote.*url'",
+        "git config --get 'remote.*url'",
+        "git config *",
+        // An operand opening with a glob is a pattern here and whatever the
+        // shell expands it to by the time Git reads it, so it keeps the path
+        // screen that refuses a file of the caller's choosing.
+        "git config --get-regexp '[-]-file=*' x",
+        "git config --get-regexp '[+--]-file=*' x",
+        "git config --get-regexp '[^a]-file=*' x",
+        "git config --get-regexp '[[:punct:]]-file=*' x",
+        "git config --get-regexp '[\\-]-file=*' x",
+        // The shell runs an expansion before the class is a class, so these
+        // members are not the ones that run: bash turns the first into
+        // `[!a]-file=*`, which matches a `--file=secret` in the checkout, and
+        // the parameter and substitution forms carry whatever they expand to.
+        "git config --get-regexp '[!{a,-}]-file=*' x",
+        "git config --get-regexp '[{a}]-file=*' x",
+        "git config --get-regexp '[$x]-file=*' x",
+        "git config --get-regexp '[!$x]-file=*' x",
+        "git config --get-regexp '[${x}]-file=*' x",
+        "git config --get-regexp '[$(printf -)]-file=*' x",
+        "git config --get-regexp '[`printf -`]-file=*' x",
+        // Only an ASCII alphanumeric span holds the characters between its
+        // ends whatever the shell's collation. glibc's table puts `-` inside
+        // `[_-z]`, so such a range keeps the path screen.
+        "git config --get-regexp '[_-z]-file=*' x",
+        "git config --get-regexp '[!_-z]-file=*' x",
+    ] {
+        assert!(fixed_command_floor(&model(command)), "{command}");
     }
 }
 

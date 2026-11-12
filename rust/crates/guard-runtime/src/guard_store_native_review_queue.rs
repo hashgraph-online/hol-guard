@@ -49,7 +49,9 @@ use crate::guard_store_args::Args;
 use crate::guard_store_connector_context::{record_context, scrub_context_text, MAX_SUMMARY_CHARS};
 use crate::guard_store_db::{StoreError, StoreResult};
 use crate::hook_adapter_op::review_request::{self, pre_tool_command};
-use crate::hook_decision_review_response::{paused_review, silent_review_block};
+use crate::hook_decision_review_response::{
+    paused_review, silent_review_block, silent_review_links,
+};
 use crate::hook_direct::saved_decision::review_hint::op::queued_hint;
 use crate::hook_direct::saved_decision::review_queue::connector::{first_blocked_cause, Connector};
 use crate::native_bash_reply_validation::queued_bound_bash;
@@ -319,6 +321,19 @@ pub(crate) fn delegate(
         exact_action_allowable: exact,
         connector_is_local: connector.as_ref().is_some_and(Connector::is_local),
     });
+    // A wait no bridge holds is never linked (see `silent_review_links`).
+    let silent_links = respond.as_ref().is_some_and(|respond| match &respond.ask {
+        RespondAsk::SilentReviewBlock(ask) => silent_review_links(
+            bound || exact,
+            ask.ask,
+            respond.setup_reason.is_some(),
+            respond.connector_is_local,
+        ),
+        RespondAsk::PausedReview(_) => false,
+    });
+    if silent && !silent_links {
+        delegated.remove(crate::codex_live_wait_build::FACTS_KEY);
+    }
     let connector_setup = connector.as_ref().map(|connector| {
         json!({
             "name": connector.display_name(),
@@ -433,39 +448,6 @@ fn encoded_len(value: &Value) -> usize {
     serde_json::to_vec(value).map_or(usize::MAX, |bytes| bytes.len())
 }
 
-/// `text` unless it repeats an argument of `command` (`_without_operands`).
-/// Arguments split as Python's `str.split()` does.
-fn without_operands<'a>(text: Option<&'a str>, command: Option<&str>) -> Option<&'a str> {
-    let text = text.filter(|text| !text.trim().is_empty())?;
-    let separator = |c: char| c.is_whitespace() || ('\u{1c}'..='\u{1f}').contains(&c);
-    let mut operands = command.into_iter().flat_map(|command| {
-        command
-            .split(separator)
-            .filter(|part| !part.is_empty())
-            .skip(1)
-    });
-    (!operands.any(|operand| text.contains(operand))).then_some(text)
-}
-
-/// The ask a call names under `key`, or `None` when it names none.
-fn take_ask<T: serde::de::DeserializeOwned>(
-    args: &mut Map<String, Value>,
-    key: &str,
-) -> StoreResult<Option<T>> {
-    match args.remove(key) {
-        None | Some(Value::Null) => Ok(None),
-        Some(ask) => serde_json::from_value(ask).map(Some).map_err(|_| INVALID),
-    }
-}
-
-fn take_flag(args: &mut Map<String, Value>, key: &str) -> StoreResult<bool> {
-    match args.remove(key) {
-        None | Some(Value::Null) => Ok(false),
-        Some(Value::Bool(flag)) => Ok(flag),
-        Some(_) => Err(INVALID),
-    }
-}
-
 /// The `claude_review` facts `add_claude_approval_request` signs a notice
 /// from. The hook payload carries only what the notice reads, so the command
 /// is not copied in full a second time.
@@ -490,6 +472,10 @@ fn notice_review(
         "source_scope": request.get("source_scope").cloned().unwrap_or(Value::Null),
     })
 }
+
+#[path = "guard_store_native_review_queue_args.rs"]
+mod args;
+use args::{take_ask, take_flag, without_operands};
 
 #[cfg(test)]
 #[path = "guard_store_native_review_queue_tests.rs"]

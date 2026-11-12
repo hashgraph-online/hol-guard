@@ -16,8 +16,8 @@ from typing import BinaryIO, Protocol
 
 from .....path_support import resolves_within_root
 from .....safe_output import write_text_atomic_no_follow
-from ....daemon.file_locking import try_lock_daemon_file
 from ....mdm.file_lock import release_file_lock
+from ....native_daemon_manage import try_lock_daemon_file
 from ...adapter_safe_output import write_text_at_authorized_path
 from ...adapter_state_integrity import (
     adapter_state_is_authenticated,

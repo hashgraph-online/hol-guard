@@ -9,9 +9,10 @@ type HomeSeed = { activeApps: string[]; inactiveApps: string[] };
 
 const APP_LABELS: Record<string, string> = { "claude-code": "Claude Code", cursor: "Cursor", copilot: "Copilot" };
 
-// The home seed connects two apps and leaves one connected app with inactive
-// hooks, so Protect shows the degraded posture a real machine shows when one
-// app's hooks stop working. Read that world back from the daemon first.
+// The home seed connects two apps and leaves a third with an inactive install
+// record, which is what disconnecting an app leaves behind. Protect shows a
+// degraded posture because the connected apps' hooks fail verification here.
+// Read that world back from the daemon first.
 async function readSeededRuntime(state: Parameters<typeof daemonApi>[0]): Promise<{ runtime: Runtime; home: HomeSeed }> {
   const home = state.seeded.home as unknown as HomeSeed;
   const runtime = await daemonApi<Runtime>(state, "/v1/runtime");
@@ -67,9 +68,10 @@ test("Protect explains what is failing and gates repair behind the approval pass
   // can and says so in the heading and the repair button.
   await expect(recovery.getByRole("heading", { name: /^(Restore local|Repair supported) protection$/ })).toBeVisible();
   await expect(recovery.getByRole("button", { name: /^Repair (supported )?protection$/ })).toBeEnabled();
-  // Each connected app whose hooks are inactive gets its own repair entry.
+  // An app with an inactive install record was disconnected: Home offers to
+  // connect it, so Protect must not offer to repair (reinstall) it.
   for (const harness of home.inactiveApps) {
-    await expect(recovery.getByRole("button", { name: `Open ${APP_LABELS[harness]} repair` })).toBeEnabled();
+    await expect(recovery.getByRole("button", { name: `Open ${APP_LABELS[harness]} repair` })).toHaveCount(0);
   }
   await expect(recovery.getByText("Guard Cloud policy proof", { exact: true })).toBeVisible();
   await expect(recovery.getByRole("button", { name: "Connect Guard Cloud" })).toBeEnabled();

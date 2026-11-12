@@ -7,8 +7,8 @@ from typing import Any
 
 import pytest
 
-from codex_plugin_scanner.guard.daemon import hook_native_review_approval
-from codex_plugin_scanner.guard.daemon.hook_native_exact_action import review_evidence_parts
+from codex_plugin_scanner.guard.hook_review import hook_native_review_approval
+from codex_plugin_scanner.guard.hook_review.hook_native_exact_action import review_evidence_parts
 from tests.test_native_review_fixtures import _edge, _worker
 
 # Only a review the agent's retry can match pauses for approval; without a

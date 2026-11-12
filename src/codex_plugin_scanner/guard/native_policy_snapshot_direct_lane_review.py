@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import os
 import sqlite3
-from collections.abc import Iterable, Mapping
+from collections.abc import Mapping
 
 # Mirrors the resident limits in guard-policy-snapshot's direct_lane module.
 _MAX_REVIEW_FACT_BYTES = 256
@@ -29,21 +29,6 @@ def _text_fact(value: object, limit: int) -> str | None:
     except UnicodeEncodeError:
         return None
     return value if length <= limit else None
-
-
-def uniform_blocked_request_mode(configs: Iterable[object]) -> str | None:
-    """The blocked-request mode every compiled config resolves to.
-
-    The daemon reads the mode for the hook's own workspace. A binding covers
-    the home and every settled workspace, so it carries a mode only when they
-    all agree; otherwise such a hook defers to this daemon.
-    """
-
-    modes = {getattr(config, "blocked_request_mode", None) for config in configs}
-    if len(modes) != 1:
-        return None
-    (mode,) = modes
-    return mode if isinstance(mode, str) and mode in _BLOCKED_REQUEST_MODES else None
 
 
 class _ReadState:
@@ -72,7 +57,7 @@ def _read_origin(store: object) -> tuple[bool, str | None]:
     # fallback is not the origin the daemon links once the state lands, so
     # neither case binds an origin; an unreadable state reports itself as
     # unknown so a transient lock reads as no change.
-    from .daemon.native_review_records import native_review_approval_center_url
+    from .hook_review.native_review_records import native_review_approval_center_url
 
     getter = getattr(store, "get_runtime_state", None)
     if not callable(getter):

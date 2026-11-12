@@ -27,6 +27,7 @@ function loadGuardDaemonConnection() { return {stateId: 'fixture'}; }
 function invalidateInputApprovalResumes() { inputApprovalResumeGeneration++; }
 function invalidateToolApprovalResumes() {}
 function handlerAbortSignal(ctx) { return ctx.signal; }
+function contextSessionId(ctx) { return ctx.sessionId ?? null; }
 function captureInputApprovalResumeBinding(ctx) {
   return {generation: inputApprovalResumeGeneration, cwd: ctx.cwd};
 }
@@ -34,6 +35,7 @@ function inputApprovalResumeBindingIsActive(ctx, binding) {
   return binding.generation === inputApprovalResumeGeneration && binding.cwd === ctx.cwd;
 }
 function approvalBlockedReason(_response, reason) { return reason; }
+function approvalUrlFromResponse(response) { return response.approval_url ?? null; }
 function scheduleApprovalResume() {}
 async function daemonWorkspaceReadiness() {
   await new Promise(resolve => setTimeout(resolve, setupDelayMs));
@@ -42,13 +44,16 @@ async function daemonWorkspaceReadiness() {
 async function runGuard(payload) {
   payloads.push(payload);
   if (payload.prompt === 'protected') return {decision: 'deny', reason: 'protected'};
+  if (payload.prompt === 'needs approval') {
+    return {decision: 'deny', reason: 'held', approval_url: 'https://guard.example/approve/1'};
+  }
   if (payload.prompt === 'no match') {
     return {decision: 'allow', hookSpecificOutput: {hookEventName: 'UserPromptSubmit'}};
   }
   return {decision: 'allow', hookSpecificOutput: {hookEventName: 'UserPromptSubmit',
     additionalContext: FOUND + ' ' + payload.prompt}};
 }
-const ctx = {cwd: '/fixture', ui: {notify() {}}, isIdle: () => idle};
+const ctx = {cwd: '/fixture', sessionId: 'session-a', ui: {notify() {}}, isIdle: () => idle};
 const start = (prompt) => callbacks.before_agent_start({type: 'before_agent_start', prompt}, ctx);
 const turn = async (text, source = 'interactive', expanded = text) => ({
   input: await callbacks.input({text, source}, ctx),
@@ -129,13 +134,13 @@ console.log(JSON.stringify({matched, again, empty, blocked, skill, template, oth
     assert result["later"] == {"input": {"action": "continue"}}
     reviewed = [payload for payload in result["payloads"] if payload["hook_event_name"] == "UserPromptSubmit"]
     assert reviewed and all(payload["guard_prompt_context"] is True for payload in reviewed)
+    assert all(payload["session_id"] == "session-a" for payload in reviewed)
 
 
 RESUME_STEPS = """
 setupDelayMs = 80;
 idle = RESUME_IDLE;
 const input = await callbacks.input({text: 'fix the cart total', source: 'interactive'}, ctx);
-const early = await start('fix the cart total');
 for (let waited = 0; resumed.length === 0 && waited < 2000; waited += 10) {
   await new Promise(resolve => setTimeout(resolve, 10));
 }
@@ -143,7 +148,7 @@ idle = true;
 // Pi runs the resumed prompt as a new turn from the extension.
 const resumedTurn = await turn(resumed[0], 'extension');
 const again = await start(resumed[0]);
-console.log(JSON.stringify({input, early, resumed, sent, resumedTurn, again}));
+console.log(JSON.stringify({input, resumed, sent, resumedTurn, again, payloads}));
 """
 
 
@@ -152,7 +157,8 @@ console.log(JSON.stringify({input, early, resumed, sent, resumedTurn, again}));
 def test_prompt_resumed_after_workspace_setup_keeps_its_context(tmp_path: Path, harness: str) -> None:
     result = run_handlers(tmp_path, harness, RESUME_STEPS.replace("RESUME_IDLE", "true"), timeout_ms=40)
     assert result["input"] == {"action": "handled", "handled": True}
-    assert "early" not in result, "nothing is handed on before the review finishes"
+    reviewed = [payload["prompt"] for payload in result["payloads"] if payload["hook_event_name"] == "UserPromptSubmit"]
+    assert reviewed == ["fix the cart total"], "the resumed turn is not reviewed again"
     assert result["resumed"] == ["fix the cart total"]
     # Starting the turn directly lets Pi expand a skill command or prompt template.
     assert result["sent"] == [{"expandPromptTemplates": True}]
@@ -168,3 +174,62 @@ def test_prompt_resumed_while_the_agent_is_busy_is_queued_without_context(tmp_pa
     # A queued follow-up starts no turn of its own, so its files are not kept.
     assert result["sent"] == [{"deliverAs": "followUp"}]
     assert result["resumedTurn"] == {"input": {"action": "continue"}}
+
+
+HEADLESS_STEPS = """
+const aborted = [], notes = [];
+const headless = {...ctx, abort: () => aborted.push(true), ui: {notify: (text) => notes.push(text)}};
+// Print mode and the SDK start a turn without an "input" event.
+const begin = (prompt, reason = 'prompt') =>
+  callbacks.before_agent_start({type: 'before_agent_start', reason, prompt}, headless);
+const matched = await begin('fix the cart total');
+const empty = await begin('no match');
+const blocked = await begin('protected');
+const held = await begin('needs approval');
+const stopped = aborted.length;
+const revived = await begin('fix the cart total', 'revive');
+// A typed prompt is reviewed by the input handler, and only its own turn.
+const typed = await turn('fix the theme');
+// An SDK session that emitted "input" can still call prompt() directly.
+const later = await begin('fix the cart total');
+const repeat = await begin('fix the theme');
+// A prompt the input handler held owns no turn, so prompt() reviews it again.
+await callbacks.input({text: 'protected', source: 'interactive'}, ctx);
+const retried = await begin('protected');
+console.log(JSON.stringify({
+  matched, empty, blocked, held, stopped, notes, revived, typed, later, repeat, retried, payloads,
+  aborted: aborted.length,
+}));
+"""
+
+
+@pytest.mark.parametrize("harness", ["pi", "omp"])
+@node_required
+def test_headless_prompt_is_reviewed_when_its_turn_starts(tmp_path: Path, harness: str) -> None:
+    result = run_handlers(tmp_path, harness, HEADLESS_STEPS)
+    assert result["matched"] == context_message("fix the cart total")
+    assert "empty" not in result
+    assert "blocked" not in result
+    assert "held" not in result
+    assert result["stopped"] == 2, "a denied headless prompt stops its turn"
+    # A prompt cannot be approved, so the note gives the reason and no approval link.
+    assert result["notes"] == ["protected", "held", "protected"]
+    assert "revived" not in result
+    assert result["typed"] == {"input": {"action": "continue"}, "start": context_message("fix the theme")}
+    assert result["later"] == context_message("fix the cart total")
+    assert "repeat" not in result, "a turn rerunning the typed prompt is not reviewed twice"
+    assert "retried" not in result
+    assert result["aborted"] == 3
+    reviewed = [payload["prompt"] for payload in result["payloads"] if payload["hook_event_name"] == "UserPromptSubmit"]
+    assert reviewed == [
+        "fix the cart total",
+        "no match",
+        "protected",
+        "needs approval",
+        "fix the theme",
+        "fix the cart total",
+        "protected",
+        "protected",
+    ]
+    assert all(payload["guard_prompt_context"] is True for payload in result["payloads"])
+    assert all(payload["session_id"] == "session-a" for payload in result["payloads"])

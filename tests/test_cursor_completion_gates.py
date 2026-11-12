@@ -10,10 +10,8 @@ import pytest
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.adapters.cursor import CursorHarnessAdapter
 from codex_plugin_scanner.guard.cli.install_commands import (
-    apply_managed_install,
     build_harness_verification,
 )
-from codex_plugin_scanner.guard.daemon.server import _GuardDaemonHandler
 from codex_plugin_scanner.guard.store import GuardStore
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -66,60 +64,6 @@ def test_cursor_completion_gate_detects_broken_editor_hook_as_unprotected(
     assert payload["verification"]["installed"] is False
     assert payload["cursor_action"]["status"] == "detected_unprotected"
     assert payload["cursor_action"]["evidence"]["redactedPath"] == "$WORKSPACE/.cursor/mcp.json"
-
-
-def test_cursor_completion_gate_receipts_preserve_stale_sync_summary(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.setenv("PATH", str(tmp_path / "empty-bin"))
-    context = _context(tmp_path, workspace_cursor=True)
-    store = GuardStore(context.guard_home)
-    install_payload = apply_managed_install(
-        "install",
-        "cursor",
-        False,
-        context,
-        store,
-        str(context.workspace_dir),
-        "2026-05-30T10:00:00Z",
-        surface="editor",
-    )
-    handler = object.__new__(_GuardDaemonHandler)
-    handler.server = type("Server", (), {"store": store})()
-
-    summary = _GuardDaemonHandler._record_headless_receipt(
-        handler,
-        harness="cursor",
-        operation="status",
-        payload={"surface": "editor", "workspace_id": "workspace-1"},
-        result={"cursor_action": install_payload["cursor_action"]},
-        workspace_id="workspace-1",
-        cloud_sync={"status": "stale", "last_synced_at": "2026-05-29T10:00:00Z"},
-    )
-
-    receipt = store.get_receipt(str(summary["id"]))
-    assert receipt is not None
-    assert summary["cloud_sync"]["status"] == "stale"
-    assert receipt["scanner_evidence"][0]["cloud_sync_status"] == "stale"
-    assert receipt["scanner_evidence"][0]["workspace_id"] == "workspace-1"
-
-
-def test_cursor_completion_gate_rejects_unsupported_surface_without_noop_repair(tmp_path: Path) -> None:
-    store = GuardStore(tmp_path / "guard-home")
-    handler = object.__new__(_GuardDaemonHandler)
-    handler.server = type("Server", (), {"store": store})()
-
-    status, payload = _GuardDaemonHandler._headless_app_action_payload(
-        handler,
-        action_path="repair",
-        payload={"harness": "cursor", "surface": "android"},
-    )
-
-    assert status == 400
-    assert payload["error"]["code"] == "invalid_cursor_surface"
-    assert payload["error"]["surface"] == "android"
-    assert payload["error"]["app_id"] == "cursor"
 
 
 def test_cursor_public_skill_guidance_names_editor_and_cli_without_fake_commands() -> None:

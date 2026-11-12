@@ -40,6 +40,11 @@ pub struct PathContext<'a> {
     /// `config.json` whose `default_options` HTTPie and `xh` prepend to
     /// every request. Literal contexts leave this false.
     pub http_config_absent: bool,
+    /// No inherited `OPENSSL_CONF`, `OPENSSL_CONF_INCLUDE`, `OPENSSL_MODULES`
+    /// or `OPENSSL_ENGINES` can point the `openssl` command at a
+    /// configuration that loads a provider or engine library before it
+    /// hashes a file. Literal contexts leave this false.
+    pub openssl_config_absent: bool,
     /// No step of this command creates a filesystem entry, so a path with
     /// nothing at it now still has nothing at it when a read runs and cannot
     /// be a link a peer step planted. Literal contexts leave this false.
@@ -110,6 +115,7 @@ mod clone_siblings;
 mod compound_reason;
 mod control_flow_chain;
 mod control_flow_flatten;
+mod environment_names;
 mod fanout_reads;
 mod filter_pattern_text;
 mod find_reads;
@@ -147,6 +153,7 @@ mod git_hook_files;
 pub(crate) mod git_listing_reads;
 mod git_local_writes;
 mod git_ls_remote;
+mod git_output_target;
 mod git_probe;
 mod git_push;
 mod git_read_after_allow;
@@ -176,6 +183,7 @@ mod path_word_reads;
 mod pip_reads;
 mod pnpm_reads;
 mod postgres_reads;
+mod printf_words;
 mod process_stops;
 mod pytest_contained;
 mod tool_bin_listing;
@@ -189,6 +197,7 @@ pub(crate) use git_routes::{
 mod apply_patch_writes;
 mod data_heredocs;
 mod lockfile_install;
+mod omp_file_url;
 mod omp_hashline_writes;
 pub(crate) mod pipe_attacks;
 mod pure_expression;
@@ -223,6 +232,7 @@ mod search_scope_walk;
 mod secret_aliases;
 pub(crate) mod sed_edits;
 mod segment_proof;
+mod shell_arithmetic;
 mod shell_flow;
 pub(crate) mod shell_literal;
 mod shell_script;
@@ -241,6 +251,9 @@ mod workspace_contained_effects_tests;
 #[cfg(test)]
 #[path = "workspace_contained_git_tests.rs"]
 mod workspace_contained_git_tests;
+#[cfg(test)]
+#[path = "workspace_contained_name_pattern_tests.rs"]
+mod workspace_contained_name_pattern_tests;
 #[cfg(test)]
 #[path = "workspace_contained_package_tests.rs"]
 mod workspace_contained_package_tests;
@@ -270,7 +283,10 @@ pub use generic::{bounded_task_metadata_output, evaluate_pre_tool_envelope};
 pub use git_push::{
     install_git_push_verdict, push_environment_git, GitPushRequest, GitPushVerdict,
 };
-pub(crate) use git_read_after_allow::git_reads_after_allowed_steps;
+pub(crate) use git_read_after_allow::{
+    git_reads_after_allowed_steps, git_step_overwrites_what_runs_next,
+    step_preserves_later_programs,
+};
 pub use read_paths::proven_repository_hidden_document;
 pub use safe_scalar::PsqlEnvironment;
 #[cfg_attr(not(unix), allow(unused_imports))]
@@ -280,7 +296,7 @@ pub(crate) use script_content::{
     sole_program_sources, sourced_program_sources, sourcing_bounded_sources,
 };
 pub use search_scope_tracked::proven_project_document;
-pub(crate) use segment_proof::{benign_command_segments, without_stderr_merge};
+pub(crate) use segment_proof::{benign_command_segments, leading_cd_segment, without_stderr_merge};
 pub(crate) use worktree_add::entered_checkouts;
 pub(crate) use worktree_add::new_checkout_route;
 pub(crate) use worktree_add::verified_leading_cd;
@@ -530,10 +546,18 @@ fn takes_next_value(token: &str, merge: bool) -> bool {
 /// A class the glob check reads differently from the shell and Git is
 /// screened as `?`; see [`readable_pattern`].
 fn selects_secret_outside_message(segment: &crate::CommandSegmentV1) -> bool {
+    // A `git config --get-regexp` operand names configuration keys, so the
+    // wider path questions -- which refuse every pattern holding a `.*` --
+    // would floor an ordinary `remote.*url` read. The pattern still faces the
+    // markers the glob's own text names, the screen a search pattern faces.
+    let patterns = git_config_reads::configuration_patterns(segment);
     arguments_outside_message(segment).any(|argument| {
         let last_component = argument.rsplit('/').next().unwrap_or(argument);
         if !argument.contains(['*', '?', '[', '{']) || readable_pattern(last_component).1 {
             return false;
+        }
+        if patterns.contains(&argument.as_str()) {
+            return search::literal_glob_names_sensitive_path(&readable_pattern(argument).0);
         }
         match argument.split_once('=') {
             Some((name, _))
@@ -724,7 +748,8 @@ fn sensitive_location_text(value: &str) -> bool {
         ".env",
     ];
     needles.iter().any(|needle| lowered.contains(needle))
-        || crate::environment_secret_dump::printenv_may_print_secret(&lowered)
+        || (crate::environment_secret_dump::printenv_may_print_secret(&lowered)
+            && !crate::environment_name_filters::printenv_renders_only_names(value))
         || lowered.contains("os.environ")
         || lowered.contains("process.env")
 }
@@ -835,6 +860,20 @@ fn exact_safe_command_with_context(
     {
         return false;
     }
+    // `$((PATH=10))` assigns as it expands, so a later step could run a
+    // program the proof never looked at.
+    if model.segments[..model.segments.len() - 1]
+        .iter()
+        .any(|segment| shell_arithmetic::arithmetic_assigns(&segment.text))
+    {
+        return false;
+    }
+    // A read may name a path that is missing now. It stays missing only when
+    // no step of the whole command can create an entry.
+    let context = PathContext {
+        creates_nothing: search::command_creates_nothing(model),
+        ..context
+    };
     if segment_proof::exact_safe_cwd_compound(model, allow_git_helper_context, context)
         || segment_proof::exact_safe_absolute_cd_chain(model, allow_git_helper_context, context)
         || safe_reads::exact_safe_sequence(model, allow_git_helper_context, context)
@@ -1253,6 +1292,14 @@ fn evaluate_single_command(
             "allow",
             "native_exact_safe_command",
             "The Rust command authority proved this Bun program only prints constants and no preload can run first.",
+        ));
+    }
+    if environment_names::exact_safe_command(&model) {
+        return Ok(pretool_decision(
+            model,
+            "allow",
+            "native_exact_safe_command",
+            "The Rust command authority proved this pipeline prints variable names with their values removed.",
         ));
     }
     if worktree_add::exact_safe_command(&model, context, deadline, execution_environment) {

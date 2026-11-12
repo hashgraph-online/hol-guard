@@ -223,7 +223,7 @@ fn bash_grep_keeps_its_review_when_a_sensitive_file_could_print() {
         "grep -rn api_token workers",
         "grep -rn \"handler|cookie_name\" .",
         "grep -rn -ehandler .",
-        "grep -rn -e handler -e foo .",
+        "grep -rn -e handler -e cookie_name .",
         "grep -rnv handler .",
         "grep -rnL handler .",
         "grep -rn --invert-match handler .",

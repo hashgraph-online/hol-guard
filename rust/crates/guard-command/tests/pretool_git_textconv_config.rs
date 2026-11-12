@@ -118,6 +118,7 @@ fn textconv_driver_is_reviewed_only_where_git_can_run_it() {
                 ripgrep_config_absent: false,
                 gem_config_absent: false,
                 http_config_absent: false,
+                openssl_config_absent: false,
                 psql_environment: Default::default(),
                 creates_nothing: false,
             },

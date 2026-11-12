@@ -1,5 +1,5 @@
 //! `posix-processes --stdin`: the bounded POSIX process queries the daemon
-//! ownership checks read (`guard/daemon/manager_process_query.py` before it
+//! ownership checks read (the retired Python `manager_process_query.py` before it
 //! moved here).
 //!
 //! - `inventory` answers `ps -axo pid=,command=` as `listing`, or, on Linux
@@ -112,6 +112,12 @@ fn answer(request: &Request, host: &Host) -> Result<Value, String> {
                 .and_then(|output| py_strip(&output).parse::<i64>().ok())
                 .filter(|parent| *parent > 0);
             Ok(json!({ "parent_pid": parent }))
+        }
+        ("state", Some(pid)) if pid > 0 => {
+            let state = ps(host, &["-p", &pid.to_string(), "-o", "stat="])
+                .map(|output| py_strip(&output).to_owned())
+                .filter(|state| !state.is_empty());
+            Ok(json!({ "state": state }))
         }
         ("command", Some(pid)) if pid > 0 => {
             let command = ps(host, &["-p", &pid.to_string(), "-o", "command="])

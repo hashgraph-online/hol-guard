@@ -8,7 +8,7 @@ from types import SimpleNamespace
 import pytest
 
 from codex_plugin_scanner.guard import native_context_assistance as api
-from codex_plugin_scanner.guard.daemon import context_assistance_http as http
+from codex_plugin_scanner.guard.routes import context_assistance_http as http
 
 
 def state() -> dict[str, object]:

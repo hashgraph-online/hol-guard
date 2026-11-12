@@ -277,18 +277,29 @@ impl Prepared {
             "guardPolicyAction": policy_action,
             "reviewUrl": review_url,
         });
+        // `_notify_pending_approval` once the row is written. A notice the
+        // resident cannot read stays on the record for the daemon to raise.
+        let notices = if crate::hook_direct_evidence::notice::raise_approval(
+            &request.guard_home,
+            &oauth_source,
+            &notice,
+        ) {
+            json!([])
+        } else {
+            json!([notice])
+        };
         Ok(Routed::Asked {
             policy_action,
             message,
             data,
-            // What `_notify_pending_approval` and `_maybe_open_approval_center`
-            // raise once the row is written, which the drain owns.
+            // What `_maybe_open_approval_center` reads once the row is
+            // written, and the notices left to the daemon.
             approval: json!({
                 "approval_center_url": center,
                 "review_url": review_url,
                 "request_id": request_id,
                 "workspace": workspace,
-                "notices": [notice],
+                "notices": notices,
             }),
         })
     }

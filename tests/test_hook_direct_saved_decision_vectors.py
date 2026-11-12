@@ -20,7 +20,7 @@ from typing import Any
 
 import pytest
 
-from codex_plugin_scanner.guard.daemon import hook_fail_closed, hook_native_saved_approval
+from codex_plugin_scanner.guard.hook_review import hook_fail_closed, hook_native_saved_approval
 
 _FIXTURE = (
     Path(__file__).parents[1]

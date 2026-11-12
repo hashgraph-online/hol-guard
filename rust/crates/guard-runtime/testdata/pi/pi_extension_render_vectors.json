@@ -37,8 +37,8 @@
     ],
     "contained_request_root": "/guard-vectors/dev/.hol-guard/contained"
    },
-   "chars": 156321,
-   "sha256": "356c2acf9bc0457f89de7f1d8cd1799d4fc5d9d10fde8b3fced7c29bd3ae686a"
+   "chars": 160531,
+   "sha256": "39b64d9d1c400545fce4309e0e6bc5f7bc74cdc92132a555286e69ea970c9ca8"
   },
   {
    "name": "active_pi_posix",
@@ -76,8 +76,8 @@
     ],
     "contained_request_root": "/guard-vectors/dev/.hol-guard/contained"
    },
-   "chars": 148365,
-   "sha256": "118111812f3c4c70d781cbb2a6a7f23ebad7a5a387f8f417bc0bac87df2d95b5"
+   "chars": 152575,
+   "sha256": "8379861a314a848db5e7682a5b429a86919936ee25f530c6264955e0a44bccfd"
   },
   {
    "name": "previous_omp_posix",
@@ -171,8 +171,8 @@
     "contained_sink_command": [],
     "contained_request_root": ""
    },
-   "chars": 156234,
-   "sha256": "676e2c798a03873f2dc00cfb3df7d9f93c45d221f6034435929f02a14e336cfa"
+   "chars": 160444,
+   "sha256": "9754c5e39b9919931eb060e3fdb07900c79c4706bc71803a8aa662242886770a"
   },
   {
    "name": "previous_pi_windows",
@@ -236,8 +236,8 @@
     ],
     "contained_request_root": "/guard-vectors/é/r"
    },
-   "chars": 148447,
-   "sha256": "cc5a746b677c00c4e33b3416b74d5f7912636b26d43086f0e814fa960554b3ba"
+   "chars": 152657,
+   "sha256": "b986d450d8625129dbf1c8fa023a23bea8875d254299b92806e6645ff7f493d9"
   },
   {
    "name": "previous_omp_non_ascii",
@@ -306,8 +306,8 @@
     ],
     "contained_request_root": "/guard-vectors/dev/.hol-guard/contained"
    },
-   "chars": 156360,
-   "sha256": "494a1a14b910a126b0dc858b9883ba5df239aef5e828ffa36f37af2be1ec5403"
+   "chars": 160570,
+   "sha256": "42e87261dc12e659f08e0cf4418cb012768b2616bd8c5752ad801d943389a22b"
   },
   {
    "name": "active_pi_default_home_fixture_name",
@@ -342,8 +342,8 @@
     ],
     "contained_request_root": "/guard-vectors/dev/.hol-guard/contained"
    },
-   "chars": 148352,
-   "sha256": "073fd862564f0e6488c76ce2e9018c255fad66f47801cac9f7dc970b0c881e2f"
+   "chars": 152562,
+   "sha256": "11e14663be24e8b39f6d6390b19f906b3e9fed429e6334760b3fbda8f16000fd"
   },
   {
    "name": "previous_omp_default_home_large_version",

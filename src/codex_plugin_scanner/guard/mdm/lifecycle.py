@@ -18,7 +18,7 @@ from pathlib import Path
 
 from ..adapters.base import HarnessContext
 from ..cli.install_commands import apply_managed_install
-from ..daemon.manager import retire_all_guard_daemons_for_home
+from ..native_daemon_manage import retire_all_guard_daemons_for_home
 from ..policy_bundle_trusted_keys import policy_bundle_keyring_payload
 from ..store import GuardStore
 from .contracts import MDM_STATUS_SCHEMA_VERSION, ManagedPolicy, default_machine_paths

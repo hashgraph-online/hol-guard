@@ -47,6 +47,7 @@ function loadGuardDaemonConnection() { return {stateId: 'daemon-a'}; }
 function invalidateInputApprovalResumes() { inputApprovalResumeGeneration++; }
 function invalidateToolApprovalResumes() {}
 function handlerAbortSignal(ctx) { return ctx.signal; }
+function contextSessionId(ctx) { return ctx.sessionId ?? null; }
 function captureInputApprovalResumeBinding(ctx) {
   return {generation: inputApprovalResumeGeneration, cwd: ctx.cwd, sessionId: ctx.sessionId};
 }

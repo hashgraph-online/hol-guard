@@ -43,7 +43,7 @@ fn index_document() -> Value {
     })
 }
 
-fn detail_document() -> Value {
+pub(super) fn detail_document() -> Value {
     json!({
         "schemaVersion": RELEASE_DETAIL_SCHEMA,
         "slug": "v3-53-0",
@@ -87,7 +87,7 @@ fn detail_document() -> Value {
     })
 }
 
-fn request(kind: &str, body: &Value) -> ReleaseFeedProjectRequest {
+pub(super) fn request(kind: &str, body: &Value) -> ReleaseFeedProjectRequest {
     ReleaseFeedProjectRequest {
         schema: RELEASE_FEED_REQUEST_SCHEMA.to_owned(),
         kind: kind.to_owned(),
@@ -95,12 +95,12 @@ fn request(kind: &str, body: &Value) -> ReleaseFeedProjectRequest {
     }
 }
 
-fn run(request: ReleaseFeedProjectRequest) -> Value {
+pub(super) fn run(request: ReleaseFeedProjectRequest) -> Value {
     let bytes = evaluate_release_feed_project(&request).expect("frame bytes");
     serde_json::from_slice(&bytes).expect("frame json")
 }
 
-fn outcome(frame: &Value) -> (&str, Option<&str>) {
+pub(super) fn outcome(frame: &Value) -> (&str, Option<&str>) {
     (
         frame
             .get("outcome")
@@ -110,7 +110,7 @@ fn outcome(frame: &Value) -> (&str, Option<&str>) {
     )
 }
 
-fn projected(frame: &Value) -> Value {
+pub(super) fn projected(frame: &Value) -> Value {
     let body = frame
         .get("body")
         .and_then(Value::as_str)
