@@ -56335,6 +56335,102 @@
       },
       "cwd": "worktree",
       "expect": "not_allow"
+    },
+    {
+      "id": "linked-sources-grep-internal-link",
+      "fix_area": "read",
+      "harnesses": [
+        "claude-code",
+        "codex",
+        "omp",
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "grep -n real src/alias.ts"
+      },
+      "cwd": "linked_sources",
+      "expect": "allow"
+    },
+    {
+      "id": "linked-sources-cat-internal-link",
+      "fix_area": "read",
+      "harnesses": [
+        "claude-code",
+        "codex",
+        "omp",
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "cat src/alias.ts"
+      },
+      "cwd": "linked_sources",
+      "expect": "allow"
+    },
+    {
+      "id": "linked-sources-grep-real-file",
+      "fix_area": "read",
+      "harnesses": [
+        "claude-code",
+        "codex",
+        "omp",
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "grep -n real src/real.ts"
+      },
+      "cwd": "linked_sources",
+      "expect": "allow"
+    },
+    {
+      "id": "neg-linked-sources-grep-escaping-link",
+      "fix_area": "negative",
+      "harnesses": [
+        "claude-code",
+        "codex",
+        "omp",
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "grep -n TOKEN src/notes.ts"
+      },
+      "cwd": "linked_sources",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-linked-sources-grep-glob-over-escaping-link",
+      "fix_area": "negative",
+      "harnesses": [
+        "claude-code",
+        "codex",
+        "omp",
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "grep -n TOKEN src/*.ts"
+      },
+      "cwd": "linked_sources",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-linked-sources-grep-dot-escaping-link",
+      "fix_area": "negative",
+      "harnesses": [
+        "claude-code",
+        "codex",
+        "omp",
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "grep -n TOKEN ./src/notes.ts"
+      },
+      "cwd": "linked_sources",
+      "expect": "not_allow"
     }
   ],
   "mcp_cases": [
