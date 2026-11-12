@@ -33,7 +33,8 @@ fn routes_name_their_library_calls() {
     // The edge answers policy writes itself.
     assert_eq!(route("/v1/policy/clear"), None);
     assert_eq!(route("/v1/policy/decisions"), None);
-    let (name, args) = resident_route("/v1/local-clis/preview", None).unwrap_or_else(|| unreachable!());
+    let (name, args) =
+        resident_route("/v1/local-clis/preview", None).unwrap_or_else(|| unreachable!());
     assert_eq!(name, "route.local_cli_post");
     assert_eq!(args["op"], "preview");
     for (path, op) in [
