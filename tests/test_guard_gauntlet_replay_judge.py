@@ -249,6 +249,10 @@ def test_only_the_marked_cases_may_pass_on_containment() -> None:
         # nothing above the workspace to reach, so the pattern names only what
         # the sandbox already holds.
         "neg-hidden-glob-stands-for-dot-directories",
+        # A glob that matches only a dotfile, or names a directory that is not
+        # there, keeps its review; a contained run reads only the workspace copy.
+        "neg-read-glob-matching-only-dotfile",
+        "neg-read-glob-in-missing-directory",
         # A pattern that is a credential word and an unconstrained tail expands onto the
         # command line as the files beside it, so the second one becomes the file the
         # filter opens; a contained run has no home access and reads none of them.
