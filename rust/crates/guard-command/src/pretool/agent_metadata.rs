@@ -11,7 +11,26 @@ pub(super) fn bounded_task_list(payload: &Value, tool_name: Option<&str>) -> boo
     let Some(root) = payload.as_object() else {
         return false;
     };
-    if root.keys().any(|key| {
+    if !host_envelope_only(root) {
+        return false;
+    }
+    let Some(input) = payload.get("tool_input").and_then(Value::as_object) else {
+        return false;
+    };
+    if ["toolInput", "arguments"].iter().any(|alias| {
+        payload
+            .get(*alias)
+            .is_some_and(|value| value.as_object() != Some(input))
+    }) {
+        return false;
+    }
+    bounded_task_input(input, tool_name)
+}
+
+/// The payload root carries only the tool call and host context: nothing
+/// outside `tool_input` names a command, path or target.
+fn host_envelope_only(root: &serde_json::Map<String, Value>) -> bool {
+    !root.keys().any(|key| {
         !matches!(
             key.as_str(),
             "tool_name"
@@ -48,19 +67,10 @@ pub(super) fn bounded_task_list(payload: &Value, tool_name: Option<&str>) -> boo
                 | "harness"
                 | "guard_execution_environment"
         )
-    }) {
-        return false;
-    }
-    let Some(input) = payload.get("tool_input").and_then(Value::as_object) else {
-        return false;
-    };
-    if ["toolInput", "arguments"].iter().any(|alias| {
-        payload
-            .get(*alias)
-            .is_some_and(|value| value.as_object() != Some(input))
-    }) {
-        return false;
-    }
+    })
+}
+
+fn bounded_task_input(input: &serde_json::Map<String, Value>, tool_name: Option<&str>) -> bool {
     if tool_name == Some("Skill") {
         return input
             .keys()
@@ -122,6 +132,35 @@ pub(super) fn bounded_task_list(payload: &Value, tool_name: Option<&str>) -> boo
                         _ => !text.is_empty() && text.len() <= 2048,
                     }
                 })
+        })
+}
+
+/// Claude Code's `Agent` (formerly `Task`) starts a subagent with a written
+/// brief. The brief is prompt text, so the caller still applies the prompt
+/// detectors to it; this only proves the call carries nothing else. Every
+/// tool the subagent then runs reaches Guard as its own call.
+pub(super) fn subagent_brief(payload: &Value, tool_name: Option<&str>) -> bool {
+    if !matches!(tool_name, Some("Agent" | "Task")) {
+        return false;
+    }
+    let Some(root) = payload.as_object() else {
+        return false;
+    };
+    let Some(input) = root.get("tool_input").and_then(Value::as_object) else {
+        return false;
+    };
+    host_envelope_only(root)
+        && ["toolInput", "arguments"].iter().all(|alias| {
+            root.get(*alias)
+                .is_none_or(|value| value.as_object() == Some(input))
+        })
+        && bounded_text(input.get("prompt"), 65536)
+        && input.iter().all(|(key, value)| match key.as_str() {
+            "prompt" => true,
+            "description" | "subagent_type" | "model" | "name" | "team_name" | "mode"
+            | "isolation" => short_text(value, 512),
+            "run_in_background" => value.is_boolean(),
+            _ => false,
         })
 }
 
@@ -260,3 +299,7 @@ fn bounded_task_id(value: Option<&Value>) -> bool {
                 .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'-'))
     })
 }
+
+#[cfg(test)]
+#[path = "agent_metadata_subagent_tests.rs"]
+mod subagent_tests;

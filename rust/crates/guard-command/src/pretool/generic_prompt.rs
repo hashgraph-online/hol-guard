@@ -273,7 +273,28 @@ pub(super) fn prompt_injection_intent(values: &[String]) -> bool {
         Regex::new(r"(?i)\b(?:ignore\s+(?:all\s+)?(?:previous|prior|earlier)\s+instructions?|ignore\s+(?:the\s+)?system\s+prompt|(?:do\s+not|don't)\s+(?:tell|notify|alert|inform)\s+(?:the\s+)?users?|hide\s+(?:this|it|the\s+(?:action|instruction|request))\s+from\s+(?:the\s+)?logs?|(?:reveal|print|show)\s+(?:the\s+)?(?:system\s+prompt|developer\s+instructions?)|(?:remove|strip)\s+(?:the\s+)?(?:guard\s+)?hooks?)\b")
             .expect("bounded prompt injection intent")
     });
-    values.iter().any(|value| pattern.is_match(value))
+    values
+        .iter()
+        .any(|value| pattern.is_match(value) || forwarded_injection(value))
+}
+
+/// Injection templates that ride inside quoted data a prompt forwards, such
+/// as a record pasted into a subagent brief: a misspelled "ignore your
+/// previous instructions", a fake message from the user addressed to the
+/// model, and a `(system_message)` marker in front of an instruction.
+fn forwarded_injection(value: &str) -> bool {
+    static PATTERN: OnceLock<Regex> = OnceLock::new();
+    PATTERN
+        .get_or_init(|| {
+            Regex::new(concat!(
+                r"(?i)ignore\s+(?:all\s+)?(?:of\s+)?(?:your|the|any)\s+(?:previous|prior|earlier|above|preceding)\s+[a-z]{0,3}n?structions?\b",
+                r"|\bthis\s+is\s+an\s+important\s+message\s+from\s+me\b[^\n]{0,80}\bto\s+you\b",
+                r"|\bbefore\s+you\s+can\s+solve\s+the\s+task\s+that\s+i\s+gave\s+you\b",
+                r"|#{2,}\s*\(\s*system_message\s*\)",
+            ))
+            .expect("bounded forwarded injection templates")
+        })
+        .is_match(value)
 }
 
 pub(super) fn exfil_prompt_intent(values: &[String]) -> bool {

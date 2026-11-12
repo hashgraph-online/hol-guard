@@ -107,6 +107,17 @@ const PATTERNS: &[PatternDef] = &[
         multi_line: false,
     },
     PatternDef {
+        classifier: "stripe-secret-key",
+        family: "Stripe secret key",
+        sensitivity: "high",
+        reason: "Guard found a Stripe live secret key pattern.",
+        // Live keys only: `sk_test_` and `rk_test_` keys fill Stripe's own
+        // documentation and move no money.
+        pattern: r"\b(?:sk|rk)_live_[A-Za-z0-9]{20,}\b",
+        case_insensitive: false,
+        multi_line: false,
+    },
+    PatternDef {
         classifier: "hedera-private-key",
         family: "Hedera private key",
         sensitivity: "critical",
@@ -335,6 +346,13 @@ fn is_sample(
 }
 
 /// The matches of rule `index` in `text` that are not suppressed as samples.
+fn mixed_key_body(key: &str) -> bool {
+    let body = key.rsplit('_').next().unwrap_or(key);
+    body.bytes().any(|byte| byte.is_ascii_digit())
+        && body.bytes().any(|byte| byte.is_ascii_uppercase())
+        && body.bytes().any(|byte| byte.is_ascii_lowercase())
+}
+
 fn counted_matches<'t>(
     index: usize,
     text: &'t str,
@@ -349,6 +367,11 @@ fn counted_matches<'t>(
     let mut line_end = 0;
     let mut last_value = None;
     compiled()[index].find_iter(text).filter(move |matched| {
+        // A stand-in such as `sk_live_xxxxxxxx...` is a placeholder; a
+        // Stripe key body mixes digits with both letter cases.
+        if classifier == "stripe-secret-key" && !mixed_key_body(matched.as_str()) {
+            return false;
+        }
         if matched.end() > line_end {
             let rest = &text[matched.end()..];
             line_end = matched.end() + rest.find(['\r', '\n']).unwrap_or(rest.len());
@@ -537,6 +560,42 @@ mod tests {
     fn github_like_token() -> String {
         let prefix = ["gh", "p_"].concat();
         format!("{prefix}{}", "a".repeat(30))
+    }
+
+    #[test]
+    fn detects_a_stripe_live_key_but_not_a_test_key_or_stand_in() {
+        let live = ["sk_", "live_", "dx6YHRDb2BC8G4NQr2TyUskf"].concat();
+        let result = scan_text(
+            &format!("Leaked config dump:\n{live}"),
+            false,
+            false,
+            MAX_SCAN_BYTES,
+            None,
+        );
+        assert!(result
+            .matches
+            .iter()
+            .any(|matched| matched.classifier == "stripe-secret-key"));
+        for clean in [
+            ["sk_", "test_", "dx6YHRDb2BC8G4NQr2TyUskf"].concat(),
+            ["sk_", "live_", "xxxxxxxxxxxxxxxxxxxxxxxx"].concat(),
+            ["sk_", "live_", "..."].concat(),
+        ] {
+            let result = scan_text(
+                &format!("Set STRIPE_KEY to {clean}"),
+                false,
+                false,
+                MAX_SCAN_BYTES,
+                None,
+            );
+            assert!(
+                !result
+                    .matches
+                    .iter()
+                    .any(|matched| matched.classifier == "stripe-secret-key"),
+                "{clean}"
+            );
+        }
     }
 
     #[test]

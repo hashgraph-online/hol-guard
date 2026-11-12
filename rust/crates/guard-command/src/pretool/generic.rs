@@ -218,7 +218,7 @@ mod github;
 mod tools;
 #[path = "generic_web_fetch.rs"]
 mod web_fetch;
-pub(in crate::pretool) use tools::executable_is_package_tool;
+pub(in crate::pretool) use tools::{executable_is_package_tool, installs_from_registry};
 pub(in crate::pretool) use web_fetch::plain_public_url;
 
 /// Evaluate the complete raw PreToolUse payload in native code. This stays
@@ -835,6 +835,19 @@ fn evaluate_envelope(
         && !signals.package_present
         && signals.path_values.is_empty()
         && signals.url_values.is_empty();
+    // A subagent brief is prompt text. Only a brief none of the prompt
+    // detectors flag is admitted; the subagent's own tool calls are each
+    // checked when it makes them.
+    let subagent_brief = event == "PreToolUse"
+        && harness == "claude-code"
+        && agent_metadata::subagent_brief(payload, signals.tool_name.as_deref())
+        && signals.command.is_none()
+        && !signals.package_present
+        && !signals.prompt_injection_intent
+        && !signals.exfil_intent
+        && !signals.destructive_intent
+        && !signals.guard_bypass_intent
+        && !signals.sensitive_target;
     let omp_context = omp::OmpContext {
         yield_report_verified: yield_payload.is_some(),
         harness,
@@ -967,6 +980,13 @@ fn evaluate_envelope(
                 if signals.tool_name.as_deref() == Some("TaskOutput") { PreToolOperationV1::Read } else { PreToolOperationV1::Set }, true, false),
             "allow", "native_agent_task_metadata", "The Rust authority verified bounded host task metadata with no new execution or filesystem effects.",
         )
+    } else if subagent_brief {
+        generic_result(
+            generic_action(harness, event, PreToolActionTypeV1::Harness, PreToolOperationV1::Start, true, false),
+            "allow",
+            "native_agent_subagent_brief",
+            "The Rust authority found no instruction override, exfiltration, destructive or sensitive-data request in this subagent brief; every tool the subagent runs is checked on its own.",
+        )
     } else {
         evaluate_signals(
             harness,
@@ -1001,6 +1021,34 @@ fn evaluate_envelope(
             "review",
             reason_code,
             "This write adds a CI workflow step that uploads a local credential file to a network host. The workflow runs on the forge with the repository's secrets, where Guard cannot review it.",
+        );
+    }
+    // A key, token or password written into a file leaves the user's hands
+    // once the file is committed, synced or read back, so a write that holds
+    // a live-looking credential is reviewed rather than allowed as an
+    // ordinary workspace edit.
+    if result.decision == "allow"
+        && result.action.action_type == PreToolActionTypeV1::FileWrite
+        && super::literal_secrets::writes_literal_secret(payload)
+    {
+        let (reason_code, _) = result::review_reason(PreToolActionTypeV1::FileWrite);
+        result = generic_result(
+            result.action.clone(),
+            "review",
+            reason_code,
+            "This write puts what looks like a real key, token or password into a file. Once the file is committed, synced or read back, the credential is out of your hands.",
+        );
+    }
+    if result.decision == "allow"
+        && result.action.action_type == PreToolActionTypeV1::FileWrite
+        && super::planted_instructions::writes_hidden_instruction(payload)
+    {
+        let (reason_code, _) = result::review_reason(PreToolActionTypeV1::FileWrite);
+        result = generic_result(
+            result.action.clone(),
+            "review",
+            reason_code,
+            "This write leaves an instruction for a later agent session that overrides a safety rule and tells the agent to keep it from you.",
         );
     }
     if harness == "omp"

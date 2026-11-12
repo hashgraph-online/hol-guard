@@ -202,10 +202,12 @@ pub(crate) use git_routes::{
 mod apply_patch_writes;
 mod ci_workflow_writes;
 mod data_heredocs;
+mod literal_secrets;
 mod lockfile_install;
 mod omp_file_url;
 mod omp_hashline_writes;
 pub(crate) mod pipe_attacks;
+mod planted_instructions;
 mod pure_expression;
 mod read_paths;
 mod source_reads;
@@ -362,9 +364,10 @@ pub(crate) fn removes_a_root(command: &str) -> bool {
 }
 
 /// Floors no extension permission can settle: Guard self-protection, secret
-/// exfiltration, a glob that could name a secret file, and Git configuration
-/// that runs a program Guard cannot read. An unproven model has no segments
-/// to screen, so it is a floor itself rather than passing every screen.
+/// exfiltration, a spelled-out key, token or password, a glob that could name
+/// a secret file, and Git configuration that runs a program Guard cannot
+/// read. An unproven model has no segments to screen, so it is a floor itself
+/// rather than passing every screen.
 pub(crate) fn fixed_command_floor(model: &CanonicalCommandV1) -> bool {
     model.confidence != "exact"
         || model.segments.is_empty()
@@ -383,6 +386,9 @@ pub(crate) fn fixed_command_floor(model: &CanonicalCommandV1) -> bool {
             names_guard_outside_message(segment, &guard_names::moved_by(&model.segments[..index]))
         })
         || model.segments.iter().any(selects_secret_outside_message)
+        // A spelled-out key, token or password is in the transcript and the
+        // shell history the moment the command runs, whatever the program.
+        || literal_secrets::holds_literal_secret(&model.normalized_text)
 }
 
 /// A Git alias, hook or config value can carry a program the parser never
@@ -731,6 +737,8 @@ fn sensitive_location_text(value: &str) -> bool {
     let needles = [
         "/.ssh/",
         "~/.ssh",
+        // A `.secrets` directory is a credential store (see guard-secure-fs).
+        "/.secrets/",
         "/.aws/credentials",
         "~/.aws/credentials",
         "/.docker/config.json",
@@ -988,7 +996,30 @@ pub(super) fn evaluate_pre_tool_with_execution_context(
     // starting one of its own, and the budget ends when the outermost
     // reading returns.
     let _budget = search_scope_budget::begin_include_scope_budget();
-    evaluate_rewritten(request, home_dir, cwd, deadline, execution_environment, 0)
+    let decision = evaluate_rewritten(request, home_dir, cwd, deadline, execution_environment, 0)?;
+    Ok(literal_secret_review(request, decision))
+}
+
+/// A command that spells out a live-looking key, token or password is
+/// reviewed even when every program in it is safe: the value lands in the
+/// transcript and shell history, and in whatever the command hands it to.
+/// The review uses the ordinary command reason, so a user's explicit
+/// extension Allow still settles it.
+fn literal_secret_review(
+    request: &CommandModelRequestV1,
+    decision: PreToolDecisionV1,
+) -> PreToolDecisionV1 {
+    if decision.minimum_action != "allow"
+        || !literal_secrets::holds_literal_secret(&request.command)
+    {
+        return decision;
+    }
+    pretool_decision(
+        decision.command_model,
+        "review",
+        "native_command_review_required",
+        "This command spells out what looks like a real key, token or password. Once it runs, the value is in the transcript, the shell history and whatever the command sends it to.",
+    )
 }
 
 /// How many rewrites one submission may go through. A wrapper around a loop

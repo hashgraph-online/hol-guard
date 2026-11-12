@@ -125,12 +125,15 @@ pub(super) fn evaluate(
     signals: &GenericSignals,
     context: &OmpContext<'_>,
 ) -> Option<PreToolResultV1> {
-    if context.event != "PreToolUse"
-        || !matches!(context.harness, "omp" | "pi")
-        || signals.sensitive_target
-        || signals.command.is_some()
-        || signals.package_present
-    {
+    if context.event != "PreToolUse" || !matches!(context.harness, "omp" | "pi") {
+        return None;
+    }
+    if signals.tool_name.as_deref() == Some("task") {
+        if let Some(result) = attacking_task_brief(payload, context) {
+            return Some(result);
+        }
+    }
+    if signals.sensitive_target || signals.command.is_some() || signals.package_present {
         return None;
     }
     let tool = signals.tool_name.as_deref()?;
@@ -210,6 +213,32 @@ fn todo_shaped_edit(
             "The Rust authority found a todo update sent to edit: it names no file and has no patch header, so it cannot change any file.",
         )
     })
+}
+
+/// A `task` brief is prompt text for the delegated agent. One that carries an
+/// instruction override, a request to send data away or to turn Guard off is
+/// held for review, wherever in the brief it sits.
+fn attacking_task_brief(payload: &Value, context: &OmpContext<'_>) -> Option<PreToolResultV1> {
+    let input = strict_tool_input(payload)?;
+    let mut brief = Vec::new();
+    brief_strings(&Value::Object(input.clone()), &mut brief);
+    super::extract::brief_carries_attack(&brief).then(|| {
+        generic_result(
+            generic_action(context.harness, context.event, PreToolActionTypeV1::Harness, PreToolOperationV1::Start, true, false),
+            "review",
+            "native_omp_task_brief_review",
+            "HOL Guard held this delegated task because its brief tells the next agent to override its instructions, send data to an outside place or turn Guard off.",
+        )
+    })
+}
+
+fn brief_strings(value: &Value, out: &mut Vec<String>) {
+    match value {
+        Value::String(text) => out.push(text.clone()),
+        Value::Array(items) => items.iter().for_each(|item| brief_strings(item, out)),
+        Value::Object(map) => map.values().for_each(|item| brief_strings(item, out)),
+        _ => {}
+    }
 }
 
 fn delegation_result(tool: &str, context: &OmpContext<'_>) -> PreToolResultV1 {

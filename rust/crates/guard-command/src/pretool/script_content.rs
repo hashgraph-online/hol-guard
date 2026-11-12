@@ -18,6 +18,9 @@ mod launch;
 mod loopback;
 mod loopback_bases;
 pub(in crate::pretool) mod read_only;
+mod system_files;
+
+pub(in crate::pretool) use system_files::{keeps_system_file_review, text_names_system_file};
 
 pub(crate) use argv::{argv_script, ArgvScript};
 

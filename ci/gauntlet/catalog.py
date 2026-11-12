@@ -18,6 +18,9 @@ from .approval_retry_bash import (
 )
 from .approval_retry_relay import RELAY_ORACLE
 from .extension_adapters import extension_adapter
+from .file_write_cases import FILE_WRITE_ORACLE
+from .task_brief_cases import TASK_BRIEF_ORACLE
+from .output_cases import OUTPUT_ORACLE
 from .fixtures import digest_file
 from .remote_code import REMOTE_CODE_CASES
 from .supply_chain import PACKAGE_BLOCK_REASONS
@@ -172,6 +175,9 @@ def load_catalog_data(data: object) -> tuple[Scenario, ...]:
             "blocked-package",
             "blocked-memory-note",
             "blocked-eval-shell",
+            FILE_WRITE_ORACLE,
+            OUTPUT_ORACLE,
+            TASK_BRIEF_ORACLE,
             "native-tools",
             "full-task",
             "approved-retry",
@@ -201,6 +207,18 @@ def load_catalog_data(data: object) -> tuple[Scenario, ...]:
             raise ValueError("memory-note protection cases drive the learn tool alone")
         if scenario.oracle == "blocked-eval-shell" and (scenario.commands or scenario.required_tools != ("eval",)):
             raise ValueError("eval shell protection cases drive the eval tool alone")
+        if scenario.oracle == TASK_BRIEF_ORACLE and (
+            scenario.expectation != "block" or scenario.commands or scenario.required_tools != ("task",)
+        ):
+            raise ValueError("task-brief protection cases drive one blocked task call alone")
+        if scenario.oracle == FILE_WRITE_ORACLE and (
+            scenario.commands or scenario.required_tools not in {("write",), ("edit",)} or not scenario.path
+        ):
+            raise ValueError("file-write protection cases drive one write or edit call at one pinned file")
+        if scenario.oracle == OUTPUT_ORACLE and (
+            scenario.expectation != "block" or len(scenario.commands) != 1 or scenario.path or scenario.required_tools
+        ):
+            raise ValueError("output protection cases run one exact command whose output Guard must stop")
         if scenario.oracle == "full-task" and (
             scenario.expectation != "allow" or scenario.commands or "core" in scenario.profiles
         ):
