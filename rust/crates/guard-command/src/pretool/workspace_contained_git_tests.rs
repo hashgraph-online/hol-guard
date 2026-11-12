@@ -70,6 +70,31 @@ fn hostile_git_configuration_stays_at_review() {
     assert_eq!(got == CONTAINED, host());
 }
 
+/// A checkout that turns hooks off with `core.hooksPath = /dev/null` stages
+/// and commits inside the sandbox like any other.
+#[test]
+fn null_hook_directory_keeps_git_writes_contained() {
+    let ws = workspace("null-hooks", true);
+    std::fs::write(
+        ws.join(".git/config"),
+        "[core]\n\thooksPath = /dev/null\n[user]\n\tname = dev\n[commit]\n\tgpgsign = false\n",
+    )
+    .unwrap();
+    for command in ["git add src/lib.py", "git add .", "git commit -m x"] {
+        assert_eq!(
+            reason("omp", command, &ws, true) == CONTAINED,
+            host(),
+            "{command}"
+        );
+    }
+    std::fs::write(
+        ws.join(".git/config"),
+        "[core]\n\thooksPath = /dev/null/hooks\n",
+    )
+    .unwrap();
+    assert_ne!(reason("omp", "git add .", &ws, true), CONTAINED);
+}
+
 #[test]
 fn git_commands_that_write_sandbox_denied_metadata_stay_out_of_the_sandbox() {
     let ws = workspace("git-metadata", true);

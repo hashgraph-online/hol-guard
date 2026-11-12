@@ -21107,6 +21107,75 @@
       "expect": "allow"
     },
     {
+      "id": "null-hooks-checkout-git-add",
+      "fix_area": "git",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git add docs/notes.md"
+      },
+      "cwd": "org_null_hooks",
+      "expect": "allow"
+    },
+    {
+      "id": "null-hooks-checkout-git-add-commit",
+      "fix_area": "git",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git add -A && git commit -m 'docs: add working notes'"
+      },
+      "cwd": "org_null_hooks",
+      "expect": "allow"
+    },
+    {
+      "id": "null-hooks-checkout-remove-scratch-file",
+      "fix_area": "git",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "rm docs/notes.md && echo removed"
+      },
+      "cwd": "org_null_hooks",
+      "expect": "allow",
+      "requires_sandbox": true
+    },
+    {
+      "id": "neg-null-hooks-checkout-hooks-path-rewrite",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git config core.hooksPath .githooks"
+      },
+      "cwd": "org_null_hooks",
+      "expect": "not_allow"
+    },
+    {
       "id": "neg-git-worktree-add-implied-branch-existing",
       "fix_area": "negative",
       "harnesses": [
