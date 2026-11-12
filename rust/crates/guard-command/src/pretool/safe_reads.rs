@@ -209,6 +209,9 @@ pub(super) fn safe_cat_stdin_arguments(arguments: &[String]) -> bool {
     })
 }
 
+/// `head -n 3 a b` prints what `head -n 3 a; head -n 3 b` prints, with a
+/// `==> a <==` line before each, so every operand gets the single-file proof
+/// that `cat a b` gives its operands, up to the same bound.
 pub(super) fn safe_head_tail_arguments(
     arguments: &[String],
     piped_input: bool,
@@ -531,7 +534,7 @@ fn safe_head_tail_with_targets(
     context: super::PathContext<'_>,
     allow_target: bool,
 ) -> bool {
-    let mut saw_target = false;
+    let mut targets = 0usize;
     let mut expect_count = false;
     let mut after_options = false;
     for argument in arguments {
@@ -543,14 +546,10 @@ fn safe_head_tail_with_targets(
             continue;
         }
         if after_options {
-            if !allow_target
-                || argument == "-"
-                || !command_read_target(argument, context, false)
-                || saw_target
-            {
+            if !allow_target || argument == "-" || !command_read_target(argument, context, false) {
                 return false;
             }
-            saw_target = true;
+            targets += 1;
             continue;
         }
         if argument == "--" {
@@ -586,12 +585,9 @@ fn safe_head_tail_with_targets(
         if !allow_target || !command_read_target(argument, context, false) {
             return false;
         }
-        if saw_target {
-            return false;
-        }
-        saw_target = true;
+        targets += 1;
     }
-    (saw_target || piped_input) && !expect_count
+    targets <= MAX_PLAIN_FILE_TARGETS && (targets > 0 || piped_input) && !expect_count
 }
 
 #[cfg(test)]
@@ -603,31 +599,5 @@ mod jq_stdin_boundary_tests;
 mod sed_context_address_read_tests;
 
 #[cfg(test)]
-mod head_tail_plus_filename_tests {
-    use super::*;
-
-    #[test]
-    fn a_bare_plus_number_is_a_file_operand_not_a_line_count() {
-        let root = env!("CARGO_MANIFEST_DIR");
-        let context = super::super::PathContext {
-            home_dir: Some(root),
-            cwd: Some(root),
-            ..Default::default()
-        };
-        assert!(!safe_head_tail_with_targets(
-            &["+31".to_owned(), "Cargo.toml".to_owned()],
-            false,
-            context,
-            true
-        ));
-        // A nonexistent +31 filename by itself can be a harmless proven
-        // missing-file read; the security invariant is that it still occupies
-        // the target slot and cannot hide an additional source operand.
-        assert!(safe_head_tail_with_targets(
-            &["-n".to_owned(), "+31".to_owned(), "Cargo.toml".to_owned()],
-            false,
-            context,
-            true
-        ));
-    }
-}
+#[path = "safe_reads_head_tail_tests.rs"]
+mod head_tail_tests;
