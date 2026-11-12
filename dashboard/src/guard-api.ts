@@ -2429,14 +2429,30 @@ function applyHarnessPosturePatch(
   return next;
 }
 
-export type GuardSettingsUpdate = Omit<Partial<GuardSettings>, "harness_postures" | "context_assistance_diagnostic" | "context_assistance_requested"> & {
+export type GuardSettingsUpdate = Omit<Partial<GuardSettings>, "harness_postures" | "harness_cigar" | "context_assistance_diagnostic" | "context_assistance_requested"> & {
   harness_postures?: GuardHarnessPosturePatch;
+  /** Per-app CIGAR patch: `"off"` stops CIGAR for the app, `null` lets it follow CIGAR again. */
+  harness_cigar?: Record<string, "off" | null>;
+  /** The Watch entries in this update get no auto-revert window (an app keeping only CIGAR). */
+  harness_watch_untimed?: boolean;
 };
+
+function applyHarnessCigarPatch(
+  current: GuardSettings["harness_cigar"],
+  patch: Record<string, "off" | null>,
+): NonNullable<GuardSettings["harness_cigar"]> {
+  const next = { ...(current ?? {}) };
+  for (const [harness, choice] of Object.entries(patch)) {
+    if (choice === null) delete next[harness];
+    else next[harness] = choice;
+  }
+  return next;
+}
 
 export async function updateSettings(settings: GuardSettingsUpdate): Promise<GuardSettingsPayload> {
   if (isGuardDemoMode()) {
     const current = await fetchSettings();
-    const { harness_postures: posturePatch, ...rest } = settings;
+    const { harness_postures: posturePatch, harness_cigar: cigarPatch, harness_watch_untimed: _untimed, ...rest } = settings;
     return {
       ...current,
       settings: {
@@ -2445,6 +2461,9 @@ export async function updateSettings(settings: GuardSettingsUpdate): Promise<Gua
         ...(posturePatch === undefined
           ? {}
           : { harness_postures: applyHarnessPosturePatch(current.settings.harness_postures, posturePatch) }),
+        ...(cigarPatch === undefined
+          ? {}
+          : { harness_cigar: applyHarnessCigarPatch(current.settings.harness_cigar, cigarPatch) }),
       },
     };
   }

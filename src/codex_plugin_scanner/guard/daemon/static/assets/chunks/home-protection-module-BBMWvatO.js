@@ -1,5 +1,5 @@
-import { r as reactExports, j as jsxRuntimeExports, a3 as HiMiniShieldCheck, cV as HiMiniInformationCircle, ag as HiMiniExclamationTriangle, S as SectionLabel, A as ActionButton, w as HiMiniArrowRight, T as Tag, b as formatRelativeTime, e as HiMiniChevronUp, g as HiMiniChevronDown, v as HiMiniCheckCircle, aN as HiMiniXCircle } from "../guard-dashboard.js";
-import { e as collectPackageBlockReceipts, i as isPackageBlockReceipt } from "./supply-chain-protection-stats--m3HVz8Q.js";
+import { r as reactExports, j as jsxRuntimeExports, a3 as HiMiniShieldCheck, cW as HiMiniInformationCircle, ag as HiMiniExclamationTriangle, S as SectionLabel, A as ActionButton, w as HiMiniArrowRight, T as Tag, b as formatRelativeTime, e as HiMiniChevronUp, g as HiMiniChevronDown, v as HiMiniCheckCircle, aO as HiMiniXCircle } from "../guard-dashboard.js";
+import { e as collectPackageBlockReceipts, i as isPackageBlockReceipt } from "./supply-chain-protection-stats-DezUcd8k.js";
 function resolveHomeProtectionStatus(snapshot) {
   const protection = snapshot.supply_chain?.package_manager_protection;
   if (!protection) return "unknown";
