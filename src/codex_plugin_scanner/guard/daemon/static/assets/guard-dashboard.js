@@ -16548,16 +16548,16 @@ function reloadDocument(reload) {
   }
   return false;
 }
-function storageGet(storage, key) {
+function storageGet(storage2, key) {
   try {
-    return storage.getItem(key);
+    return storage2.getItem(key);
   } catch {
     return null;
   }
 }
-function storageSet(storage, key, value) {
+function storageSet(storage2, key, value) {
   try {
-    storage.setItem(key, value);
+    storage2.setItem(key, value);
     return true;
   } catch {
     return false;
@@ -16580,13 +16580,13 @@ async function loadWorkspaceModule(loader, options = {}) {
     if (!isChunkLoadError(error)) {
       throw error;
     }
-    const storage = options.storage;
+    const storage2 = options.storage;
     const failureMessage = error instanceof Error ? error.message : String(error);
     const failureFingerprint = `${options.moduleId ?? "anonymous-workspace-module"}:${failureMessage}`;
-    if (!storage || storageGet(storage, CHUNK_RELOAD_STORAGE_KEY) === failureFingerprint) {
+    if (!storage2 || storageGet(storage2, CHUNK_RELOAD_STORAGE_KEY) === failureFingerprint) {
       throw error;
     }
-    if (!storageSet(storage, CHUNK_RELOAD_STORAGE_KEY, failureFingerprint)) {
+    if (!storageSet(storage2, CHUNK_RELOAD_STORAGE_KEY, failureFingerprint)) {
       throw error;
     }
     const wait = options.wait ?? defaultWait;
@@ -16626,23 +16626,23 @@ function responseDashboardBuild(response, pageOrigin) {
     return null;
   }
 }
-function claimStaleBuildReload(state, storage) {
-  if (!isDashboardBuildStale(state) || !storage || state.serverBuild === null) {
+function claimStaleBuildReload(state, storage2) {
+  if (!isDashboardBuildStale(state) || !storage2 || state.serverBuild === null) {
     return false;
   }
   try {
-    if (storage.getItem(DASHBOARD_BUILD_RELOAD_STORAGE_KEY) === state.serverBuild) {
+    if (storage2.getItem(DASHBOARD_BUILD_RELOAD_STORAGE_KEY) === state.serverBuild) {
       return false;
     }
-    storage.setItem(DASHBOARD_BUILD_RELOAD_STORAGE_KEY, state.serverBuild);
+    storage2.setItem(DASHBOARD_BUILD_RELOAD_STORAGE_KEY, state.serverBuild);
     return true;
   } catch {
     return false;
   }
 }
-function releaseStaleBuildClaim(storage) {
+function releaseStaleBuildClaim(storage2) {
   try {
-    storage?.removeItem?.(DASHBOARD_BUILD_RELOAD_STORAGE_KEY);
+    storage2?.removeItem?.(DASHBOARD_BUILD_RELOAD_STORAGE_KEY);
   } catch {
   }
 }
@@ -16733,12 +16733,12 @@ function releaseClaimIfLeaveIsCancelled(build) {
       if (!event.defaultPrevented) {
         return;
       }
-      const storage = browserSessionStorage();
-      releaseStaleBuildClaim(storage);
+      const storage2 = browserSessionStorage();
+      releaseStaleBuildClaim(storage2);
       const restore = () => {
         restoreClaimOnLeave = null;
         try {
-          storage?.setItem(DASHBOARD_BUILD_RELOAD_STORAGE_KEY, build);
+          storage2?.setItem(DASHBOARD_BUILD_RELOAD_STORAGE_KEY, build);
         } catch {
         }
       };
@@ -16750,8 +16750,8 @@ function releaseClaimIfLeaveIsCancelled(build) {
 }
 function loadCurrentDashboardBuild(href) {
   const state = currentBuildState();
-  const storage = browserSessionStorage();
-  if (typeof window === "undefined" || state.serverBuild === null || !claimStaleBuildReload(state, storage)) {
+  const storage2 = browserSessionStorage();
+  if (typeof window === "undefined" || state.serverBuild === null || !claimStaleBuildReload(state, storage2)) {
     return false;
   }
   releaseClaimIfLeaveIsCancelled(state.serverBuild);
@@ -23880,41 +23880,41 @@ function store() {
     return null;
   }
 }
-function rememberTurnOn(now2, storage = store()) {
+function rememberTurnOn(now2, storage2 = store()) {
   try {
-    storage?.setItem(KEY, String(now2));
+    storage2?.setItem(KEY, String(now2));
   } catch {
   }
 }
-function rememberTurnOnJob(jobId, storage = store()) {
+function rememberTurnOnJob(jobId, storage2 = store()) {
   try {
-    storage?.setItem(JOB_KEY, jobId);
+    storage2?.setItem(JOB_KEY, jobId);
   } catch {
   }
 }
-function forgetTurnOnClick(storage = store()) {
+function forgetTurnOnClick(storage2 = store()) {
   try {
-    storage?.removeItem(KEY);
+    storage2?.removeItem(KEY);
   } catch {
   }
 }
-function forgetTurnOn(storage = store()) {
+function forgetTurnOn(storage2 = store()) {
   try {
-    storage?.removeItem(KEY);
-    storage?.removeItem(JOB_KEY);
+    storage2?.removeItem(KEY);
+    storage2?.removeItem(JOB_KEY);
   } catch {
   }
 }
-function turnOnJob(storage = store()) {
+function turnOnJob(storage2 = store()) {
   try {
-    return storage?.getItem(JOB_KEY) || null;
+    return storage2?.getItem(JOB_KEY) || null;
   } catch {
     return null;
   }
 }
-function turnOnRequestedAt(storage = store()) {
+function turnOnRequestedAt(storage2 = store()) {
   try {
-    const value = Number(storage?.getItem(KEY) ?? NaN);
+    const value = Number(storage2?.getItem(KEY) ?? NaN);
     return Number.isFinite(value) ? value : null;
   } catch {
     return null;
@@ -23969,8 +23969,8 @@ const revision = (value) => typeof value === "string" && /^[1-9][0-9]{0,19}$/.te
 const version$1 = (value) => Array.isArray(value) && value.length === 3 && value.every((part) => Number.isSafeInteger(part) && part >= 0 && part <= 65535);
 function config(value) {
   if (!record$5(value) || value.schema_version !== 1 || typeof value.enabled !== "boolean" || !text$3(value.runtime_id, 128) || !["low_memory", "balanced", "custom"].includes(String(value.resource_profile)) || !record$5(value.features) || !record$5(value.sources) || !record$5(value.storage) || !record$5(value.limits)) return false;
-  const { features, sources, storage, limits } = value;
-  return ["review_briefs", "agent_context", "shared_agents"].every((key) => typeof features[key] === "boolean") && (features.execution_context === void 0 || typeof features.execution_context === "boolean") && ["native_policy_facts", "sanitized_receipt_facts", "workspace_documents"].every((key) => typeof sources[key] === "boolean") && text$3(sources.source_set_id, 128) && (storage.mode === "memory" || storage.mode === "sqlite") && Number.isSafeInteger(storage.retention_hours) && ["context_tokens", "reserve_tokens", "max_active_workspaces", "idle_shutdown_seconds"].every((key) => Number.isSafeInteger(limits[key]));
+  const { features, sources, storage: storage2, limits } = value;
+  return ["review_briefs", "agent_context", "shared_agents"].every((key) => typeof features[key] === "boolean") && (features.execution_context === void 0 || typeof features.execution_context === "boolean") && ["native_policy_facts", "sanitized_receipt_facts", "workspace_documents"].every((key) => typeof sources[key] === "boolean") && text$3(sources.source_set_id, 128) && (storage2.mode === "memory" || storage2.mode === "sqlite") && Number.isSafeInteger(storage2.retention_hours) && ["context_tokens", "reserve_tokens", "max_active_workspaces", "idle_shutdown_seconds"].every((key) => Number.isSafeInteger(limits[key]));
 }
 function runtime(value) {
   if (!record$5(value) || value.schema !== "guard-cigar-runtime-status.v1" || !record$5(value.interpreter)) return false;
@@ -37488,6 +37488,9 @@ const QUEUE_CONNECTION_ERROR_INSTRUCTION = "Start Guard on this machine, then re
 const QUEUE_SESSION_ERROR_HEADLINE = "This approval link needs a signed local session";
 const QUEUE_SESSION_ERROR_DETAIL = "Guard is still running on this device. This browser is not signed in to the local dashboard.";
 const QUEUE_SESSION_ERROR_INSTRUCTION = "Use the signed link from the paused tool, or open Inbox from Guard on this device.";
+const QUEUE_DESKTOP_HANDOFF_HEADLINE = "Opened this request in HOL Guard Desktop";
+const QUEUE_DESKTOP_HANDOFF_DETAIL = "Approve it or keep it blocked in HOL Guard Desktop. This browser tab is not signed in to the local dashboard, so it cannot decide the request.";
+const QUEUE_DESKTOP_HANDOFF_INSTRUCTION = "If HOL Guard Desktop did not open, open the request again below.";
 const QUEUE_SESSION_COMMAND_INSTRUCTION = "Or run this in your own terminal. It opens the request signed in, in HOL Guard Desktop when you use it.";
 const REQUEST_ID = /^[0-9a-f]{32}$/;
 function desktopRequestUrl(requestId) {
@@ -37506,11 +37509,115 @@ function queueErrorIsUnauthorizedSession(message) {
   }
   return /request failed with 401(?:\D|$)/.test(lower);
 }
+const DESKTOP_REQUESTS_META = "guard-desktop-requests";
+const HANDOFF_KEY_PREFIX = "guard-desktop-handoff:";
+const EMBEDDED_KEY = "guard-desktop-embedded";
+const REQUEST_PATH = /^\/requests\/([0-9a-f]{32})\/?$/;
+function requestPageId(pathname) {
+  return REQUEST_PATH.exec(pathname)?.[1] ?? null;
+}
+function desktopHandoffTarget(page) {
+  if (!page.desktopOpensRequests || page.embedded) {
+    return null;
+  }
+  const requestId = requestPageId(page.pathname);
+  if (requestId === null || page.alreadyHandedOff(requestId)) {
+    return null;
+  }
+  return desktopRequestUrl(requestId);
+}
+function pageDesktopOpensRequests() {
+  try {
+    const meta = document.querySelector(`meta[name="${DESKTOP_REQUESTS_META}"]`);
+    return meta?.getAttribute("content") === "1";
+  } catch {
+    return false;
+  }
+}
+function storage() {
+  try {
+    return window.sessionStorage;
+  } catch {
+    return null;
+  }
+}
+function readTabFlag(store2, key) {
+  try {
+    return store2?.getItem(key) === "1";
+  } catch {
+    return false;
+  }
+}
+function writeTabFlag(store2, key) {
+  if (store2 === null) {
+    return false;
+  }
+  try {
+    store2.setItem(key, "1");
+    return true;
+  } catch {
+    return false;
+  }
+}
+function clearTabFlag(store2, key) {
+  try {
+    store2?.removeItem(key);
+  } catch {
+  }
+}
+function tabIsEmbedded() {
+  const store2 = storage();
+  let embedded = false;
+  try {
+    embedded = dashboardEmbedsInDesktop();
+  } catch {
+    embedded = false;
+  }
+  if (embedded) {
+    writeTabFlag(store2, EMBEDDED_KEY);
+    return true;
+  }
+  return readTabFlag(store2, EMBEDDED_KEY);
+}
+function requestHandedOffToDesktop(requestId) {
+  if (!requestId) {
+    return false;
+  }
+  return readTabFlag(storage(), HANDOFF_KEY_PREFIX + requestId);
+}
+function handOffRequestPageToDesktop() {
+  let pathname;
+  try {
+    pathname = window.location.pathname;
+  } catch {
+    return;
+  }
+  const target2 = desktopHandoffTarget({
+    pathname,
+    desktopOpensRequests: pageDesktopOpensRequests(),
+    embedded: tabIsEmbedded(),
+    alreadyHandedOff: requestHandedOffToDesktop
+  });
+  const requestId = requestPageId(pathname);
+  const store2 = storage();
+  if (target2 === null || requestId === null) {
+    return;
+  }
+  if (!writeTabFlag(store2, HANDOFF_KEY_PREFIX + requestId)) {
+    return;
+  }
+  try {
+    window.location.assign(target2);
+  } catch {
+    clearTabFlag(store2, HANDOFF_KEY_PREFIX + requestId);
+  }
+}
 function QueueConnectionError(props) {
   const [repairing, setRepairing] = reactExports.useState(false);
   const sessionMissing = queueErrorIsUnauthorizedSession(props.message);
   const desktopUrl = sessionMissing ? desktopRequestUrl(props.requestId ?? null) : null;
   const openCommand = sessionMissing ? approvalsOpenCommand(props.requestId ?? null) : null;
+  const handedOff = desktopUrl !== null && (props.handedOffToDesktop ?? requestHandedOffToDesktop(props.requestId));
   const handleRepair = reactExports.useCallback(async () => {
     if (props.onRepair === void 0) {
       return;
@@ -37529,19 +37636,24 @@ function QueueConnectionError(props) {
       void handleRepair();
     }
   }, [handleRepair, props.approvalUrl]);
-  const headline = sessionMissing ? QUEUE_SESSION_ERROR_HEADLINE : QUEUE_CONNECTION_ERROR_HEADLINE;
-  const detail = sessionMissing ? QUEUE_SESSION_ERROR_DETAIL : props.message;
-  const instruction = sessionMissing ? QUEUE_SESSION_ERROR_INSTRUCTION : QUEUE_CONNECTION_ERROR_INSTRUCTION;
+  let headline = sessionMissing ? QUEUE_SESSION_ERROR_HEADLINE : QUEUE_CONNECTION_ERROR_HEADLINE;
+  let detail = sessionMissing ? QUEUE_SESSION_ERROR_DETAIL : props.message;
+  let instruction = sessionMissing ? QUEUE_SESSION_ERROR_INSTRUCTION : QUEUE_CONNECTION_ERROR_INSTRUCTION;
+  if (handedOff) {
+    headline = QUEUE_DESKTOP_HANDOFF_HEADLINE;
+    detail = QUEUE_DESKTOP_HANDOFF_DETAIL;
+    instruction = QUEUE_DESKTOP_HANDOFF_INSTRUCTION;
+  }
   let sessionRetryVariant;
   if (desktopUrl !== null) {
     sessionRetryVariant = "outline";
   }
-  return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "space-y-4", children: /* @__PURE__ */ jsxRuntimeExports.jsxs(Surface, { tone: "danger", children: [
+  return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "space-y-4", children: /* @__PURE__ */ jsxRuntimeExports.jsxs(Surface, { tone: handedOff ? "default" : "danger", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-semibold text-brand-purple", role: "alert", children: headline }),
     /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-sm text-brand-purple/80", children: detail }),
     /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-sm text-brand-purple/70", children: instruction }),
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-4 flex flex-wrap gap-3", children: [
-      desktopUrl !== null && /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { href: desktopUrl, children: "Open in HOL Guard Desktop" }),
+      desktopUrl !== null && /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { href: desktopUrl, children: handedOff ? "Open in HOL Guard Desktop again" : "Open in HOL Guard Desktop" }),
       sessionMissing ? props.onRetry !== void 0 && /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { onClick: props.onRetry, variant: sessionRetryVariant, children: "Retry" }) : /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { onClick: handleOpenDaemon, children: "Repair" }),
       sessionMissing ? null : props.onRepair !== void 0 && /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { onClick: handleRepair, disabled: repairing, variant: "outline", children: repairing ? "Repairing..." : "Reconnect" }),
       sessionMissing ? null : /* @__PURE__ */ jsxRuntimeExports.jsx("code", { className: "inline-flex min-h-10 items-center rounded-lg border border-brand-purple/30 bg-slate-50 px-3 py-2 font-mono text-sm text-brand-purple select-all", children: "hol-guard start" }),
@@ -39766,6 +39878,7 @@ if (container === null) {
   throw new Error("Missing guard-dashboard-root");
 }
 installStaleBuildGuard();
+handOffRequestPageToDesktop();
 clientExports.createRoot(container).render(
   /* @__PURE__ */ jsxRuntimeExports.jsx(reactExports.StrictMode, { children: /* @__PURE__ */ jsxRuntimeExports.jsx(App, {}) })
 );

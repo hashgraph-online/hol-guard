@@ -475,7 +475,9 @@ def _finish(calls: dict, call_id: Any, is_error: bool, result: Any) -> None:
 
 
 def _claude_event(event: dict, kind: Any, calls: dict, order: list, terminal: bool, failed: bool) -> tuple[bool, bool]:
-    content = (event.get("message") or {}).get("content")
+    # Some events, such as a ``system`` permission denial, carry ``message`` as plain text.
+    message = event.get("message")
+    content = message.get("content") if isinstance(message, dict) else None
     if kind == "assistant" and isinstance(content, list):
         for part in content:
             if isinstance(part, dict) and part.get("type") == "tool_use":

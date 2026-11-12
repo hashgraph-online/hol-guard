@@ -99,6 +99,25 @@ def test_claude_stream_pairs_tool_use_with_result(tmp_path):
     assert [(call["tool"], call["is_error"]) for call in transcript["calls"]] == [("bash", True)]
 
 
+def test_claude_stream_reads_past_a_permission_denial_with_a_text_message(tmp_path):
+    # Claude Code reports a hook denial as a system event whose ``message`` is plain text.
+    stream = write_stream(
+        tmp_path / "claude.jsonl",
+        [
+            {
+                "type": "assistant",
+                "message": {"content": [{"type": "tool_use", "id": "t1", "name": "Bash", "input": {}}]},
+            },
+            {"type": "system", "subtype": "permission_denied", "tool_use_id": "t1", "message": "HOL Guard review"},
+            {"type": "user", "message": {"content": [{"type": "tool_result", "tool_use_id": "t1", "is_error": True}]}},
+            {"type": "result", "subtype": "success", "is_error": False},
+        ],
+    )
+    transcript = read_transcript("claude-code", stream)
+    assert transcript["terminal"] is True and transcript["failed"] is False
+    assert [(call["tool"], call["is_error"]) for call in transcript["calls"]] == [("bash", True)]
+
+
 def test_codex_stream_reads_command_status_and_exit_code(tmp_path):
     item = {"id": "i1", "type": "command_execution", "command": "cat a", "status": "completed", "exit_code": 1}
     stream = write_stream(

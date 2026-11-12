@@ -131,6 +131,36 @@ def required_checks(scenario: Scenario) -> set[str]:
     return checks
 
 
+PROMPT_EVENT = "UserPromptSubmit"
+
+
+def is_prompt_answer(observation: object) -> bool:
+    """Whether a Guard observation answers the case prompt rather than a tool call.
+
+    The Pi and Oh My Pi extension reviews each prompt before its turn starts.
+    That answer names no tool, so it binds to no call, but the native routes
+    still count it.
+    """
+    return isinstance(observation, dict) and observation.get("event") == PROMPT_EVENT
+
+
+def prompt_answer_error(observation: dict[str, Any]) -> str | None:
+    """Why a prompt answer is not one that let the case prompt run, or ``None``."""
+    if (
+        observation.get("http_status") != 200
+        or observation.get("observer_error")
+        or observation.get("transport_error")
+        or observation.get("input") != {}
+        or input_digest({}) != observation.get("input_sha256")
+        or observation.get("tool") is not None
+        or observation.get("tool_call_id") is not None
+    ):
+        return "malformed or unsuccessful Guard HTTP observation"
+    if observation.get("decision") != "allow":
+        return "Guard did not let the case prompt run"
+    return None
+
+
 def guard_inventory(
     calls: list[dict[str, Any]],
     observations: list[dict[str, Any]],
@@ -145,6 +175,10 @@ def guard_inventory(
     """
     by_id: dict[str, list[dict[str, Any]]] = {}
     for observation in observations:
+        if is_prompt_answer(observation):
+            if prompt_error := prompt_answer_error(observation):
+                return {}, prompt_error
+            continue
         if (
             not isinstance(observation, dict)
             or observation.get("http_status") != 200
