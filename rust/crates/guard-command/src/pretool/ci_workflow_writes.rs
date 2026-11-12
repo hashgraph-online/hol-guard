@@ -339,11 +339,23 @@ fn reads_credential_file(segment: &str) -> bool {
             .any(|word| credential_file_operand(word))
 }
 
-/// True when this segment runs a network tool.
+/// True when this segment runs a network tool, or a command named by a
+/// variable that sends its stdin as a body (`cat .env | "$CURL" -d @- ...`).
 fn runs_network_tool(segment: &str) -> bool {
+    command_words(segment).first().is_some_and(|word| {
+        NETWORK_TOOLS.contains(&basename(word))
+            || (word.starts_with('$')
+                && (segment.contains("@-")
+                    || segment.contains("-T -")
+                    || segment.contains("--upload-file -")))
+    })
+}
+
+/// True when this segment runs a command named by a variable (`$CURL ...`).
+fn runs_variable_command(segment: &str) -> bool {
     command_words(segment)
         .first()
-        .is_some_and(|word| NETWORK_TOOLS.contains(&basename(word)))
+        .is_some_and(|word| word.starts_with('$'))
 }
 
 /// True when one command line sends a credential file to a network host.
@@ -365,7 +377,9 @@ fn command_uploads(line: &str, depth: usize) -> bool {
     }
     // `curl -d "$(cat .env)" ...`.
     pipes_credential_read(&line, 0)
-        || (commands.iter().any(|command| runs_network_tool(command))
+        || (commands
+            .iter()
+            .any(|command| runs_network_tool(command) || runs_variable_command(command))
             && SUBSTITUTED_READ
                 .captures_iter(&line)
                 .filter_map(|captures| captures.name("file"))
