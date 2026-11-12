@@ -109,8 +109,8 @@
     "recovery_accepts_failure_kind": true,
     "taskkill_path": null
    },
-   "chars": 65302,
-   "sha256": "382765a2829a787b6c222ec1be0f902e798fc610337680aaa23f9f0f26283c6d"
+   "chars": 64681,
+   "sha256": "a6825add553427965673124b483a04bca925c4b88999c37a7334f7e74e9514da"
   },
   {
    "name": "previous_pi_posix",
@@ -142,8 +142,8 @@
     "recovery_accepts_failure_kind": true,
     "taskkill_path": null
    },
-   "chars": 64757,
-   "sha256": "ca689161c40a0965c61b87d449645a885c350c2ae88b985bfc9d63c23a43e67e"
+   "chars": 64136,
+   "sha256": "d77170a7b4806e8bf21a0a0aacc867cbc057b748906013a9f023997493846649"
   },
   {
    "name": "active_omp_windows",
@@ -197,8 +197,8 @@
     "recovery_accepts_failure_kind": false,
     "taskkill_path": "C:\\Windows\\System32\\taskkill.exe"
    },
-   "chars": 64785,
-   "sha256": "877890e33d7ec875847ca4de1a574d5d1c69b965591520b5b80192423f893339"
+   "chars": 64164,
+   "sha256": "c6a367d09ed3fa38a80c3a8b8e6fbf6b2e85b5fb37d9674fbb629901292fa61d"
   },
   {
    "name": "active_pi_non_ascii",
@@ -269,8 +269,8 @@
     "recovery_accepts_failure_kind": true,
     "taskkill_path": null
    },
-   "chars": 65344,
-   "sha256": "4e60f8dda73dbf9de498572ae09c3ccf138e885fa4176f7dd42d9972a6bc61b6"
+   "chars": 64723,
+   "sha256": "98ba893ac66597b5fab625cbde69ac810ede433952c4b64ac16ac177aa888b2e"
   },
   {
    "name": "active_omp_placeholder_spellings",
@@ -375,8 +375,8 @@
     "recovery_accepts_failure_kind": true,
     "taskkill_path": null
    },
-   "chars": 65396,
-   "sha256": "7e3ef51aeb7c1956b869f02805b63e77c872174fc472cc7df673de2f982d9910"
+   "chars": 64775,
+   "sha256": "bd73270c80a55038689d621472ba5fa3500c7b6f2420a864f53156cdbfef8f8b"
   }
  ]
 }
