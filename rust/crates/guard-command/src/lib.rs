@@ -67,6 +67,8 @@ pub mod cloud_pack_pattern;
 pub mod cloud_pack_request;
 pub mod cloud_pack_response;
 #[cfg(test)]
+mod cloud_pack_review_tests;
+#[cfg(test)]
 mod cloud_pack_tests;
 pub mod cloud_pack_validate;
 mod cloud_pack_validate_facts;

@@ -61,8 +61,12 @@ response. Compilation runs the fixtures and stops on any failure.
 - `artifactDigest`: everything else in the artifact: schema, compiler version, provider, the two digests above
   and the compiled pack.
 
-Loading an artifact recomputes all three and refuses any mismatch, so an edited artifact does not load. Key order
-does not change a digest.
+Loading an artifact recomputes all three and refuses any mismatch, so an artifact whose content no longer matches
+its digests does not load. Key order does not change a digest.
+
+The digests are not keyed, so they do not authenticate an artifact: anyone who edits a pack can recompute all three.
+A host must compare `artifactDigest` with a pin it trusts independently, such as a signed catalog entry, before it
+activates an artifact.
 
 ## Widening
 

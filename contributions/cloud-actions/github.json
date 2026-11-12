@@ -352,7 +352,7 @@
           "type": "string",
           "required": true,
           "maxLength": 4000,
-          "forbidden": "(?:^|[^\\w`])@[A-Za-z0-9][A-Za-z0-9-]*/[A-Za-z0-9_.-]+"
+          "forbidden": "(?:^|[^\\w])@[A-Za-z0-9][A-Za-z0-9-]*/[A-Za-z0-9_.-]+"
         }
       },
       "facts": {
@@ -458,6 +458,18 @@
             "repository": "octo-org/widgets",
             "issue_number": 7,
             "body": "cc @octo-org/security"
+          },
+          "expect": {
+            "error": "forbidden_content"
+          }
+        },
+        {
+          "name": "refuses a team mention after a backtick",
+          "kind": "risky",
+          "arguments": {
+            "repository": "octo-org/widgets",
+            "issue_number": 7,
+            "body": "see `x`@octo-org/security"
           },
           "expect": {
             "error": "forbidden_content"

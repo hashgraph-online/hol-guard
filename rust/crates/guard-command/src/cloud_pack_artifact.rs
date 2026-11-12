@@ -80,8 +80,11 @@ fn artifact_digest(artifact: &PackArtifact) -> Result<String, PackError> {
     Ok(domain_digest(ARTIFACT_DOMAIN, &[&bytes]))
 }
 
-/// Compile a source pack. The pack must validate and every fixture must pass.
+/// Compile a source pack. The pack must validate and every fixture must pass,
+/// and the artifact must be one [`load`] accepts: compiling adds digests and a
+/// wrapper, so a pack near the size limit can produce an artifact over it.
 pub fn compile(pack: &CloudActionPack) -> Result<PackArtifact, PackError> {
+    crate::cloud_pack::within_limit(&to_value(pack)?)?;
     validate(pack)?;
     if !crate::cloud_pack_fixtures::run(pack).passed {
         return Err(PackError::new("cloud_pack_fixtures_failed", ""));
@@ -97,6 +100,7 @@ pub fn compile(pack: &CloudActionPack) -> Result<PackArtifact, PackError> {
         pack: compiled,
     };
     artifact.artifact_digest = artifact_digest(&artifact)?;
+    crate::cloud_pack::within_limit(&to_value(&artifact)?)?;
     Ok(artifact)
 }
 

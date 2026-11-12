@@ -281,6 +281,12 @@ fn compare_fields(
                     Some(&path),
                     true,
                 );
+                changes.when(
+                    max_items < old_max,
+                    "response_limit_lowered",
+                    Some(&path),
+                    false,
+                );
                 compare_fields(changes, &format!("{path}."), old_fields, fields);
             }
             (

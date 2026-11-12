@@ -324,7 +324,15 @@ fn write_template(
     }
 }
 
+/// Longest request body a pack may render. An `each` item can repeat a whole
+/// argument once per element, so the body is checked as it grows rather than
+/// trusting the argument bounds to keep it small.
+pub const MAX_BODY_BYTES: usize = 1 << 20;
+
 fn write_json(value: &Value, out: &mut String) -> Result<(), ArgumentError> {
     out.push_str(&serde_json::to_string(value).map_err(|_| refused(None))?);
+    if out.len() > MAX_BODY_BYTES {
+        return Err(refused(None));
+    }
     Ok(())
 }

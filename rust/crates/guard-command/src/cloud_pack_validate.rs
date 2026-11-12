@@ -185,7 +185,7 @@ fn validate_argument(spec: &ArgumentSpec) -> Result<(), &'static str> {
             items,
             ..
         } => {
-            if *min_items == 0 || min_items > max_items || *max_items > MAX_ARRAY_ITEMS {
+            if *max_items == 0 || min_items > max_items || *max_items > MAX_ARRAY_ITEMS {
                 return Err("cloud_pack_argument_bounds_invalid");
             }
             validate_text(items)?;
@@ -355,7 +355,10 @@ fn validate_fixtures(action: &PackAction) -> Result<(), &'static str> {
             || !fixture.arguments.is_object()
             || (expect.request.is_some() && !http)
             || expect.response.is_some() != expect.projection.is_some()
-            || (expect.error.is_some() && (expect.facts.is_some() || expect.request.is_some()))
+            || (expect.error.is_some()
+                && (expect.facts.is_some()
+                    || expect.request.is_some()
+                    || expect.response.is_some()))
         {
             return Err("cloud_pack_fixtures_invalid");
         }
