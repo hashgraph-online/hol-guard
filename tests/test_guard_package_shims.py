@@ -1897,7 +1897,8 @@ def test_guard_protect_pnpm_install_alias_renders_wrapped_review_link_for_cloud_
 
     assert rc == 2
     normalized_output = " ".join(output.lower().split())
-    assert "blocked" in normalized_output
+    assert "paused" in normalized_output
+    assert "guard blocked the install" not in normalized_output
     assert "approve or keep this blocked" not in normalized_output
     assert "http://127.0.0.1:5474/requests/" not in output
 

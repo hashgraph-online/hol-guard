@@ -183,7 +183,7 @@ pub(super) fn with_additional_reason(
 }
 
 /// `_cloud_result_should_defer_to_bundle` (:5123-5137) — whether a cloud
-/// result carrying an auth/http/timeout fallback reason should yield to the
+/// result carrying an auth/http/timeout/validation fallback reason should yield to the
 /// stricter local bundle decision.
 // supply_chain_package_eval.py:5123-5137
 #[allow(dead_code)]
@@ -202,7 +202,12 @@ pub(super) fn cloud_result_should_defer_to_bundle(
     if evaluation.decision == "block" && evaluation.enforcement == "block" {
         return false;
     }
-    let defer_codes = ["cloud_auth_error", "cloud_http_error", "cloud_timeout"];
+    let defer_codes = [
+        "cloud_auth_error",
+        "cloud_http_error",
+        "cloud_timeout",
+        "cloud_validation_error",
+    ];
     if !reason_codes
         .iter()
         .any(|c| defer_codes.contains(&c.as_str()))
@@ -223,4 +228,50 @@ pub(super) fn cloud_fallback_reason(code: &str, message: &str) -> Map<String, Va
     reason.insert("severity".into(), Value::String("unknown".into()));
     reason.insert("source".into(), Value::String("guard-cloud".into()));
     reason
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::supply_chain_package_eval::cloud_transport::cloud_http_failure_outcome;
+
+    #[test]
+    fn cloud_validation_error_cannot_override_a_local_bundle_block() {
+        for status in [400, 404] {
+            let (code, message, decision) =
+                cloud_http_failure_outcome(status, None, "block", "ask").unwrap();
+            let cloud = EvaluationDraft {
+                decision,
+                enforcement: "enforced".into(),
+                reasons: vec![cloud_fallback_reason(code, &message)],
+                ..Default::default()
+            };
+            let bundle = EvaluationDraft {
+                decision: "block".into(),
+                refresh_required: true,
+                ..Default::default()
+            };
+            assert!(cloud_result_should_defer_to_bundle(&cloud, &bundle));
+            for decision in ["allow", "ask"] {
+                let nonblocking_bundle = EvaluationDraft {
+                    decision: decision.into(),
+                    ..Default::default()
+                };
+                assert!(!cloud_result_should_defer_to_bundle(
+                    &cloud,
+                    &nonblocking_bundle
+                ));
+            }
+            let configured_block = EvaluationDraft {
+                decision: "block".into(),
+                enforcement: "block".into(),
+                reasons: cloud.reasons.clone(),
+                ..Default::default()
+            };
+            assert!(!cloud_result_should_defer_to_bundle(
+                &configured_block,
+                &bundle
+            ));
+        }
+    }
 }
