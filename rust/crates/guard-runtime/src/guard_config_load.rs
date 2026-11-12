@@ -182,12 +182,19 @@ fn context_assistance_at(
     context_assistance_from_home(home, workspace, source, &home_config)
 }
 
-/// Whether someone turned CIGAR off for `harness` on this machine. A config
-/// Guard cannot read leaves the choice to CIGAR's own policy, which refuses
-/// that config too.
-pub(crate) fn cigar_off_for(home: &Path, harness: &str) -> bool {
-    context_snapshot::read_home(home)
-        .is_ok_and(|table| harness::loaded_cigar(table.get("harness_cigar")).contains_key(harness))
+/// Whether CIGAR is off for `harness`, read from the same composed settings
+/// the dashboard shows: the home config, `workspace`'s settings and managed
+/// policy. A config Guard cannot read leaves the choice to CIGAR's own
+/// policy, which refuses that config too.
+pub(crate) fn cigar_off_for(home: &Path, workspace: Option<&Path>, harness: &str) -> bool {
+    let mut source = ManagedPolicySource::native();
+    source.write_cache = false;
+    effective_config(home, workspace, &source).is_ok_and(|config| {
+        config
+            .get("harness_cigar")
+            .and_then(Value::as_object)
+            .is_some_and(|table| table.contains_key(harness))
+    })
 }
 
 /// Hypothetical local intent is composed through the same native machine

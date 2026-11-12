@@ -121,11 +121,20 @@ export function appModesStatusMessage(next: AppModes, displayName: string): stri
   return `Guard is only recording in ${displayName}.`;
 }
 
-/** The inline confirmation's sentence for turning Guard off. */
-export function guardOffPrompt(next: AppModes, displayName: string, revertHours: number): string {
+/**
+ * The inline confirmation's sentence for turning Guard off. An app that ends
+ * up following the machine's Watch keeps the machine's timing, so no new
+ * interval is promised for it.
+ */
+export function guardOffPrompt(settings: GuardSettings, harness: string, next: AppModes, displayName: string): string {
   if (next.cigar) {
     return `Guard will stop checking ${displayName}'s actions until you turn it back on. CIGAR keeps adding project context.`;
   }
+  const ownWatch = appModesUpdate(settings, harness, next)?.harness_postures?.[harness] === "watch";
+  if (globalPosture(settings) === "watch" && !ownWatch) {
+    return `Guard will only record in ${displayName}, following this machine's Watch setting.`;
+  }
+  const revertHours = settings.watch_auto_revert_hours ?? 24;
   if (revertHours > 0) {
     const hours = revertHours === 1 ? "1 hour" : `${revertHours} hours`;
     return `Guard will only record in ${displayName}. Protection comes back on its own after ${hours}.`;

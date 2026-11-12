@@ -807,7 +807,7 @@ function useFleetAppPosture(props) {
         role: "alertdialog",
         "aria-label": guardWasOn ? `Turn Guard off in ${row.displayName}` : `Keep only CIGAR in ${row.displayName}`,
         children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-brand-dark", children: guardOffPrompt(change.next, row.displayName, settings.watch_auto_revert_hours ?? 24) }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-brand-dark", children: guardOffPrompt(settings, harness, change.next, row.displayName) }),
           /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap gap-2", children: [
             /* @__PURE__ */ jsxRuntimeExports.jsx(
               "button",
@@ -848,7 +848,7 @@ function useFleetAppPosture(props) {
       " ",
       /* @__PURE__ */ jsxRuntimeExports.jsx("a", { className: "font-medium text-brand-blue underline underline-offset-2", href: guardAwareHref("/cigar"), children: "Set up CIGAR" })
     ] }) : null,
-    locked && rows.length > 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-3 text-xs text-slate-400", children: "Your organization manages protection for each app, so these choices can't be changed here." }) : null,
+    locked && rows.length > 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-3 text-xs text-slate-400", children: "Your organization manages Guard for each app, so Guard can't be turned on or off here. CIGAR can still be changed." }) : null,
     /* @__PURE__ */ jsxRuntimeExports.jsx("div", { "aria-live": "polite", "aria-atomic": "true", className: "sr-only", children: statusMessage ?? "" }),
     proofRequest !== null ? /* @__PURE__ */ jsxRuntimeExports.jsx(
       SettingsSaveProofModal,

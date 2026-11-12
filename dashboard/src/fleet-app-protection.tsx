@@ -341,7 +341,7 @@ export function useFleetAppPosture(props: FleetAppPostureOptions): FleetAppPostu
         aria-label={guardWasOn ? `Turn Guard off in ${row.displayName}` : `Keep only CIGAR in ${row.displayName}`}
       >
         <p className="text-sm text-brand-dark">
-          {guardOffPrompt(change.next, row.displayName, settings.watch_auto_revert_hours ?? 24)}
+          {guardOffPrompt(settings, harness, change.next, row.displayName)}
         </p>
         <div className="flex flex-wrap gap-2">
           <button
@@ -390,7 +390,7 @@ export function useFleetAppPosture(props: FleetAppPostureOptions): FleetAppPostu
       ) : null}
       {locked && rows.length > 0 ? (
         <p className="mt-3 text-xs text-slate-400">
-          Your organization manages protection for each app, so these choices can't be changed here.
+          Your organization manages Guard for each app, so Guard can't be turned on or off here. CIGAR can still be changed.
         </p>
       ) : null}
       <div aria-live="polite" aria-atomic="true" className="sr-only">{statusMessage ?? ""}</div>

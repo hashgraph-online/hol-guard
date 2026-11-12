@@ -289,6 +289,27 @@ fn an_untimed_watch_keeps_no_stamp_and_a_timed_one_restarts_it() {
     assert!(back.contains("codex = \"watch\""), "{back}");
 }
 
+/// Turning CIGAR off machine-wide leaves a CIGAR-only app with nothing
+/// running, so its untimed Watch gets the usual revert window.
+#[test]
+fn turning_cigar_off_times_an_untimed_watch() {
+    let home = scratch("cigar-off-untimed").join("home");
+    let config = home.join(HOME_CONFIG_FILENAME);
+    run(
+        &home,
+        "settings",
+        r#"{"harness_postures": {"codex": "watch"}, "harness_watch_untimed": true}"#,
+    );
+    assert!(!fs::read_to_string(&config)
+        .unwrap()
+        .contains("harness_watch_entered_at"));
+    let response = run(&home, "settings", r#"{"context_assistance": null}"#);
+    assert_eq!(response["ok"], json!(true), "{response}");
+    let after = fs::read_to_string(&config).unwrap();
+    assert!(after.contains("[harness_watch_entered_at]"), "{after}");
+    assert!(after.contains("codex = \"watch\""), "{after}");
+}
+
 #[test]
 fn per_app_cigar_choices_are_checked() {
     let home = scratch("cigar-invalid").join("home");

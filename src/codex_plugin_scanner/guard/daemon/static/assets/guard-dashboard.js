@@ -1,4 +1,4 @@
-const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/chunks/home-dashboard-in9LMPhY.js","assets/chunks/home-protection-module-DCaScQ5x.js","assets/chunks/supply-chain-protection-stats-C6bXlZB5.js","assets/chunks/workspace-model-hR3eI7UO.js","assets/chunks/brand-hero-COty1p6U.js","assets/chunks/about-content-Dr9zFg1V.js","assets/chunks/app-catalog-Ca_M7GbC.js","assets/chunks/fleet-workspace-_OmOzetX.js","assets/chunks/harness-version-label-BMeZqHL3.js","assets/chunks/connect-guard-cloud-button-BUnXYp-e.js","assets/chunks/settings-save-proof-modal-DW4goyCe.js","assets/chunks/settings-workspace-B1ncoIh-.js","assets/chunks/confirm-dialog-D3mZurPG.js","assets/chunks/extensions-workspace-CQ1lpUuu.js","assets/chunks/app-detail-workspace-CDmqqZRR.js","assets/chunks/policy-workspace-page-Dm3Ct0Bg.js","assets/chunks/about-workspace-CKjljbOH.js","assets/about-workspace.css"])))=>i.map(i=>d[i]);
+const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/chunks/home-dashboard-in9LMPhY.js","assets/chunks/home-protection-module-DCaScQ5x.js","assets/chunks/supply-chain-protection-stats-C6bXlZB5.js","assets/chunks/workspace-model-hR3eI7UO.js","assets/chunks/brand-hero-COty1p6U.js","assets/chunks/about-content-Dr9zFg1V.js","assets/chunks/app-catalog-Ca_M7GbC.js","assets/chunks/fleet-workspace-Cz8BJVf-.js","assets/chunks/harness-version-label-BMeZqHL3.js","assets/chunks/connect-guard-cloud-button-BUnXYp-e.js","assets/chunks/settings-save-proof-modal-DW4goyCe.js","assets/chunks/settings-workspace-B1ncoIh-.js","assets/chunks/confirm-dialog-D3mZurPG.js","assets/chunks/extensions-workspace-CQ1lpUuu.js","assets/chunks/app-detail-workspace-CDmqqZRR.js","assets/chunks/policy-workspace-page-Dm3Ct0Bg.js","assets/chunks/about-workspace-CKjljbOH.js","assets/about-workspace.css"])))=>i.map(i=>d[i]);
 (function polyfill() {
   const relList = document.createElement("link").relList;
   if (relList && relList.supports && relList.supports("modulepreload")) return;
@@ -16872,7 +16872,7 @@ function selectHarnessPosture(settings, harness, choice) {
   return { ...settings, harness_postures: next };
 }
 function canRestartHarnessWatch(settings, harness) {
-  return settings.harness_postures?.[harness] === "watch" && (settings.watch_auto_revert_hours ?? 24) > 0;
+  return settings.harness_postures?.[harness] === "watch" && settings.harness_watch_entered_at?.[harness] !== void 0 && (settings.watch_auto_revert_hours ?? 24) > 0;
 }
 function restartHarnessWatch(settings, harness) {
   if (!canRestartHarnessWatch(settings, harness)) return settings;
@@ -17071,10 +17071,15 @@ function appModesStatusMessage(next, displayName) {
   if (next.cigar) return `CIGAR is on in ${displayName}. Guard is not checking actions.`;
   return `Guard is only recording in ${displayName}.`;
 }
-function guardOffPrompt(next, displayName, revertHours) {
+function guardOffPrompt(settings, harness, next, displayName) {
   if (next.cigar) {
     return `Guard will stop checking ${displayName}'s actions until you turn it back on. CIGAR keeps adding project context.`;
   }
+  const ownWatch = appModesUpdate(settings, harness, next)?.harness_postures?.[harness] === "watch";
+  if (globalPosture(settings) === "watch" && !ownWatch) {
+    return `Guard will only record in ${displayName}, following this machine's Watch setting.`;
+  }
+  const revertHours = settings.watch_auto_revert_hours ?? 24;
   if (revertHours > 0) {
     const hours = revertHours === 1 ? "1 hour" : `${revertHours} hours`;
     return `Guard will only record in ${displayName}. Protection comes back on its own after ${hours}.`;
@@ -39010,7 +39015,7 @@ function RuntimeGate(props) {
 }
 const HOME_QUEUE_PREVIEW_LIMIT = 50;
 const HomeWorkspace = lazyWorkspace("home-dashboard", () => __vitePreload(() => import("./chunks/home-dashboard-in9LMPhY.js"), true ? __vite__mapDeps([0,1,2,3,4,5,6]) : void 0).then((m) => ({ default: m.HomeWorkspace })));
-const FleetWorkspace = lazyWorkspace("fleet-workspace", () => __vitePreload(() => import("./chunks/fleet-workspace-_OmOzetX.js"), true ? __vite__mapDeps([7,8,9,6,10]) : void 0).then((m) => ({ default: m.FleetWorkspace })));
+const FleetWorkspace = lazyWorkspace("fleet-workspace", () => __vitePreload(() => import("./chunks/fleet-workspace-Cz8BJVf-.js"), true ? __vite__mapDeps([7,8,9,6,10]) : void 0).then((m) => ({ default: m.FleetWorkspace })));
 const SettingsWorkspace = lazyWorkspace("settings-workspace", () => __vitePreload(() => import("./chunks/settings-workspace-B1ncoIh-.js"), true ? __vite__mapDeps([11,10,6,12,9,3]) : void 0).then((m) => ({ default: m.SettingsWorkspace })));
 const ExtensionsWorkspace = lazyWorkspace(
   "extensions-workspace",

@@ -141,8 +141,16 @@ assert(appModesNote(settings({ harness_cigar: { codex: "off" } }), "codex")?.sta
 assert(appModesNote(cigarOnly, "codex")?.startsWith("CIGAR only") === true, "CIGAR only note");
 assert(appModesNote(recording, "codex") === "Watch · recording only", "recording note");
 assert(appModesNote(settings(), "cursor") === null, "an app without CIGAR has no CIGAR note");
-assert(guardOffPrompt({ guard: false, cigar: true }, "Codex", 24).includes("CIGAR keeps"), "CIGAR-only prompt");
-assert(guardOffPrompt({ guard: false, cigar: false }, "Codex", 24).includes("24 hours"), "timed prompt names the hours");
-assert(guardOffPrompt({ guard: false, cigar: false }, "Codex", 0).includes("until you turn it back on"), "no timer prompt");
+assert(guardOffPrompt(settings(), "codex", { guard: false, cigar: true }, "Codex").includes("CIGAR keeps"), "CIGAR-only prompt");
+assert(guardOffPrompt(settings(), "codex", { guard: false, cigar: false }, "Codex").includes("24 hours"), "timed prompt names the hours");
+assert(
+  guardOffPrompt(settings({ watch_auto_revert_hours: 0 }), "codex", { guard: false, cigar: false }, "Codex").includes("until you turn it back on"),
+  "no timer prompt",
+);
+const machineWatchOverride = settings({ protection_posture: "watch", harness_postures: { codex: "extra_careful" } });
+assert(
+  guardOffPrompt(machineWatchOverride, "codex", { guard: false, cigar: false }, "Codex").includes("following this machine's Watch"),
+  "an app that falls back to machine Watch is not promised a new interval",
+);
 
 console.log("fleet-app-modes.test.ts: all assertions passed");

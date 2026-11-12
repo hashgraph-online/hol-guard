@@ -65,6 +65,42 @@ pub(crate) fn apply_harness_patch(
     }
 }
 
+/// True when the stored CIGAR settings add project context to prompts.
+pub(crate) fn cigar_ready(next: &Table) -> bool {
+    let Some(config) = get(next, "context_assistance").map(to_json) else {
+        return false;
+    };
+    let on = |path: &[&str]| {
+        path.iter()
+            .try_fold(&config, |value, key| value.get(*key))
+            .and_then(serde_json::Value::as_bool)
+            == Some(true)
+    };
+    on(&["enabled"])
+        && on(&["features", "agent_context"])
+        && on(&["sources", "workspace_documents"])
+}
+
+/// Once CIGAR stops adding context, an untimed Watch (kept only for CIGAR)
+/// would leave the app unchecked with nothing running, so it gets the usual
+/// revert window from now.
+pub(crate) fn stamp_untimed_watch(next: &mut Table, now: &str) {
+    let stored = loaded_postures(get(next, "harness_postures").map(to_json).as_ref());
+    let mut stamps = loaded_watch_stamps(
+        get(next, "harness_watch_entered_at").map(to_json).as_ref(),
+        &stored,
+    );
+    let before = stamps.len();
+    for (harness, posture) in &stored {
+        if posture == "watch" && !stamps.contains_key(harness) {
+            stamps.insert(harness.clone(), now.to_owned());
+        }
+    }
+    if stamps.len() != before {
+        set(next, "harness_watch_entered_at", string_table(stamps));
+    }
+}
+
 /// `harness_cigar`: fold a per-app CIGAR patch into the stored choices.
 pub(crate) fn apply_cigar_patch(next: &mut Table, patch: &[(&str, bool)]) {
     let mut stored =

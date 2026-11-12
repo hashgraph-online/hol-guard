@@ -108,7 +108,8 @@ pub(crate) fn harness_response(
     }
     // With Guard off for an app (Watch), CIGAR still answers its prompts
     // unless CIGAR is off for that app too.
-    if let Some(store) = store.filter(|store| !cigar_off(store, harness)) {
+    let workspace = prompt_cwd(envelope).map(Path::new);
+    if let Some(store) = store.filter(|store| !cigar_off(store, workspace, harness)) {
         let slot = envelope.recording_only && open_slot(&mut response);
         let before = context_len(&response);
         attach(&mut response, envelope, harness, store, started);
@@ -124,8 +125,14 @@ pub(crate) fn harness_response(
 }
 
 /// Whether the person turned CIGAR off for this app on the Protect screen.
-fn cigar_off(store: &PolicySnapshotStore, harness: &str) -> bool {
-    crate::guard_config_load::cigar_off_for(store.guard_home(), harness)
+fn cigar_off(store: &PolicySnapshotStore, workspace: Option<&Path>, harness: &str) -> bool {
+    crate::guard_config_load::cigar_off_for(store.guard_home(), workspace, harness)
+}
+
+/// The folder a prompt was sent from.
+fn prompt_cwd(envelope: &GuardHookEnvelopeV2) -> Option<&str> {
+    (envelope.source.cwd.as_deref())
+        .or_else(|| envelope.raw_payload.get("cwd").and_then(Value::as_str))
 }
 
 /// Watch answers some apps' prompts without a context slot; one is opened
@@ -166,7 +173,8 @@ fn warm(
 /// types the next prompt. Only harnesses that can receive project context wake it, only
 /// when project context is on, and never for an app with CIGAR turned off.
 pub(crate) fn wake(harness: &str, store: &PolicySnapshotStore) {
-    if matches!(harness, "claude-code" | "codex" | "pi" | "omp") && !cigar_off(store, harness) {
+    if matches!(harness, "claude-code" | "codex" | "pi" | "omp") && !cigar_off(store, None, harness)
+    {
         store
             .context_assistance()
             .warm_prompt_lane(store.guard_home());
@@ -194,9 +202,7 @@ fn attach(
     if prompt.chars().count() < MIN_PROMPT_CHARS {
         return;
     }
-    let Some(cwd) = (envelope.source.cwd.as_deref())
-        .or_else(|| envelope.raw_payload.get("cwd").and_then(Value::as_str))
-    else {
+    let Some(cwd) = prompt_cwd(envelope) else {
         return;
     };
     let home = Path::new(&envelope.source.home_dir);
@@ -312,7 +318,10 @@ fn attach(
             .flatten()
             .filter(|_| service.prompt_context_chosen() && project_context_on(home, &root, harness))
     };
-    let context = answered(lookup(service, home, request, deadline), own_read);
+    // CIGAR's own answer is checked again too: the lookup can wait out most
+    // of the hook, and project context or CIGAR may be turned off meanwhile.
+    let context = answered(lookup(service, home, request, deadline), own_read)
+        .filter(|_| service.prompt_context_chosen() && project_context_on(home, &root, harness));
     let Some(context) = context else {
         return;
     };

@@ -13,7 +13,8 @@ use crate::guard_config_update_coerce::{
     coerce_cigar_patch, coerce_editable, coerce_harness_patch, invalid, normalize_posture,
 };
 use crate::guard_config_update_harness::{
-    apply_cigar_patch, apply_harness_patch, apply_named_policy, string_table,
+    apply_cigar_patch, apply_harness_patch, apply_named_policy, cigar_ready, stamp_untimed_watch,
+    string_table,
 };
 use crate::guard_config_update_value::{
     get, is_str, py_eq, py_json_eq_int, py_str, remove, set, table_to_json, to_json, truthy, Table,
@@ -447,6 +448,9 @@ pub(crate) fn update(
     }
     if !cigar_patch.is_empty() {
         apply_cigar_patch(&mut next, &cigar_patch);
+    }
+    if has(payload, "context_assistance") && !cigar_ready(&next) {
+        stamp_untimed_watch(&mut next, now);
     }
     let next_json = table_to_json(&next);
     let effective = match managed {

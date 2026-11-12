@@ -28,6 +28,7 @@ fn cigar_off_is_read_per_app_from_the_home_config() {
     let home = tempfile::tempdir().unwrap();
     assert!(!crate::guard_config_load::cigar_off_for(
         home.path(),
+        None,
         "codex"
     ));
     std::fs::write(
@@ -37,10 +38,12 @@ fn cigar_off_is_read_per_app_from_the_home_config() {
     .unwrap();
     assert!(crate::guard_config_load::cigar_off_for(
         home.path(),
+        None,
         "codex"
     ));
     assert!(!crate::guard_config_load::cigar_off_for(
         home.path(),
+        None,
         "claude-code"
     ));
 }
