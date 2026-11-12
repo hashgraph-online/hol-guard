@@ -1036,7 +1036,7 @@
       "enabled_extensions": [
         "command.serverguardian"
       ],
-      "expected_action": "allow",
+      "expected_action": "review",
       "expected_effective_segments": [
         0
       ],
@@ -1049,7 +1049,7 @@
       "enabled_extensions": [
         "command.serverguardian"
       ],
-      "expected_action": "allow",
+      "expected_action": "review",
       "expected_effective_segments": [
         0
       ],
@@ -1062,7 +1062,7 @@
       "enabled_extensions": [
         "command.serverguardian"
       ],
-      "expected_action": "allow",
+      "expected_action": "review",
       "expected_effective_segments": [
         0
       ],
