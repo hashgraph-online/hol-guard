@@ -7,7 +7,10 @@ native matcher/quarantine tests separately exercise executable compiler output.
 from __future__ import annotations
 
 import copy
+import functools
 import sqlite3
+import threading
+import time
 from types import SimpleNamespace
 
 import pytest
@@ -384,9 +387,7 @@ def test_protected_write_requires_readback(device, delivery, monkeypatch):
         observe(device, publication(delivery), delivery)
 
 
-def test_independent_missing_proofs_arrive_in_one_round(device, delivery, monkeypatch):
-    # After an upgrade every selected pack can miss proofs at once. Asking for
-    # them one per native round kept hooks failing closed for half a minute.
+def _revoke_extension_and_pack(delivery):
     root = copy.deepcopy(delivery.value)
     root["publication_id"] = "12.2"
     identity = "command.core"
@@ -407,6 +408,14 @@ def test_independent_missing_proofs_arrive_in_one_round(device, delivery, monkey
         entries[key] = delivery.store.put_json(record)
     root["policy"]["revocations"] = dict(epoch=1, count=len(entries), index=delivery.store.index(entries))
     delivery.plan.finish()
+    return root
+
+
+def test_independent_missing_proofs_arrive_in_one_round(device, delivery, monkeypatch):
+    # After an upgrade every selected pack can miss proofs at once. Asking for
+    # them one per native round kept hooks failing closed for half a minute.
+    identity = "command.core"
+    root = _revoke_extension_and_pack(delivery)
     rounds = []
     invoke = active_security.invoke
 
@@ -421,3 +430,73 @@ def test_independent_missing_proofs_arrive_in_one_round(device, delivery, monkey
     assert result["quarantine"] == [identity]
     # The shared revocation index page, then both records together, then done.
     assert rounds == [1, 2, 0]
+
+
+def test_one_rounds_missing_proofs_download_together(device, delivery):
+    # The two revocation records arrive in one round. Fetched one after another,
+    # each costs a full download, and an upgrade fetches a few hundred objects.
+    root = _revoke_extension_and_pack(delivery)
+    lock = threading.Lock()
+    in_flight = [0, 0]
+
+    def overlapping(target, maximum):
+        with lock:
+            in_flight[0] += 1
+            in_flight[1] = max(in_flight)
+        try:
+            time.sleep(0.3)
+            return delivery.fetch(target, maximum)
+        finally:
+            with lock:
+                in_flight[0] -= 1
+
+    result = observe(device, delivery.verified(root), SimpleNamespace(fetch=overlapping))
+    assert result["quarantine"] == ["command.core"]
+    assert in_flight[1] == 2
+
+
+def test_a_failed_fetch_cancels_the_ones_not_started():
+    # An outage must not wait out every queued download before it reports.
+    started = []
+    lock = threading.Lock()
+    release = threading.Event()
+
+    def failing():
+        with lock:
+            started.append("failing")
+        raise ValueError("active_security_required_proofs_unavailable")
+
+    def slow(index):
+        with lock:
+            started.append(index)
+        release.wait(5)
+
+    tasks = [failing] + [functools.partial(slow, index) for index in range(31)]
+    timer = threading.Timer(0.5, release.set)
+    timer.start()
+    with pytest.raises(ValueError, match="active_security_required_proofs_unavailable"):
+        active_security._fetch_together(tasks)
+    timer.cancel()
+    # The failed task, then at most one wave: its worker can pick up one more
+    # task before the rest are cancelled. Without cancelling, all 32 start.
+    assert len(started) <= active_security.FETCH_WORKERS + 1
+
+
+def test_queued_fetches_skip_once_one_failed():
+    # Quick tasks keep every worker taking queued work; none may start a
+    # download after the failure is known.
+    started = []
+    lock = threading.Lock()
+
+    def failing():
+        raise ValueError("active_security_required_proofs_unavailable")
+
+    def quick(index):
+        with lock:
+            started.append(index)
+        time.sleep(0.02)
+
+    tasks = [failing] + [functools.partial(quick, index) for index in range(63)]
+    with pytest.raises(ValueError, match="active_security_required_proofs_unavailable"):
+        active_security._fetch_together(tasks)
+    assert len(started) <= active_security.FETCH_WORKERS
