@@ -4,12 +4,13 @@
 //! edit, and marks each match uncertain because the rule alone cannot prove a
 //! target is safe to lose. A plain `rm` or `rmdir` in the workspace is ordinary
 //! cleanup, `truncate` empties or resizes a file the same way `> file` does,
-//! and `sed -i` is the same file edit an agent's own edit tool makes: the
-//! sandbox keeps all of them off the network, credentials, the home directory
-//! and `.git`, so this module accepts that uncertainty for those programs
-//! only.
-//! Sed file effects are bounded here; command_shape separately screens scripts
-//! so shell execution cannot hide behind containment. A recursive removal could still take uncommitted work with it, so each of its
+//! and `sed -i` or `perl -i` is the same file edit an agent's own edit tool
+//! makes: the sandbox keeps all of them off the network, credentials, the home
+//! directory and `.git`, so this module accepts that uncertainty for those
+//! programs only. Sed file effects are bounded here; command_shape separately
+//! screens sed scripts so shell execution cannot hide behind containment.
+//! Perl's script runs inside the sandbox like any other perl program. A
+//! recursive removal could still take uncommitted work with it, so each of its
 //! targets must be missing or ignored by Git, and it must run before any other
 //! command could create or move what it names.
 use super::super::git_session_probe::Probe;
@@ -32,12 +33,12 @@ fn segment_indexes(observation: &NativeCommandObservationV1) -> impl Iterator<It
 }
 
 /// The operands of a plain `rm`, `rmdir` or `truncate` segment and whether it
-/// recurses, no operands for an in-place `sed` edit, or `None` for any other
-/// program, option or shell expansion.
+/// recurses, no operands for an in-place `sed` or `perl` edit, or `None` for
+/// any other program, option or shell expansion.
 fn removal(model: &CanonicalCommandV1, index: usize) -> Option<(bool, Vec<&str>)> {
     let segment = model.segments.get(index)?;
     let program = segment.executable.as_deref()?;
-    if !matches!(program, "rm" | "rmdir" | "sed" | "truncate")
+    if !matches!(program, "rm" | "rmdir" | "sed" | "perl" | "truncate")
         || segment.path_overridden
         || !segment.wrapper_chain.is_empty()
         || !segment.environment_names.is_empty()
@@ -46,6 +47,13 @@ fn removal(model: &CanonicalCommandV1, index: usize) -> Option<(bool, Vec<&str>)
     }
     if program == "sed" {
         return in_place_edit(&segment.arguments).then(|| (false, Vec::new()));
+    }
+    // Perl runs its script in the sandbox whatever the switches, so only the
+    // in-place switch is read here; the reach check still holds every operand
+    // to the workspace.
+    if program == "perl" {
+        return (super::super::inplace_edit_reason::inplace_editor(segment) == Some("perl"))
+            .then(|| (false, Vec::new()));
     }
     if program == "truncate" {
         return truncate_targets(&segment.arguments).map(|operands| (false, operands));

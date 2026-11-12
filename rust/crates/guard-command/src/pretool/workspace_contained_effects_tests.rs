@@ -234,3 +234,41 @@ fn truncating_a_workspace_file_runs_in_the_workspace_sandbox() {
     }
     let _ = std::fs::remove_dir_all(&ws);
 }
+
+/// `perl -i -pe 's/a/b/' file` is the same in-place edit as `perl -pi -e`.
+/// The destructive-shell rule flags the first spelling and not the second,
+/// so the sandbox accepts the flag for perl the way it does for `sed -i`.
+/// Perl runs its script there like any other perl program, and the reach
+/// check still holds each file to the workspace.
+#[test]
+fn a_perl_in_place_edit_runs_in_the_workspace_sandbox() {
+    let ws = workspace("perl-in-place", true);
+    std::fs::create_dir_all(ws.join("src")).unwrap();
+    std::fs::write(ws.join("src/a.py"), "x = _old\n").unwrap();
+    for command in [
+        "perl -i -pe 's/_old/_new/g' src/a.py",
+        "perl -i -p -e 's/_old/_new/g' src/a.py",
+        "perl -i.bak -pe 's/_old/_new/g' src/a.py",
+        "perl -pe 's/_old/_new/g' -i src/a.py",
+        "perl -pi -e 's/(?<![\\w-])_old(?![\\w-])/_new/g' src/a.py",
+        "perl -i -pe 's/_old/_new/g' src/a.py && rm -f src/a.py.bak",
+    ] {
+        let got = reason("omp", command, &ws, true);
+        if host() {
+            assert_eq!(got, CONTAINED, "{command}");
+        } else {
+            assert_ne!(got, CONTAINED, "{command}");
+        }
+    }
+    for command in [
+        "perl -i -pe 's/a/b/' ~/.bashrc",
+        "perl -i -pe 's/a/b/' $HOME/.bashrc",
+        "perl -i -pe 's/a/b/' ../outside.py",
+        "perl -i -pe 's/a/b/' /etc/hosts",
+        "perl -i -pe 's/a/b/' .git/config",
+        "PERL5OPT=-Mevil perl -i -pe 's/a/b/' src/a.py",
+    ] {
+        assert_ne!(reason("omp", command, &ws, true), CONTAINED, "{command}");
+    }
+    let _ = std::fs::remove_dir_all(&ws);
+}

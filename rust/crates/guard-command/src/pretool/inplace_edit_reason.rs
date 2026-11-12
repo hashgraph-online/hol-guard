@@ -31,7 +31,9 @@ enum Cluster {
     Done,
 }
 
-fn inplace_editor(segment: &CommandSegmentV1) -> Option<&'static str> {
+/// `"sed"` or `"perl"` when `segment` runs that editor with its in-place
+/// switch, or `None`.
+pub(super) fn inplace_editor(segment: &CommandSegmentV1) -> Option<&'static str> {
     let executable = segment.executable.as_deref()?;
     let (editor, name) = match executable.rsplit(['/', '\\']).next()? {
         "sed" | "gsed" => (Editor::Sed, "sed"),
