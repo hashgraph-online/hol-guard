@@ -32,6 +32,7 @@ from codex_plugin_scanner.guard.runtime.command_extensions import BUILT_IN_COMMA
 from codex_plugin_scanner.guard.runtime.extension_control_authority import (
     AuthorityPhase,
     ExtensionControlAuthorityError,
+    layers_to_json,
 )
 from codex_plugin_scanner.guard.runtime.extension_control_runtime import ExtensionControlRuntime
 from codex_plugin_scanner.guard.store import GuardStore
@@ -44,6 +45,46 @@ from tests.native_activation_support import BINARY
 from tests.test_native_command_control_binding_publisher import (
     _pinned_integrity_material_and_resident_key as _pinned_integrity_material_and_resident_key,
 )
+
+
+def _authority_head(store):
+    with store._connect() as connection:
+        return tuple(
+            connection.execute(
+                "select revision, catalog_digest from extension_control_authority_snapshot where singleton = 1"
+            ).fetchone()
+        )
+
+
+def _move_head_off_activation(store, stale, active):
+    """Leave the head where an older install running beside the upgrade did.
+
+    That install reads with the catalog it shipped. Its resident asked it to
+    migrate the head there, off the catalog the pack activation names, and
+    the installed upgrade, which plans from the activation, then failed on
+    every startup with every hook closed.
+    """
+
+    assert stale.catalog_digest != active.catalog_digest
+    before = _authority_head(store)
+    assert before[1] == active.catalog_digest
+    # A current runtime on another catalog is served the rebinding in memory.
+    store.read_extension_control_authority_for_registry(stale)
+    assert _authority_head(store) == before
+    # An older one committed the migration its read asked for.
+    rebound = store.read_extension_control_authority_for_registry(stale, include_managed_controls=False, read_only=True)
+    with store._extension_control_authority_lock():
+        store._migrate_extension_control_catalog(
+            {
+                "previous_revision": before[0],
+                "previous_catalog_digest": before[1],
+                "catalog_digest": stale.catalog_digest,
+                "layers": json.loads(layers_to_json(rebound.layers)),
+            },
+            registry=stale,
+            key=store._authority_key(required=True),
+        )
+    assert _authority_head(store) == (before[0] + 1, stale.catalog_digest)
 
 
 def test_real_packaged_cross_engine_and_changed_source_offline_api_upgrade(tmp_path, monkeypatch):
@@ -205,6 +246,12 @@ def test_real_packaged_cross_engine_and_changed_source_offline_api_upgrade(tmp_p
             # client left; no record is read without an installed runtime.
             old = activation_store.read(store)
             assert "command.agentbridge" in old.selected
+        if old.engine != authority.engine and version == "3.50.0a1":
+            _move_head_off_activation(
+                store,
+                registry,
+                candidates.GeneratedCommandCatalog.from_prepared_packs(activation_store.read(store)),
+            )
         with store._connect() as connection:
             saved_decisions = [tuple(row) for row in connection.execute("select * from policy_decisions")]
         previous_registry = candidates.GeneratedCommandCatalog.from_prepared_packs(activation_store.read(store))
