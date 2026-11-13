@@ -274,8 +274,14 @@ pub(super) fn written_bodies(input: &serde_json::Map<String, Value>) -> Vec<Cow<
 /// The text a file tool writes, joined per destination file: the call's own
 /// body and every replacement aimed at the same file read as one text, since
 /// a MultiEdit can split one passage across its replacements. A replacement
-/// that names its own file is kept apart from the others.
+/// that names its own file is kept apart from files it does not name; one
+/// that names the call's own file, or none, joins the call's own text.
 pub(super) fn written_text_by_file(input: &serde_json::Map<String, Value>) -> Vec<String> {
+    fn named(object: &serde_json::Map<String, Value>) -> Option<&str> {
+        ["file_path", "filePath", "path"]
+            .iter()
+            .find_map(|key| object.get(*key).and_then(Value::as_str))
+    }
     fn add<'a>(files: &mut Vec<(Option<&'a str>, String)>, file: Option<&'a str>, body: &str) {
         let at = match files.iter().position(|(name, _)| *name == file) {
             Some(at) => at,
@@ -290,12 +296,13 @@ pub(super) fn written_text_by_file(input: &serde_json::Map<String, Value>) -> Ve
         }
         text.push_str(body);
     }
-    let mut files: Vec<(Option<&str>, String)> = vec![(None, String::new())];
+    let top = named(input);
+    let mut files: Vec<(Option<&str>, String)> = vec![(top, String::new())];
     for body in BODY_KEYS
         .iter()
         .filter_map(|key| input.get(*key).and_then(Value::as_str))
     {
-        add(&mut files, None, body);
+        add(&mut files, top, body);
     }
     for edit in input
         .get("edits")
@@ -309,9 +316,7 @@ pub(super) fn written_text_by_file(input: &serde_json::Map<String, Value>) -> Ve
         else {
             continue;
         };
-        let file = ["file_path", "filePath", "path"]
-            .iter()
-            .find_map(|key| edit.get(*key).and_then(Value::as_str));
+        let file = edit.as_object().and_then(named).or(top);
         add(&mut files, file, body);
     }
     files
