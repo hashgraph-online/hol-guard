@@ -277,15 +277,3 @@ def test_primary_key_and_matching_control_are_mirrored_together(tmp_path: Path) 
     assert backend.get_secret(store._policy_integrity_key_ref) == PRIMARY
     assert backend.fallback.get_secret(store._policy_integrity_key_ref) == PRIMARY
     assert backend.fallback.get_secret(store._policy_integrity_control_ref) == "primary-control"
-
-
-def test_primary_write_failure_falls_back_to_the_encrypted_store(tmp_path: Path) -> None:
-    store, backend = _setup(tmp_path)
-
-    def fail_primary(_secret_id: str, _value: str) -> None:
-        raise RuntimeError("headless keyring unavailable")
-
-    backend.primary.set_secret = fail_primary  # type: ignore[method-assign]
-    backend.set_secret(store._policy_integrity_key_ref, "new-key")
-
-    assert backend.fallback.get_secret(store._policy_integrity_key_ref) == "new-key"

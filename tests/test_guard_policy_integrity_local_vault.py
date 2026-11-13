@@ -155,7 +155,7 @@ def test_linux_unavailable_legacy_keyring_does_not_replace_armed_native_key(
     assert store._policy_integrity_secret_material(create=True) == (None, None)
 
 
-def test_mirrored_policy_keyring_write_failure_keeps_existing_vault_value(
+def test_mirrored_policy_keyring_write_failure_falls_back_to_vault(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -169,9 +169,8 @@ def test_mirrored_policy_keyring_write_failure_keeps_existing_vault_value(
     monkeypatch.setattr(primary, "set_secret", fail_write)
     mirrored = MirroredPolicyIntegritySecretStore(primary, fallback)
 
-    with pytest.raises(RuntimeError, match="keyring unavailable"):
-        mirrored.set_secret("integrity-key", "new")
-    assert fallback.get_secret("integrity-key") == "old"
+    mirrored.set_secret("integrity-key", "new")
+    assert fallback.get_secret("integrity-key") == "new"
 
 
 def test_mirrored_policy_keyring_remains_readable_when_vault_fails(
