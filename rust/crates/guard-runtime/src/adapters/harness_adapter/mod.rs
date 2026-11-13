@@ -1,6 +1,6 @@
 //! `runner_authority` kind `harness_adapter`: the Gemini, Antigravity, Kimi,
 //! Devin, Muse, OpenClaw, Paseo, Grok, ZCode, Pi, Oh My Pi, OpenCode,
-//! Cline, Copilot and Cursor harness adapters.
+//! Cline, Copilot, Cursor and Claude Code harness adapters.
 //!
 //! Python keeps one generic adapter class that holds the ownership locks,
 //! prepares and removes the launcher shim, builds the bounded hook argv and
@@ -28,6 +28,9 @@ use crate::runner_authority_detector::args_object;
 use crate::runner_authority_op::{KindResult, ERR_INVALID};
 
 mod authorized_write;
+mod claude;
+mod claude_argv;
+mod claude_settings;
 mod cline;
 mod cline_hooks;
 mod cline_install;
@@ -238,6 +241,7 @@ pub(crate) fn dispatch(args: &Value) -> KindResult {
         "cline" => cline::dispatch(spec, op, &ctx, fields),
         "copilot" => copilot::dispatch(spec, op, &ctx, fields),
         "cursor" => cursor::dispatch(spec, op, &ctx, fields),
+        "claude-code" => claude::dispatch(spec, op, &ctx, fields),
         _ => Err(Failure::Invalid),
     })
 }

@@ -45,10 +45,6 @@
         "surface": "hook_http_and_cli_events"
       },
       {
-        "module": "codex_plugin_scanner.guard.adapters._modules.claude.claude_frozen_hook",
-        "surface": "hook_http_and_cli_events"
-      },
-      {
         "module": "codex_plugin_scanner.guard.adapters.codex_daemon_hook_bridge",
         "surface": "hook_http_and_cli_events"
       },
@@ -1101,19 +1097,11 @@
         "category": "install_config",
         "path": "src/codex_plugin_scanner/guard/adapters/claude_code.py",
         "symbols": [
-          "_handler_identity",
-          "_is_guard_hook_command",
-          "_is_guard_hook_url",
-          "_manifest_notes",
-          "ClaudeCodeHarnessAdapter._hook_command",
-          "ClaudeCodeHarnessAdapter._hook_command_parts",
-          "ClaudeCodeHarnessAdapter.prepare_install",
-          "ClaudeCodeHarnessAdapter.install",
-          "ClaudeCodeHarnessAdapter.uninstall"
+          "ClaudeCodeHarnessAdapter.prepare_install"
         ],
         "entry_points": [],
-        "reason": "Claude Code settings install and uninstall (shim notes, settings I/O) and the helpers only they use; the hook entry prune and merge, handler identity and Guard-handler checks run in the native claude_hook_config runner-authority kind.",
-        "evidence": "install, prepare_install and uninstall are invoked only from the excluded install, uninstall and repair dispatchers; the remaining helpers have no reference outside this excluded set. The SessionStart command builder and handler factory stay in scope because the retained runtime refresh rewrites the SessionStart entry after an upgrade. The report validates that no retained symbol or in-scope module references the excluded names."
+        "reason": "Claude Code settings install; the native harness_adapter kind plans the settings write, the hook entry prune and merge, handler identity and the hook argv. Python keeps the shim and the facts this process answers.",
+        "evidence": "prepare_install has no caller in any in-scope module; it is invoked by the excluded install and repair dispatchers. The report validates that no retained symbol or in-scope module references the excluded names."
       },
       {
         "id": "adapter-codex-setup",

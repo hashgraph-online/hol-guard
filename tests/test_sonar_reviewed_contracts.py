@@ -12,7 +12,6 @@ import pytest
 from codex_plugin_scanner.ecosystems.kimi import _path_values
 from codex_plugin_scanner.guard import action_lattice
 from codex_plugin_scanner.guard import native_daemon_client as client
-from codex_plugin_scanner.guard.adapters.claude_hook_config import handler_identity
 from codex_plugin_scanner.guard.approval_scope_support import package_request_portable_workspace_scope
 from codex_plugin_scanner.guard.models import GUARD_ACTION_VALUES, GuardAction, GuardArtifact
 from codex_plugin_scanner.guard.package_execution_context import (
@@ -30,17 +29,6 @@ from codex_plugin_scanner.guard.store_workflow_capability_secret_control import 
 )
 def test_manifest_paths_are_a_variadic_collection(value, expected) -> None:
     assert _path_values(value) == expected
-
-
-def test_handler_identity_is_a_hashable_tagged_key_not_an_unpacking_record() -> None:
-    identities = {
-        handler_identity({"type": "http", "url": "http://localhost/hook"}),
-        handler_identity({"type": "command", "command": "guard", "args": []}),
-        handler_identity({"type": "command", "command": "guard", "args": ["hook", "--json"]}),
-        handler_identity({"type": "command", "command": "guard hook", "shell": "bash"}),
-    }
-    assert len(identities) == 4
-    assert {len(identity) for identity in identities} == {2, 3, 5}
 
 
 class _SecretControl(StoreWorkflowCapabilitySecretControlMixin):

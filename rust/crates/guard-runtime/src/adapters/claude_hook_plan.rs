@@ -1,10 +1,11 @@
 //! Guard's Claude hook entries as index plans over the caller's own lists.
 //!
 //! A port of `prune_guard_hook_entries`, `merge_hook_group` and
-//! `handler_identity` from `adapters/claude_hook_config.py`. Results never
-//! rebuild user JSON: each entry of a result names an entry of the caller's
-//! list, a copy of one with some of its own handlers (and Guard's), or a new
-//! Guard group, so Python keeps the user's objects and their key order.
+//! `handler_identity` from the retired `adapters/claude_hook_config.py`.
+//! Results never rebuild user JSON: each entry of a result names an entry of
+//! the caller's list, a copy of one with some of its own handlers (and
+//! Guard's), or a new Guard group, so `harness_adapter::claude_settings` keeps
+//! the user's objects and their key order.
 
 use serde_json::{json, Map, Value};
 
@@ -216,7 +217,7 @@ fn py_repr(value: &Value) -> String {
     }
 }
 
-fn py_repr_str(text: &str) -> String {
+pub(crate) fn py_repr_str(text: &str) -> String {
     let quote = if text.contains('\'') && !text.contains('"') {
         '"'
     } else {

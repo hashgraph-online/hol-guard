@@ -8,8 +8,7 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.guard import stable_guard_cli
-from codex_plugin_scanner.guard.adapters import claude_hook_argv, cline_runtime, cursor, hermes
-from codex_plugin_scanner.guard.adapters._modules.claude.claude_frozen_hook import FROZEN_CLAUDE_HOOK_COMMAND
+from codex_plugin_scanner.guard.adapters import claude_code, cline_runtime, cursor, hermes
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.adapters.hook_python import guard_cli_command
 from codex_plugin_scanner.guard.adapters.mcp_relay_native import mcp_proxy_launch
@@ -72,19 +71,21 @@ def test_claude_frozen_hooks_use_the_stable_launcher(
 ) -> None:
     _, launcher = versioned_core
 
-    def no_native_bridge(_guard_home: Path) -> None:
+    def no_native_bridge(_feature: str, **_kwargs: object) -> None:
         return None
 
-    monkeypatch.setattr(claude_hook_argv, "_native_bridge_executable", no_native_bridge)
+    monkeypatch.setattr(claude_code, "native_hook_bridge_executable", no_native_bridge)
+    monkeypatch.setattr(claude_code, "load_guard_daemon_url", lambda _guard_home: "http://127.0.0.1:1")
     context = _context(tmp_path)
+    adapter = claude_code.ClaudeCodeHarnessAdapter
 
-    hook = claude_hook_argv.guard_hook_command_parts(context)
-    daemon = claude_hook_argv.daemon_hook_command_parts(context, fallback_daemon_url="http://127.0.0.1:1")
-    session = claude_hook_argv._python_session_start_command_parts(context)  # pyright: ignore[reportPrivateUsage]
+    hook = adapter._hook_command_parts(context)  # pyright: ignore[reportPrivateUsage]
+    daemon = adapter._daemon_hook_command_parts(context)  # pyright: ignore[reportPrivateUsage]
+    session = adapter._session_start_command_parts(context)  # pyright: ignore[reportPrivateUsage]
 
     assert [hook[0], daemon[0], session[0]] == [launcher, launcher, launcher]
     assert hook[1] == "hook"
-    assert daemon[1] == session[1] == FROZEN_CLAUDE_HOOK_COMMAND
+    assert daemon[1] == session[1] == "__guard-claude-hook"
 
 
 def test_frozen_mcp_proxies_use_the_stable_launcher(tmp_path: Path, versioned_core: tuple[Path, str]) -> None:

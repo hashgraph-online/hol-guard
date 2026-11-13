@@ -47,12 +47,13 @@ for arm in ("base", "cigar"):
         text += f'\n[hooks]\n{line}\n\n[hooks.state."{key}"]\ntrusted_hash = "{state[1]}"\n'
     (codex_home / "config.toml").write_text(text)
 
+from codex_plugin_scanner.guard.adapters import claude_code  # noqa: E402
 from codex_plugin_scanner.guard.adapters.base import HarnessContext  # noqa: E402
-from codex_plugin_scanner.guard.adapters.claude_hook_argv import daemon_hook_command_parts  # noqa: E402
 
 port = json.loads((guard / "daemon-state.json").read_text()).get("port") or 0
+claude_code.load_guard_daemon_url = lambda _guard_home: f"http://127.0.0.1:{port}"
 ctx = HarnessContext(home_dir=home, workspace_dir=None, guard_home=guard, home_override_explicit=True)
-parts = daemon_hook_command_parts(ctx, fallback_daemon_url=f"http://127.0.0.1:{port}")
+parts = claude_code.ClaudeCodeHarnessAdapter._daemon_hook_command_parts(ctx)
 settings = {
     "sandbox": {"enabled": True, "autoAllowBashIfSandboxed": True, "allowUnsandboxedCommands": False},
     "permissions": {"defaultMode": "bypassPermissions", "deny": ["WebFetch", "WebSearch"]},

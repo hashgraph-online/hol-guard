@@ -171,6 +171,29 @@ fn missing(
     Ok(json!({ "missing": missing }))
 }
 
+/// `missing_guard_hook_events` of a settings object: the required events
+/// whose Guard handler does not cover the PreToolUse group's tools.
+pub(crate) fn missing_events(
+    contract: &HookGroupsContract,
+    payload: &Map<String, Value>,
+) -> Result<Vec<String>, Unhashable> {
+    let matcher = contract
+        .runtime_groups
+        .iter()
+        .find(|group| group.event == "PreToolUse")
+        .and_then(|group| group.matcher.as_deref())
+        .unwrap_or_default();
+    let events = ["PreToolUse", "PermissionRequest"];
+    let answer = missing(contract, payload, &events, &matcher_parts(matcher))?;
+    Ok(answer["missing"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(Value::as_str)
+        .map(str::to_owned)
+        .collect())
+}
+
 /// The stripped, non-empty `|` parts of a matcher.
 fn matcher_parts(matcher: &str) -> BTreeSet<&str> {
     matcher
