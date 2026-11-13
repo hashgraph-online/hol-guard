@@ -216,7 +216,7 @@ const AMOUNT_KEYS: &[&str] = &[
 const CURRENCY_KEYS: &[&str] = &["currency", "currencycode"];
 
 /// Strictness among the classes a name can propose.
-const fn rank(class: ActionClassV2) -> u8 {
+pub(crate) const fn rank(class: ActionClassV2) -> u8 {
     match class {
         ActionClassV2::Read | ActionClassV2::Draft => 0,
         ActionClassV2::Update => 1,
