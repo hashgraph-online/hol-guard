@@ -86,6 +86,48 @@ def test_concurrent_misses_in_one_container_download_it_once(plan_type, monkeypa
     assert transport._CONTAINERS == {}
 
 
+def test_callers_waiting_on_a_failed_container_download_do_not_repeat_it(plan_type, monkeypatch, tmp_path):
+    # During an outage, members of one container waiting on its download must
+    # report the failure, not each download again. A later fetch still retries.
+    plan = plan_type(tmp_path / "assets", "1" * 40)
+    one, two = b'{"one":1}', b'{"two":2}'
+    first, second = plan.asset(one, "object"), plan.asset(two, "object")
+    plan.finish()
+    reads = []
+
+    def failing(url, maximum):
+        reads.append(url)
+        time.sleep(0.3)
+        raise OSError("release transport unavailable")
+
+    monkeypatch.setattr(transport, "download", failing)
+    fetch = transport.cached_fetcher(tmp_path / "cache")
+    errors = {}
+
+    def run(key, ref, size):
+        try:
+            fetch(ref, size)
+        except OSError as error:
+            errors[key] = str(error)
+
+    threads = [
+        threading.Thread(target=run, args=(key, ref, size))
+        for key, ref, size in (("one", first, len(one)), ("two", second, len(two)))
+    ]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+    assert errors == {"one": "release transport unavailable", "two": "release transport unavailable"}
+    assert len(reads) == 1
+    assert transport._CONTAINERS == {}
+
+    monkeypatch.setattr(
+        transport, "download", lambda url, maximum: (plan.directory / first["tag"] / first["asset"]).read_bytes()
+    )
+    assert fetch(first, len(one)) == one
+
+
 def test_uncached_fetches_of_one_container_are_not_serialized(plan_type, monkeypatch, tmp_path):
     # An uncached fetch writes nothing the next caller could reuse, so holding
     # the container lock would only make concurrent misses wait on each other.

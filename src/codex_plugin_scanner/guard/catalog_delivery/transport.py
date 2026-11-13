@@ -150,11 +150,13 @@ def cached_fetcher(directory):
 
 
 class _ContainerFetch:
-    """One container URL in flight: the lock its callers share and how many wait on it."""
+    """One container URL in flight: the lock its callers share, how many wait on it,
+    and the download failure the waiting callers report instead of repeating it."""
 
     def __init__(self) -> None:
         self.lock = threading.Lock()
         self.callers = 0
+        self.failure: Exception | None = None
 
 
 # Container URLs being fetched into a cache by this process.
@@ -170,13 +172,17 @@ def _one_container_fetch(url):
     each would download its own copy before the first reached the cache. Only
     callers with a cache take the lock: an uncached caller writes nothing the
     next one could reuse, so waiting would only serialize its downloads.
+
+    A failed download is shared with the callers already waiting, so an outage
+    costs one download and its retries, not one per waiting caller. The entry is
+    dropped once no caller holds it, so a later fetch downloads again.
     """
     with _CONTAINERS_LOCK:
         entry = _CONTAINERS.setdefault(url, _ContainerFetch())
         entry.callers += 1
     try:
         with entry.lock:
-            yield
+            yield entry
     finally:
         with _CONTAINERS_LOCK:
             entry.callers -= 1
@@ -192,11 +198,11 @@ def _fetch(target, maximum, cache=None):
         return download(url, maximum)
     if cache is None:
         return _fetch_container(url, plan, maximum, None)
-    with _one_container_fetch(url):
-        return _fetch_container(url, plan, maximum, cache)
+    with _one_container_fetch(url) as shared:
+        return _fetch_container(url, plan, maximum, cache, shared)
 
 
-def _fetch_container(url, plan, maximum, cache):
+def _fetch_container(url, plan, maximum, cache, shared=None):
     asset, name, bound = plan["asset"], plan["name"], plan["bound"]
     path = None if cache is None else checked_path(cache / (hashlib.sha256(url.encode()).hexdigest() + ".zip"))
     repair = False
@@ -205,7 +211,16 @@ def _fetch_container(url, plan, maximum, cache):
             return member_at(path, asset, name, maximum)
         except (ValueError, OSError, BuilderError):
             repair = True
-    data = download(url, bound)
+    if shared is not None and shared.failure is not None:
+        raise shared.failure
+    try:
+        data = download(url, bound)
+    except Exception as error:
+        # Only the download is shared; a member that fails its own checks
+        # does not stop the container's other members.
+        if shared is not None:
+            shared.failure = error
+        raise
     if path is None:
         return member(data, asset, name, maximum)
     with tempfile.NamedTemporaryFile(dir=cache, prefix=".transfer-", delete=False) as stream:
