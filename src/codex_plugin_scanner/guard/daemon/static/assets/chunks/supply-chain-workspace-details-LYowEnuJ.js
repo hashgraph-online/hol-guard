@@ -1,8 +1,9 @@
 import { j as jsxRuntimeExports, r as reactExports, be as HiMiniArrowTopRightOnSquare, ag as HiMiniExclamationTriangle, eK as HiMiniBugAnt, ai as Badge, T as Tag, b as formatRelativeTime, g as HiMiniChevronDown, f3 as fetchReceipts, A as ActionButton, v as HiMiniCheckCircle, aH as HiMiniXCircle, h as harnessDisplayName, e as HiMiniChevronUp, i as HiMiniArrowPath } from "../guard-dashboard.js";
-import { m as missingBundleMessage, f as formatBundleExpiry, i as isBundleExpired, b as bundleRefreshKey, r as resolveIntelFreshness } from "./feed-health-workspace-gZT33n0c.js";
-import { u as useSupplyChainBundle } from "./supply-chain-hub-workspace-DKEZ1NCt.js";
+import { m as missingBundleMessage, f as formatBundleExpiry, i as isBundleExpired, b as bundleRefreshKey, r as resolveIntelFreshness } from "./feed-health-workspace-BXK9id-q.js";
+import { u as useSupplyChainBundle } from "./supply-chain-hub-workspace-BJZR421D.js";
 import { s as supplyChainEvidenceHref, d as deriveSupplyChainEvidenceRail } from "./supply-chain-protection-stats-C4S58svV.js";
-import { r as resolveSupplyChainIssues } from "./supply-chain-issues-BHYc96FD.js";
+import { r as resolveSupplyChainIssues } from "./supply-chain-issues-kEudk8xr.js";
+import "./harness-action-errors-x2AyNCK-.js";
 import "./home-protection-module-CMu4ycX8.js";
 function SupplyChainDetailSection({
   id,

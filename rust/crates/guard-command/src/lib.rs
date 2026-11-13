@@ -87,6 +87,8 @@ pub mod cloud_pack_response;
 #[cfg(test)]
 mod cloud_pack_review_tests;
 #[cfg(test)]
+mod cloud_pack_shape_tests;
+#[cfg(test)]
 mod cloud_pack_tests;
 pub mod cloud_pack_validate;
 mod cloud_pack_validate_facts;
@@ -233,6 +235,7 @@ pub mod network_url;
 pub mod node_build_output;
 pub mod npm_source_spec;
 pub mod ordered_json;
+pub mod output_injection;
 #[cfg(unix)]
 pub mod package_context_build;
 pub mod package_execution_context;

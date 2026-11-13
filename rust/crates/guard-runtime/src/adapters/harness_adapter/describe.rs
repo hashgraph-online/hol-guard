@@ -95,7 +95,7 @@ pub(crate) const ENV_PREFIXES: [&str; 14] = [
     "OMP_PROFILE",
 ];
 
-pub(crate) const SPECS: [Spec; 13] = [
+pub(crate) const SPECS: [Spec; 14] = [
     Spec {
         harness: "devin",
         aliases: &["devin", "devin-cli", "cognition-devin"],
@@ -329,6 +329,27 @@ pub(crate) const SPECS: [Spec; 13] = [
         fallback: "Resolve the Guard request, then retry the exact Cline tool action.",
         channel: "browser",
         auto_open: true,
+        workspace_aibom: false,
+        hook: Hook::None,
+        install: Install::Plan,
+        dynamic: false,
+    },
+    Spec {
+        harness: "copilot",
+        aliases: &[],
+        executable: "copilot",
+        launcher_name: "",
+        display_name: None,
+        tier: "native-or-center",
+        summary: "Guard uses native Copilot prompts through Copilot CLI hook surfaces and VS Code \
+                  workspace hooks when those surfaces are installed. Guard falls back to the local \
+                  approval center only when the active Copilot surface cannot prompt.",
+        fallback: "Guard prefers native Copilot prompts where the active Copilot surface exposes \
+                   them. Proof for Copilot should come from native hook responses and Guard runtime \
+                   receipts in Copilot CLI or VS Code workspace hooks, or from the local approval \
+                   center when prompting is unavailable.",
+        channel: "hook",
+        auto_open: false,
         workspace_aibom: false,
         hook: Hook::None,
         install: Install::Plan,

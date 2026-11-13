@@ -149,7 +149,7 @@ def test_claude_install_writes_session_start_and_command_hook_schema_and_is_idem
     assert {entry["matcher"] for entry in session_start} == {"startup", "resume", "clear", "compact"}
     assert all(entry["hooks"][0]["type"] == "command" for entry in session_start)
     assert len(pre_tool_use) == 1
-    assert pre_tool_use[0]["matcher"] == "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*"
+    assert pre_tool_use[0]["matcher"] == "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*"
     assert pre_tool_use[0]["hooks"][0]["type"] == "command"
     assert CLAUDE_GUARD_DAEMON_HOOK_MARKER in "\0".join(_handler_argv(pre_tool_use[0]["hooks"][0]))
     assert "url" not in pre_tool_use[0]["hooks"][0]
@@ -157,14 +157,14 @@ def test_claude_install_writes_session_start_and_command_hook_schema_and_is_idem
     assert pre_tool_use[0]["hooks"][0]["statusMessage"] == "HOL Guard is checking this tool use"
     assert len(permission_request) == 1
     assert (
-        permission_request[0]["matcher"] == "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*"
+        permission_request[0]["matcher"] == "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*"
     )
     assert permission_request[0]["hooks"][0]["type"] == "command"
     assert permission_request[0]["hooks"][0]["timeout"] == 10
     assert permission_request[0]["hooks"][0]["statusMessage"] == "HOL Guard is reviewing this approval prompt"
     assert len(post_tool_use) == 1
     assert post_tool_use[0]["matcher"] == (
-        "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*|AskUserQuestion"
+        "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*|AskUserQuestion"
     )
     assert post_tool_use[0]["hooks"][0]["type"] == "command"
     user_prompt = payload["hooks"]["UserPromptSubmit"]

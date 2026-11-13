@@ -1,0 +1,1169 @@
+{
+  "schema": "guard.cloud-action-pack.v1",
+  "provider": {
+    "id": "airtable",
+    "name": "Airtable",
+    "publisher": {
+      "name": "HOL",
+      "verified": true
+    }
+  },
+  "hosts": [
+    "api.airtable.com"
+  ],
+  "auth": {
+    "mode": "oauth2",
+    "scopes": [
+      "data.records:read",
+      "data.records:write",
+      "schema.bases:read"
+    ]
+  },
+  "actions": [
+    {
+      "actionId": "airtable.records.list",
+      "title": "List records in a table",
+      "executor": {
+        "kind": "declarative-http",
+        "request": {
+          "method": "GET",
+          "host": "api.airtable.com",
+          "path": "/v0/{base_id}/{table_id}",
+          "query": [
+            {
+              "name": "pageSize",
+              "value": {
+                "arg": {
+                  "name": "page_size",
+                  "default": 100
+                }
+              }
+            },
+            {
+              "name": "view",
+              "value": {
+                "arg": {
+                  "name": "view"
+                }
+              }
+            },
+            {
+              "name": "filterByFormula",
+              "value": {
+                "arg": {
+                  "name": "formula"
+                }
+              }
+            },
+            {
+              "name": "offset",
+              "value": {
+                "arg": {
+                  "name": "offset"
+                }
+              }
+            }
+          ],
+          "headers": [
+            {
+              "name": "accept",
+              "value": "application/json"
+            }
+          ],
+          "maxPages": 1
+        }
+      },
+      "arguments": {
+        "base_id": {
+          "type": "string",
+          "required": true,
+          "maxLength": 17,
+          "pattern": "^app[A-Za-z0-9]{14}$"
+        },
+        "table_id": {
+          "type": "string",
+          "required": true,
+          "maxLength": 17,
+          "pattern": "^tbl[A-Za-z0-9]{14}$"
+        },
+        "page_size": {
+          "type": "integer",
+          "required": false,
+          "minimum": 1,
+          "maximum": 100
+        },
+        "view": {
+          "type": "string",
+          "required": false,
+          "maxLength": 64,
+          "pattern": "^(?:viw[A-Za-z0-9]{14}|[A-Za-z0-9 _.()-]{1,64})$"
+        },
+        "formula": {
+          "type": "string",
+          "required": false,
+          "maxLength": 2000,
+          "pattern": "^[^\\x00-\\x1f\\x7f]+$"
+        },
+        "offset": {
+          "type": "string",
+          "required": false,
+          "maxLength": 200,
+          "pattern": "^[A-Za-z0-9/_-]{1,200}$"
+        }
+      },
+      "facts": {
+        "class": "read",
+        "object": {
+          "const": "record"
+        },
+        "scope": {
+          "const": "query_selected"
+        },
+        "recordCount": {
+          "argument": {
+            "name": "page_size",
+            "max": 100,
+            "default": 100
+          }
+        }
+      },
+      "response": {
+        "maxBytes": 1048576,
+        "fields": [
+          {
+            "name": "records",
+            "value": {
+              "list": {
+                "from": "records",
+                "maxItems": 100,
+                "fields": [
+                  {
+                    "name": "id",
+                    "value": {
+                      "from": "id"
+                    }
+                  },
+                  {
+                    "name": "created",
+                    "value": {
+                      "from": "createdTime"
+                    }
+                  },
+                  {
+                    "name": "name",
+                    "value": {
+                      "from": "fields.Name"
+                    },
+                    "untrusted": true
+                  },
+                  {
+                    "name": "status",
+                    "value": {
+                      "from": "fields.Status"
+                    },
+                    "untrusted": true
+                  },
+                  {
+                    "name": "notes",
+                    "value": {
+                      "from": "fields.Notes"
+                    },
+                    "untrusted": true
+                  }
+                ]
+              }
+            }
+          },
+          {
+            "name": "offset",
+            "value": {
+              "from": "offset"
+            }
+          }
+        ]
+      },
+      "safety": {
+        "effect": "read",
+        "requiredCapabilities": [
+          "bounded-output",
+          "egress-pinned"
+        ],
+        "idempotency": "safe-read",
+        "scopes": [
+          "data.records:read"
+        ],
+        "maxItems": 100,
+        "minIntervalMs": 250,
+        "timeoutMs": 10000
+      },
+      "fixtures": [
+        {
+          "name": "lists open tasks in a view",
+          "kind": "safe",
+          "arguments": {
+            "base_id": "appA1b2C3d4E5f6G7",
+            "table_id": "tblH8i9J0k1L2m3N4",
+            "page_size": 50,
+            "formula": "{Status}='Open'"
+          },
+          "expect": {
+            "facts": {
+              "class": "read"
+            },
+            "response": "{\"records\":[{\"id\":\"recO5p6Q7r8S9t0U1\",\"createdTime\":\"2026-11-01T09:00:00.000Z\",\"fields\":{\"Name\":\"Ship it\",\"Status\":\"Open\",\"Secret\":\"x\"}}]}",
+            "projection": {
+              "records": [
+                {
+                  "id": "recO5p6Q7r8S9t0U1",
+                  "created": "2026-11-01T09:00:00.000Z",
+                  "name": "Ship it",
+                  "status": "Open"
+                }
+              ]
+            },
+            "request": {
+              "body": null,
+              "headers": [
+                [
+                  "accept",
+                  "application/json"
+                ]
+              ],
+              "maxPages": 1,
+              "method": "GET",
+              "url": "https://api.airtable.com/v0/appA1b2C3d4E5f6G7/tblH8i9J0k1L2m3N4?pageSize=50&filterByFormula=%7BStatus%7D%3D%27Open%27"
+            },
+            "decisions": {
+              "balanced": "allow",
+              "relaxed": "allow",
+              "strict": "allow"
+            }
+          }
+        },
+        {
+          "name": "refuses a page over 100",
+          "kind": "risky",
+          "arguments": {
+            "base_id": "appA1b2C3d4E5f6G7",
+            "table_id": "tblH8i9J0k1L2m3N4",
+            "page_size": 500
+          },
+          "expect": {
+            "error": "invalid_argument"
+          }
+        }
+      ]
+    },
+    {
+      "actionId": "airtable.records.get",
+      "title": "Read one record",
+      "executor": {
+        "kind": "declarative-http",
+        "request": {
+          "method": "GET",
+          "host": "api.airtable.com",
+          "path": "/v0/{base_id}/{table_id}/{record_id}",
+          "headers": [
+            {
+              "name": "accept",
+              "value": "application/json"
+            }
+          ],
+          "maxPages": 1
+        }
+      },
+      "arguments": {
+        "base_id": {
+          "type": "string",
+          "required": true,
+          "maxLength": 17,
+          "pattern": "^app[A-Za-z0-9]{14}$"
+        },
+        "table_id": {
+          "type": "string",
+          "required": true,
+          "maxLength": 17,
+          "pattern": "^tbl[A-Za-z0-9]{14}$"
+        },
+        "record_id": {
+          "type": "string",
+          "required": true,
+          "maxLength": 17,
+          "pattern": "^rec[A-Za-z0-9]{14}$"
+        }
+      },
+      "facts": {
+        "class": "read",
+        "object": {
+          "const": "record"
+        },
+        "scope": {
+          "const": "single"
+        },
+        "recordCount": {
+          "const": 1
+        }
+      },
+      "response": {
+        "maxBytes": 131072,
+        "fields": [
+          {
+            "name": "id",
+            "value": {
+              "from": "id"
+            }
+          },
+          {
+            "name": "created",
+            "value": {
+              "from": "createdTime"
+            }
+          },
+          {
+            "name": "name",
+            "value": {
+              "from": "fields.Name"
+            },
+            "untrusted": true
+          },
+          {
+            "name": "status",
+            "value": {
+              "from": "fields.Status"
+            },
+            "untrusted": true
+          },
+          {
+            "name": "notes",
+            "value": {
+              "from": "fields.Notes"
+            },
+            "untrusted": true
+          }
+        ]
+      },
+      "safety": {
+        "effect": "read",
+        "requiredCapabilities": [
+          "bounded-output",
+          "egress-pinned"
+        ],
+        "idempotency": "safe-read",
+        "scopes": [
+          "data.records:read"
+        ],
+        "maxItems": 1,
+        "minIntervalMs": 250,
+        "timeoutMs": 10000
+      },
+      "fixtures": [
+        {
+          "name": "reads one record",
+          "kind": "safe",
+          "arguments": {
+            "base_id": "appA1b2C3d4E5f6G7",
+            "table_id": "tblH8i9J0k1L2m3N4",
+            "record_id": "recO5p6Q7r8S9t0U1"
+          },
+          "expect": {
+            "facts": {
+              "class": "read"
+            },
+            "request": {
+              "body": null,
+              "headers": [
+                [
+                  "accept",
+                  "application/json"
+                ]
+              ],
+              "maxPages": 1,
+              "method": "GET",
+              "url": "https://api.airtable.com/v0/appA1b2C3d4E5f6G7/tblH8i9J0k1L2m3N4/recO5p6Q7r8S9t0U1"
+            },
+            "decisions": {
+              "balanced": "allow",
+              "relaxed": "allow",
+              "strict": "allow"
+            }
+          }
+        },
+        {
+          "name": "refuses a table name in place of an id",
+          "kind": "risky",
+          "arguments": {
+            "base_id": "appA1b2C3d4E5f6G7",
+            "table_id": "tblH8i9J0k1L2m3N4",
+            "record_id": "Tasks"
+          },
+          "expect": {
+            "error": "invalid_argument"
+          }
+        }
+      ]
+    },
+    {
+      "actionId": "airtable.records.create",
+      "title": "Add a record",
+      "executor": {
+        "kind": "declarative-http",
+        "request": {
+          "method": "POST",
+          "host": "api.airtable.com",
+          "path": "/v0/{base_id}/{table_id}",
+          "headers": [
+            {
+              "name": "accept",
+              "value": "application/json"
+            }
+          ],
+          "body": {
+            "object": [
+              {
+                "name": "records",
+                "value": {
+                  "array": [
+                    {
+                      "object": [
+                        {
+                          "name": "fields",
+                          "value": {
+                            "keyed": {
+                              "key": "field",
+                              "value": {
+                                "arg": "value"
+                              }
+                            }
+                          }
+                        }
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "name": "typecast",
+                "value": {
+                  "const": false
+                }
+              }
+            ]
+          },
+          "maxPages": 1
+        }
+      },
+      "arguments": {
+        "base_id": {
+          "type": "string",
+          "required": true,
+          "maxLength": 17,
+          "pattern": "^app[A-Za-z0-9]{14}$"
+        },
+        "table_id": {
+          "type": "string",
+          "required": true,
+          "maxLength": 17,
+          "pattern": "^tbl[A-Za-z0-9]{14}$"
+        },
+        "field": {
+          "type": "string",
+          "required": true,
+          "maxLength": 64,
+          "pattern": "^(?:fld[A-Za-z0-9]{14}|[A-Za-z0-9 _.()-]{1,64})$"
+        },
+        "value": {
+          "type": "string",
+          "required": true,
+          "maxLength": 10000,
+          "pattern": "^[^\\x00-\\x08\\x0b\\x0c\\x0e-\\x1f\\x7f]+$"
+        }
+      },
+      "facts": {
+        "class": "update",
+        "object": {
+          "const": "record"
+        },
+        "scope": {
+          "const": "single"
+        },
+        "reversibility": {
+          "const": "reversible"
+        },
+        "recordCount": {
+          "const": 1
+        }
+      },
+      "response": {
+        "maxBytes": 1048576,
+        "fields": [
+          {
+            "name": "records",
+            "value": {
+              "list": {
+                "from": "records",
+                "maxItems": 1,
+                "fields": [
+                  {
+                    "name": "id",
+                    "value": {
+                      "from": "id"
+                    }
+                  },
+                  {
+                    "name": "created",
+                    "value": {
+                      "from": "createdTime"
+                    }
+                  },
+                  {
+                    "name": "name",
+                    "value": {
+                      "from": "fields.Name"
+                    },
+                    "untrusted": true
+                  },
+                  {
+                    "name": "status",
+                    "value": {
+                      "from": "fields.Status"
+                    },
+                    "untrusted": true
+                  },
+                  {
+                    "name": "notes",
+                    "value": {
+                      "from": "fields.Notes"
+                    },
+                    "untrusted": true
+                  }
+                ]
+              }
+            }
+          },
+          {
+            "name": "offset",
+            "value": {
+              "from": "offset"
+            }
+          }
+        ]
+      },
+      "safety": {
+        "effect": "write",
+        "requiredCapabilities": [
+          "bounded-output",
+          "egress-pinned"
+        ],
+        "idempotency": "none",
+        "scopes": [
+          "data.records:write"
+        ],
+        "maxItems": 1,
+        "minIntervalMs": 250,
+        "timeoutMs": 10000
+      },
+      "fixtures": [
+        {
+          "name": "adds a task by name",
+          "kind": "safe",
+          "arguments": {
+            "base_id": "appA1b2C3d4E5f6G7",
+            "table_id": "tblH8i9J0k1L2m3N4",
+            "field": "Name",
+            "value": "Write release notes"
+          },
+          "expect": {
+            "facts": {
+              "class": "update"
+            },
+            "request": {
+              "body": "{\"records\":[{\"fields\":{\"Name\":\"Write release notes\"}}],\"typecast\":false}",
+              "headers": [
+                [
+                  "accept",
+                  "application/json"
+                ],
+                [
+                  "content-type",
+                  "application/json; charset=utf-8"
+                ]
+              ],
+              "maxPages": 1,
+              "method": "POST",
+              "url": "https://api.airtable.com/v0/appA1b2C3d4E5f6G7/tblH8i9J0k1L2m3N4"
+            },
+            "decisions": {
+              "balanced": "allow",
+              "relaxed": "allow",
+              "strict": "review"
+            }
+          }
+        },
+        {
+          "name": "refuses a field name with a control character",
+          "kind": "risky",
+          "arguments": {
+            "base_id": "appA1b2C3d4E5f6G7",
+            "table_id": "tblH8i9J0k1L2m3N4",
+            "field": "Na\nme",
+            "value": "x"
+          },
+          "expect": {
+            "error": "invalid_argument"
+          }
+        }
+      ]
+    },
+    {
+      "actionId": "airtable.records.set_field",
+      "title": "Set one field on up to 10 records",
+      "executor": {
+        "kind": "declarative-http",
+        "request": {
+          "method": "PATCH",
+          "host": "api.airtable.com",
+          "path": "/v0/{base_id}/{table_id}",
+          "headers": [
+            {
+              "name": "accept",
+              "value": "application/json"
+            }
+          ],
+          "body": {
+            "object": [
+              {
+                "name": "records",
+                "value": {
+                  "each": {
+                    "arg": "record_ids",
+                    "item": {
+                      "object": [
+                        {
+                          "name": "id",
+                          "value": {
+                            "element": true
+                          }
+                        },
+                        {
+                          "name": "fields",
+                          "value": {
+                            "keyed": {
+                              "key": "field",
+                              "value": {
+                                "arg": "value"
+                              }
+                            }
+                          }
+                        }
+                      ]
+                    }
+                  }
+                }
+              },
+              {
+                "name": "typecast",
+                "value": {
+                  "const": false
+                }
+              }
+            ]
+          },
+          "maxPages": 1
+        }
+      },
+      "arguments": {
+        "base_id": {
+          "type": "string",
+          "required": true,
+          "maxLength": 17,
+          "pattern": "^app[A-Za-z0-9]{14}$"
+        },
+        "table_id": {
+          "type": "string",
+          "required": true,
+          "maxLength": 17,
+          "pattern": "^tbl[A-Za-z0-9]{14}$"
+        },
+        "record_ids": {
+          "type": "array",
+          "required": true,
+          "minItems": 1,
+          "maxItems": 10,
+          "items": {
+            "maxLength": 17,
+            "pattern": "^rec[A-Za-z0-9]{14}$"
+          }
+        },
+        "field": {
+          "type": "string",
+          "required": true,
+          "maxLength": 64,
+          "pattern": "^(?:fld[A-Za-z0-9]{14}|[A-Za-z0-9 _.()-]{1,64})$"
+        },
+        "value": {
+          "type": "string",
+          "required": true,
+          "maxLength": 10000,
+          "pattern": "^[^\\x00-\\x08\\x0b\\x0c\\x0e-\\x1f\\x7f]+$"
+        }
+      },
+      "facts": {
+        "class": "update",
+        "object": {
+          "const": "record"
+        },
+        "scope": {
+          "const": "enumerated"
+        },
+        "reversibility": {
+          "const": "reversible"
+        },
+        "recordCount": {
+          "count": {
+            "arguments": [
+              "record_ids"
+            ]
+          }
+        }
+      },
+      "response": {
+        "maxBytes": 1048576,
+        "fields": [
+          {
+            "name": "records",
+            "value": {
+              "list": {
+                "from": "records",
+                "maxItems": 10,
+                "fields": [
+                  {
+                    "name": "id",
+                    "value": {
+                      "from": "id"
+                    }
+                  },
+                  {
+                    "name": "created",
+                    "value": {
+                      "from": "createdTime"
+                    }
+                  },
+                  {
+                    "name": "name",
+                    "value": {
+                      "from": "fields.Name"
+                    },
+                    "untrusted": true
+                  },
+                  {
+                    "name": "status",
+                    "value": {
+                      "from": "fields.Status"
+                    },
+                    "untrusted": true
+                  },
+                  {
+                    "name": "notes",
+                    "value": {
+                      "from": "fields.Notes"
+                    },
+                    "untrusted": true
+                  }
+                ]
+              }
+            }
+          },
+          {
+            "name": "offset",
+            "value": {
+              "from": "offset"
+            }
+          }
+        ]
+      },
+      "safety": {
+        "effect": "write",
+        "requiredCapabilities": [
+          "bounded-output",
+          "egress-pinned"
+        ],
+        "idempotency": "none",
+        "scopes": [
+          "data.records:write"
+        ],
+        "maxItems": 10,
+        "minIntervalMs": 250,
+        "timeoutMs": 10000
+      },
+      "fixtures": [
+        {
+          "name": "marks three tasks done",
+          "kind": "safe",
+          "arguments": {
+            "base_id": "appA1b2C3d4E5f6G7",
+            "table_id": "tblH8i9J0k1L2m3N4",
+            "record_ids": [
+              "rec00000000000000",
+              "rec00000000000001",
+              "rec00000000000002"
+            ],
+            "field": "Status",
+            "value": "Done"
+          },
+          "expect": {
+            "facts": {
+              "class": "update",
+              "record_count": {
+                "state": "known",
+                "value": 3
+              }
+            },
+            "request": {
+              "body": "{\"records\":[{\"id\":\"rec00000000000000\",\"fields\":{\"Status\":\"Done\"}},{\"id\":\"rec00000000000001\",\"fields\":{\"Status\":\"Done\"}},{\"id\":\"rec00000000000002\",\"fields\":{\"Status\":\"Done\"}}],\"typecast\":false}",
+              "headers": [
+                [
+                  "accept",
+                  "application/json"
+                ],
+                [
+                  "content-type",
+                  "application/json; charset=utf-8"
+                ]
+              ],
+              "maxPages": 1,
+              "method": "PATCH",
+              "url": "https://api.airtable.com/v0/appA1b2C3d4E5f6G7/tblH8i9J0k1L2m3N4"
+            },
+            "decisions": {
+              "balanced": "allow",
+              "relaxed": "allow",
+              "strict": "review"
+            }
+          }
+        },
+        {
+          "name": "refuses more than 10 records",
+          "kind": "risky",
+          "arguments": {
+            "base_id": "appA1b2C3d4E5f6G7",
+            "table_id": "tblH8i9J0k1L2m3N4",
+            "record_ids": [
+              "rec00000000000000",
+              "rec00000000000001",
+              "rec00000000000002",
+              "rec00000000000003",
+              "rec00000000000004",
+              "rec00000000000005",
+              "rec00000000000006",
+              "rec00000000000007",
+              "rec00000000000008",
+              "rec00000000000009",
+              "rec00000000000010"
+            ],
+            "field": "Status",
+            "value": "Done"
+          },
+          "expect": {
+            "error": "invalid_argument"
+          }
+        }
+      ]
+    },
+    {
+      "actionId": "airtable.records.delete",
+      "title": "Delete up to 10 records",
+      "executor": {
+        "kind": "declarative-http",
+        "request": {
+          "method": "DELETE",
+          "host": "api.airtable.com",
+          "path": "/v0/{base_id}/{table_id}",
+          "query": [
+            {
+              "name": "records[]",
+              "value": {
+                "arg": {
+                  "name": "record_ids"
+                }
+              }
+            }
+          ],
+          "headers": [
+            {
+              "name": "accept",
+              "value": "application/json"
+            }
+          ],
+          "maxPages": 1
+        }
+      },
+      "arguments": {
+        "base_id": {
+          "type": "string",
+          "required": true,
+          "maxLength": 17,
+          "pattern": "^app[A-Za-z0-9]{14}$"
+        },
+        "table_id": {
+          "type": "string",
+          "required": true,
+          "maxLength": 17,
+          "pattern": "^tbl[A-Za-z0-9]{14}$"
+        },
+        "record_ids": {
+          "type": "array",
+          "required": true,
+          "minItems": 1,
+          "maxItems": 10,
+          "items": {
+            "maxLength": 17,
+            "pattern": "^rec[A-Za-z0-9]{14}$"
+          }
+        }
+      },
+      "facts": {
+        "class": "delete",
+        "object": {
+          "const": "record"
+        },
+        "scope": {
+          "const": "enumerated"
+        },
+        "reversibility": {
+          "const": "permanent"
+        },
+        "recordCount": {
+          "count": {
+            "arguments": [
+              "record_ids"
+            ]
+          }
+        }
+      },
+      "response": {
+        "maxBytes": 16384,
+        "fields": [
+          {
+            "name": "records",
+            "value": {
+              "list": {
+                "from": "records",
+                "maxItems": 10,
+                "fields": [
+                  {
+                    "name": "id",
+                    "value": {
+                      "from": "id"
+                    }
+                  },
+                  {
+                    "name": "deleted",
+                    "value": {
+                      "from": "deleted"
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        ]
+      },
+      "safety": {
+        "effect": "destructive",
+        "requiredCapabilities": [
+          "bounded-output",
+          "egress-pinned"
+        ],
+        "idempotency": "none",
+        "scopes": [
+          "data.records:write"
+        ],
+        "maxItems": 10,
+        "minIntervalMs": 1000,
+        "timeoutMs": 10000
+      },
+      "fixtures": [
+        {
+          "name": "deletes two records",
+          "kind": "safe",
+          "arguments": {
+            "base_id": "appA1b2C3d4E5f6G7",
+            "table_id": "tblH8i9J0k1L2m3N4",
+            "record_ids": [
+              "rec00000000000000",
+              "rec00000000000001"
+            ]
+          },
+          "expect": {
+            "facts": {
+              "class": "delete",
+              "record_count": {
+                "state": "known",
+                "value": 2
+              },
+              "reversibility": {
+                "state": "known",
+                "value": "permanent"
+              }
+            },
+            "request": {
+              "body": null,
+              "headers": [
+                [
+                  "accept",
+                  "application/json"
+                ]
+              ],
+              "maxPages": 1,
+              "method": "DELETE",
+              "url": "https://api.airtable.com/v0/appA1b2C3d4E5f6G7/tblH8i9J0k1L2m3N4?records%5B%5D=rec00000000000000&records%5B%5D=rec00000000000001"
+            },
+            "decisions": {
+              "balanced": "review",
+              "relaxed": "review",
+              "strict": "block"
+            }
+          }
+        },
+        {
+          "name": "refuses an empty delete",
+          "kind": "risky",
+          "arguments": {
+            "base_id": "appA1b2C3d4E5f6G7",
+            "table_id": "tblH8i9J0k1L2m3N4",
+            "record_ids": []
+          },
+          "expect": {
+            "error": "invalid_argument"
+          }
+        }
+      ]
+    },
+    {
+      "actionId": "airtable.tables.list",
+      "title": "List a base's tables",
+      "executor": {
+        "kind": "declarative-http",
+        "request": {
+          "method": "GET",
+          "host": "api.airtable.com",
+          "path": "/v0/meta/bases/{base_id}/tables",
+          "headers": [
+            {
+              "name": "accept",
+              "value": "application/json"
+            }
+          ],
+          "maxPages": 1
+        }
+      },
+      "arguments": {
+        "base_id": {
+          "type": "string",
+          "required": true,
+          "maxLength": 17,
+          "pattern": "^app[A-Za-z0-9]{14}$"
+        }
+      },
+      "facts": {
+        "class": "read",
+        "object": {
+          "const": "table"
+        },
+        "scope": {
+          "const": "all"
+        }
+      },
+      "response": {
+        "maxBytes": 524288,
+        "fields": [
+          {
+            "name": "tables",
+            "value": {
+              "list": {
+                "from": "tables",
+                "maxItems": 200,
+                "fields": [
+                  {
+                    "name": "id",
+                    "value": {
+                      "from": "id"
+                    }
+                  },
+                  {
+                    "name": "name",
+                    "value": {
+                      "from": "name"
+                    },
+                    "untrusted": true
+                  },
+                  {
+                    "name": "primary_field",
+                    "value": {
+                      "from": "primaryFieldId"
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        ]
+      },
+      "safety": {
+        "effect": "read",
+        "requiredCapabilities": [
+          "bounded-output",
+          "egress-pinned"
+        ],
+        "idempotency": "safe-read",
+        "scopes": [
+          "schema.bases:read"
+        ],
+        "maxItems": 200,
+        "minIntervalMs": 500,
+        "timeoutMs": 10000
+      },
+      "fixtures": [
+        {
+          "name": "lists the tables in a base",
+          "kind": "safe",
+          "arguments": {
+            "base_id": "appA1b2C3d4E5f6G7"
+          },
+          "expect": {
+            "facts": {
+              "class": "read"
+            },
+            "request": {
+              "body": null,
+              "headers": [
+                [
+                  "accept",
+                  "application/json"
+                ]
+              ],
+              "maxPages": 1,
+              "method": "GET",
+              "url": "https://api.airtable.com/v0/meta/bases/appA1b2C3d4E5f6G7/tables"
+            },
+            "decisions": {
+              "balanced": "allow",
+              "relaxed": "allow",
+              "strict": "allow"
+            }
+          }
+        },
+        {
+          "name": "refuses a workspace id",
+          "kind": "risky",
+          "arguments": {
+            "base_id": "wspA1b2C3d4E5f6G7"
+          },
+          "expect": {
+            "error": "invalid_argument"
+          }
+        }
+      ]
+    }
+  ]
+}

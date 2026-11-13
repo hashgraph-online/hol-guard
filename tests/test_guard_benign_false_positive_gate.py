@@ -74,6 +74,8 @@ _FIXED_TOOLS = {
     "ask_user_question": "AskUserQuestion",
     # A web fetch reaches Guard as its own tool; only the URL decides it.
     "web_fetch": "WebFetch",
+    # Claude Code starts a subagent with a written brief; the brief is prompt text.
+    "agent": "Agent",
     # Grok's keyword search over its configured integration (MCP) tools.
     "search_tool": "search_tool",
 }

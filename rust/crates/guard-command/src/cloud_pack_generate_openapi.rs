@@ -136,11 +136,14 @@ fn operation_action(
                 query.push(json!({ "name": name, "value": { "arg": { "name": arg } } }));
                 arguments.insert(arg, spec);
             }
+            // An action that cannot send a parameter the provider requires
+            // could never succeed, so the operation is left out.
             (_, _, _) if required => {
                 draft.note(
                     "required_argument_unsupported",
                     &format!("{at}/parameters/{name}"),
                 );
+                return None;
             }
             _ => draft.note("argument_skipped", &format!("{at}/parameters/{name}")),
         }
@@ -159,8 +162,8 @@ fn operation_action(
         (Some(schema), _) => {
             let mut names = BTreeMap::new();
             let at = format!("{at}/requestBody");
-            object_arguments(schema, &mut arguments, &mut names, draft, &at, true);
-            if names.is_empty() {
+            let complete = object_arguments(schema, &mut arguments, &mut names, draft, &at, true);
+            if !complete || names.is_empty() {
                 return None;
             }
             let fields: Vec<Value> = names
@@ -257,12 +260,19 @@ fn rewrite_path(base: &str, path: &str, renamed: &BTreeMap<String, String>) -> O
     let mut out = String::from(base);
     for segment in path.trim_start_matches('/').split('/') {
         out.push('/');
-        match segment
+        // A Google-style custom method (`{fileId}:copy`) keeps its verb after
+        // the renamed placeholder.
+        let (head, verb) = crate::cloud_pack_validate_request::custom_method(segment)?;
+        match head
             .strip_prefix('{')
             .and_then(|rest| rest.strip_suffix('}'))
         {
             Some(name) => out.push_str(&format!("{{{}}}", renamed.get(name)?)),
-            None => out.push_str(segment),
+            None => out.push_str(head),
+        }
+        if let Some(verb) = verb {
+            out.push(':');
+            out.push_str(verb);
         }
     }
     let placeholders = path_placeholders(&out)?;
