@@ -272,7 +272,6 @@
    "id": "harness_launchers",
    "class": "python_transport",
    "paths": [
-    "src/codex_plugin_scanner/guard/adapters/*argv*.py",
     "src/codex_plugin_scanner/guard/adapters/*bridge*.py",
     "src/codex_plugin_scanner/guard/adapters/*resume*.py",
     "src/codex_plugin_scanner/guard/adapters/*script_template*.py",
@@ -290,7 +289,6 @@
    "paths": [
     "src/codex_plugin_scanner/guard/adapters/*_hooks.py",
     "src/codex_plugin_scanner/guard/adapters/_modules/*/*_hooks.py",
-    "src/codex_plugin_scanner/guard/adapters/*hook_config.py",
     "src/codex_plugin_scanner/guard/adapters/*hook_payload*.py",
     "src/codex_plugin_scanner/guard/adapters/codex.py",
     "src/codex_plugin_scanner/guard/adapters/contracts.py",
