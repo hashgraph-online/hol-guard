@@ -18,11 +18,9 @@ use std::path::{Component, Path, PathBuf};
 
 /// Segments that print, filter or copy a file. None changes directory,
 /// renames a file or creates a link.
-/// `base64` is held to `base64_reads.rs`, which never admits its output-file
-/// option.
 const CHAIN_PEERS: &[&str] = &[
-    "base64", "cat", "cmp", "cp", "cut", "diff", "echo", "grep", "head", "jq", "ls", "nl",
-    "printf", "rg", "sort", "tail", "tr", "true", "uniq", "wc",
+    "cat", "cmp", "cp", "cut", "diff", "echo", "grep", "head", "jq", "ls", "nl", "printf", "rg",
+    "sort", "tail", "tr", "true", "uniq", "wc",
 ];
 
 /// Scratch editors that may also share a chain. Each segment is still proven
@@ -57,10 +55,14 @@ const GIT_OBJECT_READERS: &[&str] = &[
     "show-ref",
 ];
 
-/// Plain peers beside Git object reads. This is the guard for a temporary file
-/// a chain writes or reads; [`peers_only`] stays the guard for copies.
+/// Plain peers beside Git object reads or a `base64` decode. This is the
+/// guard for a temporary file a chain writes or reads; [`peers_only`] stays
+/// the guard for copies and workspace writes, so `cat a | base64 -d > run.sh`
+/// keeps its review. `base64` is held to `base64_reads.rs`, which never admits
+/// its output-file option.
 pub(super) fn temporary_peers(model: &CanonicalCommandV1) -> bool {
     peers_only(model)
+        || plain_chain(model, &["base64"])
         || (plain_chain(model, &["git"])
             && model.segments.iter().all(|segment| {
                 segment.executable.as_deref() != Some("git")
@@ -146,7 +148,10 @@ pub(super) fn absent_reads_bounded(
 /// `gh api` nor `curl` changes directory, renames a file or creates a link, so
 /// a temporary file that is absent now is still absent when a later peer opens
 /// it, or is the regular file a redirect created. Only the first step may
-/// fetch, and each step still needs its own proof.
+/// fetch, and each step still needs its own proof. `base64` may decode the
+/// saved file here, held to `base64_reads.rs`, which never admits its
+/// output-file option; it stays out of [`CHAIN_PEERS`], so a decode is never
+/// a peer of a chain that writes a workspace file.
 fn fetch_then_read(model: &CanonicalCommandV1) -> bool {
     let fetches = |segment: &crate::CommandSegmentV1| match segment.executable.as_deref() {
         Some("curl") => true,
@@ -157,7 +162,7 @@ fn fetch_then_read(model: &CanonicalCommandV1) -> bool {
         _ => false,
     };
     model.segments.len() > 1
-        && plain_chain(model, &["curl", "gh"])
+        && plain_chain(model, &["base64", "curl", "gh"])
         && fetches(&model.segments[0])
         && model.segments[1..]
             .iter()
