@@ -2555,8 +2555,7 @@
         }
       },
       "response": {
-        "maxBytes": 4096,
-        "emptyOk": true,
+        "maxBytes": 65536,
         "fields": [
           {
             "name": "message",

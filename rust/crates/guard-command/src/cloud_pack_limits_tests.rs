@@ -83,6 +83,28 @@ fn github_issue_lists_keep_up_to_a_hundred_labels() {
 }
 
 #[test]
+fn adding_labels_echoes_the_full_label_list_and_never_an_empty_body() {
+    let pack = pack_from_value(value(GITHUB)).unwrap();
+    let action = pack.action("github.issues.add_labels").unwrap();
+    // GitHub answers with every label the issue now has, full objects included.
+    let labels: Vec<_> = (0..100)
+        .map(|n| {
+            json!({"id": 1_000_000 + n, "node_id": format!("LA_kwDOAbCdEf{n:08}"),
+                "url": format!("https://api.github.com/repos/octo-org/widgets/labels/label-{n}"),
+                "name": format!("label-{n}"), "color": "ededed", "default": false,
+                "description": "x".repeat(100)})
+        })
+        .collect();
+    let body = serde_json::Value::Array(labels).to_string();
+    assert!(body.len() > 4096);
+    assert!(crate::cloud_pack_response::project(action, body.as_bytes()).is_ok());
+    assert_eq!(
+        crate::cloud_pack_response::project(action, b"").unwrap_err(),
+        "response_json_invalid"
+    );
+}
+
+#[test]
 fn a_closing_bracket_cannot_carry_the_body_past_its_limit() {
     let template = Template::Object(vec![TemplateField {
         name: "t".into(),
