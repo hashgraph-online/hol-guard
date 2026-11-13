@@ -185,6 +185,7 @@ pub mod pretool_home_tool_find_reads;
 pub mod pretool_home_variable_directory_targets;
 pub mod pretool_home_variable_reads;
 pub mod pretool_hooks_path_writes;
+pub mod pretool_in_checkout_links;
 pub mod pretool_inert_substitutions;
 pub mod pretool_inline_content;
 pub mod pretool_installed_package_source;

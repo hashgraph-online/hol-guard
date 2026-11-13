@@ -594,6 +594,7 @@
       "src/pretool/search/literal_bracket.rs",
       "src/pretool/search/names_only.rs",
       "src/pretool/search/options.rs",
+      "src/pretool/search/options_link_tests.rs",
       "src/pretool/search/operand.rs",
       "src/pretool/search/rg.rs",
       "src/pretool/search/rg_whitelist.rs",
