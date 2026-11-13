@@ -369,6 +369,16 @@ fn heredoc_bodies_inside_a_substitution_are_text() {
             "x=$( ((y = 1<<2)); echo it ); ls",
             vec!["((y = 1<<2)); echo it"],
         ),
+        // So does one in `((` right after a keyword, as bash reads
+        // `if((...))` and `for((...))` with no space.
+        (
+            "x=$( if((y<<EOF)); then :; fi\n); echo 'EOF'\nEOF\n",
+            vec!["if((y<<EOF)); then :; fi"],
+        ),
+        (
+            "x=$( for((i=0;i<<EOF;i++)); do :; done\n); echo 'EOF'\nEOF\n",
+            vec!["for((i=0;i<<EOF;i++)); do :; done"],
+        ),
     ] {
         let found = bodies(command);
         let mut nested = Vec::new();

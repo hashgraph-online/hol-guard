@@ -69,7 +69,9 @@ pub(super) fn extract_parenthesized(chars: &[char], start: usize) -> (String, us
         }
         if quote.is_none() && ch == '(' {
             let opens_arithmetic = chars.get(index + 1) == Some(&'(')
-                && (index > start && chars[index - 1] == '$' || word_start(chars, start, index));
+                && (index > start && chars[index - 1] == '$'
+                    || word_start(chars, start, index)
+                    || after_keyword(chars, start, index));
             if arithmetic.is_none() && opens_arithmetic {
                 arithmetic = Some(depth + 1);
             }
@@ -89,6 +91,17 @@ pub(super) fn extract_parenthesized(chars: &[char], start: usize) -> (String, us
 }
 
 /// Whether `index` starts a word, so a `#` there opens a comment.
+/// Whether `index` directly follows a keyword that bash lets open `((`
+/// with no space, as in `for((i=0;i<n;i++))` or `while((x<<2))`.
+fn after_keyword(chars: &[char], start: usize, index: usize) -> bool {
+    ["for", "while", "until", "if", "elif"].iter().any(|keyword| {
+        let length = keyword.len();
+        index >= start + length
+            && chars[index - length..index].iter().copied().eq(keyword.chars())
+            && word_start(chars, start, index - length)
+    })
+}
+
 fn word_start(chars: &[char], start: usize, index: usize) -> bool {
     index == start
         || chars[index - 1].is_whitespace()
