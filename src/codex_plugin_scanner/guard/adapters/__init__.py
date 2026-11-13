@@ -9,33 +9,41 @@ from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     from .base import HarnessAdapter, HarnessContext
 
+# ``(module, class)`` for a Python adapter; ``(".native_harness", harness)``
+# for one the native ``harness_adapter`` kind answers.
 _ADAPTER_SPECS: tuple[tuple[str, str], ...] = (
     (".codex", "CodexHarnessAdapter"),
     (".claude_code", "ClaudeCodeHarnessAdapter"),
     (".copilot", "CopilotHarnessAdapter"),
     (".cursor", "CursorHarnessAdapter"),
     (".cline", "ClineHarnessAdapter"),
-    (".devin", "DevinHarnessAdapter"),
-    (".antigravity", "AntigravityHarnessAdapter"),
-    (".gemini", "GeminiHarnessAdapter"),
+    (".native_harness", "devin"),
+    (".native_harness", "antigravity"),
+    (".native_harness", "gemini"),
     (".grok", "GrokHarnessAdapter"),
     (".hermes", "HermesHarnessAdapter"),
-    (".kimi", "KimiHarnessAdapter"),
+    (".native_harness", "kimi"),
     (".pi", "OmpHarnessAdapter"),
     (".pi", "PiHarnessAdapter"),
-    (".openclaw", "OpenClawHarnessAdapter"),
+    (".native_harness", "openclaw"),
     (".opencode", "OpenCodeHarnessAdapter"),
     (".zcode", "ZCodeHarnessAdapter"),
-    (".paseo", "PaseoHarnessAdapter"),
-    (".muse", "MuseHarnessAdapter"),
+    (".native_harness", "paseo"),
+    (".native_harness", "muse"),
 )
 
 
 @lru_cache(maxsize=1)
 def _adapters() -> tuple[HarnessAdapter, ...]:
+    from .native_harness import NATIVE_HARNESSES, NativeHarnessAdapter
+
+    native = {harness: (harness, aliases, launcher) for harness, aliases, launcher in NATIVE_HARNESSES}
     adapters: list[HarnessAdapter] = []
-    for module_name, class_name in _ADAPTER_SPECS:
-        adapter_class = getattr(import_module(module_name, __package__), class_name)
+    for module_name, name in _ADAPTER_SPECS:
+        if module_name == ".native_harness":
+            adapters.append(NativeHarnessAdapter(*native[name]))
+            continue
+        adapter_class = getattr(import_module(module_name, __package__), name)
         adapters.append(adapter_class())
     return tuple(adapters)
 

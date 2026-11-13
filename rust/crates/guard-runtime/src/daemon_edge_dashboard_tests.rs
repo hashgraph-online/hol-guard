@@ -192,6 +192,16 @@ fn a_short_link_redirects_to_its_request_page() {
     let signed = get(Some(dir.path()), path);
     let location = format!("Location: /requests/{id}#guard-{}=gld1.", "token");
     assert!(signed.contains(&location), "{signed}");
+    // An agent that drops one character of the id while relaying the link
+    // still hands the user a way into the same request.
+    let slipped = path.replacen(&id[..9], &id[..8], 1);
+    assert_ne!(slipped, path);
+    let repaired = get(Some(dir.path()), &slipped);
+    assert!(
+        repaired.starts_with("HTTP/1.0 303 See Other\r\n"),
+        "{repaired}"
+    );
+    assert!(repaired.contains(&location), "{repaired}");
 }
 
 #[test]

@@ -9,6 +9,7 @@ from typing import cast
 
 import pytest
 
+from codex_plugin_scanner.guard.adapters import get_adapter
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.adapters.copilot import (
     _hook_command_parts as copilot_hook_command_parts,  # pyright: ignore[reportPrivateUsage]
@@ -17,8 +18,7 @@ from codex_plugin_scanner.guard.adapters.grok import GrokHarnessAdapter
 from codex_plugin_scanner.guard.adapters.hermes import (
     _pretool_payload as hermes_pretool_payload,  # pyright: ignore[reportPrivateUsage]
 )
-from codex_plugin_scanner.guard.adapters.kimi import KimiHarnessAdapter
-from codex_plugin_scanner.guard.adapters.openclaw_support import pretool_payload as openclaw_pretool_payload
+from codex_plugin_scanner.guard.adapters.native_harness import NativeHarnessAdapter
 from codex_plugin_scanner.guard.adapters.zcode import ZCodeHarnessAdapter
 
 CommandFactory = Callable[[HarnessContext], tuple[str, ...]]
@@ -42,12 +42,25 @@ def _copilot_command(context: HarnessContext) -> tuple[str, ...]:
     return copilot_hook_command_parts(context, include_workspace=True)
 
 
+def _kimi_command(context: HarnessContext) -> tuple[str, ...]:
+    adapter = get_adapter("kimi")
+    assert isinstance(adapter, NativeHarnessAdapter)
+    return tuple(adapter._hook_argv(context))  # pyright: ignore[reportPrivateUsage]
+
+
+def openclaw_pretool_payload(*, context: HarnessContext) -> dict[str, object]:
+    prepared = get_adapter("openclaw").prepare_install(context)
+    pretool = next(change for change in prepared.files if change.path.name == "pretool-hook.json")
+    assert pretool.after is not None
+    return cast(dict[str, object], json.loads(pretool.after))
+
+
 @pytest.mark.parametrize(
     ("harness", "factory", "timeout_seconds"),
     [
         ("copilot", _copilot_command, 25),
         ("grok", GrokHarnessAdapter._hook_command_parts, 85),  # pyright: ignore[reportPrivateUsage]
-        ("kimi", KimiHarnessAdapter._hook_command_parts, 25),  # pyright: ignore[reportPrivateUsage]
+        ("kimi", _kimi_command, 25),
         ("zcode", ZCodeHarnessAdapter._hook_command_parts, 25),  # pyright: ignore[reportPrivateUsage]
     ],
 )
@@ -73,7 +86,7 @@ def test_managed_cli_hooks_use_bounded_process_bridge(
     ("harness", "factory"),
     [
         ("copilot", _copilot_command),
-        ("kimi", KimiHarnessAdapter._hook_command_parts),  # pyright: ignore[reportPrivateUsage]
+        ("kimi", _kimi_command),
         ("zcode", ZCodeHarnessAdapter._hook_command_parts),  # pyright: ignore[reportPrivateUsage]
     ],
 )

@@ -657,6 +657,8 @@ mod guard_store_wfcap_wire;
 mod guard_store_workflow_capability_vectors_tests;
 mod guard_store_write_cache;
 mod hardening;
+#[path = "adapters/harness_adapter/mod.rs"]
+mod harness_adapter;
 #[path = "adapters/harness_backup_restore.rs"]
 mod harness_backup_restore;
 #[cfg(test)]

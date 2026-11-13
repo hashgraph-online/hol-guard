@@ -1017,6 +1017,8 @@ export type GuardSettings = {
   /** Per-app overrides only; an app with no entry inherits `protection_posture`. */
   harness_postures?: Record<string, GuardProtectionPostureValue>;
   harness_watch_entered_at?: Record<string, string>;
+  /** Apps whose prompts CIGAR leaves alone; an app with no entry follows CIGAR. */
+  harness_cigar?: Record<string, "off">;
   /** Read-only: the posture each known app actually runs under. */
   harness_postures_effective?: Record<string, GuardProtectionPostureValue>;
   /** Read-only: true when managed policy blocks local Watch/Protected app overrides. */
@@ -1047,6 +1049,8 @@ export type GuardSettings = {
   context_assistance_requested?: GuardContextAssistanceConfig | null;
   /** Read-only, content-free native configuration diagnostic. */
   context_assistance_diagnostic?: string | null;
+  /** Read-only: whether CIGAR adds context after validation and managed policy. Absent on older cores. */
+  context_assistance_effective_ready?: boolean;
   update_channel?: "stable" | "alpha";
   approval_gate?: GuardApprovalGatePublicConfig;
   managed_locked_settings?: string[];
@@ -1263,6 +1267,7 @@ export type GuardUpdateStatus = {
   retry_command?: string;
   update_attempt_message?: string;
   release_channel: "stable" | "alpha";
+  update_mode: "automatic" | "ask" | "off";
 };
 
 export type GuardUpdateReconnectOptions = {

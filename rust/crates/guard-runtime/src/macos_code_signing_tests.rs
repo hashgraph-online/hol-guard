@@ -294,3 +294,25 @@ fn linked_files_and_directories_are_not_followed() {
     assert_eq!(failure, Value::Null);
     assert_eq!(checked.len(), 2, "{checked:?}");
 }
+
+#[test]
+fn tree_checks_give_the_sealed_launcher_a_bundle_sized_timeout() {
+    // The launcher's `--verify` hashes every sealed resource; 5 s was not
+    // enough on a busy Mac and failed the update as an invalid signature.
+    let directory = tempfile::tempdir().expect("tempdir");
+    let tree = tree(directory.path());
+    let mut runner = FakeRunner::new(verified, team_display);
+    let request = Request {
+        expected_team: Some("TEAMID".to_owned()),
+        ..request("tree", tree.to_str().expect("utf-8 path"))
+    };
+    assert_eq!(
+        answer(&request, &mut runner).expect("answer")["failure"],
+        Value::Null
+    );
+    assert!(!runner.calls.is_empty());
+    assert!(runner
+        .calls
+        .iter()
+        .all(|call| call.timeout == Duration::from_secs(30)));
+}

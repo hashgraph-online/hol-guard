@@ -340,6 +340,11 @@ fn table() -> Vec<(&'static str, Call, [&'static str; 3])> {
             ["review", "require-reapproval", "block"],
         ),
         (
+            "R14 recoverable delete",
+            call("delete", recoverable(12)).session(&["injection_signal_seen"]),
+            ["allow", "require-reapproval", "require-reapproval"],
+        ),
+        (
             "R14 money",
             call("pay", merge(one("payment"), json!({"money": money(5000)})))
                 .session(&["injection_signal_seen"]),

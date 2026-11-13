@@ -87,6 +87,7 @@ fn collect<'a>(template: &'a Template, found: &mut Vec<&'a MailTemplate>) {
         Template::Object(fields) => fields.iter().for_each(|f| collect(&f.value, found)),
         Template::Array(items) => items.iter().for_each(|item| collect(item, found)),
         Template::Each { item, .. } => collect(item, found),
+        Template::Keyed { value, .. } => collect(value, found),
         Template::Arg(_) | Template::Const(_) | Template::Element(_) => {}
     }
 }

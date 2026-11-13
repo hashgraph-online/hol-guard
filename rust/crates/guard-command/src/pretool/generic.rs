@@ -11,7 +11,7 @@ pub(crate) mod contained_publish;
 #[path = "generic_cursor_compaction_writes.rs"]
 mod cursor_compaction_writes;
 #[path = "generic_cursor_project_reads.rs"]
-mod cursor_project_reads;
+pub(in crate::pretool) mod cursor_project_reads;
 #[path = "env_prefix_projection.rs"]
 mod env_prefix_projection;
 pub use env_prefix_projection::bindable_setting;
@@ -288,6 +288,7 @@ pub fn evaluate_pre_tool_envelope_with_execution_context(
     context: super::PathContext<'_>,
     execution_environment: Option<&guard_contracts::GuardExecutionEnvironmentV1>,
 ) -> PreToolResultV1 {
+    let _cursor = super::cursor_session_outputs::scope(harness, context.cwd);
     let mut context =
         super::PathContext::for_session(context.home_dir, context.cwd, execution_environment);
     let (projected_payload, cline_payload);

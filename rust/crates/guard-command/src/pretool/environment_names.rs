@@ -1,20 +1,14 @@
-//! `printenv | grep -o '^PREFIX[A-Z_]*'` and the other listings of names.
+//! `awk 'BEGIN { for (name in ENVIRON) print name }'` and its reordered forms.
 //!
-//! A bare `printenv` prints every value the process was given, so it stays
-//! under review. Piped into a stage that provably prints a variable name and
-//! nothing else, it shows a list of names and no secret. Agents ask for that
-//! list while they work out which variable a service reads, and reviewing it
-//! stalls ordinary work, so the pipeline is proven here instead.
-//!
-//! The proof rests on the first filter: once a stage provably renders only
-//! names, nothing after it can print a value. Later stages may therefore
-//! reorder, count or trim the names, but may not run a program or name a
-//! file of their own. What a stage has to prove, and why a filter that keeps
-//! "the text before the `=`" cannot prove it, is set out in
-//! [`crate::environment_name_filters`].
-use crate::environment_name_filters::{
-    stage_is_plain_env_dump, stage_only_reorders_lines, stage_renders_only_variable_names,
-};
+//! Agents ask for the list of environment variable names while they work out
+//! which variable a service reads, and reviewing the question stalls ordinary
+//! work. A dump of the environment piped into a filter cannot answer it
+//! without review, because a value with a newline in it reaches the filter as
+//! a line of its own; why, and the one listing that renders no value, is set
+//! out in [`crate::environment_name_filters`]. Later stages may reorder,
+//! count or trim the names, but may not run a program or name a file of
+//! their own.
+use crate::environment_name_filters::{stage_lists_environment_names, stage_only_reorders_lines};
 use crate::CanonicalCommandV1;
 
 /// Whether a token redirects a stream. A redirect can send the names
@@ -39,10 +33,10 @@ pub(super) fn exact_safe_command(model: &CanonicalCommandV1) -> bool {
     if model.confidence != "exact" || model.path_overridden || !model.wrapper_chain.is_empty() {
         return false;
     }
-    let [dump, filter, rest @ ..] = model.segments.as_slice() else {
+    let [listing, rest @ ..] = model.segments.as_slice() else {
         return false;
     };
-    let context = &dump.execution_context;
+    let context = &listing.execution_context;
     if model.segments.iter().enumerate().any(|(index, segment)| {
         segment.path_overridden
             || !segment.wrapper_chain.is_empty()
@@ -53,11 +47,7 @@ pub(super) fn exact_safe_command(model: &CanonicalCommandV1) -> bool {
     }) {
         return false;
     }
-    let (Some(dump_name), Some(filter_name)) = (stage_name(dump), stage_name(filter)) else {
-        return false;
-    };
-    stage_is_plain_env_dump(dump_name, &dump.arguments)
-        && stage_renders_only_variable_names(filter_name, &filter.arguments)
+    stage_name(listing).is_some_and(|name| stage_lists_environment_names(name, &listing.arguments))
         && rest.iter().all(|segment| {
             stage_name(segment)
                 .is_some_and(|name| stage_only_reorders_lines(name, &segment.arguments))

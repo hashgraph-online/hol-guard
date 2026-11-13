@@ -172,6 +172,11 @@ def is_file_like(relative: str) -> bool:
 PROBES_FOR_ABSENCE = frozenset(
     {
         "gauntlet-ls-missing-git-leaf-plain-dir",
+        # Probes for an unfinished operation in a linked worktree: the lock
+        # and merge files are absent, and that absence is the whole answer.
+        "ls-linked-worktree-git-operation-state",
+        "test-linked-worktree-merge-head-in-admin-dir",
+        "check-linked-worktree-for-unfinished-merge",
         # These two measure the feature worktree's ``node_modules``, and the
         # session they were mined from had one. The fixture cannot give them
         # one yet: three other cases link the main checkout's tree in at that

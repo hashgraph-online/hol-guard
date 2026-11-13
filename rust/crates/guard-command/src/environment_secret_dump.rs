@@ -282,14 +282,8 @@ pub fn command_reads_environment_secrets_with_caller_cwd(
     home_dir: Option<&Path>,
     fallback_cwd: Option<&Path>,
 ) -> Result<bool, &'static str> {
-    let parts = split_shell_parts(command);
-    let segments = iter_shell_command_segments(&parts);
-    let piped = crate::environment_name_filters::segments_piped_into_next(&parts);
-    for (index, segment) in segments.iter().enumerate() {
-        if crate::environment_name_filters::dump_feeds_a_name_filter(&segments, &piped, index) {
-            continue;
-        }
-        if segment_reads_secrets(segment, cwd, home_dir, fallback_cwd)? {
+    for segment in iter_shell_command_segments(&split_shell_parts(command)) {
+        if segment_reads_secrets(&segment, cwd, home_dir, fallback_cwd)? {
             return Ok(true);
         }
     }

@@ -55,3 +55,15 @@ def test_grouped_adapter_sources_remain_in_native_ownership_contract(monkeypatch
         relative = module_file.relative_to(ROOT).as_posix()
         assert any(fnmatchcase(relative, pattern) for pattern in owner_globs), relative
         assert any(fnmatchcase(relative, pattern) for pattern in protected_globs), relative
+
+
+def test_native_harness_registry_matches_the_runtime_description() -> None:
+    from codex_plugin_scanner.guard.adapters.native_harness import NATIVE_HARNESSES, describe
+
+    described = {entry["harness"]: entry for entry in describe()["adapters"]}
+    assert list(described) == [harness for harness, _aliases, _launcher in NATIVE_HARNESSES]
+    for harness, aliases, launcher_name in NATIVE_HARNESSES:
+        entry = described[harness]
+        assert tuple(entry["aliases"]) == aliases
+        assert entry["launcher_name"] == launcher_name
+        assert entry["executable"] == harness

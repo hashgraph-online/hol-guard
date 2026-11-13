@@ -375,7 +375,7 @@ fn decode_base64(text: &str) -> Result<Vec<u8>, Failure> {
             bits &= (1 << count) - 1;
         }
     }
-    if (symbols + padding) % 4 != 0 || padding > 2 {
+    if !(symbols + padding).is_multiple_of(4) || padding > 2 {
         return Err(Failure::Parse);
     }
     Ok(out)

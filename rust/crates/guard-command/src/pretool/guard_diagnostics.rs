@@ -668,6 +668,7 @@ const HELP_SUBCOMMANDS: &[&str] = &[
     "doctor",
     "events",
     "exceptions",
+    "execute-bound-bash",
     "explain",
     "export",
     "extensions",
@@ -719,7 +720,13 @@ const HELP_SUBCOMMANDS: &[&str] = &[
 /// Guard's own read-only records: the local event log, the active exceptions,
 /// the remembered rules, the receipts, the decision history, the cached
 /// advisories, the artifact inventory and the local trust posture. Each prints
-/// what Guard already holds and writes nothing.
+/// what Guard already holds and, apart from the `mcp list` bookkeeping below,
+/// writes nothing.
+///
+/// `extensions list` and `mcp list` print the same inventory, one kind at a
+/// time. Before it prints, `mcp list` records which harness configs declare a
+/// remote server, the bookkeeping Guard does on its own when it next sees
+/// those configs; it changes no grant and sends nothing.
 ///
 /// The subcommands that leave the local store are not admitted: `advisories
 /// sync` and `inventory --sync` report to Guard Cloud, and `policies clear`,
@@ -738,6 +745,7 @@ fn record_inspection(words: &[&str]) -> bool {
             ["events" | "exceptions" | "receipts" | "history" | "advisories" | "inventory"
             | "policies" | "trust"]
             | ["advisories", "list"]
+            | ["extensions" | "mcp", "list"]
             | ["policies", "verify" | "integrity-status"]
             | ["trust", "status"] => true,
             ["events", "--name", value]
