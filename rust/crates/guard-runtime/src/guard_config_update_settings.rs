@@ -13,8 +13,8 @@ use crate::guard_config_update_coerce::{
     coerce_cigar_patch, coerce_editable, coerce_harness_patch, invalid, normalize_posture,
 };
 use crate::guard_config_update_harness::{
-    apply_cigar_patch, apply_harness_patch, apply_named_policy, cigar_ready, stamp_untimed_watch,
-    string_table,
+    apply_cigar_patch, apply_harness_patch, apply_named_policy, settle_untimed_watch, string_table,
+    wants_untimed_watch, WatchSettle,
 };
 use crate::guard_config_update_value::{
     get, is_str, py_eq, py_json_eq_int, py_str, remove, set, table_to_json, to_json, truthy, Table,
@@ -70,10 +70,6 @@ const HARNESS_POSTURE_LOCK_KEYS: [&str; 4] = [
     "security_level",
     "harness_postures",
 ];
-/// Update-only flag: the Watch choices in this payload's `harness_postures`
-/// get no auto-revert window. The dashboard sends it for an app that keeps
-/// CIGAR while Guard steps back, a choice meant to last.
-const HARNESS_WATCH_UNTIMED_KEY: &str = "harness_watch_untimed";
 /// The posture state the caller records audit events from.
 pub(crate) struct SettingsWrite {
     pub(crate) next: Table,
@@ -439,24 +435,20 @@ pub(crate) fn update(
         &current_or(&next, "security_level", current),
     );
     sync_posture(&mut next, current, payload, selected, now);
+    let untimed = wants_untimed_watch(payload);
     if !harness_patch.is_empty() {
-        let untimed = matches!(
-            incoming(payload, HARNESS_WATCH_UNTIMED_KEY),
-            Some(PyVal::Bool(true))
-        );
         apply_harness_patch(&mut next, &harness_patch, now, untimed);
     }
     if !cigar_patch.is_empty() {
         apply_cigar_patch(&mut next, &cigar_patch);
-        let turned_off: Vec<&str> = cigar_patch
-            .iter()
-            .filter_map(|(harness, off)| off.then_some(*harness))
-            .collect();
-        stamp_untimed_watch(&mut next, now, Some(&turned_off));
     }
-    if has(payload, "context_assistance") && !cigar_ready(&next) {
-        stamp_untimed_watch(&mut next, now, None);
-    }
+    let save = WatchSettle {
+        postures: &harness_patch,
+        untimed,
+        cigar: &cigar_patch,
+        context_changed: has(payload, "context_assistance"),
+    };
+    settle_untimed_watch(&mut next, now, &save);
     let next_json = table_to_json(&next);
     let effective = match managed {
         Some(policy) => {

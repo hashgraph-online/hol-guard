@@ -250,11 +250,23 @@ fn watch_stamp_repair_leaves_a_managed_watch_unstamped() {
     assert_eq!(computed.text, "telemetry = true\n");
 }
 
+/// A Guard home with CIGAR set up to add project context.
+fn cigar_home(name: &str) -> PathBuf {
+    let home = scratch(name).join("home");
+    fs::create_dir_all(&home).unwrap();
+    fs::write(
+        home.join(HOME_CONFIG_FILENAME),
+        "[context_assistance]\nenabled = true\n\n[context_assistance.features]\nagent_context = true\n\n[context_assistance.sources]\nworkspace_documents = true\n",
+    )
+    .unwrap();
+    home
+}
+
 /// An app that keeps only CIGAR is in Watch without a revert time; turning
 /// CIGAR off for it again starts the usual timed Watch.
 #[test]
 fn an_untimed_watch_keeps_no_stamp_and_a_timed_one_restarts_it() {
-    let home = scratch("untimed-watch").join("home");
+    let home = cigar_home("untimed-watch");
     let config = home.join(HOME_CONFIG_FILENAME);
     let response = run(
         &home,
@@ -293,7 +305,7 @@ fn an_untimed_watch_keeps_no_stamp_and_a_timed_one_restarts_it() {
 /// running, so its untimed Watch gets the usual revert window.
 #[test]
 fn turning_cigar_off_times_an_untimed_watch() {
-    let home = scratch("cigar-off-untimed").join("home");
+    let home = cigar_home("cigar-off-untimed");
     let config = home.join(HOME_CONFIG_FILENAME);
     run(
         &home,
@@ -314,7 +326,7 @@ fn turning_cigar_off_times_an_untimed_watch() {
 /// app that keeps CIGAR keeps its lasting Watch.
 #[test]
 fn turning_cigar_off_for_one_app_times_only_its_untimed_watch() {
-    let home = scratch("cigar-off-one-app").join("home");
+    let home = cigar_home("cigar-off-one-app");
     let config = home.join(HOME_CONFIG_FILENAME);
     run(
         &home,
@@ -331,6 +343,36 @@ fn turning_cigar_off_for_one_app_times_only_its_untimed_watch() {
     let stamps = stamps.split("\n[").next().unwrap();
     assert!(stamps.contains("codex ="), "{after}");
     assert!(!stamps.contains("claude-code"), "{after}");
+}
+
+/// An untimed Watch is only for an app that keeps CIGAR. An app CIGAR can't
+/// run in, or a machine where CIGAR isn't set up, gets the usual timed Watch.
+#[test]
+fn an_untimed_watch_without_cigar_is_timed() {
+    let ready = cigar_home("untimed-no-cigar-app");
+    let response = run(
+        &ready,
+        "settings",
+        r#"{"harness_postures": {"cursor": "watch", "codex": "watch"}, "harness_watch_untimed": true}"#,
+    );
+    assert_eq!(response["ok"], json!(true), "{response}");
+    let text = fs::read_to_string(ready.join(HOME_CONFIG_FILENAME)).unwrap();
+    let stamps = text
+        .split("[harness_watch_entered_at]")
+        .nth(1)
+        .unwrap_or_else(|| panic!("{text}"));
+    let stamps = stamps.split("\n[").next().unwrap();
+    assert!(stamps.contains("cursor ="), "{text}");
+    assert!(!stamps.contains("codex"), "{text}");
+
+    let unready = scratch("untimed-cigar-not-ready").join("home");
+    run(
+        &unready,
+        "settings",
+        r#"{"harness_postures": {"codex": "watch"}, "harness_watch_untimed": true}"#,
+    );
+    let text = fs::read_to_string(unready.join(HOME_CONFIG_FILENAME)).unwrap();
+    assert!(text.contains("[harness_watch_entered_at]"), "{text}");
 }
 
 #[test]

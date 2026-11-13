@@ -47,3 +47,26 @@ fn cigar_off_is_read_per_app_from_the_home_config() {
         "claude-code"
     ));
 }
+
+/// A project's settings cannot turn back on CIGAR that the person turned off
+/// for an app, but can turn it off.
+#[test]
+fn a_project_cannot_turn_cigar_back_on() {
+    let home = tempfile::tempdir().unwrap();
+    let workspace = tempfile::tempdir().unwrap();
+    std::fs::write(
+        home.path().join("config.toml"),
+        "[harness_cigar]\ncodex = \"off\"\n",
+    )
+    .unwrap();
+    std::fs::write(
+        workspace.path().join(".hol-guard.toml"),
+        "[harness_cigar]\ncodex = \"on\"\nclaude-code = \"off\"\n",
+    )
+    .unwrap();
+    let off =
+        |app| crate::guard_config_load::cigar_off_for(home.path(), Some(workspace.path()), app);
+    assert!(off("codex"));
+    assert!(off("claude-code"));
+    assert!(!off("pi"));
+}

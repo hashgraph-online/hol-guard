@@ -22,6 +22,16 @@ fn incoming_str<'a>(payload: &'a Payload, key: &str) -> Option<&'a str> {
     incoming(payload, key).and_then(PyVal::as_str)
 }
 
+/// Update-only flag: the Watch choices in this payload's `harness_postures`
+/// get no auto-revert window. The dashboard sends it for an app that keeps
+/// CIGAR while Guard steps back, a choice meant to last.
+pub(crate) fn wants_untimed_watch(payload: &Payload) -> bool {
+    matches!(
+        incoming(payload, "harness_watch_untimed"),
+        Some(PyVal::Bool(true))
+    )
+}
+
 /// `apply_harness_posture_patch`: selecting Watch always restarts its window.
 /// An untimed Watch (an app that keeps only CIGAR) gets no window, so it
 /// never turns back to Protected on its own.
@@ -65,8 +75,11 @@ pub(crate) fn apply_harness_patch(
     }
 }
 
+/// Apps whose prompt hook can carry CIGAR's project context.
+const CIGAR_APPS: [&str; 4] = ["claude-code", "codex", "pi", "omp"];
+
 /// True when the stored CIGAR settings add project context to prompts.
-pub(crate) fn cigar_ready(next: &Table) -> bool {
+fn cigar_ready(next: &Table) -> bool {
     let Some(config) = get(next, "context_assistance").map(to_json) else {
         return false;
     };
@@ -81,11 +94,31 @@ pub(crate) fn cigar_ready(next: &Table) -> bool {
         && on(&["sources", "workspace_documents"])
 }
 
-/// Once CIGAR stops adding context, an untimed Watch (kept only for CIGAR)
-/// would leave the app unchecked with nothing running, so it gets the usual
-/// revert window from now. `only` limits this to the named apps; existing
+/// What one settings save asked of per-app Guard and CIGAR.
+pub(crate) struct WatchSettle<'a> {
+    pub(crate) postures: &'a [(&'a str, Option<&'a str>)],
+    pub(crate) untimed: bool,
+    pub(crate) cigar: &'a [(&'a str, bool)],
+    pub(crate) context_changed: bool,
+}
+
+/// An untimed Watch is only for an app that keeps CIGAR. When CIGAR cannot
+/// add context there (not set up, not supported by the app, or off for it),
+/// the app would sit unchecked with nothing running, so its Watch gets the
+/// usual revert window from now. Only apps this save touched are checked,
+/// or every app when the save changed CIGAR's machine settings; existing
 /// stamps are kept.
-pub(crate) fn stamp_untimed_watch(next: &mut Table, now: &str, only: Option<&[&str]>) {
+pub(crate) fn settle_untimed_watch(next: &mut Table, now: &str, save: &WatchSettle<'_>) {
+    let mut touched: Vec<&str> = save.cigar.iter().map(|(harness, _)| *harness).collect();
+    if save.untimed {
+        touched.extend(save.postures.iter().map(|(harness, _)| *harness));
+    }
+    if touched.is_empty() && !save.context_changed {
+        return;
+    }
+    let ready = cigar_ready(next);
+    let cigar_off =
+        crate::guard_config_harness::loaded_cigar(get(next, "harness_cigar").map(to_json).as_ref());
     let stored = loaded_postures(get(next, "harness_postures").map(to_json).as_ref());
     let mut stamps = loaded_watch_stamps(
         get(next, "harness_watch_entered_at").map(to_json).as_ref(),
@@ -93,8 +126,10 @@ pub(crate) fn stamp_untimed_watch(next: &mut Table, now: &str, only: Option<&[&s
     );
     let before = stamps.len();
     for (harness, posture) in &stored {
-        let named = only.is_none_or(|names| names.contains(&harness.as_str()));
-        if named && posture == "watch" && !stamps.contains_key(harness) {
+        let named = save.context_changed || touched.contains(&harness.as_str());
+        let keeps_cigar =
+            ready && CIGAR_APPS.contains(&harness.as_str()) && !cigar_off.contains_key(harness);
+        if named && posture == "watch" && !keeps_cigar && !stamps.contains_key(harness) {
             stamps.insert(harness.clone(), now.to_owned());
         }
     }
