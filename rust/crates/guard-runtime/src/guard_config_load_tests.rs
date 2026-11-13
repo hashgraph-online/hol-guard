@@ -48,15 +48,7 @@ fn python_parity_vectors_match() {
         let outcome = load(&request_for(&root, case));
         let expected = &case["expected"];
         let matched = match (&outcome, expected.get("config")) {
-            (Ok(actual), Some(config)) => {
-                if config.get("update_mode").is_none() {
-                    let mut legacy_actual = actual.clone();
-                    legacy_actual.as_object_mut().unwrap().remove("update_mode");
-                    legacy_actual == *config
-                } else {
-                    actual == config
-                }
-            }
+            (Ok(actual), Some(config)) => actual == config,
             (Err(_), None) => true,
             _ => false,
         };
