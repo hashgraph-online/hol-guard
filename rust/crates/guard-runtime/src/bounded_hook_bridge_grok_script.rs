@@ -216,7 +216,7 @@ pub(crate) fn invocation(argument: &str, guard_home: &str) -> Option<Invocation>
         return None;
     }
     let options = &args[2..args.len() - 1];
-    if options.len() % 2 != 0 {
+    if !options.len().is_multiple_of(2) {
         return None;
     }
     let mut pairs: Vec<(&str, &str)> = Vec::new();

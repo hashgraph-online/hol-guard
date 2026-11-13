@@ -169,7 +169,7 @@ pub(crate) fn verify_pss(
 /// trailing bits are not checked.
 pub(crate) fn strict_base64_decode(value: &str) -> Option<Vec<u8>> {
     let bytes = value.as_bytes();
-    if bytes.len() % 4 != 0 {
+    if !bytes.len().is_multiple_of(4) {
         return None;
     }
     let padding = bytes.iter().rev().take_while(|byte| **byte == b'=').count();

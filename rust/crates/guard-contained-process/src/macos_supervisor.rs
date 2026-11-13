@@ -61,7 +61,7 @@ impl DescriptorTable {
             )
         };
         let entry_size = size_of::<libc::proc_fdinfo>();
-        if bytes <= 0 || bytes >= self.bytes || bytes as usize % entry_size != 0 {
+        if bytes <= 0 || bytes >= self.bytes || !(bytes as usize).is_multiple_of(entry_size) {
             return None;
         }
         Some(bytes as usize / entry_size)

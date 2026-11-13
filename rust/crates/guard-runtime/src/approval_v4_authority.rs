@@ -69,7 +69,7 @@ fn verify_enrollment_root_signature(
 fn valid_hex_string(value: &str, maximum_bytes: usize) -> bool {
     value.len() >= 2
         && value.len() <= maximum_bytes.saturating_mul(2)
-        && value.len() % 2 == 0
+        && value.len().is_multiple_of(2)
         && value
             .bytes()
             .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
@@ -127,7 +127,7 @@ fn validate_record(record: &ApprovalAuthorityV4) -> Result<(Vec<u8>, Vec<u8>), S
             return Err("native_approval_v4_authority_invalid".to_owned());
         }
     }
-    if record.credential_id.len() > 2 * 1024 || record.credential_id.len() % 2 != 0 {
+    if record.credential_id.len() > 2 * 1024 || !record.credential_id.len().is_multiple_of(2) {
         return Err("native_approval_v4_authority_invalid".to_owned());
     }
     let credential_id = decode_hex(
