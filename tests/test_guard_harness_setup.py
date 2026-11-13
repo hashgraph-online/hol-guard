@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import sys
 import urllib.error
 import urllib.request
 from pathlib import Path
@@ -195,6 +196,77 @@ def test_daemon_install_endpoint_runs_managed_install_without_cli(
     config_path = home / ".config" / "opencode" / "opencode.json"
     assert config_path.exists()
     assert "npx" not in json.dumps(payload)
+
+
+def _post_codex_repair(store: GuardStore) -> tuple[int, dict[str, object]]:
+    daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+    daemon.start()
+    try:
+        return _read_json_response(
+            _request(
+                daemon.port,
+                "/v1/harnesses/codex/repair",
+                token=daemon._server.auth_token,
+                payload={"dry_run": False},
+            )
+        )
+    finally:
+        daemon.stop()
+
+
+def test_daemon_repair_endpoint_explains_a_dead_codex_handler_it_cannot_remove(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The app shows the refusal the CLI prints, not a bare reason code.
+
+    A handler left by a deleted checkout names a Guard bridge that no longer
+    exists. Guard will not remove a handler it cannot prove it wrote, so the
+    person has to delete it; the reply must say where it is and what to do.
+    """
+
+    home = tmp_path / "home"
+    codex_home = home / ".codex"
+    codex_home.mkdir(parents=True)
+    monkeypatch.setattr(Path, "home", lambda: home)
+    dead_bridge = tmp_path / "deleted-checkout" / "src/codex_plugin_scanner/guard/adapters/codex_daemon_hook_bridge.py"
+    command = f"{sys.executable} -I {dead_bridge} '{{}}'"
+    config_path = codex_home / "config.toml"
+    original = (
+        "[features]\nhooks = true\n\n[hooks]\n"
+        f'PreToolUse = [{{ matcher = "Bash", hooks = [{{ type = "command", command = {json.dumps(command)} }}] }}]\n'
+    )
+    config_path.write_text(original, encoding="utf-8")
+
+    status, payload = _post_codex_repair(GuardStore(tmp_path / "guard-home"))
+
+    assert status == 409
+    assert payload["error"] == "codex_hook_owner_conflict"
+    assert payload["harness"] == "codex"
+    message = payload["message"]
+    assert isinstance(message, str)
+    assert str(dead_bridge) in message
+    assert str(config_path) in message
+    assert "hol-guard install codex" in message
+    assert config_path.read_text(encoding="utf-8") == original
+
+
+def test_daemon_repair_endpoint_keeps_unexplained_failures_generic(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from codex_plugin_scanner.guard.cli import install_commands
+
+    def fail(*_args: object, **_kwargs: object) -> dict[str, object]:
+        raise RuntimeError("internal state at /private/guard-home/secret-path went missing")
+
+    monkeypatch.setattr(install_commands, "apply_managed_install", fail)
+
+    status, payload = _post_codex_repair(GuardStore(tmp_path / "guard-home"))
+
+    assert status == 409
+    assert payload["error"] == "harness_repair_failed"
+    assert "secret-path" not in json.dumps(payload)
 
 
 def test_daemon_verify_endpoint_runs_safe_local_detection(tmp_path: Path) -> None:

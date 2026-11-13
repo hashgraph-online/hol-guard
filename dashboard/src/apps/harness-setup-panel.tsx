@@ -12,6 +12,7 @@ import { ActionButton, SectionLabel } from "../approval-center-primitives";
 import { formatRelativeTime, harnessDisplayName } from "../approval-center-utils";
 import { ApprovalProofModal } from "../approval-proof-modal";
 import { isGuardDemoMode } from "../guard-demo";
+import { setupActionErrorMessage } from "../harness-action-errors";
 import {
   fetchSettings,
   fetchGuardApi,
@@ -476,21 +477,6 @@ function setupActionLabel(action: GuardHarnessAction): string {
   return "disconnect";
 }
 
-function setupActionErrorMessage(error: GuardHarnessActionError): string {
-  if (error.payload?.error === "confirmation_required") {
-    return "Disconnect requires confirmation so accidental clicks cannot remove local protection.";
-  }
-  if (error.payload?.error === "approval_gate_totp_required") {
-    return "Enter a fresh authenticator code to disconnect this app.";
-  }
-  if (
-    error.payload?.error === "approval_gate_required"
-    || error.payload?.error === "approval_gate_password_required"
-  ) {
-    return "Enter your approval password to disconnect this app.";
-  }
-  return error.payload?.error ?? error.message;
-}
 function setupSuccessTitle(action: GuardHarnessAction, displayName: string): string {
   if (action === "install") return `${displayName} connected`;
   if (action === "verify") return `${displayName} test complete`;
