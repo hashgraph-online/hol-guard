@@ -14,14 +14,14 @@ them. Nothing in it sends a request.
 The language is small on purpose, so a pack from a third party can be reviewed as data:
 
 - No expressions, scripts or loops. A body is built from constants, whole arguments, one bounded copy of an
-  array argument (`each`), one field named by an argument (`keyed`), and the `rfc822` mail template described
-  below.
+  array argument (`each`), one field named by an argument (`keyed`), the `rfc822` mail template described
+  below, and a flat `form` body described below.
 - No URL outside the declared `hosts`. The scheme is always `https`, the host is fixed per action, and an argument
   can fill only whole path segments.
 - No credential headers. Header names are lowercase constants. Names containing `auth`, `cookie`, `token`,
   `secret`, `key`, `session`, `password` or `credential`, and framing headers such as `host`, `content-length`,
   `forwarded`, `proxy-*` and `x-forwarded-*`, are refused. `content-type` is refused too, because rendering
-  always sets it for the JSON body. The host adds the credential and the `user-agent`.
+  sets it from the body: JSON, or `application/x-www-form-urlencoded` for a `form` body. The host adds the credential and the `user-agent`.
 - No unbounded input. Every string has a `maxLength`, every integer a range, every array an item limit. Patterns
   must start with `^` and end with `$`, compile on the linear-time `regex` engine within 1 MiB, and are matched
   against the whole value, so an alternation such as `^a|b$` cannot match a value that only starts with `a`.
@@ -34,6 +34,22 @@ recipient domains, environment and sensitivity. An extractor is a constant, a bo
 argument, a bounded integer argument, or the domains of address arguments. Extraction is total: a value that is
 missing, malformed or out of range becomes `unknown`, never a guess. The facts feed the version 2 evaluator in
 [Cloud Action Evaluator](cloud-action-evaluator.md).
+
+An action that moves money adds `money`: the integer argument holding the amount in the currency's minor unit
+(`amount`), either a string argument holding the ISO 4217 code (`currencyArgument`, pattern-bound and at most three
+characters) or a fixed code (`currency`), and a `direction` of `out` or `in`. The code is uppercased. A missing
+amount or currency, or one that is not a three-letter code, leaves the money fact `unknown`, which a rule with
+`min_amount_minor` treats as the stricter branch. A Stripe refund takes no currency argument, so its money fact stays
+`unknown` and it is reviewed like any other money out.
+
+## Form bodies
+
+Some APIs, Stripe's among them, accept only `application/x-www-form-urlencoded` bodies. A `form` body is a flat list
+of fields, allowed only as the whole body. Each value is a string, integer or boolean argument, or a scalar
+constant of at most 256 characters; a field whose argument is absent is left out. Field names use letters, digits and
+`_ . - [ ]`, so the bracket notation such APIs read as nesting (`metadata[order]`) is available, and both names and
+values are percent-encoded with spaces as `+`, so a tab or other control character in a value travels as `%09` and
+so on. Rendering stops as soon as the body passes 1 MiB.
 
 ## Mail messages
 
@@ -227,6 +243,14 @@ movement (`send_money`, `transfer_money`, `convert_currency`) is class `pay` and
 Tools that multiplex several operations behind one name (Stripe `stripe_api_write`, Atlassian `executeRead`,
 `executeWrite` and `executeDestructive`, HubSpot `manage_*`) and Linear, whose tool names are not published, are not
 covered.
+
+`stripe.json` covers the Stripe REST API for money movement the MCP server multiplexes: reading the balance,
+refunds, payouts, transfers to connected accounts and new prices, all with form bodies. Payouts, transfers and
+prices carry money facts, so a workspace limit on `min_amount_minor` applies to the exact amount. `hubspot.json`
+covers HubSpot CRM records over REST: listing contacts, companies and deals, setting one property on up to 100 records
+in a call, archiving up to 100 records (restorable for 90 days), permanently erasing a contact under GDPR, and deleting
+a custom object type, which is a delete on a table. Salesforce REST is not packed: its API host is per org, and a
+pack's hosts are fixed.
 
 Pack authors choose reversibility from what the provider can undo. An Airtable record delete is marked permanent: the
 API has no undo, even where a plan keeps a history in the web app. Deletes that land in a trash, recycle bin or
