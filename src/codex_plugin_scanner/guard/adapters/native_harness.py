@@ -142,7 +142,7 @@ class NativeHarnessAdapter(HarnessAdapter):
     def _spec(self) -> dict[str, Any]:
         return _description(self.harness)
 
-    def _ask(self, op: str, context: HarnessContext, **fields: object) -> dict[str, Any]:
+    def _ask(self, op: str, context: HarnessContext, **fields: Any) -> dict[str, Any]:
         return ask(op, context, harness=self.harness, **fields)
 
     def _shim_names(self) -> dict[str, Any]:
