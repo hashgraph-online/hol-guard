@@ -7,6 +7,7 @@ first: a nonce or challenge one process consumes is gone for the next.
 
 from __future__ import annotations
 
+import errno
 import json
 import os
 import threading
@@ -19,13 +20,22 @@ from ..local_clis.mcp_discovery_jobs import _JOB_ID, _MAX_RUNNING_JOBS, Discover
 
 try:
     import fcntl
-except ImportError:  # pragma: no cover - the native edge runs on Unix only
+except ImportError:  # pragma: no cover - Windows has msvcrt instead
     fcntl = None
+try:
+    import msvcrt
+except ImportError:  # pragma: no cover - Unix has fcntl instead
+    msvcrt = None
 
 
 _STATE_FILENAME = "daemon-replay-state.json"
 _LOCK_FILENAME = "daemon-replay-state.lock"
 _STATE_LIMIT_BYTES = 1024 * 1024
+# How often a Windows replay retries a lock another replay holds. msvcrt has
+# no wait that lasts until release, so the lock is polled instead.
+_WINDOWS_LOCK_POLL_SECONDS = 0.01
+# The errors msvcrt.locking raises while another descriptor holds the range.
+_WINDOWS_LOCK_BUSY = frozenset({errno.EACCES, getattr(errno, "EDEADLOCK", errno.EDEADLK)})
 _PERSISTED_FIELDS = (
     "guard_cloud_connect_state",
     "package_firewall_connect_state",
@@ -62,7 +72,10 @@ class _FileLock:
     def __exit__(self, *exc: object) -> None:
         self._depth -= 1
         if self._depth == 0 and self._descriptor is not None:
-            # Closing the descriptor releases the lock.
+            # Closing the descriptor releases the lock. Windows asks for the
+            # byte-range lock to be dropped before the file is closed.
+            with suppress(OSError):
+                _unlock(self._descriptor)
             with suppress(OSError):
                 os.close(self._descriptor)
             self._descriptor = None
@@ -76,15 +89,51 @@ def _locked_descriptor(path: Path) -> int:
     they hold the shared state.
     """
 
-    if fcntl is None:
+    if fcntl is None and msvcrt is None:
         raise OSError("file locking is unavailable")
-    descriptor = os.open(path, os.O_RDWR | os.O_CREAT | getattr(os, "O_NOFOLLOW", 0), 0o600)
+    flags = os.O_RDWR | os.O_CREAT | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_BINARY", 0)
+    descriptor = os.open(path, flags, 0o600)
     try:
-        fcntl.flock(descriptor, fcntl.LOCK_EX)
+        _lock(descriptor)
     except OSError:
         os.close(descriptor)
         raise
     return descriptor
+
+
+def _lock(descriptor: int) -> None:
+    """Wait for the exclusive lock: ``flock`` on Unix, a byte range on Windows.
+
+    msvcrt locks a byte range rather than the file, so the lock file is given
+    the one byte both sides lock, and a range another replay holds is retried
+    until it is released, as ``flock`` would wait.
+    """
+
+    if fcntl is not None:
+        fcntl.flock(descriptor, fcntl.LOCK_EX)
+        return
+    if msvcrt is None:
+        raise OSError("file locking is unavailable")
+    if os.fstat(descriptor).st_size == 0:
+        _ = os.write(descriptor, b"0")
+    while True:
+        _ = os.lseek(descriptor, 0, os.SEEK_SET)
+        try:
+            msvcrt.locking(descriptor, msvcrt.LK_NBLCK, 1)
+            return
+        except OSError as error:
+            if error.errno not in _WINDOWS_LOCK_BUSY:
+                raise
+        time.sleep(_WINDOWS_LOCK_POLL_SECONDS)
+
+
+def _unlock(descriptor: int) -> None:
+    """Release a Windows byte-range lock; on Unix closing releases ``flock``."""
+
+    if fcntl is not None or msvcrt is None:
+        return
+    _ = os.lseek(descriptor, 0, os.SEEK_SET)
+    msvcrt.locking(descriptor, msvcrt.LK_UNLCK, 1)
 
 
 class _ReplayState:
