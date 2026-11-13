@@ -124,9 +124,9 @@ pub(super) fn retire_pid(
     };
     let identity = host::command_identity(caller, pid, Some(&caller.guard_home));
     if identity != Some(true) {
-        // Another command now owns the pid: nothing of ours to stop, so the
-        // caller may clear the stale state. An unreadable command fails closed.
-        return identity == Some(false);
+        // A mismatched or unreadable command does not prove the recorded
+        // process exited. Leave it untouched and preserve its state.
+        return false;
     }
     if let Some(creation_time) = observed_creation_time {
         return terminate_exact(creation_time);
@@ -496,8 +496,6 @@ fn retire_state_daemon(
         if !retired.contains(&pid) {
             retired.push(pid);
         }
-    } else if host::command_identity(caller, pid, Some(home)) == Some(false) {
-        records::clear_state_if_current(home, state);
     }
 }
 
