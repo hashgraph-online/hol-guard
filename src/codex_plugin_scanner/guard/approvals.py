@@ -1081,7 +1081,7 @@ def _live_hook_verification(
                 verified[harness] = proven
                 continue
             if harness == "grok":
-                from .adapters.grok import grok_runtime_hooks_verified
+                from .cli.native_install_checks import grok_runtime_hooks_verified
 
                 verified[harness] = grok_runtime_hooks_verified(context)
                 continue

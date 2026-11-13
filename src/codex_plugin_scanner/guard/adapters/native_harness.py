@@ -1,4 +1,5 @@
-"""Harness adapters the native runtime answers: Devin, Antigravity, Gemini, Kimi, OpenClaw, Paseo and Muse.
+"""Harness adapters the native runtime answers: Devin, Antigravity, Gemini, Kimi, OpenClaw, Paseo, Muse,
+Grok and ZCode.
 
 The ``harness_adapter`` runner-authority kind owns their paths, detection,
 command lookup, install and uninstall plans, manifests, launch environment,
@@ -14,7 +15,9 @@ from __future__ import annotations
 import base64
 import json
 import os
+import shutil
 import sys
+from collections.abc import Mapping
 from dataclasses import replace
 from datetime import datetime, timezone
 from functools import cache
@@ -37,6 +40,8 @@ NATIVE_HARNESSES: tuple[tuple[str, tuple[str, ...], str], ...] = (
     ("openclaw", (), ""),
     ("paseo", (), ""),
     ("muse", ("muse", "muse-code"), "muse"),
+    ("grok", ("grok-build", "grok-build-cli", "xai-grok"), "grok"),
+    ("zcode", ("zcode", "zai", "z-code", "zai-zcode"), "zcode"),
 )
 
 
@@ -83,6 +88,7 @@ def wire_context(context: HarnessContext) -> dict[str, object]:
         "cwd": cwd,
         "user_home": str(Path.home()),
         "env": _environment(),
+        "executable_overrides": dict(context.executable_overrides),
     }
 
 
@@ -106,6 +112,8 @@ def ask(
             raise ValueError(str(answer["refusal"]))
         if "os_error" in answer:
             raise OSError(str(answer["os_error"]))
+        if "not_found" in answer:
+            raise FileNotFoundError(str(answer["not_found"]))
         if "integrity" in answer:
             from ..codex_hook_recovery import _error
 
@@ -183,6 +191,33 @@ class NativeHarnessAdapter(HarnessAdapter):
             detection, home_dir=context.home_dir, workspace_dir=context.workspace_dir
         )
 
+    def launch_command(self, context: HarnessContext, passthrough_args: list[str]) -> list[str]:
+        if not self._spec.get("trusted_launcher"):
+            return super().launch_command(context, passthrough_args)
+        return [str(part) for part in self._ask("launch_command", context, args=passthrough_args)["argv"]]
+
+    def preview_launch_commands(self, context: HarnessContext, passthrough_args: list[str]) -> tuple[list[str], ...]:
+        if not self._spec.get("trusted_launcher"):
+            return super().preview_launch_commands(context, passthrough_args)
+        # Resolves without registering an explicit path.
+        return ([str(part) for part in self._ask("preview_launch", context, args=passthrough_args)["argv"]],)
+
+    def prepare_launch_environment(self, context: HarnessContext, inherited: Mapping[str, str]) -> dict[str, str]:
+        if not self._spec.get("trusted_launcher"):
+            return super().prepare_launch_environment(context, inherited)
+        answer = self._ask(
+            "sanitize_env",
+            context,
+            path_value=inherited.get("PATH"),
+            grok_home=inherited.get("GROK_HOME"),
+            env_keys=sorted(inherited),
+        )
+        dropped = {str(key) for key in answer["drop"]}
+        environment = {key: value for key, value in inherited.items() if key not in dropped}
+        environment["PATH"] = _text(answer, "path")
+        environment.update(self.launch_environment(context))
+        return environment
+
     def launch_environment(self, context: HarnessContext) -> dict[str, str]:
         if not self._spec.get("dynamic"):
             return {}
@@ -245,6 +280,8 @@ class NativeHarnessAdapter(HarnessAdapter):
         fields: dict[str, object] = {"shim": json.dumps(shim.manifest)}
         if self._spec.get("hook") is not None:
             fields["hook_argv"] = self._hook_argv(context, hook_files)
+        if self._spec.get("retired_hooks"):
+            fields["retired_commands"] = self._retired_hooks(context, fields["hook_argv"])
         answer = self._ask("prepare_install", context, **fields)
         files: list[TransitionFile] = []
         for change in answer["files"]:
@@ -259,6 +296,16 @@ class NativeHarnessAdapter(HarnessAdapter):
             planned.payload()
             files.append(planned)
         return PreparedHarnessInstall((*shim.files, *hook_files, *files), json.loads(_text(answer, "manifest")))
+
+    def _retired_hooks(self, context: HarnessContext, hook_argv: object) -> list[str]:
+        """Generated hook clients the config names whose client is gone; the CLI's validator decides."""
+        from ..cli.grok_hook_validation import is_missing_grok_hook_command
+
+        answer = self._ask("hook_candidates", context, hook_argv=hook_argv)
+        hook_command = _text(answer, "hook_command")
+        return [
+            str(command) for command in answer["commands"] if is_missing_grok_hook_command(str(command), hook_command)
+        ]
 
     def preflight_management(self, context: HarnessContext, *, operation: str) -> None:
         if operation == "install" and self._spec.get("install") == "delegated":
@@ -276,6 +323,7 @@ class NativeHarnessAdapter(HarnessAdapter):
         return self.prepare_install(context).publish(context.guard_home)
 
     def uninstall(self, context: HarnessContext) -> dict[str, object]:
+        from ...safe_output import write_text_atomic_no_follow
         from ..codex_hook_integrity import atomic_write_text
         from ..shims import remove_guard_shim
 
@@ -287,10 +335,17 @@ class NativeHarnessAdapter(HarnessAdapter):
         shim = remove_guard_shim(self.harness, context, **self._shim_names())
         for write in plan["writes"]:
             target = Path(write["path"])
-            if write.get("mode") is None:
+            if write.get("raw"):
+                target.write_bytes(write["text"].encode("utf-8"))
+            elif write.get("no_follow"):
+                write_text_atomic_no_follow(target, write["text"])
+            elif write.get("mode") is None:
                 target.write_text(write["text"], encoding="utf-8")
             else:
                 atomic_write_text(target, write["text"], mode=write["mode"])
+        for copy in plan.get("copies", ()):
+            shutil.copy2(copy["from"], copy["to"])
+            Path(copy["from"]).unlink(missing_ok=True)
         removed: list[str] = []
         for value in plan["deletes"]:
             Path(value).unlink(missing_ok=True)

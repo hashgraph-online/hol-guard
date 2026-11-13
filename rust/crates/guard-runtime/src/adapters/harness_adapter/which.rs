@@ -98,9 +98,14 @@ pub(crate) fn which(ctx: &Ctx, command: &str) -> Option<String> {
 }
 
 /// `_which_from_user_directories`: a CLI installed outside the caller's PATH.
-fn which_from_user_directories(ctx: &Ctx, command: &str, home: &Path, extra: &[PathBuf]) -> bool {
+pub(crate) fn user_directory_command(
+    ctx: &Ctx,
+    command: &str,
+    home: &Path,
+    extra: &[PathBuf],
+) -> Option<String> {
     if ctx.windows || command.contains('/') {
-        return false;
+        return None;
     }
     let request = json!({
         "command": command,
@@ -108,9 +113,13 @@ fn which_from_user_directories(ctx: &Ctx, command: &str, home: &Path, extra: &[P
         "path": ctx.env("PATH"),
         "extra": extra.iter().map(|directory| path_text(directory)).collect::<Vec<_>>(),
     });
-    crate::user_command_lookup::dispatch(&request)
-        .ok()
-        .is_some_and(|answer| matches!(answer.get("path"), Some(Value::String(_))))
+    match crate::user_command_lookup::dispatch(&request)
+        .ok()?
+        .get("path")
+    {
+        Some(Value::String(path)) => Some(path.clone()),
+        _ => None,
+    }
 }
 
 /// `_command_available`; `home` defaults to the caller's own home.
@@ -121,7 +130,7 @@ pub(crate) fn command_available(
     extra: &[PathBuf],
 ) -> bool {
     which(ctx, command).is_some()
-        || which_from_user_directories(ctx, command, home.unwrap_or(&ctx.user_home), extra)
+        || user_directory_command(ctx, command, home.unwrap_or(&ctx.user_home), extra).is_some()
 }
 
 /// `_resolve_command`: PATH first, then the first executable candidate.

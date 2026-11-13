@@ -7,7 +7,7 @@ import sqlite3
 from collections.abc import Callable
 from pathlib import Path
 
-from ..adapters import copilot, hermes, zcode
+from ..adapters import copilot, hermes
 from ..adapters.base import HarnessContext
 from ..adapters.bounded_cli_hook_bridge import _render_bounded_hook_script, bounded_hook_script_path
 from ..store import GuardStore
@@ -35,7 +35,7 @@ def _native_hook_timeout(harness: str) -> Callable[[HarnessContext], float]:
 # wait, a callable that recomputes the same value for this context. Rendering a
 # constant for such a harness would shorten its approval wait on every update.
 _BOUNDED_HOOK_TIMEOUTS: tuple[tuple[str, str, float | Callable[[HarnessContext], float]], ...] = (
-    ("zcode", "ZCode", zcode._GUARD_HOOK_INTERNAL_TIMEOUT_SECONDS),
+    ("zcode", "ZCode", _native_hook_timeout("zcode")),
     ("devin", "Devin", _native_hook_timeout("devin")),
     ("kimi", "Kimi", _native_hook_timeout("kimi")),
     ("copilot", "Copilot", copilot._GUARD_HOOK_INTERNAL_TIMEOUT_SECONDS),

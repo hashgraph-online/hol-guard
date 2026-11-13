@@ -135,16 +135,27 @@ def origin_harness_env(harness: str) -> dict[str, str]:
     return {ORIGIN_HARNESS_ENV: slug}
 
 
-def _zcode_env_markers() -> frozenset[str]:
-    from ..adapters.zcode_config import ZCODE_ENV_HINTS
+_ZCODE_BUNDLE_IDENTIFIER = "dev.zcode.app"
+_ZCODE_ENV_HINTS = frozenset(
+    {
+        "ZCODE_BASE_URL",
+        "ZCODE_APP_VERSION",
+        "ZCODE_ENV",
+        "ZCODE_RUNTIME_ENV",
+        "ZCODE_PROCESS_LABEL",
+        "ZCODE_RG_BINARY",
+        "ZAI_OAUTH_ORIGIN",
+        "ZAI_OAUTH_CLIENT_ID",
+    }
+)
 
-    return frozenset(ZCODE_ENV_HINTS)
+
+def _zcode_env_markers() -> frozenset[str]:
+    return _ZCODE_ENV_HINTS
 
 
 def _zcode_bundle_identifier() -> str:
-    from ..adapters.zcode_config import ZCODE_BUNDLE_IDENTIFIER
-
-    return ZCODE_BUNDLE_IDENTIFIER
+    return _ZCODE_BUNDLE_IDENTIFIER
 
 
 def _env_marker_present(env: Mapping[str, str], markers: frozenset[str]) -> bool:

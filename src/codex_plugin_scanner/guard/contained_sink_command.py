@@ -15,7 +15,7 @@ import sys
 from collections.abc import Mapping
 from pathlib import Path
 
-from ..codex_hook_launch_runtime import isolated_guard_cli_command
+from .codex_hook_launch_runtime import isolated_guard_cli_command
 
 
 def contained_sink_command_prefix(
@@ -25,14 +25,14 @@ def contained_sink_command_prefix(
     return _sink_command_prefix(
         {
             "python_executable": python_executable or sys.executable,
-            "package_root": str(package_root or Path(__file__).resolve().parents[3]),
+            "package_root": str(package_root or Path(__file__).resolve().parents[2]),
         }
     )
 
 
 def _sink_command_prefix(config: Mapping[str, object]) -> tuple[str, ...]:
     if getattr(sys, "frozen", False):
-        from ..stable_guard_cli import resolve_frozen_guard_cli
+        from .stable_guard_cli import resolve_frozen_guard_cli
 
         return (resolve_frozen_guard_cli(),)
     package_root = Path(str(config["package_root"]))
