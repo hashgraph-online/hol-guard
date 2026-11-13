@@ -173,3 +173,10 @@ The script reads `NATIVE_OFFLINE_PREVIOUS_SHA` from `ci.yml` and builds that cli
 `~/.cache/hol-guard/native-offline-previous/<sha>`. Every later run only rebuilds the current
 checkout incrementally, then runs the test with the same environment CI uses. Set
 `SKIP_CURRENT_BUILD=1` to reuse the current binaries as they are.
+
+The script pins CI's Rust toolchain (`1.89.0` from `.github/actions/setup-rust`), because older
+local defaults cannot build the workspace. CI runs this test on Linux. On a loaded macOS
+machine (2026-11-13), the script built both clients: the prior one in 11.5 minutes, once, and
+the current one in 24 minutes cold. The test then timed out after 180 seconds in the
+prior-client step, which takes seconds in CI. If that happens, run the script on a Linux host
+or container, or rely on the CI job.

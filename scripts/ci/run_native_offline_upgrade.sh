@@ -15,6 +15,7 @@
 #   HOL_GUARD_OFFLINE_CACHE_DIR  where the prior client lives
 #                                (default: ${XDG_CACHE_HOME:-$HOME/.cache}/hol-guard/native-offline-previous)
 #   SKIP_CURRENT_BUILD=1         reuse rust/target/release and the current projections as they are
+#   RUSTUP_TOOLCHAIN             toolchain to build with (default: CI's pinned version)
 set -euo pipefail
 
 root=$(git rev-parse --show-toplevel)
@@ -31,7 +32,10 @@ if [[ ! "$previous_sha" =~ ^[0-9a-f]{40}$ ]]; then
   exit 1
 fi
 
-# Same profile overrides as ci.yml, so local evaluators match CI's.
+# CI's pinned toolchain (.github/actions/setup-rust) and profile overrides (ci.yml),
+# so local evaluators match CI's. Override with RUSTUP_TOOLCHAIN if needed.
+toolchain=$(sed -n '/^  toolchain:/,/default:/s/^ *default: *"\([0-9.]*\)" *$/\1/p' .github/actions/setup-rust/action.yml)
+export RUSTUP_TOOLCHAIN=${RUSTUP_TOOLCHAIN:-${toolchain:?could not read the pinned toolchain}}
 export CARGO_PROFILE_RELEASE_LTO=false
 export CARGO_PROFILE_RELEASE_CODEGEN_UNITS=16
 
