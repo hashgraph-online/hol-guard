@@ -357,8 +357,12 @@ function appModesSummary(settings, harness) {
   return appModes(settings, harness).cigar ? "Guard and CIGAR are both on" : "Guard is on";
 }
 function AppModesPanel(props) {
-  const apps = [{ harness: props.harness, active: props.managed }];
+  const apps = reactExports.useMemo(() => [{ harness: props.harness, active: props.managed }], [props.harness, props.managed]);
   const posture = useFleetAppPosture({ apps, onChanged: props.onChanged });
+  return /* @__PURE__ */ jsxRuntimeExports.jsx(AppModesPanelView, { ...props, posture });
+}
+function AppModesPanelView(props) {
+  const { posture } = props;
   const displayName = harnessDisplayName(props.harness);
   const control = posture.control(props.harness);
   const settings = posture.settings;

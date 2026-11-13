@@ -1,6 +1,7 @@
+import { useMemo } from "react";
 import { harnessDisplayName } from "../approval-center-utils";
 import { appModes, appModesNote } from "../fleet-app-modes";
-import { useFleetAppPosture } from "../fleet-app-protection";
+import { useFleetAppPosture, type FleetAppPosture } from "../fleet-app-protection";
 import type { GuardSettings } from "../guard-types";
 
 type AppModesPanelProps = {
@@ -29,8 +30,14 @@ export function appModesSummary(settings: GuardSettings, harness: string): strin
  * come from the shared posture hook.
  */
 export function AppModesPanel(props: AppModesPanelProps) {
-  const apps = [{ harness: props.harness, active: props.managed }];
+  const apps = useMemo(() => [{ harness: props.harness, active: props.managed }], [props.harness, props.managed]);
   const posture = useFleetAppPosture({ apps, onChanged: props.onChanged });
+  return <AppModesPanelView {...props} posture={posture} />;
+}
+
+/** The panel for a given posture state, separate from loading so each state can be tested. */
+export function AppModesPanelView(props: AppModesPanelProps & { posture: FleetAppPosture }) {
+  const { posture } = props;
   const displayName = harnessDisplayName(props.harness);
   const control = posture.control(props.harness);
   const settings = posture.settings;

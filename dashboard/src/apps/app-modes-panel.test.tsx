@@ -1,5 +1,6 @@
 import { renderToStaticMarkup } from "react-dom/server";
-import { AppModesPanel, appModesSummary } from "./app-modes-panel";
+import { AppModesPanel, AppModesPanelView, appModesSummary } from "./app-modes-panel";
+import type { FleetAppPosture } from "../fleet-app-protection";
 import type { GuardContextAssistanceConfig, GuardSettings } from "../guard-types";
 
 function assert(condition: boolean, message: string): void {
@@ -57,5 +58,33 @@ const managed = renderToStaticMarkup(
 );
 assert(!managed.includes("Set up Guard for"), "a managed app does not offer setup");
 assert(managed.includes("guard-skeleton"), "a managed app shows a skeleton while settings load");
+
+function loaded(current: GuardSettings, hasSwitches: boolean): FleetAppPosture {
+  return {
+    kind: "ready",
+    rowFor: () => undefined,
+    control: () => (hasSwitches ? <span data-testid="app-mode-switches" /> : null),
+    watchConfirm: () => null,
+    summary: null,
+    settings: current,
+    footer: null,
+  } as unknown as FleetAppPosture;
+}
+
+const ready = renderToStaticMarkup(
+  <AppModesPanelView harness="codex" managed onSetUp={() => undefined} posture={loaded(settings({ harness_cigar: { codex: "off" } }), true)} />
+);
+assert(ready.includes('data-testid="app-mode-switches"'), "a loaded managed app shows its switches");
+assert(ready.includes('data-testid="app-modes-summary"'), "a loaded managed app names what runs");
+assert(ready.includes("Guard only"), "the summary follows the saved settings");
+assert(!ready.includes("guard-skeleton"), "no skeleton once loaded");
+assert(!ready.includes("Set up Guard for"), "a loaded managed app does not offer setup");
+
+const notInterceptedYet = renderToStaticMarkup(
+  <AppModesPanelView harness="codex" managed={false} onSetUp={() => undefined} posture={loaded(settings(), false)} />
+);
+assert(!notInterceptedYet.includes('data-testid="app-mode-switches"'), "a loaded unmanaged app shows no switches");
+assert(!notInterceptedYet.includes('data-testid="app-modes-summary"'), "a loaded unmanaged app claims nothing runs");
+assert(notInterceptedYet.includes("Set up Guard for"), "a loaded unmanaged app offers setup");
 
 console.log("app-modes-panel tests passed");
