@@ -50,7 +50,19 @@ fn lookup<'a>(node: &'a Value, path: &str) -> Option<&'a Value> {
         return Some(node);
     }
     path.split('.')
-        .try_fold(node, |current, key| current.as_object()?.get(key))
+        .try_fold(node, |current, key| match current {
+            Value::Object(map) => map.get(key),
+            Value::Array(items) => items.get(array_index(key)?),
+            _ => None,
+        })
+}
+
+/// A path step into an array: a canonical decimal index (`0`, `12`, never `01`).
+fn array_index(key: &str) -> Option<usize> {
+    let canonical = key.len() <= 4
+        && key.bytes().all(|b| b.is_ascii_digit())
+        && (key == "0" || !key.starts_with('0'));
+    canonical.then(|| key.parse().ok()).flatten()
 }
 
 fn escape(key: &str) -> String {
