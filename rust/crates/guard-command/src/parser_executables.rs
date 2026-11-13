@@ -234,14 +234,20 @@ fn sed_exec_only_found_files(child: &[String]) -> bool {
     let mut index = 1; // the sed/gsed executable
     let mut named_script = false;
     let mut positional_script = false;
+    let mut detached_suffix = false;
+    let mut quiet = false;
     while let Some(argument) = child.get(index) {
         match argument.as_str() {
             "-i" => {
-                // BSD sed accepts an empty backup suffix after -i.
+                // BSD sed accepts an empty backup suffix after -i. GNU sed
+                // reads that word as the script instead, so every later word
+                // is a file and the empty script prints nothing under -n.
                 if child.get(index + 1).is_some_and(String::is_empty) {
+                    detached_suffix = true;
                     index += 1;
                 }
             }
+            "-n" => quiet = true,
             "-e" | "--expression" => {
                 // GNU sed may permute a later -e option ahead of an earlier
                 // positional word, turning that earlier word into a file.
@@ -254,8 +260,11 @@ fn sed_exec_only_found_files(child: &[String]) -> bool {
                 }
                 named_script = true;
             }
-            "-n" | "-E" | "-r" | "-s" | "-u" | "-z" => {}
+            "-E" | "-r" | "-s" | "-u" | "-z" => {}
             "--" => {
+                if detached_suffix && quiet {
+                    return false;
+                }
                 let trailing = &child[index + 1..];
                 return if named_script || positional_script {
                     trailing.is_empty()
@@ -288,5 +297,7 @@ fn sed_exec_only_found_files(child: &[String]) -> bool {
         }
         index += 1;
     }
-    named_script || positional_script
+    // Read as GNU sed reads it, `-n -i ''` empties every file it names,
+    // including a word BSD sed would take as the script.
+    !(detached_suffix && quiet) && (named_script || positional_script)
 }

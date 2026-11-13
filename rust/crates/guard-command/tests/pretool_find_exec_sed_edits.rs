@@ -74,6 +74,8 @@ fn an_edit_that_would_not_fit_the_sandbox_keeps_its_review() {
         // Extra file operands must not slip past the workspace-wide wipe
         // screen merely because the find walk itself is narrow.
         "find tests -name '*.py' -type f -exec sed -i 'd' ./* {} +",
+        "find tests -name '*.py' -type f -exec sed -n -i '' ./* {} +",
+        "find tests -name '*.py' -type f -exec sed -i '' -n 's/a/b/p' {} +",
         "find tests -name '*.py' -type f -exec sed -i 's/a/b/' ../* {} +",
         "find tests -name '*.py' -type f -exec sed -i 's/a/b/' tests/other.py {} +",
         "find tests -name '*.py' -type f -exec sed -i -e 's/a/b/' README.md {} +",
