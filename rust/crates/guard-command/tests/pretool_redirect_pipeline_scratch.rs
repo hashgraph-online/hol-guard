@@ -33,9 +33,9 @@ fn a_pipeline_may_save_its_output_to_a_scratch_file() {
 }
 
 /// Only one pipeline whose last command alone writes a scratch file takes
-/// that answer. Another separator, an earlier write, a command that can
-/// create a link, an interpreter, a substitution, or a target outside the
-/// scratch roots keeps the review it had.
+/// that answer. Another separator, an earlier write, a command that is not a
+/// plain stream filter, a substitution, or a target outside the scratch roots
+/// keeps the review it had.
 #[test]
 fn other_pipeline_writes_keep_their_review() {
     let session = session("redirect-pipeline-scratch-negative");
@@ -50,6 +50,11 @@ fn other_pipeline_writes_keep_their_review() {
         format!("echo aGk= |& base64 -d > {target}"),
         format!("echo aGk= | base64 -d > {target} | cat > /tmp/hg-pipe-neg-{tag}-b.txt"),
         format!("ln -s {home_profile} {target} | cat > {target}"),
+        format!("git checkout -q other | cat > {target}"),
+        format!("gh repo clone o/r /tmp/hg-pipe-neg-{tag} | cat > {target}"),
+        format!("echo x | awk '{{system(\"true\")}}' > {target}"),
+        format!("echo {target} | xargs touch | cat > {target}"),
+        format!("echo x | base64 | sed -n p > {target}"),
         format!("echo x | tee {home_profile} | cat > {target}"),
         format!("echo aGk= | base64 -d > {home_profile}"),
         format!("echo aGk= | base64 -d > /tmp/.hg-pipe-neg-{tag}"),

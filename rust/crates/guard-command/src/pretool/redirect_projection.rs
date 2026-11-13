@@ -88,9 +88,7 @@ pub(super) fn project(
     // so another step could run before the shell opens the file.
     let mut separated = false;
     let mut late_write = false;
-    // Whether anything but a plain pipe separated the commands, or any
-    // separator followed a file write: the text is not one pipeline whose
-    // last command alone writes.
+    // Set once the text is not one pipeline whose last command alone writes.
     let mut beyond_pipeline = false;
     let mut index = 0usize;
     while index < chars.len() {
@@ -116,8 +114,9 @@ pub(super) fn project(
                 } else if current == '\\' {
                     escaped = true;
                 }
-                separated |= substitution(&chars, index);
-                beyond_pipeline |= substitution(&chars, index);
+                let opens = substitution(&chars, index);
+                separated |= opens;
+                beyond_pipeline |= opens;
                 out.push(current);
                 index += 1;
                 continue;
@@ -134,7 +133,8 @@ pub(super) fn project(
                 || substitution(&chars, index));
         separated |= separates;
         stdin_separated |= saw_stdin_data && separates;
-        beyond_pipeline |= separates && (!targets.is_empty() || !plain_pipe(&chars, index));
+        beyond_pipeline |= separates
+            && (!targets.is_empty() || !super::super::chain_temporary::plain_pipe(&chars, index));
         match current {
             '\'' => quote = Quote::Single,
             '"' => quote = Quote::Double,
@@ -326,13 +326,6 @@ fn projected_model(command: &str) -> Option<crate::CanonicalCommandV1> {
         rounds += 1;
     }
     Some(model)
-}
-
-/// A single `|`: not `||`, and not `|&`, which also pipes standard error.
-fn plain_pipe(chars: &[char], index: usize) -> bool {
-    chars[index] == '|'
-        && !matches!(chars.get(index + 1), Some('|' | '&'))
-        && (index == 0 || chars[index - 1] != '|')
 }
 
 /// `$(` or a backquote: a command substitution runs before the redirect

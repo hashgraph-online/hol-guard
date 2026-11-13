@@ -87,16 +87,52 @@ pub(super) fn plain_chain(model: &CanonicalCommandV1, extra: &[&str]) -> bool {
         })
 }
 
-/// Programs that can create a link, rename a file or unpack an archive.
-const LINK_MAKERS: &[&str] = &[
-    "bsdtar", "cp", "cpio", "ditto", "install", "link", "ln", "mv", "rsync", "tar", "unzip",
+/// Stream filters that read input or named files and print to standard
+/// output. None can run another program, create a link or rename a file.
+const PIPE_FILTERS: &[&str] = &[
+    "base64",
+    "cat",
+    "column",
+    "cut",
+    "egrep",
+    "fgrep",
+    "fmt",
+    "fold",
+    "grep",
+    "head",
+    "hexdump",
+    "jq",
+    "md5",
+    "md5sum",
+    "nl",
+    "od",
+    "paste",
+    "rev",
+    "rg",
+    "sha1sum",
+    "sha256sum",
+    "shasum",
+    "sort",
+    "tail",
+    "tr",
+    "uniq",
+    "wc",
+    "xxd",
 ];
 
+/// Commands that may only start the pipeline: they print text or fetched
+/// content. `gh` qualifies only for `gh api`, which never touches the tree.
+fn pipe_source(executable: &str, arguments: &[String]) -> bool {
+    matches!(executable, "curl" | "echo" | "printf")
+        || (executable == "gh" && arguments.first().is_some_and(|value| value == "api"))
+}
+
 /// One pipeline, `a | b | c`, whose last command alone carries the file
-/// write. The shell opens that file while the earlier commands run, so only a
+/// write. The shell opens that file while the earlier commands run, so a
 /// command that creates a link could swap the leaf the target check proved.
-/// None of these may run here, and the pipeline without its redirect still has
-/// to earn its own allow before the write is allowed.
+/// Every command must be a known stream filter, and only the first may be a
+/// fetch or print source. The pipeline without its redirect still has to earn
+/// its own allow before the write is allowed.
 pub(super) fn final_pipeline_write(model: &CanonicalCommandV1) -> bool {
     let Some(first) = model.segments.first() else {
         return false;
@@ -108,13 +144,20 @@ pub(super) fn final_pipeline_write(model: &CanonicalCommandV1) -> bool {
             segment.pipeline_index == index
                 && segment.execution_context == first.execution_context
                 && segment.wrapper_chain.is_empty()
+                && segment.environment_names.is_empty()
                 && !segment.path_overridden
-                && segment
-                    .executable
-                    .as_deref()
-                    .and_then(|executable| executable.rsplit(['/', '\\']).next())
-                    .is_some_and(|name| !LINK_MAKERS.contains(&name))
+                && segment.executable.as_deref().is_some_and(|executable| {
+                    PIPE_FILTERS.contains(&executable)
+                        || (index == 0 && pipe_source(executable, &segment.arguments))
+                })
         })
+}
+
+/// A single `|`: not `||`, and not `|&`, which also pipes standard error.
+pub(super) fn plain_pipe(chars: &[char], index: usize) -> bool {
+    chars[index] == '|'
+        && !matches!(chars.get(index + 1), Some('|' | '&'))
+        && (index == 0 || chars[index - 1] != '|')
 }
 
 /// An absolute temporary path that is absent or a regular single-link file
