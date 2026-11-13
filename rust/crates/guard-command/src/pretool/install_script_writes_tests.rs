@@ -48,6 +48,21 @@ fn install_scripts_added_to_a_manifest_are_found() {
     assert!(adds(json!({
         "input": "*** Begin Patch\n[package.json]\nPUT 3\n    \"postinstall\": \"node setup.js\",\n*** End Patch"
     })));
+    // A script that starts like a version range is still a script.
+    assert!(adds(json!({
+        "file_path": "/w/project/package.json",
+        "old_string": "\"test\": \"vitest\"",
+        "new_string": "\"test\": \"vitest\",\n\"postinstall\": \">/dev/null; node setup.js\""
+    })));
+    assert!(adds(json!({
+        "file_path": "/w/project/package.json",
+        "old_string": "\"test\": \"vitest\"",
+        "new_string": "\"test\": \"vitest\",\n\"install\": \"1; node setup.js\""
+    })));
+    // Rows after `*** Move to:` land in the destination manifest.
+    assert!(adds(json!({
+        "input": "*** Begin Patch\n*** Update File: template.json\n*** Move to: package.json\n@@\n   \"scripts\": {\n+    \"postinstall\": \"node setup.js\",\n*** End Patch"
+    })));
 }
 
 #[test]

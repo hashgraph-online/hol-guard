@@ -18,10 +18,19 @@ static INSTALL_SCRIPT: LazyLock<Regex> = LazyLock::new(|| {
         .expect("install script pattern compiles")
 });
 /// A dependency's version range or source: `"install": "^0.13.0"` under
-/// `dependencies` names a package, not a script.
+/// `dependencies` names a package, not a script. The whole value must read
+/// as a range, tag or source with no shell syntax, so a script such as
+/// `>/dev/null; node setup.js` is not mistaken for one.
 static DEPENDENCY_SPEC: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r"^\s*(?:[\^~<>=*]|\d|v\d|(?:npm|workspace|file|link|git|git\+[a-z]+|github|https?):|(?:latest|next)\s*$)")
-        .expect("dependency spec pattern compiles")
+    Regex::new(concat!(
+        r"^\s*(?:",
+        r"(?:[\^~]|[<>]=?|=)?\s*v?\d+(?:\.[\dx*]+){0,2}(?:-[0-9A-Za-z.-]+)?",
+        r"(?:\s*(?:\|\||-|[<>]=?)\s*v?\d+(?:\.[\dx*]+){0,2}(?:-[0-9A-Za-z.-]+)?)*",
+        r"|\*|latest|next",
+        r"|(?:npm|workspace|file|link|github|git(?:\+[a-z]+)?|https?):[^\s;&|`$<>()]+",
+        r")\s*$",
+    ))
+    .expect("dependency spec pattern compiles")
 });
 static PATCH_FILE: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r"^\*\*\* (?:Add|Update) File:\s*(?P<path>.+?)\s*$")
@@ -182,6 +191,13 @@ fn patch_adds(patch: &str, cwd: Option<&str>) -> bool {
             close(&target, &mut removed, &mut added);
             target = manifest(&path).then_some(path);
             (hashline, in_put) = (is_hashline, false);
+            continue;
+        }
+        // The hunks after `*** Move to:` are written to the destination.
+        if let Some(destination) = line.strip_prefix("*** Move to:") {
+            let destination = destination.trim();
+            close(&target, &mut removed, &mut added);
+            target = manifest(destination).then(|| destination.to_owned());
             continue;
         }
         if line.starts_with("*** ") {

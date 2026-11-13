@@ -30,7 +30,7 @@ const COUNTRY_SECOND_LEVEL: [&str; 9] = ["co", "com", "org", "net", "ac", "gov",
 
 /// Hosting domains that hand each customer their own subdomain. Two of
 /// their subdomains belong to different owners, so each is its own site.
-const SHARED_HOSTING: [&str; 22] = [
+const SHARED_HOSTING: [&str; 21] = [
     "github.io",
     "gitlab.io",
     "vercel.app",
@@ -44,7 +44,6 @@ const SHARED_HOSTING: [&str; 22] = [
     "web.app",
     "firebaseapp.com",
     "blogspot.com",
-    "amazonaws.com",
     "onrender.com",
     "fly.dev",
     "glitch.me",
@@ -100,8 +99,14 @@ fn local(host: &Host<String>) -> bool {
 
 /// The site a domain belongs to: its registered name, one label under a
 /// country's second level (`shop.co.uk`) or under a shared hosting domain
-/// (`project.github.io`), and otherwise its last two labels.
+/// (`project.github.io`), and otherwise its last two labels. Under
+/// `amazonaws.com` each whole host is its own site: S3 names a bucket
+/// before its service and region labels (`bucket.s3.us-east-1`), so no fixed
+/// label count separates one customer from another.
 fn site(domain: &str) -> &str {
+    if domain.ends_with(".amazonaws.com") {
+        return domain;
+    }
     let labels: Vec<&str> = domain.split('.').collect();
     let count = labels.len();
     let shared = SHARED_HOSTING
