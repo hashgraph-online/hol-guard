@@ -14,6 +14,9 @@ from ci.native_runtime import probe_installed_pi_output as probe
 
 from .case_worker import SubprocessCaseWorker
 from .catalog import Scenario, catalog_digest, load_catalog
+from .file_write_cases import FILE_WRITE_ORACLE
+from .task_brief_cases import TASK_BRIEF_ORACLE
+from .output_cases import OUTPUT_ORACLE
 from .fixtures import create_run_root, digest_file
 from .harness_case import run_harness_case
 from .harnesses import adapter
@@ -23,8 +26,9 @@ from .source_identity import source_identity
 
 HERE = Path(__file__).resolve().parent
 REPO = HERE.parents[1]
-# Protection cases that drive an Oh My Pi tool no other lane has: learn, and eval's sh helper.
-OMP_TOOL_ORACLES = frozenset({"blocked-memory-note", "blocked-eval-shell"})
+# Protection cases that drive an Oh My Pi tool no other lane has (learn, task, and eval's sh helper), and
+# the output cases, whose judge reads the post-tool rows only the Oh My Pi lane binds per call.
+OMP_TOOL_ORACLES = frozenset({"blocked-memory-note", "blocked-eval-shell", OUTPUT_ORACLE, TASK_BRIEF_ORACLE})
 
 
 def lane_catalog(harness: str) -> tuple[Scenario, ...]:
@@ -46,7 +50,8 @@ def lane_catalog(harness: str) -> tuple[Scenario, ...]:
     return tuple(
         s
         for s in load_catalog()
-        if s.oracle not in OMP_TOOL_ORACLES and (s.oracle != "native-tools" or set(s.required_tools) <= tools)
+        if s.oracle not in OMP_TOOL_ORACLES
+        and (s.oracle not in {"native-tools", FILE_WRITE_ORACLE} or set(s.required_tools) <= tools)
     )
 
 

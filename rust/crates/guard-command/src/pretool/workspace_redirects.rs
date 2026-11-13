@@ -235,8 +235,13 @@ pub(super) fn contained(
     // `.tool-versions`, or a chain beside local Git writes, runs here.
     let stripped = project(command)?;
     // Removing an input redirect drops the program it feeds, so a program
-    // that needs the network keeps the review of the text as sent.
-    if crate::pretool::script_content::text_uses_network(command, context) {
+    // that needs the network, or opens a system file the sandbox still lets
+    // it read, keeps the review of the text as sent.
+    if crate::pretool::script_content::text_uses_network(command, context)
+        || crate::pretool::script_content::text_names_system_file(command, context)
+        || crate::pretool::script_content::text_spells_destructive_git(command, context)
+        || crate::pretool::literal_secrets::holds_literal_secret(command)
+    {
         return None;
     }
     let direct = super::redirect_projection::project(command, context);

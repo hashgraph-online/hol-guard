@@ -440,7 +440,7 @@ def run_case(
         case["execution_error_chain"] = chain
         (private / "execution-error.txt").write_text("\n".join(chain) + "\n", encoding="utf-8")
     finally:
-        case["filesystem"] = filesystem_checks(fixture, scenario.oracle, scenario.id)
+        case["filesystem"] = filesystem_checks(fixture, scenario.oracle, scenario.id, scenario.path)
         remove_scratch_checkout(fixture.root)
         if daemon is not None:
             case.update(cleanup_case_resources(daemon, identity, fixture.root / "guard-home", private))
