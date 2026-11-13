@@ -35,7 +35,7 @@ fn stage_name(segment: &crate::command_parse_surface::CommandSegmentV1) -> Optio
         .filter(|executable| !executable.contains(['/', '\\']))
 }
 
-pub(super) fn exact_safe_command(model: &CanonicalCommandV1) -> bool {
+pub(crate) fn exact_safe_command(model: &CanonicalCommandV1) -> bool {
     if model.confidence != "exact" || model.path_overridden || !model.wrapper_chain.is_empty() {
         return false;
     }
