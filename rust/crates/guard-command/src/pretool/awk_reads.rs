@@ -2,7 +2,8 @@
 //!
 //! awk can start commands (`system()`, `"cmd" | getline`, `print | "cmd"`),
 //! write files (`print > "f"`), read any file or the environment
-//! (`getline < "f"`, `ENVIRON`), and swap its own input list (`ARGV`). The
+//! (`getline < "f"`, `ENVIRON`), and swap its own input list (`ARGV`). A
+//! program may read `ARGV` and `ARGC`; [`input_list`] refuses any write. The
 //! blocked words are matched in the raw program text, string literals and
 //! regular expressions included, so such a word anywhere sends the command to
 //! review. The pipe, redirect and `@` checks read only code: string literals,
@@ -11,15 +12,19 @@
 //! the lexer cannot delimit the way every awk would refuses the program.
 //! File operands get the same bounded read proof that `cat` uses.
 
+#[path = "awk_input_list.rs"]
+mod input_list;
+
 const MAX_PROGRAM_CHARS: usize = 1024;
 const MAX_FILE_TARGETS: usize = 16;
 
-/// Words that run commands, read other files or the environment, change the
-/// input list, or load code. gawk's `SYMTAB` and `FUNCTAB` reach any variable
+/// Words that run commands, read other files or the environment, or load
+/// code. `ARGV` and `ARGC` are screened in [`input_list`] instead, which
+/// admits reading them and refuses every write. gawk's `SYMTAB` and `FUNCTAB` reach any variable
 /// or function by a computed name (`SYMTAB["ENV" "IRON"]`), so they are
 /// blocked too.
 const BLOCKED_WORDS: &[&str] = &[
-    "system", "getline", "ENVIRON", "PROCINFO", "ARGV", "ARGC", "SYMTAB", "FUNCTAB",
+    "system", "getline", "ENVIRON", "PROCINFO", "SYMTAB", "FUNCTAB",
 ];
 
 /// Keywords after which awk reads `/` as the start of a regular expression
@@ -96,6 +101,7 @@ fn safe_assignment(value: &str) -> bool {
         .is_some_and(|first| first.is_ascii_alphabetic() || first == '_')
         && characters.all(|character| character.is_ascii_alphanumeric() || character == '_')
         && !BLOCKED_WORDS.contains(&name)
+        && !input_list::INPUT_LIST.contains(&name)
         && (name.chars().any(|character| character.is_ascii_lowercase())
             || ASSIGNABLE_BUILTINS.contains(&name))
 }
@@ -115,7 +121,7 @@ fn safe_program(program: &str) -> bool {
         return false;
     };
     // `@include` and `@load` pull in other code.
-    if code.contains('@') {
+    if code.contains('@') || !input_list::reads_only(&code) {
         return false;
     }
     // Every `|` must be part of a logical `||`; a single `|` or `|&` is a pipe.
@@ -271,6 +277,8 @@ mod tests {
             "NF { print } # skip lines with | or >",
             "split($0, parts, /,/) {print parts[1]}",
             "f&&c<=22{print;c++} /sample\\.test\\.ts/{f=1}",
+            "FILENAME==ARGV[2]{print}",
+            "NR==FNR{was[$1]=1; next} ($1 in was)==0 && FILENAME==ARGV[3]{print \"NEW MISS \" $0}",
         ] {
             assert!(safe_program(program), "{program}");
         }
@@ -307,6 +315,8 @@ mod tests {
             "BEGIN { while ((getline line < \"/etc/hosts\") > 0) print line }",
             "BEGIN { print ENVIRON[\"HOME\"] }",
             "BEGIN { ARGV[1] = \"/etc/hosts\" } {print}",
+            "BEGIN { ARGV[ARGC++] = \"/etc/hosts\" } {print}",
+            "BEGIN { sub(/x/, \"/etc/hosts\", ARGV[1]) } {print}",
             "BEGIN { SYMTAB[\"AR\" \"GV\"][1] = \"/etc/hosts\" } {print}",
             "BEGIN { for (k in SYMTAB[\"ENV\" \"IRON\"]) print k }",
             "@include \"lib.awk\"",
