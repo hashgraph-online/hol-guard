@@ -165,7 +165,10 @@ fn command_reports_invalid_payloads_without_writing() {
     assert!(!home.join(HOME_CONFIG_FILENAME).exists());
 
     let response = run(&home, "settings", r#"{"update_mode":"later"}"#);
-    assert_eq!(response["invalid"], json!("Update mode must be automatic, ask, or off."));
+    assert_eq!(
+        response["invalid"],
+        json!("Update mode must be automatic, ask, or off.")
+    );
 }
 
 #[test]
