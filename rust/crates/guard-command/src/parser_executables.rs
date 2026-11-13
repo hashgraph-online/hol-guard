@@ -234,8 +234,10 @@ fn sed_exec_only_found_files(child: &[String]) -> bool {
     let mut index = 1; // the sed/gsed executable
     let mut named_script = false;
     let mut positional_script = false;
+    // GNU sed treats the empty word after -i as a script and any following
+    // positional word as a file; BSD sed treats it as a backup suffix.
+    // Require a named script with no positional operand for both dialects.
     let mut detached_suffix = false;
-    let mut quiet = false;
     while let Some(argument) = child.get(index) {
         match argument.as_str() {
             "-i" => {
@@ -247,7 +249,7 @@ fn sed_exec_only_found_files(child: &[String]) -> bool {
                     index += 1;
                 }
             }
-            "-n" => quiet = true,
+            "-n" | "-E" | "-r" | "-s" | "-u" | "-z" => {},
             "-e" | "--expression" => {
                 // GNU sed may permute a later -e option ahead of an earlier
                 // positional word, turning that earlier word into a file.
@@ -260,9 +262,8 @@ fn sed_exec_only_found_files(child: &[String]) -> bool {
                 }
                 named_script = true;
             }
-            "-E" | "-r" | "-s" | "-u" | "-z" => {}
             "--" => {
-                if detached_suffix && quiet {
+                if detached_suffix {
                     return false;
                 }
                 let trailing = &child[index + 1..];
@@ -287,6 +288,11 @@ fn sed_exec_only_found_files(child: &[String]) -> bool {
             word if word.starts_with("-i") && word.len() > 2 => {}
             word if word.starts_with('-') => return false,
             _ => {
+                // Under GNU sed a BSD -i '' positional script is an unchecked
+                // file path; do not silently admit it through the find walk.
+                if detached_suffix {
+                    return false;
+                }
                 // Any second positional operand is a file beyond those find
                 // supplies; never omit it from the broad-wipe screen.
                 if named_script || positional_script {
@@ -297,7 +303,5 @@ fn sed_exec_only_found_files(child: &[String]) -> bool {
         }
         index += 1;
     }
-    // Read as GNU sed reads it, `-n -i ''` empties every file it names,
-    // including a word BSD sed would take as the script.
-    !(detached_suffix && quiet) && (named_script || positional_script)
+    named_script || positional_script
 }
