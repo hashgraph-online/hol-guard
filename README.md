@@ -37,7 +37,7 @@ Run it locally without an account. Use the CLI and local dashboard to manage pro
 #### Bronze sponsors
 
 <p align="center">
-<a href="https://synthetic.new/"><img src="https://raw.githubusercontent.com/hashgraph-online/hol-guard/451f3fee55db9fe86c42f545606a25af8ae8b66f/assets/synthetic-sponsor-bronze.png" alt="Synthetic" width="160" height="48" /></a>
+<a href="https://synthetic.new/?referral=FTVR2kb0"><img src="https://raw.githubusercontent.com/hashgraph-online/hol-guard/451f3fee55db9fe86c42f545606a25af8ae8b66f/assets/synthetic-sponsor-bronze.png" alt="Synthetic" width="160" height="48" /></a>
 &nbsp;&nbsp;&nbsp;
 <a href="https://www.firecrawl.dev/referral?rid=SLPLSKAU"><img src="https://raw.githubusercontent.com/hashgraph-online/hol-guard/451f3fee55db9fe86c42f545606a25af8ae8b66f/assets/firecrawl-sponsor-bronze.png" alt="Firecrawl" width="160" height="48" /></a>
 </p>
