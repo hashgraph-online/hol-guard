@@ -188,6 +188,33 @@ fn a_command_run_inside_a_python_f_string_field_is_read() {
 }
 
 #[test]
+fn non_ascii_text_inside_a_string_is_read_without_panicking() {
+    for (language, program) in [
+        (
+            super::super::Language::Python,
+            "print(\"caf\u{e9} \u{2192} \u{1f600}\"); __import__('os').system('git reset --hard')",
+        ),
+        (
+            super::super::Language::Python,
+            "s = f\"\u{e9}{__import__('os').system('git clean -fdx')}\u{2192}\"",
+        ),
+        (
+            super::super::Language::Node,
+            "console.log(`\u{e9} ${require('child_process').execSync('git reset --hard')} \u{1f600}`)",
+        ),
+    ] {
+        assert!(
+            spells_destructive_git(&super::without_comments(language, program)),
+            "{program}"
+        );
+    }
+    assert!(!spells_destructive_git(&super::without_comments(
+        super::super::Language::Python,
+        "print(\"r\u{e9}sum\u{e9} \u{2192} done\")"
+    )));
+}
+
+#[test]
 fn each_language_keeps_the_other_languages_comment_markers() {
     // `//` is integer division in Python and `#` starts a private field in
     // Node, so neither may cut the other language's source.

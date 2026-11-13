@@ -35,8 +35,10 @@ pub(in crate::pretool::script_content) fn without_comments(
         if let Some(close) = quote {
             let spans_lines = close.len() == 3 || close == "`";
             // A backslash never escapes the brace of an f-string replacement
-            // field, raw or not: Python still runs the field.
-            let brace_follows = rest[1..].starts_with(['{', '}']);
+            // field, raw or not: Python still runs the field. The lookahead
+            // only runs past a backslash, which is one byte, so it never
+            // slices inside a multi-byte character.
+            let brace_follows = ch == '\\' && rest[1..].starts_with(['{', '}']);
             if ch == '\\' && !(formatted && brace_follows) {
                 match chars.next() {
                     // A line continuation inside a string adds nothing.
