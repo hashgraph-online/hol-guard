@@ -248,6 +248,20 @@ fn names_a_chosen_word(pattern: &str) -> bool {
             .any(|run| run.chars().count() >= CHOSEN_WORD_LETTERS && !run.contains('.'))
 }
 
+/// Whether the arguments are roots followed by an expression that only
+/// matches, prunes and prints names: no action runs a program, writes a file
+/// or deletes. The roots themselves are not checked here.
+pub(super) fn prints_names_only(arguments: &[String]) -> bool {
+    let arguments = arguments
+        .strip_prefix(&["-P".to_owned()])
+        .unwrap_or(arguments);
+    let roots_end = arguments
+        .iter()
+        .position(|argument| argument.starts_with('-') || matches!(argument.as_str(), "!" | "("))
+        .unwrap_or(arguments.len());
+    roots_end > 0 && safe_expression(&arguments[roots_end..])
+}
+
 fn safe_expression(expression: &[String]) -> bool {
     let mut depth = 0_usize;
     let mut index = 0;
