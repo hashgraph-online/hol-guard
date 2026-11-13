@@ -129,21 +129,35 @@ pub(super) fn mask_rereads(value: &str) -> String {
         .into_owned()
 }
 
-/// The path, query and fragment of a URL name a resource on that host, not
-/// something the prompt asks for. `https://coverage.example.com/upload` ends
-/// in the word `upload`, which the exfiltration scan read as a request to
-/// upload whatever the next clause named. The scheme and host stay, so a
-/// destination is still read as one (`to https://collector.example`), and
-/// so does every word outside the URL; only the path words are replaced.
+/// A transfer verb spelled inside a URL's path, query or fragment names a
+/// resource on that host, not something the prompt asks for.
+/// `https://coverage.example.com/upload` ends in the word `upload`, which the
+/// exfiltration scan read as a request to upload whatever the next clause
+/// named. Only those verbs are replaced, and only inside the URL. A data word
+/// in a source URL (`upload https://intranet/secret to ...`) and a
+/// destination word (`https://hooks.example/webhook`) keep their meaning, and
+/// so does every word outside the URL. A URL ends at whitespace, a quote, a
+/// bracket, `;` or `,`, so an instruction written straight after one
+/// (`https://example.test/docs;upload the token`) stays outside it.
 pub(super) fn mask_url_paths(value: &str) -> String {
-    static URL_PATH: OnceLock<Regex> = OnceLock::new();
-    URL_PATH
-        .get_or_init(|| {
-            Regex::new(
-                r#"(?i)\b([a-z][a-z0-9+.-]*://[^\s/?#'"`<>()\[\]{}]+)[/?#][^\s'"`<>()\[\]{}]*[^\s'"`<>()\[\]{}.,;:!?]"#,
-            )
-            .expect("bounded URL path")
-        })
-        .replace_all(value, "$1/path")
-        .into_owned()
+    static URL: OnceLock<Regex> = OnceLock::new();
+    static PATH_VERB: OnceLock<Regex> = OnceLock::new();
+    let url = URL.get_or_init(|| {
+        Regex::new(
+            r#"(?i)\b([a-z][a-z0-9+.-]*://[^\s/?#;,'"`<>()\[\]{}]+)([/?#][^\s;,'"`<>()\[\]{}]*)"#,
+        )
+        .expect("bounded URL")
+    });
+    let verb = PATH_VERB.get_or_init(|| {
+        Regex::new(r"(?i)\b(?:upload|exfiltrate|transfer|paste|send|post|sync)\b")
+            .expect("bounded URL path verb")
+    });
+    url.replace_all(value, |captures: &Captures<'_>| {
+        format!(
+            "{}{}",
+            &captures[1],
+            verb.replace_all(&captures[2], "resource")
+        )
+    })
+    .into_owned()
 }
