@@ -1,5 +1,6 @@
-import { r as reactExports, h as harnessDisplayName, aD as fetchSettings, ei as runHarnessAction, ej as GuardHarnessActionError, j as jsxRuntimeExports, S as SectionLabel, A as ActionButton, ek as HiMiniRocketLaunch, a3 as HiMiniShieldCheck, i as HiMiniArrowPath, b as formatRelativeTime, ag as HiMiniExclamationTriangle, v as HiMiniCheckCircle, el as HiMiniTrash, a_ as ApprovalProofModal, bA as isGuardDemoMode, em as fetchGuardApi, en as formatHarnessCommand, bd as HiMiniAdjustmentsHorizontal, eo as fetchApprovalPage, ep as fetchPolicy, a5 as guardActionDisposition, X as protectionHealthFor, W as useProtectionPresentationState, bS as HiMiniArrowLeft, H as HiMiniChevronRight, aV as GuardHero, aW as ProofStrip, bF as HiMiniHome, ah as HiMiniBolt, eq as appSetupTarget, er as guardActionPresentation, ai as Badge, es as DEFAULT_FILTER_STATE, et as filterEvidence, eu as sortEvidence, ev as computeMetrics, ew as CommandActivityWorkspace, aa as EmptyState, ex as EvidenceFilterBar, ey as EvidenceInsightStrip, ez as EvidenceActionList, eA as EvidenceActionDetail, ae as useFocusTrap, eB as policyIdentityKey, ac as HiMiniCloud, T as Tag, aU as HiMiniXCircle, eC as clearLabelForScope, eD as HiMiniChartBar } from "../guard-dashboard.js";
-import { b as versionCheckUnsupported, c as versionReasonCopy, H as HarnessVersionLabel, e as refreshVersionCompatibility, f as acknowledgeUntestedVersion, g as clearVersionAcknowledgement, u as useHarnessDetection, a as versionCompatibilityFor, h as isHarnessDetected } from "./harness-version-label-BMeZqHL3.js";
+import { r as reactExports, h as harnessDisplayName, c6 as fetchSettings, e9 as runHarnessAction, ea as GuardHarnessActionError, j as jsxRuntimeExports, S as SectionLabel, A as ActionButton, eb as HiMiniRocketLaunch, a3 as HiMiniShieldCheck, i as HiMiniArrowPath, b as formatRelativeTime, ag as HiMiniExclamationTriangle, v as HiMiniCheckCircle, ec as HiMiniTrash, aN as ApprovalProofModal, bq as isGuardDemoMode, ed as fetchGuardApi, ee as formatHarnessCommand, b3 as HiMiniAdjustmentsHorizontal, aE as appModesNote, ef as appModes, eg as fetchApprovalPage, eh as fetchPolicy, a5 as guardActionDisposition, X as protectionHealthFor, W as useProtectionPresentationState, bI as HiMiniArrowLeft, H as HiMiniChevronRight, aI as GuardHero, aJ as ProofStrip, ei as appSetupTarget, bv as HiMiniHome, ah as HiMiniBolt, ej as guardActionPresentation, ai as Badge, ek as DEFAULT_FILTER_STATE, el as filterEvidence, em as sortEvidence, en as computeMetrics, eo as CommandActivityWorkspace, aa as EmptyState, ep as EvidenceFilterBar, eq as EvidenceInsightStrip, er as EvidenceActionList, es as EvidenceActionDetail, ae as useFocusTrap, et as policyIdentityKey, ac as HiMiniCloud, T as Tag, aH as HiMiniXCircle, eu as clearLabelForScope, ev as HiMiniChartBar } from "../guard-dashboard.js";
+import { u as useFleetAppPosture, c as versionCheckUnsupported, e as versionReasonCopy, H as HarnessVersionLabel, f as refreshVersionCompatibility, g as acknowledgeUntestedVersion, h as clearVersionAcknowledgement, a as useHarnessDetection, b as versionCompatibilityFor, j as isHarnessDetected } from "./harness-version-label-MLxWNcFW.js";
+import "./settings-save-proof-modal-_wjRK7LN.js";
 function HarnessSetupPanel(props) {
   const [setupState, setSetupState] = reactExports.useState({ kind: "idle" });
   const [disconnectArmed, setDisconnectArmed] = reactExports.useState(false);
@@ -349,6 +350,58 @@ function setupSuccessTitle(action, displayName) {
   if (action === "verify") return `${displayName} test complete`;
   if (action === "repair") return `${displayName} repaired`;
   return `${displayName} disconnected`;
+}
+function appModesSummary(settings, harness) {
+  const note = appModesNote(settings, harness);
+  if (note !== null) return note;
+  return appModes(settings, harness).cigar ? "Guard and CIGAR are both on" : "Guard is on";
+}
+function AppModesPanel(props) {
+  const apps = reactExports.useMemo(() => [{ harness: props.harness, active: props.managed }], [props.harness, props.managed]);
+  const posture = useFleetAppPosture({ apps, onChanged: props.onChanged });
+  return /* @__PURE__ */ jsxRuntimeExports.jsx(AppModesPanelView, { ...props, posture });
+}
+function AppModesPanelView(props) {
+  const { posture } = props;
+  const displayName = harnessDisplayName(props.harness);
+  const control = posture.control(props.harness);
+  const settings = posture.settings;
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs(
+    "section",
+    {
+      "aria-labelledby": "app-modes-heading",
+      className: "rounded-xl border border-slate-100 p-4 sm:p-5",
+      "data-testid": "app-modes-panel",
+      children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-6", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("h2", { id: "app-modes-heading", className: "text-lg font-semibold text-brand-dark", children: [
+              "What runs in ",
+              displayName
+            ] }),
+            settings !== null && control !== null ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-sm font-medium text-brand-dark", "data-testid": "app-modes-summary", children: appModesSummary(settings, props.harness) }) : null,
+            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 max-w-[65ch] text-sm text-slate-500", children: props.managed ? "Guard checks this app's actions. CIGAR adds project context so the agent reads less and spends fewer tokens." : `Set up Guard for ${displayName} to choose whether Guard, CIGAR or both run here.` })
+          ] }),
+          control,
+          !props.managed ? /* @__PURE__ */ jsxRuntimeExports.jsxs(
+            "button",
+            {
+              type: "button",
+              onClick: props.onSetUp,
+              className: "shrink-0 self-start rounded-full border border-slate-200 px-3 py-1.5 text-sm font-medium text-brand-dark transition-colors hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue sm:self-auto",
+              children: [
+                "Set up Guard for ",
+                displayName
+              ]
+            }
+          ) : null
+        ] }),
+        posture.watchConfirm(props.harness),
+        posture.kind === "loading" && props.managed ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "guard-skeleton mt-3 h-6 w-48", "aria-hidden": "true" }) : null,
+        posture.footer
+      ]
+    }
+  );
 }
 const SOURCE_LABELS = {
   "package-metadata": "Package metadata",
@@ -819,6 +872,15 @@ function AppDetailWorkspace(props) {
         ]
       }
     ),
+    appSetupTarget(harness) === "harness" ? /* @__PURE__ */ jsxRuntimeExports.jsx(
+      AppModesPanel,
+      {
+        harness,
+        managed: isActive,
+        onSetUp: handleGoSettings,
+        onChanged: props.onManagedInstallChanged
+      }
+    ) : null,
     /* @__PURE__ */ jsxRuntimeExports.jsx(
       "div",
       {

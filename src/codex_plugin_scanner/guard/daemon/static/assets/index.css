@@ -1672,6 +1672,10 @@
     max-width: 62ch;
   }
 
+  .max-w-\[65ch\] {
+    max-width: 65ch;
+  }
+
   .max-w-\[68ch\] {
     max-width: 68ch;
   }
@@ -8074,6 +8078,10 @@
       :where(.sm\:divide-brand-dark\/12 > :not(:last-child)) {
         border-color: color-mix(in oklab, var(--brand-dark) 12%, transparent);
       }
+    }
+
+    .sm\:self-auto {
+      align-self: auto;
     }
 
     .sm\:self-end {
