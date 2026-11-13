@@ -46,12 +46,12 @@ def test_an_absent_installed_release_is_recorded(tmp_path, recorded, monkeypatch
     assert recorded == [("installed_authority_release_absent", "detail=installed bundle not advertised")]
 
 
-def test_a_failed_startup_migration_is_recorded(recorded) -> None:
+def test_a_failed_startup_migration_is_recorded(tmp_path, recorded) -> None:
     def unavailable():
         raise ValueError("pack_lifecycle_protected_floor_missing")
 
     server = SimpleNamespace(
-        store=SimpleNamespace(migrate_installed_command_pack_authority=unavailable),
+        store=SimpleNamespace(guard_home=tmp_path, migrate_installed_command_pack_authority=unavailable),
         _installed_authority_pending=False,
     )
 
@@ -59,9 +59,9 @@ def test_a_failed_startup_migration_is_recorded(recorded) -> None:
         ExtensionControlHost._migrate_installed_authority(server)
 
     assert server._installed_authority_pending is True
-    assert recorded == [
-        ("installed_authority_migration_failed", "error=ValueError detail=pack_lifecycle_protected_floor_missing")
-    ]
+    [(event, detail)] = recorded
+    assert event == "installed_authority_migration_failed"
+    assert detail.startswith("error=ValueError detail=pack_lifecycle_protected_floor_missing elapsed_ms=")
 
 
 def test_the_recorded_startup_detail_carries_no_path(tmp_path, recorded) -> None:
@@ -71,7 +71,7 @@ def test_the_recorded_startup_detail_carries_no_path(tmp_path, recorded) -> None
         raise ValueError(f"installed bundle metadata unavailable: no such file: '{secret}'")
 
     server = SimpleNamespace(
-        store=SimpleNamespace(migrate_installed_command_pack_authority=unavailable),
+        store=SimpleNamespace(guard_home=tmp_path, migrate_installed_command_pack_authority=unavailable),
         _installed_authority_pending=False,
     )
 

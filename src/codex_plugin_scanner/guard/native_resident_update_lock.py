@@ -93,32 +93,47 @@ def _runtime_digest(executable: Path) -> str | None:
         return None
 
 
+def open_private_lock_file(guard_home: Path, name: str) -> int:
+    """Open (creating) a private lock file in Guard's runtime state directory.
+
+    Raises ``OSError`` when the file cannot be opened or is not a private
+    regular file owned by this user.
+    """
+
+    path = _runtime_state_directory(guard_home.expanduser().resolve()) / name
+    if os.name == "nt":
+        from .native_policy_snapshot import _windows_open_private_fd
+
+        return _windows_open_private_fd(path, maximum_bytes=_MAX_MARKER_BYTES)
+    flags = os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW | getattr(os, "O_CLOEXEC", 0)
+    descriptor = os.open(path, flags, 0o600)
+    try:
+        metadata = os.fstat(descriptor)
+        path_metadata = path.lstat()
+        if (
+            not stat.S_ISREG(metadata.st_mode)
+            or metadata.st_nlink != 1
+            or metadata.st_uid != os.geteuid()
+            or stat.S_IMODE(metadata.st_mode) & 0o077
+            or metadata.st_dev != path_metadata.st_dev
+            or metadata.st_ino != path_metadata.st_ino
+        ):
+            raise _PrivateLockFileError(name)
+    except BaseException:
+        os.close(descriptor)
+        raise
+    return descriptor
+
+
+class _PrivateLockFileError(OSError):
+    """The lock file exists but is not a private regular file."""
+
+
 def _open_lock_file(guard_home: Path) -> int:
     try:
-        state_dir = _runtime_state_directory(guard_home.expanduser().resolve())
-        path = state_dir / RESIDENT_UPDATE_LOCK_NAME
-        if os.name == "nt":
-            from .native_policy_snapshot import _windows_open_private_fd
-
-            descriptor = _windows_open_private_fd(path, maximum_bytes=_MAX_MARKER_BYTES)
-        else:
-            flags = os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW | getattr(os, "O_CLOEXEC", 0)
-            descriptor = os.open(path, flags, 0o600)
-            metadata = os.fstat(descriptor)
-            path_metadata = path.lstat()
-            if (
-                not stat.S_ISREG(metadata.st_mode)
-                or metadata.st_nlink != 1
-                or metadata.st_uid != os.geteuid()
-                or stat.S_IMODE(metadata.st_mode) & 0o077
-                or metadata.st_dev != path_metadata.st_dev
-                or metadata.st_ino != path_metadata.st_ino
-            ):
-                os.close(descriptor)
-                raise NativeResidentUpdateLockError("update_native_resident_lock_invalid")
-        return descriptor
-    except NativeResidentUpdateLockError:
-        raise
+        return open_private_lock_file(guard_home, RESIDENT_UPDATE_LOCK_NAME)
+    except _PrivateLockFileError as error:
+        raise NativeResidentUpdateLockError("update_native_resident_lock_invalid") from error
     except (OSError, RuntimeError, ValueError) as error:
         raise NativeResidentUpdateLockError("update_native_resident_lock_open_failed") from error
 

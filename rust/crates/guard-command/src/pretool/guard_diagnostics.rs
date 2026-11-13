@@ -420,6 +420,7 @@ pub(super) fn safe_hol_guard_arguments(arguments: &[String]) -> bool {
         || artifact_explanation(&words)
         || posture_inspection(&words)
         || cloud_actions::cloud_actions_inspection(&words)
+        || network::network_inspection(&words)
 }
 
 /// `hol-guard explain <target>` prints the evidence Guard already holds for
@@ -640,6 +641,7 @@ fn subcommand_verb(word: &str) -> bool {
 /// flag the same way; [`VERBS_TAKING_A_REMAINDER`] names those.
 const HELP_SUBCOMMANDS: &[&str] = &[
     "abom",
+    "ack-bound-bash",
     "admin",
     "advisories",
     "aibom",
@@ -669,6 +671,7 @@ const HELP_SUBCOMMANDS: &[&str] = &[
     "events",
     "exceptions",
     "execute-bound-bash",
+    "execute-contained-test",
     "explain",
     "export",
     "extensions",
@@ -771,6 +774,9 @@ fn plain_value(value: &str) -> bool {
 
 #[path = "guard_diagnostics_cloud_actions.rs"]
 mod cloud_actions;
+
+#[path = "guard_diagnostics_network.rs"]
+mod network;
 
 #[cfg(test)]
 #[path = "guard_diagnostics_tests.rs"]
