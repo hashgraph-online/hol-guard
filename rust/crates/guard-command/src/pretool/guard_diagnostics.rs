@@ -668,6 +668,7 @@ const HELP_SUBCOMMANDS: &[&str] = &[
     "doctor",
     "events",
     "exceptions",
+    "execute-bound-bash",
     "explain",
     "export",
     "extensions",
