@@ -118,7 +118,7 @@ fn python(name: &str) -> bool {
 
 /// Whether every stage after `index` in its pipeline reads only its standard
 /// input: a pipeline filter whose patterns may be masked, or `head`, `tail`
-/// or `wc` with options and counts but no operand.
+/// or `wc` with no operand.
 fn later_stages_read_stdin_only(model: &CanonicalCommandV1, index: usize) -> bool {
     model.segments[index + 1..]
         .iter()
@@ -129,28 +129,30 @@ fn later_stages_read_stdin_only(model: &CanonicalCommandV1, index: usize) -> boo
         })
 }
 
+/// `head`, `tail` or `wc` reading only its standard input, with or without
+/// options. A bare stage carries no word that could hide shell syntax.
 fn trimmer(segment: &CommandSegmentV1) -> bool {
-    super::filter_pattern_text::maskable_filter_segment(segment)
-        && segment.executable.as_deref().is_some_and(|executable| {
-            matches!(
-                super::executable_basename(executable),
-                "head" | "tail" | "wc"
-            )
-        })
-        && segment
-            .arguments
-            .iter()
-            .enumerate()
-            .all(|(position, argument)| {
-                argument.bytes().all(|byte| byte.is_ascii_digit())
-                    && position > 0
-                    && matches!(segment.arguments[position - 1].as_str(), "-n" | "-c")
-                    || (argument.starts_with('-')
-                        && argument.len() > 1
-                        && argument[1..]
-                            .bytes()
-                            .all(|byte| byte.is_ascii_digit() || b"nclwmL".contains(&byte)))
-            })
+    let plain = if segment.arguments.is_empty() {
+        segment.pipeline_index > 0
+            && segment.tokens.len() == 1
+            && segment.environment_names.is_empty()
+            && segment.wrapper_chain.is_empty()
+            && !segment.path_overridden
+    } else {
+        super::filter_pattern_text::maskable_filter_segment(segment)
+    };
+    plain
+        && match segment
+            .executable
+            .as_deref()
+            .map(super::executable_basename)
+        {
+            Some("head" | "tail") => {
+                super::safe_reads::safe_head_tail_stdin_arguments(&segment.arguments)
+            }
+            Some("wc") => super::safe_reads::safe_word_count_stdin_arguments(&segment.arguments),
+            _ => false,
+        }
 }
 
 #[cfg(test)]

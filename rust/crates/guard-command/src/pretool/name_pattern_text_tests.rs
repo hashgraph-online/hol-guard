@@ -25,6 +25,8 @@ fn a_name_pattern_is_not_a_sensitive_target() {
         "find . -iname '*secret*'",
         "find src -path '*credentials*' -type f | wc -l",
         "find . -name '*token*' | grep -v node_modules | head -n 20",
+        "find src -name '*password*' | head",
+        "find src -name '*password*' | wc -l",
     ] {
         assert!(!sensitive(command), "{command} still reads as sensitive");
     }
@@ -41,6 +43,8 @@ fn a_pattern_that_can_reach_a_file_keeps_its_screen() {
         "find . -name '*secret*' -fprint out.txt",
         "find . -name '*secret*' | head -5 | xargs cat",
         "find . -name '*secret*' | tail -f",
+        "find . -name '*secret*' | wc -c 5",
+        "find . -name '*secret*' | head .env",
         "pytest -k password .env",
         "pytest -k password -- -k secret",
         "cat .env | head",
