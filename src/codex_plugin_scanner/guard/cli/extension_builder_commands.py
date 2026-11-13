@@ -38,7 +38,10 @@ def configure_extension_builder_parser(subparsers: argparse._SubParsersAction[ar
     configure_inventory_list_parser(list_parser)
     generate = commands.add_parser("generate", help="Compile an offline inventory into a new contribution kit")
     generate.add_argument(
-        "--from", dest="source_adapter", required=True, choices=("cli", "help", "click", "oclif", "mcp", "snapshot")
+        "--from",
+        dest="source_adapter",
+        required=True,
+        choices=("cli", "help", "click", "oclif", "mcp", "snapshot", "openapi"),
     )
     generate.add_argument("--input", type=Path, required=True, help="Local exported inventory or discovery snapshot")
     generate.add_argument(
@@ -47,6 +50,13 @@ def configure_extension_builder_parser(subparsers: argparse._SubParsersAction[ar
     generate.add_argument("--review", type=Path, help="Explicit review bound to this discovery snapshot")
     for name in _METADATA_FLAGS:
         generate.add_argument("--" + name.replace("_", "-"))
+    generate.add_argument(
+        "--cloud",
+        action="store_true",
+        help="Draft a cloud action pack from an OpenAPI document or MCP tool list; --output names a new file",
+    )
+    generate.add_argument("--host", help="API host for --cloud drafts; required for MCP tool lists")
+    generate.add_argument("--auth-mode", choices=("none", "oauth2", "api-key"), help="Auth mode for MCP --cloud drafts")
     generate.add_argument(
         "--topic-separator", choices=("colon", "space"), help="oclif invocation topic separator; defaults to colon"
     )
@@ -82,6 +92,12 @@ def _generate(args: argparse.Namespace) -> dict[str, object]:
     from ..extension_builder.models import Metadata
     from ..extension_builder.review import default_review, load_review
 
+    if args.cloud:
+        from .extension_builder_cloud import generate_cloud_draft
+
+        return generate_cloud_draft(args)
+    if args.source_adapter == "openapi":
+        raise BuilderError("cloud_source", "OpenAPI input drafts a cloud action pack; add --cloud.")
     metadata: Metadata | None = None
     if args.source_adapter == "snapshot":
         if any(getattr(args, name) is not None for name in _METADATA_FLAGS):
@@ -226,6 +242,10 @@ def _emit(result: dict[str, object], command: str, output: TextIO) -> None:
         print("Kits differ." if result["changed"] else "Kits are identical.", file=output)
         for name in ("addedOperations", "removedOperations", "changedOperations", "changedReviews"):
             print(f"{name}: {result[name]}", file=output)
+    elif command == "generate" and result.get("cloud"):
+        from .extension_builder_cloud import emit_cloud_summary
+
+        emit_cloud_summary(result, output)
     elif command == "handoff":
         print(f"Contribution handoff is ready for {result['contributionId']}.", file=output)
         print("Source, fixture, external trust mapping, and generated projections agree.", file=output)

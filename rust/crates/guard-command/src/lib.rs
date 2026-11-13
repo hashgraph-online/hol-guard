@@ -66,6 +66,10 @@ mod cloud_pack_corpus_tests;
 pub mod cloud_pack_diff;
 pub mod cloud_pack_facts;
 pub mod cloud_pack_fixtures;
+pub mod cloud_pack_generate;
+mod cloud_pack_generate_openapi;
+#[cfg(test)]
+mod cloud_pack_generate_tests;
 #[cfg(test)]
 mod cloud_pack_keyed_tests;
 pub mod cloud_pack_mail;

@@ -119,6 +119,8 @@ fn answer_op(op: &str, mut request: Map<String, Value>) -> Result<Value, Value> 
                 "unclassified": pack.unclassified,
             })
         }
+        "generate" => crate::cloud_pack_generate::generate(&mut request)
+            .map_err(|(code, pointer)| refuse(code, Some(pointer)))?,
         "classify" => {
             let Some(Value::String(name)) = request.remove("name") else {
                 return Err(refuse("request_invalid", Some("/name")));

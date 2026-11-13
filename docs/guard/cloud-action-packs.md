@@ -141,8 +141,42 @@ Both read one JSON request per line on standard input and write one JSON result 
 | `project` | `pack` or `artifact`, `actionId`, `response` | `projection` |
 | `policy` | `preset` name or `policyPack` | `preset`, `packDigest`, `factRules`, `unclassified` |
 | `classify` | `name`, optional `inputSchema`, optional `preset` or `policyPack` | `proposal`, and `action` when a preset is named |
+| `generate` | `providerId`; `openapi` or `mcpTools`, or `from` and `document` text; optional `providerName`, `publisher`, `host`, `authMode` | draft `pack`, `proposals`, `notes` |
 
 A result is `{"ok": true, ...}` or `{"ok": false, "error": {"code": ..., "pointer" | "argument": ...}}`.
+
+## Drafting a pack
+
+`hol-guard extensions generate --cloud` drafts a pack from an exported description of a provider's API. It ships in
+the released CLI and runs the native runtime, so it needs no Rust toolchain.
+
+```
+hol-guard extensions generate --cloud --from openapi --input api.json --output pack.json --slug shop
+hol-guard extensions generate --cloud --from mcp --input tools.json --output pack.json --slug files \
+  --host mcp.files.example --auth-mode oauth2
+```
+
+`--from openapi` reads an OpenAPI 3 document. Each operation whose path, path and query parameters and JSON body a
+pack can express becomes a `declarative-http` action on the host of the first `https` server, or on `--host`. `--from
+mcp` reads a `tools/list` result (or its `tools` array) and makes one `remote-mcp` action per tool; `--host` is
+required.
+
+The draft leans strict, so an author loosens it with evidence rather than tightening it later:
+
+- The class comes from the name classifier, which never proposes less than `update`. Only a `GET` whose name gives the
+  classifier no evidence drops to `read`, and a `DELETE` is never below `delete`. MCP tools keep the classifier's
+  class, whatever their annotations claim.
+- Every action that is not a read is proposed `permanent`.
+- String, integer, boolean and string-array arguments take their bounds from the schema: `maxLength`, `minimum` and
+  `maximum`, `maxItems`, an anchored `pattern`, or an `enum` turned into a whole-value pattern. A missing bound gets a
+  fixed limit. Arguments no pack type can bound are left out and listed in `notes`.
+- Response fields are the scalar properties of the success schema; text fields are marked `untrusted`.
+- OAuth scopes come from each operation's `security`. When the source names none, the draft uses the scope `api`.
+
+The output names a new file and the draft carries no fixtures, so `validate` refuses it with
+`cloud_pack_fixtures_missing` until every action has a safe and a risky fixture. `proposals` lists each action's
+class with the evidence behind it, and `notes` lists everything left out or guessed. Review both before filling in
+the fixtures.
 
 ## Shipped packs
 
