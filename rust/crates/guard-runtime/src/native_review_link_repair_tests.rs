@@ -86,7 +86,15 @@ fn one_slipped_digit_in_the_expiry_still_opens_the_request() {
     let page = signed_page();
     assert_eq!(location(ID, "180004320", MAC), Some(page.clone()));
     assert_eq!(location(ID, "1800043201", MAC), Some(page.clone()));
-    assert_eq!(location(ID, "18000432000", MAC), Some(page));
+    assert_eq!(location(ID, "18000432000", MAC), Some(page.clone()));
+    assert_eq!(location(ID, "01800043200", MAC), Some(page));
+}
+
+#[test]
+fn leading_zeros_in_the_expiry_count_as_slips() {
+    let unsigned = Some(format!("/requests/{ID}"));
+    assert_eq!(location(ID, "001800043200", MAC), unsigned);
+    assert_eq!(location(ID, "01800043200", &changed(MAC, 2)), unsigned);
 }
 
 #[test]

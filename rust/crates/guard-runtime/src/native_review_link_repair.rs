@@ -85,8 +85,10 @@ pub(super) fn handoff_signed_request(
 }
 
 /// The expiry `digits` spell when it is a time a link issued now could carry.
+/// Guard never writes a leading zero, so digits with one are not read as a
+/// number: parsing would drop the zeros without counting them as slips.
 fn signed_window(digits: &str, now_micros: i64) -> Option<i64> {
-    if digits.is_empty() || digits.len() > MAX_EXPIRY_DIGITS {
+    if digits.is_empty() || digits.len() > MAX_EXPIRY_DIGITS || digits.starts_with('0') {
         return None;
     }
     let expires: i64 = digits.parse().ok()?;

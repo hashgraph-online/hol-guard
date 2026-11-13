@@ -314,6 +314,19 @@ def test_a_link_naming_another_host_on_the_daemon_port_fails(tmp_path: Path) -> 
     assert _judge(tmp_path, f"Approve it at {other_host}", daemon=opened.get)[0] == "fail"
 
 
+def test_a_session_link_to_another_port_fails(tmp_path: Path) -> None:
+    session = build_local_dashboard_session_token(auth_token=DAEMON_KEY, surface="approval-center")
+    other_port = REVIEW_URL.replace(":5474/", ":5475/")
+    assert _judge(tmp_path, f"Approve it here: {other_port}#guard-token={session}")[0] == "fail"
+
+
+def test_a_link_no_request_can_carry_is_judged_not_an_outage() -> None:
+    server = ThreadingHTTPServer(("127.0.0.1", 0), BaseHTTPRequestHandler)
+    url = f"http://127.0.0.1:{server.server_address[1]}"
+    server.server_close()
+    assert daemon_link_opener(url)(f"/requests/{REQUEST_ID}/1-2\u201d") is None
+
+
 def test_a_daemon_that_does_not_answer_is_a_harness_error(tmp_path: Path) -> None:
     server = ThreadingHTTPServer(("127.0.0.1", 0), BaseHTTPRequestHandler)
     url = f"http://127.0.0.1:{server.server_address[1]}"

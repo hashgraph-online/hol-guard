@@ -171,9 +171,10 @@ class DaemonUnreachableError(Exception):
 def daemon_link_opener(daemon_url: str) -> LinkOpener:
     """Where the daemon at ``daemon_url`` sends a path, without following it.
 
-    An answer with no redirect returns ``None``. A refused connection or a
-    timeout raises ``DaemonUnreachableError``, so an outage is never read as the
-    daemon turning the link down.
+    An answer with no redirect, or a path no request can carry, returns
+    ``None``. A refused connection or a timeout raises
+    ``DaemonUnreachableError``, so an outage is never read as the daemon
+    turning the link down.
     """
     opener = urllib.request.build_opener(_NoRedirect())
 
@@ -183,7 +184,9 @@ def daemon_link_opener(daemon_url: str) -> LinkOpener:
                 location = response.headers.get("Location")
         except urllib.error.HTTPError as redirect:
             location = redirect.headers.get("Location") if 300 <= redirect.code < 400 else None
-        except (OSError, ValueError) as error:
+        except ValueError:
+            return None
+        except OSError as error:
             raise DaemonUnreachableError(str(error)) from error
         return location or None
 
@@ -241,10 +244,13 @@ def _browser_link(
     found = _REQUEST_ID.match(rest)
     tail = rest[found.end() :] if found is not None else ""
     if found is not None and (token := _SESSION_TOKEN.match(tail)):
+        if daemon.url is None:
+            return {"form": "unopened", "request": "unknown"}
         request_id = found.group("id")
         rest_of_link = tail[token.end() :]
         valid = (
-            (_ends_link(rest_of_link) or rest_of_link.startswith("&"))
+            _same_daemon(origin, daemon.url)
+            and (_ends_link(rest_of_link) or rest_of_link.startswith("&"))
             and auth_token is not None
             and _session_token_valid(token.group("token"), auth_token, request_id, now)
         )
