@@ -141,6 +141,7 @@ Both read one JSON request per line on standard input and write one JSON result 
 | `project` | `pack` or `artifact`, `actionId`, `response` | `projection` |
 | `policy` | `preset` name or `policyPack` | `preset`, `packDigest`, `factRules`, `unclassified` |
 | `classify` | `name`, optional `inputSchema`, optional `preset` or `policyPack` | `proposal`, and `action` when a preset is named |
+| `explain` | `actionId`, `arguments`, optional `pack` or `artifact` (defaults to the shipped packs) | `providerId`, `effect`, `facts`, `decisions` by preset |
 | `generate` | `providerId`; `openapi` or `mcpTools`, or `from` and `document` text; optional `providerName`, `publisher`, `host`, `authMode` | draft `pack`, `proposals`, `notes` |
 
 A result is `{"ok": true, ...}` or `{"ok": false, "error": {"code": ..., "pointer" | "argument": ...}}`.
@@ -177,6 +178,21 @@ The output names a new file and the draft carries no fixtures, so `validate` ref
 `cloud_pack_fixtures_missing` until every action has a safe and a risky fixture. `proposals` lists each action's
 class with the evidence behind it, and `notes` lists everything left out or guessed. Review both before filling in
 the fixtures.
+
+## Checking a pack from the CLI
+
+```
+hol-guard extensions validate --cloud pack.json
+hol-guard command explain --cloud slack.chat.post_message --arguments '{"channel": "C0123456789", "text": "hi"}'
+hol-guard command explain --cloud shop.remove_pet --pack pack.json --arguments '{"pet_id": 7}'
+```
+
+`extensions validate --cloud` checks the pack and runs every fixture, and fails with the first fixture that does not
+hold. `command explain --cloud` checks the example arguments against the action's bounds, then prints the facts Guard
+derives and the decision each shipped preset (`relaxed`, `balanced`, `strict`) gives the call. Without `--pack` it
+looks the action up in the shipped packs. The decision is the preset's fact rules over a clean session with every
+rate window at zero; workspace rules, capabilities and consent are applied later and can still change the outcome.
+Both commands run the native runtime, read nothing beyond the named file and never contact the provider.
 
 ## Shipped packs
 

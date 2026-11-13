@@ -64,6 +64,9 @@ pub mod cloud_pack_cli;
 #[cfg(test)]
 mod cloud_pack_corpus_tests;
 pub mod cloud_pack_diff;
+pub mod cloud_pack_explain;
+#[cfg(test)]
+mod cloud_pack_explain_tests;
 pub mod cloud_pack_facts;
 pub mod cloud_pack_fixtures;
 pub mod cloud_pack_generate;

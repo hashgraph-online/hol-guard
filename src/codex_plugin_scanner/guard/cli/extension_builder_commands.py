@@ -63,7 +63,8 @@ def configure_extension_builder_parser(subparsers: argparse._SubParsersAction[ar
     validate = commands.add_parser(
         "validate", help="Rebuild a kit and verify every byte without importing generated code"
     )
-    validate.add_argument("kit", type=Path)
+    validate.add_argument("kit", type=Path, help="Kit directory, or a pack file with --cloud")
+    validate.add_argument("--cloud", action="store_true", help="Validate a cloud action pack and run its fixtures")
     diff = commands.add_parser("diff", help="Compare valid kits; exit 1 when their inventories or reviews differ")
     diff.add_argument("previous", type=Path)
     diff.add_argument("current", type=Path)
@@ -218,6 +219,10 @@ def _operate(args: argparse.Namespace) -> dict[str, object]:
     if command == "handoff":
         return _handoff(args)
     if command == "validate":
+        if args.cloud:
+            from .extension_builder_cloud import validate_cloud_pack
+
+            return validate_cloud_pack(args.kit)
         return {**load_kit(args.kit).summary(), "validated": True}
     if command == "diff":
         return diff_kits(load_kit(args.previous), load_kit(args.current))
@@ -246,6 +251,11 @@ def _emit(result: dict[str, object], command: str, output: TextIO) -> None:
         from .extension_builder_cloud import emit_cloud_summary
 
         emit_cloud_summary(result, output)
+    elif command == "validate" and result.get("cloud"):
+        print(
+            f"Validated {result['providerId']}: {result['actions']} actions, {result['fixtures']} fixtures passed.",
+            file=output,
+        )
     elif command == "handoff":
         print(f"Contribution handoff is ready for {result['contributionId']}.", file=output)
         print("Source, fixture, external trust mapping, and generated projections agree.", file=output)

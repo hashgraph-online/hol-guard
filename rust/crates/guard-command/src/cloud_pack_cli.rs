@@ -13,6 +13,7 @@
 //! | `render`   | pack, `actionId`, `arguments`      | exact request              |
 //! | `extract`  | pack, `actionId`, `arguments`      | action facts v2            |
 //! | `project`  | pack, `actionId`, `response` text  | projection and labels      |
+//! | `explain`  | `actionId`, `arguments`, optional pack | facts and preset decisions |
 //! | `policy`   | `preset` name or `policyPack`      | fact rules and pack digest |
 //! | `classify` | `name`, optional `inputSchema`, optional `preset` or `policyPack` | class proposal and unclassified action |
 //!
@@ -25,6 +26,7 @@ use crate::cloud_action_serve::{read_line, Line};
 use crate::cloud_pack::{pack_from_value, CloudActionPack, PackAction, PackError};
 use crate::cloud_pack_artifact::{compile, load_value, ARTIFACT_SCHEMA};
 use crate::cloud_pack_diff::diff;
+use crate::cloud_pack_explain::{explain, shipped_pack_for};
 use crate::cloud_pack_facts::extract;
 use crate::cloud_pack_fixtures::run;
 use crate::cloud_pack_request::{check_arguments, render, ArgumentError};
@@ -134,20 +136,24 @@ fn answer_op(op: &str, mut request: Map<String, Value>) -> Result<Value, Value> 
             }
             result
         }
-        "render" | "extract" | "project" => return answer_action(op, request),
+        "render" | "extract" | "project" | "explain" => return answer_action(op, request),
         _ => return Err(refuse("op_unsupported", Some("/op"))),
     };
     Ok(ok(into_map(result)))
 }
 
 fn answer_action(op: &str, mut request: Map<String, Value>) -> Result<Value, Value> {
-    let pack = if request.contains_key("artifact") {
-        either(&mut request, "artifact")?
-    } else {
-        source(&mut request, "pack")?
-    };
     let Some(Value::String(action_id)) = request.remove("actionId") else {
         return Err(refuse("request_invalid", Some("/actionId")));
+    };
+    let pack = if request.contains_key("artifact") {
+        either(&mut request, "artifact")?
+    } else if op == "explain" && !request.contains_key("pack") {
+        shipped_pack_for(&action_id)
+            .cloned()
+            .ok_or_else(|| refuse("action_unknown", Some("/actionId")))?
+    } else {
+        source(&mut request, "pack")?
     };
     let action: &PackAction = pack
         .action(&action_id)
@@ -162,7 +168,9 @@ fn answer_action(op: &str, mut request: Map<String, Value>) -> Result<Value, Val
         }
         _ => {
             let arguments = request.remove("arguments").unwrap_or_else(|| json!({}));
-            if op == "render" {
+            if op == "explain" {
+                Value::Object(explain(&pack, action, &arguments).map_err(argument_error)?)
+            } else if op == "render" {
                 json!({ "request": render(action, &arguments).map_err(argument_error)? })
             } else {
                 let record = check_arguments(action, &arguments).map_err(argument_error)?;
