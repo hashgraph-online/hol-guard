@@ -294,7 +294,9 @@ fn sed_exec_only_found_files(child: &[String]) -> bool {
             word => {
                 // Unquoted, `*` alone could expand to a file named `d`, which
                 // BSD sed would run as the script over every other match.
-                if detached_suffix && word.contains(['*', '?', '[']) {
+                // Brace expansion can likewise add a second file operand,
+                // e.g. {d,README.md}; do not trust tokenizer word count.
+                if detached_suffix && word.contains(['*', '?', '[', '{', '}']) {
                     return false;
                 }
                 // Any second positional operand is a file beyond those find
