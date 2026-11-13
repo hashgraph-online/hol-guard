@@ -37,9 +37,9 @@ Run it locally without an account. Use the CLI and local dashboard to manage pro
 #### Bronze sponsors
 
 <p align="center">
-<a href="https://synthetic.new/"><img src="https://raw.githubusercontent.com/hashgraph-online/hol-guard/38bef9809b92194ded54bcb8943d64c4e442c862/assets/synthetic-sponsor-bronze.png" alt="Synthetic" width="160" height="48" /></a>
+<a href="https://synthetic.new/"><img src="https://raw.githubusercontent.com/hashgraph-online/hol-guard/451f3fee55db9fe86c42f545606a25af8ae8b66f/assets/synthetic-sponsor-bronze.png" alt="Synthetic" width="160" height="48" /></a>
 &nbsp;&nbsp;&nbsp;
-<a href="https://www.firecrawl.dev/referral?rid=SLPLSKAU"><img src="https://raw.githubusercontent.com/hashgraph-online/hol-guard/38bef9809b92194ded54bcb8943d64c4e442c862/assets/firecrawl-sponsor-bronze.png" alt="Firecrawl" width="160" height="48" /></a>
+<a href="https://www.firecrawl.dev/referral?rid=SLPLSKAU"><img src="https://raw.githubusercontent.com/hashgraph-online/hol-guard/451f3fee55db9fe86c42f545606a25af8ae8b66f/assets/firecrawl-sponsor-bronze.png" alt="Firecrawl" width="160" height="48" /></a>
 </p>
 
 <p align="center"><sub>Thank you to our sponsors for supporting HOL Guard. Some sponsor links are referral links.<br>Sponsorship does not change Guard's security decisions or coverage.</sub></p>
