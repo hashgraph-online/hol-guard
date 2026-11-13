@@ -65,6 +65,8 @@ def _matches_native_authority(guard_home: Path, encoded_key: str | None) -> bool
 class MirroredPolicyIntegritySecretStore(FallbackSecretStore):
     """Prefer the system keyring and keep its key usable in a headless session."""
 
+    _FALLBACK_PREFERENCE_PREFIX = "hol-guard:fallback-preferred:"
+
     def __init__(self, primary: SecretStore, fallback: SecretStore, *, guard_home: Path | None = None) -> None:
         super().__init__(primary, fallback)
         self._guard_home = guard_home
@@ -91,6 +93,20 @@ class MirroredPolicyIntegritySecretStore(FallbackSecretStore):
                 suffix = secret_id[len(prefix) :]
                 return f"{_POLICY_INTEGRITY_KEY_REF}{suffix}", f"{_POLICY_INTEGRITY_CONTROL_REF}{suffix}"
         return None
+
+    def _fallback_preference_ref(self, secret_id: str) -> str:
+        return f"{self._FALLBACK_PREFERENCE_PREFIX}{secret_id}"
+
+    def _fallback_is_preferred(self, secret_id: str) -> bool:
+        if secret_id in self._fallback_preferred_secret_ids:
+            return True
+        try:
+            preferred = self.fallback.get_secret(self._fallback_preference_ref(secret_id)) == "1"
+        except Exception:
+            preferred = False
+        if preferred:
+            self._fallback_preferred_secret_ids.add(secret_id)
+        return preferred
 
     def _policy_source(
         self, primary_key: str | None, fallback_key: str | None
@@ -128,7 +144,7 @@ class MirroredPolicyIntegritySecretStore(FallbackSecretStore):
         """Read the key and control metadata from the same authenticated origin."""
 
         key_ref, control_ref = refs
-        if secret_id in self._fallback_preferred_secret_ids:
+        if self._fallback_is_preferred(key_ref):
             return self._read_or_none(self.fallback, secret_id)
         primary_key = self._read_or_none(self.primary, key_ref)
         fallback_key = self._read_or_none(self.fallback, key_ref)
@@ -167,7 +183,7 @@ class MirroredPolicyIntegritySecretStore(FallbackSecretStore):
         refs = self._policy_refs(secret_id)
         if refs is not None:
             return self._get_policy_value(secret_id, refs)
-        if secret_id in self._fallback_preferred_secret_ids:
+        if self._fallback_is_preferred(secret_id):
             return self._read_or_none(self.fallback, secret_id)
         primary_value = self._read_or_none(self.primary, secret_id)
         if primary_value is not None:
@@ -180,8 +196,12 @@ class MirroredPolicyIntegritySecretStore(FallbackSecretStore):
     def set_secret(self, secret_id: str, value: str) -> None:
         refs = self._policy_refs(secret_id)
         if refs is not None and secret_id == refs[1]:
-            source = self._policy_source(
-                self._read_or_none(self.primary, refs[0]), self._read_or_none(self.fallback, refs[0])
+            source = (
+                "fallback"
+                if self._fallback_is_preferred(refs[0])
+                else self._policy_source(
+                    self._read_or_none(self.primary, refs[0]), self._read_or_none(self.fallback, refs[0])
+                )
             )
             if source == "fallback":
                 self.fallback.set_secret(secret_id, value)
@@ -193,6 +213,8 @@ class MirroredPolicyIntegritySecretStore(FallbackSecretStore):
         try:
             self.primary.set_secret(secret_id, value)
             self._fallback_preferred_secret_ids.discard(secret_id)
+            with suppress(Exception):
+                self.fallback.delete_secret(self._fallback_preference_ref(secret_id))
         except Exception as error:
             if is_control_update:
                 raise
@@ -202,6 +224,7 @@ class MirroredPolicyIntegritySecretStore(FallbackSecretStore):
             if primary_error is not None:
                 # Keep the successful fallback authoritative until the primary catches up.
                 self._fallback_preferred_secret_ids.add(secret_id)
+                self.fallback.set_secret(self._fallback_preference_ref(secret_id), "1")
         except Exception as fallback_error:
             if primary_error is not None:
                 raise primary_error from fallback_error
@@ -216,6 +239,8 @@ class MirroredPolicyIntegritySecretStore(FallbackSecretStore):
         if remaining is not None:
             raise RuntimeError("policy integrity keyring deletion did not persist")
         self.fallback.delete_secret(secret_id)
+        with suppress(Exception):
+            self.fallback.delete_secret(self._fallback_preference_ref(secret_id))
         if self.fallback.get_secret(secret_id) is not None:
             raise RuntimeError("policy integrity vault deletion did not persist")
 
