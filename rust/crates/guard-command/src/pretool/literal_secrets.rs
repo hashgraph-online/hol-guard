@@ -277,13 +277,17 @@ pub(super) fn written_bodies(input: &serde_json::Map<String, Value>) -> Vec<Cow<
 /// that names its own file is kept apart from files it does not name; one
 /// that names the call's own file, or none, joins the call's own text.
 pub(super) fn written_text_by_file(input: &serde_json::Map<String, Value>) -> Vec<String> {
-    fn named(object: &serde_json::Map<String, Value>) -> Option<&str> {
+    fn named(object: &serde_json::Map<String, Value>) -> Option<String> {
         ["file_path", "filePath", "path"]
             .iter()
             .find_map(|key| object.get(*key).and_then(Value::as_str))
+            .map(lexical_file)
     }
-    fn add<'a>(files: &mut Vec<(Option<&'a str>, String)>, file: Option<&'a str>, body: &str) {
-        let at = match files.iter().position(|(name, _)| *name == file) {
+    fn add(files: &mut Vec<(Option<String>, String)>, file: Option<String>, body: &str) {
+        let at = match files.iter().position(|(name, _)| match (name, &file) {
+            (Some(name), Some(file)) => same_file(name, file),
+            (name, file) => name.is_none() && file.is_none(),
+        }) {
             Some(at) => at,
             None => {
                 files.push((file, String::new()));
@@ -297,12 +301,12 @@ pub(super) fn written_text_by_file(input: &serde_json::Map<String, Value>) -> Ve
         text.push_str(body);
     }
     let top = named(input);
-    let mut files: Vec<(Option<&str>, String)> = vec![(top, String::new())];
+    let mut files: Vec<(Option<String>, String)> = vec![(top.clone(), String::new())];
     for body in BODY_KEYS
         .iter()
         .filter_map(|key| input.get(*key).and_then(Value::as_str))
     {
-        add(&mut files, top, body);
+        add(&mut files, top.clone(), body);
     }
     for edit in input
         .get("edits")
@@ -316,7 +320,7 @@ pub(super) fn written_text_by_file(input: &serde_json::Map<String, Value>) -> Ve
         else {
             continue;
         };
-        let file = edit.as_object().and_then(named).or(top);
+        let file = edit.as_object().and_then(named).or_else(|| top.clone());
         add(&mut files, file, body);
     }
     files
@@ -326,12 +330,54 @@ pub(super) fn written_text_by_file(input: &serde_json::Map<String, Value>) -> Ve
         .collect()
 }
 
-/// Whether a file-tool write carries a body longer than the content screens
-/// read, so a credential or instruction past the limit would go unseen.
+/// A file path spelled the way it resolves lexically, so `/w/./notes.md`
+/// and `/w/notes.md` name one file: `.` segments and repeated separators
+/// dropped, `..` applied, `\` read as `/`.
+fn lexical_file(path: &str) -> String {
+    let path = path.replace('\\', "/");
+    let absolute = path.starts_with('/');
+    let mut parts: Vec<&str> = Vec::new();
+    for part in path.split('/') {
+        match part {
+            "" | "." => {}
+            ".." if parts.last().is_some_and(|last| *last != "..") => {
+                parts.pop();
+            }
+            ".." if absolute => {}
+            part => parts.push(part),
+        }
+    }
+    let joined = parts.join("/");
+    if absolute {
+        format!("/{joined}")
+    } else {
+        joined
+    }
+}
+
+/// Whether two lexical paths can name one file: equal, or one is relative
+/// and the other ends with it (`notes.md` and `/w/notes.md`).
+fn same_file(one: &str, other: &str) -> bool {
+    one == other
+        || [(one, other), (other, one)].iter().any(|(long, short)| {
+            !short.starts_with('/')
+                && !short.starts_with("..")
+                && long
+                    .strip_suffix(short)
+                    .is_some_and(|head| head.ends_with('/'))
+        })
+}
+
+/// Whether a file-tool write carries more text than the content screens
+/// read, in one body or across the replacements made to one file, so a
+/// credential or instruction past the limit would go unseen.
 pub(super) fn writes_unscreened_body(input: &Map<String, Value>) -> bool {
     written_bodies(input)
         .iter()
         .any(|body| body.char_indices().nth(SCAN_LIMIT).is_some())
+        || written_text_by_file(input)
+            .iter()
+            .any(|text| text.char_indices().nth(SCAN_LIMIT).is_some())
 }
 
 /// Whether a file-tool write puts a live-looking credential into a file.

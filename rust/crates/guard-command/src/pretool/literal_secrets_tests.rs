@@ -248,6 +248,38 @@ fn a_body_past_the_scan_limit_is_reviewed_as_a_whole() {
 }
 
 #[test]
+fn replacements_to_one_file_past_the_scan_limit_together_are_reviewed() {
+    let half = " ".repeat(super::SCAN_LIMIT / 2 + 1);
+    assert!(writes_unscreened_body(&json!({
+        "tool_input": {"file_path": "/w/notes.md", "edits": [
+            {"old_string": "a", "new_string": half},
+            {"path": "/w/./notes.md", "old_string": "b", "new_string": half}
+        ]}
+    })));
+    assert!(!writes_unscreened_body(&json!({
+        "tool_input": {"edits": [
+            {"path": "/w/a.md", "old_string": "a", "new_string": half},
+            {"path": "/w/b.md", "old_string": "b", "new_string": half}
+        ]}
+    })));
+}
+
+#[test]
+fn file_paths_are_compared_the_way_they_resolve() {
+    use super::{lexical_file, same_file};
+    assert_eq!(lexical_file("/w/./notes.md"), "/w/notes.md");
+    assert_eq!(lexical_file("/w//docs/../notes.md"), "/w/notes.md");
+    assert_eq!(lexical_file("/../w/notes.md"), "/w/notes.md");
+    assert_eq!(lexical_file("../notes.md"), "../notes.md");
+    assert_eq!(lexical_file("docs\\notes.md"), "docs/notes.md");
+    assert!(same_file("/w/notes.md", "notes.md"));
+    assert!(same_file("docs/notes.md", "/w/docs/notes.md"));
+    assert!(!same_file("/w/notes.md", "/w/other.md"));
+    assert!(!same_file("/w/mynotes.md", "notes.md"));
+    assert!(!same_file("/w/notes.md", "/x/notes.md"));
+}
+
+#[test]
 fn placeholder_words_and_percent_signs_inside_a_real_value_do_not_hide_it() {
     for text in [
         format!(

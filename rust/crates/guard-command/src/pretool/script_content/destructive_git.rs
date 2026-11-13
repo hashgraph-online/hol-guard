@@ -299,10 +299,13 @@ pub(super) fn other_inline_sources(
 /// the next line, as the interpreter does. A string that spans lines is
 /// written back as one `"`-quoted line (inner `"` as `'`, line ends as `;`)
 /// so the one-line literal readers pair its quotes the way the interpreter
-/// does and still see each command inside it.
+/// does and still see each command inside it. A `${...}` in a Node template
+/// runs as code, so it is written back outside the string.
 pub(super) fn without_comments(language: Language, source: &str) -> String {
     let mut code = String::with_capacity(source.len());
     let mut quote: Option<&'static str> = None;
+    // Open brace depth of each `${` interpolation the scan is inside.
+    let mut interpolations: Vec<usize> = Vec::new();
     let mut in_block = false;
     let mut in_line_comment = false;
     let mut chars = source.char_indices();
@@ -327,6 +330,11 @@ pub(super) fn without_comments(language: Language, source: &str) -> String {
                 for _ in 1..close.len() {
                     chars.next();
                 }
+                quote = None;
+            } else if close == "`" && rest.starts_with("${") {
+                code.push_str("\"+(");
+                chars.next();
+                interpolations.push(0);
                 quote = None;
             } else if spans_lines {
                 code.push(match ch {
@@ -373,6 +381,19 @@ pub(super) fn without_comments(language: Language, source: &str) -> String {
                 continue;
             }
             _ => {}
+        }
+        if let Some(depth) = interpolations.last_mut() {
+            match ch {
+                '{' => *depth += 1,
+                '}' if *depth == 0 => {
+                    interpolations.pop();
+                    code.push_str(")+\"");
+                    quote = Some("`");
+                    continue;
+                }
+                '}' => *depth -= 1,
+                _ => {}
+            }
         }
         let opened = match ch {
             '"' if language == Language::Python && rest.starts_with("\"\"\"") => Some("\"\"\""),

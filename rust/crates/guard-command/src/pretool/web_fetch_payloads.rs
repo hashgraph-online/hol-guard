@@ -298,15 +298,27 @@ fn query_value_carries_payload(value: &str) -> bool {
         || OPAQUE_RUN.is_match(value)
 }
 
-/// Whether a query name, value or fragment carries a payload as written or
-/// under up to `MAX_DECODE_DEPTH` layers of percent, hex or base64 encoding:
-/// a recovery phrase sent base64url-encoded is as short as a session token.
-fn query_part_carries_payload(part: &str, depth: usize) -> bool {
-    query_value_carries_payload(part)
+/// Whether `part`, as written or under up to `MAX_DECODE_DEPTH` layers of
+/// percent, hex or base64 encoding, reads as `found`: a recovery phrase sent
+/// base64url-encoded is as short as a session token.
+fn any_reading(part: &str, depth: usize, found: &dyn Fn(&str) -> bool) -> bool {
+    found(part)
         || (depth < super::MAX_DECODE_DEPTH
             && super::decoded_readings(part)
                 .iter()
-                .any(|reading| query_part_carries_payload(reading, depth + 1)))
+                .any(|reading| any_reading(reading, depth + 1, found)))
+}
+
+/// Whether a query name, value or fragment carries a payload in any reading.
+fn query_part_carries_payload(part: &str) -> bool {
+    any_reading(part, 0, &query_value_carries_payload)
+}
+
+/// Whether a query pair sends a hex private key under a key-shaped name,
+/// with the name and the value each read through their encodings.
+fn names_a_hex_key(key: &str, value: &str) -> bool {
+    any_reading(key, 0, &|name| KEY_NAME.is_match(name))
+        && any_reading(value, 0, &|value| HEX_KEY.is_match(value))
 }
 
 /// Whether the query or fragment carries a wallet key, recovery phrase,
@@ -326,13 +338,13 @@ pub(super) fn url_carries_payload(url: &Url) -> bool {
     let fragment = url.fragment().map(str::to_owned);
     path_phrase
         || url.query_pairs().any(|(key, value)| {
-            (KEY_NAME.is_match(&key) && HEX_KEY.is_match(&value))
-                || query_part_carries_payload(&key, 0)
-                || query_part_carries_payload(&value, 0)
+            names_a_hex_key(&key, &value)
+                || query_part_carries_payload(&key)
+                || query_part_carries_payload(&value)
         })
         || fragment
             .map(|fragment| decoded(&fragment))
-            .is_some_and(|fragment| query_part_carries_payload(&fragment, 0))
+            .is_some_and(|fragment| query_part_carries_payload(&fragment))
 }
 
 /// A label of either case that decodes from base32 to readable text, as data

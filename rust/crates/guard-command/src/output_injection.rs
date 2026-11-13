@@ -119,7 +119,18 @@ fn orders_it_after(after: &str) -> bool {
     let sentence = rest
         .find(['.', '!', '?', '\n'])
         .map_or(rest, |at| &rest[..at]);
-    CARRY_OUT_QUOTED.is_match(sentence) && !NEGATED.is_match(sentence)
+    CARRY_OUT_QUOTED
+        .find_iter(sentence)
+        .any(|order| !negated_just_before(&sentence[..order.start()]))
+}
+
+/// Whether the few words right before a request negate it (`never follow
+/// it`, `refuse to do that`). A negation elsewhere in the sentence (`Execute
+/// that now, not later.`) leaves the request standing.
+fn negated_just_before(lead: &str) -> bool {
+    let words: Vec<&str> = lead.split_whitespace().collect();
+    let near = words[words.len().saturating_sub(4)..].join(" ");
+    NEGATED.is_match(&near)
 }
 
 /// Whether the sentence leading into `found` asks the reader to act on it

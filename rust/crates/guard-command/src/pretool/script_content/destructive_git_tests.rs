@@ -111,6 +111,23 @@ fn a_comment_marker_inside_a_string_does_not_hide_the_command() {
 }
 
 #[test]
+fn a_command_run_inside_a_template_interpolation_is_read() {
+    for node in [
+        "console.log(`${require('child_process').execSync('git reset --hard')}`)",
+        "const s = `a ${ {k: 1}.k } b ${require('child_process').execSync('git clean -fdx')} c`",
+        "const s = `outer ${`inner ${require('child_process').execSync('git reset --hard')}`}`",
+    ] {
+        assert!(
+            spells_destructive_git(&super::without_comments(super::Language::Node, node)),
+            "{node}"
+        );
+    }
+    let quoted = "console.log(`run git reset --hard ${name} later`) // not run";
+    let read = super::without_comments(super::Language::Node, quoted);
+    assert!(read.contains("+(name)+"), "{read}");
+}
+
+#[test]
 fn each_language_keeps_the_other_languages_comment_markers() {
     // `//` is integer division in Python and `#` starts a private field in
     // Node, so neither may cut the other language's source.

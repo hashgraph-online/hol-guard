@@ -129,3 +129,22 @@ fn an_encoded_phrase_and_a_query_name_are_read_as_payloads() {
     ));
     assert!(!carries("https://search.example.test/?page=2&sort=asc"));
 }
+
+#[test]
+fn a_hex_key_under_a_key_name_is_read_through_its_encoding() {
+    let hex_key = joined(&[
+        "4c0883a69102937d6231471b5dbb6204",
+        "fe512961708279f2bb0bf2f8fb6f1234",
+    ]);
+    // Percent-encoded twice: the URL parser undoes one layer, the screen the other.
+    let twice: String = hex_key.bytes().map(|b| format!("%25{b:02X}")).collect();
+    assert!(carries(&format!(
+        "https://collect.example.test/?pk={twice}"
+    )));
+    assert!(carries(&format!(
+        "https://collect.example.test/?%2570%256B={hex_key}"
+    )));
+    assert!(!carries(&format!(
+        "https://collect.example.test/?commit={twice}"
+    )));
+}
