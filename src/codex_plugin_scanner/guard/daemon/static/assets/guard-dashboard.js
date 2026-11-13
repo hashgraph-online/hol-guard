@@ -14368,7 +14368,10 @@ function retryCannotReuseApproval(item) {
   return item.once_only_reason === "script_execution_binding_unavailable" || item.scope_restrictions?.includes("retry_cannot_reuse_approval") === true;
 }
 function oneTimeRetryWindowMinutes(item) {
-  return item.artifact_id.includes(":native-pretool:") ? 5 : 15;
+  return item.artifact_id.includes(":native-pretool:") ? 60 : 15;
+}
+function retryWindowText(minutes) {
+  return minutes === 60 ? "an hour" : `${minutes} minutes`;
 }
 function allowPermissionLabels(item) {
   const recommendation = item.extension_recommendation;
@@ -15141,7 +15144,7 @@ function buildRetryAfterApprovalCopy(item, action, persistedExactAction = false)
       return `Saved. Return to ${harness} to retry. Guard will allow this exact action next time; changed commands still need review.`;
     }
     if (retryCannotReuseApproval(item)) return retryBlockedApprovalCopy(item, harness);
-    return `Approved once. Return to ${harness} and retry within ${oneTimeRetryWindowMinutes(item)} minutes.`;
+    return `Approved once. Return to ${harness} and retry within ${retryWindowText(oneTimeRetryWindowMinutes(item))}.`;
   }
   return `Blocked. Return to ${harness} to continue with a different action, or ask it to try something else.`;
 }
@@ -32361,7 +32364,7 @@ function ExactActionPersistenceChoice(props) {
           }
         ),
         /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "block text-sm font-semibold text-brand-dark", children: props.versionBoundScript ? "Run once" : "This time" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "mt-0.5 block text-xs text-muted-foreground", children: `Retry within ${props.retryWindowMinutes} minutes.` })
+        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "mt-0.5 block text-xs text-muted-foreground", children: `Retry within ${retryWindowText(props.retryWindowMinutes)}.` })
       ] }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: exactActionChoiceClassName(props.checked), children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx(
