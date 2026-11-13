@@ -756,20 +756,20 @@ def test_openclaw_complete_plan_recovers_overlay_hook_manifest_and_launchers(tra
 
 @pytest.mark.parametrize("previous_exists", [False, True])
 def test_grok_plan_restores_config_hooks_state_and_backup_lifetime(transition, previous_exists):
+    from codex_plugin_scanner.guard.adapters import get_adapter
     from codex_plugin_scanner.guard.adapters.base import HarnessContext
     from codex_plugin_scanner.guard.adapters.cursor_hook_config import isolated_cursor_hook_python
-    from codex_plugin_scanner.guard.adapters.grok import GrokHarnessAdapter
 
     runtime, plan, _, _ = transition
     ctx = HarnessContext(home_dir=runtime.home.parent, workspace_dir=None, guard_home=runtime.home)
-    adapter = GrokHarnessAdapter()
+    adapter = get_adapter("grok")
     config = ctx.home_dir / ".grok/config.toml"
     config.parent.mkdir(parents=True)
     config.write_text("# user setting\n[ui]\nsimple_mode = true\n")
     config.chmod(0o600)
     if previous_exists:
         adapter.install(ctx)
-    backup = adapter._backup_path(ctx, "config.toml")
+    backup = ctx.guard_home / "managed" / "grok" / "config.toml.backup"
     previous_backup = backup.stat() if backup.exists() else None
     prepared = adapter.prepare_install(replace(ctx, workspace_dir=ctx.home_dir / "candidate-workspace"))
     assert len(prepared.files) == (11 if isolated_cursor_hook_python() is not None else 10)
@@ -812,10 +812,7 @@ def test_native_json_plan_restores_config_state_and_backup_lifetime(transition, 
     config.chmod(0o600)
     if previous_exists:
         adapter.install(ctx)
-    if harness == "zcode":
-        _, backup, _ = adapter._managed_state_paths(ctx)
-    else:
-        backup = ctx.guard_home / "managed" / "devin" / "config.json.backup"
+    backup = ctx.guard_home / "managed" / harness / "config.json.backup"
     previous_backup = backup.stat() if backup.exists() else None
     prepared = adapter.prepare_install(replace(ctx, workspace_dir=ctx.home_dir / "candidate-workspace"))
     assert len(prepared.files) == 5

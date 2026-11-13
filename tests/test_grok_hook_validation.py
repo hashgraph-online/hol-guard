@@ -11,12 +11,13 @@ from unittest.mock import patch
 import pytest
 
 from codex_plugin_scanner.guard.adapters.base import HarnessContext, _shell_command
-from codex_plugin_scanner.guard.adapters.grok import GrokHarnessAdapter
 from codex_plugin_scanner.guard.cli.grok_hook_validation import is_grok_hook_command
 from codex_plugin_scanner.guard.cli.native_install_checks import (
     _grok_managed_config_is_active,
     _grok_protection_checks,
 )
+
+from .grok_test_support import _ctx, grok_hook_command_parts
 
 
 def _command(tmp_path: Path) -> tuple[str, ...]:
@@ -25,7 +26,7 @@ def _command(tmp_path: Path) -> tuple[str, ...]:
     with patch(
         "codex_plugin_scanner.guard.adapters.bounded_cli_hook_bridge.isolated_cursor_hook_python", return_value=None
     ):
-        return GrokHarnessAdapter._hook_command_parts(context)
+        return grok_hook_command_parts(context)
 
 
 def test_generated_grok_bridge_is_recognized(tmp_path: Path) -> None:
@@ -90,7 +91,7 @@ def test_isolated_grok_client_is_recognized(tmp_path: Path, monkeypatch: pytest.
             lambda *_args, **_kwargs: runtime,
         )
     context = HarnessContext(tmp_path / "home", tmp_path / "workspace", tmp_path / "guard")
-    command = GrokHarnessAdapter._hook_command_parts(context)
+    command = grok_hook_command_parts(context)
     assert command[:4] == (str(runtime), "bounded-hook-bridge", "/usr/bin/python3", "-I")
     assert is_grok_hook_command(_shell_command(command), context) is True
     other = HarnessContext(tmp_path / "other", None, tmp_path / "other-guard")
@@ -140,12 +141,10 @@ def test_desktop_grok_proxy_requires_all_signatures(tmp_path: Path, monkeypatch:
         '[permission]\ndeny = ["Read(**/.grok/auth/**)"',
     ],
 )
-def test_grok_readiness_requires_real_permission_deny_list(table: str) -> None:
+def test_grok_readiness_requires_real_permission_deny_list(table: str, tmp_path: Path) -> None:
     """Rules in allow, unrelated tables, comments, or invalid TOML do not protect secrets."""
-    assert (
-        _grok_managed_config_is_active(f"# BEGIN HOL GUARD MANAGED GROK\n{table}\n# END HOL GUARD MANAGED GROK\n")
-        is False
-    )
+    managed = f"# BEGIN HOL GUARD MANAGED GROK\n{table}\n# END HOL GUARD MANAGED GROK\n"
+    assert _grok_managed_config_is_active(managed, _ctx(tmp_path)) is False
 
 
 @pytest.mark.parametrize("error", ["unicode", "io"])

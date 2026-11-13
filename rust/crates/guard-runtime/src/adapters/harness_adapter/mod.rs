@@ -1,5 +1,5 @@
 //! `runner_authority` kind `harness_adapter`: the Gemini, Antigravity, Kimi,
-//! Devin, Muse, OpenClaw and Paseo harness adapters.
+//! Devin, Muse, OpenClaw, Paseo, Grok and ZCode harness adapters.
 //!
 //! Python keeps one generic adapter class that holds the ownership locks,
 //! prepares and removes the launcher shim, builds the bounded hook argv and
@@ -14,7 +14,8 @@
 //! env}`, where `env` holds only the variables `describe` names and the ones
 //! starting with its prefixes. A failure Python raises answers one key:
 //! `{"refusal": message}` is a `ValueError`, `{"os_error": message}` an
-//! `OSError` and `{"integrity": reason}` the snapshot's integrity error.
+//! `OSError`, `{"not_found": message}` a `FileNotFoundError` and
+//! `{"integrity": reason}` the snapshot's integrity error.
 
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
@@ -28,6 +29,8 @@ use crate::runner_authority_op::{KindResult, ERR_INVALID};
 mod cloud_identity;
 mod describe;
 mod files;
+mod grok;
+mod grok_install;
 mod kimi;
 mod openclaw;
 mod paseo;
@@ -37,6 +40,7 @@ mod proof;
 mod settings_hooks;
 mod simple;
 mod which;
+mod zcode;
 
 #[cfg(test)]
 #[path = "tests.rs"]
@@ -54,6 +58,7 @@ pub(crate) struct Ctx {
     pub(crate) cwd: Option<PathBuf>,
     pub(crate) user_home: PathBuf,
     pub(crate) env: BTreeMap<String, String>,
+    pub(crate) executable_overrides: BTreeMap<String, String>,
     pub(crate) windows: bool,
 }
 
@@ -70,9 +75,9 @@ impl Ctx {
             None => Ok(false),
             Some(value) => value.as_bool().ok_or(ERR_INVALID),
         };
-        let env = match map.get("env") {
-            None | Some(Value::Null) => BTreeMap::new(),
-            Some(Value::Object(env)) => env
+        let strings = |key: &str| match map.get(key) {
+            None | Some(Value::Null) => Ok(BTreeMap::new()),
+            Some(Value::Object(entries)) => entries
                 .iter()
                 .map(|(key, value)| {
                     value
@@ -80,8 +85,8 @@ impl Ctx {
                         .map(|text| (key.clone(), text.to_owned()))
                         .ok_or(ERR_INVALID)
                 })
-                .collect::<Result<_, _>>()?,
-            Some(_) => return Err(ERR_INVALID),
+                .collect::<Result<_, _>>(),
+            Some(_) => Err(ERR_INVALID),
         };
         Ok(Self {
             home: PathBuf::from(text("home")?),
@@ -90,7 +95,8 @@ impl Ctx {
             home_explicit: flag("home_override_explicit")?,
             cwd: optional("cwd")?,
             user_home: PathBuf::from(text("user_home")?),
-            env,
+            env: strings("env")?,
+            executable_overrides: strings("executable_overrides")?,
             windows: cfg!(windows),
         })
     }
@@ -143,6 +149,7 @@ pub(crate) fn path_text(path: &Path) -> String {
 pub(crate) enum Failure {
     Refusal(String),
     Os(String),
+    NotFound(String),
     Integrity(&'static str),
     Invalid,
 }
@@ -160,6 +167,7 @@ fn answer(step: Step<Value>) -> KindResult {
         Ok(value) => Ok(value),
         Err(Failure::Refusal(message)) => Ok(json!({ "refusal": message })),
         Err(Failure::Os(message)) => Ok(json!({ "os_error": message })),
+        Err(Failure::NotFound(message)) => Ok(json!({ "not_found": message })),
         Err(Failure::Integrity(reason)) => Ok(json!({ "integrity": reason })),
         Err(Failure::Invalid) => Err(ERR_INVALID),
     }
@@ -189,6 +197,8 @@ pub(crate) fn dispatch(args: &Value) -> KindResult {
         "devin" | "muse" => settings_hooks::dispatch(spec, op, &ctx, fields),
         "openclaw" => openclaw::dispatch(spec, op, &ctx, fields),
         "paseo" => paseo::dispatch(spec, op, &ctx, fields),
+        "grok" => grok::dispatch(spec, op, &ctx, fields),
+        "zcode" => zcode::dispatch(spec, op, &ctx, fields),
         _ => Err(Failure::Invalid),
     })
 }

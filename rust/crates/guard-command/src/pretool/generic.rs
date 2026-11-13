@@ -19,6 +19,8 @@ pub use env_prefix_projection::bindable_setting;
 mod cline_view;
 #[path = "generic_extract.rs"]
 mod extract;
+#[path = "generic_grok_tool_discovery.rs"]
+mod grok_tool_discovery;
 #[path = "inert_tool_settings.rs"]
 pub(crate) mod inert_tool_settings;
 #[path = "generic_omp.rs"]
@@ -956,6 +958,9 @@ fn evaluate_envelope(
         )
     } else if let Some(omp_result) = omp_result {
         omp_result
+    } else if let Some(discovery) = grok_tool_discovery::evaluate(harness, event, payload, &signals)
+    {
+        discovery
     } else if let Some(pure_result) = pure_eval::evaluate(harness, event, payload, &signals) {
         pure_result
     } else if let Some(cursor_read) =

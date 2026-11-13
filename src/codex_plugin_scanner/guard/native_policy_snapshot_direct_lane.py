@@ -146,7 +146,7 @@ def local_cli_block_rules_present(store: object) -> bool:
 def contained_sink_command() -> tuple[str, ...] | None:
     """The sink command prefix the resident routes sandbox requirements to."""
 
-    from .adapters.zcode_contained_tests import contained_sink_command_prefix
+    from .contained_sink_command import contained_sink_command_prefix
 
     try:
         return contained_sink_command_prefix()

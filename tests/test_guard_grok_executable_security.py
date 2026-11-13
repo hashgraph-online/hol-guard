@@ -6,15 +6,8 @@ from pathlib import Path
 
 import pytest
 
+from codex_plugin_scanner.guard.adapters import get_adapter
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
-from codex_plugin_scanner.guard.adapters.grok import GrokHarnessAdapter
-from codex_plugin_scanner.guard.adapters.grok_executable import (
-    grok_executable_names,
-    resolve_trusted_grok_executable,
-    sanitized_grok_launch_environment,
-)
-
-from .grok_native_fake import install_grok_native_fake
 
 
 def _context(tmp_path: Path, *, workspace: bool = True, override: str | None = None) -> HarnessContext:
@@ -34,6 +27,13 @@ def _context(tmp_path: Path, *, workspace: bool = True, override: str | None = N
     )
 
 
+def _refusal(context: HarnessContext) -> str:
+    """The reason the native runtime gives for not launching Grok."""
+    with pytest.raises(OSError) as refused:
+        get_adapter("grok").launch_command(context, [])
+    return str(refused.value)
+
+
 def _write_executable(path: Path, body: str = "#!/bin/sh\nexit 0\n") -> Path:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(body, encoding="utf-8")
@@ -47,11 +47,9 @@ def test_workspace_path_collision_is_rejected(tmp_path: Path, monkeypatch: pytes
     candidate = _write_executable(context.workspace_dir / "bin" / "grok")
     monkeypatch.setenv("PATH", str(candidate.parent))
 
-    resolution = resolve_trusted_grok_executable(context)
+    error = _refusal(context)
 
-    assert resolution.executable is None
-    assert resolution.error is not None
-    assert "workspace" in resolution.error.lower()
+    assert "workspace" in error.lower()
 
 
 def test_relative_path_entry_is_never_promoted_to_absolute(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -60,11 +58,9 @@ def test_relative_path_entry_is_never_promoted_to_absolute(tmp_path: Path, monke
     monkeypatch.chdir(tmp_path)
     monkeypatch.setenv("PATH", "relative-bin")
 
-    resolution = resolve_trusted_grok_executable(context)
+    error = _refusal(context)
 
-    assert resolution.executable is None
-    assert resolution.error is not None
-    assert "absolute" in resolution.error.lower() or "cwd" in resolution.error.lower()
+    assert "absolute" in error.lower() or "cwd" in error.lower()
 
 
 def test_symlink_target_inside_workspace_is_rejected(tmp_path: Path) -> None:
@@ -76,22 +72,18 @@ def test_symlink_target_inside_workspace_is_rejected(tmp_path: Path) -> None:
     candidate.symlink_to(target)
     context = replace(context, executable_overrides={"grok": str(candidate)})
 
-    resolution = resolve_trusted_grok_executable(context)
+    error = _refusal(context)
 
-    assert resolution.executable is None
-    assert resolution.error is not None
-    assert "workspace" in resolution.error.lower()
+    assert "workspace" in error.lower()
 
 
 def test_missing_executable_has_actionable_error(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     context = _context(tmp_path, workspace=False)
     monkeypatch.setenv("PATH", "")
 
-    resolution = resolve_trusted_grok_executable(context)
+    error = _refusal(context)
 
-    assert resolution.executable is None
-    assert resolution.error is not None
-    assert "not found" in resolution.error.lower()
+    assert "not found" in error.lower()
 
 
 def test_custom_path_root_requires_one_explicit_selection(
@@ -102,11 +94,9 @@ def test_custom_path_root_requires_one_explicit_selection(
     candidate = _write_executable(tmp_path / "custom-tools" / "grok")
     monkeypatch.setenv("PATH", str(candidate.parent))
 
-    resolution = resolve_trusted_grok_executable(context)
+    error = _refusal(context)
 
-    assert resolution.executable is None
-    assert resolution.error is not None
-    assert "--grok-executable" in resolution.error
+    assert "--grok-executable" in error
 
 
 def test_group_writable_executable_is_rejected(tmp_path: Path) -> None:
@@ -114,16 +104,9 @@ def test_group_writable_executable_is_rejected(tmp_path: Path) -> None:
     candidate.chmod(0o775)
     context = _context(tmp_path, workspace=False, override=str(candidate))
 
-    resolution = resolve_trusted_grok_executable(context)
+    error = _refusal(context)
 
-    assert resolution.executable is None
-    assert resolution.error is not None
-    assert "writable" in resolution.error.lower()
-
-
-def test_windows_command_extensions_are_explicitly_supported() -> None:
-    assert grok_executable_names(windows=True) == ("grok.exe", "grok.cmd", "grok.bat", "grok.com")
-    assert grok_executable_names(windows=False) == ("grok",)
+    assert "writable" in error.lower()
 
 
 def test_launch_environment_removes_code_loader_variables_and_workspace_path(
@@ -142,7 +125,7 @@ def test_launch_environment_removes_code_loader_variables_and_workspace_path(
         "SAFE_SETTING": "preserved",
     }
 
-    environment = sanitized_grok_launch_environment(context, inherited)
+    environment = get_adapter("grok").prepare_launch_environment(context, inherited)
 
     assert str(workspace_bin) not in environment["PATH"]
     assert "NODE_OPTIONS" not in environment
@@ -162,26 +145,10 @@ def test_detect_reports_config_but_never_probes_untrusted_path(
     config.write_text('[permission]\nallow = ["Read"]\n', encoding="utf-8")
     candidate = _write_executable(context.workspace_dir / "bin" / "grok")
     monkeypatch.setenv("PATH", str(candidate.parent))
-    monkeypatch.setattr(
-        "codex_plugin_scanner.guard.adapters.grok._run_command_probe",
-        lambda *_args, **_kwargs: pytest.fail("untrusted executable must not be probed"),
-    )
 
-    detection = GrokHarnessAdapter().detect(context)
+    detection = get_adapter("grok").detect(context)
 
     assert detection.installed is True
     assert detection.command_available is False
     assert str(config) in detection.config_paths
     assert any("workspace" in warning.lower() for warning in detection.warnings)
-
-
-def test_launch_uses_absolute_registered_path(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    custom = _write_executable(tmp_path / "custom-tools" / "grok")
-    context = _context(tmp_path, workspace=False, override=str(custom))
-    install_grok_native_fake(monkeypatch)
-
-    command = GrokHarnessAdapter().launch_command(context, ["--help"])
-
-    assert command == [str(custom.resolve()), "--help"]
-    registration = context.guard_home / "managed" / "grok" / "trusted-executable.json"
-    assert registration.is_file()

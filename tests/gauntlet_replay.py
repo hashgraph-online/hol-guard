@@ -45,7 +45,7 @@ SHELL = {
 READ = {"zcode": "Read", "claude-code": "Read", "omp": "read", "pi": "read", "cursor": "Read"}
 GLOB = {"claude-code": "Glob", "omp": "glob"}
 GREP = {"claude-code": "Grep", "omp": "grep", "pi": "grep"}
-WRITE = {"zcode": "Write", "claude-code": "Write", "omp": "write", "pi": "write"}
+WRITE = {"zcode": "Write", "claude-code": "Write", "omp": "write", "pi": "write", "cursor": "Write"}
 FIXED = {
     "eval": "eval",
     "task": "task",
@@ -192,7 +192,7 @@ def payload_input(case: ReplayCase, resolved: dict[str, object]) -> dict[str, ob
         resolved = {"file_path": resolved["path"]}
     if case.harness == "cursor" and case.tool == "read":
         resolved = {"file_path": resolved["path"], "path": resolved["path"]}
-    if case.harness in {"claude-code", "zcode"} and case.tool == "write":
+    if case.harness in {"claude-code", "zcode", "cursor"} and case.tool == "write":
         resolved = {"file_path": resolved["path"], "content": resolved["content"]}
     return resolved
 
@@ -203,9 +203,12 @@ def cursor_hook_fields(tool: str, payload: dict[str, object]) -> dict[str, objec
     Cursor reports shell calls as beforeShellExecution and reads as beforeReadFile.
     The script forwards both as PreToolUse, keeping the raw command or path beside tool_input.
     A beforeReadFile event also carries the file's full text as ``content``.
+    A Write call reaches preToolUse unchanged, so it gains no fields.
     """
     tool_input = payload["tool_input"]
     assert isinstance(tool_input, dict)
+    if tool == "write":
+        return {}
     if tool == "read":
         file_path = str(tool_input["file_path"])
         fields: dict[str, object] = {"file_path": file_path}

@@ -330,3 +330,22 @@ pub(crate) fn adapter_result(
 pub(crate) fn manifest_answer(doc: Doc) -> Step<Value> {
     Ok(json!({ "manifest": render(&doc.value())? }))
 }
+
+/// `finish_uninstall`: the inactive manifest with the plan's notes before the
+/// removed shim's.
+pub(crate) fn finished(
+    harness: &str,
+    config_path: &Path,
+    fields: &serde_json::Map<String, Value>,
+) -> Step<Value> {
+    let shim = shim_manifest(fields)?;
+    let notes = fields
+        .get("finish")
+        .and_then(|finish| finish.get("notes"))
+        .and_then(Value::as_array)
+        .ok_or(Failure::Invalid)?
+        .iter()
+        .map(|note| note.as_str().map(text).ok_or(Failure::Invalid))
+        .collect::<Step<Vec<_>>>()?;
+    manifest_answer(adapter_result(harness, false, config_path, &shim, notes))
+}

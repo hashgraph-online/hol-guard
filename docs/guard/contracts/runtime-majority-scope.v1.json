@@ -641,25 +641,17 @@
           "src/codex_plugin_scanner/guard/adapters/codex_remote_control.py",
           "src/codex_plugin_scanner/guard/adapters/cursor_native_approval.py",
           "src/codex_plugin_scanner/guard/adapters/cursor_path_cleanup.py",
-          "src/codex_plugin_scanner/guard/adapters/grok.py",
           "src/codex_plugin_scanner/guard/adapters/grok_approval_resume.py",
-          "src/codex_plugin_scanner/guard/adapters/grok_config.py",
-          "src/codex_plugin_scanner/guard/adapters/grok_executable.py",
-          "src/codex_plugin_scanner/guard/adapters/grok_install_settings.py",
-          "src/codex_plugin_scanner/guard/adapters/grok_state.py",
-          "src/codex_plugin_scanner/guard/adapters/grok_user_config.py",
-          "src/codex_plugin_scanner/guard/adapters/grok_version_probe.py",
           "src/codex_plugin_scanner/guard/adapters/guard_cli_attestation.py",
           "src/codex_plugin_scanner/guard/adapters/hermes_file_inspection.py",
           "src/codex_plugin_scanner/guard/adapters/managed_mcp_upstream.py",
           "src/codex_plugin_scanner/guard/adapters/mcp_relay_native.py",
           "src/codex_plugin_scanner/guard/adapters/mcp_servers.py",
           "src/codex_plugin_scanner/guard/adapters/workspace_overrides.py",
-          "src/codex_plugin_scanner/guard/adapters/zcode_config.py",
-          "src/codex_plugin_scanner/guard/adapters/zcode_contained_tests.py",
+          "src/codex_plugin_scanner/guard/contained_sink_command.py",
           "src/codex_plugin_scanner/guard/windows_paths.py"
         ],
-        "reason": "Reviewed: adapters: harness registry targets (codex, grok, zcode, mcp_servers and the MCP proxy launcher selection, cursor native approval, hermes file inspection, attestation and path helpers). Loaded through the dynamic adapter registry and reached from approvals.py, cursor_hooks, hook workers and launch_command for run/protect. Install/diagnostics methods share the classes with the launch and approval paths, so the files stay whole in scope. guard/windows_paths.py is the trusted Windows profile lookup codex_lifecycle_lock uses to place its lock."
+        "reason": "Reviewed: adapters: harness registry targets (codex, the Grok approval resume, mcp_servers and the MCP proxy launcher selection, cursor native approval, hermes file inspection, attestation and path helpers). guard/contained_sink_command.py builds the contained test sink command hook routes hand to the native runtime. Loaded through the dynamic adapter registry and reached from approvals.py, cursor_hooks, hook workers and launch_command for run/protect. Install/diagnostics methods share the classes with the launch and approval paths, so the files stay whole in scope. guard/windows_paths.py is the trusted Windows profile lookup codex_lifecycle_lock uses to place its lock."
       },
       {
         "path": [
@@ -774,7 +766,6 @@
           "src/codex_plugin_scanner/guard/adapters/pi_extension_pinned_core.py",
           "src/codex_plugin_scanner/guard/adapters/pi_support.py",
           "src/codex_plugin_scanner/guard/adapters/state_files.py",
-          "src/codex_plugin_scanner/guard/adapters/zcode.py",
           "src/codex_plugin_scanner/json_comment_stripping.py"
         ],
         "reason": "Reviewed: adapter implementations behind the harness registry. Adapters normalize harness payloads into hook requests, so they sit on the hook path, and hook-path authority is never excluded. Install and setup methods that have a function_exclusions entry are excluded as install_config, not hook path; install helpers without an entry (for example in the Cline and OpenCode support modules) stay counted, which understates the Rust share."
@@ -1232,22 +1223,6 @@
         "evidence": "install_cursor_hooks and uninstall_cursor_hooks have no caller in any in-scope module; they are invoked by the excluded Cursor adapter and rebind modules. The hook entry readers and payload code stay in scope. The report validates that no retained symbol or in-scope module references the excluded names."
       },
       {
-        "id": "adapter-grok-setup",
-        "category": "install_config",
-        "path": "src/codex_plugin_scanner/guard/adapters/grok.py",
-        "symbols": [
-          "_GUARD_HOOK_INTERNAL_TIMEOUT_SECONDS",
-          "GrokHarnessAdapter._backup_path",
-          "GrokHarnessAdapter._hook_command_parts",
-          "GrokHarnessAdapter.prepare_install",
-          "GrokHarnessAdapter.install",
-          "GrokHarnessAdapter.uninstall"
-        ],
-        "entry_points": [],
-        "reason": "Grok adapter install and uninstall and the hook command builder used only to write the install.",
-        "evidence": "install, prepare_install and uninstall have no caller in any in-scope module; they are invoked by the excluded install, uninstall and repair dispatchers. The report validates that no retained symbol or in-scope module references the excluded names."
-      },
-      {
         "id": "runtime-policy-admin-payloads",
         "category": "cli_only",
         "path": "src/codex_plugin_scanner/guard/cli/commands_support_runtime_policy.py",
@@ -1441,20 +1416,6 @@
         ],
         "entry_points": [],
         "reason": "Pi family adapter extension install and uninstall.",
-        "evidence": "install, prepare_install and uninstall have no caller in any in-scope module; they are invoked by the excluded install, uninstall and repair dispatchers. The report validates that no retained symbol or in-scope module references the excluded names."
-      },
-      {
-        "id": "adapter-zcode-setup",
-        "category": "install_config",
-        "path": "src/codex_plugin_scanner/guard/adapters/zcode.py",
-        "symbols": [
-          "ZCodeHarnessAdapter.prepare_install",
-          "ZCodeHarnessAdapter.install",
-          "ZCodeHarnessAdapter.uninstall",
-          "ZCodeHarnessAdapter._hook_command_parts"
-        ],
-        "entry_points": [],
-        "reason": "ZCode adapter hook install and uninstall (file reads, path checks, install state and writes) and the helpers used only to write the install; the hook settings rewrite itself (legacy hook-event migration, managed hook prune and merge, Guard handler rendering, the enabled flag and its saved record, and the settings file rendering) runs in the native zcode_hook_settings runner-authority kind.",
         "evidence": "install, prepare_install and uninstall have no caller in any in-scope module; they are invoked by the excluded install, uninstall and repair dispatchers. The report validates that no retained symbol or in-scope module references the excluded names."
       },
       {

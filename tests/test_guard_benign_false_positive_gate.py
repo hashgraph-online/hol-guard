@@ -60,7 +60,7 @@ _SHELL_TOOL = {
 _READ_TOOL = {"zcode": "Read", "claude-code": "Read", "omp": "read", "cursor": "Read"}
 _GLOB_TOOL = {"claude-code": "Glob", "omp": "glob"}
 _GREP_TOOL = {"claude-code": "Grep", "omp": "grep", "grok": "Grep"}
-_WRITE_TOOL = {"zcode": "Write", "claude-code": "Write", "omp": "write"}
+_WRITE_TOOL = {"zcode": "Write", "claude-code": "Write", "omp": "write", "cursor": "Write"}
 _FIXED_TOOLS = {
     "eval": "eval",
     "task": "task",
@@ -76,6 +76,8 @@ _FIXED_TOOLS = {
     "web_fetch": "WebFetch",
     # Claude Code starts a subagent with a written brief; the brief is prompt text.
     "agent": "Agent",
+    # Grok's keyword search over its configured integration (MCP) tools.
+    "search_tool": "search_tool",
 }
 # A pending marker names the open work that owns the case. "unassigned" still
 # prompts and has no owner yet. A merged PR is never a marker: once its fix
@@ -180,7 +182,7 @@ def _tool_input(case: GateCase, fixture: BenignFixture) -> dict[str, object]:
         resolved = {"file_path": resolved["path"]}
     if case.harness == "cursor" and case.tool == "read":
         resolved = {"file_path": resolved["path"], "path": resolved["path"]}
-    if case.harness in {"claude-code", "zcode"} and case.tool == "write":
+    if case.harness in {"claude-code", "zcode", "cursor"} and case.tool == "write":
         resolved = {"file_path": resolved["path"], "content": resolved["content"]}
     return resolved
 

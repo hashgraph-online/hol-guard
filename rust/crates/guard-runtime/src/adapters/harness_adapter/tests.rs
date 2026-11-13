@@ -11,6 +11,9 @@ use tempfile::TempDir;
 
 use super::dispatch;
 
+#[path = "tests_grok_zcode.rs"]
+mod grok_zcode;
+
 struct Home {
     _dir: TempDir,
     root: std::path::PathBuf,
@@ -84,7 +87,9 @@ fn describe_lists_every_adapter_this_kind_owns() {
             "kimi",
             "openclaw",
             "paseo",
-            "muse"
+            "muse",
+            "grok",
+            "zcode"
         ]
     );
 }

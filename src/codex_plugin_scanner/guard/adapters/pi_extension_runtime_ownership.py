@@ -69,8 +69,8 @@ def resolve_pi_extension_runtime_ownership(
 def _windows_contained_sink(python: str, package_root: Path) -> tuple[tuple[str, ...], str]:
     """The sink argv and request directory Claude Code's Windows route uses.
     Without a profile Temp directory, protected runs stay denied."""
+    from ..contained_sink_command import contained_sink_command_prefix
     from ..windows_paths import trusted_windows_local_temp
-    from .zcode_contained_tests import contained_sink_command_prefix
 
     try:
         request_root = str(trusted_windows_local_temp())

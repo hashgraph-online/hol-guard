@@ -9,7 +9,7 @@ use base64::engine::general_purpose::STANDARD;
 use base64::Engine as _;
 use serde_json::{json, Map, Value};
 
-use super::files::{self, adapter_result, manifest_answer, Change};
+use super::files::{self, adapter_result, Change};
 use super::kimi::{guard_hook_args, hook_command};
 use super::{
     common, detection, path_answer, path_text, resolved_executable, which, Ctx, Failure, Spec, Step,
@@ -230,25 +230,6 @@ fn prepare_uninstall(spec: &Spec, ctx: &Ctx) -> Step<Value> {
     Ok(json!({"writes": writes, "deletes": deletes, "finish": {"notes": notes}}))
 }
 
-fn finish_uninstall(spec: &Spec, ctx: &Ctx, fields: &Map<String, Value>) -> Step<Value> {
-    let shim = files::shim_manifest(fields)?;
-    let notes = fields
-        .get("finish")
-        .and_then(|finish| finish.get("notes"))
-        .and_then(Value::as_array)
-        .ok_or(Failure::Invalid)?
-        .iter()
-        .map(|note| note.as_str().map(files::text).ok_or(Failure::Invalid))
-        .collect::<Step<Vec<_>>>()?;
-    manifest_answer(adapter_result(
-        spec.harness,
-        false,
-        &user_config(spec, ctx),
-        &shim,
-        notes,
-    ))
-}
-
 pub(crate) fn dispatch(
     spec: &Spec,
     op: &str,
@@ -297,7 +278,7 @@ pub(crate) fn dispatch(
         })),
         "prepare_install" => prepare_install(spec, ctx, fields),
         "prepare_uninstall" => prepare_uninstall(spec, ctx),
-        "finish_uninstall" => finish_uninstall(spec, ctx, fields),
+        "finish_uninstall" => files::finished(spec.harness, &user_config(spec, ctx), fields),
         _ => common(spec, op, ctx),
     }
 }
