@@ -8,8 +8,12 @@ import { effectiveHarnessPosture, globalPosture, harnessPosturePatch, selectHarn
  */
 export type AppModes = { guard: boolean; cigar: boolean };
 
-/** Apps whose prompt hook can carry CIGAR's project context. */
-const CIGAR_APPS = new Set(["claude-code", "codex", "pi", "omp"]);
+/**
+ * Apps whose prompt hook can carry CIGAR's project context. Copilot CLI and
+ * Grok drop what an allowing prompt hook adds, Cursor's prompt hook can only
+ * allow or block, and Guard has no prompt hook in the rest.
+ */
+const CIGAR_APPS = new Set(["claude-code", "codex", "pi", "omp", "devin", "muse", "zcode", "kimi", "cline"]);
 
 /**
  * True when CIGAR adds project context on this machine: the person turned it
@@ -97,7 +101,7 @@ export function cigarUnavailableReason(settings: GuardSettings, harness: string,
     return cigarLocked(settings) ? "Your organization manages CIGAR for each app." : undefined;
   }
   if (cigarSupported(harness)) return "CIGAR is off on this machine. Set it up on the CIGAR page.";
-  return `CIGAR can't add project context in ${displayName}.`;
+  return `${displayName} doesn't let Guard add context to its prompts yet.`;
 }
 
 /** Applies a per-app CIGAR patch, where null removes an app's entry. */
