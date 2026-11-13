@@ -40,7 +40,7 @@ patterns! {
     ADDRESSED_INSTRUCTIONS = r"(?i)\bnew\s+(?:priority\s+)?(?:instructions?|directives?)\s+for\s+(?:the\s+)?(?:parent\s+|calling\s+)?(?:agent|assistant|ai|model)\b";
     CONCEAL = r"(?i)\b(?:do\s+not|don't|never)\s+(?:mention|surface|reveal|disclose|tell|show|inform|notify)\s+(?:this|it|these|the\s+user|anyone)\b[^.\n]{0,60}";
     CONCEAL_FROM = r"(?i)\b(?:user|operator|pr\b|pull\s+request|description|human|anyone|logs?)";
-    PROTECTS_SECRET = r"(?i)\b(?:mention|surface|reveal|disclose|tell|show|inform|notify)\s+(?:this|these|it|the|your)\s+(?:passwords?|passphrases?|passcodes?|secrets?|(?:api\s+|private\s+|secret\s+)?keys?|tokens?|credentials?|pins?|otps?|(?:verification\s+|one-time\s+|security\s+)?codes?|(?:recovery|seed)\s+phrases?)\b";
+    PROTECTS_SECRET = r"(?i)^(?:do\s+not|don't|never)\s+(?:mention|surface|reveal|disclose|tell|show|inform|notify)\s+(?:this|these|it|the|your)\s+(?:passwords?|passphrases?|passcodes?|secrets?|(?:api\s+|private\s+|secret\s+)?keys?|tokens?|credentials?|pins?|otps?|(?:verification\s+|one-time\s+|security\s+)?codes?|(?:recovery|seed)\s+phrases?)\b";
     AUTHORITY = r"(?i)\byou\s+(?:now\s+)?(?:have|are\s+granted)\s+(?:full\s+)?(?:admin|root|elevated|unrestricted)\b|\byou\s+are\s+now\s+in\s+(?:admin|developer|god|dan|root|unrestricted|jailbreak)\s+mode";
     PROMPT_LEAK = r"(?i)\b(?:output|print|reveal|repeat|show|dump|send)\s+(?:me\s+)?(?:your|the)\s+(?:complete\s+|full\s+|entire\s+|current\s+)?(?:system\s+prompt|hidden\s+instructions|tool\s+definitions)";
     DECODE_AND_RUN = r"(?i)\bdecode\b[^.\n]{0,60}\b(?:and\s+)?(?:execute|run|eval)\b";
@@ -160,6 +160,22 @@ fn unquoted(text: &str, shape: &Regex) -> bool {
         .any(|found| !quoted_for_discussion(text, &found))
 }
 
+/// Whether `text` orders something hidden from the user. A warning whose own
+/// negated verb guards a credential ("never reveal this password") is not one.
+/// Every order is read from its own start, overlapping the one before it, so a
+/// second order inside an exempt warning's tail is still judged on its own.
+fn conceals(text: &str) -> bool {
+    let mut at = 0;
+    while let Some(found) = CONCEAL.find_at(text, at) {
+        let order = found.as_str();
+        if CONCEAL_FROM.is_match(order) && !PROTECTS_SECRET.is_match(order) {
+            return true;
+        }
+        at = found.start() + order.chars().next().map_or(1, char::len_utf8);
+    }
+    false
+}
+
 /// The name of the first injection shape found in `text`, if any.
 #[must_use]
 pub fn injection_shape(text: &str, source: OutputSource) -> Option<&'static str> {
@@ -169,9 +185,7 @@ pub fn injection_shape(text: &str, source: OutputSource) -> Option<&'static str>
     if ROLE_MARKER.is_match(text) || ADDRESSED_INSTRUCTIONS.is_match(text) {
         return Some("injected_role");
     }
-    if CONCEAL.find_iter(text).any(|found| {
-        CONCEAL_FROM.is_match(found.as_str()) && !PROTECTS_SECRET.is_match(found.as_str())
-    }) {
+    if conceals(text) {
         return Some("concealment");
     }
     if source == OutputSource::Local {
