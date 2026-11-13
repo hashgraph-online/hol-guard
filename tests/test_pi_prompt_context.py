@@ -54,7 +54,7 @@ async function runGuard(payload) {
   return {decision: 'allow', hookSpecificOutput: {hookEventName: 'UserPromptSubmit',
     additionalContext: FOUND + ' ' + payload.prompt}};
 }
-const ctx = {cwd: '/fixture', sessionId: 'session-a', ui: {notify() {}}, isIdle: () => idle};
+const ctx = {cwd: '/fixture', sessionId: 'session-a', hasUI: true, ui: {notify() {}}, isIdle: () => idle};
 const start = (prompt) => callbacks.before_agent_start({type: 'before_agent_start', prompt}, ctx);
 const turn = async (text, source = 'interactive', expanded = text) => ({
   input: await callbacks.input({text, source}, ctx),
@@ -63,12 +63,15 @@ const turn = async (text, source = 'interactive', expanded = text) => ({
 """
 
 
-def run_handlers(tmp_path: Path, harness: str, steps: str, timeout_ms: int = 4250) -> dict[str, object]:
+def run_handlers(
+    tmp_path: Path, harness: str, steps: str, timeout_ms: int = 4250, exit_code: int = 0
+) -> dict[str, object]:
     completed = run_node(handler_script(tmp_path, harness, steps, timeout_ms))
     assert completed.stdout.strip(), completed.stderr
-    result = json.loads(completed.stdout)
     # A stopped headless prompt ends the run nonzero and says why on stderr.
-    result["exit"] = {"code": completed.returncode, "stderr": completed.stderr.splitlines()}
+    assert completed.returncode == exit_code, completed.stderr
+    result = json.loads(completed.stdout)
+    result["stderr"] = completed.stderr.splitlines()
     return result
 
 
@@ -191,7 +194,7 @@ def test_prompt_resumed_while_the_agent_is_busy_is_queued_without_context(tmp_pa
 
 HEADLESS_STEPS = """
 const aborted = [], notes = [];
-const headless = {...ctx, abort: () => aborted.push(true), ui: {notify: (text) => notes.push(text)}};
+const headless = {...ctx, hasUI: false, abort: () => aborted.push(true), ui: {notify: (text) => notes.push(text)}};
 // Print mode and the SDK start a turn without an "input" event.
 const begin = (prompt, reason = 'prompt') =>
   callbacks.before_agent_start({type: 'before_agent_start', reason, prompt}, headless);
@@ -219,7 +222,7 @@ console.log(JSON.stringify({
 @pytest.mark.parametrize("harness", ["pi", "omp"])
 @node_required
 def test_headless_prompt_is_reviewed_when_its_turn_starts(tmp_path: Path, harness: str) -> None:
-    result = run_handlers(tmp_path, harness, HEADLESS_STEPS)
+    result = run_handlers(tmp_path, harness, HEADLESS_STEPS, exit_code=1)
     assert result["matched"] == context_message("fix the cart total")
     assert "empty" not in result
     assert "blocked" not in result
@@ -233,7 +236,7 @@ def test_headless_prompt_is_reviewed_when_its_turn_starts(tmp_path: Path, harnes
     assert "repeat" not in result, "a turn rerunning the typed prompt is not reviewed twice"
     assert "retried" not in result
     assert result["aborted"] == 3
-    assert result["exit"] == {"code": 1, "stderr": ["protected", "held", "protected"]}
+    assert result["stderr"] == ["protected", "held", "protected"]
     reviewed = [payload["prompt"] for payload in result["payloads"] if payload["hook_event_name"] == "UserPromptSubmit"]
     assert reviewed == [
         "fix the cart total",
@@ -256,24 +259,35 @@ await begin('protected');
 await begin('needs approval');
 await begin('fix the cart total');
 console.log(JSON.stringify({done: true}));
+HOST_EXIT
 """
+
+# Print mode ends with the host's own process.exit(0); a run may also just drain.
+HOST_EXITS = pytest.mark.parametrize("host_exit", ["", "process.exit(0);"], ids=["drain", "host-exit"])
+
+
+def print_mode_script(tmp_path: Path, harness: str, has_ui: str, host_exit: str) -> str:
+    steps = PRINT_MODE_STEPS.replace("HAS_UI", has_ui).replace("HOST_EXIT", host_exit)
+    return handler_script(tmp_path, harness, steps)
 
 
 @pytest.mark.parametrize("harness", ["pi", "omp"])
+@HOST_EXITS
 @node_required
-def test_stopped_print_mode_prompt_says_why_and_exits_nonzero(tmp_path: Path, harness: str) -> None:
+def test_stopped_print_mode_prompt_says_why_and_exits_nonzero(tmp_path: Path, harness: str, host_exit: str) -> None:
     # Print and JSON modes have no UI, so a notice alone reaches no one and the
     # run used to exit 0 as if the prompt had finished.
-    completed = run_node(handler_script(tmp_path, harness, PRINT_MODE_STEPS.replace("HAS_UI", "false")))
+    completed = run_node(print_mode_script(tmp_path, harness, "false", host_exit))
     assert json.loads(completed.stdout) == {"done": True}
     assert completed.stderr.splitlines() == ["protected", "held"]
     assert completed.returncode == 1
 
 
 @pytest.mark.parametrize("harness", ["pi", "omp"])
+@HOST_EXITS
 @node_required
-def test_stopped_prompt_with_a_ui_leaves_the_exit_status_alone(tmp_path: Path, harness: str) -> None:
-    completed = run_node(handler_script(tmp_path, harness, PRINT_MODE_STEPS.replace("HAS_UI", "true")))
+def test_stopped_prompt_with_a_ui_leaves_the_exit_status_alone(tmp_path: Path, harness: str, host_exit: str) -> None:
+    completed = run_node(print_mode_script(tmp_path, harness, "true", host_exit))
     assert json.loads(completed.stdout) == {"done": True}
     assert completed.stderr == ""
     assert completed.returncode == 0
