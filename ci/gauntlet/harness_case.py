@@ -367,6 +367,7 @@ def run_harness_case(
                     guard_home=guard_home,
                     request_ids=queued_request_ids(worker.store, approval_ids_before),
                     marker_written=(fixture.workspace / RELAY_MARKER).exists(),
+                    daemon_url=f"http://127.0.0.1:{daemon._server.server_address[1]}",
                 )
                 replacements.update(SIGNED_LINK_REDACTIONS)
             case["transcript"] = redact_value(transcript, replacements)
