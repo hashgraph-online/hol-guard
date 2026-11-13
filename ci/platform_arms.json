@@ -764,6 +764,14 @@
   },
   {
    "verdict": "windows-permissive",
+   "note": "Windows has no `openat`, so the write goes by the resolved path. Every ancestor is checked for a symlink first, as Python's Windows writer refused untrusted parent links, but a parent swapped between that check and the rename is not detected the way the Unix arm's held directory handles detect it.",
+   "file": "rust/crates/guard-runtime/src/adapters/harness_adapter/authorized_write.rs",
+   "item": "pub(super) fn write_beneath_parent(path: &Path, bytes: &[u8]) -> std::io::Result<()>",
+   "cfg": "not(unix)",
+   "body": "e5fdfbf635c7"
+  },
+  {
+   "verdict": "windows-permissive",
    "note": "Identifies the Copilot lifecycle lock by its length instead of device and inode, so a lock replaced with one of the same length between the claim and the release reads as the same lock. The lock sits in the account's own Guard home and only serialises Guard's own install and uninstall runs.",
    "file": "rust/crates/guard-runtime/src/adapters/harness_adapter/copilot_state.rs",
    "item": "fn identity(metadata: &fs::Metadata) -> (u64, u64)",

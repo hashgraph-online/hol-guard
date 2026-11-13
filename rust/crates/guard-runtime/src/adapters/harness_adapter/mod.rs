@@ -27,6 +27,7 @@ use crate::harness_coverage::artifacts::resolve_lenient;
 use crate::runner_authority_detector::args_object;
 use crate::runner_authority_op::{KindResult, ERR_INVALID};
 
+mod authorized_write;
 mod cline;
 mod cline_hooks;
 mod cline_install;

@@ -378,7 +378,7 @@ pub(super) fn write_authorized(ctx: &Ctx, path: &Path, bytes: &[u8]) -> Step<()>
         .file_name()
         .ok_or_else(|| os("Copilot path has no file name"))?;
     let target = fs::canonicalize(parent).map_err(failure)?.join(name);
-    crate::encrypted_secret_store::atomic_write_bytes(&target, bytes, 0o600).map_err(failure)
+    super::authorized_write::write_beneath_parent(&target, bytes).map_err(failure)
 }
 
 /// `restore_from_backup`: put back what the backup holds; whether it did.
