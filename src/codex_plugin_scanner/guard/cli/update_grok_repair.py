@@ -55,7 +55,7 @@ def repair_grok_install(
 
 
 def _grok_hooks_are_current(context: HarnessContext) -> bool:
-    from ..adapters.cursor_hook_config import isolated_cursor_hook_python
+    from ..adapters.isolated_hook_python import isolated_cursor_hook_python
 
     protection = grok_protection(context)
     hook_path = Path(protection["pretool_hook_path"])
@@ -139,7 +139,7 @@ def _prompt_hook_entries_are_current(payload: object, expected: dict[str, object
 
 def _isolated_bounded_hook_is_current(command: str, *, context: HarnessContext, timeout_seconds: int) -> bool:
     from ..adapters.bounded_cli_hook_bridge import _render_bounded_hook_script, bounded_hook_script_path
-    from ..adapters.cursor_hook_config import isolated_cursor_hook_python
+    from ..adapters.isolated_hook_python import isolated_cursor_hook_python
     from .grok_hook_validation import is_grok_hook_command
 
     interpreter = isolated_cursor_hook_python()

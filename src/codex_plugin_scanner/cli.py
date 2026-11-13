@@ -375,7 +375,7 @@ def _run_frozen_early_dispatch(requested_argv: list[str]) -> int | None:
 
         return main_from_argv(requested_argv[1:])
     if requested_argv[:1] == ["__guard-cursor-hook"]:
-        from .guard.adapters.cursor_hook_config import run_frozen_cursor_hook
+        from .guard.adapters.cursor import run_frozen_cursor_hook
 
         return run_frozen_cursor_hook(requested_argv[1:])
     if requested_argv[:1] == ["__guard-claude-hook"]:
@@ -419,7 +419,7 @@ def main(argv: list[str] | None = None) -> int:
 
         return main_from_argv(effective_argv[1:])
     if bool(getattr(sys, "frozen", False)) and effective_argv[:1] == ["__guard-cursor-hook"]:
-        from .guard.adapters.cursor_hook_config import run_frozen_cursor_hook
+        from .guard.adapters.cursor import run_frozen_cursor_hook
 
         return run_frozen_cursor_hook(effective_argv[1:])
     program_name = _program_name(sys.argv[0])

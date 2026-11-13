@@ -8,6 +8,7 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
+from tests.cursor_test_support import cursor_agent_on_path
 
 
 def _context(tmp_path: Path) -> HarnessContext:
@@ -109,10 +110,7 @@ def test_doctor_treats_managed_cursor_hooks_as_guard_install(
         ),
         encoding="utf-8",
     )
-    monkeypatch.setattr(
-        "codex_plugin_scanner.guard.adapters.cursor.cursor_cli_command_available",
-        lambda _context: True,
-    )
+    cursor_agent_on_path(monkeypatch, tmp_path, present=True)
 
     from codex_plugin_scanner.guard.adapters import get_adapter
 
@@ -143,10 +141,7 @@ def test_doctor_ignores_name_only_cursor_hook_marker(
         ),
         encoding="utf-8",
     )
-    monkeypatch.setattr(
-        "codex_plugin_scanner.guard.adapters.cursor.cursor_cli_command_available",
-        lambda _context: True,
-    )
+    cursor_agent_on_path(monkeypatch, tmp_path, present=True)
 
     from codex_plugin_scanner.guard.adapters import get_adapter
 
@@ -176,10 +171,7 @@ def test_doctor_ignores_disabled_or_missing_cursor_hook_script(
         ),
         encoding="utf-8",
     )
-    monkeypatch.setattr(
-        "codex_plugin_scanner.guard.adapters.cursor.cursor_cli_command_available",
-        lambda _context: True,
-    )
+    cursor_agent_on_path(monkeypatch, tmp_path, present=True)
 
     from codex_plugin_scanner.guard.adapters import get_adapter
 

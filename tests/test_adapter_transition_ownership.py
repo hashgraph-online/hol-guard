@@ -9,7 +9,7 @@ import pytest
 
 from codex_plugin_scanner.guard.adapters import list_adapters
 from codex_plugin_scanner.guard.adapters.base import HarnessAdapter, HarnessContext
-from codex_plugin_scanner.guard.adapters.cursor_hook_config import isolated_cursor_hook_python
+from codex_plugin_scanner.guard.adapters.isolated_hook_python import isolated_cursor_hook_python
 from codex_plugin_scanner.guard.codex_install_transaction import require_codex_install_owner
 from codex_plugin_scanner.guard.runtime_transition import TransitionError
 
@@ -256,14 +256,14 @@ def test_copilot_preparation_preserves_and_distinguishes_invalid_authority(tmp_p
 @pytest.mark.parametrize("workspace_enabled", [False, True])
 def test_cursor_editor_prepared_generation_matches_normal_install(tmp_path, workspace_enabled):
     from codex_plugin_scanner.guard.adapters.cursor import CursorHarnessAdapter
-    from codex_plugin_scanner.guard.adapters.cursor_native_approval import ensure_cursor_hook_attestation_secret
+    from tests.cursor_test_support import enroll_cursor_hook_key
 
     ctx = HarnessContext(
         home_dir=tmp_path,
         guard_home=tmp_path / "guard",
         workspace_dir=tmp_path / "workspace" if workspace_enabled else None,
     )
-    ensure_cursor_hook_attestation_secret(ctx.guard_home)
+    enroll_cursor_hook_key(ctx.guard_home)
     adapter = CursorHarnessAdapter()
     prepared = adapter.prepare_install(ctx)
     assert len(prepared.files) == (14 if workspace_enabled else 9)
@@ -279,7 +279,7 @@ def test_cursor_editor_prepared_generation_matches_normal_install(tmp_path, work
 
 def test_cursor_preparation_rejects_invalid_authority_without_replacing_it(tmp_path):
     from codex_plugin_scanner.guard.adapters.cursor import CursorHarnessAdapter
-    from codex_plugin_scanner.guard.adapters.cursor_native_approval import cursor_hook_attestation_secret_path
+    from tests.cursor_test_support import cursor_hook_attestation_secret_path
 
     ctx = context(tmp_path)
     authority = cursor_hook_attestation_secret_path(ctx.guard_home)
@@ -299,11 +299,11 @@ def test_cursor_preparation_rejects_invalid_authority_without_replacing_it(tmp_p
 def test_cursor_cli_and_all_preparation_matches_normal_install(tmp_path, monkeypatch, surface):
     from codex_plugin_scanner.guard import shims
     from codex_plugin_scanner.guard.adapters.cursor import CursorHarnessAdapter
-    from codex_plugin_scanner.guard.adapters.cursor_native_approval import ensure_cursor_hook_attestation_secret
+    from tests.cursor_test_support import enroll_cursor_hook_key
 
     ctx = context(tmp_path)
     if surface == "all":
-        ensure_cursor_hook_attestation_secret(ctx.guard_home)
+        enroll_cursor_hook_key(ctx.guard_home)
     monkeypatch.setattr(shims, "_is_transient_path", lambda path: False)
     monkeypatch.setenv("SHELL", "/bin/zsh")
     adapter = CursorHarnessAdapter()

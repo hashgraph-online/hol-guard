@@ -48,7 +48,7 @@ pub(crate) const PASEO_DELEGATES: [&str; 6] =
     ["claude-code", "codex", "copilot", "opencode", "pi", "omp"];
 
 /// Every variable a request's `env` may carry.
-pub(crate) const ENV_NAMES: [&str; 26] = [
+pub(crate) const ENV_NAMES: [&str; 28] = [
     "PATH",
     "PATHEXT",
     "NoDefaultCurrentDirectoryInExePath",
@@ -75,6 +75,8 @@ pub(crate) const ENV_NAMES: [&str; 26] = [
     "CLINE_DATA_DIR",
     "CLINE_DIR",
     "CLINE_MCP_SETTINGS_PATH",
+    "HOL_GUARD_CURSOR_HOOK_BRIDGE",
+    "HOL_GUARD_TEST_MODE",
 ];
 
 /// Prefixes of the variables that redirect Paseo's native runtimes.
@@ -95,7 +97,7 @@ pub(crate) const ENV_PREFIXES: [&str; 14] = [
     "OMP_PROFILE",
 ];
 
-pub(crate) const SPECS: [Spec; 14] = [
+pub(crate) const SPECS: [Spec; 15] = [
     Spec {
         harness: "devin",
         aliases: &["devin", "devin-cli", "cognition-devin"],
@@ -351,6 +353,24 @@ pub(crate) const SPECS: [Spec; 14] = [
         channel: "hook",
         auto_open: false,
         workspace_aibom: false,
+        hook: Hook::None,
+        install: Install::Plan,
+        dynamic: false,
+    },
+    Spec {
+        harness: "cursor",
+        aliases: &[],
+        executable: "cursor-agent",
+        launcher_name: "cursor-agent",
+        display_name: None,
+        tier: "native-harness",
+        summary: "Cursor already owns tool approval, so Guard focuses on artifact trust, \
+                  provenance, and preflight review.",
+        fallback: "Resolve package-level trust in Guard and let Cursor keep its built-in tool \
+                   approval flow.",
+        channel: "native",
+        auto_open: false,
+        workspace_aibom: true,
         hook: Hook::None,
         install: Install::Plan,
         dynamic: false,

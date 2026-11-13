@@ -117,7 +117,7 @@ def test_grok_repair_migrates_to_current_lightweight_client(tmp_path: Path, monk
         lambda: sys.executable,
     )
     monkeypatch.setattr(
-        "codex_plugin_scanner.guard.adapters.cursor_hook_config.isolated_cursor_hook_python", lambda: sys.executable
+        "codex_plugin_scanner.guard.adapters.isolated_hook_python.isolated_cursor_hook_python", lambda: sys.executable
     )
     runtime = tmp_path / "hol-guard-runtime"
     monkeypatch.setattr(
@@ -167,7 +167,7 @@ def test_grok_repair_hands_a_bare_client_back_to_the_bridge(tmp_path: Path, monk
         lambda: sys.executable,
     )
     monkeypatch.setattr(
-        "codex_plugin_scanner.guard.adapters.cursor_hook_config.isolated_cursor_hook_python", lambda: sys.executable
+        "codex_plugin_scanner.guard.adapters.isolated_hook_python.isolated_cursor_hook_python", lambda: sys.executable
     )
     for module in ("bounded_cli_hook_bridge", "bounded_cli_hook_native"):
         monkeypatch.setattr(
@@ -255,7 +255,7 @@ def _force_frozen_hook_commands(monkeypatch: pytest.MonkeyPatch) -> None:
         lambda: None,
     )
     monkeypatch.setattr(
-        "codex_plugin_scanner.guard.adapters.cursor_hook_config.isolated_cursor_hook_python",
+        "codex_plugin_scanner.guard.adapters.isolated_hook_python.isolated_cursor_hook_python",
         lambda: None,
     )
 

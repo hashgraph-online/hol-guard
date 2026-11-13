@@ -1,6 +1,6 @@
 //! `runner_authority` kind `harness_adapter`: the Gemini, Antigravity, Kimi,
 //! Devin, Muse, OpenClaw, Paseo, Grok, ZCode, Pi, Oh My Pi, OpenCode,
-//! Cline and Copilot harness adapters.
+//! Cline, Copilot and Cursor harness adapters.
 //!
 //! Python keeps one generic adapter class that holds the ownership locks,
 //! prepares and removes the launcher shim, builds the bounded hook argv and
@@ -39,6 +39,15 @@ mod copilot_install;
 mod copilot_mcp;
 mod copilot_state;
 mod copilot_uninstall;
+mod cursor;
+mod cursor_ask;
+mod cursor_editor;
+mod cursor_files;
+mod cursor_hooks;
+mod cursor_hooks_plan;
+mod cursor_hooks_uninstall;
+mod cursor_rebind;
+mod cursor_state;
 mod describe;
 mod desktop_core;
 mod files;
@@ -172,6 +181,8 @@ pub(crate) enum Failure {
     Integrity(&'static str),
     /// The `RuntimeError` an adapter raised.
     Runtime(String),
+    /// A fact only the Guard process can supply; Python answers and asks again.
+    Reply(Value),
     Invalid,
 }
 
@@ -191,6 +202,7 @@ fn answer(step: Step<Value>) -> KindResult {
         Err(Failure::NotFound(message)) => Ok(json!({ "not_found": message })),
         Err(Failure::Integrity(reason)) => Ok(json!({ "integrity": reason })),
         Err(Failure::Runtime(message)) => Ok(json!({ "runtime_error": message })),
+        Err(Failure::Reply(needed)) => Ok(json!({ "reply": needed })),
         Err(Failure::Invalid) => Err(ERR_INVALID),
     }
 }
@@ -225,6 +237,7 @@ pub(crate) fn dispatch(args: &Value) -> KindResult {
         "opencode" => opencode::dispatch(spec, op, &ctx, fields),
         "cline" => cline::dispatch(spec, op, &ctx, fields),
         "copilot" => copilot::dispatch(spec, op, &ctx, fields),
+        "cursor" => cursor::dispatch(spec, op, &ctx, fields),
         _ => Err(Failure::Invalid),
     })
 }

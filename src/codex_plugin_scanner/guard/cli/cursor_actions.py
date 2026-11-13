@@ -7,7 +7,7 @@ from pathlib import Path
 
 from ..adapters.base import HarnessContext
 from ..adapters.codex_install_plan import guard_proxy_server_names
-from ..adapters.cursor_cli import cursor_cli_detected, cursor_cli_shim_installed
+from ..adapters.cursor import cursor_cli_detected, cursor_cli_shim_installed
 from ..store import GuardStore
 
 

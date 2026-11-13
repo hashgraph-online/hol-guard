@@ -31,7 +31,6 @@ from codex_plugin_scanner.guard.adapters import codex as codex_adapter_module
 from codex_plugin_scanner.guard.adapters import cursor as cursor_adapter_module
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.adapters.claude_code import CLAUDE_GUARD_DAEMON_HOOK_MARKER, ClaudeCodeHarnessAdapter
-from codex_plugin_scanner.guard.adapters.cursor_cli import CursorCliLaunchEntry
 from codex_plugin_scanner.guard.adapters.opencode_runtime import OpenCodeHarnessAdapter
 from codex_plugin_scanner.guard.cli import commands as guard_commands_module
 from codex_plugin_scanner.guard.cli import commands_support_connect as guard_connect_support_module
@@ -10224,15 +10223,12 @@ url = http://127.0.0.1:8787/guard-canary
         home_dir = tmp_path / "home"
         workspace_dir = tmp_path / "workspace"
         _build_guard_fixture(home_dir, workspace_dir)
-        monkeypatch.setattr(cursor_adapter_module, "cursor_cli_command_available", lambda _context: True)
-        monkeypatch.setattr(
-            cursor_adapter_module,
-            "resolve_cursor_cli_entry",
-            lambda _context: CursorCliLaunchEntry(
-                executable="cursor-agent",
-                launch_mode="cursor-agent",
-            ),
-        )
+        cursor_bin = tmp_path / "cursor-bin"
+        cursor_bin.mkdir()
+        cursor_agent = cursor_bin / ("cursor-agent.exe" if os.name == "nt" else "cursor-agent")
+        cursor_agent.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+        cursor_agent.chmod(0o755)
+        monkeypatch.setenv("PATH", str(cursor_bin))
         monkeypatch.setattr(
             cursor_adapter_module,
             "_run_command_probe",
