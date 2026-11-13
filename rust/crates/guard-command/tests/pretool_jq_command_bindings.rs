@@ -24,6 +24,9 @@ fn jq_may_read_names_its_command_line_binds() {
         "jq -rn --rawfile body rows.json '$body | length'",
         "cat rows.json | jq --arg want 2 'select((.id | tostring) == $want)'",
         "cat rows.json | jq -c --slurpfile a after.json 'select(.id == $a[0].id)'",
+        "jq -n --arg x '*' '$x'",
+        "jq -n --argjson v '{\"a\":1,\"b\":2}' '$v.a'",
+        "jq -n --argjson v '[1,2]' '$v | length'",
     ] {
         let result = session.evaluate_at(command, &session.primary);
         assert_eq!(
@@ -51,6 +54,11 @@ fn other_jq_bindings_keep_their_review() {
         "jq --argfile r rows.json '$r' rows.json",
         "jq -n -f rows.json",
         "jq -L . 'import \"rows\" as r; r' rows.json",
+        "jq -n --arg x * '.'",
+        "jq -n --argjson x [ab] '.'",
+        "jq -n --arg x {y,-f} '.'",
+        "jq --rawfile x * '$x' rows.json",
+        "cat rows.json | jq --arg x * '.'",
     ] {
         let result = session.evaluate_at(command, &session.primary);
         assert_ne!(

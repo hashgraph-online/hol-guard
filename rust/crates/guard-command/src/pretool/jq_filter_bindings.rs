@@ -21,7 +21,14 @@ impl Drop for Scope {
     }
 }
 
-pub(super) fn with_names<T>(names: &[&str], check: impl FnOnce() -> T) -> T {
+/// [`super::safe_filter`] for a filter jq runs with `names` already bound by
+/// `--arg` and the like, so a `$name` among them reads a value the command
+/// line supplied rather than the environment.
+pub(in crate::pretool) fn safe_filter_binding(filter: &str, names: &[&str]) -> bool {
+    with_names(names, || super::safe_filter(filter))
+}
+
+fn with_names<T>(names: &[&str], check: impl FnOnce() -> T) -> T {
     NAMES.with(|bound| {
         *bound.borrow_mut() = names.iter().map(|name| (*name).to_owned()).collect();
     });

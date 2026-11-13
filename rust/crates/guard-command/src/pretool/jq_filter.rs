@@ -33,6 +33,7 @@
 
 #[path = "jq_filter_bindings.rs"]
 mod bindings;
+pub(super) use bindings::safe_filter_binding;
 #[path = "jq_filter_budget.rs"]
 mod budget;
 #[path = "jq_filter_program.rs"]
@@ -127,13 +128,6 @@ const FORMATS: &[&str] = &[
 
 /// Comparisons, longest spelling first so `<=` is never read as `<`.
 const COMPARISONS: &[&str] = &["==", "!=", "<=", ">=", "<", ">"];
-
-/// [`safe_filter`] for a filter jq runs with `names` already bound by
-/// `--arg` and the like, so a `$name` among them reads a value the command
-/// line supplied rather than the environment.
-pub(super) fn safe_filter_binding(filter: &str, names: &[&str]) -> bool {
-    bindings::with_names(names, || safe_filter(filter))
-}
 
 pub(super) fn safe_filter(filter: &str) -> bool {
     budget::reset();
