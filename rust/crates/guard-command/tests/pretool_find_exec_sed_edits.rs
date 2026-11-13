@@ -45,6 +45,7 @@ fn outcome(root: &Path, command: &str) -> (String, String) {
     (result.minimum_action, result.reason_code)
 }
 
+#[cfg(unix)]
 #[test]
 fn a_sed_edit_over_found_files_runs_in_the_workspace_sandbox() {
     let (root, _cleanup) = checkout("edits");
@@ -63,6 +64,12 @@ fn a_sed_edit_over_found_files_runs_in_the_workspace_sandbox() {
 fn an_edit_that_would_not_fit_the_sandbox_keeps_its_review() {
     let (root, _cleanup) = checkout("misfits");
     for command in [
+        // Extra file operands must not slip past the workspace-wide wipe
+        // screen merely because the find walk itself is narrow.
+        "find tests -name '*.py' -type f -exec sed -i 'd' ./* {} +",
+        "find tests -name '*.py' -type f -exec sed -i 's/a/b/' ../* {} +",
+        "find tests -name '*.py' -type f -exec sed -i 's/a/b/' tests/other.py {} +",
+        "find tests -name '*.py' -type f -exec sed -i -e 's/a/b/' README.md {} +",
         "find tests -type f -exec sed -i 's/a/b/e' {} +",
         "find tests -type f -exec sed -i -e 'e touch x' {} +",
         "find tests -type f -exec sed -i -f edits.sed {} +",
