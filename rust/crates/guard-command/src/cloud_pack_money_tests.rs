@@ -261,3 +261,26 @@ fn hubspot_deletes_accept_their_empty_success() {
     let list = pack.action("hubspot.objects.list").unwrap();
     assert_eq!(project(list, b"").unwrap_err(), "response_json_invalid");
 }
+
+#[test]
+fn a_form_constant_is_limited_in_characters() {
+    let with_const = |text: String| {
+        let mut pack: Value = serde_json::from_str(STRIPE).unwrap();
+        let action = pack["actions"]
+            .as_array_mut()
+            .unwrap()
+            .iter_mut()
+            .find(|action| action["actionId"] == "stripe.payouts.create")
+            .unwrap();
+        action.pointer_mut("/executor/request/body/form").unwrap()[2]["value"] =
+            json!({"const": text});
+        pack_from_value(pack)
+            .map(|_| ())
+            .map_err(|error| error.code)
+    };
+    assert_eq!(with_const("é".repeat(256)), Ok(()));
+    assert_eq!(
+        with_const("é".repeat(257)),
+        Err("cloud_pack_template_form_invalid")
+    );
+}

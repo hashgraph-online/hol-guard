@@ -41,7 +41,7 @@ pub(crate) fn validate(
                         | ArgumentSpec::Boolean { .. }
                 )
             ),
-            Template::Const(value) => scalar(value).is_some_and(|text| text.len() <= 256),
+            Template::Const(value) => scalar(value).is_some_and(|text| text.chars().count() <= 256),
             _ => false,
         };
         if !value_ok {
