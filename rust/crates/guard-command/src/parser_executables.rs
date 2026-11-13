@@ -249,7 +249,7 @@ fn sed_exec_only_found_files(child: &[String]) -> bool {
                     index += 1;
                 }
             }
-            "-n" | "-E" | "-r" | "-s" | "-u" | "-z" => {},
+            "-n" | "-E" | "-r" | "-s" | "-u" | "-z" => {}
             "-e" | "--expression" => {
                 // GNU sed may permute a later -e option ahead of an earlier
                 // positional word, turning that earlier word into a file.
