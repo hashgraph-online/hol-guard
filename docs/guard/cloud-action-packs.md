@@ -218,8 +218,10 @@ team links, shares with people and makes four-hour download links.
 
 Pack authors choose reversibility from what the provider can undo. An Airtable record delete is marked permanent: the
 API has no undo, even where a plan keeps a history in the web app. Deletes that land in a trash, recycle bin or
-version history (Dropbox, OneDrive, Outlook Deleted Items, Teams soft delete, cleared Sheets ranges) are marked
-recoverable.
+version history (Dropbox, OneDrive, Outlook mail in Deleted Items, Teams soft delete, cleared Sheets ranges) are
+marked recoverable. An action that can tell other people something is judged by that notice: deleting an Outlook
+meeting sends cancellations to its attendees, so `outlook.events.delete` is permanent with a named audience, and
+moving a meeting sends updates, so `outlook.events.update` is a send.
 
 Known limits of the format, compared with hand-written adapters:
 
@@ -230,17 +232,23 @@ Known limits of the format, compared with hand-written adapters:
 - Responses are projected from JSON only. Drive export therefore uses the `files/{id}/download` operation, whose
   JSON result carries a download link, rather than `files/{id}/export`, which returns the file bytes. When the
   export is still running, `drive.operations.get` reads the same operation until it carries the link.
-- A Drive file id does not say whether it names a folder, and trashing or deleting a folder takes everything
-  inside it. Drive trash, restore and delete therefore leave the scope and record count unknown, and Guard
-  treats them as it treats any action of unknown size.
+- A Drive, Dropbox or OneDrive id or path does not say whether it names a folder, and deleting a folder takes
+  everything inside it. Their trash, restore and delete actions therefore leave the scope and record count
+  unknown, and Guard treats them as it treats any action of unknown size.
 - A Calendar event delete is permanent whether or not guests are told: the quiet delete and the cancellation
   differ only in the notice. A rename and a reschedule are separate actions because an object field is always
   written, so one action cannot leave the event times unchanged when only the title changes.
 - `gmail.messages.modify` changes user labels and the star, importance and unread marks only. Archive, trash
   and spam have their own actions with their own facts.
-- A response path is split on dots, so a key that contains a dot (such as Graph's
-  `@microsoft.graph.downloadUrl`) or starts with one (such as Dropbox's `.tag`) cannot be projected. OneDrive
-  therefore has no download-link action. A digit step reads an array element, so `values.0` and `roles.0` work.
+- A response path is split on dots. A step that starts with `@` reads the rest of the path as one key, so
+  Graph's `@odata.nextLink` is projected as `next_link`. Any other key that contains a dot, or one that starts
+  with a dot (such as Dropbox's `.tag`), cannot be projected. A digit step reads an array element, so
+  `values.0` and `roles.0` work.
+- An optional object field is still written as `{}` when its arguments are left out. OneDrive rename and move
+  are therefore separate actions, as Calendar rename and reschedule are.
+- A list page must be bounded by the request. Dropbox listings require a page size, and `sheets.values.get`
+  requires a range with explicit row bounds in columns A to Z; a read longer than 1,000 rows is refused, so read
+  a long tab in ranges.
 - A placeholder fills a whole path segment, optionally followed by a Google-style custom method such as
   `{document_id}:batchUpdate`. Graph's inline function syntax (`search(q='...')`) is not expressible.
 - An array argument in the query repeats the parameter (`records[]=a&records[]=b`), and a parameter name may start

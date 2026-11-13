@@ -72,7 +72,7 @@
         },
         "limit": {
           "type": "integer",
-          "required": false,
+          "required": true,
           "minimum": 1,
           "maximum": 500
         }
@@ -88,8 +88,7 @@
         "recordCount": {
           "argument": {
             "name": "limit",
-            "max": 500,
-            "default": 100
+            "max": 500
           }
         }
       },
@@ -177,7 +176,19 @@
           },
           "expect": {
             "facts": {
-              "class": "read"
+              "class": "read",
+              "object": {
+                "state": "known",
+                "value": "folder"
+              },
+              "scope": {
+                "state": "known",
+                "value": "query_selected"
+              },
+              "record_count": {
+                "state": "known",
+                "value": 50
+              }
             },
             "response": "{\"entries\":[{\".tag\":\"file\",\"id\":\"id:a4ayc_80_OEAAAAAAAAAXw\",\"name\":\"Q3 budget.xlsx\",\"path_display\":\"/Reports/Q3 budget.xlsx\",\"size\":4096,\"server_modified\":\"2026-11-10T10:00:00Z\",\"sharing_info\":{\"x\":1}}],\"cursor\":\"c1\",\"has_more\":false}",
             "projection": {
@@ -220,10 +231,21 @@
           "name": "refuses a parent-folder step",
           "kind": "risky",
           "arguments": {
-            "path": "/Reports/../Private"
+            "path": "/Reports/../Private",
+            "limit": 50
           },
           "expect": {
             "error": "forbidden_content"
+          }
+        },
+        {
+          "name": "refuses an omitted page size",
+          "kind": "risky",
+          "arguments": {
+            "path": "/Reports"
+          },
+          "expect": {
+            "error": "missing_argument"
           }
         }
       ]
@@ -271,7 +293,7 @@
       "arguments": {
         "limit": {
           "type": "integer",
-          "required": false,
+          "required": true,
           "minimum": 1,
           "maximum": 500
         }
@@ -287,8 +309,7 @@
         "recordCount": {
           "argument": {
             "name": "limit",
-            "max": 500,
-            "default": 100
+            "max": 500
           }
         }
       },
@@ -375,7 +396,19 @@
           },
           "expect": {
             "facts": {
-              "class": "read"
+              "class": "read",
+              "object": {
+                "state": "known",
+                "value": "folder"
+              },
+              "scope": {
+                "state": "known",
+                "value": "query_selected"
+              },
+              "record_count": {
+                "state": "known",
+                "value": 100
+              }
             },
             "request": {
               "body": "{\"path\":\"\",\"limit\":100,\"recursive\":false}",
@@ -404,10 +437,19 @@
           "name": "refuses a path argument",
           "kind": "risky",
           "arguments": {
-            "path": "/x"
+            "path": "/x",
+            "limit": 50
           },
           "expect": {
             "error": "unknown_argument"
+          }
+        },
+        {
+          "name": "refuses an omitted page size",
+          "kind": "risky",
+          "arguments": {},
+          "expect": {
+            "error": "missing_argument"
           }
         }
       ]
@@ -524,7 +566,23 @@
           },
           "expect": {
             "facts": {
-              "class": "read"
+              "class": "read",
+              "object": {
+                "state": "known",
+                "value": "file"
+              },
+              "scope": {
+                "state": "known",
+                "value": "single"
+              },
+              "reversibility": {
+                "state": "known",
+                "value": "reversible"
+              },
+              "record_count": {
+                "state": "known",
+                "value": 1
+              }
             },
             "request": {
               "body": "{\"path\":\"/Reports/Q3 budget.xlsx\"}",
@@ -689,7 +747,23 @@
           },
           "expect": {
             "facts": {
-              "class": "update"
+              "class": "update",
+              "object": {
+                "state": "known",
+                "value": "folder"
+              },
+              "scope": {
+                "state": "known",
+                "value": "single"
+              },
+              "reversibility": {
+                "state": "known",
+                "value": "reversible"
+              },
+              "record_count": {
+                "state": "known",
+                "value": 1
+              }
             },
             "request": {
               "body": "{\"path\":\"/Reports/2026\",\"autorename\":false}",
@@ -868,7 +942,23 @@
           },
           "expect": {
             "facts": {
-              "class": "update"
+              "class": "update",
+              "object": {
+                "state": "known",
+                "value": "file"
+              },
+              "scope": {
+                "state": "known",
+                "value": "single"
+              },
+              "reversibility": {
+                "state": "known",
+                "value": "reversible"
+              },
+              "record_count": {
+                "state": "known",
+                "value": 1
+              }
             },
             "request": {
               "body": "{\"from_path\":\"/Reports/Q3 budget.xlsx\",\"to_path\":\"/Reports/Q3 budget (final).xlsx\",\"autorename\":false}",
@@ -947,14 +1037,8 @@
         "object": {
           "const": "file"
         },
-        "scope": {
-          "const": "single"
-        },
         "reversibility": {
           "const": "recoverable"
-        },
-        "recordCount": {
-          "const": 1
         }
       },
       "response": {
@@ -1028,6 +1112,10 @@
           "expect": {
             "facts": {
               "class": "delete",
+              "object": {
+                "state": "known",
+                "value": "file"
+              },
               "reversibility": {
                 "state": "known",
                 "value": "recoverable"
@@ -1050,7 +1138,7 @@
               "url": "https://api.dropboxapi.com/2/files/delete_v2"
             },
             "decisions": {
-              "balanced": "allow",
+              "balanced": "require-reapproval",
               "relaxed": "allow",
               "strict": "review"
             }
@@ -1126,18 +1214,8 @@
         "object": {
           "const": "file"
         },
-        "scope": {
-          "const": "enumerated"
-        },
         "reversibility": {
           "const": "recoverable"
-        },
-        "recordCount": {
-          "count": {
-            "arguments": [
-              "paths"
-            ]
-          }
         }
       },
       "response": {
@@ -1192,9 +1270,13 @@
           "expect": {
             "facts": {
               "class": "delete",
-              "record_count": {
+              "object": {
                 "state": "known",
-                "value": 10
+                "value": "file"
+              },
+              "reversibility": {
+                "state": "known",
+                "value": "recoverable"
               }
             },
             "request": {
@@ -1214,7 +1296,7 @@
               "url": "https://api.dropboxapi.com/2/files/delete_batch"
             },
             "decisions": {
-              "balanced": "allow",
+              "balanced": "require-reapproval",
               "relaxed": "allow",
               "strict": "review"
             }
@@ -1270,9 +1352,13 @@
           "expect": {
             "facts": {
               "class": "delete",
-              "record_count": {
+              "object": {
                 "state": "known",
-                "value": 40
+                "value": "file"
+              },
+              "reversibility": {
+                "state": "known",
+                "value": "recoverable"
               }
             },
             "request": {
@@ -1292,7 +1378,7 @@
               "url": "https://api.dropboxapi.com/2/files/delete_batch"
             },
             "decisions": {
-              "balanced": "review",
+              "balanced": "require-reapproval",
               "relaxed": "allow",
               "strict": "review"
             }
@@ -2354,14 +2440,8 @@
         "object": {
           "const": "file"
         },
-        "scope": {
-          "const": "single"
-        },
         "reversibility": {
           "const": "permanent"
-        },
-        "recordCount": {
-          "const": 1
         }
       },
       "response": {
@@ -2400,6 +2480,10 @@
           "expect": {
             "facts": {
               "class": "delete",
+              "object": {
+                "state": "known",
+                "value": "file"
+              },
               "reversibility": {
                 "state": "known",
                 "value": "permanent"
@@ -2422,7 +2506,7 @@
               "url": "https://api.dropboxapi.com/2/files/permanently_delete"
             },
             "decisions": {
-              "balanced": "review",
+              "balanced": "require-reapproval",
               "relaxed": "review",
               "strict": "block"
             }
@@ -2575,17 +2659,21 @@
           "expect": {
             "facts": {
               "class": "share",
-              "audience": {
-                "external": {
-                  "state": "unknown"
-                },
-                "kind": {
-                  "state": "known",
-                  "value": "public"
-                },
-                "recipient_domains": {
-                  "state": "unknown"
-                }
+              "object": {
+                "state": "known",
+                "value": "file"
+              },
+              "scope": {
+                "state": "known",
+                "value": "single"
+              },
+              "reversibility": {
+                "state": "known",
+                "value": "reversible"
+              },
+              "record_count": {
+                "state": "known",
+                "value": 1
               }
             },
             "request": {
@@ -2760,17 +2848,21 @@
           "expect": {
             "facts": {
               "class": "share",
-              "audience": {
-                "external": {
-                  "state": "unknown"
-                },
-                "kind": {
-                  "state": "known",
-                  "value": "domain"
-                },
-                "recipient_domains": {
-                  "state": "unknown"
-                }
+              "object": {
+                "state": "known",
+                "value": "file"
+              },
+              "scope": {
+                "state": "known",
+                "value": "single"
+              },
+              "reversibility": {
+                "state": "known",
+                "value": "reversible"
+              },
+              "record_count": {
+                "state": "known",
+                "value": 1
               }
             },
             "request": {
@@ -2978,20 +3070,25 @@
           "expect": {
             "facts": {
               "class": "share",
-              "audience": {
-                "external": {
-                  "state": "unknown"
-                },
-                "kind": {
-                  "state": "known",
-                  "value": "named"
-                },
-                "recipient_domains": {
-                  "state": "known",
-                  "value": [
-                    "example.org"
-                  ]
-                }
+              "object": {
+                "state": "known",
+                "value": "file"
+              },
+              "scope": {
+                "state": "known",
+                "value": "single"
+              },
+              "reversibility": {
+                "state": "known",
+                "value": "reversible"
+              },
+              "record_count": {
+                "state": "known",
+                "value": 1
+              },
+              "recipient_count": {
+                "state": "known",
+                "value": 1
               }
             },
             "request": {
@@ -3156,7 +3253,19 @@
           },
           "expect": {
             "facts": {
-              "class": "export"
+              "class": "export",
+              "object": {
+                "state": "known",
+                "value": "file"
+              },
+              "scope": {
+                "state": "known",
+                "value": "single"
+              },
+              "record_count": {
+                "state": "known",
+                "value": 1
+              }
             },
             "request": {
               "body": "{\"path\":\"/Reports/Q3 budget.xlsx\"}",

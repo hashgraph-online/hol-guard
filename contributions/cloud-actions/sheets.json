@@ -132,7 +132,19 @@
           },
           "expect": {
             "facts": {
-              "class": "read"
+              "class": "read",
+              "object": {
+                "state": "known",
+                "value": "file"
+              },
+              "scope": {
+                "state": "known",
+                "value": "single"
+              },
+              "record_count": {
+                "state": "known",
+                "value": 1
+              }
             },
             "request": {
               "body": null,
@@ -202,7 +214,7 @@
           "type": "string",
           "required": true,
           "maxLength": 220,
-          "pattern": "^(?:'[^'\\x00-\\x1f\\x7f]{1,100}'|[A-Za-z0-9_ ]{1,100})(?:![A-Z]{1,3}[0-9]{0,7}(?::[A-Z]{1,3}[0-9]{0,7})?)?$"
+          "pattern": "^(?:'[^'\\x00-\\x1f\\x7f]{1,100}'|[A-Za-z0-9_ ]{1,100})![A-Z][1-9][0-9]{0,6}:[A-Z][1-9][0-9]{0,6}$"
         }
       },
       "facts": {
@@ -313,6 +325,104 @@
                       "from": "11"
                     },
                     "untrusted": true
+                  },
+                  {
+                    "name": "c12",
+                    "value": {
+                      "from": "12"
+                    },
+                    "untrusted": true
+                  },
+                  {
+                    "name": "c13",
+                    "value": {
+                      "from": "13"
+                    },
+                    "untrusted": true
+                  },
+                  {
+                    "name": "c14",
+                    "value": {
+                      "from": "14"
+                    },
+                    "untrusted": true
+                  },
+                  {
+                    "name": "c15",
+                    "value": {
+                      "from": "15"
+                    },
+                    "untrusted": true
+                  },
+                  {
+                    "name": "c16",
+                    "value": {
+                      "from": "16"
+                    },
+                    "untrusted": true
+                  },
+                  {
+                    "name": "c17",
+                    "value": {
+                      "from": "17"
+                    },
+                    "untrusted": true
+                  },
+                  {
+                    "name": "c18",
+                    "value": {
+                      "from": "18"
+                    },
+                    "untrusted": true
+                  },
+                  {
+                    "name": "c19",
+                    "value": {
+                      "from": "19"
+                    },
+                    "untrusted": true
+                  },
+                  {
+                    "name": "c20",
+                    "value": {
+                      "from": "20"
+                    },
+                    "untrusted": true
+                  },
+                  {
+                    "name": "c21",
+                    "value": {
+                      "from": "21"
+                    },
+                    "untrusted": true
+                  },
+                  {
+                    "name": "c22",
+                    "value": {
+                      "from": "22"
+                    },
+                    "untrusted": true
+                  },
+                  {
+                    "name": "c23",
+                    "value": {
+                      "from": "23"
+                    },
+                    "untrusted": true
+                  },
+                  {
+                    "name": "c24",
+                    "value": {
+                      "from": "24"
+                    },
+                    "untrusted": true
+                  },
+                  {
+                    "name": "c25",
+                    "value": {
+                      "from": "25"
+                    },
+                    "untrusted": true
                   }
                 ]
               }
@@ -344,7 +454,15 @@
           },
           "expect": {
             "facts": {
-              "class": "read"
+              "class": "read",
+              "object": {
+                "state": "known",
+                "value": "record"
+              },
+              "scope": {
+                "state": "known",
+                "value": "query_selected"
+              }
             },
             "response": "{\"range\":\"Sheet1!A1:D2\",\"majorDimension\":\"ROWS\",\"values\":[[\"Name\",\"Qty\"],[\"Bolts\",\"40\"]]}",
             "projection": {
@@ -380,11 +498,81 @@
           }
         },
         {
+          "name": "reads a row 14 cells wide",
+          "kind": "safe",
+          "arguments": {
+            "spreadsheet_id": "1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms",
+            "range": "Sheet1!A1:N1"
+          },
+          "expect": {
+            "facts": {
+              "class": "read",
+              "object": {
+                "state": "known",
+                "value": "record"
+              },
+              "scope": {
+                "state": "known",
+                "value": "query_selected"
+              }
+            },
+            "response": "{\"range\":\"Sheet1!A1:N1\",\"majorDimension\":\"ROWS\",\"values\":[[\"v0\",\"v1\",\"v2\",\"v3\",\"v4\",\"v5\",\"v6\",\"v7\",\"v8\",\"v9\",\"v10\",\"v11\",\"v12\",\"v13\"]]}",
+            "projection": {
+              "range": "Sheet1!A1:N1",
+              "rows": [
+                {
+                  "c0": "v0",
+                  "c1": "v1",
+                  "c2": "v2",
+                  "c3": "v3",
+                  "c4": "v4",
+                  "c5": "v5",
+                  "c6": "v6",
+                  "c7": "v7",
+                  "c8": "v8",
+                  "c9": "v9",
+                  "c10": "v10",
+                  "c11": "v11",
+                  "c12": "v12",
+                  "c13": "v13"
+                }
+              ]
+            },
+            "decisions": {
+              "balanced": "allow",
+              "relaxed": "allow",
+              "strict": "allow"
+            }
+          }
+        },
+        {
           "name": "refuses a range with a newline",
           "kind": "risky",
           "arguments": {
             "spreadsheet_id": "1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms",
             "range": "Sheet1!A1\n"
+          },
+          "expect": {
+            "error": "invalid_argument"
+          }
+        },
+        {
+          "name": "refuses a range with no row bounds",
+          "kind": "risky",
+          "arguments": {
+            "spreadsheet_id": "1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms",
+            "range": "Sheet1!A:D"
+          },
+          "expect": {
+            "error": "invalid_argument"
+          }
+        },
+        {
+          "name": "refuses a column past Z",
+          "kind": "risky",
+          "arguments": {
+            "spreadsheet_id": "1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms",
+            "range": "Sheet1!A1:AA20"
           },
           "expect": {
             "error": "invalid_argument"
@@ -541,6 +729,18 @@
           "expect": {
             "facts": {
               "class": "update",
+              "object": {
+                "state": "known",
+                "value": "record"
+              },
+              "scope": {
+                "state": "known",
+                "value": "enumerated"
+              },
+              "reversibility": {
+                "state": "known",
+                "value": "recoverable"
+              },
               "record_count": {
                 "state": "known",
                 "value": 5
@@ -731,6 +931,18 @@
           "expect": {
             "facts": {
               "class": "update",
+              "object": {
+                "state": "known",
+                "value": "record"
+              },
+              "scope": {
+                "state": "known",
+                "value": "enumerated"
+              },
+              "reversibility": {
+                "state": "known",
+                "value": "recoverable"
+              },
               "record_count": {
                 "state": "known",
                 "value": 150
@@ -1912,7 +2124,23 @@
           },
           "expect": {
             "facts": {
-              "class": "update"
+              "class": "update",
+              "object": {
+                "state": "known",
+                "value": "record"
+              },
+              "scope": {
+                "state": "known",
+                "value": "single"
+              },
+              "reversibility": {
+                "state": "known",
+                "value": "recoverable"
+              },
+              "record_count": {
+                "state": "known",
+                "value": 1
+              }
             },
             "request": {
               "body": "{\"majorDimension\":\"ROWS\",\"values\":[[\"2026-11-13\",\"deploy\",\"ok\"]]}",
@@ -2062,9 +2290,17 @@
           "expect": {
             "facts": {
               "class": "delete",
+              "object": {
+                "state": "known",
+                "value": "record"
+              },
               "scope": {
                 "state": "known",
                 "value": "query_selected"
+              },
+              "reversibility": {
+                "state": "known",
+                "value": "recoverable"
               }
             },
             "request": {
@@ -2217,6 +2453,18 @@
               "object": {
                 "state": "known",
                 "value": "table"
+              },
+              "scope": {
+                "state": "known",
+                "value": "single"
+              },
+              "reversibility": {
+                "state": "known",
+                "value": "recoverable"
+              },
+              "record_count": {
+                "state": "known",
+                "value": 1
               }
             },
             "request": {
@@ -2360,7 +2608,19 @@
           },
           "expect": {
             "facts": {
-              "class": "export"
+              "class": "export",
+              "object": {
+                "state": "known",
+                "value": "file"
+              },
+              "scope": {
+                "state": "known",
+                "value": "single"
+              },
+              "record_count": {
+                "state": "known",
+                "value": 1
+              }
             },
             "request": {
               "body": "{}",

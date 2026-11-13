@@ -175,12 +175,20 @@
           "expect": {
             "facts": {
               "class": "read",
+              "object": {
+                "state": "known",
+                "value": "folder"
+              },
+              "scope": {
+                "state": "known",
+                "value": "query_selected"
+              },
               "record_count": {
                 "state": "known",
                 "value": 20
               }
             },
-            "response": "{\"value\":[{\"id\":\"01BYE5RZ6QN3ZWBTUFOFD3GSPGOHDJD36K\",\"name\":\"Budget.xlsx\",\"size\":4096,\"lastModifiedDateTime\":\"2026-11-10T10:00:00Z\",\"webUrl\":\"https://contoso.sharepoint.com/x\",\"@microsoft.graph.downloadUrl\":\"https://download.example/x\"}]}",
+            "response": "{\"value\":[{\"id\":\"01BYE5RZ6QN3ZWBTUFOFD3GSPGOHDJD36K\",\"name\":\"Budget.xlsx\",\"size\":4096,\"lastModifiedDateTime\":\"2026-11-10T10:00:00Z\",\"webUrl\":\"https://contoso.sharepoint.com/x\",\"@microsoft.graph.downloadUrl\":\"https://download.example/x\"}],\"@odata.nextLink\":\"https://graph.microsoft.com/v1.0/drives/b!x/items/root/children?$skiptoken=XyZ789\"}",
             "projection": {
               "items": [
                 {
@@ -190,7 +198,8 @@
                   "modified": "2026-11-10T10:00:00Z",
                   "web_url": "https://contoso.sharepoint.com/x"
                 }
-              ]
+              ],
+              "next_link": "https://graph.microsoft.com/v1.0/drives/b!x/items/root/children?$skiptoken=XyZ789"
             },
             "request": {
               "body": null,
@@ -346,7 +355,23 @@
           },
           "expect": {
             "facts": {
-              "class": "read"
+              "class": "read",
+              "object": {
+                "state": "known",
+                "value": "file"
+              },
+              "scope": {
+                "state": "known",
+                "value": "single"
+              },
+              "reversibility": {
+                "state": "known",
+                "value": "reversible"
+              },
+              "record_count": {
+                "state": "known",
+                "value": 1
+              }
             },
             "request": {
               "body": null,
@@ -522,7 +547,23 @@
           },
           "expect": {
             "facts": {
-              "class": "update"
+              "class": "update",
+              "object": {
+                "state": "known",
+                "value": "folder"
+              },
+              "scope": {
+                "state": "known",
+                "value": "single"
+              },
+              "reversibility": {
+                "state": "known",
+                "value": "reversible"
+              },
+              "record_count": {
+                "state": "known",
+                "value": 1
+              }
             },
             "request": {
               "body": "{\"name\":\"Q3 reports\",\"folder\":{},\"@microsoft.graph.conflictBehavior\":\"fail\"}",
@@ -562,8 +603,8 @@
       ]
     },
     {
-      "actionId": "onedrive.items.update",
-      "title": "Rename or move a file",
+      "actionId": "onedrive.items.rename",
+      "title": "Rename a file or folder",
       "executor": {
         "kind": "declarative-http",
         "request": {
@@ -582,19 +623,6 @@
                 "name": "name",
                 "value": {
                   "arg": "name"
-                }
-              },
-              {
-                "name": "parentReference",
-                "value": {
-                  "object": [
-                    {
-                      "name": "id",
-                      "value": {
-                        "arg": "parent_id"
-                      }
-                    }
-                  ]
                 }
               }
             ]
@@ -617,15 +645,9 @@
         },
         "name": {
           "type": "string",
-          "required": false,
+          "required": true,
           "maxLength": 255,
           "pattern": "^[^\\x00-\\x1f\\x7f\"*:<>?/\\\\|]{1,255}$"
-        },
-        "parent_id": {
-          "type": "string",
-          "required": false,
-          "maxLength": 128,
-          "pattern": "^[A-Za-z0-9!_-]{1,128}$"
         }
       },
       "facts": {
@@ -710,23 +732,23 @@
           },
           "expect": {
             "facts": {
-              "class": "update"
-            },
-            "request": {
-              "body": "{\"name\":\"Budget (final).xlsx\",\"parentReference\":{}}",
-              "headers": [
-                [
-                  "accept",
-                  "application/json"
-                ],
-                [
-                  "content-type",
-                  "application/json; charset=utf-8"
-                ]
-              ],
-              "maxPages": 1,
-              "method": "PATCH",
-              "url": "https://graph.microsoft.com/v1.0/drives/b%21t18F8ybsHUq1z3LTz8xvZqP8zaSWjkFNhsME-Fepo75dTf9vQKfeRblBZjoSQrd7/items/01BYE5RZ6QN3ZWBTUFOFD3GSPGOHDJD36K"
+              "class": "update",
+              "object": {
+                "state": "known",
+                "value": "file"
+              },
+              "scope": {
+                "state": "known",
+                "value": "single"
+              },
+              "reversibility": {
+                "state": "known",
+                "value": "reversible"
+              },
+              "record_count": {
+                "state": "known",
+                "value": 1
+              }
             },
             "decisions": {
               "balanced": "allow",
@@ -745,6 +767,217 @@
           },
           "expect": {
             "error": "unknown_argument"
+          }
+        },
+        {
+          "name": "refuses an omitted name",
+          "kind": "risky",
+          "arguments": {
+            "drive_id": "b!t18F8ybsHUq1z3LTz8xvZqP8zaSWjkFNhsME-Fepo75dTf9vQKfeRblBZjoSQrd7",
+            "item_id": "01BYE5RZ6QN3ZWBTUFOFD3GSPGOHDJD36K"
+          },
+          "expect": {
+            "error": "missing_argument"
+          }
+        }
+      ]
+    },
+    {
+      "actionId": "onedrive.items.move",
+      "title": "Move a file or folder",
+      "executor": {
+        "kind": "declarative-http",
+        "request": {
+          "method": "PATCH",
+          "host": "graph.microsoft.com",
+          "path": "/v1.0/drives/{drive_id}/items/{item_id}",
+          "headers": [
+            {
+              "name": "accept",
+              "value": "application/json"
+            }
+          ],
+          "body": {
+            "object": [
+              {
+                "name": "parentReference",
+                "value": {
+                  "object": [
+                    {
+                      "name": "id",
+                      "value": {
+                        "arg": "parent_id"
+                      }
+                    }
+                  ]
+                }
+              },
+              {
+                "name": "name",
+                "value": {
+                  "arg": "name"
+                }
+              }
+            ]
+          },
+          "maxPages": 1
+        }
+      },
+      "arguments": {
+        "drive_id": {
+          "type": "string",
+          "required": true,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9!_-]{1,128}$"
+        },
+        "item_id": {
+          "type": "string",
+          "required": true,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9!_-]{1,128}$"
+        },
+        "name": {
+          "type": "string",
+          "required": false,
+          "maxLength": 255,
+          "pattern": "^[^\\x00-\\x1f\\x7f\"*:<>?/\\\\|]{1,255}$"
+        },
+        "parent_id": {
+          "type": "string",
+          "required": true,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9!_-]{1,128}$"
+        }
+      },
+      "facts": {
+        "class": "update",
+        "object": {
+          "const": "file"
+        },
+        "scope": {
+          "const": "single"
+        },
+        "reversibility": {
+          "const": "reversible"
+        },
+        "recordCount": {
+          "const": 1
+        }
+      },
+      "response": {
+        "maxBytes": 65536,
+        "fields": [
+          {
+            "name": "id",
+            "value": {
+              "from": "id"
+            }
+          },
+          {
+            "name": "name",
+            "value": {
+              "from": "name"
+            },
+            "untrusted": true
+          },
+          {
+            "name": "size",
+            "value": {
+              "from": "size"
+            }
+          },
+          {
+            "name": "folder",
+            "value": {
+              "from": "folder.childCount"
+            }
+          },
+          {
+            "name": "modified",
+            "value": {
+              "from": "lastModifiedDateTime"
+            }
+          },
+          {
+            "name": "web_url",
+            "value": {
+              "from": "webUrl"
+            }
+          }
+        ]
+      },
+      "safety": {
+        "effect": "write",
+        "requiredCapabilities": [
+          "bounded-output",
+          "egress-pinned"
+        ],
+        "idempotency": "none",
+        "scopes": [
+          "https://graph.microsoft.com/Files.ReadWrite"
+        ],
+        "maxItems": 1,
+        "minIntervalMs": 500,
+        "timeoutMs": 10000
+      },
+      "fixtures": [
+        {
+          "name": "moves a file into another folder",
+          "kind": "safe",
+          "arguments": {
+            "drive_id": "b!t18F8ybsHUq1z3LTz8xvZqP8zaSWjkFNhsME-Fepo75dTf9vQKfeRblBZjoSQrd7",
+            "item_id": "01BYE5RZ6QN3ZWBTUFOFD3GSPGOHDJD36K",
+            "parent_id": "01BYE5RZ2KXWOGNNMGCFCKFBBRZGQBNY5L"
+          },
+          "expect": {
+            "facts": {
+              "class": "update",
+              "object": {
+                "state": "known",
+                "value": "file"
+              },
+              "scope": {
+                "state": "known",
+                "value": "single"
+              },
+              "reversibility": {
+                "state": "known",
+                "value": "reversible"
+              },
+              "record_count": {
+                "state": "known",
+                "value": 1
+              }
+            },
+            "decisions": {
+              "balanced": "allow",
+              "relaxed": "allow",
+              "strict": "review"
+            }
+          }
+        },
+        {
+          "name": "refuses a deleted flag",
+          "kind": "risky",
+          "arguments": {
+            "drive_id": "b!t18F8ybsHUq1z3LTz8xvZqP8zaSWjkFNhsME-Fepo75dTf9vQKfeRblBZjoSQrd7",
+            "item_id": "01BYE5RZ6QN3ZWBTUFOFD3GSPGOHDJD36K",
+            "deleted": true
+          },
+          "expect": {
+            "error": "unknown_argument"
+          }
+        },
+        {
+          "name": "refuses an omitted folder",
+          "kind": "risky",
+          "arguments": {
+            "drive_id": "b!t18F8ybsHUq1z3LTz8xvZqP8zaSWjkFNhsME-Fepo75dTf9vQKfeRblBZjoSQrd7",
+            "item_id": "01BYE5RZ6QN3ZWBTUFOFD3GSPGOHDJD36K",
+            "name": "Budget (final).xlsx"
+          },
+          "expect": {
+            "error": "missing_argument"
           }
         }
       ]
@@ -786,14 +1019,8 @@
         "object": {
           "const": "file"
         },
-        "scope": {
-          "const": "single"
-        },
         "reversibility": {
           "const": "recoverable"
-        },
-        "recordCount": {
-          "const": 1
         }
       },
       "response": {
@@ -833,6 +1060,10 @@
           "expect": {
             "facts": {
               "class": "delete",
+              "object": {
+                "state": "known",
+                "value": "file"
+              },
               "reversibility": {
                 "state": "known",
                 "value": "recoverable"
@@ -851,7 +1082,7 @@
               "url": "https://graph.microsoft.com/v1.0/drives/b%21t18F8ybsHUq1z3LTz8xvZqP8zaSWjkFNhsME-Fepo75dTf9vQKfeRblBZjoSQrd7/items/01BYE5RZ6QN3ZWBTUFOFD3GSPGOHDJD36K"
             },
             "decisions": {
-              "balanced": "allow",
+              "balanced": "require-reapproval",
               "relaxed": "allow",
               "strict": "review"
             }
@@ -910,14 +1141,8 @@
         "object": {
           "const": "file"
         },
-        "scope": {
-          "const": "single"
-        },
         "reversibility": {
           "const": "permanent"
-        },
-        "recordCount": {
-          "const": 1
         }
       },
       "response": {
@@ -957,6 +1182,10 @@
           "expect": {
             "facts": {
               "class": "delete",
+              "object": {
+                "state": "known",
+                "value": "file"
+              },
               "reversibility": {
                 "state": "known",
                 "value": "permanent"
@@ -979,7 +1208,7 @@
               "url": "https://graph.microsoft.com/v1.0/drives/b%21t18F8ybsHUq1z3LTz8xvZqP8zaSWjkFNhsME-Fepo75dTf9vQKfeRblBZjoSQrd7/items/01BYE5RZ6QN3ZWBTUFOFD3GSPGOHDJD36K/permanentDelete"
             },
             "decisions": {
-              "balanced": "review",
+              "balanced": "require-reapproval",
               "relaxed": "review",
               "strict": "block"
             }
@@ -1137,17 +1366,21 @@
           "expect": {
             "facts": {
               "class": "share",
-              "audience": {
-                "external": {
-                  "state": "unknown"
-                },
-                "kind": {
-                  "state": "known",
-                  "value": "public"
-                },
-                "recipient_domains": {
-                  "state": "unknown"
-                }
+              "object": {
+                "state": "known",
+                "value": "file"
+              },
+              "scope": {
+                "state": "known",
+                "value": "single"
+              },
+              "reversibility": {
+                "state": "known",
+                "value": "reversible"
+              },
+              "record_count": {
+                "state": "known",
+                "value": 1
               }
             },
             "request": {
@@ -1328,17 +1561,21 @@
           "expect": {
             "facts": {
               "class": "share",
-              "audience": {
-                "external": {
-                  "state": "unknown"
-                },
-                "kind": {
-                  "state": "known",
-                  "value": "domain"
-                },
-                "recipient_domains": {
-                  "state": "unknown"
-                }
+              "object": {
+                "state": "known",
+                "value": "file"
+              },
+              "scope": {
+                "state": "known",
+                "value": "single"
+              },
+              "reversibility": {
+                "state": "known",
+                "value": "reversible"
+              },
+              "record_count": {
+                "state": "known",
+                "value": 1
               }
             },
             "request": {
@@ -1577,20 +1814,25 @@
           "expect": {
             "facts": {
               "class": "share",
-              "audience": {
-                "external": {
-                  "state": "unknown"
-                },
-                "kind": {
-                  "state": "known",
-                  "value": "named"
-                },
-                "recipient_domains": {
-                  "state": "known",
-                  "value": [
-                    "example.org"
-                  ]
-                }
+              "object": {
+                "state": "known",
+                "value": "file"
+              },
+              "scope": {
+                "state": "known",
+                "value": "single"
+              },
+              "reversibility": {
+                "state": "known",
+                "value": "reversible"
+              },
+              "record_count": {
+                "state": "known",
+                "value": 1
+              },
+              "recipient_count": {
+                "state": "known",
+                "value": 1
               }
             },
             "request": {
@@ -1724,7 +1966,23 @@
           },
           "expect": {
             "facts": {
-              "class": "update"
+              "class": "update",
+              "object": {
+                "state": "known",
+                "value": "file"
+              },
+              "scope": {
+                "state": "known",
+                "value": "single"
+              },
+              "reversibility": {
+                "state": "known",
+                "value": "reversible"
+              },
+              "record_count": {
+                "state": "known",
+                "value": 1
+              }
             },
             "request": {
               "body": null,

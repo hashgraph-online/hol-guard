@@ -236,7 +236,8 @@ fn integer_spec(schema: &Value, required: bool) -> Option<Value> {
 }
 
 /// Arguments for the top-level properties of an object schema. Properties no
-/// pack type can bound are left out; a left-out required one is noted.
+/// pack type can bound are left out; a left-out required one is noted, and
+/// the result is `false` when any required property was left out.
 ///
 /// With `rename` off (an MCP tool, whose call keeps the caller's names) a
 /// property whose name is not already `snake_case` is left out rather than
@@ -248,15 +249,16 @@ pub(crate) fn object_arguments(
     draft: &mut Draft,
     at: &str,
     rename: bool,
-) {
+) -> bool {
     let Some(properties) = schema.get("properties").and_then(Value::as_object) else {
-        return;
+        return true;
     };
     let required: BTreeSet<&str> = schema
         .get("required")
         .and_then(Value::as_array)
         .map(|list| list.iter().filter_map(Value::as_str).collect())
         .unwrap_or_default();
+    let mut complete = true;
     for (key, property) in properties {
         let wanted = required.contains(key.as_str());
         let spec = argument(property, wanted);
@@ -268,10 +270,14 @@ pub(crate) fn object_arguments(
                 into.insert(name.clone(), spec);
                 names.insert(key.clone(), name);
             }
-            _ if wanted => draft.note("required_argument_unsupported", &format!("{at}/{key}")),
+            _ if wanted => {
+                complete = false;
+                draft.note("required_argument_unsupported", &format!("{at}/{key}"));
+            }
             _ => draft.note("argument_skipped", &format!("{at}/{key}")),
         }
     }
+    complete
 }
 
 /// `camelCase`, `kebab-case` and spaced names as `snake_case`, at most 64 bytes.
@@ -406,7 +412,9 @@ fn build_mcp(tools: &[Value], provider: &str, mode: &str, draft: &mut Draft) {
         let mut arguments = Map::new();
         if let Some(schema) = schema {
             let at = format!("{at}/inputSchema/properties");
-            object_arguments(
+            // A remote MCP tool validates its own input, so a tool whose
+            // required property the pack cannot carry still drafts for review.
+            let _ = object_arguments(
                 schema,
                 &mut arguments,
                 &mut BTreeMap::new(),
