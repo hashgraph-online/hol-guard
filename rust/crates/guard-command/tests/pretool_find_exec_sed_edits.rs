@@ -45,10 +45,10 @@ fn outcome(root: &Path, command: &str) -> (String, String) {
     (result.minimum_action, result.reason_code)
 }
 
-#[cfg(unix)]
 #[test]
 fn a_sed_edit_over_found_files_runs_in_the_workspace_sandbox() {
     let (root, _cleanup) = checkout("edits");
+    let contained = guard_command::pretool::workspace_sandbox_available();
     for command in [
         r#"find tests -name "*.py" -type f -exec sed -i '' 's/\._reset(/._reset_impl(/g' {} \;"#,
         "find tests -name '*.py' -type f -exec sed -i 's/old/new/g' {} +",
@@ -56,7 +56,14 @@ fn a_sed_edit_over_found_files_runs_in_the_workspace_sandbox() {
         "find . -path ./node_modules -prune -o -type f -name '*.py' -exec sed -i.bak 's/a/b/' {} +",
     ] {
         let (action, reason) = outcome(&root, command);
-        assert_eq!((action.as_str(), reason.as_str()), CONTAINED, "{command}");
+        if contained {
+            assert_eq!((action.as_str(), reason.as_str()), CONTAINED, "{command}");
+        } else {
+            // Windows has no workspace sandbox; Linux hosts without a working
+            // bubblewrap probe also retain review rather than allowing edits.
+            assert_ne!(action, "allow", "{command}");
+            assert_ne!(action, "sandbox-required", "{command}");
+        }
     }
 }
 
