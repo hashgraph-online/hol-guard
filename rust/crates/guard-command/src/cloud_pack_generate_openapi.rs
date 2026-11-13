@@ -162,7 +162,7 @@ fn operation_action(
         (Some(schema), _) => {
             let mut names = BTreeMap::new();
             let at = format!("{at}/requestBody");
-            let complete = object_arguments(schema, &mut arguments, &mut names, draft, &at, true);
+            let complete = object_arguments(schema, &mut arguments, &mut names, draft, &at);
             if !complete || names.is_empty() {
                 return None;
             }

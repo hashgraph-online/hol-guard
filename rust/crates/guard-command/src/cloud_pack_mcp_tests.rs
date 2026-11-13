@@ -62,14 +62,20 @@ fn a_remote_mcp_argument_keeps_the_provider_name() {
     let pack = parsed(mcp_pack(record_arguments(), None));
     assert!(pack.actions[0].arguments.contains_key("sobject-name"));
     assert_eq!(
-        check(&pack, json!({"sobject-name": "Account", "id": "001", "body": {"Name": "Acme"}})),
+        check(
+            &pack,
+            json!({"sobject-name": "Account", "id": "001", "body": {"Name": "Acme"}})
+        ),
         Ok(())
     );
 }
 
 #[test]
 fn an_http_argument_must_stay_snake_case() {
-    let mut value = mcp_pack(json!({"sobjectName": {"type": "string", "required": true, "maxLength": 8}}), None);
+    let mut value = mcp_pack(
+        json!({"sobjectName": {"type": "string", "required": true, "maxLength": 8}}),
+        None,
+    );
     value["actions"][0]["executor"] = json!({"kind": "declarative-http", "request": {
         "method": "GET", "host": "mcp.crm.example", "path": "/v1/{sobjectName}", "maxPages": 1}});
     assert_eq!(refused(value), "cloud_pack_argument_name_invalid");
@@ -80,14 +86,20 @@ fn a_json_argument_is_bounded_by_size() {
     let pack = parsed(mcp_pack(record_arguments(), None));
     let big = "x".repeat(80);
     assert_eq!(
-        check(&pack, json!({"sobject-name": "Account", "id": "001", "body": {"Name": big}})),
+        check(
+            &pack,
+            json!({"sobject-name": "Account", "id": "001", "body": {"Name": big}})
+        ),
         Err("invalid_argument")
     );
 }
 
 #[test]
 fn a_json_argument_is_refused_outside_remote_mcp() {
-    let mut value = mcp_pack(json!({"body": {"type": "json", "required": true, "maxBytes": 64}}), None);
+    let mut value = mcp_pack(
+        json!({"body": {"type": "json", "required": true, "maxBytes": 64}}),
+        None,
+    );
     value["actions"][0]["executor"] = json!({"kind": "declarative-http", "request": {
         "method": "POST", "host": "mcp.crm.example", "path": "/v1/records", "maxPages": 1,
         "body": {"arg": "body"}}});
@@ -110,7 +122,10 @@ fn a_counted_json_argument_feeds_the_record_count() {
     let facts = serde_json::to_value(extract(&pack.actions[0], args.as_object().unwrap())).unwrap();
     assert_eq!(facts["record_count"], json!({"state": "known", "value": 3}));
     let too_many: Vec<Value> = (0..21).map(|n| json!({"id": n})).collect();
-    assert_eq!(check(&pack, json!({"pages": too_many})), Err("invalid_argument"));
+    assert_eq!(
+        check(&pack, json!({"pages": too_many})),
+        Err("invalid_argument")
+    );
 }
 
 #[test]
@@ -120,13 +135,17 @@ fn undeclared_arguments_need_open_arguments() {
     assert_eq!(check(&closed, call.clone()), Err("unknown_argument"));
     let open = parsed(mcp_pack(record_arguments(), Some(json!({"maxBytes": 16}))));
     assert_eq!(check(&open, call), Ok(()));
-    let large = json!({"sobject-name": "Account", "id": "001", "body": {}, "cloudId": "c".repeat(32)});
+    let large =
+        json!({"sobject-name": "Account", "id": "001", "body": {}, "cloudId": "c".repeat(32)});
     assert_eq!(check(&open, large), Err("open_arguments_too_large"));
 }
 
 #[test]
 fn open_arguments_are_refused_outside_remote_mcp() {
-    let mut value = mcp_pack(json!({"name": {"type": "string", "required": true, "maxLength": 8}}), Some(json!({"maxBytes": 16})));
+    let mut value = mcp_pack(
+        json!({"name": {"type": "string", "required": true, "maxLength": 8}}),
+        Some(json!({"maxBytes": 16})),
+    );
     value["actions"][0]["executor"] = json!({"kind": "declarative-http", "request": {
         "method": "GET", "host": "mcp.crm.example", "path": "/v1/{name}", "maxPages": 1}});
     assert_eq!(refused(value), "cloud_pack_open_arguments_invalid");
@@ -138,6 +157,9 @@ fn opening_arguments_widens_a_pack() {
     let open = parsed(mcp_pack(record_arguments(), Some(json!({"maxBytes": 16}))));
     let change = diff(&closed, &open).unwrap();
     assert!(change.widening);
-    assert!(change.changes.iter().any(|c| c.code == "open_arguments_changed"));
+    assert!(change
+        .changes
+        .iter()
+        .any(|c| c.code == "open_arguments_changed"));
     assert!(!diff(&open, &closed).unwrap().widening);
 }

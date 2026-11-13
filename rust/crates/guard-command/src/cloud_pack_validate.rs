@@ -136,7 +136,11 @@ fn validate_action(
     }
     let mcp = matches!(action.executor, Executor::RemoteMcp { .. });
     for (name, spec) in &action.arguments {
-        let named = if mcp { mcp_name(name) } else { snake_name(name) };
+        let named = if mcp {
+            mcp_name(name)
+        } else {
+            snake_name(name)
+        };
         if !named {
             return fail(
                 "cloud_pack_argument_name_invalid",
@@ -148,7 +152,10 @@ fn validate_action(
     }
     if let Some(open) = &action.open_arguments {
         if !mcp || open.max_bytes == 0 || open.max_bytes > MAX_JSON_BYTES {
-            return fail("cloud_pack_open_arguments_invalid", format!("{at}/openArguments"));
+            return fail(
+                "cloud_pack_open_arguments_invalid",
+                format!("{at}/openArguments"),
+            );
         }
     }
     match &action.executor {

@@ -151,12 +151,18 @@ fn count_fact(
         Some(Extractor::Const(value)) => typed::<u64>(value),
         Some(Extractor::Count { arguments }) => {
             if !distinct(arguments)
-                || !arguments
-                    .iter()
-                    .all(|name| matches!(
+                || !arguments.iter().all(|name| {
+                    matches!(
                         args.get(name),
-                        Some(ArgumentSpec::Array { .. } | ArgumentSpec::Json { max_items: Some(_), .. })
-                    ))
+                        Some(
+                            ArgumentSpec::Array { .. }
+                                | ArgumentSpec::Json {
+                                    max_items: Some(_),
+                                    ..
+                                }
+                        )
+                    )
+                })
             {
                 return Err("cloud_pack_extractor_argument_invalid");
             }

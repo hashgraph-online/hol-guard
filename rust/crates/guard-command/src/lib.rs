@@ -81,9 +81,9 @@ mod cloud_pack_generate_tests;
 mod cloud_pack_keyed_tests;
 pub mod cloud_pack_mail;
 #[cfg(test)]
-mod cloud_pack_mcp_tests;
-#[cfg(test)]
 mod cloud_pack_mail_tests;
+#[cfg(test)]
+mod cloud_pack_mcp_tests;
 pub mod cloud_pack_pattern;
 pub mod cloud_pack_request;
 pub mod cloud_pack_response;

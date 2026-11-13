@@ -644,14 +644,8 @@
         "object": {
           "const": "record"
         },
-        "scope": {
-          "const": "single"
-        },
         "reversibility": {
           "const": "permanent"
-        },
-        "recordCount": {
-          "const": 1
         }
       },
       "response": {
@@ -698,21 +692,13 @@
                 "state": "known",
                 "value": "record"
               },
-              "scope": {
-                "state": "known",
-                "value": "single"
-              },
               "reversibility": {
                 "state": "known",
                 "value": "permanent"
-              },
-              "record_count": {
-                "state": "known",
-                "value": 1
               }
             },
             "decisions": {
-              "balanced": "review",
+              "balanced": "require-reapproval",
               "relaxed": "review",
               "strict": "block"
             }

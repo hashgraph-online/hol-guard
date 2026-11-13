@@ -237,17 +237,12 @@ fn integer_spec(schema: &Value, required: bool) -> Option<Value> {
 /// Arguments for the top-level properties of an object schema. Properties no
 /// pack type can bound are left out; a left-out required one is noted, and
 /// the result is `false` when any required property was left out.
-///
-/// With `rename` off (an MCP tool, whose call keeps the caller's names) a
-/// property whose name is not already `snake_case` is left out rather than
-/// renamed, since nothing would translate the new name back.
 pub(crate) fn object_arguments(
     schema: &Value,
     into: &mut Map<String, Value>,
     names: &mut BTreeMap<String, String>,
     draft: &mut Draft,
     at: &str,
-    rename: bool,
 ) -> bool {
     let Some(properties) = schema.get("properties").and_then(Value::as_object) else {
         return true;
@@ -261,9 +256,7 @@ pub(crate) fn object_arguments(
     for (key, property) in properties {
         let wanted = required.contains(key.as_str());
         let spec = argument(property, wanted);
-        let name = snake(key)
-            .filter(|name| rename || name == key)
-            .filter(|name| !into.contains_key(name));
+        let name = snake(key).filter(|name| !into.contains_key(name));
         match (spec, name) {
             (Some(spec), Some(name)) if into.len() < MAX_ARGUMENTS => {
                 into.insert(name.clone(), spec);

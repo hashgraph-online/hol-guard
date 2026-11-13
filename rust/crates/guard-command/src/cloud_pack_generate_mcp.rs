@@ -41,7 +41,7 @@ pub(crate) fn build(tools: &[Value], provider: &str, mode: &str, draft: &mut Dra
             let at = format!("{at}/inputSchema/properties");
             tool_arguments(schema, &mut arguments, draft, &at);
         }
-        let response = response(tool.get("outputSchema"), draft, &at);
+        let response = response(tool.get("outputSchema"), false, draft, &at);
         let text = tool
             .get("title")
             .or_else(|| tool.get("description"))

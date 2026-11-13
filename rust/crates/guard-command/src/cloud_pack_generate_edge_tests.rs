@@ -203,19 +203,6 @@ fn a_zero_bound_is_never_widened() {
     assert!(noted(&reply, "argument_skipped"));
 }
 
-#[test]
-fn an_mcp_argument_is_never_renamed() {
-    let tools = json!([{ "name": "move_file", "inputSchema": { "type": "object",
-        "required": ["folderPath"],
-        "properties": { "folderPath": { "type": "string" }, "note": { "type": "string" } } } }]);
-    let reply = reply(json!({ "op": "generate", "providerId": "files",
-        "host": "mcp.files.example", "authMode": "oauth2", "mcpTools": tools }));
-    let arguments = &only(&reply)["arguments"];
-    assert!(arguments.get("folder_path").is_none(), "{arguments}");
-    assert_eq!(arguments["note"]["type"], json!("string"));
-    assert!(noted(&reply, "required_argument_unsupported"));
-}
-
 /// A draft with `/status` beside `extra`, so the draft is never empty.
 fn with_status(extra: Value) -> Value {
     let mut paths = json!({ "/status": { "get": { "operationId": "getStatus" } } });

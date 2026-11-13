@@ -1010,14 +1010,8 @@
         "object": {
           "const": "record"
         },
-        "scope": {
-          "const": "single"
-        },
         "reversibility": {
           "const": "recoverable"
-        },
-        "recordCount": {
-          "const": 1
         }
       },
       "response": {
@@ -1066,21 +1060,13 @@
                 "state": "known",
                 "value": "record"
               },
-              "scope": {
-                "state": "known",
-                "value": "single"
-              },
               "reversibility": {
                 "state": "known",
                 "value": "recoverable"
-              },
-              "record_count": {
-                "state": "known",
-                "value": 1
               }
             },
             "decisions": {
-              "balanced": "allow",
+              "balanced": "require-reapproval",
               "relaxed": "allow",
               "strict": "review"
             }
