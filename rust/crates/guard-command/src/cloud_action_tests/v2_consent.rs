@@ -290,3 +290,51 @@ fn tainted_sessions_are_answered_only_by_exact_consent() {
     )]);
     assert_eq!(run(&evaluator, &delete)["action"], "allow");
 }
+
+#[test]
+fn bounded_offers_never_reach_outside_or_bound_a_payment() {
+    let evaluator = evaluator();
+    let base = archive_request(&evaluator);
+    let with = |class: &str, external: Value| {
+        let mut request = base.clone();
+        request["facts"]["class"] = class.into();
+        request["facts"]["audience"]["kind"] = json!({"state": "unknown"});
+        request["facts"]["audience"]["external"] = external;
+        request["facts"]["audience"]["recipient_domains"] =
+            json!({"state": "known", "value": ["example.org"]});
+        request["facts"]["recipient_count"] = json!({"state": "known", "value": 3});
+        run(&evaluator, &request)
+    };
+    let known = |value: bool| json!({"state": "known", "value": value});
+    let unknown = json!({"state": "unknown"});
+
+    // A send known to reach outside, and an update or execute that might.
+    for (class, external) in [
+        ("send", known(true)),
+        ("share", known(true)),
+        ("update", unknown.clone()),
+        ("execute", unknown.clone()),
+        ("send", unknown.clone()),
+        ("delete", known(true)),
+    ] {
+        let review = with(class, external.clone());
+        assert_eq!(review["action"], "require-reapproval", "{class}: {review}");
+        assert!(bounded_offers(&review).is_empty(), "{class} {external}: {review}");
+    }
+    // No selector bounds an amount, so a payment gets none even when internal.
+    let mut pay = base.clone();
+    pay["facts"]["class"] = "pay".into();
+    pay["facts"]["audience"]["kind"] = json!({"state": "unknown"});
+    pay["facts"]["audience"]["external"] = known(false);
+    pay["facts"]["money"] = json!({"state": "known", "value": {"amount_minor": 500, "currency": "USD", "direction": "out"}});
+    let paid = run(&evaluator, &pay);
+    assert_eq!(paid["action"], "require-reapproval", "{paid}");
+    assert!(bounded_offers(&paid).is_empty(), "{paid}");
+
+    // Known to stay inside: every offer pins `external: false`.
+    for class in ["send", "update"] {
+        let offers = bounded_offers(&with(class, known(false)));
+        assert!(!offers.is_empty(), "{class}");
+        assert!(offers.iter().all(|offer| offer["selector"]["external"] == false), "{offers:?}");
+    }
+}

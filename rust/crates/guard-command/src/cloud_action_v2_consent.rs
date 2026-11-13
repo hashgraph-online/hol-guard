@@ -226,10 +226,24 @@ pub(crate) fn consent_options(
 
 /// Up to two bounded Always allow choices: the smallest tier that covers this
 /// call and the next wider one. Each pins the provider, class, object and
-/// reversibility, plus the recipient domains for an outbound call. A call
-/// whose bounding facts are unknown, or larger than the widest tier, gets none.
+/// reversibility, plus the recipient domains for an outbound call. A payment,
+/// a call known to reach outside, an outbound call not known to stay inside,
+/// and a call whose bounding facts are unknown or larger than the widest tier
+/// get none.
 fn bounded_offers(subject: &FactSubjectV2<'_>) -> Vec<Value> {
     let facts = subject.facts;
+    // No selector bounds an amount, so a payment never gets a standing choice.
+    if matches!(facts.class, ActionClassV2::Pay) {
+        return Vec::new();
+    }
+    // A call known to reach outside gets none, and an outbound call must be
+    // known to stay inside: the selector then pins `external: false`.
+    let internal = match facts.audience.external.known() {
+        Some(true) => return Vec::new(),
+        Some(false) => true,
+        None if outbound(subject) => return Vec::new(),
+        None => false,
+    };
     let (Some(object), Some(reversibility)) = (facts.object.known(), facts.reversibility.known())
     else {
         return Vec::new();
@@ -239,6 +253,7 @@ fn bounded_offers(subject: &FactSubjectV2<'_>) -> Vec<Value> {
         classes: Some(vec![facts.class]),
         objects: Some(vec![*object]),
         reversibility: Some(vec![*reversibility]),
+        external: internal.then_some(false),
         ..FactSelectorV2::default()
     };
     let count = if facts.class.is_egress() {
@@ -251,11 +266,6 @@ fn bounded_offers(subject: &FactSubjectV2<'_>) -> Vec<Value> {
         base.recipient_domains = Some(domains.clone());
         facts.recipient_count.known()
     } else {
-        match facts.audience.external.known() {
-            Some(true) => return Vec::new(),
-            Some(false) => base.external = Some(false),
-            None => {}
-        }
         facts.record_count.known()
     };
     let Some(&count) = count else {
