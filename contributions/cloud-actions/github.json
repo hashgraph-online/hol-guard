@@ -14,8 +14,13 @@
   "auth": {
     "mode": "github-app",
     "scopes": [
+      "actions:write",
+      "administration:write",
+      "contents:write",
       "issues:read",
-      "issues:write"
+      "issues:write",
+      "pull_requests:write",
+      "secrets:write"
     ]
   },
   "actions": [
@@ -376,7 +381,7 @@
         }
       },
       "response": {
-        "maxBytes": 4096,
+        "maxBytes": 65536,
         "fields": [
           {
             "name": "id",
@@ -498,6 +503,2506 @@
           },
           "expect": {
             "error": "unknown_argument"
+          }
+        }
+      ]
+    },
+    {
+      "actionId": "github.issues.create",
+      "title": "Open an issue",
+      "executor": {
+        "kind": "declarative-http",
+        "request": {
+          "method": "POST",
+          "host": "api.github.com",
+          "path": "/repos/{repository*}/issues",
+          "body": {
+            "object": [
+              {
+                "name": "title",
+                "value": {
+                  "arg": "title"
+                }
+              },
+              {
+                "name": "body",
+                "value": {
+                  "arg": "body"
+                }
+              }
+            ]
+          },
+          "maxPages": 1,
+          "headers": [
+            {
+              "name": "accept",
+              "value": "application/vnd.github+json"
+            },
+            {
+              "name": "x-github-api-version",
+              "value": "2022-11-28"
+            }
+          ]
+        }
+      },
+      "arguments": {
+        "repository": {
+          "type": "string",
+          "required": true,
+          "maxLength": 140,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9-]{0,38}/[A-Za-z0-9._-]{1,100}$"
+        },
+        "title": {
+          "type": "string",
+          "required": true,
+          "maxLength": 256,
+          "pattern": "^[^\\x00-\\x1f\\x7f]{1,256}$"
+        },
+        "body": {
+          "type": "string",
+          "required": false,
+          "maxLength": 65536,
+          "forbidden": "(?:^|[^\\w])@[A-Za-z0-9][A-Za-z0-9-]*/[A-Za-z0-9_.-]+"
+        }
+      },
+      "facts": {
+        "class": "update",
+        "object": {
+          "const": "record"
+        },
+        "scope": {
+          "const": "single"
+        },
+        "reversibility": {
+          "const": "reversible"
+        },
+        "recordCount": {
+          "const": 1
+        }
+      },
+      "response": {
+        "maxBytes": 524288,
+        "fields": [
+          {
+            "name": "number",
+            "value": {
+              "from": "number"
+            }
+          },
+          {
+            "name": "state",
+            "value": {
+              "from": "state"
+            }
+          },
+          {
+            "name": "title",
+            "value": {
+              "from": "title"
+            },
+            "untrusted": true
+          },
+          {
+            "name": "html_url",
+            "value": {
+              "from": "html_url"
+            }
+          }
+        ]
+      },
+      "safety": {
+        "effect": "write",
+        "requiredCapabilities": [
+          "bounded-output",
+          "egress-pinned",
+          "resource-allowlist"
+        ],
+        "idempotency": "none",
+        "scopes": [
+          "issues:write"
+        ],
+        "maxItems": 1,
+        "minIntervalMs": 3000,
+        "timeoutMs": 15000,
+        "resource": {
+          "kind": "repository",
+          "argument": "repository"
+        }
+      },
+      "fixtures": [
+        {
+          "name": "opens one issue",
+          "kind": "safe",
+          "arguments": {
+            "repository": "octo-org/widgets",
+            "title": "Flaky login test",
+            "body": "Fails one run in ten."
+          },
+          "expect": {
+            "facts": {
+              "class": "update"
+            },
+            "request": {
+              "body": "{\"title\":\"Flaky login test\",\"body\":\"Fails one run in ten.\"}",
+              "headers": [
+                [
+                  "accept",
+                  "application/vnd.github+json"
+                ],
+                [
+                  "x-github-api-version",
+                  "2022-11-28"
+                ],
+                [
+                  "content-type",
+                  "application/json; charset=utf-8"
+                ]
+              ],
+              "maxPages": 1,
+              "method": "POST",
+              "url": "https://api.github.com/repos/octo-org/widgets/issues"
+            },
+            "decisions": {
+              "relaxed": "allow",
+              "balanced": "allow",
+              "strict": "review"
+            }
+          }
+        },
+        {
+          "name": "refuses a team mention",
+          "kind": "risky",
+          "arguments": {
+            "repository": "octo-org/widgets",
+            "title": "x",
+            "body": "cc @octo-org/everyone"
+          },
+          "expect": {
+            "error": "forbidden_content"
+          }
+        }
+      ]
+    },
+    {
+      "actionId": "github.issues.update",
+      "title": "Close, reopen or retitle an issue",
+      "executor": {
+        "kind": "declarative-http",
+        "request": {
+          "method": "PATCH",
+          "host": "api.github.com",
+          "path": "/repos/{repository*}/issues/{issue_number}",
+          "body": {
+            "object": [
+              {
+                "name": "state",
+                "value": {
+                  "arg": "state"
+                }
+              },
+              {
+                "name": "title",
+                "value": {
+                  "arg": "title"
+                }
+              }
+            ]
+          },
+          "maxPages": 1,
+          "headers": [
+            {
+              "name": "accept",
+              "value": "application/vnd.github+json"
+            },
+            {
+              "name": "x-github-api-version",
+              "value": "2022-11-28"
+            }
+          ]
+        }
+      },
+      "arguments": {
+        "repository": {
+          "type": "string",
+          "required": true,
+          "maxLength": 140,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9-]{0,38}/[A-Za-z0-9._-]{1,100}$"
+        },
+        "issue_number": {
+          "type": "integer",
+          "required": true,
+          "minimum": 1,
+          "maximum": 2147483647
+        },
+        "state": {
+          "type": "string",
+          "required": false,
+          "maxLength": 6,
+          "pattern": "^(?:open|closed)$"
+        },
+        "title": {
+          "type": "string",
+          "required": false,
+          "maxLength": 256,
+          "pattern": "^[^\\x00-\\x1f\\x7f]{1,256}$"
+        }
+      },
+      "facts": {
+        "class": "update",
+        "object": {
+          "const": "record"
+        },
+        "scope": {
+          "const": "single"
+        },
+        "reversibility": {
+          "const": "reversible"
+        },
+        "recordCount": {
+          "const": 1
+        }
+      },
+      "response": {
+        "maxBytes": 524288,
+        "fields": [
+          {
+            "name": "number",
+            "value": {
+              "from": "number"
+            }
+          },
+          {
+            "name": "state",
+            "value": {
+              "from": "state"
+            }
+          },
+          {
+            "name": "title",
+            "value": {
+              "from": "title"
+            },
+            "untrusted": true
+          },
+          {
+            "name": "html_url",
+            "value": {
+              "from": "html_url"
+            }
+          }
+        ]
+      },
+      "safety": {
+        "effect": "write",
+        "requiredCapabilities": [
+          "bounded-output",
+          "egress-pinned",
+          "resource-allowlist"
+        ],
+        "idempotency": "none",
+        "scopes": [
+          "issues:write"
+        ],
+        "maxItems": 1,
+        "minIntervalMs": 3000,
+        "timeoutMs": 15000,
+        "resource": {
+          "kind": "repository",
+          "argument": "repository"
+        }
+      },
+      "fixtures": [
+        {
+          "name": "closes one issue",
+          "kind": "safe",
+          "arguments": {
+            "repository": "octo-org/widgets",
+            "issue_number": 42,
+            "state": "closed"
+          },
+          "expect": {
+            "facts": {
+              "class": "update"
+            },
+            "request": {
+              "body": "{\"state\":\"closed\"}",
+              "headers": [
+                [
+                  "accept",
+                  "application/vnd.github+json"
+                ],
+                [
+                  "x-github-api-version",
+                  "2022-11-28"
+                ],
+                [
+                  "content-type",
+                  "application/json; charset=utf-8"
+                ]
+              ],
+              "maxPages": 1,
+              "method": "PATCH",
+              "url": "https://api.github.com/repos/octo-org/widgets/issues/42"
+            },
+            "decisions": {
+              "relaxed": "allow",
+              "balanced": "allow",
+              "strict": "review"
+            }
+          }
+        },
+        {
+          "name": "refuses a state outside the list",
+          "kind": "risky",
+          "arguments": {
+            "repository": "octo-org/widgets",
+            "issue_number": 42,
+            "state": "locked"
+          },
+          "expect": {
+            "error": "invalid_argument"
+          }
+        }
+      ]
+    },
+    {
+      "actionId": "github.pulls.create",
+      "title": "Open a pull request",
+      "executor": {
+        "kind": "declarative-http",
+        "request": {
+          "method": "POST",
+          "host": "api.github.com",
+          "path": "/repos/{repository*}/pulls",
+          "body": {
+            "object": [
+              {
+                "name": "title",
+                "value": {
+                  "arg": "title"
+                }
+              },
+              {
+                "name": "head",
+                "value": {
+                  "arg": "head"
+                }
+              },
+              {
+                "name": "base",
+                "value": {
+                  "arg": "base"
+                }
+              },
+              {
+                "name": "body",
+                "value": {
+                  "arg": "body"
+                }
+              },
+              {
+                "name": "draft",
+                "value": {
+                  "arg": "draft"
+                }
+              }
+            ]
+          },
+          "maxPages": 1,
+          "headers": [
+            {
+              "name": "accept",
+              "value": "application/vnd.github+json"
+            },
+            {
+              "name": "x-github-api-version",
+              "value": "2022-11-28"
+            }
+          ]
+        }
+      },
+      "arguments": {
+        "repository": {
+          "type": "string",
+          "required": true,
+          "maxLength": 140,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9-]{0,38}/[A-Za-z0-9._-]{1,100}$"
+        },
+        "title": {
+          "type": "string",
+          "required": true,
+          "maxLength": 256,
+          "pattern": "^[^\\x00-\\x1f\\x7f]{1,256}$"
+        },
+        "head": {
+          "type": "string",
+          "required": true,
+          "maxLength": 255,
+          "pattern": "^[A-Za-z0-9._-]{1,100}(?:/[A-Za-z0-9._-]{1,100}){0,8}$"
+        },
+        "base": {
+          "type": "string",
+          "required": true,
+          "maxLength": 255,
+          "pattern": "^[A-Za-z0-9._-]{1,100}(?:/[A-Za-z0-9._-]{1,100}){0,8}$"
+        },
+        "body": {
+          "type": "string",
+          "required": false,
+          "maxLength": 65536,
+          "forbidden": "(?:^|[^\\w])@[A-Za-z0-9][A-Za-z0-9-]*/[A-Za-z0-9_.-]+"
+        },
+        "draft": {
+          "type": "boolean",
+          "required": false
+        }
+      },
+      "facts": {
+        "class": "update",
+        "object": {
+          "const": "record"
+        },
+        "scope": {
+          "const": "single"
+        },
+        "reversibility": {
+          "const": "reversible"
+        },
+        "recordCount": {
+          "const": 1
+        }
+      },
+      "response": {
+        "maxBytes": 524288,
+        "fields": [
+          {
+            "name": "number",
+            "value": {
+              "from": "number"
+            }
+          },
+          {
+            "name": "state",
+            "value": {
+              "from": "state"
+            }
+          },
+          {
+            "name": "title",
+            "value": {
+              "from": "title"
+            },
+            "untrusted": true
+          },
+          {
+            "name": "html_url",
+            "value": {
+              "from": "html_url"
+            }
+          }
+        ]
+      },
+      "safety": {
+        "effect": "write",
+        "requiredCapabilities": [
+          "bounded-output",
+          "egress-pinned",
+          "resource-allowlist"
+        ],
+        "idempotency": "none",
+        "scopes": [
+          "pull_requests:write"
+        ],
+        "maxItems": 1,
+        "minIntervalMs": 3000,
+        "timeoutMs": 15000,
+        "resource": {
+          "kind": "repository",
+          "argument": "repository"
+        }
+      },
+      "fixtures": [
+        {
+          "name": "opens a draft pull request",
+          "kind": "safe",
+          "arguments": {
+            "repository": "octo-org/widgets",
+            "title": "Fix flaky login test",
+            "head": "fix/login",
+            "base": "main",
+            "draft": true
+          },
+          "expect": {
+            "facts": {
+              "class": "update"
+            },
+            "request": {
+              "body": "{\"title\":\"Fix flaky login test\",\"head\":\"fix/login\",\"base\":\"main\",\"draft\":true}",
+              "headers": [
+                [
+                  "accept",
+                  "application/vnd.github+json"
+                ],
+                [
+                  "x-github-api-version",
+                  "2022-11-28"
+                ],
+                [
+                  "content-type",
+                  "application/json; charset=utf-8"
+                ]
+              ],
+              "maxPages": 1,
+              "method": "POST",
+              "url": "https://api.github.com/repos/octo-org/widgets/pulls"
+            },
+            "decisions": {
+              "relaxed": "allow",
+              "balanced": "allow",
+              "strict": "review"
+            }
+          }
+        },
+        {
+          "name": "refuses a head from another fork",
+          "kind": "risky",
+          "arguments": {
+            "repository": "octo-org/widgets",
+            "title": "x",
+            "head": "someone:main",
+            "base": "main"
+          },
+          "expect": {
+            "error": "invalid_argument"
+          }
+        }
+      ]
+    },
+    {
+      "actionId": "github.pulls.merge",
+      "title": "Merge a pull request",
+      "executor": {
+        "kind": "declarative-http",
+        "request": {
+          "method": "PUT",
+          "host": "api.github.com",
+          "path": "/repos/{repository*}/pulls/{pull_number}/merge",
+          "body": {
+            "object": [
+              {
+                "name": "merge_method",
+                "value": {
+                  "arg": "merge_method"
+                }
+              },
+              {
+                "name": "sha",
+                "value": {
+                  "arg": "sha"
+                }
+              }
+            ]
+          },
+          "maxPages": 1,
+          "headers": [
+            {
+              "name": "accept",
+              "value": "application/vnd.github+json"
+            },
+            {
+              "name": "x-github-api-version",
+              "value": "2022-11-28"
+            }
+          ]
+        }
+      },
+      "arguments": {
+        "repository": {
+          "type": "string",
+          "required": true,
+          "maxLength": 140,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9-]{0,38}/[A-Za-z0-9._-]{1,100}$"
+        },
+        "pull_number": {
+          "type": "integer",
+          "required": true,
+          "minimum": 1,
+          "maximum": 2147483647
+        },
+        "merge_method": {
+          "type": "string",
+          "required": false,
+          "maxLength": 6,
+          "pattern": "^(?:merge|squash|rebase)$"
+        },
+        "sha": {
+          "type": "string",
+          "required": false,
+          "maxLength": 40,
+          "pattern": "^[0-9a-f]{40}$"
+        }
+      },
+      "facts": {
+        "class": "execute",
+        "object": {
+          "const": "branch"
+        },
+        "scope": {
+          "const": "single"
+        },
+        "reversibility": {
+          "const": "reversible"
+        },
+        "recordCount": {
+          "const": 1
+        }
+      },
+      "response": {
+        "maxBytes": 4096,
+        "fields": [
+          {
+            "name": "merged",
+            "value": {
+              "from": "merged"
+            }
+          },
+          {
+            "name": "sha",
+            "value": {
+              "from": "sha"
+            }
+          }
+        ]
+      },
+      "safety": {
+        "effect": "write",
+        "requiredCapabilities": [
+          "bounded-output",
+          "egress-pinned",
+          "resource-allowlist"
+        ],
+        "idempotency": "none",
+        "scopes": [
+          "contents:write"
+        ],
+        "maxItems": 1,
+        "minIntervalMs": 3000,
+        "timeoutMs": 15000,
+        "resource": {
+          "kind": "repository",
+          "argument": "repository"
+        }
+      },
+      "fixtures": [
+        {
+          "name": "squash-merges one pull request",
+          "kind": "safe",
+          "arguments": {
+            "repository": "octo-org/widgets",
+            "pull_number": 7,
+            "merge_method": "squash"
+          },
+          "expect": {
+            "facts": {
+              "class": "execute"
+            },
+            "request": {
+              "body": "{\"merge_method\":\"squash\"}",
+              "headers": [
+                [
+                  "accept",
+                  "application/vnd.github+json"
+                ],
+                [
+                  "x-github-api-version",
+                  "2022-11-28"
+                ],
+                [
+                  "content-type",
+                  "application/json; charset=utf-8"
+                ]
+              ],
+              "maxPages": 1,
+              "method": "PUT",
+              "url": "https://api.github.com/repos/octo-org/widgets/pulls/7/merge"
+            },
+            "decisions": {
+              "relaxed": "review",
+              "balanced": "review",
+              "strict": "block"
+            }
+          }
+        },
+        {
+          "name": "refuses a short head sha",
+          "kind": "risky",
+          "arguments": {
+            "repository": "octo-org/widgets",
+            "pull_number": 7,
+            "sha": "abc123"
+          },
+          "expect": {
+            "error": "invalid_argument"
+          }
+        }
+      ]
+    },
+    {
+      "actionId": "github.git.delete_branch",
+      "title": "Delete a branch",
+      "executor": {
+        "kind": "declarative-http",
+        "request": {
+          "method": "DELETE",
+          "host": "api.github.com",
+          "path": "/repos/{repository*}/git/refs/heads/{branch*}",
+          "maxPages": 1,
+          "headers": [
+            {
+              "name": "accept",
+              "value": "application/vnd.github+json"
+            },
+            {
+              "name": "x-github-api-version",
+              "value": "2022-11-28"
+            }
+          ]
+        }
+      },
+      "arguments": {
+        "repository": {
+          "type": "string",
+          "required": true,
+          "maxLength": 140,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9-]{0,38}/[A-Za-z0-9._-]{1,100}$"
+        },
+        "branch": {
+          "type": "string",
+          "required": true,
+          "maxLength": 255,
+          "pattern": "^[A-Za-z0-9._-]{1,100}(?:/[A-Za-z0-9._-]{1,100}){0,8}$"
+        }
+      },
+      "facts": {
+        "class": "delete",
+        "object": {
+          "const": "branch"
+        },
+        "scope": {
+          "const": "single"
+        },
+        "reversibility": {
+          "const": "permanent"
+        },
+        "recordCount": {
+          "const": 1
+        }
+      },
+      "response": {
+        "maxBytes": 4096,
+        "emptyOk": true,
+        "fields": [
+          {
+            "name": "message",
+            "value": {
+              "exists": "message"
+            }
+          }
+        ]
+      },
+      "safety": {
+        "effect": "destructive",
+        "requiredCapabilities": [
+          "bounded-output",
+          "egress-pinned",
+          "resource-allowlist"
+        ],
+        "idempotency": "none",
+        "scopes": [
+          "contents:write"
+        ],
+        "maxItems": 1,
+        "minIntervalMs": 3000,
+        "timeoutMs": 15000,
+        "resource": {
+          "kind": "repository",
+          "argument": "repository"
+        }
+      },
+      "fixtures": [
+        {
+          "name": "deletes one merged branch",
+          "kind": "safe",
+          "arguments": {
+            "repository": "octo-org/widgets",
+            "branch": "fix/login"
+          },
+          "expect": {
+            "facts": {
+              "class": "delete",
+              "object": {
+                "state": "known",
+                "value": "branch"
+              }
+            },
+            "request": {
+              "body": null,
+              "headers": [
+                [
+                  "accept",
+                  "application/vnd.github+json"
+                ],
+                [
+                  "x-github-api-version",
+                  "2022-11-28"
+                ]
+              ],
+              "maxPages": 1,
+              "method": "DELETE",
+              "url": "https://api.github.com/repos/octo-org/widgets/git/refs/heads/fix/login"
+            },
+            "decisions": {
+              "relaxed": "review",
+              "balanced": "block",
+              "strict": "block"
+            },
+            "response": "",
+            "projection": {
+              "message": false
+            }
+          }
+        },
+        {
+          "name": "refuses a branch path that climbs",
+          "kind": "risky",
+          "arguments": {
+            "repository": "octo-org/widgets",
+            "branch": "fix/../../tags/v1"
+          },
+          "expect": {
+            "error": "render_refused"
+          }
+        }
+      ]
+    },
+    {
+      "actionId": "github.git.force_update_branch",
+      "title": "Force a branch to another commit",
+      "executor": {
+        "kind": "declarative-http",
+        "request": {
+          "method": "PATCH",
+          "host": "api.github.com",
+          "path": "/repos/{repository*}/git/refs/heads/{branch*}",
+          "body": {
+            "object": [
+              {
+                "name": "sha",
+                "value": {
+                  "arg": "sha"
+                }
+              },
+              {
+                "name": "force",
+                "value": {
+                  "const": true
+                }
+              }
+            ]
+          },
+          "maxPages": 1,
+          "headers": [
+            {
+              "name": "accept",
+              "value": "application/vnd.github+json"
+            },
+            {
+              "name": "x-github-api-version",
+              "value": "2022-11-28"
+            }
+          ]
+        }
+      },
+      "arguments": {
+        "repository": {
+          "type": "string",
+          "required": true,
+          "maxLength": 140,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9-]{0,38}/[A-Za-z0-9._-]{1,100}$"
+        },
+        "branch": {
+          "type": "string",
+          "required": true,
+          "maxLength": 255,
+          "pattern": "^[A-Za-z0-9._-]{1,100}(?:/[A-Za-z0-9._-]{1,100}){0,8}$"
+        },
+        "sha": {
+          "type": "string",
+          "required": true,
+          "maxLength": 40,
+          "pattern": "^[0-9a-f]{40}$"
+        }
+      },
+      "facts": {
+        "class": "update",
+        "object": {
+          "const": "branch"
+        },
+        "scope": {
+          "const": "single"
+        },
+        "reversibility": {
+          "const": "permanent"
+        },
+        "recordCount": {
+          "const": 1
+        }
+      },
+      "response": {
+        "maxBytes": 4096,
+        "fields": [
+          {
+            "name": "ref",
+            "value": {
+              "from": "ref"
+            }
+          },
+          {
+            "name": "sha",
+            "value": {
+              "from": "object.sha"
+            }
+          }
+        ]
+      },
+      "safety": {
+        "effect": "destructive",
+        "requiredCapabilities": [
+          "bounded-output",
+          "egress-pinned",
+          "resource-allowlist"
+        ],
+        "idempotency": "none",
+        "scopes": [
+          "contents:write"
+        ],
+        "maxItems": 1,
+        "minIntervalMs": 3000,
+        "timeoutMs": 15000,
+        "resource": {
+          "kind": "repository",
+          "argument": "repository"
+        }
+      },
+      "fixtures": [
+        {
+          "name": "rewrites one branch",
+          "kind": "safe",
+          "arguments": {
+            "repository": "octo-org/widgets",
+            "branch": "main",
+            "sha": "0000000000000000000000000000000000000000"
+          },
+          "expect": {
+            "facts": {
+              "class": "update",
+              "reversibility": {
+                "state": "known",
+                "value": "permanent"
+              }
+            },
+            "request": {
+              "body": "{\"sha\":\"0000000000000000000000000000000000000000\",\"force\":true}",
+              "headers": [
+                [
+                  "accept",
+                  "application/vnd.github+json"
+                ],
+                [
+                  "x-github-api-version",
+                  "2022-11-28"
+                ],
+                [
+                  "content-type",
+                  "application/json; charset=utf-8"
+                ]
+              ],
+              "maxPages": 1,
+              "method": "PATCH",
+              "url": "https://api.github.com/repos/octo-org/widgets/git/refs/heads/main"
+            },
+            "decisions": {
+              "relaxed": "review",
+              "balanced": "block",
+              "strict": "block"
+            }
+          }
+        },
+        {
+          "name": "refuses a branch name with a space",
+          "kind": "risky",
+          "arguments": {
+            "repository": "octo-org/widgets",
+            "branch": "main x",
+            "sha": "0000000000000000000000000000000000000000"
+          },
+          "expect": {
+            "error": "invalid_argument"
+          }
+        }
+      ]
+    },
+    {
+      "actionId": "github.repos.archive",
+      "title": "Archive a repository",
+      "executor": {
+        "kind": "declarative-http",
+        "request": {
+          "method": "PATCH",
+          "host": "api.github.com",
+          "path": "/repos/{repository*}",
+          "body": {
+            "object": [
+              {
+                "name": "archived",
+                "value": {
+                  "const": true
+                }
+              }
+            ]
+          },
+          "maxPages": 1,
+          "headers": [
+            {
+              "name": "accept",
+              "value": "application/vnd.github+json"
+            },
+            {
+              "name": "x-github-api-version",
+              "value": "2022-11-28"
+            }
+          ]
+        }
+      },
+      "arguments": {
+        "repository": {
+          "type": "string",
+          "required": true,
+          "maxLength": 140,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9-]{0,38}/[A-Za-z0-9._-]{1,100}$"
+        }
+      },
+      "facts": {
+        "class": "update",
+        "object": {
+          "const": "repository"
+        },
+        "scope": {
+          "const": "single"
+        },
+        "reversibility": {
+          "const": "reversible"
+        },
+        "recordCount": {
+          "const": 1
+        }
+      },
+      "response": {
+        "maxBytes": 16384,
+        "fields": [
+          {
+            "name": "full_name",
+            "value": {
+              "from": "full_name"
+            }
+          },
+          {
+            "name": "private",
+            "value": {
+              "from": "private"
+            }
+          },
+          {
+            "name": "archived",
+            "value": {
+              "from": "archived"
+            }
+          }
+        ]
+      },
+      "safety": {
+        "effect": "write",
+        "requiredCapabilities": [
+          "bounded-output",
+          "egress-pinned",
+          "resource-allowlist"
+        ],
+        "idempotency": "none",
+        "scopes": [
+          "administration:write"
+        ],
+        "maxItems": 1,
+        "minIntervalMs": 3000,
+        "timeoutMs": 15000,
+        "resource": {
+          "kind": "repository",
+          "argument": "repository"
+        }
+      },
+      "fixtures": [
+        {
+          "name": "archives one repository",
+          "kind": "safe",
+          "arguments": {
+            "repository": "octo-org/widgets"
+          },
+          "expect": {
+            "facts": {
+              "class": "update"
+            },
+            "request": {
+              "body": "{\"archived\":true}",
+              "headers": [
+                [
+                  "accept",
+                  "application/vnd.github+json"
+                ],
+                [
+                  "x-github-api-version",
+                  "2022-11-28"
+                ],
+                [
+                  "content-type",
+                  "application/json; charset=utf-8"
+                ]
+              ],
+              "maxPages": 1,
+              "method": "PATCH",
+              "url": "https://api.github.com/repos/octo-org/widgets"
+            },
+            "decisions": {
+              "relaxed": "review",
+              "balanced": "review",
+              "strict": "block"
+            }
+          }
+        },
+        {
+          "name": "refuses a repository without an owner",
+          "kind": "risky",
+          "arguments": {
+            "repository": "widgets"
+          },
+          "expect": {
+            "error": "invalid_argument"
+          }
+        }
+      ]
+    },
+    {
+      "actionId": "github.repos.make_public",
+      "title": "Make a repository public",
+      "executor": {
+        "kind": "declarative-http",
+        "request": {
+          "method": "PATCH",
+          "host": "api.github.com",
+          "path": "/repos/{repository*}",
+          "body": {
+            "object": [
+              {
+                "name": "private",
+                "value": {
+                  "const": false
+                }
+              }
+            ]
+          },
+          "maxPages": 1,
+          "headers": [
+            {
+              "name": "accept",
+              "value": "application/vnd.github+json"
+            },
+            {
+              "name": "x-github-api-version",
+              "value": "2022-11-28"
+            }
+          ]
+        }
+      },
+      "arguments": {
+        "repository": {
+          "type": "string",
+          "required": true,
+          "maxLength": 140,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9-]{0,38}/[A-Za-z0-9._-]{1,100}$"
+        }
+      },
+      "facts": {
+        "class": "share",
+        "object": {
+          "const": "repository"
+        },
+        "scope": {
+          "const": "single"
+        },
+        "reversibility": {
+          "const": "reversible"
+        },
+        "recordCount": {
+          "const": 1
+        },
+        "audienceKind": {
+          "const": "public"
+        }
+      },
+      "response": {
+        "maxBytes": 16384,
+        "fields": [
+          {
+            "name": "full_name",
+            "value": {
+              "from": "full_name"
+            }
+          },
+          {
+            "name": "private",
+            "value": {
+              "from": "private"
+            }
+          },
+          {
+            "name": "archived",
+            "value": {
+              "from": "archived"
+            }
+          }
+        ]
+      },
+      "safety": {
+        "effect": "write",
+        "requiredCapabilities": [
+          "bounded-output",
+          "egress-pinned",
+          "resource-allowlist"
+        ],
+        "idempotency": "none",
+        "scopes": [
+          "administration:write"
+        ],
+        "maxItems": 1,
+        "minIntervalMs": 3000,
+        "timeoutMs": 15000,
+        "resource": {
+          "kind": "repository",
+          "argument": "repository"
+        }
+      },
+      "fixtures": [
+        {
+          "name": "makes one repository public",
+          "kind": "safe",
+          "arguments": {
+            "repository": "octo-org/widgets"
+          },
+          "expect": {
+            "facts": {
+              "class": "share",
+              "audience": {
+                "external": {
+                  "state": "unknown"
+                },
+                "kind": {
+                  "state": "known",
+                  "value": "public"
+                },
+                "recipient_domains": {
+                  "state": "unknown"
+                }
+              }
+            },
+            "request": {
+              "body": "{\"private\":false}",
+              "headers": [
+                [
+                  "accept",
+                  "application/vnd.github+json"
+                ],
+                [
+                  "x-github-api-version",
+                  "2022-11-28"
+                ],
+                [
+                  "content-type",
+                  "application/json; charset=utf-8"
+                ]
+              ],
+              "maxPages": 1,
+              "method": "PATCH",
+              "url": "https://api.github.com/repos/octo-org/widgets"
+            },
+            "decisions": {
+              "relaxed": "review",
+              "balanced": "block",
+              "strict": "block"
+            }
+          }
+        },
+        {
+          "name": "refuses an extra setting",
+          "kind": "risky",
+          "arguments": {
+            "repository": "octo-org/widgets",
+            "visibility": "public"
+          },
+          "expect": {
+            "error": "unknown_argument"
+          }
+        }
+      ]
+    },
+    {
+      "actionId": "github.repos.delete",
+      "title": "Delete a repository",
+      "executor": {
+        "kind": "declarative-http",
+        "request": {
+          "method": "DELETE",
+          "host": "api.github.com",
+          "path": "/repos/{repository*}",
+          "maxPages": 1,
+          "headers": [
+            {
+              "name": "accept",
+              "value": "application/vnd.github+json"
+            },
+            {
+              "name": "x-github-api-version",
+              "value": "2022-11-28"
+            }
+          ]
+        }
+      },
+      "arguments": {
+        "repository": {
+          "type": "string",
+          "required": true,
+          "maxLength": 140,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9-]{0,38}/[A-Za-z0-9._-]{1,100}$"
+        }
+      },
+      "facts": {
+        "class": "delete",
+        "object": {
+          "const": "repository"
+        },
+        "scope": {
+          "const": "all"
+        },
+        "reversibility": {
+          "const": "permanent"
+        },
+        "recordCount": {
+          "const": 1
+        }
+      },
+      "response": {
+        "maxBytes": 4096,
+        "emptyOk": true,
+        "fields": [
+          {
+            "name": "message",
+            "value": {
+              "exists": "message"
+            }
+          }
+        ]
+      },
+      "safety": {
+        "effect": "destructive",
+        "requiredCapabilities": [
+          "bounded-output",
+          "egress-pinned",
+          "resource-allowlist"
+        ],
+        "idempotency": "none",
+        "scopes": [
+          "administration:write"
+        ],
+        "maxItems": 1,
+        "minIntervalMs": 3000,
+        "timeoutMs": 15000,
+        "resource": {
+          "kind": "repository",
+          "argument": "repository"
+        }
+      },
+      "fixtures": [
+        {
+          "name": "deletes one repository",
+          "kind": "safe",
+          "arguments": {
+            "repository": "octo-org/widgets"
+          },
+          "expect": {
+            "facts": {
+              "class": "delete",
+              "scope": {
+                "state": "known",
+                "value": "all"
+              }
+            },
+            "request": {
+              "body": null,
+              "headers": [
+                [
+                  "accept",
+                  "application/vnd.github+json"
+                ],
+                [
+                  "x-github-api-version",
+                  "2022-11-28"
+                ]
+              ],
+              "maxPages": 1,
+              "method": "DELETE",
+              "url": "https://api.github.com/repos/octo-org/widgets"
+            },
+            "decisions": {
+              "relaxed": "review",
+              "balanced": "require-reapproval",
+              "strict": "block"
+            },
+            "response": "",
+            "projection": {
+              "message": false
+            }
+          }
+        },
+        {
+          "name": "refuses a path inside the repository",
+          "kind": "risky",
+          "arguments": {
+            "repository": "octo-org/widgets/issues"
+          },
+          "expect": {
+            "error": "invalid_argument"
+          }
+        }
+      ]
+    },
+    {
+      "actionId": "github.actions.set_secret",
+      "title": "Write a repository secret",
+      "executor": {
+        "kind": "declarative-http",
+        "request": {
+          "method": "PUT",
+          "host": "api.github.com",
+          "path": "/repos/{repository*}/actions/secrets/{secret_name}",
+          "body": {
+            "object": [
+              {
+                "name": "encrypted_value",
+                "value": {
+                  "arg": "encrypted_value"
+                }
+              },
+              {
+                "name": "key_id",
+                "value": {
+                  "arg": "key_id"
+                }
+              }
+            ]
+          },
+          "maxPages": 1,
+          "headers": [
+            {
+              "name": "accept",
+              "value": "application/vnd.github+json"
+            },
+            {
+              "name": "x-github-api-version",
+              "value": "2022-11-28"
+            }
+          ]
+        }
+      },
+      "arguments": {
+        "repository": {
+          "type": "string",
+          "required": true,
+          "maxLength": 140,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9-]{0,38}/[A-Za-z0-9._-]{1,100}$"
+        },
+        "secret_name": {
+          "type": "string",
+          "required": true,
+          "maxLength": 100,
+          "pattern": "^[A-Za-z_][A-Za-z0-9_]{0,99}$"
+        },
+        "encrypted_value": {
+          "type": "string",
+          "required": true,
+          "maxLength": 65536,
+          "pattern": "^[A-Za-z0-9+/]+={0,2}$"
+        },
+        "key_id": {
+          "type": "string",
+          "required": true,
+          "maxLength": 64,
+          "pattern": "^[0-9]{1,64}$"
+        }
+      },
+      "facts": {
+        "class": "update",
+        "object": {
+          "const": "secret"
+        },
+        "scope": {
+          "const": "single"
+        },
+        "reversibility": {
+          "const": "reversible"
+        },
+        "recordCount": {
+          "const": 1
+        }
+      },
+      "response": {
+        "maxBytes": 4096,
+        "emptyOk": true,
+        "fields": [
+          {
+            "name": "message",
+            "value": {
+              "exists": "message"
+            }
+          }
+        ]
+      },
+      "safety": {
+        "effect": "write",
+        "requiredCapabilities": [
+          "bounded-output",
+          "egress-pinned",
+          "resource-allowlist"
+        ],
+        "idempotency": "none",
+        "scopes": [
+          "secrets:write"
+        ],
+        "maxItems": 1,
+        "minIntervalMs": 3000,
+        "timeoutMs": 15000,
+        "resource": {
+          "kind": "repository",
+          "argument": "repository"
+        }
+      },
+      "fixtures": [
+        {
+          "name": "writes one sealed secret",
+          "kind": "safe",
+          "arguments": {
+            "repository": "octo-org/widgets",
+            "secret_name": "DEPLOY_TOKEN",
+            "encrypted_value": "c2VhbGVk",
+            "key_id": "568250167242549743"
+          },
+          "expect": {
+            "facts": {
+              "class": "update",
+              "object": {
+                "state": "known",
+                "value": "secret"
+              }
+            },
+            "request": {
+              "body": "{\"encrypted_value\":\"c2VhbGVk\",\"key_id\":\"568250167242549743\"}",
+              "headers": [
+                [
+                  "accept",
+                  "application/vnd.github+json"
+                ],
+                [
+                  "x-github-api-version",
+                  "2022-11-28"
+                ],
+                [
+                  "content-type",
+                  "application/json; charset=utf-8"
+                ]
+              ],
+              "maxPages": 1,
+              "method": "PUT",
+              "url": "https://api.github.com/repos/octo-org/widgets/actions/secrets/DEPLOY_TOKEN"
+            },
+            "decisions": {
+              "relaxed": "review",
+              "balanced": "review",
+              "strict": "block"
+            },
+            "response": "",
+            "projection": {
+              "message": false
+            }
+          }
+        },
+        {
+          "name": "refuses a plain-text value",
+          "kind": "risky",
+          "arguments": {
+            "repository": "octo-org/widgets",
+            "secret_name": "DEPLOY_TOKEN",
+            "encrypted_value": "ghp_plain text",
+            "key_id": "1"
+          },
+          "expect": {
+            "error": "invalid_argument"
+          }
+        }
+      ]
+    },
+    {
+      "actionId": "github.actions.dispatch_workflow",
+      "title": "Run a workflow",
+      "executor": {
+        "kind": "declarative-http",
+        "request": {
+          "method": "POST",
+          "host": "api.github.com",
+          "path": "/repos/{repository*}/actions/workflows/{workflow}/dispatches",
+          "body": {
+            "object": [
+              {
+                "name": "ref",
+                "value": {
+                  "arg": "ref"
+                }
+              }
+            ]
+          },
+          "maxPages": 1,
+          "headers": [
+            {
+              "name": "accept",
+              "value": "application/vnd.github+json"
+            },
+            {
+              "name": "x-github-api-version",
+              "value": "2022-11-28"
+            }
+          ]
+        }
+      },
+      "arguments": {
+        "repository": {
+          "type": "string",
+          "required": true,
+          "maxLength": 140,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9-]{0,38}/[A-Za-z0-9._-]{1,100}$"
+        },
+        "workflow": {
+          "type": "string",
+          "required": true,
+          "maxLength": 100,
+          "pattern": "^(?:[0-9]{1,20}|[A-Za-z0-9._-]{1,90}\\.ya?ml)$"
+        },
+        "ref": {
+          "type": "string",
+          "required": true,
+          "maxLength": 255,
+          "pattern": "^[A-Za-z0-9._-]{1,100}(?:/[A-Za-z0-9._-]{1,100}){0,8}$"
+        }
+      },
+      "facts": {
+        "class": "execute",
+        "object": {
+          "const": "deployment"
+        },
+        "scope": {
+          "const": "single"
+        },
+        "reversibility": {
+          "const": "permanent"
+        },
+        "recordCount": {
+          "const": 1
+        }
+      },
+      "response": {
+        "maxBytes": 4096,
+        "emptyOk": true,
+        "fields": [
+          {
+            "name": "message",
+            "value": {
+              "exists": "message"
+            }
+          }
+        ]
+      },
+      "safety": {
+        "effect": "write",
+        "requiredCapabilities": [
+          "bounded-output",
+          "egress-pinned",
+          "resource-allowlist"
+        ],
+        "idempotency": "none",
+        "scopes": [
+          "actions:write"
+        ],
+        "maxItems": 1,
+        "minIntervalMs": 3000,
+        "timeoutMs": 15000,
+        "resource": {
+          "kind": "repository",
+          "argument": "repository"
+        }
+      },
+      "fixtures": [
+        {
+          "name": "runs one workflow",
+          "kind": "safe",
+          "arguments": {
+            "repository": "octo-org/widgets",
+            "workflow": "deploy.yml",
+            "ref": "main"
+          },
+          "expect": {
+            "facts": {
+              "class": "execute",
+              "object": {
+                "state": "known",
+                "value": "deployment"
+              }
+            },
+            "request": {
+              "body": "{\"ref\":\"main\"}",
+              "headers": [
+                [
+                  "accept",
+                  "application/vnd.github+json"
+                ],
+                [
+                  "x-github-api-version",
+                  "2022-11-28"
+                ],
+                [
+                  "content-type",
+                  "application/json; charset=utf-8"
+                ]
+              ],
+              "maxPages": 1,
+              "method": "POST",
+              "url": "https://api.github.com/repos/octo-org/widgets/actions/workflows/deploy.yml/dispatches"
+            },
+            "decisions": {
+              "relaxed": "review",
+              "balanced": "review",
+              "strict": "block"
+            },
+            "response": "",
+            "projection": {
+              "message": false
+            }
+          }
+        },
+        {
+          "name": "refuses a workflow path",
+          "kind": "risky",
+          "arguments": {
+            "repository": "octo-org/widgets",
+            "workflow": "../secrets",
+            "ref": "main"
+          },
+          "expect": {
+            "error": "invalid_argument"
+          }
+        }
+      ]
+    },
+    {
+      "actionId": "github.collaborators.add",
+      "title": "Give someone access to a repository",
+      "executor": {
+        "kind": "declarative-http",
+        "request": {
+          "method": "PUT",
+          "host": "api.github.com",
+          "path": "/repos/{repository*}/collaborators/{username}",
+          "body": {
+            "object": [
+              {
+                "name": "permission",
+                "value": {
+                  "arg": "permission"
+                }
+              }
+            ]
+          },
+          "maxPages": 1,
+          "headers": [
+            {
+              "name": "accept",
+              "value": "application/vnd.github+json"
+            },
+            {
+              "name": "x-github-api-version",
+              "value": "2022-11-28"
+            }
+          ]
+        }
+      },
+      "arguments": {
+        "repository": {
+          "type": "string",
+          "required": true,
+          "maxLength": 140,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9-]{0,38}/[A-Za-z0-9._-]{1,100}$"
+        },
+        "username": {
+          "type": "string",
+          "required": true,
+          "maxLength": 39,
+          "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?$"
+        },
+        "permission": {
+          "type": "string",
+          "required": true,
+          "maxLength": 8,
+          "pattern": "^(?:pull|triage|push|maintain|admin)$"
+        }
+      },
+      "facts": {
+        "class": "admin",
+        "object": {
+          "const": "user"
+        },
+        "scope": {
+          "const": "single"
+        },
+        "reversibility": {
+          "const": "reversible"
+        },
+        "recordCount": {
+          "const": 1
+        }
+      },
+      "response": {
+        "maxBytes": 4096,
+        "emptyOk": true,
+        "fields": [
+          {
+            "name": "id",
+            "value": {
+              "from": "id"
+            }
+          },
+          {
+            "name": "permissions",
+            "value": {
+              "from": "permissions"
+            }
+          }
+        ]
+      },
+      "safety": {
+        "effect": "admin",
+        "requiredCapabilities": [
+          "bounded-output",
+          "egress-pinned",
+          "resource-allowlist"
+        ],
+        "idempotency": "none",
+        "scopes": [
+          "administration:write"
+        ],
+        "maxItems": 1,
+        "minIntervalMs": 3000,
+        "timeoutMs": 15000,
+        "resource": {
+          "kind": "repository",
+          "argument": "repository"
+        }
+      },
+      "fixtures": [
+        {
+          "name": "adds one collaborator",
+          "kind": "safe",
+          "arguments": {
+            "repository": "octo-org/widgets",
+            "username": "pat",
+            "permission": "push"
+          },
+          "expect": {
+            "facts": {
+              "class": "admin"
+            },
+            "request": {
+              "body": "{\"permission\":\"push\"}",
+              "headers": [
+                [
+                  "accept",
+                  "application/vnd.github+json"
+                ],
+                [
+                  "x-github-api-version",
+                  "2022-11-28"
+                ],
+                [
+                  "content-type",
+                  "application/json; charset=utf-8"
+                ]
+              ],
+              "maxPages": 1,
+              "method": "PUT",
+              "url": "https://api.github.com/repos/octo-org/widgets/collaborators/pat"
+            },
+            "decisions": {
+              "relaxed": "block",
+              "balanced": "block",
+              "strict": "block"
+            }
+          }
+        },
+        {
+          "name": "accepts a user who already has access",
+          "kind": "safe",
+          "arguments": {
+            "repository": "octo-org/widgets",
+            "username": "pat",
+            "permission": "push"
+          },
+          "expect": {
+            "facts": {
+              "class": "admin"
+            },
+            "request": {
+              "body": "{\"permission\":\"push\"}",
+              "headers": [
+                [
+                  "accept",
+                  "application/vnd.github+json"
+                ],
+                [
+                  "x-github-api-version",
+                  "2022-11-28"
+                ],
+                [
+                  "content-type",
+                  "application/json; charset=utf-8"
+                ]
+              ],
+              "maxPages": 1,
+              "method": "PUT",
+              "url": "https://api.github.com/repos/octo-org/widgets/collaborators/pat"
+            },
+            "decisions": {
+              "relaxed": "block",
+              "balanced": "block",
+              "strict": "block"
+            },
+            "response": "",
+            "projection": {}
+          }
+        },
+        {
+          "name": "refuses an owner role",
+          "kind": "risky",
+          "arguments": {
+            "repository": "octo-org/widgets",
+            "username": "pat",
+            "permission": "owner"
+          },
+          "expect": {
+            "error": "invalid_argument"
+          }
+        }
+      ]
+    },
+    {
+      "actionId": "github.issues.add_labels",
+      "title": "Label an issue",
+      "executor": {
+        "kind": "declarative-http",
+        "request": {
+          "method": "POST",
+          "host": "api.github.com",
+          "path": "/repos/{repository*}/issues/{issue_number}/labels",
+          "body": {
+            "object": [
+              {
+                "name": "labels",
+                "value": {
+                  "arg": "labels"
+                }
+              }
+            ]
+          },
+          "maxPages": 1,
+          "headers": [
+            {
+              "name": "accept",
+              "value": "application/vnd.github+json"
+            },
+            {
+              "name": "x-github-api-version",
+              "value": "2022-11-28"
+            }
+          ]
+        }
+      },
+      "arguments": {
+        "repository": {
+          "type": "string",
+          "required": true,
+          "maxLength": 140,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9-]{0,38}/[A-Za-z0-9._-]{1,100}$"
+        },
+        "issue_number": {
+          "type": "integer",
+          "required": true,
+          "minimum": 1,
+          "maximum": 2147483647
+        },
+        "labels": {
+          "type": "array",
+          "required": true,
+          "minItems": 1,
+          "maxItems": 10,
+          "items": {
+            "maxLength": 50,
+            "pattern": "^[^\\x00-\\x1f\\x7f,]{1,50}$"
+          }
+        }
+      },
+      "facts": {
+        "class": "update",
+        "object": {
+          "const": "record"
+        },
+        "scope": {
+          "const": "single"
+        },
+        "reversibility": {
+          "const": "reversible"
+        },
+        "recordCount": {
+          "const": 1
+        }
+      },
+      "response": {
+        "maxBytes": 65536,
+        "fields": [
+          {
+            "name": "message",
+            "value": {
+              "exists": "message"
+            }
+          }
+        ]
+      },
+      "safety": {
+        "effect": "write",
+        "requiredCapabilities": [
+          "bounded-output",
+          "egress-pinned",
+          "resource-allowlist"
+        ],
+        "idempotency": "none",
+        "scopes": [
+          "issues:write"
+        ],
+        "maxItems": 1,
+        "minIntervalMs": 3000,
+        "timeoutMs": 15000,
+        "resource": {
+          "kind": "repository",
+          "argument": "repository"
+        }
+      },
+      "fixtures": [
+        {
+          "name": "labels one issue",
+          "kind": "safe",
+          "arguments": {
+            "repository": "octo-org/widgets",
+            "issue_number": 42,
+            "labels": [
+              "bug",
+              "flaky"
+            ]
+          },
+          "expect": {
+            "facts": {
+              "class": "update"
+            },
+            "request": {
+              "body": "{\"labels\":[\"bug\",\"flaky\"]}",
+              "headers": [
+                [
+                  "accept",
+                  "application/vnd.github+json"
+                ],
+                [
+                  "x-github-api-version",
+                  "2022-11-28"
+                ],
+                [
+                  "content-type",
+                  "application/json; charset=utf-8"
+                ]
+              ],
+              "maxPages": 1,
+              "method": "POST",
+              "url": "https://api.github.com/repos/octo-org/widgets/issues/42/labels"
+            },
+            "decisions": {
+              "relaxed": "allow",
+              "balanced": "allow",
+              "strict": "review"
+            },
+            "response": "[{\"id\": 1, \"name\": \"bug\"}]",
+            "projection": {
+              "message": false
+            }
+          }
+        },
+        {
+          "name": "refuses more than ten labels",
+          "kind": "risky",
+          "arguments": {
+            "repository": "octo-org/widgets",
+            "issue_number": 42,
+            "labels": [
+              "l0",
+              "l1",
+              "l2",
+              "l3",
+              "l4",
+              "l5",
+              "l6",
+              "l7",
+              "l8",
+              "l9",
+              "l10"
+            ]
+          },
+          "expect": {
+            "error": "invalid_argument"
+          }
+        }
+      ]
+    },
+    {
+      "actionId": "github.pulls.create_review",
+      "title": "Review a pull request",
+      "executor": {
+        "kind": "declarative-http",
+        "request": {
+          "method": "POST",
+          "host": "api.github.com",
+          "path": "/repos/{repository*}/pulls/{pull_number}/reviews",
+          "body": {
+            "object": [
+              {
+                "name": "event",
+                "value": {
+                  "arg": "event"
+                }
+              },
+              {
+                "name": "body",
+                "value": {
+                  "arg": "body"
+                }
+              }
+            ]
+          },
+          "maxPages": 1,
+          "headers": [
+            {
+              "name": "accept",
+              "value": "application/vnd.github+json"
+            },
+            {
+              "name": "x-github-api-version",
+              "value": "2022-11-28"
+            }
+          ]
+        }
+      },
+      "arguments": {
+        "repository": {
+          "type": "string",
+          "required": true,
+          "maxLength": 140,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9-]{0,38}/[A-Za-z0-9._-]{1,100}$"
+        },
+        "pull_number": {
+          "type": "integer",
+          "required": true,
+          "minimum": 1,
+          "maximum": 2147483647
+        },
+        "event": {
+          "type": "string",
+          "required": true,
+          "maxLength": 15,
+          "pattern": "^(?:COMMENT|REQUEST_CHANGES)$"
+        },
+        "body": {
+          "type": "string",
+          "required": false,
+          "maxLength": 65536,
+          "forbidden": "(?:^|[^\\w])@[A-Za-z0-9][A-Za-z0-9-]*/[A-Za-z0-9_.-]+"
+        }
+      },
+      "facts": {
+        "class": "update",
+        "object": {
+          "const": "record"
+        },
+        "scope": {
+          "const": "single"
+        },
+        "reversibility": {
+          "const": "reversible"
+        },
+        "recordCount": {
+          "const": 1
+        }
+      },
+      "response": {
+        "maxBytes": 524288,
+        "fields": [
+          {
+            "name": "id",
+            "value": {
+              "from": "id"
+            }
+          },
+          {
+            "name": "state",
+            "value": {
+              "from": "state"
+            }
+          }
+        ]
+      },
+      "safety": {
+        "effect": "write",
+        "requiredCapabilities": [
+          "bounded-output",
+          "egress-pinned",
+          "resource-allowlist"
+        ],
+        "idempotency": "none",
+        "scopes": [
+          "pull_requests:write"
+        ],
+        "maxItems": 1,
+        "minIntervalMs": 3000,
+        "timeoutMs": 15000,
+        "resource": {
+          "kind": "repository",
+          "argument": "repository"
+        }
+      },
+      "fixtures": [
+        {
+          "name": "requests changes on one pull request",
+          "kind": "safe",
+          "arguments": {
+            "repository": "octo-org/widgets",
+            "pull_number": 7,
+            "event": "REQUEST_CHANGES",
+            "body": "Please add a test."
+          },
+          "expect": {
+            "facts": {
+              "class": "update"
+            },
+            "request": {
+              "body": "{\"event\":\"REQUEST_CHANGES\",\"body\":\"Please add a test.\"}",
+              "headers": [
+                [
+                  "accept",
+                  "application/vnd.github+json"
+                ],
+                [
+                  "x-github-api-version",
+                  "2022-11-28"
+                ],
+                [
+                  "content-type",
+                  "application/json; charset=utf-8"
+                ]
+              ],
+              "maxPages": 1,
+              "method": "POST",
+              "url": "https://api.github.com/repos/octo-org/widgets/pulls/7/reviews"
+            },
+            "decisions": {
+              "relaxed": "allow",
+              "balanced": "allow",
+              "strict": "review"
+            }
+          }
+        },
+        {
+          "name": "refuses an approval",
+          "kind": "risky",
+          "arguments": {
+            "repository": "octo-org/widgets",
+            "pull_number": 7,
+            "event": "APPROVE"
+          },
+          "expect": {
+            "error": "invalid_argument"
+          }
+        }
+      ]
+    },
+    {
+      "actionId": "github.releases.delete",
+      "title": "Delete a release",
+      "executor": {
+        "kind": "declarative-http",
+        "request": {
+          "method": "DELETE",
+          "host": "api.github.com",
+          "path": "/repos/{repository*}/releases/{release_id}",
+          "maxPages": 1,
+          "headers": [
+            {
+              "name": "accept",
+              "value": "application/vnd.github+json"
+            },
+            {
+              "name": "x-github-api-version",
+              "value": "2022-11-28"
+            }
+          ]
+        }
+      },
+      "arguments": {
+        "repository": {
+          "type": "string",
+          "required": true,
+          "maxLength": 140,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9-]{0,38}/[A-Za-z0-9._-]{1,100}$"
+        },
+        "release_id": {
+          "type": "integer",
+          "required": true,
+          "minimum": 1,
+          "maximum": 2147483647
+        }
+      },
+      "facts": {
+        "class": "delete",
+        "object": {
+          "const": "record"
+        },
+        "scope": {
+          "const": "single"
+        },
+        "reversibility": {
+          "const": "permanent"
+        },
+        "recordCount": {
+          "const": 1
+        }
+      },
+      "response": {
+        "maxBytes": 4096,
+        "emptyOk": true,
+        "fields": [
+          {
+            "name": "message",
+            "value": {
+              "exists": "message"
+            }
+          }
+        ]
+      },
+      "safety": {
+        "effect": "destructive",
+        "requiredCapabilities": [
+          "bounded-output",
+          "egress-pinned",
+          "resource-allowlist"
+        ],
+        "idempotency": "none",
+        "scopes": [
+          "contents:write"
+        ],
+        "maxItems": 1,
+        "minIntervalMs": 3000,
+        "timeoutMs": 15000,
+        "resource": {
+          "kind": "repository",
+          "argument": "repository"
+        }
+      },
+      "fixtures": [
+        {
+          "name": "deletes one release",
+          "kind": "safe",
+          "arguments": {
+            "repository": "octo-org/widgets",
+            "release_id": 1001
+          },
+          "expect": {
+            "facts": {
+              "class": "delete",
+              "reversibility": {
+                "state": "known",
+                "value": "permanent"
+              }
+            },
+            "request": {
+              "body": null,
+              "headers": [
+                [
+                  "accept",
+                  "application/vnd.github+json"
+                ],
+                [
+                  "x-github-api-version",
+                  "2022-11-28"
+                ]
+              ],
+              "maxPages": 1,
+              "method": "DELETE",
+              "url": "https://api.github.com/repos/octo-org/widgets/releases/1001"
+            },
+            "decisions": {
+              "relaxed": "review",
+              "balanced": "review",
+              "strict": "block"
+            },
+            "response": "",
+            "projection": {
+              "message": false
+            }
+          }
+        },
+        {
+          "name": "refuses a tag name as a release id",
+          "kind": "risky",
+          "arguments": {
+            "repository": "octo-org/widgets",
+            "release_id": "v1.0.0"
+          },
+          "expect": {
+            "error": "invalid_argument"
           }
         }
       ]

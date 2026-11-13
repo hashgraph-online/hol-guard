@@ -206,6 +206,9 @@
               "minimum": 1,
               "maximum": 1048576
             },
+            "emptyOk": {
+              "type": "boolean"
+            },
             "fields": {
               "$ref": "#/$defs/responseFields"
             }
@@ -562,6 +565,31 @@
                 },
                 "text": {
                   "$ref": "#/$defs/argumentName"
+                }
+              }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "keyed"
+          ],
+          "properties": {
+            "keyed": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "key",
+                "value"
+              ],
+              "properties": {
+                "key": {
+                  "$ref": "#/$defs/argumentName"
+                },
+                "value": {
+                  "$ref": "#/$defs/template"
                 }
               }
             }
