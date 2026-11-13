@@ -104,6 +104,13 @@ impl CompiledNativeCommandControls {
                         .mcp
                         .as_ref()
                         .is_some_and(|mcp| mcp.mcp_launch.kind == "remote-http")
+                    && self
+                        .program
+                        .extension_names(
+                            index,
+                            super::compatibility_executables(&extension.extension_id),
+                        )
+                        .is_some_and(|names| names.is_empty())
                 {
                     return false;
                 }

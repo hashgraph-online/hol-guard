@@ -109,6 +109,7 @@ pub struct Launch {
     pub harness: String,
     pub workspace: String,
     pub task: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub model: Option<String>,
 }
 
@@ -143,6 +144,7 @@ pub struct Action {
     pub run_id: String,
     pub expected_revision: u64,
     pub action: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub text: Option<String>,
 }
 

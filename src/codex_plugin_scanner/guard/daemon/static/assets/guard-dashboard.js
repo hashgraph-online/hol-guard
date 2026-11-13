@@ -39239,6 +39239,9 @@ function App() {
       if (refreshInFlight || cancelled || resolutionInFlight.current) {
         return;
       }
+      if (needsFullQueue && view === "swarm" && document.hidden) {
+        return;
+      }
       refreshInFlight = true;
       const queueErrorMessage = "Unable to load the local approval queue.";
       const runtimeErrorMessage = "Unable to load the local runtime snapshot.";
