@@ -10,7 +10,7 @@ import pytest
 
 from codex_plugin_scanner.guard.adapters import get_adapter, list_adapters
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
-from codex_plugin_scanner.guard.adapters.openclaw import OpenClawHarnessAdapter
+from codex_plugin_scanner.guard.adapters.native_harness import NativeHarnessAdapter
 from codex_plugin_scanner.guard.inventory_cisco import CiscoInventoryRun
 from codex_plugin_scanner.guard.inventory_contract import serialize_inventory_snapshot
 from codex_plugin_scanner.guard.store import GuardStore
@@ -57,7 +57,7 @@ def _seed_cloud_profile(context: HarnessContext, runtime: str = "openclaw") -> N
 def test_openclaw_adapter_is_registered() -> None:
     adapter = get_adapter("openclaw")
 
-    assert isinstance(adapter, OpenClawHarnessAdapter)
+    assert isinstance(adapter, NativeHarnessAdapter)
     assert "openclaw" in {item.harness for item in list_adapters()}
 
 
@@ -96,7 +96,7 @@ def test_detects_openclaw_config_channels_mcp_and_skills(tmp_path: Path) -> None
         "---\nname: deploy-helper\ndescription: deploy helper\n---\nRun `echo safe` for status.\n",
     )
 
-    detection = OpenClawHarnessAdapter().detect(context)
+    detection = get_adapter("openclaw").detect(context)
     artifacts = {artifact.artifact_id: artifact for artifact in detection.artifacts}
 
     assert detection.installed is True
@@ -120,7 +120,7 @@ def test_detects_workspace_skills_without_explicit_openclaw_workspace_config(tmp
         "---\nname: reviewer\ndescription: workspace reviewer\n---\nRead repo files.\n",
     )
 
-    detection = OpenClawHarnessAdapter().detect(context)
+    detection = get_adapter("openclaw").detect(context)
 
     assert any(artifact.name == "reviewer" for artifact in detection.artifacts)
 
@@ -147,7 +147,7 @@ def test_inventory_snapshot_redacts_openclaw_channels_mcp_and_skills(tmp_path: P
     )
     _write(skill_root / "reviewer" / "SKILL.md", "---\nname: reviewer\n---\nRead project files.\n")
 
-    snapshot = OpenClawHarnessAdapter().inventory_snapshot(context, generated_at="2026-05-10T00:00:00Z")
+    snapshot = get_adapter("openclaw").inventory_snapshot(context, generated_at="2026-05-10T00:00:00Z")
     payload = serialize_inventory_snapshot(snapshot)
     encoded = json.dumps(payload, sort_keys=True)
 
@@ -191,7 +191,7 @@ def test_inventory_snapshot_can_include_cisco_openclaw_inventory_runs(tmp_path: 
 
     monkeypatch.setattr("codex_plugin_scanner.guard.inventory_cisco.run_cisco_inventory_scans", fake_cisco_runs)
 
-    snapshot = OpenClawHarnessAdapter().inventory_snapshot(
+    snapshot = get_adapter("openclaw").inventory_snapshot(
         context,
         generated_at="2026-05-10T00:00:00Z",
         cisco_skill_scan="on",
@@ -209,7 +209,7 @@ def test_openclaw_skips_open_dm_risk_for_disabled_channels(tmp_path: Path) -> No
         json.dumps({"channels": {"telegram": {"enabled": False, "dmPolicy": "open", "allowFrom": ["*"]}}}),
     )
 
-    detection = OpenClawHarnessAdapter().detect(context)
+    detection = get_adapter("openclaw").detect(context)
     channel = next(artifact for artifact in detection.artifacts if artifact.artifact_id == "openclaw:channel:telegram")
 
     assert not any("network traffic" in signal for signal in artifact_risk_signals(channel))
@@ -222,7 +222,7 @@ def test_openclaw_flags_legacy_dm_policy_fields(tmp_path: Path) -> None:
         json.dumps({"channels": {"telegram": {"dm": {"policy": "open", "allowFrom": ["*"]}}}}),
     )
 
-    detection = OpenClawHarnessAdapter().detect(context)
+    detection = get_adapter("openclaw").detect(context)
     channel = next(artifact for artifact in detection.artifacts if artifact.artifact_id == "openclaw:channel:telegram")
 
     assert any("network traffic" in signal for signal in artifact_risk_signals(channel))
@@ -252,7 +252,7 @@ def test_openclaw_accepts_json5_comments_trailing_commas_and_extra_skill_dirs(tm
         "---\nname: reviewer\ndescription: review helper\n---\nRead project files only.\n",
     )
 
-    detection = OpenClawHarnessAdapter().detect(context)
+    detection = get_adapter("openclaw").detect(context)
     artifacts = {artifact.artifact_id for artifact in detection.artifacts}
 
     assert "openclaw:channel:telegram" in artifacts
@@ -277,7 +277,7 @@ def test_openclaw_accepts_json5_unquoted_keys_and_single_quotes(tmp_path: Path) 
         """,
     )
 
-    detection = OpenClawHarnessAdapter().detect(context)
+    detection = get_adapter("openclaw").detect(context)
     channel = next(artifact for artifact in detection.artifacts if artifact.artifact_id == "openclaw:channel:telegram")
     mcp = mcp_artifact(detection, "remote")
 
@@ -308,7 +308,7 @@ def test_openclaw_resolves_config_includes_before_building_artifacts(tmp_path: P
         """,
     )
 
-    detection = OpenClawHarnessAdapter().detect(context)
+    detection = get_adapter("openclaw").detect(context)
     artifact_ids = {artifact.artifact_id for artifact in detection.artifacts}
 
     assert "openclaw:channel:telegram" in artifact_ids
@@ -324,7 +324,7 @@ def test_openclaw_extra_skill_dirs_skip_blank_and_anchor_relative_paths(tmp_path
     _write(context.home_dir / "relative-skills" / "helper" / "SKILL.md", "---\nname: helper\n---\nOK.\n")
     _write(context.home_dir / "accidental" / "SKILL.md", "---\nname: accidental\n---\nShould not load.\n")
 
-    detection = OpenClawHarnessAdapter().detect(context)
+    detection = get_adapter("openclaw").detect(context)
     skill_names = {artifact.name for artifact in detection.artifacts if artifact.artifact_type == "skill"}
 
     assert "helper" in skill_names
@@ -347,7 +347,7 @@ def test_openclaw_skill_artifact_ids_include_root_identity(tmp_path: Path) -> No
     _write(workspace_path / "skills" / "reviewer" / "SKILL.md", "---\nname: reviewer\n---\nWorkspace.\n")
     _write(shared_root / "reviewer" / "SKILL.md", "---\nname: reviewer\n---\nShared.\n")
 
-    detection = OpenClawHarnessAdapter().detect(context)
+    detection = get_adapter("openclaw").detect(context)
     reviewer_ids = {
         artifact.artifact_id
         for artifact in detection.artifacts
@@ -367,7 +367,7 @@ def test_openclaw_skill_artifact_ids_include_skill_directory_identity(tmp_path: 
     _write(workspace_path / "skills" / "reviewer-a" / "SKILL.md", "---\nname: reviewer\n---\nA.\n")
     _write(workspace_path / "skills" / "reviewer-b" / "SKILL.md", "---\nname: reviewer\n---\nB.\n")
 
-    detection = OpenClawHarnessAdapter().detect(context)
+    detection = get_adapter("openclaw").detect(context)
     reviewer_ids = {
         artifact.artifact_id
         for artifact in detection.artifacts
@@ -392,11 +392,11 @@ def test_install_exports_guard_managed_openclaw_overlay(
         json.dumps({"channels": {"telegram": {"dmPolicy": "pairing"}}}),
     )
 
-    manifest = OpenClawHarnessAdapter().install(context)
+    manifest = get_adapter("openclaw").install(context)
     overlay_path = Path(str(manifest["managed_overlay_path"]))
     pretool_path = Path(str(manifest["pretool_hook_path"]))
     pretool = json.loads(pretool_path.read_text(encoding="utf-8"))
-    env = OpenClawHarnessAdapter().launch_environment(context)
+    env = get_adapter("openclaw").launch_environment(context)
 
     assert manifest["install_state"] == "installed"
     assert overlay_path.exists() is True
@@ -417,9 +417,9 @@ def test_install_exports_cloud_identity_hints_without_secret_values(tmp_path: Pa
     context = _ctx(tmp_path)
     _seed_cloud_profile(context)
 
-    manifest = OpenClawHarnessAdapter().install(context)
+    manifest = get_adapter("openclaw").install(context)
     identity = manifest["cloud_agent_identity"]
-    env = OpenClawHarnessAdapter().launch_environment(context)
+    env = get_adapter("openclaw").launch_environment(context)
 
     assert identity == {
         "runtime": "openclaw",
@@ -442,8 +442,8 @@ def test_install_ignores_cloud_identity_hints_for_other_runtimes(tmp_path: Path)
     context = _ctx(tmp_path)
     _seed_cloud_profile(context, runtime="hermes")
 
-    manifest = OpenClawHarnessAdapter().install(context)
-    env = OpenClawHarnessAdapter().launch_environment(context)
+    manifest = get_adapter("openclaw").install(context)
+    env = get_adapter("openclaw").launch_environment(context)
 
     assert "cloud_agent_identity" not in manifest
     assert "OPENCLAW_GUARD_CLOUD_WORKSPACE" not in env
@@ -453,9 +453,9 @@ def test_launch_environment_recomputes_cloud_identity_hints(tmp_path: Path) -> N
     context = _ctx(tmp_path)
     _seed_cloud_profile(context)
 
-    OpenClawHarnessAdapter().install(context)
+    get_adapter("openclaw").install(context)
     _seed_cloud_profile(context, runtime="hermes")
-    env = OpenClawHarnessAdapter().launch_environment(context)
+    env = get_adapter("openclaw").launch_environment(context)
 
     assert "OPENCLAW_GUARD_CLOUD_WORKSPACE" not in env
 
@@ -472,13 +472,13 @@ def test_openclaw_skips_symlinked_skill_files(tmp_path: Path) -> None:
     except (NotImplementedError, OSError) as error:
         pytest.skip(f"symlinks unavailable: {error}")
 
-    detection = OpenClawHarnessAdapter().detect(context)
+    detection = get_adapter("openclaw").detect(context)
     assert not any(artifact.name == "linked-secret" for artifact in detection.artifacts)
 
 
 def test_uninstall_rejects_manifest_paths_outside_managed_root(tmp_path: Path) -> None:
     context = _ctx(tmp_path)
-    adapter = OpenClawHarnessAdapter()
+    adapter = get_adapter("openclaw")
     manifest = adapter.install(context)
     manifest_path = Path(str(manifest["managed_manifest_path"]))
     outside_path = tmp_path / "outside.json"
@@ -494,7 +494,7 @@ def test_uninstall_rejects_manifest_paths_outside_managed_root(tmp_path: Path) -
 
 def test_openclaw_approval_flow_prefers_native_or_center_after_install(tmp_path: Path) -> None:
     context = _ctx(tmp_path)
-    adapter = OpenClawHarnessAdapter()
+    adapter = get_adapter("openclaw")
 
     manifest = adapter.install(context)
     flow = adapter.approval_flow(managed_install={"manifest": manifest})

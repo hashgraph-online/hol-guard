@@ -10,6 +10,7 @@ try:
 except ModuleNotFoundError:
     import tomli as tomllib  # type: ignore[no-redef]
 
+from codex_plugin_scanner.guard.adapters import get_adapter
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.adapters.claude_code import (
     CLAUDE_GUARD_DAEMON_HOOK_MARKER,
@@ -18,7 +19,6 @@ from codex_plugin_scanner.guard.adapters.claude_code import (
 from codex_plugin_scanner.guard.adapters.codex import CodexHarnessAdapter
 from codex_plugin_scanner.guard.adapters.copilot import CopilotHarnessAdapter
 from codex_plugin_scanner.guard.adapters.cursor import CursorHarnessAdapter
-from codex_plugin_scanner.guard.adapters.gemini import GeminiHarnessAdapter
 from codex_plugin_scanner.guard.adapters.opencode import OpenCodeHarnessAdapter
 from codex_plugin_scanner.guard.cli.install_commands import list_harness_setup_items
 from codex_plugin_scanner.guard.store import GuardStore
@@ -66,7 +66,7 @@ def test_gr092_gemini_adapter_detects_cli_settings_smoke(tmp_path: Path) -> None
         encoding="utf-8",
     )
 
-    detection = GeminiHarnessAdapter().detect(context)
+    detection = get_adapter("gemini").detect(context)
 
     assert detection.installed is True
     assert detection.artifacts[0].harness == "gemini"

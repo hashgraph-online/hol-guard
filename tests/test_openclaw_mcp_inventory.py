@@ -5,8 +5,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from codex_plugin_scanner.guard.adapters import get_adapter
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
-from codex_plugin_scanner.guard.adapters.openclaw import OpenClawHarnessAdapter
 from tests.artifact_risk_support import artifact_risk_signals
 from tests.openclaw_test_support import mcp_artifact
 
@@ -37,7 +37,7 @@ def test_openclaw_flags_open_dm_policy_and_remote_mcp(tmp_path: Path) -> None:
         },
     )
 
-    detection = OpenClawHarnessAdapter().detect(context)
+    detection = get_adapter("openclaw").detect(context)
     channel = next(artifact for artifact in detection.artifacts if artifact.artifact_id == "openclaw:channel:telegram")
     mcp = mcp_artifact(detection, "remote")
 
@@ -57,7 +57,7 @@ def test_openclaw_checks_fallback_mcp_maps_after_disabled_servers(tmp_path: Path
         },
     )
 
-    mcp = mcp_artifact(OpenClawHarnessAdapter().detect(context), "remote")
+    mcp = mcp_artifact(get_adapter("openclaw").detect(context), "remote")
 
     assert any("remote server" in signal for signal in artifact_risk_signals(mcp))
 
@@ -75,7 +75,7 @@ def test_openclaw_inventories_unique_servers_from_every_supported_map(tmp_path: 
         },
     )
 
-    detection = OpenClawHarnessAdapter().detect(context)
+    detection = get_adapter("openclaw").detect(context)
     gateway = next(artifact for artifact in detection.artifacts if artifact.artifact_type == "gateway_config")
 
     assert gateway.metadata["mcp_server_names"] == ["canonical", "nested_compat", "top_compat"]
@@ -105,7 +105,7 @@ def test_openclaw_preserves_explicit_mcp_transport(tmp_path: Path) -> None:
         },
     )
 
-    events = mcp_artifact(OpenClawHarnessAdapter().detect(context), "events")
+    events = mcp_artifact(get_adapter("openclaw").detect(context), "events")
 
     assert events.transport == "sse"
 
@@ -126,7 +126,7 @@ def test_openclaw_rejects_unsupported_transport_without_exposing_it_downstream(t
         },
     )
 
-    detection = OpenClawHarnessAdapter().detect(context)
+    detection = get_adapter("openclaw").detect(context)
     remote = mcp_artifact(detection, "remote")
     gateway = next(artifact for artifact in detection.artifacts if artifact.artifact_type == "gateway_config")
 
@@ -149,7 +149,7 @@ def test_openclaw_duplicate_active_names_use_canonical_precedence_and_retain_con
         },
     )
 
-    detection = OpenClawHarnessAdapter().detect(context)
+    detection = get_adapter("openclaw").detect(context)
     shared = mcp_artifact(detection, "shared")
     gateway = next(artifact for artifact in detection.artifacts if artifact.artifact_type == "gateway_config")
 
@@ -182,7 +182,7 @@ def test_openclaw_disabled_higher_precedence_definition_does_not_hide_active_fal
         },
     )
 
-    shared = mcp_artifact(OpenClawHarnessAdapter().detect(context), "shared")
+    shared = mcp_artifact(get_adapter("openclaw").detect(context), "shared")
 
     assert shared.command == "active-fallback"
     assert shared.metadata["source_scope"] == "mcp.mcpServers"
@@ -199,7 +199,7 @@ def test_openclaw_identical_duplicate_definitions_are_visible_without_false_conf
         {"mcp": {"servers": {"shared": definition}}, "mcpServers": {"shared": definition}},
     )
 
-    detection = OpenClawHarnessAdapter().detect(context)
+    detection = get_adapter("openclaw").detect(context)
     shared = mcp_artifact(detection, "shared")
     gateway = next(artifact for artifact in detection.artifacts if artifact.artifact_type == "gateway_config")
 
