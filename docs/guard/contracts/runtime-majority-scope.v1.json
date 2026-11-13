@@ -675,6 +675,7 @@
           "src/codex_plugin_scanner/guard/runtime/contained_output_filters.py",
           "src/codex_plugin_scanner/guard/runtime/contained_run_directory.py",
           "src/codex_plugin_scanner/guard/runtime/contained_test_hook.py",
+          "src/codex_plugin_scanner/guard/runtime/contained_test_request.py",
           "src/codex_plugin_scanner/guard/runtime/contained_worktree_add.py",
           "src/codex_plugin_scanner/guard/runtime/contained_wrapper.py",
           "src/codex_plugin_scanner/guard/runtime/extension_contribution.py",

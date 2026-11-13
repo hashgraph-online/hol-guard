@@ -39,6 +39,7 @@ from .source_output_fixtures import (
 )
 from .workspace_runner_fixtures import (
     HOME_BUN_ENTRY_CASES,
+    HOME_BUN_ENTRY_CWD_CASE,
     WORKSPACE_RUNNER_CASES,
     runner_marker,
 )
@@ -304,6 +305,17 @@ def _workspace_runner_match(scenario: Scenario, calls: list[dict[str, Any]]) -> 
         return False
     text = _text(calls[0])
     return text is not None and runner_marker(scenario.id) in text
+
+
+def cwd_argument_error(scenario: Scenario, calls: list[dict[str, Any]]) -> str | None:
+    """A case about the bash tool's ``cwd`` argument proves nothing when the model left it out."""
+    if scenario.id != HOME_BUN_ENTRY_CWD_CASE:
+        return None
+    for call in calls:
+        cwd = call["args"].get("cwd") if call.get("name") == "bash" and isinstance(call.get("args"), dict) else None
+        if not isinstance(cwd, str) or cwd.replace("\\", "/").rstrip("/") != "{{workspace}}":
+            return "the bash call did not set its cwd argument to the project"
+    return None
 
 
 def command_outputs_match(scenario: Scenario, calls: list[dict[str, Any]]) -> bool:
