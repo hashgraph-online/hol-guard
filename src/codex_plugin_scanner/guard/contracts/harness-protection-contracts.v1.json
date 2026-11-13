@@ -334,7 +334,7 @@
           "known_blind_spots": [
             "Cursor terminal actions outside an agent hook path remain outside this boundary."
           ],
-          "source_reference": "src/codex_plugin_scanner/guard/adapters/cursor_hook_config.py:_BLOCKING_MANAGED_HOOK_EVENTS"
+          "source_reference": "rust/crates/guard-runtime/src/adapters/cursor_hook_config.rs:BLOCKING_EVENTS"
         },
         {
           "event": "beforeMCPExecution",
@@ -350,7 +350,7 @@
           "known_blind_spots": [
             "Only MCP traffic entering Cursor's declared hook surface is covered."
           ],
-          "source_reference": "src/codex_plugin_scanner/guard/adapters/cursor_hook_config.py:_BLOCKING_MANAGED_HOOK_EVENTS"
+          "source_reference": "rust/crates/guard-runtime/src/adapters/cursor_hook_config.rs:BLOCKING_EVENTS"
         },
         {
           "event": "beforeReadFile",
@@ -366,7 +366,7 @@
           "known_blind_spots": [
             "Reads outside the Cursor hook path are not covered."
           ],
-          "source_reference": "src/codex_plugin_scanner/guard/adapters/cursor_hook_config.py:_BLOCKING_MANAGED_HOOK_EVENTS"
+          "source_reference": "rust/crates/guard-runtime/src/adapters/cursor_hook_config.rs:BLOCKING_EVENTS"
         },
         {
           "event": "preToolUse",
@@ -382,7 +382,7 @@
           "known_blind_spots": [
             "Inline edits that bypass the declared Cursor hook are not covered."
           ],
-          "source_reference": "src/codex_plugin_scanner/guard/adapters/cursor_hook_config.py:_BLOCKING_MANAGED_HOOK_EVENTS"
+          "source_reference": "rust/crates/guard-runtime/src/adapters/cursor_hook_config.rs:BLOCKING_EVENTS"
         },
         {
           "event": "afterShellExecution",
@@ -396,7 +396,7 @@
           "known_blind_spots": [
             "Observation does not block or undo the completed shell command."
           ],
-          "source_reference": "src/codex_plugin_scanner/guard/adapters/cursor_hook_config.py:_OBSERVER_MANAGED_HOOK_EVENTS"
+          "source_reference": "rust/crates/guard-runtime/src/adapters/cursor_hook_config.rs:SUPPORTED_EVENTS"
         },
         {
           "event": "afterMCPExecution",
@@ -410,7 +410,7 @@
           "known_blind_spots": [
             "Observation does not block or replace a result already returned by Cursor."
           ],
-          "source_reference": "src/codex_plugin_scanner/guard/adapters/cursor_hook_config.py:_OBSERVER_MANAGED_HOOK_EVENTS"
+          "source_reference": "rust/crates/guard-runtime/src/adapters/cursor_hook_config.rs:SUPPORTED_EVENTS"
         },
         {
           "event": "UserPromptSubmit",

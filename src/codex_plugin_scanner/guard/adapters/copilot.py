@@ -53,7 +53,7 @@ def _ask(op: str, context: HarnessContext, **fields: Any) -> dict[str, Any]:
 def _hook_fields(context: HarnessContext, staged: list[TransitionFile]) -> dict[str, object]:
     """Guard's bounded hook argv for each hooks object, and the isolated bridge."""
     from .bounded_cli_hook_bridge import bounded_cli_hook_command, bounded_hook_script_path
-    from .cursor_hook_config import isolated_cursor_hook_python
+    from .isolated_hook_python import isolated_cursor_hook_python
 
     spec = _ask("hook_spec", context)
 

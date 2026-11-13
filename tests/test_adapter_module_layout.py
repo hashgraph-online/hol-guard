@@ -14,7 +14,7 @@ from scripts.ci.hook_data_plane_ownership_contract import load_manifest
 
 ROOT = Path(__file__).resolve().parents[1]
 PACKAGE = Path(adapters.__file__).parent
-FAMILIES = ("claude", "cursor", "zcode")
+FAMILIES = ("claude", "zcode")
 
 
 @pytest.mark.parametrize("family", FAMILIES)
@@ -66,4 +66,4 @@ def test_native_harness_registry_matches_the_runtime_description() -> None:
         entry = described[harness]
         assert tuple(entry["aliases"]) == aliases
         assert entry["launcher_name"] == launcher_name
-        assert entry["executable"] == harness
+        assert entry["executable"] == (launcher_name or harness)
