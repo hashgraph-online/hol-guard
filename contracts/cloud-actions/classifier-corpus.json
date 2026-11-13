@@ -1,0 +1,1701 @@
+{
+  "schema": "guard.cloud-action-classifier-corpus.v1",
+  "about": "Public tool names from widely used MCP servers and provider APIs, with the class a reviewer expects. The classifier must never propose a class below update, and every destructive verb must land in delete, admin or pay.",
+  "cases": [
+    {
+      "name": "create_issue",
+      "expect": "update",
+      "source": "github"
+    },
+    {
+      "name": "update_issue",
+      "expect": "update",
+      "source": "github"
+    },
+    {
+      "name": "create_pull_request",
+      "expect": "update",
+      "source": "github"
+    },
+    {
+      "name": "update_pull_request",
+      "expect": "update",
+      "source": "github"
+    },
+    {
+      "name": "create_branch",
+      "expect": "update",
+      "source": "github"
+    },
+    {
+      "name": "add_issue_labels",
+      "expect": "update",
+      "source": "github"
+    },
+    {
+      "name": "create_or_update_file",
+      "expect": "update",
+      "source": "github"
+    },
+    {
+      "name": "list_issues",
+      "expect": "update",
+      "source": "github"
+    },
+    {
+      "name": "get_issue",
+      "expect": "update",
+      "source": "github"
+    },
+    {
+      "name": "search_repositories",
+      "expect": "update",
+      "source": "github"
+    },
+    {
+      "name": "get_file_contents",
+      "expect": "update",
+      "source": "github"
+    },
+    {
+      "name": "list_commits",
+      "expect": "update",
+      "source": "github"
+    },
+    {
+      "name": "get_pull_request",
+      "expect": "update",
+      "source": "github"
+    },
+    {
+      "name": "list_pull_requests",
+      "expect": "update",
+      "source": "github"
+    },
+    {
+      "name": "create_repository",
+      "expect": "update",
+      "source": "github"
+    },
+    {
+      "name": "update_pull_request_branch",
+      "expect": "update",
+      "source": "github"
+    },
+    {
+      "name": "assign_copilot_to_issue",
+      "expect": "update",
+      "source": "github"
+    },
+    {
+      "name": "mark_all_notifications_read",
+      "expect": "update",
+      "source": "github"
+    },
+    {
+      "name": "add_issue_comment",
+      "expect": "send",
+      "source": "github"
+    },
+    {
+      "name": "create_pull_request_review",
+      "expect": "send",
+      "source": "github"
+    },
+    {
+      "name": "add_pull_request_review_comment",
+      "expect": "send",
+      "source": "github"
+    },
+    {
+      "name": "post_review_comment",
+      "expect": "send",
+      "source": "github"
+    },
+    {
+      "name": "reply_to_review_thread",
+      "expect": "send",
+      "source": "github"
+    },
+    {
+      "name": "API-post-search",
+      "expect": "send",
+      "source": "github"
+    },
+    {
+      "name": "draft_email",
+      "expect": "send",
+      "source": "github"
+    },
+    {
+      "name": "read_email",
+      "expect": "send",
+      "source": "github"
+    },
+    {
+      "name": "publish_blog_post",
+      "expect": "send",
+      "source": "github"
+    },
+    {
+      "name": "merge_pull_request",
+      "expect": "execute",
+      "source": "github"
+    },
+    {
+      "name": "push_files",
+      "expect": "execute",
+      "source": "github"
+    },
+    {
+      "name": "run_workflow",
+      "expect": "execute",
+      "source": "github"
+    },
+    {
+      "name": "rerun_workflow_run",
+      "expect": "execute",
+      "source": "github"
+    },
+    {
+      "name": "rerun_failed_jobs",
+      "expect": "execute",
+      "source": "github"
+    },
+    {
+      "name": "trigger_deployment",
+      "expect": "execute",
+      "source": "github"
+    },
+    {
+      "name": "dispatch_workflow",
+      "expect": "execute",
+      "source": "github"
+    },
+    {
+      "name": "delete_file",
+      "expect": "delete",
+      "source": "github"
+    },
+    {
+      "name": "delete_branch",
+      "expect": "delete",
+      "source": "github"
+    },
+    {
+      "name": "delete_repository",
+      "expect": "delete",
+      "source": "github"
+    },
+    {
+      "name": "delete_workflow_run_logs",
+      "expect": "delete",
+      "source": "github"
+    },
+    {
+      "name": "cancel_and_delete_run",
+      "expect": "delete",
+      "source": "github"
+    },
+    {
+      "name": "remove_issue_label",
+      "expect": "delete",
+      "source": "github"
+    },
+    {
+      "name": "force_push_branch",
+      "expect": "delete",
+      "source": "github"
+    },
+    {
+      "name": "archive_repository",
+      "expect": "delete",
+      "source": "github"
+    },
+    {
+      "name": "delete_gist",
+      "expect": "delete",
+      "source": "github"
+    },
+    {
+      "name": "add_collaborator",
+      "expect": "admin",
+      "source": "github"
+    },
+    {
+      "name": "remove_collaborator",
+      "expect": "admin",
+      "source": "github"
+    },
+    {
+      "name": "update_branch_protection_settings",
+      "expect": "admin",
+      "source": "github"
+    },
+    {
+      "name": "transfer_repository_ownership",
+      "expect": "admin",
+      "source": "github"
+    },
+    {
+      "name": "create_deploy_key_credentials",
+      "expect": "admin",
+      "source": "github"
+    },
+    {
+      "name": "update_team_permissions",
+      "expect": "admin",
+      "source": "github"
+    },
+    {
+      "name": "fork_and_publish_release_notes",
+      "expect": "share",
+      "source": "github"
+    },
+    {
+      "name": "make_repository_public",
+      "expect": "share",
+      "source": "github"
+    },
+    {
+      "name": "create_public_gist",
+      "expect": "share",
+      "source": "github"
+    },
+    {
+      "name": "download_workflow_run_artifact",
+      "expect": "export",
+      "source": "github"
+    },
+    {
+      "name": "download_release_asset",
+      "expect": "export",
+      "source": "github"
+    },
+    {
+      "name": "export_issues_csv",
+      "expect": "export",
+      "source": "github"
+    },
+    {
+      "name": "slack_post_message",
+      "expect": "send",
+      "source": "slack"
+    },
+    {
+      "name": "slack_reply_to_thread",
+      "expect": "send",
+      "source": "slack"
+    },
+    {
+      "name": "chat_postMessage",
+      "expect": "send",
+      "source": "slack"
+    },
+    {
+      "name": "chat_postEphemeral",
+      "expect": "send",
+      "source": "slack"
+    },
+    {
+      "name": "send_dm",
+      "expect": "send",
+      "source": "slack"
+    },
+    {
+      "name": "conversations_reply",
+      "expect": "send",
+      "source": "slack"
+    },
+    {
+      "name": "chat.scheduleMessage",
+      "expect": "send",
+      "source": "slack"
+    },
+    {
+      "name": "notify_channel",
+      "expect": "send",
+      "source": "slack"
+    },
+    {
+      "name": "slack_add_reaction",
+      "expect": "update",
+      "source": "slack"
+    },
+    {
+      "name": "slack_get_channel_history",
+      "expect": "update",
+      "source": "slack"
+    },
+    {
+      "name": "slack_list_channels",
+      "expect": "update",
+      "source": "slack"
+    },
+    {
+      "name": "conversations_history",
+      "expect": "update",
+      "source": "slack"
+    },
+    {
+      "name": "users_list",
+      "expect": "update",
+      "source": "slack"
+    },
+    {
+      "name": "conversations_setTopic",
+      "expect": "update",
+      "source": "slack"
+    },
+    {
+      "name": "pins_add",
+      "expect": "update",
+      "source": "slack"
+    },
+    {
+      "name": "reminders_add",
+      "expect": "update",
+      "source": "slack"
+    },
+    {
+      "name": "slack_get_users",
+      "expect": "update",
+      "source": "slack"
+    },
+    {
+      "name": "chat_delete",
+      "expect": "delete",
+      "source": "slack"
+    },
+    {
+      "name": "conversations_archive",
+      "expect": "delete",
+      "source": "slack"
+    },
+    {
+      "name": "files_delete",
+      "expect": "delete",
+      "source": "slack"
+    },
+    {
+      "name": "pins_remove",
+      "expect": "delete",
+      "source": "slack"
+    },
+    {
+      "name": "reactions_remove",
+      "expect": "delete",
+      "source": "slack"
+    },
+    {
+      "name": "slack_delete_message",
+      "expect": "delete",
+      "source": "slack"
+    },
+    {
+      "name": "admin_users_remove",
+      "expect": "admin",
+      "source": "slack"
+    },
+    {
+      "name": "admin_conversations_setPermissions",
+      "expect": "admin",
+      "source": "slack"
+    },
+    {
+      "name": "admin_users_session_reset",
+      "expect": "admin",
+      "source": "slack"
+    },
+    {
+      "name": "usergroups_users_update_roles",
+      "expect": "admin",
+      "source": "slack"
+    },
+    {
+      "name": "admin_apps_approve",
+      "expect": "admin",
+      "source": "slack"
+    },
+    {
+      "name": "conversations_invite",
+      "expect": "share",
+      "source": "slack"
+    },
+    {
+      "name": "files_sharedPublicURL",
+      "expect": "share",
+      "source": "slack"
+    },
+    {
+      "name": "conversations_inviteShared",
+      "expect": "share",
+      "source": "slack"
+    },
+    {
+      "name": "notion_create_page",
+      "expect": "update",
+      "source": "notion"
+    },
+    {
+      "name": "notion_update_page",
+      "expect": "update",
+      "source": "notion"
+    },
+    {
+      "name": "notion_append_block_children",
+      "expect": "update",
+      "source": "notion"
+    },
+    {
+      "name": "notion_query_database",
+      "expect": "update",
+      "source": "notion"
+    },
+    {
+      "name": "notion_search",
+      "expect": "update",
+      "source": "notion"
+    },
+    {
+      "name": "notion_retrieve_page",
+      "expect": "update",
+      "source": "notion"
+    },
+    {
+      "name": "API-patch-page",
+      "expect": "update",
+      "source": "notion"
+    },
+    {
+      "name": "create_database",
+      "expect": "update",
+      "source": "notion"
+    },
+    {
+      "name": "update_database_properties",
+      "expect": "update",
+      "source": "notion"
+    },
+    {
+      "name": "notion_delete_block",
+      "expect": "delete",
+      "source": "notion"
+    },
+    {
+      "name": "API-delete-a-block",
+      "expect": "delete",
+      "source": "notion"
+    },
+    {
+      "name": "archive_page",
+      "expect": "delete",
+      "source": "notion"
+    },
+    {
+      "name": "notion_trash_page",
+      "expect": "delete",
+      "source": "notion"
+    },
+    {
+      "name": "notion_create_comment",
+      "expect": "send",
+      "source": "notion"
+    },
+    {
+      "name": "API-create-a-comment",
+      "expect": "send",
+      "source": "notion"
+    },
+    {
+      "name": "publish_page_to_web",
+      "expect": "share",
+      "source": "notion"
+    },
+    {
+      "name": "share_page",
+      "expect": "share",
+      "source": "notion"
+    },
+    {
+      "name": "export_workspace",
+      "expect": "export",
+      "source": "notion"
+    },
+    {
+      "name": "download_page_markdown",
+      "expect": "export",
+      "source": "notion"
+    },
+    {
+      "name": "send_email",
+      "expect": "send",
+      "source": "google"
+    },
+    {
+      "name": "gmail_send_message",
+      "expect": "send",
+      "source": "google"
+    },
+    {
+      "name": "reply_to_email",
+      "expect": "send",
+      "source": "google"
+    },
+    {
+      "name": "forward_email",
+      "expect": "send",
+      "source": "google"
+    },
+    {
+      "name": "gmail_send_draft",
+      "expect": "send",
+      "source": "google"
+    },
+    {
+      "name": "send_calendar_invitation_email",
+      "expect": "send",
+      "source": "google"
+    },
+    {
+      "name": "gmail_create_draft",
+      "expect": "update",
+      "source": "google"
+    },
+    {
+      "name": "list_emails",
+      "expect": "update",
+      "source": "google"
+    },
+    {
+      "name": "search_emails",
+      "expect": "update",
+      "source": "google"
+    },
+    {
+      "name": "gmail_modify_labels",
+      "expect": "update",
+      "source": "google"
+    },
+    {
+      "name": "create_label",
+      "expect": "update",
+      "source": "google"
+    },
+    {
+      "name": "create_event",
+      "expect": "update",
+      "source": "google"
+    },
+    {
+      "name": "update_event",
+      "expect": "update",
+      "source": "google"
+    },
+    {
+      "name": "list_events",
+      "expect": "update",
+      "source": "google"
+    },
+    {
+      "name": "find_free_slots",
+      "expect": "update",
+      "source": "google"
+    },
+    {
+      "name": "create_spreadsheet",
+      "expect": "update",
+      "source": "google"
+    },
+    {
+      "name": "update_cells",
+      "expect": "update",
+      "source": "google"
+    },
+    {
+      "name": "append_values",
+      "expect": "update",
+      "source": "google"
+    },
+    {
+      "name": "create_document",
+      "expect": "update",
+      "source": "google"
+    },
+    {
+      "name": "insert_text",
+      "expect": "update",
+      "source": "google"
+    },
+    {
+      "name": "list_files",
+      "expect": "update",
+      "source": "google"
+    },
+    {
+      "name": "search_drive",
+      "expect": "update",
+      "source": "google"
+    },
+    {
+      "name": "get_file_metadata",
+      "expect": "update",
+      "source": "google"
+    },
+    {
+      "name": "create_folder",
+      "expect": "update",
+      "source": "google"
+    },
+    {
+      "name": "move_file",
+      "expect": "update",
+      "source": "google"
+    },
+    {
+      "name": "rename_file",
+      "expect": "update",
+      "source": "google"
+    },
+    {
+      "name": "batch_update_presentation",
+      "expect": "update",
+      "source": "google"
+    },
+    {
+      "name": "delete_email",
+      "expect": "delete",
+      "source": "google"
+    },
+    {
+      "name": "trash_email",
+      "expect": "delete",
+      "source": "google"
+    },
+    {
+      "name": "batch_delete_emails",
+      "expect": "delete",
+      "source": "google"
+    },
+    {
+      "name": "delete_event",
+      "expect": "delete",
+      "source": "google"
+    },
+    {
+      "name": "delete_file_permanently",
+      "expect": "delete",
+      "source": "google"
+    },
+    {
+      "name": "trash_file",
+      "expect": "delete",
+      "source": "google"
+    },
+    {
+      "name": "remove_label",
+      "expect": "delete",
+      "source": "google"
+    },
+    {
+      "name": "clear_sheet_range",
+      "expect": "delete",
+      "source": "google"
+    },
+    {
+      "name": "delete_rows",
+      "expect": "delete",
+      "source": "google"
+    },
+    {
+      "name": "empty_trash",
+      "expect": "delete",
+      "source": "google"
+    },
+    {
+      "name": "delete_calendar",
+      "expect": "delete",
+      "source": "google"
+    },
+    {
+      "name": "share_file",
+      "expect": "share",
+      "source": "google"
+    },
+    {
+      "name": "share_document_with_user",
+      "expect": "share",
+      "source": "google"
+    },
+    {
+      "name": "invite_attendees",
+      "expect": "share",
+      "source": "google"
+    },
+    {
+      "name": "export_doc_as_pdf",
+      "expect": "export",
+      "source": "google"
+    },
+    {
+      "name": "download_file",
+      "expect": "export",
+      "source": "google"
+    },
+    {
+      "name": "export_sheet_csv",
+      "expect": "export",
+      "source": "google"
+    },
+    {
+      "name": "takeout_export_mailbox",
+      "expect": "export",
+      "source": "google"
+    },
+    {
+      "name": "update_user_roles",
+      "expect": "admin",
+      "source": "google"
+    },
+    {
+      "name": "grant_drive_permission",
+      "expect": "admin",
+      "source": "google"
+    },
+    {
+      "name": "revoke_drive_permission",
+      "expect": "admin",
+      "source": "google"
+    },
+    {
+      "name": "set_mail_forwarding_settings",
+      "expect": "admin",
+      "source": "google"
+    },
+    {
+      "name": "admin_suspend_user",
+      "expect": "admin",
+      "source": "google"
+    },
+    {
+      "name": "transfer_file_ownership",
+      "expect": "admin",
+      "source": "google"
+    },
+    {
+      "name": "drive_permissions_create_public",
+      "expect": "admin",
+      "source": "google"
+    },
+    {
+      "name": "create_refund",
+      "expect": "pay",
+      "source": "stripe"
+    },
+    {
+      "name": "create_payment_intent",
+      "expect": "pay",
+      "source": "stripe"
+    },
+    {
+      "name": "capture_payment_intent",
+      "expect": "pay",
+      "source": "stripe"
+    },
+    {
+      "name": "create_payout",
+      "expect": "pay",
+      "source": "stripe"
+    },
+    {
+      "name": "create_transfer",
+      "expect": "pay",
+      "source": "stripe"
+    },
+    {
+      "name": "create_charge",
+      "expect": "pay",
+      "source": "stripe"
+    },
+    {
+      "name": "confirm_payment",
+      "expect": "pay",
+      "source": "stripe"
+    },
+    {
+      "name": "pay_invoice",
+      "expect": "pay",
+      "source": "stripe"
+    },
+    {
+      "name": "create_checkout_session",
+      "expect": "pay",
+      "source": "stripe"
+    },
+    {
+      "name": "refund_charge",
+      "expect": "pay",
+      "source": "stripe"
+    },
+    {
+      "name": "list_payment_intents",
+      "expect": "pay",
+      "source": "stripe"
+    },
+    {
+      "name": "create_payment_link",
+      "expect": "pay",
+      "source": "stripe"
+    },
+    {
+      "name": "create_customer",
+      "expect": "update",
+      "source": "stripe"
+    },
+    {
+      "name": "list_customers",
+      "expect": "update",
+      "source": "stripe"
+    },
+    {
+      "name": "create_product",
+      "expect": "update",
+      "source": "stripe"
+    },
+    {
+      "name": "create_price",
+      "expect": "update",
+      "source": "stripe"
+    },
+    {
+      "name": "create_invoice",
+      "expect": "update",
+      "source": "stripe"
+    },
+    {
+      "name": "finalize_invoice",
+      "expect": "update",
+      "source": "stripe"
+    },
+    {
+      "name": "retrieve_balance",
+      "expect": "update",
+      "source": "stripe"
+    },
+    {
+      "name": "create_coupon",
+      "expect": "update",
+      "source": "stripe"
+    },
+    {
+      "name": "update_subscription",
+      "expect": "update",
+      "source": "stripe"
+    },
+    {
+      "name": "search_documentation",
+      "expect": "update",
+      "source": "stripe"
+    },
+    {
+      "name": "cancel_subscription_and_delete_customer",
+      "expect": "delete",
+      "source": "stripe"
+    },
+    {
+      "name": "delete_customer",
+      "expect": "delete",
+      "source": "stripe"
+    },
+    {
+      "name": "void_and_delete_invoice",
+      "expect": "delete",
+      "source": "stripe"
+    },
+    {
+      "name": "delete_product",
+      "expect": "delete",
+      "source": "stripe"
+    },
+    {
+      "name": "update_account_settings",
+      "expect": "admin",
+      "source": "stripe"
+    },
+    {
+      "name": "create_restricted_api_key",
+      "expect": "admin",
+      "source": "stripe"
+    },
+    {
+      "name": "rotate_api_keys",
+      "expect": "admin",
+      "source": "stripe"
+    },
+    {
+      "name": "execute_sql",
+      "expect": "execute",
+      "source": "database"
+    },
+    {
+      "name": "run_query",
+      "expect": "execute",
+      "source": "database"
+    },
+    {
+      "name": "postgres_query_sql",
+      "expect": "execute",
+      "source": "database"
+    },
+    {
+      "name": "apply_migration",
+      "expect": "execute",
+      "source": "database"
+    },
+    {
+      "name": "run_migration",
+      "expect": "execute",
+      "source": "database"
+    },
+    {
+      "name": "execute_statement",
+      "expect": "execute",
+      "source": "database"
+    },
+    {
+      "name": "invoke_function",
+      "expect": "execute",
+      "source": "database"
+    },
+    {
+      "name": "rollback_migration",
+      "expect": "execute",
+      "source": "database"
+    },
+    {
+      "name": "list_tables",
+      "expect": "update",
+      "source": "database"
+    },
+    {
+      "name": "describe_table",
+      "expect": "update",
+      "source": "database"
+    },
+    {
+      "name": "list_projects",
+      "expect": "update",
+      "source": "database"
+    },
+    {
+      "name": "get_project",
+      "expect": "update",
+      "source": "database"
+    },
+    {
+      "name": "list_branches",
+      "expect": "update",
+      "source": "database"
+    },
+    {
+      "name": "create_branch_from_parent",
+      "expect": "update",
+      "source": "database"
+    },
+    {
+      "name": "insert_rows",
+      "expect": "update",
+      "source": "database"
+    },
+    {
+      "name": "update_rows",
+      "expect": "update",
+      "source": "database"
+    },
+    {
+      "name": "upsert_record",
+      "expect": "update",
+      "source": "database"
+    },
+    {
+      "name": "create_index",
+      "expect": "update",
+      "source": "database"
+    },
+    {
+      "name": "get_logs",
+      "expect": "update",
+      "source": "database"
+    },
+    {
+      "name": "get_advisors",
+      "expect": "update",
+      "source": "database"
+    },
+    {
+      "name": "search_docs",
+      "expect": "update",
+      "source": "database"
+    },
+    {
+      "name": "drop_table",
+      "expect": "delete",
+      "source": "database"
+    },
+    {
+      "name": "truncate_table",
+      "expect": "delete",
+      "source": "database"
+    },
+    {
+      "name": "delete_project",
+      "expect": "delete",
+      "source": "database"
+    },
+    {
+      "name": "delete_branch_database",
+      "expect": "delete",
+      "source": "database"
+    },
+    {
+      "name": "drop_database",
+      "expect": "delete",
+      "source": "database"
+    },
+    {
+      "name": "purge_table_rows",
+      "expect": "delete",
+      "source": "database"
+    },
+    {
+      "name": "delete_records",
+      "expect": "delete",
+      "source": "database"
+    },
+    {
+      "name": "reset_branch",
+      "expect": "delete",
+      "source": "database"
+    },
+    {
+      "name": "wipe_collection",
+      "expect": "delete",
+      "source": "database"
+    },
+    {
+      "name": "destroy_cluster",
+      "expect": "delete",
+      "source": "database"
+    },
+    {
+      "name": "deprovision_instance",
+      "expect": "delete",
+      "source": "database"
+    },
+    {
+      "name": "drop_index",
+      "expect": "delete",
+      "source": "database"
+    },
+    {
+      "name": "grant_role",
+      "expect": "admin",
+      "source": "database"
+    },
+    {
+      "name": "revoke_role",
+      "expect": "admin",
+      "source": "database"
+    },
+    {
+      "name": "create_role",
+      "expect": "admin",
+      "source": "database"
+    },
+    {
+      "name": "alter_user_permissions",
+      "expect": "admin",
+      "source": "database"
+    },
+    {
+      "name": "update_billing_plan",
+      "expect": "admin",
+      "source": "database"
+    },
+    {
+      "name": "pause_project_billing",
+      "expect": "admin",
+      "source": "database"
+    },
+    {
+      "name": "export_table",
+      "expect": "export",
+      "source": "database"
+    },
+    {
+      "name": "dump_database",
+      "expect": "export",
+      "source": "database"
+    },
+    {
+      "name": "backup_database",
+      "expect": "export",
+      "source": "database"
+    },
+    {
+      "name": "download_query_results",
+      "expect": "export",
+      "source": "database"
+    },
+    {
+      "name": "deploy_to_vercel",
+      "expect": "execute",
+      "source": "cloud"
+    },
+    {
+      "name": "create_deployment",
+      "expect": "execute",
+      "source": "cloud"
+    },
+    {
+      "name": "trigger_build",
+      "expect": "execute",
+      "source": "cloud"
+    },
+    {
+      "name": "redeploy",
+      "expect": "execute",
+      "source": "cloud"
+    },
+    {
+      "name": "run_command",
+      "expect": "execute",
+      "source": "cloud"
+    },
+    {
+      "name": "invoke_lambda",
+      "expect": "execute",
+      "source": "cloud"
+    },
+    {
+      "name": "launch_instance",
+      "expect": "execute",
+      "source": "cloud"
+    },
+    {
+      "name": "restart_service",
+      "expect": "execute",
+      "source": "cloud"
+    },
+    {
+      "name": "promote_deployment_release",
+      "expect": "execute",
+      "source": "cloud"
+    },
+    {
+      "name": "exec_in_container",
+      "expect": "execute",
+      "source": "cloud"
+    },
+    {
+      "name": "kubectl_apply",
+      "expect": "execute",
+      "source": "cloud"
+    },
+    {
+      "name": "get_deployment_logs",
+      "expect": "execute",
+      "source": "cloud"
+    },
+    {
+      "name": "delete_deployment",
+      "expect": "delete",
+      "source": "cloud"
+    },
+    {
+      "name": "terminate_instance",
+      "expect": "delete",
+      "source": "cloud"
+    },
+    {
+      "name": "kill_process",
+      "expect": "delete",
+      "source": "cloud"
+    },
+    {
+      "name": "delete_bucket",
+      "expect": "delete",
+      "source": "cloud"
+    },
+    {
+      "name": "remove_dns_record",
+      "expect": "delete",
+      "source": "cloud"
+    },
+    {
+      "name": "uninstall_helm_release",
+      "expect": "delete",
+      "source": "cloud"
+    },
+    {
+      "name": "teardown_environment",
+      "expect": "delete",
+      "source": "cloud"
+    },
+    {
+      "name": "delete_secret",
+      "expect": "delete",
+      "source": "cloud"
+    },
+    {
+      "name": "erase_volume",
+      "expect": "delete",
+      "source": "cloud"
+    },
+    {
+      "name": "purge_cache",
+      "expect": "delete",
+      "source": "cloud"
+    },
+    {
+      "name": "kubectl_delete",
+      "expect": "delete",
+      "source": "cloud"
+    },
+    {
+      "name": "update_iam_policy",
+      "expect": "admin",
+      "source": "cloud"
+    },
+    {
+      "name": "set_bucket_acl",
+      "expect": "admin",
+      "source": "cloud"
+    },
+    {
+      "name": "create_access_token",
+      "expect": "admin",
+      "source": "cloud"
+    },
+    {
+      "name": "rotate_credentials",
+      "expect": "admin",
+      "source": "cloud"
+    },
+    {
+      "name": "update_project_settings",
+      "expect": "admin",
+      "source": "cloud"
+    },
+    {
+      "name": "add_team_member",
+      "expect": "admin",
+      "source": "cloud"
+    },
+    {
+      "name": "remove_team_member",
+      "expect": "admin",
+      "source": "cloud"
+    },
+    {
+      "name": "update_sso_configuration",
+      "expect": "admin",
+      "source": "cloud"
+    },
+    {
+      "name": "list_deployments",
+      "expect": "update",
+      "source": "cloud"
+    },
+    {
+      "name": "create_dns_record",
+      "expect": "update",
+      "source": "cloud"
+    },
+    {
+      "name": "update_environment_variable",
+      "expect": "update",
+      "source": "cloud"
+    },
+    {
+      "name": "list_buckets",
+      "expect": "update",
+      "source": "cloud"
+    },
+    {
+      "name": "get_metrics",
+      "expect": "update",
+      "source": "cloud"
+    },
+    {
+      "name": "set_secret_value",
+      "expect": "update",
+      "source": "cloud"
+    },
+    {
+      "name": "create_bucket",
+      "expect": "update",
+      "source": "cloud"
+    },
+    {
+      "name": "scale_service",
+      "expect": "update",
+      "source": "cloud"
+    },
+    {
+      "name": "make_bucket_public",
+      "expect": "share",
+      "source": "cloud"
+    },
+    {
+      "name": "publish_package",
+      "expect": "share",
+      "source": "cloud"
+    },
+    {
+      "name": "expose_service",
+      "expect": "share",
+      "source": "cloud"
+    },
+    {
+      "name": "download_object",
+      "expect": "export",
+      "source": "cloud"
+    },
+    {
+      "name": "sync_bucket",
+      "expect": "export",
+      "source": "cloud"
+    },
+    {
+      "name": "copy_snapshot",
+      "expect": "export",
+      "source": "cloud"
+    },
+    {
+      "name": "clone_repository",
+      "expect": "export",
+      "source": "cloud"
+    },
+    {
+      "name": "linear_create_issue",
+      "expect": "update",
+      "source": "linear"
+    },
+    {
+      "name": "linear_update_issue",
+      "expect": "update",
+      "source": "linear"
+    },
+    {
+      "name": "linear_search_issues",
+      "expect": "update",
+      "source": "linear"
+    },
+    {
+      "name": "create_project",
+      "expect": "update",
+      "source": "linear"
+    },
+    {
+      "name": "update_cycle",
+      "expect": "update",
+      "source": "linear"
+    },
+    {
+      "name": "jira_create_issue",
+      "expect": "update",
+      "source": "linear"
+    },
+    {
+      "name": "jira_transition_issue",
+      "expect": "update",
+      "source": "linear"
+    },
+    {
+      "name": "jira_get_issue",
+      "expect": "update",
+      "source": "linear"
+    },
+    {
+      "name": "asana_create_task",
+      "expect": "update",
+      "source": "linear"
+    },
+    {
+      "name": "asana_update_task",
+      "expect": "update",
+      "source": "linear"
+    },
+    {
+      "name": "trello_move_card",
+      "expect": "update",
+      "source": "linear"
+    },
+    {
+      "name": "trello_create_card",
+      "expect": "update",
+      "source": "linear"
+    },
+    {
+      "name": "linear_add_comment",
+      "expect": "send",
+      "source": "linear"
+    },
+    {
+      "name": "jira_add_comment",
+      "expect": "send",
+      "source": "linear"
+    },
+    {
+      "name": "asana_post_comment_on_task",
+      "expect": "send",
+      "source": "linear"
+    },
+    {
+      "name": "linear_delete_issue",
+      "expect": "delete",
+      "source": "linear"
+    },
+    {
+      "name": "jira_delete_issue",
+      "expect": "delete",
+      "source": "linear"
+    },
+    {
+      "name": "asana_delete_task",
+      "expect": "delete",
+      "source": "linear"
+    },
+    {
+      "name": "trello_archive_card",
+      "expect": "delete",
+      "source": "linear"
+    },
+    {
+      "name": "remove_attachment",
+      "expect": "delete",
+      "source": "linear"
+    },
+    {
+      "name": "jira_update_project_permissions",
+      "expect": "admin",
+      "source": "linear"
+    },
+    {
+      "name": "linear_update_team_settings",
+      "expect": "admin",
+      "source": "linear"
+    },
+    {
+      "name": "asana_remove_workspace_admin",
+      "expect": "admin",
+      "source": "linear"
+    },
+    {
+      "name": "twilio_send_sms",
+      "expect": "send",
+      "source": "crm"
+    },
+    {
+      "name": "send_whatsapp_message",
+      "expect": "send",
+      "source": "crm"
+    },
+    {
+      "name": "discord_send_message",
+      "expect": "send",
+      "source": "crm"
+    },
+    {
+      "name": "teams_post_channel_message",
+      "expect": "send",
+      "source": "crm"
+    },
+    {
+      "name": "intercom_reply_to_conversation",
+      "expect": "send",
+      "source": "crm"
+    },
+    {
+      "name": "zendesk_respond_to_ticket",
+      "expect": "send",
+      "source": "crm"
+    },
+    {
+      "name": "mailchimp_send_campaign",
+      "expect": "send",
+      "source": "crm"
+    },
+    {
+      "name": "broadcast_announcement",
+      "expect": "send",
+      "source": "crm"
+    },
+    {
+      "name": "send_push_notification",
+      "expect": "send",
+      "source": "crm"
+    },
+    {
+      "name": "hubspot_create_contact",
+      "expect": "update",
+      "source": "crm"
+    },
+    {
+      "name": "hubspot_update_deal",
+      "expect": "update",
+      "source": "crm"
+    },
+    {
+      "name": "salesforce_query_records",
+      "expect": "update",
+      "source": "crm"
+    },
+    {
+      "name": "salesforce_update_record",
+      "expect": "update",
+      "source": "crm"
+    },
+    {
+      "name": "zendesk_create_ticket",
+      "expect": "update",
+      "source": "crm"
+    },
+    {
+      "name": "list_contacts",
+      "expect": "update",
+      "source": "crm"
+    },
+    {
+      "name": "shopify_update_product",
+      "expect": "update",
+      "source": "crm"
+    },
+    {
+      "name": "shopify_list_orders",
+      "expect": "update",
+      "source": "crm"
+    },
+    {
+      "name": "airtable_create_records",
+      "expect": "update",
+      "source": "crm"
+    },
+    {
+      "name": "airtable_update_records",
+      "expect": "update",
+      "source": "crm"
+    },
+    {
+      "name": "hubspot_delete_contact",
+      "expect": "delete",
+      "source": "crm"
+    },
+    {
+      "name": "salesforce_delete_record",
+      "expect": "delete",
+      "source": "crm"
+    },
+    {
+      "name": "airtable_delete_records",
+      "expect": "delete",
+      "source": "crm"
+    },
+    {
+      "name": "shopify_delete_product",
+      "expect": "delete",
+      "source": "crm"
+    },
+    {
+      "name": "mailchimp_remove_subscriber",
+      "expect": "delete",
+      "source": "crm"
+    },
+    {
+      "name": "discord_delete_channel",
+      "expect": "delete",
+      "source": "crm"
+    },
+    {
+      "name": "shopify_refund_order",
+      "expect": "pay",
+      "source": "crm"
+    },
+    {
+      "name": "shopify_create_order_purchase",
+      "expect": "pay",
+      "source": "crm"
+    },
+    {
+      "name": "paypal_create_payout",
+      "expect": "pay",
+      "source": "crm"
+    },
+    {
+      "name": "square_create_payment",
+      "expect": "pay",
+      "source": "crm"
+    },
+    {
+      "name": "issue_refund",
+      "expect": "pay",
+      "source": "crm"
+    },
+    {
+      "name": "withdraw_funds",
+      "expect": "pay",
+      "source": "crm"
+    },
+    {
+      "name": "discord_ban_member",
+      "expect": "admin",
+      "source": "crm"
+    },
+    {
+      "name": "shopify_update_staff_permissions",
+      "expect": "admin",
+      "source": "crm"
+    },
+    {
+      "name": "hubspot_update_user_role",
+      "expect": "admin",
+      "source": "crm"
+    },
+    {
+      "name": "zendesk_suspend_user",
+      "expect": "admin",
+      "source": "crm"
+    },
+    {
+      "name": "deactivate_account",
+      "expect": "admin",
+      "source": "crm"
+    },
+    {
+      "name": "hubspot_export_contacts",
+      "expect": "export",
+      "source": "crm"
+    },
+    {
+      "name": "salesforce_bulk_extract",
+      "expect": "export",
+      "source": "crm"
+    },
+    {
+      "name": "shopify_export_orders",
+      "expect": "export",
+      "source": "crm"
+    },
+    {
+      "name": "dropbox_create_shared_link",
+      "expect": "share",
+      "source": "crm"
+    },
+    {
+      "name": "box_share_folder",
+      "expect": "share",
+      "source": "crm"
+    }
+  ]
+}

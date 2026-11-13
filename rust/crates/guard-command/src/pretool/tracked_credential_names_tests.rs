@@ -10,7 +10,7 @@ const CATALOG_TEXT: &str =
 
 /// A home with one repository under the build tree, which the location
 /// screens accept as an ordinary workspace.
-fn fixture() -> (PathBuf, PathBuf) {
+pub(super) fn fixture() -> (PathBuf, PathBuf) {
     let nonce = FIXTURE_COUNTER.fetch_add(1, Ordering::Relaxed);
     let root = Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../target")
@@ -34,7 +34,7 @@ fn write(path: &Path, contents: &str) {
 }
 
 /// A version 2 index at `git_dir` listing `names`, as `git add` writes it.
-fn write_index(git_dir: &Path, names: &[&str]) {
+pub(super) fn write_index(git_dir: &Path, names: &[&str]) {
     let mut bytes = b"DIRC".to_vec();
     bytes.extend_from_slice(&2_u32.to_be_bytes());
     bytes.extend_from_slice(&(names.len() as u32).to_be_bytes());
@@ -186,6 +186,59 @@ fn a_tracked_file_holding_a_credential_keeps_review() {
 }
 
 #[test]
+fn a_tracked_document_under_a_feature_directory_is_proven() {
+    let (_, project) = fixture();
+    // `auth-evidence` names a feature, as `auth-service` does. A store
+    // directory such as `secrets/` or `api-tokens/` keeps the review.
+    let feature = "docs/auth-evidence/phase-e-auth-schema.md";
+    let stores = [
+        "docs/secrets/auth-notes.md",
+        "docs/api-tokens/auth-notes.md",
+    ];
+    for name in [feature].iter().chain(&stores) {
+        write(&project.join(name), "# Phase E schema\n");
+    }
+    let mut names = vec![feature];
+    names.extend(stores);
+    write_index(&project.join(".git"), &names);
+    assert!(guard_secure_fs::credential_named_path(
+        &project.join(feature)
+    ));
+    assert!(!unproven(&project.join(feature), cwd(&project)));
+    for name in stores {
+        assert!(unproven(&project.join(name), cwd(&project)), "{name}");
+    }
+}
+
+/// A recursive search reaches tracked files through the walk's own proof,
+/// not through [`committed_document`], so that proof refuses a `Secret`
+/// manifest and a repository kept inside a store directory on its own.
+#[test]
+fn the_walk_proof_refuses_secret_manifests_and_store_repositories() {
+    let (home, project) = fixture();
+    let feature = "docs/auth-evidence/phase-e-auth-schema.md";
+    let manifest = "docs/auth-evidence/app-secrets.yaml";
+    write(&project.join(feature), "# Phase E schema\n");
+    write(
+        &project.join(manifest),
+        "apiVersion: v1\nkind: Secret\nmetadata:\n  name: app\n",
+    );
+    write_index(&project.join(".git"), &[feature, manifest]);
+    assert!(TrackedFiles::default().non_secret(&project.join(feature)));
+    assert!(!TrackedFiles::default().non_secret(&project.join(manifest)));
+    assert_eq!(
+        TrackedFiles::default().classify(&project.join(manifest)),
+        super::super::Tracked::SecretManifest
+    );
+    // The same tracked document in a checkout below `.config`.
+    let dotfiles = home.join(".config/tools");
+    std::fs::create_dir_all(dotfiles.join(".git")).unwrap();
+    write(&dotfiles.join(feature), "# Phase E schema\n");
+    write_index(&dotfiles.join(".git"), &[feature]);
+    assert!(!TrackedFiles::default().non_secret(&dotfiles.join(feature)));
+}
+
+#[test]
 fn another_repository_beside_the_workspace_is_not_proven() {
     let (home, project) = fixture();
     let other = home.join("other");
@@ -235,6 +288,10 @@ fn a_linked_worktree_of_the_same_repository_is_proven() {
     assert!(!unproven(&file, cwd(&project)));
 }
 
+#[cfg(test)]
+#[path = "tracked_secret_manifest_walk_tests.rs"]
+mod secret_manifest_walk;
+
 #[cfg(unix)]
 const ORDINARY: &str = "contributions/extensions/command.kubectl-get.json";
 #[cfg(unix)]
@@ -260,7 +317,11 @@ fn hook_fixture() -> (PathBuf, PathBuf) {
 }
 
 #[cfg(unix)]
-fn hook(tool: serde_json::Value, home: &Path, project: &Path) -> guard_contracts::PreToolResultV1 {
+pub(super) fn hook(
+    tool: serde_json::Value,
+    home: &Path,
+    project: &Path,
+) -> guard_contracts::PreToolResultV1 {
     let controls = crate::pretool::workspace_contained_tests::controls();
     crate::pretool::evaluate_pre_tool_envelope_with_context(
         "claude-code",
@@ -286,7 +347,7 @@ fn edit(path: &Path) -> serde_json::Value {
 }
 
 #[cfg(unix)]
-fn bash(command: &str) -> serde_json::Value {
+pub(super) fn bash(command: &str) -> serde_json::Value {
     serde_json::json!({"tool_name": "Bash", "tool_input": {"command": command}})
 }
 

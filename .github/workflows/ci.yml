@@ -157,7 +157,9 @@ jobs:
   native-workspace:
     name: Rust workspace (${{ matrix.check }})
     runs-on: ubuntu-24.04
-    timeout-minutes: 15
+    # A change to guard-command misses the runtime test archive, and the cold
+    # optimized runtime build alone takes about twelve minutes.
+    timeout-minutes: 20
     # Required main consumers are the archive producers. Only the two runtime
     # shards share an archive; core/command and PR/Clippy work stay independent.
     concurrency:

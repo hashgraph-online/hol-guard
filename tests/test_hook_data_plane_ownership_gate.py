@@ -60,7 +60,7 @@ def test_changed_path_gate_maps_live_cli_hook_support(monkeypatch: pytest.Monkey
 
 
 def test_changed_path_gate_maps_every_production_adapter(monkeypatch: pytest.MonkeyPatch) -> None:
-    path = "src/codex_plugin_scanner/guard/adapters/antigravity.py"
+    path = "src/codex_plugin_scanner/guard/adapters/native_harness.py"
     monkeypatch.setattr(MODULE, "_changed_files", lambda _base_ref: (path,))
 
     changed = MODULE._changed_path_gate(MODULE._manifest(), "base")

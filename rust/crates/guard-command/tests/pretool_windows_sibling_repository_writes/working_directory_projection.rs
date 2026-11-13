@@ -76,6 +76,7 @@ fn action(session: &Session, command: &str, spell: fn(&Path) -> String) -> Strin
         Some(&controls),
         None,
         guard_command::pretool::PathContext {
+            literal_words: &[],
             home_dir: Some(&home),
             cwd: Some(&cwd),
             cdpath_unset: false,
@@ -87,6 +88,7 @@ fn action(session: &Session, command: &str, spell: fn(&Path) -> String) -> Strin
             ripgrep_config_absent: false,
             gem_config_absent: false,
             http_config_absent: false,
+            openssl_config_absent: false,
             psql_environment: Default::default(),
             creates_nothing: false,
         },

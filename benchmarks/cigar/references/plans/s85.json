@@ -1,0 +1,113 @@
+{
+ "repo": "click",
+ "seed": 85,
+ "steps": [
+  {
+   "doc": {
+    "module": "click.core",
+    "path": "src/click/core.py",
+    "qual": "augment_usage_errors"
+   },
+   "kind": "doc",
+   "prompt": "Add a short usage example to the docstring of `augment_usage_errors` in src/click/core.py, written as a doctest (`>>>` lines with their expected output). Make sure the example actually passes."
+  },
+  {
+   "kind": "rename",
+   "prompt": "Rename the internal helper `_check_iter` to `_check_iter_impl` everywhere in the project, including tests. Behavior must not change.",
+   "rename": {
+    "count": 4,
+    "files": [
+     "src/click/core.py"
+    ],
+    "new": "_check_iter_impl",
+    "old": "_check_iter",
+    "path": "src/click/core.py"
+   }
+  },
+  {
+   "kind": "question",
+   "prompt": "Question, no code changes: which function does this? \"Formats the usage line into a string and returns it.\" Reply with its file path and function name.",
+   "question": {
+    "name": "get_usage",
+    "path": "src/click/core.py",
+    "qual": "Command.get_usage",
+    "sentence": "Formats the usage line into a string and returns it."
+   }
+  },
+  {
+   "kind": "bug",
+   "prompt": "Something in `HelpFormatter.write_usage` broke recently and its tests fail now. Track it down and fix it. Leave the tests alone.",
+   "setup": [
+    {
+     "failing": [
+      "tests/test_basic.py::test_basic_group",
+      "tests/test_basic.py::test_summary_line",
+      "tests/test_commands.py::test_auto_shorthelp",
+      "tests/test_formatting.py::test_removing_multiline_marker",
+      "tests/test_formatting.py::test_wrapping_long_command_name",
+      "tests/test_shell_completion.py::test_full_complete[fish-env4-plain,a\\nplain,b\\tbee\\n]",
+      "tests/test_shell_completion.py::test_full_complete[fish-env5-plain,b\\tbee\\n]",
+      "tests/test_shell_completion.py::test_full_complete[zsh-env2-plain\\na\\n_\\nplain\\nb\\nbee\\n]",
+      "tests/test_shell_completion.py::test_full_complete[zsh-env3-plain\\nb\\nbee\\n]",
+      "tests/test_utils.py::test_make_default_short_help[-equal",
+      "tests/test_utils.py::test_make_default_short_help[-ignore",
+      "tests/test_utils.py::test_make_default_short_help[-length",
+      "tests/test_utils.py::test_make_default_short_help[-paragraph",
+      "tests/test_utils.py::test_make_default_short_help[-sentence",
+      "tests/test_utils.py::test_make_default_short_help[-truncate]",
+      "tests/test_utils.py::test_make_default_short_help[no-wrap"
+     ],
+     "line": 176,
+     "new": "            indent = \" \" // (max(self.current_indent, term_len(prefix)) + 4)\n",
+     "orig": "            indent = \" \" * (max(self.current_indent, term_len(prefix)) + 4)\n",
+     "path": "src/click/formatting.py",
+     "qual": "HelpFormatter.write_usage"
+    }
+   ]
+  },
+  {
+   "kind": "bug2",
+   "prompt": "The last commit broke several tests in different places. Find every root cause in the library code and fix them all without changing the tests.",
+   "setup": [
+    {
+     "failing": [
+      "tests/test_utils.py::test_confirm_repeat"
+     ],
+     "line": 240,
+     "new": "        elif default is not None or value == \"\":\n",
+     "orig": "        elif default is not None and value == \"\":\n",
+     "path": "src/click/termui.py",
+     "qual": "confirm"
+    },
+    {
+     "failing": [
+      "tests/test_basic.py::test_basic_group",
+      "tests/test_basic.py::test_summary_line",
+      "tests/test_commands.py::test_auto_shorthelp",
+      "tests/test_formatting.py::test_removing_multiline_marker",
+      "tests/test_shell_completion.py::test_full_complete[fish-env4-plain,a\\nplain,b\\tbee\\n]",
+      "tests/test_shell_completion.py::test_full_complete[fish-env5-plain,b\\tbee\\n]",
+      "tests/test_shell_completion.py::test_full_complete[zsh-env2-plain\\na\\n_\\nplain\\nb\\nbee\\n]",
+      "tests/test_shell_completion.py::test_full_complete[zsh-env3-plain\\nb\\nbee\\n]",
+      "tests/test_utils.py::test_make_default_short_help[-equal",
+      "tests/test_utils.py::test_make_default_short_help[-ignore",
+      "tests/test_utils.py::test_make_default_short_help[-length",
+      "tests/test_utils.py::test_make_default_short_help[-paragraph",
+      "tests/test_utils.py::test_make_default_short_help[-sentence",
+      "tests/test_utils.py::test_make_default_short_help[-truncate]",
+      "tests/test_utils.py::test_make_default_short_help[no-wrap"
+     ],
+     "line": 408,
+     "new": "    kwargs.setdefault(\"hide_input\", False)\n",
+     "orig": "    kwargs.setdefault(\"hide_input\", True)\n",
+     "path": "src/click/decorators.py",
+     "qual": "password_option"
+    }
+   ]
+  },
+  {
+   "kind": "review",
+   "prompt": "Review every change made in this session. Remove leftovers or duplication, match the style of the surrounding code, and make sure the full test suite passes."
+  }
+ ]
+}

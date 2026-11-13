@@ -38,6 +38,7 @@ fn git_query_uses_bounded_request_context_not_resident_path() {
             None,
             None,
             guard_command::pretool::PathContext {
+                literal_words: &[],
                 home_dir: home.to_str(),
                 cwd: repository.to_str(),
                 cdpath_unset: false,
@@ -49,6 +50,7 @@ fn git_query_uses_bounded_request_context_not_resident_path() {
                 ripgrep_config_absent: false,
                 gem_config_absent: false,
                 http_config_absent: false,
+                openssl_config_absent: false,
                 psql_environment: Default::default(),
                 creates_nothing: false,
             },
@@ -442,6 +444,7 @@ fn stamped_git_reads_allow_only_when_no_diff_helper_is_configured() {
             None,
             None,
             guard_command::pretool::PathContext {
+                literal_words: &[],
                 home_dir: home.to_str(),
                 cwd: repository.to_str(),
                 cdpath_unset: false,
@@ -453,6 +456,7 @@ fn stamped_git_reads_allow_only_when_no_diff_helper_is_configured() {
                 ripgrep_config_absent: false,
                 gem_config_absent: false,
                 http_config_absent: false,
+                openssl_config_absent: false,
                 psql_environment: Default::default(),
                 creates_nothing: false,
             },

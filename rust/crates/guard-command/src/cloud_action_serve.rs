@@ -4,16 +4,19 @@
 //! a host that installs the Guard wheel already has an evaluator.
 use std::io::{self, BufRead, Read, Write};
 
+use serde_json::Value;
+
 use crate::cloud_action::{error_result, CloudActionEvaluator};
 use crate::cloud_action_activation::parse_public_key;
 use crate::cloud_action_binding::load_binding_set;
+use crate::cloud_action_inspect::{inspect, inspect_error};
 
 const MAX_LINE_BYTES: usize = 4 * 1024 * 1024;
 const MAX_BINDING_SET_BYTES: u64 = 16 * 1024 * 1024;
 const BINDING_SET_ENV: &str = "GUARD_CLOUD_ACTION_BINDING_SET";
 const ACTIVATION_KEY_ENV: &str = "GUARD_CLOUD_ACTION_ACTIVATION_PUBLIC_KEY";
 
-enum Line {
+pub(crate) enum Line {
     End,
     Request,
     Oversize,
@@ -23,7 +26,25 @@ enum Line {
 /// process exit code: 0 after a clean run, 2 when startup input is bad, in
 /// which case nothing is read or answered. `program` prefixes the startup
 /// error on stderr.
+///
+/// `inspect` as the first argument serves content inspection instead: it is
+/// stateless, so it takes no binding set and no flags. `pack` serves the
+/// cloud action pack tools (see [`crate::cloud_pack_cli`]), stateless too.
 pub fn serve(program: &str, args: &[String]) -> i32 {
+    if let [command, rest @ ..] = args {
+        if command == "inspect" || command == "pack" {
+            if !rest.is_empty() {
+                eprintln!("{program}: usage");
+                return 2;
+            }
+            if command == "inspect" {
+                answer_lines(inspect, |code| inspect_error(None, code));
+            } else {
+                crate::cloud_pack_cli::serve_lines();
+            }
+            return 0;
+        }
+    }
     let evaluator = match startup(args) {
         Ok(evaluator) => evaluator,
         Err(code) => {
@@ -31,14 +52,22 @@ pub fn serve(program: &str, args: &[String]) -> i32 {
             return 2;
         }
     };
+    answer_lines(
+        |bytes| evaluator.evaluate(bytes),
+        |code| error_result(None, code),
+    );
+    0
+}
+
+fn answer_lines(answer: impl Fn(&[u8]) -> Value, refuse: impl Fn(&str) -> Value) {
     let mut input = io::stdin().lock();
     let mut output = io::stdout().lock();
     loop {
         let mut bytes = Vec::new();
         let response = match read_line(&mut input, &mut bytes) {
             Ok(Line::End) | Err(_) => break,
-            Ok(Line::Request) => evaluator.evaluate(&bytes),
-            Ok(Line::Oversize) => error_result(None, "limit"),
+            Ok(Line::Request) => answer(&bytes),
+            Ok(Line::Oversize) => refuse("limit"),
         };
         if serde_json::to_writer(&mut output, &response).is_err()
             || writeln!(output).is_err()
@@ -47,7 +76,6 @@ pub fn serve(program: &str, args: &[String]) -> i32 {
             break;
         }
     }
-    0
 }
 
 /// `--binding-set <path>` and `--activation-public-key <hex>`, each falling
@@ -83,7 +111,7 @@ fn startup(args: &[String]) -> Result<CloudActionEvaluator, &'static str> {
 
 /// One request line, capped at [`MAX_LINE_BYTES`]. The rest of an oversize
 /// line is discarded unread so the next request starts on a line boundary.
-fn read_line(input: &mut impl BufRead, bytes: &mut Vec<u8>) -> io::Result<Line> {
+pub(crate) fn read_line(input: &mut impl BufRead, bytes: &mut Vec<u8>) -> io::Result<Line> {
     let read = Read::take(&mut *input, MAX_LINE_BYTES as u64 + 1).read_until(b'\n', bytes)?;
     if read == 0 {
         return Ok(Line::End);

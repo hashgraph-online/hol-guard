@@ -1,0 +1,176 @@
+# Cloud Action Packs
+
+A cloud action pack describes one provider's hosted actions as data. It says which hosts requests may reach, how
+the provider signs in, and for each action: the exact request, the arguments a caller may set and their bounds, the
+facts Guard derives from those arguments, the response fields that come back, and the limits a host must enforce.
+
+Packs live in `contributions/cloud-actions/`. The schema is
+[`contracts/extensions/cloud-action-pack.v1.schema.json`](../../contracts/extensions/cloud-action-pack.v1.schema.json)
+(`guard.cloud-action-pack.v1`). The Rust tooling in `guard-command` validates, tests, compiles, renders and diffs
+them. Nothing in it sends a request.
+
+## What a pack cannot say
+
+The language is small on purpose, so a pack from a third party can be reviewed as data:
+
+- No expressions, scripts or loops. A body is built from constants, whole arguments, one bounded copy of an
+  array argument (`each`), one field named by an argument (`keyed`), and the `rfc822` mail template described
+  below.
+- No URL outside the declared `hosts`. The scheme is always `https`, the host is fixed per action, and an argument
+  can fill only whole path segments.
+- No credential headers. Header names are lowercase constants. Names containing `auth`, `cookie`, `token`,
+  `secret`, `key`, `session`, `password` or `credential`, and framing headers such as `host`, `content-length`,
+  `forwarded`, `proxy-*` and `x-forwarded-*`, are refused. `content-type` is refused too, because rendering
+  always sets it for the JSON body. The host adds the credential and the `user-agent`.
+- No unbounded input. Every string has a `maxLength`, every integer a range, every array an item limit. Patterns
+  must start with `^` and end with `$`, compile on the linear-time `regex` engine within 1 MiB, and are matched
+  against the whole value, so an alternation such as `^a|b$` cannot match a value that only starts with `a`.
+- No effect weaker than the facts. An action whose fact class is `send` cannot declare `effect: read`.
+
+## Facts
+
+Each action names a fact class and may add extractors for object, reversibility, scope, counts, audience,
+recipient domains, environment and sensitivity. An extractor is a constant, a boolean flag, the length of an array
+argument, a bounded integer argument, or the domains of address arguments. Extraction is total: a value that is
+missing, malformed or out of range becomes `unknown`, never a guess. The facts feed the version 2 evaluator in
+[Cloud Action Evaluator](cloud-action-evaluator.md).
+
+## Mail messages
+
+Mail APIs such as Gmail take a whole encoded message rather than separate recipient fields. Passing a caller's
+message through would let it name recipients Guard never saw, so a pack builds the message with the `rfc822`
+template instead:
+
+```json
+{"rfc822": {"to": "to", "cc": "cc", "bcc": "bcc", "subject": "subject", "text": "text"}}
+```
+
+Each value names an argument. `to` must be a required array with at least one item, `cc` and `bcc` are optional
+arrays, and `subject` and `text` are strings. Every recipient must be a bare `local@domain` address: a display
+name, a second address or a line break refuses the call. The subject is always RFC 2047 encoded and the text is
+always base64, so neither can add a header. Rendering writes `To`, `Cc` and `Bcc` from the arguments alone and
+base64url-encodes the message.
+
+An action that uses the template must read `recipientDomains` and `recipientCount` from exactly its recipient
+arguments, so the facts Guard decides on name every address the message goes to. The template cannot appear
+inside `each`.
+
+## Fields named by an argument
+
+Some providers name a field after the user's own data, such as a Notion database column. `keyed` writes a
+one-field object whose name is a string argument:
+
+```json
+{"keyed": {"key": "property", "value": {"object": [{"name": "select", "value": {"object": [{"name": "name", "value": {"arg": "option"}}]}}]}}}
+```
+
+The key argument must be required, carry a pattern, and allow at most 256 characters. The name is written as a
+JSON string, so it cannot add a sibling field. A call without the key is refused rather than rendered.
+
+## Rendering and projection
+
+Rendering checks every argument against its rule, then builds the request. Path segments and query values are
+percent-encoded. A path segment that is empty, `.` or `..` (including full-width and ideographic full stops) or
+that contains a control character is refused, as is a query value with a control character. Bodies are JSON.
+
+Projection reads a response the host already received. It refuses a body over `response.maxBytes`, refuses
+duplicate keys, keeps only the declared fields, refuses a list longer than its `maxItems`, and labels fields that
+carry provider text (`untrusted: true`) so the caller can treat them as data, not instructions.
+
+An action whose provider answers success with no body (HTTP 204 for most deletes, workflow dispatches and secret
+writes) sets `response.emptyOk: true`; an empty body then projects as `{}`, so `exists` fields read `false`. Without
+it an empty body is `response_json_invalid`, which keeps a read that comes back empty from passing as an empty
+result. Turning `emptyOk` on is a widening change in `diff`. Size `maxBytes` for the largest response the provider
+can send back, including any argument it echoes: GitHub returns the full issue or pull request body, so those
+actions allow 512 KiB.
+
+## Fixtures
+
+Every action in a source pack carries at least one `safe` and one `risky` fixture. A fixture states the arguments
+and what must happen: the error code, the facts, the exact rendered request, or the projection of a recorded
+response. Compilation runs the fixtures and stops on any failure.
+
+A fixture may also name the decision each shipped preset reaches for its call, as
+`expect.decisions: {"relaxed": ..., "balanced": ..., "strict": ...}`. The fixture runner evaluates the extracted
+facts against each named preset with the action's declared effect, a clean session and empty windows, and fails on
+any difference. See [Cloud policy presets](cloud-policy-presets.md).
+
+## Artifacts and digests
+
+`compile` validates the pack, runs its fixtures, strips them, and returns a
+`guard.cloud-action-pack-artifact.v1` artifact with three SHA-256 digests over canonical JSON:
+
+- `packDigest`: the whole compiled pack.
+- `factsProgramDigest`: each action's id, fact extractors and effect, so a change to what Guard decides on is
+  visible apart from request or wording changes.
+- `artifactDigest`: everything else in the artifact: schema, compiler version, provider, the two digests above
+  and the compiled pack.
+
+Loading an artifact recomputes all three and refuses any mismatch, so an artifact whose content no longer matches
+its digests does not load. Key order does not change a digest.
+
+The digests are not keyed, so they do not authenticate an artifact: anyone who edits a pack can recompute all three.
+A host must compare `artifactDigest` with a pin it trusts independently, such as a signed catalog entry, before it
+activates an artifact.
+
+## Widening
+
+`diff` compares two packs or artifacts for the same provider and lists each change with a code. A change is
+widening when it lets a pack do more than before: a new host, scope or action, a looser argument, a weaker effect,
+a dropped capability, a new response field, a removed untrusted label, looser limits, a changed executor or
+link, or any changed fact extractor. Any edit to a pattern or forbidden rule counts as widening, because whether a new pattern accepts less
+cannot be decided in general. A widening pack version needs fresh review.
+
+## Running the tools
+
+```
+guard-cloud-action pack
+hol-guard-runtime cloud-action pack
+```
+
+Both read one JSON request per line on standard input and write one JSON result per line:
+
+| `op` | Input | Result |
+|---|---|---|
+| `validate` | `pack` | `actions` count |
+| `test` | `pack` | fixture `report` |
+| `compile` | `pack` | `artifact` |
+| `diff` | `old`, `new` (pack or artifact) | `diff` |
+| `render` | `pack` or `artifact`, `actionId`, `arguments` | `request` |
+| `extract` | `pack` or `artifact`, `actionId`, `arguments` | `facts` |
+| `project` | `pack` or `artifact`, `actionId`, `response` | `projection` |
+| `policy` | `preset` name or `policyPack` | `preset`, `packDigest`, `factRules`, `unclassified` |
+| `classify` | `name`, optional `inputSchema`, optional `preset` or `policyPack` | `proposal`, and `action` when a preset is named |
+
+A result is `{"ok": true, ...}` or `{"ok": false, "error": {"code": ..., "pointer" | "argument": ...}}`.
+
+## Shipped packs
+
+`github.json`, `notion.json` and `slack.json` cover Slack channel reads, posting, editing and deleting messages,
+reactions, pins and channel topics, file deletes, channel archive and restore, and inviting, sharing with and removing
+members; GitHub issues, comments and labels, pull requests, reviews and merges, branch deletes and force updates,
+repository archive, visibility and delete, release deletes, Actions secrets and workflow runs, and collaborators; and
+Notion blocks, pages and their properties, page archive and restore, block deletes, database queries and creation, and
+database column removal and type changes. A pull request review can comment or request changes but never approve. The
+actions that match an existing hosted tool link to its name; the others have no hosted tool yet. `gmail.json`,
+`drive.json` and `calendar.json` cover Google Workspace: reading, drafting and sending mail, archiving, trashing and
+deleting messages, mail forwarding and filters, file search, export, sharing with a person, a domain or anyone with
+the link, trash and permanent delete, and calendar events with and without guests. Their actions link to the matching
+Google Workspace command permissions. Known limits of the format, compared with hand-written adapters:
+
+- An argument cannot be normalized before use (for example, removing dashes from an id). The pattern accepts only
+  the canonical form.
+- Paging values that a provider returns in a response header (such as a `Link` header) cannot be projected.
+- A list longer than its `maxItems` is refused rather than truncated.
+- Responses are projected from JSON only. Drive export therefore uses the `files/{id}/download` operation, whose
+  JSON result carries a download link, rather than `files/{id}/export`, which returns the file bytes. When the
+  export is still running, `drive.operations.get` reads the same operation until it carries the link.
+- A Drive file id does not say whether it names a folder, and trashing or deleting a folder takes everything
+  inside it. Drive trash, restore and delete therefore leave the scope and record count unknown, and Guard
+  treats them as it treats any action of unknown size.
+- A Calendar event delete is permanent whether or not guests are told: the quiet delete and the cancellation
+  differ only in the notice. A rename and a reschedule are separate actions because an object field is always
+  written, so one action cannot leave the event times unchanged when only the title changes.
+- `gmail.messages.modify` changes user labels and the star, importance and unread marks only. Archive, trash
+  and spam have their own actions with their own facts.
+- A secret pasted into an argument is not a fact. Guard's inspection finds it at call time, not the pack.

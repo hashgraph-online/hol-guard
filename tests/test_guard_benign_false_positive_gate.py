@@ -72,6 +72,8 @@ _FIXED_TOOLS = {
     "ls": "ls",
     # Claude Code's built-in question prompt reaches Guard only after the user answers.
     "ask_user_question": "AskUserQuestion",
+    # A web fetch reaches Guard as its own tool; only the URL decides it.
+    "web_fetch": "WebFetch",
 }
 # A pending marker names the open work that owns the case. "unassigned" still
 # prompts and has no owner yet. A merged PR is never a marker: once its fix
@@ -204,11 +206,12 @@ def gate_environment(tmp_path_factory: pytest.TempPathFactory) -> Iterator[tuple
     # NPM_CONFIG_*, NODE_*, PIP_* and CARGO_* are the same shape: a CI runner or
     # a developer shell that exports one makes npm, pip or cargo read a
     # redirected configuration, which keeps their probes on review no matter
-    # what the case says.
+    # what the case says. OPENSSL_* points openssl at another configuration,
+    # module or engine directory, which keeps the digest cases on review.
     for name in list(os.environ):
         upper = name.upper()
         if (
-            upper.startswith(("GIT_", "LD_", "DYLD_", "NPM_CONFIG_", "NODE_", "PIP_", "CARGO_"))
+            upper.startswith(("GIT_", "LD_", "DYLD_", "NPM_CONFIG_", "NODE_", "PIP_", "CARGO_", "OPENSSL_"))
             or upper == "RIPGREP_CONFIG_PATH"
         ):
             patch.delenv(name)

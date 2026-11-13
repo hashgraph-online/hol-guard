@@ -46,11 +46,42 @@ pub mod cloud_action;
 pub mod cloud_action_activation;
 pub mod cloud_action_binding;
 pub mod cloud_action_canonical;
+pub mod cloud_action_classifier;
+pub mod cloud_action_inspect;
+mod cloud_action_inspect_pii;
+#[cfg(test)]
+mod cloud_action_inspect_tests;
 pub mod cloud_action_policy;
 pub mod cloud_action_serve;
 #[cfg(test)]
 mod cloud_action_tests;
+pub mod cloud_action_v2;
+pub mod cloud_action_v2_consent;
 pub mod cloud_catalog;
+pub mod cloud_pack;
+pub mod cloud_pack_artifact;
+pub mod cloud_pack_cli;
+#[cfg(test)]
+mod cloud_pack_corpus_tests;
+pub mod cloud_pack_diff;
+pub mod cloud_pack_facts;
+pub mod cloud_pack_fixtures;
+#[cfg(test)]
+mod cloud_pack_keyed_tests;
+pub mod cloud_pack_mail;
+#[cfg(test)]
+mod cloud_pack_mail_tests;
+pub mod cloud_pack_pattern;
+pub mod cloud_pack_request;
+pub mod cloud_pack_response;
+#[cfg(test)]
+mod cloud_pack_review_tests;
+#[cfg(test)]
+mod cloud_pack_tests;
+pub mod cloud_pack_validate;
+mod cloud_pack_validate_facts;
+mod cloud_pack_validate_request;
+pub mod cloud_policy_pack;
 pub mod cloud_scrub;
 mod cloud_scrub_shell;
 mod cloud_scrub_source_search;

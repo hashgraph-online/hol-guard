@@ -10,6 +10,7 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.guard.adapters.pi_extension_source import managed_extension_source
+from tests.pi_continuation_support import WATCH_POSTURE_STUB
 
 FOUND = "HOL Guard CIGAR found code in this project that matches this request."
 
@@ -75,7 +76,7 @@ def run_handlers(tmp_path: Path, harness: str, steps: str, timeout_ms: int = 425
     input_end = source.index('  pi.on("tool_call",', input_start)
     script = (
         PRELUDE.replace("FOUND_TEXT", json.dumps(FOUND)).replace("TIMEOUT_VALUE", str(timeout_ms))
-        + source[cache_start:cache_end]
+        + WATCH_POSTURE_STUB + source[cache_start:cache_end]
         + source[input_start:input_end]
         + steps
     )

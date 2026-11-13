@@ -93,10 +93,12 @@ def _grok_hooks_are_current(context: HarnessContext) -> bool:
         return False
     if hook_config.get("frozen_launcher") and isolated_cursor_hook_python() is not None:
         from ..adapters.bounded_cli_hook_bridge import _FROZEN_BRIDGE_COMMAND
+        from ..adapters.bounded_cli_hook_native import native_bridge_executable
 
         argv = _split_hook_command(command, posix=True) or _split_hook_command(command, posix=False)
-        if _FROZEN_BRIDGE_COMMAND in argv:
-            # Plain frozen bridge: migrate to the lightweight client. Desktop proxies are preferred by the installer.
+        if _FROZEN_BRIDGE_COMMAND in argv and native_bridge_executable("grok", guard_home=context.guard_home):
+            # Plain frozen bridge: migrate to the lightweight client the runtime
+            # wraps. Desktop proxies are preferred by the installer.
             return False
     executable = hook_config.get("python_executable")
     cli_args = hook_config.get("cli_args")
@@ -150,7 +152,9 @@ def _isolated_bounded_hook_is_current(command: str, *, context: HarnessContext) 
     if not is_grok_hook_command(command, context=context):
         return False
     argv = _isolated_client_argv(command)
-    if argv is None:
+    if argv is None or not _runtime_wraps_client(command):
+        # A bare client fails every deciding hook closed and never looks for
+        # a runtime, so repair re-registers it.
         return False
     try:
         if Path(argv[0]).resolve() != Path(interpreter).resolve():
@@ -176,6 +180,16 @@ def _isolated_client_argv(command: str) -> list[str] | None:
         if len(argv) in {3, 4} and argv[1] == "-I":
             return argv
     return None
+
+
+def _runtime_wraps_client(command: str) -> bool:
+    from ..adapters.bounded_cli_hook_native import NATIVE_BOUNDED_HOOK_COMMAND
+
+    for posix in (True, False):
+        argv = _split_hook_command(command, posix=posix)
+        if len(argv) > 2 and argv[1] == NATIVE_BOUNDED_HOOK_COMMAND:
+            return True
+    return False
 
 
 def _hook_config_from_command(command: str) -> dict[str, object] | None:

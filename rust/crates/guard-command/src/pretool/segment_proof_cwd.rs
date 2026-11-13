@@ -364,6 +364,7 @@ pub(in crate::pretool) fn exact_safe_cwd_compound(
             &operation.segments[0],
             false,
             crate::pretool::PathContext {
+                literal_words: &[],
                 home_dir: context.home_dir,
                 cdpath_unset: context.cdpath_unset,
                 rustup_override_absent: context.rustup_override_absent,
@@ -374,6 +375,7 @@ pub(in crate::pretool) fn exact_safe_cwd_compound(
                 ripgrep_config_absent: context.ripgrep_config_absent,
                 gem_config_absent: context.gem_config_absent,
                 http_config_absent: context.http_config_absent,
+                openssl_config_absent: context.openssl_config_absent,
                 psql_environment: context.psql_environment,
                 cwd: Some(&cwd),
                 creates_nothing: false,
@@ -387,6 +389,7 @@ pub(in crate::pretool) fn exact_safe_cwd_compound(
                 segment,
                 allow_git_helper_context,
                 crate::pretool::PathContext {
+                    literal_words: &[],
                     home_dir: context.home_dir,
                     cdpath_unset: context.cdpath_unset,
                     rustup_override_absent: context.rustup_override_absent,
@@ -397,9 +400,10 @@ pub(in crate::pretool) fn exact_safe_cwd_compound(
                     ripgrep_config_absent: context.ripgrep_config_absent,
                     gem_config_absent: context.gem_config_absent,
                     http_config_absent: context.http_config_absent,
+                    openssl_config_absent: context.openssl_config_absent,
                     psql_environment: context.psql_environment,
                     cwd: Some(&cwd),
-                    creates_nothing: false,
+                    creates_nothing: context.creates_nothing,
                 },
             )
     })
@@ -469,7 +473,9 @@ fn cwd_effectful_executable(executable: Option<&str>) -> bool {
 /// name is missing here is refused for the name alone, so the spellings that
 /// read the way `grep` and `rg` do belong beside them.
 pub(in crate::pretool) fn cwd_read_executable(executable: Option<&str>) -> bool {
-    if executable.is_some_and(super::super::digest_reads::digest_program) {
+    if executable
+        .is_some_and(|name| super::super::digest_reads::digest_program(name) || name == "openssl")
+    {
         return true;
     }
     matches!(

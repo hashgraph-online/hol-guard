@@ -119,6 +119,29 @@ fn flag(fields: &Map<String, Value>, key: &str) -> Result<&'static str, &'static
     }
 }
 
+fn display_name_fragment(value: &str) -> String {
+    let mut escaped = String::with_capacity(value.len());
+    let mut chars = value.chars().peekable();
+    while let Some(character) = chars.next() {
+        match character {
+            '\\' => escaped.push_str("\\\\"),
+            '\'' => escaped.push_str("\\'"),
+            '"' => escaped.push_str("\\\""),
+            '`' => escaped.push_str("\\`"),
+            '$' if chars.peek() == Some(&'{') => escaped.push_str("\\$"),
+            '\n' => escaped.push_str("\\n"),
+            '\r' => escaped.push_str("\\r"),
+            '\t' => escaped.push_str("\\t"),
+            character if character.is_control() => {
+                use std::fmt::Write;
+                let _ = write!(escaped, "\\u{:04x}", character as u32);
+            }
+            character => escaped.push(character),
+        }
+    }
+    escaped
+}
+
 /// The text each placeholder becomes: JSON with Python's default spelling,
 /// `true`/`false` for flags, and the display name as written.
 fn placeholder_values(
@@ -134,7 +157,7 @@ fn placeholder_values(
         .and_then(Value::as_str)
         .ok_or(ERR_INVALID)?;
     let mut values = BTreeMap::from([
-        ("display_name", display_name.to_owned()),
+        ("display_name", display_name_fragment(display_name)),
         ("guard_args", json_text(strings(fields, "guard_args")?)?),
         ("guard_home", json_text(string(fields, "guard_home")?)?),
         ("home_dir", json_text(string(fields, "home_dir")?)?),

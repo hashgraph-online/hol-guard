@@ -216,6 +216,7 @@ fn read_only_github_predecessor_counts_as_benign_for_git_context() {
         benign_command_segments(
             &model,
             PathContext {
+                literal_words: &[],
                 home_dir: Some("/tmp"),
                 cwd: Some("/tmp"),
                 cdpath_unset: false,
@@ -227,6 +228,7 @@ fn read_only_github_predecessor_counts_as_benign_for_git_context() {
                 ripgrep_config_absent: false,
                 gem_config_absent: false,
                 http_config_absent: false,
+                openssl_config_absent: false,
                 psql_environment: Default::default(),
                 creates_nothing: false,
             },
@@ -599,7 +601,7 @@ fn reviews_date_mutations_and_unbounded_file_reads() {
         "cat //etc/passwd",
         "cat /proc//self/environ",
         "cat /var/../etc/passwd",
-        "head -n 10 README.md Cargo.toml",
+        "head -n 10 README.md .env",
         "ls /",
         "cat /root/secret",
         "cat /home/user/notes",

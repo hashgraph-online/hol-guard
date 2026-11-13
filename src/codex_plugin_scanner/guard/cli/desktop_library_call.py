@@ -107,6 +107,9 @@ def serve_lines(guard_home: Path, read_line: Callable[[], bytes], write: Callabl
 def serve_library_calls(guard_home: Path) -> int:
     """Answer the calls on stdin, one per line, until it closes."""
 
+    from ..runtime_health.background_diagnostics import install_sink, release_sink
+    from ..runtime_health.diagnostics import BackgroundLogWriter
+
     source = sys.stdin.buffer
     out = sys.stdout.buffer
 
@@ -114,7 +117,15 @@ def serve_library_calls(guard_home: Path) -> int:
         out.write(line)
         out.flush()
 
-    return serve_lines(guard_home, lambda: source.readline(_REQUEST_LIMIT_BYTES + 1), _write)
+    # The extension-control service and the catalog tick run in this process;
+    # their background failures reach daemon.log only through these sinks.
+    writer = BackgroundLogWriter(guard_home)
+    install_sink(writer.error, notice=writer.notice)
+    try:
+        return serve_lines(guard_home, lambda: source.readline(_REQUEST_LIMIT_BYTES + 1), _write)
+    finally:
+        release_sink(writer.error)
+        _ = writer.close()
 
 
 __all__ = ["answer_line", "run_library_call", "serve_library_calls", "serve_lines"]

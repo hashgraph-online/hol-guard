@@ -1,8 +1,7 @@
-"""The generated argv grammar of a Guard MCP proxy launch."""
+"""Environment keys a Guard MCP proxy launch never takes from server config."""
 
 from __future__ import annotations
 
-_NATIVE_RELAY_COMMAND = "mcp-relay"
 PROXY_LAUNCHER_ENV_KEYS = frozenset(
     {
         "PYTHONPATH",
@@ -18,19 +17,3 @@ PROXY_LAUNCHER_ENV_KEYS = frozenset(
         "HOL_GUARD_TEST_MODE",
     }
 )
-
-
-def proxy_argument_tail(args: tuple[str, ...], commands: frozenset[str]) -> tuple[str, tuple[str, ...]] | None:
-    if len(args) > 2 and args[0] == _NATIVE_RELAY_COMMAND:
-        # ``<runtime> mcp-relay <python> <proxy argv>`` carries the generated module argv unchanged.
-        relayed = args[2:]
-        if len(relayed) >= 4 and relayed[:3] == ("-m", "codex_plugin_scanner.cli", "guard") and relayed[3] in commands:
-            return relayed[3], relayed[4:]
-        return None
-    if args and args[0] in commands:
-        return args[0], args[1:]
-    if len(args) >= 2 and args[0] == "guard" and args[1] in commands:
-        return args[1], args[2:]
-    if len(args) >= 4 and args[:3] == ("-m", "codex_plugin_scanner.cli", "guard") and args[3] in commands:
-        return args[3], args[4:]
-    return None

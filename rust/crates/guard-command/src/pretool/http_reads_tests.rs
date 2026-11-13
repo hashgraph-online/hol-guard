@@ -15,6 +15,7 @@ fn proven_in(command: &str, home: &str) -> bool {
             home_dir: Some(home),
             shell_home_matches: true,
             http_config_absent: true,
+            openssl_config_absent: false,
             ..Default::default()
         },
     )
@@ -106,24 +107,28 @@ fn a_home_the_proof_cannot_place_keeps_the_review() {
             // An inherited HTTPIE_CONFIG_DIR reads the file from somewhere
             // this proof never looked.
             http_config_absent: false,
+            openssl_config_absent: false,
             ..Default::default()
         },
         crate::pretool::PathContext {
             home_dir: Some(home_text),
             shell_home_matches: false,
             http_config_absent: true,
+            openssl_config_absent: false,
             ..Default::default()
         },
         crate::pretool::PathContext {
             home_dir: Some("relative/home"),
             shell_home_matches: true,
             http_config_absent: true,
+            openssl_config_absent: false,
             ..Default::default()
         },
         crate::pretool::PathContext {
             home_dir: None,
             shell_home_matches: true,
             http_config_absent: true,
+            openssl_config_absent: false,
             ..Default::default()
         },
     ] {

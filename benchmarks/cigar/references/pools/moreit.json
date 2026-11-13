@@ -1,0 +1,403 @@
+{
+ "deselect": [],
+ "mutations": [
+  {
+   "path": "more_itertools/more.py",
+   "qual": "callback_iter.__exit__",
+   "line": 3906,
+   "orig": "        self._aborted = True\n",
+   "new": "        self._aborted = False\n",
+   "failing": [
+    "tests/test_more.py::CallbackIterTests::test_abort"
+   ]
+  },
+  {
+   "path": "more_itertools/more.py",
+   "qual": "exactly_n",
+   "line": 2992,
+   "orig": "    return len(take(n + 1, filter(predicate, iterable))) == n\n",
+   "new": "    return len(take(n + 1, filter(predicate, iterable))) != n\n",
+   "failing": [
+    "tests/test_more.py::ExactlyNTests::test_empty",
+    "tests/test_more.py::ExactlyNTests::test_false",
+    "tests/test_more.py::ExactlyNTests::test_true"
+   ]
+  },
+  {
+   "path": "more_itertools/recipes.py",
+   "qual": "tail",
+   "line": 145,
+   "orig": "        yield from islice(iterable, max(0, len(iterable) - n), None)\n",
+   "new": "        yield from islice(iterable, max(0, len(iterable) + n), None)\n",
+   "failing": [
+    "tests/test_recipes.py::TailTests::test_sized_equal",
+    "tests/test_recipes.py::TailTests::test_sized_greater",
+    "tests/test_recipes.py::TailTests::test_sized_less"
+   ]
+  },
+  {
+   "path": "more_itertools/more.py",
+   "qual": "is_sorted",
+   "line": 3828,
+   "orig": "    it = iterable if (key is None) else map(key, iterable)\n",
+   "new": "    it = iterable if (key is not None) else map(key, iterable)\n",
+   "failing": [
+    "tests/test_more.py::IsSortedTests::test_basic"
+   ]
+  },
+  {
+   "path": "more_itertools/more.py",
+   "qual": "mark_ends",
+   "line": 2367,
+   "orig": "            yield i == 0, False, a\n",
+   "new": "            yield i != 0, False, a\n",
+   "failing": [
+    "tests/test_more.py::MarkEndsTests::test_basic"
+   ]
+  },
+  {
+   "path": "more_itertools/more.py",
+   "qual": "callback_iter.done",
+   "line": 3917,
+   "orig": "        if self._future is None:\n",
+   "new": "        if self._future is not None:\n",
+   "failing": [
+    "tests/test_more.py::CallbackIterTests::test_abort",
+    "tests/test_more.py::CallbackIterTests::test_basic",
+    "tests/test_more.py::CallbackIterTests::test_exception",
+    "tests/test_more.py::CallbackIterTests::test_no_result"
+   ]
+  },
+  {
+   "path": "more_itertools/more.py",
+   "qual": "callback_iter.done",
+   "line": 3917,
+   "orig": "        if self._future is None:\n",
+   "new": "        if self._future is not None:\n",
+   "failing": [
+    "tests/test_more.py::CallbackIterTests::test_abort",
+    "tests/test_more.py::CallbackIterTests::test_basic",
+    "tests/test_more.py::CallbackIterTests::test_exception",
+    "tests/test_more.py::CallbackIterTests::test_no_result"
+   ]
+  },
+  {
+   "path": "more_itertools/more.py",
+   "qual": "adjacent",
+   "line": 2048,
+   "orig": "    if distance < 0:\n",
+   "new": "    if distance <= 0:\n",
+   "failing": [
+    "tests/test_more.py::AdjacentTests::test_zero_distance"
+   ]
+  },
+  {
+   "path": "more_itertools/more.py",
+   "qual": "numeric_range.__contains__",
+   "line": 2195,
+   "orig": "            if self._start >= elem > self._stop:\n",
+   "new": "            if self._start > elem > self._stop:\n",
+   "failing": [
+    "tests/test_more.py::NumericRangeTests::test_contains"
+   ]
+  },
+  {
+   "path": "more_itertools/more.py",
+   "qual": "callback_iter.__exit__",
+   "line": 3906,
+   "orig": "        self._aborted = True\n",
+   "new": "        self._aborted = False\n",
+   "failing": [
+    "tests/test_more.py::CallbackIterTests::test_abort"
+   ]
+  },
+  {
+   "path": "more_itertools/more.py",
+   "qual": "nth_or_last",
+   "line": 267,
+   "orig": "    return last(islice(iterable, n + 1), default=default)\n",
+   "new": "    return last(islice(iterable, n - 1), default=default)\n",
+   "failing": [
+    "tests/test_more.py::NthOrLastTests::test_basic"
+   ]
+  },
+  {
+   "path": "more_itertools/more.py",
+   "qual": "last",
+   "line": 240,
+   "orig": "        elif hasattr(iterable, '__reversed__') and (hexversion != 0x030800F0):\n",
+   "new": "        elif hasattr(iterable, '__reversed__') or (hexversion != 0x030800F0):\n",
+   "failing": [
+    "tests/test_more.py::CombinationIndexTests::test_long",
+    "tests/test_more.py::CombinationIndexTests::test_multiplicity",
+    "tests/test_more.py::CombinationIndexTests::test_r_less_than_n",
+    "tests/test_more.py::LastTests::test_basic",
+    "tests/test_more.py::NthOrLastTests::test_basic"
+   ]
+  }
+ ],
+ "stubs": [
+  {
+   "path": "more_itertools/more.py",
+   "qual": "permutation_index",
+   "body_start": 4335,
+   "end": 4342,
+   "body": "    index = 0\n    pool = list(iterable)\n    for i, x in zip(range(len(pool), -1, -1), element):\n        r = pool.index(x)\n        index = index * i + r\n        del pool[r]\n\n    return index\n",
+   "indent": 4,
+   "failing": [
+    "tests/test_more.py::PermutationIndexTests::test_invalid_large",
+    "tests/test_more.py::PermutationIndexTests::test_invalid_match",
+    "tests/test_more.py::PermutationIndexTests::test_long",
+    "tests/test_more.py::PermutationIndexTests::test_multiplicity",
+    "tests/test_more.py::PermutationIndexTests::test_null",
+    "tests/test_more.py::PermutationIndexTests::test_r_equal_to_n",
+    "tests/test_more.py::PermutationIndexTests::test_r_less_than_n"
+   ]
+  },
+  {
+   "path": "more_itertools/more.py",
+   "qual": "last",
+   "body_start": 236,
+   "end": 250,
+   "body": "    try:\n        if isinstance(iterable, Sequence):\n            return iterable[-1]\n        # Work around https://bugs.python.org/issue38525\n        elif hasattr(iterable, '__reversed__') and (hexversion != 0x030800F0):\n            return next(reversed(iterable))\n        else:\n            return deque(iterable, maxlen=1)[-1]\n    except (IndexError, TypeError, StopIteration):\n        if default is _marker:\n            raise ValueError(\n                'last() was called on an empty iterable, and no default was '\n                'provided.'\n            )\n        return default\n",
+   "indent": 4,
+   "failing": [
+    "tests/test_more.py::CombinationIndexTests::test_long",
+    "tests/test_more.py::CombinationIndexTests::test_multiplicity",
+    "tests/test_more.py::CombinationIndexTests::test_r_equal_to_n",
+    "tests/test_more.py::CombinationIndexTests::test_r_less_than_n",
+    "tests/test_more.py::LastTests::test_basic",
+    "tests/test_more.py::LastTests::test_default",
+    "tests/test_more.py::LastTests::test_empty",
+    "tests/test_more.py::NthOrLastTests::test_basic",
+    "tests/test_more.py::NthOrLastTests::test_default_value",
+    "tests/test_more.py::NthOrLastTests::test_empty_iterable_no_default"
+   ]
+  },
+  {
+   "path": "more_itertools/recipes.py",
+   "qual": "roundrobin",
+   "body_start": 428,
+   "end": 431,
+   "body": "    iterators = map(iter, iterables)\n    for num_active in range(len(iterables), 0, -1):\n        iterators = cycle(islice(iterators, num_active))\n        yield from map(next, iterators)\n",
+   "indent": 4,
+   "failing": [
+    "tests/test_recipes.py::RoundrobinTests::test_even_groups",
+    "tests/test_recipes.py::RoundrobinTests::test_uneven_groups"
+   ]
+  },
+  {
+   "path": "more_itertools/more.py",
+   "qual": "zip_broadcast",
+   "body_start": 4449,
+   "end": 4480,
+   "body": "    def is_scalar(obj):\n        if scalar_types and isinstance(obj, scalar_types):\n            return True\n        try:\n            iter(obj)\n        except TypeError:\n            return True\n        else:\n            return False\n\n    size = len(objects)\n    if not size:\n        return\n\n    new_item = [None] * size\n    iterables, iterable_positions = [], []\n    for i, obj in enumerate(objects):\n        if is_scalar(obj):\n            new_item[i] = obj\n        else:\n            iterables.append(iter(obj))\n            iterable_positions.append(i)\n\n    if not iterables:\n        yield tuple(objects)\n        return\n\n    zipper = _zip_equal if strict else zip\n    for item in zipper(*iterables):\n        for i, new_item[i] in zip(iterable_positions, item):\n            pass\n        yield tuple(new_item)\n",
+   "indent": 4,
+   "failing": [
+    "tests/test_more.py::ZipBroadcastTests::test_scalar_types",
+    "tests/test_more.py::ZipBroadcastTests::test_zip"
+   ]
+  },
+  {
+   "path": "more_itertools/more.py",
+   "qual": "interleave_evenly",
+   "body_start": 1181,
+   "end": 1220,
+   "body": "    if lengths is None:\n        try:\n            lengths = [len(it) for it in iterables]\n        except TypeError:\n            raise ValueError(\n                'Iterable lengths could not be determined automatically. '\n                'Specify them with the lengths keyword.'\n            )\n    elif len(iterables) != len(lengths):\n        raise ValueError('Mismatching number of iterables and lengths.')\n\n    dims = len(lengths)\n\n    # sort iterables by length, descending\n    lengths_permute = sorted(\n        range(dims), key=lambda i: lengths[i], reverse=True\n    )\n    lengths_desc = [lengths[i] for i in lengths_permute]\n    iters_desc = [iter(iterables[i]) for i in lengths_permute]\n\n    # the longest iterable is the primary one (Bresenham: the longest\n    # distance along an axis)\n    delta_primary, deltas_secondary = lengths_desc[0], lengths_desc[1:]\n    iter_primary, iters_secondary = iters_desc[0], iters_desc[1:]\n    errors = [delta_primary // dims] * len(deltas_secondary)\n\n    to_yield = sum(lengths)\n    while to_yield:\n        yield next(iter_primary)\n        to_yield -= 1\n        # update errors for each secondary iterable\n        errors = [e - delta for e, delta in zip(errors, deltas_secondary)]\n\n        # those iterables for which the error is negative are yielded\n        # (\"diagonal step\" in Bresenham)\n        for i, e_ in enumerate(errors):\n            if e_ < 0:\n                yield next(iters_secondary[i])\n                to_yield -= 1\n                errors[i] += delta_primary\n",
+   "indent": 4,
+   "failing": [
+    "tests/test_more.py::InterleaveEvenlyTests::test_argument_mismatch_raises",
+    "tests/test_more.py::InterleaveEvenlyTests::test_degenerate_empty",
+    "tests/test_more.py::InterleaveEvenlyTests::test_degenerate_one",
+    "tests/test_more.py::InterleaveEvenlyTests::test_equal_lengths",
+    "tests/test_more.py::InterleaveEvenlyTests::test_manual_lengths",
+    "tests/test_more.py::InterleaveEvenlyTests::test_many_iters",
+    "tests/test_more.py::InterleaveEvenlyTests::test_no_length_raises",
+    "tests/test_more.py::InterleaveEvenlyTests::test_not_proportional",
+    "tests/test_more.py::InterleaveEvenlyTests::test_proportional",
+    "tests/test_more.py::InterleaveEvenlyTests::test_three_iters"
+   ]
+  },
+  {
+   "path": "more_itertools/more.py",
+   "qual": "sort_together",
+   "body_start": 1839,
+   "end": 1863,
+   "body": "    if key is None:\n        # if there is no key function, the key argument to sorted is an\n        # itemgetter\n        key_argument = itemgetter(*key_list)\n    else:\n        # if there is a key function, call it with the items at the offsets\n        # specified by the key function as arguments\n        key_list = list(key_list)\n        if len(key_list) == 1:\n            # if key_list contains a single item, pass the item at that offset\n            # as the only argument to the key function\n            key_offset = key_list[0]\n            key_argument = lambda zipped_items: key(zipped_items[key_offset])\n        else:\n            # if key_list contains multiple items, use itemgetter to return a\n            # tuple of items, which we pass as *args to the key function\n            get_key_items = itemgetter(*key_list)\n            key_argument = lambda zipped_items: key(\n                *get_key_items(zipped_items)\n            )\n\n    zipper = zip_equal if strict else zip\n    return list(\n        zipper(*sorted(zipper(*iterables), key=key_argument, reverse=reverse))\n    )\n",
+   "indent": 4,
+   "failing": [
+    "tests/test_more.py::SortTogetherTest::test_invalid_key_list",
+    "tests/test_more.py::SortTogetherTest::test_key_function",
+    "tests/test_more.py::SortTogetherTest::test_key_list",
+    "tests/test_more.py::SortTogetherTest::test_reverse",
+    "tests/test_more.py::SortTogetherTest::test_strict",
+    "tests/test_more.py::SortTogetherTest::test_uneven_iterables"
+   ]
+  },
+  {
+   "path": "more_itertools/more.py",
+   "qual": "intersperse",
+   "body_start": 822,
+   "end": 834,
+   "body": "    if n == 0:\n        raise ValueError('n must be > 0')\n    elif n == 1:\n        # interleave(repeat(e), iterable) -> e, x_0, e, x_1, e, x_2...\n        # islice(..., 1, None) -> x_0, e, x_1, e, x_2...\n        return islice(interleave(repeat(e), iterable), 1, None)\n    else:\n        # interleave(filler, chunks) -> [e], [x_0, x_1], [e], [x_2, x_3]...\n        # islice(..., 1, None) -> [x_0, x_1], [e], [x_2, x_3]...\n        # flatten(...) -> x_0, x_1, e, x_2, x_3...\n        filler = repeat([e])\n        chunks = chunked(iterable, n)\n        return flatten(islice(interleave(filler, chunks), 1, None))\n",
+   "indent": 4,
+   "failing": [
+    "tests/test_more.py::IntersperseTest::test_even",
+    "tests/test_more.py::IntersperseTest::test_n",
+    "tests/test_more.py::IntersperseTest::test_n_zero",
+    "tests/test_more.py::IntersperseTest::test_nested",
+    "tests/test_more.py::IntersperseTest::test_not_iterable",
+    "tests/test_more.py::IntersperseTest::test_odd"
+   ]
+  },
+  {
+   "path": "more_itertools/more.py",
+   "qual": "bucket._get_values",
+   "body_start": 1049,
+   "end": 1067,
+   "body": "        while True:\n            # If we've cached some items that match the target value, emit\n            # the first one and evict it from the cache.\n            if self._cache[value]:\n                yield self._cache[value].popleft()\n            # Otherwise we need to advance the parent iterator to search for\n            # a matching item, caching the rest.\n            else:\n                while True:\n                    try:\n                        item = next(self._it)\n                    except StopIteration:\n                        return\n                    item_value = self._key(item)\n                    if item_value == value:\n                        yield item\n                        break\n                    elif self._validator(item_value):\n                        self._cache[item_value].append(item)\n",
+   "indent": 8,
+   "failing": [
+    "tests/test_more.py::BucketTests::test_basic",
+    "tests/test_more.py::BucketTests::test_in",
+    "tests/test_more.py::BucketTests::test_list",
+    "tests/test_more.py::BucketTests::test_list_validator",
+    "tests/test_more.py::BucketTests::test_validator"
+   ]
+  }
+ ],
+ "renames": [
+  {
+   "old": "_complex_sumprod",
+   "new": "_complex_sumprod_impl",
+   "count": 3,
+   "files": [
+    "more_itertools/more.py"
+   ],
+   "path": "more_itertools/more.py"
+  },
+  {
+   "old": "_zip_equal",
+   "new": "_zip_equal_impl",
+   "count": 5,
+   "files": [
+    "more_itertools/more.py",
+    "more_itertools/recipes.py"
+   ],
+   "path": "more_itertools/recipes.py"
+  },
+  {
+   "old": "_pairwise",
+   "new": "_pairwise_impl",
+   "count": 4,
+   "files": [
+    "tests/test_recipes.py",
+    "more_itertools/recipes.py"
+   ],
+   "path": "more_itertools/recipes.py"
+  },
+  {
+   "old": "_islice_helper",
+   "new": "_islice_helper_impl",
+   "count": 3,
+   "files": [
+    "more_itertools/more.py"
+   ],
+   "path": "more_itertools/more.py"
+  },
+  {
+   "old": "_batched",
+   "new": "_batched_impl",
+   "count": 3,
+   "files": [
+    "more_itertools/recipes.py"
+   ],
+   "path": "more_itertools/recipes.py"
+  },
+  {
+   "old": "_partial",
+   "new": "_partial_impl",
+   "count": 3,
+   "files": [
+    "more_itertools/more.py"
+   ],
+   "path": "more_itertools/more.py"
+  },
+  {
+   "old": "_get_by_index",
+   "new": "_get_by_index_impl",
+   "count": 8,
+   "files": [
+    "more_itertools/more.py"
+   ],
+   "path": "more_itertools/more.py"
+  },
+  {
+   "old": "_zip_equal_generator",
+   "new": "_zip_equal_generator_impl",
+   "count": 3,
+   "files": [
+    "tests/test_more.py",
+    "more_itertools/recipes.py"
+   ],
+   "path": "more_itertools/recipes.py"
+  }
+ ],
+ "docs": [
+  {
+   "path": "more_itertools/more.py",
+   "module": "more_itertools.more",
+   "qual": "with_iter"
+  }
+ ],
+ "questions": [
+  {
+   "sentence": "Yield all arguments passed to the function in the same order in which they were passed.",
+   "path": "more_itertools/more.py",
+   "qual": "value_chain",
+   "name": "value_chain"
+  },
+  {
+   "sentence": "Return the elements from each of the input iterables that aren't in the other input iterables.",
+   "path": "more_itertools/more.py",
+   "qual": "unique_to_each",
+   "name": "unique_to_each"
+  },
+  {
+   "sentence": "Interleave multiple iterables so that their elements are evenly distributed throughout the output sequence.",
+   "path": "more_itertools/more.py",
+   "qual": "interleave_evenly",
+   "name": "interleave_evenly"
+  },
+  {
+   "sentence": "A variant of :func:`takewhile` that yields one additional element.",
+   "path": "more_itertools/more.py",
+   "qual": "takewhile_inclusive",
+   "name": "takewhile_inclusive"
+  },
+  {
+   "sentence": "Repeat each element in *iterable* *n* times.",
+   "path": "more_itertools/more.py",
+   "qual": "repeat_each",
+   "name": "repeat_each"
+  },
+  {
+   "sentence": "Return the first item from *iterable*, which is expected to contain only that item.",
+   "path": "more_itertools/more.py",
+   "qual": "one",
+   "name": "one"
+  },
+  {
+   "sentence": "Returns the sequence of elements and then returns ``None`` indefinitely.",
+   "path": "more_itertools/recipes.py",
+   "qual": "pad_none",
+   "name": "pad_none"
+  },
+  {
+   "sentence": "Yield the index of each item in *iterable* for which *pred* returns ``True``, starting from the right and moving left.",
+   "path": "more_itertools/more.py",
+   "qual": "rlocate",
+   "name": "rlocate"
+  }
+ ]
+}

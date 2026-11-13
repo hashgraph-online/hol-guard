@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import signal
 import socket
 import stat
 import subprocess
@@ -222,6 +221,17 @@ def test_wait_for_socket_accepts_trusted_live_socket() -> None:
             listener.close()
 
 
+def _answer_reclaim(monkeypatch, answer: dict[str, object]) -> list[tuple[str, dict[str, object], float | None]]:
+    requests: list[tuple[str, dict[str, object], float | None]] = []
+
+    def fake_ask(op: str, fields: dict[str, object], budget: float | None = None) -> dict[str, object]:
+        requests.append((op, dict(fields), budget))
+        return answer
+
+    monkeypatch.setattr(codex_remote_control, "_ask", fake_ask)
+    return requests
+
+
 def test_direct_app_server_uses_private_control_directory(
     tmp_path: Path,
     monkeypatch,
@@ -245,6 +255,7 @@ def test_direct_app_server_uses_private_control_directory(
 
     monkeypatch.setattr(codex_remote_control, "_wait_for_socket", fake_wait)
     monkeypatch.setattr(codex_remote_control.subprocess, "Popen", fake_popen)
+    requests = _answer_reclaim(monkeypatch, {"state": "free"})
 
     started = codex_remote_control._start_direct_app_server(
         executable_prefix=("/usr/bin/env", "codex"),
@@ -253,14 +264,16 @@ def test_direct_app_server_uses_private_control_directory(
     )
 
     directory_mode = stat.S_IMODE(socket_path.parent.stat().st_mode)
-    pid_mode = stat.S_IMODE((socket_path.parent / "hol-guard-app-server.pid").stat().st_mode)
+    pid_path = socket_path.parent / "hol-guard-app-server.pid"
     assert started is True
+    assert requests == [("reclaim", {"socket": str(socket_path), "seconds": 3.0}, 7.0)]
     assert launch_commands == [["/usr/bin/env", "codex", "app-server", "--listen", f"unix://{socket_path}"]]
     assert directory_mode == 0o700
-    assert pid_mode == 0o600
+    assert stat.S_IMODE(pid_path.stat().st_mode) == 0o600
+    assert pid_path.read_text(encoding="utf-8") == "4321"
 
 
-def test_direct_app_server_recovers_when_pid_marker_is_stale(
+def test_direct_app_server_replaces_a_stale_pid_marker_the_resident_frees(
     tmp_path: Path,
     monkeypatch,
 ) -> None:
@@ -285,9 +298,8 @@ def test_direct_app_server_recovers_when_pid_marker_is_stale(
         return FakeProcess()
 
     monkeypatch.setattr(codex_remote_control, "_wait_for_socket", fake_wait)
-    monkeypatch.setattr(codex_remote_control.os, "kill", lambda _pid, _signal: None)
-    monkeypatch.setattr(codex_remote_control, "_tracked_process_command", lambda _pid: "other-process")
     monkeypatch.setattr(codex_remote_control.subprocess, "Popen", fake_popen)
+    _answer_reclaim(monkeypatch, {"state": "free"})
 
     started = codex_remote_control._start_direct_app_server(
         executable_prefix=("codex",),
@@ -300,9 +312,11 @@ def test_direct_app_server_recovers_when_pid_marker_is_stale(
     assert (socket_path.parent / "hol-guard-app-server.pid").read_text(encoding="utf-8") == "9876"
 
 
-def test_direct_app_server_keeps_tracking_when_the_resident_cannot_identify_it(
+@pytest.mark.parametrize("answer", [{}, {"state": "busy"}, {"state": None}, {"state": "other"}])
+def test_direct_app_server_keeps_tracking_unless_the_resident_frees_it(
     tmp_path: Path,
     monkeypatch,
+    answer: dict[str, object],
 ) -> None:
     socket_path = tmp_path / "home" / ".codex" / "app-server-control" / "app-server-control.sock"
     socket_path.parent.mkdir(parents=True)
@@ -310,13 +324,11 @@ def test_direct_app_server_keeps_tracking_when_the_resident_cannot_identify_it(
     pid_path.write_text("4321", encoding="utf-8")
 
     def fail_popen(*_args, **_kwargs):
-        raise AssertionError("an unidentified tracked server must not be replaced")
+        raise AssertionError("a tracked server the resident did not free must not be replaced")
 
     monkeypatch.setattr(codex_remote_control, "_wait_for_socket", lambda _path: False)
-    monkeypatch.setattr(codex_remote_control.os, "kill", lambda _pid, _signal: None)
-    monkeypatch.setattr(codex_remote_control, "_tracked_process_command", lambda _pid: "codex app-server")
-    monkeypatch.setattr(codex_remote_control, "_ask", lambda *_args, **_kwargs: {})
     monkeypatch.setattr(codex_remote_control.subprocess, "Popen", fail_popen)
+    _answer_reclaim(monkeypatch, answer)
 
     started = codex_remote_control._start_direct_app_server(
         executable_prefix=("codex",),
@@ -326,6 +338,29 @@ def test_direct_app_server_keeps_tracking_when_the_resident_cannot_identify_it(
 
     assert started is False
     assert pid_path.read_text(encoding="utf-8") == "4321"
+
+
+def test_direct_app_server_reuses_a_tracked_server_that_listens(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    socket_path = tmp_path / "home" / ".codex" / "app-server-control" / "app-server-control.sock"
+
+    def fail_popen(*_args, **_kwargs):
+        raise AssertionError("a listening tracked server must be reused")
+
+    monkeypatch.setattr(codex_remote_control, "_wait_for_socket", lambda _path: False)
+    monkeypatch.setattr(codex_remote_control.subprocess, "Popen", fail_popen)
+    _answer_reclaim(monkeypatch, {"state": "ready"})
+
+    assert (
+        codex_remote_control._start_direct_app_server(
+            executable_prefix=("codex",),
+            socket_path=socket_path,
+            environment={},
+        )
+        is True
+    )
 
 
 def test_launch_preparation_selects_only_among_previewed_argv(tmp_path: Path, monkeypatch) -> None:
@@ -343,49 +378,3 @@ def test_launch_preparation_selects_only_among_previewed_argv(tmp_path: Path, mo
 
     assert previewed == (["codex", "fix"],)
     assert prepared == ["codex", "fix"]
-
-
-def test_direct_app_server_stops_matching_dead_listener_before_replacement(
-    tmp_path: Path,
-    monkeypatch,
-) -> None:
-    socket_path = tmp_path / "home" / ".codex" / "app-server-control" / "app-server-control.sock"
-    socket_path.parent.mkdir(parents=True)
-    (socket_path.parent / "hol-guard-app-server.pid").write_text("4321", encoding="utf-8")
-    listener_uri = f"unix://{socket_path}"
-
-    process_stopped = False
-    events: list[str] = []
-
-    def fake_kill(_pid: int, requested_signal: int) -> None:
-        nonlocal process_stopped
-        if requested_signal == signal.SIGTERM:
-            events.append("stop")
-            process_stopped = True
-        elif process_stopped:
-            raise ProcessLookupError
-
-    class FakeProcess:
-        pid = 9876
-
-    def fake_popen(*args, **kwargs):
-        events.append("start")
-        return FakeProcess()
-
-    monkeypatch.setattr(codex_remote_control, "_wait_for_socket", lambda _path: False)
-    monkeypatch.setattr(codex_remote_control.os, "kill", fake_kill)
-    monkeypatch.setattr(
-        codex_remote_control,
-        "_tracked_process_command",
-        lambda _pid: f"codex\napp-server\n--listen\n{listener_uri}",
-    )
-    monkeypatch.setattr(codex_remote_control.subprocess, "Popen", fake_popen)
-
-    started = codex_remote_control._start_direct_app_server(
-        executable_prefix=("codex",),
-        socket_path=socket_path,
-        environment={},
-    )
-
-    assert started is False
-    assert events == ["stop", "start"]

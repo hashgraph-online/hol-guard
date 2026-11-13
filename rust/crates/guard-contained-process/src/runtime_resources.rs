@@ -329,13 +329,9 @@ impl Capture<'_> {
                     let (resolved, links) = resolve(&root.join(&source))?;
                     let sitecustomize = name == "sitecustomize.py"
                         && resolved
-                            == PathBuf::from(format!(
-                                "/etc/{}/sitecustomize.py",
-                                destination
-                                    .file_name()
-                                    .unwrap_or_default()
-                                    .to_string_lossy()
-                            ));
+                            == Path::new("/etc")
+                                .join(destination.file_name().unwrap_or_default())
+                                .join("sitecustomize.py");
                     if resolved.starts_with(self.excluded)
                         || resource_protected(&resolved)
                         || (!sitecustomize

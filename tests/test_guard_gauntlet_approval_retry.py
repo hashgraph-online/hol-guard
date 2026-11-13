@@ -52,6 +52,7 @@ def test_lane_catalog_carries_retry_and_bash_lifecycle_cases():
         "approved-retry-environment-dump",
         "approved-retry-sourced-toolchain-init",
         "approved-retry-identical-file-read",
+        "relayed-approval-link-held-command",
     }
     ordinary = [scenario for scenario in scenarios if scenario.oracle == "approved-retry"]
     lifecycle = [scenario for scenario in scenarios if scenario.oracle == BASH_LIFECYCLE_ORACLE]

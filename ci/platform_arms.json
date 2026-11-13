@@ -44,6 +44,14 @@
   },
   {
    "verdict": "windows-equivalent",
+   "note": "Contained runs are planned only on Unix (`restricted_pytest` is Unix-only), so no Windows plan ever puts `--no-env-file` in front of a Bun argv. Returning the argv unchanged is the same answer the Unix arm gives every argv that is not a planned Bun run, so a sink asking off Unix re-authorizes exactly the argv it runs. Proven by the Windows native-runtime build compiling this operation and by `contained_argv` tests on the Unix arm.",
+   "file": "rust/crates/guard-command/src/contained_argv.rs",
+   "item": "fn planned_route_argv(command: &[String]) -> Vec<String>",
+   "cfg": "not(unix)",
+   "body": "0911781b1f15"
+  },
+  {
+   "verdict": "windows-equivalent",
    "note": "`runtime/harness_attribution.py` returns `None` on `os.name == \"nt\"` before it ever reaches `/bin/ps`, so there is no Windows behaviour to keep parity with rather than an absent one. A Windows harness is still attributed by its environment markers, which every supported harness sets; only the fallback parent walk is missing, and its absence leaves the origin unknown rather than wrong. The slug is receipt and display identity, never a policy selector, so an unknown origin softens nothing.",
    "file": "rust/crates/guard-command/src/harness_attribution.rs",
    "item": "fn read_process_table() -> Option<String>",
@@ -225,6 +233,14 @@
    "note": "Unix proves an existing compaction note has one link and no execute bit before Cursor overwrites it. The link count is unstable on Windows, so an existing note fails closed and keeps its review; a write to a new segment name still passes because nothing exists to alias.",
    "cfg": "not(unix)",
    "body": "ff97d5ea05af"
+  },
+  {
+   "verdict": "windows-unsupported",
+   "note": "Git Bash resolves `/dev/null` against the directory where the hook runs, so a `core.hooksPath` of `/dev/null` does not name an empty device there. The local-write proof keeps treating that setting as unproven off Unix, and those writes stay reviewed as before.",
+   "file": "rust/crates/guard-command/src/pretool/git_hook_files.rs",
+   "item": "fn null_device() -> bool",
+   "cfg": "not(unix)",
+   "body": "3e06527b43b4"
   },
   {
    "file": "rust/crates/guard-command/src/pretool/git_hook_files.rs",
@@ -723,12 +739,84 @@
    "body": "d73c3f0622bf"
   },
   {
+   "verdict": "windows-equivalent",
+   "note": "Reads and creates the adapter state key by path without owner-only mode checks or `openat`, since Windows has no POSIX modes: the key lives under the account's own Guard home, the `managed` folder and key must not be links, and creation is still exclusive. The Windows unit tests in `adapter_state_key_tests.rs` run create-once, reload and malformed-file cases through this arm.",
+   "file": "rust/crates/guard-runtime/src/adapters/adapter_state_key.rs",
+   "item": "mod platform",
+   "cfg": "not(unix)",
+   "body": "218162a319c3"
+  },
+  {
+   "verdict": "windows-unsupported",
+   "note": "Codex's app-server control socket is a Unix socket and `_start_direct_app_server` returns before asking on Windows, so no tracked app-server exists to reclaim there; answering `busy` keeps any launch on the ordinary argv.",
+   "file": "rust/crates/guard-runtime/src/adapters/codex_remote_launch.rs",
+   "item": "fn reclaim_state(_socket: &str, _seconds: f64) -> &'static str",
+   "cfg": "not(unix)",
+   "body": "a04ac213d091"
+  },
+  {
    "verdict": "windows-unsupported",
    "note": "Codex's app-server control socket is a Unix socket, and `_start_direct_app_server` never starts one on Windows, so no socket is ever ready there and the launch keeps the ordinary argv, as the Python `getuid` guard did.",
    "file": "rust/crates/guard-runtime/src/adapters/codex_remote_launch.rs",
    "item": "fn ready(_socket: &Path) -> bool",
    "cfg": "not(unix)",
    "body": "53abbd254e3b"
+  },
+  {
+   "verdict": "posix-primitive",
+   "note": "Windows has no `O_NOFOLLOW`, so the file is opened by path, as Python's `os.open` did with `getattr(os, \"O_NOFOLLOW\", 0)`. `snapshot` still refuses a link: after the read it takes `symlink_metadata` of the path and `same_file` rejects a symlink there, so a linked config is reported as `target_changed` instead of being followed.",
+   "file": "rust/crates/guard-runtime/src/adapters/harness_adapter/files.rs",
+   "item": "fn open_no_follow(path: &Path) -> std::io::Result<File>",
+   "cfg": "not(unix)",
+   "body": "108e0c44a91d"
+  },
+  {
+   "verdict": "posix-primitive",
+   "note": "Windows metadata from the standard library carries no stable file ID, so the arm compares size and refuses a path that is now a symlink. That catches a swap to a link and a rewrite that changes length; a same-length in-place rewrite between open and recheck is the gap, and the file sits under the account's own home where no second account can write.",
+   "file": "rust/crates/guard-runtime/src/adapters/harness_adapter/files.rs",
+   "item": "fn same_file(opened: &fs::Metadata, current: &fs::Metadata) -> bool",
+   "cfg": "not(unix)",
+   "body": "b82c593164ef"
+  },
+  {
+   "verdict": "posix-primitive",
+   "note": "Mirrors CPython's Windows `st_mode`: 0o444 or 0o666 from the read-only attribute, plus 0o111 for directories and `.exe`/`.bat`/`.cmd`/`.com`. The mode only feeds the plan's before/after modes, which the Windows writer applies as the read-only attribute.",
+   "file": "rust/crates/guard-runtime/src/adapters/harness_adapter/files.rs",
+   "item": "pub(crate) fn mode(ctx: &Ctx, path: &Path) -> Option<u32>",
+   "cfg": "not(unix)",
+   "body": "e329a6385624"
+  },
+  {
+   "verdict": "windows-unsupported",
+   "note": "Windows has no root-owned link concept, so no link is trusted and `output_path` refuses every link component on the way to an output file. Fails closed: an install whose config path goes through a junction is refused instead of followed.",
+   "file": "rust/crates/guard-runtime/src/adapters/harness_adapter/files.rs",
+   "item": "fn trusted_system_link(_candidate: &Path) -> bool",
+   "cfg": "not(unix)",
+   "body": "dc474b94f640"
+  },
+  {
+   "verdict": "posix-primitive",
+   "note": "The standard library exposes no hard-link count on Windows, so the arm reports one link and the multiply-linked refusal is Unix-only, as Python's `st_nlink` check was effectively on Windows. The managed Paseo paths are under the account's own Guard home.",
+   "file": "rust/crates/guard-runtime/src/adapters/harness_adapter/paseo_paths.rs",
+   "item": "fn link_count(_meta: &fs::Metadata) -> u64",
+   "cfg": "not(unix)",
+   "body": "06c8dfdb2085"
+  },
+  {
+   "verdict": "posix-primitive",
+   "note": "Windows has neither `O_NOFOLLOW` nor `O_NONBLOCK` for files. `bounded_read` refuses a symlink before the open and refuses anything that is not a regular file after it, and reads at most the size cap, so a FIFO or link cannot be used to hang or redirect the read.",
+   "file": "rust/crates/guard-runtime/src/adapters/harness_adapter/paseo_paths.rs",
+   "item": "fn open_config(path: &Path) -> std::io::Result<fs::File>",
+   "cfg": "not(unix)",
+   "body": "f2fb61e2f089"
+  },
+  {
+   "verdict": "posix-primitive",
+   "note": "Windows has no execute bit; `os.access(path, os.X_OK)` there is true for any existing file, and `which` already narrows candidates by `PATHEXT`. Same answer as `shutil.which` on Windows.",
+   "file": "rust/crates/guard-runtime/src/adapters/harness_adapter/which.rs",
+   "item": "fn executable(path: &Path) -> bool",
+   "cfg": "not(unix)",
+   "body": "2d392d8ec24d"
   },
   {
    "verdict": "windows-equivalent",

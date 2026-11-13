@@ -1,0 +1,88 @@
+{
+ "repo": "click",
+ "seed": 87,
+ "steps": [
+  {
+   "doc": {
+    "module": "click.termui",
+    "path": "src/click/termui.py",
+    "qual": "prompt"
+   },
+   "kind": "doc",
+   "prompt": "Add a short usage example to the docstring of `prompt` in src/click/termui.py, written as a doctest (`>>>` lines with their expected output). Make sure the example actually passes."
+  },
+  {
+   "kind": "bug",
+   "prompt": "Something in `Parameter.value_from_envvar` broke recently and its tests fail now. Track it down and fix it. Leave the tests alone.",
+   "setup": [
+    {
+     "failing": [
+      "tests/test_arguments.py::test_defaults_for_nargs"
+     ],
+     "line": 2390,
+     "new": "        if rv is not None or self.nargs != 1:\n",
+     "orig": "        if rv is not None and self.nargs != 1:\n",
+     "path": "src/click/core.py",
+     "qual": "Parameter.value_from_envvar"
+    }
+   ]
+  },
+  {
+   "kind": "question",
+   "prompt": "Question, no code changes: which function does this? \"A helper function that intelligently wraps text.\" Reply with its file path and function name.",
+   "question": {
+    "name": "wrap_text",
+    "path": "src/click/formatting.py",
+    "qual": "wrap_text",
+    "sentence": "A helper function that intelligently wraps text."
+   }
+  },
+  {
+   "kind": "rename",
+   "prompt": "Rename the internal helper `_translate_ch_to_exc` to `_translate_ch_to_exc_impl` everywhere in the project, including tests. Behavior must not change.",
+   "rename": {
+    "count": 3,
+    "files": [
+     "src/click/_termui_impl.py"
+    ],
+    "new": "_translate_ch_to_exc_impl",
+    "old": "_translate_ch_to_exc",
+    "path": "src/click/_termui_impl.py"
+   }
+  },
+  {
+   "kind": "bug",
+   "prompt": "A teammate just pushed a commit and now some tests fail. Find the root cause in the library code and fix it without changing the tests.",
+   "setup": [
+    {
+     "failing": [
+      "tests/test_basic.py::test_basic_group",
+      "tests/test_basic.py::test_summary_line",
+      "tests/test_commands.py::test_auto_shorthelp",
+      "tests/test_formatting.py::test_removing_multiline_marker",
+      "tests/test_shell_completion.py::test_full_complete[fish-env4-plain,a\\nplain,b\\tbee\\n]",
+      "tests/test_shell_completion.py::test_full_complete[fish-env5-plain,b\\tbee\\n]",
+      "tests/test_shell_completion.py::test_full_complete[zsh-env2-plain\\na\\n_\\nplain\\nb\\nbee\\n]",
+      "tests/test_shell_completion.py::test_full_complete[zsh-env3-plain\\nb\\nbee\\n]",
+      "tests/test_utils.py::test_make_default_short_help[-equal",
+      "tests/test_utils.py::test_make_default_short_help[-ignore",
+      "tests/test_utils.py::test_make_default_short_help[-length",
+      "tests/test_utils.py::test_make_default_short_help[-paragraph",
+      "tests/test_utils.py::test_make_default_short_help[-sentence",
+      "tests/test_utils.py::test_make_default_short_help[-truncate]",
+      "tests/test_utils.py::test_make_default_short_help[no-wrap"
+     ],
+     "line": 71,
+     "new": "    if words[0] != \"\\b\":\n",
+     "orig": "    if words[0] == \"\\b\":\n",
+     "path": "src/click/utils.py",
+     "qual": "make_default_short_help"
+    }
+   ]
+  },
+  {
+   "kind": "review",
+   "prompt": "Review every change made in this session. Remove leftovers or duplication, match the style of the surrounding code, and make sure the full test suite passes."
+  }
+ ]
+}

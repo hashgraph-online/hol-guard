@@ -112,6 +112,8 @@ class GuardConfig:
     watch_entered_at: str | None = None
     harness_postures: dict[str, str] | None = None
     harness_watch_entered_at: dict[str, str] | None = None
+    # Apps whose CIGAR project context is off; an app without an entry follows CIGAR.
+    harness_cigar: dict[str, str] | None = None
     security_level: str = DEFAULT_SECURITY_LEVEL
     default_action: GuardAction = "warn"
     unknown_publisher_action: GuardAction = "review"
@@ -125,6 +127,7 @@ class GuardConfig:
     approval_browser_immediate_severity: str = "critical"
     desktop_notifications: bool = True
     update_channel: str = "stable"
+    update_mode: str = "automatic"
     telemetry: bool = False
     sync: bool = False
     receipt_redaction_level: str = "full"
@@ -319,6 +322,7 @@ def editable_guard_settings(config: GuardConfig) -> dict[str, object]:
         "watch_auto_revert_hours": config.watch_auto_revert_hours,
         "harness_postures": dict(config.harness_postures or {}),
         "harness_watch_entered_at": dict(config.harness_watch_entered_at or {}),
+        "harness_cigar": dict(config.harness_cigar or {}),
         "harness_postures_effective": effective_harness_postures(config),
         "harness_posture_status": harness_posture_status(config),
         "harness_postures_locked": managed_locks_harness_postures(config.managed_locked_settings),
@@ -338,6 +342,7 @@ def editable_guard_settings(config: GuardConfig) -> dict[str, object]:
         "approval_browser_immediate_severity": config.approval_browser_immediate_severity,
         "desktop_notifications": config.desktop_notifications,
         "update_channel": config.update_channel,
+        "update_mode": config.update_mode,
         "telemetry": config.telemetry,
         "sync": config.sync,
         "receipt_redaction_level": config.receipt_redaction_level,

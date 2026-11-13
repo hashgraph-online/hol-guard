@@ -11,31 +11,26 @@ use std::fs::{self, File, OpenOptions};
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
-use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
+use std::time::{Duration, Instant};
 
 use fs2::FileExt;
 use pep440_rs::Version;
 use serde_json::{json, Map, Value};
 
-use crate::daemon_edge::standalone::{
-    self, write_record_tombstone, write_signed_record, LaunchConfig,
-};
+use crate::daemon_edge::standalone::{self, write_signed_record, LaunchConfig};
 use crate::daemon_policy_authority::{
     daemon_pid_matches_command, healthz_payload_is_current, healthz_payload_matches_guard_home,
-    http_get_json, load_authenticated_daemon_identity, load_daemon_discovery_key,
-    read_private_regular_text, verify_daemon_state,
+    http_get_json, load_authenticated_daemon_identity,
 };
 
 use super::host::{self, Caller};
 use super::records::{self, int, text};
 use super::retire::{self, Deadline};
+use super::start_progress::{self, clear_progress, load_progress, progress_is_live};
 
 const COMPATIBILITY_VERSION: i64 = 2;
 const START_LOCK_FILE: &str = "daemon-start.lock";
-const PROGRESS_FILE: &str = "daemon-start-progress.json";
 const PENDING_FILE: &str = "daemon-launch-pending.json";
-const PROGRESS_MAX_BYTES: u64 = 4096;
-const WORKER_READY_FLOOR_SECONDS: f64 = 14.0;
 const MARKER_ATTEMPTS: usize = 10;
 const MARKER_RETRY: Duration = Duration::from_millis(20);
 const TERMINATE_WAIT: Duration = Duration::from_secs(1);
@@ -88,6 +83,14 @@ fn runtime(message: &str) -> Failure {
     Failure::Runtime(message.to_owned())
 }
 
+/// A launch is starting and has not handed off yet; the caller waits for it.
+fn still_starting(home: &Path) -> Failure {
+    Failure::Timeout(format!(
+        "Guard daemon is still starting; retry shortly. Expected state file at {}.",
+        records::state_path(home).display()
+    ))
+}
+
 struct Context<'a> {
     caller: &'a Caller,
     request: &'a Ensure<'a>,
@@ -128,10 +131,9 @@ pub(super) fn ensure(
     let home = context.home().to_path_buf();
     let initial_pending = records::load_pending(&home);
     let initial_progress = load_progress(&home);
-    let progress_live = initial_progress
-        .as_ref()
-        .is_some_and(|progress| progress_is_live(caller, progress));
-    if !progress_live
+    // Recorded start progress is settled under the start lock, where an
+    // expired launch is retired instead of blocking every later start.
+    if initial_progress.is_none()
         && records::is_generation_bound(initial_pending.as_ref())
         && !records::pending_is_resolved(&home)
         && !retire::resolve_abandoned(caller, initial_pending.as_ref())
@@ -225,12 +227,21 @@ fn locked(context: &Context<'_>) -> Result<String, Failure> {
             return Ok(url);
         }
     }
+    let progress = load_progress(&home);
+    let progress_live = progress
+        .as_ref()
+        .is_some_and(|progress| progress_is_live(caller, progress));
     if let Some(stale) = records::load_state_unverified(&home) {
         let pid = int(&stale, "pid").unwrap_or(0);
         if runtime_matches(context, &stale) {
             if pid > 0 && host::pid_is_running(pid) {
                 if let Some(url) = wait_live(context) {
+                    clear_progress(&home);
                     return Ok(url);
+                }
+                // Published state, not yet healthy: still inside its window.
+                if progress_live {
+                    return Err(still_starting(&home));
                 }
                 retire::retire_all(caller, None, deadline);
                 if !retire::retirement_is_complete(caller) {
@@ -241,21 +252,20 @@ fn locked(context: &Context<'_>) -> Result<String, Failure> {
             return Err(runtime("Stale Guard daemon could not be retired safely."));
         }
     }
-    let progress = load_progress(&home);
-    let mut progress_live = false;
     if let Some(progress) = progress {
-        if progress_is_live(caller, &progress) {
-            progress_live = true;
+        if progress_live {
             if let Some(url) = wait_live(context) {
                 clear_progress(&home);
                 return Ok(url);
             }
-            clear_progress(&home);
+            // `retire_all` never signals a launch whose receipt is open; its
+            // marker stays until the window passes and a later start retires it.
             retire::retire_all(caller, None, deadline);
             if !retire::retirement_is_complete(caller) {
-                return Err(runtime(IN_PROGRESS));
+                return Err(still_starting(&home));
             }
-        } else {
+            clear_progress(&home);
+        } else if start_progress::retire_stalled(caller, &progress, deadline) {
             clear_progress(&home);
         }
     }
@@ -665,66 +675,6 @@ fn launch_config(context: &Context<'_>, port: u16, nonce: Option<&str>) -> Optio
     LaunchConfig::parse(&serde_json::to_vec(&Value::Object(launch)).ok()?)
 }
 
-pub(super) fn load_progress(home: &Path) -> Option<Map<String, Value>> {
-    let raw = read_private_regular_text(&home.join(PROGRESS_FILE), PROGRESS_MAX_BYTES, true)?;
-    let Value::Object(payload) = serde_json::from_str(&raw).ok()? else {
-        return None;
-    };
-    if !verify_daemon_state(&payload, &load_daemon_discovery_key(home)?)
-        || text(&payload, "state_kind") != Some("daemon_start_progress")
-    {
-        return None;
-    }
-    int(&payload, "pid").filter(|pid| *pid > 0)?;
-    int(&payload, "port").filter(|port| (1..=65535).contains(port))?;
-    int(&payload, "recorded_at_ns").filter(|at| *at > 0)?;
-    int(&payload, "spawned_at_ns").filter(|at| *at > 0)?;
-    let marker_key = format!("process_start_{}", "token");
-    text(&payload, &marker_key).filter(|marker| !marker.is_empty())?;
-    let recorded = host::resolve_lenient(Path::new(text(&payload, "guard_home")?));
-    (recorded == host::resolve_lenient(home)).then_some(payload)
-}
-
-fn progress_is_live(caller: &Caller, progress: &Map<String, Value>) -> bool {
-    let marker_key = format!("process_start_{}", "token");
-    let now_ns = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map_or(0, |elapsed| elapsed.as_nanos() as i64);
-    let mut record = Map::new();
-    record.insert(
-        "pid".into(),
-        progress.get("pid").cloned().unwrap_or(Value::Null),
-    );
-    record.insert(
-        marker_key.clone(),
-        progress.get(&marker_key).cloned().unwrap_or(Value::Null),
-    );
-    record.insert(
-        "recorded_at_ns".into(),
-        progress
-            .get("recorded_at_ns")
-            .cloned()
-            .unwrap_or(Value::Null),
-    );
-    host::lifecycle(
-        caller,
-        json!({
-            "check": "start_progress_live",
-            "record": record,
-            "now_ns": now_ns,
-            "worker_ready_floor": WORKER_READY_FLOOR_SECONDS,
-        }),
-    )
-    .and_then(|answer| answer.get("live").and_then(Value::as_bool))
-    .unwrap_or(false)
-}
-
-fn clear_progress(home: &Path) {
-    if home.join(PROGRESS_FILE).is_file() {
-        let _ = write_record_tombstone(home, PROGRESS_FILE);
-    }
-}
-
 /// `_retire_guard_daemon_process`: a stale state's daemon, signalled only
 /// when its recorded generation still runs.
 fn retire_process(caller: &Caller, stale: &Map<String, Value>, deadline: Deadline) -> bool {
@@ -797,6 +747,13 @@ fn launch_once(context: &Context<'_>, port: i64) -> Result<Option<String>, Failu
     command.envs(request.launcher_env);
     if !native {
         command.env(NONCE_ENV, &nonce);
+        // The frozen entry point writes this before it imports Guard, so a
+        // cold start that outlasts the deadline is not mistaken for a stuck one.
+        start_progress::clear_heartbeat(home);
+        command.env(
+            start_progress::HEARTBEAT_ENV,
+            start_progress::heartbeat_path(home),
+        );
     }
     if let Some(cwd) = request.launch_cwd {
         command.current_dir(cwd);
@@ -821,6 +778,7 @@ fn launch_once(context: &Context<'_>, port: i64) -> Result<Option<String>, Failu
     // daemon must not inherit it and hold it open for the daemon's life.
     #[cfg(windows)]
     guard_runtime_windows_process::disinherit_standard_handles();
+    let spawned_at_ns = start_progress::now_ns();
     let spawned = match command.spawn() {
         Ok(child) => Ok(child),
         Err(_) if cfg!(windows) && !request.allow_windows_job_breakaway => {
@@ -830,9 +788,17 @@ fn launch_once(context: &Context<'_>, port: i64) -> Result<Option<String>, Failu
         Err(error) => Err(error),
     };
     let mut child = spawned.map_err(|_| runtime("Guard daemon process could not be started."))?;
-    match supervise(context, &mut child, port, &nonce, config_line) {
+    let launch = Launch {
+        port,
+        nonce: &nonce,
+        spawned_at_ns,
+    };
+    match supervise(context, &mut child, &launch, config_line) {
         // Handed off: the process belongs to the daemon lifecycle now.
         Ok(Handoff::Done(outcome)) => outcome.map(Some),
+        // Still starting: the child keeps running under its pending receipt
+        // and signed progress marker, and the caller waits for its handoff.
+        Ok(Handoff::StillStarting) => Err(still_starting(home)),
         Ok(Handoff::Missing) => {
             terminate(&mut child);
             Err(runtime(NOT_CONTAINED))
@@ -900,16 +866,26 @@ enum Handoff {
     Done(Result<String, Failure>),
     /// The child never handed off; its receipt stays.
     Missing,
+    /// The child missed the deadline but showed it is starting; it is left
+    /// running and its progress is recorded.
+    StillStarting,
+}
+
+/// What one spawn was given.
+struct Launch<'a> {
+    port: i64,
+    nonce: &'a str,
+    spawned_at_ns: i64,
 }
 
 fn supervise(
     context: &Context<'_>,
     child: &mut Child,
-    port: i64,
-    nonce: &str,
+    launch: &Launch<'_>,
     config_line: Option<Vec<u8>>,
 ) -> Result<Handoff, Failure> {
     let home = context.home();
+    let (port, nonce) = (launch.port, launch.nonce);
     let pid = i64::from(child.id());
     let marker = retried_marker(child, host::start_marker, pid)
         .ok_or_else(|| runtime("Guard daemon process start marker could not be recorded."))?;
@@ -985,8 +961,22 @@ fn supervise(
                 }));
             }
         }
-        if child_exited(child) || Instant::now() >= wait_deadline {
+        if child_exited(child) {
             return Ok(Handoff::Missing);
+        }
+        if Instant::now() >= wait_deadline {
+            let progressing =
+                start_progress::child_is_progressing(
+                    context.caller,
+                    nonce,
+                    pid,
+                    launch.spawned_at_ns,
+                ) && start_progress::record(home, pid, port, &marker, launch.spawned_at_ns);
+            return Ok(if progressing {
+                Handoff::StillStarting
+            } else {
+                Handoff::Missing
+            });
         }
         std::thread::sleep(host::POLL_INTERVAL);
     }

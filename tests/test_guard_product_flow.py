@@ -894,6 +894,7 @@ args = ["workspace-skill.js", "--changed"]
         daemon.start()
         try:
             _wait_for_runtime_heartbeat(GuardStore(home_dir), daemon.port)
+            _wait_for_verified_endpoint(home_dir, daemon.port)
             status_rc = main(
                 [
                     "guard",
@@ -1088,3 +1089,21 @@ def _wait_for_runtime_heartbeat(store: GuardStore, port: int) -> None:
             return
         time.sleep(0.05)
     raise AssertionError("the daemon recorded no runtime heartbeat")
+
+
+def _wait_for_verified_endpoint(guard_home: Path, port: int) -> None:
+    """Status reports the runtime active only once its endpoint answers health.
+
+    The heartbeat can land before the loopback listener answers a verified
+    health check, so a status read in between reports a running daemon as
+    stale. Wait for the same verified endpoint `guard status` reads.
+    """
+    from codex_plugin_scanner.guard.native_daemon_peer import load_guard_daemon_endpoint_url
+
+    expected = f"http://127.0.0.1:{port}"
+    deadline = time.monotonic() + 15
+    while time.monotonic() < deadline:
+        if load_guard_daemon_endpoint_url(guard_home) == expected:
+            return
+        time.sleep(0.05)
+    raise AssertionError("the daemon endpoint never passed its health check")

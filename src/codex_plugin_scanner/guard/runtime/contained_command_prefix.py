@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import os
-from collections.abc import Iterator, Mapping
+from collections.abc import Iterator, Mapping, Sequence
 from contextlib import contextmanager
 
 
@@ -26,6 +26,22 @@ def command_words(command: str) -> list[str]:
     if type(words) is not list or not all(type(word) is str for word in words):
         raise RestrictedPytestError("pytest_restricted_invalid_command", "Invalid restricted execution request.")
     return list(words)
+
+
+def planned_route_argv(command: Sequence[str]) -> list[str]:
+    """Ask native authority which argv a sink re-authorizes for a planned run.
+
+    The planner puts `--no-env-file` in front of a contained Bun run. The
+    resident routed the caller's spelling, which never carried that flag, so
+    native authority strips it before the sink asks again.
+    """
+    from ..native_restricted_pytest import restricted_native
+    from .restricted_pytest import RestrictedPytestError
+
+    argv = restricted_native("planned_route_argv", {"command": list(command)}, list)
+    if type(argv) is not list or not all(type(word) is str for word in argv):
+        raise RestrictedPytestError("pytest_restricted_invalid_command", "Invalid restricted execution request.")
+    return list(argv)
 
 
 def _read_command_prefix(command: list[str], *, drop_data: bool = False) -> tuple[list[str], dict[str, str], bool]:

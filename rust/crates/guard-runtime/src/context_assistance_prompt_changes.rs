@@ -24,6 +24,7 @@ use crate::context_assistance_engine::screened_texts;
 use crate::git_execution_safety_binary::resolve_trusted_git;
 use crate::git_execution_safety_config::Environment;
 use crate::git_execution_safety_probe::Prober;
+use asked::{about_changes, about_others};
 use labels::{commits, render, uncommitted, Commit, Named, Since};
 use std::collections::{BTreeSet, VecDeque};
 use std::path::{Path, PathBuf};
@@ -53,42 +54,6 @@ const DIFF: [&str; 7] = [
     "--dst-prefix=b/",
     "--ignore-submodules=all",
 ];
-const WORDS: &str =
-    "change changed changes pushed teammate review diff broke commit commits committed recently";
-/// Words for a prompt about a change the agent did not make, or one that
-/// broke something: then a commit's own diff is worth showing.
-const OTHERS: [&str; 5] = ["teammate", "pushed", "broke", "broken", "failing"];
-
-/// Words that, just before a change word, say there is none to look at.
-const NOT: [&str; 5] = ["no", "not", "without", "don", "dont"];
-
-/// Whether `prompt` asks about what changed.
-pub(super) fn about_changes(prompt: &str) -> bool {
-    let lower = prompt.to_lowercase();
-    let words: Vec<&str> = lower
-        .split(|c: char| !c.is_alphanumeric())
-        .filter(|word| !word.is_empty())
-        .collect();
-    // "no code changes" or "don't change anything" rules changes out.
-    let denied = |at: usize| {
-        words[at.saturating_sub(2)..at]
-            .iter()
-            .any(|word| NOT.contains(word))
-    };
-    (words.iter().enumerate()).any(|(at, word)| {
-        (WORDS.split(' ').any(|known| known == *word) || word.starts_with("regress")) && !denied(at)
-    }) || words.windows(2).any(|pair| pair == ["this", "session"])
-}
-
-/// Whether `prompt` is about someone else's change or a failure.
-pub(super) fn about_others(prompt: &str) -> bool {
-    prompt
-        .to_lowercase()
-        .split(|c: char| !c.is_alphanumeric())
-        .any(|word| {
-            OTHERS.contains(&word) || word.starts_with("fail") || word.starts_with("regress")
-        })
-}
 
 /// Records the commit `session` started at, on its first prompt, and for a
 /// prompt about changes returns what changed since then. A prompt about
@@ -484,6 +449,8 @@ fn clean(text: &str) -> bool {
     !scan.budget_exhausted && scan.bytes_scanned == text.len() && scan.matches.is_empty()
 }
 
+#[path = "context_assistance_prompt_changes_asked.rs"]
+mod asked;
 #[path = "context_assistance_prompt_changes_code.rs"]
 mod code;
 #[path = "context_assistance_prompt_changes_fix.rs"]

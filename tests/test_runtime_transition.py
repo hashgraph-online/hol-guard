@@ -625,8 +625,8 @@ def test_native_claude_binding_plan_restores_user_hooks_and_launchers(transition
 
 
 def test_native_kimi_plan_restores_config_and_launchers_after_rebind(transition):
+    from codex_plugin_scanner.guard.adapters import get_adapter
     from codex_plugin_scanner.guard.adapters.base import HarnessContext
-    from codex_plugin_scanner.guard.adapters.kimi import KimiHarnessAdapter
 
     runtime, plan, _, _ = transition
     ctx = HarnessContext(home_dir=runtime.home.parent, workspace_dir=None, guard_home=runtime.home)
@@ -634,7 +634,7 @@ def test_native_kimi_plan_restores_config_and_launchers_after_rebind(transition)
     config.parent.mkdir(parents=True)
     config.write_text('# user configuration\nmodel = "user-model"\n')
     config.chmod(0o600)
-    adapter = KimiHarnessAdapter()
+    adapter = get_adapter("kimi")
     adapter.install(ctx)
     previous = config.read_bytes()
     prepared = adapter.prepare_install(replace(ctx, workspace_dir=ctx.home_dir / "candidate-workspace"))
@@ -652,15 +652,15 @@ def test_native_kimi_plan_restores_config_and_launchers_after_rebind(transition)
 
 
 def test_prepared_native_install_preserves_foreign_edit_before_any_publication(transition):
+    from codex_plugin_scanner.guard.adapters import get_adapter
     from codex_plugin_scanner.guard.adapters.base import HarnessContext
-    from codex_plugin_scanner.guard.adapters.kimi import KimiHarnessAdapter
 
     runtime, _, _, _ = transition
     ctx = HarnessContext(home_dir=runtime.home.parent, workspace_dir=None, guard_home=runtime.home)
     config = ctx.home_dir / ".kimi-code/config.toml"
     config.parent.mkdir(parents=True)
     config.write_text('model = "previous"\n')
-    prepared = KimiHarnessAdapter().prepare_install(ctx)
+    prepared = get_adapter("kimi").prepare_install(ctx)
     config.write_text('model = "foreign user edit"\n')
     with pytest.raises(TransitionError, match="generation_changed"):
         prepared.publish(ctx.guard_home)
@@ -730,12 +730,12 @@ def test_authenticated_invalid_file_contract_refuses_publication(transition, fie
 
 @pytest.mark.parametrize("previous_exists", [False, True])
 def test_openclaw_complete_plan_recovers_overlay_hook_manifest_and_launchers(transition, previous_exists):
+    from codex_plugin_scanner.guard.adapters import get_adapter
     from codex_plugin_scanner.guard.adapters.base import HarnessContext
-    from codex_plugin_scanner.guard.adapters.openclaw import OpenClawHarnessAdapter
 
     runtime, plan, _, _ = transition
     ctx = HarnessContext(home_dir=runtime.home.parent, workspace_dir=None, guard_home=runtime.home)
-    adapter = OpenClawHarnessAdapter()
+    adapter = get_adapter("openclaw")
     if previous_exists:
         adapter.install(ctx)
     prepared = adapter.prepare_install(replace(ctx, workspace_dir=ctx.home_dir / "candidate-workspace"))
@@ -812,7 +812,10 @@ def test_native_json_plan_restores_config_state_and_backup_lifetime(transition, 
     config.chmod(0o600)
     if previous_exists:
         adapter.install(ctx)
-    _, backup, _ = adapter._managed_state_paths(ctx)
+    if harness == "zcode":
+        _, backup, _ = adapter._managed_state_paths(ctx)
+    else:
+        backup = ctx.guard_home / "managed" / "devin" / "config.json.backup"
     previous_backup = backup.stat() if backup.exists() else None
     prepared = adapter.prepare_install(replace(ctx, workspace_dir=ctx.home_dir / "candidate-workspace"))
     assert len(prepared.files) == 5
@@ -872,13 +875,13 @@ def test_pi_family_plan_restores_extension_settings_and_user_entries(transition,
             assert change.path.stat().st_mode & 0o777 == change.before_mode
 
 
-@pytest.mark.parametrize("harness", ["kimi", "grok", "zcode", "devin"])
 @pytest.mark.parametrize("helper_exists", [False, True])
-def test_frozen_helper_participates_in_signed_inverse(transition, monkeypatch, harness, helper_exists):
+def test_frozen_grok_helper_participates_in_signed_inverse(transition, monkeypatch, helper_exists):
     from codex_plugin_scanner.guard.adapters import bounded_cli_hook_bridge as bridge
     from codex_plugin_scanner.guard.adapters import get_adapter
     from codex_plugin_scanner.guard.adapters.base import HarnessContext
 
+    harness = "grok"
     runtime, plan, _, _ = transition
     ctx = HarnessContext(home_dir=runtime.home.parent, workspace_dir=None, guard_home=runtime.home)
     helper = ctx.guard_home / f"managed/bounded-hooks/{harness}.py"
@@ -1007,7 +1010,8 @@ def test_copilot_plan_restores_native_bindings_and_preserves_authority(
         monkeypatch.setattr(bridge, "isolated_cursor_hook_python", lambda: sys.executable)
         monkeypatch.setattr(bridge, "_trusted_desktop_hook_proxy_command", lambda *args: None)
     prepared = adapter.prepare_install(ctx)
-    assert len(prepared.files) == (12 if workspace_enabled else 7) + int(frozen)
+    # A frozen Guard hands the hook to its runtime and plans no helper script.
+    assert len(prepared.files) == (12 if workspace_enabled else 7)
     dependency = next(change for change in prepared.files if change.path == authority)
     assert dependency.before is dependency.after is None
     assert dependency.expected_digest is not None

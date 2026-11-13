@@ -67,6 +67,7 @@ pub(crate) fn benign_command_segments(
         return Vec::new();
     }
     let proof_context = crate::pretool::PathContext {
+        literal_words: &[],
         home_dir: context.home_dir,
         cdpath_unset: context.cdpath_unset,
         rustup_override_absent: context.rustup_override_absent,
@@ -77,6 +78,7 @@ pub(crate) fn benign_command_segments(
         ripgrep_config_absent: context.ripgrep_config_absent,
         gem_config_absent: context.gem_config_absent,
         http_config_absent: context.http_config_absent,
+        openssl_config_absent: context.openssl_config_absent,
         psql_environment: context.psql_environment,
         creates_nothing: super::search::command_creates_nothing(model),
         cwd: cwd.as_deref().or(context.cwd),
@@ -135,6 +137,7 @@ pub(crate) fn benign_command_segments(
             // home/cwd context retain the bounded path proof below.
             let requires_path_context = !path_free
                 && (super::digest_reads::digest_program(basename)
+                    || basename == "openssl"
                     || matches!(
                         basename,
                     "ls" | "cat"
@@ -275,8 +278,15 @@ pub(super) fn stdin_filter_segment(segment: &crate::CommandSegmentV1) -> bool {
             || (super::digest_reads::digest_program(basename)
                 && super::digest_reads::safe_digest_stdin_arguments(&segment.arguments))
             || (matches!(basename, "grep" | "egrep" | "fgrep")
-                && search::safe_grep_stdin_arguments(&segment.arguments))
-            || (basename == "rg" && search::safe_rg_stdin_arguments(&segment.arguments))
+                && search::safe_grep_stdin_arguments(
+                    &segment.arguments,
+                    &super::listing_reads::literal_words(&segment.text),
+                ))
+            || (basename == "rg"
+                && search::safe_rg_stdin_arguments(
+                    &segment.arguments,
+                    &super::listing_reads::literal_words(&segment.text),
+                ))
             || (basename == "sed" && safe_reads::safe_sed_stdin_arguments(&segment.arguments))
             || super::stdin_filters::safe_arguments(basename, &segment.arguments))
 }
@@ -595,6 +605,16 @@ pub(super) fn exact_safe_segment_with_context(
             segment.pipeline_index > 0,
             context,
         ),
+        // An unquoted Windows drive path loses its backslashes to the shell,
+        // so the file `openssl` opens is not the one the proof screened.
+        "openssl" => {
+            super::directory_targets::drive_targets_quoted(segment)
+                && super::digest_reads::safe_openssl_digest_arguments(
+                    &segment.arguments,
+                    segment.pipeline_index > 0,
+                    context,
+                )
+        }
         name if super::digest_reads::digest_program(name) => {
             super::digest_reads::safe_digest_arguments(
                 &segment.arguments,

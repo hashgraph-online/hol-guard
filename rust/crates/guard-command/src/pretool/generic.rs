@@ -11,7 +11,7 @@ pub(crate) mod contained_publish;
 #[path = "generic_cursor_compaction_writes.rs"]
 mod cursor_compaction_writes;
 #[path = "generic_cursor_project_reads.rs"]
-mod cursor_project_reads;
+pub(in crate::pretool) mod cursor_project_reads;
 #[path = "env_prefix_projection.rs"]
 mod env_prefix_projection;
 pub use env_prefix_projection::bindable_setting;
@@ -198,11 +198,11 @@ pub fn bounded_task_metadata_output(payload: &serde_json::Value, harness: &str) 
     }
     let input = root
         .iter()
-        .filter(|(key, _)| {
-            !matches!(
-                key.as_str(),
-                "tool_response" | "toolResponse" | "toolResultPreview"
-            )
+        // The result, and Claude Code's `duration_ms` run time in whole milliseconds.
+        .filter(|(key, value)| match key.as_str() {
+            "tool_response" | "toolResponse" | "toolResultPreview" => false,
+            "duration_ms" => !value.is_u64(),
+            _ => true,
         })
         .map(|(key, value)| (key.clone(), value.clone()))
         .collect();
@@ -257,6 +257,7 @@ pub fn evaluate_pre_tool_envelope_with_context(
         controls,
         deadline,
         crate::pretool::PathContext {
+            literal_words: &[],
             home_dir,
             cwd,
             cdpath_unset: false,
@@ -268,6 +269,7 @@ pub fn evaluate_pre_tool_envelope_with_context(
             ripgrep_config_absent: false,
             gem_config_absent: false,
             http_config_absent: false,
+            openssl_config_absent: false,
             psql_environment: Default::default(),
             creates_nothing: false,
         },
@@ -284,6 +286,7 @@ pub fn evaluate_pre_tool_envelope_with_execution_context(
     context: super::PathContext<'_>,
     execution_environment: Option<&guard_contracts::GuardExecutionEnvironmentV1>,
 ) -> PreToolResultV1 {
+    let _cursor = super::cursor_session_outputs::scope(harness, context.cwd);
     let mut context =
         super::PathContext::for_session(context.home_dir, context.cwd, execution_environment);
     let (projected_payload, cline_payload);
@@ -986,6 +989,20 @@ fn evaluate_envelope(
     {
         let (reason_code, reason) = result::review_reason(PreToolActionTypeV1::FileWrite);
         result = generic_result(result.action.clone(), "review", reason_code, reason);
+    }
+    // A CI workflow step runs on the forge with the repository's secrets,
+    // beyond any later Guard review, so planting a credential upload there is
+    // reviewed now rather than treated as an ordinary workspace edit.
+    if result.reason_code == "native_exact_safe_file_write"
+        && super::ci_workflow_writes::plants_credential_upload(&signals.path_values, payload)
+    {
+        let (reason_code, _) = result::review_reason(PreToolActionTypeV1::FileWrite);
+        result = generic_result(
+            result.action.clone(),
+            "review",
+            reason_code,
+            "This write adds a CI workflow step that uploads a local credential file to a network host. The workflow runs on the forge with the repository's secrets, where Guard cannot review it.",
+        );
     }
     if harness == "omp"
         && signals.tool_name.as_deref() == Some("edit")

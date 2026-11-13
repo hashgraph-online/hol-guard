@@ -876,6 +876,7 @@ fn windows_contains_direct_vite_builds_of_a_flat_install() {
             None,
             None,
             guard_command::pretool::PathContext {
+                literal_words: &[],
                 home_dir: Some(r"C:\Users\tester"),
                 cwd: Some(cwd),
                 cdpath_unset: true,
@@ -887,6 +888,7 @@ fn windows_contains_direct_vite_builds_of_a_flat_install() {
                 ripgrep_config_absent: false,
                 gem_config_absent: false,
                 http_config_absent: false,
+                openssl_config_absent: false,
                 psql_environment: Default::default(),
                 creates_nothing: false,
             },

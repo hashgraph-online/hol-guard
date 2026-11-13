@@ -41,6 +41,7 @@ use shell::{
 };
 pub use shell::{AUTHORIZATION_HEADER_REASON, CREDENTIAL_OPTION_REASON};
 
+pub use encoded::payloads::{decoded_payloads, DecodedPayload, DecodedPayloads};
 pub use encoded::{encoded_payload_spans, ENCODED_REASON};
 
 /// How the scan tells two candidates apart without keeping either one.
@@ -1302,6 +1303,13 @@ fn round4(value: f64) -> f64 {
 /// Detector version digest, byte-identical to the Python implementation: the
 /// SHA-256 hex digest of the rule material truncated to 16 hex characters.
 pub fn detector_version() -> String {
+    // The rules are fixed for the life of the process, and every scan reports
+    // this digest, so hash the rule material once.
+    static VERSION: std::sync::OnceLock<String> = std::sync::OnceLock::new();
+    VERSION.get_or_init(compute_detector_version).clone()
+}
+
+fn compute_detector_version() -> String {
     let mut material_parts: Vec<String> = SECRET_RULES.iter().map(rule_material_line).collect();
     material_parts.push(assignment_material_line());
     material_parts.push(encoded_payload_material_line());

@@ -199,16 +199,25 @@ impl Probe {
         for request in &requests {
             arguments.extend(["--git-path", request.as_str()]);
         }
-        let Some((status, output)) = self.run(true, &arguments, TEXT_LIMIT * requests.len() as u64)
-        else {
-            return false;
+        let limit = TEXT_LIMIT * requests.len() as u64;
+        let resolve = |arguments: &[&str]| {
+            let (status, output) = self.run(true, arguments, limit)?;
+            status
+                .success()
+                .then(|| lines(&output, requests.len()))
+                .flatten()
         };
-        let Some(paths) = status
-            .success()
-            .then(|| lines(&output, requests.len()))
-            .flatten()
-        else {
-            return false;
+        let Some(paths) = resolve(&arguments) else {
+            // `core.hooksPath = /dev/null` turns hooks off. Git cannot make a
+            // path below the null device absolute, so ask again as Git
+            // spells it: every hook there is one Git's own lookup never finds.
+            arguments.remove(1);
+            return resolve(&arguments).is_some_and(|paths| {
+                paths
+                    .iter()
+                    .zip(&hooks)
+                    .all(|(path, hook)| super::git_hook_files::below_null_device(path, hook))
+            });
         };
         paths.iter().zip(&hooks).all(|(path, hook)| {
             let path = PathBuf::from(path);

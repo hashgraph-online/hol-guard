@@ -5,6 +5,7 @@ fn failure(error: shared::Failure) -> Failure {
     match error {
         shared::Failure::Need(v) => Failure::Need(v),
         shared::Failure::Archives(v) => Failure::Archives(v),
+        shared::Failure::Batch(v) => Failure::Batch(v),
         shared::Failure::Invalid(s) => Failure::Invalid(s.into()),
     }
 }

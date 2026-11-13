@@ -509,8 +509,8 @@ pub(super) fn safe_rg_segment(
     rg::safe_rg_segment(model, segment, context)
 }
 
-pub(super) fn safe_grep_stdin_arguments(arguments: &[String]) -> bool {
-    grep::safe_stdin_arguments(arguments)
+pub(super) fn safe_grep_stdin_arguments(arguments: &[String], literal_words: &[String]) -> bool {
+    grep::safe_stdin_arguments(arguments, literal_words)
 }
 
 #[cfg(test)]

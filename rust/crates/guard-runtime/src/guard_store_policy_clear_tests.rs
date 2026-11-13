@@ -161,3 +161,42 @@ fn an_unknown_scope_is_refused() {
     );
     assert_eq!(dump(&connection).len(), 2);
 }
+
+#[test]
+fn a_decision_id_clear_takes_only_those_rows_and_skips_widening() {
+    let mut rows = signed_rows();
+    rows[1]["artifact_id"] = rows[0]["artifact_id"].clone();
+    let connection = store(&rows);
+    let first = dump(&connection)[0]["decision_id"].clone();
+
+    let reply = call(
+        &connection,
+        &args(
+            json!({
+                "harness": "codex",
+                "artifact_id": "codex:project:tool-1",
+                "decision_ids": [first],
+            }),
+            false,
+        ),
+    );
+
+    assert_eq!(reply["cleared"], json!(1), "no sibling widening");
+    assert_eq!(dump(&connection).len(), 1);
+}
+
+#[test]
+fn an_empty_decision_id_list_clears_nothing() {
+    let connection = store(&signed_rows());
+
+    let reply = call(
+        &connection,
+        &args(json!({"decision_ids": [], "unsigned_only": true}), false),
+    );
+
+    assert_eq!(
+        reply,
+        json!({"cleared": 0, "next_control_state": Value::Null})
+    );
+    assert_eq!(dump(&connection).len(), 2);
+}

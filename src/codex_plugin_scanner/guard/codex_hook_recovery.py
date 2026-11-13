@@ -11,7 +11,6 @@ from __future__ import annotations
 
 import base64
 import hashlib
-import json
 import math
 import os
 import stat
@@ -19,11 +18,18 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from .codex_hook_authority_record import (
+    AuthorityRecordRefusedError,
+    check_receipt_manifest,
+    open_authority_record,
+    seal_authority_record,
+)
+from .codex_hook_authority_record import repair_proof_matches as native_repair_proof_matches
 from .codex_hook_file_integrity import CodexHookIntegrityError, canonical_path, check_hook_validation_deadline
 from .codex_hook_integrity import (
+    HookSecretMaterial,
     atomic_write_bytes,
     authenticate_hook_manifest_text,
-    canonical_manifest_bytes,
     hook_authority_receipt_path,
     hook_manifest_path,
     load_hook_secret,
@@ -33,7 +39,6 @@ from .codex_hook_integrity import (
 from .codex_hook_rollback import rollback_file_identity
 from .codex_install_transaction import require_codex_install_owner
 from .durable_io import fsync_directory
-from .local_authority_integrity import sign_local_authority_payload, verify_local_authority_payload
 from .private_file_io import read_private_regular_bytes, read_private_regular_text
 
 if TYPE_CHECKING:
@@ -69,59 +74,26 @@ def load_hook_authority_receipt(home: Path, config: Path) -> AuthenticatedHookAu
     check_hook_validation_deadline()
     if raw is None:
         raise _error("receipt_invalid")
-    try:
-        payload = json.loads(raw)
-    except (ValueError, UnicodeDecodeError, RecursionError) as exc:
-        raise _error("receipt_invalid") from exc
-    if not isinstance(payload, dict) or set(payload) != {
-        "schema",
-        "guard_home",
-        "config_path",
-        "installation_id",
-        "config_sha256",
-        "manifest",
-        "authentication",
-    }:
-        raise _error("receipt_invalid")
-    authentication = payload.pop("authentication")
-    check_hook_validation_deadline()
     secret = load_hook_secret(home)
     check_hook_validation_deadline()
-    if (
-        payload["schema"] != _RECEIPT_SCHEMA
-        or payload["guard_home"] != canonical_path(home)
-        or payload["config_path"] != canonical_path(config)
-        or payload["installation_id"] != secret.installation_id
-        or not isinstance(authentication, dict)
-        or verify_local_authority_payload(
-            payload,
-            authentication,
-            key=secret.key,
-            key_id=secret.key_id,
-            purpose=_RECEIPT_PURPOSE,
-        ).status
-        != "valid"
-    ):
-        raise _error("receipt_authentication_invalid")
+    try:
+        payload, _signed_at = open_authority_record(
+            "receipt", raw, secret, guard_home=canonical_path(home), config_path=canonical_path(config)
+        )
+    except AuthorityRecordRefusedError as exc:
+        raise _error(exc.reason) from exc
+    check_hook_validation_deadline()
     manifest_bytes = _decode(payload["manifest"])
-    if manifest_bytes is None or authentication.get("signed_at") != hashlib.sha256(manifest_bytes).hexdigest():
+    if manifest_bytes is None:
         raise _error("receipt_invalid")
     try:
         manifest = authenticate_hook_manifest_text(home, manifest_bytes.decode("utf-8"), _secret=secret)
     except UnicodeDecodeError as exc:
         raise _error("receipt_invalid") from exc
-    manifest_config = manifest.get("config")
-    context = manifest.get("context")
-    if (
-        manifest.get("harness") != "codex"
-        or manifest.get("installation_id") != secret.installation_id
-        or not isinstance(manifest_config, dict)
-        or manifest_config.get("scope") != "global"
-        or manifest_config.get("target") != canonical_path(config)
-        or not isinstance(context, dict)
-        or context.get("guard_home") != canonical_path(home)
-    ):
-        raise _error("receipt_context_invalid")
+    try:
+        check_receipt_manifest(manifest, secret, guard_home=canonical_path(home), config_path=canonical_path(config))
+    except AuthorityRecordRefusedError as exc:
+        raise _error(exc.reason) from exc
     check_hook_validation_deadline()
     config_bytes = _snapshot(config)
     if config_bytes is None or payload["config_sha256"] != hashlib.sha256(config_bytes).hexdigest():
@@ -149,17 +121,10 @@ def build_hook_authority_receipt(home: Path, config: Path, *, config_bytes: byte
         "config_sha256": hashlib.sha256(config_bytes).hexdigest(),
         "manifest": _encode(manifest_bytes),
     }
-    payload["authentication"] = sign_local_authority_payload(
-        payload,
-        key=secret.key,
-        key_id=secret.key_id,
-        purpose=_RECEIPT_PURPOSE,
-        signed_at=hashlib.sha256(manifest_bytes).hexdigest(),
-    )
-    encoded = canonical_manifest_bytes(payload) + b"\n"
-    if len(encoded) > _MAX_SNAPSHOT:
-        raise _error("snapshot_too_large")
-    return encoded
+    try:
+        return seal_authority_record("receipt", payload, secret)
+    except AuthorityRecordRefusedError as exc:
+        raise _error(exc.reason) from exc
 
 
 def _record_path(home: Path) -> Path:
@@ -284,76 +249,28 @@ def prepare_hook_publication(
     if repair_plan is not None:
         payload["repair_plan"] = repair_plan
         payload["repair_publication_monotonic"] = repair_publication_monotonic
-        _validate_repair_record(payload)
     elif repair_publication_monotonic is not None:
         raise _error("repair_record_invalid")
-    payload["authentication"] = sign_local_authority_payload(
-        payload, key=secret.key, key_id=secret.key_id, purpose=_PURPOSE, signed_at=owner.operation_id
-    )
-    encoded = canonical_manifest_bytes(payload) + b"\n"
-    if len(encoded) > _MAX_RECORD:
-        raise _error("record_too_large")
+    encoded = _seal_record(payload, secret, signed_at=owner.operation_id)
     atomic_write_bytes(path, encoded, mode=0o600, private=True)
 
 
-def _validate_repair_record(payload: dict[str, object]) -> None:
-    plan = payload.get("repair_plan")
-    publication_time = payload.get("repair_publication_monotonic")
-    if (
-        not isinstance(plan, dict)
-        or plan.get("schema") != "hol-guard.codex-authority-repair-plan.v1"
-        or plan.get("action") != "apps.repair.codex-authority"
-        or plan.get("guard_home") != payload.get("guard_home")
-        or plan.get("config_path") != payload.get("config_path")
-        or payload.get("phase") not in ("prepared", "committed")
-        or payload.get("key_created") is not False
-        or payload.get("before_manifest") is not None
-        or not isinstance(payload.get("after_manifest"), str)
-        or not isinstance(payload.get("after_receipt"), str)
-        or payload.get("before_config") != payload.get("after_config")
-        or payload.get("before_receipt") != payload.get("after_receipt")
-        or not isinstance(publication_time, (float, int))
-        or isinstance(publication_time, bool)
-        or not math.isfinite(publication_time)
-        or publication_time <= 0
-    ):
-        raise _error("repair_record_invalid")
-    if payload.get("phase") == "committed":
-        proof = payload.get("native_verification")
-        if not isinstance(proof, dict) or not _repair_proof_matches(payload, proof):
-            raise _error("repair_record_invalid")
-    elif "native_verification" in payload:
-        raise _error("repair_record_invalid")
+def _seal_record(payload: dict[str, object], secret: HookSecretMaterial, *, signed_at: str) -> bytes:
+    try:
+        encoded = seal_authority_record("recovery", payload, secret, signed_at=signed_at)
+    except AuthorityRecordRefusedError as exc:
+        raise _error(exc.reason) from exc
+    if len(encoded) > _MAX_RECORD:
+        # Readers cap the record at the same size.
+        raise _error("record_too_large")
+    return encoded
 
 
 def _repair_proof_matches(payload: dict[str, object], proof: dict[str, object]) -> bool:
-    plan = payload.get("repair_plan")
-    if not isinstance(plan, dict) or not isinstance(plan.get("native_runtime"), dict):
-        return False
-    config, manifest = _decode(payload.get("after_config")), _decode(payload.get("after_manifest"))
-    evidence = proof.get("installed_hook_evidence")
-    generation = "codex-authority-repair-" + hashlib.sha256(canonical_manifest_bytes(plan)).hexdigest()
-    observed, published = proof.get("observed_monotonic"), payload.get("repair_publication_monotonic")
-    return (
-        config is not None
-        and manifest is not None
-        and isinstance(evidence, dict)
-        and proof.get("schema") == "hol-guard.native-protection-admission.v1"
-        and proof.get("operation_id") == plan.get("operation_id")
-        and proof.get("generation") == generation
-        and proof.get("guard_home") == payload.get("guard_home")
-        and proof.get("runtime_identity") == plan.get("native_runtime")
-        and evidence.get("harness") == "codex"
-        and evidence.get("config_sha256") == hashlib.sha256(config).hexdigest()
-        and evidence.get("manifest_sha256") == hashlib.sha256(manifest).hexdigest()
-        and isinstance(observed, (float, int))
-        and not isinstance(observed, bool)
-        and math.isfinite(observed)
-        and isinstance(published, (float, int))
-        and not isinstance(published, bool)
-        and math.isfinite(published)
-        and observed >= published
-    )
+    try:
+        return native_repair_proof_matches(payload, proof)
+    except AuthorityRecordRefusedError as exc:
+        raise _error(exc.reason) from exc
 
 
 def assert_owned_hook_repair_publication(
@@ -394,46 +311,18 @@ def _load_record(home: Path, *, live_config_conflict: bool = False) -> dict[str,
     check_hook_validation_deadline()
     if raw is None:
         raise _error("record_invalid")
-    try:
-        payload = json.loads(raw)
-    except json.JSONDecodeError as exc:
-        raise _error("record_invalid") from exc
-    if not isinstance(payload, dict):
-        raise _error("record_invalid")
-    check_hook_validation_deadline()
-    authentication = payload.pop("authentication", None)
     secret = load_hook_secret(home)
     check_hook_validation_deadline()
-    if (
-        not isinstance(authentication, dict)
-        or payload.get("schema") != _SCHEMA
-        or payload.get("guard_home") != canonical_path(home)
-        or payload.get("installation_id") != secret.installation_id
-        or verify_local_authority_payload(
-            payload, authentication, key=secret.key, key_id=secret.key_id, purpose=_PURPOSE
-        ).status
-        != "valid"
-    ):
-        raise _error("authentication_invalid")
-    check_hook_validation_deadline()
-    config_value = payload.get("config_path")
-    if not isinstance(config_value, str) or not Path(config_value).is_absolute():
-        raise _error("target_invalid")
-    config = Path(config_value)
-    if (
-        payload.get("phase") != "config_conflict"
-        and not live_config_conflict
-        and canonical_path(config) != config_value
-    ):
-        raise _error("target_changed")
-    if payload.get("phase") not in ("prepared", "committed", "config_conflict"):
-        raise _error("phase_invalid")
-    if ("after_receipt" in payload or "before_receipt" in payload) and (
-        "before_receipt" not in payload or not isinstance(payload.get("after_receipt"), str)
-    ):
-        raise _error("record_invalid")
-    if "repair_plan" in payload:
-        _validate_repair_record(payload)
+    try:
+        payload, _signed_at = open_authority_record(
+            "recovery",
+            raw,
+            secret,
+            guard_home=canonical_path(home),
+            live_config_conflict=live_config_conflict,
+        )
+    except AuthorityRecordRefusedError as exc:
+        raise _error(exc.reason) from exc
     return payload
 
 
@@ -482,11 +371,8 @@ def mark_owned_hook_publication_conflict(home: Path, config: Path) -> None:
         if _snapshot(target) not in (_decode(payload.get(before)), _decode(payload.get(after))):
             raise _error("generation_changed")
     payload["phase"] = "config_conflict"
-    secret = load_hook_secret(home)
-    payload["authentication"] = sign_local_authority_payload(
-        payload, key=secret.key, key_id=secret.key_id, purpose=_PURPOSE, signed_at=owner.operation_id
-    )
-    atomic_write_bytes(_record_path(home), canonical_manifest_bytes(payload) + b"\n", mode=0o600, private=True)
+    encoded = _seal_record(payload, load_hook_secret(home), signed_at=owner.operation_id)
+    atomic_write_bytes(_record_path(home), encoded, mode=0o600, private=True)
 
 
 def record_owned_hook_config_publication(home: Path, config: Path, identity: tuple[int, int, int, int, int]) -> None:
@@ -514,11 +400,8 @@ def record_owned_hook_config_publication(home: Path, config: Path, identity: tup
     ):
         raise _error("generation_changed")
     payload["after_config_identity"] = list(identity)
-    secret = load_hook_secret(home)
-    payload["authentication"] = sign_local_authority_payload(
-        payload, key=secret.key, key_id=secret.key_id, purpose=_PURPOSE, signed_at=owner.operation_id
-    )
-    atomic_write_bytes(_record_path(home), canonical_manifest_bytes(payload) + b"\n", mode=0o600, private=True)
+    encoded = _seal_record(payload, load_hook_secret(home), signed_at=owner.operation_id)
+    atomic_write_bytes(_record_path(home), encoded, mode=0o600, private=True)
 
 
 def _require_recorded_config_identity(payload: dict[str, object], config: Path) -> None:
@@ -654,21 +537,9 @@ def _commit_verified_hook_repair_publication(
 def _commit_record(home: Path, payload: dict[str, object]) -> None:
     payload["phase"] = "committed"
     _require_recorded_config_identity(payload, Path(str(payload["config_path"])))
-    if "repair_plan" in payload:
-        _validate_repair_record(payload)
-    secret = load_hook_secret(home)
-    payload["authentication"] = sign_local_authority_payload(
-        payload,
-        key=secret.key,
-        key_id=secret.key_id,
-        purpose=_PURPOSE,
-        signed_at=str(payload["operation_id"]),
-    )
     # Publish the commit before cleanup. A crash during cleanup must retain the
     # authenticated candidate, rather than applying the predecessor inverse.
-    encoded = canonical_manifest_bytes(payload) + b"\n"
-    if len(encoded) > _MAX_RECORD:
-        raise _error("record_too_large")
+    encoded = _seal_record(payload, load_hook_secret(home), signed_at=str(payload["operation_id"]))
     atomic_write_bytes(_record_path(home), encoded, mode=0o600, private=True)
     _remove_record(home)
 

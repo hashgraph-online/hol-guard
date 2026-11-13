@@ -64,6 +64,8 @@ fn sibling_glob_reads_prove_every_expanded_file() {
         "wc -l ~/org/service-api/contracts/*.json".to_owned(),
         "cat ../service-api/contracts/*.md".to_owned(),
         "wc -l ../app-portal/*.md".to_owned(),
+        // A pattern that matches nothing reads nothing.
+        format!("cat {sibling}/contracts/*.yaml"),
     ];
     for harness in ["codex", "zcode"] {
         for command in &allowed {
@@ -76,9 +78,8 @@ fn sibling_glob_reads_prove_every_expanded_file() {
         format!("cat {sibling}/mixed/*.json {sibling}/mixed/.e*"),
         format!("cat {sibling}/creds/*.json"),
         format!("base64 {sibling}/keys/*"),
-        // A directory match, no match, or an unmodelled pattern.
+        // A directory match or an unmodelled pattern.
         format!("wc -l {sibling}/nested/*.json"),
-        format!("cat {sibling}/contracts/*.yaml"),
         format!("cat {sibling}/contracts/[cs]*.json"),
         format!("cat {sibling}/*/*.json"),
         format!("cat {sibling}/**/*.json"),

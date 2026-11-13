@@ -83,9 +83,15 @@ def test_isolated_grok_client_is_recognized(tmp_path: Path, monkeypatch: pytest.
         "codex_plugin_scanner.guard.adapters.cursor_hook_config.isolated_cursor_hook_python",
         lambda: "/usr/bin/python3",
     )
+    runtime = tmp_path / "hol-guard-runtime"
+    for module in ("bounded_cli_hook_bridge", "bounded_cli_hook_native"):
+        monkeypatch.setattr(
+            f"codex_plugin_scanner.guard.adapters.{module}.native_bridge_executable",
+            lambda *_args, **_kwargs: runtime,
+        )
     context = HarnessContext(tmp_path / "home", tmp_path / "workspace", tmp_path / "guard")
     command = GrokHarnessAdapter._hook_command_parts(context)
-    assert command[:2] == ("/usr/bin/python3", "-I")
+    assert command[:4] == (str(runtime), "bounded-hook-bridge", "/usr/bin/python3", "-I")
     assert is_grok_hook_command(_shell_command(command), context) is True
     other = HarnessContext(tmp_path / "other", None, tmp_path / "other-guard")
     assert is_grok_hook_command(_shell_command(command), other) is False

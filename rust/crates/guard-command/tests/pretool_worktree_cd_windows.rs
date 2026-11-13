@@ -83,6 +83,7 @@ fn worktree_add_then_cd_into_it_is_proved_on_windows() {
             Some(&controls),
             None,
             guard_command::pretool::PathContext {
+                literal_words: &[],
                 home_dir: Some(&home_text),
                 cwd: Some(&cwd),
                 cdpath_unset: false,
@@ -94,6 +95,7 @@ fn worktree_add_then_cd_into_it_is_proved_on_windows() {
                 ripgrep_config_absent: false,
                 gem_config_absent: false,
                 http_config_absent: false,
+                openssl_config_absent: false,
                 psql_environment: Default::default(),
                 creates_nothing: false,
             },

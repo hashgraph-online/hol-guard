@@ -233,12 +233,13 @@ impl CompiledNativeCommandControls {
         // evidence field stays one value for both, because consumers pin it;
         // this flag carries the difference to the floor below.
         let mut deadline_expired = false;
-        // An administrator disable is a floor the user cannot clear, and a
-        // check that ran out of time cannot show the command falls outside
-        // it. Where anything is disabled, a timeout keeps the block rather
-        // than offering an approval that would override that decision.
-        let admin_disabled =
-            !self.blocked_permissions.is_empty() || !self.blocked_extensions.is_empty();
+        // An administrator disable is a floor the user cannot clear. A check
+        // that ran out of time keeps the block when a disabled extension
+        // could own the command, rather than offering an approval that would
+        // override that decision. A disable that provably cannot reach the
+        // command, such as a Kubernetes permission under `git diff`, leaves
+        // the timeout reviewable.
+        let admin_disabled = || self.disabled_owner_in_reach(command, tool, packages);
         let (mut batch, unmodeled) = match observed {
             Ok(observed) => observed,
             Err(error) => {
@@ -270,7 +271,7 @@ impl CompiledNativeCommandControls {
                             ..Default::default()
                         };
                     }
-                    if deadline_expired && !admin_disabled {
+                    if deadline_expired && !admin_disabled() {
                         "review"
                     } else {
                         "block"
@@ -288,7 +289,7 @@ impl CompiledNativeCommandControls {
         let mut reason = if self.global_block {
             "native_command_control_authority_block"
         } else if batch.evaluation_error.is_some() {
-            evaluation_error_reason(deadline_expired && !admin_disabled)
+            evaluation_error_reason(deadline_expired && !admin_disabled())
         } else if delegated_floor == "block" {
             "native_command_permission_disabled"
         } else {
@@ -436,7 +437,7 @@ impl CompiledNativeCommandControls {
             // a block no approval can clear. Every other evaluation failure
             // still blocks, and so does a timeout while an administrator has
             // disabled anything the unfinished check could not rule out.
-            let softened = deadline_expired && !admin_disabled;
+            let softened = deadline_expired && !admin_disabled();
             let error_floor = if softened { "review" } else { "block" };
             if rank(floor) < rank(error_floor) {
                 floor = error_floor;
@@ -446,7 +447,10 @@ impl CompiledNativeCommandControls {
         strengthen(&mut result, floor, reason);
         floor::explain_timed_out_review(
             &mut result,
-            evaluation_error.is_some() && deadline_expired && !admin_disabled && !self.global_block,
+            evaluation_error.is_some()
+                && deadline_expired
+                && !self.global_block
+                && !admin_disabled(),
         );
         self.enforce_quarantine(command, tool, &mut result);
         let evaluates = |probe: &CanonicalCommandV1| {

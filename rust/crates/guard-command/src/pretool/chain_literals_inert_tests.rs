@@ -232,6 +232,12 @@ fn a_quoted_heredoc_read_by_cat_becomes_its_own_text() {
             "git commit -m \"$(cat <<'EOF'\nfix(x): drop the old path\n\nRefs: #12\nEOF\n)\"",
             "git commit -m \"fix(x): drop the old path\n\nRefs: #12\"",
         ),
+        // An apostrophe is literal inside the double quotes, so the message
+        // is the text the program receives.
+        (
+            "git commit -m \"$(cat <<'EOF'\nfix: keep 'in' checks\n\nit's the old path\nEOF\n)\"",
+            "git commit -m \"fix: keep 'in' checks\n\nit's the old path\"",
+        ),
     ] {
         assert_eq!(projected(command).as_deref(), Some(expected), "{command}");
     }
@@ -273,6 +279,9 @@ fn a_cat_that_reads_more_than_a_quoted_heredoc_stays_opaque() {
         "git commit -m \"$(cat <<'EOF'\nuse `id` here\nEOF\n)\"",
         "git commit -m \"$(cat <<'EOF'\ncost $(id)\nEOF\n)\"",
         "git commit -m \"$(cat <<'EOF'\nsay \"hi\"\nEOF\n)\"",
+        "git commit -m \"$(cat <<'EOF'\nit's a \\ path\nEOF\n)\"",
+        // The projection is ASCII only.
+        "git commit -m \"$(cat <<'EOF'\nit's a caf\u{e9}\nEOF\n)\"",
         "git commit -m \"$(cat <<'EOF'\nwipe *\nEOF\n)\"",
         // A pattern character is refused even though the double quotes keep
         // the shell from matching it: the screens downstream read the

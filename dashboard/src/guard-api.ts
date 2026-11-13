@@ -100,6 +100,7 @@ import {
 import { normalizeApprovalExtensionCoverage } from "./approval-extension-coverage";
 import { normalizeApprovalExtensionRecommendation } from "./approval-extension-recommendation";
 import { observeDashboardBuild } from "./dashboard-build";
+import { applyHarnessCigarPatch } from "./fleet-app-modes";
 
 const GUARD_TOKEN_PARAM = "guard-token";
 const GUARD_DAEMON_PARAM = "guardDaemon";
@@ -2429,14 +2430,18 @@ function applyHarnessPosturePatch(
   return next;
 }
 
-export type GuardSettingsUpdate = Omit<Partial<GuardSettings>, "harness_postures" | "context_assistance_diagnostic" | "context_assistance_requested"> & {
+export type GuardSettingsUpdate = Omit<Partial<GuardSettings>, "harness_postures" | "harness_cigar" | "context_assistance_diagnostic" | "context_assistance_requested" | "context_assistance_effective_ready"> & {
   harness_postures?: GuardHarnessPosturePatch;
+  /** Per-app CIGAR patch: `"off"` stops CIGAR for the app, `null` lets it follow CIGAR again. */
+  harness_cigar?: Record<string, "off" | null>;
+  /** The Watch entries in this update get no auto-revert window (an app keeping only CIGAR). */
+  harness_watch_untimed?: boolean;
 };
 
 export async function updateSettings(settings: GuardSettingsUpdate): Promise<GuardSettingsPayload> {
   if (isGuardDemoMode()) {
     const current = await fetchSettings();
-    const { harness_postures: posturePatch, ...rest } = settings;
+    const { harness_postures: posturePatch, harness_cigar: cigarPatch, harness_watch_untimed: _untimed, ...rest } = settings;
     return {
       ...current,
       settings: {
@@ -2445,6 +2450,9 @@ export async function updateSettings(settings: GuardSettingsUpdate): Promise<Gua
         ...(posturePatch === undefined
           ? {}
           : { harness_postures: applyHarnessPosturePatch(current.settings.harness_postures, posturePatch) }),
+        ...(cigarPatch === undefined
+          ? {}
+          : { harness_cigar: applyHarnessCigarPatch(current.settings.harness_cigar, cigarPatch) }),
       },
     };
   }
@@ -3538,6 +3546,7 @@ export function normalizeGuardUpdateStatus(
     release_channel: isGuardUpdateChannel(value.release_channel)
       ? value.release_channel
       : (fallbackReleaseChannel ?? "stable"),
+    update_mode: value.update_mode === "ask" || value.update_mode === "off" ? value.update_mode : "automatic",
   };
 }
 
@@ -3654,6 +3663,31 @@ export type GuardUpdateChannelProof = {
   approval_password?: string;
   approval_totp_code?: string;
 };
+
+export type GuardUpdateMode = "automatic" | "ask" | "off";
+
+export async function setGuardUpdateMode(
+  mode: GuardUpdateMode,
+  proof?: GuardUpdateChannelProof,
+): Promise<GuardUpdateStatus> {
+  if (isGuardDemoMode()) {
+    return normalizeGuardUpdateStatus({
+      ...(await fetchGuardUpdateStatus()),
+      update_mode: mode,
+    });
+  }
+  const response = await fetchWithGuardAuth("/v1/settings", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ settings: { update_mode: mode }, ...proof }),
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    const value = isRecord(payload) ? payload : {};
+    throw new Error(stringValue(value.message) ?? `Update preference failed with ${response.status}`);
+  }
+  return fetchGuardUpdateStatus();
+}
 
 export async function setGuardUpdateChannel(
   channel: "stable" | "alpha",

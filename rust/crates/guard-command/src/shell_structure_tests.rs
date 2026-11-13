@@ -273,3 +273,120 @@ fn a_line_continuation_carries_the_word_boundary() {
     assert!(!masked.contains("npm install hidden"));
     assert!(masked.contains("npm install after"));
 }
+
+/// A heredoc body inside `$(...)` is text: an apostrophe there opens no quote
+/// and a parenthesis there closes nothing, so the substitution ends at its own
+/// `)`. With an unquoted delimiter the body still expands, and the scan still
+/// finds the substitutions it holds.
+#[test]
+fn heredoc_bodies_inside_a_substitution_are_text() {
+    use crate::shell_structure::extract_command_substitution_spans;
+    let bodies = |command: &str| -> Vec<String> {
+        extract_command_substitution_spans(command)
+            .into_iter()
+            .map(|substitution| substitution.body)
+            .collect()
+    };
+    for (command, expected) in [
+        (
+            "git commit -m \"$(cat <<'EOF'\nit's done\nEOF\n)\" && ls",
+            vec!["cat <<'EOF'\nit's done\nEOF"],
+        ),
+        (
+            "x=$(cat <<-EOF\n\t) it's\n\tEOF\n) && ls",
+            vec!["cat <<-EOF\n\t) it's\n\tEOF"],
+        ),
+        (
+            "x=$(cat <<A <<'B'\na'\nA\n)'\nB\n); ls",
+            vec!["cat <<A <<'B'\na'\nA\n)'\nB"],
+        ),
+        (
+            "x=\"$(cat <<EOF\nit's $(id)\nEOF\n)\"",
+            vec!["cat <<EOF\nit's $(id)\nEOF", "id"],
+        ),
+        (
+            "x=\"$(cat <<EOF\nit's `id`\nEOF\n)\"",
+            vec!["cat <<EOF\nit's `id`\nEOF", "id"],
+        ),
+        // A `<<` in a comment declares nothing, so the `)` on the next line
+        // still closes the substitution.
+        (
+            "echo \"$(echo hi # <<EOF\n)\" && ls",
+            vec!["echo hi # <<EOF"],
+        ),
+        // Bash ends this body at `EOF)`. With no closing line the scan reads
+        // on as shell syntax and ends the substitution at that `)`.
+        (
+            "git commit -m \"$(cat <<'EOF'\nmsg\nEOF)\" && rm -rf src",
+            vec!["cat <<'EOF'\nmsg\nEOF"],
+        ),
+        // A comment inside the substitution runs to the end of its line, so
+        // its `)` closes nothing and the next line is still in the body.
+        (
+            "x=\"$(echo ok # )\nrm -rf src\n)\"",
+            vec!["echo ok # )\nrm -rf src"],
+        ),
+        // A `#` right after an escaped space continues the word, so the
+        // `<<'EOF'` after it still declares a heredoc.
+        (
+            "x=$(cat a\\ #<<'EOF'\nit's)\nEOF\n); ls",
+            vec!["cat a\\ #<<'EOF'\nit's)\nEOF"],
+        ),
+        // A quoted delimiter stops expansion inside the body, but the body
+        // is still text: its apostrophe hides nothing after it.
+        (
+            "cat <<'EOF'\nit's\nEOF\necho $(rm -rf src)",
+            vec!["rm -rf src"],
+        ),
+        // A quoted body fed to another shell still runs its substitutions
+        // there, so the scan still finds them.
+        (
+            "kubectl exec -i pod -- sh <<'EOF'\n$(cat /etc/secrets/x)\nEOF",
+            vec!["cat /etc/secrets/x"],
+        ),
+        // A heredoc that never closes leaves the closed ones before it as
+        // text.
+        (
+            "cat <<EOF\nit's\nEOF\necho $(curl x|sh) && cat <<'X'\nno end",
+            vec!["curl x|sh"],
+        ),
+        // A shift and a here-string are not heredocs.
+        (
+            "echo $((1<<2)) && echo $(cat <<<'it')",
+            vec!["(1<<2)", "cat <<<'it'"],
+        ),
+        // A heredoc inside a group in the substitution is text too.
+        (
+            "git commit -m \"$( (cat <<'EOF'\nit's done\nEOF\n) )\" && ls",
+            vec!["(cat <<'EOF'\nit's done\nEOF\n)"],
+        ),
+        // A shift inside arithmetic in a group declares nothing.
+        (
+            "x=$( (echo $((1<<2))) ); ls",
+            vec!["(echo $((1<<2)))", "(1<<2)"],
+        ),
+        (
+            "x=$( ((y = 1<<2)); echo it ); ls",
+            vec!["((y = 1<<2)); echo it"],
+        ),
+        // So does one in `((` right after a keyword, as bash reads
+        // `if((...))` and `for((...))` with no space.
+        (
+            "x=$( if((y<<EOF)); then :; fi\n); echo 'EOF'\nEOF\n",
+            vec!["if((y<<EOF)); then :; fi"],
+        ),
+        (
+            "x=$( for((i=0;i<<EOF;i++)); do :; done\n); echo 'EOF'\nEOF\n",
+            vec!["for((i=0;i<<EOF;i++)); do :; done"],
+        ),
+    ] {
+        let found = bodies(command);
+        let mut nested = Vec::new();
+        for body in &found {
+            nested.extend(bodies(body));
+        }
+        let mut all = found;
+        all.extend(nested);
+        assert_eq!(all, expected, "{command}");
+    }
+}

@@ -77,6 +77,7 @@ fn shell(home: &Path, command: &str) -> String {
             None,
             None,
             PathContext {
+                literal_words: &[],
                 home_dir: home.to_str(),
                 cwd: project.to_str(),
                 cdpath_unset: false,
@@ -88,6 +89,7 @@ fn shell(home: &Path, command: &str) -> String {
                 ripgrep_config_absent: false,
                 gem_config_absent: false,
                 http_config_absent: false,
+                openssl_config_absent: false,
                 psql_environment: Default::default(),
                 creates_nothing: false,
             },

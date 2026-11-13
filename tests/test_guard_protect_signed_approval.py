@@ -165,3 +165,80 @@ def test_guard_protect_render_keeps_signed_approval_link_copyable_at_narrow_widt
     assert "#guard-token=*****" not in output
     assert "fixture-value" not in output
     assert "token=*****" in output
+
+
+def _desktop_guard_home(tmp_path):
+    guard_home = tmp_path / "desktop-guard-home"
+    guard_home.mkdir(parents=True)
+    guard_home.chmod(0o700)
+    token_path = guard_home / "daemon-auth-token"
+    token_path.write_text("synthetic-daemon-token", encoding="utf-8")
+    token_path.chmod(0o600)
+    app = tmp_path / "HOL Guard.app"
+    app.mkdir()
+    marker = guard_home / "desktop-deep-link.json"
+    marker.write_text(
+        json.dumps({"version": 1, "scheme": "hol-guard-desktop", "routes": ["requests"], "app_path": str(app)}),
+        encoding="utf-8",
+    )
+    marker.chmod(0o600)
+    return guard_home
+
+
+def _stub_native_guidance(monkeypatch, output):
+    """Stand in for the native guidance answer, which carries the approval link line."""
+
+    placeholder = output["_ephemeral_signed_approval_placeholder"]
+    monkeypatch.setattr(
+        render,
+        "human_protect_guidance",
+        lambda _payload, **_kwargs: (
+            "Approve this install",
+            [f"Open HOL Guard to approve or keep this blocked: {placeholder}."],
+        ),
+    )
+
+
+def test_guard_protect_human_output_offers_desktop_when_desktop_opens_requests(tmp_path, capsys, monkeypatch) -> None:
+    request_id = "2c79d707370b453886adf5b2e7e622ec"
+    review_url = f"http://127.0.0.1:5474/requests/{request_id}"
+    payload = {
+        "supply_chain_evaluation": {
+            "user_copy": {"dashboard_url": review_url, "harness_message": f"Review: {review_url}"}
+        }
+    }
+
+    output = commands_dispatch_local._protect_payload_for_human_output(
+        payload, guard_home=_desktop_guard_home(tmp_path)
+    )
+    assert output["_ephemeral_desktop_approval_url"] == f"hol-guard-desktop://requests/{request_id}"
+
+    _stub_native_guidance(monkeypatch, output)
+    emit_guard_payload("protect", output, as_json=False)
+    printed = capsys.readouterr().out
+    desktop_at = printed.index(f"Open in HOL Guard Desktop: hol-guard-desktop://requests/{request_id}")
+    browser_at = printed.index("Or in a browser:")
+    assert desktop_at < browser_at
+    assert short_signed_link(review_url).search(printed[browser_at:])
+
+
+def test_guard_protect_human_output_without_desktop_prints_only_the_browser_link(tmp_path, capsys, monkeypatch) -> None:
+    request_id = "2c79d707370b453886adf5b2e7e622ec"
+    review_url = f"http://127.0.0.1:5474/requests/{request_id}"
+    guard_home = _desktop_guard_home(tmp_path)
+    (guard_home / "desktop-deep-link.json").unlink()
+    payload = {
+        "supply_chain_evaluation": {
+            "user_copy": {"dashboard_url": review_url, "harness_message": f"Review: {review_url}"}
+        }
+    }
+
+    output = commands_dispatch_local._protect_payload_for_human_output(payload, guard_home=guard_home)
+    assert "_ephemeral_desktop_approval_url" not in output
+
+    _stub_native_guidance(monkeypatch, output)
+    emit_guard_payload("protect", output, as_json=False)
+    printed = capsys.readouterr().out
+    assert "hol-guard-desktop://" not in printed
+    assert "Or in a browser:" not in printed
+    assert short_signed_link(review_url).search(printed)
