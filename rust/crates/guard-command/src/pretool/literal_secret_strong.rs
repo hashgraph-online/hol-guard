@@ -63,13 +63,31 @@ fn entropy(value: &str) -> f64 {
         .sum()
 }
 
+/// Whether `value` is a whole `$NAME` or `%NAME%` reference to another
+/// variable rather than a literal.
+fn variable_reference(value: &str) -> bool {
+    let name = value.strip_prefix('$').or_else(|| {
+        value
+            .strip_prefix('%')
+            .and_then(|rest| rest.strip_suffix('%'))
+    });
+    name.is_some_and(|name| {
+        let mut chars = name.chars();
+        chars
+            .next()
+            .is_some_and(|first| first.is_ascii_alphabetic() || first == '_')
+            && chars.all(|ch| ch.is_ascii_alphanumeric() || ch == '_')
+    })
+}
+
 /// Whether a value next to a credential name is long and random enough that
 /// it cannot be an identifier, phrase or placeholder.
 fn strongly_random(raw: &str) -> bool {
     // A YAML or JSON string often carries its newline as a `\n` escape.
     let value = raw.strip_suffix("\\n").unwrap_or(raw);
-    // `$NAME` and `%NAME%` read the value from another variable.
-    if value.starts_with('$') || (value.starts_with('%') && value.ends_with('%')) {
+    // `$NAME` and `%NAME%` read the value from another variable. Any other
+    // value that starts with `$` is still measured.
+    if variable_reference(value) {
         return false;
     }
     if value.chars().count() < 16 || FILLER.is_match(value) || SEQUENTIAL.is_match(value) {

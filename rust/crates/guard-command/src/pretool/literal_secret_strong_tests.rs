@@ -51,6 +51,11 @@ fn credentials_proven_by_their_context_are_secrets() {
             ".oauth_verifier(\"{}\")",
             joined(&["cSde7aQw9Lm3Xp", "Rt5Vb2Nk8Hz4Jy6G"])
         ),
+        // A literal that happens to start with `$` is not a variable name.
+        format!(
+            "CLIENT_SECRET = \"{}\"",
+            joined(&["$kQ9vZ2pL/x7Rt4", "mWbN8sJ3cHd+=="])
+        ),
     ] {
         assert!(holds_proven_secret(&text), "{text}");
     }
