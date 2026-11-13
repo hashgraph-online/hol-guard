@@ -109,7 +109,6 @@ pub(crate) mod directory_targets;
 pub(crate) mod workspace_git_config;
 pub(crate) mod workspace_git_environment;
 pub(crate) use directory_targets::safe_directory_target;
-pub(crate) use environment_names::exact_safe_command as names_only_environment_listing;
 mod awk_reads;
 mod base64_reads;
 mod brace_words;
@@ -755,8 +754,7 @@ fn sensitive_location_text(value: &str) -> bool {
         ".env",
     ];
     needles.iter().any(|needle| lowered.contains(needle))
-        || (crate::environment_secret_dump::printenv_may_print_secret(&lowered)
-            && !crate::environment_name_filters::printenv_renders_only_names(value))
+        || crate::environment_secret_dump::printenv_may_print_secret(&lowered)
         || lowered.contains("os.environ")
         || lowered.contains("process.env")
 }
@@ -1306,7 +1304,7 @@ fn evaluate_single_command(
             model,
             "allow",
             "native_exact_safe_command",
-            "The Rust command authority proved this pipeline prints variable names with their values removed.",
+            "The Rust command authority proved this awk program prints environment variable names and never reads their values.",
         ));
     }
     if worktree_add::exact_safe_command(&model, context, deadline, execution_environment) {

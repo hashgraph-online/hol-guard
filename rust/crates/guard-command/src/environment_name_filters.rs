@@ -1,42 +1,29 @@
-//! Pipeline stages that render variable names without their values.
+//! Listings of environment variable names that never render a value.
 //!
-//! `printenv` alone prints every value a process was given, so Guard reviews
-//! it. An agent working out which variable a service reads asks for the list
-//! of names often enough that reviewing the question stalls ordinary work,
-//! so one shape of it is proven here instead.
+//! `printenv` and `env` print every variable as `NAME=value` followed by a
+//! newline, but a value may carry newlines of its own: a PEM key, a
+//! certificate and a JSON credential all do. Every line after the first one
+//! of such a value then reaches the next stage looking like any other line,
+//! so no filter over that output can tell a name from value bytes. `cut -d=
+//! -f1` and `awk -F= '{print $1}'` print such a line whole, and `grep -o`
+//! with an anchored, upper-case pattern prints the part of it that matches:
+//! a value holding a newline and then an access key id comes out of
+//! `printenv | grep -oE '^AKIA[A-Z0-9_]*'` as the whole key id. A spelled
+//! prefix is no boundary when secrets carry a well-known one, so a dump
+//! piped into a filter keeps its review.
 //!
-//! The shape is narrow on purpose. `printenv` ends every variable with a
-//! newline, but a value may carry a newline of its own: a PEM key, a
-//! certificate and a JSON credential all do. Each line after the first then
-//! holds value bytes and no name, so a stage that keeps "the text before the
-//! `=`" keeps secret text on those lines. `cut -d= -f1` prints such a line
-//! whole, because it has no delimiter to cut at, and `awk -F= '{print $1}'`
-//! prints the whole record for the same reason. Neither can prove the value
-//! is gone, so neither is proven here.
-//!
-//! `grep -o` is different. It prints a match or nothing at all, so what it
-//! renders is bounded by the pattern rather than by the line. The pattern is
-//! accepted only when it is anchored at the start of the line, when every
-//! character it can match is an upper-case letter, a digit or `_`, and when
-//! every match has to begin with at least four characters the user spelled
-//! out, taken from at most eight spellings. Case folding (`-i`) is refused.
-//! On a name line a match is the name and stops at the `=`. A line of value
-//! bytes can match too, because a character set cannot tell it from a name
-//! line, but only when the value already holds a newline followed by one of
-//! the spelled prefixes. The command must guess those leading characters
-//! before it learns anything after them, and one command can try only a
-//! handful of guesses, so a secret cannot be read out through it.
+//! A listing is proven only when the names are produced without the values
+//! ever being rendered. `awk 'BEGIN { for (name in ENVIRON) print name }'`
+//! walks the keys of awk's environment array and prints each key: the
+//! program runs before any input is read, names no file, and never indexes
+//! the array, so no value reaches its output. The program is read token by
+//! token against that one shape and refused on any other character.
 
 use crate::codex_output_py::py_strip;
-use crate::sfrs_patterns::SHELL_COMMAND_SEPARATORS;
-use crate::sfrs_shell_tokens::{
-    iter_shell_command_segments, shell_segment_primary_command, split_shell_parts,
-};
 
 /// A token with one surrounding pair of quotes removed, or `None` when a
-/// quote is left inside it. Guard would otherwise read `-F'"='` as the `=`
-/// this proof rests on, when the shell passes a two-character separator the
-/// proof says nothing about.
+/// quote is left inside it. A quote left inside changes what the shell hands
+/// the program, so the token is not read at all.
 pub(crate) fn unquoted(token: &str) -> Option<String> {
     let trimmed = py_strip(token);
     let mut chars = trimmed.chars();
@@ -54,274 +41,6 @@ fn unquoted_arguments(arguments: &[String]) -> Option<Vec<String>> {
         .iter()
         .map(|argument| unquoted(argument))
         .collect()
-}
-
-/// Whether `c` is one of the characters a variable name is written in. Lower
-/// case is left out on purpose: a value line of base64 or hex mixes cases,
-/// and a match that may read lower case could follow one to its end.
-fn is_name_char(c: char) -> bool {
-    c.is_ascii_uppercase() || c.is_ascii_digit() || c == '_'
-}
-
-/// Whether a bracket expression matches only characters a variable name is
-/// written in. A negated class matches far more, and so does a range that
-/// leaves the upper-case letters or the digits, such as `[0-A]` or `[A-z]`.
-fn class_stays_in_a_name(body: &str) -> bool {
-    let chars: Vec<char> = body.chars().collect();
-    if chars.first() == Some(&'^') || chars.is_empty() {
-        return false;
-    }
-    let mut index = 0;
-    while index < chars.len() {
-        let low = chars[index];
-        if !is_name_char(low) {
-            return false;
-        }
-        if index + 2 < chars.len() && chars[index + 1] == '-' {
-            let high = chars[index + 2];
-            let same_kind = (low.is_ascii_uppercase() && high.is_ascii_uppercase())
-                || (low.is_ascii_digit() && high.is_ascii_digit());
-            if !same_kind || low > high {
-                return false;
-            }
-            index += 3;
-            continue;
-        }
-        index += 1;
-    }
-    true
-}
-
-/// A walk over an extended regular expression, far enough into it to answer
-/// two questions: can any match reach past the name, and which characters
-/// does every match have to begin with.
-struct PatternWalk<'a> {
-    chars: &'a [char],
-    index: usize,
-}
-
-/// The fewest characters a pattern spells out before any match may vary.
-const MIN_SPELLED_PREFIX: usize = 4;
-/// The most prefixes one pattern may spell out. Each is one guess at how a
-/// line of value bytes begins, so a pattern that spells many could try them
-/// all at once: `(A|B|...)(A|B|...)` spells every two-letter start.
-const MAX_SPELLED_PREFIXES: usize = 8;
-
-/// What every match of a piece of the pattern must begin with.
-#[derive(Clone, Copy)]
-struct Lead {
-    /// How many characters at the start of every match are spelled out.
-    spelled: usize,
-    /// Whether the piece is spelled out to its end, so the next piece's
-    /// spelled characters still extend the prefix.
-    whole: bool,
-    /// How many different spellings the piece allows.
-    spellings: usize,
-}
-
-impl Lead {
-    const LITERAL: Lead = Lead {
-        spelled: 1,
-        whole: true,
-        spellings: 1,
-    };
-    const VARYING: Lead = Lead {
-        spelled: 0,
-        whole: false,
-        spellings: 1,
-    };
-}
-
-impl PatternWalk<'_> {
-    fn peek(&self) -> Option<char> {
-        self.chars.get(self.index).copied()
-    }
-
-    /// `sequence ( '|' sequence )*`, read only inside a group. ERE binds `|`
-    /// loosest, so `^A|B` anchors only its first alternative; the top level is
-    /// therefore a single sequence, and a `|` there stops the walk short of the
-    /// end and refuses the pattern. Inside a group every alternative sits at
-    /// the position the anchored sequence puts it, so the group spells out
-    /// only as much as its shortest alternative does.
-    fn alternation(&mut self) -> Option<Lead> {
-        let mut lead = self.sequence()?;
-        while self.peek() == Some('|') {
-            self.index += 1;
-            let next = self.sequence()?;
-            lead = Lead {
-                spelled: lead.spelled.min(next.spelled),
-                whole: lead.whole && next.whole,
-                spellings: lead.spellings.saturating_add(next.spellings),
-            };
-        }
-        Some(lead)
-    }
-
-    /// `item*`, up to the end of the pattern or of this alternative.
-    fn sequence(&mut self) -> Option<Lead> {
-        let mut lead = Lead {
-            spelled: 0,
-            whole: true,
-            spellings: 1,
-        };
-        while !matches!(self.peek(), None | Some('|') | Some(')')) {
-            let item = self.item()?;
-            if lead.whole {
-                lead.spelled += item.spelled;
-                lead.whole = item.whole;
-            }
-            lead.spellings = lead.spellings.saturating_mul(item.spellings);
-        }
-        Some(lead)
-    }
-
-    /// `atom quantifier?`. A quantifier that allows the atom to be absent
-    /// leaves the match free to begin at whatever follows it, and one that
-    /// repeats it leaves the length of the match open, so either ends the
-    /// spelled prefix.
-    fn item(&mut self) -> Option<Lead> {
-        let atom = self.atom()?;
-        match self.peek() {
-            Some('*' | '?') => {
-                self.index += 1;
-                Some(Lead {
-                    spellings: atom.spellings,
-                    ..Lead::VARYING
-                })
-            }
-            Some('+') => {
-                self.index += 1;
-                Some(Lead {
-                    whole: false,
-                    ..atom
-                })
-            }
-            _ => Some(atom),
-        }
-    }
-
-    fn atom(&mut self) -> Option<Lead> {
-        match self.peek()? {
-            '(' => {
-                self.index += 1;
-                let inner = self.alternation()?;
-                if self.peek() != Some(')') {
-                    return None;
-                }
-                self.index += 1;
-                Some(inner)
-            }
-            '[' => {
-                let close = self.chars[self.index..].iter().position(|c| *c == ']')?;
-                let body: String = self.chars[self.index + 1..self.index + close]
-                    .iter()
-                    .collect();
-                if !class_stays_in_a_name(&body) {
-                    return None;
-                }
-                self.index += close + 1;
-                Some(Lead::VARYING)
-            }
-            c if is_name_char(c) => {
-                self.index += 1;
-                Some(Lead::LITERAL)
-            }
-            _ => None,
-        }
-    }
-}
-
-/// Whether every match of `pattern` stays inside a variable name and has to
-/// start with a prefix the pattern spells out in full. A wildcard, an escape,
-/// a negated class, a lower-case character, an unbalanced group or a
-/// top-level `|` refuses the pattern, and so does one whose matches could
-/// begin with fewer than four spelled characters or with more than eight
-/// different spellings.
-pub(crate) fn pattern_matches_inside_a_name(pattern: &str) -> bool {
-    let Some(rest) = pattern.strip_prefix('^') else {
-        return false;
-    };
-    let chars: Vec<char> = rest.chars().collect();
-    let mut walk = PatternWalk {
-        chars: &chars,
-        index: 0,
-    };
-    let Some(lead) = walk.sequence() else {
-        return false;
-    };
-    walk.index == chars.len()
-        && lead.spelled >= MIN_SPELLED_PREFIX
-        && lead.spellings <= MAX_SPELLED_PREFIXES
-}
-
-/// `grep -oE '^PREFIX[A-Z_]*'`: `-o` prints the match alone, and the pattern
-/// can only match inside a variable name, so no value is rendered.
-fn grep_prints_name_matches_only(args: &[&str]) -> bool {
-    let mut only_matching = false;
-    let mut pattern: Option<&str> = None;
-    let mut index = 0;
-    while index < args.len() {
-        let arg = args[index];
-        index += 1;
-        match arg {
-            "--only-matching" => {
-                only_matching = true;
-                continue;
-            }
-            "--extended-regexp" => continue,
-            "-e" | "--regexp" => {
-                let Some(value) = args.get(index).copied() else {
-                    return false;
-                };
-                index += 1;
-                if pattern.replace(value).is_some() {
-                    return false;
-                }
-                continue;
-            }
-            _ => {}
-        }
-        if let Some(cluster) = arg
-            .strip_prefix('-')
-            .filter(|rest| !rest.is_empty() && !rest.starts_with('-'))
-        {
-            for letter in cluster.chars() {
-                match letter {
-                    'o' => only_matching = true,
-                    'E' | 'a' | 'h' | 's' => {}
-                    _ => return false,
-                }
-            }
-            continue;
-        }
-        if arg.starts_with('-') || pattern.replace(arg).is_some() {
-            return false;
-        }
-    }
-    only_matching && pattern.is_some_and(pattern_matches_inside_a_name)
-}
-
-/// Whether a pipeline stage renders only the names of the variables that
-/// reach it. Such a stage drops everything after the `=` before any later
-/// stage sees it, so no command further down the pipeline can print a value.
-fn renders_only_variable_names(segment: &[String]) -> bool {
-    let Some(command) = segment_bare_command(segment) else {
-        return false;
-    };
-    stage_renders_only_variable_names(&command, &segment[1..])
-}
-
-/// Whether a stage named `command`, given `arguments`, renders only the
-/// names of the variables that reach it.
-pub(crate) fn stage_renders_only_variable_names(command: &str, arguments: &[String]) -> bool {
-    let Some(args) = unquoted_arguments(arguments) else {
-        return false;
-    };
-    let args: Vec<&str> = args.iter().map(String::as_str).collect();
-    match command {
-        "grep" | "egrep" => grep_prints_name_matches_only(&args),
-        _ => false,
-    }
 }
 
 /// Whether `text` counts a number of options and nothing more: `20`, `+5`.
@@ -416,9 +135,9 @@ const CAT_LONG_FLAGS: &[&str] = &[
     "--show-nonprinting",
 ];
 
-/// Whether a stage placed after the name filter can only reorder, count or
-/// trim the lines it is handed. The values are gone by then, so such a stage
-/// renders no secret; one that runs a program or names a file is refused.
+/// Whether a stage placed after the listing can only reorder, count or trim
+/// the names it is handed. Such a stage renders nothing it was not given; one
+/// that runs a program or names a file is refused.
 pub(crate) fn stage_only_reorders_lines(command: &str, arguments: &[String]) -> bool {
     let Some(args) = unquoted_arguments(arguments) else {
         return false;
@@ -435,102 +154,73 @@ pub(crate) fn stage_only_reorders_lines(command: &str, arguments: &[String]) -> 
     }
 }
 
-/// Whether a bare environment dump names `command` and carries no operand.
-pub(crate) fn stage_is_plain_env_dump(command: &str, arguments: &[String]) -> bool {
-    matches!(command, "printenv" | "env") && arguments.is_empty()
-}
-
-/// The command a segment runs, when the segment names it plainly: the very
-/// first token, spelled as the command's own name. A leading assignment, a
-/// wrapper or a path such as `/tmp/sort` leaves the proof reading one
-/// program while the shell runs another, so each one refuses the segment.
-fn segment_bare_command(segment: &[String]) -> Option<String> {
-    let (command, index) = shell_segment_primary_command(segment);
-    let command = command?;
-    (index == Some(0) && segment.first() == Some(&command)).then_some(command)
-}
-
-/// Whether the segment is a bare environment dump, with no variable named
-/// and nothing else on it: `printenv` or `env` alone.
-fn segment_is_plain_env_dump(segment: &[String]) -> bool {
-    segment.len() == 1
-        && segment_bare_command(segment)
-            .is_some_and(|command| matches!(command.as_str(), "printenv" | "env"))
-}
-
-/// For each segment [`iter_shell_command_segments`] returns, whether the
-/// separator that ended it was a pipe. The walk matches that function's, so
-/// the two line up position by position.
-pub(crate) fn segments_piped_into_next(parts: &[String]) -> Vec<bool> {
-    let mut links = Vec::new();
-    let mut open = false;
-    for part in parts {
-        let token = py_strip(part);
-        if token.is_empty() {
-            continue;
-        }
-        if SHELL_COMMAND_SEPARATORS.contains(&token) {
-            if open {
-                links.push(matches!(token, "|" | "|&"));
-                open = false;
+/// One lexical piece of an awk program: a name or a single punctuation mark.
+fn awk_tokens(program: &str) -> Option<Vec<String>> {
+    let mut tokens = Vec::new();
+    let mut chars = program.chars().peekable();
+    while let Some(&next) = chars.peek() {
+        if matches!(next, ' ' | '\t' | '\n') {
+            chars.next();
+        } else if matches!(next, '{' | '}' | '(' | ')' | ';') {
+            tokens.push(next.to_string());
+            chars.next();
+        } else if next.is_ascii_alphabetic() || next == '_' {
+            let mut word = String::new();
+            while let Some(&letter) = chars.peek() {
+                if !(letter.is_ascii_alphanumeric() || letter == '_') {
+                    break;
+                }
+                word.push(letter);
+                chars.next();
             }
-            continue;
+            tokens.push(word);
+        } else {
+            return None;
         }
-        open = true;
     }
-    if open {
-        links.push(false);
-    }
-    links
+    Some(tokens)
 }
 
-/// Whether a stage can only reorder, count or trim the lines it is handed.
-fn segment_only_reorders_lines(segment: &[String]) -> bool {
-    segment_bare_command(segment)
-        .is_some_and(|command| stage_only_reorders_lines(&command, &segment[1..]))
+/// Whether `name` can be an awk loop variable written in lower case. Upper
+/// case is left to awk's own variables, such as `ENVIRON` and `ORS`.
+fn is_loop_variable(name: &str) -> bool {
+    let mut letters = name.chars();
+    letters
+        .next()
+        .is_some_and(|first| first.is_ascii_lowercase() || first == '_')
+        && letters
+            .all(|letter| letter.is_ascii_lowercase() || letter.is_ascii_digit() || letter == '_')
 }
 
-/// Whether the dump at `index` is piped straight into a stage that renders
-/// variable names alone, and every stage piped on from there can only
-/// reorder, count or trim the names it is handed.
-pub(crate) fn dump_feeds_a_name_filter(
-    segments: &[Vec<String>],
-    piped: &[bool],
-    index: usize,
-) -> bool {
-    if !piped.get(index).copied().unwrap_or(false) || !segment_is_plain_env_dump(&segments[index]) {
-        return false;
-    }
-    let Some(filter) = segments.get(index + 1) else {
+/// Whether `program` is `BEGIN { for (name in ENVIRON) print name }`, with
+/// any spacing and an optional `;` after the `print`. The loop variable must
+/// be the one printed, so `print name, ENVIRON[name]` and `print ENVIRON[name]`
+/// are refused along with every other program.
+pub(crate) fn awk_program_lists_environment_names(program: &str) -> bool {
+    let Some(tokens) = awk_tokens(program) else {
         return false;
     };
-    if !renders_only_variable_names(filter) {
+    let tokens: Vec<&str> = tokens.iter().map(String::as_str).collect();
+    let body = match tokens.as_slice() {
+        [body @ .., ";", "}"] | [body @ .., "}"] => body,
+        _ => return false,
+    };
+    let ["BEGIN", "{", "for", "(", loop_variable, "in", "ENVIRON", ")", "print", printed] = body
+    else {
         return false;
-    }
-    let mut stage = index + 1;
-    while piped.get(stage).copied().unwrap_or(false) {
-        let Some(next) = segments.get(stage + 1) else {
-            return false;
-        };
-        if !segment_only_reorders_lines(next) {
-            return false;
-        }
-        stage += 1;
-    }
-    true
+    };
+    is_loop_variable(loop_variable) && loop_variable == printed
 }
 
-/// Whether the single `printenv` in `text` is piped into a stage that
-/// renders only variable names. Listing the names a process was given shows
-/// no secret, and an agent asks for that list often.
-pub(crate) fn printenv_renders_only_names(text: &str) -> bool {
-    if text.matches("printenv").count() != 1 {
+/// Whether the arguments of an `awk` stage are exactly one program that lists
+/// environment variable names. Any option, such as `-f FILE` or `-v`, and any
+/// operand naming a file refuse the stage.
+pub(crate) fn stage_lists_environment_names(command: &str, arguments: &[String]) -> bool {
+    let [program] = arguments else {
         return false;
-    }
-    let parts = split_shell_parts(text);
-    let segments = iter_shell_command_segments(&parts);
-    let piped = segments_piped_into_next(&parts);
-    (0..segments.len()).any(|index| dump_feeds_a_name_filter(&segments, &piped, index))
+    };
+    command == "awk"
+        && unquoted(program).is_some_and(|program| awk_program_lists_environment_names(&program))
 }
 
 #[cfg(test)]

@@ -65,15 +65,15 @@ fn printenv_of_location_and_display_names_proceeds() {
 
 #[test]
 fn a_names_only_environment_listing_proceeds_under_the_packaged_rules() {
-    // The packaged environment-secret rule used to observe the `printenv`
-    // stage even when the next stage provably keeps only each name, which
-    // sent the listing to the workspace sandbox instead of letting it run.
+    // `awk` walks the keys of its environment array and never indexes it, so
+    // no value is rendered. The packaged environment-secret rule only observes
+    // `printenv` and `env`, which render every value first.
     let lab = Lab::new();
     let project = lab.project("app-portal", &[("README.md", "portal\n")]);
     for cwd in [&lab.home, &project] {
         for command in [
-            "printenv | grep -oE '^(PATH|HOME)[A-Z_]*'",
-            "printenv | grep -oE '^ALPHAHOST[A-Z_]*' | sort -u | head -40",
+            "awk 'BEGIN { for (name in ENVIRON) print name }' | sort",
+            "awk 'BEGIN{for(k in ENVIRON)print k}' | sort -u | head -40",
         ] {
             let result = lab.classify(cwd, command, &[]);
             assert_eq!(
@@ -83,18 +83,37 @@ fn a_names_only_environment_listing_proceeds_under_the_packaged_rules() {
                 cwd.display()
             );
         }
+    }
+}
+
+#[test]
+fn a_dump_piped_into_a_name_filter_keeps_its_review_under_the_packaged_rules() {
+    // A value holding a newline reaches the filter as a line of its own, so
+    // `HOME=$'ordinary\nHOMEFAKECANARYONLY'` comes out of the first command
+    // as `HOMEFAKECANARYONLY`, and a value holding a newline and then an
+    // access key id out of the second as the whole key id.
+    let lab = Lab::new();
+    let project = lab.project("app-portal", &[("README.md", "portal\n")]);
+    for cwd in [&lab.home, &project] {
         for command in [
+            "printenv | grep -oE '^(PATH|HOME)[A-Z_]*'",
+            "printenv | grep -oE '^AKIA[A-Z0-9_]*'",
+            "printenv | grep -oE '^ALPHAHOST[A-Z_]*' | sort -u | head -40",
             "printenv | grep -oE 'TOKEN'",
-            "printenv | grep -oE '^ALPHA|[A-Za-z0-9_]+'",
-            "printenv | grep -oE '^M[A-Za-z0-9]*'",
-            "printenv | grep -oE '^D[A-F0-9]*'",
-            "printenv | grep -oE '^A[A-Z0-9_]*'",
             "printenv | grep -oiE '^ALPHAHOST[A-Z_]*'",
-            "printenv | grep -oE '^ALPHAHOST[A-Z_]*' | sort -o /tmp/names",
+            "printenv | cut -d= -f1",
             "env | grep -oE '^(PATH|HOME)[A-Z_]*'",
+            "awk 'BEGIN { for (k in ENVIRON) print k, ENVIRON[k] }'",
+            "awk 'BEGIN { for (k in ENVIRON) print ENVIRON[k] }' | sort",
         ] {
             let result = lab.classify(cwd, command, &[]);
-            assert_ne!(result.minimum_action, "allow", "{command}");
+            assert_ne!(
+                result.minimum_action,
+                "allow",
+                "{command} in {}: {}",
+                cwd.display(),
+                result.reason_code
+            );
         }
     }
 }
