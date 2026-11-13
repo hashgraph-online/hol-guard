@@ -7568,7 +7568,7 @@
       ],
       "tool": "shell",
       "tool_input": {
-        "command": "find src -name \"*.tsx\" -type f -exec sed -i '' -e 's/\\._reset(/._reset_impl(/g' {} \\;"
+        "command": "find src -name \"*.tsx\" -type f -exec sed -i '' 's/\\._reset(/._reset_impl(/g' {} \\;"
       },
       "cwd": "org_app",
       "expect": "allow",
@@ -7609,7 +7609,7 @@
       "expect": "not_allow"
     },
     {
-      "id": "neg-find-exec-sed-bsd-gnu-ambiguous-positional-script",
+      "id": "neg-find-exec-sed-bsd-gnu-unquoted-glob-script",
       "fix_area": "shell",
       "harnesses": [
         "codex",
@@ -7620,7 +7620,7 @@
       ],
       "tool": "shell",
       "tool_input": {
-        "command": "find src -type f -exec sed -i '' 's/a/b/' {} +"
+        "command": "find src -type f -exec sed -i '' s/a*/b/ {} +"
       },
       "cwd": "org_app",
       "expect": "not_allow"

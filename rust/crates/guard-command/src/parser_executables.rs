@@ -235,9 +235,12 @@ fn sed_exec_only_found_files(child: &[String]) -> bool {
     let mut named_script = false;
     let mut positional_script = false;
     // GNU sed treats the empty word after -i as a script and any following
-    // positional word as a file; BSD sed treats it as a backup suffix.
-    // Require a named script with no positional operand for both dialects.
+    // positional word as a file; BSD sed treats it as a backup suffix. Under
+    // GNU the empty script rewrites each file unchanged unless -n silences
+    // it, so a positional script after `-i ''` is admitted only without -n
+    // and without a glob the shell could expand into further operands.
     let mut detached_suffix = false;
+    let mut quiet = false;
     while let Some(argument) = child.get(index) {
         match argument.as_str() {
             "-i" => {
@@ -249,7 +252,8 @@ fn sed_exec_only_found_files(child: &[String]) -> bool {
                     index += 1;
                 }
             }
-            "-n" | "-E" | "-r" | "-s" | "-u" | "-z" => {}
+            "-n" => quiet = true,
+            "-E" | "-r" | "-s" | "-u" | "-z" => {}
             "-e" | "--expression" => {
                 // GNU sed may permute a later -e option ahead of an earlier
                 // positional word, turning that earlier word into a file.
@@ -287,10 +291,10 @@ fn sed_exec_only_found_files(child: &[String]) -> bool {
             }
             word if word.starts_with("-i") && word.len() > 2 => {}
             word if word.starts_with('-') => return false,
-            _ => {
-                // Under GNU sed a BSD -i '' positional script is an unchecked
-                // file path; do not silently admit it through the find walk.
-                if detached_suffix {
+            word => {
+                // Unquoted, `*` alone could expand to a file named `d`, which
+                // BSD sed would run as the script over every other match.
+                if detached_suffix && word.contains(['*', '?', '[']) {
                     return false;
                 }
                 // Any second positional operand is a file beyond those find
@@ -303,5 +307,5 @@ fn sed_exec_only_found_files(child: &[String]) -> bool {
         }
         index += 1;
     }
-    named_script || positional_script
+    !(detached_suffix && positional_script && quiet) && (named_script || positional_script)
 }

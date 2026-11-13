@@ -50,6 +50,7 @@ fn a_sed_edit_over_found_files_runs_in_the_workspace_sandbox() {
     let (root, _cleanup) = checkout("edits");
     let contained = guard_command::pretool::workspace_sandbox_available();
     for command in [
+        r#"find tests -name "*.py" -type f -exec sed -i '' 's/\._reset(/._reset_impl(/g' {} \;"#,
         r#"find tests -name "*.py" -type f -exec sed -i '' -e 's/\._reset(/._reset_impl(/g' {} \;"#,
         "find tests -name '*.py' -type f -exec sed -i 's/old/new/g' {} +",
         "find src tests -type f -name '*.py' -exec gsed -i -e 's/a/b/' {} +",
@@ -78,7 +79,7 @@ fn an_edit_that_would_not_fit_the_sandbox_keeps_its_review() {
         "find tests -name '*.py' -type f -exec sed -i '' ./* {} +",
         "find tests -name '*.py' -type f -exec sed -i '' ../* {} +",
         "find tests -name '*.py' -type f -exec sed -i '' '/tmp/guard-fp-synthetic/d' {} +",
-        "find tests -name '*.py' -type f -exec sed -i '' 's/a/b/' {} +",
+        "find tests -name '*.py' -type f -exec sed -i '' s/a*/b/ {} +",
         "find tests -name '*.py' -type f -exec sed -i '' -- 'd' {} +",
         "find tests -name '*.py' -type f -exec sed -i '' -e 's/a/b/' README.md {} +",
         "find tests -name '*.py' -type f -exec sed -i 'd' ./* {} +",
