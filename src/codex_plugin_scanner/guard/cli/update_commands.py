@@ -3022,7 +3022,11 @@ def _migrate_legacy_omp_install(
         return None, None
     if omp_install is not None or pi_install is None:
         return None, None
-    if not legacy_omp_extension_is_verified(context, pi_install):
+    try:
+        verified = legacy_omp_extension_is_verified(context, pi_install)
+    except (OSError, RuntimeError, ValueError) as error:
+        return None, f"Could not verify legacy Oh My Pi protection during update: {error}"
+    if not verified:
         return None, None
     try:
         repair_context, repair_workspace = _repair_context_from_managed_install(context, pi_install)

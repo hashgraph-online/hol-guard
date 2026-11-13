@@ -138,6 +138,17 @@ fn install_refuses_a_config_that_moved_after_detection() {
 }
 
 #[test]
+fn install_reads_a_comment_ended_by_a_lone_carriage_return() {
+    let home = Home::new();
+    let target = global(&home).join("opencode.json");
+    write(&target, "// note\r{\"theme\": \"dark\"}");
+    let answer = install(&home);
+    let files = answer["files"].as_array().unwrap();
+    let config: Value = serde_json::from_str(&after(file(files, &target))).unwrap();
+    assert_eq!(config["theme"], "dark");
+}
+
+#[test]
 fn install_refuses_an_invalid_config() {
     let home = Home::new();
     write(&global(&home).join("opencode.json"), "{oops");

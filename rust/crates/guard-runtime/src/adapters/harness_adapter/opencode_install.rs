@@ -20,6 +20,7 @@ use super::opencode::{
 };
 use super::opencode_build::{self, Builder};
 use super::{detection, path_text, Ctx, Failure, Spec, Step};
+use crate::copilot_detect::universal_newlines;
 use crate::pyjson::{self, PyVal};
 
 const SCHEMA: &str = "https://opencode.ai/config.json";
@@ -104,7 +105,8 @@ fn snapshot(ctx: &Ctx) -> Step<Snapshot> {
                     path_text(&path)
                 ))
             })?;
-            let parsed = opencode::load_text(&path, source).ok_or_else(|| invalid(&path))?;
+            let parsed = opencode::load_text(&path, &universal_newlines(source.to_owned()))
+                .ok_or_else(|| invalid(&path))?;
             let answer = normalize(ctx, &path, wire_payload(&parsed), None)?;
             let normalized = match answer.as_object() {
                 Some(fields) if fields.len() == 1 => fields.get("config").and_then(Value::as_str),
@@ -393,7 +395,10 @@ pub(super) fn prepare_install(ctx: &Ctx, fields: &Map<String, Value>) -> Step<Va
     assign(&mut after, managed_plugin.clone(), Some(source.clone()));
     assign(&mut after, global_plugin.clone(), Some(source));
     for (path, bytes) in &snapshot.contents {
-        if after.iter().all(|(known, _)| known != path) {
+        if after
+            .iter()
+            .all(|(known, _)| ctx.resolved(known) != ctx.resolved(path))
+        {
             after.push((path.clone(), bytes.clone()));
         }
     }

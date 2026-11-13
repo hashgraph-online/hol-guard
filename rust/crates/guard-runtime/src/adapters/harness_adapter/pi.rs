@@ -8,15 +8,16 @@ use std::path::{Path, PathBuf};
 use serde_json::{json, Map, Value};
 
 use super::files::{self, adapter_result, render, text, Change, Object};
-use super::kimi::{expand_user, utf8};
+use super::kimi::utf8;
 use super::openclaw::truthy;
-use super::pi_extension::{code_mode_warnings, pinned_core, render_source, Runtime};
+use super::pi_extension::{
+    code_mode_warnings, managed_reference, names_extension, pinned_core, render_source, Runtime,
+    EXTENSION_NAME,
+};
 use super::{detection, path_answer, path_text, which, Ctx, Failure, Spec, Step};
 use crate::pyjson::PyVal;
 
 const SETTINGS_FILE: &str = "settings.json";
-const EXTENSION_NAME: &str = "hol-guard.ts";
-const REMOTE_PREFIXES: [&str; 5] = ["npm:", "git:", "http://", "https://", "ssh://"];
 const LEGACY_OMP_NOTE: &str =
     "Guard also removed the verified legacy Oh My Pi extension from the combined Pi install.";
 
@@ -152,23 +153,6 @@ fn with_extensions(mut payload: Object, items: Vec<String>) -> Step<Vec<u8>> {
     Ok(format!("{}\n", payload.render()?).into_bytes())
 }
 
-/// Whether a local settings entry names a managed extension file.
-fn managed_reference(ctx: &Ctx, value: &str, settings: &Path) -> bool {
-    if REMOTE_PREFIXES
-        .iter()
-        .any(|prefix| value.starts_with(prefix))
-    {
-        return false;
-    }
-    let mut candidate = expand_user(ctx, value);
-    if !candidate.is_absolute() {
-        candidate = settings.parent().unwrap_or(Path::new("")).join(candidate);
-    }
-    candidate
-        .file_name()
-        .is_some_and(|name| name == EXTENSION_NAME)
-}
-
 /// The settings with the managed reference listed once and no other.
 fn enabled_settings(ctx: &Ctx, payload: Object, settings: &Path, extension: &str) -> Step<Vec<u8>> {
     let mut items: Vec<String> = extensions(&payload.entries)
@@ -198,7 +182,9 @@ fn disabled_settings(ctx: &Ctx, settings: &Path, extension: &str) -> Step<Option
     let kept = items
         .iter()
         .filter_map(|item| match item {
-            PyVal::Str(value) if value != extension => Some(value.clone()),
+            PyVal::Str(value) if !names_extension(ctx, value, settings, extension) => {
+                Some(value.clone())
+            }
             _ => None,
         })
         .collect();

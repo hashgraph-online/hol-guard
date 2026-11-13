@@ -470,9 +470,14 @@ pub(super) fn refresh_apply(ctx: &Ctx, fields: &Map<String, Value>) -> Step<Valu
     for write in &writes {
         let (path, before, after, mode) = write;
         if let Err(error) = write_existing(ctx, path, before, after, *mode) {
+            // Restore every earlier config even when one restore fails.
+            let mut restored = Ok(());
             for (path, before, after, mode) in applied.iter().rev() {
-                write_existing(ctx, path, after, before, *mode)?;
+                if let Err(failure) = write_existing(ctx, path, after, before, *mode) {
+                    restored = restored.and(Err(failure));
+                }
             }
+            restored?;
             return Err(error);
         }
         applied.push(write);

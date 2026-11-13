@@ -191,3 +191,26 @@ fn pi_install_and_uninstall_keep_lone_surrogate_escapes() {
         "{kept}"
     );
 }
+
+#[test]
+fn pi_uninstall_drops_a_relative_reference_to_the_managed_extension() {
+    let home = Home::new();
+    let settings = home.home().join(".pi/agent/settings.json");
+    let extra = json!({"shim": shim(), "runtime": runtime()});
+    apply(
+        home.ask("pi", "prepare_install", extra)["files"]
+            .as_array()
+            .unwrap(),
+    );
+    // A user rewrote the reference relative to the settings file.
+    fs::write(
+        &settings,
+        r#"{"extensions": ["./extensions/hol-guard.ts", "./other/hol-guard.ts"]}"#,
+    )
+    .unwrap();
+
+    let uninstall = home.ask("pi", "prepare_uninstall", json!({"runtime": runtime()}));
+    let text = uninstall["writes"][0]["text"].as_str().unwrap();
+    let kept: Value = serde_json::from_str(text).unwrap();
+    assert_eq!(kept["extensions"], json!(["./other/hol-guard.ts"]));
+}

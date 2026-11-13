@@ -17,6 +17,8 @@ use super::kimi::expand_user;
 use super::{path_text, which, Ctx, Failure, Step};
 use crate::guard_store_json::py_repr_str;
 
+pub(super) const EXTENSION_NAME: &str = "hol-guard.ts";
+const REMOTE_PREFIXES: [&str; 5] = ["npm:", "git:", "http://", "https://", "ssh://"];
 const MAX_EXTENSION_BYTES: u64 = 2_000_000;
 /// The daemon compatibility the extension's readiness check expects.
 const COMPATIBILITY_VERSION: i64 = 2;
@@ -285,4 +287,35 @@ pub(super) fn code_mode_warnings(ctx: &Ctx) -> Vec<String> {
                 .collect()
         })
         .unwrap_or_default()
+}
+
+/// Whether a local settings entry names a managed extension file.
+pub(super) fn managed_reference(ctx: &Ctx, value: &str, settings: &Path) -> bool {
+    reference(ctx, value, settings).is_some_and(|candidate| {
+        candidate
+            .file_name()
+            .is_some_and(|name| name == EXTENSION_NAME)
+    })
+}
+
+/// A local settings entry as a path, relative entries against the settings directory.
+fn reference(ctx: &Ctx, value: &str, settings: &Path) -> Option<PathBuf> {
+    if REMOTE_PREFIXES
+        .iter()
+        .any(|prefix| value.starts_with(prefix))
+    {
+        return None;
+    }
+    let candidate = expand_user(ctx, value);
+    Some(match candidate.is_absolute() {
+        true => candidate,
+        false => settings.parent().unwrap_or(Path::new("")).join(candidate),
+    })
+}
+
+/// Whether a settings entry names the managed file in any spelling.
+pub(super) fn names_extension(ctx: &Ctx, value: &str, settings: &Path, extension: &str) -> bool {
+    value == extension
+        || reference(ctx, value, settings)
+            .is_some_and(|path| ctx.resolved(&path) == ctx.resolved(Path::new(extension)))
 }
