@@ -219,8 +219,63 @@ pub(crate) fn find_exec_sed(arguments: &[String]) -> Option<&[String]> {
         || child
             .iter()
             .any(|argument| argument.contains("{}") || matches!(argument.as_str(), ";" | "+"))
+        || !sed_exec_only_found_files(child)
     {
         return None;
     }
     Some(child)
+}
+
+/// `find -exec sed ... {} +` must not smuggle additional file operands into
+/// the edit. The wipe screen checks the walk's paths, not any extra paths
+/// named inside sed's argv. Keep the admitted spelling to options, one or
+/// more literal scripts, and the substituted `{}` files only.
+fn sed_exec_only_found_files(child: &[String]) -> bool {
+    let mut index = 1; // the sed/gsed executable
+    let mut named_script = false;
+    let mut positional_script = false;
+    while let Some(argument) = child.get(index) {
+        match argument.as_str() {
+            "-i" => {
+                // BSD sed accepts an empty backup suffix after -i.
+                if child.get(index + 1).is_some_and(String::is_empty) {
+                    index += 1;
+                }
+            }
+            "-e" | "--expression" => {
+                index += 1;
+                if child.get(index).is_none() {
+                    return false;
+                }
+                named_script = true;
+            }
+            "-n" | "-E" | "-r" | "-s" | "-u" | "-z" => {}
+            "--" => {
+                let trailing = &child[index + 1..];
+                return if named_script || positional_script {
+                    trailing.is_empty()
+                } else {
+                    trailing.len() == 1
+                };
+            }
+            word if word.starts_with("--expression=") && word.len() > "--expression=".len() => {
+                named_script = true;
+            }
+            word if word.starts_with("-e") && word.len() > 2 => {
+                named_script = true;
+            }
+            word if word.starts_with("-i") && word.len() > 2 => {}
+            word if word.starts_with('-') => return false,
+            _ => {
+                // Any second positional operand is a file beyond those find
+                // supplies; never omit it from the broad-wipe screen.
+                if named_script || positional_script {
+                    return false;
+                }
+                positional_script = true;
+            }
+        }
+        index += 1;
+    }
+    named_script || positional_script
 }
