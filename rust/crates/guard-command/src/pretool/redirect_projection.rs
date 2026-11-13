@@ -88,6 +88,10 @@ pub(super) fn project(
     // so another step could run before the shell opens the file.
     let mut separated = false;
     let mut late_write = false;
+    // Whether anything but a plain pipe separated the commands, or any
+    // separator followed a file write: the text is not one pipeline whose
+    // last command alone writes.
+    let mut beyond_pipeline = false;
     let mut index = 0usize;
     while index < chars.len() {
         let current = chars[index];
@@ -113,6 +117,7 @@ pub(super) fn project(
                     escaped = true;
                 }
                 separated |= substitution(&chars, index);
+                beyond_pipeline |= substitution(&chars, index);
                 out.push(current);
                 index += 1;
                 continue;
@@ -129,6 +134,7 @@ pub(super) fn project(
                 || substitution(&chars, index));
         separated |= separates;
         stdin_separated |= saw_stdin_data && separates;
+        beyond_pipeline |= separates && (!targets.is_empty() || !plain_pipe(&chars, index));
         match current {
             '\'' => quote = Quote::Single,
             '"' => quote = Quote::Double,
@@ -144,6 +150,7 @@ pub(super) fn project(
                 if chars[index..].iter().any(|value| !value.is_whitespace()) {
                     separated = true;
                     stdin_separated = true;
+                    beyond_pipeline = true;
                 }
                 continue;
             }
@@ -230,6 +237,13 @@ pub(super) fn project(
     // so a write that follows one still opens the file the target check
     // proved: `cp /tmp/a.ts /tmp/b.ts && cat /tmp/a.ts > src/c.ts`.
     let peer_write = chain && bounded_writes && super::super::chain_temporary::peers_only(&model);
+    // `gh api ... | base64 -d > /tmp/a.json` saves a pipeline's output the
+    // way the same redirect on one command does. See `final_pipeline_write`.
+    let pipe_write = chain
+        && bounded_writes
+        && temporary_writes
+        && !beyond_pipeline
+        && super::super::chain_temporary::final_pipeline_write(&model);
     scratch_writes &= targets.iter().all(|target| {
         crate::pretool::curl_reads::output_targets::scratch_output_target(target, context)
     });
@@ -240,7 +254,12 @@ pub(super) fn project(
     if model.confidence != "exact"
         || model.uncertainty_reason.is_some()
         || model.segments.is_empty()
-        || (chain && git_chain.is_none() && !leading_write && !init_chain && !peer_write)
+        || (chain
+            && git_chain.is_none()
+            && !leading_write
+            && !init_chain
+            && !peer_write
+            && !pipe_write)
     {
         return None;
     }
@@ -307,6 +326,13 @@ fn projected_model(command: &str) -> Option<crate::CanonicalCommandV1> {
         rounds += 1;
     }
     Some(model)
+}
+
+/// A single `|`: not `||`, and not `|&`, which also pipes standard error.
+fn plain_pipe(chars: &[char], index: usize) -> bool {
+    chars[index] == '|'
+        && !matches!(chars.get(index + 1), Some('|' | '&'))
+        && (index == 0 || chars[index - 1] != '|')
 }
 
 /// `$(` or a backquote: a command substitution runs before the redirect

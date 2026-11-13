@@ -87,6 +87,36 @@ pub(super) fn plain_chain(model: &CanonicalCommandV1, extra: &[&str]) -> bool {
         })
 }
 
+/// Programs that can create a link, rename a file or unpack an archive.
+const LINK_MAKERS: &[&str] = &[
+    "bsdtar", "cp", "cpio", "ditto", "install", "link", "ln", "mv", "rsync", "tar", "unzip",
+];
+
+/// One pipeline, `a | b | c`, whose last command alone carries the file
+/// write. The shell opens that file while the earlier commands run, so only a
+/// command that creates a link could swap the leaf the target check proved.
+/// None of these may run here, and the pipeline without its redirect still has
+/// to earn its own allow before the write is allowed.
+pub(super) fn final_pipeline_write(model: &CanonicalCommandV1) -> bool {
+    let Some(first) = model.segments.first() else {
+        return false;
+    };
+    model.segments.len() > 1
+        && model.wrapper_chain.is_empty()
+        && !model.path_overridden
+        && model.segments.iter().enumerate().all(|(index, segment)| {
+            segment.pipeline_index == index
+                && segment.execution_context == first.execution_context
+                && segment.wrapper_chain.is_empty()
+                && !segment.path_overridden
+                && segment
+                    .executable
+                    .as_deref()
+                    .and_then(|executable| executable.rsplit(['/', '\\']).next())
+                    .is_some_and(|name| !LINK_MAKERS.contains(&name))
+        })
+}
+
 /// An absolute temporary path that is absent or a regular single-link file
 /// the user owns. Hidden and credential-shaped names never qualify.
 pub(super) fn temporary_file_target(
