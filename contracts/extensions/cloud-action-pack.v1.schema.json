@@ -609,6 +609,37 @@
               }
             }
           }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "form"
+          ],
+          "properties": {
+            "form": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 64,
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "name",
+                  "value"
+                ],
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "pattern": "^[A-Za-z0-9_.\\[\\]-]{1,64}$"
+                  },
+                  "value": {
+                    "$ref": "#/$defs/template"
+                  }
+                }
+              }
+            }
+          }
         }
       ]
     },
@@ -934,6 +965,44 @@
         },
         "sensitivity": {
           "$ref": "#/$defs/extractor"
+        },
+        "money": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "amount",
+            "direction"
+          ],
+          "oneOf": [
+            {
+              "required": [
+                "currencyArgument"
+              ]
+            },
+            {
+              "required": [
+                "currency"
+              ]
+            }
+          ],
+          "properties": {
+            "amount": {
+              "$ref": "#/$defs/argumentName"
+            },
+            "currencyArgument": {
+              "$ref": "#/$defs/argumentName"
+            },
+            "currency": {
+              "type": "string",
+              "pattern": "^[A-Z]{3}$"
+            },
+            "direction": {
+              "enum": [
+                "out",
+                "in"
+              ]
+            }
+          }
         },
         "countReadback": {
           "type": "string",

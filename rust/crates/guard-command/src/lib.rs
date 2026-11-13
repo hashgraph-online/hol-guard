@@ -69,6 +69,7 @@ pub mod cloud_pack_explain;
 mod cloud_pack_explain_tests;
 pub mod cloud_pack_facts;
 pub mod cloud_pack_fixtures;
+mod cloud_pack_form;
 pub mod cloud_pack_generate;
 #[cfg(test)]
 mod cloud_pack_generate_edge_tests;
@@ -84,6 +85,9 @@ pub mod cloud_pack_mail;
 mod cloud_pack_mail_tests;
 #[cfg(test)]
 mod cloud_pack_mcp_tests;
+mod cloud_pack_money;
+#[cfg(test)]
+mod cloud_pack_money_tests;
 pub mod cloud_pack_pattern;
 pub mod cloud_pack_request;
 pub mod cloud_pack_response;

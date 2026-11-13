@@ -164,10 +164,11 @@ pub fn render(action: &PackAction, args: &Value) -> Result<RenderedRequest, Argu
         .collect();
     let body = match &request.body {
         Some(template) => {
-            headers.push([
-                "content-type".into(),
-                "application/json; charset=utf-8".into(),
-            ]);
+            let content_type = match template {
+                Template::Form(_) => "application/x-www-form-urlencoded",
+                _ => "application/json; charset=utf-8",
+            };
+            headers.push(["content-type".into(), content_type.into()]);
             Some(render_body(template, record)?)
         }
         None => None,
@@ -335,6 +336,7 @@ fn write_template(
         Template::Arg(name) => write_json(args.get(name).unwrap_or(&Value::Null), out),
         Template::Const(value) => write_json(value, out),
         Template::Element(_) => write_json(element.ok_or_else(|| refused(None))?, out),
+        Template::Form(_) => Err(refused(None)),
         Template::Rfc822(mail) => {
             let encoded =
                 crate::cloud_pack_mail::render(mail, args).ok_or_else(|| refused(None))?;
@@ -414,7 +416,12 @@ pub(crate) fn render_body(
     args: &Map<String, Value>,
 ) -> Result<String, ArgumentError> {
     let mut out = String::new();
-    write_template(template, args, None, &mut out)?;
+    match template {
+        Template::Form(fields) => {
+            out = crate::cloud_pack_form::render(fields, args).ok_or_else(|| refused(None))?;
+        }
+        _ => write_template(template, args, None, &mut out)?,
+    }
     if out.len() > MAX_BODY_BYTES {
         return Err(refused(None));
     }

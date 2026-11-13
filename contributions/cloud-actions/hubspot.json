@@ -1,0 +1,1274 @@
+{
+  "schema": "guard.cloud-action-pack.v1",
+  "provider": {
+    "id": "hubspot",
+    "name": "HubSpot",
+    "publisher": {
+      "name": "HOL",
+      "verified": true
+    }
+  },
+  "hosts": [
+    "api.hubapi.com"
+  ],
+  "auth": {
+    "mode": "oauth2",
+    "scopes": [
+      "crm.objects.companies.read",
+      "crm.objects.companies.write",
+      "crm.objects.contacts.read",
+      "crm.objects.contacts.write",
+      "crm.objects.deals.read",
+      "crm.objects.deals.write",
+      "crm.schemas.custom.write"
+    ]
+  },
+  "actions": [
+    {
+      "actionId": "hubspot.objects.list",
+      "title": "List contacts, companies or deals",
+      "executor": {
+        "kind": "declarative-http",
+        "request": {
+          "method": "GET",
+          "path": "/crm/v3/objects/{object_type}",
+          "query": [
+            {
+              "name": "limit",
+              "value": {
+                "arg": {
+                  "name": "limit"
+                }
+              }
+            },
+            {
+              "name": "after",
+              "value": {
+                "arg": {
+                  "name": "after"
+                }
+              }
+            }
+          ],
+          "host": "api.hubapi.com",
+          "headers": [
+            {
+              "name": "accept",
+              "value": "application/json"
+            }
+          ],
+          "maxPages": 1
+        }
+      },
+      "arguments": {
+        "object_type": {
+          "type": "string",
+          "required": true,
+          "maxLength": 9,
+          "pattern": "^(?:contacts|companies|deals)$"
+        },
+        "limit": {
+          "type": "integer",
+          "required": false,
+          "minimum": 1,
+          "maximum": 100
+        },
+        "after": {
+          "type": "string",
+          "required": false,
+          "maxLength": 64,
+          "pattern": "^[A-Za-z0-9_-]{1,64}$"
+        }
+      },
+      "facts": {
+        "class": "read",
+        "object": {
+          "const": "record"
+        },
+        "scope": {
+          "const": "query_selected"
+        },
+        "recordCount": {
+          "argument": {
+            "name": "limit",
+            "max": 100,
+            "default": 10
+          }
+        }
+      },
+      "response": {
+        "maxBytes": 262144,
+        "fields": [
+          {
+            "name": "results",
+            "value": {
+              "list": {
+                "from": "results",
+                "maxItems": 100,
+                "fields": [
+                  {
+                    "name": "id",
+                    "value": {
+                      "from": "id"
+                    }
+                  },
+                  {
+                    "name": "name",
+                    "value": {
+                      "from": "properties.name"
+                    },
+                    "untrusted": true
+                  },
+                  {
+                    "name": "email",
+                    "value": {
+                      "from": "properties.email"
+                    },
+                    "untrusted": true
+                  },
+                  {
+                    "name": "updated",
+                    "value": {
+                      "from": "updatedAt"
+                    }
+                  }
+                ]
+              }
+            }
+          },
+          {
+            "name": "next",
+            "value": {
+              "from": "paging.next.after"
+            }
+          }
+        ]
+      },
+      "safety": {
+        "effect": "read",
+        "requiredCapabilities": [
+          "bounded-output",
+          "egress-pinned"
+        ],
+        "idempotency": "safe-read",
+        "scopes": [
+          "crm.objects.contacts.read",
+          "crm.objects.companies.read",
+          "crm.objects.deals.read"
+        ],
+        "maxItems": 100,
+        "minIntervalMs": 250,
+        "timeoutMs": 10000
+      },
+      "fixtures": [
+        {
+          "name": "lists contacts",
+          "kind": "safe",
+          "arguments": {
+            "object_type": "contacts",
+            "limit": 20
+          },
+          "expect": {
+            "facts": {
+              "class": "read",
+              "object": {
+                "state": "known",
+                "value": "record"
+              },
+              "scope": {
+                "state": "known",
+                "value": "query_selected"
+              },
+              "record_count": {
+                "state": "known",
+                "value": 20
+              }
+            },
+            "decisions": {
+              "balanced": "allow",
+              "relaxed": "allow",
+              "strict": "allow"
+            }
+          }
+        },
+        {
+          "name": "refuses an object type it does not cover",
+          "kind": "risky",
+          "arguments": {
+            "object_type": "line_items"
+          },
+          "expect": {
+            "error": "invalid_argument"
+          }
+        },
+        {
+          "name": "refuses a page over 100",
+          "kind": "risky",
+          "arguments": {
+            "object_type": "deals",
+            "limit": 500
+          },
+          "expect": {
+            "error": "invalid_argument"
+          }
+        }
+      ]
+    },
+    {
+      "actionId": "hubspot.objects.set_property",
+      "title": "Set one property on up to 100 records",
+      "executor": {
+        "kind": "declarative-http",
+        "request": {
+          "method": "POST",
+          "path": "/crm/v3/objects/{object_type}/batch/update",
+          "body": {
+            "object": [
+              {
+                "name": "inputs",
+                "value": {
+                  "each": {
+                    "arg": "record_ids",
+                    "item": {
+                      "object": [
+                        {
+                          "name": "id",
+                          "value": {
+                            "element": true
+                          }
+                        },
+                        {
+                          "name": "properties",
+                          "value": {
+                            "keyed": {
+                              "key": "property",
+                              "value": {
+                                "arg": "value"
+                              }
+                            }
+                          }
+                        }
+                      ]
+                    }
+                  }
+                }
+              }
+            ]
+          },
+          "host": "api.hubapi.com",
+          "headers": [
+            {
+              "name": "accept",
+              "value": "application/json"
+            }
+          ],
+          "maxPages": 1
+        }
+      },
+      "arguments": {
+        "object_type": {
+          "type": "string",
+          "required": true,
+          "maxLength": 9,
+          "pattern": "^(?:contacts|companies|deals)$"
+        },
+        "record_ids": {
+          "type": "array",
+          "required": true,
+          "minItems": 1,
+          "maxItems": 100,
+          "items": {
+            "maxLength": 20,
+            "pattern": "^[0-9]{1,20}$"
+          }
+        },
+        "property": {
+          "type": "string",
+          "required": true,
+          "maxLength": 100,
+          "pattern": "^[a-z][a-z0-9_]{0,99}$"
+        },
+        "value": {
+          "type": "string",
+          "required": true,
+          "maxLength": 10000,
+          "pattern": "^[^\\x00-\\x08\\x0b\\x0c\\x0e-\\x1f\\x7f]*$"
+        }
+      },
+      "facts": {
+        "class": "update",
+        "object": {
+          "const": "record"
+        },
+        "scope": {
+          "const": "enumerated"
+        },
+        "reversibility": {
+          "const": "reversible"
+        },
+        "recordCount": {
+          "count": {
+            "arguments": [
+              "record_ids"
+            ]
+          }
+        }
+      },
+      "response": {
+        "maxBytes": 262144,
+        "fields": [
+          {
+            "name": "results",
+            "value": {
+              "list": {
+                "from": "results",
+                "maxItems": 100,
+                "fields": [
+                  {
+                    "name": "id",
+                    "value": {
+                      "from": "id"
+                    }
+                  },
+                  {
+                    "name": "updated",
+                    "value": {
+                      "from": "updatedAt"
+                    }
+                  }
+                ]
+              }
+            }
+          },
+          {
+            "name": "status",
+            "value": {
+              "from": "status"
+            }
+          }
+        ]
+      },
+      "safety": {
+        "effect": "write",
+        "requiredCapabilities": [
+          "bounded-output",
+          "egress-pinned"
+        ],
+        "idempotency": "none",
+        "scopes": [
+          "crm.objects.contacts.write",
+          "crm.objects.companies.write",
+          "crm.objects.deals.write"
+        ],
+        "maxItems": 100,
+        "minIntervalMs": 1000,
+        "timeoutMs": 10000
+      },
+      "fixtures": [
+        {
+          "name": "updates 99 deals",
+          "kind": "safe",
+          "arguments": {
+            "object_type": "deals",
+            "record_ids": [
+              "1000",
+              "1001",
+              "1002",
+              "1003",
+              "1004",
+              "1005",
+              "1006",
+              "1007",
+              "1008",
+              "1009",
+              "1010",
+              "1011",
+              "1012",
+              "1013",
+              "1014",
+              "1015",
+              "1016",
+              "1017",
+              "1018",
+              "1019",
+              "1020",
+              "1021",
+              "1022",
+              "1023",
+              "1024",
+              "1025",
+              "1026",
+              "1027",
+              "1028",
+              "1029",
+              "1030",
+              "1031",
+              "1032",
+              "1033",
+              "1034",
+              "1035",
+              "1036",
+              "1037",
+              "1038",
+              "1039",
+              "1040",
+              "1041",
+              "1042",
+              "1043",
+              "1044",
+              "1045",
+              "1046",
+              "1047",
+              "1048",
+              "1049",
+              "1050",
+              "1051",
+              "1052",
+              "1053",
+              "1054",
+              "1055",
+              "1056",
+              "1057",
+              "1058",
+              "1059",
+              "1060",
+              "1061",
+              "1062",
+              "1063",
+              "1064",
+              "1065",
+              "1066",
+              "1067",
+              "1068",
+              "1069",
+              "1070",
+              "1071",
+              "1072",
+              "1073",
+              "1074",
+              "1075",
+              "1076",
+              "1077",
+              "1078",
+              "1079",
+              "1080",
+              "1081",
+              "1082",
+              "1083",
+              "1084",
+              "1085",
+              "1086",
+              "1087",
+              "1088",
+              "1089",
+              "1090",
+              "1091",
+              "1092",
+              "1093",
+              "1094",
+              "1095",
+              "1096",
+              "1097",
+              "1098"
+            ],
+            "property": "dealstage",
+            "value": "closedwon"
+          },
+          "expect": {
+            "facts": {
+              "class": "update",
+              "object": {
+                "state": "known",
+                "value": "record"
+              },
+              "scope": {
+                "state": "known",
+                "value": "enumerated"
+              },
+              "reversibility": {
+                "state": "known",
+                "value": "reversible"
+              },
+              "record_count": {
+                "state": "known",
+                "value": 99
+              }
+            },
+            "decisions": {
+              "balanced": "allow",
+              "relaxed": "allow",
+              "strict": "review"
+            }
+          }
+        },
+        {
+          "name": "updates 100 deals",
+          "kind": "safe",
+          "arguments": {
+            "object_type": "deals",
+            "record_ids": [
+              "1000",
+              "1001",
+              "1002",
+              "1003",
+              "1004",
+              "1005",
+              "1006",
+              "1007",
+              "1008",
+              "1009",
+              "1010",
+              "1011",
+              "1012",
+              "1013",
+              "1014",
+              "1015",
+              "1016",
+              "1017",
+              "1018",
+              "1019",
+              "1020",
+              "1021",
+              "1022",
+              "1023",
+              "1024",
+              "1025",
+              "1026",
+              "1027",
+              "1028",
+              "1029",
+              "1030",
+              "1031",
+              "1032",
+              "1033",
+              "1034",
+              "1035",
+              "1036",
+              "1037",
+              "1038",
+              "1039",
+              "1040",
+              "1041",
+              "1042",
+              "1043",
+              "1044",
+              "1045",
+              "1046",
+              "1047",
+              "1048",
+              "1049",
+              "1050",
+              "1051",
+              "1052",
+              "1053",
+              "1054",
+              "1055",
+              "1056",
+              "1057",
+              "1058",
+              "1059",
+              "1060",
+              "1061",
+              "1062",
+              "1063",
+              "1064",
+              "1065",
+              "1066",
+              "1067",
+              "1068",
+              "1069",
+              "1070",
+              "1071",
+              "1072",
+              "1073",
+              "1074",
+              "1075",
+              "1076",
+              "1077",
+              "1078",
+              "1079",
+              "1080",
+              "1081",
+              "1082",
+              "1083",
+              "1084",
+              "1085",
+              "1086",
+              "1087",
+              "1088",
+              "1089",
+              "1090",
+              "1091",
+              "1092",
+              "1093",
+              "1094",
+              "1095",
+              "1096",
+              "1097",
+              "1098",
+              "1099"
+            ],
+            "property": "dealstage",
+            "value": "closedwon"
+          },
+          "expect": {
+            "facts": {
+              "class": "update",
+              "object": {
+                "state": "known",
+                "value": "record"
+              },
+              "scope": {
+                "state": "known",
+                "value": "enumerated"
+              },
+              "reversibility": {
+                "state": "known",
+                "value": "reversible"
+              },
+              "record_count": {
+                "state": "known",
+                "value": 100
+              }
+            },
+            "decisions": {
+              "balanced": "review",
+              "relaxed": "allow",
+              "strict": "review"
+            }
+          }
+        },
+        {
+          "name": "refuses more than 100 records",
+          "kind": "risky",
+          "arguments": {
+            "object_type": "deals",
+            "record_ids": [
+              "1000",
+              "1001",
+              "1002",
+              "1003",
+              "1004",
+              "1005",
+              "1006",
+              "1007",
+              "1008",
+              "1009",
+              "1010",
+              "1011",
+              "1012",
+              "1013",
+              "1014",
+              "1015",
+              "1016",
+              "1017",
+              "1018",
+              "1019",
+              "1020",
+              "1021",
+              "1022",
+              "1023",
+              "1024",
+              "1025",
+              "1026",
+              "1027",
+              "1028",
+              "1029",
+              "1030",
+              "1031",
+              "1032",
+              "1033",
+              "1034",
+              "1035",
+              "1036",
+              "1037",
+              "1038",
+              "1039",
+              "1040",
+              "1041",
+              "1042",
+              "1043",
+              "1044",
+              "1045",
+              "1046",
+              "1047",
+              "1048",
+              "1049",
+              "1050",
+              "1051",
+              "1052",
+              "1053",
+              "1054",
+              "1055",
+              "1056",
+              "1057",
+              "1058",
+              "1059",
+              "1060",
+              "1061",
+              "1062",
+              "1063",
+              "1064",
+              "1065",
+              "1066",
+              "1067",
+              "1068",
+              "1069",
+              "1070",
+              "1071",
+              "1072",
+              "1073",
+              "1074",
+              "1075",
+              "1076",
+              "1077",
+              "1078",
+              "1079",
+              "1080",
+              "1081",
+              "1082",
+              "1083",
+              "1084",
+              "1085",
+              "1086",
+              "1087",
+              "1088",
+              "1089",
+              "1090",
+              "1091",
+              "1092",
+              "1093",
+              "1094",
+              "1095",
+              "1096",
+              "1097",
+              "1098",
+              "1099",
+              "1100"
+            ],
+            "property": "dealstage",
+            "value": "x"
+          },
+          "expect": {
+            "error": "invalid_argument"
+          }
+        },
+        {
+          "name": "refuses a property name with a dot",
+          "kind": "risky",
+          "arguments": {
+            "object_type": "contacts",
+            "record_ids": [
+              "1"
+            ],
+            "property": "a.b",
+            "value": "x"
+          },
+          "expect": {
+            "error": "invalid_argument"
+          }
+        }
+      ]
+    },
+    {
+      "actionId": "hubspot.objects.archive",
+      "title": "Archive up to 100 records",
+      "executor": {
+        "kind": "declarative-http",
+        "request": {
+          "method": "POST",
+          "path": "/crm/v3/objects/{object_type}/batch/archive",
+          "body": {
+            "object": [
+              {
+                "name": "inputs",
+                "value": {
+                  "each": {
+                    "arg": "record_ids",
+                    "item": {
+                      "object": [
+                        {
+                          "name": "id",
+                          "value": {
+                            "element": true
+                          }
+                        }
+                      ]
+                    }
+                  }
+                }
+              }
+            ]
+          },
+          "host": "api.hubapi.com",
+          "headers": [
+            {
+              "name": "accept",
+              "value": "application/json"
+            }
+          ],
+          "maxPages": 1
+        }
+      },
+      "arguments": {
+        "object_type": {
+          "type": "string",
+          "required": true,
+          "maxLength": 9,
+          "pattern": "^(?:contacts|companies|deals)$"
+        },
+        "record_ids": {
+          "type": "array",
+          "required": true,
+          "minItems": 1,
+          "maxItems": 100,
+          "items": {
+            "maxLength": 20,
+            "pattern": "^[0-9]{1,20}$"
+          }
+        }
+      },
+      "facts": {
+        "class": "delete",
+        "object": {
+          "const": "record"
+        },
+        "scope": {
+          "const": "enumerated"
+        },
+        "reversibility": {
+          "const": "recoverable"
+        },
+        "recordCount": {
+          "count": {
+            "arguments": [
+              "record_ids"
+            ]
+          }
+        }
+      },
+      "response": {
+        "maxBytes": 262144,
+        "fields": [
+          {
+            "name": "status",
+            "value": {
+              "from": "status"
+            }
+          }
+        ]
+      },
+      "safety": {
+        "effect": "destructive",
+        "requiredCapabilities": [
+          "bounded-output",
+          "egress-pinned"
+        ],
+        "idempotency": "none",
+        "scopes": [
+          "crm.objects.contacts.write",
+          "crm.objects.companies.write",
+          "crm.objects.deals.write"
+        ],
+        "maxItems": 100,
+        "minIntervalMs": 1000,
+        "timeoutMs": 10000
+      },
+      "fixtures": [
+        {
+          "name": "archives 3 contacts",
+          "kind": "safe",
+          "arguments": {
+            "object_type": "contacts",
+            "record_ids": [
+              "1000",
+              "1001",
+              "1002"
+            ]
+          },
+          "expect": {
+            "facts": {
+              "class": "delete",
+              "object": {
+                "state": "known",
+                "value": "record"
+              },
+              "scope": {
+                "state": "known",
+                "value": "enumerated"
+              },
+              "reversibility": {
+                "state": "known",
+                "value": "recoverable"
+              },
+              "record_count": {
+                "state": "known",
+                "value": 3
+              }
+            },
+            "decisions": {
+              "balanced": "allow",
+              "relaxed": "allow",
+              "strict": "review"
+            }
+          }
+        },
+        {
+          "name": "archives 80 companies",
+          "kind": "safe",
+          "arguments": {
+            "object_type": "companies",
+            "record_ids": [
+              "1000",
+              "1001",
+              "1002",
+              "1003",
+              "1004",
+              "1005",
+              "1006",
+              "1007",
+              "1008",
+              "1009",
+              "1010",
+              "1011",
+              "1012",
+              "1013",
+              "1014",
+              "1015",
+              "1016",
+              "1017",
+              "1018",
+              "1019",
+              "1020",
+              "1021",
+              "1022",
+              "1023",
+              "1024",
+              "1025",
+              "1026",
+              "1027",
+              "1028",
+              "1029",
+              "1030",
+              "1031",
+              "1032",
+              "1033",
+              "1034",
+              "1035",
+              "1036",
+              "1037",
+              "1038",
+              "1039",
+              "1040",
+              "1041",
+              "1042",
+              "1043",
+              "1044",
+              "1045",
+              "1046",
+              "1047",
+              "1048",
+              "1049",
+              "1050",
+              "1051",
+              "1052",
+              "1053",
+              "1054",
+              "1055",
+              "1056",
+              "1057",
+              "1058",
+              "1059",
+              "1060",
+              "1061",
+              "1062",
+              "1063",
+              "1064",
+              "1065",
+              "1066",
+              "1067",
+              "1068",
+              "1069",
+              "1070",
+              "1071",
+              "1072",
+              "1073",
+              "1074",
+              "1075",
+              "1076",
+              "1077",
+              "1078",
+              "1079"
+            ]
+          },
+          "expect": {
+            "facts": {
+              "class": "delete",
+              "object": {
+                "state": "known",
+                "value": "record"
+              },
+              "scope": {
+                "state": "known",
+                "value": "enumerated"
+              },
+              "reversibility": {
+                "state": "known",
+                "value": "recoverable"
+              },
+              "record_count": {
+                "state": "known",
+                "value": 80
+              }
+            },
+            "decisions": {
+              "balanced": "review",
+              "relaxed": "allow",
+              "strict": "review"
+            }
+          }
+        },
+        {
+          "name": "refuses an id that is not a number",
+          "kind": "risky",
+          "arguments": {
+            "object_type": "contacts",
+            "record_ids": [
+              "../schemas"
+            ]
+          },
+          "expect": {
+            "error": "invalid_argument"
+          }
+        }
+      ]
+    },
+    {
+      "actionId": "hubspot.contacts.gdpr_delete",
+      "title": "Permanently delete a contact (GDPR)",
+      "executor": {
+        "kind": "declarative-http",
+        "request": {
+          "method": "POST",
+          "path": "/crm/v3/objects/contacts/gdpr-delete",
+          "body": {
+            "object": [
+              {
+                "name": "objectId",
+                "value": {
+                  "arg": "contact_id"
+                }
+              }
+            ]
+          },
+          "host": "api.hubapi.com",
+          "headers": [
+            {
+              "name": "accept",
+              "value": "application/json"
+            }
+          ],
+          "maxPages": 1
+        }
+      },
+      "arguments": {
+        "contact_id": {
+          "type": "string",
+          "required": true,
+          "maxLength": 20,
+          "pattern": "^[0-9]{1,20}$"
+        }
+      },
+      "facts": {
+        "class": "delete",
+        "object": {
+          "const": "contact"
+        },
+        "scope": {
+          "const": "single"
+        },
+        "reversibility": {
+          "const": "permanent"
+        },
+        "recordCount": {
+          "const": 1
+        }
+      },
+      "response": {
+        "maxBytes": 262144,
+        "fields": [
+          {
+            "name": "status",
+            "value": {
+              "from": "status"
+            }
+          }
+        ]
+      },
+      "safety": {
+        "effect": "destructive",
+        "requiredCapabilities": [
+          "bounded-output",
+          "egress-pinned"
+        ],
+        "idempotency": "none",
+        "scopes": [
+          "crm.objects.contacts.write"
+        ],
+        "maxItems": 1,
+        "minIntervalMs": 1000,
+        "timeoutMs": 10000
+      },
+      "fixtures": [
+        {
+          "name": "erases one contact",
+          "kind": "safe",
+          "arguments": {
+            "contact_id": "1001"
+          },
+          "expect": {
+            "facts": {
+              "class": "delete",
+              "object": {
+                "state": "known",
+                "value": "contact"
+              },
+              "scope": {
+                "state": "known",
+                "value": "single"
+              },
+              "reversibility": {
+                "state": "known",
+                "value": "permanent"
+              },
+              "record_count": {
+                "state": "known",
+                "value": 1
+              }
+            },
+            "decisions": {
+              "balanced": "review",
+              "relaxed": "review",
+              "strict": "block"
+            }
+          }
+        },
+        {
+          "name": "refuses an email in place of an id",
+          "kind": "risky",
+          "arguments": {
+            "contact_id": "a@example.com"
+          },
+          "expect": {
+            "error": "invalid_argument"
+          }
+        }
+      ]
+    },
+    {
+      "actionId": "hubspot.schemas.delete",
+      "title": "Delete a custom object type",
+      "executor": {
+        "kind": "declarative-http",
+        "request": {
+          "method": "DELETE",
+          "path": "/crm/v3/schemas/{object_type}",
+          "host": "api.hubapi.com",
+          "headers": [
+            {
+              "name": "accept",
+              "value": "application/json"
+            }
+          ],
+          "maxPages": 1
+        }
+      },
+      "arguments": {
+        "object_type": {
+          "type": "string",
+          "required": true,
+          "maxLength": 64,
+          "pattern": "^(?:p_[a-z0-9_]{1,60}|2-[0-9]{1,12})$"
+        }
+      },
+      "facts": {
+        "class": "delete",
+        "object": {
+          "const": "table"
+        },
+        "scope": {
+          "const": "all"
+        },
+        "reversibility": {
+          "const": "recoverable"
+        }
+      },
+      "response": {
+        "maxBytes": 262144,
+        "fields": [
+          {
+            "name": "status",
+            "value": {
+              "from": "status"
+            }
+          }
+        ]
+      },
+      "safety": {
+        "effect": "destructive",
+        "requiredCapabilities": [
+          "bounded-output",
+          "egress-pinned"
+        ],
+        "idempotency": "none",
+        "scopes": [
+          "crm.schemas.custom.write"
+        ],
+        "maxItems": 1,
+        "minIntervalMs": 1000,
+        "timeoutMs": 10000
+      },
+      "fixtures": [
+        {
+          "name": "deletes a custom object type",
+          "kind": "safe",
+          "arguments": {
+            "object_type": "p_shipments"
+          },
+          "expect": {
+            "facts": {
+              "class": "delete",
+              "object": {
+                "state": "known",
+                "value": "table"
+              },
+              "scope": {
+                "state": "known",
+                "value": "all"
+              },
+              "reversibility": {
+                "state": "known",
+                "value": "recoverable"
+              }
+            },
+            "decisions": {
+              "balanced": "block",
+              "relaxed": "require-reapproval",
+              "strict": "block"
+            }
+          }
+        },
+        {
+          "name": "refuses a standard object type",
+          "kind": "risky",
+          "arguments": {
+            "object_type": "contacts"
+          },
+          "expect": {
+            "error": "invalid_argument"
+          }
+        }
+      ]
+    }
+  ]
+}

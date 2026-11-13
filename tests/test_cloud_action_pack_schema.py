@@ -39,6 +39,7 @@ def test_the_shipped_packs_match_the_schema() -> None:
         "github.json",
         "gmail.json",
         "hubspot-mcp.json",
+        "hubspot.json",
         "notion-mcp.json",
         "notion.json",
         "onedrive.json",
@@ -47,6 +48,7 @@ def test_the_shipped_packs_match_the_schema() -> None:
         "sheets.json",
         "slack.json",
         "stripe-mcp.json",
+        "stripe.json",
         "teams.json",
     ]
     validator = _validator()

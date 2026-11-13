@@ -18,7 +18,7 @@ use serde_json::{json, Map, Value};
 use std::sync::LazyLock;
 
 /// Every pack this build ships; tests read the same list.
-pub(crate) const SHIPPED_SOURCES: [&str; 20] = [
+pub(crate) const SHIPPED_SOURCES: [&str; 22] = [
     include_str!("../../../../contributions/cloud-actions/airtable.json"),
     include_str!("../../../../contributions/cloud-actions/asana.json"),
     include_str!("../../../../contributions/cloud-actions/atlassian.json"),
@@ -29,6 +29,7 @@ pub(crate) const SHIPPED_SOURCES: [&str; 20] = [
     include_str!("../../../../contributions/cloud-actions/dropbox.json"),
     include_str!("../../../../contributions/cloud-actions/github.json"),
     include_str!("../../../../contributions/cloud-actions/gmail.json"),
+    include_str!("../../../../contributions/cloud-actions/hubspot.json"),
     include_str!("../../../../contributions/cloud-actions/hubspot-mcp.json"),
     include_str!("../../../../contributions/cloud-actions/notion.json"),
     include_str!("../../../../contributions/cloud-actions/notion-mcp.json"),
@@ -37,6 +38,7 @@ pub(crate) const SHIPPED_SOURCES: [&str; 20] = [
     include_str!("../../../../contributions/cloud-actions/salesforce-mcp.json"),
     include_str!("../../../../contributions/cloud-actions/sheets.json"),
     include_str!("../../../../contributions/cloud-actions/slack.json"),
+    include_str!("../../../../contributions/cloud-actions/stripe.json"),
     include_str!("../../../../contributions/cloud-actions/stripe-mcp.json"),
     include_str!("../../../../contributions/cloud-actions/teams.json"),
 ];
