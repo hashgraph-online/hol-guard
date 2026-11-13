@@ -10,16 +10,19 @@ use serde_json::{json, Map, Value};
 
 use crate::guard_config_managed::{apply_managed_policy, ManagedInput};
 use crate::guard_config_update_coerce::{
-    coerce_editable, coerce_harness_patch, invalid, normalize_posture,
+    coerce_cigar_patch, coerce_editable, coerce_harness_patch, invalid, normalize_posture,
 };
-use crate::guard_config_update_harness::{apply_harness_patch, apply_named_policy, string_table};
+use crate::guard_config_update_harness::{
+    apply_cigar_patch, apply_harness_patch, apply_named_policy, cigar_ready, stamp_untimed_watch,
+    string_table,
+};
 use crate::guard_config_update_value::{
     get, is_str, py_eq, py_json_eq_int, py_str, remove, set, table_to_json, to_json, truthy, Table,
     Tv,
 };
 use crate::pyjson::PyVal;
 
-pub(crate) const EDITABLE_KEYS: [&str; 28] = [
+pub(crate) const EDITABLE_KEYS: [&str; 29] = [
     "mode",
     "presentation_mode",
     "presentation_mode_explicit",
@@ -28,6 +31,7 @@ pub(crate) const EDITABLE_KEYS: [&str; 28] = [
     "protection_posture_explicit",
     "watch_auto_revert_hours",
     "harness_postures",
+    "harness_cigar",
     "security_level",
     "default_action",
     "unknown_publisher_action",
@@ -66,6 +70,10 @@ const HARNESS_POSTURE_LOCK_KEYS: [&str; 4] = [
     "security_level",
     "harness_postures",
 ];
+/// Update-only flag: the Watch choices in this payload's `harness_postures`
+/// get no auto-revert window. The dashboard sends it for an app that keeps
+/// CIGAR while Guard steps back, a choice meant to last.
+const HARNESS_WATCH_UNTIMED_KEY: &str = "harness_watch_untimed";
 /// The posture state the caller records audit events from.
 pub(crate) struct SettingsWrite {
     pub(crate) next: Table,
@@ -380,6 +388,7 @@ pub(crate) fn update(
     apply_named_policy(&mut next, payload);
     let locked: &[String] = managed.map_or(&[], |policy| &policy.locked_settings);
     let mut harness_patch = Vec::new();
+    let mut cigar_patch = Vec::new();
     for (key, value) in payload {
         if !EDITABLE_KEYS.contains(&key.as_str()) {
             continue;
@@ -398,6 +407,10 @@ pub(crate) fn update(
                     "Managed policy locks prevent per-harness protection overrides.",
                 ));
             }
+            continue;
+        }
+        if key == "harness_cigar" {
+            cigar_patch = coerce_cigar_patch(value)?;
             continue;
         }
         if PRESENTATION_KEYS.contains(&key.as_str()) {
@@ -427,7 +440,22 @@ pub(crate) fn update(
     );
     sync_posture(&mut next, current, payload, selected, now);
     if !harness_patch.is_empty() {
-        apply_harness_patch(&mut next, &harness_patch, now);
+        let untimed = matches!(
+            incoming(payload, HARNESS_WATCH_UNTIMED_KEY),
+            Some(PyVal::Bool(true))
+        );
+        apply_harness_patch(&mut next, &harness_patch, now, untimed);
+    }
+    if !cigar_patch.is_empty() {
+        apply_cigar_patch(&mut next, &cigar_patch);
+        let turned_off: Vec<&str> = cigar_patch
+            .iter()
+            .filter_map(|(harness, off)| off.then_some(*harness))
+            .collect();
+        stamp_untimed_watch(&mut next, now, Some(&turned_off));
+    }
+    if has(payload, "context_assistance") && !cigar_ready(&next) {
+        stamp_untimed_watch(&mut next, now, None);
     }
     let next_json = table_to_json(&next);
     let effective = match managed {

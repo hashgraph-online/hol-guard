@@ -78,6 +78,30 @@ pub(crate) fn loaded_watch_stamps(
     stamps
 }
 
+/// Stored per-app CIGAR choices. Only `"off"` is kept: an app without an
+/// entry gets CIGAR's project context whenever CIGAR itself is on.
+pub(crate) fn loaded_cigar(value: Option<&Value>) -> BTreeMap<String, String> {
+    let mut choices = BTreeMap::new();
+    let Some(Value::Object(map)) = value else {
+        return choices;
+    };
+    for (key, raw) in map {
+        let Some(harness) = canonical_harness_id(key) else {
+            continue;
+        };
+        if raw
+            .as_str()
+            .map(|text| text.trim().to_lowercase())
+            .as_deref()
+            == Some("off")
+            && choices.len() < MAX_HARNESS_POSTURES
+        {
+            choices.insert(harness.to_owned(), "off".to_owned());
+        }
+    }
+    choices
+}
+
 /// `managed_effective_harness_postures`: apply managed locks to the local map.
 pub(crate) fn managed_effective(
     local: BTreeMap<String, String>,

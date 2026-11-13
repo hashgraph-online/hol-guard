@@ -266,6 +266,7 @@ impl Loaded {
         }
         put("harness_postures", Value::Object(harness_postures.clone()));
         put("harness_watch_entered_at", Value::Object(stamps.clone()));
+        put("harness_cigar", Value::Object(self.map("harness_cigar")));
         put("harness_postures_effective", Value::Object(effective_known));
         put("harness_posture_status", Value::Array(status));
         put(

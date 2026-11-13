@@ -182,6 +182,21 @@ fn context_assistance_at(
     context_assistance_from_home(home, workspace, source, &home_config)
 }
 
+/// Whether CIGAR is off for `harness`, read from the same composed settings
+/// the dashboard shows: the home config, `workspace`'s settings and managed
+/// policy. A config Guard cannot read leaves the choice to CIGAR's own
+/// policy, which refuses that config too.
+pub(crate) fn cigar_off_for(home: &Path, workspace: Option<&Path>, harness: &str) -> bool {
+    let mut source = ManagedPolicySource::native();
+    source.write_cache = false;
+    effective_config(home, workspace, &source).is_ok_and(|config| {
+        config
+            .get("harness_cigar")
+            .and_then(Value::as_object)
+            .is_some_and(|table| table.contains_key(harness))
+    })
+}
+
 /// Hypothetical local intent is composed through the same native machine
 /// authority as ordinary activation. It never writes config or grants a scope.
 pub(crate) fn context_assistance_target_from_source(
@@ -427,6 +442,7 @@ pub(crate) fn coerce_config(merged: &Map<String, Value>, managed: Option<&Manage
         "watch_entered_at": watch_entered_at(get("watch_entered_at")),
         "harness_postures": postures,
         "harness_watch_entered_at": stamps,
+        "harness_cigar": harness::loaded_cigar(get("harness_cigar")),
         "default_action": action_text(get("default_action"), GuardAction::Warn),
         "unknown_publisher_action": action_text(get("unknown_publisher_action"), GuardAction::Review),
         "changed_hash_action": action_text(get("changed_hash_action"), GuardAction::RequireReapproval),

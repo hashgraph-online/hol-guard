@@ -28,6 +28,7 @@
           "changed_hash_action": "require-reapproval",
           "default_action": "warn",
           "desktop_notifications": true,
+          "harness_cigar": {},
           "harness_posture_status": [
             {
               "harness": "codex",
@@ -466,6 +467,7 @@
           "context_assistance_requested": null,
           "default_action": "warn",
           "desktop_notifications": true,
+          "harness_cigar": {},
           "harness_posture_status": [
             {
               "harness": "codex",
@@ -703,6 +705,7 @@
           "changed_hash_action": "require-reapproval",
           "default_action": "warn",
           "desktop_notifications": true,
+          "harness_cigar": {},
           "harness_posture_status": [
             {
               "harness": "codex",
@@ -1141,6 +1144,7 @@
           "context_assistance_requested": null,
           "default_action": "warn",
           "desktop_notifications": true,
+          "harness_cigar": {},
           "harness_posture_status": [
             {
               "harness": "codex",
@@ -1378,6 +1382,7 @@
           "changed_hash_action": "require-reapproval",
           "default_action": "warn",
           "desktop_notifications": true,
+          "harness_cigar": {},
           "harness_posture_status": [
             {
               "harness": "codex",
@@ -1820,6 +1825,7 @@
           "context_assistance_requested": null,
           "default_action": "warn",
           "desktop_notifications": true,
+          "harness_cigar": {},
           "harness_posture_status": [
             {
               "harness": "codex",
@@ -2089,6 +2095,7 @@
           },
           "default_action": "warn",
           "desktop_notifications": false,
+          "harness_cigar": {},
           "harness_posture_status": [
             {
               "harness": "codex",
@@ -2581,6 +2588,7 @@
           },
           "default_action": "warn",
           "desktop_notifications": false,
+          "harness_cigar": {},
           "harness_posture_status": [
             {
               "harness": "codex",

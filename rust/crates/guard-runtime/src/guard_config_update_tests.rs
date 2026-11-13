@@ -249,3 +249,113 @@ fn watch_stamp_repair_leaves_a_managed_watch_unstamped() {
     };
     assert_eq!(computed.text, "telemetry = true\n");
 }
+
+/// An app that keeps only CIGAR is in Watch without a revert time; turning
+/// CIGAR off for it again starts the usual timed Watch.
+#[test]
+fn an_untimed_watch_keeps_no_stamp_and_a_timed_one_restarts_it() {
+    let home = scratch("untimed-watch").join("home");
+    let config = home.join(HOME_CONFIG_FILENAME);
+    let response = run(
+        &home,
+        "settings",
+        r#"{"harness_postures": {"codex": "watch"}, "harness_watch_untimed": true}"#,
+    );
+    assert_eq!(response["ok"], json!(true), "{response}");
+    let untimed = fs::read_to_string(&config).unwrap();
+    assert!(untimed.contains("codex = \"watch\""), "{untimed}");
+    assert!(!untimed.contains("harness_watch_entered_at"), "{untimed}");
+    assert!(!untimed.contains("harness_watch_untimed"), "{untimed}");
+
+    let response = run(
+        &home,
+        "settings",
+        r#"{"harness_postures": {"codex": "watch"}, "harness_cigar": {"codex": "off"}}"#,
+    );
+    assert_eq!(response["ok"], json!(true), "{response}");
+    let timed = fs::read_to_string(&config).unwrap();
+    assert!(timed.contains("[harness_watch_entered_at]"), "{timed}");
+    assert!(timed.contains("[harness_cigar]"), "{timed}");
+
+    // Following CIGAR again drops the table; an earlier timed stamp is cleared by an untimed save.
+    run(
+        &home,
+        "settings",
+        r#"{"harness_postures": {"codex": "watch"}, "harness_cigar": {"codex": null}, "harness_watch_untimed": true}"#,
+    );
+    let back = fs::read_to_string(&config).unwrap();
+    assert!(!back.contains("harness_cigar"), "{back}");
+    assert!(!back.contains("harness_watch_entered_at"), "{back}");
+    assert!(back.contains("codex = \"watch\""), "{back}");
+}
+
+/// Turning CIGAR off machine-wide leaves a CIGAR-only app with nothing
+/// running, so its untimed Watch gets the usual revert window.
+#[test]
+fn turning_cigar_off_times_an_untimed_watch() {
+    let home = scratch("cigar-off-untimed").join("home");
+    let config = home.join(HOME_CONFIG_FILENAME);
+    run(
+        &home,
+        "settings",
+        r#"{"harness_postures": {"codex": "watch"}, "harness_watch_untimed": true}"#,
+    );
+    assert!(!fs::read_to_string(&config)
+        .unwrap()
+        .contains("harness_watch_entered_at"));
+    let response = run(&home, "settings", r#"{"context_assistance": null}"#);
+    assert_eq!(response["ok"], json!(true), "{response}");
+    let after = fs::read_to_string(&config).unwrap();
+    assert!(after.contains("[harness_watch_entered_at]"), "{after}");
+    assert!(after.contains("codex = \"watch\""), "{after}");
+}
+
+/// Turning CIGAR off for one app times only that app's untimed Watch; an
+/// app that keeps CIGAR keeps its lasting Watch.
+#[test]
+fn turning_cigar_off_for_one_app_times_only_its_untimed_watch() {
+    let home = scratch("cigar-off-one-app").join("home");
+    let config = home.join(HOME_CONFIG_FILENAME);
+    run(
+        &home,
+        "settings",
+        r#"{"harness_postures": {"codex": "watch", "claude-code": "watch"}, "harness_watch_untimed": true}"#,
+    );
+    let response = run(&home, "settings", r#"{"harness_cigar": {"codex": "off"}}"#);
+    assert_eq!(response["ok"], json!(true), "{response}");
+    let after = fs::read_to_string(&config).unwrap();
+    let stamps = after
+        .split("[harness_watch_entered_at]")
+        .nth(1)
+        .unwrap_or_else(|| panic!("{after}"));
+    let stamps = stamps.split("\n[").next().unwrap();
+    assert!(stamps.contains("codex ="), "{after}");
+    assert!(!stamps.contains("claude-code"), "{after}");
+}
+
+#[test]
+fn per_app_cigar_choices_are_checked() {
+    let home = scratch("cigar-invalid").join("home");
+    for (payload, message) in [
+        (
+            r#"{"harness_cigar": "off"}"#,
+            "Per-app CIGAR choices must be a table.",
+        ),
+        (
+            r#"{"harness_cigar": {"nope": "off"}}"#,
+            "Unknown Guard harness for CIGAR.",
+        ),
+        (
+            r#"{"harness_cigar": {"codex": "later"}}"#,
+            "CIGAR for an app must be on or off.",
+        ),
+    ] {
+        let response = run(&home, "settings", payload);
+        assert_eq!(response["ok"], json!(false), "{payload}: {response}");
+        assert!(
+            response.to_string().contains(message),
+            "{payload}: {response}"
+        );
+    }
+    assert!(!home.join(HOME_CONFIG_FILENAME).exists());
+}
