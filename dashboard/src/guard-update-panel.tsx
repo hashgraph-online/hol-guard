@@ -10,9 +10,12 @@ import {
   redirectToGuardDaemonOrigin,
   scheduleGuardUpdate,
   setGuardUpdateChannel,
+  setGuardUpdateMode,
   type GuardUpdateChannelProof,
+  type GuardUpdateMode,
 } from "./guard-api";
 import { AlphaChannelDialog } from "./alpha-update-channel-dialog";
+import { UpdateModeDialog } from "./update-mode-dialog";
 import { dashboardEmbedsInDesktop } from "./desktop-embed";
 import { shouldPromptRecoveryReinstall, updateHelpCopy, updateStatusLabel } from "./guard-update-copy";
 import { buildApprovalProofCredentials } from "./approval-proof-inline";
@@ -42,6 +45,7 @@ export type GuardUpdatePanelProps = {
   onReinstallGuard?: () => void;
   approvalGate?: GuardApprovalGatePublicConfig | null;
   onSetUpdateChannel?: (channel: "stable" | "alpha", proof?: GuardUpdateChannelProof) => void | Promise<void>;
+  onSetUpdateMode?: (mode: GuardUpdateMode, proof?: GuardUpdateChannelProof) => void | Promise<void>;
   compact?: boolean;
 };
 
@@ -73,6 +77,12 @@ export function GuardUpdatePanel(props: GuardUpdatePanelProps) {
   const [alphaSaveError, setAlphaSaveError] = useState<string | null>(null);
   const [alphaApprovalPassword, setAlphaApprovalPassword] = useState("");
   const [alphaApprovalTotpCode, setAlphaApprovalTotpCode] = useState("");
+  const [updateModeModalOpen, setUpdateModeModalOpen] = useState(false);
+  const [updateModeDraft, setUpdateModeDraft] = useState<GuardUpdateMode>(props.updateStatus?.update_mode ?? "automatic");
+  const [updateModeSavePending, setUpdateModeSavePending] = useState(false);
+  const [updateModeSaveError, setUpdateModeSaveError] = useState<string | null>(null);
+  const [updateModeApprovalPassword, setUpdateModeApprovalPassword] = useState("");
+  const [updateModeApprovalTotpCode, setUpdateModeApprovalTotpCode] = useState("");
   const targetChannel = useAlpha ? "stable" : "alpha";
   const modalTitle = useAlpha ? "Return to stable updates" : "Try alpha updates";
 
@@ -118,6 +128,37 @@ export function GuardUpdatePanel(props: GuardUpdatePanelProps) {
   const handleApprovalTotpCodeChange = useCallback((event: ChangeEvent<HTMLInputElement>) => {
     setAlphaApprovalTotpCode(event.target.value);
   }, []);
+  const handleOpenUpdateModeModal = useCallback(() => {
+    setUpdateModeDraft(props.updateStatus?.update_mode ?? "automatic");
+    setUpdateModeSaveError(null);
+    setUpdateModeApprovalPassword("");
+    setUpdateModeApprovalTotpCode("");
+    setUpdateModeModalOpen(true);
+  }, [props.updateStatus?.update_mode]);
+  const handleCloseUpdateModeModal = useCallback(() => {
+    if (updateModeSavePending) return;
+    setUpdateModeModalOpen(false);
+    setUpdateModeSaveError(null);
+  }, [updateModeSavePending]);
+  const handleConfirmUpdateMode = useCallback(async () => {
+    if (!props.onSetUpdateMode) return;
+    setUpdateModeSavePending(true);
+    setUpdateModeSaveError(null);
+    try {
+      const proof = props.approvalGate?.enabled
+        ? buildApprovalProofCredentials(props.approvalGate, {
+            approvalPassword: updateModeApprovalPassword,
+            approvalTotpCode: updateModeApprovalTotpCode,
+          })
+        : undefined;
+      await props.onSetUpdateMode(updateModeDraft, proof);
+      setUpdateModeModalOpen(false);
+    } catch (error) {
+      setUpdateModeSaveError(error instanceof Error ? error.message : "Guard could not save the update preference. Try again.");
+    } finally {
+      setUpdateModeSavePending(false);
+    }
+  }, [props.approvalGate, props.onSetUpdateMode, updateModeApprovalPassword, updateModeApprovalTotpCode, updateModeDraft]);
 
   let updateChannelSummary: ReactNode = null;
   if (props.onSetUpdateChannel) {
@@ -146,6 +187,11 @@ export function GuardUpdatePanel(props: GuardUpdatePanelProps) {
       }
     >
       {updateChannelSummary}
+      {props.onSetUpdateMode ? (
+        <button type="button" onClick={handleOpenUpdateModeModal} disabled={busy} className="text-[11px] font-medium text-brand-blue hover:underline" aria-label="Manage Core update preferences">
+          {props.updateStatus?.update_mode === "ask" ? "Ask before installing" : props.updateStatus?.update_mode === "off" ? "Automatic Core updates off" : "Automatic Core updates on"}
+        </button>
+      ) : null}
       {props.updateStatus?.update_available ? (
         <div className="flex items-center justify-between gap-2">
           <p className="min-w-0 text-[11px] leading-4 text-brand-dark/75 [overflow-wrap:anywhere]">
@@ -199,6 +245,24 @@ export function GuardUpdatePanel(props: GuardUpdatePanelProps) {
           />
         </GuardModalLayer>
       ) : null}
+      {updateModeModalOpen ? (
+        <GuardModalLayer ariaLabel="Core update preferences" onClose={handleCloseUpdateModeModal} panelClassName="w-full max-w-md">
+          <UpdateModeDialog
+            mode={props.updateStatus?.update_mode ?? "automatic"}
+            draft={updateModeDraft}
+            pending={updateModeSavePending}
+            error={updateModeSaveError}
+            approvalGate={props.approvalGate ?? null}
+            approvalPassword={updateModeApprovalPassword}
+            approvalTotpCode={updateModeApprovalTotpCode}
+            onDraftChange={(event) => setUpdateModeDraft(event.target.value as GuardUpdateMode)}
+            onClose={handleCloseUpdateModeModal}
+            onConfirm={handleConfirmUpdateMode}
+            onApprovalPasswordChange={(event) => setUpdateModeApprovalPassword(event.target.value)}
+            onApprovalTotpCodeChange={(event) => setUpdateModeApprovalTotpCode(event.target.value)}
+          />
+        </GuardModalLayer>
+      ) : null}
     </div>
   );
 }
@@ -213,6 +277,8 @@ export function useGuardUpdate(options?: { onReconnected?: () => void; enabled?:
   const updateStatusEpoch = useRef(0);
   const channelMutationId = useRef(0);
   const channelMutationPending = useRef(false);
+  const modeMutationId = useRef(0);
+  const modeMutationPending = useRef(false);
   const isMounted = useRef(false);
 
   useEffect(() => {
@@ -227,7 +293,7 @@ export function useGuardUpdate(options?: { onReconnected?: () => void; enabled?:
   }, []);
 
   const refreshUpdateStatus = useCallback(async () => {
-    if (!enabled || !isMounted.current || channelMutationPending.current) {
+    if (!enabled || !isMounted.current || channelMutationPending.current || modeMutationPending.current) {
       return;
     }
     const epoch = updateStatusEpoch.current;
@@ -238,7 +304,7 @@ export function useGuardUpdate(options?: { onReconnected?: () => void; enabled?:
         !isMounted.current ||
         epoch !== updateStatusEpoch.current ||
         mutationId !== channelMutationId.current ||
-        channelMutationPending.current
+        channelMutationPending.current || modeMutationPending.current
       ) {
         return;
       }
@@ -267,7 +333,8 @@ export function useGuardUpdate(options?: { onReconnected?: () => void; enabled?:
           cancelled ||
           epoch !== updateStatusEpoch.current ||
           mutationId !== channelMutationId.current ||
-          channelMutationPending.current
+          channelMutationPending.current ||
+          modeMutationPending.current
         ) {
           return;
         }
@@ -426,6 +493,22 @@ export function useGuardUpdate(options?: { onReconnected?: () => void; enabled?:
     }
   }, []);
 
+  const onSetUpdateMode = useCallback(async (mode: GuardUpdateMode, proof?: GuardUpdateChannelProof) => {
+    const mutationId = ++modeMutationId.current;
+    updateStatusEpoch.current += 1;
+    modeMutationPending.current = true;
+    try {
+      const status = await setGuardUpdateMode(mode, proof);
+      if (mutationId === modeMutationId.current) {
+        updateStatusEpoch.current += 1;
+        setUpdateStatus(status);
+        if (updatePhaseRef.current === "checking" || updatePhaseRef.current === "idle") setUpdatePhase("idle");
+      }
+    } finally {
+      if (mutationId === modeMutationId.current) modeMutationPending.current = false;
+    }
+  }, []);
+
   return {
     guardVersion: updateStatus?.current_version ?? null,
     updateStatus,
@@ -434,6 +517,7 @@ export function useGuardUpdate(options?: { onReconnected?: () => void; enabled?:
     onUpdateGuard,
     onReinstallGuard,
     onSetUpdateChannel,
+    onSetUpdateMode,
     refreshUpdateStatus,
   };
 }

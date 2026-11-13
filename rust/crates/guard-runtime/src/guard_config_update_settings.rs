@@ -19,7 +19,7 @@ use crate::guard_config_update_value::{
 };
 use crate::pyjson::PyVal;
 
-pub(crate) const EDITABLE_KEYS: [&str; 28] = [
+pub(crate) const EDITABLE_KEYS: [&str; 29] = [
     "mode",
     "presentation_mode",
     "presentation_mode_explicit",
@@ -43,6 +43,7 @@ pub(crate) const EDITABLE_KEYS: [&str; 28] = [
     "approval_browser_immediate_severity",
     "desktop_notifications",
     "update_channel",
+    "update_mode",
     "telemetry",
     "sync",
     "billing",
