@@ -165,31 +165,35 @@ fn short_cluster_has(word: &str, letter: char) -> bool {
 /// pattern, so neither is read as an option: `git clean -fd -- -notes`
 /// removes `-notes`.
 fn clean_is_dry_run(rest: &[&str]) -> bool {
+    // The last dry-run option wins: `--no-dry-run` clears an earlier `-n`.
+    let mut dry_run = false;
     let mut words = rest.iter();
     while let Some(word) = words.next() {
         match *word {
-            "--" => return false,
-            "--dry-run" => return true,
+            "--" => break,
+            "--dry-run" => dry_run = true,
+            "--no-dry-run" => dry_run = false,
             "-e" | "--exclude" => {
                 words.next();
-                continue;
             }
-            _ => {}
-        }
-        let Some(cluster) = word.strip_prefix('-').filter(|rest| !rest.starts_with('-')) else {
-            continue;
-        };
-        // In a cluster, `e` takes the rest of the word (or the next word)
-        // as its pattern, so only the letters before it are options.
-        let (flags, pattern) = cluster.split_once('e').unwrap_or((cluster, ""));
-        if flags.contains('n') {
-            return true;
-        }
-        if cluster.contains('e') && pattern.is_empty() {
-            words.next();
+            _ => {
+                let Some(cluster) = word.strip_prefix('-').filter(|rest| !rest.starts_with('-'))
+                else {
+                    continue;
+                };
+                // In a cluster, `e` takes the rest of the word (or the next word)
+                // as its pattern, so only the letters before it are options.
+                let (flags, pattern) = cluster.split_once('e').unwrap_or((cluster, ""));
+                if flags.contains('n') {
+                    dry_run = true;
+                }
+                if cluster.contains('e') && pattern.is_empty() {
+                    words.next();
+                }
+            }
         }
     }
-    false
+    dry_run
 }
 
 /// Whether `argv` (a git invocation, starting at `git`) discards work.

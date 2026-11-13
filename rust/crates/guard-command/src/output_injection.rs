@@ -206,25 +206,34 @@ pub fn injection_shape(text: &str, source: OutputSource) -> Option<&'static str>
         .then_some("destructive_command")
 }
 
-/// The longest command block read after a "run the following command" line.
-const BLOCK_LIMIT: usize = 2_000;
-
 /// Every command a "run the following command" line introduces: the whole
-/// fenced block when one opens, otherwise the lines up to the next blank
-/// line, capped at [`BLOCK_LIMIT`] bytes.
+/// fenced block when one opens, up to the line that closes it (or the end of
+/// the text when none does), otherwise the lines up to the next blank line.
+/// The block is never cut short, so padding cannot push a command out of it.
 fn command_block<'t>(text: &'t str, found: &regex::Captures<'t>) -> &'t str {
     let start = found.name("cmd").map_or(text.len(), |cmd| cmd.start());
     let rest = &text[start..];
     let end = match found.name("fence") {
-        Some(fence) => rest.find(fence.as_str()),
+        Some(fence) => closing_fence(rest, fence.as_str()),
         None => rest.find("\n\n"),
     }
     .unwrap_or(rest.len());
-    let mut end = end.min(BLOCK_LIMIT);
-    while !rest.is_char_boundary(end) {
-        end -= 1;
-    }
     &rest[..end]
+}
+
+/// Where the line that closes a `fence` block starts in `block`: a line
+/// holding only the fence, as Markdown requires. A fence spelled inside a
+/// command, such as `printf '```'`, does not close the block.
+fn closing_fence(block: &str, fence: &str) -> Option<usize> {
+    let mut at = 0;
+    for line in block.split_inclusive('\n') {
+        let bare = line.trim();
+        if bare.len() >= fence.len() && bare.chars().all(|ch| fence.starts_with(ch)) {
+            return Some(at);
+        }
+        at += line.len();
+    }
+    None
 }
 
 #[cfg(test)]

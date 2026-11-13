@@ -135,6 +135,8 @@ fn a_clean_reads_only_its_options_before_the_pathspec_separator() {
         r#"os.system("git clean -fd --exclude -n")"#,
         r#"os.system("git clean -fden")"#,
         r#"os.system("git clean -fde -n")"#,
+        r#"os.system("git clean -fdn --no-dry-run")"#,
+        r#"os.system("git clean --dry-run -fd --no-dry-run")"#,
     ] {
         assert!(spells_destructive_git(code), "{code}");
     }
@@ -142,6 +144,7 @@ fn a_clean_reads_only_its_options_before_the_pathspec_separator() {
         r#"os.system("git clean -fdn -- notes")"#,
         r#"os.system("git clean -fd -e build -n")"#,
         r#"os.system("git clean -fd --dry-run")"#,
+        r#"os.system("git clean --no-dry-run -fdn")"#,
     ] {
         assert!(!spells_destructive_git(code), "{code}");
     }
@@ -155,6 +158,11 @@ fn a_command_run_inside_a_python_f_string_field_is_read() {
         r#"s = rf"{ {'k': 1}['k'] } {__import__('os').system('git reset --hard')}""#,
         "s = f\"\"\"\n{__import__('os').system('git reset --hard')}\n\"\"\"",
         r#"s = f"{__import__('os').system("git reset --hard")}""#,
+        r#"print(rf"\{__import__('os').system('git reset --hard')}")"#,
+        r#"print(f"\{__import__('os').system('git reset --hard')}")"#,
+        r#"print(f"{1:#>{__import__('os').system('git reset --hard')}}")"#,
+        r#"print(f"{x:#>{w}} {__import__('os').system('git reset --hard')}")"#,
+        r#"print(f"{x!r:#^10} {__import__('os').system('git clean -fdx')}")"#,
     ] {
         assert!(
             spells_destructive_git(&super::without_comments(

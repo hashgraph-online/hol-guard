@@ -23,10 +23,8 @@ pub(in crate::pretool::script_content) fn without_comments(
 ) -> String {
     let mut code = String::with_capacity(source.len());
     let mut quote: Option<&'static str> = None;
-    // Each `${...}` or Python `{...}` replacement field the scan is inside:
-    // its open brace depth, the string it returns to and whether that string
-    // is a Python f-string.
-    let mut interpolations: Vec<(usize, &'static str, bool)> = Vec::new();
+    // Each `${...}` or Python `{...}` replacement field the scan is inside.
+    let mut interpolations: Vec<Field> = Vec::new();
     // Whether the open string is a Python f-string.
     let mut formatted = false;
     let mut in_block = false;
@@ -36,7 +34,10 @@ pub(in crate::pretool::script_content) fn without_comments(
         let rest = &source[at..];
         if let Some(close) = quote {
             let spans_lines = close.len() == 3 || close == "`";
-            if ch == '\\' {
+            // A backslash never escapes the brace of an f-string replacement
+            // field, raw or not: Python still runs the field.
+            let brace_follows = rest[1..].starts_with(['{', '}']);
+            if ch == '\\' && !(formatted && brace_follows) {
                 match chars.next() {
                     // A line continuation inside a string adds nothing.
                     Some((_, '\n')) => {}
@@ -58,7 +59,7 @@ pub(in crate::pretool::script_content) fn without_comments(
             } else if close == "`" && rest.starts_with("${") {
                 code.push_str("\"+(");
                 chars.next();
-                interpolations.push((0, close, false));
+                interpolations.push(Field::new(close, false));
                 quote = None;
             } else if formatted && (rest.starts_with("{{") || rest.starts_with("}}")) {
                 code.push_str(&rest[..2]);
@@ -66,7 +67,7 @@ pub(in crate::pretool::script_content) fn without_comments(
             } else if formatted && ch == '{' {
                 code.push_str(if spans_lines { "\"" } else { close });
                 code.push_str("+(");
-                interpolations.push((0, close, true));
+                interpolations.push(Field::new(close, true));
                 quote = None;
                 formatted = false;
             } else if spans_lines {
@@ -92,6 +93,31 @@ pub(in crate::pretool::script_content) fn without_comments(
         if in_line_comment {
             continue;
         }
+        // A Python format specifier (`{value:#>{width}}`) is text, not code:
+        // a `#` in it starts no comment. A field nested in it is code.
+        if let Some(field) = interpolations.last_mut().filter(|field| field.in_spec) {
+            match ch {
+                '{' => {
+                    let close = field.close;
+                    code.push('(');
+                    interpolations.push(Field {
+                        in_parent_spec: true,
+                        ..Field::new(close, true)
+                    });
+                }
+                '}' => {
+                    let close = field.close;
+                    interpolations.pop();
+                    let spans_lines = close.len() == 3 || close == "`";
+                    code.push_str(")+");
+                    code.push_str(if spans_lines { "\"" } else { close });
+                    quote = Some(close);
+                    formatted = true;
+                }
+                _ => {}
+            }
+            continue;
+        }
         if in_block {
             if rest.starts_with("*/") {
                 chars.next();
@@ -115,11 +141,20 @@ pub(in crate::pretool::script_content) fn without_comments(
             }
             _ => {}
         }
-        if let Some((depth, close, was_formatted)) = interpolations.last_mut() {
+        if let Some(field) = interpolations.last_mut() {
             match ch {
-                '{' => *depth += 1,
-                '}' if *depth == 0 => {
-                    let (close, was_formatted) = (*close, *was_formatted);
+                '{' | '(' | '[' => field.depth += 1,
+                ':' if field.depth == 0 && field.formatted => {
+                    field.in_spec = true;
+                    continue;
+                }
+                '}' if field.depth == 0 && field.in_parent_spec => {
+                    interpolations.pop();
+                    code.push(')');
+                    continue;
+                }
+                '}' if field.depth == 0 => {
+                    let (close, was_formatted) = (field.close, field.formatted);
                     interpolations.pop();
                     let spans_lines = close.len() == 3 || close == "`";
                     code.push_str(")+");
@@ -128,7 +163,7 @@ pub(in crate::pretool::script_content) fn without_comments(
                     formatted = was_formatted;
                     continue;
                 }
-                '}' => *depth -= 1,
+                '}' | ')' | ']' => field.depth = field.depth.saturating_sub(1),
                 _ => {}
             }
         }
@@ -153,6 +188,34 @@ pub(in crate::pretool::script_content) fn without_comments(
         code.push(ch);
     }
     code
+}
+
+/// A `${...}` or Python `{...}` replacement field the scan is inside.
+struct Field {
+    /// Open brackets, braces and parentheses inside the field's code.
+    depth: usize,
+    /// The string the field returns to when it closes.
+    close: &'static str,
+    /// Whether that string is a Python f-string.
+    formatted: bool,
+    /// Whether the scan has passed the field's top-level `:` into its format
+    /// specifier.
+    in_spec: bool,
+    /// Whether the field is nested in another field's format specifier, so
+    /// closing it returns to that specifier rather than to a string.
+    in_parent_spec: bool,
+}
+
+impl Field {
+    fn new(close: &'static str, formatted: bool) -> Self {
+        Self {
+            depth: 0,
+            close,
+            formatted,
+            in_spec: false,
+            in_parent_spec: false,
+        }
+    }
 }
 
 /// Whether `before` ends in a Python string prefix that makes the string an
