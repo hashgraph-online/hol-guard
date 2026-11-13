@@ -177,11 +177,21 @@ The policy step changes as follows. Everything else in the precedence list above
    `bounded` matches this action on this connection only when its selector answers yes, so an unknown fact never
    satisfies it. `selector_sha256` must equal the digest of the selector's canonical JSON. Resource and bounded
    scopes do not answer `require-reapproval` unless the facts say the change is reversible or recoverable. A
-   permanent or unknown change needs exact consent. When several match, `always` beats `once`, and then the
-   narrowest scope wins.
+   permanent or unknown change needs exact consent. Resource and bounded scopes also never answer a call in a
+   session that saw an injection signal, or an outbound call (a send, share, export or payment, or an update or
+   execute whose audience is not known to be internal) when the session read untrusted or sensitive content or
+   `session_flow` is `null`. Only exact consent answers those. When several match, `always` beats `once`, and
+   then the narrowest scope wins.
 
 Every reviewable result lists `consent_options`. Both kinds, Allow once and Always allow, are always offered for
-the exact call, and for the resource too when a resource scope could apply. The result also reports
+the exact call, and for the resource too when a resource scope could apply. When a wider scope could apply and
+the call's object, reversibility and count are known, up to two bounded Always allow choices follow:
+`{"kind": "always", "scope": "bounded", "selector", "selector_sha256"}`. The selector pins the provider, class,
+object and reversibility and bounds the count at the smallest of 1, 5, 10, 25, 50, 100, 250, 500 and 1000 that
+covers this call, then at the next one. It bounds `max_record_count`, plus `external: false` when the audience is
+known to be internal; a call known to reach outside gets none, and so does an outbound call (a send, share or export, or an update or execute) not known to stay inside, which also gets `external: false`. A payment gets none, because no selector bounds its amount. An outbound call is bounded by
+`max_recipient_count` and pinned to its known `recipient_domains`. Store a choice as given: the evaluator matches
+the selector against later calls and checks the digest. The result also reports
 `consent_scope`, `facts_digest` and `pack_digest`. `evaluation_provenance_digest` additionally covers the fact
 rules, the facts, the windows, and the session flow.
 
