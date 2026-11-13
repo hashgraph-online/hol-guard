@@ -101,12 +101,26 @@ SCENARIOS: list[dict[str, object]] = [
         "rows": [row("r1", status="pending", resolution_action=None, resolution_scope=None, resolved_at=None)],
         "calls": [call()],
     },
-    {"name": "expired_after_one_hour", "rows": [row("r1")], "calls": [call(now="2026-03-01T13:00:01+00:00")]},
-    {"name": "exactly_one_hour", "rows": [row("r1")], "calls": [call(now="2026-03-01T13:00:00+00:00")]},
+    # Window edges. The Python twin's window was five minutes; the resident's
+    # Allow once window is one hour. These record at the Python edge and are
+    # re-stamped to the one-hour edge by `restamp_window_edge`.
+    {
+        "name": "expired_after_one_hour",
+        "window_edge": True,
+        "rows": [row("r1")],
+        "calls": [call(now="2026-03-01T12:05:01+00:00")],
+    },
+    {
+        "name": "exactly_one_hour",
+        "window_edge": True,
+        "rows": [row("r1")],
+        "calls": [call(now="2026-03-01T12:05:00+00:00")],
+    },
     {
         "name": "one_hour_plus_one_microsecond",
+        "window_edge": True,
         "rows": [row("r1")],
-        "calls": [call(now="2026-03-01T13:00:00.000001+00:00")],
+        "calls": [call(now="2026-03-01T12:05:00.000001+00:00")],
     },
     {"name": "decision_in_the_future", "rows": [row("r1")], "calls": [call(now="2026-03-01T11:59:59+00:00")]},
     {"name": "same_instant_as_now", "rows": [row("r1")], "calls": [call(now=T0)]},
@@ -324,6 +338,21 @@ def insert(path: Path, rows: list[dict[str, object]]) -> None:
         connection.close()
 
 
+PYTHON_EDGE = "2026-03-01T12:05:0"
+RESIDENT_EDGE = "2026-03-01T13:00:0"
+
+
+def restamp_window_edge(calls: list[dict[str, object]]) -> list[dict[str, object]]:
+    """Moves a call recorded at the Python five-minute edge to the resident's one-hour edge.
+
+    The effect digest does not cover the call time, so only `now` and the
+    effect's `created_at` change; the decision and the digest stay as recorded.
+    """
+    text = json.dumps(calls)
+    assert PYTHON_EDGE in text
+    return json.loads(text.replace(PYTHON_EDGE, RESIDENT_EDGE))
+
+
 def run(scenario: dict[str, object]) -> dict[str, object]:
     with tempfile.TemporaryDirectory(prefix="native-review-consume-") as root:
         store = GuardStore(Path(root) / "guard-home", prime_policy_integrity=False)
@@ -344,6 +373,8 @@ def run(scenario: dict[str, object]) -> dict[str, object]:
             )
             if index == 0 and "after_first_call_rows" in scenario:
                 insert(path, scenario["after_first_call_rows"])  # type: ignore[arg-type]
+        if scenario.get("window_edge"):
+            calls = restamp_window_edge(calls)
         return {
             "name": scenario["name"],
             "native_may_deny": bool(scenario.get("native_may_deny")),

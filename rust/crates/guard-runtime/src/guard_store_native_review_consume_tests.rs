@@ -51,7 +51,11 @@ fn blocks_use_the_same_identity_window_scope_and_latest_decision_rules() {
         }
         insert_rows(&Connection::open(&db).unwrap(), "approval_requests", &rows);
         let first = &scenario["calls"][0];
-        let expected = scenario["native_may_deny"] != true && first["result"] == true;
+        // A Block once answers retries for five minutes, not the hour an
+        // Allow once covers, so the one-hour edge does not block.
+        let expected = scenario["native_may_deny"] != true
+            && first["result"] == true
+            && name != "exactly_one_hour";
         for _ in 0..2 {
             let reply = call(&home, &first["args"], "matching_native_review_block");
             assert_eq!(reply["status"], "ok", "{name}: {reply}");
@@ -232,6 +236,25 @@ fn a_late_answer_covers_one_identical_retry_within_the_hour() {
         false,
         "after the hour it asks"
     );
+    std::fs::remove_dir_all(home).unwrap();
+}
+
+/// A refusal only stops a retry loop: after five minutes a new try is a new
+/// question, even though an Allow once would still cover it.
+#[test]
+fn a_block_once_answers_retries_for_five_minutes_only() {
+    let (home, base) = settle_home("block-five-minutes", true);
+    for (now, blocked) in [
+        ("2026-03-01T12:04:00+00:00", true),
+        ("2026-03-01T12:05:00+00:00", true),
+        ("2026-03-01T12:06:00+00:00", false),
+    ] {
+        let mut args = base.clone();
+        args["now"] = Value::from(now);
+        let reply = call(&home, &args, "matching_native_review_block");
+        assert_eq!(reply["status"], "ok", "{now}: {reply}");
+        assert_eq!(reply["payload"], blocked, "{now}");
+    }
     std::fs::remove_dir_all(home).unwrap();
 }
 
