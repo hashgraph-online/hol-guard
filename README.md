@@ -31,7 +31,7 @@ Run it locally without an account. Use the CLI and local dashboard to manage pro
 #### Gold sponsors
 
 <p align="center">
-<a href="https://www.yanez.ai/"><img src="assets/yanez-sponsor-gold.svg" alt="Yanez" width="240" height="68" /></a>
+<a href="https://www.yanez.ai/"><img src="https://raw.githubusercontent.com/hashgraph-online/hol-guard/main/assets/yanez-sponsor-gold.svg" alt="Yanez" width="240" height="68" /></a>
 </p>
 
 #### Bronze sponsors
