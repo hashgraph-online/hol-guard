@@ -32,13 +32,13 @@ _CANARY_TIMEOUT_SECONDS = 10
 _NODE_CHECK_TIMEOUT_SECONDS = 5
 
 
-def _run_canary(request: dict[str, Any]) -> dict[str, object]:
+def _run_canary(canary: dict[str, Any]) -> dict[str, object]:
     """Run the bound PreToolUse launcher once with the synthetic read."""
     env = {**os.environ, "HOL_GUARD_CLINE_CANARY": "1"}
     try:
         result = subprocess.run(
-            [str(part) for part in request["argv"]],
-            input=str(request["input"]),
+            [str(part) for part in canary["argv"]],
+            input=str(canary["input"]),
             capture_output=True,
             text=True,
             timeout=_CANARY_TIMEOUT_SECONDS,
