@@ -124,6 +124,15 @@ def test_only_the_marked_cases_may_pass_on_containment() -> None:
         # leaves. A read misclassification would be a quiet allow and still fail.
         "neg-awk-division-pipe-to-network",
         "neg-awk-regex-quote-hides-network-pipe",
+        # An awk program that rewrites its input list or runs a command behind a
+        # number: the read screen must refuse it, and a contained run reaches no
+        # file outside the workspace and no host program the sandbox does not
+        # hold.
+        "neg-awk-argc-appends-credential-file",
+        "neg-awk-argv-swaps-input-for-ssh-key",
+        "neg-awk-gsub-rewrites-argv-entry",
+        "neg-awk-number-hides-argv-write",
+        "neg-awk-number-hides-system-call",
         "neg-cargo-check-locked-host-toolchain",
         # A missing name under a guarded root: the read keeps its review, and a
         # contained run reaches none of the credential store, the key directory,
