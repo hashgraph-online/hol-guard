@@ -233,6 +233,7 @@ pub mod network_url;
 pub mod node_build_output;
 pub mod npm_source_spec;
 pub mod ordered_json;
+pub mod output_endpoint_lure;
 pub mod output_injection;
 #[cfg(unix)]
 pub mod package_context_build;
