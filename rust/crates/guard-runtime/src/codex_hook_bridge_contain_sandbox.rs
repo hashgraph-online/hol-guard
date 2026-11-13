@@ -13,14 +13,17 @@
 //! directories unless its config excludes them; Guard's workspace profile
 //! does not.
 //!
-//! A project's own pytest is the one read-only profile a workspace-write
-//! turn also runs, temporary directories shared or not. Codex's default
-//! sandbox lets the agent write the workspace and both temporary
-//! directories with any shell command, so a test run that can write the
-//! same places reaches nothing the turn could not already reach, while the
-//! sandbox still keeps it off the network and out of the home directory and
-//! the folders beside the workspace. Every other read-only profile keeps
-//! Guard's answer in a workspace-write turn.
+//! A workspace-write turn with no network and no extra writable roots runs
+//! every contained profile, temporary directories shared or not. Codex's
+//! default sandbox lets the agent write the workspace and both temporary
+//! directories with any shell command, so a contained call that can write
+//! the same places reaches nothing the turn could not already reach, while
+//! the sandbox still keeps it off the network and out of the home directory
+//! and the folders beside the workspace. That holds for a project's pytest,
+//! for `python -m unittest` and inline Python or Node, and for the workspace
+//! profile alike; denying them left the agent a refusal it could not get
+//! past without asking Codex for more access. Only the native Bash owner,
+//! which is not a sandbox profile, keeps Guard's answer.
 //!
 //! The turn's sandbox is not proof that this one call runs in it: Codex
 //! starts a call outside it when the user approves an escalation, when an
@@ -81,12 +84,35 @@ impl Turn {
     pub(super) fn check_profile<'a>(&self, profile: Option<&'a str>) -> Option<&'a str> {
         match (self, profile?) {
             (Self::ReadOnly, profile) => Some(profile),
-            (Self::WorkspaceWrite, WORKSPACE_PROFILE | PYTEST_PROFILE) => Some(WORKSPACE_PROFILE),
-            (Self::SharedTmp, PYTEST_PROFILE) => Some(SHARED_TMP_CHECK),
+            (Self::WorkspaceWrite, profile) if contained_profile(profile) => {
+                Some(WORKSPACE_PROFILE)
+            }
+            (Self::SharedTmp, profile) if contained_profile(profile) => Some(SHARED_TMP_CHECK),
             _ => None,
         }
     }
 }
+
+/// Whether `profile` names one of Guard's contained sandbox profiles, the
+/// ones a workspace-write turn's own sandbox holds at least as tightly.
+fn contained_profile(profile: &str) -> bool {
+    profile == WORKSPACE_PROFILE
+        || profile == PYTEST_PROFILE
+        || CONTAINED_PROFILES.contains(&profile)
+}
+
+/// Guard's other contained profiles: each keeps the workspace read-only or
+/// writes only its build output there, and none reaches the network.
+const CONTAINED_PROFILES: &[&str] = &[
+    "git-readonly-v1",
+    "node-build-output-v1",
+    "node-eval-readonly-v1",
+    "node-test-readonly-v1",
+    "node-tool-readonly-v1",
+    "package-test-readonly-v1",
+    "python-eval-readonly-v1",
+    "vitest-readonly-v1",
+];
 
 /// The sandbox of the turn this hook call belongs to. Only macOS is known
 /// to refuse a nested sandbox; elsewhere Guard's rewrite stands.

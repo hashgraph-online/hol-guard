@@ -45,6 +45,7 @@ fn restamp(
     let mut context = BTreeMap::new();
     let mut node_options_inert = false;
     let mut cargo_home = None;
+    let mut git_config = BTreeMap::new();
     for (name, value) in environment {
         let name = name.into_string().map_err(|_| invalid())?;
         if name.is_empty()
@@ -68,6 +69,14 @@ fn restamp(
             // Kept only long enough to compare with HOME below; the value
             // itself never leaves this process either.
             cargo_home = value.to_str().map(str::to_owned);
+        }
+        if guard_contracts::git_config_count_entry(&name)
+            && git_config.len() <= 2 * guard_contracts::MAX_INERT_GIT_CONFIG_ENVIRONMENT_ENTRIES
+        {
+            // Kept only to judge the entries below; never sent on.
+            if let Some(value) = value.to_str() {
+                git_config.insert(name.clone(), value.to_owned());
+            }
         }
         if NATIVE_BASH_SELECTED_ENVIRONMENT_NAMES.contains(&name.as_str())
             || matches!(name.as_str(), "HOME" | "PATH")
@@ -94,6 +103,9 @@ fn restamp(
     observed.file_creation_mask = None; // A previous hook's value cannot survive restamping.
     let cargo_home_default =
         guard_contracts::cargo_home_default(Some(home.as_str()), cargo_home.as_deref());
+    let git_config_environment_inert = guard_contracts::git_config_environment_inert(|name| {
+        git_config.get(name).map(String::as_str)
+    });
     let mut material = b"hol.guard.bash.final-environment.v1\0".to_vec();
     material.extend(serde_json::to_vec(&(&names, &context)).map_err(|_| invalid())?);
     if node_options_inert {
@@ -105,6 +117,11 @@ fn restamp(
         // decision taken while the file was where Cargo reads it anyway.
         material.extend(b"\0cargo_home_default");
     }
+    if git_config_environment_inert {
+        // Different `GIT_CONFIG_COUNT` entries must not reuse a decision taken
+        // while they only changed how Git quotes paths.
+        material.extend(b"\0git_config_environment_inert");
+    }
     observed.execution_environment = GuardExecutionEnvironmentV1 {
         path: context.get("PATH").cloned().unwrap_or_default(),
         home: Some(home.clone()),
@@ -112,6 +129,7 @@ fn restamp(
         environment_digest: guard_policy_snapshot::digest_bytes(&material),
         node_options_inert,
         cargo_home_default,
+        git_config_environment_inert,
         ..GuardExecutionEnvironmentV1::unavailable()
     };
     if !observed.execution_environment.has_valid_shape() {

@@ -54413,6 +54413,22 @@
       "expect": "allow"
     },
     {
+      "id": "pytest-disable-plugin-autoload-prefix-venv-pytest",
+      "fix_area": "env-prefix",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 .venv/bin/pytest -q"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
       "id": "pytest-addopts-quoted-prefix-venv-pytest",
       "fix_area": "env-prefix",
       "harnesses": [
@@ -57122,6 +57138,81 @@
       "expect": "not_allow"
     },
     {
+      "id": "ls-linked-worktree-git-operation-state",
+      "fix_area": "read",
+      "harnesses": [
+        "codex",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "ls ${WORKTREE}/.git/index.lock 2>&1; ls ${WORKTREE}/.git/MERGE_HEAD 2>&1"
+      },
+      "cwd": "parent",
+      "expect": "allow"
+    },
+    {
+      "id": "test-linked-worktree-merge-head-in-admin-dir",
+      "fix_area": "read",
+      "harnesses": [
+        "codex",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "test -f ${PARENT}/.git/worktrees/parent-repo-feature/MERGE_HEAD && echo MERGE || echo NO_MERGE"
+      },
+      "cwd": "parent",
+      "expect": "allow"
+    },
+    {
+      "id": "check-linked-worktree-for-unfinished-merge",
+      "fix_area": "read",
+      "harnesses": [
+        "codex",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "test -f ${WORKTREE}/.git/MERGE_HEAD && echo MERGE_IN_PROGRESS || echo NO_MERGE; test -d ${WORKTREE}/.git && echo HAS_GIT; ls ${WORKTREE}/.git 2>/dev/null | head -5; ls ${WORKTREE} | head -20"
+      },
+      "cwd": "parent",
+      "expect": "allow"
+    },
+    {
+      "id": "neg-ls-through-ssh-key-file",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "ls ${HOME}/.ssh/id_rsa/config 2>&1"
+      },
+      "cwd": "parent",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-test-through-ssh-key-file",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "test -f ${HOME}/.ssh/id_rsa/config && echo yes || echo no"
+      },
+      "cwd": "parent",
+      "expect": "not_allow"
+    },
+    {
       "id": "linked-sources-grep-internal-link",
       "fix_area": "read",
       "harnesses": [
@@ -57216,6 +57307,141 @@
         "command": "grep -n KEY ./src/notes.ts"
       },
       "cwd": "linked_sources",
+      "expect": "not_allow"
+    },
+    {
+      "id": "git-status-editor-terminal-quote-path",
+      "fix_area": "git",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git status --short"
+      },
+      "cwd": "worktree",
+      "environment": {
+        "GIT_CONFIG_COUNT": "1",
+        "GIT_CONFIG_KEY_0": "core.quotePath",
+        "GIT_CONFIG_VALUE_0": "false"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "git-log-editor-terminal-quote-path",
+      "fix_area": "git",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git log --oneline -3"
+      },
+      "cwd": "worktree",
+      "environment": {
+        "GIT_CONFIG_COUNT": "1",
+        "GIT_CONFIG_KEY_0": "core.quotePath",
+        "GIT_CONFIG_VALUE_0": "false"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "git-diff-stat-editor-terminal-quote-path",
+      "fix_area": "git",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git diff --stat"
+      },
+      "cwd": "worktree",
+      "environment": {
+        "GIT_CONFIG_COUNT": "1",
+        "GIT_CONFIG_KEY_0": "core.quotePath",
+        "GIT_CONFIG_VALUE_0": "false"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "neg-git-log-config-entry-sets-pager",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git log --oneline -3"
+      },
+      "cwd": "worktree",
+      "environment": {
+        "GIT_CONFIG_COUNT": "1",
+        "GIT_CONFIG_KEY_0": "core.pager",
+        "GIT_CONFIG_VALUE_0": "touch /tmp/hol-guard-gate-config-pager-mark; cat"
+      },
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-git-status-config-entry-sets-fsmonitor",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git status --short"
+      },
+      "cwd": "worktree",
+      "environment": {
+        "GIT_CONFIG_COUNT": "2",
+        "GIT_CONFIG_KEY_0": "core.quotePath",
+        "GIT_CONFIG_VALUE_0": "false",
+        "GIT_CONFIG_KEY_1": "core.fsmonitor",
+        "GIT_CONFIG_VALUE_1": "touch /tmp/hol-guard-gate-fsmonitor-mark"
+      },
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-git-log-quote-path-beside-config-parameters",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git log --oneline -3"
+      },
+      "cwd": "worktree",
+      "environment": {
+        "GIT_CONFIG_COUNT": "1",
+        "GIT_CONFIG_KEY_0": "core.quotePath",
+        "GIT_CONFIG_VALUE_0": "false",
+        "GIT_CONFIG_PARAMETERS": "'core.pager'='touch /tmp/hol-guard-gate-parameters-mark; cat'"
+      },
       "expect": "not_allow"
     },
     {

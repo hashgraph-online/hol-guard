@@ -85,16 +85,24 @@ fn codex_default_workspace_write_turn_shares_tmp() {
 }
 
 /// Which profile the sandbox check confirms for each turn: a read-only turn
-/// the profile itself, a workspace-write turn the workspace profile for
-/// that profile and for pytest, Codex's default turn the shared-tmp check
-/// for pytest alone, and a wider or unknown turn nothing.
+/// the profile itself, a workspace-write turn the workspace profile, Codex's
+/// default turn the shared-tmp check, for every contained profile, and a
+/// wider or unknown turn nothing.
 #[test]
 fn each_turn_names_the_check_its_calls_run_behind() {
-    for profile in [
+    let contained = [
         "workspace-contained-v1",
         "pytest-readonly-v2",
+        "python-eval-readonly-v1",
+        "node-eval-readonly-v1",
         "node-build-output-v1",
-    ] {
+        "node-tool-readonly-v1",
+        "node-test-readonly-v1",
+        "package-test-readonly-v1",
+        "git-readonly-v1",
+        "vitest-readonly-v1",
+    ];
+    for profile in contained {
         assert_eq!(Turn::ReadOnly.check_profile(Some(profile)), Some(profile));
         assert_eq!(Turn::Wider.check_profile(Some(profile)), None, "{profile}");
         assert_eq!(
@@ -102,23 +110,20 @@ fn each_turn_names_the_check_its_calls_run_behind() {
             None,
             "{profile}"
         );
-    }
-    for profile in ["workspace-contained-v1", "pytest-readonly-v2"] {
         assert_eq!(
             Turn::WorkspaceWrite.check_profile(Some(profile)),
             Some(WORKSPACE_PROFILE),
             "{profile}"
         );
+        assert_eq!(
+            Turn::SharedTmp.check_profile(Some(profile)),
+            Some(SHARED_TMP_CHECK),
+            "{profile}"
+        );
     }
-    assert_eq!(
-        Turn::SharedTmp.check_profile(Some("pytest-readonly-v2")),
-        Some(SHARED_TMP_CHECK)
-    );
     for profile in [
-        Some("python-eval-readonly-v1"),
-        Some("node-eval-readonly-v1"),
-        Some("node-build-output-v1"),
-        Some("node-tool-readonly-v1"),
+        Some("native-bash-owner-v1"),
+        Some("unknown-profile-v9"),
         None,
     ] {
         assert_eq!(
@@ -128,11 +133,6 @@ fn each_turn_names_the_check_its_calls_run_behind() {
         );
         assert_eq!(Turn::SharedTmp.check_profile(profile), None, "{profile:?}");
     }
-    assert_eq!(
-        Turn::SharedTmp.check_profile(Some("workspace-contained-v1")),
-        None,
-        "the workspace profile keeps /tmp and $TMPDIR read-only"
-    );
 }
 
 #[test]
@@ -326,9 +326,23 @@ fn a_contained_call_in_codex_sandbox_runs_behind_the_sandbox_check() {
         denied
     );
     assert_eq!(
-        answer(SHARED_TMP, DENY),
+        routed(SHARED_TMP, DENY),
+        allowed("codex-workspace-write-shared-tmp"),
+        "the workspace profile runs in Codex's default sandbox"
+    );
+    const EVAL_DENY: &str = r#"{"policy_action":"sandbox-required","decision":"deny","reason_code":"native_python_eval_readonly_containment_required","required_execution_profile":"python-eval-readonly-v1","hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"Run this inside the contained runner."}}"#;
+    assert_eq!(
+        routed(SHARED_TMP, EVAL_DENY),
+        allowed("codex-workspace-write-shared-tmp"),
+        "python -m unittest writes no more than Codex's default turn already does"
+    );
+    assert_eq!(
+        answer(
+            r#"{"type":"workspace-write","network_access":true}"#,
+            EVAL_DENY
+        ),
         denied,
-        "Codex's default sandbox writes /tmp and $TMPDIR"
+        "inline Python with network keeps the denial"
     );
     assert_eq!(
         answer(
