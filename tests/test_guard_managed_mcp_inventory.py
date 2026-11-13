@@ -8,8 +8,8 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
-from codex_plugin_scanner.guard.adapters.cline import ClineHarnessAdapter
-from codex_plugin_scanner.guard.adapters.cline_mcp import install_cline_mcp_proxies
+from codex_plugin_scanner.guard.adapters.cline_runtime import ClineHarnessAdapter
+from codex_plugin_scanner.guard.adapters.cline_runtime import install_mcp_proxies as install_cline_mcp_proxies
 from codex_plugin_scanner.guard.adapters.cursor import CursorHarnessAdapter
 from codex_plugin_scanner.guard.adapters.harness_mcp_discovery import discover_harness_mcp_servers
 from codex_plugin_scanner.guard.adapters.mcp_servers import (

@@ -27,6 +27,11 @@ use crate::harness_coverage::artifacts::resolve_lenient;
 use crate::runner_authority_detector::args_object;
 use crate::runner_authority_op::{KindResult, ERR_INVALID};
 
+mod cline;
+mod cline_hooks;
+mod cline_install;
+mod cline_mcp;
+mod cline_plugin;
 mod cloud_identity;
 mod describe;
 mod desktop_core;
@@ -159,6 +164,8 @@ pub(crate) enum Failure {
     Os(String),
     NotFound(String),
     Integrity(&'static str),
+    /// The `RuntimeError` an adapter raised.
+    Runtime(String),
     Invalid,
 }
 
@@ -177,6 +184,7 @@ fn answer(step: Step<Value>) -> KindResult {
         Err(Failure::Os(message)) => Ok(json!({ "os_error": message })),
         Err(Failure::NotFound(message)) => Ok(json!({ "not_found": message })),
         Err(Failure::Integrity(reason)) => Ok(json!({ "integrity": reason })),
+        Err(Failure::Runtime(message)) => Ok(json!({ "runtime_error": message })),
         Err(Failure::Invalid) => Err(ERR_INVALID),
     }
 }
@@ -209,6 +217,7 @@ pub(crate) fn dispatch(args: &Value) -> KindResult {
         "zcode" => zcode::dispatch(spec, op, &ctx, fields),
         "pi" | "omp" => pi::dispatch(spec, op, &ctx, fields),
         "opencode" => opencode::dispatch(spec, op, &ctx, fields),
+        "cline" => cline::dispatch(spec, op, &ctx, fields),
         _ => Err(Failure::Invalid),
     })
 }

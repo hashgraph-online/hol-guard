@@ -1,5 +1,5 @@
 """Harness adapters the native runtime answers: Devin, Antigravity, Gemini, Kimi, OpenClaw, Paseo, Muse,
-Grok, ZCode, Pi, Oh My Pi and OpenCode.
+Grok, ZCode, Pi, Oh My Pi, OpenCode and Cline.
 
 The ``harness_adapter`` runner-authority kind owns their paths, detection, command lookup, install and
 uninstall plans, manifests, launch environment, runtime probe fields, approval flow, Paseo's delegated
@@ -43,6 +43,7 @@ NATIVE_HARNESSES: tuple[tuple[str, tuple[str, ...], str], ...] = (
     ("pi", ("pi", "pi-agent", "pi-coding-agent"), "pi"),
     ("omp", ("omp", "oh-my-pi"), "omp"),
     ("opencode", (), ""),
+    ("cline", ("cline-cli", "cline-vscode"), "cline"),
 )
 
 #: Ops that render a Pi-family extension, so they carry this process's facts.
@@ -120,6 +121,8 @@ def ask(
             raise OSError(str(answer["os_error"]))
         if "not_found" in answer:
             raise FileNotFoundError(str(answer["not_found"]))
+        if "runtime_error" in answer:
+            raise RuntimeError(str(answer["runtime_error"]))
         if "integrity" in answer:
             from ..codex_hook_recovery import _error
 
