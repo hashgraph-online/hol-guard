@@ -126,6 +126,7 @@ fn display_name_fragment(value: &str) -> String {
         match character {
             '\\' => escaped.push_str("\\\\"),
             '\'' => escaped.push_str("\\'"),
+            '"' => escaped.push_str("\\\""),
             '`' => escaped.push_str("\\`"),
             '$' if chars.peek() == Some(&'{') => escaped.push_str("\\$"),
             '\n' => escaped.push_str("\\n"),
