@@ -104,9 +104,11 @@ def _locked_descriptor(path: Path) -> int:
 def _lock(descriptor: int) -> None:
     """Wait for the exclusive lock: ``flock`` on Unix, a byte range on Windows.
 
-    msvcrt locks a byte range rather than the file, so the lock file is given
-    the one byte both sides lock, and a range another replay holds is retried
-    until it is released, as ``flock`` would wait.
+    msvcrt locks a byte range rather than the file. Both sides lock byte 0,
+    which Windows allows beyond the end of the file, so the lock file is never
+    written: Windows byte-range locks are mandatory, and a replay that seeded
+    the byte could be refused by one that locked it first. A range another
+    replay holds is retried until it is released, as ``flock`` would wait.
     """
 
     if fcntl is not None:
@@ -114,8 +116,6 @@ def _lock(descriptor: int) -> None:
         return
     if msvcrt is None:
         raise OSError("file locking is unavailable")
-    if os.fstat(descriptor).st_size == 0:
-        _ = os.write(descriptor, b"0")
     while True:
         _ = os.lseek(descriptor, 0, os.SEEK_SET)
         try:

@@ -71,7 +71,7 @@ def test_a_windows_replay_locks_the_first_byte_and_releases_it(tmp_path: Path, m
     state.set("package_firewall_session_nonces", {"n": 1})
     assert state.get("package_firewall_session_nonces") == {"n": 1}
     assert fake.calls == [(fake.LK_NBLCK, 0, 1), (fake.LK_UNLCK, 0, 1)] * 2
-    assert (tmp_path / "daemon-replay-state.lock").read_bytes() == b"0"
+    assert (tmp_path / "daemon-replay-state.lock").read_bytes() == b""
 
 
 def test_a_windows_replay_waits_while_another_holds_the_lock(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
