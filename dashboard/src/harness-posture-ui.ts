@@ -119,7 +119,12 @@ export function selectHarnessPosture(
 
 /** True when an app is in Watch through its own entry, so its own timer can restart. */
 export function canRestartHarnessWatch(settings: GuardSettings, harness: string): boolean {
-  return settings.harness_postures?.[harness] === "watch" && (settings.watch_auto_revert_hours ?? 24) > 0;
+  // An untimed Watch (an app kept on CIGAR only) has no timer to restart.
+  return (
+    settings.harness_postures?.[harness] === "watch" &&
+    settings.harness_watch_entered_at?.[harness] !== undefined &&
+    (settings.watch_auto_revert_hours ?? 24) > 0
+  );
 }
 
 /** Draft that restarts one app's Watch timer on the next save. */

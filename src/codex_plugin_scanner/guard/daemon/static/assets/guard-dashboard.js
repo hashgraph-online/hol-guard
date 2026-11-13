@@ -1,4 +1,4 @@
-const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/chunks/home-dashboard-OxpCh2cB.js","assets/chunks/home-protection-module-CKLh5X9E.js","assets/chunks/supply-chain-protection-stats--m3HVz8Q.js","assets/chunks/workspace-model-hR3eI7UO.js","assets/chunks/brand-hero-COty1p6U.js","assets/chunks/about-content-Dr9zFg1V.js","assets/chunks/app-catalog-Ca_M7GbC.js","assets/chunks/fleet-workspace-BVvg6Lpo.js","assets/chunks/harness-version-label-xEsgWKwG.js","assets/chunks/connect-guard-cloud-button-Xk2GIeZa.js","assets/chunks/settings-save-proof-modal-B1l5ib5t.js","assets/chunks/settings-workspace-C_CNq8AH.js","assets/chunks/confirm-dialog-CjbF_rrG.js","assets/chunks/extensions-workspace-DeE0MG3h.js","assets/chunks/app-detail-workspace-DqHWwK_5.js","assets/chunks/policy-workspace-page-ChvzniW9.js","assets/chunks/about-workspace-DSZDVR66.js","assets/about-workspace.css"])))=>i.map(i=>d[i]);
+const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/chunks/home-dashboard-in9LMPhY.js","assets/chunks/home-protection-module-DCaScQ5x.js","assets/chunks/supply-chain-protection-stats-C6bXlZB5.js","assets/chunks/workspace-model-hR3eI7UO.js","assets/chunks/brand-hero-COty1p6U.js","assets/chunks/about-content-Dr9zFg1V.js","assets/chunks/app-catalog-Ca_M7GbC.js","assets/chunks/fleet-workspace-CcakKyDb.js","assets/chunks/harness-version-label-BMeZqHL3.js","assets/chunks/connect-guard-cloud-button-BUnXYp-e.js","assets/chunks/settings-save-proof-modal-DW4goyCe.js","assets/chunks/settings-workspace-D_73bnzk.js","assets/chunks/confirm-dialog-D3mZurPG.js","assets/chunks/extensions-workspace-CQ1lpUuu.js","assets/chunks/app-detail-workspace-CDmqqZRR.js","assets/chunks/policy-workspace-page-Dm3Ct0Bg.js","assets/chunks/about-workspace-CKjljbOH.js","assets/about-workspace.css"])))=>i.map(i=>d[i]);
 (function polyfill() {
   const relList = document.createElement("link").relList;
   if (relList && relList.supports && relList.supports("modulepreload")) return;
@@ -16766,6 +16766,335 @@ function loadCurrentDashboardBuild(href) {
   }
   return true;
 }
+const PROTECTION_POSTURE_COPY = {
+  protected: {
+    label: "Protected",
+    help: "Stops theft, wipes, and Guard bypass. Asks once about new tools or first-time secret access, then remembers."
+  },
+  extra_careful: {
+    label: "Extra careful",
+    help: "Same as Protected, and also asks the first time this project talks to a new site or installs a new tool."
+  },
+  watch: {
+    label: "Watch",
+    help: "Records what Guard would have stopped, but does not stop anything. Use only while debugging."
+  }
+};
+const WATCH_BANNER_COPY = "Protection is off. Guard is only recording.";
+const POSTURE_OUTCOME_COLUMNS = {
+  protected: {
+    stops: "Credential theft, Guard bypass, encoded exfil, known-bad tools",
+    asks: "First secret read, new destructive command, first package script, new MCP or skill",
+    runs: "Remembered actions, routine browsing, verified-benign work"
+  },
+  extra_careful: {
+    stops: "The same automatic stops as Protected",
+    asks: "Everything Protected asks, plus first new site, first new tool, and cloud advisories",
+    runs: "Remembered actions and verified-benign work"
+  },
+  watch: {
+    stops: "Nothing. Guard only records.",
+    asks: "Nothing. Inbox shows what would have stopped.",
+    runs: "Every action, including known-bad work"
+  }
+};
+function isProtectionPosture(value) {
+  return value === "protected" || value === "extra_careful" || value === "watch";
+}
+function deriveProtectionPosture(mode, securityLevel) {
+  if (mode === "observe") return "watch";
+  if (securityLevel === "strict" || securityLevel === "paranoid") return "extra_careful";
+  return "protected";
+}
+const POSTURE_LABEL = {
+  protected: "Protected",
+  extra_careful: "Extra careful",
+  watch: "Watch"
+};
+function normalizeHarnessPostures(value) {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) return {};
+  const result = {};
+  for (const [harness, posture] of Object.entries(value)) {
+    if (harness.length > 0 && typeof posture === "string" && isProtectionPosture(posture)) {
+      result[harness] = posture;
+    }
+  }
+  return result;
+}
+function globalPosture(settings) {
+  if (isProtectionPosture(settings.protection_posture)) return settings.protection_posture;
+  if (settings.mode === "observe") return "watch";
+  return "protected";
+}
+function protectedLevel(effective, baseline) {
+  if (effective !== "watch") return effective;
+  if (baseline !== "watch") return baseline;
+  return "protected";
+}
+function effectiveHarnessPosture(settings, harness) {
+  const override = settings.harness_postures?.[harness];
+  const baseline = globalPosture(settings);
+  if (override === void 0) return baseline;
+  if (override === "watch") return "watch";
+  return baseline === "extra_careful" ? baseline : override;
+}
+function harnessPostureRows(settings, capabilities) {
+  return capabilities.map((capability) => {
+    const effective = effectiveHarnessPosture(settings, capability.harness);
+    return {
+      harness: capability.harness,
+      displayName: capability.display_name,
+      effective,
+      hasOverride: settings.harness_postures?.[capability.harness] !== void 0,
+      selected: effective === "watch" ? "watch" : "on"
+    };
+  });
+}
+function harnessPostureOptions(settings, harness) {
+  const onLevel = protectedLevel(effectiveHarnessPosture(settings, harness), globalPosture(settings));
+  return [
+    { choice: "on", label: POSTURE_LABEL[onLevel] },
+    { choice: "watch", label: POSTURE_LABEL.watch }
+  ];
+}
+function selectHarnessPosture(settings, harness, choice) {
+  const baseline = globalPosture(settings);
+  if (choice === "on" && effectiveHarnessPosture(settings, harness) !== "watch") return settings;
+  const next = { ...settings.harness_postures ?? {} };
+  if (choice === "watch") {
+    if (baseline === "watch") delete next[harness];
+    else next[harness] = "watch";
+  } else if (baseline === "watch") {
+    next[harness] = "protected";
+  } else {
+    delete next[harness];
+  }
+  return { ...settings, harness_postures: next };
+}
+function canRestartHarnessWatch(settings, harness) {
+  return settings.harness_postures?.[harness] === "watch" && settings.harness_watch_entered_at?.[harness] !== void 0 && (settings.watch_auto_revert_hours ?? 24) > 0;
+}
+function restartHarnessWatch(settings, harness) {
+  if (!canRestartHarnessWatch(settings, harness)) return settings;
+  const restarts = new Set(settings.harness_watch_restart ?? []);
+  restarts.add(harness);
+  return { ...settings, harness_watch_restart: [...restarts].sort() };
+}
+function harnessPosturePatch(draft, saved) {
+  const before = saved?.harness_postures ?? {};
+  const after = draft.harness_postures ?? {};
+  const restarts = new Set(draft.harness_watch_restart ?? []);
+  const patch = {};
+  for (const harness of /* @__PURE__ */ new Set([...Object.keys(before), ...Object.keys(after)])) {
+    const posture = after[harness] ?? null;
+    const restart = posture === "watch" && restarts.has(harness);
+    if (restart || posture !== (before[harness] ?? null)) patch[harness] = posture;
+  }
+  return Object.keys(patch).length > 0 ? patch : null;
+}
+function clearHarnessWatchOverrides(settings) {
+  const next = Object.fromEntries(
+    Object.entries(settings.harness_postures ?? {}).filter(([, posture]) => posture !== "watch")
+  );
+  return { ...settings, harness_postures: next };
+}
+function settingsWatchBannerModel(settings, capabilities) {
+  const rows = harnessPostureRows(settings, capabilities);
+  return watchBannerModel({
+    protection_posture: globalPosture(settings),
+    harness_postures: settings.harness_postures,
+    harnesses_in_watch: rows.filter((row) => row.effective === "watch").map((row) => row.harness),
+    protection_capabilities: capabilities
+  });
+}
+function withHarnessPosturePatch(payload, draft, saved) {
+  const {
+    harness_postures: _postures,
+    harness_postures_effective: _effective,
+    harness_postures_locked: _locked,
+    harness_watch_entered_at: _enteredAt,
+    harness_watch_restart: _restart,
+    ...rest
+  } = payload;
+  const patch = harnessPosturePatch(draft, saved);
+  return patch === null ? rest : { ...rest, harness_postures: patch };
+}
+function harnessPostureSummary(rows) {
+  if (rows.length === 0) return "";
+  const watching = rows.filter((row) => row.effective === "watch");
+  if (watching.length === 0) return "Every app is protected.";
+  if (watching.length === rows.length) return "Every app is in Watch.";
+  return `${watching.length} of ${rows.length} apps in Watch: ${joinNames(watching.map((row) => row.displayName))}.`;
+}
+function harnessRowTone(row) {
+  return row.effective === "watch" ? "watch" : "protected";
+}
+function harnessRowStatus(row) {
+  if (row.effective === "watch") {
+    return row.hasOverride ? "Watch · recording only" : "Watch · follows the machine setting";
+  }
+  if (!row.hasOverride) return "Follows the machine setting";
+  return "Set for this app";
+}
+function sortHarnessRows(rows) {
+  const watching = rows.filter((row) => row.effective === "watch");
+  const rest = rows.filter((row) => row.effective !== "watch");
+  return [...watching, ...rest];
+}
+function overrideRows(rows) {
+  return rows.filter((row) => row.hasOverride);
+}
+function harnessWatchPrompt(rows, harness) {
+  const row = rows.find((candidate) => candidate.harness === harness);
+  const name = row?.displayName ?? harness;
+  const others = rows.filter((candidate) => candidate.harness !== harness);
+  const protectedOthers = others.filter((candidate) => candidate.effective !== "watch");
+  const lead = `Guard will only record in ${name}.`;
+  if (others.length === 0) return lead;
+  if (protectedOthers.length === 0) return `${lead} Every app will then be in Watch.`;
+  if (protectedOthers.length === others.length) return `${lead} Your other apps stay protected.`;
+  const verb = protectedOthers.length === 1 ? "stays" : "stay";
+  return `${lead} ${joinNames(protectedOthers.map((candidate) => candidate.displayName))} ${verb} protected.`;
+}
+function joinNames(names) {
+  if (names.length <= 1) return names[0] ?? "";
+  if (names.length === 2) return `${names[0]} and ${names[1]}`;
+  return `${names.slice(0, -1).join(", ")}, and ${names[names.length - 1]}`;
+}
+function displayNameFor(harness, capabilities) {
+  return capabilities?.find((capability) => capability.harness === harness)?.display_name ?? harness;
+}
+function watchBannerModel(snapshot) {
+  const globalWatch = snapshot.protection_posture === "watch";
+  const watchOverrides = Object.entries(snapshot.harness_postures ?? {}).filter(([, posture]) => posture === "watch").map(([harness]) => harness);
+  const inWatch = globalWatch ? [] : snapshot.harnesses_in_watch ?? watchOverrides;
+  if (!globalWatch && inWatch.length === 0) return null;
+  const appNames = inWatch.map((harness) => displayNameFor(harness, snapshot.protection_capabilities));
+  if (globalWatch) {
+    return {
+      globalWatch,
+      appNames: [],
+      message: WATCH_BANNER_COPY,
+      confirmMessage: "Guard will start stopping dangerous actions in every app."
+    };
+  }
+  const names = joinNames(appNames);
+  return {
+    globalWatch,
+    appNames,
+    message: `Guard is only recording in ${names}. Other apps are protected.`,
+    confirmMessage: `Guard will start stopping dangerous actions in ${names}.`
+  };
+}
+function turnProtectionOnUpdate(snapshot) {
+  const update = {};
+  if (snapshot.protection_posture === "watch") update.protection_posture = "protected";
+  const cleared = {};
+  for (const [harness, posture] of Object.entries(snapshot.harness_postures ?? {})) {
+    if (posture === "watch") cleared[harness] = null;
+  }
+  if (Object.keys(cleared).length > 0) update.harness_postures = cleared;
+  return update;
+}
+const CIGAR_APPS = /* @__PURE__ */ new Set(["claude-code", "codex", "pi", "omp"]);
+function cigarReady(settings) {
+  const config2 = settings.context_assistance;
+  const requested = config2?.enabled === true && config2.features.agent_context && config2.sources.workspace_documents;
+  return requested && settings.context_assistance_effective_ready !== false;
+}
+function cigarLocked(settings) {
+  return settings.managed_locked_settings?.includes("harness_cigar") === true;
+}
+function cigarSupported(harness) {
+  return CIGAR_APPS.has(harness);
+}
+function cigarAvailable(settings, harness) {
+  return cigarReady(settings) && cigarSupported(harness);
+}
+function appModes(settings, harness) {
+  return {
+    guard: effectiveHarnessPosture(settings, harness) !== "watch",
+    cigar: cigarAvailable(settings, harness) && settings.harness_cigar?.[harness] !== "off"
+  };
+}
+function watchIsUntimed(settings, harness) {
+  return settings.harness_postures?.[harness] === "watch" && settings.harness_watch_entered_at?.[harness] === void 0;
+}
+function appModesUpdate(settings, harness, next) {
+  const update = {};
+  const available = cigarAvailable(settings, harness);
+  const cigarOnly = !next.guard && next.cigar && available;
+  if (settings.harness_postures_locked === true) ;
+  else if (cigarOnly) {
+    if (!watchIsUntimed(settings, harness)) {
+      update.harness_postures = { [harness]: "watch" };
+      update.harness_watch_untimed = true;
+    }
+  } else if (next.guard) {
+    const patch = harnessPosturePatch(selectHarnessPosture(settings, harness, "on"), settings);
+    if (patch !== null) update.harness_postures = patch;
+  } else {
+    const draft = selectHarnessPosture(settings, harness, "watch");
+    const patch = harnessPosturePatch(draft, settings) ?? {};
+    if (watchIsUntimed(settings, harness) && globalPosture(settings) !== "watch") patch[harness] = "watch";
+    if (Object.keys(patch).length > 0) update.harness_postures = patch;
+  }
+  if (available) {
+    const off = settings.harness_cigar?.[harness] === "off";
+    if (next.cigar === off) update.harness_cigar = { [harness]: next.cigar ? null : "off" };
+  }
+  return Object.keys(update).length > 0 ? update : null;
+}
+function needsConfirm(current, next, locked = false) {
+  if (next.guard || locked) return false;
+  return current.guard || next.cigar && !current.cigar;
+}
+function cigarUnavailableReason(settings, harness, displayName) {
+  if (cigarAvailable(settings, harness)) {
+    return cigarLocked(settings) ? "Your organization manages CIGAR for each app." : void 0;
+  }
+  if (cigarSupported(harness)) return "CIGAR is off on this machine. Set it up on the CIGAR page.";
+  return `CIGAR can't add project context in ${displayName}.`;
+}
+function applyHarnessCigarPatch(current, patch) {
+  const next = { ...current ?? {} };
+  for (const [harness, choice] of Object.entries(patch)) {
+    if (choice === null) delete next[harness];
+    else next[harness] = choice;
+  }
+  return next;
+}
+function appModesNote(settings, harness) {
+  const modes = appModes(settings, harness);
+  const available = cigarAvailable(settings, harness);
+  if (modes.guard) return available && !modes.cigar ? "Guard only · CIGAR off for this app" : null;
+  if (modes.cigar) return "CIGAR only · Guard is not checking actions";
+  return globalPosture(settings) === "watch" && settings.harness_postures?.[harness] === void 0 ? "Watch · follows the machine setting" : "Watch · recording only";
+}
+function appModesStatusMessage(next, displayName) {
+  if (next.guard && next.cigar) return `Guard and CIGAR are on in ${displayName}.`;
+  if (next.guard) return `Guard is on in ${displayName}. CIGAR is off.`;
+  if (next.cigar) return `CIGAR is on in ${displayName}. Guard is not checking actions.`;
+  return `Guard is only recording in ${displayName}.`;
+}
+function guardOffPrompt(settings, harness, next, displayName) {
+  if (next.cigar && !appModes(settings, harness).guard) {
+    return `CIGAR will start adding project context in ${displayName}. Guard stays off and no longer turns back on by itself.`;
+  }
+  if (next.cigar) {
+    return `Guard will stop checking ${displayName}'s actions until you turn it back on. CIGAR keeps adding project context.`;
+  }
+  const ownWatch = appModesUpdate(settings, harness, next)?.harness_postures?.[harness] === "watch";
+  if (globalPosture(settings) === "watch" && !ownWatch) {
+    return `Guard will only record in ${displayName}, following this machine's Watch setting.`;
+  }
+  const revertHours = settings.watch_auto_revert_hours ?? 24;
+  if (revertHours > 0) {
+    const hours = revertHours === 1 ? "1 hour" : `${revertHours} hours`;
+    return `Guard will only record in ${displayName}. Protection comes back on its own after ${hours}.`;
+  }
+  return `Guard will only record in ${displayName} until you turn it back on.`;
+}
 function isRecord$5(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
@@ -18534,13 +18863,14 @@ function applyHarnessPosturePatch(current, patch) {
 async function updateSettings(settings) {
   if (isGuardDemoMode()) {
     const current = await fetchSettings();
-    const { harness_postures: posturePatch, ...rest } = settings;
+    const { harness_postures: posturePatch, harness_cigar: cigarPatch, harness_watch_untimed: _untimed, ...rest } = settings;
     return {
       ...current,
       settings: {
         ...current.settings,
         ...rest,
-        ...posturePatch === void 0 ? {} : { harness_postures: applyHarnessPosturePatch(current.settings.harness_postures, posturePatch) }
+        ...posturePatch === void 0 ? {} : { harness_postures: applyHarnessPosturePatch(current.settings.harness_postures, posturePatch) },
+        ...cigarPatch === void 0 ? {} : { harness_cigar: applyHarnessCigarPatch(current.settings.harness_cigar, cigarPatch) }
       }
     };
   }
@@ -38105,46 +38435,6 @@ function GuardUpdateBanner(props) {
     }
   );
 }
-const PROTECTION_POSTURE_COPY = {
-  protected: {
-    label: "Protected",
-    help: "Stops theft, wipes, and Guard bypass. Asks once about new tools or first-time secret access, then remembers."
-  },
-  extra_careful: {
-    label: "Extra careful",
-    help: "Same as Protected, and also asks the first time this project talks to a new site or installs a new tool."
-  },
-  watch: {
-    label: "Watch",
-    help: "Records what Guard would have stopped, but does not stop anything. Use only while debugging."
-  }
-};
-const WATCH_BANNER_COPY = "Protection is off. Guard is only recording.";
-const POSTURE_OUTCOME_COLUMNS = {
-  protected: {
-    stops: "Credential theft, Guard bypass, encoded exfil, known-bad tools",
-    asks: "First secret read, new destructive command, first package script, new MCP or skill",
-    runs: "Remembered actions, routine browsing, verified-benign work"
-  },
-  extra_careful: {
-    stops: "The same automatic stops as Protected",
-    asks: "Everything Protected asks, plus first new site, first new tool, and cloud advisories",
-    runs: "Remembered actions and verified-benign work"
-  },
-  watch: {
-    stops: "Nothing. Guard only records.",
-    asks: "Nothing. Inbox shows what would have stopped.",
-    runs: "Every action, including known-bad work"
-  }
-};
-function isProtectionPosture(value) {
-  return value === "protected" || value === "extra_careful" || value === "watch";
-}
-function deriveProtectionPosture(mode, securityLevel) {
-  if (mode === "observe") return "watch";
-  if (securityLevel === "strict" || securityLevel === "paranoid") return "extra_careful";
-  return "protected";
-}
 const DEFAULT_CONFIRM = "Guard will start stopping dangerous actions.";
 function WatchProtectionBanner(props) {
   const [confirming, setConfirming] = reactExports.useState(false);
@@ -38209,199 +38499,9 @@ function WatchProtectionBanner(props) {
     }
   );
 }
-const POSTURE_LABEL = {
-  protected: "Protected",
-  extra_careful: "Extra careful",
-  watch: "Watch"
-};
-function normalizeHarnessPostures(value) {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) return {};
-  const result = {};
-  for (const [harness, posture] of Object.entries(value)) {
-    if (harness.length > 0 && typeof posture === "string" && isProtectionPosture(posture)) {
-      result[harness] = posture;
-    }
-  }
-  return result;
-}
-function globalPosture(settings) {
-  if (isProtectionPosture(settings.protection_posture)) return settings.protection_posture;
-  if (settings.mode === "observe") return "watch";
-  return "protected";
-}
-function protectedLevel(effective, baseline) {
-  if (effective !== "watch") return effective;
-  if (baseline !== "watch") return baseline;
-  return "protected";
-}
-function effectiveHarnessPosture(settings, harness) {
-  const override = settings.harness_postures?.[harness];
-  const baseline = globalPosture(settings);
-  if (override === void 0) return baseline;
-  if (override === "watch") return "watch";
-  return baseline === "extra_careful" ? baseline : override;
-}
-function harnessPostureRows(settings, capabilities) {
-  return capabilities.map((capability) => {
-    const effective = effectiveHarnessPosture(settings, capability.harness);
-    return {
-      harness: capability.harness,
-      displayName: capability.display_name,
-      effective,
-      hasOverride: settings.harness_postures?.[capability.harness] !== void 0,
-      selected: effective === "watch" ? "watch" : "on"
-    };
-  });
-}
-function harnessPostureOptions(settings, harness) {
-  const onLevel = protectedLevel(effectiveHarnessPosture(settings, harness), globalPosture(settings));
-  return [
-    { choice: "on", label: POSTURE_LABEL[onLevel] },
-    { choice: "watch", label: POSTURE_LABEL.watch }
-  ];
-}
-function selectHarnessPosture(settings, harness, choice) {
-  const baseline = globalPosture(settings);
-  if (choice === "on" && effectiveHarnessPosture(settings, harness) !== "watch") return settings;
-  const next = { ...settings.harness_postures ?? {} };
-  if (choice === "watch") {
-    if (baseline === "watch") delete next[harness];
-    else next[harness] = "watch";
-  } else if (baseline === "watch") {
-    next[harness] = "protected";
-  } else {
-    delete next[harness];
-  }
-  return { ...settings, harness_postures: next };
-}
-function canRestartHarnessWatch(settings, harness) {
-  return settings.harness_postures?.[harness] === "watch" && (settings.watch_auto_revert_hours ?? 24) > 0;
-}
-function restartHarnessWatch(settings, harness) {
-  if (!canRestartHarnessWatch(settings, harness)) return settings;
-  const restarts = new Set(settings.harness_watch_restart ?? []);
-  restarts.add(harness);
-  return { ...settings, harness_watch_restart: [...restarts].sort() };
-}
-function harnessPosturePatch(draft, saved) {
-  const before = saved?.harness_postures ?? {};
-  const after = draft.harness_postures ?? {};
-  const restarts = new Set(draft.harness_watch_restart ?? []);
-  const patch = {};
-  for (const harness of /* @__PURE__ */ new Set([...Object.keys(before), ...Object.keys(after)])) {
-    const posture = after[harness] ?? null;
-    const restart = posture === "watch" && restarts.has(harness);
-    if (restart || posture !== (before[harness] ?? null)) patch[harness] = posture;
-  }
-  return Object.keys(patch).length > 0 ? patch : null;
-}
-function clearHarnessWatchOverrides(settings) {
-  const next = Object.fromEntries(
-    Object.entries(settings.harness_postures ?? {}).filter(([, posture]) => posture !== "watch")
-  );
-  return { ...settings, harness_postures: next };
-}
-function settingsWatchBannerModel(settings, capabilities) {
-  const rows = harnessPostureRows(settings, capabilities);
-  return watchBannerModel({
-    protection_posture: globalPosture(settings),
-    harness_postures: settings.harness_postures,
-    harnesses_in_watch: rows.filter((row) => row.effective === "watch").map((row) => row.harness),
-    protection_capabilities: capabilities
-  });
-}
-function withHarnessPosturePatch(payload, draft, saved) {
-  const {
-    harness_postures: _postures,
-    harness_postures_effective: _effective,
-    harness_postures_locked: _locked,
-    harness_watch_entered_at: _enteredAt,
-    harness_watch_restart: _restart,
-    ...rest
-  } = payload;
-  const patch = harnessPosturePatch(draft, saved);
-  return patch === null ? rest : { ...rest, harness_postures: patch };
-}
-function harnessPostureSummary(rows) {
-  if (rows.length === 0) return "";
-  const watching = rows.filter((row) => row.effective === "watch");
-  if (watching.length === 0) return "Every app is protected.";
-  if (watching.length === rows.length) return "Every app is in Watch.";
-  return `${watching.length} of ${rows.length} apps in Watch: ${joinNames(watching.map((row) => row.displayName))}.`;
-}
-function harnessRowTone(row) {
-  return row.effective === "watch" ? "watch" : "protected";
-}
-function harnessRowStatus(row) {
-  if (row.effective === "watch") {
-    return row.hasOverride ? "Watch · recording only" : "Watch · follows the machine setting";
-  }
-  if (!row.hasOverride) return "Follows the machine setting";
-  return "Set for this app";
-}
-function sortHarnessRows(rows) {
-  const watching = rows.filter((row) => row.effective === "watch");
-  const rest = rows.filter((row) => row.effective !== "watch");
-  return [...watching, ...rest];
-}
-function overrideRows(rows) {
-  return rows.filter((row) => row.hasOverride);
-}
-function harnessWatchPrompt(rows, harness) {
-  const row = rows.find((candidate) => candidate.harness === harness);
-  const name = row?.displayName ?? harness;
-  const others = rows.filter((candidate) => candidate.harness !== harness);
-  const protectedOthers = others.filter((candidate) => candidate.effective !== "watch");
-  const lead = `Guard will only record in ${name}.`;
-  if (others.length === 0) return lead;
-  if (protectedOthers.length === 0) return `${lead} Every app will then be in Watch.`;
-  if (protectedOthers.length === others.length) return `${lead} Your other apps stay protected.`;
-  const verb = protectedOthers.length === 1 ? "stays" : "stay";
-  return `${lead} ${joinNames(protectedOthers.map((candidate) => candidate.displayName))} ${verb} protected.`;
-}
-function joinNames(names) {
-  if (names.length <= 1) return names[0] ?? "";
-  if (names.length === 2) return `${names[0]} and ${names[1]}`;
-  return `${names.slice(0, -1).join(", ")}, and ${names[names.length - 1]}`;
-}
-function displayNameFor(harness, capabilities) {
-  return capabilities?.find((capability) => capability.harness === harness)?.display_name ?? harness;
-}
-function watchBannerModel(snapshot) {
-  const globalWatch = snapshot.protection_posture === "watch";
-  const watchOverrides = Object.entries(snapshot.harness_postures ?? {}).filter(([, posture]) => posture === "watch").map(([harness]) => harness);
-  const inWatch = globalWatch ? [] : snapshot.harnesses_in_watch ?? watchOverrides;
-  if (!globalWatch && inWatch.length === 0) return null;
-  const appNames = inWatch.map((harness) => displayNameFor(harness, snapshot.protection_capabilities));
-  if (globalWatch) {
-    return {
-      globalWatch,
-      appNames: [],
-      message: WATCH_BANNER_COPY,
-      confirmMessage: "Guard will start stopping dangerous actions in every app."
-    };
-  }
-  const names = joinNames(appNames);
-  return {
-    globalWatch,
-    appNames,
-    message: `Guard is only recording in ${names}. Other apps are protected.`,
-    confirmMessage: `Guard will start stopping dangerous actions in ${names}.`
-  };
-}
-function turnProtectionOnUpdate(snapshot) {
-  const update = {};
-  if (snapshot.protection_posture === "watch") update.protection_posture = "protected";
-  const cleared = {};
-  for (const [harness, posture] of Object.entries(snapshot.harness_postures ?? {})) {
-    if (posture === "watch") cleared[harness] = null;
-  }
-  if (Object.keys(cleared).length > 0) update.harness_postures = cleared;
-  return update;
-}
 const McpPolicyRequestPanel = lazyWorkspace(
   "mcp-policy-request-panel",
-  () => __vitePreload(() => import("./chunks/mcp-policy-request-panel-C_EJjR5Y.js"), true ? [] : void 0).then((m) => ({ default: m.McpPolicyRequestPanel }))
+  () => __vitePreload(() => import("./chunks/mcp-policy-request-panel-CvRBQMz5.js"), true ? [] : void 0).then((m) => ({ default: m.McpPolicyRequestPanel }))
 );
 function InboxWatchBanner(props) {
   const { snapshot } = props;
@@ -39088,34 +39188,34 @@ function RuntimeGate(props) {
   );
 }
 const HOME_QUEUE_PREVIEW_LIMIT = 50;
-const HomeWorkspace = lazyWorkspace("home-dashboard", () => __vitePreload(() => import("./chunks/home-dashboard-OxpCh2cB.js"), true ? __vite__mapDeps([0,1,2,3,4,5,6]) : void 0).then((m) => ({ default: m.HomeWorkspace })));
-const FleetWorkspace = lazyWorkspace("fleet-workspace", () => __vitePreload(() => import("./chunks/fleet-workspace-BVvg6Lpo.js"), true ? __vite__mapDeps([7,8,9,6,10]) : void 0).then((m) => ({ default: m.FleetWorkspace })));
-const SettingsWorkspace = lazyWorkspace("settings-workspace", () => __vitePreload(() => import("./chunks/settings-workspace-C_CNq8AH.js"), true ? __vite__mapDeps([11,10,6,12,9,3]) : void 0).then((m) => ({ default: m.SettingsWorkspace })));
+const HomeWorkspace = lazyWorkspace("home-dashboard", () => __vitePreload(() => import("./chunks/home-dashboard-in9LMPhY.js"), true ? __vite__mapDeps([0,1,2,3,4,5,6]) : void 0).then((m) => ({ default: m.HomeWorkspace })));
+const FleetWorkspace = lazyWorkspace("fleet-workspace", () => __vitePreload(() => import("./chunks/fleet-workspace-CcakKyDb.js"), true ? __vite__mapDeps([7,8,9,6,10]) : void 0).then((m) => ({ default: m.FleetWorkspace })));
+const SettingsWorkspace = lazyWorkspace("settings-workspace", () => __vitePreload(() => import("./chunks/settings-workspace-D_73bnzk.js"), true ? __vite__mapDeps([11,10,6,12,9,3]) : void 0).then((m) => ({ default: m.SettingsWorkspace })));
 const ExtensionsWorkspace = lazyWorkspace(
   "extensions-workspace",
-  () => __vitePreload(() => import("./chunks/extensions-workspace-DeE0MG3h.js"), true ? __vite__mapDeps([13,12]) : void 0).then((module) => ({ default: module.ExtensionsWorkspace }))
+  () => __vitePreload(() => import("./chunks/extensions-workspace-CQ1lpUuu.js"), true ? __vite__mapDeps([13,12]) : void 0).then((module) => ({ default: module.ExtensionsWorkspace }))
 );
-const AppDetailWorkspace = lazyWorkspace("app-detail-workspace", () => __vitePreload(() => import("./chunks/app-detail-workspace-DqHWwK_5.js"), true ? __vite__mapDeps([14,8]) : void 0).then((m) => ({ default: m.AppDetailWorkspace })));
+const AppDetailWorkspace = lazyWorkspace("app-detail-workspace", () => __vitePreload(() => import("./chunks/app-detail-workspace-CDmqqZRR.js"), true ? __vite__mapDeps([14,8]) : void 0).then((m) => ({ default: m.AppDetailWorkspace })));
 const HelpModal = lazyWorkspace("help-modal", () => __vitePreload(() => import("./chunks/help-modal-DUQGf9sy.js"), true ? [] : void 0).then((m) => ({ default: m.HelpModal })));
 const SupplyChainHubWorkspace = lazyWorkspace(
   "supply-chain-hub-workspace",
-  () => __vitePreload(() => import("./chunks/supply-chain-hub-workspace-BSkPbVjN.js").then((n) => n.d), true ? [] : void 0).then((m) => ({ default: m.SupplyChainHubWorkspace }))
+  () => __vitePreload(() => import("./chunks/supply-chain-hub-workspace-ClRT5Gmv.js").then((n) => n.d), true ? [] : void 0).then((m) => ({ default: m.SupplyChainHubWorkspace }))
 );
 const PolicyWorkspacePage = lazyWorkspace(
   "policy-workspace-page",
-  () => __vitePreload(() => import("./chunks/policy-workspace-page-ChvzniW9.js"), true ? __vite__mapDeps([15,9]) : void 0).then((m) => ({ default: m.PolicyWorkspacePage }))
+  () => __vitePreload(() => import("./chunks/policy-workspace-page-Dm3Ct0Bg.js"), true ? __vite__mapDeps([15,9]) : void 0).then((m) => ({ default: m.PolicyWorkspacePage }))
 );
 const AboutWorkspace = lazyWorkspace(
   "about-workspace",
-  () => __vitePreload(() => import("./chunks/about-workspace-DSZDVR66.js"), true ? __vite__mapDeps([16,4,5,17]) : void 0).then((m) => ({ default: m.AboutWorkspace }))
+  () => __vitePreload(() => import("./chunks/about-workspace-CKjljbOH.js"), true ? __vite__mapDeps([16,4,5,17]) : void 0).then((m) => ({ default: m.AboutWorkspace }))
 );
 const ReleasesWorkspace = lazyWorkspace(
   "releases-workspace",
-  () => __vitePreload(() => import("./chunks/releases-workspace-O-K0NSan.js"), true ? [] : void 0).then((m) => ({ default: m.ReleasesWorkspace }))
+  () => __vitePreload(() => import("./chunks/releases-workspace-Z_6ECoMn.js"), true ? [] : void 0).then((m) => ({ default: m.ReleasesWorkspace }))
 );
 const ProtectionRepairPage = lazyWorkspace(
   "protection-repair-page",
-  () => __vitePreload(() => import("./chunks/protection-repair-page-B9sLrlwj.js"), true ? [] : void 0).then((m) => ({ default: m.ProtectionRepairPage }))
+  () => __vitePreload(() => import("./chunks/protection-repair-page-D6R468wZ.js"), true ? [] : void 0).then((m) => ({ default: m.ProtectionRepairPage }))
 );
 function LazyFallback() {
   return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex min-h-[200px] items-center justify-center", children: /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "guard-skeleton h-8 w-48" }) });
@@ -40077,7 +40177,7 @@ export {
   buildHomeRuntimeErrorCopy as Z,
   RuntimeErrorState as _,
   contextStatusCopy as a,
-  TabBar as a$,
+  POSTURE_OUTCOME_COLUMNS as a$,
   WatchProtectionBanner as a0,
   EvidenceInsightsShareModal as a1,
   OperatorHealthCard as a2,
@@ -40093,28 +40193,28 @@ export {
   HiMiniWrenchScrewdriver as aC,
   fetchSettings as aD,
   harnessPostureRows as aE,
-  selectHarnessPosture as aF,
-  harnessPosturePatch as aG,
-  harnessRowTone as aH,
-  PROTECTION_POSTURE_COPY as aI,
-  harnessPostureOptions as aJ,
-  globalPosture as aK,
-  harnessRowStatus as aL,
-  HiMiniEye as aM,
-  HiMiniXCircle as aN,
-  GuardHero as aO,
-  ProofStrip as aP,
-  HiMiniClipboardDocumentCheck as aQ,
-  HiMiniClipboard as aR,
-  fetchResolvedApprovalGate as aS,
-  ApprovalProofModal as aT,
-  POSTURE_OUTCOME_COLUMNS as aU,
-  getDefaultExportFromCjs as aV,
-  React as aW,
-  HiMiniSquares2X2 as aX,
-  HiMiniBellAlert as aY,
-  HiMiniAdjustmentsHorizontal as aZ,
-  HiMiniCircleStack as a_,
+  appModesUpdate as aF,
+  appModesStatusMessage as aG,
+  appModes as aH,
+  needsConfirm as aI,
+  harnessRowTone as aJ,
+  cigarReady as aK,
+  cigarSupported as aL,
+  guardAwareHref as aM,
+  PROTECTION_POSTURE_COPY as aN,
+  guardOffPrompt as aO,
+  cigarUnavailableReason as aP,
+  globalPosture as aQ,
+  appModesNote as aR,
+  harnessRowStatus as aS,
+  HiMiniEye as aT,
+  HiMiniXCircle as aU,
+  GuardHero as aV,
+  ProofStrip as aW,
+  HiMiniClipboardDocumentCheck as aX,
+  HiMiniClipboard as aY,
+  fetchResolvedApprovalGate as aZ,
+  ApprovalProofModal as a_,
   EmptyState as aa,
   resolveCloudIntelCopy as ab,
   HiMiniCloud as ac,
@@ -40142,293 +40242,301 @@ export {
   openPackageFirewallAuthorizeFallback as ay,
   waitForCloudConnection as az,
   formatRelativeTime as b,
-  resolveProtectionLevelCopy as b$,
-  SelectMenu as b0,
-  fetchCloudReviewSettings as b1,
-  ApprovalProofFieldInputs as b2,
-  isApprovalProofSubmitDisabled as b3,
-  buildApprovalProofCredentials as b4,
-  changeCloudReviewSettings as b5,
-  fetchWithGuardAuth as b6,
-  isRecord$5 as b7,
-  HiMiniArrowTopRightOnSquare as b8,
-  shellHref as b9,
-  HiMiniCpuChip as bA,
-  HiMiniAcademicCap as bB,
-  HiMiniArrowLeft as bC,
-  isCigarProducerVersion as bD,
-  isCigarCoreLabel as bE,
-  subscribeDashboardLocation as bF,
-  HiMiniChatBubbleLeftRight as bG,
-  HiMiniArrowUpCircle as bH,
-  parseContextAssistanceStatus as bI,
-  isCigarBuildIdentity as bJ,
-  fetchContextInstallations as bK,
-  HiMiniCloudArrowDown as bL,
-  turnOnJob as bM,
-  shouldResumeTurnOn as bN,
-  turnOnRequestedAt as bO,
-  forgetTurnOn as bP,
-  rememberTurnOn as bQ,
-  forgetTurnOnClick as bR,
-  rememberTurnOnJob as bS,
-  commitDashboardLocation as bT,
-  HiMiniArrowDownTray as bU,
-  downloadBlob as bV,
-  savedEvidenceCopy as bW,
-  guardAwareHref as bX,
-  fetchContextData as bY,
-  forgetContextHistory as bZ,
-  forgetSavedEvidence as b_,
-  HiMiniPauseCircle as ba,
-  listContextAgentSessions as bb,
-  HiMiniLink as bc,
-  revokeContextAgentSession as bd,
-  grantContextWorkspace as be,
-  authorizeContextAgentSession as bf,
-  ContextAssistanceApiError as bg,
-  ask as bh,
-  parseContextScope as bi,
-  validContextBrokerRevision as bj,
-  isGuardDemoMode as bk,
-  HiMiniArrowUturnLeft as bl,
-  HiMiniCodeBracketSquare as bm,
-  HiMiniFolder as bn,
-  HiMiniComputerDesktop as bo,
-  HiMiniHome as bp,
-  HiMiniFolderPlus as bq,
-  HiMiniClock as br,
-  listContextWorkspaces as bs,
-  HiMiniFolderOpen as bt,
-  manageContextWorkspace as bu,
-  compileWorkspaceContext as bv,
-  HiMiniChatBubbleLeftEllipsis as bw,
-  HiMiniDocumentMagnifyingGlass as bx,
-  HiMiniPower as by,
-  HiMiniEyeSlash as bz,
+  HiMiniCloudArrowDown as b$,
+  overrideRows as b0,
+  harnessPostureSummary as b1,
+  joinNames as b2,
+  sortHarnessRows as b3,
+  selectHarnessPosture as b4,
+  restartHarnessWatch as b5,
+  harnessWatchPrompt as b6,
+  harnessPostureOptions as b7,
+  canRestartHarnessWatch as b8,
+  getDefaultExportFromCjs as b9,
+  isGuardDemoMode as bA,
+  HiMiniArrowUturnLeft as bB,
+  HiMiniCodeBracketSquare as bC,
+  HiMiniFolder as bD,
+  HiMiniComputerDesktop as bE,
+  HiMiniHome as bF,
+  HiMiniFolderPlus as bG,
+  HiMiniClock as bH,
+  listContextWorkspaces as bI,
+  HiMiniFolderOpen as bJ,
+  manageContextWorkspace as bK,
+  compileWorkspaceContext as bL,
+  HiMiniChatBubbleLeftEllipsis as bM,
+  HiMiniDocumentMagnifyingGlass as bN,
+  HiMiniPower as bO,
+  HiMiniEyeSlash as bP,
+  HiMiniCpuChip as bQ,
+  HiMiniAcademicCap as bR,
+  HiMiniArrowLeft as bS,
+  isCigarProducerVersion as bT,
+  isCigarCoreLabel as bU,
+  subscribeDashboardLocation as bV,
+  HiMiniChatBubbleLeftRight as bW,
+  HiMiniArrowUpCircle as bX,
+  parseContextAssistanceStatus as bY,
+  isCigarBuildIdentity as bZ,
+  fetchContextInstallations as b_,
+  React as ba,
+  HiMiniSquares2X2 as bb,
+  HiMiniBellAlert as bc,
+  HiMiniAdjustmentsHorizontal as bd,
+  HiMiniCircleStack as be,
+  TabBar as bf,
+  SelectMenu as bg,
+  fetchCloudReviewSettings as bh,
+  ApprovalProofFieldInputs as bi,
+  isApprovalProofSubmitDisabled as bj,
+  buildApprovalProofCredentials as bk,
+  changeCloudReviewSettings as bl,
+  fetchWithGuardAuth as bm,
+  isRecord$5 as bn,
+  HiMiniArrowTopRightOnSquare as bo,
+  shellHref as bp,
+  HiMiniPauseCircle as bq,
+  listContextAgentSessions as br,
+  HiMiniLink as bs,
+  revokeContextAgentSession as bt,
+  grantContextWorkspace as bu,
+  authorizeContextAgentSession as bv,
+  ContextAssistanceApiError as bw,
+  ask as bx,
+  parseContextScope as by,
+  validContextBrokerRevision as bz,
   controlContextAssistance as c,
-  fetchLocalCliApi as c$,
-  fetchRuntimeSnapshot as c0,
-  clearHarnessWatchOverrides as c1,
-  withHarnessPosturePatch as c2,
-  clearPolicy as c3,
-  clearReviewQueue as c4,
-  revokeApprovalGateCooldown as c5,
-  disableApprovalGateTotp as c6,
-  importSettings as c7,
-  resetSettings as c8,
-  enrollApprovalGateTotp as c9,
-  ExtensionControlProtocolError as cA,
-  normalizeExtensionCatalogItem as cB,
-  guardApiCacheScope as cC,
-  fetchExtensionCatalogV2Api as cD,
-  localPermissionDraftState as cE,
-  setLocalPermissionDraftState as cF,
-  extensionPolicyAuthorityUnchanged as cG,
-  newExtensionPolicyDraftIdentity as cH,
-  extensionPolicyDraftIsDirty as cI,
-  setLocalPermissionDraftStates as cJ,
-  buildExtensionPolicyDraftMutation as cK,
-  fetchEffectiveExtensionControls as cL,
-  previewExtensionMutation as cM,
-  isCurrentExtensionPolicyDraft as cN,
-  applyExtensionMutation as cO,
-  fetchExtensionControlHistory as cP,
-  managedPermissionState as cQ,
-  controlProvenance as cR,
-  treatmentLabel as cS,
-  useResolvedApprovalGate as cT,
-  groupPermissionsByFamily as cU,
-  HiMiniInformationCircle as cV,
-  LocalCliApiError as cW,
-  hasSuggestedRules as cX,
-  approvalProofRecentlySatisfied as cY,
-  StyledSelect as cZ,
-  bulkCommandState as c_,
-  verifyApprovalGateTotp as ca,
-  clearEvidence as cb,
-  exportDiagnostics as cc,
-  repairApprovalCenter as cd,
-  exportSettings as ce,
-  setupDesktopNotifications as cf,
-  settingsWatchBannerModel as cg,
-  WorkspacePageHeader as ch,
-  navigateFromAnchor as ci,
-  humanizeList as cj,
-  isProtectionPosture as ck,
-  deriveProtectionPosture as cl,
-  normalizeHarnessPostures as cm,
-  approvalGateCooldownLabel as cn,
-  overrideRows as co,
-  harnessPostureSummary as cp,
-  joinNames as cq,
-  sortHarnessRows as cr,
-  restartHarnessWatch as cs,
-  harnessWatchPrompt as ct,
-  canRestartHarnessWatch as cu,
-  HiMiniKey as cv,
-  fetchExtensionCatalog as cw,
-  ExtensionControlApiError as cx,
-  normalizeExtensionCatalogSummary as cy,
-  normalizeExtensionPermission as cz,
+  useResolvedApprovalGate as c$,
+  turnOnJob as c0,
+  shouldResumeTurnOn as c1,
+  turnOnRequestedAt as c2,
+  forgetTurnOn as c3,
+  rememberTurnOn as c4,
+  forgetTurnOnClick as c5,
+  rememberTurnOnJob as c6,
+  commitDashboardLocation as c7,
+  HiMiniArrowDownTray as c8,
+  downloadBlob as c9,
+  deriveProtectionPosture as cA,
+  normalizeHarnessPostures as cB,
+  approvalGateCooldownLabel as cC,
+  HiMiniKey as cD,
+  fetchExtensionCatalog as cE,
+  ExtensionControlApiError as cF,
+  normalizeExtensionCatalogSummary as cG,
+  normalizeExtensionPermission as cH,
+  ExtensionControlProtocolError as cI,
+  normalizeExtensionCatalogItem as cJ,
+  guardApiCacheScope as cK,
+  fetchExtensionCatalogV2Api as cL,
+  localPermissionDraftState as cM,
+  setLocalPermissionDraftState as cN,
+  extensionPolicyAuthorityUnchanged as cO,
+  newExtensionPolicyDraftIdentity as cP,
+  extensionPolicyDraftIsDirty as cQ,
+  setLocalPermissionDraftStates as cR,
+  buildExtensionPolicyDraftMutation as cS,
+  fetchEffectiveExtensionControls as cT,
+  previewExtensionMutation as cU,
+  isCurrentExtensionPolicyDraft as cV,
+  applyExtensionMutation as cW,
+  fetchExtensionControlHistory as cX,
+  managedPermissionState as cY,
+  controlProvenance as cZ,
+  treatmentLabel as c_,
+  savedEvidenceCopy as ca,
+  fetchContextData as cb,
+  forgetContextHistory as cc,
+  forgetSavedEvidence as cd,
+  resolveProtectionLevelCopy as ce,
+  fetchRuntimeSnapshot as cf,
+  clearHarnessWatchOverrides as cg,
+  withHarnessPosturePatch as ch,
+  clearPolicy as ci,
+  clearReviewQueue as cj,
+  revokeApprovalGateCooldown as ck,
+  disableApprovalGateTotp as cl,
+  importSettings as cm,
+  resetSettings as cn,
+  enrollApprovalGateTotp as co,
+  verifyApprovalGateTotp as cp,
+  clearEvidence as cq,
+  exportDiagnostics as cr,
+  repairApprovalCenter as cs,
+  exportSettings as ct,
+  setupDesktopNotifications as cu,
+  settingsWatchBannerModel as cv,
+  WorkspacePageHeader as cw,
+  navigateFromAnchor as cx,
+  humanizeList as cy,
+  isProtectionPosture as cz,
   formatNumber as d,
-  canonicalExtensionId as d$,
-  ExtensionBrandMark as d0,
-  fetchMcpProviderActions as d1,
-  connectorSetupReady as d2,
-  shortIdentity as d3,
-  customExtensionDisplayName as d4,
-  previewLocalCliMutation as d5,
-  applyLocalCliMutation as d6,
-  LOCAL_CLI_CAPABILITIES as d7,
-  loadLocalCliCommands as d8,
-  DiscoveryFailure as d9,
-  startGuardCloudConnect as dA,
-  extensionEffectiveState as dB,
-  permissionEffectiveState as dC,
-  fetchExtensionControlApi as dD,
-  permissionForRule as dE,
-  refreshEffectiveExtensionControls as dF,
-  fetchExtensionDiscoveryApi as dG,
-  startCancelableDiscoveryJob as dH,
-  waitForMcpDiscoveryJob as dI,
-  isLocalCliId as dJ,
-  localCliHref as dK,
-  fetchPluginUpdatesApi as dL,
-  filterCodexHostApps as dM,
-  connectorWorkspaceItems as dN,
-  customExtensionNeedsReview as dO,
-  profileSetupCommand as dP,
-  customExtensionBadge as dQ,
-  extensionDisplayName as dR,
-  catalogRowSecondLine as dS,
-  extensionStateLabel as dT,
-  HiMiniGlobeAlt as dU,
-  HiMiniFunnel as dV,
-  discoveryFailureMessage as dW,
-  refreshCodexHostInventory as dX,
-  CODEX_HOST_FALLBACK as dY,
-  CONFIGURED_CONNECTIONS_FALLBACK as dZ,
-  loadCurrentDashboardBuild as d_,
-  readJson as da,
-  enrollablePackageScriptCommands as db,
-  seenSuggestionMeta as dc,
-  HiMiniPlus as dd,
-  looksLikeProjectRelocatePaste as de,
-  packageScriptFilterNeedle as df,
-  initialAddCommand as dg,
-  suggestedPackageScriptExtensions as dh,
-  filterExtensionSuggestions as di,
-  suggestedHarnessExtensions as dj,
-  suggestedSeenExtensions as dk,
-  keepsPackageScriptCatalog as dl,
-  prefillSuggestedStates as dm,
-  recognizeLocalCli as dn,
-  preferredPackageScriptExtension as dp,
-  looksLikePackageScriptPaste as dq,
-  enrollmentCommandStates as dr,
-  isBulkApproveGateReady as ds,
-  fetchLocalCliList as dt,
-  normalizeLocalCliList as du,
-  unreviewedToolChangeCount as dv,
-  connectorSetupMatch as dw,
-  refreshMcpInventory as dx,
-  connectorGroupOutcome as dy,
-  allowedEarlierVersion as dz,
+  extensionStateLabel as d$,
+  groupPermissionsByFamily as d0,
+  HiMiniInformationCircle as d1,
+  LocalCliApiError as d2,
+  hasSuggestedRules as d3,
+  approvalProofRecentlySatisfied as d4,
+  StyledSelect as d5,
+  bulkCommandState as d6,
+  fetchLocalCliApi as d7,
+  ExtensionBrandMark as d8,
+  fetchMcpProviderActions as d9,
+  isBulkApproveGateReady as dA,
+  fetchLocalCliList as dB,
+  normalizeLocalCliList as dC,
+  unreviewedToolChangeCount as dD,
+  connectorSetupMatch as dE,
+  refreshMcpInventory as dF,
+  connectorGroupOutcome as dG,
+  allowedEarlierVersion as dH,
+  startGuardCloudConnect as dI,
+  extensionEffectiveState as dJ,
+  permissionEffectiveState as dK,
+  fetchExtensionControlApi as dL,
+  permissionForRule as dM,
+  refreshEffectiveExtensionControls as dN,
+  fetchExtensionDiscoveryApi as dO,
+  startCancelableDiscoveryJob as dP,
+  waitForMcpDiscoveryJob as dQ,
+  isLocalCliId as dR,
+  localCliHref as dS,
+  fetchPluginUpdatesApi as dT,
+  filterCodexHostApps as dU,
+  connectorWorkspaceItems as dV,
+  customExtensionNeedsReview as dW,
+  profileSetupCommand as dX,
+  customExtensionBadge as dY,
+  extensionDisplayName as dZ,
+  catalogRowSecondLine as d_,
+  connectorSetupReady as da,
+  shortIdentity as db,
+  customExtensionDisplayName as dc,
+  previewLocalCliMutation as dd,
+  applyLocalCliMutation as de,
+  LOCAL_CLI_CAPABILITIES as df,
+  loadLocalCliCommands as dg,
+  DiscoveryFailure as dh,
+  readJson as di,
+  enrollablePackageScriptCommands as dj,
+  seenSuggestionMeta as dk,
+  HiMiniPlus as dl,
+  looksLikeProjectRelocatePaste as dm,
+  packageScriptFilterNeedle as dn,
+  initialAddCommand as dp,
+  suggestedPackageScriptExtensions as dq,
+  filterExtensionSuggestions as dr,
+  suggestedHarnessExtensions as ds,
+  suggestedSeenExtensions as dt,
+  keepsPackageScriptCatalog as du,
+  prefillSuggestedStates as dv,
+  recognizeLocalCli as dw,
+  preferredPackageScriptExtension as dx,
+  looksLikePackageScriptPaste as dy,
+  enrollmentCommandStates as dz,
   HiMiniChevronUp as e,
-  HiMiniCloudArrowUp as e$,
-  extensionDetailHref as e0,
-  DEFAULT_EXTENSION_DETAIL_URL_STATE as e1,
-  addCustomExtensionPrefillHref as e2,
-  acknowledgeDegradedExtensionControlAuthority as e3,
-  recoverExtensionControlAuthority as e4,
-  connectorSetupLinkFromSearch as e5,
-  readExtensionDetailUrlState as e6,
-  parseProtectionRoute as e7,
-  addCustomExtensionHref as e8,
-  GuardModalLayer as e9,
-  IconActionButton as eA,
-  HiMiniBeaker as eB,
-  HiMiniBugAnt as eC,
-  ActivationSummary as eD,
-  ActionResultPanel as eE,
-  fetchSupplyChainBundle as eF,
-  closeOnEscape as eG,
-  ConnectFlowCard as eH,
-  ApprovalProofInline as eI,
-  SUPPLY_CHAIN_SYNC_TIMEOUT_MS as eJ,
-  fetchPackageFirewallStatus as eK,
-  runPackageAudit as eL,
-  resolveSupplyChainAuditFailure as eM,
-  runPackageSync as eN,
-  GuardOperationTimeoutError as eO,
-  startPackageFirewallConnect as eP,
-  PACKAGE_FIREWALL_CONNECT_POPUP_BLOCKED_MESSAGE as eQ,
-  repairSupplyChainProtection as eR,
-  runPackageFirewallAction as eS,
-  parseInterceptProofSnapshot as eT,
-  activatePackageFirewallRuntime as eU,
-  EntitlementNotice as eV,
-  chooseSupplyChainAuditFolder as eW,
-  fetchReceipts as eX,
-  lazyWorkspace as eY,
-  __vitePreload as eZ,
-  scopeLabel as e_,
-  runHarnessAction as ea,
-  GuardHarnessActionError as eb,
-  HiMiniRocketLaunch as ec,
-  HiMiniTrash as ed,
-  fetchGuardApi as ee,
-  formatHarnessCommand as ef,
-  fetchApprovalPage as eg,
-  fetchPolicy as eh,
-  appSetupTarget as ei,
-  guardActionPresentation as ej,
-  DEFAULT_FILTER_STATE as ek,
-  filterEvidence as el,
-  sortEvidence as em,
-  computeMetrics as en,
-  CommandActivityWorkspace as eo,
-  EvidenceFilterBar as ep,
-  EvidenceInsightStrip as eq,
-  EvidenceActionList as er,
-  EvidenceActionDetail as es,
-  policyIdentityKey as et,
-  clearLabelForScope as eu,
-  HiMiniChartBar as ev,
-  HiMiniCheckBadge as ew,
-  isSupplyChainAuditIncomplete as ex,
-  isSupplyChainAuditEvidence as ey,
-  readString$1 as ez,
+  parseInterceptProofSnapshot as e$,
+  HiMiniGlobeAlt as e0,
+  HiMiniFunnel as e1,
+  discoveryFailureMessage as e2,
+  refreshCodexHostInventory as e3,
+  CODEX_HOST_FALLBACK as e4,
+  CONFIGURED_CONNECTIONS_FALLBACK as e5,
+  loadCurrentDashboardBuild as e6,
+  canonicalExtensionId as e7,
+  extensionDetailHref as e8,
+  DEFAULT_EXTENSION_DETAIL_URL_STATE as e9,
+  EvidenceActionDetail as eA,
+  policyIdentityKey as eB,
+  clearLabelForScope as eC,
+  HiMiniChartBar as eD,
+  HiMiniCheckBadge as eE,
+  isSupplyChainAuditIncomplete as eF,
+  isSupplyChainAuditEvidence as eG,
+  readString$1 as eH,
+  IconActionButton as eI,
+  HiMiniBeaker as eJ,
+  HiMiniBugAnt as eK,
+  ActivationSummary as eL,
+  ActionResultPanel as eM,
+  fetchSupplyChainBundle as eN,
+  closeOnEscape as eO,
+  ConnectFlowCard as eP,
+  ApprovalProofInline as eQ,
+  SUPPLY_CHAIN_SYNC_TIMEOUT_MS as eR,
+  fetchPackageFirewallStatus as eS,
+  runPackageAudit as eT,
+  resolveSupplyChainAuditFailure as eU,
+  runPackageSync as eV,
+  GuardOperationTimeoutError as eW,
+  startPackageFirewallConnect as eX,
+  PACKAGE_FIREWALL_CONNECT_POPUP_BLOCKED_MESSAGE as eY,
+  repairSupplyChainProtection as eZ,
+  runPackageFirewallAction as e_,
+  addCustomExtensionPrefillHref as ea,
+  acknowledgeDegradedExtensionControlAuthority as eb,
+  recoverExtensionControlAuthority as ec,
+  connectorSetupLinkFromSearch as ed,
+  readExtensionDetailUrlState as ee,
+  parseProtectionRoute as ef,
+  addCustomExtensionHref as eg,
+  GuardModalLayer as eh,
+  runHarnessAction as ei,
+  GuardHarnessActionError as ej,
+  HiMiniRocketLaunch as ek,
+  HiMiniTrash as el,
+  fetchGuardApi as em,
+  formatHarnessCommand as en,
+  fetchApprovalPage as eo,
+  fetchPolicy as ep,
+  appSetupTarget as eq,
+  guardActionPresentation as er,
+  DEFAULT_FILTER_STATE as es,
+  filterEvidence as et,
+  sortEvidence as eu,
+  computeMetrics as ev,
+  CommandActivityWorkspace as ew,
+  EvidenceFilterBar as ex,
+  EvidenceInsightStrip as ey,
+  EvidenceActionList as ez,
   fetchContextAssistance as f,
-  HiMiniCodeBracket as f0,
-  HiMiniUsers as f1,
-  HiMiniIdentification as f2,
-  policyActionLabel as f3,
-  createCloudExceptionRequest as f4,
-  HiMiniPuzzlePiece as f5,
-  fetchCloudExceptions as f6,
-  fetchCloudExceptionRequests as f7,
-  PaginationControls as f8,
-  PolicyStatField as f9,
-  HiMiniInbox as fa,
-  HiMiniQueueList as fb,
-  Surface as fc,
-  HiMiniEllipsisHorizontal as fd,
-  HiMiniMinus as fe,
-  HiMiniWrench as ff,
-  HiMiniArrowLongRight as fg,
-  fetchReleaseFeedApi as fh,
-  fetchMcpPolicyRequest as fi,
-  resolveMcpPolicyRequest as fj,
-  HiMiniDocumentPlus as fk,
-  HiMiniChevronLeft as fl,
-  HiMiniArrowDown as fm,
-  HiMiniArrowUp as fn,
-  runAuditRemediation as fo,
-  isBlockedGuardAction as fp,
-  isSupplyChainScannerEvidence as fq,
-  HiMiniSignal as fr,
+  activatePackageFirewallRuntime as f0,
+  EntitlementNotice as f1,
+  chooseSupplyChainAuditFolder as f2,
+  fetchReceipts as f3,
+  lazyWorkspace as f4,
+  __vitePreload as f5,
+  scopeLabel as f6,
+  HiMiniCloudArrowUp as f7,
+  HiMiniCodeBracket as f8,
+  HiMiniUsers as f9,
+  HiMiniIdentification as fa,
+  policyActionLabel as fb,
+  createCloudExceptionRequest as fc,
+  HiMiniPuzzlePiece as fd,
+  fetchCloudExceptions as fe,
+  fetchCloudExceptionRequests as ff,
+  PaginationControls as fg,
+  PolicyStatField as fh,
+  HiMiniInbox as fi,
+  HiMiniQueueList as fj,
+  Surface as fk,
+  HiMiniEllipsisHorizontal as fl,
+  HiMiniMinus as fm,
+  HiMiniWrench as fn,
+  HiMiniArrowLongRight as fo,
+  fetchReleaseFeedApi as fp,
+  fetchMcpPolicyRequest as fq,
+  resolveMcpPolicyRequest as fr,
+  HiMiniDocumentPlus as fs,
+  HiMiniChevronLeft as ft,
+  HiMiniArrowDown as fu,
+  HiMiniArrowUp as fv,
+  runAuditRemediation as fw,
+  isBlockedGuardAction as fx,
+  isSupplyChainScannerEvidence as fy,
+  HiMiniSignal as fz,
   HiMiniChevronDown as g,
   harnessDisplayName as h,
   HiMiniArrowPath as i,

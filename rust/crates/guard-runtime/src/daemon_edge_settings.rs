@@ -88,6 +88,7 @@ pub(super) fn export(config: &ReadConfig) -> Option<(u16, Value)> {
     }
     settings.remove("context_assistance_diagnostic");
     settings.remove("context_assistance_requested");
+    settings.remove("context_assistance_effective_ready");
     Some((
         200,
         json!({
@@ -266,6 +267,7 @@ impl Loaded {
         }
         put("harness_postures", Value::Object(harness_postures.clone()));
         put("harness_watch_entered_at", Value::Object(stamps.clone()));
+        put("harness_cigar", Value::Object(self.map("harness_cigar")));
         put("harness_postures_effective", Value::Object(effective_known));
         put("harness_posture_status", Value::Array(status));
         put(
@@ -321,6 +323,13 @@ impl Loaded {
         // requested value is what the dashboard edits.
         let requested = self.get("context_assistance_requested");
         put("context_assistance", requested.clone());
+        // What the prompt hook enforces, after validation and managed policy.
+        put(
+            "context_assistance_effective_ready",
+            Value::Bool(crate::guard_config_harness::cigar_adds_context(Some(
+                &self.get("context_assistance"),
+            ))),
+        );
         put(
             "context_assistance_diagnostic",
             self.get("context_assistance_diagnostic"),
