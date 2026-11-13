@@ -56093,8 +56093,42 @@
       "expect": "not_allow"
     },
     {
-      "id": "env-names-printenv-grep-anchored-prefix",
+      "id": "env-names-awk-environ-keys",
       "fix_area": "environment-names",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "awk 'BEGIN { for (name in ENVIRON) print name }' | sort"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "env-names-awk-environ-keys-then-trim",
+      "fix_area": "environment-names",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "awk 'BEGIN{for(k in ENVIRON)print k}' | sort -u | head -40"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "neg-env-names-printenv-grep-anchored-prefix",
+      "fix_area": "negative",
       "harnesses": [
         "codex",
         "zcode",
@@ -56107,11 +56141,11 @@
         "command": "printenv | grep -oE '^(PATH|HOME)[A-Z_]*'"
       },
       "cwd": "worktree",
-      "expect": "allow"
+      "expect": "not_allow"
     },
     {
-      "id": "env-names-printenv-grep-then-sort",
-      "fix_area": "environment-names",
+      "id": "neg-env-names-printenv-grep-then-sort",
+      "fix_area": "negative",
       "harnesses": [
         "codex",
         "zcode",
@@ -56124,7 +56158,60 @@
         "command": "printenv | grep -oE '^ALPHAHOST[A-Z_]*' | sort -u | head -40"
       },
       "cwd": "worktree",
-      "expect": "allow"
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-env-names-printenv-grep-key-prefix",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "printenv | grep -oE '^AKIA[A-Z0-9_]*'"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-env-names-awk-environ-values",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "awk 'BEGIN { for (name in ENVIRON) print name, ENVIRON[name] }'"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow",
+      "contained_ok": true
+    },
+    {
+      "id": "neg-env-names-awk-environ-value-only",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "awk 'BEGIN { for (name in ENVIRON) print ENVIRON[name] }' | sort"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow",
+      "contained_ok": true
     },
     {
       "id": "neg-env-names-printenv-cut-first-field",
