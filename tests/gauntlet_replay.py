@@ -45,7 +45,7 @@ SHELL = {
 READ = {"zcode": "Read", "claude-code": "Read", "omp": "read", "pi": "read", "cursor": "Read"}
 GLOB = {"claude-code": "Glob", "omp": "glob"}
 GREP = {"claude-code": "Grep", "omp": "grep", "pi": "grep"}
-WRITE = {"zcode": "Write", "claude-code": "Write", "omp": "write", "pi": "write"}
+WRITE = {"zcode": "Write", "claude-code": "Write", "omp": "write", "pi": "write", "cursor": "Write"}
 FIXED = {
     "eval": "eval",
     "task": "task",
