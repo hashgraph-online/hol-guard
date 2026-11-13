@@ -7509,6 +7509,99 @@
       "expect": "allow"
     },
     {
+      "id": "queue-perl-separate-in-place-switch-workspace-edit",
+      "fix_area": "queue",
+      "harnesses": [
+        "codex",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "perl -i -pe 's|href={OLD}|href={next}|g' src/app/page.tsx"
+      },
+      "cwd": "org_app",
+      "expect": "allow",
+      "requires_sandbox": true
+    },
+    {
+      "id": "queue-perl-backup-in-place-switch-workspace-edit",
+      "fix_area": "queue",
+      "harnesses": [
+        "codex",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "perl -i.bak -pe 's|href={OLD}|href={next}|g' src/app/page.tsx && rm -f src/app/page.tsx.bak"
+      },
+      "cwd": "org_app",
+      "expect": "allow",
+      "requires_sandbox": true
+    },
+    {
+      "id": "neg-queue-perl-separate-in-place-switch-shell-profile",
+      "fix_area": "queue",
+      "harnesses": [
+        "codex",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "perl -i -pe 's|PATH=|PATH=/tmp/x:|' ~/.zshrc"
+      },
+      "cwd": "org_app",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-queue-perl-separate-in-place-switch-git-config",
+      "fix_area": "queue",
+      "harnesses": [
+        "codex",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "perl -i -pe 's|hooksPath|hookspath|' .git/config"
+      },
+      "cwd": "org_app",
+      "expect": "not_allow"
+    },
+    {
+      "id": "queue-perl-slurp-in-place-workspace-edit",
+      "fix_area": "queue",
+      "harnesses": [
+        "codex",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "perl -i -0777pe 's|href={OLD}|href={next}|g' src/app/page.tsx"
+      },
+      "cwd": "org_app",
+      "expect": "allow",
+      "requires_sandbox": true
+    },
+    {
+      "id": "neg-queue-perl-in-place-unquoted-glob-script",
+      "fix_area": "queue",
+      "harnesses": [
+        "codex",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "perl -i -ne *"
+      },
+      "cwd": "org_app",
+      "expect": "not_allow"
+    },
+    {
       "id": "queue-scratch-copy-sed-in-place-edit",
       "fix_area": "queue",
       "harnesses": [
