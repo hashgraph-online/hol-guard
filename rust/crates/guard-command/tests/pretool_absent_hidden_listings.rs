@@ -106,6 +106,11 @@ fn a_probe_for_git_operation_state_in_a_linked_worktree_reads_nothing() {
     std::fs::write(root.join("work/.env"), "TOKEN=synthetic\n").unwrap();
     std::fs::write(root.join(".ssh/id_ed25519"), "synthetic\n").unwrap();
     std::fs::write(root.join(".git-credentials"), "synthetic\n").unwrap();
+    // A sibling checkout's package store is hidden too, but it is not a Git
+    // directory, so an absent name below it keeps its review.
+    std::fs::create_dir_all(root.join("other/.git")).unwrap();
+    std::fs::write(root.join("other/.git/HEAD"), "ref: refs/heads/main\n").unwrap();
+    std::fs::create_dir_all(root.join("other/node_modules/.pnpm")).unwrap();
     let gitdir = root.join("work/.git/worktrees/wt");
     std::fs::write(
         root.join("wt/.git"),
@@ -136,6 +141,10 @@ fn a_probe_for_git_operation_state_in_a_linked_worktree_reads_nothing() {
         ("ls ~/.git-credentials/x".to_string(), false),
         (format!("ls {cwd}/.env/x"), false),
         ("test -f ~/.ssh/id_ed25519/x && echo M".to_string(), false),
+        (
+            format!("ls {home}/other/node_modules/.pnpm/registry.npmjs.org"),
+            false,
+        ),
     ] {
         let result = evaluate_pre_tool_envelope_with_context(
             "claude-code",

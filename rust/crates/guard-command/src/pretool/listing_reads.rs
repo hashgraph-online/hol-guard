@@ -363,9 +363,10 @@ fn parent_steps_lead(value: &str) -> bool {
 /// The nearest existing ancestor must be a directory a listing may name. The
 /// kernel resolves `..` physically, so a spelling with parent steps is judged
 /// by its canonical directory, never by its lexical text. A repository's own
-/// hidden directory, such as `.git/worktrees/<name>` or a linked worktree's
+/// Git directory, such as `.git/worktrees/<name>` or a linked worktree's
 /// `.git` file, counts too: a listing of it is already allowed, so a probe for
-/// `index.lock` or `MERGE_HEAD` below it says no more than that listing.
+/// `index.lock` or `MERGE_HEAD` below it says no more than that listing. Other
+/// hidden directories, such as a package store under `node_modules`, do not.
 fn listable_ancestor(ancestor: &std::path::Path, context: super::PathContext<'_>) -> bool {
     let parent_steps = ancestor
         .components()
@@ -382,6 +383,7 @@ fn listable_ancestor(ancestor: &std::path::Path, context: super::PathContext<'_>
         safe_reads::bounded_read_target(parent, context.home_dir, context.cwd, true)
             || (!parent_steps && search::skill_listing_root(parent, context, false))
             || (!parent_steps
+                && resolved.components().any(|part| part.as_os_str() == ".git")
                 && super::read_paths::repository_hidden_directory(
                     parent,
                     context.home_dir,
