@@ -22,10 +22,11 @@ def test_telemio_mcp_profile_schema_and_policy():
     assert profile["activation"] == "opt-in"
     tools = {tool["name"]: tool["state"] for tool in profile["tools"]}
     assert tools["create_dashboard"] == "review"
+    assert tools["integration_setup"] == "review"
     assert tools["other"] == "review"
     for name in (
         "workspace_summary", "query_telemetry", "list_runtimes", "get_runtime",
-        "list_dashboards", "list_integrations", "integration_setup", "console_link",
+        "list_dashboards", "list_integrations", "console_link",
     ):
         assert tools[name] == "inherit"
     assert "allow" not in tools.values()

@@ -3,7 +3,7 @@
   "id": "mcp.telemio",
   "version": "1.0.0",
   "name": "Telemio MCP Server",
-  "description": "Authenticated, workspace-scoped observability tools for traces, logs, metrics, runtimes, integrations, and dashboard visualizations. Dashboard creation or update must be reviewed; read tools remain subject to Guard and Telemio policy.",
+  "description": "Authenticated, workspace-scoped observability tools for traces, logs, metrics, runtimes, integrations, and dashboard visualizations. Dashboard changes and integration setup require review; read tools remain subject to Guard and Telemio policy.",
   "trustClass": "external",
   "activation": "opt-in",
   "publisher": {
@@ -53,7 +53,7 @@
     },
     {
       "name": "integration_setup",
-      "state": "inherit"
+      "state": "review"
     },
     {
       "name": "console_link",
