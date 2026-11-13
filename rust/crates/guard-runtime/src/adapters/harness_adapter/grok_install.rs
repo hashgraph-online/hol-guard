@@ -217,17 +217,25 @@ pub(super) fn prepare_install(spec: &Spec, ctx: &Ctx, fields: &Map<String, Value
         legacy_settings(snapshots[4].as_deref(), &recorded)?,
     ];
     let mut changes = Vec::new();
-    for ((path, source), written) in paths.iter().zip(&snapshots).zip(&after).take(3) {
+    let recorded_keys = [None, Some("pretool_hook_path"), Some("prompt_hook_path")];
+    for (((path, source), written), key) in
+        paths.iter().zip(&snapshots).zip(&after).zip(recorded_keys)
+    {
         let name = path
             .file_name()
             .map(|name| name.to_string_lossy().into_owned());
         let backup = backup_path(ctx, &name.unwrap_or_default());
         let before = files::snapshot(ctx, &backup)?;
         let mode = existing_mode(ctx, &backup, before.as_ref(), 0o644)?;
-        // A repeated install finds Guard's own file; only a user's is kept.
+        // A hook an earlier install recorded, or the file this one writes, is
+        // Guard's own; only a user's file becomes the backup.
+        let guard_owned = key.is_some_and(|key| match state_field(&recorded, key) {
+            Some(PyVal::Str(owned)) => *owned == path_text(path),
+            _ => false,
+        });
         let user_source = source
             .clone()
-            .filter(|bytes| Some(bytes) != written.as_ref());
+            .filter(|bytes| !guard_owned && Some(bytes) != written.as_ref());
         let after_mode = match (&before, &user_source) {
             (None, Some(_)) => files::mode(ctx, path).ok_or(Failure::Invalid)?,
             _ => mode,

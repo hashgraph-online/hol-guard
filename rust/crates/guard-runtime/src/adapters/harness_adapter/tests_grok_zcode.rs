@@ -88,11 +88,13 @@ fn grok_repeated_install_does_not_back_up_its_own_hooks() {
     let home = Home::new();
     let args = json!({"shim": shim(), "hook_argv": ["/py", "hook"], "retired_commands": []});
     apply(
-        home.ask("grok", "prepare_install", args.clone())["files"]
+        home.ask("grok", "prepare_install", args)["files"]
             .as_array()
             .unwrap(),
     );
-    let again = home.ask("grok", "prepare_install", args);
+    // A later install with a moved interpreter renders a different hook.
+    let moved = json!({"shim": shim(), "hook_argv": ["/py2", "hook"], "retired_commands": []});
+    let again = home.ask("grok", "prepare_install", moved);
     let files = again["files"].as_array().unwrap();
     assert!(
         files[1]["after"].is_null() && files[2]["after"].is_null(),
