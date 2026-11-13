@@ -118,7 +118,7 @@ fn a_probe_for_git_operation_state_in_a_linked_worktree_reads_nothing() {
     let state = gitdir.to_str().unwrap();
     for (command, allowed) in [
         (format!("ls {home}/wt/.git/index.lock 2>&1"), true),
-        (format!("ls ~/wt/.git/MERGE_HEAD 2>&1"), true),
+        ("ls ~/wt/.git/MERGE_HEAD 2>&1".to_string(), true),
         (format!("ls {state}/index.lock"), true),
         (
             format!("test -f {home}/wt/.git/MERGE_HEAD && echo M || echo N"),
@@ -132,10 +132,10 @@ fn a_probe_for_git_operation_state_in_a_linked_worktree_reads_nothing() {
             format!("ls {home}/wt/.git 2>&1; ls {home}/wt/.git/index.lock 2>&1"),
             true,
         ),
-        (format!("ls ~/.ssh/id_ed25519/x"), false),
-        (format!("ls ~/.git-credentials/x"), false),
+        ("ls ~/.ssh/id_ed25519/x".to_string(), false),
+        ("ls ~/.git-credentials/x".to_string(), false),
         (format!("ls {cwd}/.env/x"), false),
-        (format!("test -f ~/.ssh/id_ed25519/x && echo M"), false),
+        ("test -f ~/.ssh/id_ed25519/x && echo M".to_string(), false),
     ] {
         let result = evaluate_pre_tool_envelope_with_context(
             "claude-code",
@@ -154,4 +154,5 @@ fn a_probe_for_git_operation_state_in_a_linked_worktree_reads_nothing() {
             result.reason_code
         );
     }
+    let _ = std::fs::remove_dir_all(&root);
 }
