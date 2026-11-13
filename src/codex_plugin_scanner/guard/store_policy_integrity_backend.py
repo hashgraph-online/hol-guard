@@ -200,6 +200,7 @@ class MirroredPolicyIntegritySecretStore(FallbackSecretStore):
         try:
             self.fallback.set_secret(secret_id, value)
             if primary_error is not None:
+                # Keep the successful fallback authoritative until the primary catches up.
                 self._fallback_preferred_secret_ids.add(secret_id)
         except Exception as fallback_error:
             if primary_error is not None:
