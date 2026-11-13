@@ -219,11 +219,14 @@ fn cursor_project_state_outside_the_workspace_leaves_keeps_review() {
         fixture.own("worker.log"),
         fixture.own("terminals/.state.txt"),
         fixture.own("terminals/linked.txt"),
-        traversal,
     ] {
         let result = fixture.read("cursor", &path, Some(OWN_CONVERSATION));
         assert!(!allowed(&result), "{path}: {}", result.reason_code);
     }
+    // A `..` spelling that resolves back to the session's own saved output
+    // reads the same file as the plain path, so it takes the same answer.
+    let result = fixture.read("cursor", &traversal, Some(OWN_CONVERSATION));
+    assert!(allowed(&result), "{traversal}: {}", result.reason_code);
     for harness in ["claude-code", "zcode", "codex"] {
         let result = fixture.read(harness, &own_terminal, None);
         assert!(
@@ -231,5 +234,49 @@ fn cursor_project_state_outside_the_workspace_leaves_keeps_review() {
             "{harness}: {own_terminal}: {}",
             result.reason_code
         );
+    }
+}
+
+fn shell(harness: &str, command: &str) -> Value {
+    let tool = if harness == "cursor" { "Shell" } else { "Bash" };
+    json!({
+        "hook_event_name": "PreToolUse",
+        "tool_name": tool,
+        "tool_input": {"command": command},
+    })
+}
+
+#[test]
+fn cursor_shell_reads_back_its_own_saved_output() {
+    let fixture = Fixture::new("shell-outputs");
+    let tool = fixture.own("agent-tools/0a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d.txt");
+    let terminal = fixture.own("terminals/120467.txt");
+    let reads = [
+        format!("cat {tool}"),
+        format!("jq '.checks' {tool}"),
+        format!("head -40 {terminal}"),
+        format!("grep -n FAIL {terminal}"),
+    ];
+    for command in &reads {
+        let result = fixture.evaluate("cursor", &shell("cursor", command), &fixture.home);
+        assert!(allowed(&result), "{command}: {}", result.reason_code);
+        for harness in ["codex", "claude-code"] {
+            let result = fixture.evaluate(harness, &shell(harness, command), &fixture.home);
+            assert!(!allowed(&result), "{harness} {command}");
+        }
+    }
+
+    let other = fixture
+        .project_dir(&fixture.workspace.with_file_name("billing-api"))
+        .join("terminals/120467.txt");
+    for command in [
+        format!("cat {}", other.display()),
+        format!("cat {}", fixture.own("terminals/.state.txt")),
+        format!("cat {}", fixture.own("terminals/linked.txt")),
+        format!("cat {}", fixture.own("mcp-auth.json")),
+        format!("cat {}", fixture.own("worker.log")),
+    ] {
+        let result = fixture.evaluate("cursor", &shell("cursor", &command), &fixture.home);
+        assert!(!allowed(&result), "{command}");
     }
 }
