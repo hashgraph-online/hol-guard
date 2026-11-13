@@ -10,14 +10,14 @@ import subprocess
 import sys
 from dataclasses import replace
 from pathlib import Path
+from typing import Any
 
 import pytest
 
 from codex_plugin_scanner.guard.adapters import codex_remote_control
-from codex_plugin_scanner.guard.adapters import grok as grok_adapter_module
 from codex_plugin_scanner.guard.adapters.base import HarnessAdapter, HarnessContext
 from codex_plugin_scanner.guard.adapters.codex import CodexHarnessAdapter
-from codex_plugin_scanner.guard.adapters.grok import GrokHarnessAdapter
+from codex_plugin_scanner.guard.adapters.native_harness import NATIVE_HARNESSES, NativeHarnessAdapter
 from codex_plugin_scanner.guard.adapters.opencode import OpenCodeHarnessAdapter
 from codex_plugin_scanner.guard.adapters.opencode_artifacts import runtime_config_path
 from codex_plugin_scanner.guard.approvals import queue_blocked_approvals
@@ -35,8 +35,6 @@ from codex_plugin_scanner.guard.runtime.approval_context import (
     build_runtime_launch_identity,
 )
 from codex_plugin_scanner.guard.store import GuardStore
-
-from .grok_native_fake import install_grok_native_fake
 
 pytestmark = pytest.mark.usefixtures("native_prompt_runtime")
 
@@ -809,6 +807,40 @@ def test_no_saved_pure_default_finalizer_launches_once_in_canonical_workspace(
     assert result["launched"] is True
 
 
+class _RecordingGrokAdapter(NativeHarnessAdapter):
+    """Grok whose launcher answers stand in for the native trust checks.
+
+    The runtime refuses launchers under shared temporary roots, so these answers
+    model it: a preview resolves without registering, a launch registers the
+    explicit selection.
+    """
+
+    def __init__(self, events: list[str], registration: Path, executable: Path) -> None:
+        harness, aliases, launcher = next(entry for entry in NATIVE_HARNESSES if entry[0] == "grok")
+        super().__init__(harness, aliases, launcher)
+        self._events = events
+        self._registration = registration
+        self._executable = executable
+
+    def preview_launch_commands(self, context: HarnessContext, passthrough_args: list[str]) -> tuple[list[str], ...]:
+        self._events.append("preview")
+        assert self._registration.exists() is False
+        return super().preview_launch_commands(context, passthrough_args)
+
+    def launch_command(self, context: HarnessContext, passthrough_args: list[str]) -> list[str]:
+        self._events.append("launch-setup")
+        return super().launch_command(context, passthrough_args)
+
+    def _ask(self, op: str, context: HarnessContext, **fields: Any) -> dict[str, Any]:
+        if op not in {"preview_launch", "launch_command"}:
+            return super()._ask(op, context, **fields)
+        if op == "launch_command":
+            self._events.append("register")
+            self._registration.parent.mkdir(parents=True, exist_ok=True)
+            self._registration.write_text("{}\n", encoding="utf-8")
+        return {"argv": [str(self._executable.resolve()), *fields["args"]]}
+
+
 def test_grok_previews_do_not_register_and_final_setup_registers_once_after_claim(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -836,21 +868,7 @@ def test_grok_previews_do_not_register_and_final_setup_registers_once_after_clai
     _record_once(store, artifact=artifact, context_hash=context_hash, workspace=workspace)
     events: list[str] = []
 
-    class RecordingGrokAdapter(GrokHarnessAdapter):
-        def preview_launch_commands(self, *args, **kwargs) -> tuple[list[str], ...]:
-            events.append("preview")
-            assert registration.exists() is False
-            return super().preview_launch_commands(*args, **kwargs)
-
-        def launch_command(self, *args, **kwargs) -> list[str]:
-            events.append("launch-setup")
-            return super().launch_command(*args, **kwargs)
-
-    original_register = grok_adapter_module.register_trusted_grok_executable
-
-    def register_once(*args, **kwargs):
-        events.append("register")
-        return original_register(*args, **kwargs)
+    adapter = _RecordingGrokAdapter(events, registration, executable)
 
     original_claim = store.claim_approval_reuse_decisions
 
@@ -863,10 +881,8 @@ def test_grok_previews_do_not_register_and_final_setup_registers_once_after_clai
         events.append("execute")
         return subprocess.CompletedProcess(args=command, returncode=0)
 
-    install_grok_native_fake(monkeypatch)
-    monkeypatch.setattr(grok_adapter_module, "register_trusted_grok_executable", register_once)
     monkeypatch.setattr(wrapper_run, "detect_harness", lambda _harness, _context: detection)
-    monkeypatch.setattr(guard_run_launch, "get_adapter", lambda _harness: RecordingGrokAdapter())
+    monkeypatch.setattr(guard_run_launch, "get_adapter", lambda _harness: adapter)
     monkeypatch.setattr(store, "claim_approval_reuse_decisions", claim_and_record)
     monkeypatch.setattr(wrapper_run_finish.subprocess, "run", execute)
 
@@ -913,30 +929,14 @@ def test_no_saved_grok_preview_registers_once_only_in_authorized_finalizer(
     registration = config.guard_home / "managed" / "grok" / "trusted-executable.json"
     events: list[str] = []
 
-    class RecordingGrokAdapter(GrokHarnessAdapter):
-        def preview_launch_commands(self, *args, **kwargs) -> tuple[list[str], ...]:
-            events.append("preview")
-            assert registration.exists() is False
-            return super().preview_launch_commands(*args, **kwargs)
-
-        def launch_command(self, *args, **kwargs) -> list[str]:
-            events.append("launch-setup")
-            return super().launch_command(*args, **kwargs)
-
-    original_register = grok_adapter_module.register_trusted_grok_executable
-
-    def register_once(*args, **kwargs):
-        events.append("register")
-        return original_register(*args, **kwargs)
+    adapter = _RecordingGrokAdapter(events, registration, executable)
 
     def execute(command, **_kwargs) -> subprocess.CompletedProcess[str]:
         events.append("execute")
         return subprocess.CompletedProcess(args=command, returncode=0)
 
-    install_grok_native_fake(monkeypatch)
-    monkeypatch.setattr(grok_adapter_module, "register_trusted_grok_executable", register_once)
     monkeypatch.setattr(wrapper_run, "detect_harness", lambda _harness, _context: detection)
-    monkeypatch.setattr(guard_run_launch, "get_adapter", lambda _harness: RecordingGrokAdapter())
+    monkeypatch.setattr(guard_run_launch, "get_adapter", lambda _harness: adapter)
     monkeypatch.setattr(wrapper_run_finish.subprocess, "run", execute)
 
     result = wrapper_run.guard_run(

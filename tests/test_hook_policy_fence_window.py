@@ -13,7 +13,8 @@ from unittest.mock import Mock
 import pytest
 
 from codex_plugin_scanner.guard import hook_deadline
-from codex_plugin_scanner.guard.adapters import zcode
+from codex_plugin_scanner.guard.adapters.base import HarnessContext
+from codex_plugin_scanner.guard.adapters.native_harness import ask
 from codex_plugin_scanner.guard.hook_review import hook_policy_fence_window as fence
 from codex_plugin_scanner.guard.hook_review import hook_worker_native_review as review
 from codex_plugin_scanner.guard.hook_review.hook_policy_admission import _native_policy_not_ready_reason
@@ -130,9 +131,11 @@ def test_zcode_wait_stays_inside_its_hook_budget(
 ) -> None:
     # ZCode fails open on hook timeout. The daemon deadline it hands a hook is
     # well inside the ZCode timeout, and the wait stops short of that deadline.
-    assert hook_deadline._MAX_EXPLICIT_BUDGET_SECONDS < zcode._GUARD_HOOK_INTERNAL_TIMEOUT_SECONDS
-    assert zcode._GUARD_HOOK_INTERNAL_TIMEOUT_SECONDS < zcode._ZCODE_PRETOOL_TIMEOUT_SECONDS
-    assert fence.REBUILD_WAIT_SECONDS < zcode._GUARD_HOOK_INTERNAL_TIMEOUT_SECONDS
+    context = HarnessContext(home_dir=tmp_path / "home", workspace_dir=None, guard_home=tmp_path / "guard")
+    internal = ask("hook_spec", context, harness="zcode")["timeout_seconds"]
+    # 30 seconds is the PreToolUse timeout the ZCode install writes.
+    assert hook_deadline._MAX_EXPLICIT_BUDGET_SECONDS < internal < 30
+    assert internal > fence.REBUILD_WAIT_SECONDS
     native = Mock(side_effect=fence.PolicySourceFenceBusyError(FENCE_CODE))
     monkeypatch.setattr(worker, "_review_native_edge_with_snapshot", native)
     deadline = clock.now + hook_deadline._DEFAULT_BUDGET_SECONDS

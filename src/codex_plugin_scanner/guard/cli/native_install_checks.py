@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import Any
 
 from ..adapters.base import HarnessContext
 from ..store import GuardStore
@@ -168,9 +169,28 @@ def _grok_event_has_command_hook(entries: object, context: HarnessContext | None
     return False
 
 
-def _grok_managed_config_is_active(managed_text: str, context: HarnessContext | None = None) -> bool:
+def grok_protection(context: HarnessContext) -> dict[str, Any]:
+    """Grok's protection paths, deny rules and hook timeouts, as the native adapter names them."""
+    from ..adapters.native_harness import ask
+
+    return ask("protection", context, harness="grok")
+
+
+def grok_runtime_hooks_verified(context: HarnessContext) -> bool:
+    """Return whether Grok catch-all PreToolUse and prompt screening hooks are installed.
+
+    Managed permission rules in ``managed_config.toml`` are a second layer. Missing
+    that file must not fail machine-wide local protection health while hooks still
+    intercept every tool.
+    """
+    protection = grok_protection(context)
+    return _grok_pretool_is_catchall(Path(protection["pretool_hook_path"]), context) and _grok_prompt_hook_is_observe(
+        Path(protection["prompt_hook_path"]), context
+    )
+
+
+def _grok_managed_config_is_active(managed_text: str, context: HarnessContext) -> bool:
     """Verify durable permission floors, compatibility, and catch-all backup hooks."""
-    from ..adapters.grok_config import MANAGED_DENY_RULES
     from ..codex_config import tomllib
 
     try:
@@ -182,7 +202,7 @@ def _grok_managed_config_is_active(managed_text: str, context: HarnessContext | 
     compat = payload.get("compat")
     if (
         not isinstance(denied, list)
-        or not all(rule in denied for rule in MANAGED_DENY_RULES)
+        or not all(rule in denied for rule in grok_protection(context)["managed_deny_rules"])
         or not isinstance(compat, dict)
     ):
         return False
@@ -222,8 +242,7 @@ def grok_hooks_protection_ready(context: HarnessContext) -> bool:
     )
 
 
-def _grok_has_legacy_deny_rules(text: str) -> bool:
-    from ..adapters.grok_config import MANAGED_DENY_RULES
+def _grok_has_legacy_deny_rules(text: str, deny_rules: list[str]) -> bool:
     from ..codex_config import tomllib
 
     try:
@@ -234,20 +253,17 @@ def _grok_has_legacy_deny_rules(text: str) -> bool:
     denied = permission.get("deny") if isinstance(permission, dict) else None
     return isinstance(denied, list) and any(
         rule not in denied and rule.replace("**/", "~/", 1) in denied
-        for rule in MANAGED_DENY_RULES
+        for rule in deny_rules
         if rule.startswith("Read(**/")
     )
 
 
 def _grok_protection_checks(context: HarnessContext) -> dict[str, object]:
     """Report missing or stale Grok protection artifacts with repair instructions."""
-    from ..adapters.grok import GrokHarnessAdapter
-
-    adapter = GrokHarnessAdapter()
-    hooks_dir = adapter._hooks_dir(context)
-    managed_config = adapter._protection_config_path(context)
-    pretool_hook = hooks_dir / "hol-guard-pretooluse.json"
-    prompt_hook = hooks_dir / "hol-guard-prompt.json"
+    protection = grok_protection(context)
+    managed_config = Path(protection["config_path"])
+    pretool_hook = Path(protection["pretool_hook_path"])
+    prompt_hook = Path(protection["prompt_hook_path"])
     warnings: list[str] = []
     if not pretool_hook.is_file() or not prompt_hook.is_file():
         warnings.append("Grok Guard hook files are missing from ~/.grok/hooks/. Re-run `hol-guard apps connect grok`.")
@@ -265,7 +281,7 @@ def _grok_protection_checks(context: HarnessContext) -> dict[str, object]:
         managed_read_error = True
     if managed_read_error:
         warnings.append("Grok managed config could not be read. Re-run `hol-guard apps repair grok`.")
-    elif _grok_has_legacy_deny_rules(managed_text):
+    elif _grok_has_legacy_deny_rules(managed_text, protection["managed_deny_rules"]):
         warnings.append(
             "Grok managed deny rules still use literal home prefixes that Grok does not expand. "
             "Re-run `hol-guard apps repair grok`."

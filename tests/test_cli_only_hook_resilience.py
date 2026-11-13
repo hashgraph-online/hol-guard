@@ -14,12 +14,10 @@ from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.adapters.copilot import (
     _hook_command_parts as copilot_hook_command_parts,  # pyright: ignore[reportPrivateUsage]
 )
-from codex_plugin_scanner.guard.adapters.grok import GrokHarnessAdapter
 from codex_plugin_scanner.guard.adapters.hermes import (
     _pretool_payload as hermes_pretool_payload,  # pyright: ignore[reportPrivateUsage]
 )
 from codex_plugin_scanner.guard.adapters.native_harness import NativeHarnessAdapter
-from codex_plugin_scanner.guard.adapters.zcode import ZCodeHarnessAdapter
 
 CommandFactory = Callable[[HarnessContext], tuple[str, ...]]
 
@@ -42,10 +40,13 @@ def _copilot_command(context: HarnessContext) -> tuple[str, ...]:
     return copilot_hook_command_parts(context, include_workspace=True)
 
 
-def _kimi_command(context: HarnessContext) -> tuple[str, ...]:
-    adapter = get_adapter("kimi")
-    assert isinstance(adapter, NativeHarnessAdapter)
-    return tuple(adapter._hook_argv(context))  # pyright: ignore[reportPrivateUsage]
+def _native_command(harness: str) -> CommandFactory:
+    def command(context: HarnessContext) -> tuple[str, ...]:
+        adapter = get_adapter(harness)
+        assert isinstance(adapter, NativeHarnessAdapter)
+        return tuple(adapter._hook_argv(context))  # pyright: ignore[reportPrivateUsage]
+
+    return command
 
 
 def openclaw_pretool_payload(*, context: HarnessContext) -> dict[str, object]:
@@ -59,9 +60,9 @@ def openclaw_pretool_payload(*, context: HarnessContext) -> dict[str, object]:
     ("harness", "factory", "timeout_seconds"),
     [
         ("copilot", _copilot_command, 25),
-        ("grok", GrokHarnessAdapter._hook_command_parts, 85),  # pyright: ignore[reportPrivateUsage]
-        ("kimi", _kimi_command, 25),
-        ("zcode", ZCodeHarnessAdapter._hook_command_parts, 25),  # pyright: ignore[reportPrivateUsage]
+        ("grok", _native_command("grok"), 85),
+        ("kimi", _native_command("kimi"), 25),
+        ("zcode", _native_command("zcode"), 25),
     ],
 )
 def test_managed_cli_hooks_use_bounded_process_bridge(
@@ -86,8 +87,8 @@ def test_managed_cli_hooks_use_bounded_process_bridge(
     ("harness", "factory"),
     [
         ("copilot", _copilot_command),
-        ("kimi", _kimi_command),
-        ("zcode", ZCodeHarnessAdapter._hook_command_parts),  # pyright: ignore[reportPrivateUsage]
+        ("kimi", _native_command("kimi")),
+        ("zcode", _native_command("zcode")),
     ],
 )
 def test_frozen_managed_cli_hooks_hand_off_to_the_runtime_not_a_stdlib_client(
@@ -128,7 +129,7 @@ def test_frozen_grok_hook_without_a_runtime_registers_the_bridge_not_the_client(
         lambda *_args, **_kwargs: None,
     )
 
-    command = GrokHarnessAdapter._hook_command_parts(_context(tmp_path))  # pyright: ignore[reportPrivateUsage]
+    command = _native_command("grok")(_context(tmp_path))
 
     assert command[0] != "/usr/bin/python3"
     assert command[1] == "__guard-bounded-hook"
@@ -151,7 +152,7 @@ def test_frozen_grok_hook_with_a_runtime_wraps_its_isolated_constants_client(
         lambda *_args, **_kwargs: runtime,
     )
 
-    command = GrokHarnessAdapter._hook_command_parts(_context(tmp_path))  # pyright: ignore[reportPrivateUsage]
+    command = _native_command("grok")(_context(tmp_path))
 
     assert command[:4] == (str(runtime), "bounded-hook-bridge", "/usr/bin/python3", "-I")
     assert Path(command[4]).name == "grok.py"
