@@ -433,10 +433,7 @@ fn probe(
         };
     // Configuration plus root, path and attribute inspection share this budget.
     // The caller's overall deadline remains the upper bound.
-    let inspection_deadline = Instant::now() + super::git_probe::PROBE_BUDGET;
-    let deadline = deadline
-        .unwrap_or(inspection_deadline)
-        .min(inspection_deadline);
+    let deadline = super::git_probe::probe_deadline(deadline);
     if Instant::now() >= deadline {
         return None;
     }
