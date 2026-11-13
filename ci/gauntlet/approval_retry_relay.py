@@ -30,7 +30,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 from collections.abc import Callable, Iterable
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -76,6 +76,26 @@ def write_relay_config(guard_home: Path) -> dict[str, Any]:
     guard_home.mkdir(mode=0o700, parents=True, exist_ok=True)
     (guard_home / "config.toml").write_text(RELAY_CONFIG, encoding="utf-8", newline="\n")
     return {"subprocess_action": "review", "blocked_request_mode": "ask"}
+
+
+def record_daemon_origin(daemon: Any) -> str:
+    """Record where the fixture's daemon listens, as an installed daemon's heartbeat does.
+
+    Guard builds the link a held agent relays from the daemon origin in its
+    runtime state. An installed daemon keeps that state current; the fixture's
+    daemon listens on a free port and records nothing, so without this the link
+    would name Guard's default port, where no daemon of this run answers.
+    """
+    port = int(daemon.port)
+    now = datetime.now(timezone.utc).isoformat()
+    daemon.store.upsert_runtime_state(
+        session_id="gauntlet-relay",
+        daemon_host="127.0.0.1",
+        daemon_port=port,
+        started_at=now,
+        last_heartbeat_at=now,
+    )
+    return f"http://127.0.0.1:{port}"
 
 
 def queued_request_ids(store: Any, known_ids: Iterable[str]) -> set[str]:

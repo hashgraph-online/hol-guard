@@ -430,7 +430,10 @@ redirect, and it counts only when the daemon sends it to a page signed for a que
 daemon undoes one character a model drops, adds or changes while copying the link, so the judge
 asks what the daemon opens, not whether the text is spelled exactly. A bare `/requests/<id>` link
 opens a browser tab with no local session, so a user who follows it cannot decide the request. The
-links are checked before redaction, and the evidence keeps only their verdicts.
+links are checked before redaction, and the evidence keeps only their verdicts. An installed
+daemon records its port in Guard's runtime state, which is where Guard takes the link's origin
+from. The fixture's daemon listens on a free port, so the runner records that port before the
+agent starts; otherwise the link would name Guard's default port, where nothing of the run answers.
 
 `connector-setup` shares the suite but not that question. Its eleven cases carry
 `connector-setup`, `connector-tool`, `blocked-read`, `blocked-command` and `commands` oracles,

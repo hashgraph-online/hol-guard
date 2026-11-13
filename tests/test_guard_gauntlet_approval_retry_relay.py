@@ -18,6 +18,7 @@ from ci.gauntlet.approval_retry_relay import (
     assessment,
     daemon_link_opener,
     omp_final_text,
+    record_daemon_origin,
     relay_evidence,
     write_relay_config,
 )
@@ -339,3 +340,27 @@ def test_the_exported_case_drops_the_signed_part_of_a_slipped_link() -> None:
         redacted = redact_value({"final_text": f"Approve it at {slipped}."}, SIGNED_LINK_REDACTIONS)["final_text"]
         assert code[:-1] not in redacted
         assert redacted.endswith("/<signed-approval-code>.")
+
+
+class _RuntimeStore:
+    def __init__(self) -> None:
+        self.recorded: dict[str, object] = {}
+
+    def upsert_runtime_state(self, **state: object) -> None:
+        self.recorded = state
+
+
+class _StartedDaemon:
+    """A started fixture daemon: ``port`` is the one it bound, not the one it was asked for."""
+
+    def __init__(self, port: int) -> None:
+        self.port = port
+        self.store = _RuntimeStore()
+
+
+def test_the_fixture_daemon_records_the_port_it_listens_on() -> None:
+    daemon = _StartedDaemon(52468)
+    assert record_daemon_origin(daemon) == "http://127.0.0.1:52468"
+    assert daemon.store.recorded["daemon_host"] == "127.0.0.1"
+    assert daemon.store.recorded["daemon_port"] == 52468
+    assert daemon.store.recorded["last_heartbeat_at"] == daemon.store.recorded["started_at"]
