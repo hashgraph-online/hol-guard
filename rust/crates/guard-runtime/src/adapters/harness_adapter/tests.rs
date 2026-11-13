@@ -340,3 +340,13 @@ fn devin_reads_its_config_from_appdata_only_on_windows() {
     ctx.windows = true;
     assert_eq!(path(&ctx), appdata.join("devin/config.json"));
 }
+
+#[cfg(unix)]
+#[test]
+fn a_named_user_home_expands_as_python_does() {
+    let home = Home::new();
+    let ctx = super::Ctx::parse(Some(&home.context(json!({})))).unwrap();
+    let root = nix::unistd::User::from_name("root").unwrap().unwrap().dir;
+    assert_eq!(super::kimi::expand_user(&ctx, "~root/x"), root.join("x"));
+    assert_eq!(super::kimi::expand_user(&ctx, "~/x"), home.home().join("x"));
+}

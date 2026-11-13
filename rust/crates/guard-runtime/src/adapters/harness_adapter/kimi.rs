@@ -13,7 +13,8 @@ const HOOK_TIMEOUT_SECONDS: u64 = 25;
 const INSTALLED_NOTE: &str = "Guard hook entries added to ~/.kimi-code/config.toml";
 const REMOVED_NOTE: &str = "Guard hook entries removed from ~/.kimi-code/config.toml";
 
-/// `os.path.expanduser` against the caller's home.
+/// `os.path.expanduser` against the caller's home; `~name` names another
+/// user's home on Unix, as `pwd` resolves it.
 pub(crate) fn expand_user(ctx: &Ctx, value: &str) -> PathBuf {
     if value == "~" {
         return ctx.user_home.clone();
@@ -23,6 +24,9 @@ pub(crate) fn expand_user(ctx: &Ctx, value: &str) -> PathBuf {
         .or_else(|| ctx.windows.then(|| value.strip_prefix("~\\")).flatten())
     {
         Some(rest) => ctx.user_home.join(rest),
+        None if !ctx.windows && value.starts_with('~') => {
+            crate::aibom_skill_rules::expanduser(value, None)
+        }
         None => PathBuf::from(value),
     }
 }

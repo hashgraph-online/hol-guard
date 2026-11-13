@@ -86,14 +86,21 @@ def wire_context(context: HarnessContext) -> dict[str, object]:
     }
 
 
-def ask(op: str, context: HarnessContext, *, harness: str | None = None, **fields: object) -> dict[str, Any]:
+def ask(
+    op: str,
+    context: HarnessContext,
+    *,
+    harness: str | None = None,
+    timeout_seconds: float | None = None,
+    **fields: object,
+) -> dict[str, Any]:
     """Run one op and raise the error the Python adapter raised for a refusal."""
     from ..native_runner_authority import native_runner_authority
 
     request: dict[str, object] = {"op": op, "context": wire_context(context), **fields}
     if harness is not None:
         request["harness"] = harness
-    answer = native_runner_authority(_KIND, request)
+    answer = native_runner_authority(_KIND, request, timeout_seconds=timeout_seconds)
     if len(answer) == 1:
         if "refusal" in answer:
             raise ValueError(str(answer["refusal"]))
@@ -149,9 +156,19 @@ class NativeHarnessAdapter(HarnessAdapter):
         return path if isinstance(path, str) else None
 
     def detect(self, context: HarnessContext) -> HarnessDetection:
-        from ..aibom_detection import _artifacts_from_payload, extend_detection_with_workspace_aibom
+        from ..aibom_detection import (
+            _AIBOM_DISCOVERY_TIMEOUT_SECONDS,
+            NativeAibomError,
+            _artifacts_from_payload,
+            extend_detection_with_workspace_aibom,
+        )
+        from ..native_runner_authority import NativeRunnerAuthorityError
 
-        answer = self._ask("detect", context)
+        # Discovery walks the workspace, so it keeps the longer AIBOM deadline.
+        try:
+            answer = ask("detect", context, harness=self.harness, timeout_seconds=_AIBOM_DISCOVERY_TIMEOUT_SECONDS)
+        except NativeRunnerAuthorityError as error:
+            raise NativeAibomError(str(error)) from error
         detection = HarnessDetection(
             harness=self.harness,
             installed=answer.get("installed") is True,
