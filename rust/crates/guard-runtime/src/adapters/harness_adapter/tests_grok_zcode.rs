@@ -84,6 +84,27 @@ fn grok_install_writes_both_hooks_and_uninstall_removes_them() {
 }
 
 #[test]
+fn grok_repeated_install_does_not_back_up_its_own_hooks() {
+    let home = Home::new();
+    let args = json!({"shim": shim(), "hook_argv": ["/py", "hook"], "retired_commands": []});
+    apply(
+        home.ask("grok", "prepare_install", args.clone())["files"]
+            .as_array()
+            .unwrap(),
+    );
+    let again = home.ask("grok", "prepare_install", args);
+    let files = again["files"].as_array().unwrap();
+    assert!(
+        files[1]["after"].is_null() && files[2]["after"].is_null(),
+        "{again}"
+    );
+    apply(files);
+
+    let uninstall = home.ask("grok", "prepare_uninstall", json!({}));
+    assert_eq!(uninstall["copies"], json!([]), "{uninstall}");
+}
+
+#[test]
 fn zcode_install_writes_the_desktop_surface_only_until_the_cli_migrates() {
     let home = Home::new();
     let answer = home.ask(

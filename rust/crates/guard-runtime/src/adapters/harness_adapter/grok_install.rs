@@ -99,9 +99,12 @@ fn legacy_settings(raw: Option<&[u8]>, state: &[(String, PyVal)]) -> Step<Option
     }
 }
 
-fn hook_paths(ctx: &Ctx) -> (PathBuf, PathBuf) {
+fn hook_paths(ctx: &Ctx) -> Step<(PathBuf, PathBuf)> {
     let hooks = hooks_dir(ctx);
-    (hooks.join(PRETOOL_FILE), hooks.join(PROMPT_FILE))
+    let (pretool, prompt) = (hooks.join(PRETOOL_FILE), hooks.join(PROMPT_FILE));
+    files::within_root(ctx, &grok_home(ctx), &pretool, LABEL)?;
+    files::within_root(ctx, &grok_home(ctx), &prompt, LABEL)?;
+    Ok((pretool, prompt))
 }
 
 fn guard_settings_paths(ctx: &Ctx) -> Step<(PathBuf, PathBuf)> {
@@ -165,7 +168,7 @@ pub(super) fn prepare_install(spec: &Spec, ctx: &Ctx, fields: &Map<String, Value
         .and_then(Value::as_array)
         .filter(|commands| commands.iter().all(Value::is_string))
         .ok_or(Failure::Invalid)?;
-    let (pretool, prompt) = hook_paths(ctx);
+    let (pretool, prompt) = hook_paths(ctx)?;
     let state = state_path(ctx);
     let paths = [
         config.clone(),
@@ -214,18 +217,22 @@ pub(super) fn prepare_install(spec: &Spec, ctx: &Ctx, fields: &Map<String, Value
         legacy_settings(snapshots[4].as_deref(), &recorded)?,
     ];
     let mut changes = Vec::new();
-    for (path, source) in paths.iter().zip(&snapshots).take(3) {
+    for ((path, source), written) in paths.iter().zip(&snapshots).zip(&after).take(3) {
         let name = path
             .file_name()
             .map(|name| name.to_string_lossy().into_owned());
         let backup = backup_path(ctx, &name.unwrap_or_default());
         let before = files::snapshot(ctx, &backup)?;
         let mode = existing_mode(ctx, &backup, before.as_ref(), 0o644)?;
-        let after_mode = match (&before, source) {
+        // A repeated install finds Guard's own file; only a user's is kept.
+        let user_source = source
+            .clone()
+            .filter(|bytes| Some(bytes) != written.as_ref());
+        let after_mode = match (&before, &user_source) {
             (None, Some(_)) => files::mode(ctx, path).ok_or(Failure::Invalid)?,
             _ => mode,
         };
-        let restored = before.clone().or_else(|| source.clone());
+        let restored = before.clone().or(user_source);
         let mut change = Change::at(ctx, &backup, before, restored, mode);
         change.after_mode = after_mode;
         changes.push(change);
@@ -325,7 +332,7 @@ pub(super) fn prepare_uninstall(ctx: &Ctx) -> Step<Value> {
     }
     let mut copies = Vec::new();
     let mut deletes = Vec::new();
-    let (pretool, prompt) = hook_paths(ctx);
+    let (pretool, prompt) = hook_paths(ctx)?;
     for (hook, name) in [(pretool, PRETOOL_FILE), (prompt, PROMPT_FILE)] {
         let backup = backup_path(ctx, name);
         if ctx.absolute(&backup).is_file() {

@@ -346,7 +346,7 @@ fn prepare_install(spec: &Spec, ctx: &Ctx, fields: &Map<String, Value>) -> Step<
     let backup_mode = if backup_before.is_some() {
         mode_or(ctx, &backup, 0o644)
     } else {
-        0o644
+        mode_or(ctx, &config, 0o644)
     };
     let mut record = Doc::default();
     record
@@ -418,9 +418,7 @@ fn prepare_uninstall(ctx: &Ctx) -> Step<Value> {
             continue;
         }
         files::within_root(ctx, &zcode_home(ctx), &path, "ZCode")?;
-        let Ok(bytes) = std::fs::read(&absolute) else {
-            continue;
-        };
+        let bytes = std::fs::read(&absolute).map_err(|error| Failure::Os(error.to_string()))?;
         let current = utf8(bytes, "ZCode config")?;
         let request = surface_request("uninstall", Some(&current), &path, &recorded);
         let answer = hook_settings(request, &["text"])?;
