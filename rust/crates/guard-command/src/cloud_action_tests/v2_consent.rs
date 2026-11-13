@@ -319,7 +319,10 @@ fn bounded_offers_never_reach_outside_or_bound_a_payment() {
     ] {
         let review = with(class, external.clone());
         assert_eq!(review["action"], "require-reapproval", "{class}: {review}");
-        assert!(bounded_offers(&review).is_empty(), "{class} {external}: {review}");
+        assert!(
+            bounded_offers(&review).is_empty(),
+            "{class} {external}: {review}"
+        );
     }
     // No selector bounds an amount, so a payment gets none even when internal.
     let mut pay = base.clone();
@@ -335,6 +338,11 @@ fn bounded_offers_never_reach_outside_or_bound_a_payment() {
     for class in ["send", "update"] {
         let offers = bounded_offers(&with(class, known(false)));
         assert!(!offers.is_empty(), "{class}");
-        assert!(offers.iter().all(|offer| offer["selector"]["external"] == false), "{offers:?}");
+        assert!(
+            offers
+                .iter()
+                .all(|offer| offer["selector"]["external"] == false),
+            "{offers:?}"
+        );
     }
 }
