@@ -25,6 +25,7 @@ fn a_wildcard_include_is_proven_by_what_it_selects_below_the_root() {
     let context = crate::pretool::PathContext {
         home_dir: home.to_str(),
         cwd: repo.to_str(),
+        shell_home_matches: true,
         ..Default::default()
     };
     let h = home.display();
@@ -47,6 +48,10 @@ fn a_wildcard_include_is_proven_by_what_it_selects_below_the_root() {
         ("-rn x --include *.md ~/.ssh".to_owned(), false),
         ("-rn x --include *.md ~".to_owned(), false),
         ("-rn x --include *.md ~root/docs".to_owned(), false),
+        // Extra slashes after the tilde stay below the home, as the shell
+        // reads them, so `~//etc` is not `/etc`.
+        ("-rn x --include *.md ~//work/app/docs".to_owned(), true),
+        ("-rn x --include *.md ~//.ssh".to_owned(), false),
         // `grep` matches a glob holding a separator against the whole name
         // it reached the file by, which this walk does not render.
         ("-rn x --include docs/*.md .".to_owned(), false),
@@ -77,6 +82,22 @@ fn a_wildcard_include_is_proven_by_what_it_selects_below_the_root() {
         assert_eq!(
             super::safe_grep_arguments(&arguments, context),
             allowed,
+            "{command}"
+        );
+    }
+    // The shell expands the tilde from its own `HOME`. When that is not the
+    // home Guard vetted, the tree it walks is not the one proven here.
+    let elsewhere = crate::pretool::PathContext {
+        shell_home_matches: false,
+        ..context
+    };
+    for command in [
+        "-rn x --include *.md ~/work/app/docs",
+        "-rln x ~/work/app/docs --include=*.md",
+    ] {
+        let arguments: Vec<String> = command.split(' ').map(str::to_owned).collect();
+        assert!(
+            !super::safe_grep_arguments(&arguments, elsewhere),
             "{command}"
         );
     }
