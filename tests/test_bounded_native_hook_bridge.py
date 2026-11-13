@@ -11,7 +11,7 @@ import pytest
 
 from codex_plugin_scanner.guard.adapters import bounded_cli_hook_bridge as bridge
 from codex_plugin_scanner.guard.adapters import (
-    cline_hooks,
+    cline_runtime,
     copilot,
     hermes_runtime_hooks,
 )
@@ -155,14 +155,15 @@ def test_cline_worker_runs_the_native_bridge_once_per_payload(tmp_path: Path, mo
     _offer_native(monkeypatch, runtime, (NATIVE_BOUNDED_HOOK_FEATURE,))
     context = HarnessContext(home_dir=tmp_path / "h", workspace_dir=None, guard_home=tmp_path / "g")
 
-    argv = cline_hooks._bounded_hook_argv(context, sys.executable)
+    argv = tuple(cline_runtime._facts(context, "plugin")["hook_argv"])  # pyright: ignore[reportPrivateUsage]
     worker = json.loads(worker_config(context, event_name="PreToolUse", guard_cli=list(argv)))
 
     assert argv[:2] == (str(runtime), NATIVE_BOUNDED_HOOK_COMMAND)
     config = json.loads(argv[-1])
     assert config["harness"] == "cline"
     assert config["cli_args"][:2] == ["guard", "hook"]
-    assert config["timeout_seconds"] < cline_hooks._TIMEOUT
+    # The native worker gives the bridge 9 seconds; the bridge answers inside it.
+    assert config["timeout_seconds"] < 9
     assert worker["guard"] == list(argv)
 
 

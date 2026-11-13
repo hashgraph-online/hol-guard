@@ -17,7 +17,8 @@ from codex_plugin_scanner.guard.adapters.bounded_cli_hook_native import (
     NATIVE_BOUNDED_HOOK_COMMAND,
     NATIVE_BOUNDED_HOOK_FEATURE,
 )
-from codex_plugin_scanner.guard.adapters.cline_plugin import _plugin_source, install_cline_plugin
+from tests.cline_test_support import install_plugin
+from tests.cline_test_support import plugin_source as _plugin_source
 
 _BEFORE_TOOL = 'plugin.hooks.beforeTool({toolCall:{toolCallId:"1",toolName:"run_commands"},input:{commands:["ls"]}})'
 
@@ -83,7 +84,7 @@ def test_plugin_reviews_through_the_native_bridge(tmp_path: Path, monkeypatch: p
     _offer_native(monkeypatch, runtime)
     context = _context(tmp_path)
 
-    manifest = install_cline_plugin(context)
+    manifest = install_plugin(context)
 
     argv = _hook_argv(Path(str(manifest["managed_plugin_path"])).read_text(encoding="utf-8"))
     assert argv[:2] == [str(runtime), NATIVE_BOUNDED_HOOK_COMMAND]
@@ -105,7 +106,7 @@ def test_frozen_plugin_keeps_the_guard_cli(tmp_path: Path, monkeypatch: pytest.M
     monkeypatch.setattr(guard_cli_attestation.sys, "frozen", True, raising=False)
     monkeypatch.setattr(guard_cli_attestation.sys, "executable", str(executable))
 
-    manifest = install_cline_plugin(_context(tmp_path))
+    manifest = install_plugin(_context(tmp_path))
 
     argv = _hook_argv(Path(str(manifest["managed_plugin_path"])).read_text(encoding="utf-8"))
     assert argv == [str(executable), "hook", "--harness", "cline", "--json"]

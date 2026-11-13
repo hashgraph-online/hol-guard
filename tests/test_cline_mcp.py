@@ -8,12 +8,14 @@ import pytest
 
 from codex_plugin_scanner.cli import _build_parser
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
-from codex_plugin_scanner.guard.adapters.cline import ClineHarnessAdapter
-from codex_plugin_scanner.guard.adapters.cline_mcp import (
-    install_cline_mcp_proxies,
-    restore_cline_mcp_proxies,
-)
+from codex_plugin_scanner.guard.adapters.cline_runtime import ClineHarnessAdapter
+from codex_plugin_scanner.guard.adapters.cline_runtime import install_mcp_proxies as install_cline_mcp_proxies
 from codex_plugin_scanner.guard.cli.commands_router import _COMMON_HANDLERS, _resolve_guard_handler
+from tests.cline_test_support import uninstall
+
+
+def restore_cline_mcp_proxies(context: HarnessContext) -> dict[str, object]:
+    return uninstall(context, "all")["mcp"]
 
 
 def _context(tmp_path: Path) -> HarnessContext:

@@ -13,12 +13,13 @@ import pytest
 
 from codex_plugin_scanner.cli import _build_parser
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
-from codex_plugin_scanner.guard.adapters.cline import ClineHarnessAdapter
-from codex_plugin_scanner.guard.adapters.cline_plugin import _plugin_source, cline_plugin_state
+from codex_plugin_scanner.guard.adapters.cline_runtime import ClineHarnessAdapter
 from codex_plugin_scanner.guard.adapters.contracts import contract_for
 from codex_plugin_scanner.guard.cli.commands_support_interaction import _apps_disconnect_confirm_command
 from codex_plugin_scanner.guard.cli.install_commands import build_harness_verification
 from codex_plugin_scanner.guard.product_model import SUPPORTED_HARNESS_VALUES
+from tests.cline_test_support import plugin_source as _plugin_source
+from tests.cline_test_support import plugin_state as cline_plugin_state
 from tests.cline_worker_config import worker_config as _worker_config
 
 pytestmark = pytest.mark.usefixtures("approval_questionnaire_mode")
@@ -219,7 +220,15 @@ def test_plugin_ready_requires_block_and_replacement_proofs(tmp_path: Path) -> N
     source = "// HOL_GUARD_MANAGED_CLINE_PLUGIN_V1\nexport default {};\n"
     index.write_bytes(source.encode("utf-8"))
     package = root / "package.json"
-    package.write_text('{"name":"hol-guard-cline-plugin"}\n', encoding="utf-8")
+    package.write_text(
+        json.dumps(
+            {
+                "name": "hol-guard-cline-plugin",
+                "cline": {"plugins": [{"paths": ["./index.js"], "capabilities": ["hooks"]}]},
+            }
+        ),
+        encoding="utf-8",
+    )
     state_path = context.guard_home / "managed" / "cline" / "plugin-state.json"
     state_path.parent.mkdir(parents=True)
     state_path.write_text(

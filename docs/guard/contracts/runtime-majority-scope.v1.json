@@ -729,14 +729,7 @@
       {
         "path": [
           "src/codex_plugin_scanner/guard/adapters/adapter_state_integrity.py",
-          "src/codex_plugin_scanner/guard/adapters/cline.py",
-          "src/codex_plugin_scanner/guard/adapters/cline_contract.py",
-          "src/codex_plugin_scanner/guard/adapters/cline_detection.py",
-          "src/codex_plugin_scanner/guard/adapters/cline_mcp.py",
-          "src/codex_plugin_scanner/guard/adapters/cline_paths.py",
-          "src/codex_plugin_scanner/guard/adapters/cline_plugin.py",
-          "src/codex_plugin_scanner/guard/adapters/cline_plugin_probe.py",
-          "src/codex_plugin_scanner/guard/adapters/cline_state_paths.py",
+          "src/codex_plugin_scanner/guard/adapters/cline_runtime.py",
           "src/codex_plugin_scanner/guard/adapters/cloud_identity.py",
           "src/codex_plugin_scanner/guard/adapters/copilot.py",
           "src/codex_plugin_scanner/guard/adapters/cursor.py",
@@ -1610,66 +1603,20 @@
       {
         "id": "adapter-cline-setup",
         "category": "install_config",
-        "path": "src/codex_plugin_scanner/guard/adapters/cline.py",
+        "path": "src/codex_plugin_scanner/guard/adapters/cline_runtime.py",
         "symbols": [
           "ClineHarnessAdapter.install",
+          "ClineHarnessAdapter.prepare_install",
           "ClineHarnessAdapter.uninstall",
-          "ClineHarnessAdapter._install_transport",
-          "ClineHarnessAdapter._reconcile_transport",
-          "_install_plan"
+          "_reconcile",
+          "_facts",
+          "_node_check",
+          "install_mcp_proxies",
+          "proxy_entry"
         ],
         "entry_points": [],
-        "reason": "Cline adapter install and uninstall and the native request helper used only by install; transport selection, inactive-transport cleanup, coverage and blind spots are decided by the native cline_install_plan runner-authority kind, and Python keeps the transport installs, probes and file I/O.",
-        "evidence": "install and uninstall have no caller in any in-scope module; they are invoked by the excluded install, uninstall and repair dispatchers. The report validates that no retained symbol or in-scope module references the excluded names. Install-only imports live inside these methods so the retained module imports only state and detection helpers."
-      },
-      {
-        "id": "adapter-cline-hooks-setup",
-        "category": "install_config",
-        "path": "src/codex_plugin_scanner/guard/adapters/cline_hooks.py",
-        "symbols": [
-          "install_cline_hooks",
-          "_bounded_hook_argv",
-          "_render_hook_files",
-          "_claim_slot",
-          "_worker_path",
-          "_write"
-        ],
-        "entry_points": [],
-        "reason": "Cline native-hook install: the worker configuration and launcher file writes. The native cline_hook_files kind renders both files and their digests.",
-        "evidence": "install and uninstall have no caller in any in-scope module; they are invoked by the excluded install, uninstall and repair dispatchers. The report validates that no retained symbol or in-scope module references the excluded names. The hook worker itself runs in the native runtime (cline-hook-worker); install only writes the configuration and launchers the native cline_hook_files kind renders."
-      },
-      {
-        "id": "adapter-cline-plugin-setup",
-        "category": "install_config",
-        "path": "src/codex_plugin_scanner/guard/adapters/cline_plugin.py",
-        "symbols": [
-          "install_cline_plugin",
-          "uninstall_cline_plugin",
-          "cline_plugin_syntax_probe",
-          "_bounded_hook_argv",
-          "_plugin_source",
-          "_package_json",
-          "_atomic_write"
-        ],
-        "entry_points": [],
-        "reason": "Cline AgentPlugin install, uninstall and install-time syntax probe, plus the package.json they write; _plugin_source only resolves the install values and passes them to the native cline_plugin_render kind, which renders the TypeScript plugin.",
-        "evidence": "install and uninstall have no caller in any in-scope module; they are invoked by the excluded install, uninstall and repair dispatchers. The report validates that no retained symbol or in-scope module references the excluded names. The plugin source is a TypeScript asset executed by Cline, not Python on the request path."
-      },
-      {
-        "id": "adapter-cline-mcp-setup",
-        "category": "install_config",
-        "path": "src/codex_plugin_scanner/guard/adapters/cline_mcp.py",
-        "symbols": [
-          "install_cline_mcp_proxies",
-          "restore_cline_mcp_proxies",
-          "_proxy_entry",
-          "_proxy_plan",
-          "_backup_path",
-          "_atomic_write_bytes"
-        ],
-        "entry_points": [],
-        "reason": "Cline MCP settings rewrite to the Guard proxy on install and restore on uninstall; _proxy_plan asks the native cline_install_plan kind which servers to proxy.",
-        "evidence": "install and uninstall have no caller in any in-scope module; they are invoked by the excluded install, uninstall and repair dispatchers. The report validates that no retained symbol or in-scope module references the excluded names."
+        "reason": "Cline adapter install and uninstall; the native harness_adapter kind chooses the transport, writes the native hooks or the AgentPlugin, rewrites the MCP settings and removes them, and Python keeps the attested Guard CLI, the node --check and hook-canary subprocesses, the launcher shim and Guard's proxy argv.",
+        "evidence": "install, prepare_install and uninstall have no caller in any in-scope module; they are invoked by the excluded install, uninstall and repair dispatchers. The report validates that no retained symbol or in-scope module references the excluded names."
       },
       {
         "id": "approvals-resolution-and-dashboard-snapshot",

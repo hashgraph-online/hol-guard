@@ -16,7 +16,7 @@ _ADAPTER_SPECS: tuple[tuple[str, str], ...] = (
     (".claude_code", "ClaudeCodeHarnessAdapter"),
     (".copilot", "CopilotHarnessAdapter"),
     (".cursor", "CursorHarnessAdapter"),
-    (".cline", "ClineHarnessAdapter"),
+    (".cline_runtime", "ClineHarnessAdapter"),
     (".native_harness", "devin"),
     (".native_harness", "antigravity"),
     (".native_harness", "gemini"),

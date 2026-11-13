@@ -35,7 +35,7 @@ Search [open adapter PRs](https://github.com/hashgraph-online/hol-guard/pulls?q=
 
 Public harness classes stay at their existing adapter entrypoints. Internal helpers use ordinary Python package imports, such as `codex_plugin_scanner.guard.adapters._modules.cursor.cursor_hook_events`. Each family and `_modules/` has an `__init__.py`, so Python, static analysis, and frozen builds discover the same modules. Put a new public harness class at the adapter root and its supporting files in the corresponding family package; do not extend `__path__` or create a second import identity.
 
-Begin with [Gemini and Antigravity](../../rust/crates/guard-runtime/src/adapters/harness_adapter/simple.rs) for discovery-only examples, and [Cline](../../src/codex_plugin_scanner/guard/adapters/cline.py) or [Cursor](../../src/codex_plugin_scanner/guard/adapters/cursor.py) for hook installation. Review the actual host contract before copying a strategy.
+Begin with [Gemini and Antigravity](../../rust/crates/guard-runtime/src/adapters/harness_adapter/simple.rs) for discovery-only examples, and [Cline](../../rust/crates/guard-runtime/src/adapters/harness_adapter/cline.rs) or [Cursor](../../src/codex_plugin_scanner/guard/adapters/cursor.py) for hook installation. Review the actual host contract before copying a strategy.
 
 ## 3. Add discovery and registration
 

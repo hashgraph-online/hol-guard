@@ -48,7 +48,7 @@ pub(crate) const PASEO_DELEGATES: [&str; 6] =
     ["claude-code", "codex", "copilot", "opencode", "pi", "omp"];
 
 /// Every variable a request's `env` may carry.
-pub(crate) const ENV_NAMES: [&str; 23] = [
+pub(crate) const ENV_NAMES: [&str; 26] = [
     "PATH",
     "PATHEXT",
     "NoDefaultCurrentDirectoryInExePath",
@@ -72,6 +72,9 @@ pub(crate) const ENV_NAMES: [&str; 23] = [
     "ZAI_OAUTH_CLIENT_ID",
     "HOL_GUARD_DESKTOP_RUNTIME_OWNER",
     "XDG_DATA_HOME",
+    "CLINE_DATA_DIR",
+    "CLINE_DIR",
+    "CLINE_MCP_SETTINGS_PATH",
 ];
 
 /// Prefixes of the variables that redirect Paseo's native runtimes.
@@ -92,7 +95,7 @@ pub(crate) const ENV_PREFIXES: [&str; 14] = [
     "OMP_PROFILE",
 ];
 
-pub(crate) const SPECS: [Spec; 12] = [
+pub(crate) const SPECS: [Spec; 13] = [
     Spec {
         harness: "devin",
         aliases: &["devin", "devin-cli", "cognition-devin"],
@@ -310,6 +313,23 @@ pub(crate) const SPECS: [Spec; 12] = [
         channel: "native",
         auto_open: false,
         workspace_aibom: true,
+        hook: Hook::None,
+        install: Install::Plan,
+        dynamic: false,
+    },
+    Spec {
+        harness: "cline",
+        aliases: &["cline-cli", "cline-vscode"],
+        executable: "cline",
+        launcher_name: "cline",
+        display_name: None,
+        tier: "approval-center",
+        summary: "Guard blocks Cline PreToolUse actions synchronously and routes review-required \
+                  actions through the local approval center.",
+        fallback: "Resolve the Guard request, then retry the exact Cline tool action.",
+        channel: "browser",
+        auto_open: true,
+        workspace_aibom: false,
         hook: Hook::None,
         install: Install::Plan,
         dynamic: false,
