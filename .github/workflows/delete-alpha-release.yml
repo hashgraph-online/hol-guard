@@ -1,9 +1,12 @@
 name: Delete alpha release
 
-# Retracts an optional test alpha cut from main. Deleting the prerelease and its
+# Withdraws a bad alpha cut from main. Deleting the prerelease and its
 # alpha/v<version> tag removes the Desktop Core sidecars and stops
 # `hol-guard update --alpha` and Desktop's Alpha channel from offering it.
-# PyPI never allows a version to be reused; yank it there by hand if needed.
+# The restore-alpha-feed job then makes sure the newest remaining main alpha
+# still carries signed Desktop Core sidecars, so the Alpha channel falls back to it.
+# PyPI never allows a version to be reused or yanked by a CI token; a PyPI owner
+# yanks it by hand. Runbook: docs/guard/alpha-rollback-runbook.md
 on:
   workflow_dispatch:
     inputs:
@@ -137,9 +140,130 @@ jobs:
         run: |
           {
             echo
-            echo "Guard and Desktop alpha updates no longer offer ${VERSION}."
+            echo "\`hol-guard update --alpha\` and Desktop's Alpha channel no longer offer ${VERSION}."
             echo
-            echo "PyPI keeps hol-guard ${VERSION} because published versions cannot be deleted or reused."
-            echo "pip and uv already skip it unless --pre is set. To hide it from explicit pins too, yank it at"
+            echo "PyPI keeps hol-guard ${VERSION} because published versions cannot be deleted or reused,"
+            echo "and trusted publishing cannot yank. Until a PyPI owner yanks it, \`pip install --pre\`,"
+            echo "\`uv pip install --prerelease=allow\`, \`pipx install --pip-args=--pre\` and the CLI's"
+            echo "Desktop Core updater still resolve it. Yank it now at"
             echo "https://pypi.org/manage/project/hol-guard/release/${VERSION}/"
+            echo "(Options > Yank, reason: withdrawn alpha). See docs/guard/alpha-rollback-runbook.md."
           } >>"$GITHUB_STEP_SUMMARY"
+
+  restore-alpha-feed:
+    name: Fall the Desktop Core alpha feed back to the last good alpha
+    needs: delete
+    if: github.repository == 'hashgraph-online/hol-guard'
+    runs-on: ubuntu-24.04
+    # Leaves room for a rate-limit retry to wait out one quota reset.
+    timeout-minutes: 75
+    permissions:
+      actions: write
+      contents: read
+    steps:
+      - name: Check out release API token tooling
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 1
+          persist-credentials: false
+          path: .release-api-token
+          sparse-checkout: .github/actions/release-api-token
+          sparse-checkout-cone-mode: false
+      - name: Route gh through the rate-limit retry wrapper
+        uses: ./.release-api-token/.github/actions/release-api-token
+
+      - name: Find the newest live main alpha
+        id: fallback
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          # Newest first; the retracted tag is already deleted, but exclude it in case of a rerun race.
+          candidates=$(git ls-remote --tags --refs "https://github.com/${GITHUB_REPOSITORY}.git" 'alpha/v*' \
+            | awk '{print $2}' | sed 's#^refs/tags/alpha/v##' \
+            | { grep -E '^[0-9]+\.[0-9]+\.0a[1-9][0-9]*$' || true; } | { grep -vxF "$VERSION" || true; } | sort -rV)
+          for candidate in $candidates; do
+            tag="alpha/v${candidate}"
+            if ! release=$(gh release view "$tag" --repo "$GITHUB_REPOSITORY" --json isPrerelease,isDraft \
+              --jq '"\(.isPrerelease) \(.isDraft)"' 2>/dev/null); then
+              continue
+            fi
+            [[ "$release" == "true false" ]] || continue
+            source_sha=$(gh api "repos/${GITHUB_REPOSITORY}/commits/tags/${tag}" --jq .sha)
+            status=$(gh api "repos/${GITHUB_REPOSITORY}/compare/${source_sha}...main" --jq .status)
+            [[ "$status" == "ahead" || "$status" == "identical" ]] || continue
+            {
+              echo "version=${candidate}"
+              echo "source_sha=${source_sha}"
+            } >>"$GITHUB_OUTPUT"
+            echo "- Alpha channel falls back to ${candidate} (${source_sha})" >>"$GITHUB_STEP_SUMMARY"
+            exit 0
+          done
+          echo "No live main alpha prerelease remains; ship a fix-forward alpha" >&2
+          echo "- No live main alpha remains to fall back to; ship a fix-forward alpha" >>"$GITHUB_STEP_SUMMARY"
+          exit 1
+
+      # Desktop's Alpha channel reads signed sidecars from the newest live prerelease, not PyPI.
+      # The feed workflows verify the publication run themselves, so a wrong run id is refused there.
+      - name: Dispatch missing Desktop Core sidecars for the fallback alpha
+        env:
+          GH_TOKEN: ${{ github.token }}
+          FALLBACK: ${{ steps.fallback.outputs.version }}
+          SOURCE_SHA: ${{ steps.fallback.outputs.source_sha }}
+        run: |
+          set -euo pipefail
+          tag="alpha/v${FALLBACK}"
+          assets=$(gh release view "$tag" --repo "$GITHUB_REPOSITORY" --json assets --jq '.assets[].name')
+          missing=()
+          for target in aarch64-apple-darwin x86_64-unknown-linux-gnu; do
+            if ! grep -qxF "hol-guard-core-${FALLBACK}-${target}.attested.json" <<<"$assets"; then
+              missing+=("$target")
+            fi
+          done
+          if [[ ${#missing[@]} -eq 0 ]]; then
+            echo "- ${tag} already carries signed macOS and Linux Core sidecars; nothing to dispatch" >>"$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          run_id=$(gh api "repos/${GITHUB_REPOSITORY}/actions/workflows/publish.yml/runs?event=workflow_dispatch&branch=main&status=success&head_sha=${SOURCE_SHA}&per_page=10" \
+            --jq '.workflow_runs[0].id // empty')
+          if [[ -z "$run_id" ]]; then
+            echo "No successful publish run for ${SOURCE_SHA}; dispatch the feeds by hand (see docs/guard/alpha-rollback-runbook.md)" >&2
+            exit 1
+          fi
+          for target in "${missing[@]}"; do
+            case "$target" in
+              aarch64-apple-darwin) feed=desktop-core-alpha-feed.yml ;;
+              x86_64-unknown-linux-gnu) feed=desktop-core-linux-feed.yml ;;
+            esac
+            gh workflow run "$feed" --repo "$GITHUB_REPOSITORY" --ref main -f "core_version=$FALLBACK" -f release_channel=alpha -f "publication_run_id=$run_id" -f "publication_source_sha=$SOURCE_SHA"
+            echo "- Dispatched ${feed} for ${FALLBACK} (publish run ${run_id}); watch it finish" >>"$GITHUB_STEP_SUMMARY"
+          done
+
+      - name: Report the PyPI yank state
+        env:
+          VERSION: ${{ inputs.version }}
+          FALLBACK: ${{ steps.fallback.outputs.version }}
+        run: |
+          set -euo pipefail
+          yanked() {
+            curl -fsS --max-time 20 "https://pypi.org/pypi/hol-guard/$1/json" \
+              | jq -r 'if (.urls | length) > 0 and all(.urls[]; .yanked) then "yanked" else "live" end' \
+              || echo "unknown"
+          }
+          bad=$(yanked "$VERSION")
+          good=$(yanked "$FALLBACK")
+          {
+            echo
+            echo "| Version | Role | PyPI |"
+            echo "| --- | --- | --- |"
+            echo "| ${VERSION} | withdrawn | ${bad} |"
+            echo "| ${FALLBACK} | fallback | ${good} |"
+          } >>"$GITHUB_STEP_SUMMARY"
+          if [[ "$bad" != "yanked" ]]; then
+            echo "::warning title=Yank ${VERSION} on PyPI::A PyPI owner must yank ${VERSION} by hand: https://pypi.org/manage/project/hol-guard/release/${VERSION}/"
+          fi
+          if [[ "$good" != "live" ]]; then
+            echo "::warning title=Fallback ${FALLBACK} is not live on PyPI::Desktop Core updates via the CLI skip yanked versions"
+          fi
