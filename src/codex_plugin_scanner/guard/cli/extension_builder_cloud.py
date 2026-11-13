@@ -122,7 +122,8 @@ def validate_cloud_pack(path: Path) -> dict[str, object]:
     report = tested.get("report")
     if tested.get("ok") is not True or not isinstance(report, dict):
         raise BuilderError("cloud_validate", f"The pack fixtures could not run: {refusal_text(tested)}.")
-    results = report.get("results") if isinstance(report.get("results"), list) else []
+    results = report.get("results")
+    results = results if isinstance(results, list) else []
     failures = [item for item in results if isinstance(item, dict) and not item.get("passed")]
     if failures:
         first = failures[0]

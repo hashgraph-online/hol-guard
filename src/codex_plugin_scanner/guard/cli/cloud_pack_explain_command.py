@@ -64,9 +64,10 @@ def _explain(args: argparse.Namespace) -> dict[str, object]:
 
 def _print(result: dict[str, object], stream: TextIO) -> None:
     print(f"{result.get('actionId')} ({result.get('providerId')}), effect {result.get('effect')}", file=stream)
-    facts = result.get("facts") if isinstance(result.get("facts"), dict) else {}
-    for key, value in facts.items():
+    facts = result.get("facts")
+    for key, value in (facts if isinstance(facts, dict) else {}).items():
         print(f"  {key}: {json.dumps(value, ensure_ascii=False)}", file=stream)
-    decisions = result.get("decisions") if isinstance(result.get("decisions"), dict) else {}
+    decisions = result.get("decisions")
+    decisions = decisions if isinstance(decisions, dict) else {}
     print("Default decision by preset: " + ", ".join(f"{k} {v}" for k, v in decisions.items()), file=stream)
     print("Workspace rules, capabilities and consent can still change the outcome.", file=stream)
