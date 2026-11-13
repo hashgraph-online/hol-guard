@@ -3,6 +3,11 @@
 //! allowed; the transcript itself, another name in the folder, another
 //! conversation's or another workspace's notes, a linked or multiply linked
 //! note, and the same write from any other harness keep their review.
+//!
+//! Cursor's spilled tool output, `agent-tools/<uuid>.txt` in the session's
+//! own project directory, is allowed the same way; other names there, another
+//! workspace's folder, a linked or executable file and other harnesses keep
+//! their review.
 #![cfg(unix)]
 
 use guard_command::pretool::evaluate_pre_tool_envelope_with_context;
@@ -14,6 +19,10 @@ use std::path::{Path, PathBuf};
 const OWN_CONVERSATION: &str = "5d0c3b9e-7a41-4c1f-9b2e-0f6a8d4c2e71";
 const OTHER_CONVERSATION: &str = "9e8d7c6b-5a49-4382-9170-6f5e4d3c2b1a";
 const LINKED_CONVERSATION: &str = "1f2e3d4c-5b6a-4978-8695-a4b3c2d1e0f9";
+const SPILLED: &str = "ebfc6863-95b8-4564-92fa-1902ecf9eca3";
+const EXECUTABLE: &str = "7a1939fa-2511-4b48-a2ce-8937c5060770";
+const LINKED: &str = "29be27e2-e1a1-415b-9c5f-2a3bb2e3a32c";
+const FRESH: &str = "a3ec1b86-1c21-4d9e-8cab-1cfc6defadb9";
 
 struct Fixture {
     root: PathBuf,
@@ -56,6 +65,22 @@ impl Fixture {
                 std::fs::write(transcripts.join(format!("{conversation}.jsonl")), "{}\n").unwrap();
             }
         }
+        for project in [&own, &other] {
+            std::fs::create_dir_all(project.join("agent-tools")).unwrap();
+        }
+        let tools = own.join("agent-tools");
+        std::fs::write(tools.join(format!("{SPILLED}.txt")), "earlier output\n").unwrap();
+        std::fs::write(tools.join(format!("{EXECUTABLE}.txt")), "#!/bin/sh\n").unwrap();
+        std::fs::set_permissions(
+            tools.join(format!("{EXECUTABLE}.txt")),
+            std::fs::Permissions::from_mode(0o755),
+        )
+        .unwrap();
+        std::os::unix::fs::symlink(
+            fixture.home.join("outside-note.md"),
+            tools.join(format!("{LINKED}.txt")),
+        )
+        .unwrap();
         let compaction = fixture.own_compaction();
         std::fs::create_dir_all(compaction.join("nested")).unwrap();
         std::fs::write(compaction.join("segment_001.md"), "# Run\n").unwrap();
@@ -182,6 +207,58 @@ fn other_compaction_targets_keep_review() {
     );
     for harness in ["claude-code", "codex", "zcode"] {
         let result = fixture.write(harness, &note, Some(OWN_CONVERSATION));
+        assert!(!allowed(&result), "{harness}: {}", result.reason_code);
+    }
+}
+
+#[test]
+fn cursor_writes_its_own_spilled_tool_output() {
+    let fixture = Fixture::new("spill");
+    let tools = fixture.project_dir(&fixture.workspace).join("agent-tools");
+    for name in [FRESH, SPILLED] {
+        let path = tools.join(format!("{name}.txt"));
+        for conversation in [Some(OWN_CONVERSATION), None] {
+            let result = fixture.write("cursor", &path, conversation);
+            assert!(allowed(&result), "{name}: {}", result.reason_code);
+            assert_eq!(result.reason_code, "native_exact_safe_file_write");
+        }
+    }
+}
+
+#[test]
+fn other_agent_tools_targets_keep_review() {
+    let fixture = Fixture::new("spill-negative");
+    let tools = fixture.project_dir(&fixture.workspace).join("agent-tools");
+    let other = fixture
+        .project_dir(&fixture.root.join("work").join("billing-api"))
+        .join("agent-tools")
+        .join(format!("{FRESH}.txt"));
+    for path in [
+        tools.join("notes.txt"),
+        tools.join(format!("{FRESH}.sh")),
+        tools.join(format!("{FRESH}.txt.sh")),
+        tools.join(format!(".{FRESH}.txt")),
+        tools.join(format!("nested/{FRESH}.txt")),
+        tools.join(format!("{EXECUTABLE}.txt")),
+        tools.join(format!("{LINKED}.txt")),
+        tools.join(format!("../agent-tools/{FRESH}.txt")),
+        tools
+            .with_file_name("terminals")
+            .join(format!("{FRESH}.txt")),
+        tools.with_file_name(format!("{FRESH}.txt")),
+        other,
+    ] {
+        let result = fixture.write("cursor", &path, Some(OWN_CONVERSATION));
+        assert!(
+            !allowed(&result),
+            "{}: {}",
+            path.display(),
+            result.reason_code
+        );
+    }
+    let fresh = tools.join(format!("{FRESH}.txt"));
+    for harness in ["claude-code", "codex", "zcode"] {
+        let result = fixture.write(harness, &fresh, Some(OWN_CONVERSATION));
         assert!(!allowed(&result), "{harness}: {}", result.reason_code);
     }
 }
