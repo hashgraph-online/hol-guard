@@ -56776,6 +56776,81 @@
       },
       "cwd": "worktree",
       "expect": "not_allow"
+    },
+    {
+      "id": "ls-linked-worktree-git-operation-state",
+      "fix_area": "read",
+      "harnesses": [
+        "codex",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "ls ${WORKTREE}/.git/index.lock 2>&1; ls ${WORKTREE}/.git/MERGE_HEAD 2>&1"
+      },
+      "cwd": "parent",
+      "expect": "allow"
+    },
+    {
+      "id": "test-linked-worktree-merge-head-in-admin-dir",
+      "fix_area": "read",
+      "harnesses": [
+        "codex",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "test -f ${PARENT}/.git/worktrees/parent-repo-feature/MERGE_HEAD && echo MERGE || echo NO_MERGE"
+      },
+      "cwd": "parent",
+      "expect": "allow"
+    },
+    {
+      "id": "check-linked-worktree-for-unfinished-merge",
+      "fix_area": "read",
+      "harnesses": [
+        "codex",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "test -f ${WORKTREE}/.git/MERGE_HEAD && echo MERGE_IN_PROGRESS || echo NO_MERGE; test -d ${WORKTREE}/.git && echo HAS_GIT; ls ${WORKTREE}/.git 2>/dev/null | head -5; ls ${WORKTREE} | head -20"
+      },
+      "cwd": "parent",
+      "expect": "allow"
+    },
+    {
+      "id": "neg-ls-through-ssh-key-file",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "ls ${HOME}/.ssh/id_rsa/config 2>&1"
+      },
+      "cwd": "parent",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-test-through-ssh-key-file",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "test -f ${HOME}/.ssh/id_rsa/config && echo yes || echo no"
+      },
+      "cwd": "parent",
+      "expect": "not_allow"
     }
   ],
   "mcp_cases": [

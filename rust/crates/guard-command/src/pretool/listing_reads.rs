@@ -161,9 +161,7 @@ pub(super) fn absent_listing_operand(value: &str, context: super::PathContext<'_
     let Some(expanded) = expanded_path(value, context) else {
         return false;
     };
-    if !std::fs::symlink_metadata(&expanded)
-        .is_err_and(|error| error.kind() == std::io::ErrorKind::NotFound)
-    {
+    if !std::fs::symlink_metadata(&expanded).is_err_and(|error| absent(&error)) {
         return false;
     }
     let mut missing: Vec<&std::ffi::OsStr> = Vec::new();
@@ -201,7 +199,7 @@ pub(super) fn absent_listing_operand(value: &str, context: super::PathContext<'_
                     && spelled
                     && (private_temporary || listable_ancestor(ancestor, context));
             }
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            Err(error) if absent(&error) => {
                 let Some(name) = ancestor.file_name() else {
                     return false;
                 };
@@ -211,6 +209,18 @@ pub(super) fn absent_listing_operand(value: &str, context: super::PathContext<'_
         }
     }
     false
+}
+
+/// Whether a lookup failed because the path is not there. A path that runs
+/// through a regular file, as `<worktree>/.git/index.lock` does where `.git`
+/// is a linked worktree's gitfile, fails with `Not a directory` and prints
+/// that error and nothing else, the same as a missing name. The walk still
+/// judges that file as the nearest existing ancestor.
+fn absent(error: &std::io::Error) -> bool {
+    matches!(
+        error.kind(),
+        std::io::ErrorKind::NotFound | std::io::ErrorKind::NotADirectory
+    )
 }
 
 /// The path an operand names, with `~` and a relative cwd resolved.
@@ -352,7 +362,10 @@ fn parent_steps_lead(value: &str) -> bool {
 
 /// The nearest existing ancestor must be a directory a listing may name. The
 /// kernel resolves `..` physically, so a spelling with parent steps is judged
-/// by its canonical directory, never by its lexical text.
+/// by its canonical directory, never by its lexical text. A repository's own
+/// hidden directory, such as `.git/worktrees/<name>` or a linked worktree's
+/// `.git` file, counts too: a listing of it is already allowed, so a probe for
+/// `index.lock` or `MERGE_HEAD` below it says no more than that listing.
 fn listable_ancestor(ancestor: &std::path::Path, context: super::PathContext<'_>) -> bool {
     let parent_steps = ancestor
         .components()
@@ -368,6 +381,12 @@ fn listable_ancestor(ancestor: &std::path::Path, context: super::PathContext<'_>
     resolved.to_str().is_some_and(|parent| {
         safe_reads::bounded_read_target(parent, context.home_dir, context.cwd, true)
             || (!parent_steps && search::skill_listing_root(parent, context, false))
+            || (!parent_steps
+                && super::read_paths::repository_hidden_directory(
+                    parent,
+                    context.home_dir,
+                    context.cwd,
+                ))
     })
 }
 
