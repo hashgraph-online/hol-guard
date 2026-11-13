@@ -171,6 +171,8 @@ fn recursive_removal_runs_in_the_sandbox_only_for_ignored_or_missing_targets() {
         "rm -rf dist src",
         "rm -rf *.egg-info",
         "npm run build && rm -rf dist",
+        // Perl's script can move source work into the ignored tree first.
+        "perl -i -e 'rename(q(src/a.ts), q(dist/a.ts))' && rm -rf dist",
         "cd src && rm -rf .",
         "rm -rf $DIR",
         "shred -u src/a.ts",

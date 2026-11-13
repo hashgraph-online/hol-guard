@@ -7,12 +7,11 @@
 //! and `sed -i` or `perl -i` is the same file edit an agent's own edit tool
 //! makes: the sandbox keeps all of them off the network, credentials, the home
 //! directory and `.git`, so this module accepts that uncertainty for those
-//! programs only. Sed file effects are bounded here; command_shape separately
-//! screens sed scripts so shell execution cannot hide behind containment.
-//! Perl's script runs inside the sandbox like any other perl program. A
+//! programs only. command_shape screens sed scripts so shell execution cannot
+//! hide behind containment; perl's runs in the sandbox like any perl. A
 //! recursive removal could still take uncommitted work with it, so each of its
 //! targets must be missing or ignored by Git, and it must run before any other
-//! command could create or move what it names.
+//! command, a perl script included, could create or move what it names.
 use super::super::git_session_probe::Probe;
 use super::PathContext;
 use crate::CanonicalCommandV1;
@@ -48,9 +47,8 @@ fn removal(model: &CanonicalCommandV1, index: usize) -> Option<(bool, Vec<&str>)
     if program == "sed" {
         return in_place_edit(&segment.arguments).then(|| (false, Vec::new()));
     }
-    // Perl runs its script in the sandbox whatever the switches, so only the
-    // in-place switch is read here; the reach check still holds every operand
-    // to the workspace.
+    // Perl runs its script in the sandbox whatever the switches; the reach
+    // check still holds every operand to the workspace.
     if program == "perl" {
         return (super::super::inplace_edit_reason::inplace_editor(segment) == Some("perl"))
             .then(|| (false, Vec::new()));
@@ -261,7 +259,9 @@ pub(super) fn loses_work(
         .segments
         .iter()
         .enumerate()
-        .position(|(index, _)| removal(model, index).is_none())
+        .position(|(index, segment)| {
+            removal(model, index).is_none() || segment.executable.as_deref() == Some("perl")
+        })
         .unwrap_or(model.segments.len());
     if removals.iter().any(|(index, _)| *index > first_other) {
         return true;
