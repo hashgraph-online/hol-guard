@@ -47,9 +47,32 @@
           {
             "name": "content",
             "value": {
-              "from": "content"
-            },
-            "untrusted": true
+              "list": {
+                "from": "content",
+                "maxItems": 256,
+                "fields": [
+                  {
+                    "name": "type",
+                    "value": {
+                      "from": "type"
+                    }
+                  },
+                  {
+                    "name": "text",
+                    "value": {
+                      "from": "text"
+                    },
+                    "untrusted": true
+                  }
+                ]
+              }
+            }
+          },
+          {
+            "name": "is_error",
+            "value": {
+              "from": "isError"
+            }
           }
         ]
       },
@@ -137,9 +160,32 @@
           {
             "name": "content",
             "value": {
-              "from": "content"
-            },
-            "untrusted": true
+              "list": {
+                "from": "content",
+                "maxItems": 256,
+                "fields": [
+                  {
+                    "name": "type",
+                    "value": {
+                      "from": "type"
+                    }
+                  },
+                  {
+                    "name": "text",
+                    "value": {
+                      "from": "text"
+                    },
+                    "untrusted": true
+                  }
+                ]
+              }
+            }
+          },
+          {
+            "name": "is_error",
+            "value": {
+              "from": "isError"
+            }
           }
         ]
       },
@@ -217,15 +263,6 @@
         "class": "update",
         "object": {
           "const": "file"
-        },
-        "scope": {
-          "const": "single"
-        },
-        "reversibility": {
-          "const": "reversible"
-        },
-        "recordCount": {
-          "const": 1
         }
       },
       "response": {
@@ -234,9 +271,32 @@
           {
             "name": "content",
             "value": {
-              "from": "content"
-            },
-            "untrusted": true
+              "list": {
+                "from": "content",
+                "maxItems": 256,
+                "fields": [
+                  {
+                    "name": "type",
+                    "value": {
+                      "from": "type"
+                    }
+                  },
+                  {
+                    "name": "text",
+                    "value": {
+                      "from": "text"
+                    },
+                    "untrusted": true
+                  }
+                ]
+              }
+            }
+          },
+          {
+            "name": "is_error",
+            "value": {
+              "from": "isError"
+            }
           }
         ]
       },
@@ -268,22 +328,32 @@
               "object": {
                 "state": "known",
                 "value": "file"
-              },
-              "scope": {
-                "state": "known",
-                "value": "single"
-              },
-              "reversibility": {
-                "state": "known",
-                "value": "reversible"
-              },
-              "record_count": {
-                "state": "known",
-                "value": 1
               }
             },
             "decisions": {
-              "balanced": "allow",
+              "balanced": "review",
+              "relaxed": "allow",
+              "strict": "review"
+            }
+          }
+        },
+        {
+          "name": "moves a file into a shared folder",
+          "kind": "risky",
+          "arguments": {
+            "file_id": "123",
+            "parent_folder_id": "987"
+          },
+          "expect": {
+            "facts": {
+              "class": "update",
+              "object": {
+                "state": "known",
+                "value": "file"
+              }
+            },
+            "decisions": {
+              "balanced": "review",
               "relaxed": "allow",
               "strict": "review"
             }
@@ -336,9 +406,32 @@
           {
             "name": "content",
             "value": {
-              "from": "content"
-            },
-            "untrusted": true
+              "list": {
+                "from": "content",
+                "maxItems": 256,
+                "fields": [
+                  {
+                    "name": "type",
+                    "value": {
+                      "from": "type"
+                    }
+                  },
+                  {
+                    "name": "text",
+                    "value": {
+                      "from": "text"
+                    },
+                    "untrusted": true
+                  }
+                ]
+              }
+            }
+          },
+          {
+            "name": "is_error",
+            "value": {
+              "from": "isError"
+            }
           }
         ]
       },
@@ -437,9 +530,32 @@
           {
             "name": "content",
             "value": {
-              "from": "content"
-            },
-            "untrusted": true
+              "list": {
+                "from": "content",
+                "maxItems": 256,
+                "fields": [
+                  {
+                    "name": "type",
+                    "value": {
+                      "from": "type"
+                    }
+                  },
+                  {
+                    "name": "text",
+                    "value": {
+                      "from": "text"
+                    },
+                    "untrusted": true
+                  }
+                ]
+              }
+            }
+          },
+          {
+            "name": "is_error",
+            "value": {
+              "from": "isError"
+            }
           }
         ]
       },
@@ -539,9 +655,32 @@
           {
             "name": "content",
             "value": {
-              "from": "content"
-            },
-            "untrusted": true
+              "list": {
+                "from": "content",
+                "maxItems": 256,
+                "fields": [
+                  {
+                    "name": "type",
+                    "value": {
+                      "from": "type"
+                    }
+                  },
+                  {
+                    "name": "text",
+                    "value": {
+                      "from": "text"
+                    },
+                    "untrusted": true
+                  }
+                ]
+              }
+            }
+          },
+          {
+            "name": "is_error",
+            "value": {
+              "from": "isError"
+            }
           }
         ]
       },
@@ -640,9 +779,32 @@
           {
             "name": "content",
             "value": {
-              "from": "content"
-            },
-            "untrusted": true
+              "list": {
+                "from": "content",
+                "maxItems": 256,
+                "fields": [
+                  {
+                    "name": "type",
+                    "value": {
+                      "from": "type"
+                    }
+                  },
+                  {
+                    "name": "text",
+                    "value": {
+                      "from": "text"
+                    },
+                    "untrusted": true
+                  }
+                ]
+              }
+            }
+          },
+          {
+            "name": "is_error",
+            "value": {
+              "from": "isError"
+            }
           }
         ]
       },
@@ -741,9 +903,32 @@
           {
             "name": "content",
             "value": {
-              "from": "content"
-            },
-            "untrusted": true
+              "list": {
+                "from": "content",
+                "maxItems": 256,
+                "fields": [
+                  {
+                    "name": "type",
+                    "value": {
+                      "from": "type"
+                    }
+                  },
+                  {
+                    "name": "text",
+                    "value": {
+                      "from": "text"
+                    },
+                    "untrusted": true
+                  }
+                ]
+              }
+            }
+          },
+          {
+            "name": "is_error",
+            "value": {
+              "from": "isError"
+            }
           }
         ]
       },
@@ -843,9 +1028,32 @@
           {
             "name": "content",
             "value": {
-              "from": "content"
-            },
-            "untrusted": true
+              "list": {
+                "from": "content",
+                "maxItems": 256,
+                "fields": [
+                  {
+                    "name": "type",
+                    "value": {
+                      "from": "type"
+                    }
+                  },
+                  {
+                    "name": "text",
+                    "value": {
+                      "from": "text"
+                    },
+                    "untrusted": true
+                  }
+                ]
+              }
+            }
+          },
+          {
+            "name": "is_error",
+            "value": {
+              "from": "isError"
+            }
           }
         ]
       },
@@ -941,9 +1149,32 @@
           {
             "name": "content",
             "value": {
-              "from": "content"
-            },
-            "untrusted": true
+              "list": {
+                "from": "content",
+                "maxItems": 256,
+                "fields": [
+                  {
+                    "name": "type",
+                    "value": {
+                      "from": "type"
+                    }
+                  },
+                  {
+                    "name": "text",
+                    "value": {
+                      "from": "text"
+                    },
+                    "untrusted": true
+                  }
+                ]
+              }
+            }
+          },
+          {
+            "name": "is_error",
+            "value": {
+              "from": "isError"
+            }
           }
         ]
       },

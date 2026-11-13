@@ -50,9 +50,32 @@
           {
             "name": "content",
             "value": {
-              "from": "content"
-            },
-            "untrusted": true
+              "list": {
+                "from": "content",
+                "maxItems": 256,
+                "fields": [
+                  {
+                    "name": "type",
+                    "value": {
+                      "from": "type"
+                    }
+                  },
+                  {
+                    "name": "text",
+                    "value": {
+                      "from": "text"
+                    },
+                    "untrusted": true
+                  }
+                ]
+              }
+            }
+          },
+          {
+            "name": "is_error",
+            "value": {
+              "from": "isError"
+            }
           }
         ]
       },
@@ -112,7 +135,7 @@
     },
     {
       "actionId": "stripe-mcp.stripe_api_search",
-      "title": "Search Stripe objects",
+      "title": "Search Stripe API methods",
       "link": {
         "tool": "stripe_api_search"
       },
@@ -139,9 +162,32 @@
           {
             "name": "content",
             "value": {
-              "from": "content"
-            },
-            "untrusted": true
+              "list": {
+                "from": "content",
+                "maxItems": 256,
+                "fields": [
+                  {
+                    "name": "type",
+                    "value": {
+                      "from": "type"
+                    }
+                  },
+                  {
+                    "name": "text",
+                    "value": {
+                      "from": "text"
+                    },
+                    "untrusted": true
+                  }
+                ]
+              }
+            }
+          },
+          {
+            "name": "is_error",
+            "value": {
+              "from": "isError"
+            }
           }
         ]
       },
@@ -164,7 +210,7 @@
           "name": "calls stripe_api_search",
           "kind": "safe",
           "arguments": {
-            "query": "email:'a@example.com'"
+            "query": "create a refund"
           },
           "expect": {
             "facts": {
@@ -199,7 +245,7 @@
     },
     {
       "actionId": "stripe-mcp.stripe_api_read",
-      "title": "Read a Stripe object",
+      "title": "Call a Stripe read method",
       "link": {
         "tool": "stripe_api_read"
       },
@@ -215,12 +261,6 @@
         "class": "read",
         "object": {
           "const": "record"
-        },
-        "scope": {
-          "const": "single"
-        },
-        "recordCount": {
-          "const": 1
         }
       },
       "response": {
@@ -229,9 +269,32 @@
           {
             "name": "content",
             "value": {
-              "from": "content"
-            },
-            "untrusted": true
+              "list": {
+                "from": "content",
+                "maxItems": 256,
+                "fields": [
+                  {
+                    "name": "type",
+                    "value": {
+                      "from": "type"
+                    }
+                  },
+                  {
+                    "name": "text",
+                    "value": {
+                      "from": "text"
+                    },
+                    "untrusted": true
+                  }
+                ]
+              }
+            }
+          },
+          {
+            "name": "is_error",
+            "value": {
+              "from": "isError"
+            }
           }
         ]
       },
@@ -262,14 +325,30 @@
               "object": {
                 "state": "known",
                 "value": "record"
-              },
-              "scope": {
+              }
+            },
+            "decisions": {
+              "balanced": "allow",
+              "relaxed": "allow",
+              "strict": "allow"
+            }
+          }
+        },
+        {
+          "name": "lists charges",
+          "kind": "risky",
+          "arguments": {
+            "method": "GET /v1/charges",
+            "params": {
+              "limit": 100
+            }
+          },
+          "expect": {
+            "facts": {
+              "class": "read",
+              "object": {
                 "state": "known",
-                "value": "single"
-              },
-              "record_count": {
-                "state": "known",
-                "value": 1
+                "value": "record"
               }
             },
             "decisions": {
@@ -323,9 +402,32 @@
           {
             "name": "content",
             "value": {
-              "from": "content"
-            },
-            "untrusted": true
+              "list": {
+                "from": "content",
+                "maxItems": 256,
+                "fields": [
+                  {
+                    "name": "type",
+                    "value": {
+                      "from": "type"
+                    }
+                  },
+                  {
+                    "name": "text",
+                    "value": {
+                      "from": "text"
+                    },
+                    "untrusted": true
+                  }
+                ]
+              }
+            }
+          },
+          {
+            "name": "is_error",
+            "value": {
+              "from": "isError"
+            }
           }
         ]
       },
@@ -418,9 +520,32 @@
           {
             "name": "content",
             "value": {
-              "from": "content"
-            },
-            "untrusted": true
+              "list": {
+                "from": "content",
+                "maxItems": 256,
+                "fields": [
+                  {
+                    "name": "type",
+                    "value": {
+                      "from": "type"
+                    }
+                  },
+                  {
+                    "name": "text",
+                    "value": {
+                      "from": "text"
+                    },
+                    "untrusted": true
+                  }
+                ]
+              }
+            }
+          },
+          {
+            "name": "is_error",
+            "value": {
+              "from": "isError"
+            }
           }
         ]
       },
@@ -520,9 +645,32 @@
           {
             "name": "content",
             "value": {
-              "from": "content"
-            },
-            "untrusted": true
+              "list": {
+                "from": "content",
+                "maxItems": 256,
+                "fields": [
+                  {
+                    "name": "type",
+                    "value": {
+                      "from": "type"
+                    }
+                  },
+                  {
+                    "name": "text",
+                    "value": {
+                      "from": "text"
+                    },
+                    "untrusted": true
+                  }
+                ]
+              }
+            }
+          },
+          {
+            "name": "is_error",
+            "value": {
+              "from": "isError"
+            }
           }
         ]
       },
@@ -622,9 +770,32 @@
           {
             "name": "content",
             "value": {
-              "from": "content"
-            },
-            "untrusted": true
+              "list": {
+                "from": "content",
+                "maxItems": 256,
+                "fields": [
+                  {
+                    "name": "type",
+                    "value": {
+                      "from": "type"
+                    }
+                  },
+                  {
+                    "name": "text",
+                    "value": {
+                      "from": "text"
+                    },
+                    "untrusted": true
+                  }
+                ]
+              }
+            }
+          },
+          {
+            "name": "is_error",
+            "value": {
+              "from": "isError"
+            }
           }
         ]
       },
@@ -725,9 +896,32 @@
           {
             "name": "content",
             "value": {
-              "from": "content"
-            },
-            "untrusted": true
+              "list": {
+                "from": "content",
+                "maxItems": 256,
+                "fields": [
+                  {
+                    "name": "type",
+                    "value": {
+                      "from": "type"
+                    }
+                  },
+                  {
+                    "name": "text",
+                    "value": {
+                      "from": "text"
+                    },
+                    "untrusted": true
+                  }
+                ]
+              }
+            }
+          },
+          {
+            "name": "is_error",
+            "value": {
+              "from": "isError"
+            }
           }
         ]
       },

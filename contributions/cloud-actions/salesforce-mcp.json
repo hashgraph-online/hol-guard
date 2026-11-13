@@ -52,9 +52,32 @@
           {
             "name": "content",
             "value": {
-              "from": "content"
-            },
-            "untrusted": true
+              "list": {
+                "from": "content",
+                "maxItems": 256,
+                "fields": [
+                  {
+                    "name": "type",
+                    "value": {
+                      "from": "type"
+                    }
+                  },
+                  {
+                    "name": "text",
+                    "value": {
+                      "from": "text"
+                    },
+                    "untrusted": true
+                  }
+                ]
+              }
+            }
+          },
+          {
+            "name": "is_error",
+            "value": {
+              "from": "isError"
+            }
           }
         ]
       },
@@ -165,9 +188,32 @@
           {
             "name": "content",
             "value": {
-              "from": "content"
-            },
-            "untrusted": true
+              "list": {
+                "from": "content",
+                "maxItems": 256,
+                "fields": [
+                  {
+                    "name": "type",
+                    "value": {
+                      "from": "type"
+                    }
+                  },
+                  {
+                    "name": "text",
+                    "value": {
+                      "from": "text"
+                    },
+                    "untrusted": true
+                  }
+                ]
+              }
+            }
+          },
+          {
+            "name": "is_error",
+            "value": {
+              "from": "isError"
+            }
           }
         ]
       },
@@ -253,9 +299,32 @@
           {
             "name": "content",
             "value": {
-              "from": "content"
-            },
-            "untrusted": true
+              "list": {
+                "from": "content",
+                "maxItems": 256,
+                "fields": [
+                  {
+                    "name": "type",
+                    "value": {
+                      "from": "type"
+                    }
+                  },
+                  {
+                    "name": "text",
+                    "value": {
+                      "from": "text"
+                    },
+                    "untrusted": true
+                  }
+                ]
+              }
+            }
+          },
+          {
+            "name": "is_error",
+            "value": {
+              "from": "isError"
+            }
           }
         ]
       },
@@ -341,9 +410,32 @@
           {
             "name": "content",
             "value": {
-              "from": "content"
-            },
-            "untrusted": true
+              "list": {
+                "from": "content",
+                "maxItems": 256,
+                "fields": [
+                  {
+                    "name": "type",
+                    "value": {
+                      "from": "type"
+                    }
+                  },
+                  {
+                    "name": "text",
+                    "value": {
+                      "from": "text"
+                    },
+                    "untrusted": true
+                  }
+                ]
+              }
+            }
+          },
+          {
+            "name": "is_error",
+            "value": {
+              "from": "isError"
+            }
           }
         ]
       },
@@ -434,9 +526,32 @@
           {
             "name": "content",
             "value": {
-              "from": "content"
-            },
-            "untrusted": true
+              "list": {
+                "from": "content",
+                "maxItems": 256,
+                "fields": [
+                  {
+                    "name": "type",
+                    "value": {
+                      "from": "type"
+                    }
+                  },
+                  {
+                    "name": "text",
+                    "value": {
+                      "from": "text"
+                    },
+                    "untrusted": true
+                  }
+                ]
+              }
+            }
+          },
+          {
+            "name": "is_error",
+            "value": {
+              "from": "isError"
+            }
           }
         ]
       },
@@ -537,9 +652,32 @@
           {
             "name": "content",
             "value": {
-              "from": "content"
-            },
-            "untrusted": true
+              "list": {
+                "from": "content",
+                "maxItems": 256,
+                "fields": [
+                  {
+                    "name": "type",
+                    "value": {
+                      "from": "type"
+                    }
+                  },
+                  {
+                    "name": "text",
+                    "value": {
+                      "from": "text"
+                    },
+                    "untrusted": true
+                  }
+                ]
+              }
+            }
+          },
+          {
+            "name": "is_error",
+            "value": {
+              "from": "isError"
+            }
           }
         ]
       },
@@ -643,9 +781,32 @@
           {
             "name": "content",
             "value": {
-              "from": "content"
-            },
-            "untrusted": true
+              "list": {
+                "from": "content",
+                "maxItems": 256,
+                "fields": [
+                  {
+                    "name": "type",
+                    "value": {
+                      "from": "type"
+                    }
+                  },
+                  {
+                    "name": "text",
+                    "value": {
+                      "from": "text"
+                    },
+                    "untrusted": true
+                  }
+                ]
+              }
+            }
+          },
+          {
+            "name": "is_error",
+            "value": {
+              "from": "isError"
+            }
           }
         ]
       },
@@ -766,9 +927,32 @@
           {
             "name": "content",
             "value": {
-              "from": "content"
-            },
-            "untrusted": true
+              "list": {
+                "from": "content",
+                "maxItems": 256,
+                "fields": [
+                  {
+                    "name": "type",
+                    "value": {
+                      "from": "type"
+                    }
+                  },
+                  {
+                    "name": "text",
+                    "value": {
+                      "from": "text"
+                    },
+                    "untrusted": true
+                  }
+                ]
+              }
+            }
+          },
+          {
+            "name": "is_error",
+            "value": {
+              "from": "isError"
+            }
           }
         ]
       },
@@ -883,9 +1067,32 @@
           {
             "name": "content",
             "value": {
-              "from": "content"
-            },
-            "untrusted": true
+              "list": {
+                "from": "content",
+                "maxItems": 256,
+                "fields": [
+                  {
+                    "name": "type",
+                    "value": {
+                      "from": "type"
+                    }
+                  },
+                  {
+                    "name": "text",
+                    "value": {
+                      "from": "text"
+                    },
+                    "untrusted": true
+                  }
+                ]
+              }
+            }
+          },
+          {
+            "name": "is_error",
+            "value": {
+              "from": "isError"
+            }
           }
         ]
       },

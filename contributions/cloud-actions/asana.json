@@ -47,9 +47,32 @@
           {
             "name": "content",
             "value": {
-              "from": "content"
-            },
-            "untrusted": true
+              "list": {
+                "from": "content",
+                "maxItems": 256,
+                "fields": [
+                  {
+                    "name": "type",
+                    "value": {
+                      "from": "type"
+                    }
+                  },
+                  {
+                    "name": "text",
+                    "value": {
+                      "from": "text"
+                    },
+                    "untrusted": true
+                  }
+                ]
+              }
+            }
+          },
+          {
+            "name": "is_error",
+            "value": {
+              "from": "isError"
+            }
           }
         ]
       },
@@ -138,9 +161,32 @@
           {
             "name": "content",
             "value": {
-              "from": "content"
-            },
-            "untrusted": true
+              "list": {
+                "from": "content",
+                "maxItems": 256,
+                "fields": [
+                  {
+                    "name": "type",
+                    "value": {
+                      "from": "type"
+                    }
+                  },
+                  {
+                    "name": "text",
+                    "value": {
+                      "from": "text"
+                    },
+                    "untrusted": true
+                  }
+                ]
+              }
+            }
+          },
+          {
+            "name": "is_error",
+            "value": {
+              "from": "isError"
+            }
           }
         ]
       },
@@ -229,9 +275,32 @@
           {
             "name": "content",
             "value": {
-              "from": "content"
-            },
-            "untrusted": true
+              "list": {
+                "from": "content",
+                "maxItems": 256,
+                "fields": [
+                  {
+                    "name": "type",
+                    "value": {
+                      "from": "type"
+                    }
+                  },
+                  {
+                    "name": "text",
+                    "value": {
+                      "from": "text"
+                    },
+                    "untrusted": true
+                  }
+                ]
+              }
+            }
+          },
+          {
+            "name": "is_error",
+            "value": {
+              "from": "isError"
+            }
           }
         ]
       },
@@ -316,9 +385,32 @@
           {
             "name": "content",
             "value": {
-              "from": "content"
-            },
-            "untrusted": true
+              "list": {
+                "from": "content",
+                "maxItems": 256,
+                "fields": [
+                  {
+                    "name": "type",
+                    "value": {
+                      "from": "type"
+                    }
+                  },
+                  {
+                    "name": "text",
+                    "value": {
+                      "from": "text"
+                    },
+                    "untrusted": true
+                  }
+                ]
+              }
+            }
+          },
+          {
+            "name": "is_error",
+            "value": {
+              "from": "isError"
+            }
           }
         ]
       },
@@ -406,9 +498,32 @@
           {
             "name": "content",
             "value": {
-              "from": "content"
-            },
-            "untrusted": true
+              "list": {
+                "from": "content",
+                "maxItems": 256,
+                "fields": [
+                  {
+                    "name": "type",
+                    "value": {
+                      "from": "type"
+                    }
+                  },
+                  {
+                    "name": "text",
+                    "value": {
+                      "from": "text"
+                    },
+                    "untrusted": true
+                  }
+                ]
+              }
+            }
+          },
+          {
+            "name": "is_error",
+            "value": {
+              "from": "isError"
+            }
           }
         ]
       },
@@ -504,9 +619,32 @@
           {
             "name": "content",
             "value": {
-              "from": "content"
-            },
-            "untrusted": true
+              "list": {
+                "from": "content",
+                "maxItems": 256,
+                "fields": [
+                  {
+                    "name": "type",
+                    "value": {
+                      "from": "type"
+                    }
+                  },
+                  {
+                    "name": "text",
+                    "value": {
+                      "from": "text"
+                    },
+                    "untrusted": true
+                  }
+                ]
+              }
+            }
+          },
+          {
+            "name": "is_error",
+            "value": {
+              "from": "isError"
+            }
           }
         ]
       },
@@ -590,14 +728,8 @@
         "object": {
           "const": "record"
         },
-        "scope": {
-          "const": "single"
-        },
         "reversibility": {
           "const": "reversible"
-        },
-        "recordCount": {
-          "const": 1
         }
       },
       "response": {
@@ -606,9 +738,32 @@
           {
             "name": "content",
             "value": {
-              "from": "content"
-            },
-            "untrusted": true
+              "list": {
+                "from": "content",
+                "maxItems": 256,
+                "fields": [
+                  {
+                    "name": "type",
+                    "value": {
+                      "from": "type"
+                    }
+                  },
+                  {
+                    "name": "text",
+                    "value": {
+                      "from": "text"
+                    },
+                    "untrusted": true
+                  }
+                ]
+              }
+            }
+          },
+          {
+            "name": "is_error",
+            "value": {
+              "from": "isError"
+            }
           }
         ]
       },
@@ -640,21 +795,46 @@
                 "state": "known",
                 "value": "record"
               },
-              "scope": {
+              "reversibility": {
                 "state": "known",
-                "value": "single"
+                "value": "reversible"
+              }
+            },
+            "decisions": {
+              "balanced": "review",
+              "relaxed": "allow",
+              "strict": "review"
+            }
+          }
+        },
+        {
+          "name": "creates a project with tasks",
+          "kind": "risky",
+          "arguments": {
+            "name": "Launch",
+            "tasks": [
+              {
+                "name": "Draft"
+              },
+              {
+                "name": "Review"
+              }
+            ]
+          },
+          "expect": {
+            "facts": {
+              "class": "update",
+              "object": {
+                "state": "known",
+                "value": "record"
               },
               "reversibility": {
                 "state": "known",
                 "value": "reversible"
-              },
-              "record_count": {
-                "state": "known",
-                "value": 1
               }
             },
             "decisions": {
-              "balanced": "allow",
+              "balanced": "review",
               "relaxed": "allow",
               "strict": "review"
             }
@@ -690,15 +870,6 @@
         "class": "update",
         "object": {
           "const": "record"
-        },
-        "scope": {
-          "const": "single"
-        },
-        "reversibility": {
-          "const": "reversible"
-        },
-        "recordCount": {
-          "const": 1
         }
       },
       "response": {
@@ -707,9 +878,32 @@
           {
             "name": "content",
             "value": {
-              "from": "content"
-            },
-            "untrusted": true
+              "list": {
+                "from": "content",
+                "maxItems": 256,
+                "fields": [
+                  {
+                    "name": "type",
+                    "value": {
+                      "from": "type"
+                    }
+                  },
+                  {
+                    "name": "text",
+                    "value": {
+                      "from": "text"
+                    },
+                    "untrusted": true
+                  }
+                ]
+              }
+            }
+          },
+          {
+            "name": "is_error",
+            "value": {
+              "from": "isError"
+            }
           }
         ]
       },
@@ -741,22 +935,35 @@
               "object": {
                 "state": "known",
                 "value": "record"
-              },
-              "scope": {
-                "state": "known",
-                "value": "single"
-              },
-              "reversibility": {
-                "state": "known",
-                "value": "reversible"
-              },
-              "record_count": {
-                "state": "known",
-                "value": 1
               }
             },
             "decisions": {
-              "balanced": "allow",
+              "balanced": "review",
+              "relaxed": "allow",
+              "strict": "review"
+            }
+          }
+        },
+        {
+          "name": "makes a project public and adds members",
+          "kind": "risky",
+          "arguments": {
+            "project_gid": "1201",
+            "public": true,
+            "members": [
+              "1301"
+            ]
+          },
+          "expect": {
+            "facts": {
+              "class": "update",
+              "object": {
+                "state": "known",
+                "value": "record"
+              }
+            },
+            "decisions": {
+              "balanced": "review",
               "relaxed": "allow",
               "strict": "review"
             }
@@ -806,9 +1013,32 @@
           {
             "name": "content",
             "value": {
-              "from": "content"
-            },
-            "untrusted": true
+              "list": {
+                "from": "content",
+                "maxItems": 256,
+                "fields": [
+                  {
+                    "name": "type",
+                    "value": {
+                      "from": "type"
+                    }
+                  },
+                  {
+                    "name": "text",
+                    "value": {
+                      "from": "text"
+                    },
+                    "untrusted": true
+                  }
+                ]
+              }
+            }
+          },
+          {
+            "name": "is_error",
+            "value": {
+              "from": "isError"
+            }
           }
         ]
       },
@@ -898,9 +1128,32 @@
           {
             "name": "content",
             "value": {
-              "from": "content"
-            },
-            "untrusted": true
+              "list": {
+                "from": "content",
+                "maxItems": 256,
+                "fields": [
+                  {
+                    "name": "type",
+                    "value": {
+                      "from": "type"
+                    }
+                  },
+                  {
+                    "name": "text",
+                    "value": {
+                      "from": "text"
+                    },
+                    "untrusted": true
+                  }
+                ]
+              }
+            }
+          },
+          {
+            "name": "is_error",
+            "value": {
+              "from": "isError"
+            }
           }
         ]
       },

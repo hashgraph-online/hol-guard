@@ -14,10 +14,13 @@
   "auth": {
     "mode": "oauth2",
     "scopes": [
-      "read:jira-work",
-      "write:jira-work",
-      "read:confluence-content.all",
-      "write:confluence-content"
+      "read:jira:agent-interface",
+      "search:jira:agent-interface",
+      "write:jira:agent-interface",
+      "delete:jira:agent-interface",
+      "read:confluence:agent-interface",
+      "write:confluence:agent-interface",
+      "write:bitbucket:agent-interface"
     ]
   },
   "actions": [
@@ -53,9 +56,32 @@
           {
             "name": "content",
             "value": {
-              "from": "content"
-            },
-            "untrusted": true
+              "list": {
+                "from": "content",
+                "maxItems": 256,
+                "fields": [
+                  {
+                    "name": "type",
+                    "value": {
+                      "from": "type"
+                    }
+                  },
+                  {
+                    "name": "text",
+                    "value": {
+                      "from": "text"
+                    },
+                    "untrusted": true
+                  }
+                ]
+              }
+            }
+          },
+          {
+            "name": "is_error",
+            "value": {
+              "from": "isError"
+            }
           }
         ]
       },
@@ -67,10 +93,7 @@
         ],
         "idempotency": "safe-read",
         "scopes": [
-          "read:jira-work",
-          "write:jira-work",
-          "read:confluence-content.all",
-          "write:confluence-content"
+          "read:jira:agent-interface"
         ],
         "maxItems": 1,
         "minIntervalMs": 500,
@@ -148,9 +171,32 @@
           {
             "name": "content",
             "value": {
-              "from": "content"
-            },
-            "untrusted": true
+              "list": {
+                "from": "content",
+                "maxItems": 256,
+                "fields": [
+                  {
+                    "name": "type",
+                    "value": {
+                      "from": "type"
+                    }
+                  },
+                  {
+                    "name": "text",
+                    "value": {
+                      "from": "text"
+                    },
+                    "untrusted": true
+                  }
+                ]
+              }
+            }
+          },
+          {
+            "name": "is_error",
+            "value": {
+              "from": "isError"
+            }
           }
         ]
       },
@@ -162,10 +208,7 @@
         ],
         "idempotency": "safe-read",
         "scopes": [
-          "read:jira-work",
-          "write:jira-work",
-          "read:confluence-content.all",
-          "write:confluence-content"
+          "search:jira:agent-interface"
         ],
         "maxItems": 1,
         "minIntervalMs": 500,
@@ -245,9 +288,32 @@
           {
             "name": "content",
             "value": {
-              "from": "content"
-            },
-            "untrusted": true
+              "list": {
+                "from": "content",
+                "maxItems": 256,
+                "fields": [
+                  {
+                    "name": "type",
+                    "value": {
+                      "from": "type"
+                    }
+                  },
+                  {
+                    "name": "text",
+                    "value": {
+                      "from": "text"
+                    },
+                    "untrusted": true
+                  }
+                ]
+              }
+            }
+          },
+          {
+            "name": "is_error",
+            "value": {
+              "from": "isError"
+            }
           }
         ]
       },
@@ -259,10 +325,7 @@
         ],
         "idempotency": "none",
         "scopes": [
-          "read:jira-work",
-          "write:jira-work",
-          "read:confluence-content.all",
-          "write:confluence-content"
+          "write:jira:agent-interface"
         ],
         "maxItems": 1,
         "minIntervalMs": 1000,
@@ -351,9 +414,32 @@
           {
             "name": "content",
             "value": {
-              "from": "content"
-            },
-            "untrusted": true
+              "list": {
+                "from": "content",
+                "maxItems": 256,
+                "fields": [
+                  {
+                    "name": "type",
+                    "value": {
+                      "from": "type"
+                    }
+                  },
+                  {
+                    "name": "text",
+                    "value": {
+                      "from": "text"
+                    },
+                    "untrusted": true
+                  }
+                ]
+              }
+            }
+          },
+          {
+            "name": "is_error",
+            "value": {
+              "from": "isError"
+            }
           }
         ]
       },
@@ -365,10 +451,7 @@
         ],
         "idempotency": "none",
         "scopes": [
-          "read:jira-work",
-          "write:jira-work",
-          "read:confluence-content.all",
-          "write:confluence-content"
+          "write:jira:agent-interface"
         ],
         "maxItems": 1,
         "minIntervalMs": 1000,
@@ -456,9 +539,32 @@
           {
             "name": "content",
             "value": {
-              "from": "content"
-            },
-            "untrusted": true
+              "list": {
+                "from": "content",
+                "maxItems": 256,
+                "fields": [
+                  {
+                    "name": "type",
+                    "value": {
+                      "from": "type"
+                    }
+                  },
+                  {
+                    "name": "text",
+                    "value": {
+                      "from": "text"
+                    },
+                    "untrusted": true
+                  }
+                ]
+              }
+            }
+          },
+          {
+            "name": "is_error",
+            "value": {
+              "from": "isError"
+            }
           }
         ]
       },
@@ -470,10 +576,7 @@
         ],
         "idempotency": "none",
         "scopes": [
-          "read:jira-work",
-          "write:jira-work",
-          "read:confluence-content.all",
-          "write:confluence-content"
+          "write:jira:agent-interface"
         ],
         "maxItems": 1,
         "minIntervalMs": 1000,
@@ -558,9 +661,32 @@
           {
             "name": "content",
             "value": {
-              "from": "content"
-            },
-            "untrusted": true
+              "list": {
+                "from": "content",
+                "maxItems": 256,
+                "fields": [
+                  {
+                    "name": "type",
+                    "value": {
+                      "from": "type"
+                    }
+                  },
+                  {
+                    "name": "text",
+                    "value": {
+                      "from": "text"
+                    },
+                    "untrusted": true
+                  }
+                ]
+              }
+            }
+          },
+          {
+            "name": "is_error",
+            "value": {
+              "from": "isError"
+            }
           }
         ]
       },
@@ -572,10 +698,7 @@
         ],
         "idempotency": "none",
         "scopes": [
-          "read:jira-work",
-          "write:jira-work",
-          "read:confluence-content.all",
-          "write:confluence-content"
+          "write:jira:agent-interface"
         ],
         "maxItems": 1,
         "minIntervalMs": 1000,
@@ -654,9 +777,32 @@
           {
             "name": "content",
             "value": {
-              "from": "content"
-            },
-            "untrusted": true
+              "list": {
+                "from": "content",
+                "maxItems": 256,
+                "fields": [
+                  {
+                    "name": "type",
+                    "value": {
+                      "from": "type"
+                    }
+                  },
+                  {
+                    "name": "text",
+                    "value": {
+                      "from": "text"
+                    },
+                    "untrusted": true
+                  }
+                ]
+              }
+            }
+          },
+          {
+            "name": "is_error",
+            "value": {
+              "from": "isError"
+            }
           }
         ]
       },
@@ -668,10 +814,7 @@
         ],
         "idempotency": "none",
         "scopes": [
-          "read:jira-work",
-          "write:jira-work",
-          "read:confluence-content.all",
-          "write:confluence-content"
+          "delete:jira:agent-interface"
         ],
         "maxItems": 1,
         "minIntervalMs": 1000,
@@ -751,9 +894,32 @@
           {
             "name": "content",
             "value": {
-              "from": "content"
-            },
-            "untrusted": true
+              "list": {
+                "from": "content",
+                "maxItems": 256,
+                "fields": [
+                  {
+                    "name": "type",
+                    "value": {
+                      "from": "type"
+                    }
+                  },
+                  {
+                    "name": "text",
+                    "value": {
+                      "from": "text"
+                    },
+                    "untrusted": true
+                  }
+                ]
+              }
+            }
+          },
+          {
+            "name": "is_error",
+            "value": {
+              "from": "isError"
+            }
           }
         ]
       },
@@ -765,10 +931,7 @@
         ],
         "idempotency": "none",
         "scopes": [
-          "read:jira-work",
-          "write:jira-work",
-          "read:confluence-content.all",
-          "write:confluence-content"
+          "delete:jira:agent-interface"
         ],
         "maxItems": 1,
         "minIntervalMs": 1000,
@@ -857,9 +1020,32 @@
           {
             "name": "content",
             "value": {
-              "from": "content"
-            },
-            "untrusted": true
+              "list": {
+                "from": "content",
+                "maxItems": 256,
+                "fields": [
+                  {
+                    "name": "type",
+                    "value": {
+                      "from": "type"
+                    }
+                  },
+                  {
+                    "name": "text",
+                    "value": {
+                      "from": "text"
+                    },
+                    "untrusted": true
+                  }
+                ]
+              }
+            }
+          },
+          {
+            "name": "is_error",
+            "value": {
+              "from": "isError"
+            }
           }
         ]
       },
@@ -871,10 +1057,7 @@
         ],
         "idempotency": "none",
         "scopes": [
-          "read:jira-work",
-          "write:jira-work",
-          "read:confluence-content.all",
-          "write:confluence-content"
+          "delete:jira:agent-interface"
         ],
         "maxItems": 1,
         "minIntervalMs": 1000,
@@ -928,14 +1111,14 @@
       ]
     },
     {
-      "actionId": "atlassian.getconfluencepage",
-      "title": "Read a Confluence page",
+      "actionId": "atlassian.getconfluencecontent",
+      "title": "Read a Confluence page or blog post",
       "link": {
-        "tool": "getConfluencePage"
+        "tool": "getConfluenceContent"
       },
       "executor": {
         "kind": "remote-mcp",
-        "tool": "getConfluencePage"
+        "tool": "getConfluenceContent"
       },
       "arguments": {},
       "openArguments": {
@@ -959,9 +1142,32 @@
           {
             "name": "content",
             "value": {
-              "from": "content"
-            },
-            "untrusted": true
+              "list": {
+                "from": "content",
+                "maxItems": 256,
+                "fields": [
+                  {
+                    "name": "type",
+                    "value": {
+                      "from": "type"
+                    }
+                  },
+                  {
+                    "name": "text",
+                    "value": {
+                      "from": "text"
+                    },
+                    "untrusted": true
+                  }
+                ]
+              }
+            }
+          },
+          {
+            "name": "is_error",
+            "value": {
+              "from": "isError"
+            }
           }
         ]
       },
@@ -973,10 +1179,7 @@
         ],
         "idempotency": "safe-read",
         "scopes": [
-          "read:jira-work",
-          "write:jira-work",
-          "read:confluence-content.all",
-          "write:confluence-content"
+          "read:confluence:agent-interface"
         ],
         "maxItems": 1,
         "minIntervalMs": 500,
@@ -984,11 +1187,11 @@
       },
       "fixtures": [
         {
-          "name": "calls getConfluencePage",
+          "name": "calls getConfluenceContent",
           "kind": "safe",
           "arguments": {
             "cloudId": "c1",
-            "pageId": "123"
+            "contentId": "123"
           },
           "expect": {
             "facts": {
@@ -1060,9 +1263,32 @@
           {
             "name": "content",
             "value": {
-              "from": "content"
-            },
-            "untrusted": true
+              "list": {
+                "from": "content",
+                "maxItems": 256,
+                "fields": [
+                  {
+                    "name": "type",
+                    "value": {
+                      "from": "type"
+                    }
+                  },
+                  {
+                    "name": "text",
+                    "value": {
+                      "from": "text"
+                    },
+                    "untrusted": true
+                  }
+                ]
+              }
+            }
+          },
+          {
+            "name": "is_error",
+            "value": {
+              "from": "isError"
+            }
           }
         ]
       },
@@ -1074,10 +1300,7 @@
         ],
         "idempotency": "none",
         "scopes": [
-          "read:jira-work",
-          "write:jira-work",
-          "read:confluence-content.all",
-          "write:confluence-content"
+          "write:confluence:agent-interface"
         ],
         "maxItems": 1,
         "minIntervalMs": 1000,
@@ -1166,9 +1389,32 @@
           {
             "name": "content",
             "value": {
-              "from": "content"
-            },
-            "untrusted": true
+              "list": {
+                "from": "content",
+                "maxItems": 256,
+                "fields": [
+                  {
+                    "name": "type",
+                    "value": {
+                      "from": "type"
+                    }
+                  },
+                  {
+                    "name": "text",
+                    "value": {
+                      "from": "text"
+                    },
+                    "untrusted": true
+                  }
+                ]
+              }
+            }
+          },
+          {
+            "name": "is_error",
+            "value": {
+              "from": "isError"
+            }
           }
         ]
       },
@@ -1180,10 +1426,7 @@
         ],
         "idempotency": "none",
         "scopes": [
-          "read:jira-work",
-          "write:jira-work",
-          "read:confluence-content.all",
-          "write:confluence-content"
+          "write:confluence:agent-interface"
         ],
         "maxItems": 1,
         "minIntervalMs": 1000,
@@ -1271,9 +1514,32 @@
           {
             "name": "content",
             "value": {
-              "from": "content"
-            },
-            "untrusted": true
+              "list": {
+                "from": "content",
+                "maxItems": 256,
+                "fields": [
+                  {
+                    "name": "type",
+                    "value": {
+                      "from": "type"
+                    }
+                  },
+                  {
+                    "name": "text",
+                    "value": {
+                      "from": "text"
+                    },
+                    "untrusted": true
+                  }
+                ]
+              }
+            }
+          },
+          {
+            "name": "is_error",
+            "value": {
+              "from": "isError"
+            }
           }
         ]
       },
@@ -1285,10 +1551,7 @@
         ],
         "idempotency": "none",
         "scopes": [
-          "read:jira-work",
-          "write:jira-work",
-          "read:confluence-content.all",
-          "write:confluence-content"
+          "write:confluence:agent-interface"
         ],
         "maxItems": 1,
         "minIntervalMs": 1000,
@@ -1376,9 +1639,32 @@
           {
             "name": "content",
             "value": {
-              "from": "content"
-            },
-            "untrusted": true
+              "list": {
+                "from": "content",
+                "maxItems": 256,
+                "fields": [
+                  {
+                    "name": "type",
+                    "value": {
+                      "from": "type"
+                    }
+                  },
+                  {
+                    "name": "text",
+                    "value": {
+                      "from": "text"
+                    },
+                    "untrusted": true
+                  }
+                ]
+              }
+            }
+          },
+          {
+            "name": "is_error",
+            "value": {
+              "from": "isError"
+            }
           }
         ]
       },
@@ -1390,10 +1676,7 @@
         ],
         "idempotency": "none",
         "scopes": [
-          "read:jira-work",
-          "write:jira-work",
-          "read:confluence-content.all",
-          "write:confluence-content"
+          "write:confluence:agent-interface"
         ],
         "maxItems": 1,
         "minIntervalMs": 1000,
@@ -1481,9 +1764,32 @@
           {
             "name": "content",
             "value": {
-              "from": "content"
-            },
-            "untrusted": true
+              "list": {
+                "from": "content",
+                "maxItems": 256,
+                "fields": [
+                  {
+                    "name": "type",
+                    "value": {
+                      "from": "type"
+                    }
+                  },
+                  {
+                    "name": "text",
+                    "value": {
+                      "from": "text"
+                    },
+                    "untrusted": true
+                  }
+                ]
+              }
+            }
+          },
+          {
+            "name": "is_error",
+            "value": {
+              "from": "isError"
+            }
           }
         ]
       },
@@ -1495,10 +1801,7 @@
         ],
         "idempotency": "none",
         "scopes": [
-          "read:jira-work",
-          "write:jira-work",
-          "read:confluence-content.all",
-          "write:confluence-content"
+          "write:confluence:agent-interface"
         ],
         "maxItems": 1,
         "minIntervalMs": 1000,
@@ -1586,9 +1889,32 @@
           {
             "name": "content",
             "value": {
-              "from": "content"
-            },
-            "untrusted": true
+              "list": {
+                "from": "content",
+                "maxItems": 256,
+                "fields": [
+                  {
+                    "name": "type",
+                    "value": {
+                      "from": "type"
+                    }
+                  },
+                  {
+                    "name": "text",
+                    "value": {
+                      "from": "text"
+                    },
+                    "untrusted": true
+                  }
+                ]
+              }
+            }
+          },
+          {
+            "name": "is_error",
+            "value": {
+              "from": "isError"
+            }
           }
         ]
       },
@@ -1600,10 +1926,7 @@
         ],
         "idempotency": "none",
         "scopes": [
-          "read:jira-work",
-          "write:jira-work",
-          "read:confluence-content.all",
-          "write:confluence-content"
+          "write:bitbucket:agent-interface"
         ],
         "maxItems": 1,
         "minIntervalMs": 1000,

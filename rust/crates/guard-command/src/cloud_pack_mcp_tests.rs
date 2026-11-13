@@ -206,3 +206,31 @@ fn removing_an_argument_under_open_arguments_widens_a_pack() {
             .widening
     );
 }
+
+#[test]
+fn an_mcp_result_keeps_its_content_blocks_and_error_flag() {
+    let pack = parsed(
+        serde_json::from_str(include_str!(
+            "../../../../contributions/cloud-actions/asana.json"
+        ))
+        .unwrap(),
+    );
+    let action = pack
+        .actions
+        .iter()
+        .find(|action| action.action_id == "asana.get_task")
+        .unwrap();
+    let body = json!({
+        "content": [{"type": "text", "text": "Task created"}],
+        "isError": true,
+    });
+    let projection =
+        crate::cloud_pack_response::project(action, body.to_string().as_bytes()).unwrap();
+    assert_eq!(
+        projection.data,
+        json!({"content": [{"type": "text", "text": "Task created"}], "is_error": true})
+    );
+    assert_eq!(projection.labels.len(), 1);
+    assert_eq!(projection.labels[0].pointer, "/content/0/text");
+    assert!(projection.labels[0].untrusted);
+}
