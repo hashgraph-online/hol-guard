@@ -5,8 +5,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from codex_plugin_scanner.guard.adapters import get_adapter
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
-from codex_plugin_scanner.guard.adapters.gemini import GeminiHarnessAdapter
 
 
 def _ctx(tmp_path: Path, *, workspace: bool = False) -> HarnessContext:
@@ -32,13 +32,13 @@ def _write_text(path: Path, content: str) -> None:
 
 class TestGeminiAdapterIdentity:
     def test_harness_identifier_is_gemini(self) -> None:
-        assert GeminiHarnessAdapter.harness == "gemini"
+        assert get_adapter("gemini").harness == "gemini"
 
     def test_executable_is_gemini(self) -> None:
-        assert GeminiHarnessAdapter.executable == "gemini"
+        assert get_adapter("gemini").executable == "gemini"
 
     def test_approval_tier_is_approval_center(self) -> None:
-        assert GeminiHarnessAdapter.approval_tier == "approval-center"
+        assert get_adapter("gemini").approval_flow()["tier"] == "approval-center"
 
 
 class TestGeminiPolicyPath:
@@ -46,18 +46,18 @@ class TestGeminiPolicyPath:
         ctx = _ctx(tmp_path, workspace=True)
         assert ctx.workspace_dir is not None
         expected = ctx.workspace_dir / ".gemini" / "settings.json"
-        assert GeminiHarnessAdapter().policy_path(ctx) == expected
+        assert get_adapter("gemini").policy_path(ctx) == expected
 
     def test_policy_path_falls_back_to_home_without_workspace(self, tmp_path: Path) -> None:
         ctx = _ctx(tmp_path, workspace=False)
         expected = (tmp_path / "home") / ".gemini" / "settings.json"
-        assert GeminiHarnessAdapter().policy_path(ctx) == expected
+        assert get_adapter("gemini").policy_path(ctx) == expected
 
 
 class TestGeminiDetectEmptyConfig:
     def test_empty_dir_returns_no_artifacts(self, tmp_path: Path) -> None:
         ctx = _ctx(tmp_path)
-        result = GeminiHarnessAdapter().detect(ctx)
+        result = get_adapter("gemini").detect(ctx)
         assert result.harness == "gemini"
         assert result.artifacts == ()
         assert result.config_paths == ()
@@ -65,7 +65,7 @@ class TestGeminiDetectEmptyConfig:
     def test_empty_settings_json_yields_no_artifacts(self, tmp_path: Path) -> None:
         ctx = _ctx(tmp_path)
         _write_json(ctx.home_dir / ".gemini" / "settings.json", {})
-        result = GeminiHarnessAdapter().detect(ctx)
+        result = get_adapter("gemini").detect(ctx)
         assert result.artifacts == ()
 
 
@@ -76,7 +76,7 @@ class TestGeminiMCPFromSettings:
             ctx.home_dir / ".gemini" / "settings.json",
             {"mcpServers": {"my-server": {"command": "node", "args": ["server.js"]}}},
         )
-        result = GeminiHarnessAdapter().detect(ctx)
+        result = get_adapter("gemini").detect(ctx)
         ids = [a.artifact_id for a in result.artifacts]
         assert "gemini:global:mcp:my-server" in ids
 
@@ -86,7 +86,7 @@ class TestGeminiMCPFromSettings:
             ctx.home_dir / ".gemini" / "settings.json",
             {"mcpServers": {"tools": {"command": "npx", "args": ["-y", "tools-server"]}}},
         )
-        result = GeminiHarnessAdapter().detect(ctx)
+        result = get_adapter("gemini").detect(ctx)
         art = result.artifacts[0]
         assert art.name == "tools"
         assert art.artifact_type == "mcp_server"
@@ -100,7 +100,7 @@ class TestGeminiMCPFromSettings:
             ctx.home_dir / ".gemini" / "settings.json",
             {"mcpServers": {"remote": {"url": "http://localhost:8080/mcp"}}},
         )
-        result = GeminiHarnessAdapter().detect(ctx)
+        result = get_adapter("gemini").detect(ctx)
         art = result.artifacts[0]
         assert art.transport == "http"
         assert art.url == "http://localhost:8080/mcp"
@@ -117,7 +117,7 @@ class TestGeminiMCPFromSettings:
                 }
             },
         )
-        result = GeminiHarnessAdapter().detect(ctx)
+        result = get_adapter("gemini").detect(ctx)
         ids = {a.artifact_id for a in result.artifacts if a.artifact_type == "mcp_server"}
         assert ids == {"gemini:global:mcp:a", "gemini:global:mcp:b", "gemini:global:mcp:c"}
 
@@ -125,7 +125,7 @@ class TestGeminiMCPFromSettings:
         ctx = _ctx(tmp_path)
         config = ctx.home_dir / ".gemini" / "settings.json"
         _write_json(config, {"mcpServers": {"s": {"command": "x"}}})
-        result = GeminiHarnessAdapter().detect(ctx)
+        result = get_adapter("gemini").detect(ctx)
         assert str(config) in result.config_paths
 
 
@@ -136,7 +136,7 @@ class TestGeminiHookDetection:
             ctx.home_dir / ".gemini" / "settings.json",
             {"hooks": {"PreToolUse": [{"hooks": [{"type": "command", "command": "python hook.py"}]}]}},
         )
-        result = GeminiHarnessAdapter().detect(ctx)
+        result = get_adapter("gemini").detect(ctx)
         hook_artifacts = [a for a in result.artifacts if a.artifact_type == "hook"]
         assert len(hook_artifacts) == 1
         assert hook_artifacts[0].artifact_id == "gemini:global:hook:pretooluse:0"
@@ -147,7 +147,7 @@ class TestGeminiHookDetection:
             ctx.home_dir / ".gemini" / "settings.json",
             {"hooks": {"PreToolUse": [{"hooks": [{"type": "command", "command": "guard-hook.sh"}]}]}},
         )
-        result = GeminiHarnessAdapter().detect(ctx)
+        result = get_adapter("gemini").detect(ctx)
         hook = next(a for a in result.artifacts if a.artifact_type == "hook")
         assert hook.command == "guard-hook.sh"
 
@@ -157,7 +157,7 @@ class TestGeminiHookDetection:
             ctx.home_dir / ".gemini" / "settings.json",
             {"hooks": {"PostToolUse": [{"command": "post-hook.sh"}]}},
         )
-        result = GeminiHarnessAdapter().detect(ctx)
+        result = get_adapter("gemini").detect(ctx)
         hook = next(a for a in result.artifacts if a.artifact_type == "hook")
         assert hook.command == "post-hook.sh"
 
@@ -174,7 +174,7 @@ class TestGeminiHookDetection:
                 }
             },
         )
-        result = GeminiHarnessAdapter().detect(ctx)
+        result = get_adapter("gemini").detect(ctx)
         hook_ids = {a.artifact_id for a in result.artifacts if a.artifact_type == "hook"}
         assert "gemini:global:hook:pretooluse:0" in hook_ids
         assert "gemini:global:hook:pretooluse:1" in hook_ids
@@ -185,7 +185,7 @@ class TestGeminiHookDetection:
             ctx.home_dir / ".gemini" / "settings.json",
             {"hooks": {"PreToolUse": "not-a-list"}},
         )
-        result = GeminiHarnessAdapter().detect(ctx)
+        result = get_adapter("gemini").detect(ctx)
         hook_artifacts = [a for a in result.artifacts if a.artifact_type == "hook"]
         assert hook_artifacts == []
 
@@ -195,7 +195,7 @@ class TestGeminiExtensionDetection:
         ctx = _ctx(tmp_path)
         manifest = ctx.home_dir / ".gemini" / "extensions" / "my-ext" / "gemini-extension.json"
         _write_json(manifest, {"name": "my-ext", "contextFileName": "GEMINI.md"})
-        result = GeminiHarnessAdapter().detect(ctx)
+        result = get_adapter("gemini").detect(ctx)
         ext_artifacts = [a for a in result.artifacts if a.artifact_type == "extension"]
         assert len(ext_artifacts) == 1
         assert ext_artifacts[0].artifact_id == "gemini:global:my-ext"
@@ -204,7 +204,7 @@ class TestGeminiExtensionDetection:
         ctx = _ctx(tmp_path)
         manifest = ctx.home_dir / ".gemini" / "extensions" / "vendor-ext" / "gemini-extension.json"
         _write_json(manifest, {"name": "vendor-ext", "publisher": "acme-corp"})
-        result = GeminiHarnessAdapter().detect(ctx)
+        result = get_adapter("gemini").detect(ctx)
         ext = next(a for a in result.artifacts if a.artifact_type == "extension")
         assert ext.publisher == "acme-corp"
 
@@ -212,7 +212,7 @@ class TestGeminiExtensionDetection:
         ctx = _ctx(tmp_path)
         manifest = ctx.home_dir / ".gemini" / "extensions" / "dir-name-ext" / "gemini-extension.json"
         _write_json(manifest, {"contextFileName": "GEMINI.md"})
-        result = GeminiHarnessAdapter().detect(ctx)
+        result = get_adapter("gemini").detect(ctx)
         ext = next(a for a in result.artifacts if a.artifact_type == "extension")
         assert ext.name == "dir-name-ext"
         assert ext.artifact_id == "gemini:global:dir-name-ext"
@@ -227,7 +227,7 @@ class TestGeminiExtensionDetection:
                 "mcpServers": {"embedded-server": {"command": "node", "args": ["server.js"]}},
             },
         )
-        result = GeminiHarnessAdapter().detect(ctx)
+        result = get_adapter("gemini").detect(ctx)
         mcp_artifacts = [a for a in result.artifacts if a.artifact_type == "mcp_server"]
         assert len(mcp_artifacts) == 1
         assert mcp_artifacts[0].artifact_id == "gemini:global:ext-with-mcp:embedded-server"
@@ -236,7 +236,7 @@ class TestGeminiExtensionDetection:
         ctx = _ctx(tmp_path)
         manifest = ctx.home_dir / ".gemini" / "extensions" / "some-ext" / "gemini-extension.json"
         _write_json(manifest, {"name": "some-ext"})
-        result = GeminiHarnessAdapter().detect(ctx)
+        result = get_adapter("gemini").detect(ctx)
         assert str(manifest) in result.config_paths
 
     def test_malformed_extension_manifest_skipped(self, tmp_path: Path) -> None:
@@ -244,7 +244,7 @@ class TestGeminiExtensionDetection:
         manifest = ctx.home_dir / ".gemini" / "extensions" / "broken" / "gemini-extension.json"
         manifest.parent.mkdir(parents=True, exist_ok=True)
         manifest.write_text("{ broken json }", encoding="utf-8")
-        result = GeminiHarnessAdapter().detect(ctx)
+        result = get_adapter("gemini").detect(ctx)
         ext_artifacts = [a for a in result.artifacts if a.artifact_type == "extension"]
         assert ext_artifacts == []
 
@@ -253,7 +253,7 @@ class TestGeminiExtensionDetection:
         for name in ("ext-a", "ext-b", "ext-c"):
             manifest = ctx.home_dir / ".gemini" / "extensions" / name / "gemini-extension.json"
             _write_json(manifest, {"name": name})
-        result = GeminiHarnessAdapter().detect(ctx)
+        result = get_adapter("gemini").detect(ctx)
         ext_ids = {a.artifact_id for a in result.artifacts if a.artifact_type == "extension"}
         assert ext_ids == {"gemini:global:ext-a", "gemini:global:ext-b", "gemini:global:ext-c"}
 
@@ -263,7 +263,7 @@ class TestGeminiSkillDetection:
         ctx = _ctx(tmp_path)
         skill = ctx.home_dir / ".gemini" / "skills" / "my-skill" / "SKILL.md"
         _write_text(skill, "---\nname: my-skill\ndescription: test\n---\n")
-        result = GeminiHarnessAdapter().detect(ctx)
+        result = get_adapter("gemini").detect(ctx)
         skill_artifacts = [a for a in result.artifacts if a.artifact_type == "skill"]
         assert len(skill_artifacts) == 1
         assert "my-skill" in skill_artifacts[0].artifact_id
@@ -272,7 +272,7 @@ class TestGeminiSkillDetection:
         ctx = _ctx(tmp_path)
         skill = ctx.home_dir / ".gemini" / "skills" / "guard-skill" / "SKILL.md"
         _write_text(skill, "content")
-        result = GeminiHarnessAdapter().detect(ctx)
+        result = get_adapter("gemini").detect(ctx)
         skill_arts = [a for a in result.artifacts if a.artifact_type == "skill"]
         assert all(a.harness == "gemini" for a in skill_arts)
 
@@ -280,7 +280,7 @@ class TestGeminiSkillDetection:
         ctx = _ctx(tmp_path)
         nested = ctx.home_dir / ".gemini" / "skills" / "category" / "sub-skill" / "SKILL.md"
         _write_text(nested, "content")
-        result = GeminiHarnessAdapter().detect(ctx)
+        result = get_adapter("gemini").detect(ctx)
         skill_arts = [a for a in result.artifacts if a.artifact_type == "skill"]
         assert len(skill_arts) == 1
         assert "category/sub-skill" in skill_arts[0].artifact_id
@@ -290,7 +290,7 @@ class TestGeminiSkillDetection:
         for skill_name in ("skill-a", "skill-b"):
             path = ctx.home_dir / ".gemini" / "skills" / skill_name / "SKILL.md"
             _write_text(path, "content")
-        result = GeminiHarnessAdapter().detect(ctx)
+        result = get_adapter("gemini").detect(ctx)
         skill_arts = [a for a in result.artifacts if a.artifact_type == "skill"]
         assert len(skill_arts) == 2
 
@@ -307,7 +307,7 @@ class TestGeminiMultiScope:
             ctx.workspace_dir / ".gemini" / "settings.json",
             {"mcpServers": {"project-srv": {"command": "y"}}},
         )
-        result = GeminiHarnessAdapter().detect(ctx)
+        result = get_adapter("gemini").detect(ctx)
         ids = {a.artifact_id for a in result.artifacts}
         assert "gemini:global:mcp:global-srv" in ids
         assert "gemini:project:mcp:project-srv" in ids
@@ -319,7 +319,7 @@ class TestGeminiMultiScope:
             ctx.workspace_dir / ".gemini" / "settings.json",
             {"mcpServers": {"ws-srv": {"command": "x"}}},
         )
-        result = GeminiHarnessAdapter().detect(ctx)
+        result = get_adapter("gemini").detect(ctx)
         art = next(a for a in result.artifacts if "ws-srv" in a.artifact_id)
         assert art.source_scope == "project"
 
@@ -329,30 +329,30 @@ class TestGeminiMultiScope:
             ctx.home_dir / ".gemini" / "settings.json",
             {"mcpServers": {"g": {"command": "x"}}},
         )
-        result = GeminiHarnessAdapter().detect(ctx)
+        result = get_adapter("gemini").detect(ctx)
         assert all(a.source_scope == "global" for a in result.artifacts)
 
 
 class TestGeminiAdapterContract:
     def test_adapter_has_setup_contract(self) -> None:
-        contract = GeminiHarnessAdapter().setup_contract()
+        contract = get_adapter("gemini").setup_contract()
         assert contract.harness == "gemini"
         assert contract.display_name
 
     def test_adapter_has_connect_step(self) -> None:
-        contract = GeminiHarnessAdapter().setup_contract()
+        contract = get_adapter("gemini").setup_contract()
         step_ids = {s.step_id for s in contract.setup_steps}
         assert "connect" in step_ids
 
     def test_installed_true_when_settings_json_present(self, tmp_path: Path) -> None:
         ctx = _ctx(tmp_path)
         _write_json(ctx.home_dir / ".gemini" / "settings.json", {"theme": "dark"})
-        result = GeminiHarnessAdapter().detect(ctx)
+        result = get_adapter("gemini").detect(ctx)
         assert result.installed is True
 
     def test_installed_false_when_no_config_and_no_cli(self, tmp_path: Path) -> None:
         ctx = _ctx(tmp_path)
-        result = GeminiHarnessAdapter().detect(ctx)
+        result = get_adapter("gemini").detect(ctx)
         assert result.installed is False or result.installed is True
 
 
@@ -362,19 +362,19 @@ class TestGeminiDetectResiliency:
         settings = ctx.home_dir / ".gemini" / "settings.json"
         settings.parent.mkdir(parents=True, exist_ok=True)
         settings.write_text("not valid json {{{", encoding="utf-8")
-        result = GeminiHarnessAdapter().detect(ctx)
+        result = get_adapter("gemini").detect(ctx)
         assert result.artifacts == ()
 
     def test_missing_extension_root_does_not_crash(self, tmp_path: Path) -> None:
         ctx = _ctx(tmp_path)
-        result = GeminiHarnessAdapter().detect(ctx)
+        result = get_adapter("gemini").detect(ctx)
         assert isinstance(result.artifacts, tuple)
 
     def test_extension_mcp_non_dict_server_skipped(self, tmp_path: Path) -> None:
         ctx = _ctx(tmp_path)
         manifest = ctx.home_dir / ".gemini" / "extensions" / "bad-ext" / "gemini-extension.json"
         _write_json(manifest, {"name": "bad-ext", "mcpServers": {"srv": "not-a-dict"}})
-        result = GeminiHarnessAdapter().detect(ctx)
+        result = get_adapter("gemini").detect(ctx)
         mcp_arts = [a for a in result.artifacts if a.artifact_type == "mcp_server"]
         assert mcp_arts == []
 
@@ -382,5 +382,5 @@ class TestGeminiDetectResiliency:
         ctx = _ctx(tmp_path)
         settings = ctx.home_dir / ".gemini" / "settings.json"
         _write_json(settings, {"mcpServers": {"s": {"command": "x"}}})
-        result = GeminiHarnessAdapter().detect(ctx)
+        result = get_adapter("gemini").detect(ctx)
         assert len(result.config_paths) == len(set(result.config_paths))

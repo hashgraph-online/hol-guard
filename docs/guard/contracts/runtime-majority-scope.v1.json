@@ -750,7 +750,6 @@
       {
         "path": [
           "src/codex_plugin_scanner/guard/adapters/adapter_state_integrity.py",
-          "src/codex_plugin_scanner/guard/adapters/antigravity.py",
           "src/codex_plugin_scanner/guard/adapters/cline.py",
           "src/codex_plugin_scanner/guard/adapters/cline_contract.py",
           "src/codex_plugin_scanner/guard/adapters/cline_detection.py",
@@ -763,25 +762,14 @@
           "src/codex_plugin_scanner/guard/adapters/copilot.py",
           "src/codex_plugin_scanner/guard/adapters/cursor.py",
           "src/codex_plugin_scanner/guard/adapters/cursor_cli.py",
-          "src/codex_plugin_scanner/guard/adapters/devin.py",
-          "src/codex_plugin_scanner/guard/adapters/devin_config.py",
-          "src/codex_plugin_scanner/guard/adapters/gemini.py",
-          "src/codex_plugin_scanner/guard/adapters/harness_hook_settings.py",
           "src/codex_plugin_scanner/guard/adapters/hermes.py",
           "src/codex_plugin_scanner/guard/adapters/hermes_install_plan.py",
           "src/codex_plugin_scanner/guard/adapters/hermes_state_paths.py",
-          "src/codex_plugin_scanner/guard/adapters/kimi.py",
-          "src/codex_plugin_scanner/guard/adapters/muse.py",
-          "src/codex_plugin_scanner/guard/adapters/muse_config.py",
+          "src/codex_plugin_scanner/guard/adapters/native_harness.py",
           "src/codex_plugin_scanner/guard/adapters/omp_code_mode.py",
-          "src/codex_plugin_scanner/guard/adapters/openclaw.py",
-          "src/codex_plugin_scanner/guard/adapters/openclaw_support.py",
           "src/codex_plugin_scanner/guard/adapters/opencode.py",
           "src/codex_plugin_scanner/guard/adapters/opencode_artifacts.py",
           "src/codex_plugin_scanner/guard/adapters/opencode_pretool.py",
-          "src/codex_plugin_scanner/guard/adapters/paseo.py",
-          "src/codex_plugin_scanner/guard/adapters/paseo_config.py",
-          "src/codex_plugin_scanner/guard/adapters/paseo_install.py",
           "src/codex_plugin_scanner/guard/adapters/pi.py",
           "src/codex_plugin_scanner/guard/adapters/pi_extension_pinned_core.py",
           "src/codex_plugin_scanner/guard/adapters/pi_support.py",
@@ -789,7 +777,7 @@
           "src/codex_plugin_scanner/guard/adapters/zcode.py",
           "src/codex_plugin_scanner/json_comment_stripping.py"
         ],
-        "reason": "Reviewed: adapter implementations behind the harness registry. Adapters normalize harness payloads into hook requests, so they sit on the hook path, and hook-path authority is never excluded. Install and setup methods that have a function_exclusions entry are excluded as install_config, not hook path; install helpers without an entry (for example in the Cline, OpenCode and OpenClaw support modules) stay counted, which understates the Rust share."
+        "reason": "Reviewed: adapter implementations behind the harness registry. Adapters normalize harness payloads into hook requests, so they sit on the hook path, and hook-path authority is never excluded. Install and setup methods that have a function_exclusions entry are excluded as install_config, not hook path; install helpers without an entry (for example in the Cline and OpenCode support modules) stay counted, which understates the Rust share."
       },
       {
         "path": [
@@ -833,7 +821,7 @@
         "path": [
           "src/codex_plugin_scanner/guard/managed_install_proof.py"
         ],
-        "reason": "Reviewed: managed install proof binding and verification. PaseoHarnessAdapter.detect (adapters/paseo.py) calls paseo_install.provider_status, which runs verify_managed_install_proof to report each provider's protection status. Adapter detection stays in scope for every harness (the adapter setup exclusions leave detect counted), so the verifier stays counted with it. Binding (bind_managed_install_proof) is reached only from the excluded install paths."
+        "reason": "Reviewed: managed install proof binding and verification, now a thin client of the native harness_adapter kind. Approvals and install health checks call verify_managed_install_proof, so the verifier stays counted. Binding (bind_managed_install_proof) is reached only from the excluded install paths."
       },
       {
         "path": [
@@ -1374,50 +1362,6 @@
         "evidence": "install, prepare_install and uninstall have no caller in any in-scope module; they are invoked by the excluded install, uninstall and repair dispatchers. The report validates that no retained symbol or in-scope module references the excluded names."
       },
       {
-        "id": "adapter-devin-setup",
-        "category": "install_config",
-        "path": "src/codex_plugin_scanner/guard/adapters/devin.py",
-        "symbols": [
-          "DevinHarnessAdapter.prepare_install",
-          "DevinHarnessAdapter.install",
-          "DevinHarnessAdapter.uninstall",
-          "DevinHarnessAdapter._hook_command_parts"
-        ],
-        "entry_points": [],
-        "reason": "Devin adapter hook install and uninstall and the hook command builder used only to write the install.",
-        "evidence": "install, prepare_install and uninstall have no caller in any in-scope module; they are invoked by the excluded install, uninstall and repair dispatchers. The report validates that no retained symbol or in-scope module references the excluded names."
-      },
-      {
-        "id": "adapter-kimi-setup",
-        "category": "install_config",
-        "path": "src/codex_plugin_scanner/guard/adapters/kimi.py",
-        "symbols": [
-          "KimiHarnessAdapter.prepare_install",
-          "KimiHarnessAdapter.install",
-          "KimiHarnessAdapter.uninstall",
-          "KimiHarnessAdapter._hook_command_parts"
-        ],
-        "entry_points": [],
-        "reason": "Kimi adapter hook install and uninstall and the hook command builder used only to write the install.",
-        "evidence": "install, prepare_install and uninstall have no caller in any in-scope module; they are invoked by the excluded install, uninstall and repair dispatchers. The report validates that no retained symbol or in-scope module references the excluded names."
-      },
-      {
-        "id": "adapter-muse-setup",
-        "category": "install_config",
-        "path": "src/codex_plugin_scanner/guard/adapters/muse.py",
-        "symbols": [
-          "MuseHarnessAdapter.prepare_install",
-          "MuseHarnessAdapter.install",
-          "MuseHarnessAdapter.uninstall",
-          "MuseHarnessAdapter._hook_command_parts",
-          "MuseHarnessAdapter._managed_state_paths",
-          "_adapter_result"
-        ],
-        "entry_points": [],
-        "reason": "Muse adapter hook install and uninstall and the settings helpers used only to write or remove that install.",
-        "evidence": "install, prepare_install and uninstall have no caller in any in-scope module; they are invoked by the excluded install, uninstall and repair dispatchers. _hook_command_parts, _managed_state_paths and _adapter_result are called only from those three methods. _bridge_timeout_seconds and the approval wait it reads stay in scope: the bounded hook refresh recomputes that timeout on every update. detect and policy_path stay in scope with the helpers they call. The report validates that no retained symbol or in-scope module references the excluded names."
-      },
-      {
         "id": "approval-continuation-replay",
         "category": "async_control_plane",
         "path": "src/codex_plugin_scanner/guard/continuation_runtime.py",
@@ -1469,19 +1413,6 @@
         "reason": "Building and reconciling the OAuth package-firewall entitlement during connect and cloud sync."
       },
       {
-        "id": "adapter-openclaw-setup",
-        "category": "install_config",
-        "path": "src/codex_plugin_scanner/guard/adapters/openclaw.py",
-        "symbols": [
-          "OpenClawHarnessAdapter.prepare_install",
-          "OpenClawHarnessAdapter.install",
-          "OpenClawHarnessAdapter.uninstall"
-        ],
-        "entry_points": [],
-        "reason": "OpenClaw adapter install and uninstall.",
-        "evidence": "install, prepare_install and uninstall have no caller in any in-scope module; they are invoked by the excluded install, uninstall and repair dispatchers. The report validates that no retained symbol or in-scope module references the excluded names."
-      },
-      {
         "id": "adapter-opencode-setup",
         "category": "install_config",
         "path": "src/codex_plugin_scanner/guard/adapters/opencode.py",
@@ -1527,19 +1458,6 @@
         "evidence": "install, prepare_install and uninstall have no caller in any in-scope module; they are invoked by the excluded install, uninstall and repair dispatchers. The report validates that no retained symbol or in-scope module references the excluded names."
       },
       {
-        "id": "adapter-paseo-install",
-        "category": "install_config",
-        "path": "src/codex_plugin_scanner/guard/adapters/paseo_install.py",
-        "symbols": [
-          "install_native",
-          "write_receipt",
-          "protection_paths"
-        ],
-        "entry_points": [],
-        "reason": "Paseo native install, which delegates to each adapter's install.",
-        "evidence": "install_native, write_receipt and protection_paths have no caller in any in-scope module; they are invoked by the excluded install, uninstall and repair dispatchers. The report validates that no retained symbol or in-scope module references the excluded names."
-      },
-      {
         "id": "adapter-hermes-runtime-hooks-setup",
         "category": "install_config",
         "path": "src/codex_plugin_scanner/guard/adapters/hermes_runtime_hooks.py",
@@ -1579,18 +1497,6 @@
         ],
         "entry_points": [],
         "reason": "Hermes adapter install and uninstall and the config writers used only by them.",
-        "evidence": "install, prepare_install and uninstall have no caller in any in-scope module; they are invoked by the excluded install, uninstall and repair dispatchers. The report validates that no retained symbol or in-scope module references the excluded names."
-      },
-      {
-        "id": "adapter-paseo-setup",
-        "category": "install_config",
-        "path": "src/codex_plugin_scanner/guard/adapters/paseo.py",
-        "symbols": [
-          "PaseoHarnessAdapter.install",
-          "PaseoHarnessAdapter.uninstall"
-        ],
-        "entry_points": [],
-        "reason": "Paseo adapter install and uninstall.",
         "evidence": "install, prepare_install and uninstall have no caller in any in-scope module; they are invoked by the excluded install, uninstall and repair dispatchers. The report validates that no retained symbol or in-scope module references the excluded names."
       },
       {
@@ -2027,6 +1933,21 @@
         "entry_points": [],
         "reason": "Listing shared workspace AIBOM artifacts for the inventory contract. Inventory is built for reports and Cloud sync, not on a hook call.",
         "evidence": "discover_shared_workspace_aibom_artifacts is called only from inventory_contract.py, which is outside runtime scope. The role grammar this entry used to cover now lives in the resident's aibom_paths.rs and reaches Python only as the inventory_source_evidence answer. The retained adapter detection, Codex skill discovery and MCP metadata enrichment do not reference it, and the report validates this reference closure on every run."
+      },
+      {
+        "id": "adapter-native-harness-setup",
+        "category": "install_config",
+        "path": "src/codex_plugin_scanner/guard/adapters/native_harness.py",
+        "symbols": [
+          "NativeHarnessAdapter.prepare_install",
+          "NativeHarnessAdapter.install",
+          "NativeHarnessAdapter.uninstall",
+          "NativeHarnessAdapter._hook_argv",
+          "NativeHarnessAdapter._install_delegated"
+        ],
+        "entry_points": [],
+        "reason": "Install and uninstall for the harnesses the native harness_adapter kind answers (Devin, Antigravity, Gemini, Kimi, OpenClaw, Paseo and Muse): the launcher shim, the bounded hook argv, publishing the native file plan and Paseo's delegated provider installs.",
+        "evidence": "install, prepare_install and uninstall have no caller in any in-scope module; they are invoked by the excluded install, uninstall and repair dispatchers. _hook_argv and _install_delegated are called only from them. The report validates that no retained symbol or in-scope module references the excluded names."
       }
     ],
     "dynamic_imports": []

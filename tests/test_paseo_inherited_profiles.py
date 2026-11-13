@@ -6,11 +6,10 @@ import json
 
 import pytest
 
+from codex_plugin_scanner.guard.adapters import get_adapter
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
-from codex_plugin_scanner.guard.adapters.paseo import PaseoHarnessAdapter
-from codex_plugin_scanner.guard.adapters.paseo_config import paseo_providers
-from codex_plugin_scanner.guard.adapters.paseo_install import receipt_path
 from codex_plugin_scanner.guard.cli.install_commands import build_harness_setup_plan
+from tests.paseo_test_support import paseo_providers, receipt_path
 from tests.test_paseo_adapter import configure, statuses
 from tests.test_paseo_adapter import context as context
 
@@ -40,7 +39,7 @@ def test_inherited_provider_overrides_cannot_claim_native_protection(
     assert providers["pi-work"].enabled is True
     assert providers["pi-work"].unsupported_reason
     with pytest.raises(ValueError, match="No supported, enabled"):
-        PaseoHarnessAdapter().install(context)
+        get_adapter("paseo").install(context)
     assert not receipt_path(context).exists()
 
 
@@ -53,7 +52,7 @@ def test_inherited_credentials_preserve_profile_support_without_entering_receipt
             "pi-work": {"extends": "pi", "label": "Work", "env": {"API_BASE_URL": "https://models.test"}},
         },
     )
-    manifest = PaseoHarnessAdapter().install(context)
+    manifest = get_adapter("paseo").install(context)
     assert statuses(manifest)["pi-work"] == "native-hooks-installed"
     assert "private-base-credential" not in json.dumps(manifest)
 
@@ -71,7 +70,7 @@ def test_disconnect_plan_warns_that_native_protection_remains(context: HarnessCo
 def test_reinstall_repairs_deleted_native_artifacts(context: HarnessContext, artifact: str) -> None:
     """Reinstall rebuilds drifted native settings/extensions and publishes fresh proofs."""
     configure(context, {"pi": {"enabled": True}})
-    adapter = PaseoHarnessAdapter()
+    adapter = get_adapter("paseo")
     adapter.install(context)
     target = context.home_dir / ".pi/agent" / artifact
     target.unlink()

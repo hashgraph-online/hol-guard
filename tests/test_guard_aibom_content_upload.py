@@ -7,8 +7,8 @@ from typing import cast
 
 import pytest
 
+from codex_plugin_scanner.guard.adapters import get_adapter
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
-from codex_plugin_scanner.guard.adapters.gemini import GeminiHarnessAdapter
 from codex_plugin_scanner.guard.aibom_content_upload import (
     GuardAibomPrimaryContentSource,
     primary_content_sources_from_artifacts,
@@ -111,7 +111,7 @@ def test_gemini_directory_identity_still_has_uploadable_primary_content(tmp_path
     skill_path.parent.mkdir(parents=True)
     skill_path.write_text("# Gemini review\n", encoding="utf-8")
 
-    detection = GeminiHarnessAdapter().detect(context)
+    detection = get_adapter("gemini").detect(context)
     skill_artifact = next(artifact for artifact in detection.artifacts if artifact.artifact_type == "skill")
     assert isinstance(skill_artifact.metadata.get("content_hash"), str)
     assert isinstance(skill_artifact.metadata.get("directory_hash"), str)
@@ -168,7 +168,7 @@ def test_gemini_skill_through_symlinked_workspace_has_uploadable_primary_content
         guard_home=tmp_path / "guard-home",
     )
 
-    detection = GeminiHarnessAdapter().detect(context)
+    detection = get_adapter("gemini").detect(context)
     snapshot = inventory_snapshot_from_detection(
         detection,
         generated_at="2026-07-10T00:00:00Z",
