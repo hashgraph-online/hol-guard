@@ -38,7 +38,7 @@ from .source_output_fixtures import (
     WORKER_PATH,
 )
 from .workspace_runner_fixtures import (
-    HOME_BUN_ENTRY_CASE,
+    HOME_BUN_ENTRY_CASES,
     WORKSPACE_RUNNER_CASES,
     runner_marker,
 )
@@ -59,7 +59,7 @@ WORKSPACE_FIND_CASE = "omp-native-shell-find-exec-grep-workspace-absolute"
 # which answers with its own successful status, so the build line is the only proof it ran.
 BUN_ENTRY_CASE = "omp-native-shell-linked-modules-bun-entry"
 # Both spellings of that launcher print the same build, so one check answers for either.
-BUN_ENTRY_CASES = frozenset({BUN_ENTRY_CASE, HOME_BUN_ENTRY_CASE})
+BUN_ENTRY_CASES = frozenset({BUN_ENTRY_CASE}) | HOME_BUN_ENTRY_CASES
 # The same build with its own status echoed after it. `| tail -15` answers with the
 # pipeline's status and the `echo` answers with `tail`'s, so neither reports the build;
 # the oracle asks for the build line and the status the run printed.

@@ -156,6 +156,25 @@ def run_authorized_contained_test(
             )
             first = settled_authority(authorize, rooted) if bounded else None
             if receipt_matches(first) and isinstance(first, Mapping):
+                rooted_input = rooted["tool_input"]
+                if (
+                    isinstance(rooted_input, dict)
+                    and contained_target(str(rooted_input["command"]), cwd=root, home_dir=home_dir) is not None
+                ):
+                    # A home-spelled launcher, a trailing group or a virtualenv
+                    # activation was answered for its projection, and the
+                    # workspace planner plans only that text. The rooted call
+                    # carries no `cwd` argument, so it takes the projection
+                    # path below, as the runtime's own sink does.
+                    return run_authorized_contained_test(
+                        rooted,
+                        workspace=root,
+                        authorize=authorize,
+                        timeout_seconds=timeout_seconds,
+                        cwd=root,
+                        home_dir=home_dir,
+                        merge_stderr=merge_stderr,
+                    )
                 return run_workspace_contained(
                     rooted,
                     workspace=root,
