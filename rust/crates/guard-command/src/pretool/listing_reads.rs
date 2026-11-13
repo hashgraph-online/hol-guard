@@ -383,9 +383,8 @@ fn listable_ancestor(ancestor: &std::path::Path, context: super::PathContext<'_>
         safe_reads::bounded_read_target(parent, context.home_dir, context.cwd, true)
             || (!parent_steps && search::skill_listing_root(parent, context, false))
             || (!parent_steps
-                && std::fs::canonicalize(&resolved).is_ok_and(|target| {
-                    target.components().any(|part| part.as_os_str() == ".git")
-                })
+                && std::fs::canonicalize(&resolved)
+                    .is_ok_and(|target| target.components().any(|part| part.as_os_str() == ".git"))
                 && super::read_paths::repository_hidden_directory(
                     parent,
                     context.home_dir,
