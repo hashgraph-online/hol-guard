@@ -166,7 +166,7 @@ def _resident_route(
     workspace: Path,
     deadline: float | None = None,
 ) -> dict[str, object] | None:
-    from ..adapters.zcode_contained_tests import contained_sink_command_prefix
+    from ..contained_sink_command import contained_sink_command_prefix
     from ..native_hook_render import native_render_cli
 
     params: dict[str, object] = {

@@ -17,9 +17,10 @@ from codex_plugin_scanner.guard.adapters.bounded_cli_hook_native import (
     NATIVE_BOUNDED_HOOK_FEATURE,
 )
 from codex_plugin_scanner.guard.adapters.bounded_cli_hook_script_template import BOUNDED_HOOK_SCRIPT_TEMPLATE
-from codex_plugin_scanner.guard.adapters.grok import GrokHarnessAdapter
 from codex_plugin_scanner.guard.cli.grok_hook_validation import is_grok_hook_command
 from codex_plugin_scanner.guard.cli.update_grok_repair import _isolated_bounded_hook_is_current
+
+from .grok_test_support import grok_hook_command_parts
 
 _POSIX_ONLY = pytest.mark.skipif(sys.platform == "win32", reason="asserts POSIX paths and hook command syntax")
 _PYTHON = "/usr/bin/python3"
@@ -79,13 +80,13 @@ def test_grok_hook_runs_the_client_behind_the_native_runtime(tmp_path: Path, mon
     _isolated_python(monkeypatch)
     context = _context(tmp_path)
 
-    command = GrokHarnessAdapter._hook_command_parts(context)
+    command = grok_hook_command_parts(context)
 
     assert command[:4] == (str(runtime), NATIVE_BOUNDED_HOOK_COMMAND, _PYTHON, "-I")
     assert command[4].endswith("managed/bounded-hooks/grok.py")
     assert json.loads(command[5])["harness"] == "grok"
     assert is_grok_hook_command(_shell_command(command), context) is True
-    assert _isolated_bounded_hook_is_current(_shell_command(command), context=context) is True
+    assert _isolated_bounded_hook_is_current(_shell_command(command), context=context, timeout_seconds=85) is True
 
 
 @_POSIX_ONLY
@@ -93,7 +94,7 @@ def test_grok_hook_from_another_runtime_is_not_managed(tmp_path: Path, monkeypat
     _offer_native(monkeypatch, tmp_path / "hol-guard-runtime")
     _isolated_python(monkeypatch)
     context = _context(tmp_path)
-    command = list(GrokHarnessAdapter._hook_command_parts(context))
+    command = list(grok_hook_command_parts(context))
     command[0] = str(tmp_path / "other-runtime")
 
     assert is_grok_hook_command(_shell_command(tuple(command)), context) is False
@@ -104,7 +105,7 @@ def test_native_grok_hook_needs_the_native_runtime(tmp_path: Path, monkeypatch: 
     _offer_native(monkeypatch, tmp_path / "hol-guard-runtime")
     _isolated_python(monkeypatch)
     context = _context(tmp_path)
-    command = _shell_command(GrokHarnessAdapter._hook_command_parts(context))
+    command = _shell_command(grok_hook_command_parts(context))
 
     # Pinning the Python bridge retires the native launcher, so the hook is repaired.
     monkeypatch.setenv("HOL_GUARD_BOUNDED_HOOK_BRIDGE", "python")
@@ -123,7 +124,7 @@ def test_frozen_grok_hook_without_a_durable_runtime_uses_the_bridge(
     monkeypatch.setattr(sys, "frozen", True, raising=False)
     monkeypatch.delenv("HOL_GUARD_DESKTOP", raising=False)
 
-    command = GrokHarnessAdapter._hook_command_parts(_context(tmp_path))
+    command = grok_hook_command_parts(_context(tmp_path))
 
     assert command[0] != _PYTHON
     assert command[1] == "__guard-bounded-hook"

@@ -57462,6 +57462,89 @@
       "expect": "not_allow"
     },
     {
+      "id": "grok-search-tool-integration-keywords",
+      "fix_area": "tool",
+      "harnesses": [
+        "grok"
+      ],
+      "tool": "search_tool",
+      "tool_input": {
+        "query": "x_ads get campaign line item ads analytics",
+        "limit": 15
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "grok-search-tool-plain-query",
+      "fix_area": "tool",
+      "harnesses": [
+        "grok"
+      ],
+      "tool": "search_tool",
+      "tool_input": {
+        "query": "read file contents",
+        "limit": 5
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "grok-search-tool-query-without-limit",
+      "fix_area": "tool",
+      "harnesses": [
+        "grok"
+      ],
+      "tool": "search_tool",
+      "tool_input": {
+        "query": "hol guard approvals"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "neg-grok-search-tool-with-path",
+      "fix_area": "negative",
+      "harnesses": [
+        "grok"
+      ],
+      "tool": "search_tool",
+      "tool_input": {
+        "query": "config",
+        "path": "${HOME}/.ssh/id_rsa"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-grok-search-tool-with-command",
+      "fix_area": "negative",
+      "harnesses": [
+        "grok"
+      ],
+      "tool": "search_tool",
+      "tool_input": {
+        "query": "status",
+        "command": "rm -rf build"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-grok-search-tool-text-limit",
+      "fix_area": "negative",
+      "harnesses": [
+        "grok"
+      ],
+      "tool": "search_tool",
+      "tool_input": {
+        "query": "status",
+        "limit": "all"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
       "id": "gauntlet-omp-sleep-semicolon-cd-git-status",
       "fix_area": "queue",
       "harnesses": [

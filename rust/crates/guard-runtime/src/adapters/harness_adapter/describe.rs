@@ -48,7 +48,7 @@ pub(crate) const PASEO_DELEGATES: [&str; 6] =
     ["claude-code", "codex", "copilot", "opencode", "pi", "omp"];
 
 /// Every variable a request's `env` may carry.
-pub(crate) const ENV_NAMES: [&str; 7] = [
+pub(crate) const ENV_NAMES: [&str; 21] = [
     "PATH",
     "PATHEXT",
     "NoDefaultCurrentDirectoryInExePath",
@@ -56,6 +56,20 @@ pub(crate) const ENV_NAMES: [&str; 7] = [
     "APPDATA",
     "XDG_CONFIG_HOME",
     "PASEO_HOME",
+    "GROK_HOME",
+    "ProgramFiles",
+    "ProgramFiles(x86)",
+    "LOCALAPPDATA",
+    "ZCODE_HOME",
+    "__CFBundleIdentifier",
+    "ZCODE_BASE_URL",
+    "ZCODE_APP_VERSION",
+    "ZCODE_ENV",
+    "ZCODE_RUNTIME_ENV",
+    "ZCODE_PROCESS_LABEL",
+    "ZCODE_RG_BINARY",
+    "ZAI_OAUTH_ORIGIN",
+    "ZAI_OAUTH_CLIENT_ID",
 ];
 
 /// Prefixes of the variables that redirect Paseo's native runtimes.
@@ -76,7 +90,7 @@ pub(crate) const ENV_PREFIXES: [&str; 14] = [
     "OMP_PROFILE",
 ];
 
-pub(crate) const SPECS: [Spec; 7] = [
+pub(crate) const SPECS: [Spec; 9] = [
     Spec {
         harness: "devin",
         aliases: &["devin", "devin-cli", "cognition-devin"],
@@ -205,6 +219,44 @@ pub(crate) const SPECS: [Spec; 7] = [
         install: Install::Plan,
         dynamic: false,
     },
+    Spec {
+        harness: "grok",
+        aliases: &["grok-build", "grok-build-cli", "xai-grok"],
+        executable: "grok",
+        launcher_name: "grok",
+        display_name: Some("grok"),
+        tier: CENTER,
+        summary: "Guard intercepts every Grok tool call, including subagent and MCP tools, \
+                  through a catch-all PreToolUse hook and routes blocked actions to the local \
+                  approval center.",
+        fallback: "Guard screens submitted prompts and intercepts tool calls on PreToolUse. Use \
+                   the Guard approval center when a tool call is denied.",
+        channel: "browser",
+        auto_open: true,
+        workspace_aibom: true,
+        hook: Hook::Shell,
+        install: Install::Plan,
+        dynamic: false,
+    },
+    Spec {
+        harness: "zcode",
+        aliases: &["zcode", "zai", "z-code", "zai-zcode"],
+        executable: "zcode",
+        launcher_name: "zcode",
+        display_name: Some("zcode"),
+        tier: CENTER,
+        summary: "Guard scans ZCode config, plugins, hooks, skills, and MCP registrations before \
+                  launch and routes blocked actions to the local approval center.",
+        fallback: "ZCode gets preflight approval through Guard until it exposes a richer native \
+                   approval surface. Use the Guard approval center when native prompting is \
+                   unavailable.",
+        channel: "browser",
+        auto_open: true,
+        workspace_aibom: true,
+        hook: Hook::Shell,
+        install: Install::Plan,
+        dynamic: false,
+    },
 ];
 
 pub(crate) fn spec(harness: &str) -> Option<&'static Spec> {
@@ -243,6 +295,10 @@ impl Spec {
                 Install::Delegated => "delegated",
             },
             "dynamic": self.dynamic,
+            // Grok resolves its own trusted executable and retires stale hook
+            // commands the CLI's validator names.
+            "trusted_launcher": self.harness == "grok",
+            "retired_hooks": self.harness == "grok",
             "delegates": if self.install == Install::Delegated {
                 json!(PASEO_DELEGATES)
             } else {
