@@ -54413,6 +54413,22 @@
       "expect": "allow"
     },
     {
+      "id": "pytest-disable-plugin-autoload-prefix-venv-pytest",
+      "fix_area": "env-prefix",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 .venv/bin/pytest -q"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
       "id": "pytest-addopts-quoted-prefix-venv-pytest",
       "fix_area": "env-prefix",
       "harnesses": [
