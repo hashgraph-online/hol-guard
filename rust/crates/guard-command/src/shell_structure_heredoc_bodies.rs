@@ -9,11 +9,15 @@ use super::{
 };
 
 /// `_extract_parenthesized` (:243-266), reading the bodies of heredocs
-/// declared inside the `$(` as text. A word-start `#` opens a comment that
-/// runs to the end of its line: a quote, parenthesis or `<<` there is text.
+/// declared inside the `$(` as text, at any depth of grouping such as
+/// `$( (cat <<'EOF' ...) )`. Inside arithmetic, `$((` or `((`, a `<<` is a
+/// shift and declares nothing. A word-start `#` opens a comment that runs to
+/// the end of its line: a quote, parenthesis or `<<` there is text.
 pub(super) fn extract_parenthesized(chars: &[char], start: usize) -> (String, usize) {
     let n = chars.len();
     let mut depth = 1;
+    // The depth at which arithmetic opened, while the scan is inside it.
+    let mut arithmetic = (chars.get(start) == Some(&'(')).then_some(1);
     let mut index = start;
     let mut quote: Option<char> = None;
     let mut bodies = PendingBodies::default();
@@ -48,7 +52,7 @@ pub(super) fn extract_parenthesized(chars: &[char], start: usize) -> (String, us
             index += 1;
             continue;
         }
-        if quote.is_none() && depth == 1 && ch == '<' {
+        if quote.is_none() && arithmetic.is_none() && ch == '<' {
             if let Some(end) = bodies.declare(chars, index) {
                 index = end;
                 continue;
@@ -64,9 +68,17 @@ pub(super) fn extract_parenthesized(chars: &[char], start: usize) -> (String, us
             continue;
         }
         if quote.is_none() && ch == '(' {
+            let opens_arithmetic = chars.get(index + 1) == Some(&'(')
+                && (index > start && chars[index - 1] == '$' || word_start(chars, start, index));
+            if arithmetic.is_none() && opens_arithmetic {
+                arithmetic = Some(depth + 1);
+            }
             depth += 1;
         } else if quote.is_none() && ch == ')' {
             depth -= 1;
+            if arithmetic.is_some_and(|opened| depth < opened) {
+                arithmetic = None;
+            }
             if depth == 0 {
                 return (chars[start..index].iter().collect(), index);
             }

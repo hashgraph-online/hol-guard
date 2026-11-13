@@ -355,6 +355,20 @@ fn heredoc_bodies_inside_a_substitution_are_text() {
             "echo $((1<<2)) && echo $(cat <<<'it')",
             vec!["(1<<2)", "cat <<<'it'"],
         ),
+        // A heredoc inside a group in the substitution is text too.
+        (
+            "git commit -m \"$( (cat <<'EOF'\nit's done\nEOF\n) )\" && ls",
+            vec!["(cat <<'EOF'\nit's done\nEOF\n)"],
+        ),
+        // A shift inside arithmetic in a group declares nothing.
+        (
+            "x=$( (echo $((1<<2))) ); ls",
+            vec!["(echo $((1<<2)))", "(1<<2)"],
+        ),
+        (
+            "x=$( ((y = 1<<2)); echo it ); ls",
+            vec!["((y = 1<<2)); echo it"],
+        ),
     ] {
         let found = bodies(command);
         let mut nested = Vec::new();
