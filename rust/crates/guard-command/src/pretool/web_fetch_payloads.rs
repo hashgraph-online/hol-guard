@@ -388,9 +388,14 @@ fn path_carries_token(url: &Url) -> bool {
     let Some(segments) = url.path_segments() else {
         return false;
     };
-    let mut previous = None;
+    // Each segment is read decoded, so a token spelled with percent escapes
+    // (`%41` for `A`) is judged by the characters the server receives.
+    let mut previous: Option<String> = None;
     for segment in segments {
-        if token_segment(previous, segment) {
+        let segment = percent_encoding::percent_decode_str(segment)
+            .decode_utf8_lossy()
+            .into_owned();
+        if token_segment(previous.as_deref(), &segment) {
             return true;
         }
         previous = Some(segment);

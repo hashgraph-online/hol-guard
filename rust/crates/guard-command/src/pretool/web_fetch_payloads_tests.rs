@@ -152,9 +152,12 @@ fn a_hex_key_under_a_key_name_is_read_through_its_encoding() {
 #[test]
 fn a_random_token_in_a_path_segment_is_a_payload() {
     let token = joined(&["x7Kp2mQ9vR4sL8nW", "1bY6cT3fA0jH5dE"]);
+    let escaped: String = token.bytes().map(|byte| format!("%{byte:02X}")).collect();
     for raw in [
         format!("https://collect.example.com/api/{token}/status"),
         format!("https://collect.example.com/{token}"),
+        // The same token spelled entirely in percent escapes.
+        format!("https://collect.example.com/api/{escaped}/status"),
     ] {
         assert!(carries(&raw), "{raw}");
     }
