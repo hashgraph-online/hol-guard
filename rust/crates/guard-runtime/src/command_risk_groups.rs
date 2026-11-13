@@ -9,14 +9,20 @@
 //! allows or blocks anything. A command Guard cannot place gets no group, and
 //! Cloud shows it as "other". Recognition never narrows a group to a safer one.
 
+#[path = "command_risk_groups_cloud.rs"]
+mod cloud;
+#[path = "command_risk_groups_http.rs"]
+mod http;
 #[path = "command_risk_groups_tools.rs"]
 mod tools;
 #[path = "command_risk_groups_words.rs"]
 mod words;
 
+use cloud::cloud_storage_groups;
+use http::http_sends;
 use tools::{
-    cloud_storage_groups, deploy_groups, gh_groups, git_groups, has, http_sends, is_remote_target,
-    package_groups, sql_groups, subcommand,
+    deploy_groups, gh_groups, git_groups, has, is_remote_target, package_groups, sql_groups,
+    subcommand,
 };
 use words::{tokens, Token};
 
@@ -70,8 +76,20 @@ pub(crate) fn command_risk_groups(command: &str) -> Vec<&'static str> {
 
 fn collect(command: &str, depth: usize, found: &mut [bool; GROUPS.len()]) {
     for segment in segments(tokens(command)) {
-        let Some(index) = program_index(&segment.words) else {
-            continue;
+        if depth < MAX_DEPTH {
+            for inner in &segment.substitutions {
+                collect(inner, depth + 1, found);
+            }
+        }
+        let index = match program_index(&segment.words) {
+            Some(Program::At(index)) => index,
+            Some(Program::Split(inner)) => {
+                if depth < MAX_DEPTH {
+                    collect(&inner, depth + 1, found);
+                }
+                continue;
+            }
+            None => continue,
         };
         let name = program_name(&segment.words[index]);
         let raw_args = &segment.words[index + 1..];
@@ -105,11 +123,12 @@ fn segments(tokens: Vec<Token>) -> Vec<Segment> {
                 redirect_next = false;
             }
             Token::Word(word) => current.words.push(word),
+            Token::Substitution(inner) => current.substitutions.push(inner),
         }
     }
     out.push(current);
     out.into_iter()
-        .filter(|segment| !segment.words.is_empty())
+        .filter(|segment| !segment.words.is_empty() || !segment.substitutions.is_empty())
         .collect()
 }
 
@@ -117,6 +136,13 @@ fn segments(tokens: Vec<Token>) -> Vec<Segment> {
 struct Segment {
     words: Vec<String>,
     redirects: Vec<String>,
+    substitutions: Vec<String>,
+}
+
+/// Where a segment's program is: a word, or the command line `env -S` splits.
+enum Program {
+    At(usize),
+    Split(String),
 }
 
 fn program_name(word: &str) -> String {
@@ -157,10 +183,7 @@ fn wrapper_flag_takes_value(wrapper: &str, flag: &str) -> bool {
                 | "--command-timeout"
         ),
         "doas" => matches!(flag, "-u" | "-C"),
-        "env" => matches!(
-            flag,
-            "-u" | "-C" | "-S" | "--unset" | "--chdir" | "--split-string"
-        ),
+        "env" => matches!(flag, "-u" | "-C" | "--unset" | "--chdir"),
         "nice" => matches!(flag, "-n" | "--adjustment"),
         "ionice" => matches!(flag, "-c" | "-n" | "-p" | "--class" | "--classdata"),
         "timeout" => matches!(flag, "-s" | "-k" | "--signal" | "--kill-after"),
@@ -186,9 +209,10 @@ fn wrapper_flag_takes_value(wrapper: &str, flag: &str) -> bool {
     }
 }
 
-/// The index of the program word, past `NAME=value` words and wrappers with
-/// their options (and the duration of `timeout`).
-fn program_index(words: &[String]) -> Option<usize> {
+/// The program word, past `NAME=value` words and wrappers with their options
+/// (and the duration of `timeout`). `env -S` splits its value into the
+/// command it runs, so that value is returned to be read as a command.
+fn program_index(words: &[String]) -> Option<Program> {
     let mut index = 0;
     loop {
         let word = words.get(index)?;
@@ -198,13 +222,18 @@ fn program_index(words: &[String]) -> Option<usize> {
         }
         let wrapper = program_name(word);
         if !WRAPPERS.contains(&wrapper.as_str()) {
-            return Some(index);
+            return Some(Program::At(index));
         }
         index += 1;
         while let Some(next) = words.get(index) {
             if wrapper == "command" && matches!(next.as_str(), "-v" | "-V") {
                 // `command -v rm` looks a program up without running it.
                 return None;
+            }
+            if wrapper == "env" {
+                if let Some(split) = env_split_string(next, &words[index + 1..]) {
+                    return Some(Program::Split(split));
+                }
             }
             if next.len() > 1 && next.starts_with('-') {
                 index += if wrapper_flag_takes_value(&wrapper, next) {
@@ -222,6 +251,26 @@ fn program_index(words: &[String]) -> Option<usize> {
             index += 1;
         }
     }
+}
+
+/// The command `env -S STRING`, `-SSTRING` or `--split-string=STRING` runs:
+/// the string, split into words, followed by the remaining words.
+fn env_split_string(flag: &str, rest: &[String]) -> Option<String> {
+    let (value, rest) = match flag {
+        "-S" | "--split-string" => (rest.first()?.as_str(), rest.get(1..).unwrap_or(&[])),
+        _ => (
+            flag.strip_prefix("--split-string=")
+                .or_else(|| flag.strip_prefix("-S"))
+                .filter(|value| !value.is_empty())?,
+            rest,
+        ),
+    };
+    let mut command = value.to_string();
+    for word in rest {
+        command.push(' ');
+        command.push_str(word);
+    }
+    Some(command)
 }
 
 /// The command a shell, `eval`, `ssh` or `watch` runs, as one string. `eval`,
@@ -288,6 +337,13 @@ fn names_secret(word: &str) -> bool {
             .any(|marker| lowered.contains(marker))
 }
 
+/// The file an upload argument names: `@path` in `-d @.env`, `-F file=@.env`
+/// or `-F 'file=@.env;type=text/plain'`.
+fn uploaded_file(arg: &str) -> &str {
+    arg.split_once('@')
+        .map_or(arg, |(_, path)| path.split(';').next().unwrap_or(path))
+}
+
 fn segment_groups(name: &str, raw_args: &[String], redirects: &[String]) -> Vec<&'static str> {
     let args: Vec<String> = raw_args
         .iter()
@@ -309,11 +365,7 @@ fn segment_groups(name: &str, raw_args: &[String], redirects: &[String]) -> Vec<
         }
         "git" => groups.extend(git_groups(&args)),
         "gh" => groups.extend(gh_groups(&args)),
-        "aws" => groups.extend(cloud_storage_groups(
-            &args,
-            &["rm", "rb", "delete-object", "delete-bucket"],
-        )),
-        "gsutil" | "gcloud" | "az" => groups.extend(cloud_storage_groups(&args, &["rm", "delete"])),
+        "aws" | "gsutil" | "gcloud" | "az" => groups.extend(cloud_storage_groups(name, &args)),
         "docker" | "podman" => {
             let words: Vec<&str> = args
                 .iter()
@@ -386,10 +438,12 @@ fn segment_groups(name: &str, raw_args: &[String], redirects: &[String]) -> Vec<
             | "source"
             | "."
     ) && args.iter().any(|arg| names_secret(arg));
-    let sends_secret = matches!(name, "scp" | "rsync" | "curl")
-        && args
-            .iter()
-            .any(|arg| names_secret(arg.trim_start_matches('@')));
+    let sends_secret = matches!(
+        name,
+        "scp" | "rsync" | "curl" | "wget" | "http" | "https" | "xh"
+    ) && args
+        .iter()
+        .any(|arg| names_secret(arg) || names_secret(uploaded_file(arg)));
     if reads_secret || sends_secret || redirects.iter().any(|target| names_secret(target)) {
         groups.push("secrets");
     }

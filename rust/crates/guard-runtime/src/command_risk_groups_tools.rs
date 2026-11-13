@@ -1,5 +1,5 @@
-//! Groups for specific tools: package managers, deploy tools, HTTP clients,
-//! cloud storage, SQL clients, `git` and `gh`.
+//! Groups for specific tools: package managers, deploy tools, SQL clients,
+//! `git` and `gh`. HTTP clients and cloud CLIs have their own files.
 
 const PACKAGE_MANAGERS: [&str; 10] = [
     "npm", "pnpm", "yarn", "bun", "pip", "pip3", "uv", "poetry", "cargo", "gem",
@@ -109,30 +109,25 @@ const DEPLOY_TOOLS: [DeployTool; 12] = [
     },
 ];
 
-/// Storage options that take no value; any other `--option` takes one.
-const STORAGE_BOOLEAN_FLAGS: [&str; 18] = [
-    "--recursive",
-    "--dryrun",
-    "--dry-run",
-    "--quiet",
-    "--no-progress",
-    "--only-show-errors",
-    "--follow-symlinks",
-    "--no-follow-symlinks",
-    "--delete",
-    "--exact-timestamps",
-    "--size-only",
-    "--no-sign-request",
-    "--force",
-    "--no-guess-mime-type",
-    "--no-verify-ssl",
-    "--debug",
-    "--no-paginate",
-    "--no-clobber",
+/// Package-manager options before the subcommand that take a value.
+const PACKAGE_VALUE_FLAGS: [&str; 16] = [
+    "--prefix",
+    "-C",
+    "--dir",
+    "--cwd",
+    "--filter",
+    "--workspace",
+    "-w",
+    "--registry",
+    "--cache",
+    "--userconfig",
+    "--directory",
+    "--project",
+    "--config",
+    "-Z",
+    "--proxy",
+    "--cache-dir",
 ];
-
-/// curl short options whose value follows them, attached or in the next word.
-const CURL_VALUE_FLAGS: &str = "AbcCDeEHKmoOQrUuwxYyz";
 
 pub(super) fn has(args: &[String], wanted: &str) -> bool {
     args.iter().any(|arg| arg == wanted)
@@ -172,7 +167,7 @@ pub(super) fn is_remote_target(word: &str) -> bool {
 }
 
 pub(super) fn package_groups(name: &str, args: &[String]) -> Vec<&'static str> {
-    let sub = subcommand(args, &[]).map(|(_, verb)| verb);
+    let sub = subcommand(args, &PACKAGE_VALUE_FLAGS).map(|(_, verb)| verb);
     let mut groups = Vec::new();
     if PACKAGE_MANAGERS.contains(&name) {
         if sub.is_some_and(|verb| PACKAGE_VERBS.contains(&verb))
@@ -230,152 +225,6 @@ pub(super) fn deploy_groups(name: &str, args: &[String]) -> Vec<&'static str> {
     groups
 }
 
-fn is_write_method(method: &str) -> bool {
-    matches!(
-        method.to_ascii_uppercase().as_str(),
-        "POST" | "PUT" | "PATCH" | "DELETE"
-    )
-}
-
-/// Whether an HTTP client sends a body, a file or a write request.
-/// `raw_args` keep their case: curl's `-F` uploads a form, `-f` fails quietly.
-pub(super) fn http_sends(name: &str, raw_args: &[String]) -> bool {
-    let long_option = raw_args.iter().any(|arg| {
-        [
-            "--data",
-            "--form",
-            "--json",
-            "--upload-file",
-            "--post-data",
-            "--post-file",
-            "--body-data",
-            "--body-file",
-        ]
-        .iter()
-        .any(|prefix| arg.starts_with(prefix))
-            || ["--request=", "--method="]
-                .iter()
-                .any(|prefix| arg.strip_prefix(prefix).is_some_and(is_write_method))
-    });
-    let method_option = raw_args.windows(2).any(|pair| {
-        matches!(pair[0].as_str(), "-X" | "--request" | "--method") && is_write_method(&pair[1])
-    });
-    let curl_short = name == "curl"
-        && raw_args
-            .iter()
-            .enumerate()
-            .any(|(index, arg)| curl_short_sends(arg, raw_args.get(index + 1)));
-    let httpie = matches!(name, "http" | "https" | "xh") && httpie_sends(raw_args);
-    long_option || method_option || curl_short || httpie
-}
-
-/// A curl short-option word such as `-d`, `-Ffile=@x`, `-sT x` or `-XPOST`.
-fn curl_short_sends(arg: &str, next: Option<&String>) -> bool {
-    let Some(flags) = arg
-        .strip_prefix('-')
-        .filter(|flags| !flags.starts_with('-'))
-    else {
-        return false;
-    };
-    for (at, flag) in flags.char_indices() {
-        match flag {
-            'd' | 'F' | 'T' => return true,
-            'X' => {
-                let attached = &flags[at + 1..];
-                let method = if attached.is_empty() {
-                    next.map_or("", String::as_str)
-                } else {
-                    attached
-                };
-                return is_write_method(method);
-            }
-            _ if CURL_VALUE_FLAGS.contains(flag) => return false,
-            _ => {}
-        }
-    }
-    false
-}
-
-/// HTTPie: a write method word, or `name=value`, `name:=json` or `name@file`
-/// body items after the URL.
-fn httpie_sends(args: &[String]) -> bool {
-    let words: Vec<&str> = args
-        .iter()
-        .filter(|arg| !arg.starts_with('-'))
-        .map(String::as_str)
-        .collect();
-    let Some(first) = words.first() else {
-        return false;
-    };
-    if is_write_method(first) {
-        return true;
-    }
-    let names_method = first.chars().all(|c| c.is_ascii_uppercase());
-    words
-        .iter()
-        .skip(if names_method { 2 } else { 1 })
-        .any(|item| (item.contains('=') && !item.contains("==")) || item.contains('@'))
-}
-
-pub(super) fn cloud_storage_groups(args: &[String], delete_verbs: &[&str]) -> Vec<&'static str> {
-    let mut groups = Vec::new();
-    if args.iter().any(|arg| delete_verbs.contains(&arg.as_str())) {
-        groups.push("deletes");
-    }
-    let uploads = args
-        .iter()
-        .any(|arg| matches!(arg.as_str(), "upload" | "upload-batch" | "put-object"));
-    let copies_out = args
-        .iter()
-        .position(|arg| matches!(arg.as_str(), "cp" | "sync" | "mv"))
-        .is_some_and(|at| {
-            storage_operands(&args[at + 1..])
-                .last()
-                .is_some_and(|destination| is_remote_target(destination))
-        });
-    if uploads || copies_out {
-        groups.push("sending_and_sharing");
-    }
-    if has(args, "--acl") && args.iter().any(|arg| arg.contains("public")) {
-        groups.push("sending_and_sharing");
-    }
-    if args
-        .windows(2)
-        .any(|pair| pair[0] == "secretsmanager" && pair[1] == "get-secret-value")
-        || args
-            .windows(2)
-            .any(|pair| pair[0] == "configure" && pair[1] == "get")
-    {
-        groups.push("secrets");
-    }
-    if args
-        .iter()
-        .any(|arg| arg == "deploy" || arg == "update-function-code" || arg == "update-service")
-    {
-        groups.push("code_and_deploys");
-    }
-    groups
-}
-
-/// The source and destination words of a copy, past options and their values.
-fn storage_operands(args: &[String]) -> Vec<&str> {
-    let mut operands = Vec::new();
-    let mut index = 0;
-    while let Some(arg) = args.get(index) {
-        if !arg.starts_with('-') {
-            operands.push(arg.as_str());
-            index += 1;
-            continue;
-        }
-        let takes_value = (arg.starts_with("--")
-            && !arg.contains('=')
-            && !STORAGE_BOOLEAN_FLAGS.contains(&arg.as_str()))
-            || matches!(arg.as_str(), "-h" | "-a" | "-z" | "-p" | "-o");
-        index += if takes_value { 2 } else { 1 };
-    }
-    operands
-}
-
 /// SQL statements, read as words outside string literals.
 pub(super) fn sql_groups(args: &[String]) -> Vec<&'static str> {
     let mut text = String::new();
@@ -388,24 +237,36 @@ pub(super) fn sql_groups(args: &[String]) -> Vec<&'static str> {
             text.push(c);
         }
     }
-    let words: Vec<&str> = text
-        .split(|c: char| !(c.is_ascii_alphanumeric() || c == '_'))
-        .filter(|word| !word.is_empty())
-        .collect();
+    let words_of = |statement: &'_ str| -> Vec<String> {
+        statement
+            .split(|c: char| !(c.is_ascii_alphanumeric() || c == '_'))
+            .filter(|word| !word.is_empty())
+            .map(str::to_string)
+            .collect()
+    };
+    let words = words_of(&text);
     let mut groups = Vec::new();
     let deletes = words.windows(2).any(|pair| {
-        (pair[0] == "drop" && matches!(pair[1], "table" | "database" | "schema"))
+        (pair[0] == "drop" && matches!(pair[1].as_str(), "table" | "database" | "schema"))
             || (pair[0] == "delete" && pair[1] == "from")
     }) || words
         .iter()
-        .any(|word| matches!(*word, "truncate" | "dropdatabase" | "deletemany"));
+        .any(|word| matches!(word.as_str(), "truncate" | "dropdatabase" | "deletemany"));
     if deletes {
         groups.push("deletes");
     }
-    let bulk_update = words
-        .iter()
-        .position(|word| *word == "update")
-        .is_some_and(|at| words[at + 1..].contains(&"set") && !words[at + 1..].contains(&"where"));
+    // Each statement on its own: `UPDATE a SET x WHERE y; UPDATE a SET x`
+    // updates every row in its second statement.
+    let bulk_update = text.split(';').any(|statement| {
+        let words = words_of(statement);
+        words
+            .iter()
+            .position(|word| word == "update")
+            .is_some_and(|at| {
+                words[at + 1..].iter().any(|word| word == "set")
+                    && !words[at + 1..].iter().any(|word| word == "where")
+            })
+    });
     if bulk_update {
         groups.push("bulk_changes");
     }
