@@ -20,11 +20,10 @@ use std::collections::{BTreeMap, BTreeSet};
 /// Longest string a draft accepts when the source schema states no bound.
 pub(crate) const DEFAULT_TEXT_LENGTH: u64 = 1_024;
 const MAX_TEXT_LENGTH: u64 = 65_536;
-const DEFAULT_ARRAY_ITEMS: u64 = 100;
+pub(crate) const DEFAULT_ARRAY_ITEMS: u64 = 100;
 const MAX_ARRAY_ITEMS: u64 = 1_000;
 const SAFE_INTEGER: i64 = 1 << 53;
 const MAX_TITLE_CHARS: usize = 120;
-const MAX_RESPONSE_FIELDS: usize = 64;
 /// Scope label used when the source names no provider permission.
 pub(crate) const PLACEHOLDER_SCOPE: &str = "api";
 
@@ -76,6 +75,8 @@ pub(crate) struct ActionParts {
     pub response: Value,
     pub scopes: BTreeSet<String>,
 }
+
+pub(crate) use crate::cloud_pack_generate_response::response;
 
 pub(crate) fn push_action(draft: &mut Draft, parts: ActionParts) {
     let class = parts.proposal.class;
@@ -137,13 +138,19 @@ pub(crate) fn method_class(method: &str, mut proposal: Proposal) -> Proposal {
 
 /// The argument spec for one JSON Schema, or `None` when no pack type fits.
 pub(crate) fn argument(schema: &Value, required: bool) -> Option<Value> {
+    // A source bound of zero admits nothing a pack can express; never widen it.
+    let zero = |schema: &Value, key: &str| schema.get(key).and_then(Value::as_u64) == Some(0);
+    if zero(schema, "maxLength") || zero(schema, "maxItems") {
+        return None;
+    }
     match schema.get("type").and_then(Value::as_str) {
         Some("string") => Some(text_spec(schema, required)),
         Some("integer") => integer_spec(schema, required),
         Some("boolean") => Some(json!({ "type": "boolean", "required": required })),
         Some("array") => {
             let items = schema.get("items")?;
-            if items.get("type").and_then(Value::as_str) != Some("string") {
+            if items.get("type").and_then(Value::as_str) != Some("string") || zero(items, "maxLength")
+            {
                 return None;
             }
             let mut rule = text_spec(items, false);
@@ -200,87 +207,46 @@ fn anchored(schema: &Value) -> Option<String> {
         .then(|| pattern.to_owned())
 }
 
+/// Integer bounds rounded inward, with the exclusive forms of OpenAPI 3.0
+/// (`exclusiveMinimum: true`) and 3.1 (`exclusiveMinimum: 5`) honoured.
 fn integer_spec(schema: &Value, required: bool) -> Option<Value> {
-    let bound = |key: &str, fallback: i64| {
-        schema
-            .get(key)
-            .and_then(Value::as_f64)
-            .map_or(fallback, |value| value as i64)
-            .clamp(-SAFE_INTEGER, SAFE_INTEGER)
+    let number = |key: &str| schema.get(key).and_then(Value::as_f64);
+    let flag = |key: &str| schema.get(key).and_then(Value::as_bool) == Some(true);
+    let low = match (number("minimum"), number("exclusiveMinimum")) {
+        (Some(min), _) if flag("exclusiveMinimum") => Some(min.floor() + 1.0),
+        (min, exclusive) => [min.map(f64::ceil), exclusive.map(|n| n.floor() + 1.0)]
+            .into_iter()
+            .flatten()
+            .reduce(f64::max),
     };
-    let minimum = bound("minimum", 0);
-    let maximum = bound("maximum", i64::from(i32::MAX));
+    let high = match (number("maximum"), number("exclusiveMaximum")) {
+        (Some(max), _) if flag("exclusiveMaximum") => Some(max.ceil() - 1.0),
+        (max, exclusive) => [max.map(f64::floor), exclusive.map(|n| n.ceil() - 1.0)]
+            .into_iter()
+            .flatten()
+            .reduce(f64::min),
+    };
+    let clamp = |value: f64| (value.clamp(-SAFE_INTEGER as f64, SAFE_INTEGER as f64)) as i64;
+    let minimum = low.map_or(0, clamp);
+    let maximum = high.map_or(i64::from(i32::MAX), clamp);
     (minimum <= maximum).then(|| {
         json!({ "type": "integer", "required": required, "minimum": minimum, "maximum": maximum })
     })
 }
 
-/// Projected response fields for a JSON Schema: scalar top-level properties,
-/// or those of each item when the response is an array.
-pub(crate) fn response(schema: Option<&Value>, draft: &mut Draft, at: &str) -> Value {
-    let fields = schema.and_then(|schema| {
-        if schema.get("type").and_then(Value::as_str) == Some("array") {
-            let items = scalar_fields(schema.get("items")?);
-            (!items.is_empty()).then(|| {
-                vec![json!({
-                    "name": "items",
-                    "value": { "list": { "from": "", "maxItems": DEFAULT_ARRAY_ITEMS, "fields": items } },
-                })]
-            })
-        } else {
-            Some(scalar_fields(schema)).filter(|fields| !fields.is_empty())
-        }
-    });
-    let fields = fields.unwrap_or_else(|| {
-        draft.note("response_fields_guessed", at);
-        vec![json!({ "name": "id", "value": { "from": "id" } })]
-    });
-    json!({ "maxBytes": 65_536, "fields": fields })
-}
-
-fn scalar_fields(schema: &Value) -> Vec<Value> {
-    let Some(properties) = schema.get("properties").and_then(Value::as_object) else {
-        return Vec::new();
-    };
-    let mut names = BTreeSet::new();
-    let mut fields = Vec::new();
-    for (key, property) in properties {
-        let kind = property.get("type").and_then(Value::as_str);
-        let scalar = matches!(kind, Some("string" | "integer" | "number" | "boolean"));
-        let Some(name) = snake(key).filter(|name| !name.starts_with('_')) else {
-            continue;
-        };
-        if !scalar || !response_key(key) || !names.insert(name.clone()) {
-            continue;
-        }
-        let mut field = json!({ "name": name, "value": { "from": key } });
-        if kind == Some("string") {
-            // Provider text can carry instructions; mark it untrusted until reviewed.
-            field["untrusted"] = json!(true);
-        }
-        fields.push(field);
-        if fields.len() == MAX_RESPONSE_FIELDS {
-            break;
-        }
-    }
-    fields
-}
-
-fn response_key(key: &str) -> bool {
-    (1..=64).contains(&key.len())
-        && key
-            .bytes()
-            .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'_' | b'-' | b'$' | b'@'))
-}
-
 /// Arguments for the top-level properties of an object schema. Properties no
 /// pack type can bound are left out; a left-out required one is noted.
+///
+/// With `rename` off (an MCP tool, whose call keeps the caller's names) a
+/// property whose name is not already `snake_case` is left out rather than
+/// renamed, since nothing would translate the new name back.
 pub(crate) fn object_arguments(
     schema: &Value,
     into: &mut Map<String, Value>,
     names: &mut BTreeMap<String, String>,
     draft: &mut Draft,
     at: &str,
+    rename: bool,
 ) {
     let Some(properties) = schema.get("properties").and_then(Value::as_object) else {
         return;
@@ -293,7 +259,9 @@ pub(crate) fn object_arguments(
     for (key, property) in properties {
         let wanted = required.contains(key.as_str());
         let spec = argument(property, wanted);
-        let name = snake(key).filter(|name| !into.contains_key(name));
+        let name = snake(key)
+            .filter(|name| rename || name == key)
+            .filter(|name| !into.contains_key(name));
         match (spec, name) {
             (Some(spec), Some(name)) if into.len() < MAX_ARGUMENTS => {
                 into.insert(name.clone(), spec);
@@ -437,9 +405,9 @@ fn build_mcp(tools: &[Value], provider: &str, mode: &str, draft: &mut Draft) {
         let mut arguments = Map::new();
         if let Some(schema) = schema {
             let at = format!("{at}/inputSchema/properties");
-            object_arguments(schema, &mut arguments, &mut BTreeMap::new(), draft, &at);
+            object_arguments(schema, &mut arguments, &mut BTreeMap::new(), draft, &at, false);
         }
-        let response = response(tool.get("outputSchema"), draft, &at);
+        let response = response(tool.get("outputSchema"), false, draft, &at);
         let text = tool
             .get("title")
             .or_else(|| tool.get("description"))

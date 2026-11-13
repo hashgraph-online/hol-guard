@@ -7,6 +7,7 @@ use crate::cloud_pack_generate::{
     argument, method_class, object_arguments, push_action, response, snake, title, ActionParts,
     Draft, PLACEHOLDER_SCOPE,
 };
+use crate::cloud_pack::{MAX_ARGUMENTS, MAX_HOSTS};
 use crate::cloud_pack_validate::valid_host;
 use crate::cloud_pack_validate_request::path_placeholders;
 use serde_json::{json, Map, Value};
@@ -15,8 +16,8 @@ use std::collections::{BTreeMap, BTreeSet};
 const METHODS: [&str; 5] = ["get", "post", "put", "patch", "delete"];
 const MAX_REF_HOPS: usize = 8;
 const MAX_SCHEMA_DEPTH: usize = 32;
-/// Schema nodes one draft may copy while inlining `$ref`s, so a document of
-/// mutually referencing schemas cannot grow the draft without bound.
+/// Schema nodes one operation may copy while inlining `$ref`s, so a document
+/// of mutually referencing schemas cannot grow the draft without bound.
 const MAX_SCHEMA_NODES: usize = 50_000;
 
 type Refusal = (&'static str, &'static str);
@@ -32,16 +33,13 @@ pub(crate) fn build(
     if !version.is_some_and(|version| version.starts_with("3.")) {
         return Err(("generate_openapi_unsupported", "/openapi/openapi"));
     }
-    let (server_host, base) = server(document);
-    let host = host
-        .or(server_host)
-        .ok_or(("generate_openapi_server_invalid", "/openapi/servers"))?;
     let mode = auth_mode(document);
-    let mut budget = MAX_SCHEMA_NODES;
+    let mut hosts = BTreeSet::new();
     let paths = document.get("paths").and_then(Value::as_object);
     for (path, item) in paths.into_iter().flatten() {
+        let mut item_budget = MAX_SCHEMA_NODES;
         let item = match item.get("$ref") {
-            Some(_) => resolve(document, item, &mut budget),
+            Some(_) => resolve(document, item, &mut item_budget),
             None => item.clone(),
         };
         for method in METHODS {
@@ -49,31 +47,49 @@ pub(crate) fn build(
                 continue;
             };
             let at = format!("/openapi/paths/{}/{method}", pointer_escape(path));
-            let shared = item.get("parameters");
+            // The operation's own servers win over the path's, then the document's.
+            let servers = [operation, &item, document]
+                .into_iter()
+                .find_map(|node| node.get("servers"));
+            let Some((op_host, base)) = server(servers, host.as_deref())
+                .filter(|(op_host, _)| hosts.contains(op_host) || hosts.len() < MAX_HOSTS)
+            else {
+                draft.note("server_unsupported", &at);
+                continue;
+            };
             let source = Source {
                 document,
-                host: &host,
+                host: &op_host,
                 base: &base,
                 path,
                 method,
                 mode: &mode,
             };
-            if operation_action(
+            let mut budget = MAX_SCHEMA_NODES;
+            let built = operation_action(
                 &source,
                 operation,
-                shared,
+                item.get("parameters"),
                 provider,
                 &at,
                 draft,
                 &mut budget,
-            )
-            .is_none()
-            {
-                draft.note("operation_skipped", &at);
+            );
+            if budget == 0 {
+                draft.note("schema_budget_exhausted", &at);
+            }
+            match built {
+                Some(()) => {
+                    hosts.insert(op_host);
+                }
+                None => draft.note("operation_skipped", &at),
             }
         }
     }
-    Ok((vec![host], mode))
+    if hosts.is_empty() && server(document.get("servers"), host.as_deref()).is_none() {
+        return Err(("generate_openapi_server_invalid", "/openapi/servers"));
+    }
+    Ok((hosts.into_iter().collect(), mode))
 }
 
 struct Source<'a> {
@@ -99,19 +115,7 @@ fn operation_action(
     let mut arguments = Map::new();
     let mut renamed = BTreeMap::new();
     let mut query = Vec::new();
-    let parameters = shared
-        .and_then(Value::as_array)
-        .into_iter()
-        .flatten()
-        .chain(
-            operation
-                .get("parameters")
-                .and_then(Value::as_array)
-                .into_iter()
-                .flatten(),
-        );
-    for parameter in parameters {
-        let parameter = resolve(document, parameter, budget);
+    for parameter in parameters(document, shared, operation, budget)? {
         let name = parameter.get("name").and_then(Value::as_str)?;
         let location = parameter.get("in").and_then(Value::as_str)?;
         let schema = resolve(
@@ -120,9 +124,10 @@ fn operation_action(
             budget,
         );
         let required = location == "path" || parameter.get("required") == Some(&json!(true));
-        let arg = snake(name).filter(|arg| !arguments.contains_key(arg));
+        let arg = snake(name)
+            .filter(|arg| !arguments.contains_key(arg) && arguments.len() < MAX_ARGUMENTS);
         match (location, arg, argument(&schema, required)) {
-            ("path", Some(arg), Some(spec)) => {
+            ("path", Some(arg), Some(spec)) if path_type(&spec) => {
                 renamed.insert(name.to_owned(), arg.clone());
                 arguments.insert(arg, spec);
             }
@@ -154,7 +159,7 @@ fn operation_action(
         (Some(schema), _) => {
             let mut names = BTreeMap::new();
             let at = format!("{at}/requestBody");
-            object_arguments(schema, &mut arguments, &mut names, draft, &at);
+            object_arguments(schema, &mut arguments, &mut names, draft, &at, true);
             if names.is_empty() {
                 return None;
             }
@@ -166,6 +171,11 @@ fn operation_action(
         }
         (None, _) if operation.get("requestBody").is_some() => {
             draft.note("body_unsupported", at);
+            // An action that left out a body the provider requires could never succeed.
+            let body = resolve(document, operation.get("requestBody")?, budget);
+            if body.get("required") == Some(&json!(true)) {
+                return None;
+            }
         }
         (None, _) => {}
     }
@@ -177,8 +187,8 @@ fn operation_action(
             str::to_owned,
         );
     let proposal = method_class(&method, classify(&name, body_schema.as_ref()));
-    let response_schema = response_schema(document, operation, budget);
-    let response = response(response_schema.as_ref(), draft, at);
+    let (response_schema, empty_ok) = response_schema(document, operation, budget);
+    let response = response(response_schema.as_ref(), empty_ok, draft, at);
     let action_id = draft.action_id(provider, &name)?;
     let summary = operation.get("summary").and_then(Value::as_str);
     let link = Some(&name)
@@ -199,6 +209,38 @@ fn operation_action(
         },
     );
     Some(())
+}
+
+/// Shared path-item parameters merged with the operation's own, which replace
+/// a shared one with the same `in` and `name`. `None` when one is unreadable.
+fn parameters(
+    document: &Value,
+    shared: Option<&Value>,
+    operation: &Value,
+    budget: &mut usize,
+) -> Option<Vec<Value>> {
+    let mut merged: Vec<((String, String), Value)> = Vec::new();
+    let listed = [shared, operation.get("parameters")];
+    for parameter in listed.into_iter().flatten().filter_map(Value::as_array).flatten() {
+        let parameter = resolve(document, parameter, budget);
+        let key = (
+            parameter.get("in").and_then(Value::as_str)?.to_owned(),
+            parameter.get("name").and_then(Value::as_str)?.to_owned(),
+        );
+        match merged.iter_mut().find(|(seen, _)| *seen == key) {
+            Some(slot) => slot.1 = parameter,
+            None => merged.push((key, parameter)),
+        }
+    }
+    Some(merged.into_iter().map(|(_, parameter)| parameter).collect())
+}
+
+/// A pack path placeholder holds a required string or integer only.
+fn path_type(spec: &Value) -> bool {
+    matches!(
+        spec.get("type").and_then(Value::as_str),
+        Some("string" | "integer")
+    )
 }
 
 fn is_array(spec: &Value) -> bool {
@@ -232,15 +274,29 @@ fn body_schema(document: &Value, operation: &Value, budget: &mut usize) -> Optio
     schema.get("properties").is_some().then_some(schema)
 }
 
-fn response_schema(document: &Value, operation: &Value, budget: &mut usize) -> Option<Value> {
-    let responses = operation.get("responses")?.as_object()?;
-    let (_, chosen) = responses.iter().find(|(code, _)| code.starts_with('2'))?;
+/// The first success response's JSON schema, and whether that success
+/// carries no body at all (a `204`, or a `2xx` with no `content`).
+fn response_schema(
+    document: &Value,
+    operation: &Value,
+    budget: &mut usize,
+) -> (Option<Value>, bool) {
+    let Some(responses) = operation.get("responses").and_then(Value::as_object) else {
+        return (None, false);
+    };
+    let Some((code, chosen)) = responses.iter().find(|(code, _)| code.starts_with('2')) else {
+        return (None, false);
+    };
     let chosen = resolve(document, chosen, budget);
-    let schema = chosen
-        .get("content")?
-        .get("application/json")?
-        .get("schema")?;
-    Some(resolve(document, schema, budget))
+    let content = chosen.get("content").filter(|content| {
+        content.as_object().is_some_and(|map| !map.is_empty())
+    });
+    let empty = code == "204" || content.is_none();
+    let schema = content
+        .and_then(|content| content.get("application/json"))
+        .and_then(|json| json.get("schema"))
+        .map(|schema| resolve(document, schema, budget));
+    (schema, empty)
 }
 
 /// Provider scopes for one operation, from its own or the document's `security`.
@@ -304,26 +360,32 @@ fn auth_mode(document: &Value) -> String {
     }
 }
 
-/// The host and base path of the first `https` server, when it is concrete.
-fn server(document: &Value) -> (Option<String>, String) {
-    let url = document.pointer("/servers/0/url").and_then(Value::as_str);
-    let Some(rest) = url.and_then(|url| url.strip_prefix("https://")) else {
-        return (None, String::new());
-    };
-    let (host, path) = rest.split_once('/').unwrap_or((rest, ""));
-    let host = host.to_ascii_lowercase();
-    let path = path.trim_end_matches('/');
-    let base = if path.is_empty() {
-        String::new()
-    } else {
-        format!("/{path}")
-    };
-    let concrete = !base.contains('{') && valid_host(&host);
-    if concrete {
-        (Some(host), base)
-    } else {
-        (None, String::new())
-    }
+/// The host and base path of the first usable server: an `https` URL with a
+/// concrete host, or, when the author named a host, a relative URL or one
+/// whose host is templated. The named host always wins; the base path is kept.
+fn server(servers: Option<&Value>, given: Option<&str>) -> Option<(String, String)> {
+    let urls = servers.and_then(Value::as_array);
+    let mut urls = urls.into_iter().flatten().filter_map(|server| server.get("url")?.as_str());
+    let found = urls.find_map(|url| {
+        let (host, path) = match url.strip_prefix("https://") {
+            Some(rest) => rest.split_once('/').unwrap_or((rest, "")),
+            None if url.starts_with('/') => ("", url),
+            None => return None,
+        };
+        let path = path.trim_matches('/');
+        let base = if path.is_empty() { String::new() } else { format!("/{path}") };
+        if base.contains('{') {
+            return None;
+        }
+        let host = host.to_ascii_lowercase();
+        let host = match given {
+            Some(given) => given.to_owned(),
+            None if !host.contains('{') && valid_host(&host) => host,
+            None => return None,
+        };
+        Some((host, base))
+    });
+    found.or_else(|| given.map(|host| (host.to_owned(), String::new())))
 }
 
 fn query_name(name: &str) -> bool {
