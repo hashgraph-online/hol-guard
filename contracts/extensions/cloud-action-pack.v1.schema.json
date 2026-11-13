@@ -634,10 +634,50 @@
                     "pattern": "^[A-Za-z0-9_.\\[\\]-]{1,64}$"
                   },
                   "value": {
-                    "$ref": "#/$defs/template"
+                    "$ref": "#/$defs/formValue"
                   }
                 }
               }
+            }
+          }
+        }
+      ]
+    },
+    "formValue": {
+      "description": "A form field carries one scalar: an argument, or a constant string, integer or boolean.",
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "arg"
+          ],
+          "properties": {
+            "arg": {
+              "$ref": "#/$defs/argumentName"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "const"
+          ],
+          "properties": {
+            "const": {
+              "oneOf": [
+                {
+                  "type": "string",
+                  "maxLength": 256
+                },
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "boolean"
+                }
+              ]
             }
           }
         }

@@ -46,9 +46,10 @@ amount or currency, or one that is not a three-letter code, leaves the money fac
 
 Some APIs, Stripe's among them, accept only `application/x-www-form-urlencoded` bodies. A `form` body is a flat list
 of fields, allowed only as the whole body. Each value is a string, integer or boolean argument, or a scalar
-constant; a field whose argument is absent is left out. Field names use letters, digits and `_ . - [ ]`, so the
-bracket notation such APIs read as nesting (`metadata[order]`) is available, and both names and values are
-percent-encoded with spaces as `+`.
+constant of at most 256 bytes; a field whose argument is absent is left out. Field names use letters, digits and
+`_ . - [ ]`, so the bracket notation such APIs read as nesting (`metadata[order]`) is available, and both names and
+values are percent-encoded with spaces as `+`, so a tab or other control character in a value travels as `%09` and
+so on. Rendering stops as soon as the body passes 1 MiB.
 
 ## Mail messages
 

@@ -849,6 +849,7 @@
       },
       "response": {
         "maxBytes": 262144,
+        "emptyOk": true,
         "fields": [
           {
             "name": "status",
@@ -1096,6 +1097,7 @@
       },
       "response": {
         "maxBytes": 262144,
+        "emptyOk": true,
         "fields": [
           {
             "name": "status",
@@ -1205,6 +1207,7 @@
       },
       "response": {
         "maxBytes": 262144,
+        "emptyOk": true,
         "fields": [
           {
             "name": "status",

@@ -418,7 +418,8 @@ pub(crate) fn render_body(
     let mut out = String::new();
     match template {
         Template::Form(fields) => {
-            out = crate::cloud_pack_form::render(fields, args).ok_or_else(|| refused(None))?;
+            out = crate::cloud_pack_form::render(fields, args, MAX_BODY_BYTES)
+                .ok_or_else(|| refused(None))?;
         }
         _ => write_template(template, args, None, &mut out)?,
     }

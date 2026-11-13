@@ -206,3 +206,58 @@ fn a_fixed_currency_is_reported_as_given() {
     let facts = extract(action, check_arguments(action, &args).unwrap());
     assert_eq!(facts.money.known().unwrap().currency, "GBP");
 }
+
+#[test]
+fn a_form_value_may_carry_a_tab() {
+    let request = render(
+        &action("stripe.payouts.create"),
+        &json!({"amount": 500, "currency": "usd", "description": "Order\t1042"}),
+    )
+    .unwrap();
+    assert_eq!(
+        request.body.as_deref(),
+        Some("amount=500&currency=usd&description=Order%091042")
+    );
+}
+
+#[test]
+fn a_form_stops_once_it_passes_its_limit() {
+    let action = action("stripe.payouts.create");
+    let crate::cloud_pack::Executor::DeclarativeHttp { request } = &action.executor else {
+        panic!("stripe payouts are declarative HTTP");
+    };
+    let Some(crate::cloud_pack::Template::Form(fields)) = &request.body else {
+        panic!("stripe payouts send a form");
+    };
+    let args = json!({"amount": 500, "currency": "usd", "description": "x".repeat(200)});
+    let args = args.as_object().unwrap();
+    let whole = crate::cloud_pack_form::render(fields, args, usize::MAX).unwrap();
+    assert_eq!(
+        crate::cloud_pack_form::render(fields, args, whole.len()).as_deref(),
+        Some(whole.as_str())
+    );
+    assert_eq!(
+        crate::cloud_pack_form::render(fields, args, whole.len() - 1),
+        None
+    );
+    assert_eq!(crate::cloud_pack_form::render(fields, args, 10), None);
+}
+
+#[test]
+fn hubspot_deletes_accept_their_empty_success() {
+    const HUBSPOT: &str = include_str!("../../../../contributions/cloud-actions/hubspot.json");
+    let pack = parse_pack(HUBSPOT.as_bytes()).unwrap();
+    let project = crate::cloud_pack_response::project;
+    // HubSpot answers a batch archive, a GDPR erasure and a schema delete
+    // with 204 and no body.
+    for id in [
+        "hubspot.objects.archive",
+        "hubspot.contacts.gdpr_delete",
+        "hubspot.schemas.delete",
+    ] {
+        let action = pack.action(id).unwrap();
+        assert!(project(action, b"").is_ok(), "{id}");
+    }
+    let list = pack.action("hubspot.objects.list").unwrap();
+    assert_eq!(project(list, b"").unwrap_err(), "response_json_invalid");
+}

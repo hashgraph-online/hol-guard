@@ -51,9 +51,15 @@ pub(crate) fn validate(
     Ok(())
 }
 
-/// The encoded body, or `None` when an argument is not a scalar.
-pub(crate) fn render(fields: &[TemplateField], args: &Map<String, Value>) -> Option<String> {
-    let mut pairs = Vec::with_capacity(fields.len());
+/// The encoded body, or `None` when an argument is not a scalar or the body
+/// would grow past `limit` bytes. The limit is checked as each field is
+/// appended, so a refused body never holds more than one field past it.
+pub(crate) fn render(
+    fields: &[TemplateField],
+    args: &Map<String, Value>,
+    limit: usize,
+) -> Option<String> {
+    let mut out = String::new();
     for field in fields {
         let value = match &field.value {
             Template::Arg(name) => match args.get(name) {
@@ -64,18 +70,24 @@ pub(crate) fn render(fields: &[TemplateField], args: &Map<String, Value>) -> Opt
             _ => return None,
         };
         let text = scalar(value)?;
-        pairs.push(format!(
-            "{}={}",
-            encode(&field.name, true),
-            encode(&text, true)
-        ));
+        if !out.is_empty() {
+            out.push('&');
+        }
+        out.push_str(&encode(&field.name, true));
+        out.push('=');
+        out.push_str(&encode(&text, true));
+        if out.len() > limit {
+            return None;
+        }
     }
-    Some(pairs.join("&"))
+    Some(out)
 }
 
+/// A scalar's form text. Every byte outside the unreserved set is
+/// percent-encoded, so control characters such as a tab travel safely.
 fn scalar(value: &Value) -> Option<String> {
     match value {
-        Value::String(text) if !text.chars().any(char::is_control) => Some(text.clone()),
+        Value::String(text) => Some(text.clone()),
         Value::Number(number) => number.as_i64().map(|n| n.to_string()),
         Value::Bool(flag) => Some(flag.to_string()),
         _ => None,
