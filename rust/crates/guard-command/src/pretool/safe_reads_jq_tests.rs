@@ -3,8 +3,7 @@
 //! own options may precede them.
 
 use super::{
-    jq_filter_position, safe_jq_file_arguments, safe_jq_piped_arguments,
-    safe_jq_stdin_arguments,
+    jq_filter_position, safe_jq_file_arguments, safe_jq_piped_arguments, safe_jq_stdin_arguments,
 };
 
 fn arguments(words: &[&str]) -> Vec<String> {
