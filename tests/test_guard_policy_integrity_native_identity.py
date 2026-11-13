@@ -301,6 +301,19 @@ def test_fallback_preference_reads_current_marker_after_deletion(tmp_path: Path)
     assert not backend._fallback_is_preferred(store._policy_integrity_key_ref)
 
 
+def test_primary_key_recovery_transfers_fallback_control_before_clearing_preference(tmp_path: Path) -> None:
+    store, backend = _setup(tmp_path, signer=b"p" * 32)
+    marker_ref = backend._fallback_preference_ref(store._policy_integrity_key_ref)
+    backend.fallback.set_secret(marker_ref, "1")
+    backend.primary.set_secret(store._policy_integrity_control_ref, "old-primary-control")
+    backend.fallback.set_secret(store._policy_integrity_control_ref, "new-fallback-control")
+
+    backend.set_secret(store._policy_integrity_key_ref, "new-key")
+
+    assert backend.primary.get_secret(store._policy_integrity_control_ref) == "new-fallback-control"
+    assert backend.get_secret(store._policy_integrity_control_ref) == "new-fallback-control"
+
+
 def test_unverified_control_update_preserves_both_identities(tmp_path: Path) -> None:
     store, backend = _setup(tmp_path, signer=b"x" * 32)
     backend.primary.set_secret(store._policy_integrity_control_ref, "primary-control")
