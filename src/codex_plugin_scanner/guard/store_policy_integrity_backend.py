@@ -63,7 +63,7 @@ def _matches_native_authority(guard_home: Path, encoded_key: str | None) -> bool
 
 
 class MirroredPolicyIntegritySecretStore(FallbackSecretStore):
-    """Prefer the system keyring and keep its key usable in a headless session."""
+    """Prefer the system keyring while keeping fallback authority durable in headless sessions."""
 
     _FALLBACK_PREFERENCE_PREFIX = "hol-guard:fallback-preferred:"
 
