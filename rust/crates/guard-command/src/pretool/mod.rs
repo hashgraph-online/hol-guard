@@ -156,6 +156,7 @@ use git_reads::safe_git_arguments;
 mod git_helper_context;
 mod git_history_reads;
 mod git_hook_files;
+mod hook_neutering;
 pub(crate) mod git_listing_reads;
 mod git_local_writes;
 mod git_ls_remote;
@@ -204,6 +205,7 @@ pub(crate) use git_routes::{
 mod apply_patch_writes;
 mod ci_workflow_writes;
 mod data_heredocs;
+mod install_script_writes;
 mod literal_secrets;
 mod lockfile_install;
 mod omp_file_url;

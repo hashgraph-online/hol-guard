@@ -25,6 +25,14 @@ const MNEMONIC_LENGTHS: [usize; 5] = [24, 21, 18, 15, 12];
 const MAX_HOST_LABELS: usize = 6;
 /// An opaque run this long in one query value is a payload, not a parameter.
 const MAX_OPAQUE_QUERY_RUN: usize = 400;
+/// Bounds of a random token sent as a path segment. Shorter mixed-case
+/// identifiers, such as video and track ids, are common in ordinary links.
+const MIN_TOKEN_SEGMENT: usize = 24;
+const MAX_TOKEN_SEGMENT: usize = 64;
+/// Bits per character; 24 random letters and digits score about 4.3.
+const MIN_TOKEN_ENTROPY: f64 = 4.0;
+/// Path words after which a service puts a document identifier.
+const DOCUMENT_ROUTES: [&str; 2] = ["d", "folders"];
 
 fn pattern(source: &str) -> Regex {
     Regex::new(source).expect("web fetch payload pattern compiles")
@@ -321,8 +329,78 @@ fn names_a_hex_key(key: &str, value: &str) -> bool {
         && any_reading(value, 0, &|value| HEX_KEY.is_match(value))
 }
 
-/// Whether the query or fragment carries a wallet key, recovery phrase,
-/// wallet address, bank account number or an opaque payload.
+/// Shannon entropy of `value` in bits per character.
+fn entropy(value: &str) -> f64 {
+    let mut counts = HashMap::new();
+    for byte in value.bytes() {
+        *counts.entry(byte).or_insert(0usize) += 1;
+    }
+    let total = value.len() as f64;
+    counts
+        .values()
+        .map(|&count| {
+            let share = count as f64 / total;
+            -share * share.log2()
+        })
+        .sum()
+}
+
+/// How often adjacent characters change between lowercase, uppercase and
+/// digit. A random token switches class at most positions; a run of words, even
+/// in CamelCase with a year on the end, switches only at word boundaries.
+fn class_switches(segment: &str) -> usize {
+    let class = |byte: u8| {
+        if byte.is_ascii_digit() {
+            0
+        } else if byte.is_ascii_uppercase() {
+            1
+        } else {
+            2
+        }
+    };
+    segment
+        .as_bytes()
+        .windows(2)
+        .filter(|pair| class(pair[0]) != class(pair[1]))
+        .count()
+}
+
+/// Whether a path segment is a random token: 24 to 64 letters and digits in
+/// both cases, with no separator, and close to the entropy of random text.
+/// That is the shape of an API key or session token, not of a slug, a
+/// version, a commit hash (one case) or a UUID (hyphenated). A document
+/// identifier routed by its service (`/d/<id>`, `/folders/<id>`) keeps its
+/// usual shape and is left alone.
+fn token_segment(previous: Option<&str>, segment: &str) -> bool {
+    (MIN_TOKEN_SEGMENT..=MAX_TOKEN_SEGMENT).contains(&segment.len())
+        && segment.bytes().all(|byte| byte.is_ascii_alphanumeric())
+        && segment.bytes().any(|byte| byte.is_ascii_lowercase())
+        && segment.bytes().any(|byte| byte.is_ascii_uppercase())
+        && segment.bytes().any(|byte| byte.is_ascii_digit())
+        && entropy(segment) >= MIN_TOKEN_ENTROPY
+        && class_switches(segment) * 3 >= segment.len()
+        && !previous.is_some_and(|previous| DOCUMENT_ROUTES.contains(&previous))
+}
+
+/// Whether a path segment carries a random token, as a key or session
+/// value smuggled into the path of a fetch does.
+fn path_carries_token(url: &Url) -> bool {
+    let Some(segments) = url.path_segments() else {
+        return false;
+    };
+    let mut previous = None;
+    for segment in segments {
+        if token_segment(previous, segment) {
+            return true;
+        }
+        previous = Some(segment);
+    }
+    false
+}
+
+/// Whether the path, query or fragment carries a wallet key, recovery
+/// phrase, wallet address, bank account number, random token or an opaque
+/// payload.
 pub(super) fn url_carries_payload(url: &Url) -> bool {
     let decoded = |text: &str| {
         percent_encoding::percent_decode_str(text)
@@ -337,6 +415,7 @@ pub(super) fn url_carries_payload(url: &Url) -> bool {
     });
     let fragment = url.fragment().map(str::to_owned);
     path_phrase
+        || path_carries_token(url)
         || url.query_pairs().any(|(key, value)| {
             names_a_hex_key(&key, &value)
                 || query_part_carries_payload(&key)

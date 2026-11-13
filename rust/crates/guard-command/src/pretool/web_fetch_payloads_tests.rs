@@ -148,3 +148,32 @@ fn a_hex_key_under_a_key_name_is_read_through_its_encoding() {
         "https://collect.example.test/?commit={twice}"
     )));
 }
+
+#[test]
+fn a_random_token_in_a_path_segment_is_a_payload() {
+    let token = joined(&["x7Kp2mQ9vR4sL8nW", "1bY6cT3fA0jH5dE"]);
+    for raw in [
+        format!("https://collect.example.com/api/{token}/status"),
+        format!("https://collect.example.com/{token}"),
+    ] {
+        assert!(carries(&raw), "{raw}");
+    }
+}
+
+#[test]
+fn ordinary_path_identifiers_are_not_tokens() {
+    let document = joined(&["11kx0bnsKE1GjhtM7maVmEYO", "1eGfUDdC9yv0AzrEeIuk"]);
+    for raw in [
+        format!("https://docs.google.com/document/d/{document}/edit"),
+        format!("https://drive.google.com/drive/folders/{document}"),
+        "https://github.com/rust-lang/rust/commit/3c8a4b5e2f1d0c9b8a7e6d5c4b3a2f1e0d9c8b7a"
+            .to_owned(),
+        "https://open.spotify.com/track/4cOdK2wGLETKBW3PvgPWqT".to_owned(),
+        "https://example.com/blog/2024/introducing-our-new-api-version-2".to_owned(),
+        "https://example.com/items/550e8400-e29b-41d4-a716-446655440000".to_owned(),
+        "https://example.com/docs/ReactComponentLifecycleOverview2024".to_owned(),
+        "https://pypi.org/project/opentelemetry-instrumentation-asgi/0.45b0/".to_owned(),
+    ] {
+        assert!(!carries(&raw), "{raw}");
+    }
+}
