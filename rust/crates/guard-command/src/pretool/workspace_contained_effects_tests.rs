@@ -289,6 +289,8 @@ fn braces_in_an_in_place_edit_script_are_not_a_root_glob() {
         "sed -i 's|href={OLD}|href={NEW}|g' src/a.tsx",
         "sed -i -e 's|{OLD}|{NEW}|' src/a.tsx",
         "sed -i.bak --expression 's|{OLD}|{NEW}|' src/a.tsx",
+        "perl -i -0777pe 's|{OLD}|{NEW}|g' src/a.tsx",
+        "sed -i '' 's|href={OLD}|href={NEW}|g' src/a.tsx",
     ] {
         let got = reason("omp", command, &ws, true);
         if host() {
@@ -304,6 +306,11 @@ fn braces_in_an_in_place_edit_script_are_not_a_root_glob() {
         "sed -i 's|{OLD}|{NEW}|' *",
         "sed -i * -e 's|{OLD}|{NEW}|'",
         "sed -i -- 's|{OLD}|{NEW}|' {a,b}",
+        "perl -i -ne *",
+        "perl -i -0777pe *",
+        "sed -i -e *",
+        "sed -i *",
+        "sed -i '' *",
     ] {
         assert_ne!(reason("omp", command, &ws, true), CONTAINED, "{command}");
     }
