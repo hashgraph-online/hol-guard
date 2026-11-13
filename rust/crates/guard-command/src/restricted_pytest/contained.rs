@@ -699,6 +699,22 @@ fn prepare_inline(input: &Input) -> Result<Value, RestrictedPytestError> {
             ));
         }
     };
+    // A program that runs Git can read the repository through it; the plan
+    // names that Git so the sandbox can exec it and the run finds it on PATH.
+    if let (Some(git), Some(allowed)) = (
+        super::inline_git::trusted_git(
+            &argv[index..],
+            &input.cwd,
+            &input.workspace,
+            &input.search_path,
+        ),
+        plan["allowed_executables"].as_array_mut(),
+    ) {
+        let git = json!(git);
+        if !allowed.contains(&git) {
+            allowed.push(git);
+        }
+    }
     let mut command = vec![plan["executable"].as_str().unwrap().to_owned()];
     command.extend(runtime);
     command.extend_from_slice(&argv[index..]);
