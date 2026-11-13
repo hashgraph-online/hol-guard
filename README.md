@@ -27,6 +27,26 @@ Run it locally without an account. Use the CLI and local dashboard to manage pro
 [Get started](#install-hol-guard) · [Supported agents](#supported-ai-agents) · [Plugin scanner](#plugin-scanner) · [Documentation](#documentation) · [Contribute an extension](#contribute-a-new-extension) · [Contribute an adapter](docs/guard/adapter-contributions.md) · [Development](#development)
 
 <!-- hol-sponsors:start -->
+### Sponsors
+#### Gold sponsors
+
+<table align="center">
+<tr>
+<td align="center" valign="middle" width="200"><a href="https://www.yanez.ai/"><img src="https://static.wixstatic.com/media/95b2c3_92bcb5a2779b413595e54a8db1f2ecec~mv2.png" alt="Yanez logo" width="56" height="53" /> <strong>Yanez</strong></a></td>
+</tr>
+</table>
+
+#### Bronze sponsors
+
+<table align="center">
+<tr>
+<td align="center" valign="middle" width="140" height="56"><a href="https://synthetic.new/"><img src="https://raw.githubusercontent.com/hashgraph-online/awesome-ai-plugins/main/assets/synthetic-sponsor-bronze.png" alt="Synthetic" width="120" height="48" /></a></td>
+<td align="center" valign="middle" width="140" height="56"><a href="https://www.firecrawl.dev/referral?rid=SLPLSKAU"><img src="https://www.firecrawl.dev/brand/firecrawl-wordmark.png" alt="Firecrawl" width="120" height="28" /></a></td>
+</tr>
+</table>
+
+<sub>Thank you to our sponsors for supporting HOL Guard. Some sponsor links are referral links.<br>Sponsorship does not change Guard's security decisions or coverage.</sub>
+<a href="https://hol.org/advertise"><img src="https://img.shields.io/badge/Become_a_sponsor-hol.org%2Fadvertise-1e3970?style=flat" alt="Become a sponsor" height="22"></a>
 <!-- hol-sponsors:end -->
 
 ## Install HOL Guard

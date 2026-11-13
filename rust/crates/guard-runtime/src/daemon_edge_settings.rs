@@ -305,6 +305,7 @@ impl Loaded {
             "approval_browser_immediate_severity",
             "desktop_notifications",
             "update_channel",
+            "update_mode",
             "telemetry",
             "sync",
             "receipt_redaction_level",

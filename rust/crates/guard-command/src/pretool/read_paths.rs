@@ -421,7 +421,8 @@ fn path_gate(
                     || hidden_listing::repository_hidden_source_document(
                         canonical, home_dir, cwd,
                     )
-                    || hidden_listing::repository_hidden_marker_file(canonical, home_dir, cwd)))
+                    || hidden_listing::repository_hidden_marker_file(canonical, home_dir, cwd)
+                    || super::cursor_session_outputs::own_output(canonical, home_dir)))
             || (read_only && execution_output_log(canonical, home_dir)))
     {
         return false;

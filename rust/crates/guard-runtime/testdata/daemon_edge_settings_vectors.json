@@ -234,6 +234,7 @@
           "telemetry": false,
           "unknown_publisher_action": "review",
           "update_channel": "stable",
+          "update_mode": "automatic",
           "watch_auto_revert_hours": 24
         }
       },
@@ -674,6 +675,7 @@
           "telemetry": false,
           "unknown_publisher_action": "review",
           "update_channel": "stable",
+          "update_mode": "automatic",
           "watch_auto_revert_hours": 24
         }
       }
@@ -912,6 +914,7 @@
           "telemetry": false,
           "unknown_publisher_action": "review",
           "update_channel": "stable",
+          "update_mode": "automatic",
           "watch_auto_revert_hours": 0
         }
       },
@@ -1352,6 +1355,7 @@
           "telemetry": false,
           "unknown_publisher_action": "review",
           "update_channel": "stable",
+          "update_mode": "automatic",
           "watch_auto_revert_hours": 0
         }
       }
@@ -1594,6 +1598,7 @@
           "telemetry": false,
           "unknown_publisher_action": "review",
           "update_channel": "stable",
+          "update_mode": "automatic",
           "watch_auto_revert_hours": 24
         }
       },
@@ -2038,6 +2043,7 @@
           "telemetry": false,
           "unknown_publisher_action": "review",
           "update_channel": "stable",
+          "update_mode": "automatic",
           "watch_auto_revert_hours": 24
         }
       }
@@ -2304,6 +2310,7 @@
           "telemetry": true,
           "unknown_publisher_action": "review",
           "update_channel": "stable",
+          "update_mode": "automatic",
           "watch_auto_revert_hours": 24
         }
       },
@@ -2798,6 +2805,7 @@
           "telemetry": true,
           "unknown_publisher_action": "review",
           "update_channel": "stable",
+          "update_mode": "automatic",
           "watch_auto_revert_hours": 24
         }
       }

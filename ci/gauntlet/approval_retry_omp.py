@@ -100,6 +100,7 @@ class OmpReview:
         approver: ReviewApprover | None,
         replacements: dict[str, str],
         raw_log: Path | None = None,
+        daemon_url: str | None = None,
     ) -> None:
         if self.scenario.oracle == RELAY_ORACLE:
             from .evidence import read_events
@@ -110,6 +111,7 @@ class OmpReview:
                 guard_home=self.guard_home,
                 request_ids=queued_request_ids(worker.store, self.known_ids),
                 marker_written=(self.fixture.workspace / RELAY_MARKER).exists(),
+                daemon_url=daemon_url,
             )
             case["approval_rows"] = approval_rows(worker.store, self.known_ids)
             # The caller redacts the transcript and Guard's answers with this same

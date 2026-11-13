@@ -27,7 +27,8 @@
 //! itself is written into the projection and the screens downstream read the
 //! words the shell passes. It is recognised only as a whole double-quoted
 //! word, where the value is neither split nor matched, and only when the body
-//! spells nothing that could reopen the shell.
+//! spells nothing that could reopen the shell. An apostrophe is literal there,
+//! so `it's` in a message is message text.
 //!
 //! A line break between commands separates them as `;` does. A heredoc body
 //! is not shell text: one with a quoted delimiter (`<<'EOF'`, `<<"EOF"`) is
@@ -208,19 +209,28 @@ fn heredoc_value(
         return None;
     }
     let body = &heredoc.body;
-    if body.chars().count() > MAX_HEREDOC_VALUE_CHARS
-        || !body.chars().all(|character| {
-            (character == '\n' || character == ' ' || character.is_ascii_graphic())
-                && !matches!(
-                    character,
-                    '"' | '\'' | '`' | '$' | '\\' | '*' | '?' | '[' | ']' | '{' | '}' | '~'
-                )
-        })
-    {
+    if body.chars().count() > MAX_HEREDOC_VALUE_CHARS || !body.chars().all(message_character) {
         return None;
     }
     // A substitution drops every line break at the end of what it read.
     Some(body.trim_end_matches('\n').to_owned())
+}
+
+/// A character the value may carry into the double-quoted word as it is.
+///
+/// An apostrophe is literal inside double quotes, so `it's` or `'in'` reaches
+/// the program as written: the projection is the command an agent would get
+/// by typing the message out. `"`, `` ` ``, `$` and `\` would end the word or
+/// reopen the shell there, and the screens downstream read a pattern
+/// character as a glob, so those stay refused.
+fn message_character(character: char) -> bool {
+    character == '\n'
+        || character == ' '
+        || (character.is_ascii_graphic()
+            && !matches!(
+                character,
+                '"' | '`' | '$' | '\\' | '*' | '?' | '[' | ']' | '{' | '}' | '~'
+            ))
 }
 
 /// Whether the substitution is the whole of one double-quoted word, so its

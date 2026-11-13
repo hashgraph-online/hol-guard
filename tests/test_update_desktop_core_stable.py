@@ -39,7 +39,6 @@ def test_apply_installs_stable_sidecar_from_stable_tag(
 ) -> None:
     monkeypatch.setattr(update_desktop_core, "platform_target", lambda: "aarch64-apple-darwin")
     monkeypatch.setattr(update_desktop_core, "desktop_core_root", lambda: tmp_path / "core")
-    monkeypatch.setattr(update_desktop_core, "_macos_codesign_ok", lambda _path: True)
     monkeypatch.setattr(update_desktop_core, "_macos_signing_team", lambda _path: "TEAMID")
     binary = b"signed-stable-core"
     manifest = _stable_manifest(sha256=update_desktop_core._sha256_hex(binary), size=len(binary))
@@ -138,6 +137,7 @@ def test_status_migrates_embedded_alpha_core_to_stable(monkeypatch: pytest.Monke
     assert payload["current_version"] == "3.0.0a138"
     assert payload["latest_version"] == "3.0.7"
     assert payload["release_channel"] == "stable"
+    assert payload["update_mode"] == "automatic"
     assert payload["auto_updatable"] is True
     assert payload["update_available"] is True
     assert payload["blocked_reason"] is None

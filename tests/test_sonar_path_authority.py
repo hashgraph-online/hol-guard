@@ -9,6 +9,7 @@ import pytest
 import yaml
 
 from codex_plugin_scanner.guard.adapters import cursor_hooks as cursor_hooks_module
+from codex_plugin_scanner.guard.adapters import get_adapter
 from codex_plugin_scanner.guard.adapters._modules.copilot import copilot_state_paths
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.adapters.copilot import CopilotHarnessAdapter
@@ -19,7 +20,6 @@ from codex_plugin_scanner.guard.adapters.cursor_hooks import (
     uninstall_cursor_hooks,
 )
 from codex_plugin_scanner.guard.adapters.hermes import HermesHarnessAdapter
-from codex_plugin_scanner.guard.adapters.openclaw import OpenClawHarnessAdapter
 from codex_plugin_scanner.guard.runtime.command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
 from codex_plugin_scanner.guard.runtime.extension_control_authority import AuthorityHealth
 from tests.test_guard_extension_control_authority import MemorySecretStore, _store
@@ -300,7 +300,7 @@ def test_openclaw_runtime_probe_rejects_symlinked_managed_root(tmp_path: Path) -
     )
     context.guard_home.mkdir()
     (context.guard_home / "openclaw").symlink_to(outside_root, target_is_directory=True)
-    adapter = OpenClawHarnessAdapter()
+    adapter = get_adapter("openclaw")
 
     assert adapter.launch_environment(context) == {}
     runtime_probe = adapter.runtime_probe(context)

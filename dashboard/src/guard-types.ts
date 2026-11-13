@@ -1267,6 +1267,7 @@ export type GuardUpdateStatus = {
   retry_command?: string;
   update_attempt_message?: string;
   release_channel: "stable" | "alpha";
+  update_mode: "automatic" | "ask" | "off";
 };
 
 export type GuardUpdateReconnectOptions = {

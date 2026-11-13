@@ -19643,7 +19643,8 @@ function normalizeGuardUpdateStatus(raw, fallbackReleaseChannel = null) {
     update_suppressed: value.update_suppressed === true ? true : void 0,
     retry_command: typeof value.retry_command === "string" ? value.retry_command : void 0,
     update_attempt_message: typeof value.update_attempt_message === "string" ? value.update_attempt_message : void 0,
-    release_channel: isGuardUpdateChannel(value.release_channel) ? value.release_channel : fallbackReleaseChannel ?? "stable"
+    release_channel: isGuardUpdateChannel(value.release_channel) ? value.release_channel : fallbackReleaseChannel ?? "stable",
+    update_mode: value.update_mode === "ask" || value.update_mode === "off" ? value.update_mode : "automatic"
   };
 }
 async function fetchGuardUpdateStatus() {
@@ -19723,6 +19724,25 @@ async function requestGuardDesktopHandoff() {
     handoff_requested: payload.handoff_requested === true,
     latest_version: stringValue$1(payload.latest_version)
   };
+}
+async function setGuardUpdateMode(mode, proof) {
+  if (isGuardDemoMode()) {
+    return normalizeGuardUpdateStatus({
+      ...await fetchGuardUpdateStatus(),
+      update_mode: mode
+    });
+  }
+  const response = await fetchWithGuardAuth("/v1/settings", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ settings: { update_mode: mode }, ...proof })
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    const value = isRecord$4(payload) ? payload : {};
+    throw new Error(stringValue$1(value.message) ?? `Update preference failed with ${response.status}`);
+  }
+  return fetchGuardUpdateStatus();
 }
 async function setGuardUpdateChannel(channel, proof) {
   if (isGuardDemoMode()) {
@@ -21591,6 +21611,55 @@ function AlphaChannelDialog({
     ] })
   ] });
 }
+const MODE_COPY = {
+  automatic: "Guard checks periodically and installs Core updates in the background.",
+  ask: "Guard checks periodically and waits for you to start an available Core update.",
+  off: "Guard still shows available Core updates, but never installs them in the background."
+};
+function UpdateModeDialog({
+  mode,
+  draft,
+  pending,
+  error,
+  approvalGate,
+  approvalPassword,
+  approvalTotpCode,
+  onDraftChange,
+  onClose,
+  onConfirm,
+  onApprovalPasswordChange,
+  onApprovalTotpCodeChange
+}) {
+  const confirmDisabled = pending || draft === mode || approvalGate?.enabled === true && isApprovalProofSubmitDisabled(approvalGate, { approvalPassword, approvalTotpCode }, false);
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-lg bg-white shadow-xl", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start justify-between gap-4 border-b border-slate-100 px-5 py-4", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { className: "text-base font-semibold text-brand-dark", children: "Core update preferences" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-sm leading-relaxed text-brand-dark/70", children: "Choose whether Guard can install Core updates without asking." })
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: onClose, disabled: pending, "aria-label": "Close Core update preferences", className: "inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-brand-dark/55 transition-colors hover:bg-slate-100 hover:text-brand-dark disabled:cursor-not-allowed disabled:opacity-50", children: /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniXMark, { className: "h-5 w-5", "aria-hidden": "true" }) })
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-3 px-5 py-4 text-sm leading-relaxed text-brand-dark/75", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("label", { className: "block text-sm font-semibold text-brand-dark", htmlFor: "guard-update-mode", children: "Install behavior" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("select", { id: "guard-update-mode", value: draft, onChange: onDraftChange, disabled: pending, className: "w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-brand-dark", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "automatic", children: "Automatic" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "ask", children: "Ask first" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "off", children: "Off" })
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: MODE_COPY[draft] }),
+      draft !== mode ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: "Changing this preference only saves the setting. It does not install an update immediately." }) : null,
+      approvalGate?.enabled ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-lg border border-brand-blue/20 bg-brand-blue/[0.04] p-3", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mb-3 text-sm font-semibold text-brand-dark", children: "Confirm this preference change" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(ApprovalProofFieldInputs, { approvalGate, approvalPassword, approvalTotpCode, onApprovalPasswordChange, onApprovalTotpCodeChange })
+      ] }) : null,
+      error ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "rounded-md bg-red-50 px-3 py-2 text-sm text-red-700", children: error }) : null
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col-reverse gap-2 border-t border-slate-100 px-5 py-4 sm:flex-row sm:justify-end", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: onClose, disabled: pending, className: "min-h-10 rounded-lg border border-slate-200 px-4 py-2 text-sm font-semibold text-brand-dark transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50", children: "Cancel" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: onConfirm, disabled: confirmDisabled, className: "min-h-10 rounded-lg bg-brand-blue px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-brand-blue/90 disabled:cursor-not-allowed disabled:opacity-60", children: pending ? "Saving…" : "Save preference" })
+    ] })
+  ] });
+}
 let embeddedLatch = false;
 let memoForHref = null;
 let memoResult = false;
@@ -21916,137 +21985,6 @@ function GuardUpdateChannelSummary(props) {
 const UPDATE_STATUS_POLL_MS = 6e4;
 const RECONNECT_POLL_MS = 1500;
 const RECONNECT_TIMEOUT_MS = 18e4;
-function GuardUpdatePanel(props) {
-  const version2 = props.guardVersion ?? props.updateStatus?.current_version ?? null;
-  const phase = props.updatePhase ?? "idle";
-  const embeddedInDesktop = dashboardEmbedsInDesktop();
-  const helpCopy = updateHelpCopy(props.updateStatus, phase, props.updateError, embeddedInDesktop);
-  const showUpdateButton = !embeddedInDesktop && props.updateStatus?.update_available === true && props.updateStatus.auto_updatable && props.updateStatus.update_suppressed !== true && phase !== "updating" && phase !== "reconnecting";
-  const showReinstallButton = !embeddedInDesktop && shouldPromptRecoveryReinstall(props.updateStatus) && phase !== "updating" && phase !== "reconnecting";
-  const busy = phase === "updating" || phase === "reconnecting";
-  const useAlpha = props.updateStatus?.release_channel === "alpha" || props.updateStatus == null && readRememberedGuardUpdateChannel() === "alpha";
-  const [alphaModalOpen, setAlphaModalOpen] = reactExports.useState(false);
-  const [alphaSavePending, setAlphaSavePending] = reactExports.useState(false);
-  const [alphaSaveError, setAlphaSaveError] = reactExports.useState(null);
-  const [alphaApprovalPassword, setAlphaApprovalPassword] = reactExports.useState("");
-  const [alphaApprovalTotpCode, setAlphaApprovalTotpCode] = reactExports.useState("");
-  const targetChannel = useAlpha ? "stable" : "alpha";
-  const modalTitle = useAlpha ? "Return to stable updates" : "Try alpha updates";
-  const handleOpenAlphaModal = reactExports.useCallback(() => {
-    setAlphaSaveError(null);
-    setAlphaApprovalPassword("");
-    setAlphaApprovalTotpCode("");
-    setAlphaModalOpen(true);
-  }, []);
-  const handleCloseAlphaModal = reactExports.useCallback(() => {
-    if (alphaSavePending) {
-      return;
-    }
-    setAlphaModalOpen(false);
-    setAlphaSaveError(null);
-    setAlphaApprovalPassword("");
-    setAlphaApprovalTotpCode("");
-  }, [alphaSavePending]);
-  const handleConfirmAlphaChannel = reactExports.useCallback(async () => {
-    if (!props.onSetUpdateChannel) {
-      return;
-    }
-    setAlphaSavePending(true);
-    setAlphaSaveError(null);
-    try {
-      const proof = props.approvalGate?.enabled ? buildApprovalProofCredentials(props.approvalGate, {
-        approvalPassword: alphaApprovalPassword,
-        approvalTotpCode: alphaApprovalTotpCode
-      }) : void 0;
-      await props.onSetUpdateChannel(targetChannel, proof);
-      setAlphaModalOpen(false);
-    } catch (error) {
-      setAlphaSaveError(error instanceof Error ? error.message : "Guard could not change the update channel. Try again.");
-    } finally {
-      setAlphaSavePending(false);
-    }
-  }, [alphaApprovalPassword, alphaApprovalTotpCode, props.approvalGate, props.onSetUpdateChannel, targetChannel]);
-  const handleApprovalPasswordChange = reactExports.useCallback((event) => {
-    setAlphaApprovalPassword(event.target.value);
-  }, []);
-  const handleApprovalTotpCodeChange = reactExports.useCallback((event) => {
-    setAlphaApprovalTotpCode(event.target.value);
-  }, []);
-  let updateChannelSummary = null;
-  if (props.onSetUpdateChannel) {
-    updateChannelSummary = /* @__PURE__ */ jsxRuntimeExports.jsx(
-      GuardUpdateChannelSummary,
-      {
-        version: version2,
-        useAlpha,
-        busy,
-        onManage: handleOpenAlphaModal
-      }
-    );
-  } else if (version2) {
-    updateChannelSummary = /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "font-mono text-[10px] text-brand-dark/70", "aria-label": `Guard version ${version2}`, children: [
-      "v",
-      version2
-    ] });
-  }
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs(
-    "div",
-    {
-      className: props.compact ? "space-y-1 border-t border-brand-blue/10 pt-1.5" : "space-y-1.5 border-t border-brand-blue/10 pt-2",
-      children: [
-        updateChannelSummary,
-        props.updateStatus?.update_available ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center justify-between gap-2", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "min-w-0 text-[11px] leading-4 text-brand-dark/75 [overflow-wrap:anywhere]", children: updateStatusLabel(props.updateStatus) }),
-          showUpdateButton && props.onUpdateGuard ? /* @__PURE__ */ jsxRuntimeExports.jsxs(
-            "button",
-            {
-              type: "button",
-              onClick: props.onUpdateGuard,
-              "aria-label": "Update Guard to the latest version",
-              className: GUARD_UPDATE_ACTION_BUTTON_CLASS,
-              children: [
-                /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniArrowPath, { className: "h-3 w-3 shrink-0", "aria-hidden": "true" }),
-                /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: GUARD_UPDATE_CONTROL_TEXT_CLASS, children: "Update" })
-              ]
-            }
-          ) : null
-        ] }) : null,
-        helpCopy ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-[10px] leading-4 text-brand-dark/70", children: helpCopy }) : null,
-        showReinstallButton && props.onReinstallGuard ? /* @__PURE__ */ jsxRuntimeExports.jsxs(
-          "button",
-          {
-            type: "button",
-            onClick: props.onReinstallGuard,
-            className: GUARD_UPDATE_ACTION_BUTTON_CLASS,
-            children: [
-              /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniArrowPath, { className: "h-3 w-3 shrink-0", "aria-hidden": "true" }),
-              /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: GUARD_UPDATE_CONTROL_TEXT_CLASS, children: "Reinstall from PyPI" })
-            ]
-          }
-        ) : null,
-        busy && /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "inline-flex items-center gap-1.5 text-[11px] font-medium leading-4 text-brand-blue", role: "status", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniArrowPath, { className: "h-3 w-3 animate-spin", "aria-hidden": "true" }),
-          phase === "updating" ? "Updating Guard…" : "Reconnecting…"
-        ] }),
-        alphaModalOpen ? /* @__PURE__ */ jsxRuntimeExports.jsx(GuardModalLayer, { ariaLabel: modalTitle, onClose: handleCloseAlphaModal, panelClassName: "w-full max-w-md", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
-          AlphaChannelDialog,
-          {
-            useAlpha,
-            pending: alphaSavePending,
-            error: alphaSaveError,
-            approvalGate: props.approvalGate ?? null,
-            approvalPassword: alphaApprovalPassword,
-            approvalTotpCode: alphaApprovalTotpCode,
-            onClose: handleCloseAlphaModal,
-            onConfirm: handleConfirmAlphaChannel,
-            onApprovalPasswordChange: handleApprovalPasswordChange,
-            onApprovalTotpCodeChange: handleApprovalTotpCodeChange
-          }
-        ) }) : null
-      ]
-    }
-  );
-}
 function useGuardUpdate(options) {
   const enabled = options?.enabled !== false;
   const [updateStatus, setUpdateStatus] = reactExports.useState(null);
@@ -22057,6 +21995,8 @@ function useGuardUpdate(options) {
   const updateStatusEpoch = reactExports.useRef(0);
   const channelMutationId = reactExports.useRef(0);
   const channelMutationPending = reactExports.useRef(false);
+  const modeMutationId = reactExports.useRef(0);
+  const modeMutationPending = reactExports.useRef(false);
   const isMounted = reactExports.useRef(false);
   reactExports.useEffect(() => {
     updatePhaseRef.current = updatePhase;
@@ -22068,14 +22008,14 @@ function useGuardUpdate(options) {
     };
   }, []);
   const refreshUpdateStatus = reactExports.useCallback(async () => {
-    if (!enabled || !isMounted.current || channelMutationPending.current) {
+    if (!enabled || !isMounted.current || channelMutationPending.current || modeMutationPending.current) {
       return;
     }
     const epoch = updateStatusEpoch.current;
     const mutationId = channelMutationId.current;
     try {
       const status = await fetchGuardUpdateStatus();
-      if (!isMounted.current || epoch !== updateStatusEpoch.current || mutationId !== channelMutationId.current || channelMutationPending.current) {
+      if (!isMounted.current || epoch !== updateStatusEpoch.current || mutationId !== channelMutationId.current || channelMutationPending.current || modeMutationPending.current) {
         return;
       }
       setUpdateStatus(status);
@@ -22097,7 +22037,7 @@ function useGuardUpdate(options) {
     const epoch = updateStatusEpoch.current;
     const mutationId = channelMutationId.current;
     void fetchGuardUpdateStatus().then((status) => {
-      if (cancelled || epoch !== updateStatusEpoch.current || mutationId !== channelMutationId.current || channelMutationPending.current) {
+      if (cancelled || epoch !== updateStatusEpoch.current || mutationId !== channelMutationId.current || channelMutationPending.current || modeMutationPending.current) {
         return;
       }
       setUpdateStatus(status);
@@ -22238,6 +22178,21 @@ function useGuardUpdate(options) {
       }
     }
   }, []);
+  const onSetUpdateMode = reactExports.useCallback(async (mode, proof) => {
+    const mutationId = ++modeMutationId.current;
+    updateStatusEpoch.current += 1;
+    modeMutationPending.current = true;
+    try {
+      const status = await setGuardUpdateMode(mode, proof);
+      if (mutationId === modeMutationId.current) {
+        updateStatusEpoch.current += 1;
+        setUpdateStatus(status);
+        if (updatePhaseRef.current === "checking" || updatePhaseRef.current === "idle") setUpdatePhase("idle");
+      }
+    } finally {
+      if (mutationId === modeMutationId.current) modeMutationPending.current = false;
+    }
+  }, []);
   return {
     guardVersion: updateStatus?.current_version ?? null,
     updateStatus,
@@ -22246,8 +22201,199 @@ function useGuardUpdate(options) {
     onUpdateGuard,
     onReinstallGuard,
     onSetUpdateChannel,
+    onSetUpdateMode,
     refreshUpdateStatus
   };
+}
+function GuardUpdatePanel(props) {
+  const version2 = props.guardVersion ?? props.updateStatus?.current_version ?? null;
+  const phase = props.updatePhase ?? "idle";
+  const embeddedInDesktop = dashboardEmbedsInDesktop();
+  const helpCopy = updateHelpCopy(props.updateStatus, phase, props.updateError, embeddedInDesktop);
+  const showUpdateButton = !embeddedInDesktop && props.updateStatus?.update_available === true && props.updateStatus.auto_updatable && props.updateStatus.update_suppressed !== true && phase !== "updating" && phase !== "reconnecting";
+  const showReinstallButton = !embeddedInDesktop && shouldPromptRecoveryReinstall(props.updateStatus) && phase !== "updating" && phase !== "reconnecting";
+  const busy = phase === "updating" || phase === "reconnecting";
+  const useAlpha = props.updateStatus?.release_channel === "alpha" || props.updateStatus == null && readRememberedGuardUpdateChannel() === "alpha";
+  const [alphaModalOpen, setAlphaModalOpen] = reactExports.useState(false);
+  const [alphaSavePending, setAlphaSavePending] = reactExports.useState(false);
+  const [alphaSaveError, setAlphaSaveError] = reactExports.useState(null);
+  const [alphaApprovalPassword, setAlphaApprovalPassword] = reactExports.useState("");
+  const [alphaApprovalTotpCode, setAlphaApprovalTotpCode] = reactExports.useState("");
+  const [updateModeModalOpen, setUpdateModeModalOpen] = reactExports.useState(false);
+  const [updateModeDraft, setUpdateModeDraft] = reactExports.useState(props.updateStatus?.update_mode ?? "automatic");
+  const [updateModeSavePending, setUpdateModeSavePending] = reactExports.useState(false);
+  const [updateModeSaveError, setUpdateModeSaveError] = reactExports.useState(null);
+  const [updateModeApprovalPassword, setUpdateModeApprovalPassword] = reactExports.useState("");
+  const [updateModeApprovalTotpCode, setUpdateModeApprovalTotpCode] = reactExports.useState("");
+  const targetChannel = useAlpha ? "stable" : "alpha";
+  const modalTitle = useAlpha ? "Return to stable updates" : "Try alpha updates";
+  const handleOpenAlphaModal = reactExports.useCallback(() => {
+    setAlphaSaveError(null);
+    setAlphaApprovalPassword("");
+    setAlphaApprovalTotpCode("");
+    setAlphaModalOpen(true);
+  }, []);
+  const handleCloseAlphaModal = reactExports.useCallback(() => {
+    if (alphaSavePending) {
+      return;
+    }
+    setAlphaModalOpen(false);
+    setAlphaSaveError(null);
+    setAlphaApprovalPassword("");
+    setAlphaApprovalTotpCode("");
+  }, [alphaSavePending]);
+  const handleConfirmAlphaChannel = reactExports.useCallback(async () => {
+    if (!props.onSetUpdateChannel) {
+      return;
+    }
+    setAlphaSavePending(true);
+    setAlphaSaveError(null);
+    try {
+      const proof = props.approvalGate?.enabled ? buildApprovalProofCredentials(props.approvalGate, {
+        approvalPassword: alphaApprovalPassword,
+        approvalTotpCode: alphaApprovalTotpCode
+      }) : void 0;
+      await props.onSetUpdateChannel(targetChannel, proof);
+      setAlphaModalOpen(false);
+    } catch (error) {
+      setAlphaSaveError(error instanceof Error ? error.message : "Guard could not change the update channel. Try again.");
+    } finally {
+      setAlphaSavePending(false);
+    }
+  }, [alphaApprovalPassword, alphaApprovalTotpCode, props.approvalGate, props.onSetUpdateChannel, targetChannel]);
+  const handleApprovalPasswordChange = reactExports.useCallback((event) => {
+    setAlphaApprovalPassword(event.target.value);
+  }, []);
+  const handleApprovalTotpCodeChange = reactExports.useCallback((event) => {
+    setAlphaApprovalTotpCode(event.target.value);
+  }, []);
+  const handleOpenUpdateModeModal = reactExports.useCallback(() => {
+    setUpdateModeDraft(props.updateStatus?.update_mode ?? "automatic");
+    setUpdateModeSaveError(null);
+    setUpdateModeApprovalPassword("");
+    setUpdateModeApprovalTotpCode("");
+    setUpdateModeModalOpen(true);
+  }, [props.updateStatus?.update_mode]);
+  const handleCloseUpdateModeModal = reactExports.useCallback(() => {
+    if (updateModeSavePending) return;
+    setUpdateModeModalOpen(false);
+    setUpdateModeSaveError(null);
+  }, [updateModeSavePending]);
+  const handleConfirmUpdateMode = reactExports.useCallback(async () => {
+    if (!props.onSetUpdateMode) return;
+    setUpdateModeSavePending(true);
+    setUpdateModeSaveError(null);
+    try {
+      const proof = props.approvalGate?.enabled ? buildApprovalProofCredentials(props.approvalGate, {
+        approvalPassword: updateModeApprovalPassword,
+        approvalTotpCode: updateModeApprovalTotpCode
+      }) : void 0;
+      await props.onSetUpdateMode(updateModeDraft, proof);
+      setUpdateModeModalOpen(false);
+    } catch (error) {
+      setUpdateModeSaveError(error instanceof Error ? error.message : "Guard could not save the update preference. Try again.");
+    } finally {
+      setUpdateModeSavePending(false);
+    }
+  }, [props.approvalGate, props.onSetUpdateMode, updateModeApprovalPassword, updateModeApprovalTotpCode, updateModeDraft]);
+  let updateChannelSummary = null;
+  if (props.onSetUpdateChannel) {
+    updateChannelSummary = /* @__PURE__ */ jsxRuntimeExports.jsx(
+      GuardUpdateChannelSummary,
+      {
+        version: version2,
+        useAlpha,
+        busy,
+        onManage: handleOpenAlphaModal
+      }
+    );
+  } else if (version2) {
+    updateChannelSummary = /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "font-mono text-[10px] text-brand-dark/70", "aria-label": `Guard version ${version2}`, children: [
+      "v",
+      version2
+    ] });
+  }
+  let updateModeLabel = "Automatic Core updates on";
+  if (props.updateStatus?.update_mode === "ask") {
+    updateModeLabel = "Ask before installing";
+  } else if (props.updateStatus?.update_mode === "off") {
+    updateModeLabel = "Automatic Core updates off";
+  }
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs(
+    "div",
+    {
+      className: props.compact ? "space-y-1 border-t border-brand-blue/10 pt-1.5" : "space-y-1.5 border-t border-brand-blue/10 pt-2",
+      children: [
+        updateChannelSummary,
+        props.onSetUpdateMode ? /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: handleOpenUpdateModeModal, disabled: busy, className: "text-[11px] font-medium text-brand-blue hover:underline", "aria-label": "Manage Core update preferences", children: updateModeLabel }) : null,
+        props.updateStatus?.update_available ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center justify-between gap-2", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "min-w-0 text-[11px] leading-4 text-brand-dark/75 [overflow-wrap:anywhere]", children: updateStatusLabel(props.updateStatus) }),
+          showUpdateButton && props.onUpdateGuard ? /* @__PURE__ */ jsxRuntimeExports.jsxs(
+            "button",
+            {
+              type: "button",
+              onClick: props.onUpdateGuard,
+              "aria-label": "Update Guard to the latest version",
+              className: GUARD_UPDATE_ACTION_BUTTON_CLASS,
+              children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniArrowPath, { className: "h-3 w-3 shrink-0", "aria-hidden": "true" }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: GUARD_UPDATE_CONTROL_TEXT_CLASS, children: "Update" })
+              ]
+            }
+          ) : null
+        ] }) : null,
+        helpCopy ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-[10px] leading-4 text-brand-dark/70", children: helpCopy }) : null,
+        showReinstallButton && props.onReinstallGuard ? /* @__PURE__ */ jsxRuntimeExports.jsxs(
+          "button",
+          {
+            type: "button",
+            onClick: props.onReinstallGuard,
+            className: GUARD_UPDATE_ACTION_BUTTON_CLASS,
+            children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniArrowPath, { className: "h-3 w-3 shrink-0", "aria-hidden": "true" }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: GUARD_UPDATE_CONTROL_TEXT_CLASS, children: "Reinstall from PyPI" })
+            ]
+          }
+        ) : null,
+        busy && /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "inline-flex items-center gap-1.5 text-[11px] font-medium leading-4 text-brand-blue", role: "status", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniArrowPath, { className: "h-3 w-3 animate-spin", "aria-hidden": "true" }),
+          phase === "updating" ? "Updating Guard…" : "Reconnecting…"
+        ] }),
+        alphaModalOpen ? /* @__PURE__ */ jsxRuntimeExports.jsx(GuardModalLayer, { ariaLabel: modalTitle, onClose: handleCloseAlphaModal, panelClassName: "w-full max-w-md", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
+          AlphaChannelDialog,
+          {
+            useAlpha,
+            pending: alphaSavePending,
+            error: alphaSaveError,
+            approvalGate: props.approvalGate ?? null,
+            approvalPassword: alphaApprovalPassword,
+            approvalTotpCode: alphaApprovalTotpCode,
+            onClose: handleCloseAlphaModal,
+            onConfirm: handleConfirmAlphaChannel,
+            onApprovalPasswordChange: handleApprovalPasswordChange,
+            onApprovalTotpCodeChange: handleApprovalTotpCodeChange
+          }
+        ) }) : null,
+        updateModeModalOpen ? /* @__PURE__ */ jsxRuntimeExports.jsx(GuardModalLayer, { ariaLabel: "Core update preferences", onClose: handleCloseUpdateModeModal, panelClassName: "w-full max-w-md", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
+          UpdateModeDialog,
+          {
+            mode: props.updateStatus?.update_mode ?? "automatic",
+            draft: updateModeDraft,
+            pending: updateModeSavePending,
+            error: updateModeSaveError,
+            approvalGate: props.approvalGate ?? null,
+            approvalPassword: updateModeApprovalPassword,
+            approvalTotpCode: updateModeApprovalTotpCode,
+            onDraftChange: (event) => setUpdateModeDraft(event.target.value),
+            onClose: handleCloseUpdateModeModal,
+            onConfirm: handleConfirmUpdateMode,
+            onApprovalPasswordChange: (event) => setUpdateModeApprovalPassword(event.target.value),
+            onApprovalTotpCodeChange: (event) => setUpdateModeApprovalTotpCode(event.target.value)
+          }
+        ) }) : null
+      ]
+    }
+  );
 }
 const SHELL_NAV_ITEMS = [
   {
@@ -22646,6 +22792,7 @@ function NavigationDrawer(props) {
                       onUpdateGuard: props.onUpdateGuard,
                       onReinstallGuard: props.onReinstallGuard,
                       onSetUpdateChannel: props.onSetUpdateChannel,
+                      onSetUpdateMode: props.onSetUpdateMode,
                       approvalGate: props.approvalGate
                     }
                   )
@@ -22859,6 +23006,7 @@ function PersistentSidebar(props) {
                   onUpdateGuard: props.onUpdateGuard,
                   onReinstallGuard: props.onReinstallGuard,
                   onSetUpdateChannel: props.onSetUpdateChannel,
+                  onSetUpdateMode: props.onSetUpdateMode,
                   approvalGate: props.approvalGate
                 }
               )
@@ -38514,7 +38662,8 @@ function ApprovalCenterLayout(props) {
     updateError,
     onUpdateGuard,
     onReinstallGuard,
-    onSetUpdateChannel
+    onSetUpdateChannel,
+    onSetUpdateMode
   } = useGuardUpdate({ onReconnected: props.onGuardReconnected });
   const [dismissedUpdateVersion, setDismissedUpdateVersion] = reactExports.useState(
     () => readDismissedDesktopUpdateVersion()
@@ -38543,6 +38692,7 @@ function ApprovalCenterLayout(props) {
         onUpdateGuard,
         onReinstallGuard,
         onSetUpdateChannel,
+        onSetUpdateMode,
         approvalGate: props.approvalGate ?? null,
         cloudUserProfile: props.runtime.kind === "ready" ? props.runtime.snapshot.cloud_user_profile : null,
         workspaceId: props.runtime.kind === "ready" ? props.runtime.snapshot.cloud_pairing_state.workspace_id ?? null : null,

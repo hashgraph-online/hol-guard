@@ -287,6 +287,29 @@
       }
     },
     {
+      "family": "R14",
+      "summary": "An injection signal earlier in the session, then a recoverable delete or archive.",
+      "rule": {
+        "rule_id": "strict.r14.injection_then_delete",
+        "action": "require-reapproval",
+        "match": {
+          "action_id": "*"
+        },
+        "facts": {
+          "session": [
+            "injection_signal_seen"
+          ],
+          "classes": [
+            "delete"
+          ],
+          "reversibility": [
+            "recoverable",
+            "reversible"
+          ]
+        }
+      }
+    },
+    {
       "family": "R15",
       "summary": "A merge or push to a branch, or a repository change.",
       "rule": {

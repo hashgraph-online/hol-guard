@@ -9,6 +9,7 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.guard.adapters.pi_extension_source import managed_extension_source
+from tests.pi_continuation_support import WATCH_POSTURE_STUB
 
 
 @pytest.mark.parametrize(
@@ -56,6 +57,7 @@ async function daemonWorkspaceReadiness() {
     reasonCode: 'native_policy_not_ready', daemonStateId: stateId};
 }
 """
+        + WATCH_POSTURE_STUB
         + cache
         + tool
         + """

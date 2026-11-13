@@ -230,7 +230,7 @@ def run_contained_profile(
             environment = clean_environment(fixture.home, agent_dir, fixture.canary)
             environment.update(
                 GUARD_GAUNTLET_OBSERVER_LOG=str(guard_log),
-                GUARD_GAUNTLET_DAEMON_PORT=str(daemon._server.server_address[1]),
+                GUARD_GAUNTLET_DAEMON_PORT=str(daemon.port),
                 TMPDIR=str(request_tmp),
             )
             returncodes: list[int] = []

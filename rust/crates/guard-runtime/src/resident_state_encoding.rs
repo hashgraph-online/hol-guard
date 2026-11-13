@@ -26,7 +26,7 @@ pub(crate) fn sha256_hex_from_reader(reader: &mut impl std::io::Read) -> std::io
 }
 
 pub(crate) fn decode_hex(value: &str) -> Result<Vec<u8>, String> {
-    if value.len() % 2 != 0 || !value.bytes().all(|byte| byte.is_ascii_hexdigit()) {
+    if !value.len().is_multiple_of(2) || !value.bytes().all(|byte| byte.is_ascii_hexdigit()) {
         return Err("native_resident_state_hex_invalid".to_owned());
     }
     // Collecting into a `Result` reports a lower size bound of zero, so the

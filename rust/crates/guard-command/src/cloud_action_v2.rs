@@ -409,7 +409,7 @@ fn decide_v2(
         crate::cloud_action_v2_consent::consent_options(
             admission.resource_id.is_some(),
             action,
-            &request.facts,
+            &subject,
         )
     } else {
         Vec::new()

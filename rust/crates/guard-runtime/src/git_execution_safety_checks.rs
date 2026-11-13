@@ -472,7 +472,7 @@ impl Context<'_> {
         if fields.last().is_some_and(|last| last.is_empty()) {
             fields.pop();
         }
-        fields.len() % 3 != 0
+        !fields.len().is_multiple_of(3)
             || fields
                 .iter()
                 .skip(2)

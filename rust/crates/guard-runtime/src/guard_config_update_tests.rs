@@ -121,6 +121,12 @@ fn command_writes_creates_and_resets_home_config() {
         .unwrap()
         .contains("update_channel = \"alpha\""));
 
+    let response = run(&home, "settings", r#"{"update_mode":"ask"}"#);
+    assert_eq!(response["ok"], json!(true));
+    assert!(fs::read_to_string(&config)
+        .unwrap()
+        .contains("update_mode = \"ask\""));
+
     assert_eq!(run(&home, "reset", "null")["ok"], json!(true));
     assert_eq!(fs::read_to_string(&config).unwrap(), "\n");
 }
@@ -157,6 +163,12 @@ fn command_reports_invalid_payloads_without_writing() {
     let response = run(&home, "settings", r#"{"mode": "loud"}"#);
     assert_eq!(response["invalid"], json!("Invalid Guard mode."));
     assert!(!home.join(HOME_CONFIG_FILENAME).exists());
+
+    let response = run(&home, "settings", r#"{"update_mode":"later"}"#);
+    assert_eq!(
+        response["invalid"],
+        json!("Update mode must be automatic, ask, or off.")
+    );
 }
 
 #[test]

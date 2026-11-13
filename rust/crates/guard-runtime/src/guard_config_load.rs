@@ -457,6 +457,7 @@ pub(crate) fn coerce_config(merged: &Map<String, Value>, managed: Option<&Manage
             other => coerce::loaded_bool(other),
         },
         "update_channel": coerce::update_channel(get("update_channel")),
+        "update_mode": coerce::update_mode(get("update_mode")),
         "telemetry": coerce::python_truthy(get("telemetry")),
         "sync": coerce::python_truthy(get("sync")),
         "billing": coerce::python_truthy(get("billing")),

@@ -10,6 +10,7 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.guard.adapters.pi_extension_source import managed_extension_source
+from tests.pi_continuation_support import WATCH_POSTURE_STUB
 
 
 @pytest.mark.parametrize("harness", ["pi", "omp"])
@@ -66,7 +67,8 @@ async function runGuard(payload, cwd, options) {
   if (CHANGE === 'unknown') return {};
   return {decision: CHANGE === 'deny' ? 'deny' : 'allow', reason: 'reviewed'};
 }
-""".replace("__CHANGE__", json.dumps(change))
+        """.replace("__CHANGE__", json.dumps(change))
+        + WATCH_POSTURE_STUB
         + source[cache_start:cache_end]
         + source[input_start:input_end]
         + """

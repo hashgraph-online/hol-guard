@@ -47,6 +47,7 @@ pub(crate) const EDITABLE_KEYS: [&str; 29] = [
     "approval_browser_immediate_severity",
     "desktop_notifications",
     "update_channel",
+    "update_mode",
     "telemetry",
     "sync",
     "billing",
