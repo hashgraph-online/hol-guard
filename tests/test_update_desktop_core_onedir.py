@@ -84,7 +84,6 @@ def _apply_mocks(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(update_desktop_core, "platform_target", lambda: TARGET)
     monkeypatch.setattr(update_desktop_core, "desktop_core_root", lambda: tmp_path / "core")
     monkeypatch.setattr(update_desktop_core, "_macos_signing_team", lambda _path: "TEAMID")
-    monkeypatch.setattr(update_desktop_core, "_macos_codesign_ok", lambda _path: True)
     monkeypatch.setattr(update_desktop_core, "_verify_onedir_tree_signatures", lambda *_a, **_k: None)
     monkeypatch.setattr(update_desktop_core, "_require_sealed_onedir", lambda _launcher: None)
     monkeypatch.setattr(update_desktop_core, "_unpack_onedir", _fake_unpack)
