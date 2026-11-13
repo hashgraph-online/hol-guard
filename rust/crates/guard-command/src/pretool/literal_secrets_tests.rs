@@ -1,6 +1,16 @@
 use serde_json::json;
 
-use super::{holds_literal_secret, writes_literal_secret};
+use serde_json::Value;
+
+use super::holds_literal_secret;
+
+fn writes_literal_secret(payload: &Value) -> bool {
+    super::writes_literal_secret(payload["tool_input"].as_object().unwrap())
+}
+
+fn writes_unscreened_body(payload: &Value) -> bool {
+    super::writes_unscreened_body(payload["tool_input"].as_object().unwrap())
+}
 
 /// Test credentials are assembled at run time so that secret scanners
 /// reading this file do not mistake them for leaked ones.
@@ -229,10 +239,10 @@ fn a_patch_that_adds_a_secret_is_a_write_of_it() {
 #[test]
 fn a_body_past_the_scan_limit_is_reviewed_as_a_whole() {
     let padded = format!("{}{}", " ".repeat(super::SCAN_LIMIT + 1), "token = 'x'");
-    assert!(super::writes_unscreened_body(&json!({
+    assert!(writes_unscreened_body(&json!({
         "tool_input": {"file_path": "/w/big.txt", "content": padded}
     })));
-    assert!(!super::writes_unscreened_body(&json!({
+    assert!(!writes_unscreened_body(&json!({
         "tool_input": {"file_path": "/w/app.py", "content": "print('hello')\n"}
     })));
 }
@@ -245,6 +255,11 @@ fn placeholder_words_and_percent_signs_inside_a_real_value_do_not_hide_it() {
             joined(&["Xk9t", "est2Qm7LpR4"])
         ),
         format!("DB_PASSWORD = \"{}\"", joined(&["N7q%R3", "mX9sVw2"])),
+        format!("DB_PASSWORD = \"{}\"", joined(&["N7q%fR3", "mX9sVw2"])),
+        format!(
+            "ALTER USER app IDENTIFIED BY '{}'; -- 'rotation note'",
+            joined(&["Fq8vZt", "2mWx9LpR"])
+        ),
     ] {
         assert!(holds_literal_secret(&text), "{text}");
     }

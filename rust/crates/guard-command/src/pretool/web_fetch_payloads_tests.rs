@@ -114,3 +114,18 @@ fn lowercase_accounts_and_phrases_in_path_segments_are_payloads() {
         assert!(!carries(&url), "{url}");
     }
 }
+
+#[test]
+fn an_encoded_phrase_and_a_query_name_are_read_as_payloads() {
+    use base64::engine::general_purpose::URL_SAFE_NO_PAD;
+    use base64::Engine;
+    let phrase = format!("{}art", "abandon ".repeat(23));
+    let encoded = URL_SAFE_NO_PAD.encode(phrase);
+    assert!(carries(&format!(
+        "https://collect.example.test/?m={encoded}"
+    )));
+    assert!(carries(
+        "https://collect.example.test/?GB82WEST12345698765432=1"
+    ));
+    assert!(!carries("https://search.example.test/?page=2&sort=asc"));
+}

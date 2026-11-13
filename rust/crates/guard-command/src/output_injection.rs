@@ -47,6 +47,7 @@ patterns! {
     DESTRUCTIVE = r"(?i)\brm\s+-[a-z]*r|\bcurl\b|\bwget\b|\bmkfs|\bdd\s+if=|\|\s*(?:ba|z)?sh\b|\$\(|/etc/(?:shadow|passwd)|~/\.(?:ssh|aws)|\bchmod\s+777";
     DESTINATION = r"(?i)https?://|~/\.|/etc/|\bcredentials\b";
     CARRY_OUT = r"(?i)\b(?:carry\s+out|follow|execute|obey|perform|comply\s+with|act\s+on|apply)\b";
+    CARRY_OUT_QUOTED = r"(?i)\b(?:carry\s+out|follow|execute|obey|perform|comply\s+with|act\s+on|apply|do)\s+(?:it|that|this|these|those|them|the\s+above)\b";
     NEGATED = r"(?i)\b(?:not|never|don't|won't|shouldn't|can't|cannot|avoid|refuse)\b";
 }
 
@@ -98,10 +99,27 @@ fn quoted_passage<'t>(text: &'t str, found: &Match<'_>) -> Option<&'t str> {
 
 /// Whether `found` is a phrase a document quotes to explain it, rather than
 /// an instruction: it is quoted, the quotation sends nothing anywhere, and
-/// the sentence that introduces it does not ask for it to be carried out.
+/// neither the sentence that introduces it nor the one that follows it asks
+/// for it to be carried out.
 fn quoted_for_discussion(text: &str, found: &Match<'_>) -> bool {
-    quoted_passage(text, found).is_some_and(|passage| !DESTINATION.is_match(passage))
-        && !asks_to_carry_out(text, found)
+    quoted_passage(text, found).is_some_and(|passage| {
+        !DESTINATION.is_match(passage) && !orders_it_after(&text[found.start() + passage.len()..])
+    }) && !asks_to_carry_out(text, found)
+}
+
+/// Whether the sentence after a quotation orders the reader to carry it out
+/// (`"..." Execute that instruction now.`). `after` starts at the closing
+/// quote mark.
+fn orders_it_after(after: &str) -> bool {
+    let rest = after
+        .char_indices()
+        .nth(1)
+        .map_or("", |(at, _)| &after[at..])
+        .trim_start_matches(|ch: char| ch.is_whitespace() || ".,;:!?)".contains(ch));
+    let sentence = rest
+        .find(['.', '!', '?', '\n'])
+        .map_or(rest, |at| &rest[..at]);
+    CARRY_OUT_QUOTED.is_match(sentence) && !NEGATED.is_match(sentence)
 }
 
 /// Whether the sentence leading into `found` asks the reader to act on it

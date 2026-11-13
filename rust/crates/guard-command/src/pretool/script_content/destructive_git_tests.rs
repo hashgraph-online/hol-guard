@@ -15,6 +15,7 @@ fn programs_that_run_work_destroying_git_are_found() {
         r#"require('fs').rmSync('.git', {recursive: true, force: true})"#,
         r#"import shutil; shutil.rmtree('repo/.git')"#,
         r#"os.system("rm -rf .git")"#,
+        r#"os.system("git -C 'my repo' reset --hard")"#,
     ] {
         assert!(spells_destructive_git(code), "{code}");
     }

@@ -298,6 +298,17 @@ fn query_value_carries_payload(value: &str) -> bool {
         || OPAQUE_RUN.is_match(value)
 }
 
+/// Whether a query name, value or fragment carries a payload as written or
+/// under up to `MAX_DECODE_DEPTH` layers of percent, hex or base64 encoding:
+/// a recovery phrase sent base64url-encoded is as short as a session token.
+fn query_part_carries_payload(part: &str, depth: usize) -> bool {
+    query_value_carries_payload(part)
+        || (depth < super::MAX_DECODE_DEPTH
+            && super::decoded_readings(part)
+                .iter()
+                .any(|reading| query_part_carries_payload(reading, depth + 1)))
+}
+
 /// Whether the query or fragment carries a wallet key, recovery phrase,
 /// wallet address, bank account number or an opaque payload.
 pub(super) fn url_carries_payload(url: &Url) -> bool {
@@ -316,11 +327,12 @@ pub(super) fn url_carries_payload(url: &Url) -> bool {
     path_phrase
         || url.query_pairs().any(|(key, value)| {
             (KEY_NAME.is_match(&key) && HEX_KEY.is_match(&value))
-                || query_value_carries_payload(&value)
+                || query_part_carries_payload(&key, 0)
+                || query_part_carries_payload(&value, 0)
         })
         || fragment
             .map(|fragment| decoded(&fragment))
-            .is_some_and(|fragment| query_value_carries_payload(&fragment))
+            .is_some_and(|fragment| query_part_carries_payload(&fragment, 0))
 }
 
 /// A label of either case that decodes from base32 to readable text, as data

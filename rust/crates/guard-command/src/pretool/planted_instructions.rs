@@ -11,9 +11,9 @@
 use std::sync::LazyLock;
 
 use regex::Regex;
-use serde_json::Value;
+use serde_json::{Map, Value};
 
-use super::literal_secrets::{written_bodies, SCAN_LIMIT};
+use super::literal_secrets::{written_bodies, written_text_by_file, SCAN_LIMIT};
 
 static CONCEALMENT: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(
@@ -54,16 +54,17 @@ pub(super) fn plants_hidden_instruction(text: &str) -> bool {
     CONCEALMENT.is_match(text) && OVERRIDE.is_match(text)
 }
 
-/// Whether a file-tool write plants a hidden standing instruction.
-pub(super) fn writes_hidden_instruction(payload: &Value) -> bool {
-    payload
-        .get("tool_input")
-        .and_then(Value::as_object)
-        .is_some_and(|input| {
-            written_bodies(input)
-                .iter()
-                .any(|body| plants_hidden_instruction(body))
-        })
+/// Whether a file-tool write plants a hidden standing instruction. Each body
+/// is read on its own and together with the other replacements made to the
+/// same file, so the override and the concealment cannot be split across the
+/// edits of one MultiEdit.
+pub(super) fn writes_hidden_instruction(input: &Map<String, Value>) -> bool {
+    written_bodies(input)
+        .iter()
+        .any(|body| plants_hidden_instruction(body))
+        || written_text_by_file(input)
+            .iter()
+            .any(|text| plants_hidden_instruction(text))
 }
 
 #[cfg(test)]

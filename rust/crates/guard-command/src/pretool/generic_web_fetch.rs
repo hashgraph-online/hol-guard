@@ -266,6 +266,9 @@ pub(in crate::pretool) fn plain_public_url(raw: &str) -> bool {
     }) && !url_carries_credential(raw, &url)
         && !payloads::url_carries_payload(&url)
         && !payloads::host_spells_data(&raw_host(raw))
+        // The parser percent-decodes the host, so a label spelled `%6d...`
+        // is looked up, and judged, as the label it decodes to.
+        && !url.host_str().is_some_and(payloads::host_spells_data)
 }
 
 /// True only for a bounded GET-style fetch or search of public web content.
@@ -290,6 +293,14 @@ pub(super) fn plain_public_web_request(signals: &GenericSignals) -> bool {
 #[cfg(test)]
 mod tests {
     use super::plain_public_url;
+
+    #[test]
+    fn a_percent_encoded_data_label_is_judged_as_it_decodes() {
+        assert!(!plain_public_url(
+            "https://%6dn2xg5dpnvsxezdborqtembsgu.collect.example.test/"
+        ));
+        assert!(plain_public_url("https://docs.example.test/"));
+    }
 
     #[test]
     fn public_urls_pass_and_risky_classes_do_not() {

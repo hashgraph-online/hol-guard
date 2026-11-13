@@ -16,6 +16,8 @@ fn account_kernel_and_log_files_are_system_files() {
         "open('/private/etc/master.passwd').read()",
         "open('/usr/bin/../../etc/passwd').read()",
         "open('/var/tmp/../../etc/shadow').read()",
+        "open('/./etc/passwd').read()",
+        "open('/tmp/../etc/passwd').read()",
     ] {
         assert!(names_system_file(code), "{code}");
     }
@@ -31,6 +33,7 @@ fn programs_scratch_space_and_workspace_paths_are_not_system_files() {
         "open('src/etc/config.json').read()",
         "print('/etcetera')",
         "print(1 + 1)",
+        "open('/tmp/./out/../report.txt').read()",
         "import json\nprint(json.dumps({'a': 1}))",
     ] {
         assert!(!names_system_file(code), "{code}");

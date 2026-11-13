@@ -16,7 +16,7 @@ use std::borrow::Cow;
 use std::sync::LazyLock;
 
 use regex::Regex;
-use serde_json::Value;
+use serde_json::{Map, Value};
 
 #[path = "literal_secret_pairs.rs"]
 mod pairs;
@@ -78,7 +78,7 @@ static NAMED: LazyLock<[Regex; 9]> = LazyLock::new(|| {
         ),
         pattern(r"\bBearer\s+(?P<v>[A-Za-z0-9._~+/\-]{16,}=*)"),
         pattern(r#"-pass(?:in|out)?\s+pass:(?P<v>[^\s"']{4,})"#),
-        pattern(r#"(?i)\bIDENTIFIED\s+BY\s+(?:PASSWORD\s+)?["'](?P<v>[^"\n]{4,64})["']"#),
+        pattern(r#"(?i)\bIDENTIFIED\s+BY\s+(?:PASSWORD\s+)?["'](?P<v>[^"'\n]{4,64})["']"#),
         pattern(r"(?i)\bPASSWORD\s+'(?P<v>[^'\n]{4,64})'"),
         pattern(
             r#"(?i)(?:getenv|environ\.get|env\.get|ENV\.fetch)\(\s*["'][A-Za-z0-9_]*(?:SECRET|TOKEN|PASSWORD|PASSWD|API_?KEY|KEY)[A-Za-z0-9_]*["']\s*,\s*["'](?P<v>[^"'\s]{6,})["']"#,
@@ -271,29 +271,69 @@ pub(super) fn written_bodies(input: &serde_json::Map<String, Value>) -> Vec<Cow<
     bodies
 }
 
-/// Whether a file-tool write puts a live-looking credential into a file.
-/// Whether a file-tool write carries a body longer than the content screens
-/// read, so a credential or instruction past the limit would go unseen.
-pub(super) fn writes_unscreened_body(payload: &Value) -> bool {
-    payload
-        .get("tool_input")
-        .and_then(Value::as_object)
-        .is_some_and(|input| {
-            written_bodies(input)
-                .iter()
-                .any(|body| body.char_indices().nth(SCAN_LIMIT).is_some())
-        })
+/// The text a file tool writes, joined per destination file: the call's own
+/// body and every replacement aimed at the same file read as one text, since
+/// a MultiEdit can split one passage across its replacements. A replacement
+/// that names its own file is kept apart from the others.
+pub(super) fn written_text_by_file(input: &serde_json::Map<String, Value>) -> Vec<String> {
+    fn add<'a>(files: &mut Vec<(Option<&'a str>, String)>, file: Option<&'a str>, body: &str) {
+        let at = match files.iter().position(|(name, _)| *name == file) {
+            Some(at) => at,
+            None => {
+                files.push((file, String::new()));
+                files.len() - 1
+            }
+        };
+        let text = &mut files[at].1;
+        if !text.is_empty() {
+            text.push('\n');
+        }
+        text.push_str(body);
+    }
+    let mut files: Vec<(Option<&str>, String)> = vec![(None, String::new())];
+    for body in BODY_KEYS
+        .iter()
+        .filter_map(|key| input.get(*key).and_then(Value::as_str))
+    {
+        add(&mut files, None, body);
+    }
+    for edit in input
+        .get("edits")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+    {
+        let Some(body) = BODY_KEYS
+            .iter()
+            .find_map(|key| edit.get(*key).and_then(Value::as_str))
+        else {
+            continue;
+        };
+        let file = ["file_path", "filePath", "path"]
+            .iter()
+            .find_map(|key| edit.get(*key).and_then(Value::as_str));
+        add(&mut files, file, body);
+    }
+    files
+        .into_iter()
+        .map(|(_, text)| text)
+        .filter(|text| !text.is_empty())
+        .collect()
 }
 
-pub(super) fn writes_literal_secret(payload: &Value) -> bool {
-    payload
-        .get("tool_input")
-        .and_then(Value::as_object)
-        .is_some_and(|input| {
-            written_bodies(input)
-                .iter()
-                .any(|body| holds_literal_secret(body))
-        })
+/// Whether a file-tool write carries a body longer than the content screens
+/// read, so a credential or instruction past the limit would go unseen.
+pub(super) fn writes_unscreened_body(input: &Map<String, Value>) -> bool {
+    written_bodies(input)
+        .iter()
+        .any(|body| body.char_indices().nth(SCAN_LIMIT).is_some())
+}
+
+/// Whether a file-tool write puts a live-looking credential into a file.
+pub(super) fn writes_literal_secret(input: &Map<String, Value>) -> bool {
+    written_bodies(input)
+        .iter()
+        .any(|body| holds_literal_secret(body))
 }
 
 /// A command that spells out a live-looking key, token or password is

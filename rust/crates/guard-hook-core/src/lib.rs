@@ -775,7 +775,11 @@ fn review_inline(request: &NativeHookRequestV1) -> HookReviewResponseV1 {
         if scan.budget_exhausted || !scan.matches.is_empty() {
             return HookReviewResponseV1::deny("output_too_large", "HOL Guard blocked this output because it could not be fully scanned within local limits.");
         }
-        if let Some(response) = output_instructions::injected_instructions(request, &scanned) {
+        // The excerpt joins parts without separators, so an instruction split
+        // across two parts reaches the agent whole there; read both forms.
+        if let Some(response) = output_instructions::injected_instructions(request, &excerpt)
+            .or_else(|| output_instructions::injected_instructions(request, &scanned))
+        {
             return response;
         }
         return HookReviewResponseV1::reviewed_excerpt("output_too_large", "HOL Guard returned a reviewed excerpt because the output was too large to scan in full within local limits.", excerpt);

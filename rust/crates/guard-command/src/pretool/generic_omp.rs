@@ -131,7 +131,10 @@ pub(super) fn evaluate(
     if context.event != "PreToolUse" || !matches!(context.harness, "omp" | "pi") {
         return None;
     }
-    if signals.tool_name.as_deref() == Some("task") {
+    // A brief that also names a sensitive path and a URL in structured fields
+    // keeps the signal path, whose exfiltration block outranks this review.
+    let structured_exfiltration = signals.sensitive_target && !signals.url_values.is_empty();
+    if signals.tool_name.as_deref() == Some("task") && !structured_exfiltration {
         if let Some(result) = attacking_task_brief(payload, context) {
             return Some(result);
         }

@@ -103,13 +103,46 @@ fn spelled_commands(code: &str) -> Vec<Vec<String>> {
         .map(|found| unquote(found.as_str()).to_owned());
     for text in joined.chain(single) {
         for line in text.split(['&', '|', ';', '\n']) {
-            let words: Vec<String> = line.split_whitespace().map(str::to_owned).collect();
+            let words = shell_words(line);
             if !words.is_empty() {
                 commands.push(words);
             }
         }
     }
     commands
+}
+
+/// The words of one shell command line with its quotes removed, so
+/// `git -C 'my repo' reset --hard` names the directory `my repo`.
+fn shell_words(line: &str) -> Vec<String> {
+    let mut words = Vec::new();
+    let mut word = String::new();
+    let mut started = false;
+    let mut quote: Option<char> = None;
+    for ch in line.chars() {
+        match quote {
+            Some(open) if ch == open => quote = None,
+            Some(_) => word.push(ch),
+            None if matches!(ch, '\'' | '"') => {
+                quote = Some(ch);
+                started = true;
+            }
+            None if ch.is_whitespace() => {
+                if started {
+                    words.push(std::mem::take(&mut word));
+                    started = false;
+                }
+            }
+            None => {
+                word.push(ch);
+                started = true;
+            }
+        }
+    }
+    if started {
+        words.push(word);
+    }
+    words
 }
 
 fn is_git(word: &str) -> bool {

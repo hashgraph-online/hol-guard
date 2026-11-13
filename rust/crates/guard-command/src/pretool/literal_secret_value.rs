@@ -244,11 +244,15 @@ pub(super) fn looks_random(value: &str) -> bool {
     if VENDOR_PREFIX.is_match(value) {
         return true;
     }
-    if PUNCTUATION.is_match(value)
-        || PERCENT_SYNTAX.is_match(value)
-        || value.starts_with('.')
-        || MEMBER_REFERENCE.is_match(value)
-    {
+    if PERCENT_SYNTAX.is_match(value) {
+        // A format or escape expression (`%(asctime)s`, `%s:%d`, `%20`) is not
+        // a secret, but one inside an otherwise random value does not make
+        // the value a template: what is left once the expressions are taken
+        // out is judged on its own.
+        let rest = PERCENT_SYNTAX.replace_all(value, "");
+        return !rest.contains('%') && looks_random(&rest);
+    }
+    if PUNCTUATION.is_match(value) || value.starts_with('.') || MEMBER_REFERENCE.is_match(value) {
         return false;
     }
     let base32 = BASE32.is_match(value) && value.bytes().any(|byte| (b'2'..=b'7').contains(&byte));

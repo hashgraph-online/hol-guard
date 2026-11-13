@@ -50,8 +50,9 @@ fn program_name(executable: &str) -> String {
 }
 
 /// `dotnet add [<project>] package <id>`, `dotnet package add <id>`,
-/// `dotnet tool install|update <id>` and `dotnet new install <template>`
-/// each download from NuGet.
+/// `dotnet tool install|update <id>`, `dotnet tool restore` (every tool in
+/// the manifest) and `dotnet new install <template>` each download from
+/// NuGet.
 fn dotnet_installs(arguments: &[&str]) -> bool {
     match arguments.first().copied() {
         Some("add") => arguments
@@ -59,7 +60,10 @@ fn dotnet_installs(arguments: &[&str]) -> bool {
             .skip(1)
             .take(2)
             .any(|word| *word == "package"),
-        Some("tool") => matches!(arguments.get(1).copied(), Some("install" | "update")),
+        Some("tool") => matches!(
+            arguments.get(1).copied(),
+            Some("install" | "update" | "restore")
+        ),
         Some("new") => matches!(arguments.get(1).copied(), Some("install")),
         // The .NET 10 SDK's noun-first spelling of `add package`.
         Some("package") => matches!(arguments.get(1).copied(), Some("add" | "update")),

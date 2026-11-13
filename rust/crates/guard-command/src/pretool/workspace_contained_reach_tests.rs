@@ -3,9 +3,19 @@
 //! keeps a child git from discarding the work tree.
 use crate::pretool::workspace_contained_tests::{controls, host, workspace, CONTAINED};
 
+/// Removes a test workspace when the test ends, whether it passed or not.
+struct Cleanup(std::path::PathBuf);
+
+impl Drop for Cleanup {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_dir_all(&self.0);
+    }
+}
+
 #[test]
 fn a_heredoc_program_that_opens_a_system_file_keeps_its_review() {
     let ws = workspace("python-system-file", true);
+    let _cleanup = Cleanup(ws.clone());
     std::fs::write(ws.join("data.csv"), "a,b\n").unwrap();
     let home = ws.parent().unwrap().to_str().unwrap().to_owned();
     let outcome = |_: &str, command: &str, cwd: &std::path::Path| {
@@ -46,6 +56,7 @@ fn a_heredoc_program_that_opens_a_system_file_keeps_its_review() {
 #[test]
 fn a_lone_inline_program_that_reaches_past_the_sandbox_keeps_its_review() {
     let ws = workspace("inline-program-past-sandbox", true);
+    let _cleanup = Cleanup(ws.clone());
     let home = ws.parent().unwrap().to_str().unwrap().to_owned();
     let outcome = |command: &str| {
         let result = crate::pretool::evaluate_pre_tool_envelope_with_context(

@@ -17,11 +17,15 @@ use super::{assess_programs, sent_model, PathContext};
 use crate::CanonicalCommandV1;
 use guard_contracts::PreToolResultV1;
 
-/// A quoted absolute path under a system root, in single, double or
-/// backtick quotes.
-static SYSTEM_PATH: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r#"["'`](/(?:private/)?(?:etc|root|proc|sys|boot|var|usr)(?:/[^"'`\s]*)?)["'`]"#)
-        .unwrap()
+/// A quoted absolute path, in single, double or backtick quotes. It is
+/// resolved before its root is judged, so `/./etc/passwd` and
+/// `/tmp/../etc/passwd` are read as the file they open.
+static ABSOLUTE_PATH: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r#"["'`](/[^"'`\s]*)["'`]"#).unwrap());
+
+/// A resolved path under a system root.
+static SYSTEM_ROOT: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"^/(?:private/)?(?:etc|root|proc|sys|boot|var|usr)(?:/|$)").unwrap()
 });
 
 /// Prefixes under the system roots that hold programs, libraries and scratch
@@ -58,10 +62,11 @@ fn lexical(path: &str) -> String {
 
 /// Whether `code` names a system file by a literal path.
 pub(super) fn names_system_file(code: &str) -> bool {
-    SYSTEM_PATH.captures_iter(code).any(|captures| {
+    ABSOLUTE_PATH.captures_iter(code).any(|captures| {
         let path = &lexical(&captures[1]);
         let path = path.as_str();
-        !matches!(path, "/usr" | "/var" | "/private/var")
+        SYSTEM_ROOT.is_match(path)
+            && !matches!(path, "/usr" | "/var" | "/private/var")
             && !NOT_SYSTEM_STATE.iter().any(|prefix| {
                 // `/var/tmp/` resolves to `/var/tmp`: the directory itself
                 // is as much scratch space as anything below it.

@@ -3,8 +3,10 @@
 //! that hold a live-looking credential or plant instructions for a later
 //! session, and inline programs the read-only sandbox cannot make safe.
 
+use std::borrow::Cow;
+
 use guard_contracts::{PreToolActionTypeV1, PreToolResultV1};
-use serde_json::Value;
+use serde_json::{Map, Value};
 
 use super::agent_metadata;
 use super::extract::GenericSignals;
@@ -31,19 +33,47 @@ pub(super) fn admitted_subagent_brief(
         && !signals.sensitive_target
 }
 
+/// Every argument object a call carries: `tool_input` and each alias the
+/// signal extractor also reads (`toolInput`, `arguments`, ...), sent as an
+/// object or as JSON-encoded text. The flag is set when JSON-looking argument
+/// text could not be read, so its body went unscreened.
+fn argument_inputs(payload: &Value) -> (Vec<Cow<'_, Map<String, Value>>>, bool) {
+    let mut inputs = Vec::new();
+    let mut unparsed = false;
+    let Some(root) = payload.as_object() else {
+        return (inputs, unparsed);
+    };
+    for key in super::extract::EMBEDDED_ARGUMENT_KEYS {
+        match root.get(key) {
+            Some(Value::Object(input)) => inputs.push(Cow::Borrowed(input)),
+            Some(Value::String(text)) if text.trim_start().starts_with('{') => {
+                match super::extract::parse_strict_nested_json(text.trim().as_bytes()) {
+                    Ok(Value::Object(input)) => inputs.push(Cow::Owned(input)),
+                    _ => unparsed = true,
+                }
+            }
+            _ => {}
+        }
+    }
+    (inputs, unparsed)
+}
+
 /// Reviews an allowed file write whose text holds a live-looking credential
 /// or an instruction planted for a later agent session.
 pub(super) fn review_written_content(
     mut result: PreToolResultV1,
     payload: &Value,
 ) -> PreToolResultV1 {
+    let (inputs, unparsed) = argument_inputs(payload);
     // A key, token or password written into a file leaves the user's hands
     // once the file is committed, synced or read back, so a write that holds
     // a live-looking credential is reviewed rather than allowed as an
     // ordinary workspace edit.
     if result.decision == "allow"
         && result.action.action_type == PreToolActionTypeV1::FileWrite
-        && super::super::literal_secrets::writes_literal_secret(payload)
+        && inputs
+            .iter()
+            .any(|input| super::super::literal_secrets::writes_literal_secret(input))
     {
         let (reason_code, _) = review_reason(PreToolActionTypeV1::FileWrite);
         result = generic_result(
@@ -55,7 +85,9 @@ pub(super) fn review_written_content(
     }
     if result.decision == "allow"
         && result.action.action_type == PreToolActionTypeV1::FileWrite
-        && super::super::planted_instructions::writes_hidden_instruction(payload)
+        && inputs
+            .iter()
+            .any(|input| super::super::planted_instructions::writes_hidden_instruction(input))
     {
         let (reason_code, _) = review_reason(PreToolActionTypeV1::FileWrite);
         result = generic_result(
@@ -69,7 +101,10 @@ pub(super) fn review_written_content(
     // that is reviewed rather than allowed on the strength of its prefix.
     if result.decision == "allow"
         && result.action.action_type == PreToolActionTypeV1::FileWrite
-        && super::super::literal_secrets::writes_unscreened_body(payload)
+        && (unparsed
+            || inputs
+                .iter()
+                .any(|input| super::super::literal_secrets::writes_unscreened_body(input)))
     {
         let (reason_code, _) = review_reason(PreToolActionTypeV1::FileWrite);
         result = generic_result(
@@ -98,4 +133,24 @@ pub(super) fn keeps_unsandboxed_program_review(
             command_text,
             context,
         )
+}
+
+#[cfg(test)]
+mod tests {
+    use serde_json::json;
+
+    use super::argument_inputs;
+
+    #[test]
+    fn every_argument_alias_is_read_and_unreadable_json_is_flagged() {
+        let payload = json!({
+            "toolInput": {"file_path": "/w/a.py", "content": "a"},
+            "arguments": "{\"file_path\": \"/w/b.py\", \"content\": \"b\"}"
+        });
+        let (inputs, unparsed) = argument_inputs(&payload);
+        assert_eq!(inputs.len(), 2);
+        assert!(!unparsed);
+        let (_, unparsed) = argument_inputs(&json!({"tool_args": "{\"content\": "}));
+        assert!(unparsed);
+    }
 }

@@ -18,6 +18,7 @@ fn nuget_installs_are_registry_installs() {
     ));
     assert!(installs("dotnet add src/App.csproj package Serilog"));
     assert!(installs("dotnet tool install --global dotnet-ef"));
+    assert!(installs("dotnet tool restore"));
     assert!(installs("dotnet new install Avalonia.Templates"));
 }
 
