@@ -23,17 +23,23 @@ macro_rules! patterns {
     };
 }
 
-const HOOK_DIRECTORY: &str = r"(?:\.githooks|\.husky|\.git/hooks)";
+/// A path separator, with any `./` or extra `/` components after it: the
+/// kernel opens `.githooks/./pre-commit` and `.githooks//pre-commit` as
+/// `.githooks/pre-commit`.
+const SEPARATOR: &str = r"/(?:\.?/)*";
+const HOOK_DIRECTORY: &str = r"(?:\.githooks|\.husky|\.git/(?:\.?/)*hooks)";
 const HOOK_NAME: &str = r"(?:applypatch-msg|pre-applypatch|post-applypatch|pre-commit|pre-merge-commit|prepare-commit-msg|commit-msg|post-commit|pre-rebase|post-checkout|post-merge|pre-push|pre-receive|update|post-receive|post-update|push-to-checkout|pre-auto-gc|post-rewrite)";
 
 patterns! {
     REDIRECT = r#"(?:>>?|\btee\s+(?:-a\s+)?)\s*["']?(?P<path>[^\s"'<>|;&()]+)"#;
-    HOOK_FILE = &format!(r"(?:^|/){HOOK_DIRECTORY}/(?:_/)?{HOOK_NAME}$");
+    HOOK_FILE = &format!(
+        r"(?:^|/){HOOK_DIRECTORY}{SEPARATOR}(?:_{SEPARATOR})?{HOOK_NAME}$"
+    );
     HEREDOC = r#"<<-?\s*["']?(?P<tag>[A-Za-z_][A-Za-z0-9_]*)["']?"#;
     ECHOED = r#"^\s*(?:echo(?:\s+-[neE]+)*|printf)\s+(?P<body>.*?)\s*(?:>>?|\|\s*tee\b)"#;
     INERT_LINE = r"^\s*(?:#.*|exit(?:\s+0)?|true|:)?\s*;?\s*$";
     RENAMED = &format!(
-        r#"(?:(?:\brename(?:Sync)?|\bos\.replace|\bshutil\.move)\s*\(?\s*(?:q\(|["'])?|(?:^|[;&|(\s])mv\s+(?:-[A-Za-z]+\s+)*["']?)(?:[^\s"'(),]*/)?{HOOK_DIRECTORY}(?:/{HOOK_NAME})?(?:["'),\s]|$)"#
+        r#"(?:(?:\brename(?:Sync)?|\bos\.replace|\bshutil\.move)\s*\(?\s*(?:q\(|["'])?|(?:^|[;&|(\s])mv\s+(?:-[A-Za-z]+\s+)*["']?)(?:[^\s"'(),]*/)?{HOOK_DIRECTORY}(?:{SEPARATOR}{HOOK_NAME})?/*(?:["'),\s]|$)"#
     );
 }
 

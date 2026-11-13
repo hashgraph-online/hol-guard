@@ -31,8 +31,11 @@ const MIN_TOKEN_SEGMENT: usize = 24;
 const MAX_TOKEN_SEGMENT: usize = 64;
 /// Bits per character; 24 random letters and digits score about 4.3.
 const MIN_TOKEN_ENTROPY: f64 = 4.0;
-/// Path words after which a service puts a document identifier.
+/// Path words after which a document service puts a document identifier,
+/// and the hosts that route them. On any other host the same path words are
+/// a choice the receiving server made, so they earn nothing.
 const DOCUMENT_ROUTES: [&str; 2] = ["d", "folders"];
+const DOCUMENT_HOSTS: [&str; 2] = ["docs.google.com", "drive.google.com"];
 
 fn pattern(source: &str) -> Regex {
     Regex::new(source).expect("web fetch payload pattern compiles")
@@ -369,9 +372,9 @@ fn class_switches(segment: &str) -> usize {
 /// both cases, with no separator, and close to the entropy of random text.
 /// That is the shape of an API key or session token, not of a slug, a
 /// version, a commit hash (one case) or a UUID (hyphenated). A document
-/// identifier routed by its service (`/d/<id>`, `/folders/<id>`) keeps its
-/// usual shape and is left alone.
-fn token_segment(previous: Option<&str>, segment: &str) -> bool {
+/// identifier its document service routes (`/d/<id>`, `/folders/<id>`)
+/// keeps its usual shape and is left alone.
+fn token_segment(document_host: bool, previous: Option<&str>, segment: &str) -> bool {
     (MIN_TOKEN_SEGMENT..=MAX_TOKEN_SEGMENT).contains(&segment.len())
         && segment.bytes().all(|byte| byte.is_ascii_alphanumeric())
         && segment.bytes().any(|byte| byte.is_ascii_lowercase())
@@ -379,7 +382,7 @@ fn token_segment(previous: Option<&str>, segment: &str) -> bool {
         && segment.bytes().any(|byte| byte.is_ascii_digit())
         && entropy(segment) >= MIN_TOKEN_ENTROPY
         && class_switches(segment) * 3 >= segment.len()
-        && !previous.is_some_and(|previous| DOCUMENT_ROUTES.contains(&previous))
+        && !(document_host && previous.is_some_and(|previous| DOCUMENT_ROUTES.contains(&previous)))
 }
 
 /// Whether a path segment carries a random token, as a key or session
@@ -388,6 +391,9 @@ fn path_carries_token(url: &Url) -> bool {
     let Some(segments) = url.path_segments() else {
         return false;
     };
+    let document_host = url
+        .host_str()
+        .is_some_and(|host| DOCUMENT_HOSTS.contains(&host.trim_end_matches('.')));
     // Each segment is read decoded, so a token spelled with percent escapes
     // (`%41` for `A`) is judged by the characters the server receives.
     let mut previous: Option<String> = None;
@@ -395,7 +401,7 @@ fn path_carries_token(url: &Url) -> bool {
         let segment = percent_encoding::percent_decode_str(segment)
             .decode_utf8_lossy()
             .into_owned();
-        if token_segment(previous.as_deref(), &segment) {
+        if token_segment(document_host, previous.as_deref(), &segment) {
             return true;
         }
         previous = Some(segment);

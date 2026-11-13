@@ -65,6 +65,7 @@ pub(super) fn review_written_content(
     payload: &Value,
 ) -> PreToolResultV1 {
     let (inputs, unparsed) = argument_inputs(payload);
+    let cwd = payload.get("cwd").and_then(Value::as_str);
     // A key, token or password written into a file leaves the user's hands
     // once the file is committed, synced or read back, so a write that holds
     // a live-looking credential is reviewed rather than allowed as an
@@ -101,7 +102,7 @@ pub(super) fn review_written_content(
         && result.action.action_type == PreToolActionTypeV1::FileWrite
         && inputs
             .iter()
-            .any(|input| super::super::install_script_writes::adds_install_script(input))
+            .any(|input| super::super::install_script_writes::adds_install_script(input, cwd))
     {
         let (reason_code, _) = review_reason(PreToolActionTypeV1::FileWrite);
         result = generic_result(

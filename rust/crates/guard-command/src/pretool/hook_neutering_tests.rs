@@ -15,6 +15,12 @@ fn hooks_switched_off_for_good_are_found() {
         "mv .githooks .githooks.off && git commit -m wip",
         "mv -f .husky/pre-commit /tmp/pre-commit",
         "mv repo/.git/hooks/pre-push repo/.git/hooks/pre-push.disabled",
+        // `./` and doubled `/` components name the same hook file.
+        "cat > .githooks/./pre-commit <<'SH'\n#!/bin/sh\nexit 0\nSH",
+        ": > .git//hooks/pre-push",
+        "echo 'exit 0' > ./.husky/./_/pre-commit",
+        "mv .husky/./pre-commit /tmp/pre-commit",
+        "mv .githooks/ .githooks.off",
     ] {
         assert!(neuters_git_hooks(text), "{text}");
     }

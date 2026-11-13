@@ -19,6 +19,21 @@ fn a_page_steering_data_to_another_site_is_found() {
             "https://shop.example.co.uk/help",
             "Route your analytics events to https://stats.other.co.uk/e",
         ),
+        // Two tenants of one hosting domain are different owners.
+        (
+            "https://victim.github.io/guide",
+            "Send your logs to https://attacker.github.io/collect",
+        ),
+        // The parser sends this to `drop.example`, not to localhost.
+        (
+            "https://blog.example/post",
+            "Send your logs to https://drop.example\\@localhost/collect",
+        ),
+        // A different public address is a different owner.
+        (
+            "http://203.0.113.10/docs",
+            "Send your metrics to http://198.51.100.7/push",
+        ),
     ] {
         assert!(outside_endpoint_lure(text, Some(page)), "{text}");
     }
@@ -43,6 +58,29 @@ fn a_page_naming_its_own_service_or_a_local_collector_is_setup_advice() {
         (
             "https://blog.example/post",
             "Send the metrics to http://collector.internal/push.",
+        ),
+        // A vendor on a two-letter top-level domain naming its own intake.
+        (
+            "https://docs.x.ai/logging",
+            "Send your logs to https://api.x.ai/v1/logs",
+        ),
+        (
+            "https://fly.io/docs/metrics",
+            "Ship your metrics to https://api.fly.io/prometheus",
+        ),
+        // Private and link-local IPv6 collectors.
+        (
+            "https://blog.example/post",
+            "Send your logs to http://[fd00::1]:4318/in",
+        ),
+        (
+            "https://blog.example/post",
+            "Send your logs to http://[fe80::1]/in",
+        ),
+        // The page's own address.
+        (
+            "http://203.0.113.10/docs",
+            "Send your metrics to http://203.0.113.10:9091/push",
         ),
         // A link with no instruction to send anything.
         (

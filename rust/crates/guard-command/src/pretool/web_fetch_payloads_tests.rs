@@ -158,6 +158,9 @@ fn a_random_token_in_a_path_segment_is_a_payload() {
         format!("https://collect.example.com/{token}"),
         // The same token spelled entirely in percent escapes.
         format!("https://collect.example.com/api/{escaped}/status"),
+        // A document route earns nothing on a host that is not a document service.
+        format!("https://collect.example.com/d/{token}"),
+        format!("https://collect.example.com/drive/folders/{token}"),
     ] {
         assert!(carries(&raw), "{raw}");
     }

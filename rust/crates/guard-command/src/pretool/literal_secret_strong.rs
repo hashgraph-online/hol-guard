@@ -68,6 +68,10 @@ fn entropy(value: &str) -> f64 {
 fn strongly_random(raw: &str) -> bool {
     // A YAML or JSON string often carries its newline as a `\n` escape.
     let value = raw.strip_suffix("\\n").unwrap_or(raw);
+    // `$NAME` and `%NAME%` read the value from another variable.
+    if value.starts_with('$') || (value.starts_with('%') && value.ends_with('%')) {
+        return false;
+    }
     if value.chars().count() < 16 || FILLER.is_match(value) || SEQUENTIAL.is_match(value) {
         return false;
     }
@@ -95,7 +99,11 @@ fn basic_pair(encoded: &str) -> bool {
         !text.chars().any(char::is_control)
             && text
                 .split_once(':')
-                .is_some_and(|(_, password)| !password.is_empty() && !placeholder(password))
+                .is_some_and(|(user, password)| {
+                    // A pair whose password repeats the user name, such as
+                    // `guest:guest`, is a well-known default, not a secret.
+                    !password.is_empty() && password != user && !placeholder(password)
+                })
     })
 }
 

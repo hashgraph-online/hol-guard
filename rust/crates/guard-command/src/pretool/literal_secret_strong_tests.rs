@@ -59,6 +59,7 @@ fn credentials_proven_by_their_context_are_secrets() {
 #[test]
 fn placeholders_and_references_are_not_proven_secrets() {
     let words = STANDARD.encode("hello world");
+    let guest = STANDARD.encode("guest:guest");
     for text in [
         "auth = base64.b64encode(b'guest:guest')".to_string(),
         "auth = base64.b64encode(b'user:password')".to_string(),
@@ -84,6 +85,12 @@ fn placeholders_and_references_are_not_proven_secrets() {
         "secret = \"short1A!\"".to_string(),
         "client_secret: \"{{ vault_client_secret_2024 }}\"".to_string(),
         "SECRET_KEY = 'replace-this-with-a-long-random-value-9!'".to_string(),
+        // A value read from another variable.
+        format!("export CLIENT_SECRET=\"${}\"", joined(&["MyAppClient", "Secret7Q"])),
+        format!("set API_TOKEN=\"%{}%\"", joined(&["MyAppApi", "Token7Qz"])),
+        // A default pair whose password repeats the user, in either header case.
+        format!("headers['Authorization'] = 'basic {guest}'"),
+        format!("Authorization: Basic {guest}"),
     ] {
         assert!(!holds_proven_secret(&text), "{text}");
     }
