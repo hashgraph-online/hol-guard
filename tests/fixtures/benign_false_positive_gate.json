@@ -29537,6 +29537,24 @@
       "requires_sandbox": true
     },
     {
+      "id": "shell-python-inline-lists-directory-names",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "python3 -c 'import pathlib; print(sorted(p.name for p in pathlib.Path(\".\").iterdir()))'"
+      },
+      "cwd": "worktree",
+      "expect": "allow",
+      "requires_sandbox": true
+    },
+    {
       "id": "neg-shell-printf-literal-database-password",
       "fix_area": "secrets",
       "harnesses": ["claude-code", "codex", "omp", "zcode"],
