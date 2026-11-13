@@ -255,11 +255,12 @@ pub(crate) fn benign_command_segments(
 /// `jq ". as \$x | $x"` reaches jq with whatever `$x` holds spliced into the
 /// code. Every `$` in the raw text must be single-quoted or escaped.
 fn jq_dollars_literal(segment: &crate::CommandSegmentV1) -> bool {
-    !segment
-        .arguments
-        .iter()
-        .any(|argument| argument.contains('$'))
-        || super::shell_literal::literal_everywhere(&segment.text, '$')
+    super::glob_words::jq_bound_values_literal(segment)
+        && (!segment
+            .arguments
+            .iter()
+            .any(|argument| argument.contains('$'))
+            || super::shell_literal::literal_everywhere(&segment.text, '$'))
 }
 
 /// A later pipeline stage that only filters its standard input.
@@ -591,7 +592,7 @@ pub(super) fn exact_safe_segment_with_context(
         "jq" => {
             jq_dollars_literal(segment)
                 && ((segment.pipeline_index > 0
-                    && safe_reads::safe_jq_stdin_arguments(&segment.arguments))
+                    && safe_reads::safe_jq_piped_arguments(&segment.arguments, context))
                     || (segment.pipeline_index == 0
                         && safe_reads::safe_jq_file_arguments(&segment.arguments, context)))
         }

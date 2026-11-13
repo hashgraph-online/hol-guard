@@ -228,6 +228,12 @@ def test_only_the_marked_cases_may_pass_on_containment() -> None:
         "neg-goflags-screened-then-toolexec-prefix-go-test",
         "neg-goflags-toolexec-prefix-then-screened-argument-go-test",
         "neg-goflags-mod-mod-prefix-go-test",
+        # A glob after a jq binding option expands to workspace names jq may read
+        # as options; a contained run reaches nothing outside the workspace.
+        "neg-jq-arg-glob-value-splits-into-options",
+        # `--arg ENV` cannot rebind jq's environment, so the filter still reads
+        # it; a contained run has no session environment to print.
+        "neg-jq-arg-cannot-bind-env",
         # A glob over a checkout link that leaves it: the contained run has no home
         # access, so the link reads nothing.
         "neg-linked-sources-grep-glob-over-escaping-link",
