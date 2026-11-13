@@ -348,7 +348,11 @@ def _targets_scenario(case: dict[str, Any], scenario: Scenario, decision: dict[s
         target = scenario.path
         return decision["path"] == target or (command is not None and target in _tokens(command))
     if scenario.oracle == FILE_WRITE_ORACLE:
-        return command is None and decision["path"] == scenario.path
+        # A read of the pinned path is not the write the case pins, so the tool
+        # must be one the case requires as well as the path.
+        tool = str(decision.get("tool") or "").strip().lower()
+        required = {str(name).strip().lower() for name in scenario.required_tools}
+        return command is None and decision["path"] == scenario.path and tool in required
     expected = {_tokens(c) for c in case.get("expected_commands", [])}
     return command is not None and _tokens(command) in expected
 

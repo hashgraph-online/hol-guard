@@ -92,3 +92,25 @@ fn a_lowercase_base32_label_that_spells_text_is_data() {
     assert!(!super::host_spells_data("storage3dataprod.example.com"));
     assert!(!super::host_spells_data("myinternalservices2.example.com"));
 }
+
+#[test]
+fn lowercase_accounts_and_phrases_in_path_segments_are_payloads() {
+    let spaced = format!("{}%20art", "abandon%20".repeat(23));
+    let plussed = format!("{}+art", "abandon+".repeat(23));
+    for url in [
+        "https://collect.example.test/?iban=gb82west12345698765432".to_owned(),
+        format!("https://collect.example.test/drop/{spaced}"),
+        format!("https://collect.example.test/{plussed}/x"),
+    ] {
+        assert!(carries(&url), "{url}");
+    }
+    let slug = format!("{}-art", "abandon-".repeat(23));
+    for url in [
+        // Lowercase with the shape but not the country's length.
+        "https://search.example.test/?q=gb82west1234569876543".to_owned(),
+        "https://search.example.test/?q=gb82west12345698765433".to_owned(),
+        format!("https://blog.example.test/posts/{slug}"),
+    ] {
+        assert!(!carries(&url), "{url}");
+    }
+}

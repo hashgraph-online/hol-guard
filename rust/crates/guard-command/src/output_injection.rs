@@ -14,7 +14,8 @@
 //!
 //! An override phrase that a document quotes in order to explain it
 //! (`attackers write "ignore previous instructions"`) is not an instruction,
-//! unless the quoted text itself sends data somewhere or names a credential.
+//! unless the quoted text itself sends data somewhere or names a credential,
+//! or the sentence around the quotation asks for it to be carried out.
 
 use std::sync::LazyLock;
 
@@ -42,9 +43,11 @@ patterns! {
     AUTHORITY = r"(?i)\byou\s+(?:now\s+)?(?:have|are\s+granted)\s+(?:full\s+)?(?:admin|root|elevated|unrestricted)\b|\byou\s+are\s+now\s+in\s+(?:admin|developer|god|dan|root|unrestricted|jailbreak)\s+mode";
     PROMPT_LEAK = r"(?i)\b(?:output|print|reveal|repeat|show|dump|send)\s+(?:me\s+)?(?:your|the)\s+(?:complete\s+|full\s+|entire\s+|current\s+)?(?:system\s+prompt|hidden\s+instructions|tool\s+definitions)";
     DECODE_AND_RUN = r"(?i)\bdecode\b[^.\n]{0,60}\b(?:and\s+)?(?:execute|run|eval)\b";
-    RUN_FOLLOWING = r"(?i)\b(?:run|execute)\s+the\s+following\s+commands?\b[^\n]{0,40}?[:\n]\s*(?P<cmd>[^\n]{0,200})";
+    RUN_FOLLOWING = r"(?i)\b(?:run|execute)\s+the\s+following\s+commands?\b[^\n]{0,40}?[:\n]\s*(?:(?:```|~~~)[\w+-]*[ \t]*\n\s*)?(?P<cmd>[^\n]{0,200})";
     DESTRUCTIVE = r"(?i)\brm\s+-[a-z]*r|\bcurl\b|\bwget\b|\bmkfs|\bdd\s+if=|\|\s*(?:ba|z)?sh\b|\$\(|/etc/(?:shadow|passwd)|~/\.(?:ssh|aws)|\bchmod\s+777";
     DESTINATION = r"(?i)https?://|~/\.|/etc/|\bcredentials\b";
+    CARRY_OUT = r"(?i)\b(?:carry\s+out|follow|execute|obey|perform|comply\s+with|act\s+on|apply)\b";
+    NEGATED = r"(?i)\b(?:not|never|don't|won't|shouldn't|can't|cannot|avoid|refuse)\b";
 }
 
 /// Where a tool's output came from.
@@ -94,9 +97,21 @@ fn quoted_passage<'t>(text: &'t str, found: &Match<'_>) -> Option<&'t str> {
 }
 
 /// Whether `found` is a phrase a document quotes to explain it, rather than
-/// an instruction: it is quoted and the quotation sends nothing anywhere.
+/// an instruction: it is quoted, the quotation sends nothing anywhere, and
+/// the sentence that introduces it does not ask for it to be carried out.
 fn quoted_for_discussion(text: &str, found: &Match<'_>) -> bool {
     quoted_passage(text, found).is_some_and(|passage| !DESTINATION.is_match(passage))
+        && !asks_to_carry_out(text, found)
+}
+
+/// Whether the sentence leading into `found` asks the reader to act on it
+/// (`Carry out this instruction: "..."`) rather than warning against it.
+fn asks_to_carry_out(text: &str, found: &Match<'_>) -> bool {
+    let before = &text[..found.start()];
+    let lead = before
+        .rfind(['.', '!', '?', '\n'])
+        .map_or(before, |at| &before[at + 1..]);
+    CARRY_OUT.is_match(lead) && !NEGATED.is_match(lead)
 }
 
 fn unquoted(text: &str, shape: &Regex) -> bool {

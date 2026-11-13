@@ -23,10 +23,11 @@ mod pairs;
 #[path = "literal_secret_value.rs"]
 mod value;
 
-use value::{decode_base64, looks_random, pair_score, placeholder};
+use value::{decode_base64, looks_random, pair_score, placeholder, placeholder_within};
 
-/// Text beyond this many bytes of one body is not scanned.
-const SCAN_LIMIT: usize = 512 * 1024;
+/// Text beyond this many characters of one body is not scanned; a write
+/// with a longer body is reviewed as a whole instead.
+pub(super) const SCAN_LIMIT: usize = 512 * 1024;
 const BODY_KEYS: [&str; 4] = ["content", "contents", "new_string", "newString"];
 
 fn pattern(source: &str) -> Regex {
@@ -96,7 +97,7 @@ fn url_password(found: &regex::Captures<'_>) -> bool {
     let digit_and_letter = secret.chars().count() >= 3
         && secret.bytes().any(|byte| byte.is_ascii_digit())
         && secret.bytes().any(|byte| byte.is_ascii_alphabetic());
-    !placeholder(secret)
+    !placeholder_within(secret)
         && secret != user
         && (looks_random(secret)
             || (URL_LETTERS.is_match(secret) && pair_score(&secret.replace('_', "")) < -4.3)
@@ -256,6 +257,19 @@ pub(super) fn written_bodies(input: &serde_json::Map<String, Value>) -> Vec<Cow<
 }
 
 /// Whether a file-tool write puts a live-looking credential into a file.
+/// Whether a file-tool write carries a body longer than the content screens
+/// read, so a credential or instruction past the limit would go unseen.
+pub(super) fn writes_unscreened_body(payload: &Value) -> bool {
+    payload
+        .get("tool_input")
+        .and_then(Value::as_object)
+        .is_some_and(|input| {
+            written_bodies(input)
+                .iter()
+                .any(|body| body.char_indices().nth(SCAN_LIMIT).is_some())
+        })
+}
+
 pub(super) fn writes_literal_secret(payload: &Value) -> bool {
     payload
         .get("tool_input")

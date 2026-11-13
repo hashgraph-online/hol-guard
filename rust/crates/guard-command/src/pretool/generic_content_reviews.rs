@@ -65,6 +65,20 @@ pub(super) fn review_written_content(
         "This write leaves an instruction for a later agent session that overrides a safety rule and tells the agent to keep it from you.",
     );
     }
+    // Both screens read a bounded prefix of each body, so a body longer than
+    // that is reviewed rather than allowed on the strength of its prefix.
+    if result.decision == "allow"
+        && result.action.action_type == PreToolActionTypeV1::FileWrite
+        && super::super::literal_secrets::writes_unscreened_body(payload)
+    {
+        let (reason_code, _) = review_reason(PreToolActionTypeV1::FileWrite);
+        result = generic_result(
+        result.action.clone(),
+        "review",
+        reason_code,
+        "This write is too large for Guard to check in full for keys, tokens, passwords or hidden instructions.",
+    );
+    }
     result
 }
 

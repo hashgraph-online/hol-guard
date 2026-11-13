@@ -799,7 +799,11 @@ fn review_inline(request: &NativeHookRequestV1) -> HookReviewResponseV1 {
             "HOL Guard blocked this output because it contains sensitive content.",
         );
     }
-    if let Some(response) = output_instructions::injected_instructions(request, &extracted.text) {
+    // Each part is screened on its own line too, so an instruction that
+    // opens a part is not glued to the end of the part before it.
+    if let Some(response) = output_instructions::injected_instructions(request, &extracted.text)
+        .or_else(|| output_instructions::injected_instructions(request, &extracted.boundary_text))
+    {
         return response;
     }
     allow_inline_output("output_scan_allow", &extracted.text)

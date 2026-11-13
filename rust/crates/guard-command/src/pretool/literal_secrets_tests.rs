@@ -218,3 +218,36 @@ fn a_patch_that_adds_a_secret_is_a_write_of_it() {
     });
     assert!(!writes_literal_secret(&removed));
 }
+
+#[test]
+fn a_body_past_the_scan_limit_is_reviewed_as_a_whole() {
+    let padded = format!("{}{}", " ".repeat(super::SCAN_LIMIT + 1), "token = 'x'");
+    assert!(super::writes_unscreened_body(&json!({
+        "tool_input": {"file_path": "/w/big.txt", "content": padded}
+    })));
+    assert!(!super::writes_unscreened_body(&json!({
+        "tool_input": {"file_path": "/w/app.py", "content": "print('hello')\n"}
+    })));
+}
+
+#[test]
+fn placeholder_words_and_percent_signs_inside_a_real_value_do_not_hide_it() {
+    for text in [
+        format!(
+            "url = \"postgres://app:{}@db.internal/app\"",
+            joined(&["Xk9t", "est2Qm7LpR4"])
+        ),
+        format!("DB_PASSWORD = \"{}\"", joined(&["N7q%R3", "mX9sVw2"])),
+    ] {
+        assert!(holds_literal_secret(&text), "{text}");
+    }
+    for text in [
+        "url = \"postgres://user:password123@localhost/app\"",
+        "url = \"postgres://app:testpass@localhost/app\"",
+        "DB_PASSWORD = \"%DB_PASSWORD%\"",
+        "log_format = \"%(asctime)s %(levelname)s\"",
+        "token = \"%s:%d\"",
+    ] {
+        assert!(!holds_literal_secret(text), "{text}");
+    }
+}

@@ -12,7 +12,7 @@ use std::sync::LazyLock;
 
 use regex::Regex;
 
-use super::{assess_programs, code_lines, sent_model, structure, Language, PathContext};
+use super::{assess_programs, sent_model, structure, Language, PathContext};
 use crate::CanonicalCommandV1;
 use guard_contracts::PreToolResultV1;
 
@@ -45,6 +45,12 @@ static WORD_ARRAY: LazyLock<Regex> = LazyLock::new(|| {
 });
 
 static ONE_LITERAL: LazyLock<Regex> = LazyLock::new(|| Regex::new(LITERAL).unwrap());
+
+/// Two or more literals joined into one string: by `+` (Python, Node,
+/// Ruby), `.` or `..` (PHP, Perl, Lua), or by Python's implicit
+/// concatenation of adjacent literals.
+static CONCATENATED: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(&format!(r"{LITERAL}(?:\s*(?:\+|\.\.?)?\s*{LITERAL})+")).unwrap());
 
 /// Interpreters whose inline source this check reads beside Python and Node,
 /// with the options that take that source.
@@ -89,8 +95,14 @@ fn spelled_commands(code: &str) -> Vec<Vec<String>> {
             );
         }
     }
-    for found in ONE_LITERAL.find_iter(code) {
-        for line in unquote(found.as_str()).split(['&', '|', ';', '\n']) {
+    let joined = CONCATENATED
+        .find_iter(code)
+        .map(|found| literals(found.as_str()).concat());
+    let single = ONE_LITERAL
+        .find_iter(code)
+        .map(|found| unquote(found.as_str()).to_owned());
+    for text in joined.chain(single) {
+        for line in text.split(['&', '|', ';', '\n']) {
             let words: Vec<String> = line.split_whitespace().map(str::to_owned).collect();
             if !words.is_empty() {
                 commands.push(words);
@@ -132,11 +144,21 @@ fn discards_work(argv: &[String]) -> bool {
             .iter()
             .any(|word| *word == "--dry-run" || short_cluster_has(word, 'n')),
         "checkout" => {
+            // `git checkout <tree> <path>` replaces the path from the tree;
+            // a lone operand is a branch switch, which keeps local edits.
+            let creates_branch = rest.iter().any(|word| {
+                matches!(*word, "-b" | "-B" | "--orphan") || word.starts_with("--orphan=")
+            });
+            let operands = rest.iter().filter(|word| !word.starts_with('-')).count();
             has("--")
                 || has(".")
                 || has("--force")
                 || rest.iter().any(|word| short_cluster_has(word, 'f'))
+                || (!creates_branch && operands >= 2)
         }
+        "switch" => rest.iter().any(|word| {
+            matches!(*word, "--discard-changes" | "--force") || short_cluster_has(word, 'f')
+        }),
         "restore" => {
             let staged_only = rest
                 .iter()
@@ -192,7 +214,10 @@ pub(super) fn spells_destructive_git(code: &str) -> bool {
 
 /// Inline source given to an interpreter the shared program reader does not
 /// model (`ruby -e`, `perl -e`, `php -r`).
-fn other_inline_sources(model: &CanonicalCommandV1, context: PathContext<'_>) -> Vec<String> {
+pub(super) fn other_inline_sources(
+    model: &CanonicalCommandV1,
+    context: PathContext<'_>,
+) -> Vec<String> {
     let Some((_, segments)) = structure(model, context) else {
         return Vec::new();
     };
@@ -221,13 +246,63 @@ fn other_inline_sources(model: &CanonicalCommandV1, context: PathContext<'_>) ->
     sources
 }
 
+/// `source` with each comment that starts outside a string literal removed:
+/// `#` comments for Python, `//` and `/* */` comments for Node. A marker
+/// inside a quoted string is kept, so `os.system("git reset --hard # note")`
+/// still reads the whole command.
+fn without_comments(language: Language, source: &str) -> String {
+    let mut code = String::with_capacity(source.len());
+    let mut in_block = false;
+    for line in source.lines() {
+        let mut quote = None;
+        let mut chars = line.char_indices();
+        while let Some((at, ch)) = chars.next() {
+            let rest = &line[at..];
+            if in_block {
+                if rest.starts_with("*/") {
+                    chars.next();
+                    in_block = false;
+                }
+                continue;
+            }
+            if let Some(open) = quote {
+                code.push(ch);
+                if ch == '\\' {
+                    if let Some((_, escaped)) = chars.next() {
+                        code.push(escaped);
+                    }
+                } else if ch == open {
+                    quote = None;
+                }
+                continue;
+            }
+            match language {
+                Language::Python if ch == '#' => break,
+                Language::Node if rest.starts_with("//") => break,
+                Language::Node if rest.starts_with("/*") => {
+                    chars.next();
+                    in_block = true;
+                    continue;
+                }
+                _ => {}
+            }
+            if matches!(ch, '"' | '\'' | '`') {
+                quote = Some(ch);
+            }
+            code.push(ch);
+        }
+        code.push('\n');
+    }
+    code
+}
+
 fn programs_spell_destructive_git(model: &CanonicalCommandV1, context: PathContext<'_>) -> bool {
     let modeled = assess_programs(model, context, false).iter().any(|found| {
         found.sources.iter().any(|source| {
             // The language is not kept with the source, so a command counts
             // only when it survives both comment styles being removed.
-            spells_destructive_git(&code_lines(Language::Python, source))
-                && spells_destructive_git(&code_lines(Language::Node, source))
+            spells_destructive_git(&without_comments(Language::Python, source))
+                && spells_destructive_git(&without_comments(Language::Node, source))
         })
     });
     modeled

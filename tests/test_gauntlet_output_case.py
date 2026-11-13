@@ -6,7 +6,6 @@ post-tool review of that same call denies the output with an output-screen reaso
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
 
 import pytest
@@ -20,6 +19,9 @@ from ci.gauntlet.output_cases import (
     add_output_fixture,
     assess_output_block,
 )
+
+# The schema the loader requires, so a malformed row fails on its own fields.
+CATALOG_SCHEMA = "hol.guard-gauntlet.scenarios.v1"
 
 CASES = {
     "printed-file-tells-the-agent-to-drop-its-instructions": "cat vendor/REPLY.md",
@@ -113,4 +115,10 @@ def _scenario_row(**overrides: object) -> dict[str, object]:
 def test_the_catalog_rejects_a_malformed_output_case(overrides: dict[str, object]) -> None:
     row = {k: v for k, v in _scenario_row(**overrides).items() if v not in (None, [])}
     with pytest.raises(ValueError):
-        load_catalog_data(json.loads(json.dumps({"schema": 1, "scenarios": [row]})))
+        load_catalog_data({"schema": CATALOG_SCHEMA, "scenarios": [row]})
+
+
+def test_the_unmodified_output_case_loads() -> None:
+    row = {k: v for k, v in _scenario_row().items() if v not in (None, [])}
+    (scenario,) = load_catalog_data({"schema": CATALOG_SCHEMA, "scenarios": [row]})
+    assert scenario.expectation == "block"

@@ -51,3 +51,38 @@ fn a_program_fed_on_a_heredoc_is_read_for_system_files() {
     let local = "python3 - <<'PYEOF'\nwith open('data.csv') as f:\n    print(f.read())\nPYEOF";
     assert!(!super::text_names_system_file(local, context));
 }
+
+#[test]
+fn template_literals_and_bare_scratch_directories_are_read_by_quote_kind() {
+    assert!(names_system_file(
+        "require('fs').readFileSync(`/etc/passwd`, 'utf8')"
+    ));
+    for code in [
+        "tempfile.mkdtemp(dir='/var/tmp/')",
+        "os.listdir('/usr/local/')",
+        "os.listdir('/usr/bin/')",
+        "fs.readdirSync(`/var/tmp`)",
+    ] {
+        assert!(!names_system_file(code), "{code}");
+    }
+}
+
+#[test]
+fn ruby_perl_and_php_inline_source_is_read_for_system_files() {
+    let home = std::env::temp_dir();
+    let home = home.to_str().unwrap();
+    let context = crate::pretool::PathContext {
+        home_dir: Some(home),
+        cwd: Some(home),
+        ..Default::default()
+    };
+    for named in [
+        "ruby -e 'puts File.read(\"/etc/passwd\")'",
+        "perl -e 'open(my $f, \"<\", \"/etc/shadow\"); print <$f>'",
+        "php -r 'echo file_get_contents(\"/etc/passwd\");'",
+    ] {
+        assert!(super::text_names_system_file(named, context), "{named}");
+    }
+    let local = "ruby -e 'puts File.read(\"Gemfile\")'";
+    assert!(!super::text_names_system_file(local, context));
+}

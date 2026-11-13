@@ -191,7 +191,103 @@ fn wallet_or_account_token(token: &str) -> bool {
         || (WIF_KEY.is_match(token) && base58_checked(token))
         || EXTENDED_KEY.is_match(token)
         || (SEGWIT_ADDRESS.is_match(token) && segwit_checked(token))
-        || (IBAN.is_match(token) && iban_checked(token))
+        || iban_token(token)
+}
+
+/// The length of an IBAN from each country that issues them.
+const IBAN_LENGTHS: &[(&str, usize)] = &[
+    ("AD", 24),
+    ("AE", 23),
+    ("AL", 28),
+    ("AT", 20),
+    ("AZ", 28),
+    ("BA", 20),
+    ("BE", 16),
+    ("BG", 22),
+    ("BH", 22),
+    ("BR", 29),
+    ("BY", 28),
+    ("CH", 21),
+    ("CR", 22),
+    ("CY", 28),
+    ("CZ", 24),
+    ("DE", 22),
+    ("DK", 18),
+    ("DO", 28),
+    ("EE", 20),
+    ("EG", 29),
+    ("ES", 24),
+    ("FI", 18),
+    ("FO", 18),
+    ("FR", 27),
+    ("GB", 22),
+    ("GE", 22),
+    ("GI", 23),
+    ("GL", 18),
+    ("GR", 27),
+    ("GT", 28),
+    ("HR", 21),
+    ("HU", 28),
+    ("IE", 22),
+    ("IL", 23),
+    ("IQ", 23),
+    ("IS", 26),
+    ("IT", 27),
+    ("JO", 30),
+    ("KW", 30),
+    ("KZ", 20),
+    ("LB", 28),
+    ("LC", 32),
+    ("LI", 21),
+    ("LT", 20),
+    ("LU", 20),
+    ("LV", 21),
+    ("MC", 27),
+    ("MD", 24),
+    ("ME", 22),
+    ("MK", 19),
+    ("MR", 27),
+    ("MT", 31),
+    ("MU", 30),
+    ("NL", 18),
+    ("NO", 15),
+    ("PK", 24),
+    ("PL", 28),
+    ("PS", 29),
+    ("PT", 25),
+    ("QA", 29),
+    ("RO", 24),
+    ("RS", 22),
+    ("SA", 24),
+    ("SC", 31),
+    ("SE", 24),
+    ("SI", 19),
+    ("SK", 24),
+    ("SM", 27),
+    ("ST", 25),
+    ("SV", 28),
+    ("TL", 23),
+    ("TN", 24),
+    ("TR", 26),
+    ("UA", 29),
+    ("VA", 22),
+    ("VG", 24),
+    ("XK", 20),
+];
+
+/// An IBAN with a valid checksum. One written in lower or mixed case must
+/// also have its country's length, since a lowercase identifier passes the
+/// shape and the checksum by chance far more often than an uppercase one.
+fn iban_token(token: &str) -> bool {
+    if IBAN.is_match(token) {
+        return iban_checked(token);
+    }
+    let upper = token.to_ascii_uppercase();
+    IBAN.is_match(&upper)
+        && IBAN_LENGTHS
+            .iter()
+            .any(|(country, length)| upper.starts_with(country) && upper.len() == *length)
+        && iban_checked(&upper)
 }
 
 fn query_value_carries_payload(value: &str) -> bool {
@@ -205,21 +301,28 @@ fn query_value_carries_payload(value: &str) -> bool {
 /// Whether the query or fragment carries a wallet key, recovery phrase,
 /// wallet address, bank account number or an opaque payload.
 pub(super) fn url_carries_payload(url: &Url) -> bool {
+    let decoded = |text: &str| {
+        percent_encoding::percent_decode_str(text)
+            .decode_utf8_lossy()
+            .into_owned()
+    };
+    // A path segment can carry a recovery phrase as well as a query can; the
+    // phrase needs its words split by spaces, `+` or commas, so a hyphenated
+    // slug is not read as one.
+    let path_phrase = url.path_segments().is_some_and(|mut segments| {
+        segments.any(|segment| holds_recovery_phrase(&decoded(segment)))
+    });
     let fragment = url.fragment().map(str::to_owned);
-    url.query_pairs().any(|(key, value)| {
-        (KEY_NAME.is_match(&key) && HEX_KEY.is_match(&value)) || query_value_carries_payload(&value)
-    }) || fragment
-        .map(|fragment| {
-            percent_encoding::percent_decode_str(&fragment)
-                .decode_utf8_lossy()
-                .into_owned()
+    path_phrase
+        || url.query_pairs().any(|(key, value)| {
+            (KEY_NAME.is_match(&key) && HEX_KEY.is_match(&value))
+                || query_value_carries_payload(&value)
         })
-        .is_some_and(|fragment| query_value_carries_payload(&fragment))
+        || fragment
+            .map(|fragment| decoded(&fragment))
+            .is_some_and(|fragment| query_value_carries_payload(&fragment))
 }
 
-/// Whether a host name, as written, spells data into its labels: more labels
-/// than a public host uses, a base32 run written in upper case, or a label
-/// that names itself as an exfiltration endpoint.
 /// A label of either case that decodes from base32 to readable text, as data
 /// spelled into a host name does. An ordinary word-like label decodes to
 /// noise.
@@ -252,6 +355,9 @@ fn base32_text(label: &str) -> bool {
         .all(|byte| byte.is_ascii_graphic() || *byte == b' ')
 }
 
+/// Whether a host name, as written, spells data into its labels: more labels
+/// than a public host uses, a base32 run written in upper case, or a label
+/// that names itself as an exfiltration endpoint.
 pub(super) fn host_spells_data(raw_host: &str) -> bool {
     let labels: Vec<&str> = raw_host.trim_end_matches('.').split('.').collect();
     labels.len() > MAX_HOST_LABELS

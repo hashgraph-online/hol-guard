@@ -67,8 +67,28 @@ fn dotnet_installs(arguments: &[&str]) -> bool {
     }
 }
 
-/// Python options that take their value as the next argument.
-const PYTHON_VALUE_OPTIONS: &[&str] = &["-W", "-X", "--check-hash-based-pycs"];
+/// Python long options that take their value as the next argument.
+const PYTHON_VALUE_OPTIONS: &[&str] = &["--check-hash-based-pycs"];
+
+/// pip's general options that take their value as the next argument, and so
+/// may sit between `pip` and its verb.
+const PIP_VALUE_OPTIONS: &[&str] = &[
+    "--python",
+    "--log",
+    "--log-file",
+    "--keyring-provider",
+    "--proxy",
+    "--retries",
+    "--timeout",
+    "--exists-action",
+    "--trusted-host",
+    "--cert",
+    "--client-cert",
+    "--cache-dir",
+    "--use-feature",
+    "--use-deprecated",
+    "--resume-retries",
+];
 
 /// `python -m pip install …` (any `python`, `python3`, `python3.12`, `py`)
 /// runs pip's install verb. Options before `-m` are skipped with their values
@@ -87,32 +107,79 @@ fn python_module_installs(name: &str, arguments: &[&str]) -> bool {
         let Some(argument) = arguments.get(index).copied() else {
             return false;
         };
-        if argument == "-m" {
-            let Some(module) = arguments.get(index + 1).copied() else {
-                return false;
-            };
-            break (module, index + 2);
-        }
-        if let Some(module) = argument.strip_prefix("-m").filter(|m| !m.is_empty()) {
-            break (module, index + 1);
-        }
         if !argument.starts_with('-') {
             return false;
         }
-        index += if PYTHON_VALUE_OPTIONS.contains(&argument) {
-            2
-        } else {
-            1
-        };
+        if argument.starts_with("--") {
+            index += if PYTHON_VALUE_OPTIONS.contains(&argument) {
+                2
+            } else {
+                1
+            };
+            continue;
+        }
+        // A short-option cluster such as `-Im` or `-Impip`: the first
+        // option that takes a value consumes the rest of the cluster, or
+        // the next argument when the cluster ends with it.
+        match short_cluster_value(&argument[1..]) {
+            ClusterValue::Flags => index += 1,
+            ClusterValue::Command => return false,
+            ClusterValue::Value { module, tail } => {
+                let (value, next) = if tail.is_empty() {
+                    let Some(value) = arguments.get(index + 1).copied() else {
+                        return false;
+                    };
+                    (value, index + 2)
+                } else {
+                    (tail, index + 1)
+                };
+                if module {
+                    break (value, next);
+                }
+                index = next;
+            }
+        }
     };
     if !matches!(module, "pip" | "pip3") {
         return false;
     }
-    arguments
-        .iter()
-        .skip(rest)
-        .find(|argument| !argument.starts_with('-'))
-        .is_some_and(|verb| matches!(*verb, "install" | "download" | "wheel"))
+    let mut words = arguments.iter().skip(rest);
+    while let Some(word) = words.next() {
+        if PIP_VALUE_OPTIONS.contains(word) {
+            words.next();
+        } else if !word.starts_with('-') {
+            return matches!(*word, "install" | "download" | "wheel");
+        }
+    }
+    false
+}
+
+/// What a Python short-option cluster (without its `-`) does with a value.
+enum ClusterValue<'a> {
+    /// Only flags that take no value.
+    Flags,
+    /// `-c`: the program is the next argument, not a module.
+    Command,
+    /// `-m`, `-W` or `-X`, with whatever of the cluster follows it.
+    Value { module: bool, tail: &'a str },
+}
+
+fn short_cluster_value(cluster: &str) -> ClusterValue<'_> {
+    for (at, letter) in cluster.char_indices() {
+        let tail = &cluster[at + letter.len_utf8()..];
+        match letter {
+            'c' => return ClusterValue::Command,
+            'm' => return ClusterValue::Value { module: true, tail },
+            'W' | 'X' => {
+                return ClusterValue::Value {
+                    module: false,
+                    tail,
+                }
+            }
+            _ => {}
+        }
+    }
+    ClusterValue::Flags
 }
 
 #[cfg(test)]

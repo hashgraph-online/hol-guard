@@ -16,9 +16,10 @@ use super::{assess_programs, code_lines, sent_model, Language, PathContext};
 use crate::CanonicalCommandV1;
 use guard_contracts::PreToolResultV1;
 
-/// A quoted absolute path under a system root.
+/// A quoted absolute path under a system root, in single, double or
+/// backtick quotes.
 static SYSTEM_PATH: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r#"["'](/(?:private/)?(?:etc|root|proc|sys|boot|var|usr)(?:/[^"'\s]*)?)["']"#)
+    Regex::new(r#"["'`](/(?:private/)?(?:etc|root|proc|sys|boot|var|usr)(?:/[^"'`\s]*)?)["'`]"#)
         .unwrap()
 });
 
@@ -60,21 +61,27 @@ pub(super) fn names_system_file(code: &str) -> bool {
         let path = &lexical(&captures[1]);
         let path = path.as_str();
         !matches!(path, "/usr" | "/var" | "/private/var")
-            && !NOT_SYSTEM_STATE
-                .iter()
-                .any(|prefix| path.starts_with(prefix))
+            && !NOT_SYSTEM_STATE.iter().any(|prefix| {
+                // `/var/tmp/` resolves to `/var/tmp`: the directory itself
+                // is as much scratch space as anything below it.
+                path.starts_with(prefix) || path == prefix.trim_end_matches('/')
+            })
     })
 }
 
 fn programs_name_system_file(model: &CanonicalCommandV1, context: PathContext<'_>) -> bool {
-    assess_programs(model, context, false).iter().any(|found| {
+    let modeled = assess_programs(model, context, false).iter().any(|found| {
         // The language is not kept with the source, so a path counts
         // only when it survives both comment styles being removed.
         found.sources.iter().any(|source| {
             names_system_file(&code_lines(Language::Python, source))
                 && names_system_file(&code_lines(Language::Node, source))
         })
-    })
+    });
+    modeled
+        || super::destructive_git::other_inline_sources(model, context)
+            .iter()
+            .any(|source| names_system_file(source))
 }
 
 /// Whether an inline program the POSIX shell text `command` launches names a

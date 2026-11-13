@@ -75,3 +75,24 @@ fn spelling_variants_of_a_registry_install_are_found() {
     assert!(!installs("python3 -W ignore -m pip list"));
     assert!(!installs("dotnet package list"));
 }
+
+#[test]
+fn clustered_flags_and_pip_option_values_do_not_hide_the_install() {
+    for command in [
+        "python -Im pip install left-pad",
+        "python -Impip install left-pad",
+        "python3 -IWignore -m pip install left-pad",
+        "python -m pip --proxy http://proxy.invalid:3128 install left-pad",
+        "python -m pip --timeout 30 --retries 2 download left-pad",
+        "python -m pip --cache-dir /tmp/pip-cache wheel left-pad",
+    ] {
+        assert!(installs(command), "{command}");
+    }
+    for command in [
+        "python -Im pip list",
+        "python -Ic 'import pip'",
+        "python -m pip --proxy http://proxy.invalid:3128 list",
+    ] {
+        assert!(!installs(command), "{command}");
+    }
+}

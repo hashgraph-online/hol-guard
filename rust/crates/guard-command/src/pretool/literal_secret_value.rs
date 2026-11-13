@@ -29,11 +29,12 @@ macro_rules! patterns {
 patterns! {
     VENDOR_PREFIX = r"^(?:glsa_[A-Za-z0-9]{20,}|glc_[A-Za-z0-9+/=]{20,}|key-[a-z0-9]{32}|AKIA[A-Z0-9]{16}|gh[pousr]_[A-Za-z0-9]{30,}|xox[abposr]-[A-Za-z0-9\-]{10,}|AIza[0-9A-Za-z_\-]{30,}|ya29\.[0-9A-Za-z_\-]{20,}|sk-[A-Za-z0-9]{20,})";
     PLACEHOLDER = r"(?i)^(?:x+|\*+|\.+|<.*>|\{.*\}|\$.*|%.*%|changeme|change_me|password|secret|token|example|sample|test|dummy|fake|null|none|true|false|undefined|your.*|my.*|xxx.*)$";
-    PLACEHOLDER_PART = r"(?i)pass|secret|pwd|xxx|\*\*|\$|\{|%|example|changeme|test|demo|admin|user";
+    PLACEHOLDER_PART = r"(?i)pass|secret|pwd|xxx|\*\*|\$|\{|example|changeme|test|demo|admin|user";
     COMMON_PART = r"(?i)pass|test|admin|demo|user|secret";
     SHORT_BASE64 = r"^[A-Za-z0-9+/]{8,16}={0,2}$";
     LOWER_TEXT = r"^[a-z ]+\n?$";
-    PUNCTUATION = r"[&%\[\]]";
+    PUNCTUATION = r"[&\[\]]";
+    PERCENT_SYNTAX = r"%(?:[0-9A-Fa-f]{2}|[({]|[-+ #0-9.]*[sdifuxXoeEgGcr]|\w+%)";
     MEMBER_REFERENCE = r"^[A-Za-z0-9_]+\.[A-Z][A-Za-z]+$";
     BASE32 = r"^[A-Z2-7]{16,}$";
     UPPER_LETTERS = r"^[A-Z]{20,}$";
@@ -216,6 +217,25 @@ pub(super) fn placeholder(value: &str) -> bool {
     PLACEHOLDER.is_match(value) || PLACEHOLDER_PART.is_match(value)
 }
 
+/// Whether a password written into a URL is a placeholder: a whole
+/// placeholder, or one built from placeholder words (`testpass`,
+/// `password123`) whose remainder is not random. A random password that only
+/// happens to hold such a word (`Xk9test2Qm7LpR4`) is not.
+pub(super) fn placeholder_within(value: &str) -> bool {
+    if PLACEHOLDER.is_match(value) {
+        return true;
+    }
+    if !PLACEHOLDER_PART.is_match(value) {
+        return false;
+    }
+    let rest = PLACEHOLDER_PART.replace_all(value, "");
+    let mixed = rest.chars().count() >= 8
+        && rest.bytes().any(|byte| byte.is_ascii_digit())
+        && rest.bytes().any(|byte| byte.is_ascii_uppercase())
+        && rest.bytes().any(|byte| byte.is_ascii_lowercase());
+    !(mixed || looks_random(&rest))
+}
+
 /// Whether `value` looks like a real, randomly generated secret.
 pub(super) fn looks_random(value: &str) -> bool {
     if github_checksum_fails(value) || encodes_plain_text(value) || value.contains("EXAMPLE") {
@@ -224,7 +244,11 @@ pub(super) fn looks_random(value: &str) -> bool {
     if VENDOR_PREFIX.is_match(value) {
         return true;
     }
-    if PUNCTUATION.is_match(value) || value.starts_with('.') || MEMBER_REFERENCE.is_match(value) {
+    if PUNCTUATION.is_match(value)
+        || PERCENT_SYNTAX.is_match(value)
+        || value.starts_with('.')
+        || MEMBER_REFERENCE.is_match(value)
+    {
         return false;
     }
     let base32 = BASE32.is_match(value) && value.bytes().any(|byte| (b'2'..=b'7').contains(&byte));

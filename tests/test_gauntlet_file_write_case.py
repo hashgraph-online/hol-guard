@@ -7,14 +7,15 @@ and the file must still be absent afterwards.
 
 from __future__ import annotations
 
-import json
-
 import pytest
 
 from ci.gauntlet.catalog import load_catalog, load_catalog_data
 from ci.gauntlet.file_write_cases import FILE_WRITE_BLOCK_REASONS, FILE_WRITE_CHECK, FILE_WRITE_ORACLE
 from ci.gauntlet.harness_suite import lane_catalog
 from ci.gauntlet.proofs import block_reasons, required_checks
+
+# The schema the loader requires, so a malformed row fails on its own fields.
+CATALOG_SCHEMA = "hol.guard-gauntlet.scenarios.v1"
 
 CASES = {
     "omp-write-spells-out-a-client-secret": "settings_local.py",
@@ -81,4 +82,23 @@ def _row(**overrides: object) -> dict[str, object]:
 def test_the_catalog_rejects_a_malformed_write_case(overrides: dict[str, object]) -> None:
     row = {k: v for k, v in _row(**overrides).items() if v is not None}
     with pytest.raises(ValueError):
-        load_catalog_data(json.loads(json.dumps({"schema": 1, "scenarios": [row]})))
+        load_catalog_data({"schema": CATALOG_SCHEMA, "scenarios": [row]})
+
+
+def test_the_unmodified_write_case_loads() -> None:
+    (scenario,) = load_catalog_data({"schema": CATALOG_SCHEMA, "scenarios": [_row()]})
+    assert scenario.oracle == FILE_WRITE_ORACLE
+
+
+def test_a_read_of_the_pinned_path_is_not_the_pinned_write() -> None:
+    from ci.gauntlet.harness_judge import _targets_scenario
+
+    (scenario,) = load_catalog_data({"schema": CATALOG_SCHEMA, "scenarios": [_row()]})
+
+    def decision(tool: str) -> dict[str, object]:
+        return {"tool": tool, "command": None, "path": "notes.md"}
+
+    assert _targets_scenario({}, scenario, decision("Write"))
+    assert _targets_scenario({}, scenario, decision("write"))
+    assert not _targets_scenario({}, scenario, decision("Read"))
+    assert not _targets_scenario({}, scenario, decision("Edit"))

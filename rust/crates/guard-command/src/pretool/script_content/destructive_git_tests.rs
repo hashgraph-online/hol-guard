@@ -54,3 +54,54 @@ fn a_program_fed_on_a_heredoc_or_given_to_ruby_is_read() {
     let reads = "python3 -c 'import subprocess as s; s.run([\"git\",\"status\"])'";
     assert!(!super::text_spells_destructive_git(reads, context));
 }
+
+#[test]
+fn assembled_forced_and_path_checkouts_are_found() {
+    for code in [
+        r#"import os; os.system("git " + "reset --hard")"#,
+        r#"import os; os.system("git reset " "--hard")"#,
+        r#"system('git ' . 'clean -fdx');"#,
+        r#"import os; os.system("git checkout HEAD file.txt")"#,
+        r#"subprocess.run(["git", "checkout", "HEAD~1", "src/app.py"])"#,
+        r#"subprocess.run(["git", "switch", "--discard-changes", "feature"])"#,
+        r#"require('child_process').execSync('git switch -f main')"#,
+    ] {
+        assert!(spells_destructive_git(code), "{code}");
+    }
+    for code in [
+        r#"subprocess.run(["git", "checkout", "main"])"#,
+        r#"subprocess.run(["git", "checkout", "-b", "feature", "origin/main"])"#,
+        r#"subprocess.run(["git", "switch", "-c", "feature"])"#,
+        r#"print("git " + "status")"#,
+    ] {
+        assert!(!spells_destructive_git(code), "{code}");
+    }
+}
+
+#[test]
+fn a_comment_marker_inside_a_string_does_not_hide_the_command() {
+    let source = "import os\nos.system(\"git reset --hard # cleanup\")";
+    assert!(spells_destructive_git(&super::without_comments(
+        super::Language::Python,
+        source
+    )));
+    assert!(spells_destructive_git(&super::without_comments(
+        super::Language::Node,
+        source
+    )));
+    let node = "require('child_process').execSync('git clean -fdx // all') /* c */";
+    assert!(spells_destructive_git(&super::without_comments(
+        super::Language::Node,
+        node
+    )));
+    let commented = "# os.system(\"git reset --hard\")\nprint('ok')";
+    assert!(!spells_destructive_git(&super::without_comments(
+        super::Language::Python,
+        commented
+    )));
+    let block = "/* execSync('git reset --hard') */\nconsole.log('ok')";
+    assert!(!spells_destructive_git(&super::without_comments(
+        super::Language::Node,
+        block
+    )));
+}

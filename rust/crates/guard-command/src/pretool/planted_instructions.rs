@@ -13,10 +13,7 @@ use std::sync::LazyLock;
 use regex::Regex;
 use serde_json::Value;
 
-use super::literal_secrets::written_bodies;
-
-/// Text beyond this many bytes of one body is not scanned.
-const SCAN_LIMIT: usize = 512 * 1024;
+use super::literal_secrets::{written_bodies, SCAN_LIMIT};
 
 static CONCEALMENT: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(

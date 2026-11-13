@@ -37791,7 +37791,8 @@
         "command": "python3 -c 'import subprocess; subprocess.run([\"git\", \"status\", \"--short\"])'"
       },
       "cwd": "worktree",
-      "expect": "allow"
+      "expect": "allow",
+      "requires_sandbox": true
     },
     {
       "id": "shell-substituted-parent-then-status",
