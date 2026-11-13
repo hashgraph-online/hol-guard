@@ -38,7 +38,8 @@ pub(super) fn worktree_add_execution_free(
     execution_environment: Option<&guard_contracts::GuardExecutionEnvironmentV1>,
     checked_out: &mut Option<String>,
 ) -> Option<bool> {
-    let deadline = super::git_probe::probe_deadline(deadline);
+    let probe_deadline = Instant::now() + super::git_probe::PROBE_BUDGET;
+    let deadline = deadline.unwrap_or(probe_deadline).min(probe_deadline);
     if Instant::now() >= deadline || !destination.is_absolute() {
         return None;
     }

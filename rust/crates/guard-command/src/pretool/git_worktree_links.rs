@@ -28,7 +28,8 @@ pub(in super::super) fn tracked_directory_with_free_name(
     deadline: Option<Instant>,
     execution_environment: Option<&guard_contracts::GuardExecutionEnvironmentV1>,
 ) -> Option<bool> {
-    let deadline = super::super::git_probe::probe_deadline(deadline);
+    let probe_deadline = Instant::now() + super::super::git_probe::PROBE_BUDGET;
+    let deadline = deadline.unwrap_or(probe_deadline).min(probe_deadline);
     if Instant::now() >= deadline || name.is_empty() || Path::new(parent).is_absolute() {
         return None;
     }
