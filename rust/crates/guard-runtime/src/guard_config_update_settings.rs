@@ -22,7 +22,7 @@ use crate::guard_config_update_value::{
 };
 use crate::pyjson::PyVal;
 
-pub(crate) const EDITABLE_KEYS: [&str; 29] = [
+pub(crate) const EDITABLE_KEYS: [&str; 30] = [
     "mode",
     "presentation_mode",
     "presentation_mode_explicit",
