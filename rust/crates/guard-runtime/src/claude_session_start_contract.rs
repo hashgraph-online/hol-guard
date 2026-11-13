@@ -124,7 +124,8 @@ pub(crate) fn parse_contract(document: &Value) -> Result<HookGroupsContract, Str
     {
         return Err(invalid("runtime_groups.event"));
     }
-    let session_start_matchers = texts(field(session_start, "matchers")?, "session_start.matchers")?;
+    let session_start_matchers =
+        texts(field(session_start, "matchers")?, "session_start.matchers")?;
     let session_start_timeout_seconds = seconds(
         field(session_start, "timeout_seconds")?,
         "session_start.timeout_seconds",
