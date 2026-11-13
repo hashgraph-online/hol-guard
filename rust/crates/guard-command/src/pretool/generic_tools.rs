@@ -2,6 +2,10 @@ use super::{PreToolActionTypeV1, PreToolOperationV1};
 use crate::pretool::generic::extract::GenericSignals;
 use crate::CanonicalCommandV1;
 
+#[path = "registry_installers.rs"]
+mod registry_installers;
+pub(in crate::pretool) use registry_installers::installs_from_registry;
+
 fn compact(value: &str) -> String {
     value
         .chars()
@@ -296,11 +300,12 @@ fn is_command_tool(tool: &str) -> bool {
 
 pub(super) fn package_command(model: &CanonicalCommandV1) -> bool {
     model.segments.iter().any(|segment| {
-        segment
+        (segment
             .executable
             .as_deref()
             .is_some_and(executable_is_package_tool)
-            && !runs_code(segment)
+            && !runs_code(segment))
+            || installs_from_registry(segment)
     })
 }
 
