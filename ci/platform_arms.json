@@ -796,6 +796,22 @@
   },
   {
    "verdict": "posix-primitive",
+   "note": "Windows has no POSIX owner or permission bits. The Python launcher refresh skipped its owner check there (`os.name != \"nt\"`) and kept `S_IMODE(st_mode)`, which on Windows reflects only the read-only attribute; this arm answers the same: owned, with 0o444 or 0o666 from that attribute.",
+   "file": "rust/crates/guard-runtime/src/adapters/harness_adapter/opencode_checks.rs",
+   "item": "fn owner_and_mode(meta: &std::fs::Metadata) -> (bool, u32)",
+   "cfg": "not(unix)",
+   "body": "cb32c182fe3d"
+  },
+  {
+   "verdict": "posix-primitive",
+   "note": "The staged replacement keeps no POSIX mode on Windows, as the Python launcher refresh skipped `os.fchmod` there (`os.name != \"nt\"`). The byte checks before and after staging and the atomic replace run unchanged.",
+   "file": "rust/crates/guard-runtime/src/adapters/harness_adapter/opencode_checks.rs",
+   "item": "fn write_existing -- non-Unix block",
+   "cfg": "not(unix)",
+   "body": "c501184ab441"
+  },
+  {
+   "verdict": "posix-primitive",
    "note": "The standard library exposes no hard-link count on Windows, so the arm reports one link and the multiply-linked refusal is Unix-only, as Python's `st_nlink` check was effectively on Windows. The managed Paseo paths are under the account's own Guard home.",
    "file": "rust/crates/guard-runtime/src/adapters/harness_adapter/paseo_paths.rs",
    "item": "fn link_count(_meta: &fs::Metadata) -> u64",
@@ -814,9 +830,9 @@
    "verdict": "posix-primitive",
    "note": "Windows has no execute bit; `os.access(path, os.X_OK)` there is true for any existing file, and `which` already narrows candidates by `PATHEXT`. Same answer as `shutil.which` on Windows.",
    "file": "rust/crates/guard-runtime/src/adapters/harness_adapter/which.rs",
-   "item": "fn executable(path: &Path) -> bool",
+   "item": "pub(crate) fn executable(path: &Path) -> bool",
    "cfg": "not(unix)",
-   "body": "2d392d8ec24d"
+   "body": "83ab4ae09a42"
   },
   {
    "verdict": "windows-equivalent",

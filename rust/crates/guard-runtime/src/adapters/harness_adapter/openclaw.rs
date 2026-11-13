@@ -368,7 +368,7 @@ fn approval_flow(fields: &Map<String, Value>) -> Value {
 }
 
 /// Python's `bool(value)` for a JSON value.
-fn truthy(value: &Value) -> bool {
+pub(super) fn truthy(value: &Value) -> bool {
     match value {
         Value::Null => false,
         Value::Bool(flag) => *flag,

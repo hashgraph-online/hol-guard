@@ -1,5 +1,6 @@
 //! `runner_authority` kind `harness_adapter`: the Gemini, Antigravity, Kimi,
-//! Devin, Muse, OpenClaw, Paseo, Grok and ZCode harness adapters.
+//! Devin, Muse, OpenClaw, Paseo, Grok, ZCode, Pi, Oh My Pi and OpenCode
+//! harness adapters.
 //!
 //! Python keeps one generic adapter class that holds the ownership locks,
 //! prepares and removes the launcher shim, builds the bounded hook argv and
@@ -28,14 +29,21 @@ use crate::runner_authority_op::{KindResult, ERR_INVALID};
 
 mod cloud_identity;
 mod describe;
+mod desktop_core;
 mod files;
 mod grok;
 mod grok_install;
 mod kimi;
 mod openclaw;
+mod opencode;
+mod opencode_build;
+mod opencode_checks;
+mod opencode_install;
 mod paseo;
 mod paseo_install;
 mod paseo_paths;
+mod pi;
+mod pi_extension;
 mod proof;
 mod settings_hooks;
 mod simple;
@@ -199,6 +207,8 @@ pub(crate) fn dispatch(args: &Value) -> KindResult {
         "paseo" => paseo::dispatch(spec, op, &ctx, fields),
         "grok" => grok::dispatch(spec, op, &ctx, fields),
         "zcode" => zcode::dispatch(spec, op, &ctx, fields),
+        "pi" | "omp" => pi::dispatch(spec, op, &ctx, fields),
+        "opencode" => opencode::dispatch(spec, op, &ctx, fields),
         _ => Err(Failure::Invalid),
     })
 }

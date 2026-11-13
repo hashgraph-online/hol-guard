@@ -910,7 +910,7 @@ def test_frozen_grok_helper_participates_in_signed_inverse(transition, monkeypat
 @pytest.mark.parametrize("previous_exists", [False, True])
 def test_opencode_plan_restores_config_overlay_plugins_launchers_and_backup(transition, previous_exists):
     from codex_plugin_scanner.guard.adapters.base import HarnessContext
-    from codex_plugin_scanner.guard.adapters.opencode import OpenCodeHarnessAdapter
+    from codex_plugin_scanner.guard.adapters.opencode_runtime import OpenCodeHarnessAdapter
 
     runtime, plan, _, _ = transition
     ctx = HarnessContext(home_dir=runtime.home.parent, workspace_dir=None, guard_home=runtime.home)
@@ -923,9 +923,9 @@ def test_opencode_plan_restores_config_overlay_plugins_launchers_and_backup(tran
     config.chmod(0o640)
     if previous_exists:
         adapter.install(ctx)
-    backup = adapter._backup_path(ctx)
-    previous_backup = backup.stat() if backup.exists() else None
     prepared = adapter.prepare_install(replace(ctx, workspace_dir=ctx.home_dir / "candidate-workspace"))
+    backup = Path(str(prepared.manifest["backup_path"]))
+    previous_backup = backup.stat() if backup.exists() else None
     assert len(prepared.files) == 11
     assert config.read_bytes() == next(change.before for change in prepared.files if change.path == config)
     plan = replace(plan, files=(*plan.files, *prepared.files))
@@ -951,7 +951,7 @@ def test_opencode_plan_restores_config_overlay_plugins_launchers_and_backup(tran
 
 def test_opencode_foreign_source_config_prevents_any_transition_publication(transition):
     from codex_plugin_scanner.guard.adapters.base import HarnessContext
-    from codex_plugin_scanner.guard.adapters.opencode import OpenCodeHarnessAdapter
+    from codex_plugin_scanner.guard.adapters.opencode_runtime import OpenCodeHarnessAdapter
 
     runtime, plan, bindings, pointer = transition
     workspace = runtime.home.parent / "workspace"

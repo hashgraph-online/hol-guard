@@ -5,10 +5,9 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
-from codex_plugin_scanner.guard.adapters.pi import OmpHarnessAdapter, PiHarnessAdapter
-from codex_plugin_scanner.guard.adapters.pi_extension_source import managed_extension_source
 from codex_plugin_scanner.guard.cli import update_commands
 from codex_plugin_scanner.guard.store import GuardStore
+from tests.pi_extension_support import managed_extension_source
 from tests.pi_managed_extension_client import enable_managed_extension
 
 
@@ -20,6 +19,10 @@ def _context(tmp_path: Path) -> HarnessContext:
     return HarnessContext(home_dir=home, workspace_dir=None, guard_home=guard_home)
 
 
+def _agent_root(context: HarnessContext, harness: str) -> Path:
+    return context.home_dir / (".pi" if harness == "pi" else ".omp") / "agent"
+
+
 def _seed_current_pi_family(
     *,
     harness: str,
@@ -27,17 +30,15 @@ def _seed_current_pi_family(
     store: GuardStore,
     now: str,
 ) -> None:
-    adapter = PiHarnessAdapter() if harness == "pi" else OmpHarnessAdapter()
-    extension_path = adapter._managed_extension_path(context)
-    settings_path = adapter._managed_settings_path(context)
+    settings_path = _agent_root(context, harness) / "settings.json"
+    extension_path = _agent_root(context, harness) / "extensions" / "hol-guard.ts"
     extension_path.parent.mkdir(parents=True, exist_ok=True)
     extension_path.write_text(
         managed_extension_source(
             guard_home=context.guard_home,
             home_dir=context.home_dir,
             settings_path=settings_path,
-            harness=adapter.harness,
-            display_name=adapter.display_name,
+            harness=harness,
         ),
         encoding="utf-8",
     )
@@ -89,8 +90,7 @@ def test_pi_family_repair_rewrites_stale_extension(
     store = GuardStore(context.guard_home)
     now = "2026-08-08T00:00:00+00:00"
     _seed_current_pi_family(harness=harness, context=context, store=store, now=now)
-    adapter = PiHarnessAdapter() if harness == "pi" else OmpHarnessAdapter()
-    extension_path = adapter._managed_extension_path(context)
+    extension_path = _agent_root(context, harness) / "extensions" / "hol-guard.ts"
     extension_path.write_text("// stale extension\n", encoding="utf-8")
 
     repaired, warning = update_commands._repair_pi_family_install(

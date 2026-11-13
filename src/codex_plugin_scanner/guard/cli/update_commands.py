@@ -30,9 +30,7 @@ from ... import version as package_version
 from ..adapters.base import HarnessContext
 from ..adapters.codex import CodexHarnessAdapter, codex_native_hook_state
 from ..adapters.cursor_hooks import cursor_native_hook_state
-from ..adapters.pi import OmpHarnessAdapter, PiHarnessAdapter, legacy_omp_managed_extension_is_verified
-from ..adapters.pi_extension_source import managed_extension_source
-from ..adapters.pi_support import json_payload
+from ..adapters.native_extension import extension_is_current, legacy_omp_extension_is_verified
 from ..config import load_guard_config, resolve_guard_home
 from ..mdm.contracts import ManagedNetworkPolicy, ManagedPolicy
 from ..mdm.network import ManagedNetworkError, managed_urlopen
@@ -3024,7 +3022,11 @@ def _migrate_legacy_omp_install(
         return None, None
     if omp_install is not None or pi_install is None:
         return None, None
-    if not legacy_omp_managed_extension_is_verified(context, pi_install):
+    try:
+        verified = legacy_omp_extension_is_verified(context, pi_install)
+    except (OSError, RuntimeError, ValueError) as error:
+        return None, f"Could not verify legacy Oh My Pi protection during update: {error}"
+    if not verified:
         return None, None
     try:
         repair_context, repair_workspace = _repair_context_from_managed_install(context, pi_install)
@@ -3086,36 +3088,9 @@ def _repair_pi_family_install(
 def _pi_family_extension_is_current(*, harness: str, context: HarnessContext) -> bool:
     """Return whether the managed Pi/OMP extension already matches this package."""
 
-    adapter: PiHarnessAdapter | OmpHarnessAdapter
-    if harness == "pi":
-        adapter = PiHarnessAdapter()
-    elif harness == "omp":
-        adapter = OmpHarnessAdapter()
-    else:
+    if harness not in {"pi", "omp"}:
         return False
-    extension_path = adapter._managed_extension_path(context)
-    settings_path = adapter._managed_settings_path(context)
-    if not extension_path.is_file():
-        return False
-    expected_source = managed_extension_source(
-        guard_home=context.guard_home,
-        home_dir=context.home_dir,
-        settings_path=settings_path,
-        harness=adapter.harness,
-        display_name=adapter.display_name,
-    )
-    try:
-        current_source = extension_path.read_text(encoding="utf-8")
-    except OSError:
-        return False
-    if current_source != expected_source:
-        return False
-    settings = json_payload(settings_path) if settings_path.is_file() else {}
-    raw_extensions = settings.get("extensions")
-    if not isinstance(raw_extensions, list):
-        return False
-    extension_value = str(extension_path)
-    return any(isinstance(item, str) and item == extension_value for item in raw_extensions)
+    return extension_is_current(harness, context)
 
 
 def _repair_cursor_install(

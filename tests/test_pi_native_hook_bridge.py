@@ -10,12 +10,12 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.guard.adapters import native_hook_bridge
-from codex_plugin_scanner.guard.adapters._modules.pi.pi_extension_native_hook import (
+from codex_plugin_scanner.guard.adapters.extension_runtime import (
     PI_HOOK_BRIDGE_FEATURE,
     PI_HOOK_BRIDGE_SWITCH,
     pi_native_hook_runtime,
 )
-from codex_plugin_scanner.guard.adapters.pi_extension_source import managed_extension_source
+from tests.pi_extension_support import managed_extension_source
 from tests.pi_extension_template import DUMMY_VALUES, fragment, render
 from tests.test_pi_hook_latency import _bun_executable, _decode_json_object
 

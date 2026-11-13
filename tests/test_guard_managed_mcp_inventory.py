@@ -18,7 +18,7 @@ from codex_plugin_scanner.guard.adapters.mcp_servers import (
     managed_stdio_servers,
     proxy_cli_args,
 )
-from codex_plugin_scanner.guard.adapters.opencode_artifacts import native_artifacts
+from codex_plugin_scanner.guard.adapters.opencode_runtime import OpenCodeHarnessAdapter
 from codex_plugin_scanner.guard.models import GuardArtifact, HarnessDetection
 
 
@@ -416,11 +416,13 @@ def test_cline_installed_inventory_uses_private_launch_values(tmp_path: Path) ->
 
 
 def test_opencode_installed_inventory_normalizes_padded_env_keys(tmp_path: Path) -> None:
+    context = HarnessContext(home_dir=tmp_path / "home", workspace_dir=None, guard_home=tmp_path / "guard")
+    config_path = context.home_dir / ".config" / "opencode" / "opencode.json"
     server = ManagedMcpServer(
         harness="opencode",
         name="fixture",
         source_scope="global",
-        config_path=str(tmp_path / "opencode.json"),
+        config_path=str(config_path),
         command="python",
         args=("fixture_server.py",),
         transport="local",
@@ -428,11 +430,13 @@ def test_opencode_installed_inventory_normalizes_padded_env_keys(tmp_path: Path)
         enabled=True,
     )
     args = proxy_cli_args(proxy_command="opencode-mcp-proxy", guard_home=str(tmp_path / "guard"), server=server)
-    context = HarnessContext(home_dir=tmp_path / "home", workspace_dir=None, guard_home=tmp_path / "guard")
     payload = {"mcp": {"fixture": {"type": "local", "command": ["hol-guard", *args], "environment": server.env}}}
-    artifacts, _found = native_artifacts(context, [(Path(server.config_path), "global", payload)])
+    config_path.parent.mkdir(parents=True)
+    config_path.write_text(json.dumps(payload), encoding="utf-8")
+    detected = OpenCodeHarnessAdapter().detect(context)
+    artifacts = [artifact for artifact in detected.artifacts if artifact.artifact_type == "mcp_server"]
     servers = discover_harness_mcp_servers(
-        home_dir=tmp_path,
+        home_dir=context.home_dir,
         guard_home=tmp_path / "guard",
         detections=(_detection(artifacts[0]),),
     )

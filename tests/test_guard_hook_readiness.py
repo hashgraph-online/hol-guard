@@ -6,9 +6,9 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.adapters.pi_extension_source import managed_extension_source
 from codex_plugin_scanner.guard.native_daemon_route import native_route_facts
 from tests.pi_continuation_support import WATCH_POSTURE_STUB
+from tests.pi_extension_support import managed_extension_source
 
 
 def test_pi_source_prepares_workspace_before_timed_tool_review(

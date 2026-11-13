@@ -14,7 +14,7 @@ from scripts.ci.hook_data_plane_ownership_contract import load_manifest
 
 ROOT = Path(__file__).resolve().parents[1]
 PACKAGE = Path(adapters.__file__).parent
-FAMILIES = ("claude", "copilot", "cursor", "opencode", "pi", "zcode")
+FAMILIES = ("claude", "copilot", "cursor", "zcode")
 
 
 @pytest.mark.parametrize("family", FAMILIES)

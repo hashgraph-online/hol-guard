@@ -73,7 +73,7 @@ fn sources(args: &Map<String, Value>) -> Result<Vec<Source<'_>>, &'static str> {
 
 /// `strip_jsonc_comments` with double-quoted strings: `//` and `/* */`
 /// comments go, the newlines inside them stay.
-fn strip_jsonc(text: &str) -> String {
+pub(crate) fn strip_jsonc(text: &str) -> String {
     let mut output = String::with_capacity(text.len());
     let mut chars = text.chars().peekable();
     let mut in_string = false;
@@ -123,7 +123,7 @@ fn strip_jsonc(text: &str) -> String {
 }
 
 /// `str.read_text`'s universal newlines: `\r\n` and a lone `\r` read as `\n`.
-fn universal_newlines(text: String) -> String {
+pub(crate) fn universal_newlines(text: String) -> String {
     if text.contains('\r') {
         text.replace("\r\n", "\n").replace('\r', "\n")
     } else {
