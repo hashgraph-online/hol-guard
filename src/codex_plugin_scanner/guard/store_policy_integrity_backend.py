@@ -183,7 +183,8 @@ class MirroredPolicyIntegritySecretStore(FallbackSecretStore):
                 return
             if source == "unverified":
                 raise RuntimeError("policy identity could not be verified for a control-state update")
-        self.primary.set_secret(secret_id, value)
+        with suppress(Exception):
+            self.primary.set_secret(secret_id, value)
         with suppress(Exception):
             self.fallback.set_secret(secret_id, value)
 
