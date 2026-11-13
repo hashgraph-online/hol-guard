@@ -1,0 +1,3195 @@
+{
+  "schema": "guard.cloud-action-pack.v1",
+  "provider": {
+    "id": "dropbox",
+    "name": "Dropbox",
+    "publisher": {
+      "name": "HOL",
+      "verified": true
+    }
+  },
+  "hosts": [
+    "api.dropboxapi.com"
+  ],
+  "auth": {
+    "mode": "oauth2",
+    "scopes": [
+      "files.content.read",
+      "files.content.write",
+      "files.metadata.read",
+      "files.permanent_delete",
+      "sharing.write"
+    ]
+  },
+  "actions": [
+    {
+      "actionId": "dropbox.files.list_folder",
+      "title": "List a folder",
+      "executor": {
+        "kind": "declarative-http",
+        "request": {
+          "method": "POST",
+          "host": "api.dropboxapi.com",
+          "path": "/2/files/list_folder",
+          "headers": [
+            {
+              "name": "accept",
+              "value": "application/json"
+            }
+          ],
+          "body": {
+            "object": [
+              {
+                "name": "path",
+                "value": {
+                  "arg": "path"
+                }
+              },
+              {
+                "name": "limit",
+                "value": {
+                  "arg": "limit"
+                }
+              },
+              {
+                "name": "recursive",
+                "value": {
+                  "const": false
+                }
+              }
+            ]
+          },
+          "maxPages": 1
+        }
+      },
+      "arguments": {
+        "path": {
+          "type": "string",
+          "required": true,
+          "maxLength": 1024,
+          "pattern": "^(?:id:[A-Za-z0-9_-]{1,64}|(?:/[^\\x00-\\x1f\\x7f/\\\\]{1,255})+)$",
+          "forbidden": "(?:^|/)\\.\\.?(?:/|$)"
+        },
+        "limit": {
+          "type": "integer",
+          "required": false,
+          "minimum": 1,
+          "maximum": 500
+        }
+      },
+      "facts": {
+        "class": "read",
+        "object": {
+          "const": "folder"
+        },
+        "scope": {
+          "const": "query_selected"
+        },
+        "recordCount": {
+          "argument": {
+            "name": "limit",
+            "max": 500,
+            "default": 100
+          }
+        }
+      },
+      "response": {
+        "maxBytes": 1048576,
+        "fields": [
+          {
+            "name": "entries",
+            "value": {
+              "list": {
+                "from": "entries",
+                "maxItems": 500,
+                "fields": [
+                  {
+                    "name": "id",
+                    "value": {
+                      "from": "id"
+                    }
+                  },
+                  {
+                    "name": "name",
+                    "value": {
+                      "from": "name"
+                    },
+                    "untrusted": true
+                  },
+                  {
+                    "name": "path",
+                    "value": {
+                      "from": "path_display"
+                    },
+                    "untrusted": true
+                  },
+                  {
+                    "name": "size",
+                    "value": {
+                      "from": "size"
+                    }
+                  },
+                  {
+                    "name": "modified",
+                    "value": {
+                      "from": "server_modified"
+                    }
+                  }
+                ]
+              }
+            }
+          },
+          {
+            "name": "cursor",
+            "value": {
+              "from": "cursor"
+            }
+          },
+          {
+            "name": "has_more",
+            "value": {
+              "from": "has_more"
+            }
+          }
+        ]
+      },
+      "safety": {
+        "effect": "read",
+        "requiredCapabilities": [
+          "bounded-output",
+          "egress-pinned"
+        ],
+        "idempotency": "safe-read",
+        "scopes": [
+          "files.metadata.read"
+        ],
+        "maxItems": 500,
+        "minIntervalMs": 250,
+        "timeoutMs": 10000
+      },
+      "fixtures": [
+        {
+          "name": "lists a folder",
+          "kind": "safe",
+          "arguments": {
+            "path": "/Reports",
+            "limit": 50
+          },
+          "expect": {
+            "facts": {
+              "class": "read"
+            },
+            "response": "{\"entries\":[{\".tag\":\"file\",\"id\":\"id:a4ayc_80_OEAAAAAAAAAXw\",\"name\":\"Q3 budget.xlsx\",\"path_display\":\"/Reports/Q3 budget.xlsx\",\"size\":4096,\"server_modified\":\"2026-11-10T10:00:00Z\",\"sharing_info\":{\"x\":1}}],\"cursor\":\"c1\",\"has_more\":false}",
+            "projection": {
+              "entries": [
+                {
+                  "id": "id:a4ayc_80_OEAAAAAAAAAXw",
+                  "name": "Q3 budget.xlsx",
+                  "path": "/Reports/Q3 budget.xlsx",
+                  "size": 4096,
+                  "modified": "2026-11-10T10:00:00Z"
+                }
+              ],
+              "cursor": "c1",
+              "has_more": false
+            },
+            "request": {
+              "body": "{\"path\":\"/Reports\",\"limit\":50,\"recursive\":false}",
+              "headers": [
+                [
+                  "accept",
+                  "application/json"
+                ],
+                [
+                  "content-type",
+                  "application/json; charset=utf-8"
+                ]
+              ],
+              "maxPages": 1,
+              "method": "POST",
+              "url": "https://api.dropboxapi.com/2/files/list_folder"
+            },
+            "decisions": {
+              "balanced": "allow",
+              "relaxed": "allow",
+              "strict": "allow"
+            }
+          }
+        },
+        {
+          "name": "refuses a parent-folder step",
+          "kind": "risky",
+          "arguments": {
+            "path": "/Reports/../Private"
+          },
+          "expect": {
+            "error": "forbidden_content"
+          }
+        }
+      ]
+    },
+    {
+      "actionId": "dropbox.files.list_root",
+      "title": "List the top folder",
+      "executor": {
+        "kind": "declarative-http",
+        "request": {
+          "method": "POST",
+          "host": "api.dropboxapi.com",
+          "path": "/2/files/list_folder",
+          "headers": [
+            {
+              "name": "accept",
+              "value": "application/json"
+            }
+          ],
+          "body": {
+            "object": [
+              {
+                "name": "path",
+                "value": {
+                  "const": ""
+                }
+              },
+              {
+                "name": "limit",
+                "value": {
+                  "arg": "limit"
+                }
+              },
+              {
+                "name": "recursive",
+                "value": {
+                  "const": false
+                }
+              }
+            ]
+          },
+          "maxPages": 1
+        }
+      },
+      "arguments": {
+        "limit": {
+          "type": "integer",
+          "required": false,
+          "minimum": 1,
+          "maximum": 500
+        }
+      },
+      "facts": {
+        "class": "read",
+        "object": {
+          "const": "folder"
+        },
+        "scope": {
+          "const": "query_selected"
+        },
+        "recordCount": {
+          "argument": {
+            "name": "limit",
+            "max": 500,
+            "default": 100
+          }
+        }
+      },
+      "response": {
+        "maxBytes": 1048576,
+        "fields": [
+          {
+            "name": "entries",
+            "value": {
+              "list": {
+                "from": "entries",
+                "maxItems": 500,
+                "fields": [
+                  {
+                    "name": "id",
+                    "value": {
+                      "from": "id"
+                    }
+                  },
+                  {
+                    "name": "name",
+                    "value": {
+                      "from": "name"
+                    },
+                    "untrusted": true
+                  },
+                  {
+                    "name": "path",
+                    "value": {
+                      "from": "path_display"
+                    },
+                    "untrusted": true
+                  },
+                  {
+                    "name": "size",
+                    "value": {
+                      "from": "size"
+                    }
+                  },
+                  {
+                    "name": "modified",
+                    "value": {
+                      "from": "server_modified"
+                    }
+                  }
+                ]
+              }
+            }
+          },
+          {
+            "name": "cursor",
+            "value": {
+              "from": "cursor"
+            }
+          },
+          {
+            "name": "has_more",
+            "value": {
+              "from": "has_more"
+            }
+          }
+        ]
+      },
+      "safety": {
+        "effect": "read",
+        "requiredCapabilities": [
+          "bounded-output",
+          "egress-pinned"
+        ],
+        "idempotency": "safe-read",
+        "scopes": [
+          "files.metadata.read"
+        ],
+        "maxItems": 500,
+        "minIntervalMs": 250,
+        "timeoutMs": 10000
+      },
+      "fixtures": [
+        {
+          "name": "lists the top folder",
+          "kind": "safe",
+          "arguments": {
+            "limit": 100
+          },
+          "expect": {
+            "facts": {
+              "class": "read"
+            },
+            "request": {
+              "body": "{\"path\":\"\",\"limit\":100,\"recursive\":false}",
+              "headers": [
+                [
+                  "accept",
+                  "application/json"
+                ],
+                [
+                  "content-type",
+                  "application/json; charset=utf-8"
+                ]
+              ],
+              "maxPages": 1,
+              "method": "POST",
+              "url": "https://api.dropboxapi.com/2/files/list_folder"
+            },
+            "decisions": {
+              "balanced": "allow",
+              "relaxed": "allow",
+              "strict": "allow"
+            }
+          }
+        },
+        {
+          "name": "refuses a path argument",
+          "kind": "risky",
+          "arguments": {
+            "path": "/x"
+          },
+          "expect": {
+            "error": "unknown_argument"
+          }
+        }
+      ]
+    },
+    {
+      "actionId": "dropbox.files.get_metadata",
+      "title": "Read file details",
+      "executor": {
+        "kind": "declarative-http",
+        "request": {
+          "method": "POST",
+          "host": "api.dropboxapi.com",
+          "path": "/2/files/get_metadata",
+          "headers": [
+            {
+              "name": "accept",
+              "value": "application/json"
+            }
+          ],
+          "body": {
+            "object": [
+              {
+                "name": "path",
+                "value": {
+                  "arg": "path"
+                }
+              }
+            ]
+          },
+          "maxPages": 1
+        }
+      },
+      "arguments": {
+        "path": {
+          "type": "string",
+          "required": true,
+          "maxLength": 1024,
+          "pattern": "^(?:id:[A-Za-z0-9_-]{1,64}|(?:/[^\\x00-\\x1f\\x7f/\\\\]{1,255})+)$",
+          "forbidden": "(?:^|/)\\.\\.?(?:/|$)"
+        }
+      },
+      "facts": {
+        "class": "read",
+        "object": {
+          "const": "file"
+        },
+        "scope": {
+          "const": "single"
+        },
+        "reversibility": {
+          "const": "reversible"
+        },
+        "recordCount": {
+          "const": 1
+        }
+      },
+      "response": {
+        "maxBytes": 16384,
+        "fields": [
+          {
+            "name": "id",
+            "value": {
+              "from": "id"
+            }
+          },
+          {
+            "name": "name",
+            "value": {
+              "from": "name"
+            },
+            "untrusted": true
+          },
+          {
+            "name": "path",
+            "value": {
+              "from": "path_display"
+            },
+            "untrusted": true
+          },
+          {
+            "name": "size",
+            "value": {
+              "from": "size"
+            }
+          },
+          {
+            "name": "modified",
+            "value": {
+              "from": "server_modified"
+            }
+          }
+        ]
+      },
+      "safety": {
+        "effect": "read",
+        "requiredCapabilities": [
+          "bounded-output",
+          "egress-pinned"
+        ],
+        "idempotency": "safe-read",
+        "scopes": [
+          "files.metadata.read"
+        ],
+        "maxItems": 1,
+        "minIntervalMs": 250,
+        "timeoutMs": 10000
+      },
+      "fixtures": [
+        {
+          "name": "reads one file's details",
+          "kind": "safe",
+          "arguments": {
+            "path": "/Reports/Q3 budget.xlsx"
+          },
+          "expect": {
+            "facts": {
+              "class": "read"
+            },
+            "request": {
+              "body": "{\"path\":\"/Reports/Q3 budget.xlsx\"}",
+              "headers": [
+                [
+                  "accept",
+                  "application/json"
+                ],
+                [
+                  "content-type",
+                  "application/json; charset=utf-8"
+                ]
+              ],
+              "maxPages": 1,
+              "method": "POST",
+              "url": "https://api.dropboxapi.com/2/files/get_metadata"
+            },
+            "decisions": {
+              "balanced": "allow",
+              "relaxed": "allow",
+              "strict": "allow"
+            }
+          }
+        },
+        {
+          "name": "refuses a relative path",
+          "kind": "risky",
+          "arguments": {
+            "path": "Reports/x"
+          },
+          "expect": {
+            "error": "invalid_argument"
+          }
+        }
+      ]
+    },
+    {
+      "actionId": "dropbox.files.create_folder",
+      "title": "Create a folder",
+      "executor": {
+        "kind": "declarative-http",
+        "request": {
+          "method": "POST",
+          "host": "api.dropboxapi.com",
+          "path": "/2/files/create_folder_v2",
+          "headers": [
+            {
+              "name": "accept",
+              "value": "application/json"
+            }
+          ],
+          "body": {
+            "object": [
+              {
+                "name": "path",
+                "value": {
+                  "arg": "path"
+                }
+              },
+              {
+                "name": "autorename",
+                "value": {
+                  "const": false
+                }
+              }
+            ]
+          },
+          "maxPages": 1
+        }
+      },
+      "arguments": {
+        "path": {
+          "type": "string",
+          "required": true,
+          "maxLength": 1024,
+          "pattern": "^(?:id:[A-Za-z0-9_-]{1,64}|(?:/[^\\x00-\\x1f\\x7f/\\\\]{1,255})+)$",
+          "forbidden": "(?:^|/)\\.\\.?(?:/|$)"
+        }
+      },
+      "facts": {
+        "class": "update",
+        "object": {
+          "const": "folder"
+        },
+        "scope": {
+          "const": "single"
+        },
+        "reversibility": {
+          "const": "reversible"
+        },
+        "recordCount": {
+          "const": 1
+        }
+      },
+      "response": {
+        "maxBytes": 16384,
+        "fields": [
+          {
+            "name": "metadata",
+            "value": {
+              "object": {
+                "from": "metadata",
+                "fields": [
+                  {
+                    "name": "id",
+                    "value": {
+                      "from": "id"
+                    }
+                  },
+                  {
+                    "name": "name",
+                    "value": {
+                      "from": "name"
+                    },
+                    "untrusted": true
+                  },
+                  {
+                    "name": "path",
+                    "value": {
+                      "from": "path_display"
+                    },
+                    "untrusted": true
+                  },
+                  {
+                    "name": "size",
+                    "value": {
+                      "from": "size"
+                    }
+                  },
+                  {
+                    "name": "modified",
+                    "value": {
+                      "from": "server_modified"
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        ]
+      },
+      "safety": {
+        "effect": "write",
+        "requiredCapabilities": [
+          "bounded-output",
+          "egress-pinned"
+        ],
+        "idempotency": "none",
+        "scopes": [
+          "files.content.write"
+        ],
+        "maxItems": 1,
+        "minIntervalMs": 500,
+        "timeoutMs": 10000
+      },
+      "fixtures": [
+        {
+          "name": "creates a folder",
+          "kind": "safe",
+          "arguments": {
+            "path": "/Reports/2026"
+          },
+          "expect": {
+            "facts": {
+              "class": "update"
+            },
+            "request": {
+              "body": "{\"path\":\"/Reports/2026\",\"autorename\":false}",
+              "headers": [
+                [
+                  "accept",
+                  "application/json"
+                ],
+                [
+                  "content-type",
+                  "application/json; charset=utf-8"
+                ]
+              ],
+              "maxPages": 1,
+              "method": "POST",
+              "url": "https://api.dropboxapi.com/2/files/create_folder_v2"
+            },
+            "decisions": {
+              "balanced": "allow",
+              "relaxed": "allow",
+              "strict": "review"
+            }
+          }
+        },
+        {
+          "name": "refuses a backslash in the path",
+          "kind": "risky",
+          "arguments": {
+            "path": "/Reports\\2026"
+          },
+          "expect": {
+            "error": "invalid_argument"
+          }
+        }
+      ]
+    },
+    {
+      "actionId": "dropbox.files.move",
+      "title": "Move or rename a file",
+      "executor": {
+        "kind": "declarative-http",
+        "request": {
+          "method": "POST",
+          "host": "api.dropboxapi.com",
+          "path": "/2/files/move_v2",
+          "headers": [
+            {
+              "name": "accept",
+              "value": "application/json"
+            }
+          ],
+          "body": {
+            "object": [
+              {
+                "name": "from_path",
+                "value": {
+                  "arg": "from_path"
+                }
+              },
+              {
+                "name": "to_path",
+                "value": {
+                  "arg": "to_path"
+                }
+              },
+              {
+                "name": "autorename",
+                "value": {
+                  "const": false
+                }
+              }
+            ]
+          },
+          "maxPages": 1
+        }
+      },
+      "arguments": {
+        "from_path": {
+          "type": "string",
+          "required": true,
+          "maxLength": 1024,
+          "pattern": "^(?:id:[A-Za-z0-9_-]{1,64}|(?:/[^\\x00-\\x1f\\x7f/\\\\]{1,255})+)$",
+          "forbidden": "(?:^|/)\\.\\.?(?:/|$)"
+        },
+        "to_path": {
+          "type": "string",
+          "required": true,
+          "maxLength": 1024,
+          "pattern": "^(?:id:[A-Za-z0-9_-]{1,64}|(?:/[^\\x00-\\x1f\\x7f/\\\\]{1,255})+)$",
+          "forbidden": "(?:^|/)\\.\\.?(?:/|$)"
+        }
+      },
+      "facts": {
+        "class": "update",
+        "object": {
+          "const": "file"
+        },
+        "scope": {
+          "const": "single"
+        },
+        "reversibility": {
+          "const": "reversible"
+        },
+        "recordCount": {
+          "const": 1
+        }
+      },
+      "response": {
+        "maxBytes": 16384,
+        "fields": [
+          {
+            "name": "metadata",
+            "value": {
+              "object": {
+                "from": "metadata",
+                "fields": [
+                  {
+                    "name": "id",
+                    "value": {
+                      "from": "id"
+                    }
+                  },
+                  {
+                    "name": "name",
+                    "value": {
+                      "from": "name"
+                    },
+                    "untrusted": true
+                  },
+                  {
+                    "name": "path",
+                    "value": {
+                      "from": "path_display"
+                    },
+                    "untrusted": true
+                  },
+                  {
+                    "name": "size",
+                    "value": {
+                      "from": "size"
+                    }
+                  },
+                  {
+                    "name": "modified",
+                    "value": {
+                      "from": "server_modified"
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        ]
+      },
+      "safety": {
+        "effect": "write",
+        "requiredCapabilities": [
+          "bounded-output",
+          "egress-pinned"
+        ],
+        "idempotency": "none",
+        "scopes": [
+          "files.content.write"
+        ],
+        "maxItems": 1,
+        "minIntervalMs": 500,
+        "timeoutMs": 10000
+      },
+      "fixtures": [
+        {
+          "name": "renames a report",
+          "kind": "safe",
+          "arguments": {
+            "from_path": "/Reports/Q3 budget.xlsx",
+            "to_path": "/Reports/Q3 budget (final).xlsx"
+          },
+          "expect": {
+            "facts": {
+              "class": "update"
+            },
+            "request": {
+              "body": "{\"from_path\":\"/Reports/Q3 budget.xlsx\",\"to_path\":\"/Reports/Q3 budget (final).xlsx\",\"autorename\":false}",
+              "headers": [
+                [
+                  "accept",
+                  "application/json"
+                ],
+                [
+                  "content-type",
+                  "application/json; charset=utf-8"
+                ]
+              ],
+              "maxPages": 1,
+              "method": "POST",
+              "url": "https://api.dropboxapi.com/2/files/move_v2"
+            },
+            "decisions": {
+              "balanced": "allow",
+              "relaxed": "allow",
+              "strict": "review"
+            }
+          }
+        },
+        {
+          "name": "refuses a missing target",
+          "kind": "risky",
+          "arguments": {
+            "from_path": "/Reports/Q3 budget.xlsx"
+          },
+          "expect": {
+            "error": "missing_argument"
+          }
+        }
+      ]
+    },
+    {
+      "actionId": "dropbox.files.delete",
+      "title": "Delete a file or folder",
+      "executor": {
+        "kind": "declarative-http",
+        "request": {
+          "method": "POST",
+          "host": "api.dropboxapi.com",
+          "path": "/2/files/delete_v2",
+          "headers": [
+            {
+              "name": "accept",
+              "value": "application/json"
+            }
+          ],
+          "body": {
+            "object": [
+              {
+                "name": "path",
+                "value": {
+                  "arg": "path"
+                }
+              }
+            ]
+          },
+          "maxPages": 1
+        }
+      },
+      "arguments": {
+        "path": {
+          "type": "string",
+          "required": true,
+          "maxLength": 1024,
+          "pattern": "^(?:id:[A-Za-z0-9_-]{1,64}|(?:/[^\\x00-\\x1f\\x7f/\\\\]{1,255})+)$",
+          "forbidden": "(?:^|/)\\.\\.?(?:/|$)"
+        }
+      },
+      "facts": {
+        "class": "delete",
+        "object": {
+          "const": "file"
+        },
+        "scope": {
+          "const": "single"
+        },
+        "reversibility": {
+          "const": "recoverable"
+        },
+        "recordCount": {
+          "const": 1
+        }
+      },
+      "response": {
+        "maxBytes": 16384,
+        "fields": [
+          {
+            "name": "metadata",
+            "value": {
+              "object": {
+                "from": "metadata",
+                "fields": [
+                  {
+                    "name": "id",
+                    "value": {
+                      "from": "id"
+                    }
+                  },
+                  {
+                    "name": "name",
+                    "value": {
+                      "from": "name"
+                    },
+                    "untrusted": true
+                  },
+                  {
+                    "name": "path",
+                    "value": {
+                      "from": "path_display"
+                    },
+                    "untrusted": true
+                  },
+                  {
+                    "name": "size",
+                    "value": {
+                      "from": "size"
+                    }
+                  },
+                  {
+                    "name": "modified",
+                    "value": {
+                      "from": "server_modified"
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        ]
+      },
+      "safety": {
+        "effect": "destructive",
+        "requiredCapabilities": [
+          "bounded-output",
+          "egress-pinned"
+        ],
+        "idempotency": "none",
+        "scopes": [
+          "files.content.write"
+        ],
+        "maxItems": 1,
+        "minIntervalMs": 1000,
+        "timeoutMs": 10000
+      },
+      "fixtures": [
+        {
+          "name": "deletes one file, restorable from deleted files",
+          "kind": "safe",
+          "arguments": {
+            "path": "/Reports/Q3 budget.xlsx"
+          },
+          "expect": {
+            "facts": {
+              "class": "delete",
+              "reversibility": {
+                "state": "known",
+                "value": "recoverable"
+              }
+            },
+            "request": {
+              "body": "{\"path\":\"/Reports/Q3 budget.xlsx\"}",
+              "headers": [
+                [
+                  "accept",
+                  "application/json"
+                ],
+                [
+                  "content-type",
+                  "application/json; charset=utf-8"
+                ]
+              ],
+              "maxPages": 1,
+              "method": "POST",
+              "url": "https://api.dropboxapi.com/2/files/delete_v2"
+            },
+            "decisions": {
+              "balanced": "allow",
+              "relaxed": "allow",
+              "strict": "review"
+            }
+          }
+        },
+        {
+          "name": "refuses the root folder",
+          "kind": "risky",
+          "arguments": {
+            "path": ""
+          },
+          "expect": {
+            "error": "invalid_argument"
+          }
+        }
+      ]
+    },
+    {
+      "actionId": "dropbox.files.delete_batch",
+      "title": "Delete several files",
+      "executor": {
+        "kind": "declarative-http",
+        "request": {
+          "method": "POST",
+          "host": "api.dropboxapi.com",
+          "path": "/2/files/delete_batch",
+          "headers": [
+            {
+              "name": "accept",
+              "value": "application/json"
+            }
+          ],
+          "body": {
+            "object": [
+              {
+                "name": "entries",
+                "value": {
+                  "each": {
+                    "arg": "paths",
+                    "item": {
+                      "object": [
+                        {
+                          "name": "path",
+                          "value": {
+                            "element": true
+                          }
+                        }
+                      ]
+                    }
+                  }
+                }
+              }
+            ]
+          },
+          "maxPages": 1
+        }
+      },
+      "arguments": {
+        "paths": {
+          "type": "array",
+          "required": true,
+          "minItems": 1,
+          "maxItems": 1000,
+          "items": {
+            "maxLength": 1024,
+            "pattern": "^(?:id:[A-Za-z0-9_-]{1,64}|(?:/[^\\x00-\\x1f\\x7f/\\\\]{1,255})+)$",
+            "forbidden": "(?:^|/)\\.\\.?(?:/|$)"
+          }
+        }
+      },
+      "facts": {
+        "class": "delete",
+        "object": {
+          "const": "file"
+        },
+        "scope": {
+          "const": "enumerated"
+        },
+        "reversibility": {
+          "const": "recoverable"
+        },
+        "recordCount": {
+          "count": {
+            "arguments": [
+              "paths"
+            ]
+          }
+        }
+      },
+      "response": {
+        "maxBytes": 4096,
+        "fields": [
+          {
+            "name": "job",
+            "value": {
+              "from": "async_job_id"
+            }
+          },
+          {
+            "name": "complete",
+            "value": {
+              "from": "complete"
+            }
+          }
+        ]
+      },
+      "safety": {
+        "effect": "destructive",
+        "requiredCapabilities": [
+          "bounded-output",
+          "egress-pinned"
+        ],
+        "idempotency": "none",
+        "scopes": [
+          "files.content.write"
+        ],
+        "maxItems": 1000,
+        "minIntervalMs": 2000,
+        "timeoutMs": 10000
+      },
+      "fixtures": [
+        {
+          "name": "deletes ten scratch files",
+          "kind": "safe",
+          "arguments": {
+            "paths": [
+              "/Scratch/file-0.txt",
+              "/Scratch/file-1.txt",
+              "/Scratch/file-2.txt",
+              "/Scratch/file-3.txt",
+              "/Scratch/file-4.txt",
+              "/Scratch/file-5.txt",
+              "/Scratch/file-6.txt",
+              "/Scratch/file-7.txt",
+              "/Scratch/file-8.txt",
+              "/Scratch/file-9.txt"
+            ]
+          },
+          "expect": {
+            "facts": {
+              "class": "delete",
+              "record_count": {
+                "state": "known",
+                "value": 10
+              }
+            },
+            "request": {
+              "body": "{\"entries\":[{\"path\":\"/Scratch/file-0.txt\"},{\"path\":\"/Scratch/file-1.txt\"},{\"path\":\"/Scratch/file-2.txt\"},{\"path\":\"/Scratch/file-3.txt\"},{\"path\":\"/Scratch/file-4.txt\"},{\"path\":\"/Scratch/file-5.txt\"},{\"path\":\"/Scratch/file-6.txt\"},{\"path\":\"/Scratch/file-7.txt\"},{\"path\":\"/Scratch/file-8.txt\"},{\"path\":\"/Scratch/file-9.txt\"}]}",
+              "headers": [
+                [
+                  "accept",
+                  "application/json"
+                ],
+                [
+                  "content-type",
+                  "application/json; charset=utf-8"
+                ]
+              ],
+              "maxPages": 1,
+              "method": "POST",
+              "url": "https://api.dropboxapi.com/2/files/delete_batch"
+            },
+            "decisions": {
+              "balanced": "allow",
+              "relaxed": "allow",
+              "strict": "review"
+            }
+          }
+        },
+        {
+          "name": "deletes 40 files",
+          "kind": "safe",
+          "arguments": {
+            "paths": [
+              "/Scratch/file-0.txt",
+              "/Scratch/file-1.txt",
+              "/Scratch/file-2.txt",
+              "/Scratch/file-3.txt",
+              "/Scratch/file-4.txt",
+              "/Scratch/file-5.txt",
+              "/Scratch/file-6.txt",
+              "/Scratch/file-7.txt",
+              "/Scratch/file-8.txt",
+              "/Scratch/file-9.txt",
+              "/Scratch/file-10.txt",
+              "/Scratch/file-11.txt",
+              "/Scratch/file-12.txt",
+              "/Scratch/file-13.txt",
+              "/Scratch/file-14.txt",
+              "/Scratch/file-15.txt",
+              "/Scratch/file-16.txt",
+              "/Scratch/file-17.txt",
+              "/Scratch/file-18.txt",
+              "/Scratch/file-19.txt",
+              "/Scratch/file-20.txt",
+              "/Scratch/file-21.txt",
+              "/Scratch/file-22.txt",
+              "/Scratch/file-23.txt",
+              "/Scratch/file-24.txt",
+              "/Scratch/file-25.txt",
+              "/Scratch/file-26.txt",
+              "/Scratch/file-27.txt",
+              "/Scratch/file-28.txt",
+              "/Scratch/file-29.txt",
+              "/Scratch/file-30.txt",
+              "/Scratch/file-31.txt",
+              "/Scratch/file-32.txt",
+              "/Scratch/file-33.txt",
+              "/Scratch/file-34.txt",
+              "/Scratch/file-35.txt",
+              "/Scratch/file-36.txt",
+              "/Scratch/file-37.txt",
+              "/Scratch/file-38.txt",
+              "/Scratch/file-39.txt"
+            ]
+          },
+          "expect": {
+            "facts": {
+              "class": "delete",
+              "record_count": {
+                "state": "known",
+                "value": 40
+              }
+            },
+            "request": {
+              "body": "{\"entries\":[{\"path\":\"/Scratch/file-0.txt\"},{\"path\":\"/Scratch/file-1.txt\"},{\"path\":\"/Scratch/file-2.txt\"},{\"path\":\"/Scratch/file-3.txt\"},{\"path\":\"/Scratch/file-4.txt\"},{\"path\":\"/Scratch/file-5.txt\"},{\"path\":\"/Scratch/file-6.txt\"},{\"path\":\"/Scratch/file-7.txt\"},{\"path\":\"/Scratch/file-8.txt\"},{\"path\":\"/Scratch/file-9.txt\"},{\"path\":\"/Scratch/file-10.txt\"},{\"path\":\"/Scratch/file-11.txt\"},{\"path\":\"/Scratch/file-12.txt\"},{\"path\":\"/Scratch/file-13.txt\"},{\"path\":\"/Scratch/file-14.txt\"},{\"path\":\"/Scratch/file-15.txt\"},{\"path\":\"/Scratch/file-16.txt\"},{\"path\":\"/Scratch/file-17.txt\"},{\"path\":\"/Scratch/file-18.txt\"},{\"path\":\"/Scratch/file-19.txt\"},{\"path\":\"/Scratch/file-20.txt\"},{\"path\":\"/Scratch/file-21.txt\"},{\"path\":\"/Scratch/file-22.txt\"},{\"path\":\"/Scratch/file-23.txt\"},{\"path\":\"/Scratch/file-24.txt\"},{\"path\":\"/Scratch/file-25.txt\"},{\"path\":\"/Scratch/file-26.txt\"},{\"path\":\"/Scratch/file-27.txt\"},{\"path\":\"/Scratch/file-28.txt\"},{\"path\":\"/Scratch/file-29.txt\"},{\"path\":\"/Scratch/file-30.txt\"},{\"path\":\"/Scratch/file-31.txt\"},{\"path\":\"/Scratch/file-32.txt\"},{\"path\":\"/Scratch/file-33.txt\"},{\"path\":\"/Scratch/file-34.txt\"},{\"path\":\"/Scratch/file-35.txt\"},{\"path\":\"/Scratch/file-36.txt\"},{\"path\":\"/Scratch/file-37.txt\"},{\"path\":\"/Scratch/file-38.txt\"},{\"path\":\"/Scratch/file-39.txt\"}]}",
+              "headers": [
+                [
+                  "accept",
+                  "application/json"
+                ],
+                [
+                  "content-type",
+                  "application/json; charset=utf-8"
+                ]
+              ],
+              "maxPages": 1,
+              "method": "POST",
+              "url": "https://api.dropboxapi.com/2/files/delete_batch"
+            },
+            "decisions": {
+              "balanced": "review",
+              "relaxed": "allow",
+              "strict": "review"
+            }
+          }
+        },
+        {
+          "name": "refuses more than 1,000 files",
+          "kind": "risky",
+          "arguments": {
+            "paths": [
+              "/Scratch/file-0.txt",
+              "/Scratch/file-1.txt",
+              "/Scratch/file-2.txt",
+              "/Scratch/file-3.txt",
+              "/Scratch/file-4.txt",
+              "/Scratch/file-5.txt",
+              "/Scratch/file-6.txt",
+              "/Scratch/file-7.txt",
+              "/Scratch/file-8.txt",
+              "/Scratch/file-9.txt",
+              "/Scratch/file-10.txt",
+              "/Scratch/file-11.txt",
+              "/Scratch/file-12.txt",
+              "/Scratch/file-13.txt",
+              "/Scratch/file-14.txt",
+              "/Scratch/file-15.txt",
+              "/Scratch/file-16.txt",
+              "/Scratch/file-17.txt",
+              "/Scratch/file-18.txt",
+              "/Scratch/file-19.txt",
+              "/Scratch/file-20.txt",
+              "/Scratch/file-21.txt",
+              "/Scratch/file-22.txt",
+              "/Scratch/file-23.txt",
+              "/Scratch/file-24.txt",
+              "/Scratch/file-25.txt",
+              "/Scratch/file-26.txt",
+              "/Scratch/file-27.txt",
+              "/Scratch/file-28.txt",
+              "/Scratch/file-29.txt",
+              "/Scratch/file-30.txt",
+              "/Scratch/file-31.txt",
+              "/Scratch/file-32.txt",
+              "/Scratch/file-33.txt",
+              "/Scratch/file-34.txt",
+              "/Scratch/file-35.txt",
+              "/Scratch/file-36.txt",
+              "/Scratch/file-37.txt",
+              "/Scratch/file-38.txt",
+              "/Scratch/file-39.txt",
+              "/Scratch/file-40.txt",
+              "/Scratch/file-41.txt",
+              "/Scratch/file-42.txt",
+              "/Scratch/file-43.txt",
+              "/Scratch/file-44.txt",
+              "/Scratch/file-45.txt",
+              "/Scratch/file-46.txt",
+              "/Scratch/file-47.txt",
+              "/Scratch/file-48.txt",
+              "/Scratch/file-49.txt",
+              "/Scratch/file-50.txt",
+              "/Scratch/file-51.txt",
+              "/Scratch/file-52.txt",
+              "/Scratch/file-53.txt",
+              "/Scratch/file-54.txt",
+              "/Scratch/file-55.txt",
+              "/Scratch/file-56.txt",
+              "/Scratch/file-57.txt",
+              "/Scratch/file-58.txt",
+              "/Scratch/file-59.txt",
+              "/Scratch/file-60.txt",
+              "/Scratch/file-61.txt",
+              "/Scratch/file-62.txt",
+              "/Scratch/file-63.txt",
+              "/Scratch/file-64.txt",
+              "/Scratch/file-65.txt",
+              "/Scratch/file-66.txt",
+              "/Scratch/file-67.txt",
+              "/Scratch/file-68.txt",
+              "/Scratch/file-69.txt",
+              "/Scratch/file-70.txt",
+              "/Scratch/file-71.txt",
+              "/Scratch/file-72.txt",
+              "/Scratch/file-73.txt",
+              "/Scratch/file-74.txt",
+              "/Scratch/file-75.txt",
+              "/Scratch/file-76.txt",
+              "/Scratch/file-77.txt",
+              "/Scratch/file-78.txt",
+              "/Scratch/file-79.txt",
+              "/Scratch/file-80.txt",
+              "/Scratch/file-81.txt",
+              "/Scratch/file-82.txt",
+              "/Scratch/file-83.txt",
+              "/Scratch/file-84.txt",
+              "/Scratch/file-85.txt",
+              "/Scratch/file-86.txt",
+              "/Scratch/file-87.txt",
+              "/Scratch/file-88.txt",
+              "/Scratch/file-89.txt",
+              "/Scratch/file-90.txt",
+              "/Scratch/file-91.txt",
+              "/Scratch/file-92.txt",
+              "/Scratch/file-93.txt",
+              "/Scratch/file-94.txt",
+              "/Scratch/file-95.txt",
+              "/Scratch/file-96.txt",
+              "/Scratch/file-97.txt",
+              "/Scratch/file-98.txt",
+              "/Scratch/file-99.txt",
+              "/Scratch/file-100.txt",
+              "/Scratch/file-101.txt",
+              "/Scratch/file-102.txt",
+              "/Scratch/file-103.txt",
+              "/Scratch/file-104.txt",
+              "/Scratch/file-105.txt",
+              "/Scratch/file-106.txt",
+              "/Scratch/file-107.txt",
+              "/Scratch/file-108.txt",
+              "/Scratch/file-109.txt",
+              "/Scratch/file-110.txt",
+              "/Scratch/file-111.txt",
+              "/Scratch/file-112.txt",
+              "/Scratch/file-113.txt",
+              "/Scratch/file-114.txt",
+              "/Scratch/file-115.txt",
+              "/Scratch/file-116.txt",
+              "/Scratch/file-117.txt",
+              "/Scratch/file-118.txt",
+              "/Scratch/file-119.txt",
+              "/Scratch/file-120.txt",
+              "/Scratch/file-121.txt",
+              "/Scratch/file-122.txt",
+              "/Scratch/file-123.txt",
+              "/Scratch/file-124.txt",
+              "/Scratch/file-125.txt",
+              "/Scratch/file-126.txt",
+              "/Scratch/file-127.txt",
+              "/Scratch/file-128.txt",
+              "/Scratch/file-129.txt",
+              "/Scratch/file-130.txt",
+              "/Scratch/file-131.txt",
+              "/Scratch/file-132.txt",
+              "/Scratch/file-133.txt",
+              "/Scratch/file-134.txt",
+              "/Scratch/file-135.txt",
+              "/Scratch/file-136.txt",
+              "/Scratch/file-137.txt",
+              "/Scratch/file-138.txt",
+              "/Scratch/file-139.txt",
+              "/Scratch/file-140.txt",
+              "/Scratch/file-141.txt",
+              "/Scratch/file-142.txt",
+              "/Scratch/file-143.txt",
+              "/Scratch/file-144.txt",
+              "/Scratch/file-145.txt",
+              "/Scratch/file-146.txt",
+              "/Scratch/file-147.txt",
+              "/Scratch/file-148.txt",
+              "/Scratch/file-149.txt",
+              "/Scratch/file-150.txt",
+              "/Scratch/file-151.txt",
+              "/Scratch/file-152.txt",
+              "/Scratch/file-153.txt",
+              "/Scratch/file-154.txt",
+              "/Scratch/file-155.txt",
+              "/Scratch/file-156.txt",
+              "/Scratch/file-157.txt",
+              "/Scratch/file-158.txt",
+              "/Scratch/file-159.txt",
+              "/Scratch/file-160.txt",
+              "/Scratch/file-161.txt",
+              "/Scratch/file-162.txt",
+              "/Scratch/file-163.txt",
+              "/Scratch/file-164.txt",
+              "/Scratch/file-165.txt",
+              "/Scratch/file-166.txt",
+              "/Scratch/file-167.txt",
+              "/Scratch/file-168.txt",
+              "/Scratch/file-169.txt",
+              "/Scratch/file-170.txt",
+              "/Scratch/file-171.txt",
+              "/Scratch/file-172.txt",
+              "/Scratch/file-173.txt",
+              "/Scratch/file-174.txt",
+              "/Scratch/file-175.txt",
+              "/Scratch/file-176.txt",
+              "/Scratch/file-177.txt",
+              "/Scratch/file-178.txt",
+              "/Scratch/file-179.txt",
+              "/Scratch/file-180.txt",
+              "/Scratch/file-181.txt",
+              "/Scratch/file-182.txt",
+              "/Scratch/file-183.txt",
+              "/Scratch/file-184.txt",
+              "/Scratch/file-185.txt",
+              "/Scratch/file-186.txt",
+              "/Scratch/file-187.txt",
+              "/Scratch/file-188.txt",
+              "/Scratch/file-189.txt",
+              "/Scratch/file-190.txt",
+              "/Scratch/file-191.txt",
+              "/Scratch/file-192.txt",
+              "/Scratch/file-193.txt",
+              "/Scratch/file-194.txt",
+              "/Scratch/file-195.txt",
+              "/Scratch/file-196.txt",
+              "/Scratch/file-197.txt",
+              "/Scratch/file-198.txt",
+              "/Scratch/file-199.txt",
+              "/Scratch/file-200.txt",
+              "/Scratch/file-201.txt",
+              "/Scratch/file-202.txt",
+              "/Scratch/file-203.txt",
+              "/Scratch/file-204.txt",
+              "/Scratch/file-205.txt",
+              "/Scratch/file-206.txt",
+              "/Scratch/file-207.txt",
+              "/Scratch/file-208.txt",
+              "/Scratch/file-209.txt",
+              "/Scratch/file-210.txt",
+              "/Scratch/file-211.txt",
+              "/Scratch/file-212.txt",
+              "/Scratch/file-213.txt",
+              "/Scratch/file-214.txt",
+              "/Scratch/file-215.txt",
+              "/Scratch/file-216.txt",
+              "/Scratch/file-217.txt",
+              "/Scratch/file-218.txt",
+              "/Scratch/file-219.txt",
+              "/Scratch/file-220.txt",
+              "/Scratch/file-221.txt",
+              "/Scratch/file-222.txt",
+              "/Scratch/file-223.txt",
+              "/Scratch/file-224.txt",
+              "/Scratch/file-225.txt",
+              "/Scratch/file-226.txt",
+              "/Scratch/file-227.txt",
+              "/Scratch/file-228.txt",
+              "/Scratch/file-229.txt",
+              "/Scratch/file-230.txt",
+              "/Scratch/file-231.txt",
+              "/Scratch/file-232.txt",
+              "/Scratch/file-233.txt",
+              "/Scratch/file-234.txt",
+              "/Scratch/file-235.txt",
+              "/Scratch/file-236.txt",
+              "/Scratch/file-237.txt",
+              "/Scratch/file-238.txt",
+              "/Scratch/file-239.txt",
+              "/Scratch/file-240.txt",
+              "/Scratch/file-241.txt",
+              "/Scratch/file-242.txt",
+              "/Scratch/file-243.txt",
+              "/Scratch/file-244.txt",
+              "/Scratch/file-245.txt",
+              "/Scratch/file-246.txt",
+              "/Scratch/file-247.txt",
+              "/Scratch/file-248.txt",
+              "/Scratch/file-249.txt",
+              "/Scratch/file-250.txt",
+              "/Scratch/file-251.txt",
+              "/Scratch/file-252.txt",
+              "/Scratch/file-253.txt",
+              "/Scratch/file-254.txt",
+              "/Scratch/file-255.txt",
+              "/Scratch/file-256.txt",
+              "/Scratch/file-257.txt",
+              "/Scratch/file-258.txt",
+              "/Scratch/file-259.txt",
+              "/Scratch/file-260.txt",
+              "/Scratch/file-261.txt",
+              "/Scratch/file-262.txt",
+              "/Scratch/file-263.txt",
+              "/Scratch/file-264.txt",
+              "/Scratch/file-265.txt",
+              "/Scratch/file-266.txt",
+              "/Scratch/file-267.txt",
+              "/Scratch/file-268.txt",
+              "/Scratch/file-269.txt",
+              "/Scratch/file-270.txt",
+              "/Scratch/file-271.txt",
+              "/Scratch/file-272.txt",
+              "/Scratch/file-273.txt",
+              "/Scratch/file-274.txt",
+              "/Scratch/file-275.txt",
+              "/Scratch/file-276.txt",
+              "/Scratch/file-277.txt",
+              "/Scratch/file-278.txt",
+              "/Scratch/file-279.txt",
+              "/Scratch/file-280.txt",
+              "/Scratch/file-281.txt",
+              "/Scratch/file-282.txt",
+              "/Scratch/file-283.txt",
+              "/Scratch/file-284.txt",
+              "/Scratch/file-285.txt",
+              "/Scratch/file-286.txt",
+              "/Scratch/file-287.txt",
+              "/Scratch/file-288.txt",
+              "/Scratch/file-289.txt",
+              "/Scratch/file-290.txt",
+              "/Scratch/file-291.txt",
+              "/Scratch/file-292.txt",
+              "/Scratch/file-293.txt",
+              "/Scratch/file-294.txt",
+              "/Scratch/file-295.txt",
+              "/Scratch/file-296.txt",
+              "/Scratch/file-297.txt",
+              "/Scratch/file-298.txt",
+              "/Scratch/file-299.txt",
+              "/Scratch/file-300.txt",
+              "/Scratch/file-301.txt",
+              "/Scratch/file-302.txt",
+              "/Scratch/file-303.txt",
+              "/Scratch/file-304.txt",
+              "/Scratch/file-305.txt",
+              "/Scratch/file-306.txt",
+              "/Scratch/file-307.txt",
+              "/Scratch/file-308.txt",
+              "/Scratch/file-309.txt",
+              "/Scratch/file-310.txt",
+              "/Scratch/file-311.txt",
+              "/Scratch/file-312.txt",
+              "/Scratch/file-313.txt",
+              "/Scratch/file-314.txt",
+              "/Scratch/file-315.txt",
+              "/Scratch/file-316.txt",
+              "/Scratch/file-317.txt",
+              "/Scratch/file-318.txt",
+              "/Scratch/file-319.txt",
+              "/Scratch/file-320.txt",
+              "/Scratch/file-321.txt",
+              "/Scratch/file-322.txt",
+              "/Scratch/file-323.txt",
+              "/Scratch/file-324.txt",
+              "/Scratch/file-325.txt",
+              "/Scratch/file-326.txt",
+              "/Scratch/file-327.txt",
+              "/Scratch/file-328.txt",
+              "/Scratch/file-329.txt",
+              "/Scratch/file-330.txt",
+              "/Scratch/file-331.txt",
+              "/Scratch/file-332.txt",
+              "/Scratch/file-333.txt",
+              "/Scratch/file-334.txt",
+              "/Scratch/file-335.txt",
+              "/Scratch/file-336.txt",
+              "/Scratch/file-337.txt",
+              "/Scratch/file-338.txt",
+              "/Scratch/file-339.txt",
+              "/Scratch/file-340.txt",
+              "/Scratch/file-341.txt",
+              "/Scratch/file-342.txt",
+              "/Scratch/file-343.txt",
+              "/Scratch/file-344.txt",
+              "/Scratch/file-345.txt",
+              "/Scratch/file-346.txt",
+              "/Scratch/file-347.txt",
+              "/Scratch/file-348.txt",
+              "/Scratch/file-349.txt",
+              "/Scratch/file-350.txt",
+              "/Scratch/file-351.txt",
+              "/Scratch/file-352.txt",
+              "/Scratch/file-353.txt",
+              "/Scratch/file-354.txt",
+              "/Scratch/file-355.txt",
+              "/Scratch/file-356.txt",
+              "/Scratch/file-357.txt",
+              "/Scratch/file-358.txt",
+              "/Scratch/file-359.txt",
+              "/Scratch/file-360.txt",
+              "/Scratch/file-361.txt",
+              "/Scratch/file-362.txt",
+              "/Scratch/file-363.txt",
+              "/Scratch/file-364.txt",
+              "/Scratch/file-365.txt",
+              "/Scratch/file-366.txt",
+              "/Scratch/file-367.txt",
+              "/Scratch/file-368.txt",
+              "/Scratch/file-369.txt",
+              "/Scratch/file-370.txt",
+              "/Scratch/file-371.txt",
+              "/Scratch/file-372.txt",
+              "/Scratch/file-373.txt",
+              "/Scratch/file-374.txt",
+              "/Scratch/file-375.txt",
+              "/Scratch/file-376.txt",
+              "/Scratch/file-377.txt",
+              "/Scratch/file-378.txt",
+              "/Scratch/file-379.txt",
+              "/Scratch/file-380.txt",
+              "/Scratch/file-381.txt",
+              "/Scratch/file-382.txt",
+              "/Scratch/file-383.txt",
+              "/Scratch/file-384.txt",
+              "/Scratch/file-385.txt",
+              "/Scratch/file-386.txt",
+              "/Scratch/file-387.txt",
+              "/Scratch/file-388.txt",
+              "/Scratch/file-389.txt",
+              "/Scratch/file-390.txt",
+              "/Scratch/file-391.txt",
+              "/Scratch/file-392.txt",
+              "/Scratch/file-393.txt",
+              "/Scratch/file-394.txt",
+              "/Scratch/file-395.txt",
+              "/Scratch/file-396.txt",
+              "/Scratch/file-397.txt",
+              "/Scratch/file-398.txt",
+              "/Scratch/file-399.txt",
+              "/Scratch/file-400.txt",
+              "/Scratch/file-401.txt",
+              "/Scratch/file-402.txt",
+              "/Scratch/file-403.txt",
+              "/Scratch/file-404.txt",
+              "/Scratch/file-405.txt",
+              "/Scratch/file-406.txt",
+              "/Scratch/file-407.txt",
+              "/Scratch/file-408.txt",
+              "/Scratch/file-409.txt",
+              "/Scratch/file-410.txt",
+              "/Scratch/file-411.txt",
+              "/Scratch/file-412.txt",
+              "/Scratch/file-413.txt",
+              "/Scratch/file-414.txt",
+              "/Scratch/file-415.txt",
+              "/Scratch/file-416.txt",
+              "/Scratch/file-417.txt",
+              "/Scratch/file-418.txt",
+              "/Scratch/file-419.txt",
+              "/Scratch/file-420.txt",
+              "/Scratch/file-421.txt",
+              "/Scratch/file-422.txt",
+              "/Scratch/file-423.txt",
+              "/Scratch/file-424.txt",
+              "/Scratch/file-425.txt",
+              "/Scratch/file-426.txt",
+              "/Scratch/file-427.txt",
+              "/Scratch/file-428.txt",
+              "/Scratch/file-429.txt",
+              "/Scratch/file-430.txt",
+              "/Scratch/file-431.txt",
+              "/Scratch/file-432.txt",
+              "/Scratch/file-433.txt",
+              "/Scratch/file-434.txt",
+              "/Scratch/file-435.txt",
+              "/Scratch/file-436.txt",
+              "/Scratch/file-437.txt",
+              "/Scratch/file-438.txt",
+              "/Scratch/file-439.txt",
+              "/Scratch/file-440.txt",
+              "/Scratch/file-441.txt",
+              "/Scratch/file-442.txt",
+              "/Scratch/file-443.txt",
+              "/Scratch/file-444.txt",
+              "/Scratch/file-445.txt",
+              "/Scratch/file-446.txt",
+              "/Scratch/file-447.txt",
+              "/Scratch/file-448.txt",
+              "/Scratch/file-449.txt",
+              "/Scratch/file-450.txt",
+              "/Scratch/file-451.txt",
+              "/Scratch/file-452.txt",
+              "/Scratch/file-453.txt",
+              "/Scratch/file-454.txt",
+              "/Scratch/file-455.txt",
+              "/Scratch/file-456.txt",
+              "/Scratch/file-457.txt",
+              "/Scratch/file-458.txt",
+              "/Scratch/file-459.txt",
+              "/Scratch/file-460.txt",
+              "/Scratch/file-461.txt",
+              "/Scratch/file-462.txt",
+              "/Scratch/file-463.txt",
+              "/Scratch/file-464.txt",
+              "/Scratch/file-465.txt",
+              "/Scratch/file-466.txt",
+              "/Scratch/file-467.txt",
+              "/Scratch/file-468.txt",
+              "/Scratch/file-469.txt",
+              "/Scratch/file-470.txt",
+              "/Scratch/file-471.txt",
+              "/Scratch/file-472.txt",
+              "/Scratch/file-473.txt",
+              "/Scratch/file-474.txt",
+              "/Scratch/file-475.txt",
+              "/Scratch/file-476.txt",
+              "/Scratch/file-477.txt",
+              "/Scratch/file-478.txt",
+              "/Scratch/file-479.txt",
+              "/Scratch/file-480.txt",
+              "/Scratch/file-481.txt",
+              "/Scratch/file-482.txt",
+              "/Scratch/file-483.txt",
+              "/Scratch/file-484.txt",
+              "/Scratch/file-485.txt",
+              "/Scratch/file-486.txt",
+              "/Scratch/file-487.txt",
+              "/Scratch/file-488.txt",
+              "/Scratch/file-489.txt",
+              "/Scratch/file-490.txt",
+              "/Scratch/file-491.txt",
+              "/Scratch/file-492.txt",
+              "/Scratch/file-493.txt",
+              "/Scratch/file-494.txt",
+              "/Scratch/file-495.txt",
+              "/Scratch/file-496.txt",
+              "/Scratch/file-497.txt",
+              "/Scratch/file-498.txt",
+              "/Scratch/file-499.txt",
+              "/Scratch/file-500.txt",
+              "/Scratch/file-501.txt",
+              "/Scratch/file-502.txt",
+              "/Scratch/file-503.txt",
+              "/Scratch/file-504.txt",
+              "/Scratch/file-505.txt",
+              "/Scratch/file-506.txt",
+              "/Scratch/file-507.txt",
+              "/Scratch/file-508.txt",
+              "/Scratch/file-509.txt",
+              "/Scratch/file-510.txt",
+              "/Scratch/file-511.txt",
+              "/Scratch/file-512.txt",
+              "/Scratch/file-513.txt",
+              "/Scratch/file-514.txt",
+              "/Scratch/file-515.txt",
+              "/Scratch/file-516.txt",
+              "/Scratch/file-517.txt",
+              "/Scratch/file-518.txt",
+              "/Scratch/file-519.txt",
+              "/Scratch/file-520.txt",
+              "/Scratch/file-521.txt",
+              "/Scratch/file-522.txt",
+              "/Scratch/file-523.txt",
+              "/Scratch/file-524.txt",
+              "/Scratch/file-525.txt",
+              "/Scratch/file-526.txt",
+              "/Scratch/file-527.txt",
+              "/Scratch/file-528.txt",
+              "/Scratch/file-529.txt",
+              "/Scratch/file-530.txt",
+              "/Scratch/file-531.txt",
+              "/Scratch/file-532.txt",
+              "/Scratch/file-533.txt",
+              "/Scratch/file-534.txt",
+              "/Scratch/file-535.txt",
+              "/Scratch/file-536.txt",
+              "/Scratch/file-537.txt",
+              "/Scratch/file-538.txt",
+              "/Scratch/file-539.txt",
+              "/Scratch/file-540.txt",
+              "/Scratch/file-541.txt",
+              "/Scratch/file-542.txt",
+              "/Scratch/file-543.txt",
+              "/Scratch/file-544.txt",
+              "/Scratch/file-545.txt",
+              "/Scratch/file-546.txt",
+              "/Scratch/file-547.txt",
+              "/Scratch/file-548.txt",
+              "/Scratch/file-549.txt",
+              "/Scratch/file-550.txt",
+              "/Scratch/file-551.txt",
+              "/Scratch/file-552.txt",
+              "/Scratch/file-553.txt",
+              "/Scratch/file-554.txt",
+              "/Scratch/file-555.txt",
+              "/Scratch/file-556.txt",
+              "/Scratch/file-557.txt",
+              "/Scratch/file-558.txt",
+              "/Scratch/file-559.txt",
+              "/Scratch/file-560.txt",
+              "/Scratch/file-561.txt",
+              "/Scratch/file-562.txt",
+              "/Scratch/file-563.txt",
+              "/Scratch/file-564.txt",
+              "/Scratch/file-565.txt",
+              "/Scratch/file-566.txt",
+              "/Scratch/file-567.txt",
+              "/Scratch/file-568.txt",
+              "/Scratch/file-569.txt",
+              "/Scratch/file-570.txt",
+              "/Scratch/file-571.txt",
+              "/Scratch/file-572.txt",
+              "/Scratch/file-573.txt",
+              "/Scratch/file-574.txt",
+              "/Scratch/file-575.txt",
+              "/Scratch/file-576.txt",
+              "/Scratch/file-577.txt",
+              "/Scratch/file-578.txt",
+              "/Scratch/file-579.txt",
+              "/Scratch/file-580.txt",
+              "/Scratch/file-581.txt",
+              "/Scratch/file-582.txt",
+              "/Scratch/file-583.txt",
+              "/Scratch/file-584.txt",
+              "/Scratch/file-585.txt",
+              "/Scratch/file-586.txt",
+              "/Scratch/file-587.txt",
+              "/Scratch/file-588.txt",
+              "/Scratch/file-589.txt",
+              "/Scratch/file-590.txt",
+              "/Scratch/file-591.txt",
+              "/Scratch/file-592.txt",
+              "/Scratch/file-593.txt",
+              "/Scratch/file-594.txt",
+              "/Scratch/file-595.txt",
+              "/Scratch/file-596.txt",
+              "/Scratch/file-597.txt",
+              "/Scratch/file-598.txt",
+              "/Scratch/file-599.txt",
+              "/Scratch/file-600.txt",
+              "/Scratch/file-601.txt",
+              "/Scratch/file-602.txt",
+              "/Scratch/file-603.txt",
+              "/Scratch/file-604.txt",
+              "/Scratch/file-605.txt",
+              "/Scratch/file-606.txt",
+              "/Scratch/file-607.txt",
+              "/Scratch/file-608.txt",
+              "/Scratch/file-609.txt",
+              "/Scratch/file-610.txt",
+              "/Scratch/file-611.txt",
+              "/Scratch/file-612.txt",
+              "/Scratch/file-613.txt",
+              "/Scratch/file-614.txt",
+              "/Scratch/file-615.txt",
+              "/Scratch/file-616.txt",
+              "/Scratch/file-617.txt",
+              "/Scratch/file-618.txt",
+              "/Scratch/file-619.txt",
+              "/Scratch/file-620.txt",
+              "/Scratch/file-621.txt",
+              "/Scratch/file-622.txt",
+              "/Scratch/file-623.txt",
+              "/Scratch/file-624.txt",
+              "/Scratch/file-625.txt",
+              "/Scratch/file-626.txt",
+              "/Scratch/file-627.txt",
+              "/Scratch/file-628.txt",
+              "/Scratch/file-629.txt",
+              "/Scratch/file-630.txt",
+              "/Scratch/file-631.txt",
+              "/Scratch/file-632.txt",
+              "/Scratch/file-633.txt",
+              "/Scratch/file-634.txt",
+              "/Scratch/file-635.txt",
+              "/Scratch/file-636.txt",
+              "/Scratch/file-637.txt",
+              "/Scratch/file-638.txt",
+              "/Scratch/file-639.txt",
+              "/Scratch/file-640.txt",
+              "/Scratch/file-641.txt",
+              "/Scratch/file-642.txt",
+              "/Scratch/file-643.txt",
+              "/Scratch/file-644.txt",
+              "/Scratch/file-645.txt",
+              "/Scratch/file-646.txt",
+              "/Scratch/file-647.txt",
+              "/Scratch/file-648.txt",
+              "/Scratch/file-649.txt",
+              "/Scratch/file-650.txt",
+              "/Scratch/file-651.txt",
+              "/Scratch/file-652.txt",
+              "/Scratch/file-653.txt",
+              "/Scratch/file-654.txt",
+              "/Scratch/file-655.txt",
+              "/Scratch/file-656.txt",
+              "/Scratch/file-657.txt",
+              "/Scratch/file-658.txt",
+              "/Scratch/file-659.txt",
+              "/Scratch/file-660.txt",
+              "/Scratch/file-661.txt",
+              "/Scratch/file-662.txt",
+              "/Scratch/file-663.txt",
+              "/Scratch/file-664.txt",
+              "/Scratch/file-665.txt",
+              "/Scratch/file-666.txt",
+              "/Scratch/file-667.txt",
+              "/Scratch/file-668.txt",
+              "/Scratch/file-669.txt",
+              "/Scratch/file-670.txt",
+              "/Scratch/file-671.txt",
+              "/Scratch/file-672.txt",
+              "/Scratch/file-673.txt",
+              "/Scratch/file-674.txt",
+              "/Scratch/file-675.txt",
+              "/Scratch/file-676.txt",
+              "/Scratch/file-677.txt",
+              "/Scratch/file-678.txt",
+              "/Scratch/file-679.txt",
+              "/Scratch/file-680.txt",
+              "/Scratch/file-681.txt",
+              "/Scratch/file-682.txt",
+              "/Scratch/file-683.txt",
+              "/Scratch/file-684.txt",
+              "/Scratch/file-685.txt",
+              "/Scratch/file-686.txt",
+              "/Scratch/file-687.txt",
+              "/Scratch/file-688.txt",
+              "/Scratch/file-689.txt",
+              "/Scratch/file-690.txt",
+              "/Scratch/file-691.txt",
+              "/Scratch/file-692.txt",
+              "/Scratch/file-693.txt",
+              "/Scratch/file-694.txt",
+              "/Scratch/file-695.txt",
+              "/Scratch/file-696.txt",
+              "/Scratch/file-697.txt",
+              "/Scratch/file-698.txt",
+              "/Scratch/file-699.txt",
+              "/Scratch/file-700.txt",
+              "/Scratch/file-701.txt",
+              "/Scratch/file-702.txt",
+              "/Scratch/file-703.txt",
+              "/Scratch/file-704.txt",
+              "/Scratch/file-705.txt",
+              "/Scratch/file-706.txt",
+              "/Scratch/file-707.txt",
+              "/Scratch/file-708.txt",
+              "/Scratch/file-709.txt",
+              "/Scratch/file-710.txt",
+              "/Scratch/file-711.txt",
+              "/Scratch/file-712.txt",
+              "/Scratch/file-713.txt",
+              "/Scratch/file-714.txt",
+              "/Scratch/file-715.txt",
+              "/Scratch/file-716.txt",
+              "/Scratch/file-717.txt",
+              "/Scratch/file-718.txt",
+              "/Scratch/file-719.txt",
+              "/Scratch/file-720.txt",
+              "/Scratch/file-721.txt",
+              "/Scratch/file-722.txt",
+              "/Scratch/file-723.txt",
+              "/Scratch/file-724.txt",
+              "/Scratch/file-725.txt",
+              "/Scratch/file-726.txt",
+              "/Scratch/file-727.txt",
+              "/Scratch/file-728.txt",
+              "/Scratch/file-729.txt",
+              "/Scratch/file-730.txt",
+              "/Scratch/file-731.txt",
+              "/Scratch/file-732.txt",
+              "/Scratch/file-733.txt",
+              "/Scratch/file-734.txt",
+              "/Scratch/file-735.txt",
+              "/Scratch/file-736.txt",
+              "/Scratch/file-737.txt",
+              "/Scratch/file-738.txt",
+              "/Scratch/file-739.txt",
+              "/Scratch/file-740.txt",
+              "/Scratch/file-741.txt",
+              "/Scratch/file-742.txt",
+              "/Scratch/file-743.txt",
+              "/Scratch/file-744.txt",
+              "/Scratch/file-745.txt",
+              "/Scratch/file-746.txt",
+              "/Scratch/file-747.txt",
+              "/Scratch/file-748.txt",
+              "/Scratch/file-749.txt",
+              "/Scratch/file-750.txt",
+              "/Scratch/file-751.txt",
+              "/Scratch/file-752.txt",
+              "/Scratch/file-753.txt",
+              "/Scratch/file-754.txt",
+              "/Scratch/file-755.txt",
+              "/Scratch/file-756.txt",
+              "/Scratch/file-757.txt",
+              "/Scratch/file-758.txt",
+              "/Scratch/file-759.txt",
+              "/Scratch/file-760.txt",
+              "/Scratch/file-761.txt",
+              "/Scratch/file-762.txt",
+              "/Scratch/file-763.txt",
+              "/Scratch/file-764.txt",
+              "/Scratch/file-765.txt",
+              "/Scratch/file-766.txt",
+              "/Scratch/file-767.txt",
+              "/Scratch/file-768.txt",
+              "/Scratch/file-769.txt",
+              "/Scratch/file-770.txt",
+              "/Scratch/file-771.txt",
+              "/Scratch/file-772.txt",
+              "/Scratch/file-773.txt",
+              "/Scratch/file-774.txt",
+              "/Scratch/file-775.txt",
+              "/Scratch/file-776.txt",
+              "/Scratch/file-777.txt",
+              "/Scratch/file-778.txt",
+              "/Scratch/file-779.txt",
+              "/Scratch/file-780.txt",
+              "/Scratch/file-781.txt",
+              "/Scratch/file-782.txt",
+              "/Scratch/file-783.txt",
+              "/Scratch/file-784.txt",
+              "/Scratch/file-785.txt",
+              "/Scratch/file-786.txt",
+              "/Scratch/file-787.txt",
+              "/Scratch/file-788.txt",
+              "/Scratch/file-789.txt",
+              "/Scratch/file-790.txt",
+              "/Scratch/file-791.txt",
+              "/Scratch/file-792.txt",
+              "/Scratch/file-793.txt",
+              "/Scratch/file-794.txt",
+              "/Scratch/file-795.txt",
+              "/Scratch/file-796.txt",
+              "/Scratch/file-797.txt",
+              "/Scratch/file-798.txt",
+              "/Scratch/file-799.txt",
+              "/Scratch/file-800.txt",
+              "/Scratch/file-801.txt",
+              "/Scratch/file-802.txt",
+              "/Scratch/file-803.txt",
+              "/Scratch/file-804.txt",
+              "/Scratch/file-805.txt",
+              "/Scratch/file-806.txt",
+              "/Scratch/file-807.txt",
+              "/Scratch/file-808.txt",
+              "/Scratch/file-809.txt",
+              "/Scratch/file-810.txt",
+              "/Scratch/file-811.txt",
+              "/Scratch/file-812.txt",
+              "/Scratch/file-813.txt",
+              "/Scratch/file-814.txt",
+              "/Scratch/file-815.txt",
+              "/Scratch/file-816.txt",
+              "/Scratch/file-817.txt",
+              "/Scratch/file-818.txt",
+              "/Scratch/file-819.txt",
+              "/Scratch/file-820.txt",
+              "/Scratch/file-821.txt",
+              "/Scratch/file-822.txt",
+              "/Scratch/file-823.txt",
+              "/Scratch/file-824.txt",
+              "/Scratch/file-825.txt",
+              "/Scratch/file-826.txt",
+              "/Scratch/file-827.txt",
+              "/Scratch/file-828.txt",
+              "/Scratch/file-829.txt",
+              "/Scratch/file-830.txt",
+              "/Scratch/file-831.txt",
+              "/Scratch/file-832.txt",
+              "/Scratch/file-833.txt",
+              "/Scratch/file-834.txt",
+              "/Scratch/file-835.txt",
+              "/Scratch/file-836.txt",
+              "/Scratch/file-837.txt",
+              "/Scratch/file-838.txt",
+              "/Scratch/file-839.txt",
+              "/Scratch/file-840.txt",
+              "/Scratch/file-841.txt",
+              "/Scratch/file-842.txt",
+              "/Scratch/file-843.txt",
+              "/Scratch/file-844.txt",
+              "/Scratch/file-845.txt",
+              "/Scratch/file-846.txt",
+              "/Scratch/file-847.txt",
+              "/Scratch/file-848.txt",
+              "/Scratch/file-849.txt",
+              "/Scratch/file-850.txt",
+              "/Scratch/file-851.txt",
+              "/Scratch/file-852.txt",
+              "/Scratch/file-853.txt",
+              "/Scratch/file-854.txt",
+              "/Scratch/file-855.txt",
+              "/Scratch/file-856.txt",
+              "/Scratch/file-857.txt",
+              "/Scratch/file-858.txt",
+              "/Scratch/file-859.txt",
+              "/Scratch/file-860.txt",
+              "/Scratch/file-861.txt",
+              "/Scratch/file-862.txt",
+              "/Scratch/file-863.txt",
+              "/Scratch/file-864.txt",
+              "/Scratch/file-865.txt",
+              "/Scratch/file-866.txt",
+              "/Scratch/file-867.txt",
+              "/Scratch/file-868.txt",
+              "/Scratch/file-869.txt",
+              "/Scratch/file-870.txt",
+              "/Scratch/file-871.txt",
+              "/Scratch/file-872.txt",
+              "/Scratch/file-873.txt",
+              "/Scratch/file-874.txt",
+              "/Scratch/file-875.txt",
+              "/Scratch/file-876.txt",
+              "/Scratch/file-877.txt",
+              "/Scratch/file-878.txt",
+              "/Scratch/file-879.txt",
+              "/Scratch/file-880.txt",
+              "/Scratch/file-881.txt",
+              "/Scratch/file-882.txt",
+              "/Scratch/file-883.txt",
+              "/Scratch/file-884.txt",
+              "/Scratch/file-885.txt",
+              "/Scratch/file-886.txt",
+              "/Scratch/file-887.txt",
+              "/Scratch/file-888.txt",
+              "/Scratch/file-889.txt",
+              "/Scratch/file-890.txt",
+              "/Scratch/file-891.txt",
+              "/Scratch/file-892.txt",
+              "/Scratch/file-893.txt",
+              "/Scratch/file-894.txt",
+              "/Scratch/file-895.txt",
+              "/Scratch/file-896.txt",
+              "/Scratch/file-897.txt",
+              "/Scratch/file-898.txt",
+              "/Scratch/file-899.txt",
+              "/Scratch/file-900.txt",
+              "/Scratch/file-901.txt",
+              "/Scratch/file-902.txt",
+              "/Scratch/file-903.txt",
+              "/Scratch/file-904.txt",
+              "/Scratch/file-905.txt",
+              "/Scratch/file-906.txt",
+              "/Scratch/file-907.txt",
+              "/Scratch/file-908.txt",
+              "/Scratch/file-909.txt",
+              "/Scratch/file-910.txt",
+              "/Scratch/file-911.txt",
+              "/Scratch/file-912.txt",
+              "/Scratch/file-913.txt",
+              "/Scratch/file-914.txt",
+              "/Scratch/file-915.txt",
+              "/Scratch/file-916.txt",
+              "/Scratch/file-917.txt",
+              "/Scratch/file-918.txt",
+              "/Scratch/file-919.txt",
+              "/Scratch/file-920.txt",
+              "/Scratch/file-921.txt",
+              "/Scratch/file-922.txt",
+              "/Scratch/file-923.txt",
+              "/Scratch/file-924.txt",
+              "/Scratch/file-925.txt",
+              "/Scratch/file-926.txt",
+              "/Scratch/file-927.txt",
+              "/Scratch/file-928.txt",
+              "/Scratch/file-929.txt",
+              "/Scratch/file-930.txt",
+              "/Scratch/file-931.txt",
+              "/Scratch/file-932.txt",
+              "/Scratch/file-933.txt",
+              "/Scratch/file-934.txt",
+              "/Scratch/file-935.txt",
+              "/Scratch/file-936.txt",
+              "/Scratch/file-937.txt",
+              "/Scratch/file-938.txt",
+              "/Scratch/file-939.txt",
+              "/Scratch/file-940.txt",
+              "/Scratch/file-941.txt",
+              "/Scratch/file-942.txt",
+              "/Scratch/file-943.txt",
+              "/Scratch/file-944.txt",
+              "/Scratch/file-945.txt",
+              "/Scratch/file-946.txt",
+              "/Scratch/file-947.txt",
+              "/Scratch/file-948.txt",
+              "/Scratch/file-949.txt",
+              "/Scratch/file-950.txt",
+              "/Scratch/file-951.txt",
+              "/Scratch/file-952.txt",
+              "/Scratch/file-953.txt",
+              "/Scratch/file-954.txt",
+              "/Scratch/file-955.txt",
+              "/Scratch/file-956.txt",
+              "/Scratch/file-957.txt",
+              "/Scratch/file-958.txt",
+              "/Scratch/file-959.txt",
+              "/Scratch/file-960.txt",
+              "/Scratch/file-961.txt",
+              "/Scratch/file-962.txt",
+              "/Scratch/file-963.txt",
+              "/Scratch/file-964.txt",
+              "/Scratch/file-965.txt",
+              "/Scratch/file-966.txt",
+              "/Scratch/file-967.txt",
+              "/Scratch/file-968.txt",
+              "/Scratch/file-969.txt",
+              "/Scratch/file-970.txt",
+              "/Scratch/file-971.txt",
+              "/Scratch/file-972.txt",
+              "/Scratch/file-973.txt",
+              "/Scratch/file-974.txt",
+              "/Scratch/file-975.txt",
+              "/Scratch/file-976.txt",
+              "/Scratch/file-977.txt",
+              "/Scratch/file-978.txt",
+              "/Scratch/file-979.txt",
+              "/Scratch/file-980.txt",
+              "/Scratch/file-981.txt",
+              "/Scratch/file-982.txt",
+              "/Scratch/file-983.txt",
+              "/Scratch/file-984.txt",
+              "/Scratch/file-985.txt",
+              "/Scratch/file-986.txt",
+              "/Scratch/file-987.txt",
+              "/Scratch/file-988.txt",
+              "/Scratch/file-989.txt",
+              "/Scratch/file-990.txt",
+              "/Scratch/file-991.txt",
+              "/Scratch/file-992.txt",
+              "/Scratch/file-993.txt",
+              "/Scratch/file-994.txt",
+              "/Scratch/file-995.txt",
+              "/Scratch/file-996.txt",
+              "/Scratch/file-997.txt",
+              "/Scratch/file-998.txt",
+              "/Scratch/file-999.txt",
+              "/Scratch/file-1000.txt"
+            ]
+          },
+          "expect": {
+            "error": "invalid_argument"
+          }
+        }
+      ]
+    },
+    {
+      "actionId": "dropbox.files.permanently_delete",
+      "title": "Permanently delete a file",
+      "executor": {
+        "kind": "declarative-http",
+        "request": {
+          "method": "POST",
+          "host": "api.dropboxapi.com",
+          "path": "/2/files/permanently_delete",
+          "headers": [
+            {
+              "name": "accept",
+              "value": "application/json"
+            }
+          ],
+          "body": {
+            "object": [
+              {
+                "name": "path",
+                "value": {
+                  "arg": "path"
+                }
+              }
+            ]
+          },
+          "maxPages": 1
+        }
+      },
+      "arguments": {
+        "path": {
+          "type": "string",
+          "required": true,
+          "maxLength": 1024,
+          "pattern": "^(?:id:[A-Za-z0-9_-]{1,64}|(?:/[^\\x00-\\x1f\\x7f/\\\\]{1,255})+)$",
+          "forbidden": "(?:^|/)\\.\\.?(?:/|$)"
+        }
+      },
+      "facts": {
+        "class": "delete",
+        "object": {
+          "const": "file"
+        },
+        "scope": {
+          "const": "single"
+        },
+        "reversibility": {
+          "const": "permanent"
+        },
+        "recordCount": {
+          "const": 1
+        }
+      },
+      "response": {
+        "maxBytes": 4096,
+        "emptyOk": true,
+        "fields": [
+          {
+            "name": "error",
+            "value": {
+              "exists": "error"
+            }
+          }
+        ]
+      },
+      "safety": {
+        "effect": "destructive",
+        "requiredCapabilities": [
+          "bounded-output",
+          "egress-pinned"
+        ],
+        "idempotency": "none",
+        "scopes": [
+          "files.permanent_delete"
+        ],
+        "maxItems": 1,
+        "minIntervalMs": 2000,
+        "timeoutMs": 10000
+      },
+      "fixtures": [
+        {
+          "name": "permanently deletes one file",
+          "kind": "safe",
+          "arguments": {
+            "path": "/Reports/Q3 budget.xlsx"
+          },
+          "expect": {
+            "facts": {
+              "class": "delete",
+              "reversibility": {
+                "state": "known",
+                "value": "permanent"
+              }
+            },
+            "request": {
+              "body": "{\"path\":\"/Reports/Q3 budget.xlsx\"}",
+              "headers": [
+                [
+                  "accept",
+                  "application/json"
+                ],
+                [
+                  "content-type",
+                  "application/json; charset=utf-8"
+                ]
+              ],
+              "maxPages": 1,
+              "method": "POST",
+              "url": "https://api.dropboxapi.com/2/files/permanently_delete"
+            },
+            "decisions": {
+              "balanced": "review",
+              "relaxed": "review",
+              "strict": "block"
+            }
+          }
+        },
+        {
+          "name": "refuses a parent-folder step",
+          "kind": "risky",
+          "arguments": {
+            "path": "/a/.."
+          },
+          "expect": {
+            "error": "forbidden_content"
+          }
+        }
+      ]
+    },
+    {
+      "actionId": "dropbox.sharing.link_public",
+      "title": "Share a file with anyone who has the link",
+      "executor": {
+        "kind": "declarative-http",
+        "request": {
+          "method": "POST",
+          "host": "api.dropboxapi.com",
+          "path": "/2/sharing/create_shared_link_with_settings",
+          "headers": [
+            {
+              "name": "accept",
+              "value": "application/json"
+            }
+          ],
+          "body": {
+            "object": [
+              {
+                "name": "path",
+                "value": {
+                  "arg": "path"
+                }
+              },
+              {
+                "name": "settings",
+                "value": {
+                  "object": [
+                    {
+                      "name": "audience",
+                      "value": {
+                        "const": "public"
+                      }
+                    },
+                    {
+                      "name": "access",
+                      "value": {
+                        "const": "viewer"
+                      }
+                    },
+                    {
+                      "name": "expires",
+                      "value": {
+                        "arg": "expires"
+                      }
+                    }
+                  ]
+                }
+              }
+            ]
+          },
+          "maxPages": 1
+        }
+      },
+      "arguments": {
+        "path": {
+          "type": "string",
+          "required": true,
+          "maxLength": 1024,
+          "pattern": "^(?:id:[A-Za-z0-9_-]{1,64}|(?:/[^\\x00-\\x1f\\x7f/\\\\]{1,255})+)$",
+          "forbidden": "(?:^|/)\\.\\.?(?:/|$)"
+        },
+        "expires": {
+          "type": "string",
+          "required": false,
+          "maxLength": 20,
+          "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$"
+        }
+      },
+      "facts": {
+        "class": "share",
+        "object": {
+          "const": "file"
+        },
+        "scope": {
+          "const": "single"
+        },
+        "reversibility": {
+          "const": "reversible"
+        },
+        "recordCount": {
+          "const": 1
+        },
+        "audienceKind": {
+          "const": "public"
+        }
+      },
+      "response": {
+        "maxBytes": 16384,
+        "fields": [
+          {
+            "name": "url",
+            "value": {
+              "from": "url"
+            },
+            "sensitivity": "confidential"
+          },
+          {
+            "name": "name",
+            "value": {
+              "from": "name"
+            },
+            "untrusted": true
+          },
+          {
+            "name": "expires",
+            "value": {
+              "from": "expires"
+            }
+          }
+        ]
+      },
+      "safety": {
+        "effect": "write",
+        "requiredCapabilities": [
+          "bounded-output",
+          "egress-pinned"
+        ],
+        "idempotency": "none",
+        "scopes": [
+          "sharing.write"
+        ],
+        "maxItems": 1,
+        "minIntervalMs": 1000,
+        "timeoutMs": 10000
+      },
+      "fixtures": [
+        {
+          "name": "creates a public view link",
+          "kind": "safe",
+          "arguments": {
+            "path": "/Reports/Q3 budget.xlsx"
+          },
+          "expect": {
+            "facts": {
+              "class": "share",
+              "audience": {
+                "external": {
+                  "state": "unknown"
+                },
+                "kind": {
+                  "state": "known",
+                  "value": "public"
+                },
+                "recipient_domains": {
+                  "state": "unknown"
+                }
+              }
+            },
+            "request": {
+              "body": "{\"path\":\"/Reports/Q3 budget.xlsx\",\"settings\":{\"audience\":\"public\",\"access\":\"viewer\"}}",
+              "headers": [
+                [
+                  "accept",
+                  "application/json"
+                ],
+                [
+                  "content-type",
+                  "application/json; charset=utf-8"
+                ]
+              ],
+              "maxPages": 1,
+              "method": "POST",
+              "url": "https://api.dropboxapi.com/2/sharing/create_shared_link_with_settings"
+            },
+            "decisions": {
+              "balanced": "block",
+              "relaxed": "review",
+              "strict": "block"
+            }
+          }
+        },
+        {
+          "name": "refuses a password argument",
+          "kind": "risky",
+          "arguments": {
+            "path": "/Reports/Q3 budget.xlsx",
+            "link_password": "x"
+          },
+          "expect": {
+            "error": "unknown_argument"
+          }
+        }
+      ]
+    },
+    {
+      "actionId": "dropbox.sharing.link_team",
+      "title": "Share a file with the team",
+      "executor": {
+        "kind": "declarative-http",
+        "request": {
+          "method": "POST",
+          "host": "api.dropboxapi.com",
+          "path": "/2/sharing/create_shared_link_with_settings",
+          "headers": [
+            {
+              "name": "accept",
+              "value": "application/json"
+            }
+          ],
+          "body": {
+            "object": [
+              {
+                "name": "path",
+                "value": {
+                  "arg": "path"
+                }
+              },
+              {
+                "name": "settings",
+                "value": {
+                  "object": [
+                    {
+                      "name": "audience",
+                      "value": {
+                        "const": "team"
+                      }
+                    },
+                    {
+                      "name": "access",
+                      "value": {
+                        "const": "viewer"
+                      }
+                    },
+                    {
+                      "name": "expires",
+                      "value": {
+                        "arg": "expires"
+                      }
+                    }
+                  ]
+                }
+              }
+            ]
+          },
+          "maxPages": 1
+        }
+      },
+      "arguments": {
+        "path": {
+          "type": "string",
+          "required": true,
+          "maxLength": 1024,
+          "pattern": "^(?:id:[A-Za-z0-9_-]{1,64}|(?:/[^\\x00-\\x1f\\x7f/\\\\]{1,255})+)$",
+          "forbidden": "(?:^|/)\\.\\.?(?:/|$)"
+        },
+        "expires": {
+          "type": "string",
+          "required": false,
+          "maxLength": 20,
+          "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$"
+        }
+      },
+      "facts": {
+        "class": "share",
+        "object": {
+          "const": "file"
+        },
+        "scope": {
+          "const": "single"
+        },
+        "reversibility": {
+          "const": "reversible"
+        },
+        "recordCount": {
+          "const": 1
+        },
+        "audienceKind": {
+          "const": "domain"
+        }
+      },
+      "response": {
+        "maxBytes": 16384,
+        "fields": [
+          {
+            "name": "url",
+            "value": {
+              "from": "url"
+            },
+            "sensitivity": "confidential"
+          },
+          {
+            "name": "name",
+            "value": {
+              "from": "name"
+            },
+            "untrusted": true
+          },
+          {
+            "name": "expires",
+            "value": {
+              "from": "expires"
+            }
+          }
+        ]
+      },
+      "safety": {
+        "effect": "write",
+        "requiredCapabilities": [
+          "bounded-output",
+          "egress-pinned"
+        ],
+        "idempotency": "none",
+        "scopes": [
+          "sharing.write"
+        ],
+        "maxItems": 1,
+        "minIntervalMs": 1000,
+        "timeoutMs": 10000
+      },
+      "fixtures": [
+        {
+          "name": "creates a team-only link that expires",
+          "kind": "safe",
+          "arguments": {
+            "path": "/Reports/Q3 budget.xlsx",
+            "expires": "2026-12-01T00:00:00Z"
+          },
+          "expect": {
+            "facts": {
+              "class": "share",
+              "audience": {
+                "external": {
+                  "state": "unknown"
+                },
+                "kind": {
+                  "state": "known",
+                  "value": "domain"
+                },
+                "recipient_domains": {
+                  "state": "unknown"
+                }
+              }
+            },
+            "request": {
+              "body": "{\"path\":\"/Reports/Q3 budget.xlsx\",\"settings\":{\"audience\":\"team\",\"access\":\"viewer\",\"expires\":\"2026-12-01T00:00:00Z\"}}",
+              "headers": [
+                [
+                  "accept",
+                  "application/json"
+                ],
+                [
+                  "content-type",
+                  "application/json; charset=utf-8"
+                ]
+              ],
+              "maxPages": 1,
+              "method": "POST",
+              "url": "https://api.dropboxapi.com/2/sharing/create_shared_link_with_settings"
+            },
+            "decisions": {
+              "balanced": "review",
+              "relaxed": "allow",
+              "strict": "review"
+            }
+          }
+        },
+        {
+          "name": "refuses a malformed expiry",
+          "kind": "risky",
+          "arguments": {
+            "path": "/Reports/Q3 budget.xlsx",
+            "expires": "tomorrow"
+          },
+          "expect": {
+            "error": "invalid_argument"
+          }
+        }
+      ]
+    },
+    {
+      "actionId": "dropbox.sharing.add_file_member",
+      "title": "Share a file with people",
+      "executor": {
+        "kind": "declarative-http",
+        "request": {
+          "method": "POST",
+          "host": "api.dropboxapi.com",
+          "path": "/2/sharing/add_file_member",
+          "headers": [
+            {
+              "name": "accept",
+              "value": "application/json"
+            }
+          ],
+          "body": {
+            "object": [
+              {
+                "name": "file",
+                "value": {
+                  "arg": "path"
+                }
+              },
+              {
+                "name": "members",
+                "value": {
+                  "each": {
+                    "arg": "emails",
+                    "item": {
+                      "object": [
+                        {
+                          "name": ".tag",
+                          "value": {
+                            "const": "email"
+                          }
+                        },
+                        {
+                          "name": "email",
+                          "value": {
+                            "element": true
+                          }
+                        }
+                      ]
+                    }
+                  }
+                }
+              },
+              {
+                "name": "access_level",
+                "value": {
+                  "const": "viewer"
+                }
+              },
+              {
+                "name": "quiet",
+                "value": {
+                  "arg": "quiet"
+                }
+              },
+              {
+                "name": "custom_message",
+                "value": {
+                  "arg": "message"
+                }
+              }
+            ]
+          },
+          "maxPages": 1
+        }
+      },
+      "arguments": {
+        "path": {
+          "type": "string",
+          "required": true,
+          "maxLength": 1024,
+          "pattern": "^(?:id:[A-Za-z0-9_-]{1,64}|(?:/[^\\x00-\\x1f\\x7f/\\\\]{1,255})+)$",
+          "forbidden": "(?:^|/)\\.\\.?(?:/|$)"
+        },
+        "emails": {
+          "type": "array",
+          "required": true,
+          "minItems": 1,
+          "maxItems": 50,
+          "items": {
+            "maxLength": 320,
+            "pattern": "^[A-Za-z0-9.!#$%&'*+/=?^_`{|}~-]{1,64}@[A-Za-z0-9.-]{1,253}$"
+          }
+        },
+        "quiet": {
+          "type": "boolean",
+          "required": false
+        },
+        "message": {
+          "type": "string",
+          "required": false,
+          "maxLength": 1000,
+          "pattern": "^[^\\x00-\\x08\\x0b\\x0c\\x0e-\\x1f\\x7f]+$"
+        }
+      },
+      "facts": {
+        "class": "share",
+        "object": {
+          "const": "file"
+        },
+        "scope": {
+          "const": "single"
+        },
+        "reversibility": {
+          "const": "reversible"
+        },
+        "recordCount": {
+          "const": 1
+        },
+        "audienceKind": {
+          "const": "named"
+        },
+        "recipientCount": {
+          "count": {
+            "arguments": [
+              "emails"
+            ]
+          }
+        },
+        "recipientDomains": {
+          "domains": {
+            "arguments": [
+              "emails"
+            ]
+          }
+        }
+      },
+      "response": {
+        "maxBytes": 65536,
+        "fields": [
+          {
+            "name": "ok",
+            "value": {
+              "exists": "0"
+            }
+          }
+        ]
+      },
+      "safety": {
+        "effect": "write",
+        "requiredCapabilities": [
+          "bounded-output",
+          "egress-pinned"
+        ],
+        "idempotency": "none",
+        "scopes": [
+          "sharing.write"
+        ],
+        "maxItems": 1,
+        "minIntervalMs": 1000,
+        "timeoutMs": 10000
+      },
+      "fixtures": [
+        {
+          "name": "shares a file with an outside reviewer",
+          "kind": "safe",
+          "arguments": {
+            "path": "/Reports/Q3 budget.xlsx",
+            "emails": [
+              "pat@example.org"
+            ]
+          },
+          "expect": {
+            "facts": {
+              "class": "share",
+              "audience": {
+                "external": {
+                  "state": "unknown"
+                },
+                "kind": {
+                  "state": "known",
+                  "value": "named"
+                },
+                "recipient_domains": {
+                  "state": "known",
+                  "value": [
+                    "example.org"
+                  ]
+                }
+              }
+            },
+            "request": {
+              "body": "{\"file\":\"/Reports/Q3 budget.xlsx\",\"members\":[{\".tag\":\"email\",\"email\":\"pat@example.org\"}],\"access_level\":\"viewer\"}",
+              "headers": [
+                [
+                  "accept",
+                  "application/json"
+                ],
+                [
+                  "content-type",
+                  "application/json; charset=utf-8"
+                ]
+              ],
+              "maxPages": 1,
+              "method": "POST",
+              "url": "https://api.dropboxapi.com/2/sharing/add_file_member"
+            },
+            "decisions": {
+              "balanced": "review",
+              "relaxed": "allow",
+              "strict": "review"
+            }
+          }
+        },
+        {
+          "name": "refuses an empty member list",
+          "kind": "risky",
+          "arguments": {
+            "path": "/Reports/Q3 budget.xlsx",
+            "emails": []
+          },
+          "expect": {
+            "error": "invalid_argument"
+          }
+        }
+      ]
+    },
+    {
+      "actionId": "dropbox.files.temporary_link",
+      "title": "Get a four-hour download link",
+      "executor": {
+        "kind": "declarative-http",
+        "request": {
+          "method": "POST",
+          "host": "api.dropboxapi.com",
+          "path": "/2/files/get_temporary_link",
+          "headers": [
+            {
+              "name": "accept",
+              "value": "application/json"
+            }
+          ],
+          "body": {
+            "object": [
+              {
+                "name": "path",
+                "value": {
+                  "arg": "path"
+                }
+              }
+            ]
+          },
+          "maxPages": 1
+        }
+      },
+      "arguments": {
+        "path": {
+          "type": "string",
+          "required": true,
+          "maxLength": 1024,
+          "pattern": "^(?:id:[A-Za-z0-9_-]{1,64}|(?:/[^\\x00-\\x1f\\x7f/\\\\]{1,255})+)$",
+          "forbidden": "(?:^|/)\\.\\.?(?:/|$)"
+        }
+      },
+      "facts": {
+        "class": "export",
+        "object": {
+          "const": "file"
+        },
+        "scope": {
+          "const": "single"
+        },
+        "recordCount": {
+          "const": 1
+        }
+      },
+      "response": {
+        "maxBytes": 16384,
+        "fields": [
+          {
+            "name": "link",
+            "value": {
+              "from": "link"
+            },
+            "sensitivity": "confidential"
+          },
+          {
+            "name": "metadata",
+            "value": {
+              "object": {
+                "from": "metadata",
+                "fields": [
+                  {
+                    "name": "id",
+                    "value": {
+                      "from": "id"
+                    }
+                  },
+                  {
+                    "name": "name",
+                    "value": {
+                      "from": "name"
+                    },
+                    "untrusted": true
+                  },
+                  {
+                    "name": "path",
+                    "value": {
+                      "from": "path_display"
+                    },
+                    "untrusted": true
+                  },
+                  {
+                    "name": "size",
+                    "value": {
+                      "from": "size"
+                    }
+                  },
+                  {
+                    "name": "modified",
+                    "value": {
+                      "from": "server_modified"
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        ]
+      },
+      "safety": {
+        "effect": "write",
+        "requiredCapabilities": [
+          "bounded-output",
+          "egress-pinned"
+        ],
+        "idempotency": "none",
+        "scopes": [
+          "files.content.read"
+        ],
+        "maxItems": 1,
+        "minIntervalMs": 2000,
+        "timeoutMs": 10000
+      },
+      "fixtures": [
+        {
+          "name": "gets a download link for one file",
+          "kind": "safe",
+          "arguments": {
+            "path": "/Reports/Q3 budget.xlsx"
+          },
+          "expect": {
+            "facts": {
+              "class": "export"
+            },
+            "request": {
+              "body": "{\"path\":\"/Reports/Q3 budget.xlsx\"}",
+              "headers": [
+                [
+                  "accept",
+                  "application/json"
+                ],
+                [
+                  "content-type",
+                  "application/json; charset=utf-8"
+                ]
+              ],
+              "maxPages": 1,
+              "method": "POST",
+              "url": "https://api.dropboxapi.com/2/files/get_temporary_link"
+            },
+            "decisions": {
+              "balanced": "review",
+              "relaxed": "allow",
+              "strict": "review"
+            }
+          }
+        },
+        {
+          "name": "refuses a missing path",
+          "kind": "risky",
+          "arguments": {},
+          "expect": {
+            "error": "missing_argument"
+          }
+        }
+      ]
+    }
+  ]
+}

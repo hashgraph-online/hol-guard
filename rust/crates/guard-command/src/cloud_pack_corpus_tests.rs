@@ -19,14 +19,7 @@ use crate::cloud_pack_request::{check_arguments, render};
 use crate::cloud_policy_pack::{shipped, FactCall, Preset};
 use crate::effect_decision::GuardAction;
 
-const PACKS: [&str; 6] = [
-    include_str!("../../../../contributions/cloud-actions/calendar.json"),
-    include_str!("../../../../contributions/cloud-actions/drive.json"),
-    include_str!("../../../../contributions/cloud-actions/github.json"),
-    include_str!("../../../../contributions/cloud-actions/gmail.json"),
-    include_str!("../../../../contributions/cloud-actions/notion.json"),
-    include_str!("../../../../contributions/cloud-actions/slack.json"),
-];
+use crate::cloud_pack_explain::SHIPPED_SOURCES as PACKS;
 const BENIGN: &str = include_str!("../../../../tests/fixtures/cloud_benign_corpus.json");
 const ATTACK: &str = include_str!("../../../../tests/fixtures/cloud_attack_corpus.json");
 const REFUSED: &str = "invalid_argument";

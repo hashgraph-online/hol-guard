@@ -206,7 +206,22 @@ actions that match an existing hosted tool link to its name; the others have no 
 `drive.json` and `calendar.json` cover Google Workspace: reading, drafting and sending mail, archiving, trashing and
 deleting messages, mail forwarding and filters, file search, export, sharing with a person, a domain or anyone with
 the link, trash and permanent delete, and calendar events with and without guests. Their actions link to the matching
-Google Workspace command permissions. Known limits of the format, compared with hand-written adapters:
+Google Workspace command permissions. `sheets.json` and `docs.json` read, write and export Google Sheets and Docs:
+reading tabs and ranges, writing down a column, appending a row, clearing a range and deleting a tab, and appending,
+replacing and deleting document text. `outlook.json`, `onedrive.json` and `teams.json` cover Microsoft 365 through
+Microsoft Graph: listing, drafting, sending, forwarding, moving and deleting mail (to Deleted Items or permanently),
+calendar events with and without attendees, OneDrive and SharePoint files with organization and anyone links,
+invitations, the recycle bin and permanent delete, and Teams channel and chat messages, soft deletes and channel
+deletes. `airtable.json` lists, reads, adds, updates and deletes records, at most ten per call as Airtable allows.
+`dropbox.json` lists, moves and deletes files one at a time or in batches, deletes permanently, creates public and
+team links, shares with people and makes four-hour download links.
+
+Pack authors choose reversibility from what the provider can undo. An Airtable record delete is marked permanent: the
+API has no undo, even where a plan keeps a history in the web app. Deletes that land in a trash, recycle bin or
+version history (Dropbox, OneDrive, Outlook Deleted Items, Teams soft delete, cleared Sheets ranges) are marked
+recoverable.
+
+Known limits of the format, compared with hand-written adapters:
 
 - An argument cannot be normalized before use (for example, removing dashes from an id). The pattern accepts only
   the canonical form.
@@ -223,4 +238,13 @@ Google Workspace command permissions. Known limits of the format, compared with 
   written, so one action cannot leave the event times unchanged when only the title changes.
 - `gmail.messages.modify` changes user labels and the star, importance and unread marks only. Archive, trash
   and spam have their own actions with their own facts.
+- A response path is split on dots, so a key that contains a dot (such as Graph's
+  `@microsoft.graph.downloadUrl`) or starts with one (such as Dropbox's `.tag`) cannot be projected. OneDrive
+  therefore has no download-link action. A digit step reads an array element, so `values.0` and `roles.0` work.
+- A placeholder fills a whole path segment, optionally followed by a Google-style custom method such as
+  `{document_id}:batchUpdate`. Graph's inline function syntax (`search(q='...')`) is not expressible.
+- An array argument in the query repeats the parameter (`records[]=a&records[]=b`), and a parameter name may start
+  with one `$` for OData options such as `$top`.
+- Response fields are scalars. Airtable records project their id, creation time and `Name`, `Status` and `Notes`
+  fields when present; other columns are dropped.
 - A secret pasted into an argument is not a fact. Guard's inspection finds it at call time, not the pack.

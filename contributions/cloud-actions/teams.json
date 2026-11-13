@@ -1,0 +1,1347 @@
+{
+  "schema": "guard.cloud-action-pack.v1",
+  "provider": {
+    "id": "teams",
+    "name": "Microsoft Teams",
+    "publisher": {
+      "name": "HOL",
+      "verified": true
+    }
+  },
+  "hosts": [
+    "graph.microsoft.com"
+  ],
+  "auth": {
+    "mode": "oauth2",
+    "scopes": [
+      "https://graph.microsoft.com/Channel.Delete.All",
+      "https://graph.microsoft.com/Channel.ReadBasic.All",
+      "https://graph.microsoft.com/ChannelMessage.Read.All",
+      "https://graph.microsoft.com/ChannelMessage.ReadWrite",
+      "https://graph.microsoft.com/ChannelMessage.Send",
+      "https://graph.microsoft.com/Chat.ReadBasic",
+      "https://graph.microsoft.com/ChatMessage.Send",
+      "https://graph.microsoft.com/Team.ReadBasic.All"
+    ]
+  },
+  "actions": [
+    {
+      "actionId": "teams.teams.list",
+      "title": "List my teams",
+      "executor": {
+        "kind": "declarative-http",
+        "request": {
+          "method": "GET",
+          "host": "graph.microsoft.com",
+          "path": "/v1.0/me/joinedTeams",
+          "query": [
+            {
+              "name": "$select",
+              "value": {
+                "const": "id,displayName,description"
+              }
+            }
+          ],
+          "headers": [
+            {
+              "name": "accept",
+              "value": "application/json"
+            }
+          ],
+          "maxPages": 1
+        }
+      },
+      "arguments": {},
+      "facts": {
+        "class": "read",
+        "object": {
+          "const": "other"
+        },
+        "scope": {
+          "const": "all"
+        }
+      },
+      "response": {
+        "maxBytes": 262144,
+        "fields": [
+          {
+            "name": "teams",
+            "value": {
+              "list": {
+                "from": "value",
+                "maxItems": 200,
+                "fields": [
+                  {
+                    "name": "id",
+                    "value": {
+                      "from": "id"
+                    }
+                  },
+                  {
+                    "name": "name",
+                    "value": {
+                      "from": "displayName"
+                    },
+                    "untrusted": true
+                  }
+                ]
+              }
+            }
+          }
+        ]
+      },
+      "safety": {
+        "effect": "read",
+        "requiredCapabilities": [
+          "bounded-output",
+          "egress-pinned"
+        ],
+        "idempotency": "safe-read",
+        "scopes": [
+          "https://graph.microsoft.com/Team.ReadBasic.All"
+        ],
+        "maxItems": 200,
+        "minIntervalMs": 500,
+        "timeoutMs": 10000
+      },
+      "fixtures": [
+        {
+          "name": "lists the teams I belong to",
+          "kind": "safe",
+          "arguments": {},
+          "expect": {
+            "facts": {
+              "class": "read"
+            },
+            "request": {
+              "body": null,
+              "headers": [
+                [
+                  "accept",
+                  "application/json"
+                ]
+              ],
+              "maxPages": 1,
+              "method": "GET",
+              "url": "https://graph.microsoft.com/v1.0/me/joinedTeams?$select=id%2CdisplayName%2Cdescription"
+            },
+            "decisions": {
+              "balanced": "allow",
+              "relaxed": "allow",
+              "strict": "allow"
+            }
+          }
+        },
+        {
+          "name": "refuses a user id argument",
+          "kind": "risky",
+          "arguments": {
+            "user_id": "someone-else"
+          },
+          "expect": {
+            "error": "unknown_argument"
+          }
+        }
+      ]
+    },
+    {
+      "actionId": "teams.channels.list",
+      "title": "List a team's channels",
+      "executor": {
+        "kind": "declarative-http",
+        "request": {
+          "method": "GET",
+          "host": "graph.microsoft.com",
+          "path": "/v1.0/teams/{team_id}/channels",
+          "query": [
+            {
+              "name": "$select",
+              "value": {
+                "const": "id,displayName,membershipType"
+              }
+            }
+          ],
+          "headers": [
+            {
+              "name": "accept",
+              "value": "application/json"
+            }
+          ],
+          "maxPages": 1
+        }
+      },
+      "arguments": {
+        "team_id": {
+          "type": "string",
+          "required": true,
+          "maxLength": 36,
+          "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+        }
+      },
+      "facts": {
+        "class": "read",
+        "object": {
+          "const": "channel"
+        },
+        "scope": {
+          "const": "all"
+        }
+      },
+      "response": {
+        "maxBytes": 262144,
+        "fields": [
+          {
+            "name": "channels",
+            "value": {
+              "list": {
+                "from": "value",
+                "maxItems": 200,
+                "fields": [
+                  {
+                    "name": "id",
+                    "value": {
+                      "from": "id"
+                    }
+                  },
+                  {
+                    "name": "name",
+                    "value": {
+                      "from": "displayName"
+                    },
+                    "untrusted": true
+                  },
+                  {
+                    "name": "membership",
+                    "value": {
+                      "from": "membershipType"
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        ]
+      },
+      "safety": {
+        "effect": "read",
+        "requiredCapabilities": [
+          "bounded-output",
+          "egress-pinned"
+        ],
+        "idempotency": "safe-read",
+        "scopes": [
+          "https://graph.microsoft.com/Channel.ReadBasic.All"
+        ],
+        "maxItems": 200,
+        "minIntervalMs": 500,
+        "timeoutMs": 10000
+      },
+      "fixtures": [
+        {
+          "name": "lists one team's channels",
+          "kind": "safe",
+          "arguments": {
+            "team_id": "a1b2c3d4-0000-4000-8000-00000000c0de"
+          },
+          "expect": {
+            "facts": {
+              "class": "read"
+            },
+            "request": {
+              "body": null,
+              "headers": [
+                [
+                  "accept",
+                  "application/json"
+                ]
+              ],
+              "maxPages": 1,
+              "method": "GET",
+              "url": "https://graph.microsoft.com/v1.0/teams/a1b2c3d4-0000-4000-8000-00000000c0de/channels?$select=id%2CdisplayName%2CmembershipType"
+            },
+            "decisions": {
+              "balanced": "allow",
+              "relaxed": "allow",
+              "strict": "allow"
+            }
+          }
+        },
+        {
+          "name": "refuses a team id that is not a GUID",
+          "kind": "risky",
+          "arguments": {
+            "team_id": "../users"
+          },
+          "expect": {
+            "error": "invalid_argument"
+          }
+        }
+      ]
+    },
+    {
+      "actionId": "teams.channel_messages.list",
+      "title": "Read recent channel messages",
+      "executor": {
+        "kind": "declarative-http",
+        "request": {
+          "method": "GET",
+          "host": "graph.microsoft.com",
+          "path": "/v1.0/teams/{team_id}/channels/{channel_id}/messages",
+          "query": [
+            {
+              "name": "$top",
+              "value": {
+                "arg": {
+                  "name": "top",
+                  "default": 20
+                }
+              }
+            }
+          ],
+          "headers": [
+            {
+              "name": "accept",
+              "value": "application/json"
+            }
+          ],
+          "maxPages": 1
+        }
+      },
+      "arguments": {
+        "team_id": {
+          "type": "string",
+          "required": true,
+          "maxLength": 36,
+          "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+        },
+        "channel_id": {
+          "type": "string",
+          "required": true,
+          "maxLength": 220,
+          "pattern": "^19:[A-Za-z0-9_-]{1,200}@thread\\.(?:tacv2|skype|v2)$"
+        },
+        "top": {
+          "type": "integer",
+          "required": false,
+          "minimum": 1,
+          "maximum": 50
+        }
+      },
+      "facts": {
+        "class": "read",
+        "object": {
+          "const": "message"
+        },
+        "scope": {
+          "const": "query_selected"
+        },
+        "recordCount": {
+          "argument": {
+            "name": "top",
+            "max": 50,
+            "default": 20
+          }
+        }
+      },
+      "response": {
+        "maxBytes": 524288,
+        "fields": [
+          {
+            "name": "messages",
+            "value": {
+              "list": {
+                "from": "value",
+                "maxItems": 50,
+                "fields": [
+                  {
+                    "name": "id",
+                    "value": {
+                      "from": "id"
+                    }
+                  },
+                  {
+                    "name": "from",
+                    "value": {
+                      "from": "from.user.displayName"
+                    },
+                    "untrusted": true
+                  },
+                  {
+                    "name": "created",
+                    "value": {
+                      "from": "createdDateTime"
+                    }
+                  },
+                  {
+                    "name": "text",
+                    "value": {
+                      "from": "body.content"
+                    },
+                    "untrusted": true
+                  },
+                  {
+                    "name": "deleted",
+                    "value": {
+                      "from": "deletedDateTime"
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        ]
+      },
+      "safety": {
+        "effect": "read",
+        "requiredCapabilities": [
+          "bounded-output",
+          "egress-pinned"
+        ],
+        "idempotency": "safe-read",
+        "scopes": [
+          "https://graph.microsoft.com/ChannelMessage.Read.All"
+        ],
+        "maxItems": 50,
+        "minIntervalMs": 500,
+        "timeoutMs": 10000
+      },
+      "fixtures": [
+        {
+          "name": "reads the latest channel messages",
+          "kind": "safe",
+          "arguments": {
+            "team_id": "a1b2c3d4-0000-4000-8000-00000000c0de",
+            "channel_id": "19:4a95f7d8db4c4e7fae857bcebe0623e6@thread.tacv2",
+            "top": 10
+          },
+          "expect": {
+            "facts": {
+              "class": "read"
+            },
+            "request": {
+              "body": null,
+              "headers": [
+                [
+                  "accept",
+                  "application/json"
+                ]
+              ],
+              "maxPages": 1,
+              "method": "GET",
+              "url": "https://graph.microsoft.com/v1.0/teams/a1b2c3d4-0000-4000-8000-00000000c0de/channels/19%3A4a95f7d8db4c4e7fae857bcebe0623e6%40thread.tacv2/messages?$top=10"
+            },
+            "decisions": {
+              "balanced": "allow",
+              "relaxed": "allow",
+              "strict": "allow"
+            }
+          }
+        },
+        {
+          "name": "refuses a page over 50",
+          "kind": "risky",
+          "arguments": {
+            "team_id": "a1b2c3d4-0000-4000-8000-00000000c0de",
+            "channel_id": "19:4a95f7d8db4c4e7fae857bcebe0623e6@thread.tacv2",
+            "top": 500
+          },
+          "expect": {
+            "error": "invalid_argument"
+          }
+        }
+      ]
+    },
+    {
+      "actionId": "teams.channel_messages.send",
+      "title": "Post in a channel",
+      "executor": {
+        "kind": "declarative-http",
+        "request": {
+          "method": "POST",
+          "host": "graph.microsoft.com",
+          "path": "/v1.0/teams/{team_id}/channels/{channel_id}/messages",
+          "headers": [
+            {
+              "name": "accept",
+              "value": "application/json"
+            }
+          ],
+          "body": {
+            "object": [
+              {
+                "name": "body",
+                "value": {
+                  "object": [
+                    {
+                      "name": "contentType",
+                      "value": {
+                        "const": "text"
+                      }
+                    },
+                    {
+                      "name": "content",
+                      "value": {
+                        "arg": "text"
+                      }
+                    }
+                  ]
+                }
+              }
+            ]
+          },
+          "maxPages": 1
+        }
+      },
+      "arguments": {
+        "team_id": {
+          "type": "string",
+          "required": true,
+          "maxLength": 36,
+          "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+        },
+        "channel_id": {
+          "type": "string",
+          "required": true,
+          "maxLength": 220,
+          "pattern": "^19:[A-Za-z0-9_-]{1,200}@thread\\.(?:tacv2|skype|v2)$"
+        },
+        "text": {
+          "type": "string",
+          "required": true,
+          "maxLength": 28000,
+          "pattern": "^[^\\x00-\\x08\\x0b\\x0c\\x0e-\\x1f\\x7f]+$",
+          "forbidden": "(?i)<at\\b"
+        }
+      },
+      "facts": {
+        "class": "send",
+        "object": {
+          "const": "message"
+        },
+        "scope": {
+          "const": "single"
+        },
+        "reversibility": {
+          "const": "reversible"
+        },
+        "recordCount": {
+          "const": 1
+        }
+      },
+      "response": {
+        "maxBytes": 65536,
+        "fields": [
+          {
+            "name": "id",
+            "value": {
+              "from": "id"
+            }
+          },
+          {
+            "name": "created",
+            "value": {
+              "from": "createdDateTime"
+            }
+          },
+          {
+            "name": "web_url",
+            "value": {
+              "from": "webUrl"
+            }
+          }
+        ]
+      },
+      "safety": {
+        "effect": "write",
+        "requiredCapabilities": [
+          "bounded-output",
+          "egress-pinned"
+        ],
+        "idempotency": "none",
+        "scopes": [
+          "https://graph.microsoft.com/ChannelMessage.Send"
+        ],
+        "maxItems": 1,
+        "minIntervalMs": 1000,
+        "timeoutMs": 10000
+      },
+      "fixtures": [
+        {
+          "name": "posts a status update",
+          "kind": "safe",
+          "arguments": {
+            "team_id": "a1b2c3d4-0000-4000-8000-00000000c0de",
+            "channel_id": "19:4a95f7d8db4c4e7fae857bcebe0623e6@thread.tacv2",
+            "text": "Release 3.2 is out."
+          },
+          "expect": {
+            "facts": {
+              "class": "send"
+            },
+            "request": {
+              "body": "{\"body\":{\"contentType\":\"text\",\"content\":\"Release 3.2 is out.\"}}",
+              "headers": [
+                [
+                  "accept",
+                  "application/json"
+                ],
+                [
+                  "content-type",
+                  "application/json; charset=utf-8"
+                ]
+              ],
+              "maxPages": 1,
+              "method": "POST",
+              "url": "https://graph.microsoft.com/v1.0/teams/a1b2c3d4-0000-4000-8000-00000000c0de/channels/19%3A4a95f7d8db4c4e7fae857bcebe0623e6%40thread.tacv2/messages"
+            },
+            "decisions": {
+              "balanced": "review",
+              "relaxed": "allow",
+              "strict": "review"
+            }
+          }
+        },
+        {
+          "name": "refuses an at-mention tag",
+          "kind": "risky",
+          "arguments": {
+            "team_id": "a1b2c3d4-0000-4000-8000-00000000c0de",
+            "channel_id": "19:4a95f7d8db4c4e7fae857bcebe0623e6@thread.tacv2",
+            "text": "<at id=\"0\">everyone</at> look"
+          },
+          "expect": {
+            "error": "forbidden_content"
+          }
+        }
+      ]
+    },
+    {
+      "actionId": "teams.channel_messages.reply",
+      "title": "Reply in a channel thread",
+      "executor": {
+        "kind": "declarative-http",
+        "request": {
+          "method": "POST",
+          "host": "graph.microsoft.com",
+          "path": "/v1.0/teams/{team_id}/channels/{channel_id}/messages/{message_id}/replies",
+          "headers": [
+            {
+              "name": "accept",
+              "value": "application/json"
+            }
+          ],
+          "body": {
+            "object": [
+              {
+                "name": "body",
+                "value": {
+                  "object": [
+                    {
+                      "name": "contentType",
+                      "value": {
+                        "const": "text"
+                      }
+                    },
+                    {
+                      "name": "content",
+                      "value": {
+                        "arg": "text"
+                      }
+                    }
+                  ]
+                }
+              }
+            ]
+          },
+          "maxPages": 1
+        }
+      },
+      "arguments": {
+        "team_id": {
+          "type": "string",
+          "required": true,
+          "maxLength": 36,
+          "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+        },
+        "channel_id": {
+          "type": "string",
+          "required": true,
+          "maxLength": 220,
+          "pattern": "^19:[A-Za-z0-9_-]{1,200}@thread\\.(?:tacv2|skype|v2)$"
+        },
+        "message_id": {
+          "type": "string",
+          "required": true,
+          "maxLength": 20,
+          "pattern": "^[0-9]{1,20}$"
+        },
+        "text": {
+          "type": "string",
+          "required": true,
+          "maxLength": 28000,
+          "pattern": "^[^\\x00-\\x08\\x0b\\x0c\\x0e-\\x1f\\x7f]+$",
+          "forbidden": "(?i)<at\\b"
+        }
+      },
+      "facts": {
+        "class": "send",
+        "object": {
+          "const": "message"
+        },
+        "scope": {
+          "const": "single"
+        },
+        "reversibility": {
+          "const": "reversible"
+        },
+        "recordCount": {
+          "const": 1
+        }
+      },
+      "response": {
+        "maxBytes": 65536,
+        "fields": [
+          {
+            "name": "id",
+            "value": {
+              "from": "id"
+            }
+          },
+          {
+            "name": "created",
+            "value": {
+              "from": "createdDateTime"
+            }
+          },
+          {
+            "name": "web_url",
+            "value": {
+              "from": "webUrl"
+            }
+          }
+        ]
+      },
+      "safety": {
+        "effect": "write",
+        "requiredCapabilities": [
+          "bounded-output",
+          "egress-pinned"
+        ],
+        "idempotency": "none",
+        "scopes": [
+          "https://graph.microsoft.com/ChannelMessage.Send"
+        ],
+        "maxItems": 1,
+        "minIntervalMs": 1000,
+        "timeoutMs": 10000
+      },
+      "fixtures": [
+        {
+          "name": "replies in a thread",
+          "kind": "safe",
+          "arguments": {
+            "team_id": "a1b2c3d4-0000-4000-8000-00000000c0de",
+            "channel_id": "19:4a95f7d8db4c4e7fae857bcebe0623e6@thread.tacv2",
+            "message_id": "1616965872395",
+            "text": "Fixed in main."
+          },
+          "expect": {
+            "facts": {
+              "class": "send"
+            },
+            "request": {
+              "body": "{\"body\":{\"contentType\":\"text\",\"content\":\"Fixed in main.\"}}",
+              "headers": [
+                [
+                  "accept",
+                  "application/json"
+                ],
+                [
+                  "content-type",
+                  "application/json; charset=utf-8"
+                ]
+              ],
+              "maxPages": 1,
+              "method": "POST",
+              "url": "https://graph.microsoft.com/v1.0/teams/a1b2c3d4-0000-4000-8000-00000000c0de/channels/19%3A4a95f7d8db4c4e7fae857bcebe0623e6%40thread.tacv2/messages/1616965872395/replies"
+            },
+            "decisions": {
+              "balanced": "review",
+              "relaxed": "allow",
+              "strict": "review"
+            }
+          }
+        },
+        {
+          "name": "refuses a message id with a path",
+          "kind": "risky",
+          "arguments": {
+            "team_id": "a1b2c3d4-0000-4000-8000-00000000c0de",
+            "channel_id": "19:4a95f7d8db4c4e7fae857bcebe0623e6@thread.tacv2",
+            "message_id": "1/replies",
+            "text": "x"
+          },
+          "expect": {
+            "error": "invalid_argument"
+          }
+        }
+      ]
+    },
+    {
+      "actionId": "teams.channel_messages.soft_delete",
+      "title": "Delete a channel message",
+      "executor": {
+        "kind": "declarative-http",
+        "request": {
+          "method": "POST",
+          "host": "graph.microsoft.com",
+          "path": "/v1.0/teams/{team_id}/channels/{channel_id}/messages/{message_id}/softDelete",
+          "headers": [
+            {
+              "name": "accept",
+              "value": "application/json"
+            }
+          ],
+          "body": {
+            "object": []
+          },
+          "maxPages": 1
+        }
+      },
+      "arguments": {
+        "team_id": {
+          "type": "string",
+          "required": true,
+          "maxLength": 36,
+          "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+        },
+        "channel_id": {
+          "type": "string",
+          "required": true,
+          "maxLength": 220,
+          "pattern": "^19:[A-Za-z0-9_-]{1,200}@thread\\.(?:tacv2|skype|v2)$"
+        },
+        "message_id": {
+          "type": "string",
+          "required": true,
+          "maxLength": 20,
+          "pattern": "^[0-9]{1,20}$"
+        }
+      },
+      "facts": {
+        "class": "delete",
+        "object": {
+          "const": "message"
+        },
+        "scope": {
+          "const": "single"
+        },
+        "reversibility": {
+          "const": "recoverable"
+        },
+        "recordCount": {
+          "const": 1
+        }
+      },
+      "response": {
+        "maxBytes": 4096,
+        "emptyOk": true,
+        "fields": [
+          {
+            "name": "error",
+            "value": {
+              "exists": "error"
+            }
+          }
+        ]
+      },
+      "safety": {
+        "effect": "destructive",
+        "requiredCapabilities": [
+          "bounded-output",
+          "egress-pinned"
+        ],
+        "idempotency": "none",
+        "scopes": [
+          "https://graph.microsoft.com/ChannelMessage.ReadWrite"
+        ],
+        "maxItems": 1,
+        "minIntervalMs": 1000,
+        "timeoutMs": 10000
+      },
+      "fixtures": [
+        {
+          "name": "deletes one channel message, which can be undone",
+          "kind": "safe",
+          "arguments": {
+            "team_id": "a1b2c3d4-0000-4000-8000-00000000c0de",
+            "channel_id": "19:4a95f7d8db4c4e7fae857bcebe0623e6@thread.tacv2",
+            "message_id": "1616965872395"
+          },
+          "expect": {
+            "facts": {
+              "class": "delete",
+              "reversibility": {
+                "state": "known",
+                "value": "recoverable"
+              }
+            },
+            "request": {
+              "body": "{}",
+              "headers": [
+                [
+                  "accept",
+                  "application/json"
+                ],
+                [
+                  "content-type",
+                  "application/json; charset=utf-8"
+                ]
+              ],
+              "maxPages": 1,
+              "method": "POST",
+              "url": "https://graph.microsoft.com/v1.0/teams/a1b2c3d4-0000-4000-8000-00000000c0de/channels/19%3A4a95f7d8db4c4e7fae857bcebe0623e6%40thread.tacv2/messages/1616965872395/softDelete"
+            },
+            "decisions": {
+              "balanced": "allow",
+              "relaxed": "allow",
+              "strict": "review"
+            }
+          }
+        },
+        {
+          "name": "refuses a missing message id",
+          "kind": "risky",
+          "arguments": {
+            "team_id": "a1b2c3d4-0000-4000-8000-00000000c0de",
+            "channel_id": "19:4a95f7d8db4c4e7fae857bcebe0623e6@thread.tacv2"
+          },
+          "expect": {
+            "error": "missing_argument"
+          }
+        }
+      ]
+    },
+    {
+      "actionId": "teams.chats.list",
+      "title": "List my chats",
+      "executor": {
+        "kind": "declarative-http",
+        "request": {
+          "method": "GET",
+          "host": "graph.microsoft.com",
+          "path": "/v1.0/me/chats",
+          "query": [
+            {
+              "name": "$top",
+              "value": {
+                "arg": {
+                  "name": "top",
+                  "default": 20
+                }
+              }
+            }
+          ],
+          "headers": [
+            {
+              "name": "accept",
+              "value": "application/json"
+            }
+          ],
+          "maxPages": 1
+        }
+      },
+      "arguments": {
+        "top": {
+          "type": "integer",
+          "required": false,
+          "minimum": 1,
+          "maximum": 50
+        }
+      },
+      "facts": {
+        "class": "read",
+        "object": {
+          "const": "thread"
+        },
+        "scope": {
+          "const": "query_selected"
+        },
+        "recordCount": {
+          "argument": {
+            "name": "top",
+            "max": 50,
+            "default": 20
+          }
+        }
+      },
+      "response": {
+        "maxBytes": 262144,
+        "fields": [
+          {
+            "name": "chats",
+            "value": {
+              "list": {
+                "from": "value",
+                "maxItems": 50,
+                "fields": [
+                  {
+                    "name": "id",
+                    "value": {
+                      "from": "id"
+                    }
+                  },
+                  {
+                    "name": "topic",
+                    "value": {
+                      "from": "topic"
+                    },
+                    "untrusted": true
+                  },
+                  {
+                    "name": "type",
+                    "value": {
+                      "from": "chatType"
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        ]
+      },
+      "safety": {
+        "effect": "read",
+        "requiredCapabilities": [
+          "bounded-output",
+          "egress-pinned"
+        ],
+        "idempotency": "safe-read",
+        "scopes": [
+          "https://graph.microsoft.com/Chat.ReadBasic"
+        ],
+        "maxItems": 50,
+        "minIntervalMs": 500,
+        "timeoutMs": 10000
+      },
+      "fixtures": [
+        {
+          "name": "lists recent chats",
+          "kind": "safe",
+          "arguments": {
+            "top": 10
+          },
+          "expect": {
+            "facts": {
+              "class": "read"
+            },
+            "request": {
+              "body": null,
+              "headers": [
+                [
+                  "accept",
+                  "application/json"
+                ]
+              ],
+              "maxPages": 1,
+              "method": "GET",
+              "url": "https://graph.microsoft.com/v1.0/me/chats?$top=10"
+            },
+            "decisions": {
+              "balanced": "allow",
+              "relaxed": "allow",
+              "strict": "allow"
+            }
+          }
+        },
+        {
+          "name": "refuses a negative page size",
+          "kind": "risky",
+          "arguments": {
+            "top": -1
+          },
+          "expect": {
+            "error": "invalid_argument"
+          }
+        }
+      ]
+    },
+    {
+      "actionId": "teams.chat_messages.send",
+      "title": "Send a chat message",
+      "executor": {
+        "kind": "declarative-http",
+        "request": {
+          "method": "POST",
+          "host": "graph.microsoft.com",
+          "path": "/v1.0/chats/{chat_id}/messages",
+          "headers": [
+            {
+              "name": "accept",
+              "value": "application/json"
+            }
+          ],
+          "body": {
+            "object": [
+              {
+                "name": "body",
+                "value": {
+                  "object": [
+                    {
+                      "name": "contentType",
+                      "value": {
+                        "const": "text"
+                      }
+                    },
+                    {
+                      "name": "content",
+                      "value": {
+                        "arg": "text"
+                      }
+                    }
+                  ]
+                }
+              }
+            ]
+          },
+          "maxPages": 1
+        }
+      },
+      "arguments": {
+        "chat_id": {
+          "type": "string",
+          "required": true,
+          "maxLength": 220,
+          "pattern": "^19:[A-Za-z0-9_-]{1,200}@thread\\.(?:tacv2|skype|v2)$"
+        },
+        "text": {
+          "type": "string",
+          "required": true,
+          "maxLength": 28000,
+          "pattern": "^[^\\x00-\\x08\\x0b\\x0c\\x0e-\\x1f\\x7f]+$",
+          "forbidden": "(?i)<at\\b"
+        }
+      },
+      "facts": {
+        "class": "send",
+        "object": {
+          "const": "message"
+        },
+        "scope": {
+          "const": "single"
+        },
+        "reversibility": {
+          "const": "reversible"
+        },
+        "recordCount": {
+          "const": 1
+        }
+      },
+      "response": {
+        "maxBytes": 65536,
+        "fields": [
+          {
+            "name": "id",
+            "value": {
+              "from": "id"
+            }
+          },
+          {
+            "name": "created",
+            "value": {
+              "from": "createdDateTime"
+            }
+          },
+          {
+            "name": "web_url",
+            "value": {
+              "from": "webUrl"
+            }
+          }
+        ]
+      },
+      "safety": {
+        "effect": "write",
+        "requiredCapabilities": [
+          "bounded-output",
+          "egress-pinned"
+        ],
+        "idempotency": "none",
+        "scopes": [
+          "https://graph.microsoft.com/ChatMessage.Send"
+        ],
+        "maxItems": 1,
+        "minIntervalMs": 1000,
+        "timeoutMs": 10000
+      },
+      "fixtures": [
+        {
+          "name": "sends a chat message",
+          "kind": "safe",
+          "arguments": {
+            "chat_id": "19:8b081ef6d4a64ea8a29b9a2a1e1b55aa@thread.v2",
+            "text": "On my way."
+          },
+          "expect": {
+            "facts": {
+              "class": "send"
+            },
+            "request": {
+              "body": "{\"body\":{\"contentType\":\"text\",\"content\":\"On my way.\"}}",
+              "headers": [
+                [
+                  "accept",
+                  "application/json"
+                ],
+                [
+                  "content-type",
+                  "application/json; charset=utf-8"
+                ]
+              ],
+              "maxPages": 1,
+              "method": "POST",
+              "url": "https://graph.microsoft.com/v1.0/chats/19%3A8b081ef6d4a64ea8a29b9a2a1e1b55aa%40thread.v2/messages"
+            },
+            "decisions": {
+              "balanced": "review",
+              "relaxed": "allow",
+              "strict": "review"
+            }
+          }
+        },
+        {
+          "name": "refuses a chat id that is not a thread",
+          "kind": "risky",
+          "arguments": {
+            "chat_id": "../../users",
+            "text": "x"
+          },
+          "expect": {
+            "error": "invalid_argument"
+          }
+        }
+      ]
+    },
+    {
+      "actionId": "teams.channels.delete",
+      "title": "Delete a channel",
+      "executor": {
+        "kind": "declarative-http",
+        "request": {
+          "method": "DELETE",
+          "host": "graph.microsoft.com",
+          "path": "/v1.0/teams/{team_id}/channels/{channel_id}",
+          "headers": [
+            {
+              "name": "accept",
+              "value": "application/json"
+            }
+          ],
+          "maxPages": 1
+        }
+      },
+      "arguments": {
+        "team_id": {
+          "type": "string",
+          "required": true,
+          "maxLength": 36,
+          "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+        },
+        "channel_id": {
+          "type": "string",
+          "required": true,
+          "maxLength": 220,
+          "pattern": "^19:[A-Za-z0-9_-]{1,200}@thread\\.(?:tacv2|skype|v2)$"
+        }
+      },
+      "facts": {
+        "class": "delete",
+        "object": {
+          "const": "channel"
+        },
+        "scope": {
+          "const": "single"
+        },
+        "reversibility": {
+          "const": "recoverable"
+        },
+        "recordCount": {
+          "const": 1
+        }
+      },
+      "response": {
+        "maxBytes": 4096,
+        "emptyOk": true,
+        "fields": [
+          {
+            "name": "error",
+            "value": {
+              "exists": "error"
+            }
+          }
+        ]
+      },
+      "safety": {
+        "effect": "destructive",
+        "requiredCapabilities": [
+          "bounded-output",
+          "egress-pinned"
+        ],
+        "idempotency": "none",
+        "scopes": [
+          "https://graph.microsoft.com/Channel.Delete.All"
+        ],
+        "maxItems": 1,
+        "minIntervalMs": 2000,
+        "timeoutMs": 10000
+      },
+      "fixtures": [
+        {
+          "name": "deletes one channel, restorable for 30 days",
+          "kind": "safe",
+          "arguments": {
+            "team_id": "a1b2c3d4-0000-4000-8000-00000000c0de",
+            "channel_id": "19:4a95f7d8db4c4e7fae857bcebe0623e6@thread.tacv2"
+          },
+          "expect": {
+            "facts": {
+              "class": "delete",
+              "object": {
+                "state": "known",
+                "value": "channel"
+              }
+            },
+            "request": {
+              "body": null,
+              "headers": [
+                [
+                  "accept",
+                  "application/json"
+                ]
+              ],
+              "maxPages": 1,
+              "method": "DELETE",
+              "url": "https://graph.microsoft.com/v1.0/teams/a1b2c3d4-0000-4000-8000-00000000c0de/channels/19%3A4a95f7d8db4c4e7fae857bcebe0623e6%40thread.tacv2"
+            },
+            "decisions": {
+              "balanced": "allow",
+              "relaxed": "allow",
+              "strict": "review"
+            }
+          }
+        },
+        {
+          "name": "refuses the general channel by name",
+          "kind": "risky",
+          "arguments": {
+            "team_id": "a1b2c3d4-0000-4000-8000-00000000c0de",
+            "channel_id": "General"
+          },
+          "expect": {
+            "error": "invalid_argument"
+          }
+        }
+      ]
+    }
+  ]
+}
