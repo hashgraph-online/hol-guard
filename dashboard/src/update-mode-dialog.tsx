@@ -1,4 +1,4 @@
-import type { ChangeEvent } from "react";
+import type { ChangeEvent, FormEvent } from "react";
 import { HiMiniXMark } from "react-icons/hi2";
 
 import { ApprovalProofFieldInputs, isApprovalProofSubmitDisabled } from "./approval-proof-inline";
@@ -44,8 +44,13 @@ export function UpdateModeDialog({
     draft === mode ||
     (approvalGate?.enabled === true &&
       isApprovalProofSubmitDisabled(approvalGate, { approvalPassword, approvalTotpCode }, false));
+  // A form, so Enter in the select or a proof field saves like the button does.
+  const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!confirmDisabled) onConfirm();
+  };
   return (
-    <div className="rounded-lg bg-white shadow-xl">
+    <form onSubmit={handleSubmit} className="rounded-lg bg-white shadow-xl">
       <div className="flex items-start justify-between gap-4 border-b border-slate-100 px-5 py-4">
         <div>
           <h2 className="text-base font-semibold text-brand-dark">Core update preferences</h2>
@@ -74,8 +79,8 @@ export function UpdateModeDialog({
       </div>
       <div className="flex flex-col-reverse gap-2 border-t border-slate-100 px-5 py-4 sm:flex-row sm:justify-end">
         <button type="button" onClick={onClose} disabled={pending} className="min-h-10 rounded-lg border border-slate-200 px-4 py-2 text-sm font-semibold text-brand-dark transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50">Cancel</button>
-        <button type="button" onClick={onConfirm} disabled={confirmDisabled} className="min-h-10 rounded-lg bg-brand-blue px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-brand-blue/90 disabled:cursor-not-allowed disabled:opacity-60">{pending ? "Saving…" : "Save preference"}</button>
+        <button type="submit" disabled={confirmDisabled} className="min-h-10 rounded-lg bg-brand-blue px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-brand-blue/90 disabled:cursor-not-allowed disabled:opacity-60">{pending ? "Saving…" : "Save preference"}</button>
       </div>
-    </div>
+    </form>
   );
 }

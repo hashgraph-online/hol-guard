@@ -21631,7 +21631,11 @@ function UpdateModeDialog({
   onApprovalTotpCodeChange
 }) {
   const confirmDisabled = pending || draft === mode || approvalGate?.enabled === true && isApprovalProofSubmitDisabled(approvalGate, { approvalPassword, approvalTotpCode }, false);
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-lg bg-white shadow-xl", children: [
+  const handleSubmit = (event) => {
+    event.preventDefault();
+    if (!confirmDisabled) onConfirm();
+  };
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("form", { onSubmit: handleSubmit, className: "rounded-lg bg-white shadow-xl", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start justify-between gap-4 border-b border-slate-100 px-5 py-4", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { className: "text-base font-semibold text-brand-dark", children: "Core update preferences" }),
@@ -21656,7 +21660,7 @@ function UpdateModeDialog({
     ] }),
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col-reverse gap-2 border-t border-slate-100 px-5 py-4 sm:flex-row sm:justify-end", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: onClose, disabled: pending, className: "min-h-10 rounded-lg border border-slate-200 px-4 py-2 text-sm font-semibold text-brand-dark transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50", children: "Cancel" }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: onConfirm, disabled: confirmDisabled, className: "min-h-10 rounded-lg bg-brand-blue px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-brand-blue/90 disabled:cursor-not-allowed disabled:opacity-60", children: pending ? "Saving…" : "Save preference" })
+      /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "submit", disabled: confirmDisabled, className: "min-h-10 rounded-lg bg-brand-blue px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-brand-blue/90 disabled:cursor-not-allowed disabled:opacity-60", children: pending ? "Saving…" : "Save preference" })
     ] })
   ] });
 }
