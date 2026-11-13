@@ -163,3 +163,46 @@ fn opening_arguments_widens_a_pack() {
         .any(|c| c.code == "open_arguments_changed"));
     assert!(!diff(&open, &closed).unwrap().widening);
 }
+
+#[test]
+fn a_json_argument_must_be_an_object_or_array() {
+    let pack = parsed(mcp_pack(record_arguments(), None));
+    for body in [json!(false), json!("x"), json!(null), json!(7)] {
+        let call = json!({"sobject-name": "Account", "id": "001", "body": body});
+        assert_eq!(check(&pack, call), Err("invalid_argument"), "{body}");
+    }
+}
+
+#[test]
+fn open_argument_names_count_toward_the_size_bound() {
+    let open = parsed(mcp_pack(record_arguments(), Some(json!({"maxBytes": 64}))));
+    let mut call = json!({"sobject-name": "Account", "id": "001", "body": {}});
+    for n in 0..4 {
+        call[format!("{}{n}", "n".repeat(20))] = json!("");
+    }
+    assert_eq!(check(&open, call), Err("open_arguments_too_large"));
+}
+
+#[test]
+fn removing_an_argument_under_open_arguments_widens_a_pack() {
+    let mut fewer = record_arguments();
+    fewer.as_object_mut().unwrap().remove("body");
+    let open = Some(json!({"maxBytes": 64}));
+    let before = parsed(mcp_pack(record_arguments(), open.clone()));
+    let after = parsed(mcp_pack(fewer.clone(), open));
+    let change = diff(&before, &after).unwrap();
+    assert!(change.widening);
+    assert!(change
+        .changes
+        .iter()
+        .any(|c| c.code == "argument_removed" && c.widening));
+    let mut closed_value = mcp_pack(fewer, None);
+    closed_value["actions"][0]["fixtures"][0]["arguments"] =
+        json!({"sobject-name": "Account", "id": "001"});
+    let closed_before = parsed(mcp_pack(record_arguments(), None));
+    assert!(
+        !diff(&closed_before, &parsed(closed_value))
+            .unwrap()
+            .widening
+    );
+}

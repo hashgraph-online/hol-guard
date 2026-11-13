@@ -136,7 +136,12 @@ fn compare_action(changes: &mut Changes, old: &PackAction, new: &PackAction) {
     changes.when(old.title != new.title, "title_changed", None, false);
     changes.when(old.link != new.link, "link_changed", None, true);
     changes.when(old.executor != new.executor, "executor_changed", None, true);
-    compare_arguments(changes, &old.arguments, &new.arguments);
+    compare_arguments(
+        changes,
+        &old.arguments,
+        &new.arguments,
+        new.open_arguments.is_some(),
+    );
     let open_looser = match (&old.open_arguments, &new.open_arguments) {
         (None, Some(_)) => true,
         (Some(before), Some(after)) => after.max_bytes > before.max_bytes,
@@ -163,6 +168,7 @@ fn compare_arguments(
     changes: &mut Changes,
     old: &BTreeMap<String, ArgumentSpec>,
     new: &BTreeMap<String, ArgumentSpec>,
+    open: bool,
 ) {
     for (name, spec) in new {
         match old.get(name) {
@@ -183,7 +189,9 @@ fn compare_arguments(
         }
     }
     for name in old.keys().filter(|name| !new.contains_key(*name)) {
-        changes.push("argument_removed", Some(name), false);
+        // Under open arguments a removed name is still accepted, now with only
+        // the shared size bound, so the removal widens the action.
+        changes.push("argument_removed", Some(name), open);
     }
 }
 

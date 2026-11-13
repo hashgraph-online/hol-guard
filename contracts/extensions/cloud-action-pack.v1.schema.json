@@ -112,7 +112,7 @@
     },
     "argumentName": {
       "type": "string",
-      "pattern": "^[a-z_][a-z0-9_]{0,63}$"
+      "pattern": "^[A-Za-z_][A-Za-z0-9_-]{0,63}$"
     },
     "pattern": {
       "type": "string",

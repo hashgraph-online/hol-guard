@@ -97,11 +97,16 @@ fn json_spec(schema: &Value, required: bool) -> Option<Value> {
             "maxBytes": DEFAULT_JSON_BYTES,
         })),
         Some("array") => {
+            // A source bound of zero forbids every non-empty list; leave the
+            // argument out rather than widen it to one item.
             let max = schema
                 .get("maxItems")
                 .and_then(Value::as_u64)
                 .unwrap_or(DEFAULT_JSON_ITEMS)
-                .clamp(1, MAX_JSON_ITEMS);
+                .min(MAX_JSON_ITEMS);
+            if max == 0 {
+                return None;
+            }
             Some(json!({
                 "type": "json",
                 "required": required,

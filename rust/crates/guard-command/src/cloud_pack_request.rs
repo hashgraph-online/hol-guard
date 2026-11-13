@@ -55,7 +55,10 @@ pub fn check_arguments<'a>(
         if !crate::cloud_pack_validate::mcp_name(name) {
             return Err(error("unknown_argument", Some(name)));
         }
-        open_bytes = open_bytes.saturating_add(json_len(value));
+        // Count each entry as it is encoded, name and separators included,
+        // so many empty values under long names still add up.
+        let entry = json_len(&Value::String(name.clone())) + json_len(value) + 2;
+        open_bytes = open_bytes.saturating_add(entry);
         if open_bytes > open.max_bytes as usize {
             return Err(error("open_arguments_too_large", Some(name)));
         }
@@ -87,7 +90,8 @@ fn check_value(spec: &ArgumentSpec, value: &Value) -> Result<(), &'static str> {
             max_items,
             ..
         } => {
-            let fits = json_len(value) <= *max_bytes as usize;
+            let shaped = value.is_object() || value.is_array();
+            let fits = shaped && json_len(value) <= *max_bytes as usize;
             let counted = max_items.is_none_or(|max| {
                 value
                     .as_array()
