@@ -1,6 +1,7 @@
 //! Response projection: keep only the fields a pack allowlists.
 //!
 //! The provider body is bounded by the action's `maxBytes` before parsing.
+//! An action marked `emptyOk` accepts an empty success body as `{}`.
 //! Every output field is copied from a declared path; anything else is
 //! dropped. Scalar fields keep scalars only, so a provider cannot smuggle a
 //! nested object through a field declared as text. Each field marked
@@ -31,8 +32,11 @@ pub fn project(action: &PackAction, body: &[u8]) -> Result<Projection, &'static 
     if body.len() as u64 > action.response.max_bytes {
         return Err("response_too_large");
     }
-    let parsed =
-        crate::cloud_action_canonical::parse_strict(body).map_err(|_| "response_json_invalid")?;
+    let parsed = if action.response.empty_ok && body.iter().all(u8::is_ascii_whitespace) {
+        Value::Object(Map::new())
+    } else {
+        crate::cloud_action_canonical::parse_strict(body).map_err(|_| "response_json_invalid")?
+    };
     let mut labels = Vec::new();
     let data = project_fields(&action.response.fields, &parsed, "", &mut labels)?;
     Ok(Projection {

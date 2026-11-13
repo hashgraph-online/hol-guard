@@ -130,6 +130,22 @@ fn missing_home_directory_loads_defaults() {
     let config = load(&request).unwrap();
     assert_eq!(config["protection_posture"], json!("protected"));
     assert_eq!(config["mode"], json!("prompt"));
+    assert_eq!(config["update_mode"], json!("automatic"));
+    let _ = fs::remove_dir_all(root);
+}
+
+#[test]
+fn update_mode_is_coerced_from_home_config() {
+    let root = scratch("update-mode");
+    fs::write(root.join("home/config.toml"), "update_mode = 'off'\n").unwrap();
+    let request = LoadRequest {
+        schema: SCHEMA.to_owned(),
+        guard_home: root.join("home"),
+        workspace: None,
+        require_canonical_workspace: false,
+        managed: None,
+    };
+    assert_eq!(load(&request).unwrap()["update_mode"], json!("off"));
     let _ = fs::remove_dir_all(root);
 }
 

@@ -74,6 +74,7 @@ pub fn contained_matcher_stage(program: &str, arguments: &[String]) -> bool {
     contained_wrapper::output_filters::matcher_stage(program, arguments)
 }
 pub(crate) mod curl_reads;
+mod cursor_session_outputs;
 pub use curl_reads::bound_curl_read_destinations;
 
 /// Whether this host runs Guard's contained execution sink for a read-only
@@ -754,8 +755,7 @@ fn sensitive_location_text(value: &str) -> bool {
         ".env",
     ];
     needles.iter().any(|needle| lowered.contains(needle))
-        || (crate::environment_secret_dump::printenv_may_print_secret(&lowered)
-            && !crate::environment_name_filters::printenv_renders_only_names(value))
+        || crate::environment_secret_dump::printenv_may_print_secret(&lowered)
         || lowered.contains("os.environ")
         || lowered.contains("process.env")
 }
@@ -1305,7 +1305,7 @@ fn evaluate_single_command(
             model,
             "allow",
             "native_exact_safe_command",
-            "The Rust command authority proved this pipeline prints variable names with their values removed.",
+            "The Rust command authority proved this awk program prints environment variable names and never reads their values.",
         ));
     }
     if worktree_add::exact_safe_command(&model, context, deadline, execution_environment) {

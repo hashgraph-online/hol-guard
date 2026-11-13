@@ -151,6 +151,11 @@ def test_only_the_marked_cases_may_pass_on_containment() -> None:
         "neg-env-chdir-npm-run-build",
         "neg-env-git-dir-then-list",
         "neg-env-ld-preload-then-list",
+        # An awk program that prints environment values: the workspace sandbox
+        # starts from a restricted environment rather than the agent's, so the
+        # values it prints are the sandbox's own and no inherited secret.
+        "neg-env-names-awk-environ-value-only",
+        "neg-env-names-awk-environ-values",
         "neg-env-pager-names-program",
         # A pager option that carries its own shell escape: a contained run gives the
         # escape nothing outside the workspace to reach.
@@ -214,6 +219,9 @@ def test_only_the_marked_cases_may_pass_on_containment() -> None:
         "neg-goflags-screened-then-toolexec-prefix-go-test",
         "neg-goflags-toolexec-prefix-then-screened-argument-go-test",
         "neg-goflags-mod-mod-prefix-go-test",
+        # A glob over a checkout link that leaves it: the contained run has no home
+        # access, so the link reads nothing.
+        "neg-linked-sources-grep-glob-over-escaping-link",
         "neg-rustflags-linker-prefix-cargo-test",
         "neg-pytest-addopts-plugin-prefix-venv-pytest",
         # A tool setting whose value is a URL, a path or a file to load rather

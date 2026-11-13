@@ -309,6 +309,18 @@ fn write_template(
             out.push(']');
             Ok(())
         }
+        Template::Keyed { key, value } => {
+            let name = args
+                .get(key)
+                .filter(|name| name.is_string())
+                .ok_or_else(|| refused(Some(key)))?;
+            out.push('{');
+            write_json(name, out)?;
+            out.push(':');
+            write_template(value, args, element, out)?;
+            out.push('}');
+            Ok(())
+        }
         Template::Each { arg, item } => {
             out.push('[');
             let list = args

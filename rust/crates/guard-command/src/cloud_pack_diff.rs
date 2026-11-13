@@ -238,6 +238,18 @@ fn compare_response(changes: &mut Changes, old: &ResponseSpec, new: &ResponseSpe
         None,
         false,
     );
+    changes.when(
+        new.empty_ok && !old.empty_ok,
+        "response_empty_accepted",
+        None,
+        true,
+    );
+    changes.when(
+        old.empty_ok && !new.empty_ok,
+        "response_empty_refused",
+        None,
+        false,
+    );
     compare_fields(changes, "", &old.fields, &new.fields);
 }
 

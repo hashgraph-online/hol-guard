@@ -192,6 +192,11 @@ pub(crate) fn coerce_editable(key: &str, value: &PyVal) -> Result<Tv, String> {
             &["stable", "alpha"],
             "Update channel must be stable or alpha.",
         ),
+        "update_mode" => one_of(
+            value,
+            &["automatic", "ask", "off"],
+            "Update mode must be automatic, ask, or off.",
+        ),
         "receipt_redaction_level" => str_in(value, &["full", "partial", "none"])
             .map(Tv::Str)
             .ok_or_else(|| format!("Invalid receipt redaction level: {}", py_json_repr(value))),

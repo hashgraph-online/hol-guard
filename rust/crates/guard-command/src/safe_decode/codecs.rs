@@ -141,7 +141,7 @@ pub(super) fn try_base32(data: &str) -> Option<String> {
         }
         decoded.extend_from_slice(&acc.to_be_bytes()[3..]);
     }
-    if bytes.len() % 8 != 0 || !matches!(padchars, 0 | 1 | 3 | 4 | 6) {
+    if !bytes.len().is_multiple_of(8) || !matches!(padchars, 0 | 1 | 3 | 4 | 6) {
         return None;
     }
     if padchars != 0 && !decoded.is_empty() {
@@ -158,7 +158,7 @@ pub(super) fn try_base32(data: &str) -> Option<String> {
 pub(super) fn try_hex(data: &str) -> Option<String> {
     let cleaned = data.strip_prefix("0x").unwrap_or(data);
     let mut digits: Vec<u8> = Vec::with_capacity(cleaned.len() + 1);
-    if cleaned.len() % 2 != 0 {
+    if !cleaned.len().is_multiple_of(2) {
         digits.push(b'0');
     }
     digits.extend_from_slice(cleaned.as_bytes());
