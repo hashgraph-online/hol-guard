@@ -44,6 +44,7 @@ NATIVE_HARNESSES: tuple[tuple[str, tuple[str, ...], str], ...] = (
     ("omp", ("omp", "oh-my-pi"), "omp"),
     ("opencode", (), ""),
     ("cline", ("cline-cli", "cline-vscode"), "cline"),
+    ("copilot", (), ""),
 )
 
 #: Ops that render a Pi-family extension, so they carry this process's facts.

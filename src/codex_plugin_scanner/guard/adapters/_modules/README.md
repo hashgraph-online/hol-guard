@@ -4,6 +4,6 @@ Each family is an ordinary Python package. Import a helper by its source layout,
 
 Public adapter classes and helpers bound by physical-path contracts remain in the parent directory. In particular, `codex_daemon_hook_bridge.py` is authenticated by Codex manifests at its original path. Do not duplicate implementations or add compatibility search paths.
 
-Families: `claude`, `codex`, `copilot`, `cursor`, `zcode`.
+Families: `claude`, `codex`, `cursor`, `zcode`.
 
 See [adapter contributions](../../../../../docs/guard/adapter-contributions.md) before relocating more files.

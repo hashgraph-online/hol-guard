@@ -37,7 +37,6 @@
     ["AaBsqG7hkSbnfNaazftD", "variadic", "guard/runtime/detectors.py", "McpToolSchemaRiskDetector.detect"],
     ["AaBsqHP0kSbnfNaazfvq", "denylist", "guard/bridge/__init__.py", "_validate_webhook_url"],
     ["AaBsqHEOkSbnfNaazfuB", "variadic", "guard/cli/cursor_actions.py", "cursor_protected_surfaces_from_store"],
-    ["AaBsqG9YkSbnfNaazftR", "route", "guard/runtime/runner.py", "_safe_private_ip"],
-    ["AaBsqHGBkSbnfNaazfuP", "variadic", "guard/adapters/copilot.py", "CopilotHarnessAdapter._workspace_mcp_paths"]
+    ["AaBsqG9YkSbnfNaazftR", "route", "guard/runtime/runner.py", "_safe_private_ip"]
   ]
 }
