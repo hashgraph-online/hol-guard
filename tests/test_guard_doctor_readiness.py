@@ -223,7 +223,7 @@ def test_global_doctor_validates_registration_without_executable_probes(tmp_path
         pytest.fail("Global doctor must not run harness CLI probes")
 
     monkeypatch.setattr("codex_plugin_scanner.guard.adapters.base.subprocess.run", unexpected_subprocess)
-    for adapter in ("hermes", "openclaw", "opencode"):
+    for adapter in ("hermes", "opencode"):
         monkeypatch.setattr(f"codex_plugin_scanner.guard.adapters.{adapter}._command_available", lambda *_args: True)
     home = tmp_path / "home"
     codex_home = home / ".codex"
