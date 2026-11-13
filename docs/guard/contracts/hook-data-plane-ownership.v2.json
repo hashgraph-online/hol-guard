@@ -296,12 +296,10 @@
     "src/codex_plugin_scanner/guard/adapters/codex.py",
     "src/codex_plugin_scanner/guard/adapters/contracts.py",
     "src/codex_plugin_scanner/guard/adapters/copilot.py",
-    "src/codex_plugin_scanner/guard/adapters/grok.py",
     "src/codex_plugin_scanner/guard/adapters/hermes.py",
     "src/codex_plugin_scanner/guard/adapters/hook_payloads.py",
     "src/codex_plugin_scanner/guard/adapters/opencode_pretool.py",
-    "src/codex_plugin_scanner/guard/adapters/pi_extension_source.py",
-    "src/codex_plugin_scanner/guard/adapters/zcode.py"
+    "src/codex_plugin_scanner/guard/adapters/pi_extension_source.py"
    ],
    "current": "transport-only harness envelope forwarding; Rust owns event, tool, action, and payload normalization",
    "target": "Rust raw-envelope normalization"

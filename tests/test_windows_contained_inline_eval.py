@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.guard import native_restricted_pytest as transport
-from codex_plugin_scanner.guard.adapters.zcode_contained_tests import contained_sink_command_prefix
+from codex_plugin_scanner.guard.contained_sink_command import contained_sink_command_prefix
 from codex_plugin_scanner.guard.runtime import restricted_inline_eval
 from codex_plugin_scanner.guard.runtime.restricted_pytest_model import RestrictedPytestError
 from tests.containment_resident import native_containment_sink

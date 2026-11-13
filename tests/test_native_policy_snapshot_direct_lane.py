@@ -10,8 +10,8 @@ from types import SimpleNamespace
 
 import pytest
 
+from codex_plugin_scanner.guard import contained_sink_command as sink_command
 from codex_plugin_scanner.guard import native_policy_snapshot_direct_lane as direct_lane
-from codex_plugin_scanner.guard.adapters import zcode_contained_tests
 from codex_plugin_scanner.guard.native_policy_snapshot_contract import _policy_snapshot_push_bytes_v3
 from codex_plugin_scanner.guard.native_policy_snapshot_direct_lane import (
     DIRECT_LANE_ACK_LEASE_MS,
@@ -477,7 +477,7 @@ def test_the_bound_sink_command_starts_the_command_the_daemon_routes(
     output = routed["hookSpecificOutput"]
     assert isinstance(output, dict)
     argv = shlex.split(output["updatedInput"]["command"])
-    prefix = zcode_contained_tests.contained_sink_command_prefix()
+    prefix = sink_command.contained_sink_command_prefix()
     assert argv[: len(prefix)] == list(prefix)
     assert argv[len(prefix) : len(prefix) + 2] == ["guard", "execute-contained-test"]
     request = Path(argv[argv.index("--request-file") + 1])
