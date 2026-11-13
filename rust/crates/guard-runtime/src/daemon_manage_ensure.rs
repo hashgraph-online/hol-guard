@@ -685,10 +685,7 @@ fn retire_process(caller: &Caller, stale: &Map<String, Value>, deadline: Deadlin
     let marker = text(stale, "process_start_marker").filter(|marker| !marker.is_empty());
     let owner = text(stale, "user").filter(|owner| !owner.is_empty());
     match marker {
-        None => {
-            host::pid_is_proven_dead(pid)
-                || host::command_identity(caller, pid, Some(&caller.guard_home)) == Some(false)
-        }
+        None => host::pid_is_proven_dead(pid),
         Some(marker) => retire::retire_generation(caller, pid, marker, owner, deadline),
     }
 }

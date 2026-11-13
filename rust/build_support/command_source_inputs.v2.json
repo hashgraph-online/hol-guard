@@ -302,6 +302,7 @@
       "src/pretool/agent_metadata.rs",
       "src/pretool/apple_developer_tools.rs",
       "src/pretool/apply_patch_writes.rs",
+      "src/pretool/awk_input_list.rs",
       "src/pretool/awk_reads.rs",
       "src/pretool/base64_reads.rs",
       "src/pretool/brace_group.rs",
