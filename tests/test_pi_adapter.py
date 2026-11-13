@@ -394,7 +394,7 @@ class TestPiInstall:
             harness="omp",
         )
         tool_call = source.split('  pi.on("tool_call", async (event, ctx) => {', 1)[1].split(
-            '\n  });\n}', 1
+            '  pi.on("message_end"', 1
         )[0]
         assert "guardWatchPostureActive()" not in tool_call
         assert "Running without containment (Watch)." not in tool_call
