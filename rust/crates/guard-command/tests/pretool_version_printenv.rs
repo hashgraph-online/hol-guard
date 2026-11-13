@@ -86,6 +86,8 @@ fn a_names_only_environment_listing_proceeds_under_the_packaged_rules() {
         for command in [
             "printenv | grep -oE 'TOKEN'",
             "printenv | grep -oE '^ALPHA|[A-Za-z0-9_]+'",
+            "printenv | grep -oE '^M[A-Za-z0-9]*'",
+            "printenv | grep -oiE '^ALPHAHOST[A-Z_]*'",
             "printenv | grep -oE '^ALPHAHOST[A-Z_]*' | sort -o /tmp/names",
             "env | grep -oE '^(PATH|HOME)[A-Z_]*'",
         ] {

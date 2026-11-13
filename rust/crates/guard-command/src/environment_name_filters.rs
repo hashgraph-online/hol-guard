@@ -16,11 +16,17 @@
 //!
 //! `grep -o` is different. It prints a match or nothing at all, so what it
 //! renders is bounded by the pattern rather than by the line. The pattern is
-//! accepted only when it is anchored at the start of the line, when nothing
-//! in it can reach the `=` that ends a name, and when every alternative has
-//! to begin with a character the user spelled out. A line of value bytes
-//! then produces a match only where the value itself holds a newline
-//! followed by that exact prefix.
+//! accepted only when it is anchored at the start of the line, when every
+//! alternative has to begin with a character the user spelled out, and when
+//! every character it can match is an upper-case letter, a digit or `_`, the
+//! characters a variable name is written in. Case folding (`-i`) is refused
+//! for the same reason. A match is then the start of a line's leading run of
+//! those characters: on a name line that is the name, and it stops at the
+//! `=`. A line of value bytes matches only where the value itself holds a
+//! newline followed by the spelled prefix, and even then the match stops at
+//! the first lower-case letter, `+`, `/` or `=`, so the base64 body of a key
+//! or certificate, which mixes cases on every line, cannot be read through
+//! it.
 
 use crate::codex_output_py::py_strip;
 use crate::sfrs_patterns::SHELL_COMMAND_SEPARATORS;
@@ -51,10 +57,17 @@ fn unquoted_arguments(arguments: &[String]) -> Option<Vec<String>> {
         .collect()
 }
 
-/// Whether a bracket expression can match the `=` that ends a variable name.
-/// A negated class matches it, and so would a range that spans it, such as
-/// `[0-A]`.
-fn class_excludes_equals(body: &str) -> bool {
+/// Whether `c` is one of the characters a variable name is written in. Lower
+/// case is left out on purpose: a value line of base64 or hex mixes cases,
+/// and a match that may read lower case could follow one to its end.
+fn is_name_char(c: char) -> bool {
+    c.is_ascii_uppercase() || c.is_ascii_digit() || c == '_'
+}
+
+/// Whether a bracket expression matches only characters a variable name is
+/// written in. A negated class matches far more, and so does a range that
+/// leaves the upper-case letters or the digits, such as `[0-A]` or `[A-z]`.
+fn class_stays_in_a_name(body: &str) -> bool {
     let chars: Vec<char> = body.chars().collect();
     if chars.first() == Some(&'^') || chars.is_empty() {
         return false;
@@ -62,12 +75,14 @@ fn class_excludes_equals(body: &str) -> bool {
     let mut index = 0;
     while index < chars.len() {
         let low = chars[index];
-        if !low.is_ascii_alphanumeric() && low != '_' {
+        if !is_name_char(low) {
             return false;
         }
         if index + 2 < chars.len() && chars[index + 1] == '-' {
             let high = chars[index + 2];
-            if !high.is_ascii_alphanumeric() || low > high || (low..=high).contains(&'=') {
+            let same_kind = (low.is_ascii_uppercase() && high.is_ascii_uppercase())
+                || (low.is_ascii_digit() && high.is_ascii_digit());
+            if !same_kind || low > high {
                 return false;
             }
             index += 3;
@@ -155,13 +170,13 @@ impl PatternWalk<'_> {
                 let body: String = self.chars[self.index + 1..self.index + close]
                     .iter()
                     .collect();
-                if !class_excludes_equals(&body) {
+                if !class_stays_in_a_name(&body) {
                     return None;
                 }
                 self.index += close + 1;
                 Some(false)
             }
-            c if c.is_ascii_alphanumeric() || c == '_' => {
+            c if is_name_char(c) => {
                 self.index += 1;
                 Some(true)
             }
@@ -172,8 +187,9 @@ impl PatternWalk<'_> {
 
 /// Whether every match of `pattern` stays inside a variable name and has to
 /// start with a character the pattern spells out. A wildcard, an escape, a
-/// negated class, an unbalanced group or a top-level `|` refuses the pattern,
-/// and so does one whose match could begin anywhere on a line.
+/// negated class, a lower-case character, an unbalanced group or a top-level
+/// `|` refuses the pattern, and so does one whose match could begin anywhere
+/// on a line.
 pub(crate) fn pattern_matches_inside_a_name(pattern: &str) -> bool {
     let Some(rest) = pattern.strip_prefix('^') else {
         return false;
@@ -223,7 +239,7 @@ fn grep_prints_name_matches_only(args: &[&str]) -> bool {
             for letter in cluster.chars() {
                 match letter {
                     'o' => only_matching = true,
-                    'E' | 'i' | 'a' | 'h' | 's' => {}
+                    'E' | 'a' | 'h' | 's' => {}
                     _ => return false,
                 }
             }
