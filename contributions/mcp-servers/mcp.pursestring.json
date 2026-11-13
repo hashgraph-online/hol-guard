@@ -21,7 +21,7 @@
   "launch": {
     "kind": "package-launcher",
     "command": "npx",
-    "package": "github:suseendar1414/pursestring"
+    "package": "github:suseendar1414/pursestring#ed43fbed42bc713cc373ea51a93e25e5886d5649"
   },
   "riskClasses": [
     "external-funds-transfer",
