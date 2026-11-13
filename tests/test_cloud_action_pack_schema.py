@@ -28,12 +28,19 @@ def _post(pack: dict) -> dict:
 
 def test_the_shipped_packs_match_the_schema() -> None:
     assert [path.name for path in PACKS] == [
+        "airtable.json",
         "calendar.json",
+        "docs.json",
         "drive.json",
+        "dropbox.json",
         "github.json",
         "gmail.json",
         "notion.json",
+        "onedrive.json",
+        "outlook.json",
+        "sheets.json",
         "slack.json",
+        "teams.json",
     ]
     validator = _validator()
     for path in PACKS:

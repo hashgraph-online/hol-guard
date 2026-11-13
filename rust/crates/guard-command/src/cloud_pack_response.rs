@@ -49,8 +49,32 @@ fn lookup<'a>(node: &'a Value, path: &str) -> Option<&'a Value> {
     if path.is_empty() {
         return Some(node);
     }
-    path.split('.')
-        .try_fold(node, |current, key| current.as_object()?.get(key))
+    let mut current = node;
+    let mut rest = path;
+    while !rest.is_empty() {
+        // An OData annotation such as `@odata.nextLink` is one key that holds a
+        // dot, so a step that starts with `@` takes the rest of the path.
+        let (key, tail) = match rest.split_once('.') {
+            Some(_) if rest.starts_with('@') => (rest, ""),
+            Some((key, tail)) => (key, tail),
+            None => (rest, ""),
+        };
+        current = match current {
+            Value::Object(map) => map.get(key)?,
+            Value::Array(items) => items.get(array_index(key)?)?,
+            _ => return None,
+        };
+        rest = tail;
+    }
+    Some(current)
+}
+
+/// A path step into an array: a canonical decimal index (`0`, `12`, never `01`).
+fn array_index(key: &str) -> Option<usize> {
+    let canonical = key.len() <= 4
+        && key.bytes().all(|b| b.is_ascii_digit())
+        && (key == "0" || !key.starts_with('0'));
+    canonical.then(|| key.parse().ok()).flatten()
 }
 
 fn escape(key: &str) -> String {

@@ -8,6 +8,7 @@
 //! prefix, so no argument can move the request elsewhere.
 
 use crate::cloud_pack::*;
+use crate::cloud_pack_validate_request::custom_method;
 use serde::Serialize;
 use serde_json::{Map, Value};
 
@@ -155,7 +156,8 @@ fn refused(argument: Option<&str>) -> ArgumentError {
 fn render_path(template: &str, args: &Map<String, Value>) -> Result<String, ArgumentError> {
     let mut out = String::new();
     for segment in template[1..].split('/') {
-        let Some(inner) = segment
+        let (inner, verb) = custom_method(segment).ok_or_else(|| refused(None))?;
+        let Some(inner) = inner
             .strip_prefix('{')
             .and_then(|rest| rest.strip_suffix('}'))
         else {
@@ -183,6 +185,10 @@ fn render_path(template: &str, args: &Map<String, Value>) -> Result<String, Argu
             out.push('/');
             out.push_str(&encode(part, false));
         }
+        if let Some(verb) = verb {
+            out.push(':');
+            out.push_str(verb);
+        }
     }
     Ok(out)
 }
@@ -207,6 +213,22 @@ fn render_query(params: &[QueryParam], args: &Map<String, Value>) -> Result<Stri
             ValueSource::Arg { name, default } => args.get(name).or(default.as_ref()),
         };
         let Some(value) = value else { continue };
+        if let Value::Array(items) = value {
+            for item in items {
+                let Value::String(text) = item else {
+                    return Err(refused(Some(&param.name)));
+                };
+                if text.chars().any(char::is_control) {
+                    return Err(refused(Some(&param.name)));
+                }
+                pairs.push(format!(
+                    "{}={}",
+                    query_name(&param.name),
+                    encode(text, true)
+                ));
+            }
+            continue;
+        }
         let text = match value {
             Value::String(text) if !text.chars().any(char::is_control) => text.clone(),
             Value::Number(number) if number.as_i64().is_some() => number.to_string(),
@@ -215,11 +237,19 @@ fn render_query(params: &[QueryParam], args: &Map<String, Value>) -> Result<Stri
         };
         pairs.push(format!(
             "{}={}",
-            encode(&param.name, true),
+            query_name(&param.name),
             encode(&text, true)
         ));
     }
     Ok(pairs.join("&"))
+}
+
+/// A declared parameter name as sent; an OData `$` prefix stays literal.
+fn query_name(name: &str) -> String {
+    match name.strip_prefix('$') {
+        Some(rest) => format!("${}", encode(rest, true)),
+        None => encode(name, true),
+    }
 }
 
 /// Percent-encode one path segment, or one form value when `form` is set
