@@ -1256,14 +1256,14 @@
         "symbols": [
           "CopilotHarnessAdapter.install",
           "CopilotHarnessAdapter.prepare_install",
-          "CopilotHarnessAdapter._prepare",
+          "CopilotHarnessAdapter._prepared_install",
           "CopilotHarnessAdapter.uninstall",
           "_hook_fields",
           "_server_fields"
         ],
         "entry_points": [],
         "reason": "Copilot adapter install and uninstall; the native harness_adapter kind owns which hook entries are Guard's, the MCP plan, the lifecycle locks, the signed state, backups and the file plan. Python keeps the bounded hook argv, Guard's proxy argv for each server and the shim.",
-        "evidence": "install, prepare_install and uninstall have no caller in any in-scope module; they are invoked by the excluded install, uninstall and repair dispatchers. _prepare, _hook_fields and _server_fields are called only from them. The report validates that no retained symbol or in-scope module references the excluded names."
+        "evidence": "install, prepare_install and uninstall have no caller in any in-scope module; they are invoked by the excluded install, uninstall and repair dispatchers. _prepared_install, _hook_fields and _server_fields are called only from them. The report validates that no retained symbol or in-scope module references the excluded names."
       },
       {
         "id": "adapter-cursor-setup",

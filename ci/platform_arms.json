@@ -763,6 +763,14 @@
    "body": "53abbd254e3b"
   },
   {
+   "verdict": "windows-permissive",
+   "note": "Identifies the Copilot lifecycle lock by its length instead of device and inode, so a lock replaced with one of the same length between the claim and the release reads as the same lock. The lock sits in the account's own Guard home and only serialises Guard's own install and uninstall runs.",
+   "file": "rust/crates/guard-runtime/src/adapters/harness_adapter/copilot_state.rs",
+   "item": "fn identity(metadata: &fs::Metadata) -> (u64, u64)",
+   "cfg": "not(unix)",
+   "body": "93c3bae2eb35"
+  },
+  {
    "verdict": "posix-primitive",
    "note": "Windows has no `O_NOFOLLOW`, so the file is opened by path, as Python's `os.open` did with `getattr(os, \"O_NOFOLLOW\", 0)`. `snapshot` still refuses a link: after the read it takes `symlink_metadata` of the path and `same_file` rejects a symlink there, so a linked config is reported as `target_changed` instead of being followed.",
    "file": "rust/crates/guard-runtime/src/adapters/harness_adapter/files.rs",

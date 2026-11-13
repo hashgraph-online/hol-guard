@@ -119,13 +119,13 @@ class CopilotHarnessAdapter(NativeHarnessAdapter):
         super().__init__(_HARNESS, (), "")
 
     def install(self, context: HarnessContext) -> dict[str, object]:
-        return self._prepare(context, create_key=True).publish(context.guard_home)
+        return self._prepared_install(context, create_key=True).publish(context.guard_home)
 
     def prepare_install(self, context: HarnessContext) -> PreparedHarnessInstall:
         """Prepare a rebind using existing enrolled lifecycle authority; never create a key."""
-        return self._prepare(context, create_key=False)
+        return self._prepared_install(context, create_key=False)
 
-    def _prepare(self, context: HarnessContext, *, create_key: bool) -> PreparedHarnessInstall:
+    def _prepared_install(self, context: HarnessContext, *, create_key: bool) -> PreparedHarnessInstall:
         from ..runtime_transition import RuntimeTransition, TransitionError, TransitionFile
         from ..shims import prepare_guard_shim
 
