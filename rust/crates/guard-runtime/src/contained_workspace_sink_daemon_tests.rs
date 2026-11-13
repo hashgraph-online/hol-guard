@@ -7,10 +7,11 @@ use std::thread::JoinHandle;
 use std::time::Duration;
 
 use serde_json::{json, Map, Value};
+use sha2::{Digest, Sha256};
 
 use super::super::{Arguments, Authority};
 use crate::claude_hook_bridge_fixture::{
-    read_request, write_private, write_response, GuardHome, Request,
+    read_request, spawn_daemon, write_private, write_response, Exchange, GuardHome, Request,
 };
 
 const TOKEN: &str = "sink-token-fixture";
@@ -38,9 +39,31 @@ fn home_with_daemon(label: &str, port: u16) -> GuardHome {
     home
 }
 
+/// A Guard home whose signed state names a daemon that serves the hook
+/// only after the identity challenge, as it does for Codex and Claude Code.
+fn home_with_proving_daemon(
+    label: &str,
+    script: Vec<Exchange>,
+) -> (GuardHome, JoinHandle<Vec<Request>>) {
+    let home = GuardHome::new(label);
+    write_private(&home.home.join("daemon-auth-token"), TOKEN);
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let mut state = home.state(listener.local_addr().unwrap().port());
+    state.insert(
+        "auth_token_id".to_owned(),
+        Value::String(hex::encode(Sha256::digest(TOKEN.as_bytes()))),
+    );
+    home.write_state(&state);
+    (home, spawn_daemon(listener, state, script))
+}
+
 fn arguments(guard: &GuardHome) -> Arguments {
+    harness_arguments(guard, "omp")
+}
+
+fn harness_arguments(guard: &GuardHome, harness: &str) -> Arguments {
     Arguments {
-        harness: "omp".to_owned(),
+        harness: harness.to_owned(),
         guard_home: guard.home.clone(),
         workspace: PathBuf::from("/tmp"),
         request_file: PathBuf::from("/tmp/request.json"),
@@ -113,4 +136,49 @@ fn no_daemon_state_authorizes_nothing() {
     };
 
     assert!(authority.authorize(&payload()).is_none());
+}
+
+#[test]
+fn codex_and_claude_code_prove_the_daemon_before_asking_it() {
+    let receipt = json!({"decision": "deny", "policy_action": "sandbox-required"});
+    for harness in ["codex", "claude-code"] {
+        let script = vec![Exchange::Hook(200, receipt.to_string())];
+        let (guard, daemon) = home_with_proving_daemon(&format!("sink-proof-{harness}"), script);
+        let arguments = harness_arguments(&guard, harness);
+        let authority = Authority {
+            arguments: &arguments,
+            workspace: "/tmp".to_owned(),
+        };
+
+        let answered = authority.authorize(&payload()).unwrap();
+
+        assert_eq!(Value::Object(answered), receipt, "{harness}");
+        let hooks = daemon.join().unwrap();
+        assert_eq!(hooks.len(), 1, "{harness}");
+        assert!(hooks[0]
+            .target
+            .starts_with(&format!("/v1/hooks/{harness}?guard-home=")));
+        assert!(
+            hooks[0].header("X-Guard-Daemon-Proof").is_some(),
+            "{harness}"
+        );
+        let sent: Value = serde_json::from_slice(&hooks[0].body).unwrap();
+        assert_eq!(sent["guard_containment_receipt_only"], Value::Bool(true));
+    }
+}
+
+#[test]
+fn a_daemon_that_cannot_prove_itself_authorizes_nothing() {
+    for harness in ["codex", "claude-code"] {
+        let script = vec![Exchange::RefuseChallenge(401, "{}")];
+        let (guard, daemon) = home_with_proving_daemon(&format!("sink-noproof-{harness}"), script);
+        let arguments = harness_arguments(&guard, harness);
+        let authority = Authority {
+            arguments: &arguments,
+            workspace: "/tmp".to_owned(),
+        };
+
+        assert!(authority.authorize(&payload()).is_none(), "{harness}");
+        assert!(daemon.join().unwrap().is_empty(), "{harness}");
+    }
 }
