@@ -126,12 +126,12 @@ mod tests {
             ("sed -i '' -e 's/a/b/g' README.md", true),
             ("sed -i.bak 's/a/b/g' README.md", true),
             ("sed -n '1,5p' README.md", true),
-            ("find . -type f -exec sed -i '' 's/a/b/g' {} +", true),
-            (r"find . -type f -exec sed -i 's/\._reset(/x/g' {} +", true),
-            ("find . -type f -exec sed -i 's/a/b/g' {} +", true),
+            ("find . -type f -exec sed -i '' 's/a/b/g' {} +", false),
+            (r"find . -type f -exec sed -i 's/\._reset(/x/g' {} +", false),
+            ("find . -type f -exec sed -i 's/a/b/g' {} +", false),
             ("find . -type f -exec sed -i 's/a/b/e' {} +", false),
             ("find . -type f -exec sed -i -f edits.sed {} +", false),
-            (r"find . -type f -exec sed -i 's/a/b/g' {} \;", true),
+            (r"find . -type f -exec sed -i 's/a/b/g' {} \;", false),
         ] {
             let model = crate::parse_command(&crate::CommandModelRequestV1 {
                 command: command.into(),
