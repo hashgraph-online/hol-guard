@@ -68,6 +68,7 @@ class MirroredPolicyIntegritySecretStore(FallbackSecretStore):
     def __init__(self, primary: SecretStore, fallback: SecretStore, *, guard_home: Path | None = None) -> None:
         super().__init__(primary, fallback)
         self._guard_home = guard_home
+        self._fallback_preferred_secret_ids: set[str] = set()
 
     def _read_primary(self, secret_id: str) -> str | None:
         if isinstance(self.primary, SystemKeyringSecretStore):
@@ -127,6 +128,8 @@ class MirroredPolicyIntegritySecretStore(FallbackSecretStore):
         """Read the key and control metadata from the same authenticated origin."""
 
         key_ref, control_ref = refs
+        if secret_id in self._fallback_preferred_secret_ids:
+            return self._read_or_none(self.fallback, secret_id)
         primary_key = self._read_or_none(self.primary, key_ref)
         fallback_key = self._read_or_none(self.fallback, key_ref)
         source = self._policy_source(primary_key, fallback_key)
@@ -164,6 +167,8 @@ class MirroredPolicyIntegritySecretStore(FallbackSecretStore):
         refs = self._policy_refs(secret_id)
         if refs is not None:
             return self._get_policy_value(secret_id, refs)
+        if secret_id in self._fallback_preferred_secret_ids:
+            return self._read_or_none(self.fallback, secret_id)
         primary_value = self._read_or_none(self.primary, secret_id)
         if primary_value is not None:
             with suppress(Exception):
@@ -187,15 +192,18 @@ class MirroredPolicyIntegritySecretStore(FallbackSecretStore):
         primary_error: Exception | None = None
         try:
             self.primary.set_secret(secret_id, value)
+            self._fallback_preferred_secret_ids.discard(secret_id)
         except Exception as error:
             if is_control_update:
                 raise
             primary_error = error
         try:
             self.fallback.set_secret(secret_id, value)
-        except Exception:
             if primary_error is not None:
-                raise primary_error from None
+                self._fallback_preferred_secret_ids.add(secret_id)
+        except Exception as fallback_error:
+            if primary_error is not None:
+                raise primary_error from fallback_error
             _store_logger.debug("Policy-integrity fallback mirror update failed.", exc_info=True)
 
     def delete_secret(self, secret_id: str) -> None:

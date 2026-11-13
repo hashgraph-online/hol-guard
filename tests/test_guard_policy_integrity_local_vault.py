@@ -167,9 +167,11 @@ def test_mirrored_policy_keyring_write_failure_falls_back_to_vault(
         raise RuntimeError("keyring unavailable")
 
     monkeypatch.setattr(primary, "set_secret", fail_write)
+    monkeypatch.setattr(primary, "get_secret_with_timeout", lambda *_args, **_kwargs: "old")
     mirrored = MirroredPolicyIntegritySecretStore(primary, fallback)
 
     mirrored.set_secret("integrity-key", "new")
+    assert mirrored.get_secret("integrity-key") == "new"
     assert fallback.get_secret("integrity-key") == "new"
 
 
