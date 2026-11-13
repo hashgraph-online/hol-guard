@@ -95,7 +95,7 @@ class MirroredPolicyIntegritySecretStore(FallbackSecretStore):
         return None
 
     def _fallback_preference_ref(self, secret_id: str) -> str:
-        # Keep the marker in the same encrypted store as the fallback value.
+        # Keep the marker with the fallback value and its paired control metadata.
         return f"{self._FALLBACK_PREFERENCE_PREFIX}{secret_id}"
 
     def _fallback_is_preferred(self, secret_id: str) -> bool:
