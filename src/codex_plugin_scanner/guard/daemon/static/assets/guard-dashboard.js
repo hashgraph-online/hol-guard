@@ -16996,7 +16996,7 @@ function turnProtectionOnUpdate(snapshot) {
   if (Object.keys(cleared).length > 0) update.harness_postures = cleared;
   return update;
 }
-const CIGAR_APPS = /* @__PURE__ */ new Set(["claude-code", "codex", "pi", "omp"]);
+const CIGAR_APPS = /* @__PURE__ */ new Set(["claude-code", "codex", "pi", "omp", "devin", "muse", "zcode", "kimi", "cline"]);
 function cigarReady(settings) {
   const config2 = settings.context_assistance;
   const requested = config2?.enabled === true && config2.features.agent_context && config2.sources.workspace_documents;
@@ -17054,7 +17054,7 @@ function cigarUnavailableReason(settings, harness, displayName) {
     return cigarLocked(settings) ? "Your organization manages CIGAR for each app." : void 0;
   }
   if (cigarSupported(harness)) return "CIGAR is off on this machine. Set it up on the CIGAR page.";
-  return `CIGAR can't add project context in ${displayName}.`;
+  return `${displayName} doesn't let Guard add context to its prompts yet.`;
 }
 function applyHarnessCigarPatch(current, patch) {
   const next = { ...current ?? {} };
