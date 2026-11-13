@@ -160,7 +160,9 @@ def _answer(context: HarnessContext, op: str, key: str, value: Any, fields: dict
         raise ValueError("Cursor adapter reply is malformed")
 
 
-def _cursor_ask(op: str, context: HarnessContext, *, timeout_seconds: float | None = None, **fields: Any) -> dict:
+def _cursor_ask(
+    op: str, context: HarnessContext, *, timeout_seconds: float | None = None, **fields: Any
+) -> dict[str, Any]:
     """Run one op, answering each reply until it settles."""
     for _ in range(_REPLY_LIMIT):
         answer = ask(op, context, harness=_HARNESS, timeout_seconds=timeout_seconds, **fields)
