@@ -7,12 +7,12 @@ use std::path::{Path, PathBuf};
 
 use serde_json::{json, Map, Value};
 
-use super::files::{self, adapter_result, render, text, Change};
+use super::files::{self, adapter_result, render, text, Change, Object};
 use super::kimi::{expand_user, utf8};
 use super::openclaw::truthy;
 use super::pi_extension::{code_mode_warnings, pinned_core, render_source, Runtime};
 use super::{detection, path_answer, path_text, which, Ctx, Failure, Spec, Step};
-use crate::pyjson::{self, PyVal};
+use crate::pyjson::PyVal;
 
 const SETTINGS_FILE: &str = "settings.json";
 const EXTENSION_NAME: &str = "hol-guard.ts";
@@ -121,14 +121,12 @@ fn approval_flow(spec: &Spec, fields: &Map<String, Value>) -> Value {
 }
 
 /// `json_payload`: the settings object, `{}` when it is unreadable or not one.
-fn settings_payload(ctx: &Ctx, path: &Path) -> Vec<(String, PyVal)> {
-    let Ok(text) = std::fs::read_to_string(ctx.absolute(path)) else {
-        return Vec::new();
-    };
-    match pyjson::parse(&text) {
-        Ok(PyVal::Dict(entries)) => entries,
-        _ => Vec::new(),
-    }
+fn settings_payload(ctx: &Ctx, path: &Path) -> Object {
+    std::fs::read_to_string(ctx.absolute(path))
+        .ok()
+        .and_then(|text| Object::parse(&text))
+        .and_then(Result::ok)
+        .unwrap_or_default()
 }
 
 fn extensions(payload: &[(String, PyVal)]) -> Option<&[PyVal]> {
@@ -146,13 +144,12 @@ fn listed(payload: &[(String, PyVal)], extension: &str) -> bool {
     })
 }
 
-fn with_extensions(payload: Vec<(String, PyVal)>, items: Vec<String>) -> Step<Vec<u8>> {
-    let mut doc = files::Doc(payload);
-    doc.set(
+fn with_extensions(mut payload: Object, items: Vec<String>) -> Step<Vec<u8>> {
+    payload.set(
         "extensions",
         PyVal::List(items.into_iter().map(PyVal::Str).collect()),
     );
-    Ok(format!("{}\n", render(&doc.value())?).into_bytes())
+    Ok(format!("{}\n", payload.render()?).into_bytes())
 }
 
 /// Whether a local settings entry names a managed extension file.
@@ -173,13 +170,8 @@ fn managed_reference(ctx: &Ctx, value: &str, settings: &Path) -> bool {
 }
 
 /// The settings with the managed reference listed once and no other.
-fn enabled_settings(
-    ctx: &Ctx,
-    payload: Vec<(String, PyVal)>,
-    settings: &Path,
-    extension: &str,
-) -> Step<Vec<u8>> {
-    let mut items: Vec<String> = extensions(&payload)
+fn enabled_settings(ctx: &Ctx, payload: Object, settings: &Path, extension: &str) -> Step<Vec<u8>> {
+    let mut items: Vec<String> = extensions(&payload.entries)
         .unwrap_or_default()
         .iter()
         .filter_map(|item| match item {
@@ -200,7 +192,7 @@ fn disabled_settings(ctx: &Ctx, settings: &Path, extension: &str) -> Step<Option
         return Ok(None);
     }
     let payload = settings_payload(ctx, settings);
-    let Some(items) = extensions(&payload) else {
+    let Some(items) = extensions(&payload.entries) else {
         return Ok(None);
     };
     let kept = items
@@ -236,17 +228,17 @@ fn prepare_install(spec: &Spec, ctx: &Ctx, fields: &Map<String, Value>) -> Step<
     let extension_before = files::snapshot(ctx, &extension)?;
     let settings_before = files::snapshot(ctx, &settings)?;
     let payload = match &settings_before {
-        None => Vec::new(),
+        None => Object::default(),
         Some(bytes) => {
             let text = utf8(bytes.clone(), &format!("{display_name} settings"))?;
-            match pyjson::parse(&text) {
-                Ok(PyVal::Dict(entries)) => entries,
-                Ok(_) => {
+            match Object::parse(&text) {
+                Some(Ok(settings)) => settings,
+                Some(Err(())) => {
                     return Err(Failure::Refusal(format!(
                         "{display_name} settings must be a JSON object."
                     )))
                 }
-                Err(_) => {
+                None => {
                     return Err(Failure::Refusal(format!(
                         "{display_name} settings are not valid JSON."
                     )))
@@ -379,7 +371,10 @@ fn extension_current(spec: &Spec, ctx: &Ctx, fields: &Map<String, Value>) -> Ste
                     &settings,
                 )?;
                 source == expected
-                    && listed(&settings_payload(ctx, &settings), &path_text(&extension))
+                    && listed(
+                        &settings_payload(ctx, &settings).entries,
+                        &path_text(&extension),
+                    )
             }
         };
     Ok(json!({ "current": current }))
@@ -408,7 +403,10 @@ fn legacy_omp_verified(ctx: &Ctx, fields: &Map<String, Value>) -> Step<Value> {
         .unwrap_or(Path::new(""))
         .join("extensions")
         .join(EXTENSION_NAME);
-    if !listed(&settings_payload(ctx, &settings), &path_text(&extension)) {
+    if !listed(
+        &settings_payload(ctx, &settings).entries,
+        &path_text(&extension),
+    ) {
         return Ok(json!({ "verified": false }));
     }
     let verified = legacy_omp(ctx, &Runtime::parse(fields)?)?.is_some();

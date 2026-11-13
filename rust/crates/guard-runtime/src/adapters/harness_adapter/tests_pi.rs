@@ -160,3 +160,34 @@ fn pi_uninstall_retires_the_legacy_combined_omp_extension() {
     let notes = manifest["notes"].as_array().unwrap();
     assert_eq!(notes.len(), 3, "{manifest}");
 }
+
+#[test]
+fn pi_install_and_uninstall_keep_lone_surrogate_escapes() {
+    let home = Home::new();
+    let settings = home.home().join(".pi/agent/settings.json");
+    fs::create_dir_all(settings.parent().unwrap()).unwrap();
+    fs::write(
+        &settings,
+        r#"{"extensions": ["npm:custom"], "label": "a\ud800b", "\udfff": "\ud83d\ude00"}"#,
+    )
+    .unwrap();
+    let extra = json!({"shim": shim(), "runtime": runtime()});
+    let answer = home.ask("pi", "prepare_install", extra);
+    let files = answer["files"].as_array().unwrap();
+    let written = after(&files[1]);
+    assert!(written.contains(r#""label": "a\ud800b""#), "{written}");
+    assert!(written.contains(r#""\udfff": "\ud83d\ude00""#), "{written}");
+    apply(files);
+
+    let uninstall = home.ask("pi", "prepare_uninstall", json!({"runtime": runtime()}));
+    let kept = uninstall["writes"][0]["text"].as_str().unwrap();
+    assert!(kept.contains(r#""label": "a\ud800b""#), "{kept}");
+    assert!(
+        kept.contains(
+            r#""extensions": [
+    "npm:custom"
+  ]"#
+        ),
+        "{kept}"
+    );
+}
