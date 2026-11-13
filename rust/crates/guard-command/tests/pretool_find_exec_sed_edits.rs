@@ -77,6 +77,11 @@ fn an_edit_that_would_not_fit_the_sandbox_keeps_its_review() {
         "find tests -name '*.py' -type f -exec sed -i 's/a/b/' ../* {} +",
         "find tests -name '*.py' -type f -exec sed -i 's/a/b/' tests/other.py {} +",
         "find tests -name '*.py' -type f -exec sed -i -e 's/a/b/' README.md {} +",
+        // GNU sed permutes -e ahead of a preceding positional word. That
+        // preceding word is then a file, not a harmless script.
+        "find tests -name '*.py' -type f -exec sed -i w[a-z]* -e d {} +",
+        "find tests -name '*.py' -type f -exec sed -i w[a-z]* -ed {} +",
+        "find tests -name '*.py' -type f -exec sed -i w[a-z]* --expression=d {} +",
         "find tests -type f -exec sed -i 's/a/b/e' {} +",
         "find tests -type f -exec sed -i -e 'e touch x' {} +",
         "find tests -type f -exec sed -i -f edits.sed {} +",
