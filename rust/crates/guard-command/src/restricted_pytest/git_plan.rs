@@ -171,7 +171,7 @@ fn metadata_pointer(path: &Path) -> Option<String> {
 /// Resolve only Git's linked metadata, never grant its parent checkout. A
 /// plain `.git` directory inside the workspace is already readable; a linked
 /// worktree's pointer has to name a worktree of an owned, unshared repository.
-fn repository_read_roots(workspace: &Path, cwd: &Path) -> Option<Vec<PathBuf>> {
+pub(super) fn repository_read_roots(workspace: &Path, cwd: &Path) -> Option<Vec<PathBuf>> {
     let mut directory = cwd.to_path_buf();
     while !directory.join(".git").exists() {
         if directory == workspace {
