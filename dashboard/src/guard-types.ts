@@ -1017,6 +1017,8 @@ export type GuardSettings = {
   /** Per-app overrides only; an app with no entry inherits `protection_posture`. */
   harness_postures?: Record<string, GuardProtectionPostureValue>;
   harness_watch_entered_at?: Record<string, string>;
+  /** Apps whose prompts CIGAR leaves alone; an app with no entry follows CIGAR. */
+  harness_cigar?: Record<string, "off">;
   /** Read-only: the posture each known app actually runs under. */
   harness_postures_effective?: Record<string, GuardProtectionPostureValue>;
   /** Read-only: true when managed policy blocks local Watch/Protected app overrides. */

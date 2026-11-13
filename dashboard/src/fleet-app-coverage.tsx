@@ -13,6 +13,8 @@ import { harnessDisplayName } from "./approval-center-utils";
 import { APP_STATUS_LABELS, resolveAppInstallStatus } from "./apps/app-catalog";
 import { useFleetAppPosture, type FleetPostureApp } from "./fleet-app-protection";
 import type { DetectedAppStatus } from "./harness-detection";
+import { appModesNote } from "./fleet-app-modes";
+import type { GuardSettings } from "./guard-types";
 import { harnessRowStatus, harnessRowTone } from "./harness-posture-ui";
 import type { HarnessVersionCompatibility } from "./harness-version-compatibility";
 import { HarnessVersionLabel } from "./harness-version-label";
@@ -72,7 +74,7 @@ function StatusBadge({ status }: { status: DetectedAppStatus }) {
 
 type AppSummaryProps = {
   app: FleetCoverageApp;
-  /** Posture line under the counts, such as "Watch · recording only". */
+  /** What runs in the app, under the counts, such as "CIGAR only · Guard is not checking actions". */
   postureNote: string | null;
   watching: boolean;
   /** The per-app choice already states an active app's level, so its badge is dropped. */
@@ -118,10 +120,23 @@ function AppSummary({ app, postureNote, watching, showBadge, onOpenAppDetail }: 
   );
 }
 
+/** What runs in an app, once settings have loaded; before that, only a Watch or override status. */
+function rowNote(
+  row: ReturnType<ReturnType<typeof useFleetAppPosture>["rowFor"]>,
+  settings: GuardSettings | null,
+  harness: string,
+  watching: boolean,
+): string | null {
+  if (row === undefined) return null;
+  if (settings !== null) return appModesNote(settings, harness);
+  if (watching || row.hasOverride) return harnessRowStatus(row);
+  return null;
+}
+
 /**
- * Every app Guard can see on this machine, with the per-app Protected or Watch
- * choice on the rows whose hooks Guard manages. One list answers both "is this
- * app covered?" and "how closely?", so there is no second per-app card.
+ * Every app Guard can see on this machine, with Guard and CIGAR switches on
+ * the rows whose hooks Guard manages. One list answers both "is this app
+ * covered?" and "what runs there?", so there is no second per-app card.
  */
 export function FleetAppCoverage(props: FleetAppCoverageProps) {
   const posture = useFleetAppPosture({ apps: props.postureApps, onChanged: props.onPostureChanged });
@@ -138,7 +153,7 @@ export function FleetAppCoverage(props: FleetAppCoverageProps) {
         <div>
           <SectionLabel>App coverage</SectionLabel>
           <p className="mt-1 text-sm text-slate-500">
-            Which apps Guard watches on this machine, and whether it protects or only records each one.
+            Guard checks each app's actions. CIGAR adds project context so agents read less and spend fewer tokens. Turn on either or both.
           </p>
         </div>
         {posture.summary}
@@ -150,7 +165,7 @@ export function FleetAppCoverage(props: FleetAppCoverageProps) {
             const row = posture.rowFor(app.harness);
             const watching = isWatching(app.harness);
             const control = posture.control(app.harness);
-            const postureNote = row !== undefined && (watching || row.hasOverride) ? harnessRowStatus(row) : null;
+            const postureNote = rowNote(row, posture.settings, app.harness, watching);
             return (
               <li
                 key={app.harness}

@@ -23,7 +23,14 @@ fn incoming_str<'a>(payload: &'a Payload, key: &str) -> Option<&'a str> {
 }
 
 /// `apply_harness_posture_patch`: selecting Watch always restarts its window.
-pub(crate) fn apply_harness_patch(next: &mut Table, patch: &[(&str, Option<&str>)], now: &str) {
+/// An untimed Watch (an app that keeps only CIGAR) gets no window, so it
+/// never turns back to Protected on its own.
+pub(crate) fn apply_harness_patch(
+    next: &mut Table,
+    patch: &[(&str, Option<&str>)],
+    now: &str,
+    untimed: bool,
+) {
     let mut stored = loaded_postures(get(next, "harness_postures").map(to_json).as_ref());
     let mut stamps = loaded_watch_stamps(
         get(next, "harness_watch_entered_at").map(to_json).as_ref(),
@@ -38,7 +45,7 @@ pub(crate) fn apply_harness_patch(next: &mut Table, patch: &[(&str, Option<&str>
             }
             Some(posture) => {
                 stored.insert(harness.clone(), (*posture).to_owned());
-                if *posture == "watch" {
+                if *posture == "watch" && !untimed {
                     stamps.insert(harness, now.to_owned());
                 } else {
                     stamps.remove(&harness);
@@ -55,6 +62,60 @@ pub(crate) fn apply_harness_patch(next: &mut Table, patch: &[(&str, Option<&str>
         } else {
             set(next, key, string_table(values));
         }
+    }
+}
+
+/// True when the stored CIGAR settings add project context to prompts.
+pub(crate) fn cigar_ready(next: &Table) -> bool {
+    let Some(config) = get(next, "context_assistance").map(to_json) else {
+        return false;
+    };
+    let on = |path: &[&str]| {
+        path.iter()
+            .try_fold(&config, |value, key| value.get(*key))
+            .and_then(serde_json::Value::as_bool)
+            == Some(true)
+    };
+    on(&["enabled"])
+        && on(&["features", "agent_context"])
+        && on(&["sources", "workspace_documents"])
+}
+
+/// Once CIGAR stops adding context, an untimed Watch (kept only for CIGAR)
+/// would leave the app unchecked with nothing running, so it gets the usual
+/// revert window from now.
+pub(crate) fn stamp_untimed_watch(next: &mut Table, now: &str) {
+    let stored = loaded_postures(get(next, "harness_postures").map(to_json).as_ref());
+    let mut stamps = loaded_watch_stamps(
+        get(next, "harness_watch_entered_at").map(to_json).as_ref(),
+        &stored,
+    );
+    let before = stamps.len();
+    for (harness, posture) in &stored {
+        if posture == "watch" && !stamps.contains_key(harness) {
+            stamps.insert(harness.clone(), now.to_owned());
+        }
+    }
+    if stamps.len() != before {
+        set(next, "harness_watch_entered_at", string_table(stamps));
+    }
+}
+
+/// `harness_cigar`: fold a per-app CIGAR patch into the stored choices.
+pub(crate) fn apply_cigar_patch(next: &mut Table, patch: &[(&str, bool)]) {
+    let mut stored =
+        crate::guard_config_harness::loaded_cigar(get(next, "harness_cigar").map(to_json).as_ref());
+    for (harness, off) in patch {
+        if *off {
+            stored.insert((*harness).to_owned(), "off".to_owned());
+        } else {
+            stored.remove(*harness);
+        }
+    }
+    if stored.is_empty() {
+        remove(next, "harness_cigar");
+    } else {
+        set(next, "harness_cigar", string_table(stored));
     }
 }
 

@@ -1,8 +1,8 @@
-import { r as reactExports, aS as fetchResolvedApprovalGate, j as jsxRuntimeExports, A as ActionButton, aT as ApprovalProofModal, T as Tag, aI as PROTECTION_POSTURE_COPY, aU as POSTURE_OUTCOME_COLUMNS, aV as getDefaultExportFromCjs, aW as React, a3 as HiMiniShieldCheck, aX as HiMiniSquares2X2, y as HiMiniLockClosed, aY as HiMiniBellAlert, aZ as HiMiniAdjustmentsHorizontal, a_ as HiMiniCircleStack, ac as HiMiniCloud, a$ as TabBar, H as HiMiniChevronRight, b0 as SelectMenu, S as SectionLabel, ae as useFocusTrap, b1 as fetchCloudReviewSettings, i as HiMiniArrowPath, a9 as HiMiniXMark, b2 as ApprovalProofFieldInputs, b3 as isApprovalProofSubmitDisabled, b4 as buildApprovalProofCredentials, b5 as changeCloudReviewSettings, b6 as fetchWithGuardAuth, b7 as isRecord$1, b8 as HiMiniArrowTopRightOnSquare, b9 as shellHref, a as contextStatusCopy, v as HiMiniCheckCircle, ag as HiMiniExclamationTriangle, ba as HiMiniPauseCircle, h as harnessDisplayName, bb as listContextAgentSessions, bc as HiMiniLink, bd as revokeContextAgentSession, be as grantContextWorkspace, bf as authorizeContextAgentSession, bg as ContextAssistanceApiError, bh as ask, bi as parseContextScope, bj as validContextBrokerRevision, bk as isGuardDemoMode, bl as HiMiniArrowUturnLeft, q as HiMiniPencilSquare, t as HiMiniMagnifyingGlass, bm as HiMiniCodeBracketSquare, bn as HiMiniFolder, u as HiMiniDocumentText, bo as HiMiniComputerDesktop, bp as HiMiniHome, k as HiMiniCheck, bq as HiMiniFolderPlus, br as HiMiniClock, bs as listContextWorkspaces, bt as HiMiniFolderOpen, bu as manageContextWorkspace, bv as compileWorkspaceContext, w as HiMiniArrowRight, bw as HiMiniChatBubbleLeftEllipsis, bx as HiMiniDocumentMagnifyingGlass, by as HiMiniPower, bz as HiMiniEyeSlash, bA as HiMiniCpuChip, bB as HiMiniAcademicCap, ad as HiMiniQuestionMarkCircle, P as HiMiniClipboardDocument, bC as HiMiniArrowLeft, bD as isCigarProducerVersion, bE as isCigarCoreLabel, a8 as HiMiniSparkles, bF as subscribeDashboardLocation, bG as HiMiniChatBubbleLeftRight, bH as HiMiniArrowUpCircle, bI as parseContextAssistanceStatus, bJ as isCigarBuildIdentity, bK as fetchContextInstallations, bL as HiMiniCloudArrowDown, bM as turnOnJob, bN as shouldResumeTurnOn, bO as turnOnRequestedAt, bP as forgetTurnOn, bQ as rememberTurnOn, bR as forgetTurnOnClick, bS as rememberTurnOnJob, f as fetchContextAssistance, c as controlContextAssistance, bT as commitDashboardLocation, bU as HiMiniArrowDownTray, bV as downloadBlob, bW as savedEvidenceCopy, bX as guardAwareHref, bY as fetchContextData, bZ as forgetContextHistory, b_ as forgetSavedEvidence, b$ as resolveProtectionLevelCopy, aD as fetchSettings, c0 as fetchRuntimeSnapshot, c1 as clearHarnessWatchOverrides, c2 as withHarnessPosturePatch, U as updateSettings, c3 as clearPolicy, c4 as clearReviewQueue, c5 as revokeApprovalGateCooldown, c6 as disableApprovalGateTotp, c7 as importSettings, c8 as resetSettings, c9 as enrollApprovalGateTotp, ca as verifyApprovalGateTotp, cb as clearEvidence, cc as exportDiagnostics, cd as repairApprovalCenter, ce as exportSettings, cf as setupDesktopNotifications, aa as EmptyState, cg as settingsWatchBannerModel, ch as WorkspacePageHeader, a0 as WatchProtectionBanner, ci as navigateFromAnchor, g as HiMiniChevronDown, cj as humanizeList, ck as isProtectionPosture, cl as deriveProtectionPosture, cm as normalizeHarnessPostures, cn as approvalGateCooldownLabel } from "../guard-dashboard.js";
-import { p as planGuardHookRemoval, r as removeAllGuardHooks, a as GuardRepairRequestError, S as SettingsSaveProofModal, b as resolveSettingsSaveProofKind, c as requiresSettingsSaveProof, d as HarnessPostureSummaryCard, e as HarnessPostureManager, G as GuardRepairControl, f as resolveSettingsSaveProofModalCopy } from "./settings-save-proof-modal-B1l5ib5t.js";
+import { r as reactExports, aZ as fetchResolvedApprovalGate, j as jsxRuntimeExports, A as ActionButton, a_ as ApprovalProofModal, T as Tag, aN as PROTECTION_POSTURE_COPY, a$ as POSTURE_OUTCOME_COLUMNS, aE as harnessPostureRows, b0 as overrideRows, aJ as harnessRowTone, b1 as harnessPostureSummary, b2 as joinNames, b3 as sortHarnessRows, aQ as globalPosture, b4 as selectHarnessPosture, b5 as restartHarnessWatch, t as HiMiniMagnifyingGlass, b6 as harnessWatchPrompt, b7 as harnessPostureOptions, b8 as canRestartHarnessWatch, aT as HiMiniEye, a3 as HiMiniShieldCheck, aS as harnessRowStatus, b9 as getDefaultExportFromCjs, ba as React, bb as HiMiniSquares2X2, y as HiMiniLockClosed, bc as HiMiniBellAlert, bd as HiMiniAdjustmentsHorizontal, be as HiMiniCircleStack, ac as HiMiniCloud, bf as TabBar, H as HiMiniChevronRight, bg as SelectMenu, S as SectionLabel, ae as useFocusTrap, bh as fetchCloudReviewSettings, i as HiMiniArrowPath, a9 as HiMiniXMark, bi as ApprovalProofFieldInputs, bj as isApprovalProofSubmitDisabled, bk as buildApprovalProofCredentials, bl as changeCloudReviewSettings, bm as fetchWithGuardAuth, bn as isRecord$1, bo as HiMiniArrowTopRightOnSquare, bp as shellHref, a as contextStatusCopy, v as HiMiniCheckCircle, ag as HiMiniExclamationTriangle, bq as HiMiniPauseCircle, h as harnessDisplayName, br as listContextAgentSessions, bs as HiMiniLink, bt as revokeContextAgentSession, bu as grantContextWorkspace, bv as authorizeContextAgentSession, bw as ContextAssistanceApiError, bx as ask, by as parseContextScope, bz as validContextBrokerRevision, bA as isGuardDemoMode, bB as HiMiniArrowUturnLeft, q as HiMiniPencilSquare, bC as HiMiniCodeBracketSquare, bD as HiMiniFolder, u as HiMiniDocumentText, bE as HiMiniComputerDesktop, bF as HiMiniHome, k as HiMiniCheck, bG as HiMiniFolderPlus, bH as HiMiniClock, bI as listContextWorkspaces, bJ as HiMiniFolderOpen, bK as manageContextWorkspace, bL as compileWorkspaceContext, w as HiMiniArrowRight, bM as HiMiniChatBubbleLeftEllipsis, bN as HiMiniDocumentMagnifyingGlass, bO as HiMiniPower, bP as HiMiniEyeSlash, bQ as HiMiniCpuChip, bR as HiMiniAcademicCap, ad as HiMiniQuestionMarkCircle, P as HiMiniClipboardDocument, bS as HiMiniArrowLeft, bT as isCigarProducerVersion, bU as isCigarCoreLabel, a8 as HiMiniSparkles, bV as subscribeDashboardLocation, bW as HiMiniChatBubbleLeftRight, bX as HiMiniArrowUpCircle, bY as parseContextAssistanceStatus, bZ as isCigarBuildIdentity, b_ as fetchContextInstallations, b$ as HiMiniCloudArrowDown, c0 as turnOnJob, c1 as shouldResumeTurnOn, c2 as turnOnRequestedAt, c3 as forgetTurnOn, c4 as rememberTurnOn, c5 as forgetTurnOnClick, c6 as rememberTurnOnJob, f as fetchContextAssistance, c as controlContextAssistance, c7 as commitDashboardLocation, c8 as HiMiniArrowDownTray, c9 as downloadBlob, ca as savedEvidenceCopy, aM as guardAwareHref, cb as fetchContextData, cc as forgetContextHistory, cd as forgetSavedEvidence, ce as resolveProtectionLevelCopy, aD as fetchSettings, cf as fetchRuntimeSnapshot, cg as clearHarnessWatchOverrides, ch as withHarnessPosturePatch, U as updateSettings, ci as clearPolicy, cj as clearReviewQueue, ck as revokeApprovalGateCooldown, cl as disableApprovalGateTotp, cm as importSettings, cn as resetSettings, co as enrollApprovalGateTotp, cp as verifyApprovalGateTotp, cq as clearEvidence, cr as exportDiagnostics, cs as repairApprovalCenter, ct as exportSettings, cu as setupDesktopNotifications, aa as EmptyState, cv as settingsWatchBannerModel, cw as WorkspacePageHeader, a0 as WatchProtectionBanner, cx as navigateFromAnchor, g as HiMiniChevronDown, cy as humanizeList, cz as isProtectionPosture, cA as deriveProtectionPosture, cB as normalizeHarnessPostures, cC as approvalGateCooldownLabel } from "../guard-dashboard.js";
+import { p as planGuardHookRemoval, r as removeAllGuardHooks, a as GuardRepairRequestError, S as SettingsSaveProofModal, b as resolveSettingsSaveProofKind, c as requiresSettingsSaveProof, G as GuardRepairControl, d as resolveSettingsSaveProofModalCopy } from "./settings-save-proof-modal-DW4goyCe.js";
 import { f as filterSettingsBySearch, R as RISK_CONTROL_CONSEQUENCES } from "./app-catalog-Ca_M7GbC.js";
-import { C as ConfirmDialog, u as useConfirmDialog } from "./confirm-dialog-CjbF_rrG.js";
-import { C as ConnectGuardCloudButton } from "./connect-guard-cloud-button-Xk2GIeZa.js";
+import { C as ConfirmDialog, u as useConfirmDialog } from "./confirm-dialog-D3mZurPG.js";
+import { C as ConnectGuardCloudButton } from "./connect-guard-cloud-button-BUnXYp-e.js";
 import { C as CIGAR_TABS, a as cigarWaking, b as canStartCigar, c as cigarHomeCopy, d as cigarTabFromSearch } from "./workspace-model-hR3eI7UO.js";
 function describeAffectedHarness(item) {
   const count2 = item.hook_count ?? item.swept_hook_count;
@@ -212,6 +212,244 @@ function OutcomeColumn(props) {
     /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs font-semibold uppercase tracking-[0.16em] text-slate-400", children: props.title }),
     /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-sm leading-relaxed text-slate-600", children: props.body })
   ] });
+}
+function HarnessPostureManager(props) {
+  const { settings, onSettingsChange } = props;
+  const [pendingWatch, setPendingWatch] = reactExports.useState(null);
+  const [search, setSearch] = reactExports.useState("");
+  const locked = settings.harness_postures_locked === true;
+  const rows = reactExports.useMemo(() => harnessPostureRows(settings, props.capabilities), [settings, props.capabilities]);
+  const sortedRows = reactExports.useMemo(() => sortHarnessRows(rows), [rows]);
+  const query = search.trim().toLowerCase();
+  const visibleRows = query.length === 0 ? sortedRows : sortedRows.filter(
+    (row2) => row2.displayName.toLowerCase().includes(query) || row2.harness.toLowerCase().includes(query)
+  );
+  const machineLabel = PROTECTION_POSTURE_COPY[globalPosture(settings)].label;
+  const pendingRow = pendingWatch !== null ? visibleRows.find((row2) => row2.harness === pendingWatch) : void 0;
+  const handleChoice = reactExports.useCallback((harness, choice) => {
+    if (choice === "watch") {
+      setPendingWatch(harness);
+      return;
+    }
+    setPendingWatch(null);
+    onSettingsChange(selectHarnessPosture(settings, harness, choice));
+  }, [onSettingsChange, settings]);
+  const handleConfirmWatch = reactExports.useCallback(() => {
+    if (pendingWatch === null) return;
+    onSettingsChange(selectHarnessPosture(settings, pendingWatch, "watch"));
+    setPendingWatch(null);
+  }, [onSettingsChange, pendingWatch, settings]);
+  const handleCancelWatch = reactExports.useCallback(() => setPendingWatch(null), []);
+  const handleRestartWatch = reactExports.useCallback((harness) => {
+    onSettingsChange(restartHarnessWatch(settings, harness));
+  }, [onSettingsChange, settings]);
+  if (rows.length === 0) return null;
+  const watchingCount = rows.filter((row2) => harnessRowTone(row2) === "watch").length;
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-3", "data-testid": props.testId ?? "harness-posture-section", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs(
+      "div",
+      {
+        className: `rounded-xl border px-4 py-3 ${watchingCount > 0 ? "border-brand-attention/25 bg-brand-attention/[0.05]" : "border-brand-green/20 bg-brand-green/[0.05]"}`,
+        "data-testid": "harness-posture-status",
+        children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "flex items-center gap-2 text-sm font-semibold text-brand-dark", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx(StatusDot, { tone: watchingCount > 0 ? "watch" : "protected" }),
+            harnessPostureSummary(rows)
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "mt-1 text-sm text-slate-500", children: [
+            "Apps start with the machine setting (",
+            machineLabel,
+            ") and only differ when you give one its own choice."
+          ] }),
+          props.onChangeTab ? /* @__PURE__ */ jsxRuntimeExports.jsx(
+            "button",
+            {
+              type: "button",
+              onClick: () => props.onChangeTab?.("protection"),
+              className: "mt-2 min-h-11 text-sm font-semibold text-brand-blue underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue sm:min-h-0",
+              children: "Change the machine setting"
+            }
+          ) : null
+        ]
+      }
+    ),
+    locked ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-slate-500", children: "Your organization manages protection for each app, so these choices can't be changed here." }) : null,
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "relative", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniMagnifyingGlass, { className: "pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400", "aria-hidden": "true" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(
+        "input",
+        {
+          type: "search",
+          value: search,
+          onChange: (event) => setSearch(event.target.value),
+          placeholder: "Find an app...",
+          "aria-label": "Find an app",
+          className: "w-full rounded-xl border border-slate-200 bg-white py-2 pl-9 pr-4 text-sm text-brand-dark placeholder:text-slate-400 focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
+        }
+      )
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("ul", { className: "divide-y divide-slate-100 rounded-xl border border-slate-200 bg-white", children: visibleRows.map((row2) => /* @__PURE__ */ jsxRuntimeExports.jsxs(reactExports.Fragment, { children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx(
+        HarnessPostureRowCard,
+        {
+          row: row2,
+          settings,
+          locked,
+          capability: props.capabilities.find((item) => item.harness === row2.harness) ?? null,
+          onChoose: handleChoice,
+          onRestartWatch: handleRestartWatch
+        }
+      ),
+      pendingRow?.harness === row2.harness ? /* @__PURE__ */ jsxRuntimeExports.jsx(
+        "li",
+        {
+          className: "bg-brand-attention/[0.06]",
+          role: "alertdialog",
+          "aria-label": `Switch ${pendingRow.displayName} to Watch`,
+          children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col gap-3 px-4 py-3 sm:flex-row sm:items-center sm:justify-between", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-brand-dark", children: harnessWatchPrompt(rows, pendingRow.harness) }),
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap gap-2", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx(
+                "button",
+                {
+                  type: "button",
+                  onClick: handleConfirmWatch,
+                  className: "inline-flex min-h-11 items-center rounded-lg bg-brand-attention px-4 text-sm font-semibold text-white",
+                  children: "Switch to Watch"
+                }
+              ),
+              /* @__PURE__ */ jsxRuntimeExports.jsx(
+                "button",
+                {
+                  type: "button",
+                  onClick: handleCancelWatch,
+                  className: "inline-flex min-h-11 items-center rounded-lg border border-slate-200 bg-white px-4 text-sm font-medium text-brand-dark",
+                  children: "Keep protection on"
+                }
+              )
+            ] })
+          ] })
+        }
+      ) : null
+    ] }, row2.harness)) }),
+    visibleRows.length === 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-slate-500", children: "No apps match your search." }) : null
+  ] });
+}
+function HarnessPostureRowCard(props) {
+  const { row: row2 } = props;
+  const tone = harnessRowTone(row2);
+  const options = harnessPostureOptions(props.settings, row2.harness);
+  const restartPending = props.settings.harness_watch_restart?.includes(row2.harness) === true;
+  const canRestart = !props.locked && canRestartHarnessWatch(props.settings, row2.harness);
+  return /* @__PURE__ */ jsxRuntimeExports.jsx("li", { className: tone === "watch" ? "bg-brand-attention/[0.04]" : void 0, "data-harness": row2.harness, children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col gap-3 px-4 py-3 sm:flex-row sm:items-center sm:justify-between", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "flex items-center gap-2 text-sm font-semibold text-brand-dark", children: [
+        tone === "watch" ? /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniEye, { className: "h-4 w-4 shrink-0 text-brand-attention", "aria-hidden": "true" }) : /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniShieldCheck, { className: "h-4 w-4 shrink-0 text-brand-blue", "aria-hidden": "true" }),
+        row2.displayName
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-0.5 text-xs text-slate-500", children: harnessRowStatus(row2) }),
+      props.capability?.limited ? /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "mt-0.5 text-xs text-slate-400", title: props.capability.honesty_sentence, children: [
+        "Limited: ",
+        props.capability.honesty_sentence
+      ] }) : null,
+      canRestart && restartPending ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs text-slate-500", children: "Watch timer restarts when you save." }) : null,
+      canRestart && !restartPending ? /* @__PURE__ */ jsxRuntimeExports.jsx(
+        "button",
+        {
+          type: "button",
+          onClick: () => props.onRestartWatch(row2.harness),
+          className: "mt-1 min-h-11 text-xs font-semibold text-brand-blue underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue sm:min-h-0",
+          children: "Restart Watch timer"
+        }
+      ) : null
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("fieldset", { className: "border-0 p-0", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("legend", { className: "sr-only", children: `Protection for ${row2.displayName}` }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "inline-flex gap-1 rounded-xl bg-slate-100 p-1", children: options.map((option) => /* @__PURE__ */ jsxRuntimeExports.jsx(
+        HarnessPostureChoiceLabel,
+        {
+          groupName: `harness-posture-${row2.harness}`,
+          choice: option.choice,
+          label: option.label,
+          selected: row2.selected === option.choice,
+          disabled: props.locked,
+          harness: row2.harness,
+          onChoose: props.onChoose
+        },
+        option.choice
+      )) })
+    ] })
+  ] }) });
+}
+function HarnessPostureChoiceLabel(props) {
+  const handleChange = reactExports.useCallback(() => {
+    if (props.disabled) return;
+    props.onChoose(props.harness, props.choice);
+  }, [props.choice, props.disabled, props.harness, props.onChoose]);
+  const isWatch = props.choice === "watch";
+  let choiceClass = "cursor-pointer text-slate-600 hover:text-brand-dark";
+  if (props.disabled && props.selected) choiceClass = "cursor-not-allowed text-slate-500";
+  else if (props.disabled) choiceClass = "cursor-not-allowed text-slate-400";
+  else if (props.selected) {
+    choiceClass = isWatch ? "cursor-pointer bg-brand-attention text-white shadow-sm" : "cursor-pointer bg-brand-blue text-white shadow-sm";
+  }
+  let icon = null;
+  if (!props.compact) {
+    icon = isWatch ? /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniEye, { className: "h-4 w-4 shrink-0", "aria-hidden": "true" }) : /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniShieldCheck, { className: "h-4 w-4 shrink-0", "aria-hidden": "true" });
+  }
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs(
+    "label",
+    {
+      className: `flex min-h-11 items-center justify-center rounded-lg py-2 text-sm font-semibold transition-colors focus-within:ring-2 focus-within:ring-brand-blue ${props.compact ? "min-w-20 px-2.5" : "min-w-24 gap-1.5 px-3"} ${choiceClass}`,
+      children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx(
+          "input",
+          {
+            type: "radio",
+            name: props.groupName,
+            value: props.choice,
+            checked: props.selected,
+            disabled: props.disabled,
+            onChange: handleChange,
+            className: "sr-only"
+          }
+        ),
+        icon,
+        props.label
+      ]
+    }
+  );
+}
+function StatusDot(props) {
+  return /* @__PURE__ */ jsxRuntimeExports.jsx(
+    "span",
+    {
+      "aria-hidden": "true",
+      className: `h-2 w-2 shrink-0 rounded-full ${props.tone === "watch" ? "bg-brand-attention" : "bg-brand-green"}`
+    }
+  );
+}
+function HarnessPostureSummaryCard(props) {
+  const rows = harnessPostureRows(props.settings, props.capabilities);
+  if (rows.length === 0) return null;
+  const overrides = overrideRows(rows);
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs(
+    "div",
+    {
+      className: "flex flex-col gap-3 py-3 sm:flex-row sm:items-center sm:justify-between",
+      "data-testid": "harness-posture-summary-card",
+      children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "flex items-center gap-2 text-sm font-medium text-brand-dark", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx(StatusDot, { tone: rows.some((row2) => harnessRowTone(row2) === "watch") ? "watch" : "protected" }),
+            harnessPostureSummary(rows)
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-0.5 text-xs text-slate-500", children: overrides.length > 0 ? `Your choices: ${joinNames(overrides.map((row2) => row2.displayName))}.` : "Apps follow the machine setting unless you choose Watch for one of them." })
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "shrink-0", children: /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { variant: "outline", onClick: props.onOpenApps, children: "Choose per app" }) })
+      ]
+    }
+  );
 }
 var propTypes$2 = { exports: {} };
 var ReactPropTypesSecret_1;

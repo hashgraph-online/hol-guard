@@ -230,3 +230,30 @@ pub(crate) fn coerce_harness_patch(
     }
     Ok(patch)
 }
+
+/// `harness_cigar` merge patch: `"off"` turns CIGAR off for one app, and
+/// `None`, `"on"` or `"inherit"` lets it follow CIGAR again.
+pub(crate) fn coerce_cigar_patch(value: &PyVal) -> Result<Vec<(&'static str, bool)>, String> {
+    let PyVal::Dict(entries) = value else {
+        return Err(invalid("Per-app CIGAR choices must be a table."));
+    };
+    let mut patch: Vec<(&'static str, bool)> = Vec::new();
+    for (key, raw) in entries {
+        let harness = canonical_harness_id(py_strip(key))
+            .ok_or_else(|| invalid("Unknown Guard harness for CIGAR."))?;
+        let off = match raw {
+            PyVal::Null => false,
+            PyVal::Str(text) => match py_strip(text).to_lowercase().as_str() {
+                "off" => true,
+                "on" | "inherit" => false,
+                _ => return Err(invalid("CIGAR for an app must be on or off.")),
+            },
+            _ => return Err(invalid("CIGAR for an app must be on or off.")),
+        };
+        match patch.iter_mut().find(|(name, _)| *name == harness) {
+            Some(slot) => slot.1 = off,
+            None => patch.push((harness, off)),
+        }
+    }
+    Ok(patch)
+}
