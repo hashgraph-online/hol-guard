@@ -50643,6 +50643,48 @@
       "expect": "allow"
     },
     {
+      "id": "cursor-write-own-spilled-tool-output",
+      "fix_area": "write",
+      "harnesses": [
+        "cursor"
+      ],
+      "tool": "write",
+      "tool_input": {
+        "path": "${CURSOR_PROJECT}/agent-tools/7c4e2a91-3b5d-4f60-8e2a-1d9c0b7f6e53.txt",
+        "content": "exit 0\nok\n"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "cursor-write-other-workspace-spilled-tool-output",
+      "fix_area": "write",
+      "harnesses": [
+        "cursor"
+      ],
+      "tool": "write",
+      "tool_input": {
+        "path": "${HOME}/.cursor/projects/srv-billing-api/agent-tools/7c4e2a91-3b5d-4f60-8e2a-1d9c0b7f6e53.txt",
+        "content": "exit 0\nok\n"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "cursor-write-own-agent-tools-script",
+      "fix_area": "write",
+      "harnesses": [
+        "cursor"
+      ],
+      "tool": "write",
+      "tool_input": {
+        "path": "${CURSOR_PROJECT}/agent-tools/run.sh",
+        "content": "exit 0\nok\n"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
       "id": "cursor-read-own-mcp-instructions",
       "fix_area": "read",
       "harnesses": [
