@@ -173,6 +173,21 @@ def test_mirrored_policy_keyring_write_failure_falls_back_to_vault(
     assert fallback.get_secret("integrity-key") == "new"
 
 
+def test_mirrored_policy_write_raises_when_both_stores_fail(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    primary = SystemKeyringSecretStore(service_name="hol-guard.test")
+    fallback = EncryptedFileSecretStore(tmp_path)
+
+    monkeypatch.setattr(primary, "set_secret", lambda *_args: (_ for _ in ()).throw(RuntimeError("keyring unavailable")))
+    monkeypatch.setattr(fallback, "set_secret", lambda *_args: (_ for _ in ()).throw(OSError("vault unavailable")))
+    mirrored = MirroredPolicyIntegritySecretStore(primary, fallback)
+
+    with pytest.raises(RuntimeError, match="keyring unavailable"):
+        mirrored.set_secret("integrity-key", "new")
+
+
 def test_mirrored_policy_keyring_remains_readable_when_vault_fails(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

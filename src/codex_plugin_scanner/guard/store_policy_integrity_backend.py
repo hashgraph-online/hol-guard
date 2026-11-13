@@ -183,10 +183,20 @@ class MirroredPolicyIntegritySecretStore(FallbackSecretStore):
                 return
             if source == "unverified":
                 raise RuntimeError("policy identity could not be verified for a control-state update")
-        with suppress(Exception):
+        is_control_update = refs is not None and secret_id == refs[1]
+        primary_error: Exception | None = None
+        try:
             self.primary.set_secret(secret_id, value)
-        with suppress(Exception):
+        except Exception as error:
+            if is_control_update:
+                raise
+            primary_error = error
+        try:
             self.fallback.set_secret(secret_id, value)
+        except Exception:
+            if primary_error is not None:
+                raise primary_error
+            _store_logger.debug("Policy-integrity fallback mirror update failed.", exc_info=True)
 
     def delete_secret(self, secret_id: str) -> None:
         self.primary.delete_secret(secret_id)
