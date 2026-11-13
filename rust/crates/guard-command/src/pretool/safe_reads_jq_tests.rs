@@ -87,9 +87,10 @@ fn a_filter_that_reaches_outside_the_value_read_is_still_refused() {
 }
 
 /// Options that only shape parsing and printing are skipped, clustered or
-/// spelled out. Every other word is read as the filter, so an option that
-/// names a file, a module directory or a variable binding has to clear the
-/// grammar as a filter and cannot.
+/// spelled out, and so is a binding of a name to a command-line value. With
+/// no path context, a binding that reads a file is refused. Every other word
+/// is read as the filter, so an option that names a filter file or a module
+/// directory has to clear the grammar as a filter and cannot.
 #[test]
 fn only_read_only_options_are_skipped() {
     for options in [
@@ -99,6 +100,8 @@ fn only_read_only_options_are_skipped() {
         vec!["--slurp", "--sort-keys"],
         vec!["--raw-output", "--tab"],
         vec!["-n"],
+        vec!["--arg", "name", "value"],
+        vec!["--argjson", "limit", "3"],
     ] {
         let mut words = options.clone();
         words.push(".items | length");
@@ -108,11 +111,13 @@ fn only_read_only_options_are_skipped() {
         vec!["-f", "/tmp/filter.jq"],
         vec!["--from-file", "/tmp/filter.jq"],
         vec!["-L", "/tmp/modules"],
-        vec!["--arg", "name", "value"],
         vec!["--rawfile", "body", "/etc/passwd"],
         vec!["--slurpfile", "rows", "/tmp/rows.json"],
         vec!["-rf"],
         vec!["--args"],
+        vec!["--arg", "name"],
+        vec!["--arg", "1name", "value"],
+        vec!["--argfile", "rows", "/tmp/rows.json"],
         vec!["-"],
     ] {
         let mut words = options.clone();
@@ -128,4 +133,33 @@ fn a_second_filter_or_no_filter_is_refused() {
     assert!(!safe_jq_stdin_arguments(&arguments(&[".a", ".b"])));
     assert!(!safe_jq_stdin_arguments(&arguments(&["-r"])));
     assert!(!safe_jq_stdin_arguments(&arguments(&[])));
+}
+
+/// A name `--arg` or `--argjson` binds may be read back, and only that name.
+/// `$ENV` and `$__loc__` stay refused even when the command line binds them,
+/// since jq answers them from the process and the program text.
+#[test]
+fn command_line_bindings_bind_only_their_own_names() {
+    for words in [
+        vec!["--arg", "want", "open", ".[] | select(.state == $want)"],
+        vec!["-r", "--argjson", "n", "3", "limit($n; .[])"],
+        vec!["--arg", "a", "x", "--arg", "b", "y", "[$a, $b]"],
+        vec![
+            "--arg",
+            "key",
+            "x",
+            "def pick: select(.name == $key); .[] | pick",
+        ],
+    ] {
+        assert!(safe_jq_stdin_arguments(&arguments(&words)), "{words:?}");
+    }
+    for words in [
+        vec!["--arg", "want", "open", "$other"],
+        vec!["--arg", "ENV", "x", "$ENV"],
+        vec!["--arg", "__loc__", "x", "$__loc__"],
+        vec![".[] | select(.state == $want)"],
+    ] {
+        assert!(!safe_jq_stdin_arguments(&arguments(&words)), "{words:?}");
+    }
+    assert!(!safe_jq_stdin_arguments(&arguments(&["$want"])));
 }

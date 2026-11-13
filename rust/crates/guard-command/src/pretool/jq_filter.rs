@@ -31,6 +31,8 @@
 //! A shorthand object entry (`{number, title}`) names a field of the value
 //! read, so it is admitted under the same key rules as `{number: .number}`.
 
+#[path = "jq_filter_bindings.rs"]
+mod bindings;
 #[path = "jq_filter_budget.rs"]
 mod budget;
 #[path = "jq_filter_program.rs"]
@@ -126,6 +128,13 @@ const FORMATS: &[&str] = &[
 /// Comparisons, longest spelling first so `<=` is never read as `<`.
 const COMPARISONS: &[&str] = &["==", "!=", "<=", ">=", "<", ">"];
 
+/// [`safe_filter`] for a filter jq runs with `names` already bound by
+/// `--arg` and the like, so a `$name` among them reads a value the command
+/// line supplied rather than the environment.
+pub(super) fn safe_filter_binding(filter: &str, names: &[&str]) -> bool {
+    bindings::with_names(names, || safe_filter(filter))
+}
+
 pub(super) fn safe_filter(filter: &str) -> bool {
     budget::reset();
     program::prepared(filter).is_some_and(|program| {
@@ -162,7 +171,7 @@ fn binding(part: &str) -> Option<&str> {
     variable_name(name).then(|| term.trim_end())
 }
 
-fn variable_name(name: &str) -> bool {
+pub(super) fn variable_name(name: &str) -> bool {
     name.starts_with(|value: char| value.is_ascii_alphabetic() || value == '_')
         && name
             .bytes()
@@ -173,8 +182,10 @@ fn variable_name(name: &str) -> bool {
 /// with `... as $name`, read inside that binding's scope, so each one holds a
 /// value the filter computed from its input. jq looks any other name up
 /// outside the filter: `$ENV` is the process environment, `$__loc__` the
-/// source position, and the rest come from `--arg` and friends. Those names
-/// are refused even when bound, and so is a `$` that opens no name. A binding
+/// source position, and the rest come from `--arg` and friends. `$ENV` and
+/// `$__loc__` are refused even when bound, and so is a `$` that opens no
+/// name. A `--arg` name counts as bound only while [`safe_filter_binding`]
+/// checks a filter the same command line binds it for. A binding
 /// jq reads differently, such as a destructuring `as [$a, $b]`, binds nothing
 /// here, so its names stay out.
 ///
@@ -251,7 +262,7 @@ pub(crate) fn variables_bound(filter: &str) -> bool {
                 {
                     bound.push(name);
                     binding_end = Some(index + 1 + end);
-                } else if !bound.contains(&name) {
+                } else if !bound.contains(&name) && !bindings::bound(name) {
                     return false;
                 }
                 index += end;
