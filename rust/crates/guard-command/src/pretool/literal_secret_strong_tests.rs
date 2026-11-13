@@ -86,7 +86,10 @@ fn placeholders_and_references_are_not_proven_secrets() {
         "client_secret: \"{{ vault_client_secret_2024 }}\"".to_string(),
         "SECRET_KEY = 'replace-this-with-a-long-random-value-9!'".to_string(),
         // A value read from another variable.
-        format!("export CLIENT_SECRET=\"${}\"", joined(&["MyAppClient", "Secret7Q"])),
+        format!(
+            "export CLIENT_SECRET=\"${}\"",
+            joined(&["MyAppClient", "Secret7Q"])
+        ),
         format!("set API_TOKEN=\"%{}%\"", joined(&["MyAppApi", "Token7Qz"])),
         // A default pair whose password repeats the user, in either header case.
         format!("headers['Authorization'] = 'basic {guest}'"),

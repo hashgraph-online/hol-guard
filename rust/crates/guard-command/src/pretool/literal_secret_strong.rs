@@ -97,13 +97,11 @@ fn strongly_random(raw: &str) -> bool {
 fn basic_pair(encoded: &str) -> bool {
     decode_base64(encoded).is_some_and(|text| {
         !text.chars().any(char::is_control)
-            && text
-                .split_once(':')
-                .is_some_and(|(user, password)| {
-                    // A pair whose password repeats the user name, such as
-                    // `guest:guest`, is a well-known default, not a secret.
-                    !password.is_empty() && password != user && !placeholder(password)
-                })
+            && text.split_once(':').is_some_and(|(user, password)| {
+                // A pair whose password repeats the user name, such as
+                // `guest:guest`, is a well-known default, not a secret.
+                !password.is_empty() && password != user && !placeholder(password)
+            })
     })
 }
 
