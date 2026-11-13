@@ -1,13 +1,11 @@
 """Harness adapters the native runtime answers: Devin, Antigravity, Gemini, Kimi, OpenClaw, Paseo, Muse,
-Grok and ZCode.
+Grok, ZCode, Pi, Oh My Pi and OpenCode.
 
-The ``harness_adapter`` runner-authority kind owns their paths, detection,
-command lookup, install and uninstall plans, manifests, launch environment,
-runtime probe fields, approval flow and Paseo's delegated install steps. This
-class keeps what must run in the Guard process: the ownership locks the base
-class wraps around install and uninstall, the launcher shim, the bounded hook
-argv, the transition journal that publishes a plan, the probe subprocess and
-the managed-install records in the Guard store.
+The ``harness_adapter`` runner-authority kind owns their paths, detection, command lookup, install and
+uninstall plans, manifests, launch environment, runtime probe fields, approval flow, Paseo's delegated
+install steps and the Pi-family extension. This class keeps what must run in the Guard process: the
+ownership locks the base class wraps around install and uninstall, the launcher shim, the bounded hook
+argv, the transition journal that publishes a plan, the probe subprocess and the managed-install records.
 """
 
 from __future__ import annotations
@@ -42,6 +40,14 @@ NATIVE_HARNESSES: tuple[tuple[str, tuple[str, ...], str], ...] = (
     ("muse", ("muse", "muse-code"), "muse"),
     ("grok", ("grok-build", "grok-build-cli", "xai-grok"), "grok"),
     ("zcode", ("zcode", "zai", "z-code", "zai-zcode"), "zcode"),
+    ("pi", ("pi", "pi-agent", "pi-coding-agent"), "pi"),
+    ("omp", ("omp", "oh-my-pi"), "omp"),
+    ("opencode", (), ""),
+)
+
+#: Ops that render a Pi-family extension, so they carry this process's facts.
+_EXTENSION_OPS = frozenset(
+    {"prepare_install", "prepare_uninstall", "extension_source", "extension_current", "legacy_omp_verified"}
 )
 
 
@@ -151,6 +157,10 @@ class NativeHarnessAdapter(HarnessAdapter):
         return _description(self.harness)
 
     def _ask(self, op: str, context: HarnessContext, **fields: Any) -> dict[str, Any]:
+        if op in _EXTENSION_OPS and self._spec.get("extension"):
+            from .extension_runtime import extension_runtime
+
+            fields["runtime"] = extension_runtime(context.guard_home)
         return ask(op, context, harness=self.harness, **fields)
 
     def _shim_names(self) -> dict[str, Any]:
@@ -164,12 +174,7 @@ class NativeHarnessAdapter(HarnessAdapter):
         return path if isinstance(path, str) else None
 
     def detect(self, context: HarnessContext) -> HarnessDetection:
-        from ..aibom_detection import (
-            _AIBOM_DISCOVERY_TIMEOUT_SECONDS,
-            NativeAibomError,
-            _artifacts_from_payload,
-            extend_detection_with_workspace_aibom,
-        )
+        from ..aibom_detection import _AIBOM_DISCOVERY_TIMEOUT_SECONDS, NativeAibomError
         from ..native_runner_authority import NativeRunnerAuthorityError
 
         # Discovery walks the workspace, so it keeps the longer AIBOM deadline.
@@ -177,19 +182,7 @@ class NativeHarnessAdapter(HarnessAdapter):
             answer = ask("detect", context, harness=self.harness, timeout_seconds=_AIBOM_DISCOVERY_TIMEOUT_SECONDS)
         except NativeRunnerAuthorityError as error:
             raise NativeAibomError(str(error)) from error
-        detection = HarnessDetection(
-            harness=self.harness,
-            installed=answer.get("installed") is True,
-            command_available=answer.get("command_available") is True,
-            config_paths=tuple(str(path) for path in answer.get("config_paths", ())),
-            artifacts=_artifacts_from_payload(answer),
-            warnings=tuple(str(warning) for warning in answer.get("warnings", ())),
-        )
-        if answer.get("workspace_aibom") is not True:
-            return detection
-        return extend_detection_with_workspace_aibom(
-            detection, home_dir=context.home_dir, workspace_dir=context.workspace_dir
-        )
+        return detection_from(self.harness, context, answer)
 
     def launch_command(self, context: HarnessContext, passthrough_args: list[str]) -> list[str]:
         if not self._spec.get("trusted_launcher"):
@@ -283,18 +276,7 @@ class NativeHarnessAdapter(HarnessAdapter):
         if self._spec.get("retired_hooks"):
             fields["retired_commands"] = self._retired_hooks(context, fields["hook_argv"])
         answer = self._ask("prepare_install", context, **fields)
-        files: list[TransitionFile] = []
-        for change in answer["files"]:
-            planned = TransitionFile(
-                Path(change["path"]),
-                _decoded(change["before"]),
-                _decoded(change["after"]),
-                before_mode=change["before_mode"],
-                after_mode=change["after_mode"],
-                no_follow=change["no_follow"],
-            )
-            planned.payload()
-            files.append(planned)
+        files = planned_files(answer)
         return PreparedHarnessInstall((*shim.files, *hook_files, *files), json.loads(_text(answer, "manifest")))
 
     def _retired_hooks(self, context: HarnessContext, hook_argv: object) -> list[str]:
@@ -335,6 +317,8 @@ class NativeHarnessAdapter(HarnessAdapter):
         shim = remove_guard_shim(self.harness, context, **self._shim_names())
         for write in plan["writes"]:
             target = Path(write["path"])
+            if write.get("parents"):
+                target.parent.mkdir(parents=True, exist_ok=True)
             if write.get("raw"):
                 target.write_bytes(write["text"].encode("utf-8"))
             elif write.get("no_follow"):
@@ -355,10 +339,17 @@ class NativeHarnessAdapter(HarnessAdapter):
 
     def diagnostics(self, context: HarnessContext) -> dict[str, object]:
         payload = super().diagnostics(context)
-        if self._spec.get("install") != "delegated":
+        if not self._spec.get("diagnostics"):
             return payload
         found = bool(payload.get("installed") or payload.get("config_paths"))
-        answer = self._ask("diagnostics", context, found=found, **self._delegate_fields(context))
+        answer = self._ask(
+            "diagnostics",
+            context,
+            found=found,
+            setup_status=payload.get("setup_status"),
+            warnings=json.loads(json.dumps(payload.get("warnings", []), default=str)),
+            **self._delegate_fields(context),
+        )
         payload.update(json.loads(_text(answer, "update")))
         return payload
 
@@ -420,4 +411,56 @@ class NativeHarnessAdapter(HarnessAdapter):
         return json.loads(_text(answer, "manifest"))
 
 
-__all__ = ["NATIVE_HARNESSES", "NativeHarnessAdapter", "ask", "describe", "wire_context"]
+def detection_from(harness: str, context: HarnessContext, answer: dict[str, Any]) -> HarnessDetection:
+    """The detection a ``detect``-shaped answer describes."""
+    from ..aibom_detection import _artifacts_from_payload, extend_detection_with_workspace_aibom
+
+    artifacts = _artifacts_from_payload(answer)
+    if answer.get("firewall") is True:
+        from ..runtime.mcp_skill_firewall import enrich_artifact_with_mcp_skill_firewall
+
+        artifacts = tuple(enrich_artifact_with_mcp_skill_firewall(artifact) for artifact in artifacts)
+    detection = HarnessDetection(
+        harness=harness,
+        installed=answer.get("installed") is True,
+        command_available=answer.get("command_available") is True,
+        config_paths=tuple(str(path) for path in answer.get("config_paths", ())),
+        artifacts=artifacts,
+        warnings=tuple(str(warning) for warning in answer.get("warnings", ())),
+    )
+    if answer.get("workspace_aibom") is not True:
+        return detection
+    return extend_detection_with_workspace_aibom(
+        detection, home_dir=context.home_dir, workspace_dir=context.workspace_dir
+    )
+
+
+def planned_files(answer: dict[str, Any]) -> list[Any]:
+    """The transition files a ``prepare_install`` answer plans."""
+    from ..runtime_transition import TransitionFile
+
+    files = [
+        TransitionFile(
+            Path(change["path"]),
+            _decoded(change["before"]),
+            _decoded(change["after"]),
+            before_mode=change["before_mode"],
+            after_mode=change["after_mode"],
+            no_follow=change["no_follow"],
+        )
+        for change in answer["files"]
+    ]
+    for planned in files:
+        planned.payload()
+    return files
+
+
+__all__ = [
+    "NATIVE_HARNESSES",
+    "NativeHarnessAdapter",
+    "ask",
+    "describe",
+    "detection_from",
+    "planned_files",
+    "wire_context",
+]

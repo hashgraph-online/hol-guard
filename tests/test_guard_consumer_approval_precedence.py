@@ -18,8 +18,7 @@ from codex_plugin_scanner.guard.adapters import codex_remote_control
 from codex_plugin_scanner.guard.adapters.base import HarnessAdapter, HarnessContext
 from codex_plugin_scanner.guard.adapters.codex import CodexHarnessAdapter
 from codex_plugin_scanner.guard.adapters.native_harness import NATIVE_HARNESSES, NativeHarnessAdapter
-from codex_plugin_scanner.guard.adapters.opencode import OpenCodeHarnessAdapter
-from codex_plugin_scanner.guard.adapters.opencode_artifacts import runtime_config_path
+from codex_plugin_scanner.guard.adapters.opencode_runtime import OpenCodeHarnessAdapter
 from codex_plugin_scanner.guard.approvals import queue_blocked_approvals
 from codex_plugin_scanner.guard.config import GuardConfig, load_guard_config
 from codex_plugin_scanner.guard.consumer import evaluate_detection
@@ -526,7 +525,7 @@ def test_guard_run_rejects_opencode_overlay_environment_changed_after_saved_clai
         workspace_dir=workspace,
         guard_home=config.guard_home,
     )
-    overlay_path = runtime_config_path(context)
+    overlay_path = context.guard_home / "opencode" / "runtime-config.json"
     overlay_path.parent.mkdir(parents=True, exist_ok=True)
     overlay_path.write_text(json.dumps({"permission": {"bash": "ask"}}), encoding="utf-8")
     executable_alias = tmp_path / "bin" / "opencode"

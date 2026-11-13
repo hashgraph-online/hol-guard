@@ -101,6 +101,7 @@ pub mod pretool_fd_bracket_route_root;
 pub mod pretool_fd_hidden_home_root;
 pub mod pretool_fd_sibling_root;
 pub mod pretool_feature_directory_reads;
+pub mod pretool_fetch_then_read;
 pub mod pretool_file_bodies;
 pub mod pretool_file_copies;
 pub mod pretool_file_mutations;
