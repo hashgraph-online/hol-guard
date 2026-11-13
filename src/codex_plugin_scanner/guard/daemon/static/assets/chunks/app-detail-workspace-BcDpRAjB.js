@@ -1,4 +1,5 @@
 import { r as reactExports, h as harnessDisplayName, c6 as fetchSettings, e9 as runHarnessAction, ea as GuardHarnessActionError, j as jsxRuntimeExports, S as SectionLabel, A as ActionButton, eb as HiMiniRocketLaunch, a3 as HiMiniShieldCheck, i as HiMiniArrowPath, b as formatRelativeTime, ag as HiMiniExclamationTriangle, v as HiMiniCheckCircle, ec as HiMiniTrash, aN as ApprovalProofModal, bq as isGuardDemoMode, ed as fetchGuardApi, ee as formatHarnessCommand, b3 as HiMiniAdjustmentsHorizontal, aE as appModesNote, ef as appModes, eg as fetchApprovalPage, eh as fetchPolicy, a5 as guardActionDisposition, X as protectionHealthFor, W as useProtectionPresentationState, bI as HiMiniArrowLeft, H as HiMiniChevronRight, aI as GuardHero, aJ as ProofStrip, ei as appSetupTarget, bv as HiMiniHome, ah as HiMiniBolt, ej as guardActionPresentation, ai as Badge, ek as DEFAULT_FILTER_STATE, el as filterEvidence, em as sortEvidence, en as computeMetrics, eo as CommandActivityWorkspace, aa as EmptyState, ep as EvidenceFilterBar, eq as EvidenceInsightStrip, er as EvidenceActionList, es as EvidenceActionDetail, ae as useFocusTrap, et as policyIdentityKey, ac as HiMiniCloud, T as Tag, aH as HiMiniXCircle, eu as clearLabelForScope, ev as HiMiniChartBar } from "../guard-dashboard.js";
+import { s as setupActionErrorMessage } from "./harness-action-errors-x2AyNCK-.js";
 import { u as useFleetAppPosture, c as versionCheckUnsupported, e as versionReasonCopy, H as HarnessVersionLabel, f as refreshVersionCompatibility, g as acknowledgeUntestedVersion, h as clearVersionAcknowledgement, a as useHarnessDetection, b as versionCompatibilityFor, j as isHarnessDetected } from "./harness-version-label-MLxWNcFW.js";
 import "./settings-save-proof-modal-_wjRK7LN.js";
 function HarnessSetupPanel(props) {
@@ -332,18 +333,6 @@ function setupActionLabel(action) {
   if (action === "verify") return "test";
   if (action === "repair") return "repair";
   return "disconnect";
-}
-function setupActionErrorMessage(error) {
-  if (error.payload?.error === "confirmation_required") {
-    return "Disconnect requires confirmation so accidental clicks cannot remove local protection.";
-  }
-  if (error.payload?.error === "approval_gate_totp_required") {
-    return "Enter a fresh authenticator code to disconnect this app.";
-  }
-  if (error.payload?.error === "approval_gate_required" || error.payload?.error === "approval_gate_password_required") {
-    return "Enter your approval password to disconnect this app.";
-  }
-  return error.payload?.error ?? error.message;
 }
 function setupSuccessTitle(action, displayName) {
   if (action === "install") return `${displayName} connected`;
