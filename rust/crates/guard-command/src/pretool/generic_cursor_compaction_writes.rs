@@ -14,6 +14,14 @@
 //! with one link and no execute bit. The transcript itself, every other name
 //! in the directory, another conversation's notes, and the same write from
 //! any other harness keep the ordinary review path.
+//!
+//! Cursor also spills tool output too large to return inline to
+//! `~/.cursor/projects/<workspace slug>/agent-tools/<uuid>.txt`, and its
+//! subagents file that output with the same `Write` tool. A write of one of
+//! those names is admitted for the session's own project directory under the
+//! same folder and file checks. Any other name in `agent-tools`, and another
+//! workspace's folder, keep the review. Cursor's read-back of these files is
+//! admitted by `generic_cursor_project_reads.rs`.
 
 use super::cursor_project_reads::{canonical, conversation_id, workspace_slugs};
 use super::extract::GenericSignals;
@@ -51,15 +59,20 @@ pub(super) fn evaluate(
             _ => None,
         })
         .collect::<Option<Vec<_>>>()?;
-    let ["projects", slug, "agent-transcripts", id, "compaction", leaf] = parts.as_slice() else {
-        return None;
+    let own_slug = |slug: &str| workspace_slugs(cwd).iter().any(|own| own == slug);
+    let reason = match parts.as_slice() {
+        ["projects", slug, "agent-transcripts", id, "compaction", leaf]
+            if own_slug(slug)
+                && conversation_id(payload) == Some(*id)
+                && compaction_note_name(leaf) =>
+        {
+            "The Rust authority proved this write is a compaction note for the current Cursor conversation, beside its own transcript, which only that conversation reads back."
+        }
+        ["projects", slug, "agent-tools", leaf] if own_slug(slug) && spilled_output_name(leaf) => {
+            "The Rust authority proved this write is Cursor's spilled tool output for the current workspace: a plain text file in its own agent-tools folder that the session reads back."
+        }
+        _ => return None,
     };
-    if !workspace_slugs(cwd).iter().any(|own| own == *slug)
-        || conversation_id(payload) != Some(*id)
-        || !compaction_note_name(leaf)
-    {
-        return None;
-    }
     let action = generic_action(
         harness,
         event,
@@ -72,7 +85,7 @@ pub(super) fn evaluate(
         action,
         "allow",
         "native_exact_safe_file_write",
-        "The Rust authority proved this write is a compaction note for the current Cursor conversation, beside its own transcript, which only that conversation reads back.",
+        reason,
     ))
 }
 
@@ -85,6 +98,19 @@ pub(super) fn compaction_note_name(leaf: &str) -> bool {
             .is_some_and(|number| {
                 (1..=6).contains(&number.len()) && number.bytes().all(|byte| byte.is_ascii_digit())
             })
+}
+
+/// `<uuid>.txt`, the name Cursor gives spilled tool output: five groups of
+/// 8, 4, 4, 4 and 12 hex digits joined by dashes.
+pub(super) fn spilled_output_name(leaf: &str) -> bool {
+    let Some(id) = leaf.strip_suffix(".txt") else {
+        return false;
+    };
+    let groups: Vec<&str> = id.split('-').collect();
+    groups.len() == 5
+        && groups.iter().zip([8, 4, 4, 4, 12]).all(|(group, length)| {
+            group.len() == length && group.bytes().all(|byte| byte.is_ascii_hexdigit())
+        })
 }
 
 /// The note `value` names when its spelling is already canonical: an absolute
@@ -138,7 +164,31 @@ fn plain_note(_metadata: &std::fs::Metadata) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::compaction_note_name;
+    use super::{compaction_note_name, spilled_output_name};
+
+    #[test]
+    fn only_uuid_text_files_are_spilled_output() {
+        for leaf in [
+            "ebfc6863-95b8-4564-92fa-1902ecf9eca3.txt",
+            "0A1B2C3D-4E5F-4A6B-8C7D-9E0F1A2B3C4D.txt",
+        ] {
+            assert!(spilled_output_name(leaf), "{leaf}");
+        }
+        for leaf in [
+            "ebfc6863-95b8-4564-92fa-1902ecf9eca3",
+            "ebfc6863-95b8-4564-92fa-1902ecf9eca3.sh",
+            "ebfc6863-95b8-4564-92fa-1902ecf9eca3.txt.sh",
+            "ebfc6863-95b8-4564-92fa-1902ecf9eca.txt",
+            "ebfc6863-95b8-4564-92fa-1902ecf9eca3-0.txt",
+            "ebfc686395b8456492fa1902ecf9eca3.txt",
+            "gbfc6863-95b8-4564-92fa-1902ecf9eca3.txt",
+            ".ebfc6863-95b8-4564-92fa-1902ecf9eca3.txt",
+            "notes.txt",
+            "AGENTS.md",
+        ] {
+            assert!(!spilled_output_name(leaf), "{leaf}");
+        }
+    }
 
     #[test]
     fn only_the_index_and_numbered_segments_are_notes() {

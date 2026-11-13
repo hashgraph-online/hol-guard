@@ -50643,6 +50643,48 @@
       "expect": "allow"
     },
     {
+      "id": "cursor-write-own-spilled-tool-output",
+      "fix_area": "write",
+      "harnesses": [
+        "cursor"
+      ],
+      "tool": "write",
+      "tool_input": {
+        "path": "${CURSOR_PROJECT}/agent-tools/7c4e2a91-3b5d-4f60-8e2a-1d9c0b7f6e53.txt",
+        "content": "exit 0\nok\n"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "cursor-write-other-workspace-spilled-tool-output",
+      "fix_area": "write",
+      "harnesses": [
+        "cursor"
+      ],
+      "tool": "write",
+      "tool_input": {
+        "path": "${HOME}/.cursor/projects/srv-billing-api/agent-tools/7c4e2a91-3b5d-4f60-8e2a-1d9c0b7f6e53.txt",
+        "content": "exit 0\nok\n"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "cursor-write-own-agent-tools-script",
+      "fix_area": "write",
+      "harnesses": [
+        "cursor"
+      ],
+      "tool": "write",
+      "tool_input": {
+        "path": "${CURSOR_PROJECT}/agent-tools/run.sh",
+        "content": "exit 0\nok\n"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
       "id": "cursor-read-own-mcp-instructions",
       "fix_area": "read",
       "harnesses": [
@@ -57540,6 +57582,91 @@
       "tool_input": {
         "query": "status",
         "limit": "all"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "pipeline-base64-decode-to-scratch-file",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "echo eyJvayI6dHJ1ZX0= | base64 -d > ${PRIVATE_TMP}/decoded.json"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "pipeline-base64-decode-jq-to-scratch-file",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "echo eyJvayI6dHJ1ZX0= | base64 -d | jq . > ${PRIVATE_TMP}/pretty.json"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "neg-pipeline-decode-to-shell-profile",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "echo ZWNobyBoaQ== | base64 -d >> ~/.zshrc"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-pipeline-decode-then-run-scratch",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "echo ZWNobyBoaQ== | base64 -d > ${PRIVATE_TMP}/run.sh; sh ${PRIVATE_TMP}/run.sh"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-pipeline-into-shell-to-scratch-file",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "echo id | sh > ${PRIVATE_TMP}/out.txt"
       },
       "cwd": "worktree",
       "expect": "not_allow"
