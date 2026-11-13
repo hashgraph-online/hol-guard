@@ -92,7 +92,7 @@ def test_an_extension_control_host_does_not_queue_behind_another_migration(tmp_p
         assert held is True
         started = time.monotonic()
         with pytest.raises(_InstalledAuthorityMigrationError):
-            ExtensionControlHost._migrate_installed_authority(server)
+            ExtensionControlHost._migrate_installed_authority(server)  # pyright: ignore[reportArgumentType]
         assert time.monotonic() - started < 1.0
 
     # Pending, so the refresh tick retries it; nothing migrated and no failure recorded.
@@ -100,7 +100,7 @@ def test_an_extension_control_host_does_not_queue_behind_another_migration(tmp_p
     assert store.calls == 0
     assert recorded == []
 
-    ExtensionControlHost._migrate_installed_authority(server)
+    ExtensionControlHost._migrate_installed_authority(server)  # pyright: ignore[reportArgumentType]
     assert server._installed_authority_pending is False
     assert store.calls == 1
 
@@ -108,6 +108,7 @@ def test_an_extension_control_host_does_not_queue_behind_another_migration(tmp_p
 def test_the_worker_host_waits_for_another_process_to_finish(tmp_path) -> None:
     store = _SlowStore(tmp_path, seconds=0.0)
     ready = tmp_path / "held"
+    release = tmp_path / "release"
     holder = subprocess.Popen(
         [
             sys.executable,
@@ -124,26 +125,38 @@ def test_the_worker_host_waits_for_another_process_to_finish(tmp_path) -> None:
                 with installed_authority_migration_turn(home, wait_seconds=0.0) as held:
                     assert held
                     (home / "held").write_text("1")
-                    time.sleep(1.0)
+                    deadline = time.monotonic() + 60
+                    while not (home / "release").exists():
+                        assert time.monotonic() < deadline
+                        time.sleep(0.02)
                 """
             ),
             str(tmp_path),
         ],
     )
+    waited: list[bool] = []
+    waiter = threading.Thread(target=lambda: waited.append(migrate_installed_authority(store, wait_seconds=60.0)))  # pyright: ignore[reportArgumentType]
     try:
         deadline = time.monotonic() + 30
         while not ready.exists():
             assert holder.poll() is None, "turn holder exited early"
             assert time.monotonic() < deadline
             time.sleep(0.02)
+        # The other process holds the turn until told to let go.
         assert migrate_installed_authority(store, wait_seconds=0.0) is False  # pyright: ignore[reportArgumentType]
+        waiter.start()
+        waiter.join(timeout=0.5)
+        assert waiter.is_alive()
         assert store.calls == 0
-        started = time.monotonic()
-        assert migrate_installed_authority(store, wait_seconds=30.0) is True  # pyright: ignore[reportArgumentType]
-        assert time.monotonic() - started > 0.3
+        release.write_text("1")
+        waiter.join(timeout=30)
+        assert waited == [True]
         assert store.calls == 1
     finally:
+        release.write_text("1")
         holder.wait(timeout=30)
+        if waiter.is_alive():
+            waiter.join(timeout=30)
     assert holder.returncode == 0
 
 
