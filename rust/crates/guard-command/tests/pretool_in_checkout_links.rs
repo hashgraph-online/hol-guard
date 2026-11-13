@@ -42,3 +42,23 @@ fn a_link_inside_the_checkout_takes_the_answer_of_the_file_it_reaches() {
         assert_decision(&cwd, &layout.home, command, true);
     }
 }
+
+#[test]
+fn a_glob_follows_a_directory_link_inside_the_checkout() {
+    let layout = layout("in-checkout-dir-links");
+    let cwd = layout.org.join("app-portal");
+    write(cwd.join("deep/nested/real.ts"), "export const real = 1;\n");
+    let secret = layout.home.join("notes/secret.txt");
+    write(secret.clone(), "TOKEN=fixture\n");
+    std::os::unix::fs::symlink(&secret, cwd.join("deep/nested/evil.ts")).unwrap();
+    // `lib` itself stays inside the checkout; the shell's glob walks
+    // through it and reaches the outside link one level down.
+    std::os::unix::fs::symlink("deep/nested", cwd.join("lib")).unwrap();
+    // A link back to the checkout root must not loop the walk.
+    std::os::unix::fs::symlink(".", cwd.join("deep/root")).unwrap();
+
+    assert_decision(&cwd, &layout.home, "grep -n TOKEN l*/*.ts", false);
+    assert_decision(&cwd, &layout.home, "grep -n TOKEN lib/*.ts", false);
+    std::fs::remove_file(cwd.join("deep/nested/evil.ts")).unwrap();
+    assert_decision(&cwd, &layout.home, "grep -n real lib/*.ts", true);
+}

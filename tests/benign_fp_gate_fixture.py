@@ -59,6 +59,7 @@ from tests.benign_fp_gate_developer_checkout import head_commit, write_developer
 from tests.benign_fp_gate_feature_app import build_feature_app, feature_app_path
 from tests.benign_fp_gate_git import _git, _session_worktree, _signed_checkout, _stopped_rebase
 from tests.benign_fp_gate_hooked_clone import hooked_cwds, write_hooked_clone
+from tests.benign_fp_gate_linked_sources import build_linked_sources, linked_sources_path
 from tests.benign_fp_gate_long_lived_clone import write_long_lived_clones
 from tests.benign_fp_gate_paths import materialise
 from tests.benign_fp_gate_projects import (
@@ -186,7 +187,7 @@ class BenignFixture:
             "feature_app": feature_app_path(self.home),
             "pnpm_monorepo": self.home / "Code" / "acme-platform",
             "linked_worktree": self.linked_worktree,
-            "linked_sources": self.home / "Code" / "linked-sources" / "app",
+            "linked_sources": linked_sources_path(self.home),
         }[name]
 
 
@@ -581,18 +582,7 @@ def build_fixture(root: Path) -> BenignFixture:
             _write(repository / relative, text)
         _git(repository, "add", "-A", home=home)
         _git(repository, "commit", "--quiet", "-m", f"{name} base", home=home)
-    # A checkout carrying two links: one to another source file inside it and
-    # one to the SSH key in home. Reading through the second one reads the key,
-    # whatever its in-repo name says.
-    linked_sources = home / "Code" / "linked-sources"
-    linked_app = linked_sources / "app"
-    linked_app.mkdir(parents=True)
-    _git(linked_app, "init", "--quiet", "--initial-branch=main", home=home)
-    _write(linked_app / "src" / "real.ts", "export const real = 1;\n")
-    (linked_app / "src" / "alias.ts").symlink_to("real.ts")
-    (linked_app / "src" / "notes.ts").symlink_to(home / ".ssh" / "id_rsa")
-    _git(linked_app, "add", "-A", home=home)
-    _git(linked_app, "commit", "--quiet", "-m", "linked sources base", home=home)
+    build_linked_sources(home, _git)
     # A non-repository parent under /tmp whose repository has a linked worktree beside the parent.
     tmp_org = Path(tempfile.mkdtemp(prefix="org.", dir=_system_tmp())).resolve() / "org"
     (tmp_org / "app").mkdir(parents=True)

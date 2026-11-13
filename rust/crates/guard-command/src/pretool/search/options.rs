@@ -119,10 +119,13 @@ const MAX_LINK_WALK: usize = 10_000;
 /// whatever the glob would select, and a walk that runs out of room or
 /// cannot read a directory counts as meeting one.
 fn glob_reaches_outside(value: &str, context: ReadContext<'_>) -> bool {
+    context
+        .cwd
+        .is_some_and(|cwd| glob_meets_unsafe_link(value, std::path::Path::new(cwd)))
+}
+
+fn glob_meets_unsafe_link(value: &str, cwd: &std::path::Path) -> bool {
     const GLOB: [char; 6] = ['*', '?', '[', ']', '{', '}'];
-    let Some(cwd) = context.cwd.map(std::path::Path::new) else {
-        return false;
-    };
     if !value.contains(GLOB) {
         return false;
     }
@@ -147,6 +150,10 @@ fn glob_reaches_outside(value: &str, context: ReadContext<'_>) -> bool {
     } else {
         remaining.len()
     };
+    // The shell's glob descends through a link to a directory, so the walk
+    // does too, once per real directory a link reaches.
+    let mut linked = std::collections::HashSet::new();
+    linked.extend(std::fs::canonicalize(&directory));
     let mut pending = vec![(directory, 1usize)];
     let mut seen = 0usize;
     while let Some((directory, level)) = pending.pop() {
@@ -165,8 +172,17 @@ fn glob_reaches_outside(value: &str, context: ReadContext<'_>) -> bool {
                 return true;
             }
             if kind.is_symlink() {
-                if link_target_unsafe(&entry.path(), cwd) {
+                let path = entry.path();
+                if link_target_unsafe(&path, cwd) {
                     return true;
+                }
+                if level < depth && path.is_dir() {
+                    let Ok(real) = std::fs::canonicalize(&path) else {
+                        return true;
+                    };
+                    if linked.insert(real) {
+                        pending.push((path, level + 1));
+                    }
                 }
             } else if kind.is_dir() && level < depth {
                 pending.push((entry.path(), level + 1));
@@ -385,3 +401,7 @@ pub(super) fn safe_grep_flag(name: &str) -> bool {
             | "--word-regexp"
     )
 }
+
+#[cfg(all(test, unix))]
+#[path = "options_link_tests.rs"]
+mod link_tests;

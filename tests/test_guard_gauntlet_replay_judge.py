@@ -214,6 +214,9 @@ def test_only_the_marked_cases_may_pass_on_containment() -> None:
         "neg-goflags-screened-then-toolexec-prefix-go-test",
         "neg-goflags-toolexec-prefix-then-screened-argument-go-test",
         "neg-goflags-mod-mod-prefix-go-test",
+        # A glob over a checkout link that leaves it: the contained run has no home
+        # access, so the link reads nothing.
+        "neg-linked-sources-grep-glob-over-escaping-link",
         "neg-rustflags-linker-prefix-cargo-test",
         "neg-pytest-addopts-plugin-prefix-venv-pytest",
         # A tool setting whose value is a URL, a path or a file to load rather
