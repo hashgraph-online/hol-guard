@@ -273,6 +273,11 @@ fn write_template(
         Template::Arg(name) => write_json(args.get(name).unwrap_or(&Value::Null), out),
         Template::Const(value) => write_json(value, out),
         Template::Element(_) => write_json(element.ok_or_else(|| refused(None))?, out),
+        Template::Rfc822(mail) => {
+            let encoded =
+                crate::cloud_pack_mail::render(mail, args).ok_or_else(|| refused(None))?;
+            write_json(&Value::String(encoded), out)
+        }
         Template::Object(fields) => {
             out.push('{');
             let mut first = true;

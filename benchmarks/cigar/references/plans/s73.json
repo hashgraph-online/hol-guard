@@ -1,0 +1,98 @@
+{
+ "repo": "jinja",
+ "seed": 73,
+ "steps": [
+  {
+   "kind": "bug",
+   "prompt": "`tests/test_core_tags.py::TestForLoop::test_context_vars` started failing after the last commit. Fix the bug in the library code; don't edit the tests.",
+   "setup": [
+    {
+     "failing": [
+      "tests/test_core_tags.py::TestForLoop::test_context_vars",
+      "tests/test_runtime.py::test_loop_idx0"
+     ],
+     "line": 470,
+     "new": "        return self.length + self.index\n",
+     "orig": "        return self.length - self.index\n",
+     "path": "src/jinja2/runtime.py",
+     "qual": "LoopContext.revindex0"
+    }
+   ]
+  },
+  {
+   "kind": "rename",
+   "prompt": "Rename the internal helper `_import_common` to `_import_common_impl` everywhere in the project, including tests. Behavior must not change.",
+   "rename": {
+    "count": 3,
+    "files": [
+     "src/jinja2/compiler.py"
+    ],
+    "new": "_import_common_impl",
+    "old": "_import_common",
+    "path": "src/jinja2/compiler.py"
+   }
+  },
+  {
+   "kind": "stub",
+   "prompt": "Tests fail because url_quote is not implemented (src/jinja2/utils.py). Write the implementation; the docstring and tests describe the expected behavior.",
+   "stub": {
+    "body": "    if not isinstance(obj, bytes):\n        if not isinstance(obj, str):\n            obj = str(obj)\n\n        obj = obj.encode(charset)\n\n    safe = b\"\" if for_qs else b\"/\"\n    rv = quote_from_bytes(obj, safe)\n\n    if for_qs:\n        rv = rv.replace(\"%20\", \"+\")\n\n    return rv\n",
+    "body_start": 405,
+    "end": 417,
+    "failing": [
+     "tests/test_filters.py::TestFilter::test_urlencode[Hello,",
+     "tests/test_filters.py::TestFilter::test_urlencode[a",
+     "tests/test_filters.py::TestFilter::test_urlencode[value2-f=1]",
+     "tests/test_filters.py::TestFilter::test_urlencode[value3-f=1&amp;z=2]",
+     "tests/test_filters.py::TestFilter::test_urlencode[value4-%E2%80%BD=1]",
+     "tests/test_filters.py::TestFilter::test_urlencode[value5-0=1]",
+     "tests/test_filters.py::TestFilter::test_urlencode[value6-a+b%2Fc=a+b%2Fc]"
+    ],
+    "indent": 4,
+    "path": "src/jinja2/utils.py",
+    "qual": "url_quote"
+   }
+  },
+  {
+   "kind": "rename",
+   "prompt": "Rename the internal helper `_make_unop` to `_make_unop_impl` everywhere in the project, including tests. Behavior must not change.",
+   "rename": {
+    "count": 4,
+    "files": [
+     "src/jinja2/compiler.py"
+    ],
+    "new": "_make_unop_impl",
+    "old": "_make_unop",
+    "path": "src/jinja2/compiler.py"
+   }
+  },
+  {
+   "kind": "bug",
+   "prompt": "A teammate just pushed a commit and now some tests fail. Find the root cause in the library code and fix it without changing the tests.",
+   "setup": [
+    {
+     "failing": [
+      "tests/test_async_filters.py::test_simple_reject[<lambda>0]",
+      "tests/test_async_filters.py::test_simple_reject[<lambda>1]",
+      "tests/test_async_filters.py::test_simple_select[<lambda>0]",
+      "tests/test_async_filters.py::test_simple_select[<lambda>1]",
+      "tests/test_filters.py::TestFilter::test_func_reject_attr",
+      "tests/test_filters.py::TestFilter::test_func_select_attr",
+      "tests/test_filters.py::TestFilter::test_simple_reject",
+      "tests/test_filters.py::TestFilter::test_simple_select",
+      "tests/test_tests.py::TestTestsCase::test_odd"
+     ],
+     "line": 17,
+     "new": "    return value % 2 != 1\n",
+     "orig": "    return value % 2 == 1\n",
+     "path": "src/jinja2/tests.py",
+     "qual": "test_odd"
+    }
+   ]
+  },
+  {
+   "kind": "review",
+   "prompt": "Review every change made in this session. Remove leftovers or duplication, match the style of the surrounding code, and make sure the full test suite passes."
+  }
+ ]
+}

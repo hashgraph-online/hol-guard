@@ -531,6 +531,41 @@
               "const": true
             }
           }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "rfc822"
+          ],
+          "properties": {
+            "rfc822": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "to",
+                "subject",
+                "text"
+              ],
+              "properties": {
+                "to": {
+                  "$ref": "#/$defs/argumentName"
+                },
+                "cc": {
+                  "$ref": "#/$defs/argumentName"
+                },
+                "bcc": {
+                  "$ref": "#/$defs/argumentName"
+                },
+                "subject": {
+                  "$ref": "#/$defs/argumentName"
+                },
+                "text": {
+                  "$ref": "#/$defs/argumentName"
+                }
+              }
+            }
+          }
         }
       ]
     },

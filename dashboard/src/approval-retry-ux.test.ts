@@ -13,7 +13,7 @@ import { GuardRequestResolutionError } from "./guard-api";
 import { bulkApprovalRiskTier, groupDuplicates, isBulkApprovableGroup } from "./queue-state";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { approvalGateRefreshNeeded, resolvedStateForItem } from "./review-decision-state";
+import { approvalGateDemandedCode, approvalGateRefreshNeeded, resolvedStateForItem } from "./review-decision-state";
 import { allowButtonLabel, ReviewScopeControls } from "./review-scope-controls";
 import { buildDecisionPayload, requestSupportsScope } from "./approval-scopes";
 import { buildBulkRiskDisclosure } from "./queue-bulk-risk-disclosure";
@@ -200,6 +200,17 @@ assert(
   "unrelated errors do not refresh the gate",
 );
 assert(!approvalGateRefreshNeeded(new Error("network")), "non-resolution errors do not refresh the gate");
+
+// #7528: only a refusal for want of a code makes the card ask for a fresh one.
+assert(
+  approvalGateDemandedCode(new GuardRequestResolutionError(403, { error: "approval_gate_totp_required" }, "x")),
+  "a missing-code refusal demands a fresh code",
+);
+assert(
+  !approvalGateDemandedCode(new GuardRequestResolutionError(423, { error: "approval_gate_locked" }, "x")),
+  "a locked gate does not demand a code",
+);
+assert(!approvalGateDemandedCode(new Error("network")), "non-resolution errors do not demand a code");
 
 // #3835: a decision made on one request never applies to the request shown after it.
 const decided = { requestId: unbound.request_id, action: "allow" as const, persistedExactAction: false };

@@ -227,3 +227,32 @@ The bill is the number of requests times the context each request re-sends. The 
 - Codex sends several `sed -n` ranges in one shell call, so a list of line ranges turns into few, large reads: requests fell from 79 to 54.
 - Haiku sends one tool call per request. A session makes about 150 to 210 requests, each re-reading 24,000 tokens of fixed prompt plus the growing chat, so cost is almost all cache reads. Here the map helps by removing whole search and `git` loops rather than by merging reads. The batching sentence asks Claude Code to send calls it already knows together in one response; Haiku did so on about one turn in twenty.
 - Oh My Pi also makes one call per request and edits one hunk at a time, so it pays for many small edits (about 18 in the final review step). Its saving comes the same way as Haiku's, from fewer searches and a smaller step four, once the extension sends its session id. Before that fix the changes note was empty on Oh My Pi and Pi, which is why their numbers trailed the other two.
+
+## Seeded runs across repos
+
+The single click task above can be tuned to. These runs use the rig in [`benchmarks/cigar/`](../../benchmarks/cigar/README.md): each seed picks a repo and six tasks from verified pools (bug fixes, a two-bug commit, stubs to write again, a rename, a doctest, a code question, a review), and every step is checked. Seeds 116–131 use the benchmark prompts on six repos; seeds 200–215 are held out, on three other repos with loosely worded prompts; the random set is 16 seeds nobody picked (153, 171, 183, 185, 190, 191, 195, 199, 384, 1309, 1940, 2628, 3924, 6419, 6712, 8003).
+
+Three setups per harness: no Guard, CIGAR only (the prompt note, no tool checks), and enforcement plus CIGAR (every Guard hook, as a user who installed Guard runs). Totals are paired over the same seeds. Cost is list price; tokens are input plus output. Cost saved trails tokens saved because most saved tokens are cached input. Codex and Oh My Pi run gpt-6-luna at medium effort, Claude Code runs claude-haiku-4-5. Guard 3.60.0a75, 2026-11-12.
+
+| harness | seeds | setup | cost | tokens | passed | cost saved | tokens saved |
+|---|---|---|---|---|---|---|---|
+| Codex | random 16 | no Guard | $0.29 | 16.6M | 16/16 | — | — |
+| Codex | random 16 | CIGAR only | $0.14 | 6.8M | 16/16 | 50.4% | 58.8% |
+| Codex | random 16 | enforcement + CIGAR | $0.20 | 11.2M | 16/16 | 29.8% | 32.5% |
+| Codex | 116–131, 200–215 | no Guard | $0.58 | 34.2M | 31/32 | — | — |
+| Codex | 116–131, 200–215 | CIGAR only | $0.32 | 17.0M | 31/32 | 44.9% | 50.3% |
+| Codex | 116–131, 200–215 | enforcement + CIGAR | $0.49 | 28.3M | 28/32 | 15.3% | 17.4% |
+| Claude Code | random 16 | no Guard | $7.50 | 49.1M | 16/16 | — | — |
+| Claude Code | random 16 | CIGAR only | $3.90 | 22.5M | 16/16 | 47.9% | 54.2% |
+| Claude Code | random 16 | enforcement + CIGAR | $4.84 | 28.6M | 14/16 | 35.4% | 41.8% |
+| Claude Code | 116–131, 200–215 | no Guard | $16.91 | 113.7M | 30/32 | — | — |
+| Claude Code | 116–131, 200–215 | CIGAR only | $8.20 | 46.8M | 32/32 | 51.5% | 58.8% |
+| Claude Code | 116–131, 200–215 | enforcement + CIGAR | $9.94 | 58.9M | 30/32 | 41.2% | 48.2% |
+| Oh My Pi | random 16 | no Guard | $0.32 | 18.3M | 16/16 | — | — |
+| Oh My Pi | random 16 | enforcement + CIGAR | $0.18 | 8.9M | 16/16 | 43.8% | 51.4% |
+| Oh My Pi | 116–131, 200–215 | no Guard | $0.77 | 46.5M | 32/32 | — | — |
+| Oh My Pi | 116–131, 200–215 | enforcement + CIGAR | $0.38 | 18.9M | 30/32 | 50.6% | 59.4% |
+
+Oh My Pi has no CIGAR-only setup: its Guard extension carries both.
+
+CIGAR alone halves the tokens on every harness and seed set without costing tasks; Claude Code with CIGAR passed two held-out tasks the run without Guard missed. With enforcement on, the gap to CIGAR only is commands Guard held for review and the turns the agent spent working around them: inline Python (`python -c`, heredocs), `perl -pi`, `find … -exec sed -i`, shell `for` loops and `git add … && git commit`. Not every enforcement failure is a hold: three Codex held-out misses (204, 207, 212) show no Guard message, and the two Claude Code random misses left a rename or a test unfinished. The Oh My Pi misses do trace to Guard: reads of its own `xd://` and `proc://` resources held for review, and a malformed edit sent for approval instead of back to the model.

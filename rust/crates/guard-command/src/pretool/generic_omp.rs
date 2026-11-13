@@ -9,6 +9,8 @@
 mod eval;
 #[path = "generic_omp_grep_glob.rs"]
 mod grep_glob;
+#[path = "generic_omp_host_refs.rs"]
+mod host_refs;
 #[path = "generic_omp_learn.rs"]
 mod learn;
 #[path = "generic_omp_listing_proof.rs"]
@@ -20,6 +22,7 @@ use super::extract::GenericSignals;
 use super::result::{generic_action, generic_result};
 use crate::native_command_controls::CompiledNativeCommandControls;
 use guard_contracts::{PreToolActionTypeV1, PreToolOperationV1, PreToolResultV1};
+pub(super) use host_refs::host_reference_reason;
 use listing_proof::{listing, search_targets, walk_inside_session};
 use serde_json::{Map, Value};
 use std::time::Instant;
@@ -596,115 +599,3 @@ pub(super) fn grep_review_note(
 }
 
 const GLOB_PATH_NOTE: &str = "A search path with a glob is checked against everything under the folder before the glob, so list the folders you need as `;`-separated paths instead.";
-
-/// `skill://<name>[/<relative.md>]` names a skill the host resolves from its
-/// own registered skill roots; the name is a bounded token, never a path.
-fn skill_reference(value: &str) -> bool {
-    let Some(rest) = value.strip_prefix("skill://") else {
-        return false;
-    };
-    rest.len() <= 512 && rest.split('/').all(host_name_token)
-}
-
-/// One `/`-separated part of a `skill://` or `local://` name: a bounded,
-/// non-hidden run of letters, digits, `-`, `_` and `.`.
-fn host_name_token(part: &str) -> bool {
-    !part.is_empty()
-        && part.len() <= 128
-        && !part.starts_with('.')
-        && part
-            .bytes()
-            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_' | b'.'))
-}
-
-/// Reason code for host-held reference selectors, `None` for real paths.
-pub(super) fn host_reference_reason(value: &str) -> Option<&'static str> {
-    if artifact_reference(value) {
-        Some("native_omp_artifact_read")
-    } else if skill_reference(value) {
-        Some("native_omp_skill_read")
-    } else if proc_reference(value) {
-        Some("native_omp_proc_read")
-    } else if local_reference(value) {
-        Some("native_omp_local_read")
-    } else {
-        None
-    }
-}
-
-/// `local://` lists the session's scratch root and `local://<name>` reads one
-/// file in it, such as the `paste-N.md` a large paste becomes or a plan the
-/// session wrote. The host resolves the name under that root and refuses any
-/// target outside it; the name here is also bounded tokens joined by `/`, so
-/// `..`, absolute, hidden, `~` and percent-encoded names stay reviewed. An
-/// optional line range or `raw` follows, as for `artifact://`.
-fn local_reference(value: &str) -> bool {
-    let Some(rest) = value.strip_prefix("local://") else {
-        return false;
-    };
-    if rest.is_empty() {
-        return true;
-    }
-    let mut chunks = rest.split(':');
-    let name = chunks.next().unwrap_or_default();
-    rest.len() <= 512 && name.split('/').all(host_name_token) && selector_chunks_ok(chunks)
-}
-
-/// `artifact://<digits>` names an Oh My Pi session artifact, never a path.
-/// It may carry an `N-M` line range, `raw`, or one of each in either order;
-/// `raw` only drops line formatting from the same artifact.
-fn artifact_reference(value: &str) -> bool {
-    let Some(rest) = value.strip_prefix("artifact://") else {
-        return false;
-    };
-    let mut chunks = rest.split(':');
-    let id = chunks.next().unwrap_or_default();
-    let number = |part: &str| {
-        !part.is_empty() && part.len() <= 9 && part.bytes().all(|byte| byte.is_ascii_digit())
-    };
-    number(id) && selector_chunks_ok(chunks)
-}
-
-/// `proc://` lists the session's own background jobs and `proc://<id>` shows
-/// one job's status and output, with an optional line window. The host serves
-/// both from its job table, never from a path. `proc://<id>/kill` and
-/// `/mode` are write targets that fail on a read, so they stay out: the id is
-/// one bounded token with no `/`.
-fn proc_reference(value: &str) -> bool {
-    let Some(rest) = value.strip_prefix("proc://") else {
-        return false;
-    };
-    if rest.is_empty() {
-        return true;
-    }
-    let mut chunks = rest.split(':');
-    let id = chunks.next().unwrap_or_default();
-    let token = !id.is_empty()
-        && id.len() <= 128
-        && !id.starts_with('.')
-        && id
-            .bytes()
-            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_' | b'.'));
-    token && selector_chunks_ok(chunks)
-}
-
-/// The `:`-separated tail the host peels from a reference: at most one `N-M`
-/// line range and one `raw`, in either order.
-fn selector_chunks_ok<'a>(mut chunks: impl Iterator<Item = &'a str>) -> bool {
-    let number = |part: &str| {
-        !part.is_empty() && part.len() <= 9 && part.bytes().all(|byte| byte.is_ascii_digit())
-    };
-    let (mut raw, mut range) = (false, false);
-    chunks.all(|chunk| {
-        if chunk.eq_ignore_ascii_case("raw") && !raw {
-            raw = true;
-            return true;
-        }
-        let is_range = chunk
-            .split_once('-')
-            .is_some_and(|(start, end)| number(start) && number(end));
-        let fresh = is_range && !range;
-        range |= is_range;
-        fresh
-    })
-}

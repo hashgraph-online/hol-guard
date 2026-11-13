@@ -27,7 +27,14 @@ def _post(pack: dict) -> dict:
 
 
 def test_the_shipped_packs_match_the_schema() -> None:
-    assert [path.name for path in PACKS] == ["github.json", "notion.json", "slack.json"]
+    assert [path.name for path in PACKS] == [
+        "calendar.json",
+        "drive.json",
+        "github.json",
+        "gmail.json",
+        "notion.json",
+        "slack.json",
+    ]
     validator = _validator()
     for path in PACKS:
         errors = list(validator.iter_errors(json.loads(path.read_text(encoding="utf-8"))))

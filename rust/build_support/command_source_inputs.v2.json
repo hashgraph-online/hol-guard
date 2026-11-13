@@ -392,6 +392,7 @@
       "src/pretool/generic_omp_eval_pure.rs",
       "src/pretool/generic_omp_eval_tokens.rs",
       "src/pretool/generic_omp_grep_glob.rs",
+      "src/pretool/generic_omp_host_refs.rs",
       "src/pretool/generic_omp_learn.rs",
       "src/pretool/generic_omp_listing_proof.rs",
       "src/pretool/generic_omp_yield.rs",

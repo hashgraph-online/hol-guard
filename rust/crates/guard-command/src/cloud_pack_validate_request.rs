@@ -224,6 +224,8 @@ fn validate_template(
             }
             validate_template(item, args, depth + 1, true)
         }
+        Template::Rfc822(mail) if !in_each => crate::cloud_pack_mail::validate(mail, args),
+        Template::Rfc822(_) => Err("cloud_pack_template_mail_invalid"),
         Template::Element(true) if in_each => Ok(()),
         Template::Element(_) => Err("cloud_pack_template_each_invalid"),
     }

@@ -188,6 +188,8 @@ pub enum Template {
     },
     /// The current element inside `each`; must be `true`.
     Element(bool),
+    /// A base64url plain-text message built from recipient and text arguments.
+    Rfc822(crate::cloud_pack_mail::MailTemplate),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
