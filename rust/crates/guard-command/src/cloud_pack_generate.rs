@@ -8,8 +8,7 @@
 //! non-read action is proposed `permanent`; and request bounds come from the
 //! source schema when it states them, or from fixed limits when it does not.
 
-use crate::cloud_action_binding::valid_label;
-use crate::cloud_action_classifier::{classify, rank, Proposal};
+use crate::cloud_action_classifier::{rank, Proposal};
 use crate::cloud_action_v2::class_effect;
 use crate::cloud_pack::{MAX_ACTIONS, MAX_ARGUMENTS, PACK_SCHEMA};
 use crate::cloud_pack_validate::{compile_whole, valid_host};
@@ -345,7 +344,7 @@ pub fn generate(request: &mut Map<String, Value>) -> Result<Value, Refusal> {
             if !matches!(mode.as_str(), "none" | "oauth2" | "api-key") {
                 return Err(("request_invalid", "/authMode"));
             }
-            build_mcp(&tools, &provider, &mode, &mut draft);
+            crate::cloud_pack_generate_mcp::build(&tools, &provider, &mode, &mut draft);
             (vec![host], mode)
         }
         _ => return Err(("request_invalid", "/openapi")),
@@ -392,62 +391,6 @@ fn source(request: &mut Map<String, Value>) -> Result<(Option<Value>, Option<Val
 }
 
 type Refusal = (&'static str, &'static str);
-
-fn build_mcp(tools: &[Value], provider: &str, mode: &str, draft: &mut Draft) {
-    for (index, tool) in tools.iter().enumerate() {
-        let at = format!("/mcpTools/{index}");
-        let Some(name) = tool
-            .get("name")
-            .and_then(Value::as_str)
-            .filter(|name| valid_label(name) && name.len() <= 128)
-        else {
-            draft.note("tool_skipped", &at);
-            continue;
-        };
-        let Some(action_id) = draft.action_id(provider, name) else {
-            draft.note("actions_truncated", &at);
-            break;
-        };
-        let schema = tool.get("inputSchema");
-        let mut arguments = Map::new();
-        if let Some(schema) = schema {
-            let at = format!("{at}/inputSchema/properties");
-            // A remote MCP tool validates its own input, so a tool whose
-            // required property the pack cannot carry still drafts for review.
-            let _ = object_arguments(
-                schema,
-                &mut arguments,
-                &mut BTreeMap::new(),
-                draft,
-                &at,
-                false,
-            );
-        }
-        let response = response(tool.get("outputSchema"), false, draft, &at);
-        let text = tool
-            .get("title")
-            .or_else(|| tool.get("description"))
-            .and_then(Value::as_str);
-        let scopes = if mode == "none" {
-            BTreeSet::new()
-        } else {
-            BTreeSet::from([PLACEHOLDER_SCOPE.to_owned()])
-        };
-        push_action(
-            draft,
-            ActionParts {
-                action_id,
-                title: title(text, name),
-                link: json!({ "tool": name }),
-                executor: json!({ "kind": "remote-mcp", "tool": name }),
-                arguments,
-                proposal: classify(name, schema),
-                response,
-                scopes,
-            },
-        );
-    }
-}
 
 fn text_field(request: &mut Map<String, Value>, key: &str) -> Option<String> {
     match request.remove(key) {

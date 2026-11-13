@@ -17,6 +17,8 @@ pub use crate::cloud_pack_pattern::{compile, compile_whole};
 
 const MAX_TEXT_LENGTH: u32 = 65_536;
 const MAX_ARRAY_ITEMS: u32 = 1_000;
+/// Largest serialized `json` argument, or undeclared arguments taken together.
+pub(crate) const MAX_JSON_BYTES: u32 = 65_536;
 const MAX_FIELDS: usize = 64;
 const MAX_RESPONSE_DEPTH: usize = 4;
 /// Header names a pack may never set: credentials, cookies and framing.
@@ -132,15 +134,22 @@ fn validate_action(
     if action.arguments.len() > MAX_ARGUMENTS {
         return fail("cloud_pack_arguments_invalid", format!("{at}/arguments"));
     }
+    let mcp = matches!(action.executor, Executor::RemoteMcp { .. });
     for (name, spec) in &action.arguments {
-        if !snake_name(name) {
+        let named = if mcp { mcp_name(name) } else { snake_name(name) };
+        if !named {
             return fail(
                 "cloud_pack_argument_name_invalid",
                 format!("{at}/arguments/{name}"),
             );
         }
-        validate_argument(spec)
+        validate_argument(spec, mcp)
             .map_err(|code| PackError::new(code, format!("{at}/arguments/{name}")))?;
+    }
+    if let Some(open) = &action.open_arguments {
+        if !mcp || open.max_bytes == 0 || open.max_bytes > MAX_JSON_BYTES {
+            return fail("cloud_pack_open_arguments_invalid", format!("{at}/openArguments"));
+        }
     }
     match &action.executor {
         Executor::DeclarativeHttp { request } => {
@@ -167,8 +176,23 @@ fn validate_action(
     validate_safety(pack, action).map_err(|code| PackError::new(code, format!("{at}/safety")))
 }
 
-fn validate_argument(spec: &ArgumentSpec) -> Result<(), &'static str> {
+fn validate_argument(spec: &ArgumentSpec, mcp: bool) -> Result<(), &'static str> {
     match spec {
+        ArgumentSpec::Json {
+            max_bytes,
+            max_items,
+            ..
+        } => {
+            if !mcp {
+                return Err("cloud_pack_argument_type_invalid");
+            }
+            if *max_bytes == 0
+                || *max_bytes > MAX_JSON_BYTES
+                || max_items.is_some_and(|n| n == 0 || n > MAX_ARRAY_ITEMS)
+            {
+                return Err("cloud_pack_argument_bounds_invalid");
+            }
+        }
         ArgumentSpec::Integer {
             minimum, maximum, ..
         } => {
@@ -373,6 +397,16 @@ fn provider_id(value: &str) -> bool {
         && value
             .bytes()
             .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-')
+}
+
+/// A `remote-mcp` argument keeps the provider's own name (`camelCase` or
+/// `kebab-case`), since the call reaches the tool unrenamed.
+pub(crate) fn mcp_name(value: &str) -> bool {
+    (1..=64).contains(&value.len())
+        && (value.as_bytes()[0].is_ascii_alphabetic() || value.as_bytes()[0] == b'_')
+        && value
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || b == b'_' || b == b'-')
 }
 
 pub(crate) fn snake_name(value: &str) -> bool {

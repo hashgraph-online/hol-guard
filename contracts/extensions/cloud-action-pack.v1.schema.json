@@ -184,10 +184,25 @@
           "maxProperties": 32,
           "propertyNames": {
             "type": "string",
-            "pattern": "^[a-z_][a-z0-9_]{0,63}$"
+            "pattern": "^[A-Za-z_][A-Za-z0-9_-]{0,63}$"
           },
           "additionalProperties": {
             "$ref": "#/$defs/argument"
+          }
+        },
+        "openArguments": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "maxBytes"
+          ],
+          "description": "Remote MCP actions only: undeclared tool arguments may be sent, bounded in total size.",
+          "properties": {
+            "maxBytes": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 65536
+            }
           }
         },
         "facts": {
@@ -716,6 +731,34 @@
             },
             "items": {
               "$ref": "#/$defs/textRule"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "required",
+            "maxBytes"
+          ],
+          "description": "A JSON object or array argument, sent as is. Remote MCP actions only.",
+          "properties": {
+            "type": {
+              "const": "json"
+            },
+            "required": {
+              "type": "boolean"
+            },
+            "maxBytes": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 65536
+            },
+            "maxItems": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 1000
             }
           }
         }

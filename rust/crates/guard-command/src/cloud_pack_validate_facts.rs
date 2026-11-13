@@ -153,7 +153,10 @@ fn count_fact(
             if !distinct(arguments)
                 || !arguments
                     .iter()
-                    .all(|name| matches!(args.get(name), Some(ArgumentSpec::Array { .. })))
+                    .all(|name| matches!(
+                        args.get(name),
+                        Some(ArgumentSpec::Array { .. } | ArgumentSpec::Json { max_items: Some(_), .. })
+                    ))
             {
                 return Err("cloud_pack_extractor_argument_invalid");
             }

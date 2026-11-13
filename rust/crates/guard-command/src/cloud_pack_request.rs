@@ -44,11 +44,21 @@ pub fn check_arguments<'a>(
     let record = args
         .as_object()
         .ok_or_else(|| error("not_an_object", None))?;
-    if let Some(name) = record
-        .keys()
-        .find(|name| !action.arguments.contains_key(*name))
-    {
-        return Err(error("unknown_argument", Some(name)));
+    let mut open_bytes = 0_usize;
+    for (name, value) in record {
+        if action.arguments.contains_key(name) {
+            continue;
+        }
+        let Some(open) = &action.open_arguments else {
+            return Err(error("unknown_argument", Some(name)));
+        };
+        if !crate::cloud_pack_validate::mcp_name(name) {
+            return Err(error("unknown_argument", Some(name)));
+        }
+        open_bytes = open_bytes.saturating_add(json_len(value));
+        if open_bytes > open.max_bytes as usize {
+            return Err(error("open_arguments_too_large", Some(name)));
+        }
     }
     for (name, spec) in &action.arguments {
         let Some(value) = record.get(name) else {
@@ -72,6 +82,19 @@ fn check_value(spec: &ArgumentSpec, value: &Value) -> Result<(), &'static str> {
             .map(|_| ())
             .ok_or("invalid_argument"),
         ArgumentSpec::Boolean { .. } => value.as_bool().map(|_| ()).ok_or("invalid_argument"),
+        ArgumentSpec::Json {
+            max_bytes,
+            max_items,
+            ..
+        } => {
+            let fits = json_len(value) <= *max_bytes as usize;
+            let counted = max_items.is_none_or(|max| {
+                value
+                    .as_array()
+                    .is_some_and(|list| list.len() <= max as usize)
+            });
+            (fits && counted).then_some(()).ok_or("invalid_argument")
+        }
         ArgumentSpec::String { .. } => check_text(spec.text_rule().as_ref(), value),
         ArgumentSpec::Array {
             min_items,
@@ -87,6 +110,11 @@ fn check_value(spec: &ArgumentSpec, value: &Value) -> Result<(), &'static str> {
                 .try_for_each(|item| check_text(Some(items), item))
         }
     }
+}
+
+/// The serialized size of a value; one that cannot be written counts as too large.
+fn json_len(value: &Value) -> usize {
+    serde_json::to_vec(value).map_or(usize::MAX, |bytes| bytes.len())
 }
 
 pub(crate) fn check_text(rule: Option<&TextRule>, value: &Value) -> Result<(), &'static str> {

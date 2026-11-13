@@ -137,6 +137,14 @@ fn compare_action(changes: &mut Changes, old: &PackAction, new: &PackAction) {
     changes.when(old.link != new.link, "link_changed", None, true);
     changes.when(old.executor != new.executor, "executor_changed", None, true);
     compare_arguments(changes, &old.arguments, &new.arguments);
+    let open_looser = match (&old.open_arguments, &new.open_arguments) {
+        (None, Some(_)) => true,
+        (Some(before), Some(after)) => after.max_bytes > before.max_bytes,
+        _ => false,
+    };
+    if old.open_arguments != new.open_arguments {
+        changes.push("open_arguments_changed", None, open_looser);
+    }
     // Any class change can move the action into a different policy bucket.
     changes.when(
         old.facts.class != new.facts.class,
@@ -211,6 +219,18 @@ fn argument_looser(old: &ArgumentSpec, new: &ArgumentSpec) -> bool {
                 ..
             },
         ) => min_items < lo || max_items > hi || text_looser(before, items),
+        (
+            ArgumentSpec::Json {
+                max_bytes: before,
+                max_items: hi,
+                ..
+            },
+            ArgumentSpec::Json {
+                max_bytes,
+                max_items,
+                ..
+            },
+        ) => max_bytes > before || items_looser(*hi, *max_items),
         (ArgumentSpec::String { .. }, ArgumentSpec::String { .. }) => {
             match (old.text_rule(), new.text_rule()) {
                 (Some(before), Some(after)) => text_looser(&before, &after),
@@ -218,6 +238,15 @@ fn argument_looser(old: &ArgumentSpec, new: &ArgumentSpec) -> bool {
             }
         }
         _ => true,
+    }
+}
+
+/// An unbounded array (`None`) is looser than any bound.
+fn items_looser(old: Option<u32>, new: Option<u32>) -> bool {
+    match (old, new) {
+        (Some(before), Some(after)) => after > before,
+        (Some(_), None) => true,
+        (None, _) => false,
     }
 }
 
