@@ -12,9 +12,13 @@ use std::sync::LazyLock;
 
 use regex::Regex;
 
-use super::{assess_programs, sent_model, structure, Language, PathContext};
+use super::{assess_programs, sent_model, structure, PathContext};
 use crate::CanonicalCommandV1;
 use guard_contracts::PreToolResultV1;
+
+#[path = "destructive_git_source.rs"]
+mod source;
+pub(super) use source::without_comments;
 
 /// One quoted literal: single, double or backtick quoted, on one line.
 const LITERAL: &str = r#"(?:"[^"\n]*"|'[^'\n]*'|`[^`\n]*`)"#;
@@ -156,6 +160,38 @@ fn short_cluster_has(word: &str, letter: char) -> bool {
         .is_some_and(|rest| !rest.starts_with('-') && rest.contains(letter))
 }
 
+/// Whether `git clean` options (the words after `clean`) ask for a dry run.
+/// Words after `--` are pathspecs, and the value of `-e`/`--exclude` is a
+/// pattern, so neither is read as an option: `git clean -fd -- -notes`
+/// removes `-notes`.
+fn clean_is_dry_run(rest: &[&str]) -> bool {
+    let mut words = rest.iter();
+    while let Some(word) = words.next() {
+        match *word {
+            "--" => return false,
+            "--dry-run" => return true,
+            "-e" | "--exclude" => {
+                words.next();
+                continue;
+            }
+            _ => {}
+        }
+        let Some(cluster) = word.strip_prefix('-').filter(|rest| !rest.starts_with('-')) else {
+            continue;
+        };
+        // In a cluster, `e` takes the rest of the word (or the next word)
+        // as its pattern, so only the letters before it are options.
+        let (flags, pattern) = cluster.split_once('e').unwrap_or((cluster, ""));
+        if flags.contains('n') {
+            return true;
+        }
+        if cluster.contains('e') && pattern.is_empty() {
+            words.next();
+        }
+    }
+    false
+}
+
 /// Whether `argv` (a git invocation, starting at `git`) discards work.
 fn discards_work(argv: &[String]) -> bool {
     let mut words = argv.iter().skip(1).map(String::as_str);
@@ -173,9 +209,7 @@ fn discards_work(argv: &[String]) -> bool {
     let has = |flag: &str| rest.contains(&flag);
     match subcommand {
         "reset" => has("--hard") || has("--merge") || has("--keep"),
-        "clean" => !rest
-            .iter()
-            .any(|word| *word == "--dry-run" || short_cluster_has(word, 'n')),
+        "clean" => !clean_is_dry_run(&rest),
         "checkout" => {
             // `git checkout <tree> <path>` replaces the path from the tree,
             // and `git checkout src/app.py` restores a file from the index.
@@ -287,134 +321,6 @@ pub(super) fn other_inline_sources(
         }
     }
     sources
-}
-
-/// `source` with each comment that starts outside a string literal removed:
-/// `#` comments for Python, `//` and `/* */` comments for Node. A marker
-/// inside a quoted string is kept, so `os.system("git reset --hard # note")`
-/// still reads the whole command.
-///
-/// String state carries across lines. A Python triple-quoted string or a
-/// backtick template stays open over line ends, and an escaped line end joins
-/// the next line, as the interpreter does. A string that spans lines is
-/// written back as one `"`-quoted line (inner `"` as `'`, line ends as `;`)
-/// so the one-line literal readers pair its quotes the way the interpreter
-/// does and still see each command inside it. A `${...}` in a Node template
-/// runs as code, so it is written back outside the string.
-pub(super) fn without_comments(language: Language, source: &str) -> String {
-    let mut code = String::with_capacity(source.len());
-    let mut quote: Option<&'static str> = None;
-    // Open brace depth of each `${` interpolation the scan is inside.
-    let mut interpolations: Vec<usize> = Vec::new();
-    let mut in_block = false;
-    let mut in_line_comment = false;
-    let mut chars = source.char_indices();
-    while let Some((at, ch)) = chars.next() {
-        let rest = &source[at..];
-        if let Some(close) = quote {
-            let spans_lines = close.len() == 3 || close == "`";
-            if ch == '\\' {
-                match chars.next() {
-                    // A line continuation inside a string adds nothing.
-                    Some((_, '\n')) => {}
-                    Some((_, '"')) if spans_lines => code.push_str("\\'"),
-                    Some((_, escaped)) => {
-                        code.push(ch);
-                        code.push(escaped);
-                    }
-                    None => code.push(ch),
-                }
-            } else if rest.starts_with(close) {
-                code.push_str(if spans_lines { "\"" } else { close });
-                // Delimiters are ASCII, one char per byte.
-                for _ in 1..close.len() {
-                    chars.next();
-                }
-                quote = None;
-            } else if close == "`" && rest.starts_with("${") {
-                code.push_str("\"+(");
-                chars.next();
-                interpolations.push(0);
-                quote = None;
-            } else if spans_lines {
-                code.push(match ch {
-                    '\n' => ';',
-                    '"' => '\'',
-                    other => other,
-                });
-            } else if ch == '\n' {
-                // A one-quote string cannot span a bare line end.
-                quote = None;
-                code.push(ch);
-            } else {
-                code.push(ch);
-            }
-            continue;
-        }
-        if ch == '\n' {
-            in_line_comment = false;
-            code.push(ch);
-            continue;
-        }
-        if in_line_comment {
-            continue;
-        }
-        if in_block {
-            if rest.starts_with("*/") {
-                chars.next();
-                in_block = false;
-            }
-            continue;
-        }
-        match language {
-            Language::Python if ch == '#' => {
-                in_line_comment = true;
-                continue;
-            }
-            Language::Node if rest.starts_with("//") => {
-                in_line_comment = true;
-                continue;
-            }
-            Language::Node if rest.starts_with("/*") => {
-                chars.next();
-                in_block = true;
-                continue;
-            }
-            _ => {}
-        }
-        if let Some(depth) = interpolations.last_mut() {
-            match ch {
-                '{' => *depth += 1,
-                '}' if *depth == 0 => {
-                    interpolations.pop();
-                    code.push_str(")+\"");
-                    quote = Some("`");
-                    continue;
-                }
-                '}' => *depth -= 1,
-                _ => {}
-            }
-        }
-        let opened = match ch {
-            '"' if language == Language::Python && rest.starts_with("\"\"\"") => Some("\"\"\""),
-            '\'' if language == Language::Python && rest.starts_with("'''") => Some("'''"),
-            '"' => Some("\""),
-            '\'' => Some("'"),
-            '`' => Some("`"),
-            _ => None,
-        };
-        if let Some(open) = opened {
-            let spans_lines = open.len() == 3 || open == "`";
-            code.push_str(if spans_lines { "\"" } else { open });
-            for _ in 1..open.len() {
-                chars.next();
-            }
-            quote = Some(open);
-            continue;
-        }
-        code.push(ch);
-    }
-    code
 }
 
 fn programs_spell_destructive_git(model: &CanonicalCommandV1, context: PathContext<'_>) -> bool {

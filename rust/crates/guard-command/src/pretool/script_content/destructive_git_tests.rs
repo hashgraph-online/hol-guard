@@ -86,26 +86,26 @@ fn assembled_forced_and_path_checkouts_are_found() {
 fn a_comment_marker_inside_a_string_does_not_hide_the_command() {
     let source = "import os\nos.system(\"git reset --hard # cleanup\")";
     assert!(spells_destructive_git(&super::without_comments(
-        super::Language::Python,
+        super::super::Language::Python,
         source
     )));
     assert!(spells_destructive_git(&super::without_comments(
-        super::Language::Node,
+        super::super::Language::Node,
         source
     )));
     let node = "require('child_process').execSync('git clean -fdx // all') /* c */";
     assert!(spells_destructive_git(&super::without_comments(
-        super::Language::Node,
+        super::super::Language::Node,
         node
     )));
     let commented = "# os.system(\"git reset --hard\")\nprint('ok')";
     assert!(!spells_destructive_git(&super::without_comments(
-        super::Language::Python,
+        super::super::Language::Python,
         commented
     )));
     let block = "/* execSync('git reset --hard') */\nconsole.log('ok')";
     assert!(!spells_destructive_git(&super::without_comments(
-        super::Language::Node,
+        super::super::Language::Node,
         block
     )));
 }
@@ -118,13 +118,65 @@ fn a_command_run_inside_a_template_interpolation_is_read() {
         "const s = `outer ${`inner ${require('child_process').execSync('git reset --hard')}`}`",
     ] {
         assert!(
-            spells_destructive_git(&super::without_comments(super::Language::Node, node)),
+            spells_destructive_git(&super::without_comments(super::super::Language::Node, node)),
             "{node}"
         );
     }
     let quoted = "console.log(`run git reset --hard ${name} later`) // not run";
-    let read = super::without_comments(super::Language::Node, quoted);
+    let read = super::without_comments(super::super::Language::Node, quoted);
     assert!(read.contains("+(name)+"), "{read}");
+}
+
+#[test]
+fn a_clean_reads_only_its_options_before_the_pathspec_separator() {
+    for code in [
+        r#"os.system("git clean -fd -- -notes")"#,
+        r#"os.system("git clean -fd -e -n")"#,
+        r#"os.system("git clean -fd --exclude -n")"#,
+        r#"os.system("git clean -fden")"#,
+        r#"os.system("git clean -fde -n")"#,
+    ] {
+        assert!(spells_destructive_git(code), "{code}");
+    }
+    for code in [
+        r#"os.system("git clean -fdn -- notes")"#,
+        r#"os.system("git clean -fd -e build -n")"#,
+        r#"os.system("git clean -fd --dry-run")"#,
+    ] {
+        assert!(!spells_destructive_git(code), "{code}");
+    }
+}
+
+#[test]
+fn a_command_run_inside_a_python_f_string_field_is_read() {
+    for python in [
+        r#"print(f"{__import__('os').system('git reset --hard')}")"#,
+        r#"s = f'x {__import__("os").system("git clean -fdx")} y'"#,
+        r#"s = rf"{ {'k': 1}['k'] } {__import__('os').system('git reset --hard')}""#,
+        "s = f\"\"\"\n{__import__('os').system('git reset --hard')}\n\"\"\"",
+        r#"s = f"{__import__('os').system("git reset --hard")}""#,
+    ] {
+        assert!(
+            spells_destructive_git(&super::without_comments(
+                super::super::Language::Python,
+                python
+            )),
+            "{python}"
+        );
+    }
+    for python in [
+        r#"print(f"run git reset --hard on {branch} to undo")"#,
+        r#"print(f"{{os.system('git reset --hard')}}")"#,
+        r#"print(elf"{x}")"#,
+    ] {
+        assert!(
+            !spells_destructive_git(&super::without_comments(
+                super::super::Language::Python,
+                python
+            )),
+            "{python}"
+        );
+    }
 }
 
 #[test]
@@ -133,12 +185,12 @@ fn each_language_keeps_the_other_languages_comment_markers() {
     // Node, so neither may cut the other language's source.
     let python = "n = 7 // 2; import os; os.system(\"git reset --hard\")";
     assert!(spells_destructive_git(&super::without_comments(
-        super::Language::Python,
+        super::super::Language::Python,
         python
     )));
     let node = "class A { #x = 1 }; require('child_process').execSync('git clean -fdx')";
     assert!(spells_destructive_git(&super::without_comments(
-        super::Language::Node,
+        super::super::Language::Node,
         node
     )));
 }
@@ -147,35 +199,35 @@ fn each_language_keeps_the_other_languages_comment_markers() {
 fn a_marker_inside_a_string_that_spans_lines_does_not_hide_the_command() {
     let python = "s = \"\"\"\n#\"\"\"; import os; os.system(\"git reset --hard\")";
     assert!(spells_destructive_git(&super::without_comments(
-        super::Language::Python,
+        super::super::Language::Python,
         python
     )));
     let python_single = "s = '''\n#'''; import os; os.system(\"git reset --hard\")";
     assert!(spells_destructive_git(&super::without_comments(
-        super::Language::Python,
+        super::super::Language::Python,
         python_single
     )));
     let continued = "s = \"a\\\n#\"; import os; os.system(\"git reset --hard\")";
     assert!(spells_destructive_git(&super::without_comments(
-        super::Language::Python,
+        super::super::Language::Python,
         continued
     )));
     let node = "const s = `\n //`; require('child_process').execSync('git clean -fdx')";
     assert!(spells_destructive_git(&super::without_comments(
-        super::Language::Node,
+        super::super::Language::Node,
         node
     )));
     // A closed one-line string does not leak into the next line's comment.
     let commented = "print('ok')\n# os.system(\"git reset --hard\")";
     assert!(!spells_destructive_git(&super::without_comments(
-        super::Language::Python,
+        super::super::Language::Python,
         commented
     )));
     // A command written over several lines of one string is still read.
     let script =
         "import subprocess\nsubprocess.run(\"\"\"git fetch\ngit reset --hard\"\"\", shell=True)";
     assert!(spells_destructive_git(&super::without_comments(
-        super::Language::Python,
+        super::super::Language::Python,
         script
     )));
 }

@@ -40,10 +40,11 @@ patterns! {
     ADDRESSED_INSTRUCTIONS = r"(?i)\bnew\s+(?:priority\s+)?(?:instructions?|directives?)\s+for\s+(?:the\s+)?(?:parent\s+|calling\s+)?(?:agent|assistant|ai|model)\b";
     CONCEAL = r"(?i)\b(?:do\s+not|don't|never)\s+(?:mention|surface|reveal|disclose|tell|show|inform|notify)\s+(?:this|it|these|the\s+user|anyone)\b[^.\n]{0,60}";
     CONCEAL_FROM = r"(?i)\b(?:user|operator|pr\b|pull\s+request|description|human|anyone|logs?)";
+    PROTECTS_SECRET = r"(?i)\b(?:mention|surface|reveal|disclose|tell|show|inform|notify)\s+(?:this|these|it|the|your)\s+(?:passwords?|passphrases?|passcodes?|secrets?|(?:api\s+|private\s+|secret\s+)?keys?|tokens?|credentials?|pins?|otps?|(?:verification\s+|one-time\s+|security\s+)?codes?|(?:recovery|seed)\s+phrases?)\b";
     AUTHORITY = r"(?i)\byou\s+(?:now\s+)?(?:have|are\s+granted)\s+(?:full\s+)?(?:admin|root|elevated|unrestricted)\b|\byou\s+are\s+now\s+in\s+(?:admin|developer|god|dan|root|unrestricted|jailbreak)\s+mode";
     PROMPT_LEAK = r"(?i)\b(?:output|print|reveal|repeat|show|dump|send)\s+(?:me\s+)?(?:your|the)\s+(?:complete\s+|full\s+|entire\s+|current\s+)?(?:system\s+prompt|hidden\s+instructions|tool\s+definitions)";
     DECODE_AND_RUN = r"(?i)\bdecode\b[^.\n]{0,60}\b(?:and\s+)?(?:execute|run|eval)\b";
-    RUN_FOLLOWING = r"(?i)\b(?:run|execute)\s+the\s+following\s+commands?\b[^\n]{0,40}?[:\n]\s*(?:(?:```|~~~)[\w+-]*[ \t]*\n\s*)?(?P<cmd>[^\n]{0,200})";
+    RUN_FOLLOWING = r"(?i)\b(?:run|execute)\s+the\s+following\s+commands?\b[^\n]{0,40}?[:\n]\s*(?:(?P<fence>```|~~~)[\w+-]*[ \t]*\n\s*)?(?P<cmd>[^\n]{0,200})";
     DESTRUCTIVE = r"(?i)\brm\s+-[a-z]*r|\bcurl\b|\bwget\b|\bmkfs|\bdd\s+if=|\|\s*(?:ba|z)?sh\b|\$\(|/etc/(?:shadow|passwd)|~/\.(?:ssh|aws)|\bchmod\s+777";
     DESTINATION = r"(?i)https?://|~/\.|/etc/|\bcredentials\b";
     CARRY_OUT = r"(?i)\b(?:carry\s+out|follow|execute|obey|perform|comply\s+with|act\s+on|apply)\b";
@@ -67,10 +68,9 @@ impl OutputSource {
     pub fn of_tool(tool_name: &str) -> Self {
         let lowered = tool_name.to_ascii_lowercase();
         let remote = lowered.starts_with("mcp__")
-            || matches!(
-                lowered.as_str(),
-                "webfetch" | "web_fetch" | "websearch" | "web_search" | "fetch" | "agent" | "task"
-            );
+            || matches!(lowered.as_str(), "fetch" | "agent" | "task")
+            || crate::hook_adapter_envelope_tables::CURSOR_NETWORK_TOOL_NAMES
+                .contains(&lowered.as_str());
         if remote {
             Self::Remote
         } else {
@@ -169,10 +169,9 @@ pub fn injection_shape(text: &str, source: OutputSource) -> Option<&'static str>
     if ROLE_MARKER.is_match(text) || ADDRESSED_INSTRUCTIONS.is_match(text) {
         return Some("injected_role");
     }
-    if CONCEAL
-        .find_iter(text)
-        .any(|found| CONCEAL_FROM.is_match(found.as_str()))
-    {
+    if CONCEAL.find_iter(text).any(|found| {
+        CONCEAL_FROM.is_match(found.as_str()) && !PROTECTS_SECRET.is_match(found.as_str())
+    }) {
         return Some("concealment");
     }
     if source == OutputSource::Local {
@@ -189,8 +188,29 @@ pub fn injection_shape(text: &str, source: OutputSource) -> Option<&'static str>
     }
     RUN_FOLLOWING
         .captures_iter(text)
-        .any(|found| DESTRUCTIVE.is_match(&found["cmd"]))
+        .any(|found| DESTRUCTIVE.is_match(command_block(text, &found)))
         .then_some("destructive_command")
+}
+
+/// The longest command block read after a "run the following command" line.
+const BLOCK_LIMIT: usize = 2_000;
+
+/// Every command a "run the following command" line introduces: the whole
+/// fenced block when one opens, otherwise the lines up to the next blank
+/// line, capped at [`BLOCK_LIMIT`] bytes.
+fn command_block<'t>(text: &'t str, found: &regex::Captures<'t>) -> &'t str {
+    let start = found.name("cmd").map_or(text.len(), |cmd| cmd.start());
+    let rest = &text[start..];
+    let end = match found.name("fence") {
+        Some(fence) => rest.find(fence.as_str()),
+        None => rest.find("\n\n"),
+    }
+    .unwrap_or(rest.len());
+    let mut end = end.min(BLOCK_LIMIT);
+    while !rest.is_char_boundary(end) {
+        end -= 1;
+    }
+    &rest[..end]
 }
 
 #[cfg(test)]

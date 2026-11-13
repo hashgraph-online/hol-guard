@@ -381,10 +381,15 @@ pub(super) fn writes_unscreened_body(input: &Map<String, Value>) -> bool {
 }
 
 /// Whether a file-tool write puts a live-looking credential into a file.
+/// Replacements to one file are also read together, so a credential name in
+/// one replacement and its value in the next are still seen as one secret.
 pub(super) fn writes_literal_secret(input: &Map<String, Value>) -> bool {
     written_bodies(input)
         .iter()
         .any(|body| holds_literal_secret(body))
+        || written_text_by_file(input)
+            .iter()
+            .any(|text| holds_literal_secret(text))
 }
 
 /// A command that spells out a live-looking key, token or password is

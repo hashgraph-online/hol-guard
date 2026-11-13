@@ -265,6 +265,23 @@ fn replacements_to_one_file_past_the_scan_limit_together_are_reviewed() {
 }
 
 #[test]
+fn a_credential_split_across_replacements_to_one_file_is_a_secret() {
+    let value = joined(&["Fdyg", "nrahkfd"]);
+    assert!(writes_literal_secret(&json!({
+        "tool_input": {"file_path": "/w/app.yaml", "edits": [
+            {"old_string": "old_name:", "new_string": "client_secret:"},
+            {"old_string": "  old_value", "new_string": format!("  {value}")}
+        ]}
+    })));
+    assert!(!writes_literal_secret(&json!({
+        "tool_input": {"edits": [
+            {"path": "/w/a.yaml", "old_string": "old_name:", "new_string": "client_secret:"},
+            {"path": "/w/b.yaml", "old_string": "  old_value", "new_string": format!("  {value}")}
+        ]}
+    })));
+}
+
+#[test]
 fn file_paths_are_compared_the_way_they_resolve() {
     use super::{lexical_file, same_file};
     assert_eq!(lexical_file("/w/./notes.md"), "/w/notes.md");
