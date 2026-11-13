@@ -259,6 +259,61 @@ def test_control_update_stays_with_the_authenticated_local_key(tmp_path: Path) -
     _assert_copies_preserved(store, backend)
 
 
+def test_control_update_does_not_fall_back_when_primary_write_fails(tmp_path: Path) -> None:
+    store, backend = _setup(tmp_path, signer=b"p" * 32)
+    backend.fallback.set_secret(store._policy_integrity_control_ref, "old-control")
+
+    def fail_primary(_secret_id: str, _value: str) -> None:
+        raise RuntimeError("keyring unavailable")
+
+    backend.primary.set_secret = fail_primary  # type: ignore[method-assign]
+    with pytest.raises(RuntimeError, match="keyring unavailable"):
+        backend.set_secret(store._policy_integrity_control_ref, "new-control")
+    assert backend.fallback.get_secret(store._policy_integrity_control_ref) == "old-control"
+
+
+def test_fallback_key_authority_covers_control_and_survives_rebuild(tmp_path: Path) -> None:
+    store, backend = _setup(tmp_path, signer=b"p" * 32)
+
+    def fail_primary(_secret_id: str, _value: str) -> None:
+        raise RuntimeError("keyring unavailable")
+
+    backend.primary.set_secret = fail_primary  # type: ignore[method-assign]
+    backend.set_secret(store._policy_integrity_key_ref, "new-key")
+    backend.fallback.set_secret(store._policy_integrity_control_ref, "new-control")
+
+    assert backend.get_secret(store._policy_integrity_key_ref) == "new-key"
+    assert backend.get_secret(store._policy_integrity_control_ref) == "new-control"
+
+    rebuilt = MirroredPolicyIntegritySecretStore(backend.primary, backend.fallback, guard_home=tmp_path)
+    assert rebuilt.get_secret(store._policy_integrity_key_ref) == "new-key"
+    assert rebuilt.get_secret(store._policy_integrity_control_ref) == "new-control"
+
+
+def test_fallback_preference_reads_current_marker_after_deletion(tmp_path: Path) -> None:
+    store, backend = _setup(tmp_path)
+    marker_ref = backend._fallback_preference_ref(store._policy_integrity_key_ref)
+    backend.fallback.set_secret(marker_ref, "1")
+    assert backend._fallback_is_preferred(store._policy_integrity_key_ref)
+
+    backend.fallback.delete_secret(marker_ref)
+
+    assert not backend._fallback_is_preferred(store._policy_integrity_key_ref)
+
+
+def test_primary_key_recovery_transfers_fallback_control_before_clearing_preference(tmp_path: Path) -> None:
+    store, backend = _setup(tmp_path, signer=b"p" * 32)
+    marker_ref = backend._fallback_preference_ref(store._policy_integrity_key_ref)
+    backend.fallback.set_secret(marker_ref, "1")
+    backend.primary.set_secret(store._policy_integrity_control_ref, "old-primary-control")
+    backend.fallback.set_secret(store._policy_integrity_control_ref, "new-fallback-control")
+
+    backend.set_secret(store._policy_integrity_key_ref, "new-key")
+
+    assert backend.primary.get_secret(store._policy_integrity_control_ref) == "new-fallback-control"
+    assert backend.get_secret(store._policy_integrity_control_ref) == "new-fallback-control"
+
+
 def test_unverified_control_update_preserves_both_identities(tmp_path: Path) -> None:
     store, backend = _setup(tmp_path, signer=b"x" * 32)
     backend.primary.set_secret(store._policy_integrity_control_ref, "primary-control")

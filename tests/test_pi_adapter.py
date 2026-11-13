@@ -10,8 +10,6 @@ from pathlib import Path
 from codex_plugin_scanner.guard.adapters import get_adapter, list_adapters
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.adapters.contracts import contract_for
-from codex_plugin_scanner.guard.adapters.pi_extension_previous_source import previous_managed_extension_source
-from codex_plugin_scanner.guard.adapters.pi_extension_source import managed_extension_source
 from codex_plugin_scanner.guard.approvals import queue_blocked_approvals
 from codex_plugin_scanner.guard.cli.commands_support_hook_payload import _approval_surface_policy_for_flow
 from codex_plugin_scanner.guard.consumer import artifact_hash
@@ -21,6 +19,7 @@ from codex_plugin_scanner.guard.native_context import ensure_resident_prerequisi
 from codex_plugin_scanner.guard.runtime.actions import normalize_harness_payload
 from codex_plugin_scanner.guard.store import GuardStore
 from tests.live_hook_review_support import LIVE_REVIEWS_RETIRED_ALLOW, assert_secret_output_held, live_post_tool_flag
+from tests.pi_extension_support import managed_extension_source, previous_managed_extension_source
 
 
 def _write_worktree_git_marker(checkout_root: Path) -> None:
@@ -42,6 +41,12 @@ def _ctx(tmp_path: Path, *, workspace: bool = False) -> HarnessContext:
 def _write_json(path: Path, payload: object) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(payload), encoding="utf-8")
+
+
+def _executable(path: Path) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+    path.chmod(0o755)
 
 
 def _write_text(path: Path, content: str) -> None:
@@ -106,10 +111,8 @@ class TestPiAdapterIdentity:
 class TestPiDetect:
     def test_detect_marks_omp_cli_as_available(self, tmp_path: Path, monkeypatch) -> None:
         ctx = _ctx(tmp_path)
-        monkeypatch.setattr(
-            "codex_plugin_scanner.guard.adapters.pi._resolve_command",
-            lambda command, candidates=(): "/opt/homebrew/bin/omp" if command == "omp" else None,
-        )
+        _executable(tmp_path / "path-bin" / "omp")
+        monkeypatch.setenv("PATH", str(tmp_path / "path-bin"))
 
         result = get_adapter("omp").detect(ctx)
 
@@ -122,13 +125,7 @@ class TestPiDetect:
         executable.parent.mkdir(parents=True, exist_ok=True)
         executable.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
         executable.chmod(0o755)
-        monkeypatch.setattr(
-            "codex_plugin_scanner.guard.adapters.pi._resolve_command",
-            lambda command, candidates=(): next(
-                (str(candidate) for candidate in candidates if candidate.is_file() and command == "omp"),
-                None,
-            ),
-        )
+        monkeypatch.setenv("PATH", str(tmp_path / "empty-path"))
 
         result = get_adapter("omp").detect(ctx)
 
@@ -138,10 +135,7 @@ class TestPiDetect:
     def test_detect_omp_warning_mentions_omp(self, tmp_path: Path, monkeypatch) -> None:
         ctx = _ctx(tmp_path)
         _write_json(ctx.home_dir / ".omp" / "agent" / "settings.json", {"extensions": []})
-        monkeypatch.setattr(
-            "codex_plugin_scanner.guard.adapters.pi._resolve_command",
-            lambda command, candidates=(): None,
-        )
+        monkeypatch.setenv("PATH", str(tmp_path / "empty-path"))
 
         adapter = get_adapter("omp")
         result = adapter.detect(ctx)
@@ -583,7 +577,7 @@ class TestPiInstall:
     def test_uninstall_removes_managed_extension(self, tmp_path: Path, monkeypatch) -> None:
         ctx = _ctx(tmp_path)
         monkeypatch.setattr(
-            "codex_plugin_scanner.guard.adapters.pi.remove_guard_shim",
+            "codex_plugin_scanner.guard.shims.remove_guard_shim",
             lambda *args, **kwargs: {"shim_path": str(ctx.guard_home / "bin" / "guard-pi"), "notes": []},
         )
         adapter = get_adapter("pi")
@@ -608,7 +602,7 @@ class TestPiInstall:
     def test_uninstall_removes_verified_legacy_omp_extension(self, tmp_path: Path, monkeypatch) -> None:
         ctx = _ctx(tmp_path)
         monkeypatch.setattr(
-            "codex_plugin_scanner.guard.adapters.pi.remove_guard_shim",
+            "codex_plugin_scanner.guard.shims.remove_guard_shim",
             lambda *args, **kwargs: {"shim_path": str(ctx.guard_home / "bin" / "guard-pi"), "notes": []},
         )
         omp_settings_path = ctx.home_dir / ".omp" / "agent" / "settings.json"
@@ -637,7 +631,7 @@ class TestPiInstall:
     ) -> None:
         ctx = _ctx(tmp_path)
         monkeypatch.setattr(
-            "codex_plugin_scanner.guard.adapters.pi.remove_guard_shim",
+            "codex_plugin_scanner.guard.shims.remove_guard_shim",
             lambda *args, **kwargs: {"shim_path": str(ctx.guard_home / "bin" / "guard-pi"), "notes": []},
         )
         omp_settings_path = ctx.home_dir / ".omp" / "agent" / "settings.json"
@@ -666,7 +660,7 @@ class TestPiInstall:
     ) -> None:
         ctx = _ctx(tmp_path)
         monkeypatch.setattr(
-            "codex_plugin_scanner.guard.adapters.pi.remove_guard_shim",
+            "codex_plugin_scanner.guard.shims.remove_guard_shim",
             lambda *args, **kwargs: {"shim_path": str(ctx.guard_home / "bin" / "guard-pi"), "notes": []},
         )
         omp_settings_path = ctx.home_dir / ".omp" / "agent" / "settings.json"

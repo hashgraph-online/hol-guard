@@ -146,7 +146,12 @@ fn github_read_capabilities_have_a_benign_floor_but_mutations_do_not() {
             ("gh api repos/owner/repo | jq '.[0]name'", false),
             ("gh api repos/owner/repo | jq .name ordinary.json", false),
             ("gh api repos/owner/repo | jq --rawfile data .env .", false),
+            // jq may read an independently screened ordinary file bound by --slurpfile.
+            // The same binding to a credential file must still require review.
+            // Without a working directory or home context, an ordinary path
+            // could be a symlink to credentials: keep file bindings in review.
             ("gh api repos/owner/repo | jq --slurpfile data ordinary.json .", false),
+            ("gh api repos/owner/repo | jq --slurpfile data .env .", false),
             ("gh api repos/owner/repo | jq --from-file filter.jq", false),
             ("gh api repos/owner/repo | jq env", false),
             ("gh api repos/owner/repo | jq '$ENV'", false),

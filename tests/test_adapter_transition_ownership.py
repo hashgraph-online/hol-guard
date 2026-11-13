@@ -164,7 +164,7 @@ def test_frozen_preparation_hands_the_hook_to_the_runtime(tmp_path, monkeypatch,
 
 @pytest.mark.parametrize("previous_exists", [False, True])
 def test_opencode_prepared_generation_matches_normal_install(tmp_path, previous_exists):
-    from codex_plugin_scanner.guard.adapters.opencode import OpenCodeHarnessAdapter
+    from codex_plugin_scanner.guard.adapters.opencode_runtime import OpenCodeHarnessAdapter
 
     ctx = context(tmp_path)
     config = ctx.home_dir / ".config/opencode/opencode.json"

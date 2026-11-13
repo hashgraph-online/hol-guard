@@ -1,5 +1,7 @@
 #[path = "command_sequences.rs"]
 mod command_sequences;
+#[path = "safe_reads_jq.rs"]
+mod jq_arguments;
 #[path = "jq_filter.rs"]
 mod jq_filter;
 #[path = "read_globs.rs"]
@@ -22,6 +24,9 @@ pub(super) use super::safe_writes::{
 };
 pub(crate) use command_sequences::proven_created_file_removal;
 pub(super) use command_sequences::{exact_safe_sequence, leading_and_cd, leading_semicolon_cd};
+pub(super) use jq_arguments::{
+    jq_filter_position, safe_jq_file_arguments, safe_jq_piped_arguments, safe_jq_stdin_arguments,
+};
 pub(crate) use jq_filter::rendering_format as jq_rendering_format;
 pub(crate) use jq_filter::variables_bound as jq_variables_bound;
 pub(super) use read_globs::glob_file_matches;
@@ -432,94 +437,6 @@ fn safe_word_count_with_targets(
         saw_target = true;
     }
     saw_target || piped_input
-}
-
-/// `jq <filter> <file>` reads one bounded file through the same filter
-/// grammar the stdin form admits.
-pub(super) fn safe_jq_file_arguments(
-    arguments: &[String],
-    context: super::PathContext<'_>,
-) -> bool {
-    let Some((file, rest)) = arguments.split_last() else {
-        return false;
-    };
-    !file.starts_with('-')
-        && safe_jq_filter_arguments(rest)
-        && command_read_target(file, context, false)
-}
-
-/// Where a proven jq filter sits: last when jq reads stdin, before the file
-/// operand otherwise. The filter is a program over the value read, so a
-/// field such as `.key` is not a path to screen.
-pub(super) fn jq_filter_position(arguments: &[String], piped_input: bool) -> Option<usize> {
-    let last = arguments.len().checked_sub(1)?;
-    let index = if piped_input {
-        last
-    } else {
-        last.checked_sub(1)?
-    };
-    jq_filter::safe_filter(&arguments[index]).then_some(index)
-}
-
-/// `... | jq <filter>` reads the value the pipeline already produced.
-///
-/// Stdin may come from a network read the sandbox cannot contain, so the
-/// filter still has to clear the grammar in full. It no longer has to open
-/// with a projection: `length`, `map(.name)` and `select(.draft)` read the
-/// same value `.items | length` does, and the grammar — not the leading
-/// character — is what keeps a filter from reaching the environment, further
-/// input, files or modules.
-pub(super) fn safe_jq_stdin_arguments(arguments: &[String]) -> bool {
-    safe_jq_filter_arguments(arguments)
-}
-
-/// jq's options that only shape how the value read is parsed and printed.
-/// Every option that names a file, a module directory or a variable binding
-/// — `-f`, `--from-file`, `-L`, `--library-path`, `--argfile`, `--rawfile`,
-/// `--slurpfile`, `--arg`, `--args`, `--jsonargs` — is absent, so one of
-/// those is read as the filter instead and fails the grammar.
-const READ_ONLY_LONG_OPTIONS: &[&str] = &[
-    "--ascii-output",
-    "--compact-output",
-    "--exit-status",
-    "--join-output",
-    "--monochrome-output",
-    "--null-input",
-    "--raw-input",
-    "--raw-output",
-    "--slurp",
-    "--sort-keys",
-    "--tab",
-];
-
-/// The short spellings of those options. jq accepts them clustered, as in
-/// `jq -rc`, so each letter of a cluster is checked against this set.
-const READ_ONLY_SHORT_OPTIONS: &str = "acejMnrRsS";
-
-fn read_only_option(argument: &str) -> bool {
-    match argument.strip_prefix('-') {
-        Some(cluster) if !cluster.starts_with('-') => {
-            !cluster.is_empty()
-                && cluster
-                    .chars()
-                    .all(|flag| READ_ONLY_SHORT_OPTIONS.contains(flag))
-        }
-        _ => READ_ONLY_LONG_OPTIONS.contains(&argument),
-    }
-}
-
-fn safe_jq_filter_arguments(arguments: &[String]) -> bool {
-    let mut filter = None;
-    for argument in arguments {
-        if filter.is_none() && read_only_option(argument) {
-            continue;
-        }
-        if filter.replace(argument.as_str()).is_some() {
-            return false;
-        }
-    }
-    let Some(filter) = filter else { return false };
-    jq_filter::safe_filter(filter)
 }
 
 /// A head/tail count: `20`, or `+31` for "from line 31" (`tail -n +31`).

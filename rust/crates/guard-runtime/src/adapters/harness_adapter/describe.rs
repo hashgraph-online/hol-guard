@@ -48,7 +48,7 @@ pub(crate) const PASEO_DELEGATES: [&str; 6] =
     ["claude-code", "codex", "copilot", "opencode", "pi", "omp"];
 
 /// Every variable a request's `env` may carry.
-pub(crate) const ENV_NAMES: [&str; 21] = [
+pub(crate) const ENV_NAMES: [&str; 26] = [
     "PATH",
     "PATHEXT",
     "NoDefaultCurrentDirectoryInExePath",
@@ -70,6 +70,11 @@ pub(crate) const ENV_NAMES: [&str; 21] = [
     "ZCODE_RG_BINARY",
     "ZAI_OAUTH_ORIGIN",
     "ZAI_OAUTH_CLIENT_ID",
+    "HOL_GUARD_DESKTOP_RUNTIME_OWNER",
+    "XDG_DATA_HOME",
+    "CLINE_DATA_DIR",
+    "CLINE_DIR",
+    "CLINE_MCP_SETTINGS_PATH",
 ];
 
 /// Prefixes of the variables that redirect Paseo's native runtimes.
@@ -90,7 +95,7 @@ pub(crate) const ENV_PREFIXES: [&str; 14] = [
     "OMP_PROFILE",
 ];
 
-pub(crate) const SPECS: [Spec; 9] = [
+pub(crate) const SPECS: [Spec; 13] = [
     Spec {
         harness: "devin",
         aliases: &["devin", "devin-cli", "cognition-devin"],
@@ -257,6 +262,78 @@ pub(crate) const SPECS: [Spec; 9] = [
         install: Install::Plan,
         dynamic: false,
     },
+    Spec {
+        harness: "pi",
+        aliases: &["pi", "pi-agent", "pi-coding-agent"],
+        executable: "pi",
+        launcher_name: "pi",
+        display_name: Some("Pi"),
+        tier: CENTER,
+        summary: "Guard scans Pi packages, extensions, skills, prompts, and themes before launch \
+                  and uses a managed Pi extension to review prompts and tool calls inline.",
+        fallback: "Pi keeps the blocked request in Guard and shows the reason inline before you \
+                   retry.",
+        channel: "native-fallback",
+        auto_open: true,
+        workspace_aibom: true,
+        hook: Hook::None,
+        install: Install::Plan,
+        dynamic: true,
+    },
+    Spec {
+        harness: "omp",
+        aliases: &["omp", "oh-my-pi"],
+        executable: "omp",
+        launcher_name: "omp",
+        display_name: Some("Oh My Pi"),
+        tier: CENTER,
+        summary: "Guard scans Oh My Pi packages, extensions, skills, prompts, and themes before \
+                  launch and uses a managed Oh My Pi extension to review prompts and tool calls \
+                  inline.",
+        fallback: "Oh My Pi keeps the blocked request in Guard and shows the reason inline before \
+                   you retry.",
+        channel: "native-fallback",
+        auto_open: true,
+        workspace_aibom: true,
+        hook: Hook::None,
+        install: Install::Plan,
+        dynamic: true,
+    },
+    Spec {
+        harness: "opencode",
+        aliases: &[],
+        executable: "opencode",
+        launcher_name: "",
+        display_name: None,
+        tier: "mixed",
+        summary: "Guard evaluates OpenCode skills, MCP servers, commands, and plugins before \
+                  launch, and the managed runtime overlay keeps managed MCP tools on native ask.",
+        fallback: "Use Guard approvals for blocked artifacts and OpenCode's native allow once or \
+                   allow session flow for managed MCP tools.",
+        channel: "native",
+        auto_open: false,
+        workspace_aibom: true,
+        hook: Hook::None,
+        install: Install::Plan,
+        dynamic: false,
+    },
+    Spec {
+        harness: "cline",
+        aliases: &["cline-cli", "cline-vscode"],
+        executable: "cline",
+        launcher_name: "cline",
+        display_name: None,
+        tier: "approval-center",
+        summary: "Guard blocks Cline PreToolUse actions synchronously and routes review-required \
+                  actions through the local approval center.",
+        fallback: "Resolve the Guard request, then retry the exact Cline tool action.",
+        channel: "browser",
+        auto_open: true,
+        workspace_aibom: false,
+        hook: Hook::None,
+        install: Install::Plan,
+        dynamic: false,
+    },
 ];
 
 pub(crate) fn spec(harness: &str) -> Option<&'static Spec> {
@@ -299,6 +376,10 @@ impl Spec {
             // commands the CLI's validator names.
             "trusted_launcher": self.harness == "grok",
             "retired_hooks": self.harness == "grok",
+            // Paseo and the Pi family add to the generic doctor report.
+            "diagnostics": matches!(self.harness, "paseo" | "pi" | "omp"),
+            // The Pi family renders an extension that runs this Guard process.
+            "extension": matches!(self.harness, "pi" | "omp"),
             "delegates": if self.install == Install::Delegated {
                 json!(PASEO_DELEGATES)
             } else {

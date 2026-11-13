@@ -23,13 +23,13 @@ const WINDOWS_PATHEXT: &str = ".COM;.EXE;.BAT;.CMD;.VBS;.JS;.WS;.MSC";
 
 /// `os.access(path, os.X_OK)` for the calling user.
 #[cfg(unix)]
-fn executable(path: &Path) -> bool {
+pub(crate) fn executable(path: &Path) -> bool {
     use nix::unistd::{access, AccessFlags};
     access(path, AccessFlags::X_OK).is_ok()
 }
 
 #[cfg(not(unix))]
-fn executable(path: &Path) -> bool {
+pub(crate) fn executable(path: &Path) -> bool {
     path.exists()
 }
 

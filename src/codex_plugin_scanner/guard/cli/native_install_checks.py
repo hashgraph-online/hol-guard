@@ -10,90 +10,11 @@ from ..adapters.base import HarnessContext
 from ..store import GuardStore
 
 
-def _native_mcp_server_names(config_path: Path) -> set[str]:
-    """Read configured native MCP names while excluding Guard companion identities."""
-    from ...ecosystems.opencode import _load_json_or_jsonc
-
-    payload, parse_error, _ = _load_json_or_jsonc(config_path)
-    if parse_error or not isinstance(payload, dict):
-        return set()
-    mcp = payload.get("mcp")
-    if not isinstance(mcp, dict):
-        return set()
-    return {name for name in mcp if isinstance(name, str) and not name.startswith("hol-guard::")}
-
-
 def _opencode_protection_checks(context: HarnessContext, store: GuardStore | None) -> dict[str, object]:
     """Verify the managed OpenCode plugin, launcher, and MCP routing configuration."""
-    from ..adapters.opencode import OpenCodeHarnessAdapter
-    from ..adapters.opencode_artifacts import runtime_config_path
-    from ..adapters.opencode_pretool import (
-        global_plugin_path,
-        opencode_config_has_mcp_servers,
-        opencode_config_uses_guard_proxy,
-    )
+    from ..adapters.opencode_runtime import opencode_protection_checks
 
-    adapter = OpenCodeHarnessAdapter()
-    managed = store.get_managed_install("opencode") if store is not None else None
-    config_path = adapter._managed_install_config_path(context)
-    shim_path = context.guard_home / "bin" / "guard-opencode"
-    plugin_path = global_plugin_path(context)
-    loaded_config_paths = [Path(path) for path in adapter.detect(context).config_paths if Path(path).is_file()] or (
-        [config_path] if config_path.is_file() else []
-    )
-    has_loaded_mcp = any(opencode_config_has_mcp_servers(path) for path in loaded_config_paths)
-    if not has_loaded_mcp:
-        mcp_proxy_configured = False
-    else:
-        mcp_proxy_configured = all(
-            (not opencode_config_has_mcp_servers(path)) or opencode_config_uses_guard_proxy(path)
-            for path in loaded_config_paths
-        )
-        runtime_overlay_path = runtime_config_path(context)
-        if not mcp_proxy_configured and runtime_overlay_path.is_file():
-            try:
-                runtime_payload = json.loads(runtime_overlay_path.read_text(encoding="utf-8"))
-            except (OSError, json.JSONDecodeError):
-                runtime_payload = {}
-            runtime_mcp = runtime_payload.get("mcp")
-            if isinstance(runtime_mcp, dict) and runtime_mcp:
-                managed_server_names = {
-                    name
-                    for path in loaded_config_paths
-                    if opencode_config_has_mcp_servers(path)
-                    for name in _native_mcp_server_names(path)
-                }
-                mcp_proxy_configured = managed_server_names.issubset(set(runtime_mcp))
-    has_unproxied_mcp = has_loaded_mcp and not mcp_proxy_configured
-    warnings: list[str] = []
-    if not (managed and managed.get("active")):
-        warnings.append("Run `hol-guard install opencode` to activate Guard-managed OpenCode protection.")
-    if not plugin_path.is_file():
-        warnings.append(
-            "OpenCode pretool plugin is missing from ~/.config/opencode/plugins/. Re-run `hol-guard install opencode`."
-        )
-    if not config_path.is_file():
-        warnings.append(
-            "OpenCode root config is missing at ~/.config/opencode/opencode.json. Re-run `hol-guard install opencode`."
-        )
-    if has_unproxied_mcp:
-        warnings.append(
-            "OpenCode MCP servers are not routed through hol-guard companion servers or the runtime overlay. "
-            "Re-run `hol-guard install opencode`."
-        )
-    if not shim_path.is_file():
-        warnings.append(
-            f"guard-opencode launcher shim is missing. Add {context.guard_home / 'bin'} to PATH or launch with "
-            "`hol-guard run opencode` for pre-launch checks."
-        )
-    return {
-        "pretool_plugin_installed": plugin_path.is_file(),
-        "mcp_proxy_configured": mcp_proxy_configured,
-        "launch_shim_installed": shim_path.is_file(),
-        "managed_install_active": bool(managed and managed.get("active")),
-        "warnings": warnings,
-        "ready": not warnings,
-    }
+    return opencode_protection_checks(context, store)
 
 
 def _grok_pretool_is_catchall(pretool_hook: Path, context: HarnessContext | None = None) -> bool:

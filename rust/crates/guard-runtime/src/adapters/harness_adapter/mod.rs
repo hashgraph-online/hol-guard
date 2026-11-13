@@ -1,5 +1,6 @@
 //! `runner_authority` kind `harness_adapter`: the Gemini, Antigravity, Kimi,
-//! Devin, Muse, OpenClaw, Paseo, Grok and ZCode harness adapters.
+//! Devin, Muse, OpenClaw, Paseo, Grok, ZCode, Pi, Oh My Pi and OpenCode
+//! harness adapters.
 //!
 //! Python keeps one generic adapter class that holds the ownership locks,
 //! prepares and removes the launcher shim, builds the bounded hook argv and
@@ -26,16 +27,28 @@ use crate::harness_coverage::artifacts::resolve_lenient;
 use crate::runner_authority_detector::args_object;
 use crate::runner_authority_op::{KindResult, ERR_INVALID};
 
+mod cline;
+mod cline_hooks;
+mod cline_install;
+mod cline_mcp;
+mod cline_plugin;
 mod cloud_identity;
 mod describe;
+mod desktop_core;
 mod files;
 mod grok;
 mod grok_install;
 mod kimi;
 mod openclaw;
+mod opencode;
+mod opencode_build;
+mod opencode_checks;
+mod opencode_install;
 mod paseo;
 mod paseo_install;
 mod paseo_paths;
+mod pi;
+mod pi_extension;
 mod proof;
 mod settings_hooks;
 mod simple;
@@ -151,6 +164,8 @@ pub(crate) enum Failure {
     Os(String),
     NotFound(String),
     Integrity(&'static str),
+    /// The `RuntimeError` an adapter raised.
+    Runtime(String),
     Invalid,
 }
 
@@ -169,6 +184,7 @@ fn answer(step: Step<Value>) -> KindResult {
         Err(Failure::Os(message)) => Ok(json!({ "os_error": message })),
         Err(Failure::NotFound(message)) => Ok(json!({ "not_found": message })),
         Err(Failure::Integrity(reason)) => Ok(json!({ "integrity": reason })),
+        Err(Failure::Runtime(message)) => Ok(json!({ "runtime_error": message })),
         Err(Failure::Invalid) => Err(ERR_INVALID),
     }
 }
@@ -199,6 +215,9 @@ pub(crate) fn dispatch(args: &Value) -> KindResult {
         "paseo" => paseo::dispatch(spec, op, &ctx, fields),
         "grok" => grok::dispatch(spec, op, &ctx, fields),
         "zcode" => zcode::dispatch(spec, op, &ctx, fields),
+        "pi" | "omp" => pi::dispatch(spec, op, &ctx, fields),
+        "opencode" => opencode::dispatch(spec, op, &ctx, fields),
+        "cline" => cline::dispatch(spec, op, &ctx, fields),
         _ => Err(Failure::Invalid),
     })
 }

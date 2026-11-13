@@ -8,7 +8,6 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.adapters.pi_extension_source import managed_extension_source
 from tests.pi_continuation_support import (
     _PI_SDK_ROOT_ENV,
     _decode_json_object,
@@ -17,6 +16,7 @@ from tests.pi_continuation_support import (
     _run_child,
     _write_pi_package,
 )
+from tests.pi_extension_support import managed_extension_source
 
 
 def test_pi_runner_module_accepts_published_old_cli_layout(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
