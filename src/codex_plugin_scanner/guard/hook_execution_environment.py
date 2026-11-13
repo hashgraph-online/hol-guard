@@ -107,10 +107,17 @@ def git_config_environment_inert(environment: Mapping[str, str]) -> bool:
     if int(count) > _MAX_INERT_GIT_CONFIG_ENTRIES:
         return False
     return all(
-        environment.get(f"GIT_CONFIG_KEY_{index}", "").lower() in _INERT_GIT_CONFIG_KEYS
+        _inert_git_config_key(environment.get(f"GIT_CONFIG_KEY_{index}", ""))
         and f"GIT_CONFIG_VALUE_{index}" in environment
         for index in range(int(count))
     )
+
+
+def _inert_git_config_key(key: str) -> bool:
+    # Git folds configuration names with ASCII rules, as the Rust verdict does.
+    # `str.lower()` alone would also fold non-ASCII letters, such as the Kelvin
+    # sign, into ASCII ones.
+    return key.isascii() and key.lower() in _INERT_GIT_CONFIG_KEYS
 
 
 def library_search_paths() -> dict[str, str]:
