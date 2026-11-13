@@ -63,6 +63,24 @@ fn owner_marker_matches(pid: i64, expected: Option<&str>) -> bool {
     }
 }
 
+/// A generation-bound launch receipt may be cleared when its exact PID and
+/// owner are still present but the command is known to be foreign. This does
+/// not retire the process; it only prevents a stalled wrapper from keeping a
+/// pending launch open forever. An unreadable identity remains fail-closed.
+pub(super) fn known_foreign_process(
+    caller: &Caller,
+    pid: i64,
+    expected: &Expected<'_>,
+    deadline: Deadline,
+) -> bool {
+    if host::pid_is_proven_dead(pid) || deadline.passed() {
+        return false;
+    }
+    start_marker_matches(pid, expected.start_marker)
+        && owner_marker_matches(pid, expected.owner_marker)
+        && host::command_identity(caller, pid, Some(&caller.guard_home)) == Some(false)
+}
+
 /// `_retire_guard_daemon_process`: one recorded generation, by its start
 /// marker and owner.
 pub(super) fn retire_generation(
@@ -124,9 +142,9 @@ pub(super) fn retire_pid(
     };
     let identity = host::command_identity(caller, pid, Some(&caller.guard_home));
     if identity != Some(true) {
-        // Another command now owns the pid: nothing of ours to stop, so the
-        // caller may clear the stale state. An unreadable command fails closed.
-        return identity == Some(false);
+        // A mismatched or unreadable command does not prove the recorded
+        // process exited. Leave it untouched and preserve its state.
+        return false;
     }
     if let Some(creation_time) = observed_creation_time {
         return terminate_exact(creation_time);
@@ -496,8 +514,6 @@ fn retire_state_daemon(
         if !retired.contains(&pid) {
             retired.push(pid);
         }
-    } else if host::command_identity(caller, pid, Some(home)) == Some(false) {
-        records::clear_state_if_current(home, state);
     }
 }
 
