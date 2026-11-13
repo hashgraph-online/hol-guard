@@ -18,9 +18,11 @@ use std::path::{Component, Path, PathBuf};
 
 /// Segments that print, filter or copy a file. None changes directory,
 /// renames a file or creates a link.
+/// `base64` is held to `base64_reads.rs`, which never admits its output-file
+/// option.
 const CHAIN_PEERS: &[&str] = &[
-    "cat", "cmp", "cp", "cut", "diff", "echo", "grep", "head", "jq", "ls", "nl", "printf", "rg",
-    "sort", "tail", "tr", "true", "uniq", "wc",
+    "base64", "cat", "cmp", "cp", "cut", "diff", "echo", "grep", "head", "jq", "ls", "nl",
+    "printf", "rg", "sort", "tail", "tr", "true", "uniq", "wc",
 ];
 
 /// Scratch editors that may also share a chain. Each segment is still proven
@@ -131,11 +133,35 @@ pub(super) fn absent_reads_bounded(
     model.segments.len() == 1
         || temporary_peers(model)
         || plain_chain(model, &["awk", "mkdir", "sed"])
+        || fetch_then_read(model)
         || !model.segments.iter().any(|segment| {
             segment.arguments.iter().any(|argument| {
                 absent_temporary_read_target(argument, context.home_dir, context.cwd)
             })
         })
+}
+
+/// `gh api repos/o/r/contents/a.json --jq .content > /tmp/a.b64 && base64 -D -i
+/// /tmp/a.b64`: a fetch whose saved output later peers read back. Neither
+/// `gh api` nor `curl` changes directory, renames a file or creates a link, so
+/// a temporary file that is absent now is still absent when a later peer opens
+/// it, or is the regular file a redirect created. Only the first step may
+/// fetch, and each step still needs its own proof.
+fn fetch_then_read(model: &CanonicalCommandV1) -> bool {
+    let fetches = |segment: &crate::CommandSegmentV1| match segment.executable.as_deref() {
+        Some("curl") => true,
+        Some("gh") => segment
+            .arguments
+            .first()
+            .is_some_and(|value| value == "api"),
+        _ => false,
+    };
+    model.segments.len() > 1
+        && plain_chain(model, &["curl", "gh"])
+        && fetches(&model.segments[0])
+        && model.segments[1..]
+            .iter()
+            .all(|segment| !matches!(segment.executable.as_deref(), Some("curl" | "gh")))
 }
 
 /// `cp` shares a chain in two shapes, both only beside plain peers: a staged
