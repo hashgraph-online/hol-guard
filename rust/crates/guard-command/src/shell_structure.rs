@@ -366,11 +366,11 @@ fn extract_command_substitution_spans_impl(
             index += 2;
             continue;
         }
-        if let Some(&(_, _, expands)) = bodies
+        if bodies
             .iter()
-            .find(|&&(start, end, _)| start <= index && index < end)
+            .any(|&(start, end)| start <= index && index < end)
         {
-            if expands && (starts_with(&chars, index, "$(") || ch == '`') {
+            if starts_with(&chars, index, "$(") || ch == '`' {
                 quote = None;
             } else {
                 index += 1;

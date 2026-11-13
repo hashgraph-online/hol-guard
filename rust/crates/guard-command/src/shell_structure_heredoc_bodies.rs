@@ -150,13 +150,14 @@ impl PendingBodies {
     }
 }
 
-/// Closed heredoc bodies as `(start, end, expands)`. A body is text, not
-/// shell syntax, so the substitution scan must not let `it's` there open a
-/// quote that hides what follows. With an unquoted delimiter (`expands`) the
-/// shell still runs `$(...)` and backticks in the body, so the scan looks for
-/// those. A body with no closing line is left out: bash may end it at a line
-/// such as `EOF)`, which the body scan does not model.
-pub(super) fn text_bodies(command: &str) -> Vec<(usize, usize, bool)> {
+/// Closed heredoc bodies as `(start, end)`. A body is text, not shell
+/// syntax, so the substitution scan must not let `it's` there open a quote
+/// that hides what follows. The scan still looks for `$(...)` and backticks in
+/// every body: an unquoted delimiter runs them in this shell, and a quoted
+/// body fed to `sh`, `ssh` or `kubectl exec` runs them in the next one. A body
+/// with no closing line is left out: bash may end it at a line such as
+/// `EOF)`, which the body scan does not model.
+pub(super) fn text_bodies(command: &str) -> Vec<(usize, usize)> {
     if !command.contains("<<") {
         return Vec::new();
     }
@@ -164,6 +165,6 @@ pub(super) fn text_bodies(command: &str) -> Vec<(usize, usize, bool)> {
     extract_heredocs(command)
         .into_iter()
         .filter(|heredoc| heredoc.body_end < n)
-        .map(|heredoc| (heredoc.body_start, heredoc.body_end, !heredoc.quoted))
+        .map(|heredoc| (heredoc.body_start, heredoc.body_end))
         .collect()
 }

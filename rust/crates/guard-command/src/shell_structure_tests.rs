@@ -338,6 +338,12 @@ fn heredoc_bodies_inside_a_substitution_are_text() {
             "cat <<'EOF'\nit's\nEOF\necho $(rm -rf src)",
             vec!["rm -rf src"],
         ),
+        // A quoted body fed to another shell still runs its substitutions
+        // there, so the scan still finds them.
+        (
+            "kubectl exec -i pod -- sh <<'EOF'\n$(cat /etc/secrets/x)\nEOF",
+            vec!["cat /etc/secrets/x"],
+        ),
         // A heredoc that never closes leaves the closed ones before it as
         // text.
         (
