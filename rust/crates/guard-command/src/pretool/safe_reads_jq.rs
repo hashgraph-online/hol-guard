@@ -104,6 +104,11 @@ impl Call<'_> {
 
     /// Every file a binding names is a bounded read in its own right.
     fn bindings_readable(&self, context: super::super::PathContext<'_>) -> bool {
+        // Without a filesystem context, the lexical fallback cannot tell
+        // whether an ordinary-looking binding path is a symlink to a secret.
+        if !self.files.is_empty() && context.home_dir.is_none() && context.cwd.is_none() {
+            return false;
+        }
         self.files
             .iter()
             .all(|file| !file.starts_with('-') && command_read_target(file, context, false))
