@@ -2,15 +2,25 @@
 
 from __future__ import annotations
 
+import os
+import shutil
 import subprocess
 from pathlib import Path
+
+import pytest
 
 from ci.gauntlet.catalog import load_catalog
 from ci.gauntlet.fixtures import create_fixture, filesystem_checks
 from ci.gauntlet.heredoc_commit_fixtures import HEREDOC_COMMIT_CASE, heredoc_commit_checks
 
 
+# The case command is a POSIX shell command; on Windows this resolves Git for Windows' sh.
+SHELL = shutil.which("sh")
+pytestmark = pytest.mark.skipif(SHELL is None, reason="the case command needs a POSIX shell")
+
+
 def _shell(fixture_home: Path, workspace: Path, command: str) -> subprocess.CompletedProcess[str]:
+    assert SHELL is not None
     environment = {
         "HOME": str(fixture_home),
         "GIT_CONFIG_NOSYSTEM": "1",
@@ -18,10 +28,12 @@ def _shell(fixture_home: Path, workspace: Path, command: str) -> subprocess.Comp
         "GIT_AUTHOR_EMAIL": "gauntlet@example.invalid",
         "GIT_COMMITTER_NAME": "Gauntlet Fixture",
         "GIT_COMMITTER_EMAIL": "gauntlet@example.invalid",
-        "PATH": "/usr/bin:/bin:/usr/local/bin:/opt/homebrew/bin",
+        "PATH": os.environ.get("PATH", ""),
     }
+    if os.name == "nt":
+        environment["SYSTEMROOT"] = os.environ.get("SYSTEMROOT", "")
     return subprocess.run(
-        ["/bin/sh", "-c", command], cwd=workspace, env=environment, capture_output=True, text=True, check=False
+        [SHELL, "-c", command], cwd=workspace, env=environment, capture_output=True, text=True, check=False
     )
 
 
