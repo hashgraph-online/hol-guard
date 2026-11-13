@@ -2,7 +2,10 @@
 //! admitted over the value a pipeline already produced, and which of jq's
 //! own options may precede them.
 
-use super::{jq_filter_position, safe_jq_stdin_arguments};
+use super::{
+    jq_filter_position, safe_jq_file_arguments, safe_jq_piped_arguments,
+    safe_jq_stdin_arguments,
+};
 
 fn arguments(words: &[&str]) -> Vec<String> {
     words.iter().map(|word| (*word).to_owned()).collect()
@@ -162,4 +165,23 @@ fn command_line_bindings_bind_only_their_own_names() {
         assert!(!safe_jq_stdin_arguments(&arguments(&words)), "{words:?}");
     }
     assert!(!safe_jq_stdin_arguments(&arguments(&["$want"])));
+}
+
+/// A path-bearing jq binding cannot be proven from the text of the name
+/// alone: in an unlocated session it may be a link to a credential. Plain
+/// command-line values remain independent of the filesystem context.
+#[test]
+fn file_bindings_need_a_real_path_context() {
+    let context_free = crate::pretool::PathContext::default();
+    let file_binding = arguments(&["--slurpfile", "data", "ordinary.json", "."]);
+    let value_binding = arguments(&["--arg", "data", "safe", "$data"]);
+    assert!(!safe_jq_piped_arguments(&file_binding, context_free));
+    assert!(!safe_jq_file_arguments(
+        &arguments(&["-n", "--rawfile", "data", "ordinary.json", "."]),
+        crate::pretool::PathContext::default(),
+    ));
+    assert!(safe_jq_piped_arguments(
+        &value_binding,
+        crate::pretool::PathContext::default(),
+    ));
 }
