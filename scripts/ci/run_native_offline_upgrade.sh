@@ -15,6 +15,7 @@
 #   HOL_GUARD_OFFLINE_CACHE_DIR  where the prior client lives
 #                                (default: ${XDG_CACHE_HOME:-$HOME/.cache}/hol-guard/native-offline-previous)
 #   SKIP_CURRENT_BUILD=1         reuse rust/target/release and the current projections as they are
+#                                (the current build always targets rust/target; CARGO_TARGET_DIR is ignored)
 #   RUSTUP_TOOLCHAIN             toolchain to build with (default: CI's pinned version)
 set -euo pipefail
 
@@ -40,13 +41,16 @@ export CARGO_PROFILE_RELEASE_LTO=false
 export CARGO_PROFILE_RELEASE_CODEGEN_UNITS=16
 
 cache_root=${HOL_GUARD_OFFLINE_CACHE_DIR:-${XDG_CACHE_HOME:-$HOME/.cache}/hol-guard/native-offline-previous}
-previous="$cache_root/$previous_sha/source"
-previous_target="$cache_root/$previous_sha/target"
-ready="$cache_root/$previous_sha/.ready"
+# Keyed by toolchain too, so a cached prior client is never paired with a current build from another rustc.
+cache_dir="$cache_root/$previous_sha"
+previous="$cache_dir/source"
+previous_target="$cache_dir/target-$RUSTUP_TOOLCHAIN"
+ready="$cache_dir/.ready-$RUSTUP_TOOLCHAIN"
+current_target="$root/rust/target"
 
 if [[ ! -f "$ready" ]]; then
-  echo "Building pinned prior client ${previous_sha} once into ${cache_root}/${previous_sha}"
-  mkdir -p "$cache_root/$previous_sha"
+  echo "Building pinned prior client ${previous_sha} with ${RUSTUP_TOOLCHAIN} once into ${cache_dir}"
+  mkdir -p "$cache_dir"
   if [[ ! -e "$previous/.git" ]]; then
     git cat-file -e "${previous_sha}^{commit}" 2>/dev/null || git fetch --no-tags origin "$previous_sha"
     git worktree add --detach "$previous" "$previous_sha"
@@ -66,16 +70,16 @@ test -x "$previous_target/release/hol-guard-runtime"
 
 if [[ "${SKIP_CURRENT_BUILD:-}" != "1" ]]; then
   "$python" scripts/refresh_extension_artifacts.py --trust-only
-  cargo build --manifest-path rust/Cargo.toml --locked --release \
+  CARGO_TARGET_DIR="$current_target" cargo build --manifest-path rust/Cargo.toml --locked --release \
     -p guard-command -p hol-guard-runtime --bin guard-command-source --bin hol-guard-runtime
-  "$python" scripts/build_native_command_program.py --compiler rust/target/release/guard-command-source
+  "$python" scripts/build_native_command_program.py --compiler "$current_target/release/guard-command-source"
 fi
-test -x rust/target/release/hol-guard-runtime
-test -x rust/target/release/guard-command-source
+test -x "$current_target/release/hol-guard-runtime"
+test -x "$current_target/release/guard-command-source"
 
-HOL_GUARD_NATIVE_BINARY="$root/rust/target/release/hol-guard-runtime" \
-HOL_GUARD_NATIVE_SOURCE_COMPILER="$root/rust/target/release/guard-command-source" \
-HOL_GUARD_BUILD_SOURCE_COMPILER="$root/rust/target/release/guard-command-source" \
+HOL_GUARD_NATIVE_BINARY="$current_target/release/hol-guard-runtime" \
+HOL_GUARD_NATIVE_SOURCE_COMPILER="$current_target/release/guard-command-source" \
+HOL_GUARD_BUILD_SOURCE_COMPILER="$current_target/release/guard-command-source" \
 NATIVE_ACTIVATION_PREVIOUS_BINARY="$previous_target/release/hol-guard-runtime" \
 NATIVE_ACTIVATION_PREVIOUS_SOURCE="$previous" \
 HOL_GUARD_NATIVE_REGRESSION=1 \

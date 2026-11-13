@@ -278,11 +278,19 @@ def test_alpha_deletion_falls_the_core_feed_back_to_the_last_good_alpha() -> Non
     assert '"$release" == "true false"' in find
     dispatch = steps["Dispatch missing Desktop Core sidecars for the fallback alpha"]
     assert dispatch["env"]["GH_TOKEN"] == "${{ github.token }}"
-    assert "event=workflow_dispatch&branch=main&status=success&head_sha=${SOURCE_SHA}" in dispatch["run"]
+    assert "event=workflow_dispatch&branch=main&head_sha=${SOURCE_SHA}" in dispatch["run"]
+    assert "status=success" not in dispatch["run"]
+    assert '.name == "Publish alpha to PyPI" and .conclusion == "success"' in dispatch["run"]
+    assert "desktop_core_alpha_feed.py inspect-assets" in dispatch["run"]
+    assert "partial Core asset set" in dispatch["run"]
+    checkout = job["steps"][0]["with"]["sparse-checkout"]
+    assert "scripts/release/desktop_core_alpha_feed.py" in checkout
     assert "desktop-core-alpha-feed.yml" in dispatch["run"]
     assert "desktop-core-linux-feed.yml" in dispatch["run"]
     assert "-f release_channel=alpha" in dispatch["run"]
     assert "--ref main" in dispatch["run"]
+    assert steps["Report the PyPI yank state"]["if"] == "${{ !cancelled() }}"
     report = steps["Report the PyPI yank state"]["run"]
+    assert '[[ -z "$FALLBACK" ]]' in report
     assert "all(.urls[]; .yanked)" in report
     assert "::warning title=Yank ${VERSION} on PyPI::" in report

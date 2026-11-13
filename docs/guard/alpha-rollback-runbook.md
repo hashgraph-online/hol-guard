@@ -15,7 +15,7 @@ then the fix-forward.
 | --- | --- |
 | Dispatch **Delete alpha release** | Only the maintainers whose GitHub actor IDs are `6068672` or `301892678`. The workflow refuses anyone else. |
 | Yank on PyPI | A PyPI owner or maintainer of the `hol-guard` project, signed in at pypi.org. Trusted publishing tokens cannot yank, and PyPI has no yank API. |
-| Ship the fix-forward alpha | Anyone who can dispatch **Release Please** on `main`. |
+| Ship the fix-forward alpha | Only the same maintainers (actor IDs `6068672` or `301892678`), by dispatching **Release Please** on `main`. It refuses to dispatch an alpha publish for anyone else. |
 
 ## 1. Withdraw the alpha (about 5 minutes)
 

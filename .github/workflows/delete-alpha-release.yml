@@ -168,7 +168,9 @@ jobs:
           fetch-depth: 1
           persist-credentials: false
           path: .release-api-token
-          sparse-checkout: .github/actions/release-api-token
+          sparse-checkout: |
+            .github/actions/release-api-token
+            scripts/release/desktop_core_alpha_feed.py
           sparse-checkout-cone-mode: false
       - name: Route gh through the rate-limit retry wrapper
         uses: ./.release-api-token/.github/actions/release-api-token
@@ -215,21 +217,42 @@ jobs:
         run: |
           set -euo pipefail
           tag="alpha/v${FALLBACK}"
-          assets=$(gh release view "$tag" --repo "$GITHUB_REPOSITORY" --json assets --jq '.assets[].name')
+          gh release view "$tag" --repo "$GITHUB_REPOSITORY" --json assets --jq '.assets[].name' \
+            >"$RUNNER_TEMP/release-assets.txt"
+          # Same complete/partial rule the feed workflows apply: binary, manifest and signed sidecar.
           missing=()
+          partial=()
           for target in aarch64-apple-darwin x86_64-unknown-linux-gnu; do
-            if ! grep -qxF "hol-guard-core-${FALLBACK}-${target}.attested.json" <<<"$assets"; then
+            if ! mode=$(python3 -I .release-api-token/scripts/release/desktop_core_alpha_feed.py inspect-assets \
+              --assets "$RUNNER_TEMP/release-assets.txt" --base "hol-guard-core-${FALLBACK}-${target}" | sed -n 's/^mode=//p'); then
+              partial+=("$target")
+            elif [[ "$mode" == "build" ]]; then
               missing+=("$target")
             fi
           done
+          if [[ ${#partial[@]} -gt 0 ]]; then
+            echo "${tag} has a partial Core asset set for ${partial[*]}; repair it by hand (see docs/guard/alpha-rollback-runbook.md)" >&2
+            echo "- ${tag} has a partial Core asset set for ${partial[*]}; the feeds refuse it, so repair it by hand" >>"$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
           if [[ ${#missing[@]} -eq 0 ]]; then
-            echo "- ${tag} already carries signed macOS and Linux Core sidecars; nothing to dispatch" >>"$GITHUB_STEP_SUMMARY"
+            echo "- ${tag} already carries complete macOS and Linux Core asset sets; nothing to dispatch" >>"$GITHUB_STEP_SUMMARY"
             exit 0
           fi
-          run_id=$(gh api "repos/${GITHUB_REPOSITORY}/actions/workflows/publish.yml/runs?event=workflow_dispatch&branch=main&status=success&head_sha=${SOURCE_SHA}&per_page=10" \
-            --jq '.workflow_runs[0].id // empty')
+          # A later job (for example the container publish) can fail the run after PyPI succeeded,
+          # and a rerun can fail before publishing, so pick the run whose alpha PyPI job succeeded.
+          run_id=""
+          for candidate in $(gh api "repos/${GITHUB_REPOSITORY}/actions/workflows/publish.yml/runs?event=workflow_dispatch&branch=main&head_sha=${SOURCE_SHA}&per_page=20" \
+            --jq '.workflow_runs[].id'); do
+            published=$(gh api --paginate "repos/${GITHUB_REPOSITORY}/actions/runs/${candidate}/jobs?filter=latest&per_page=100" \
+              --jq '.jobs[] | select(.name == "Publish alpha to PyPI" and .conclusion == "success") | .id')
+            if [[ -n "$published" ]]; then
+              run_id="$candidate"
+              break
+            fi
+          done
           if [[ -z "$run_id" ]]; then
-            echo "No successful publish run for ${SOURCE_SHA}; dispatch the feeds by hand (see docs/guard/alpha-rollback-runbook.md)" >&2
+            echo "No publish run with a successful alpha PyPI job for ${SOURCE_SHA}; dispatch the feeds by hand (see docs/guard/alpha-rollback-runbook.md)" >&2
             exit 1
           fi
           for target in "${missing[@]}"; do
@@ -241,7 +264,9 @@ jobs:
             echo "- Dispatched ${feed} for ${FALLBACK} (publish run ${run_id}); watch it finish" >>"$GITHUB_STEP_SUMMARY"
           done
 
+      # Runs even when no fallback or publish run was found: that is when the yank matters most.
       - name: Report the PyPI yank state
+        if: ${{ !cancelled() }}
         env:
           VERSION: ${{ inputs.version }}
           FALLBACK: ${{ steps.fallback.outputs.version }}
@@ -253,17 +278,20 @@ jobs:
               || echo "unknown"
           }
           bad=$(yanked "$VERSION")
-          good=$(yanked "$FALLBACK")
           {
             echo
             echo "| Version | Role | PyPI |"
             echo "| --- | --- | --- |"
             echo "| ${VERSION} | withdrawn | ${bad} |"
-            echo "| ${FALLBACK} | fallback | ${good} |"
           } >>"$GITHUB_STEP_SUMMARY"
           if [[ "$bad" != "yanked" ]]; then
             echo "::warning title=Yank ${VERSION} on PyPI::A PyPI owner must yank ${VERSION} by hand: https://pypi.org/manage/project/hol-guard/release/${VERSION}/"
           fi
+          if [[ -z "$FALLBACK" ]]; then
+            exit 0
+          fi
+          good=$(yanked "$FALLBACK")
+          echo "| ${FALLBACK} | fallback | ${good} |" >>"$GITHUB_STEP_SUMMARY"
           if [[ "$good" != "live" ]]; then
             echo "::warning title=Fallback ${FALLBACK} is not live on PyPI::Desktop Core updates via the CLI skip yanked versions"
           fi
