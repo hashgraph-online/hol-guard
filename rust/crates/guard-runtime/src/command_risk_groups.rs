@@ -9,7 +9,16 @@
 //! allows or blocks anything. A command Guard cannot place gets no group, and
 //! Cloud shows it as "other". Recognition never narrows a group to a safer one.
 
-use super::mcp_proxy_shlex::split;
+#[path = "command_risk_groups_tools.rs"]
+mod tools;
+#[path = "command_risk_groups_words.rs"]
+mod words;
+
+use tools::{
+    cloud_storage_groups, deploy_groups, gh_groups, git_groups, has, http_sends, is_remote_target,
+    package_groups, sql_groups, subcommand,
+};
+use words::{tokens, Token};
 
 /// Cloud's group names, in Cloud's display order.
 const GROUPS: [&str; 6] = [
@@ -21,13 +30,18 @@ const GROUPS: [&str; 6] = [
     "packages_and_scripts",
 ];
 
-/// Commands that run before another command without changing what it does.
-const WRAPPERS: [&str; 9] = [
-    "sudo", "doas", "env", "nohup", "time", "nice", "command", "exec", "xargs",
+/// Commands that run another command without changing what it does.
+const WRAPPERS: [&str; 11] = [
+    "sudo", "doas", "env", "nohup", "time", "nice", "ionice", "command", "exec", "xargs", "timeout",
 ];
 
-const SECRET_PATH_MARKERS: [&str; 14] = [
-    ".env",
+/// How deep `bash -c`, `eval`, `ssh` and `watch` payloads are followed.
+const MAX_DEPTH: usize = 4;
+
+/// ssh options that take the next word as their value.
+const SSH_VALUE_FLAGS: &str = "BbcDEeFIiJLlmOoPpQRSWw";
+
+const SECRET_PATH_MARKERS: [&str; 13] = [
     "id_rsa",
     "id_ed25519",
     "id_ecdsa",
@@ -43,47 +57,10 @@ const SECRET_PATH_MARKERS: [&str; 14] = [
     ".docker/config.json",
 ];
 
-const PACKAGE_MANAGERS: [&str; 10] = [
-    "npm", "pnpm", "yarn", "bun", "pip", "pip3", "uv", "poetry", "cargo", "gem",
-];
-const PACKAGE_VERBS: [&str; 10] = [
-    "install", "i", "add", "ci", "update", "upgrade", "run", "exec", "dlx", "x",
-];
-const PACKAGE_RUNNERS: [&str; 5] = ["npx", "bunx", "pnpx", "pipx", "uvx"];
-const SYSTEM_PACKAGE_MANAGERS: [&str; 6] = ["brew", "apt", "apt-get", "yum", "dnf", "apk"];
-
-const DEPLOY_TOOLS: [(&str, &[&str]); 12] = [
-    (
-        "kubectl",
-        &[
-            "apply", "create", "replace", "rollout", "scale", "set", "patch",
-        ],
-    ),
-    ("helm", &["install", "upgrade", "rollback"]),
-    ("terraform", &["apply", "import"]),
-    ("tofu", &["apply", "import"]),
-    ("pulumi", &["up", "deploy"]),
-    ("vercel", &["deploy", "--prod", "promote"]),
-    ("netlify", &["deploy"]),
-    ("fly", &["deploy"]),
-    ("flyctl", &["deploy"]),
-    ("firebase", &["deploy"]),
-    ("wrangler", &["deploy", "publish"]),
-    ("serverless", &["deploy"]),
-];
-
 /// The groups of `command`, in Cloud's order, or none when nothing is known.
 pub(crate) fn command_risk_groups(command: &str) -> Vec<&'static str> {
-    let tokens =
-        split(command).unwrap_or_else(|| command.split_whitespace().map(str::to_owned).collect());
     let mut found = [false; GROUPS.len()];
-    for segment in segments(&tokens) {
-        for group in segment_groups(&segment) {
-            if let Some(index) = GROUPS.iter().position(|name| *name == group) {
-                found[index] = true;
-            }
-        }
-    }
+    collect(command, 0, &mut found);
     GROUPS
         .iter()
         .zip(found)
@@ -91,27 +68,43 @@ pub(crate) fn command_risk_groups(command: &str) -> Vec<&'static str> {
         .collect()
 }
 
-/// One simple command per segment, split at `;`, `&&`, `||`, `|` and
-/// parentheses, with redirections and their targets kept apart.
-fn segments(tokens: &[String]) -> Vec<Segment> {
+fn collect(command: &str, depth: usize, found: &mut [bool; GROUPS.len()]) {
+    for segment in segments(tokens(command)) {
+        let Some(index) = program_index(&segment.words) else {
+            continue;
+        };
+        let name = program_name(&segment.words[index]);
+        let raw_args = &segment.words[index + 1..];
+        for group in segment_groups(&name, raw_args, &segment.redirects) {
+            if let Some(at) = GROUPS.iter().position(|known| *known == group) {
+                found[at] = true;
+            }
+        }
+        if depth < MAX_DEPTH {
+            if let Some(inner) = nested_command(&name, raw_args) {
+                collect(&inner, depth + 1, found);
+            }
+        }
+    }
+}
+
+/// One simple command per segment, with redirection targets kept apart.
+fn segments(tokens: Vec<Token>) -> Vec<Segment> {
     let mut out = Vec::new();
     let mut current = Segment::default();
     let mut redirect_next = false;
     for token in tokens {
-        let is_operator = !token.is_empty() && token.chars().all(|c| ";&|()".contains(c));
-        if is_operator {
-            out.push(std::mem::take(&mut current));
-            continue;
-        }
-        if !token.is_empty() && token.chars().all(|c| "<>".contains(c)) {
-            redirect_next = true;
-            continue;
-        }
-        if redirect_next {
-            current.redirects.push(token.clone());
-            redirect_next = false;
-        } else {
-            current.words.push(token.clone());
+        match token {
+            Token::Boundary => {
+                out.push(std::mem::take(&mut current));
+                redirect_next = false;
+            }
+            Token::Redirect => redirect_next = true,
+            Token::Word(word) if redirect_next => {
+                current.redirects.push(word);
+                redirect_next = false;
+            }
+            Token::Word(word) => current.words.push(word),
         }
     }
     out.push(current);
@@ -136,7 +129,65 @@ fn is_assignment(word: &str) -> bool {
     })
 }
 
-/// The index of the program word, past wrappers, their flags and `NAME=value`.
+/// Wrapper options that take the next word as their value.
+fn wrapper_flag_takes_value(wrapper: &str, flag: &str) -> bool {
+    match wrapper {
+        "sudo" => matches!(
+            flag,
+            "-u" | "-g"
+                | "-C"
+                | "-h"
+                | "-p"
+                | "-U"
+                | "-r"
+                | "-t"
+                | "-D"
+                | "-R"
+                | "-T"
+                | "--user"
+                | "--group"
+                | "--close-from"
+                | "--host"
+                | "--prompt"
+                | "--other-user"
+                | "--role"
+                | "--type"
+                | "--chdir"
+                | "--chroot"
+                | "--command-timeout"
+        ),
+        "doas" => matches!(flag, "-u" | "-C"),
+        "env" => matches!(
+            flag,
+            "-u" | "-C" | "-S" | "--unset" | "--chdir" | "--split-string"
+        ),
+        "nice" => matches!(flag, "-n" | "--adjustment"),
+        "ionice" => matches!(flag, "-c" | "-n" | "-p" | "--class" | "--classdata"),
+        "timeout" => matches!(flag, "-s" | "-k" | "--signal" | "--kill-after"),
+        "exec" => flag == "-a",
+        "time" => matches!(flag, "-f" | "-o" | "--format" | "--output"),
+        "xargs" => matches!(
+            flag,
+            "-n" | "-I"
+                | "-L"
+                | "-P"
+                | "-d"
+                | "-s"
+                | "-E"
+                | "-a"
+                | "--max-args"
+                | "--max-procs"
+                | "--max-lines"
+                | "--max-chars"
+                | "--delimiter"
+                | "--arg-file"
+        ),
+        _ => false,
+    }
+}
+
+/// The index of the program word, past `NAME=value` words and wrappers with
+/// their options (and the duration of `timeout`).
 fn program_index(words: &[String]) -> Option<usize> {
     let mut index = 0;
     loop {
@@ -145,89 +196,109 @@ fn program_index(words: &[String]) -> Option<usize> {
             index += 1;
             continue;
         }
-        if WRAPPERS.contains(&program_name(word).as_str()) {
-            index += 1;
-            while words
-                .get(index)
-                .is_some_and(|next| next.starts_with('-') || is_assignment(next))
-            {
-                index += 1;
-            }
-            continue;
+        let wrapper = program_name(word);
+        if !WRAPPERS.contains(&wrapper.as_str()) {
+            return Some(index);
         }
-        return Some(index);
+        index += 1;
+        while let Some(next) = words.get(index) {
+            if wrapper == "command" && matches!(next.as_str(), "-v" | "-V") {
+                // `command -v rm` looks a program up without running it.
+                return None;
+            }
+            if next.len() > 1 && next.starts_with('-') {
+                index += if wrapper_flag_takes_value(&wrapper, next) {
+                    2
+                } else {
+                    1
+                };
+            } else if is_assignment(next) {
+                index += 1;
+            } else {
+                break;
+            }
+        }
+        if wrapper == "timeout" {
+            index += 1;
+        }
     }
 }
 
-fn has(args: &[String], wanted: &str) -> bool {
-    args.iter().any(|arg| arg == wanted)
+/// The command a shell, `eval`, `ssh` or `watch` runs, as one string. `eval`,
+/// `ssh` and `watch` join their words with spaces, as they do when they run.
+fn nested_command(name: &str, args: &[String]) -> Option<String> {
+    let joined = |words: &[String]| Some(words.join(" ")).filter(|text| !text.trim().is_empty());
+    match name {
+        "bash" | "sh" | "zsh" | "dash" | "ksh" | "fish" => shell_payload(args),
+        "eval" => joined(args),
+        "ssh" => joined(args.get(ssh_host_index(args)? + 1..)?),
+        "watch" => joined(&args[subcommand(args, &["-n", "--interval"])?.0..]),
+        _ => None,
+    }
 }
 
-/// The first argument that is not a flag.
-fn verb(args: &[String]) -> Option<&str> {
-    args.iter()
-        .find(|arg| !arg.starts_with('-'))
-        .map(String::as_str)
+/// The string after `-c` (also in `-lc`, `-ec`, ...), or a script and its
+/// arguments.
+fn shell_payload(args: &[String]) -> Option<String> {
+    let mut reads_string = false;
+    let mut index = 0;
+    while let Some(arg) = args.get(index) {
+        if matches!(arg.as_str(), "-o" | "+o" | "-O" | "+O") {
+            index += 2;
+        } else if arg == "--" {
+            index += 1;
+            break;
+        } else if arg.starts_with('-') || arg.starts_with('+') {
+            reads_string |= !arg.starts_with("--") && arg.contains('c');
+            index += 1;
+        } else {
+            break;
+        }
+    }
+    let rest = args.get(index..).filter(|rest| !rest.is_empty())?;
+    if reads_string {
+        rest.first().cloned()
+    } else {
+        Some(rest.join(" "))
+    }
+}
+
+fn ssh_host_index(args: &[String]) -> Option<usize> {
+    let mut index = 0;
+    while let Some(arg) = args.get(index) {
+        let Some(flags) = arg.strip_prefix('-') else {
+            return Some(index);
+        };
+        // In `-p 22` or `-tp 22` the value is the next word; in `-p22` it is attached.
+        let value_next = flags
+            .char_indices()
+            .find(|(_, flag)| SSH_VALUE_FLAGS.contains(*flag))
+            .is_some_and(|(at, _)| at + 1 == flags.len());
+        index += if value_next { 2 } else { 1 };
+    }
+    None
 }
 
 fn names_secret(word: &str) -> bool {
     let lowered = word.to_ascii_lowercase();
     let file = lowered.rsplit('/').next().unwrap_or(&lowered);
     (file == ".env" || file.starts_with(".env."))
-        || SECRET_PATH_MARKERS[1..]
+        || SECRET_PATH_MARKERS
             .iter()
             .any(|marker| lowered.contains(marker))
 }
 
-fn is_remote_target(word: &str) -> bool {
-    let lowered = word.to_ascii_lowercase();
-    [
-        "s3://", "gs://", "az://", "https://", "http://", "ftp://", "sftp://",
-    ]
-    .iter()
-    .any(|scheme| lowered.starts_with(scheme))
-        || (!lowered.starts_with('/')
-            && !lowered.starts_with('.')
-            && lowered
-                .split_once(':')
-                .is_some_and(|(host, _)| !host.is_empty() && !host.contains('/')))
-}
-
-fn sql_groups(args: &[String]) -> Vec<&'static str> {
-    let text = args.join(" ");
-    let mut groups = Vec::new();
-    if [
-        "drop table",
-        "drop database",
-        "drop schema",
-        "truncate",
-        "delete from",
-    ]
-    .iter()
-    .any(|statement| text.contains(statement))
-    {
-        groups.push("deletes");
-    }
-    if text.contains("update ") && text.contains(" set ") && !text.contains(" where ") {
-        groups.push("bulk_changes");
-    }
-    groups
-}
-
-fn segment_groups(segment: &Segment) -> Vec<&'static str> {
-    let Some(index) = program_index(&segment.words) else {
-        return Vec::new();
-    };
-    let name = program_name(&segment.words[index]);
-    let raw_args = &segment.words[index + 1..];
+fn segment_groups(name: &str, raw_args: &[String], redirects: &[String]) -> Vec<&'static str> {
     let args: Vec<String> = raw_args
         .iter()
         .map(|arg| arg.to_ascii_lowercase())
         .collect();
     let mut groups = Vec::new();
-    let sub = verb(&args);
-    match name.as_str() {
-        "rm" | "rmdir" | "unlink" | "shred" | "trash" | "srm" => groups.push("deletes"),
+    let sub = subcommand(&args, &[]).map(|(_, verb)| verb);
+    match name {
+        "rm" | "rmdir" | "unlink" | "shred" | "trash" | "srm" | "dropdb" | "dropuser" => {
+            groups.push("deletes")
+        }
         "find"
             if has(&args, "-delete")
                 || args
@@ -244,14 +315,22 @@ fn segment_groups(segment: &Segment) -> Vec<&'static str> {
         )),
         "gsutil" | "gcloud" | "az" => groups.extend(cloud_storage_groups(&args, &["rm", "delete"])),
         "docker" | "podman" => {
-            if matches!(sub, Some("rm" | "rmi" | "prune")) || has(&args, "prune") {
+            let words: Vec<&str> = args
+                .iter()
+                .filter(|arg| !arg.starts_with('-'))
+                .map(String::as_str)
+                .take(2)
+                .collect();
+            if matches!(
+                words.as_slice(),
+                ["rm" | "rmi" | "prune", ..] | [_, "rm" | "rmi" | "prune" | "remove"]
+            ) {
                 groups.push("deletes");
             }
-            if sub == Some("push") {
+            if matches!(words.as_slice(), ["push", ..] | [_, "push"]) {
                 groups.push("sending_and_sharing");
             }
         }
-        "dropdb" | "dropuser" => groups.push("deletes"),
         "redis-cli"
             if args
                 .iter()
@@ -262,31 +341,8 @@ fn segment_groups(segment: &Segment) -> Vec<&'static str> {
         "psql" | "mysql" | "sqlite3" | "mongosh" | "clickhouse-client" => {
             groups.extend(sql_groups(&args))
         }
-        "curl" | "wget" | "http" | "https" | "xh" => {
-            // Case matters here: curl's -F uploads a form, -f only fails quietly.
-            let sends = raw_args.iter().any(|arg| {
-                matches!(
-                    arg.as_str(),
-                    "-d" | "-F"
-                        | "-T"
-                        | "--upload-file"
-                        | "--form"
-                        | "--post-data"
-                        | "--post-file"
-                        | "--json"
-                ) || arg.starts_with("--data")
-                    || arg.starts_with("--form")
-                    || (arg.starts_with("-d") && !arg.starts_with("--"))
-            }) || raw_args.windows(2).any(|pair| {
-                matches!(pair[0].as_str(), "-X" | "--request")
-                    && matches!(
-                        pair[1].to_ascii_uppercase().as_str(),
-                        "POST" | "PUT" | "PATCH" | "DELETE"
-                    )
-            });
-            if sends {
-                groups.push("sending_and_sharing");
-            }
+        "curl" | "wget" | "http" | "https" | "xh" if http_sends(name, raw_args) => {
+            groups.push("sending_and_sharing")
         }
         "scp" | "rsync" | "sftp" | "ftp" if args.iter().any(|arg| is_remote_target(arg)) => {
             groups.push("sending_and_sharing")
@@ -308,55 +364,13 @@ fn segment_groups(segment: &Segment) -> Vec<&'static str> {
         }
         _ => {}
     }
-    if PACKAGE_MANAGERS.contains(&name.as_str()) {
-        if sub.is_some_and(|verb| PACKAGE_VERBS.contains(&verb))
-            || (name == "yarn" && sub.is_none())
-        {
-            groups.push("packages_and_scripts");
-        }
-        if sub == Some("publish") {
-            groups.push("packages_and_scripts");
-            groups.push("sending_and_sharing");
-        }
-        if name == "uv" && args.iter().take(2).any(|arg| arg == "pip") && has(&args, "install") {
-            groups.push("packages_and_scripts");
-        }
-    }
-    if PACKAGE_RUNNERS.contains(&name.as_str())
-        || (SYSTEM_PACKAGE_MANAGERS.contains(&name.as_str())
-            && matches!(sub, Some("install" | "upgrade" | "reinstall" | "add")))
-        || (matches!(name.as_str(), "go") && matches!(sub, Some("install" | "get")))
-        || (name == "composer" && matches!(sub, Some("install" | "require" | "update")))
-    {
-        groups.push("packages_and_scripts");
-    }
-    if let Some((_, verbs)) = DEPLOY_TOOLS.iter().find(|(tool, _)| *tool == name) {
-        if args.iter().any(|arg| verbs.contains(&arg.as_str())) {
-            groups.push("code_and_deploys");
-        }
-        if name == "kubectl" && has(&args, "delete") {
-            groups.push("deletes");
-        }
-        if matches!(name.as_str(), "terraform" | "tofu" | "pulumi")
-            && matches!(sub, Some("destroy"))
-        {
-            groups.push("deletes");
-        }
-        if name == "helm" && matches!(sub, Some("uninstall" | "delete")) {
-            groups.push("deletes");
-        }
-    }
-    if name == "kubectl"
-        && has(&args, "get")
-        && args.iter().any(|arg| arg == "secret" || arg == "secrets")
-    {
-        groups.push("secrets");
-    }
+    groups.extend(package_groups(name, &args));
+    groups.extend(deploy_groups(name, &args));
     if name.starts_with("deploy") {
         groups.push("code_and_deploys");
     }
     let reads_secret = matches!(
-        name.as_str(),
+        name,
         "cat"
             | "less"
             | "more"
@@ -372,138 +386,12 @@ fn segment_groups(segment: &Segment) -> Vec<&'static str> {
             | "source"
             | "."
     ) && args.iter().any(|arg| names_secret(arg));
-    if reads_secret
-        || (matches!(name.as_str(), "scp" | "rsync" | "curl")
-            && args
-                .iter()
-                .any(|arg| names_secret(arg.trim_start_matches('@'))))
-    {
-        groups.push("secrets");
-    }
-    if segment.redirects.iter().any(|target| names_secret(target)) {
-        groups.push("secrets");
-    }
-    groups
-}
-
-fn git_groups(args: &[String]) -> Vec<&'static str> {
-    let mut groups = Vec::new();
-    // `git -C dir push`: skip global options and their values.
-    let mut rest = args;
-    while let Some(first) = rest.first() {
-        if matches!(first.as_str(), "-c" | "-C" | "--git-dir" | "--work-tree") {
-            rest = rest.get(2..).unwrap_or(&[]);
-        } else if first.starts_with('-') {
-            rest = &rest[1..];
-        } else {
-            break;
-        }
-    }
-    let Some((sub, tail)) = rest.split_first() else {
-        return groups;
-    };
-    match sub.as_str() {
-        "push" => {
-            groups.push("code_and_deploys");
-            if tail.iter().any(|arg| {
-                arg == "--delete" || arg == "-d" || (arg.starts_with(':') && arg.len() > 1)
-            }) {
-                groups.push("deletes");
-            }
-        }
-        "branch"
-            if tail
-                .iter()
-                .any(|arg| matches!(arg.as_str(), "-d" | "-D" | "--delete")) =>
-        {
-            groups.push("deletes")
-        }
-        "tag"
-            if tail
-                .iter()
-                .any(|arg| matches!(arg.as_str(), "-d" | "--delete")) =>
-        {
-            groups.push("deletes")
-        }
-        "clean"
-            if tail.iter().any(|arg| {
-                (arg.starts_with('-') && !arg.starts_with("--") && arg.contains('f'))
-                    || arg == "--force"
-            }) =>
-        {
-            groups.push("deletes")
-        }
-        "reset" if has(tail, "--hard") => groups.push("code_and_deploys"),
-        "rebase" | "filter-branch" | "filter-repo" | "merge" | "cherry-pick" | "revert" => {
-            groups.push("code_and_deploys")
-        }
-        "rm" => groups.push("deletes"),
-        "stash"
-            if tail
-                .first()
-                .is_some_and(|arg| arg == "drop" || arg == "clear") =>
-        {
-            groups.push("deletes")
-        }
-        _ => {}
-    }
-    groups
-}
-
-fn gh_groups(args: &[String]) -> Vec<&'static str> {
-    let mut groups = Vec::new();
-    let words: Vec<&str> = args
-        .iter()
-        .filter(|arg| !arg.starts_with('-'))
-        .map(String::as_str)
-        .collect();
-    match words.as_slice() {
-        [_, "delete", ..] | [_, _, "delete", ..] => groups.push("deletes"),
-        ["pr", "merge", ..] | ["release", "create", ..] | ["workflow", "run", ..] => {
-            groups.push("code_and_deploys")
-        }
-        ["gist", "create", ..] | ["release", "upload", ..] => groups.push("sending_and_sharing"),
-        ["auth", "token", ..] | ["secret", "list" | "set", ..] => groups.push("secrets"),
-        _ => {}
-    }
-    if words.first() == Some(&"repo")
+    let sends_secret = matches!(name, "scp" | "rsync" | "curl")
         && args
             .iter()
-            .any(|arg| arg == "--visibility=public" || arg == "public")
-    {
-        groups.push("sending_and_sharing");
-    }
-    groups
-}
-
-fn cloud_storage_groups(args: &[String], delete_verbs: &[&str]) -> Vec<&'static str> {
-    let mut groups = Vec::new();
-    if args.iter().any(|arg| delete_verbs.contains(&arg.as_str())) {
-        groups.push("deletes");
-    }
-    let copies = args
-        .iter()
-        .any(|arg| matches!(arg.as_str(), "cp" | "sync" | "mv" | "upload" | "put-object"));
-    if copies && args.last().is_some_and(|last| is_remote_target(last)) {
-        groups.push("sending_and_sharing");
-    }
-    if args.iter().any(|arg| arg == "--acl") && args.iter().any(|arg| arg.contains("public")) {
-        groups.push("sending_and_sharing");
-    }
-    if args
-        .windows(2)
-        .any(|pair| pair[0] == "secretsmanager" && pair[1] == "get-secret-value")
-        || args
-            .windows(2)
-            .any(|pair| pair[0] == "configure" && pair[1] == "get")
-    {
+            .any(|arg| names_secret(arg.trim_start_matches('@')));
+    if reads_secret || sends_secret || redirects.iter().any(|target| names_secret(target)) {
         groups.push("secrets");
-    }
-    if args
-        .iter()
-        .any(|arg| arg == "deploy" || arg == "update-function-code" || arg == "update-service")
-    {
-        groups.push("code_and_deploys");
     }
     groups
 }

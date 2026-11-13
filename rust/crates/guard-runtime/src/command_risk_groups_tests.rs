@@ -110,7 +110,7 @@ fn unknown_and_read_only_commands_have_no_group() {
 }
 
 #[test]
-fn unbalanced_quotes_fall_back_to_whitespace_words() {
+fn an_unclosed_quote_runs_to_the_end() {
     assert_eq!(command_risk_groups("rm -rf 'build"), vec!["deletes"]);
 }
 
@@ -132,4 +132,150 @@ fn curl_flag_case_is_kept() {
         command_risk_groups("kubectl -n web delete pod a"),
         vec!["deletes"]
     );
+}
+
+fn check(cases: &[(&str, &[&str])]) {
+    for (command, expected) in cases {
+        assert_eq!(
+            command_risk_groups(command),
+            expected.to_vec(),
+            "groups for {command:?}"
+        );
+    }
+}
+
+#[test]
+fn wrapper_options_and_their_values_are_skipped() {
+    check(&[
+        ("sudo -u postgres dropdb prod", &["deletes"]),
+        (
+            "sudo --user deploy kubectl apply -f x.yaml",
+            &["code_and_deploys"],
+        ),
+        ("nice -n 10 rm -rf /tmp/cache", &["deletes"]),
+        ("env -u HOME rm -rf build", &["deletes"]),
+        ("find . -name '*.log' | xargs -n 1 rm", &["deletes"]),
+        ("timeout 60 terraform apply", &["code_and_deploys"]),
+        ("timeout -s KILL 5m git push", &["code_and_deploys"]),
+        ("command -v rm", &[]),
+    ]);
+}
+
+#[test]
+fn shell_eval_ssh_and_watch_payloads_are_read() {
+    check(&[
+        (
+            "bash -c \"rm -rf dist && git push\"",
+            &["deletes", "code_and_deploys"],
+        ),
+        ("sh -c 'kubectl apply -f x.yaml'", &["code_and_deploys"]),
+        ("bash -lc 'npm install'", &["packages_and_scripts"]),
+        ("bash ./deploy.sh prod", &["code_and_deploys"]),
+        ("eval \"rm -rf build\"", &["deletes"]),
+        ("ssh -p 22 host 'rm -rf /srv/app'", &["deletes"]),
+        ("ssh -tp 22 host git push", &["code_and_deploys"]),
+        ("watch -n 5 kubectl apply -f x.yaml", &["code_and_deploys"]),
+        ("ssh host uptime", &[]),
+        ("bash -c 'echo hello'", &[]),
+    ]);
+}
+
+#[test]
+fn quoting_and_newlines_set_command_boundaries() {
+    check(&[
+        ("echo ready\nrm -rf build", &["deletes"]),
+        ("echo $(rm -rf build)", &["deletes"]),
+        ("echo ';' rm -rf build", &[]),
+        ("echo 'a && rm -rf b'", &[]),
+        ("ls 2>&1 | grep x", &[]),
+        ("make build &> out.log", &[]),
+        ("# rm -rf build\nls", &[]),
+    ]);
+}
+
+#[test]
+fn curl_values_attached_to_short_options_count() {
+    check(&[
+        (
+            "curl -Treport.csv https://example.test/upload",
+            &["sending_and_sharing"],
+        ),
+        (
+            "curl -Ffile=@report.csv https://example.test/upload",
+            &["sending_and_sharing"],
+        ),
+        (
+            "curl -XPOST https://example.test/hook",
+            &["sending_and_sharing"],
+        ),
+        (
+            "curl -sX PUT https://example.test/item",
+            &["sending_and_sharing"],
+        ),
+        ("curl -sSLo out.txt https://example.test/file", &[]),
+        ("curl -XGET https://example.test/item", &[]),
+        ("http POST example.test/hook", &["sending_and_sharing"]),
+        (
+            "http example.test/hook name=value",
+            &["sending_and_sharing"],
+        ),
+        ("http example.test/search q==term", &[]),
+    ]);
+}
+
+#[test]
+fn storage_copies_find_the_destination_past_options() {
+    check(&[
+        (
+            "aws s3 cp report.csv s3://bucket/report.csv --profile prod",
+            &["sending_and_sharing"],
+        ),
+        (
+            "aws s3 sync ./out s3://bucket/out --delete --region us-east-1",
+            &["sending_and_sharing"],
+        ),
+        (
+            "aws s3 cp s3://bucket/report.csv ./report.csv --profile prod",
+            &[],
+        ),
+        (
+            "aws s3api put-object --bucket b --key k --body f",
+            &["sending_and_sharing"],
+        ),
+        (
+            "gsutil -m cp -r dist gs://bucket/site",
+            &["sending_and_sharing"],
+        ),
+    ]);
+}
+
+#[test]
+fn sql_is_read_as_words_outside_string_literals() {
+    check(&[
+        ("psql -c 'DROP\nTABLE users'", &["deletes"]),
+        ("psql -c 'drop   schema app cascade'", &["deletes"]),
+        ("psql -c \"SELECT 'truncate' AS note\"", &[]),
+        ("psql -c \"SELECT 'delete from x' AS note\"", &[]),
+        (
+            "psql -c 'UPDATE public.users SET plan = 1'",
+            &["bulk_changes"],
+        ),
+        ("psql -c 'UPDATE users SET plan = 1 WHERE id = 2'", &[]),
+    ]);
+}
+
+#[test]
+fn deploy_tools_match_the_subcommand_only() {
+    check(&[
+        ("kubectl get deployment apply", &[]),
+        ("kubectl get pod delete", &[]),
+        (
+            "kubectl --context prod apply -f x.yaml",
+            &["code_and_deploys"],
+        ),
+        ("kubectl get secrets/app -o yaml", &["secrets"]),
+        ("helm -n web uninstall api", &["deletes"]),
+        ("terraform apply -destroy", &["deletes", "code_and_deploys"]),
+        ("pulumi -C infra up", &["code_and_deploys"]),
+    ]);
 }
