@@ -195,7 +195,7 @@ class MirroredPolicyIntegritySecretStore(FallbackSecretStore):
             self.fallback.set_secret(secret_id, value)
         except Exception:
             if primary_error is not None:
-                raise primary_error
+                raise primary_error from None
             _store_logger.debug("Policy-integrity fallback mirror update failed.", exc_info=True)
 
     def delete_secret(self, secret_id: str) -> None:
