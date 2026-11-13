@@ -243,6 +243,11 @@ fn sed_exec_only_found_files(child: &[String]) -> bool {
                 }
             }
             "-e" | "--expression" => {
+                // GNU sed may permute a later -e option ahead of an earlier
+                // positional word, turning that earlier word into a file.
+                if positional_script {
+                    return false;
+                }
                 index += 1;
                 if child.get(index).is_none() {
                     return false;
@@ -259,9 +264,15 @@ fn sed_exec_only_found_files(child: &[String]) -> bool {
                 };
             }
             word if word.starts_with("--expression=") && word.len() > "--expression=".len() => {
+                if positional_script {
+                    return false;
+                }
                 named_script = true;
             }
             word if word.starts_with("-e") && word.len() > 2 => {
+                if positional_script {
+                    return false;
+                }
                 named_script = true;
             }
             word if word.starts_with("-i") && word.len() > 2 => {}
