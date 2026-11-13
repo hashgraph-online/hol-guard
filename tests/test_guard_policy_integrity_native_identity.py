@@ -290,6 +290,17 @@ def test_fallback_key_authority_covers_control_and_survives_rebuild(tmp_path: Pa
     assert rebuilt.get_secret(store._policy_integrity_control_ref) == "new-control"
 
 
+def test_fallback_preference_reads_current_marker_after_deletion(tmp_path: Path) -> None:
+    store, backend = _setup(tmp_path)
+    marker_ref = backend._fallback_preference_ref(store._policy_integrity_key_ref)
+    backend.fallback.set_secret(marker_ref, "1")
+    assert backend._fallback_is_preferred(store._policy_integrity_key_ref)
+
+    backend.fallback.delete_secret(marker_ref)
+
+    assert not backend._fallback_is_preferred(store._policy_integrity_key_ref)
+
+
 def test_unverified_control_update_preserves_both_identities(tmp_path: Path) -> None:
     store, backend = _setup(tmp_path, signer=b"x" * 32)
     backend.primary.set_secret(store._policy_integrity_control_ref, "primary-control")

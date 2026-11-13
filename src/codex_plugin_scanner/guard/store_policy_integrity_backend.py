@@ -70,7 +70,6 @@ class MirroredPolicyIntegritySecretStore(FallbackSecretStore):
     def __init__(self, primary: SecretStore, fallback: SecretStore, *, guard_home: Path | None = None) -> None:
         super().__init__(primary, fallback)
         self._guard_home = guard_home
-        self._fallback_preferred_secret_ids: set[str] = set()
 
     def _read_primary(self, secret_id: str) -> str | None:
         if isinstance(self.primary, SystemKeyringSecretStore):
@@ -99,15 +98,10 @@ class MirroredPolicyIntegritySecretStore(FallbackSecretStore):
         return f"{self._FALLBACK_PREFERENCE_PREFIX}{secret_id}"
 
     def _fallback_is_preferred(self, secret_id: str) -> bool:
-        if secret_id in self._fallback_preferred_secret_ids:
-            return True
         try:
-            preferred = self.fallback.get_secret(self._fallback_preference_ref(secret_id)) == "1"
+            return self.fallback.get_secret(self._fallback_preference_ref(secret_id)) == "1"
         except Exception:
-            preferred = False
-        if preferred:
-            self._fallback_preferred_secret_ids.add(secret_id)
-        return preferred
+            return False
 
     def _policy_source(
         self, primary_key: str | None, fallback_key: str | None
@@ -213,7 +207,6 @@ class MirroredPolicyIntegritySecretStore(FallbackSecretStore):
         primary_error: Exception | None = None
         try:
             self.primary.set_secret(secret_id, value)
-            self._fallback_preferred_secret_ids.discard(secret_id)
             with suppress(Exception):
                 self.fallback.delete_secret(self._fallback_preference_ref(secret_id))
         except Exception as error:
@@ -224,7 +217,6 @@ class MirroredPolicyIntegritySecretStore(FallbackSecretStore):
             self.fallback.set_secret(secret_id, value)
             if primary_error is not None:
                 # Keep the successful fallback authoritative until the primary catches up.
-                self._fallback_preferred_secret_ids.add(secret_id)
                 self.fallback.set_secret(self._fallback_preference_ref(secret_id), "1")
         except Exception as fallback_error:
             if primary_error is not None:
