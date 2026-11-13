@@ -45,4 +45,5 @@ assert.match(contextRefusalMessage("native_context_assistance_context_scope_deni
 assert.match(contextRefusalMessage("native_context_assistance_context_scope_denied", "refresh", 403), /files changed/);
 assert.match(contextRefusalMessage("native_context_assistance_context_stale", "grant", 409), /files changed/);
 assert.match(contextRefusalMessage("context_request_refused", "grant", 403), /approval password/);
+assert.match(contextRefusalMessage("native_context_assistance_runtime_deadline_exceeded", "compile", 503), /Restart CIGAR/);
 console.log("Actual native cited-context projection and malformed disclosure payload checks passed.");

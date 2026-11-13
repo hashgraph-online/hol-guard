@@ -336,6 +336,7 @@
    "class": "python_transport",
    "paths": [
     "src/codex_plugin_scanner/guard/native_archive_inspection.py",
+    "src/codex_plugin_scanner/guard/native_swarm.py",
     "src/codex_plugin_scanner/guard/native_hook_edge.py",
     "src/codex_plugin_scanner/guard/native_hook_render.py",
     "src/codex_plugin_scanner/guard/hook_review/hook_fail_closed.py",
@@ -668,6 +669,7 @@
     "rust/crates/guard-rule-contract/**",
     "rust/crates/guard-rules/**",
     "rust/crates/guard-runtime/**",
+    "rust/crates/guard-swarm/**",
     "rust/crates/guard-context-assistance/**",
     "rust/crates/guard-cigar-release/**",
     "rust/crates/guard-scanner/**",
