@@ -120,7 +120,8 @@ fn a_spent_deadline_is_still_held() {
 /// A configuration include that never finishes reading (here a FIFO with no
 /// writer) stalls the probe until its deadline. Before probes left time on
 /// the hook's deadline, the extension check then timed out as well and the
-/// diff was held instead of contained.
+/// diff was held instead of contained. FIFOs are a Unix feature.
+#[cfg(unix)]
 #[test]
 fn a_stalled_probe_leaves_time_for_the_extension_check() {
     let (root, _cleanup) = checkout("stalled");
