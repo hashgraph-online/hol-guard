@@ -208,6 +208,7 @@ pub mod pretool_manager_exec_local_bin;
 pub mod pretool_metadata_predicate_reads;
 pub mod pretool_metadata_reads;
 pub mod pretool_missing_worktree_paths;
+pub mod pretool_name_patterns_and_own_home;
 pub mod pretool_native_home_writes;
 pub mod pretool_network_reads;
 pub mod pretool_node_check_environment;

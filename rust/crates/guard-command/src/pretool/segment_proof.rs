@@ -583,12 +583,9 @@ pub(super) fn exact_safe_segment_with_context(
         // reading would act on. The spelling is handed on, because on Windows
         // the one without a suffix reaches that same shim through `PATHEXT`
         // and the proof has to read its arguments as the shim would.
-        "hol-guard" | "hol-guard.exe" => super::guard_diagnostics::safe_hol_guard_segment(
-            basename,
-            &segment.arguments,
-            context.cwd,
-            segment.pipeline_index,
-        ),
+        "hol-guard" | "hol-guard.exe" => {
+            super::guard_home_option::safe_hol_guard_segment(basename, segment, context)
+        }
         "jq" => {
             jq_dollars_literal(segment)
                 && ((segment.pipeline_index > 0

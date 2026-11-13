@@ -40,7 +40,9 @@ pub(super) fn sensitive_beyond_patterns(text: &str, without_patterns: Option<Str
 
 /// [`sensitive_beyond_patterns`] for one segment of `model`, reading `text`
 /// (or the segment's own) and its pattern-free rest without the words that
-/// name tracked documents.
+/// name tracked documents. The rest also leaves out the name patterns of a
+/// `find` listing or `pytest -k` run when nothing later in the pipeline can
+/// open what they select.
 pub(super) fn segment_sensitive(
     model: &CanonicalCommandV1,
     segment: &CommandSegmentV1,
@@ -49,6 +51,13 @@ pub(super) fn segment_sensitive(
 ) -> bool {
     let text = names::segment_screen_text(model, segment, text, cwd);
     let rest = segment_without_patterns(segment)
+        .or_else(|| {
+            let index = model
+                .segments
+                .iter()
+                .position(|candidate| std::ptr::eq(candidate, segment))?;
+            super::name_pattern_text::segment_without_patterns(model, index)
+        })
         .map(|rest| names::screened(model, rest, names::segment_words(segment), cwd));
     sensitive_beyond_patterns(&text, rest)
 }

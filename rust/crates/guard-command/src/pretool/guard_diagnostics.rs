@@ -483,8 +483,8 @@ fn posture_inspection(words: &[&str]) -> bool {
 
 /// The approval queue and the retry hint of one resolved request. The
 /// decision subcommands (`approve`, `deny`), `resume`, `open`, `lock`,
-/// `unlock` and `clear-history`, and every root override (`--home`,
-/// `--guard-home`, `--workspace`), are not admitted. `open` launches the
+/// `unlock` and `clear-history`, and every root override but a `--home` that
+/// names Guard's own home ([`super::guard_home_option`]), are not admitted. `open` launches the
 /// user's own approval center rather than printing anything, so it stays on
 /// the review path with the other launches. `--json` is lifted out before the
 /// path is read, so neither it nor `--timeout` has to be written last.
