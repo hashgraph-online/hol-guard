@@ -266,7 +266,8 @@ pub(crate) fn evaluate_directory_trust_request(
 }
 
 /// A hook spelling that named something is held to the workspace rule,
-/// which is the rule the daemon applied to it before.
+/// which is the rule the daemon applied to it before, and is also trusted
+/// where it names a directory the caller owns outside those roots.
 fn trusted_workspace(
     value: &str,
     roots: &Result<Vec<PathBuf>, DirectoryTrustRejection>,
@@ -275,10 +276,36 @@ fn trusted_workspace(
 ) -> CandidateVerdict {
     match roots {
         Ok(roots) => {
-            validate_guard_directory_path(value, roots, &request.home_dir, temp_dir, true).into()
+            match validate_guard_directory_path(value, roots, &request.home_dir, temp_dir, true) {
+                Err(DirectoryTrustRejection::UnexpectedRoot) => {
+                    owned_hook_workspace(value, &request.home_dir)
+                        .ok_or(DirectoryTrustRejection::UnexpectedRoot)
+                        .into()
+                }
+                verdict => verdict.into(),
+            }
         }
         Err(rejection) => CandidateVerdict::Rejected(*rejection),
     }
+}
+
+/// The directory a harness reports its session runs in, when that is a
+/// checkout the caller owns outside the home: a repository on an external
+/// volume, under `/opt` or `/srv`, or on a second disk. The harness, not the
+/// agent, names this directory, and every file the session touches is
+/// already the caller's. Refusing it left the hook with no workspace at all,
+/// so readiness failed and each review lost its working directory.
+///
+/// Only an existing directory owned by the current user qualifies, so `/`,
+/// system directories and another user's tree stay refused. A platform with
+/// no owner to compare keeps the stricter roots.
+fn owned_hook_workspace(value: &str, home_dir: &str) -> Option<PathBuf> {
+    let expanded = guard_paths::expanduser(value, home_dir).ok()?;
+    let canonical = guard_paths::python_realpath_lax(Path::new(&expanded)).ok()?;
+    if canonical.parent().is_none() || !std::fs::metadata(&canonical).ok()?.is_dir() {
+        return None;
+    }
+    guard_paths::owned_by_current_user(&canonical).then_some(canonical)
 }
 
 pub(crate) fn evaluate(request: &DirectoryTrustRequestV1) -> Value {
@@ -367,3 +394,7 @@ pub(crate) fn evaluate(request: &DirectoryTrustRequestV1) -> Value {
 #[cfg(all(test, unix))]
 #[path = "directory_trust_tests.rs"]
 mod tests;
+
+#[cfg(all(test, unix))]
+#[path = "directory_trust_hook_workspace_tests.rs"]
+mod hook_workspace_tests;
