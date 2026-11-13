@@ -22,6 +22,7 @@ from .extension_allow_fixtures import extension_allow_checks
 from .fast_forward_fixtures import add_fast_forward_shape, add_plain_fast_forward_shape, fast_forward_checks
 from .fixture_remotes import INSTEAD_OF_CASE, add_checkout_origin
 from .git_allow_fixtures import add_git_allow_shape, git_allow_checks
+from .heredoc_commit_fixtures import add_heredoc_commit_change, heredoc_commit_checks
 from .parent_fixtures import PARENT_WORKSPACE_CASE, write_parent_workspace
 from .realism_fixtures import (
     LOCAL_BIN,
@@ -426,6 +427,7 @@ def filesystem_checks(fixture: Fixture, oracle: str, scenario_id: str) -> dict[s
     checks.update(runtime_case_checks(fixture.workspace, scenario_id))
     checks.update(long_lived_clone_checks(fixture.workspace, scenario_id))
     checks.update(branch_return_checks(fixture.workspace, scenario_id))
+    checks.update(heredoc_commit_checks(fixture.workspace, scenario_id))
     checks.update(fast_forward_checks(fixture.workspace, scenario_id))
     checks.update(git_allow_checks(fixture.workspace, scenario_id))
     checks.update(extension_allow_checks(fixture.workspace, scenario_id, EXECUTED_FLAG))
@@ -753,6 +755,7 @@ def _add_realistic_shapes(main: Path, home: Path, environment: dict[str, str], s
     # An untracked linked worktree inside the tree, another shape agents leave behind.
     _git(("worktree", "add", "--quiet", "-b", "inner", str(worktree / ".worktrees/inner")), worktree, environment)
     add_fast_forward_shape(main, worktree, home, environment, scenario_id)
+    add_heredoc_commit_change(worktree, scenario_id)
     # Last, so default signing never touches the fixture's own commits.
     add_long_lived_clone_config(main, scenario_id, environment)
     if scenario_id == PARENT_WORKSPACE_CASE:
