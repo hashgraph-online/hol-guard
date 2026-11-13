@@ -209,7 +209,7 @@ pub(super) fn state(ctx: &Ctx) -> Value {
         .and_then(Value::as_str)
         .map(PathBuf::from);
     // Cline loads the plugin through its package manifest.
-    let integrity_ok = integrity_ok && package.as_deref().is_some_and(owned_package);
+    let integrity_ok = integrity_ok && package.as_deref().is_some_and(loads_guard);
     let loaded = proof_state(ctx, "loaded");
     let pretool = proof_state(ctx, "pretool");
     let posttool = proof_state(ctx, "posttool");
@@ -234,6 +234,19 @@ fn owned_package(path: &Path) -> bool {
         && state_text(path)
             .and_then(|text| serde_json::from_str::<Value>(&text).ok())
             .is_some_and(|payload| payload.get("name") == Some(&json!(PACKAGE_NAME)))
+}
+
+/// Whether the manifest still names the managed plugin and tells Cline to load it.
+fn loads_guard(path: &Path) -> bool {
+    let expected: Value = serde_json::from_str(PACKAGE_JSON).unwrap_or(Value::Null);
+    !is_symlink(path)
+        && path.is_file()
+        && state_text(path)
+            .and_then(|text| serde_json::from_str::<Value>(&text).ok())
+            .is_some_and(|payload| {
+                payload.get("name") == expected.get("name")
+                    && payload.get("cline") == expected.get("cline")
+            })
 }
 
 fn removed(path: &Path) -> Step<()> {

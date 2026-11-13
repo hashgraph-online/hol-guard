@@ -227,6 +227,28 @@ fn a_user_package_manifest_blocks_the_plugin_install() {
 }
 
 #[test]
+fn a_manifest_that_stops_loading_the_plugin_fails_integrity() {
+    let home = Home::new();
+    let answer = home.ask(
+        "cline",
+        "install_transport",
+        json!({"transport": "plugin", "frozen": false, "facts": hook_facts(&home)}),
+    );
+    assert!(answer.get("runtime_error").is_none(), "{answer}");
+    let integrity = |home: &Home| {
+        let probe = home.ask("cline", "runtime_probe", json!({"cli": no_cli()}));
+        probe["probe"]["plugin"]["integrity_ok"].clone()
+    };
+    assert_eq!(integrity(&home), true);
+    let package = home.home().join(".cline/plugins/hol-guard/package.json");
+    write(
+        &package,
+        "{\"name\": \"hol-guard-cline-plugin\", \"cline\": {\"plugins\": []}}\n",
+    );
+    assert_eq!(integrity(&home), false);
+}
+
+#[test]
 fn a_state_path_outside_the_slots_is_never_run_or_removed() {
     let home = Home::new();
     let outside = home.root.join("outside/PreToolUse");
