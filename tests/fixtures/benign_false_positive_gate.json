@@ -43513,7 +43513,7 @@
       ],
       "tool": "read",
       "tool_input": {
-        "path": "${HOME}/.ssh/id_ed25519"
+        "path": "${HOME}/.ssh"
       },
       "cwd": "worktree",
       "expect": "not_allow"
@@ -57268,7 +57268,7 @@
       "tool": "search_tool",
       "tool_input": {
         "query": "config",
-        "path": "${HOME}/.ssh/id_ed25519"
+        "path": "${HOME}/.ssh/id_rsa"
       },
       "cwd": "worktree",
       "expect": "not_allow"

@@ -380,6 +380,7 @@
       "src/pretool/generic_evaluate.rs",
       "src/pretool/generic_extract.rs",
       "src/pretool/generic_github.rs",
+      "src/pretool/generic_grok_tool_discovery.rs",
       "src/pretool/generic_nested_json.rs",
       "src/pretool/generic_omp.rs",
       "src/pretool/generic_omp_bash_cwd.rs",
