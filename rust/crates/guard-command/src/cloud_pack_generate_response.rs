@@ -10,7 +10,12 @@ const MAX_RESPONSE_FIELDS: usize = 64;
 /// Projected response fields for a JSON Schema: scalar top-level properties,
 /// or those of each item when the response is an array. A success that
 /// carries no body (`204`) projects as an empty object instead of failing.
-pub(crate) fn response(schema: Option<&Value>, empty_ok: bool, draft: &mut Draft, at: &str) -> Value {
+pub(crate) fn response(
+    schema: Option<&Value>,
+    empty_ok: bool,
+    draft: &mut Draft,
+    at: &str,
+) -> Value {
     let fields = schema.and_then(|schema| {
         if schema.get("type").and_then(Value::as_str) == Some("array") {
             let items = scalar_fields(schema.get("items")?);

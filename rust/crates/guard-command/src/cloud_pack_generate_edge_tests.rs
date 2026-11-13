@@ -23,7 +23,10 @@ fn draft(document: Value) -> Value {
 }
 
 fn actions(reply: &Value) -> Vec<Value> {
-    reply["pack"]["actions"].as_array().cloned().unwrap_or_default()
+    reply["pack"]["actions"]
+        .as_array()
+        .cloned()
+        .unwrap_or_default()
 }
 
 fn only(reply: &Value) -> Value {
@@ -37,7 +40,8 @@ fn noted(reply: &Value, code: &str) -> bool {
 }
 
 fn int_schema(schema: Value) -> Value {
-    let id = json!({ "name": "id", "in": "path", "required": true, "schema": { "type": "string" } });
+    let id =
+        json!({ "name": "id", "in": "path", "required": true, "schema": { "type": "string" } });
     let page = json!({ "name": "page", "in": "query", "schema": schema });
     draft(openapi(json!({ "/items/{id}": { "get": {
         "operationId": "getItem", "parameters": [id, page],
@@ -56,8 +60,15 @@ fn an_operation_parameter_replaces_the_shared_one() {
         }
     } })));
     let action = only(&reply);
-    assert_eq!(action["arguments"]["pet_id"]["type"], json!("integer"), "{action}");
-    assert_eq!(action["executor"]["request"]["path"], json!("/v1/pets/{pet_id}"));
+    assert_eq!(
+        action["arguments"]["pet_id"]["type"],
+        json!("integer"),
+        "{action}"
+    );
+    assert_eq!(
+        action["executor"]["request"]["path"],
+        json!("/v1/pets/{pet_id}")
+    );
 }
 
 #[test]
@@ -76,8 +87,10 @@ fn a_boolean_path_parameter_skips_the_operation() {
 
 #[test]
 fn a_required_body_the_pack_cannot_send_skips_the_operation() {
-    let body = |required: bool| json!({ "required": required,
-        "content": { "application/json": { "schema": { "type": "string" } } } });
+    let body = |required: bool| {
+        json!({ "required": required,
+        "content": { "application/json": { "schema": { "type": "string" } } } })
+    };
     let reply = draft(openapi(json!({
         "/notes": { "post": { "operationId": "createNote", "requestBody": body(true),
             "responses": { "201": { "description": "ok" } } } },
@@ -139,7 +152,10 @@ fn the_first_https_server_is_used() {
     ]);
     let reply = draft(document);
     assert_eq!(reply["pack"]["hosts"], json!(["api.example.com"]));
-    assert_eq!(only(&reply)["executor"]["request"]["path"], json!("/v3/pets"));
+    assert_eq!(
+        only(&reply)["executor"]["request"]["path"],
+        json!("/v3/pets")
+    );
 }
 
 #[test]
@@ -150,19 +166,34 @@ fn a_relative_server_keeps_its_base_path_with_a_named_host() {
     let reply = reply(json!({ "op": "generate", "providerId": "shop",
         "host": "pets.example.com", "openapi": document }));
     assert_eq!(reply["pack"]["hosts"], json!(["pets.example.com"]));
-    assert_eq!(only(&reply)["executor"]["request"]["path"], json!("/api/v3/pets"));
+    assert_eq!(
+        only(&reply)["executor"]["request"]["path"],
+        json!("/api/v3/pets")
+    );
 }
 
 #[test]
 fn integer_bounds_round_inward_and_honour_exclusive_forms() {
     let page = |schema: Value| only(&int_schema(schema))["arguments"]["page"].clone();
     let fractional = page(json!({ "type": "integer", "minimum": 1.5, "maximum": 9.5 }));
-    assert_eq!((fractional["minimum"].clone(), fractional["maximum"].clone()), (json!(2), json!(9)));
-    let numeric = page(json!({ "type": "integer", "exclusiveMinimum": 0, "exclusiveMaximum": 100 }));
-    assert_eq!((numeric["minimum"].clone(), numeric["maximum"].clone()), (json!(1), json!(99)));
-    let flags = page(json!({ "type": "integer", "minimum": 0, "exclusiveMinimum": true,
-        "maximum": 10, "exclusiveMaximum": true }));
-    assert_eq!((flags["minimum"].clone(), flags["maximum"].clone()), (json!(1), json!(9)));
+    assert_eq!(
+        (fractional["minimum"].clone(), fractional["maximum"].clone()),
+        (json!(2), json!(9))
+    );
+    let numeric =
+        page(json!({ "type": "integer", "exclusiveMinimum": 0, "exclusiveMaximum": 100 }));
+    assert_eq!(
+        (numeric["minimum"].clone(), numeric["maximum"].clone()),
+        (json!(1), json!(99))
+    );
+    let flags = page(
+        json!({ "type": "integer", "minimum": 0, "exclusiveMinimum": true,
+        "maximum": 10, "exclusiveMaximum": true }),
+    );
+    assert_eq!(
+        (flags["minimum"].clone(), flags["maximum"].clone()),
+        (json!(1), json!(9))
+    );
 }
 
 #[test]

@@ -149,7 +149,8 @@ pub(crate) fn argument(schema: &Value, required: bool) -> Option<Value> {
         Some("boolean") => Some(json!({ "type": "boolean", "required": required })),
         Some("array") => {
             let items = schema.get("items")?;
-            if items.get("type").and_then(Value::as_str) != Some("string") || zero(items, "maxLength")
+            if items.get("type").and_then(Value::as_str) != Some("string")
+                || zero(items, "maxLength")
             {
                 return None;
             }
@@ -405,7 +406,14 @@ fn build_mcp(tools: &[Value], provider: &str, mode: &str, draft: &mut Draft) {
         let mut arguments = Map::new();
         if let Some(schema) = schema {
             let at = format!("{at}/inputSchema/properties");
-            object_arguments(schema, &mut arguments, &mut BTreeMap::new(), draft, &at, false);
+            object_arguments(
+                schema,
+                &mut arguments,
+                &mut BTreeMap::new(),
+                draft,
+                &at,
+                false,
+            );
         }
         let response = response(tool.get("outputSchema"), false, draft, &at);
         let text = tool

@@ -36,10 +36,15 @@ Draft from the provider's own OpenAPI 3 document or MCP `tools/list` result. Use
 description, pinned to a version, not a third-party copy.
 
 ```sh
-hol-guard extensions generate --cloud --from openapi --input api.json --output pack.json --slug shop
+hol-guard extensions generate --cloud --from openapi --input api.json --output pack.json --slug shop \
+  --json > draft-notes.json
 hol-guard extensions generate --cloud --from mcp --input tools.json --output pack.json --slug files \
-  --host mcp.files.example --auth-mode oauth2
+  --host mcp.files.example --auth-mode oauth2 --json > draft-notes.json
 ```
+
+`--json` writes the proposals and notes to standard output while the pack goes to `--output`. Keep
+`draft-notes.json` out of the pull request. The command never overwrites `--output`; to draft again, choose a
+new path.
 
 The draft errs toward strict and is incomplete on purpose. Work through its output:
 

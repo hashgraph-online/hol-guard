@@ -3,11 +3,11 @@
 
 use crate::cloud_action_binding::valid_label;
 use crate::cloud_action_classifier::classify;
+use crate::cloud_pack::{MAX_ARGUMENTS, MAX_HOSTS};
 use crate::cloud_pack_generate::{
     argument, method_class, object_arguments, push_action, response, snake, title, ActionParts,
     Draft, PLACEHOLDER_SCOPE,
 };
-use crate::cloud_pack::{MAX_ARGUMENTS, MAX_HOSTS};
 use crate::cloud_pack_validate::valid_host;
 use crate::cloud_pack_validate_request::path_placeholders;
 use serde_json::{json, Map, Value};
@@ -221,7 +221,12 @@ fn parameters(
 ) -> Option<Vec<Value>> {
     let mut merged: Vec<((String, String), Value)> = Vec::new();
     let listed = [shared, operation.get("parameters")];
-    for parameter in listed.into_iter().flatten().filter_map(Value::as_array).flatten() {
+    for parameter in listed
+        .into_iter()
+        .flatten()
+        .filter_map(Value::as_array)
+        .flatten()
+    {
         let parameter = resolve(document, parameter, budget);
         let key = (
             parameter.get("in").and_then(Value::as_str)?.to_owned(),
@@ -288,9 +293,9 @@ fn response_schema(
         return (None, false);
     };
     let chosen = resolve(document, chosen, budget);
-    let content = chosen.get("content").filter(|content| {
-        content.as_object().is_some_and(|map| !map.is_empty())
-    });
+    let content = chosen
+        .get("content")
+        .filter(|content| content.as_object().is_some_and(|map| !map.is_empty()));
     let empty = code == "204" || content.is_none();
     let schema = content
         .and_then(|content| content.get("application/json"))
@@ -365,7 +370,10 @@ fn auth_mode(document: &Value) -> String {
 /// whose host is templated. The named host always wins; the base path is kept.
 fn server(servers: Option<&Value>, given: Option<&str>) -> Option<(String, String)> {
     let urls = servers.and_then(Value::as_array);
-    let mut urls = urls.into_iter().flatten().filter_map(|server| server.get("url")?.as_str());
+    let mut urls = urls
+        .into_iter()
+        .flatten()
+        .filter_map(|server| server.get("url")?.as_str());
     let found = urls.find_map(|url| {
         let (host, path) = match url.strip_prefix("https://") {
             Some(rest) => rest.split_once('/').unwrap_or((rest, "")),
@@ -373,7 +381,11 @@ fn server(servers: Option<&Value>, given: Option<&str>) -> Option<(String, Strin
             None => return None,
         };
         let path = path.trim_matches('/');
-        let base = if path.is_empty() { String::new() } else { format!("/{path}") };
+        let base = if path.is_empty() {
+            String::new()
+        } else {
+            format!("/{path}")
+        };
         if base.contains('{') {
             return None;
         }

@@ -161,3 +161,48 @@ def test_shipped_packs_validate_and_explain_through_the_native_runtime(
     result = json.loads(capsys.readouterr().out)
     assert status == 0, result
     assert result["decisions"] == {"relaxed": "allow", "balanced": "review", "strict": "review"}
+
+
+def test_explain_passes_the_arguments_text_through_so_duplicate_keys_reach_the_strict_parser(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    sent = _record(monkeypatch, cloud_pack_explain_command, [{"ok": False, "error": {"code": "json_invalid"}}])
+    arguments = '{"channel": "C0123456789",\n "channel": "C9876543210"}'
+    status = cli.main(
+        ["guard", "command", "explain", "--cloud", "slack.chat.post_message", "--arguments", arguments, "--json"]
+    )
+    assert (status, json.loads(capsys.readouterr().out)["error"]["code"]) == (2, "cloud_explain")
+    assert sent[0].count('"channel"') == 2
+    assert "\n" not in sent[0]
+
+
+def test_explain_writes_to_the_given_output_stream(monkeypatch: pytest.MonkeyPatch) -> None:
+    import argparse
+    import io
+
+    from codex_plugin_scanner.guard.cli import commands_dispatch_local
+
+    answer = {"ok": True, "providerId": "slack", "actionId": "slack.chat.post_message", "decisions": {}}
+    _record(monkeypatch, cloud_pack_explain_command, [answer])
+    stream = io.StringIO()
+    args = argparse.Namespace(command_command="explain", cloud=True, command_text="slack.chat.post_message", json=True)
+    status = commands_dispatch_local._run_guard_command_inspection_command(args, output_stream=stream)
+    assert status == 0
+    assert json.loads(stream.getvalue())["actionId"] == "slack.chat.post_message"
+
+
+def test_a_request_over_the_native_line_cap_is_refused_before_it_is_sent(monkeypatch: pytest.MonkeyPatch) -> None:
+    from codex_plugin_scanner.guard import native_runtime
+
+    calls: list[object] = []
+    monkeypatch.setattr(native_runtime, "_run_native_process", lambda *args, **kwargs: calls.append(args))
+    monkeypatch.setattr(
+        native_runtime,
+        "native_runtime_status",
+        lambda: type("S", (), {"available": True, "compatible": True, "identity": type("I", (), {"path": "x"})()})(),
+    )
+    escaped = '"' * (2 * 1024 * 1024 + 1)
+    with pytest.raises(extension_builder_cloud.BuilderError) as error:
+        extension_builder_cloud.native_pack_request({"op": "generate", "document": escaped})
+    assert error.value.code == "input_too_large"
+    assert calls == []

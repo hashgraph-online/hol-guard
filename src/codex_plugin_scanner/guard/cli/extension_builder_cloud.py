@@ -17,8 +17,10 @@ from ..extension_builder.errors import BuilderError
 from ..extension_builder.io import read_bytes
 
 CLOUD_SOURCES = ("openapi", "mcp")
-# The native request line is capped at 4 MiB; escaping can grow the text, so stay well below.
+# A source file is read up to 3 MiB; the encoded request line, which escaping can grow, is
+# checked against the native 4 MiB line cap before it is sent.
 _MAX_SOURCE_BYTES = 3 * 1024 * 1024
+_MAX_REQUEST_BYTES = 4 * 1024 * 1024
 _NATIVE_TIMEOUT_SECONDS = 30.0
 
 
@@ -73,6 +75,8 @@ def native_pack_request(request: dict[str, object] | str, *, code: str = "cloud_
     if not status.available or not status.compatible or status.identity is None:
         raise BuilderError("native_runtime_unavailable", "The HOL Guard native runtime is required for cloud packs.")
     line = request if isinstance(request, str) else json.dumps(request, separators=(",", ":"))
+    if len(line.encode("utf-8")) + 1 > _MAX_REQUEST_BYTES:
+        raise BuilderError("input_too_large", "The request is larger than the native runtime accepts (4 MiB).")
     output = _run_native_process(
         status.identity.path,
         ("cloud-action", "pack"),
@@ -159,5 +163,8 @@ def emit_cloud_summary(result: dict[str, object], output: TextIO) -> None:
             print(f"  {proposal.get('actionId')}: {proposal.get('class')} ({evidence})", file=output)
     notes = result["notes"] if isinstance(result["notes"], list) else []
     if notes:
-        print(f"{len(notes)} notes need review; rerun with --json to list them.", file=output)
+        print(
+            f"{len(notes)} notes need review; rerun with --json and a new --output path to list them.",
+            file=output,
+        )
     print("Add a safe and a risky fixture to every action, then run extensions validate --cloud.", file=output)

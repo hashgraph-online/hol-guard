@@ -51,8 +51,10 @@ def _explain(args: argparse.Namespace) -> dict[str, object]:
         raise BuilderError("arguments_invalid", "--arguments must be a JSON object.") from exc
     if not isinstance(arguments, dict):
         raise BuilderError("arguments_invalid", "--arguments must be a JSON object.")
+    # Send the text as given so the native strict parser refuses duplicate keys instead of this
+    # module silently keeping the last one. JSON allows raw line breaks only between tokens.
     request = '{"op":"explain","actionId":' + json.dumps(action_id) + ',"arguments":'
-    request += json.dumps(arguments, separators=(",", ":"))
+    request += raw.replace("\r", " ").replace("\n", " ").strip()
     pack_path = getattr(args, "pack", None)
     if pack_path is not None:
         request += ',"pack":' + read_pack_line(Path(pack_path))
