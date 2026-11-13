@@ -9,6 +9,8 @@ const MAX_PATH_CHARS: usize = 512;
 const MAX_QUERY: usize = 32;
 const MAX_HEADERS: usize = 16;
 const MAX_CONST_BYTES: usize = 4_096;
+/// Longest argument a `keyed` template may use as a field name.
+const MAX_KEY_LENGTH: u32 = 256;
 
 type Fail = (&'static str, String);
 
@@ -223,6 +225,17 @@ fn validate_template(
                 return Err("cloud_pack_template_each_invalid");
             }
             validate_template(item, args, depth + 1, true)
+        }
+        Template::Keyed { key, value } => {
+            let bound = matches!(
+                args.get(key),
+                Some(ArgumentSpec::String { required: true, pattern: Some(_), max_length, .. })
+                    if *max_length <= MAX_KEY_LENGTH
+            );
+            if !bound {
+                return Err("cloud_pack_template_key_invalid");
+            }
+            validate_template(value, args, depth + 1, in_each)
         }
         Template::Rfc822(mail) if !in_each => crate::cloud_pack_mail::validate(mail, args),
         Template::Rfc822(_) => Err("cloud_pack_template_mail_invalid"),

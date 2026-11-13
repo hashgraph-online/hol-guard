@@ -369,7 +369,15 @@ fn diff_flags_widening_changes_only() {
     );
     let mut fewer = value(SLACK);
     fewer["actions"].as_array_mut().unwrap().pop();
-    fewer["auth"]["scopes"] = json!(["channels:history", "channels:read"]);
+    let mut kept: Vec<Value> = fewer["actions"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .flat_map(|action| action["safety"]["scopes"].as_array().unwrap().clone())
+        .collect();
+    kept.sort_by(|a, b| a.as_str().cmp(&b.as_str()));
+    kept.dedup();
+    fewer["auth"]["scopes"] = Value::Array(kept);
     assert_eq!(
         codes(fewer),
         (
@@ -390,7 +398,7 @@ fn the_json_lines_tools_answer_each_op() {
     let line = |request: Value| answer(request.to_string().as_bytes());
     assert_eq!(
         line(json!({"op": "validate", "pack": pack}))["actions"],
-        json!(3)
+        json!(pack["actions"].as_array().unwrap().len())
     );
     assert_eq!(
         line(json!({"op": "test", "pack": pack}))["report"]["passed"],
