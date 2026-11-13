@@ -111,6 +111,13 @@ fn a_probe_for_git_operation_state_in_a_linked_worktree_reads_nothing() {
     std::fs::create_dir_all(root.join("other/.git")).unwrap();
     std::fs::write(root.join("other/.git/HEAD"), "ref: refs/heads/main\n").unwrap();
     std::fs::create_dir_all(root.join("other/node_modules/.pnpm")).unwrap();
+    std::fs::create_dir_all(root.join("probe")).unwrap();
+    // A lexical `.git` symlink to a package store must not give Git-directory privileges.
+    std::os::unix::fs::symlink(
+        root.join("other/node_modules/.pnpm"),
+        root.join("probe/.git"),
+    )
+    .unwrap();
     let gitdir = root.join("work/.git/worktrees/wt");
     std::fs::write(
         root.join("wt/.git"),
@@ -143,6 +150,11 @@ fn a_probe_for_git_operation_state_in_a_linked_worktree_reads_nothing() {
         ("test -f ~/.ssh/id_ed25519/x && echo M".to_string(), false),
         (
             format!("ls {home}/other/node_modules/.pnpm/registry.npmjs.org"),
+            false,
+        ),
+        (format!("ls {home}/probe/.git/missing-package"), false),
+        (
+            format!("test -f {home}/probe/.git/missing-package && echo M"),
             false,
         ),
     ] {
