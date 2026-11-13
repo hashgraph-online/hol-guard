@@ -15,6 +15,7 @@
     "evidence_retain_days": 90,
     "guard_event_limit": null,
     "harness_actions": {},
+    "harness_cigar": {},
     "harness_postures": {},
     "harness_risk_actions": {},
     "harness_watch_entered_at": {},
@@ -73,6 +74,7 @@
     "evidence_retain_days": 90,
     "guard_event_limit": null,
     "harness_actions": {},
+    "harness_cigar": {},
     "harness_postures": {},
     "harness_risk_actions": {},
     "harness_watch_entered_at": {},
@@ -153,6 +155,7 @@
     "evidence_retain_days": 3650,
     "guard_event_limit": 5,
     "harness_actions": {},
+    "harness_cigar": {},
     "harness_postures": {},
     "harness_risk_actions": {},
     "harness_watch_entered_at": {},
@@ -216,6 +219,7 @@
     "evidence_retain_days": 90,
     "guard_event_limit": null,
     "harness_actions": {},
+    "harness_cigar": {},
     "harness_postures": {},
     "harness_risk_actions": {},
     "harness_watch_entered_at": {},
@@ -276,6 +280,7 @@
     "evidence_retain_days": 90,
     "guard_event_limit": null,
     "harness_actions": {},
+    "harness_cigar": {},
     "harness_postures": {},
     "harness_risk_actions": {},
     "harness_watch_entered_at": {},
@@ -336,6 +341,7 @@
     "evidence_retain_days": 90,
     "guard_event_limit": null,
     "harness_actions": {},
+    "harness_cigar": {},
     "harness_postures": {},
     "harness_risk_actions": {},
     "harness_watch_entered_at": {},
@@ -396,6 +402,7 @@
     "evidence_retain_days": 90,
     "guard_event_limit": null,
     "harness_actions": {},
+    "harness_cigar": {},
     "harness_postures": {},
     "harness_risk_actions": {},
     "harness_watch_entered_at": {},
@@ -456,6 +463,7 @@
     "evidence_retain_days": 90,
     "guard_event_limit": null,
     "harness_actions": {},
+    "harness_cigar": {},
     "harness_postures": {},
     "harness_risk_actions": {},
     "harness_watch_entered_at": {},
@@ -516,6 +524,7 @@
     "evidence_retain_days": 90,
     "guard_event_limit": null,
     "harness_actions": {},
+    "harness_cigar": {},
     "harness_postures": {},
     "harness_risk_actions": {},
     "harness_watch_entered_at": {},
@@ -576,6 +585,7 @@
     "evidence_retain_days": 90,
     "guard_event_limit": null,
     "harness_actions": {},
+    "harness_cigar": {},
     "harness_postures": {},
     "harness_risk_actions": {},
     "harness_watch_entered_at": {},
@@ -636,6 +646,7 @@
     "evidence_retain_days": 90,
     "guard_event_limit": null,
     "harness_actions": {},
+    "harness_cigar": {},
     "harness_postures": {},
     "harness_risk_actions": {},
     "harness_watch_entered_at": {},
@@ -696,6 +707,7 @@
     "evidence_retain_days": 90,
     "guard_event_limit": null,
     "harness_actions": {},
+    "harness_cigar": {},
     "harness_postures": {},
     "harness_risk_actions": {},
     "harness_watch_entered_at": {},
@@ -756,6 +768,7 @@
     "evidence_retain_days": 90,
     "guard_event_limit": null,
     "harness_actions": {},
+    "harness_cigar": {},
     "harness_postures": {},
     "harness_risk_actions": {},
     "harness_watch_entered_at": {},
@@ -816,6 +829,7 @@
     "evidence_retain_days": 90,
     "guard_event_limit": null,
     "harness_actions": {},
+    "harness_cigar": {},
     "harness_postures": {},
     "harness_risk_actions": {},
     "harness_watch_entered_at": {},
@@ -876,6 +890,7 @@
     "evidence_retain_days": 90,
     "guard_event_limit": null,
     "harness_actions": {},
+    "harness_cigar": {},
     "harness_postures": {},
     "harness_risk_actions": {},
     "harness_watch_entered_at": {},
@@ -936,6 +951,7 @@
     "evidence_retain_days": 90,
     "guard_event_limit": null,
     "harness_actions": {},
+    "harness_cigar": {},
     "harness_postures": {},
     "harness_risk_actions": {},
     "harness_watch_entered_at": {},
@@ -996,6 +1012,7 @@
     "evidence_retain_days": 90,
     "guard_event_limit": null,
     "harness_actions": {},
+    "harness_cigar": {},
     "harness_postures": {},
     "harness_risk_actions": {},
     "harness_watch_entered_at": {},
@@ -1056,6 +1073,7 @@
     "evidence_retain_days": 90,
     "guard_event_limit": null,
     "harness_actions": {},
+    "harness_cigar": {},
     "harness_postures": {},
     "harness_risk_actions": {},
     "harness_watch_entered_at": {},
@@ -1116,6 +1134,7 @@
     "evidence_retain_days": 90,
     "guard_event_limit": null,
     "harness_actions": {},
+    "harness_cigar": {},
     "harness_postures": {},
     "harness_risk_actions": {},
     "harness_watch_entered_at": {},
@@ -1176,6 +1195,7 @@
     "evidence_retain_days": 90,
     "guard_event_limit": null,
     "harness_actions": {},
+    "harness_cigar": {},
     "harness_postures": {},
     "harness_risk_actions": {},
     "harness_watch_entered_at": {},
@@ -1236,6 +1256,7 @@
     "evidence_retain_days": 90,
     "guard_event_limit": null,
     "harness_actions": {},
+    "harness_cigar": {},
     "harness_postures": {},
     "harness_risk_actions": {},
     "harness_watch_entered_at": {},
@@ -1296,6 +1317,7 @@
     "evidence_retain_days": 90,
     "guard_event_limit": null,
     "harness_actions": {},
+    "harness_cigar": {},
     "harness_postures": {},
     "harness_risk_actions": {},
     "harness_watch_entered_at": {},
@@ -1356,6 +1378,7 @@
     "evidence_retain_days": 90,
     "guard_event_limit": null,
     "harness_actions": {},
+    "harness_cigar": {},
     "harness_postures": {},
     "harness_risk_actions": {},
     "harness_watch_entered_at": {},
@@ -1416,6 +1439,7 @@
     "evidence_retain_days": 90,
     "guard_event_limit": null,
     "harness_actions": {},
+    "harness_cigar": {},
     "harness_postures": {},
     "harness_risk_actions": {},
     "harness_watch_entered_at": {},
@@ -1476,6 +1500,7 @@
     "evidence_retain_days": 90,
     "guard_event_limit": null,
     "harness_actions": {},
+    "harness_cigar": {},
     "harness_postures": {},
     "harness_risk_actions": {},
     "harness_watch_entered_at": {},
@@ -1536,6 +1561,7 @@
     "evidence_retain_days": 90,
     "guard_event_limit": null,
     "harness_actions": {},
+    "harness_cigar": {},
     "harness_postures": {},
     "harness_risk_actions": {},
     "harness_watch_entered_at": {},
@@ -1596,6 +1622,7 @@
     "evidence_retain_days": 90,
     "guard_event_limit": null,
     "harness_actions": {},
+    "harness_cigar": {},
     "harness_postures": {},
     "harness_risk_actions": {},
     "harness_watch_entered_at": {},
@@ -1656,6 +1683,7 @@
     "evidence_retain_days": 90,
     "guard_event_limit": null,
     "harness_actions": {},
+    "harness_cigar": {},
     "harness_postures": {},
     "harness_risk_actions": {},
     "harness_watch_entered_at": {},
@@ -1716,6 +1744,7 @@
     "evidence_retain_days": 90,
     "guard_event_limit": null,
     "harness_actions": {},
+    "harness_cigar": {},
     "harness_postures": {},
     "harness_risk_actions": {},
     "harness_watch_entered_at": {},
@@ -1776,6 +1805,7 @@
     "evidence_retain_days": 90,
     "guard_event_limit": null,
     "harness_actions": {},
+    "harness_cigar": {},
     "harness_postures": {},
     "harness_risk_actions": {},
     "harness_watch_entered_at": {},
@@ -1836,6 +1866,7 @@
     "evidence_retain_days": 90,
     "guard_event_limit": null,
     "harness_actions": {},
+    "harness_cigar": {},
     "harness_postures": {},
     "harness_risk_actions": {},
     "harness_watch_entered_at": {},
@@ -1896,6 +1927,7 @@
     "evidence_retain_days": 90,
     "guard_event_limit": null,
     "harness_actions": {},
+    "harness_cigar": {},
     "harness_postures": {},
     "harness_risk_actions": {},
     "harness_watch_entered_at": {},
@@ -1956,6 +1988,7 @@
     "evidence_retain_days": 90,
     "guard_event_limit": null,
     "harness_actions": {},
+    "harness_cigar": {},
     "harness_postures": {},
     "harness_risk_actions": {},
     "harness_watch_entered_at": {},
@@ -2016,6 +2049,7 @@
     "evidence_retain_days": 90,
     "guard_event_limit": null,
     "harness_actions": {},
+    "harness_cigar": {},
     "harness_postures": {},
     "harness_risk_actions": {},
     "harness_watch_entered_at": {},
@@ -2076,6 +2110,7 @@
     "evidence_retain_days": 90,
     "guard_event_limit": null,
     "harness_actions": {},
+    "harness_cigar": {},
     "harness_postures": {},
     "harness_risk_actions": {},
     "harness_watch_entered_at": {},
@@ -2136,6 +2171,7 @@
     "evidence_retain_days": 90,
     "guard_event_limit": null,
     "harness_actions": {},
+    "harness_cigar": {},
     "harness_postures": {
      "claude-code": "watch",
      "cursor": "extra_careful",
@@ -2204,6 +2240,7 @@
     "evidence_retain_days": 90,
     "guard_event_limit": null,
     "harness_actions": {},
+    "harness_cigar": {},
     "harness_postures": {
      "claude-code": "watch",
      "codex": "watch",
@@ -2268,6 +2305,7 @@
     "evidence_retain_days": 90,
     "guard_event_limit": null,
     "harness_actions": {},
+    "harness_cigar": {},
     "harness_postures": {
      "codex": "watch"
     },
@@ -2332,6 +2370,7 @@
     "evidence_retain_days": 90,
     "guard_event_limit": null,
     "harness_actions": {},
+    "harness_cigar": {},
     "harness_postures": {
      "codex": "watch"
     },
@@ -2396,6 +2435,7 @@
     "evidence_retain_days": 90,
     "guard_event_limit": null,
     "harness_actions": {},
+    "harness_cigar": {},
     "harness_postures": {
      "codex": "watch"
     },
@@ -2460,6 +2500,7 @@
     "evidence_retain_days": 90,
     "guard_event_limit": null,
     "harness_actions": {},
+    "harness_cigar": {},
     "harness_postures": {
      "codex": "watch"
     },
@@ -2524,6 +2565,7 @@
     "evidence_retain_days": 90,
     "guard_event_limit": null,
     "harness_actions": {},
+    "harness_cigar": {},
     "harness_postures": {
      "codex": "watch"
     },
@@ -2588,6 +2630,7 @@
     "evidence_retain_days": 90,
     "guard_event_limit": null,
     "harness_actions": {},
+    "harness_cigar": {},
     "harness_postures": {
      "codex": "watch"
     },
@@ -2650,6 +2693,7 @@
     "evidence_retain_days": 90,
     "guard_event_limit": null,
     "harness_actions": {},
+    "harness_cigar": {},
     "harness_postures": {
      "codex": "watch"
     },
@@ -2712,6 +2756,7 @@
     "evidence_retain_days": 90,
     "guard_event_limit": null,
     "harness_actions": {},
+    "harness_cigar": {},
     "harness_postures": {
      "codex": "watch"
     },
@@ -2774,6 +2819,7 @@
     "evidence_retain_days": 90,
     "guard_event_limit": null,
     "harness_actions": {},
+    "harness_cigar": {},
     "harness_postures": {
      "codex": "watch"
     },
@@ -2836,6 +2882,7 @@
     "evidence_retain_days": 90,
     "guard_event_limit": null,
     "harness_actions": {},
+    "harness_cigar": {},
     "harness_postures": {
      "codex": "watch"
     },
@@ -2900,6 +2947,7 @@
     "evidence_retain_days": 90,
     "guard_event_limit": null,
     "harness_actions": {},
+    "harness_cigar": {},
     "harness_postures": {
      "codex": "watch"
     },
@@ -2962,6 +3010,7 @@
     "evidence_retain_days": 90,
     "guard_event_limit": null,
     "harness_actions": {},
+    "harness_cigar": {},
     "harness_postures": {
      "codex": "watch"
     },
@@ -3024,6 +3073,7 @@
     "evidence_retain_days": 90,
     "guard_event_limit": null,
     "harness_actions": {},
+    "harness_cigar": {},
     "harness_postures": {
      "codex": "watch"
     },
@@ -3086,6 +3136,7 @@
     "evidence_retain_days": 90,
     "guard_event_limit": null,
     "harness_actions": {},
+    "harness_cigar": {},
     "harness_postures": {
      "codex": "watch"
     },
@@ -3148,6 +3199,7 @@
     "evidence_retain_days": 90,
     "guard_event_limit": null,
     "harness_actions": {},
+    "harness_cigar": {},
     "harness_postures": {
      "codex": "watch"
     },
@@ -3210,6 +3262,7 @@
     "evidence_retain_days": 90,
     "guard_event_limit": null,
     "harness_actions": {},
+    "harness_cigar": {},
     "harness_postures": {
      "codex": "watch"
     },
@@ -3274,6 +3327,7 @@
     "evidence_retain_days": 90,
     "guard_event_limit": null,
     "harness_actions": {},
+    "harness_cigar": {},
     "harness_postures": {
      "codex": "watch"
     },
@@ -3336,6 +3390,7 @@
     "evidence_retain_days": 90,
     "guard_event_limit": null,
     "harness_actions": {},
+    "harness_cigar": {},
     "harness_postures": {
      "codex": "watch"
     },
@@ -3400,6 +3455,7 @@
     "evidence_retain_days": 90,
     "guard_event_limit": null,
     "harness_actions": {},
+    "harness_cigar": {},
     "harness_postures": {
      "codex": "watch"
     },
@@ -3464,6 +3520,7 @@
     "evidence_retain_days": 90,
     "guard_event_limit": null,
     "harness_actions": {},
+    "harness_cigar": {},
     "harness_postures": {
      "codex": "watch"
     },
@@ -3526,6 +3583,7 @@
     "evidence_retain_days": 90,
     "guard_event_limit": null,
     "harness_actions": {},
+    "harness_cigar": {},
     "harness_postures": {
      "codex": "watch"
     },
@@ -3588,6 +3646,7 @@
     "evidence_retain_days": 90,
     "guard_event_limit": null,
     "harness_actions": {},
+    "harness_cigar": {},
     "harness_postures": {
      "codex": "watch"
     },
@@ -3650,6 +3709,7 @@
     "evidence_retain_days": 90,
     "guard_event_limit": null,
     "harness_actions": {},
+    "harness_cigar": {},
     "harness_postures": {
      "codex": "watch"
     },
@@ -3712,6 +3772,7 @@
     "evidence_retain_days": 90,
     "guard_event_limit": null,
     "harness_actions": {},
+    "harness_cigar": {},
     "harness_postures": {
      "codex": "watch"
     },
@@ -3774,6 +3835,7 @@
     "evidence_retain_days": 90,
     "guard_event_limit": null,
     "harness_actions": {},
+    "harness_cigar": {},
     "harness_postures": {
      "codex": "watch"
     },
@@ -3836,6 +3898,7 @@
     "evidence_retain_days": 90,
     "guard_event_limit": null,
     "harness_actions": {},
+    "harness_cigar": {},
     "harness_postures": {
      "codex": "watch"
     },
@@ -3898,6 +3961,7 @@
     "evidence_retain_days": 90,
     "guard_event_limit": null,
     "harness_actions": {},
+    "harness_cigar": {},
     "harness_postures": {},
     "harness_risk_actions": {},
     "harness_watch_entered_at": {},
@@ -3967,6 +4031,7 @@
      "junk": "require-reapproval",
      "odd": "require-reapproval"
     },
+    "harness_cigar": {},
     "harness_postures": {},
     "harness_risk_actions": {
      "codex": {
@@ -4039,6 +4104,7 @@
     "harness_actions": {
      "codex": "block"
     },
+    "harness_cigar": {},
     "harness_postures": {},
     "harness_risk_actions": {},
     "harness_watch_entered_at": {},
@@ -4101,6 +4167,7 @@
     "evidence_retain_days": 90,
     "guard_event_limit": null,
     "harness_actions": {},
+    "harness_cigar": {},
     "harness_postures": {},
     "harness_risk_actions": {},
     "harness_watch_entered_at": {},
@@ -4163,6 +4230,7 @@
     "harness_actions": {
      "codex": "block"
     },
+    "harness_cigar": {},
     "harness_postures": {},
     "harness_risk_actions": {},
     "harness_watch_entered_at": {},
@@ -4235,6 +4303,7 @@
     "evidence_retain_days": 90,
     "guard_event_limit": null,
     "harness_actions": {},
+    "harness_cigar": {},
     "harness_postures": {},
     "harness_risk_actions": {},
     "harness_watch_entered_at": {},
@@ -4297,6 +4366,7 @@
     "harness_actions": {
      "codex": "allow"
     },
+    "harness_cigar": {},
     "harness_postures": {
      "codex": "watch",
      "cursor": "extra_careful"
@@ -4368,6 +4438,7 @@
     "harness_actions": {
      "codex": "allow"
     },
+    "harness_cigar": {},
     "harness_postures": {
      "cursor": "extra_careful"
     },
@@ -4439,6 +4510,7 @@
     "harness_actions": {
      "codex": "allow"
     },
+    "harness_cigar": {},
     "harness_postures": {
      "cursor": "extra_careful"
     },
@@ -4510,6 +4582,7 @@
     "harness_actions": {
      "codex": "allow"
     },
+    "harness_cigar": {},
     "harness_postures": {
      "cursor": "extra_careful"
     },
@@ -4581,6 +4654,7 @@
     "harness_actions": {
      "codex": "allow"
     },
+    "harness_cigar": {},
     "harness_postures": {
      "claude-code": "protected"
     },
@@ -4655,6 +4729,7 @@
     "harness_actions": {
      "codex": "block"
     },
+    "harness_cigar": {},
     "harness_postures": {
      "codex": "watch",
      "cursor": "extra_careful"
@@ -4731,6 +4806,7 @@
     "harness_actions": {
      "codex": "allow"
     },
+    "harness_cigar": {},
     "harness_postures": {
      "codex": "watch",
      "cursor": "extra_careful"
@@ -4816,6 +4892,7 @@
     "harness_actions": {
      "codex": "allow"
     },
+    "harness_cigar": {},
     "harness_postures": {
      "codex": "watch",
      "cursor": "extra_careful"
@@ -4888,6 +4965,7 @@
     "evidence_retain_days": 90,
     "guard_event_limit": null,
     "harness_actions": {},
+    "harness_cigar": {},
     "harness_postures": {},
     "harness_risk_actions": {},
     "harness_watch_entered_at": {},
@@ -4955,6 +5033,7 @@
     "evidence_retain_days": 90,
     "guard_event_limit": null,
     "harness_actions": {},
+    "harness_cigar": {},
     "harness_postures": {},
     "harness_risk_actions": {},
     "harness_watch_entered_at": {},
@@ -5022,6 +5101,7 @@
     "evidence_retain_days": 90,
     "guard_event_limit": null,
     "harness_actions": {},
+    "harness_cigar": {},
     "harness_postures": {},
     "harness_risk_actions": {},
     "harness_watch_entered_at": {},
@@ -5089,6 +5169,7 @@
     "evidence_retain_days": 90,
     "guard_event_limit": null,
     "harness_actions": {},
+    "harness_cigar": {},
     "harness_postures": {},
     "harness_risk_actions": {},
     "harness_watch_entered_at": {},
@@ -5156,6 +5237,7 @@
     "harness_actions": {
      "codex": "allow"
     },
+    "harness_cigar": {},
     "harness_postures": {
      "codex": "watch",
      "cursor": "extra_careful"
@@ -5229,6 +5311,7 @@
     "evidence_retain_days": 90,
     "guard_event_limit": null,
     "harness_actions": {},
+    "harness_cigar": {},
     "harness_postures": {},
     "harness_risk_actions": {},
     "harness_watch_entered_at": {},
@@ -5297,6 +5380,7 @@
     "evidence_retain_days": 90,
     "guard_event_limit": null,
     "harness_actions": {},
+    "harness_cigar": {},
     "harness_postures": {},
     "harness_risk_actions": {},
     "harness_watch_entered_at": {},
@@ -5368,6 +5452,7 @@
     "evidence_retain_days": 90,
     "guard_event_limit": null,
     "harness_actions": {},
+    "harness_cigar": {},
     "harness_postures": {},
     "harness_risk_actions": {
      "codex": {
@@ -5441,6 +5526,7 @@
     "evidence_retain_days": 90,
     "guard_event_limit": null,
     "harness_actions": {},
+    "harness_cigar": {},
     "harness_postures": {},
     "harness_risk_actions": {},
     "harness_watch_entered_at": {},
@@ -5512,6 +5598,7 @@
     "evidence_retain_days": 90,
     "guard_event_limit": null,
     "harness_actions": {},
+    "harness_cigar": {},
     "harness_postures": {},
     "harness_risk_actions": {},
     "harness_watch_entered_at": {},
@@ -5593,6 +5680,7 @@
     "evidence_retain_days": 90,
     "guard_event_limit": null,
     "harness_actions": {},
+    "harness_cigar": {},
     "harness_postures": {
      "cursor": "extra_careful"
     },

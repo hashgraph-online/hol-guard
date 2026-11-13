@@ -118,6 +118,7 @@ pub mod pretool_git_branch_rename;
 pub mod pretool_git_cd_reads;
 pub mod pretool_git_context_boundaries;
 pub mod pretool_git_developer_checkout;
+pub mod pretool_git_editor_config_environment;
 pub mod pretool_git_execution_environment;
 pub mod pretool_git_fast_forward_refs;
 pub mod pretool_git_filter_batches;

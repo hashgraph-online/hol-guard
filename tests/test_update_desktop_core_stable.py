@@ -39,7 +39,6 @@ def test_apply_installs_stable_sidecar_from_stable_tag(
 ) -> None:
     monkeypatch.setattr(update_desktop_core, "platform_target", lambda: "aarch64-apple-darwin")
     monkeypatch.setattr(update_desktop_core, "desktop_core_root", lambda: tmp_path / "core")
-    monkeypatch.setattr(update_desktop_core, "_macos_codesign_ok", lambda _path: True)
     monkeypatch.setattr(update_desktop_core, "_macos_signing_team", lambda _path: "TEAMID")
     binary = b"signed-stable-core"
     manifest = _stable_manifest(sha256=update_desktop_core._sha256_hex(binary), size=len(binary))

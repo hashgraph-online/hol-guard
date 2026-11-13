@@ -364,6 +364,16 @@ fn code_loading_settings_are_named_for_the_block_reason() {
         ("REPORT_DIR=out CC=./x npm run build", Some("CC")),
         ("cd app && PYTHONPATH=. python x.py", Some("PYTHONPATH")),
         ("REPORT_DIR=out node x.mjs", None),
+        // Turning plugin autoload off loads less code, so nothing to name.
+        ("PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 python -m pytest -q", None),
+        (
+            "PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 PYTHONPATH=src python -m pytest",
+            Some("PYTHONPATH"),
+        ),
+        (
+            "PYTEST_DISABLE_PLUGIN_AUTOLOAD=0 python -m pytest",
+            Some("PYTEST_DISABLE_PLUGIN_AUTOLOAD"),
+        ),
         // A setting the projection removes stopped nothing, so the reason
         // skips it and names the one that did.
         ("NODE_OPTIONS=--max-old-space-size=4096 npm test", None),
