@@ -80,6 +80,9 @@ fn an_edit_that_would_not_fit_the_sandbox_keeps_its_review() {
         "find tests -name '*.py' -type f -exec sed -i '' ../* {} +",
         "find tests -name '*.py' -type f -exec sed -i '' '/tmp/guard-fp-synthetic/d' {} +",
         "find tests -name '*.py' -type f -exec sed -i '' s/a*/b/ {} +",
+        // Bash brace expansion creates an extra filename, even though the
+        // parser initially sees one positional word after BSD sed -i ''.
+        "find src -type f -exec sed -i '' {d,README.md} {} +",
         "find tests -name '*.py' -type f -exec sed -i '' -- 'd' {} +",
         "find tests -name '*.py' -type f -exec sed -i '' -e 's/a/b/' README.md {} +",
         "find tests -name '*.py' -type f -exec sed -i 'd' ./* {} +",
