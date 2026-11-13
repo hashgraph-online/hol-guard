@@ -327,7 +327,15 @@ pub(super) fn observe(
             false,
         );
     }
-    if matches!(executable.as_str(), "printenv" | "env") {
+    // A dump piped straight into a stage that provably keeps only each
+    // variable's name (`printenv | grep -oE '^(PATH|HOME)[A-Z_]*'`) prints no
+    // value, so it reads no secret. The proof, in `environment_name_filters`,
+    // also bounds what a multi-line value can leak through the same filter.
+    // Without this the packaged rule sent the proven listing to the workspace
+    // sandbox, whose sink then refused it.
+    if matches!(executable.as_str(), "printenv" | "env")
+        && !crate::pretool::names_only_environment_listing(command)
+    {
         if arguments.is_empty() || arguments.iter().any(|value| sensitive(value)) {
             output.rule(
                 "command.shell-mutations.process-environment-secret-read",

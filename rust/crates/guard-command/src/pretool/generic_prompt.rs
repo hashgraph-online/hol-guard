@@ -4,7 +4,10 @@ use std::sync::OnceLock;
 
 #[path = "generic_prompt_masks.rs"]
 mod masks;
-use masks::{mask_credential_categories, mask_format_options, mask_liveness_probes, mask_rereads};
+use masks::{
+    mask_credential_categories, mask_format_options, mask_liveness_probes, mask_rereads,
+    mask_url_paths,
+};
 
 const BYPASS_PATTERNS: [&str; 10] = [
     "disable hol-guard",
@@ -290,7 +293,7 @@ pub(super) fn exfil_prompt_intent(values: &[String]) -> bool {
         .collect()
     });
     values.iter().any(|value| {
-        let value = mask_transfer_encoding(value);
+        let value = mask_transfer_encoding(&mask_url_paths(value));
         patterns.iter().any(|pattern| pattern.is_match(&value))
     })
 }

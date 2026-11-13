@@ -62,3 +62,37 @@ fn printenv_of_location_and_display_names_proceeds() {
         assert_ne!(result.minimum_action, "allow", "{command}");
     }
 }
+
+#[test]
+fn a_names_only_environment_listing_proceeds_under_the_packaged_rules() {
+    // The packaged environment-secret rule used to observe the `printenv`
+    // stage even when the next stage provably keeps only each name, which
+    // sent the listing to the workspace sandbox instead of letting it run.
+    let lab = Lab::new();
+    let project = lab.project("app-portal", &[("README.md", "portal\n")]);
+    for cwd in [&lab.home, &project] {
+        for command in [
+            "printenv | grep -oE '^(PATH|HOME)[A-Z_]*'",
+            "printenv | grep -oE '^ALPHAHOST[A-Z_]*' | sort -u | head -40",
+        ] {
+            let result = lab.classify(cwd, command, &[]);
+            assert_eq!(
+                (result.minimum_action.as_str(), result.reason_code.as_str()),
+                ("allow", "native_exact_safe_command"),
+                "{command} in {}",
+                cwd.display()
+            );
+        }
+        for command in [
+            "printenv | grep -oE 'TOKEN'",
+            "printenv | grep -oE '^ALPHA|[A-Za-z0-9_]+'",
+            "printenv | grep -oE '^M[A-Za-z0-9]*'",
+            "printenv | grep -oiE '^ALPHAHOST[A-Z_]*'",
+            "printenv | grep -oE '^ALPHAHOST[A-Z_]*' | sort -o /tmp/names",
+            "env | grep -oE '^(PATH|HOME)[A-Z_]*'",
+        ] {
+            let result = lab.classify(cwd, command, &[]);
+            assert_ne!(result.minimum_action, "allow", "{command}");
+        }
+    }
+}

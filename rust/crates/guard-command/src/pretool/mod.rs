@@ -109,6 +109,7 @@ pub(crate) mod directory_targets;
 pub(crate) mod workspace_git_config;
 pub(crate) mod workspace_git_environment;
 pub(crate) use directory_targets::safe_directory_target;
+pub(crate) use environment_names::exact_safe_command as names_only_environment_listing;
 mod awk_reads;
 mod base64_reads;
 mod brace_words;

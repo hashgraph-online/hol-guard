@@ -9,7 +9,6 @@ fn a_dump_piped_into_a_name_filter_renders_no_value() {
     for command in [
         "printenv | grep -oE '^(ALPHAHOST|BETAHOST)[A-Z_]*'",
         "printenv | grep -o -E '^ALPHAHOST[A-Z_]*'",
-        "printenv | grep -oiE '^alphahost[a-z_]*'",
         "printenv | grep -o --extended-regexp '^ALPHAHOST[A-Z_]*'",
         "printenv | grep -oE -e '^ALPHAHOST[A-Z_]*'",
         "printenv | grep -oE '^ALPHAHOST[A-Z_]*' | sort -u | head -20",
@@ -52,6 +51,11 @@ fn a_stage_that_could_render_a_value_keeps_the_review() {
         "printenv | grep -oE '^[^=]*'",
         "printenv | grep -E '^ALPHAHOST[A-Z_]*'",
         "printenv | grep -oE '^[0-A]*'",
+        // a match that may read lower case can follow a value line of a key
+        "printenv | grep -oE '^M[A-Za-z0-9]*'",
+        "printenv | grep -oiE '^alphahost[a-z_]*'",
+        "printenv | grep -oi '^ALPHAHOST[A-Z_]*'",
+        "printenv | grep -oE '^alphahost[A-Z_]*'",
         // the match need not begin where the pattern is anchored
         "printenv | grep -o '^[A-Za-z_]*'",
         "printenv | grep -oE '^ALPHA|[A-Za-z0-9_]+'",
@@ -97,7 +101,7 @@ fn a_stage_that_could_render_a_value_keeps_the_review() {
 #[test]
 fn a_pattern_whose_match_can_start_anywhere_is_refused() {
     assert!(pattern_matches_inside_a_name("^ALPHA[A-Z_]*"));
-    assert!(pattern_matches_inside_a_name("^(ALPHA|BETA)[a-z0-9_]+"));
+    assert!(pattern_matches_inside_a_name("^(ALPHA|BETA)[A-Z0-9_]+"));
     assert!(pattern_matches_inside_a_name("^A+[A-Z_]*"));
     assert!(!pattern_matches_inside_a_name("^A|[A-Za-z0-9_]+"));
     assert!(!pattern_matches_inside_a_name("^ALPHA|BETA"));
@@ -113,6 +117,10 @@ fn a_bracket_expression_that_spans_the_separator_is_refused() {
     assert!(!pattern_matches_inside_a_name("A[A-Z_]*"));
     assert!(!pattern_matches_inside_a_name("^A[^Z]*"));
     assert!(!pattern_matches_inside_a_name("^A[0-A]*"));
+    assert!(!pattern_matches_inside_a_name("^A[A-z]*"));
+    assert!(!pattern_matches_inside_a_name("^A[a-z0-9_]*"));
+    assert!(!pattern_matches_inside_a_name("^M[A-Za-z0-9]*"));
+    assert!(!pattern_matches_inside_a_name("^a[A-Z]*"));
     assert!(!pattern_matches_inside_a_name("^A\\w*"));
     assert!(!pattern_matches_inside_a_name("^A[A-Z"));
     assert!(!pattern_matches_inside_a_name("^"));
