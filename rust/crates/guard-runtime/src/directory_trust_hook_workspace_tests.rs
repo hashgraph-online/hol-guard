@@ -1,6 +1,7 @@
 //! A hook's working directory outside the home: a checkout on an external
 //! volume or a second disk. The harness names it, so a directory the caller
-//! owns is trusted; system directories and missing paths stay refused.
+//! owns is trusted; an agent-chosen exec workdir, system directories and
+//! missing paths stay refused.
 
 use serde_json::{json, Value};
 use std::path::Path;
@@ -44,19 +45,49 @@ fn settle(home: &Path, values: &[String]) -> Vec<Value> {
     body["results"].as_array().expect("results").clone()
 }
 
+const TEMPORARY_ROOTS: &[&str] = &[
+    "/tmp",
+    "/var/tmp",
+    "/private/tmp",
+    "/private/var/tmp",
+    "/var/folders",
+    "/private/var/folders",
+];
+
 /// A directory outside both the home and every temporary root: the crate's
-/// own source tree, which the user running the tests owns.
-fn outside_checkout() -> TempDir {
-    tempfile::Builder::new()
+/// own source tree, which the user running the tests owns. `None` when the
+/// sources sit under a temporary root, which the plain workspace rule
+/// already trusts, or cannot be written to, or when the tests run as root,
+/// where ownership proves nothing and the fallback is off.
+fn outside_checkout() -> Option<TempDir> {
+    let sources = python_realpath_lax(Path::new(env!("CARGO_MANIFEST_DIR"))).ok()?;
+    let temp = python_realpath_lax(&std::env::temp_dir()).ok()?;
+    let under_temporary_root =
+        sources.starts_with(&temp) || TEMPORARY_ROOTS.iter().any(|root| sources.starts_with(root));
+    if under_temporary_root || nix::unistd::geteuid().is_root() {
+        eprintln!(
+            "skipped: the crate sources are not an owned directory outside the temporary roots"
+        );
+        return None;
+    }
+    match tempfile::Builder::new()
         .prefix(".hook-workspace-probe-")
-        .tempdir_in(env!("CARGO_MANIFEST_DIR"))
-        .expect("a directory beside the crate sources")
+        .tempdir_in(&sources)
+    {
+        Ok(directory) => Some(directory),
+        Err(error) => {
+            eprintln!("skipped: the crate sources are not writable: {error}");
+            None
+        }
+    }
 }
 
 #[test]
 fn a_checkout_the_caller_owns_outside_the_home_is_the_hooks_workspace() {
     let home = TempDir::new().expect("a temporary home");
-    let checkout = outside_checkout();
+    let Some(checkout) = outside_checkout() else {
+        return;
+    };
     std::fs::create_dir(checkout.path().join("src")).expect("a subdirectory");
     let values = [text(checkout.path()), text(&checkout.path().join("src"))];
     let results = settle(home.path(), &values);
@@ -68,30 +99,31 @@ fn a_checkout_the_caller_owns_outside_the_home_is_the_hooks_workspace() {
         };
         assert_eq!(payload["trusted"], json!(true), "{value}");
         assert_eq!(payload["path"], json!(expected));
-        assert_eq!(workdir["trusted"], json!(true), "{value}");
-        assert_eq!(workdir["path"], json!(expected));
-        // A directory a dashboard or CLI request names keeps the home's
-        // roots: only the harness's own working directory is widened.
-        assert_eq!(plain["trusted"], json!(false), "{value}");
-        assert_eq!(plain["reason"], json!("unexpected_root"));
+        // The directory the model asked a command to run in, and the one a
+        // dashboard or CLI request names, keep the home's roots: only the
+        // harness's own working directory is widened.
+        for verdict in [workdir, plain] {
+            assert_eq!(verdict["trusted"], json!(false), "{value}: {verdict}");
+            assert_eq!(verdict["reason"], json!("unexpected_root"));
+        }
     }
 }
 
 #[test]
 fn system_directories_missing_paths_and_files_stay_refused() {
     let home = TempDir::new().expect("a temporary home");
-    let checkout = outside_checkout();
+    let Some(checkout) = outside_checkout() else {
+        return;
+    };
     let file = checkout.path().join("notes.txt");
     std::fs::write(&file, "x").expect("a file");
-    let mut values = vec![
+    let values = vec![
         "/".to_owned(),
+        "/usr/lib".to_owned(),
+        "/etc".to_owned(),
         text(&checkout.path().join("missing")),
         text(&file),
     ];
-    // Under root every system directory is the caller's own.
-    if !nix::unistd::getuid().is_root() {
-        values.extend(["/usr/lib".to_owned(), "/etc".to_owned()]);
-    }
     let results = settle(home.path(), &values);
     assert_eq!(results.len(), values.len() * 3);
     for (index, result) in results.iter().enumerate() {

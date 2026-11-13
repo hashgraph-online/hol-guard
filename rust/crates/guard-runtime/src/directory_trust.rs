@@ -266,18 +266,21 @@ pub(crate) fn evaluate_directory_trust_request(
 }
 
 /// A hook spelling that named something is held to the workspace rule,
-/// which is the rule the daemon applied to it before, and is also trusted
-/// where it names a directory the caller owns outside those roots.
+/// which is the rule the daemon applied to it before. The harness's own
+/// working directory (`harness_reported`) is also trusted where it names a
+/// directory the caller owns outside those roots. An `exec-workdir` is the
+/// directory the model asked a command to run in, so it keeps the roots.
 fn trusted_workspace(
     value: &str,
     roots: &Result<Vec<PathBuf>, DirectoryTrustRejection>,
     request: &DirectoryTrustRequestV1,
     temp_dir: &Path,
+    harness_reported: bool,
 ) -> CandidateVerdict {
     match roots {
         Ok(roots) => {
             match validate_guard_directory_path(value, roots, &request.home_dir, temp_dir, true) {
-                Err(DirectoryTrustRejection::UnexpectedRoot) => {
+                Err(DirectoryTrustRejection::UnexpectedRoot) if harness_reported => {
                     owned_hook_workspace(value, &request.home_dir)
                         .ok_or(DirectoryTrustRejection::UnexpectedRoot)
                         .into()
@@ -303,6 +306,12 @@ fn owned_hook_workspace(value: &str, home_dir: &str) -> Option<PathBuf> {
     let expanded = guard_paths::expanduser(value, home_dir).ok()?;
     let canonical = guard_paths::python_realpath_lax(Path::new(&expanded)).ok()?;
     if canonical.parent().is_none() || !std::fs::metadata(&canonical).ok()?.is_dir() {
+        return None;
+    }
+    // Under root every system directory is the caller's own, so ownership
+    // proves nothing there.
+    #[cfg(unix)]
+    if nix::unistd::geteuid().is_root() {
         return None;
     }
     guard_paths::owned_by_current_user(&canonical).then_some(canonical)
@@ -348,7 +357,13 @@ pub(crate) fn evaluate(request: &DirectoryTrustRequestV1) -> Value {
                     match normalized {
                         Err(error) => CandidateVerdict::Rejected(unresolvable(error)),
                         Ok(None) => CandidateVerdict::Absent,
-                        Ok(Some(value)) => trusted_workspace(&value, &roots, request, &temp_dir),
+                        Ok(Some(value)) => trusted_workspace(
+                            &value,
+                            &roots,
+                            request,
+                            &temp_dir,
+                            rule == "hook-workspace",
+                        ),
                     }
                 }
                 rule => match &roots {
