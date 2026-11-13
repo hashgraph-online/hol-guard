@@ -124,3 +124,40 @@ fn each_language_keeps_the_other_languages_comment_markers() {
         node
     )));
 }
+
+#[test]
+fn a_marker_inside_a_string_that_spans_lines_does_not_hide_the_command() {
+    let python = "s = \"\"\"\n#\"\"\"; import os; os.system(\"git reset --hard\")";
+    assert!(spells_destructive_git(&super::without_comments(
+        super::Language::Python,
+        python
+    )));
+    let python_single = "s = '''\n#'''; import os; os.system(\"git reset --hard\")";
+    assert!(spells_destructive_git(&super::without_comments(
+        super::Language::Python,
+        python_single
+    )));
+    let continued = "s = \"a\\\n#\"; import os; os.system(\"git reset --hard\")";
+    assert!(spells_destructive_git(&super::without_comments(
+        super::Language::Python,
+        continued
+    )));
+    let node = "const s = `\n //`; require('child_process').execSync('git clean -fdx')";
+    assert!(spells_destructive_git(&super::without_comments(
+        super::Language::Node,
+        node
+    )));
+    // A closed one-line string does not leak into the next line's comment.
+    let commented = "print('ok')\n# os.system(\"git reset --hard\")";
+    assert!(!spells_destructive_git(&super::without_comments(
+        super::Language::Python,
+        commented
+    )));
+    // A command written over several lines of one string is still read.
+    let script =
+        "import subprocess\nsubprocess.run(\"\"\"git fetch\ngit reset --hard\"\"\", shell=True)";
+    assert!(spells_destructive_git(&super::without_comments(
+        super::Language::Python,
+        script
+    )));
+}

@@ -260,48 +260,105 @@ pub(super) fn other_inline_sources(
 /// `#` comments for Python, `//` and `/* */` comments for Node. A marker
 /// inside a quoted string is kept, so `os.system("git reset --hard # note")`
 /// still reads the whole command.
+///
+/// String state carries across lines. A Python triple-quoted string or a
+/// backtick template stays open over line ends, and an escaped line end joins
+/// the next line, as the interpreter does. A string that spans lines is
+/// written back as one `"`-quoted line (inner `"` as `'`, line ends as `;`)
+/// so the one-line literal readers pair its quotes the way the interpreter
+/// does and still see each command inside it.
 pub(super) fn without_comments(language: Language, source: &str) -> String {
     let mut code = String::with_capacity(source.len());
+    let mut quote: Option<&'static str> = None;
     let mut in_block = false;
-    for line in source.lines() {
-        let mut quote = None;
-        let mut chars = line.char_indices();
-        while let Some((at, ch)) = chars.next() {
-            let rest = &line[at..];
-            if in_block {
-                if rest.starts_with("*/") {
-                    chars.next();
-                    in_block = false;
-                }
-                continue;
-            }
-            if let Some(open) = quote {
-                code.push(ch);
-                if ch == '\\' {
-                    if let Some((_, escaped)) = chars.next() {
+    let mut in_line_comment = false;
+    let mut chars = source.char_indices();
+    while let Some((at, ch)) = chars.next() {
+        let rest = &source[at..];
+        if let Some(close) = quote {
+            let spans_lines = close.len() == 3 || close == "`";
+            if ch == '\\' {
+                match chars.next() {
+                    // A line continuation inside a string adds nothing.
+                    Some((_, '\n')) => {}
+                    Some((_, '"')) if spans_lines => code.push_str("\\'"),
+                    Some((_, escaped)) => {
+                        code.push(ch);
                         code.push(escaped);
                     }
-                } else if ch == open {
-                    quote = None;
+                    None => code.push(ch),
                 }
+            } else if rest.starts_with(close) {
+                code.push_str(if spans_lines { "\"" } else { close });
+                // Delimiters are ASCII, one char per byte.
+                for _ in 1..close.len() {
+                    chars.next();
+                }
+                quote = None;
+            } else if spans_lines {
+                code.push(match ch {
+                    '\n' => ';',
+                    '"' => '\'',
+                    other => other,
+                });
+            } else if ch == '\n' {
+                // A one-quote string cannot span a bare line end.
+                quote = None;
+                code.push(ch);
+            } else {
+                code.push(ch);
+            }
+            continue;
+        }
+        if ch == '\n' {
+            in_line_comment = false;
+            code.push(ch);
+            continue;
+        }
+        if in_line_comment {
+            continue;
+        }
+        if in_block {
+            if rest.starts_with("*/") {
+                chars.next();
+                in_block = false;
+            }
+            continue;
+        }
+        match language {
+            Language::Python if ch == '#' => {
+                in_line_comment = true;
                 continue;
             }
-            match language {
-                Language::Python if ch == '#' => break,
-                Language::Node if rest.starts_with("//") => break,
-                Language::Node if rest.starts_with("/*") => {
-                    chars.next();
-                    in_block = true;
-                    continue;
-                }
-                _ => {}
+            Language::Node if rest.starts_with("//") => {
+                in_line_comment = true;
+                continue;
             }
-            if matches!(ch, '"' | '\'' | '`') {
-                quote = Some(ch);
+            Language::Node if rest.starts_with("/*") => {
+                chars.next();
+                in_block = true;
+                continue;
             }
-            code.push(ch);
+            _ => {}
         }
-        code.push('\n');
+        let opened = match ch {
+            '"' if language == Language::Python && rest.starts_with("\"\"\"") => Some("\"\"\""),
+            '\'' if language == Language::Python && rest.starts_with("'''") => Some("'''"),
+            '"' => Some("\""),
+            '\'' => Some("'"),
+            '`' => Some("`"),
+            _ => None,
+        };
+        if let Some(open) = opened {
+            let spans_lines = open.len() == 3 || open == "`";
+            code.push_str(if spans_lines { "\"" } else { open });
+            for _ in 1..open.len() {
+                chars.next();
+            }
+            quote = Some(open);
+            continue;
+        }
+        code.push(ch);
     }
     code
 }

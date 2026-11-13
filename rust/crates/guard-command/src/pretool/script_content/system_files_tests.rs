@@ -99,6 +99,9 @@ fn comment_markers_inside_strings_or_the_other_language_do_not_hide_a_path() {
     for named in [
         "python3 -c 'label = \"note # comment\"; print(open(\"/etc/passwd\").read())'",
         "python3 -c 'n = 7 // 2; print(open(\"/etc/passwd\").read())'",
+        // The `#` sits inside a triple-quoted string that opened a line above.
+        "python3 -c 's = \"\"\"\n#\"\"\"; print(open(\"/etc/passwd\").read())'",
+        "node -e 'const s = `\n //`; console.log(require(\"fs\").readFileSync(\"/etc/passwd\", \"utf8\"))'",
     ] {
         assert!(super::text_names_system_file(named, context), "{named}");
     }
