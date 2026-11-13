@@ -113,7 +113,7 @@ fn safe_program(program: &str) -> bool {
         || program
             .chars()
             .any(|character| character.is_control() && character != '\n' && character != '\t')
-        || words(program).any(|word| BLOCKED_WORDS.contains(&word))
+        || words(program).any(blocked_word)
     {
         return false;
     }
@@ -135,6 +135,20 @@ fn safe_program(program: &str) -> bool {
         .find(|word| matches!(*word, "print" | "printf"))
         .and_then(|word| code.find(word));
     !first_print.is_some_and(|start| code[start..].contains('>'))
+}
+
+/// A blocked word, alone or behind a number. awk's lexer ends a number at
+/// the first character that cannot continue it, so `1system("id")` is the
+/// number 1 followed by a call to `system`, though the run of word
+/// characters reads as one word. A run that opens with a digit is refused
+/// when any blocked or input-list name sits inside it.
+fn blocked_word(word: &str) -> bool {
+    BLOCKED_WORDS.contains(&word)
+        || (word.starts_with(|character: char| character.is_ascii_digit())
+            && BLOCKED_WORDS
+                .iter()
+                .chain(input_list::INPUT_LIST)
+                .any(|name| word.contains(name)))
 }
 
 fn words(text: &str) -> impl Iterator<Item = &str> {
@@ -288,6 +302,10 @@ mod tests {
     fn program_screen_rejects_commands_files_and_environment() {
         for program in [
             "BEGIN { system(\"id\") }",
+            "BEGIN { x = 1system(\"id\") }",
+            "BEGIN { x = 1e5ENVIRON[\"HOME\"] }",
+            "BEGIN { x = 1ARGV[1]++ } {print}",
+            "BEGIN { x = 1ARGC++ } {print}",
             "{ \"date\" | getline now; print now }",
             "{ print $1 / 2 | \"sh\" }",
             "{ print /\"/ | \"sh\" } # \"",

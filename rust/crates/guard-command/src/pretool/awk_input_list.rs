@@ -36,6 +36,14 @@ const WRITES_AFTER: &[&str] = &["++", "--", "+=", "-=", "*=", "/=", "%=", "^=", 
 /// Whether every use of `ARGV` and `ARGC` in `code` only reads it.
 pub(super) fn reads_only(code: &str) -> bool {
     let words = words(code);
+    // awk reads `1ARGV` as the number 1 and then `ARGV`, so a name behind a
+    // number is a use this screen cannot place.
+    if words.iter().any(|(_, word)| {
+        word.starts_with(|character: char| character.is_ascii_digit())
+            && INPUT_LIST.iter().any(|name| word.contains(name))
+    }) {
+        return false;
+    }
     if !words.iter().any(|(_, word)| INPUT_LIST.contains(word)) {
         return true;
     }
@@ -175,6 +183,9 @@ mod tests {
             "BEGIN { for (ARGC in seen) print }",
             "BEGIN { ARGV [1] = \" \" } {print}",
             "BEGIN { ARGV[1\n] = \" \" } {print}",
+            "BEGIN { x = 1ARGV[1]++ } {print}",
+            "BEGIN { x = 1ARGC++ } {print}",
+            "{ print ARGV[1] } BEGIN { x = 1ARGV[1]++ }",
         ] {
             assert!(!reads_only(code), "{code}");
         }
