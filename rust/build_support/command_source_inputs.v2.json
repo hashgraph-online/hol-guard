@@ -796,6 +796,7 @@
       "src/shell_secret_read_glob.rs",
       "src/shell_secret_read_support.rs",
       "src/shell_structure.rs",
+      "src/shell_structure_heredoc_bodies.rs",
       "src/shims/admin.rs",
       "src/shims/audit.rs",
       "src/shims/audit_fail_closed_tests.rs",
