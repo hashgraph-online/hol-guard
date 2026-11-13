@@ -256,7 +256,7 @@ fn cigar_home(name: &str) -> PathBuf {
     fs::create_dir_all(&home).unwrap();
     fs::write(
         home.join(HOME_CONFIG_FILENAME),
-        "[context_assistance]\nenabled = true\n\n[context_assistance.features]\nagent_context = true\n\n[context_assistance.sources]\nworkspace_documents = true\n",
+        "[context_assistance]\nschema_version = 1\nenabled = true\nruntime_id = \"cigar-test\"\n\n[context_assistance.features]\nagent_context = true\n\n[context_assistance.sources]\nworkspace_documents = true\nsource_set_id = \"docs\"\n",
     )
     .unwrap();
     home
@@ -372,6 +372,22 @@ fn an_untimed_watch_without_cigar_is_timed() {
         r#"{"harness_postures": {"codex": "watch"}, "harness_watch_untimed": true}"#,
     );
     let text = fs::read_to_string(unready.join(HOME_CONFIG_FILENAME)).unwrap();
+    assert!(text.contains("[harness_watch_entered_at]"), "{text}");
+
+    // A CIGAR config the loader rejects (no runtime or source set) is off.
+    let malformed = scratch("untimed-cigar-malformed").join("home");
+    fs::create_dir_all(&malformed).unwrap();
+    fs::write(
+        malformed.join(HOME_CONFIG_FILENAME),
+        "[context_assistance]\nenabled = true\n\n[context_assistance.features]\nagent_context = true\n\n[context_assistance.sources]\nworkspace_documents = true\n",
+    )
+    .unwrap();
+    run(
+        &malformed,
+        "settings",
+        r#"{"harness_postures": {"codex": "watch"}, "harness_watch_untimed": true}"#,
+    );
+    let text = fs::read_to_string(malformed.join(HOME_CONFIG_FILENAME)).unwrap();
     assert!(text.contains("[harness_watch_entered_at]"), "{text}");
 }
 

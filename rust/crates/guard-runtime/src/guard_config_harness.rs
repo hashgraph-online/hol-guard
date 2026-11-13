@@ -78,6 +78,16 @@ pub(crate) fn loaded_watch_stamps(
     stamps
 }
 
+/// True when a CIGAR configuration passes validation and adds project
+/// context to prompts. A malformed configuration never counts as on.
+pub(crate) fn cigar_adds_context(value: Option<&Value>) -> bool {
+    let (config, error) = guard_context_assistance::ContextAssistanceConfig::load(value);
+    error.is_none()
+        && config.enabled
+        && config.features.agent_context
+        && config.sources.workspace_documents
+}
+
 /// Stored per-app CIGAR choices. Only `"off"` is kept: an app without an
 /// entry gets CIGAR's project context whenever CIGAR itself is on.
 pub(crate) fn loaded_cigar(value: Option<&Value>) -> BTreeMap<String, String> {

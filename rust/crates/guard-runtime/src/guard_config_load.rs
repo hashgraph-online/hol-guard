@@ -109,6 +109,10 @@ fn load_from_home(request: &LoadRequest, home: &Map<String, Value>) -> Result<Va
         merged = apply_managed_policy(&merged, policy);
     }
     let mut value = coerce_config(&merged, request.managed.as_ref());
+    // A person's own CIGAR "off" holds: project or managed settings can add one, never clear it.
+    let mut cigar_off = harness::loaded_cigar(value.get("harness_cigar"));
+    cigar_off.extend(harness::loaded_cigar(home.get("harness_cigar")));
+    value["harness_cigar"] = json!(cigar_off);
     // Preserve validated local intent for presentation/settings round trips.
     // Enforcement continues to use the restricted context_assistance value.
     value["context_assistance_requested"] = match home.get("context_assistance") {
@@ -182,19 +186,14 @@ fn context_assistance_at(
     context_assistance_from_home(home, workspace, source, &home_config)
 }
 
-/// Whether CIGAR is off for `harness`. The person's own choice in the home
-/// config always holds, so a project's settings can turn CIGAR off for an
-/// app but never back on; the composed settings (project and managed policy)
-/// can only add an "off". A config Guard cannot read leaves the choice to
-/// CIGAR's own policy, which refuses that config too.
-pub(crate) fn cigar_off_for(home: &Path, workspace: Option<&Path>, harness: &str) -> bool {
-    let off_in = |config: &Value| {
-        crate::guard_config_harness::loaded_cigar(config.get("harness_cigar")).contains_key(harness)
-    };
+/// Whether CIGAR is off for `app` in the composed settings (home,
+/// `workspace` and managed policy), where the home "off" always holds. A
+/// config Guard cannot read leaves the choice to CIGAR's own policy.
+pub(crate) fn cigar_off_for(home: &Path, workspace: Option<&Path>, app: &str) -> bool {
     let mut source = ManagedPolicySource::native();
     source.write_cache = false;
-    context_snapshot::read_home(home).is_ok_and(|config| off_in(&Value::Object(config)))
-        || effective_config(home, workspace, &source).is_ok_and(|config| off_in(&config))
+    effective_config(home, workspace, &source)
+        .is_ok_and(|config| harness::loaded_cigar(config.get("harness_cigar")).contains_key(app))
 }
 
 /// Hypothetical local intent is composed through the same native machine

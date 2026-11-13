@@ -1049,6 +1049,8 @@ export type GuardSettings = {
   context_assistance_requested?: GuardContextAssistanceConfig | null;
   /** Read-only, content-free native configuration diagnostic. */
   context_assistance_diagnostic?: string | null;
+  /** Read-only: whether CIGAR adds context after validation and managed policy. Absent on older cores. */
+  context_assistance_effective_ready?: boolean;
   update_channel?: "stable" | "alpha";
   approval_gate?: GuardApprovalGatePublicConfig;
   managed_locked_settings?: string[];

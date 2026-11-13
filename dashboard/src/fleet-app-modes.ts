@@ -11,10 +11,19 @@ export type AppModes = { guard: boolean; cigar: boolean };
 /** Apps whose prompt hook can carry CIGAR's project context. */
 const CIGAR_APPS = new Set(["claude-code", "codex", "pi", "omp"]);
 
-/** True when CIGAR is set up to add project context on this machine. */
+/**
+ * True when CIGAR adds project context on this machine: the person turned it
+ * on, and the core confirms it still does after validation and managed policy.
+ */
 export function cigarReady(settings: GuardSettings): boolean {
   const config = settings.context_assistance;
-  return config?.enabled === true && config.features.agent_context && config.sources.workspace_documents;
+  const requested = config?.enabled === true && config.features.agent_context && config.sources.workspace_documents;
+  return requested && settings.context_assistance_effective_ready !== false;
+}
+
+/** True when managed policy owns each app's CIGAR choice. */
+export function cigarLocked(settings: GuardSettings): boolean {
+  return settings.managed_locked_settings?.includes("harness_cigar") === true;
 }
 
 /** True when this app's prompts can receive CIGAR's context at all. */
@@ -22,7 +31,7 @@ export function cigarSupported(harness: string): boolean {
   return CIGAR_APPS.has(harness);
 }
 
-/** True when CIGAR can be switched on for this app right now. */
+/** True when CIGAR runs for this app or can be switched on for it right now. */
 export function cigarAvailable(settings: GuardSettings, harness: string): boolean {
   return cigarReady(settings) && cigarSupported(harness);
 }
@@ -84,7 +93,9 @@ export function needsConfirm(current: AppModes, next: AppModes, locked = false):
 
 /** Why an app's CIGAR switch cannot be used, or undefined when it can. */
 export function cigarUnavailableReason(settings: GuardSettings, harness: string, displayName: string): string | undefined {
-  if (cigarAvailable(settings, harness)) return undefined;
+  if (cigarAvailable(settings, harness)) {
+    return cigarLocked(settings) ? "Your organization manages CIGAR for each app." : undefined;
+  }
   if (cigarSupported(harness)) return "CIGAR is off on this machine. Set it up on the CIGAR page.";
   return `CIGAR can't add project context in ${displayName}.`;
 }

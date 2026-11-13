@@ -448,7 +448,7 @@ pub(crate) fn update(
         cigar: &cigar_patch,
         context_changed: has(payload, "context_assistance"),
     };
-    settle_untimed_watch(&mut next, now, &save);
+    settle_untimed_watch(&mut next, now, &save, managed);
     let next_json = table_to_json(&next);
     let effective = match managed {
         Some(policy) => {

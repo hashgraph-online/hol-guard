@@ -3,9 +3,14 @@
 
 use std::collections::BTreeMap;
 
-use crate::guard_config_harness::{loaded_postures, loaded_watch_stamps};
+use crate::guard_config_harness::{
+    cigar_adds_context, loaded_cigar, loaded_postures, loaded_watch_stamps,
+};
+use crate::guard_config_managed::{apply_managed_policy, ManagedInput};
 use crate::guard_config_update_coerce::normalize_posture;
-use crate::guard_config_update_value::{get, is_str, remove, set, to_json, Table, Tv};
+use crate::guard_config_update_value::{
+    get, is_str, remove, set, table_to_json, to_json, Table, Tv,
+};
 use crate::package_authority_config::VALID_SECURITY_LEVELS;
 use crate::pyjson::PyVal;
 
@@ -78,22 +83,6 @@ pub(crate) fn apply_harness_patch(
 /// Apps whose prompt hook can carry CIGAR's project context.
 const CIGAR_APPS: [&str; 4] = ["claude-code", "codex", "pi", "omp"];
 
-/// True when the stored CIGAR settings add project context to prompts.
-fn cigar_ready(next: &Table) -> bool {
-    let Some(config) = get(next, "context_assistance").map(to_json) else {
-        return false;
-    };
-    let on = |path: &[&str]| {
-        path.iter()
-            .try_fold(&config, |value, key| value.get(*key))
-            .and_then(serde_json::Value::as_bool)
-            == Some(true)
-    };
-    on(&["enabled"])
-        && on(&["features", "agent_context"])
-        && on(&["sources", "workspace_documents"])
-}
-
 /// What one settings save asked of per-app Guard and CIGAR.
 pub(crate) struct WatchSettle<'a> {
     pub(crate) postures: &'a [(&'a str, Option<&'a str>)],
@@ -105,10 +94,17 @@ pub(crate) struct WatchSettle<'a> {
 /// An untimed Watch is only for an app that keeps CIGAR. When CIGAR cannot
 /// add context there (not set up, not supported by the app, or off for it),
 /// the app would sit unchecked with nothing running, so its Watch gets the
-/// usual revert window from now. Only apps this save touched are checked,
+/// usual revert window from now. Readiness is read from the validated,
+/// managed-composed settings, so a malformed or policy-disabled CIGAR never
+/// counts. Only apps this save touched are checked,
 /// or every app when the save changed CIGAR's machine settings; existing
 /// stamps are kept.
-pub(crate) fn settle_untimed_watch(next: &mut Table, now: &str, save: &WatchSettle<'_>) {
+pub(crate) fn settle_untimed_watch(
+    next: &mut Table,
+    now: &str,
+    save: &WatchSettle<'_>,
+    managed: Option<&ManagedInput>,
+) {
     let mut touched: Vec<&str> = save.cigar.iter().map(|(harness, _)| *harness).collect();
     if save.untimed {
         touched.extend(save.postures.iter().map(|(harness, _)| *harness));
@@ -116,9 +112,15 @@ pub(crate) fn settle_untimed_watch(next: &mut Table, now: &str, save: &WatchSett
     if touched.is_empty() && !save.context_changed {
         return;
     }
-    let ready = cigar_ready(next);
-    let cigar_off =
-        crate::guard_config_harness::loaded_cigar(get(next, "harness_cigar").map(to_json).as_ref());
+    // Decide on what Guard will enforce: validated, and after managed policy.
+    let local = table_to_json(next);
+    let composed = managed.map_or_else(
+        || local.clone(),
+        |policy| apply_managed_policy(&local, policy),
+    );
+    let ready = cigar_adds_context(composed.get("context_assistance"));
+    let mut cigar_off = loaded_cigar(composed.get("harness_cigar"));
+    cigar_off.extend(loaded_cigar(local.get("harness_cigar")));
     let stored = loaded_postures(get(next, "harness_postures").map(to_json).as_ref());
     let mut stamps = loaded_watch_stamps(
         get(next, "harness_watch_entered_at").map(to_json).as_ref(),
@@ -140,8 +142,7 @@ pub(crate) fn settle_untimed_watch(next: &mut Table, now: &str, save: &WatchSett
 
 /// `harness_cigar`: fold a per-app CIGAR patch into the stored choices.
 pub(crate) fn apply_cigar_patch(next: &mut Table, patch: &[(&str, bool)]) {
-    let mut stored =
-        crate::guard_config_harness::loaded_cigar(get(next, "harness_cigar").map(to_json).as_ref());
+    let mut stored = loaded_cigar(get(next, "harness_cigar").map(to_json).as_ref());
     for (harness, off) in patch {
         if *off {
             stored.insert((*harness).to_owned(), "off".to_owned());

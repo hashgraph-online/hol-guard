@@ -4,6 +4,7 @@ import {
   appModesUpdate,
   applyHarnessCigarPatch,
   cigarAvailable,
+  cigarUnavailableReason,
   guardOffPrompt,
   needsConfirm,
   watchIsUntimed,
@@ -58,6 +59,16 @@ assert(
   !cigarAvailable(settings({ context_assistance: { ...cigarOn, features: { ...cigarOn.features, agent_context: false } } }), "codex"),
   "CIGAR without agent context",
 );
+assert(
+  !cigarAvailable(settings({ context_assistance_effective_ready: false }), "codex"),
+  "CIGAR the core reports as not adding context, after validation or managed policy",
+);
+assert(cigarAvailable(settings({ context_assistance_effective_ready: true }), "codex"), "CIGAR the core confirms");
+assert(
+  cigarUnavailableReason(settings({ managed_locked_settings: ["harness_cigar"] }), "codex", "Codex") !== undefined,
+  "a managed per-app CIGAR choice cannot be changed here",
+);
+assert(cigarUnavailableReason(settings(), "codex", "Codex") === undefined, "an unmanaged CIGAR switch is usable");
 same(appModes(settings({ context_assistance: null }), "codex"), { guard: true, cigar: false }, "no CIGAR config reads as off");
 
 // Updates.
