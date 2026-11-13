@@ -2395,6 +2395,7 @@
       },
       "response": {
         "maxBytes": 4096,
+        "emptyOk": true,
         "fields": [
           {
             "name": "id",
@@ -2467,6 +2468,47 @@
               "balanced": "block",
               "strict": "block"
             }
+          }
+        },
+        {
+          "name": "accepts a user who already has access",
+          "kind": "safe",
+          "arguments": {
+            "repository": "octo-org/widgets",
+            "username": "pat",
+            "permission": "push"
+          },
+          "expect": {
+            "facts": {
+              "class": "admin"
+            },
+            "request": {
+              "body": "{\"permission\":\"push\"}",
+              "headers": [
+                [
+                  "accept",
+                  "application/vnd.github+json"
+                ],
+                [
+                  "x-github-api-version",
+                  "2022-11-28"
+                ],
+                [
+                  "content-type",
+                  "application/json; charset=utf-8"
+                ]
+              ],
+              "maxPages": 1,
+              "method": "PUT",
+              "url": "https://api.github.com/repos/octo-org/widgets/collaborators/pat"
+            },
+            "decisions": {
+              "relaxed": "block",
+              "balanced": "block",
+              "strict": "block"
+            },
+            "response": "",
+            "projection": {}
           }
         },
         {

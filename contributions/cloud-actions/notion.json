@@ -2642,9 +2642,6 @@
         },
         "reversibility": {
           "const": "permanent"
-        },
-        "recordCount": {
-          "const": 1
         }
       },
       "response": {
@@ -2814,9 +2811,6 @@
         },
         "reversibility": {
           "const": "permanent"
-        },
-        "recordCount": {
-          "const": 1
         }
       },
       "response": {
