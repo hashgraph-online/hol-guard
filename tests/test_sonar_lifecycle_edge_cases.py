@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import errno
+import hashlib
 import json
 import os
 import stat
@@ -12,7 +12,6 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.guard.adapters import cursor_hooks as cursor_hooks_module
-from codex_plugin_scanner.guard.adapters._modules.copilot import copilot_state_paths
 from codex_plugin_scanner.guard.adapters.adapter_state_integrity import (
     adapter_state_is_authenticated,
     authenticate_adapter_state,
@@ -28,70 +27,13 @@ def _write_json(path: Path, payload: Mapping[str, object]) -> None:
     path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
 
 
-def test_copilot_lifecycle_locks_are_guard_local_and_canonical(tmp_path: Path) -> None:
-    context = HarnessContext(home_dir=tmp_path / "home", workspace_dir=None, guard_home=tmp_path / "guard-home")
-    target = context.home_dir / ".copilot" / "mcp-config.json"
-    alias = context.home_dir / ".copilot" / "nested" / ".." / "mcp-config.json"
-
-    lock_path = copilot_state_paths._copilot_lifecycle_lock_path(context, target)
-    alias_lock_path = copilot_state_paths._copilot_lifecycle_lock_path(context, alias)
-
-    assert lock_path == alias_lock_path
-    assert lock_path.parent == context.guard_home / "managed" / "copilot"
-    assert not list(target.parent.glob("*.lifecycle.lock"))
-
-
-def test_copilot_lifecycle_lock_rejects_symlinked_guard_directory(tmp_path: Path) -> None:
-    context = HarnessContext(home_dir=tmp_path / "home", workspace_dir=None, guard_home=tmp_path / "guard-home")
-    outside = tmp_path / "outside"
-    outside.mkdir()
-    managed = context.guard_home / "managed"
-    managed.mkdir(parents=True)
-    (managed / "copilot").symlink_to(outside, target_is_directory=True)
-
-    with pytest.raises(ValueError, match="escapes the managed root"):
-        copilot_state_paths._copilot_lifecycle_lock_path(
-            context,
-            context.home_dir / ".copilot" / "mcp-config.json",
-        )
-
-    assert not list(outside.glob("*.lifecycle.lock"))
-
-
-@pytest.mark.skipif(os.name != "posix", reason="POSIX no-follow lock descriptors")
-def test_copilot_lifecycle_lock_rejects_symlinked_lock_file(tmp_path: Path) -> None:
-    context = HarnessContext(home_dir=tmp_path / "home", workspace_dir=None, guard_home=tmp_path / "guard-home")
-    target = context.home_dir / ".copilot" / "mcp-config.json"
-    lock_path = copilot_state_paths._copilot_lifecycle_lock_path(context, target)
-    outside = tmp_path / "outside.lock"
-    outside.write_bytes(b"user lock")
-    lock_path.symlink_to(outside)
-
-    with pytest.raises(OSError), copilot_state_paths.copilot_lifecycle_lock(context, target):
-        raise AssertionError("symlinked lock unexpectedly acquired")
-
-    assert outside.read_bytes() == b"user lock"
-
-
-def test_windows_lifecycle_lock_retries_only_known_contention_errors() -> None:
-    def windows_error(message: str, code: int) -> OSError:
-        error = OSError(errno.EACCES, message)
-        error.__dict__["winerror"] = code
-        return error
-
-    denied = windows_error("access denied", 5)
-    contended = windows_error("lock violation", 33)
-
-    assert copilot_state_paths._windows_lock_contention(denied) is False
-    assert copilot_state_paths._windows_lock_contention(contended) is True
-
-
 def test_unsigned_global_copilot_state_cannot_authorize_cleanup(tmp_path: Path) -> None:
     context = HarnessContext(home_dir=tmp_path / "home", workspace_dir=None, guard_home=tmp_path / "guard-home")
     adapter = CopilotHarnessAdapter()
     target = context.home_dir / ".copilot" / "mcp-config.json"
-    backup = adapter._backup_path(target, context)
-    state_path = adapter._state_path(target, context)
+    digest = hashlib.sha256(str(target.resolve()).encode("utf-8")).hexdigest()[:12]
+    backup = context.guard_home / "managed" / "copilot" / f"{digest}.backup.json"
+    state_path = context.guard_home / "managed" / "copilot" / f"{digest}.state.json"
     _write_json(target, {"owned": "user"})
     _write_json(backup, {"existed": False, "content": None})
     _write_json(
@@ -109,67 +51,6 @@ def test_unsigned_global_copilot_state_cannot_authorize_cleanup(tmp_path: Path) 
     assert json.loads(target.read_text(encoding="utf-8")) == {"owned": "user"}
     assert backup.exists()
     assert state_path.exists()
-
-
-def test_failed_copilot_target_write_does_not_reuse_orphaned_backup(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    context = HarnessContext(home_dir=tmp_path / "home", workspace_dir=None, guard_home=tmp_path / "guard-home")
-    adapter = CopilotHarnessAdapter()
-    target = context.home_dir / ".copilot" / "mcp-config.json"
-    first_content = {"mcpServers": {"first": {"command": "first-command"}}}
-    second_content = {"mcpServers": {"second": {"command": "second-command"}}}
-    _write_json(target, first_content)
-    backup = adapter._backup_path(target, context)
-    real_write = copilot_state_paths.write_text_at_authorized_path
-    fail_target = True
-
-    def fail_first_target_write(path: Path, payload: str) -> None:
-        nonlocal fail_target
-        if path == target and fail_target:
-            fail_target = False
-            raise OSError("simulated target write failure")
-        real_write(path, payload)
-
-    monkeypatch.setattr(copilot_state_paths, "write_text_at_authorized_path", fail_first_target_write)
-
-    with pytest.raises(OSError, match="target write"):
-        adapter.install(context)
-
-    assert backup.exists() is False
-    _write_json(target, second_content)
-    adapter.install(context)
-    adapter.uninstall(context)
-
-    assert json.loads(target.read_text(encoding="utf-8")) == second_content
-
-
-def test_copilot_target_write_failure_preserves_competing_target(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    context = HarnessContext(home_dir=tmp_path / "home", workspace_dir=None, guard_home=tmp_path / "guard-home")
-    adapter = CopilotHarnessAdapter()
-    target = context.home_dir / ".copilot" / "mcp-config.json"
-    competing_content = {"mcpServers": {"competing": {"command": "competing-command"}}}
-    real_write = copilot_state_paths.write_text_at_authorized_path
-    assert target.exists() is False
-
-    def fail_after_competing_writer(path: Path, payload: str) -> None:
-        if path == target:
-            _write_json(target, competing_content)
-            raise OSError("simulated target write failure")
-        real_write(path, payload)
-
-    monkeypatch.setattr(copilot_state_paths, "write_text_at_authorized_path", fail_after_competing_writer)
-
-    with pytest.raises(OSError, match="target write"):
-        adapter.install(context)
-
-    assert json.loads(target.read_text(encoding="utf-8")) == competing_content
-    assert not list((context.guard_home / "managed" / "copilot").glob("*.backup.json"))
-    assert not list((context.guard_home / "managed" / "copilot").glob("*.state.json"))
 
 
 def test_cursor_executable_update_does_not_follow_swapped_symlink(

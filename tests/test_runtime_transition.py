@@ -994,7 +994,12 @@ def test_copilot_plan_restores_native_bindings_and_preserves_authority(
     authenticate_adapter_state(runtime.home, harness="copilot", payload={"enrollment": "fixture"})
     authority = runtime.home / "managed/adapter-state.key"
     authority_before = authority.stat()
-    for target in adapter._target_mcp_paths(ctx):
+    targets = (
+        [workspace / ".mcp.json", workspace / ".vscode" / "mcp.json"]
+        if workspace is not None
+        else [ctx.home_dir / ".copilot" / "mcp-config.json"]
+    )
+    for target in targets:
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_text('{"user_setting": true, "mcpServers": {"user": {"command": "node", "args": ["user.js"]}}}')
         target.chmod(0o640)

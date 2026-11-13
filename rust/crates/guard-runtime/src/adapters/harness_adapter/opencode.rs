@@ -304,51 +304,6 @@ fn state_entry(ctx: &Ctx) -> (PathBuf, Vec<(String, String)>) {
     }
 }
 
-/// The saved config a backup envelope holds, as `restore_from_backup` reads it.
-fn backup_plan(ctx: &Ctx, backup: &Path, target: &Path) -> Step<(Value, Option<String>)> {
-    let envelope = match std::fs::read(ctx.absolute(backup)) {
-        Err(_) => None,
-        Ok(bytes) => {
-            let text = super::kimi::utf8(bytes, "The OpenCode backup")?;
-            match pyjson::parse_mapping_lone_surrogates(&universal_newlines(text)) {
-                Ok(SurrogateMapped {
-                    value: PyVal::Dict(entries),
-                    mapped,
-                    ..
-                }) => Some((entries, mapped)),
-                _ => None,
-            }
-        }
-    };
-    let content = envelope.as_ref().and_then(|(entries, mapped)| {
-        let content = entries.iter().rev().find(|(key, _)| key == "content")?;
-        content.1.as_str().map(|text| (text.to_owned(), *mapped))
-    });
-    let facts = envelope.as_ref().map(|(entries, _)| {
-        let existed = entries
-            .iter()
-            .rev()
-            .find(|(key, _)| key == "existed")
-            .is_some_and(|(_, value)| matches!(value, PyVal::Bool(true)));
-        json!({ "existed": existed, "has_content": content.is_some() })
-    });
-    let request = json!({
-        "envelope": facts,
-        "target_exists": ctx.absolute(target).is_file(),
-    });
-    let plan = crate::harness_backup_restore::dispatch(&request).map_err(|_| Failure::Invalid)?;
-    if plan["action"] == "write"
-        && content
-            .as_ref()
-            .is_some_and(|(text, mapped)| *mapped && text.chars().any(pyjson::in_surrogate_plane))
-    {
-        return Err(Failure::Refusal(
-            "The OpenCode backup holds text that cannot be written as UTF-8.".into(),
-        ));
-    }
-    Ok((plan, content.map(|(text, _)| text)))
-}
-
 /// `prepare_uninstall`: restore the backed-up config, then remove the
 /// backup, the state and the pretool plugins.
 fn prepare_uninstall(ctx: &Ctx) -> Step<Value> {
@@ -360,7 +315,7 @@ fn prepare_uninstall(ctx: &Ctx) -> Step<Value> {
     let mut writes = Vec::new();
     let mut deletes = Vec::new();
     if ctx.absolute(&backup).is_file() {
-        let (plan, content) = backup_plan(ctx, &backup, &target)?;
+        let (plan, content) = files::backup_plan(ctx, &backup, &target, "The OpenCode backup")?;
         match (plan["action"].as_str(), content) {
             (Some("write"), Some(text)) => writes.push(json!({
                 "path": path_text(&target), "text": text, "mode": null, "parents": true,

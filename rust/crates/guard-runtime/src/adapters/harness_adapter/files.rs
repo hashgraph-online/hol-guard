@@ -16,8 +16,9 @@ use serde_json::{json, Value};
 
 use super::{path_text, Ctx, Failure, Step};
 use crate::aibom_paths::resolves_within_root;
+use crate::copilot_detect::universal_newlines;
 use crate::hook_removal_prune::write_indented;
-use crate::pyjson::PyVal;
+use crate::pyjson::{self, PyVal, SurrogateMapped};
 
 const MAX_SNAPSHOT: u64 = 4 * 1024 * 1024;
 
@@ -439,4 +440,54 @@ pub(crate) fn finished(
         .map(|note| note.as_str().map(text).ok_or(Failure::Invalid))
         .collect::<Step<Vec<_>>>()?;
     manifest_answer(adapter_result(harness, false, config_path, &shim, notes))
+}
+
+/// The saved config a backup envelope holds, as `restore_from_backup` reads it.
+pub(crate) fn backup_plan(
+    ctx: &Ctx,
+    backup: &Path,
+    target: &Path,
+    label: &str,
+) -> Step<(Value, Option<String>)> {
+    let envelope = match std::fs::read(ctx.absolute(backup)) {
+        Err(_) => None,
+        Ok(bytes) => {
+            let text = super::kimi::utf8(bytes, label)?;
+            match pyjson::parse_mapping_lone_surrogates(&universal_newlines(text)) {
+                Ok(SurrogateMapped {
+                    value: PyVal::Dict(entries),
+                    mapped,
+                    ..
+                }) => Some((entries, mapped)),
+                _ => None,
+            }
+        }
+    };
+    let content = envelope.as_ref().and_then(|(entries, mapped)| {
+        let content = entries.iter().rev().find(|(key, _)| key == "content")?;
+        content.1.as_str().map(|text| (text.to_owned(), *mapped))
+    });
+    let facts = envelope.as_ref().map(|(entries, _)| {
+        let existed = entries
+            .iter()
+            .rev()
+            .find(|(key, _)| key == "existed")
+            .is_some_and(|(_, value)| matches!(value, PyVal::Bool(true)));
+        json!({ "existed": existed, "has_content": content.is_some() })
+    });
+    let request = json!({
+        "envelope": facts,
+        "target_exists": ctx.absolute(target).is_file(),
+    });
+    let plan = crate::harness_backup_restore::dispatch(&request).map_err(|_| Failure::Invalid)?;
+    if plan["action"] == "write"
+        && content
+            .as_ref()
+            .is_some_and(|(text, mapped)| *mapped && text.chars().any(pyjson::in_surrogate_plane))
+    {
+        return Err(Failure::Refusal(format!(
+            "{label} holds text that cannot be written as UTF-8."
+        )));
+    }
+    Ok((plan, content.map(|(text, _)| text)))
 }

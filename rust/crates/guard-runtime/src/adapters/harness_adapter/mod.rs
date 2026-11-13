@@ -1,6 +1,6 @@
 //! `runner_authority` kind `harness_adapter`: the Gemini, Antigravity, Kimi,
-//! Devin, Muse, OpenClaw, Paseo, Grok, ZCode, Pi, Oh My Pi and OpenCode
-//! harness adapters.
+//! Devin, Muse, OpenClaw, Paseo, Grok, ZCode, Pi, Oh My Pi, OpenCode,
+//! Cline and Copilot harness adapters.
 //!
 //! Python keeps one generic adapter class that holds the ownership locks,
 //! prepares and removes the launcher shim, builds the bounded hook argv and
@@ -33,6 +33,11 @@ mod cline_install;
 mod cline_mcp;
 mod cline_plugin;
 mod cloud_identity;
+mod copilot;
+mod copilot_install;
+mod copilot_mcp;
+mod copilot_state;
+mod copilot_uninstall;
 mod describe;
 mod desktop_core;
 mod files;
@@ -218,6 +223,7 @@ pub(crate) fn dispatch(args: &Value) -> KindResult {
         "pi" | "omp" => pi::dispatch(spec, op, &ctx, fields),
         "opencode" => opencode::dispatch(spec, op, &ctx, fields),
         "cline" => cline::dispatch(spec, op, &ctx, fields),
+        "copilot" => copilot::dispatch(spec, op, &ctx, fields),
         _ => Err(Failure::Invalid),
     })
 }
