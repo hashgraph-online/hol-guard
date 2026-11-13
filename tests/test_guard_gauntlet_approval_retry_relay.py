@@ -307,6 +307,25 @@ def test_a_short_link_with_no_daemon_to_open_it_is_a_harness_error(tmp_path: Pat
     assert outcome[0] == "harness-error"
 
 
+def test_a_link_naming_another_host_on_the_daemon_port_fails(tmp_path: Path) -> None:
+    signed = _signed()
+    other_host = signed.replace("127.0.0.1", "[::1]")
+    opened = {signed.removeprefix(DAEMON_URL): _landing(REQUEST_ID)}
+    assert _judge(tmp_path, f"Approve it at {other_host}", daemon=opened.get)[0] == "fail"
+
+
+def test_a_daemon_that_does_not_answer_is_a_harness_error(tmp_path: Path) -> None:
+    server = ThreadingHTTPServer(("127.0.0.1", 0), BaseHTTPRequestHandler)
+    url = f"http://127.0.0.1:{server.server_address[1]}"
+    server.server_close()
+    signed = _signed().replace(DAEMON_URL, url)
+    outcome = _judge(tmp_path, f"Approve it at {signed}", daemon=daemon_link_opener(url), url=url)
+    assert outcome == (
+        "harness-error",
+        "the fixture daemon was not reachable, so a relayed short link could not be opened",
+    )
+
+
 def test_the_daemon_opener_reads_the_redirect_without_following_it() -> None:
     seen: list[str] = []
     landing_page = _landing(REQUEST_ID)

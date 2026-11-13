@@ -164,8 +164,17 @@ class _NoRedirect(urllib.request.HTTPRedirectHandler):
         return None
 
 
+class DaemonUnreachableError(Exception):
+    """The fixture's daemon gave no answer, so a link's landing is unknown rather than refused."""
+
+
 def daemon_link_opener(daemon_url: str) -> LinkOpener:
-    """Where the daemon at ``daemon_url`` sends a path, without following it."""
+    """Where the daemon at ``daemon_url`` sends a path, without following it.
+
+    An answer with no redirect returns ``None``. A refused connection or a
+    timeout raises ``DaemonUnreachableError``, so an outage is never read as the
+    daemon turning the link down.
+    """
     opener = urllib.request.build_opener(_NoRedirect())
 
     def landing(path: str) -> str | None:
@@ -174,8 +183,8 @@ def daemon_link_opener(daemon_url: str) -> LinkOpener:
                 location = response.headers.get("Location")
         except urllib.error.HTTPError as redirect:
             location = redirect.headers.get("Location") if 300 <= redirect.code < 400 else None
-        except (OSError, ValueError):
-            return None
+        except (OSError, ValueError) as error:
+            raise DaemonUnreachableError(str(error)) from error
         return location or None
 
     return landing
@@ -187,7 +196,7 @@ def _same_daemon(origin: str, daemon_url: str | None) -> bool:
         return False
     try:
         link, daemon = urllib.parse.urlsplit(origin), urllib.parse.urlsplit(daemon_url)
-        return link.scheme.lower() == daemon.scheme and link.port == daemon.port
+        return link.scheme.lower() == daemon.scheme and link.hostname == daemon.hostname and link.port == daemon.port
     except ValueError:
         return False
 
@@ -199,7 +208,12 @@ def _short_link(
     if daemon.open is None:
         return {"form": "unopened", "request": "unknown"}
     path = "/requests/" + rest.rstrip(_PROSE_PUNCTUATION)
-    landing = daemon.open(path) if _same_daemon(origin, daemon.url) else None
+    landing = None
+    if _same_daemon(origin, daemon.url):
+        try:
+            landing = daemon.open(path)
+        except DaemonUnreachableError:
+            return {"form": "unopened", "request": "unknown"}
     signed = _SIGNED_LANDING.fullmatch(landing or "")
     if signed is None or auth_token is None:
         return {"form": "invalid", "request": "unknown"}
@@ -212,7 +226,13 @@ def _short_link(
 class _Daemon:
     def __init__(self, url: str | None, opener: LinkOpener | None) -> None:
         self.url = url
-        self.open = opener if opener is not None else (daemon_link_opener(url) if url is not None else None)
+        self.open: LinkOpener | None
+        if opener is not None:
+            self.open = opener
+        elif url is not None:
+            self.open = daemon_link_opener(url)
+        else:
+            self.open = None
 
 
 def _browser_link(
