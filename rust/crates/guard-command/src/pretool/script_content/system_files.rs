@@ -12,7 +12,8 @@ use std::sync::LazyLock;
 
 use regex::Regex;
 
-use super::{assess_programs, code_lines, sent_model, Language, PathContext};
+use super::destructive_git::without_comments;
+use super::{assess_programs, sent_model, PathContext};
 use crate::CanonicalCommandV1;
 use guard_contracts::PreToolResultV1;
 
@@ -71,11 +72,9 @@ pub(super) fn names_system_file(code: &str) -> bool {
 
 fn programs_name_system_file(model: &CanonicalCommandV1, context: PathContext<'_>) -> bool {
     let modeled = assess_programs(model, context, false).iter().any(|found| {
-        // The language is not kept with the source, so a path counts
-        // only when it survives both comment styles being removed.
-        found.sources.iter().any(|source| {
-            names_system_file(&code_lines(Language::Python, source))
-                && names_system_file(&code_lines(Language::Node, source))
+        found.sources.iter().any(|source| match found.language {
+            Some(language) => names_system_file(&without_comments(language, source)),
+            None => names_system_file(source),
         })
     });
     modeled

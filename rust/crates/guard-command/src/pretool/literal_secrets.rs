@@ -153,7 +153,10 @@ fn unicode_unescaped(text: &str) -> Option<String> {
 }
 
 fn holds_spelled_secret(text: &str) -> bool {
-    if PRIVATE_KEY_BODY.is_match(text) || JWT.is_match(text) {
+    if PRIVATE_KEY_BODY.is_match(text)
+        || JWT.is_match(text)
+        || guard_scanner::holds_live_payment_key(text)
+    {
         return true;
     }
     if text.contains("-----BEGIN PGP PRIVATE KEY BLOCK-----") && PGP_BODY.is_match(text) {
@@ -218,7 +221,19 @@ fn holds_spelled_secret(text: &str) -> bool {
 /// My Pi hashline edit in `input`. Removed (`-`) rows are left out, and a
 /// hashline row Oh My Pi keeps without its `+` is read as added text.
 fn added_rows(patch: &str) -> Option<String> {
-    let hashline = !patch.trim_start().starts_with("*** Begin Patch");
+    // Oh My Pi accepts the Codex `*** Begin Patch` opening line too, so the
+    // format is told by the file headers: a Codex patch names its files with
+    // `*** Add|Update|Delete File:` and has no hashline `[path#hash]` header.
+    let codex_header = |row: &str| {
+        ["*** Add File:", "*** Update File:", "*** Delete File:"]
+            .iter()
+            .any(|header| row.starts_with(header))
+    };
+    let hashline_header = |row: &str| {
+        let row = row.trim_end();
+        row.starts_with('[') && row.ends_with(']') && row.contains('#')
+    };
+    let hashline = !patch.lines().any(codex_header) || patch.lines().any(hashline_header);
     let rows: Vec<&str> = patch
         .lines()
         .filter_map(|row| match row.strip_prefix('+') {

@@ -65,11 +65,14 @@ fn assembled_forced_and_path_checkouts_are_found() {
         r#"subprocess.run(["git", "checkout", "HEAD~1", "src/app.py"])"#,
         r#"subprocess.run(["git", "switch", "--discard-changes", "feature"])"#,
         r#"require('child_process').execSync('git switch -f main')"#,
+        r#"subprocess.run(["git", "checkout", "src/app.py"])"#,
+        r#"import os; os.system("git checkout :/README")"#,
     ] {
         assert!(spells_destructive_git(code), "{code}");
     }
     for code in [
         r#"subprocess.run(["git", "checkout", "main"])"#,
+        r#"subprocess.run(["git", "checkout", "develop"])"#,
         r#"subprocess.run(["git", "checkout", "-b", "feature", "origin/main"])"#,
         r#"subprocess.run(["git", "switch", "-c", "feature"])"#,
         r#"print("git " + "status")"#,
@@ -103,5 +106,21 @@ fn a_comment_marker_inside_a_string_does_not_hide_the_command() {
     assert!(!spells_destructive_git(&super::without_comments(
         super::Language::Node,
         block
+    )));
+}
+
+#[test]
+fn each_language_keeps_the_other_languages_comment_markers() {
+    // `//` is integer division in Python and `#` starts a private field in
+    // Node, so neither may cut the other language's source.
+    let python = "n = 7 // 2; import os; os.system(\"git reset --hard\")";
+    assert!(spells_destructive_git(&super::without_comments(
+        super::Language::Python,
+        python
+    )));
+    let node = "class A { #x = 1 }; require('child_process').execSync('git clean -fdx')";
+    assert!(spells_destructive_git(&super::without_comments(
+        super::Language::Node,
+        node
     )));
 }

@@ -108,9 +108,20 @@ fn quoted_for_discussion(text: &str, found: &Match<'_>) -> bool {
 /// (`Carry out this instruction: "..."`) rather than warning against it.
 fn asks_to_carry_out(text: &str, found: &Match<'_>) -> bool {
     let before = &text[..found.start()];
-    let lead = before
-        .rfind(['.', '!', '?', '\n'])
-        .map_or(before, |at| &before[at + 1..]);
+    let mut line_start = before.rfind('\n').map_or(0, |at| at + 1);
+    // A quotation on a line of its own is introduced by the line above it:
+    // `Follow these instructions:` then `"Ignore previous instructions"`.
+    if before[line_start..]
+        .trim_matches(|ch: char| ch.is_whitespace() || "\"'`>*-:".contains(ch))
+        .is_empty()
+    {
+        let above = before[..line_start].trim_end();
+        line_start = above.rfind('\n').map_or(0, |at| at + 1);
+    }
+    let lead = &before[line_start..];
+    let lead = lead
+        .rfind(['.', '!', '?'])
+        .map_or(lead, |at| &lead[at + 1..]);
     CARRY_OUT.is_match(lead) && !NEGATED.is_match(lead)
 }
 

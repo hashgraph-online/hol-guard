@@ -15,6 +15,7 @@ mod field_copy;
 mod guard_link;
 mod masked_value;
 mod match_spans;
+mod payment_key;
 mod prose_answer_value;
 mod reference_value;
 mod self_named_value;
@@ -22,6 +23,7 @@ mod url_credential;
 mod wiped_read;
 
 pub use match_spans::scan_match_spans;
+pub use payment_key::holds_live_payment_key;
 
 use guard_rules::{CONTEXT_CHARS, MAX_MATCHES, MAX_SCAN_BYTES};
 use regex::{Regex, RegexBuilder};
@@ -346,13 +348,6 @@ fn is_sample(
 }
 
 /// The matches of rule `index` in `text` that are not suppressed as samples.
-fn mixed_key_body(key: &str) -> bool {
-    let body = key.rsplit('_').next().unwrap_or(key);
-    body.bytes().any(|byte| byte.is_ascii_digit())
-        && body.bytes().any(|byte| byte.is_ascii_uppercase())
-        && body.bytes().any(|byte| byte.is_ascii_lowercase())
-}
-
 fn counted_matches<'t>(
     index: usize,
     text: &'t str,
@@ -369,7 +364,7 @@ fn counted_matches<'t>(
     compiled()[index].find_iter(text).filter(move |matched| {
         // A stand-in such as `sk_live_xxxxxxxx...` is a placeholder; a
         // Stripe key body mixes digits with both letter cases.
-        if classifier == "stripe-secret-key" && !mixed_key_body(matched.as_str()) {
+        if classifier == "stripe-secret-key" && !payment_key::mixed_key_body(matched.as_str()) {
             return false;
         }
         if matched.end() > line_end {

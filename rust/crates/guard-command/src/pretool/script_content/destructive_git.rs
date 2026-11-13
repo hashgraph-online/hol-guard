@@ -144,17 +144,27 @@ fn discards_work(argv: &[String]) -> bool {
             .iter()
             .any(|word| *word == "--dry-run" || short_cluster_has(word, 'n')),
         "checkout" => {
-            // `git checkout <tree> <path>` replaces the path from the tree;
-            // a lone operand is a branch switch, which keeps local edits.
+            // `git checkout <tree> <path>` replaces the path from the tree,
+            // and `git checkout src/app.py` restores a file from the index.
+            // A lone bare word is read as a branch switch, which keeps local
+            // edits; one shaped like a path (a dot, a slash, a glob or a
+            // `:` pathspec) may name a file, so it keeps its review.
             let creates_branch = rest.iter().any(|word| {
                 matches!(*word, "-b" | "-B" | "--orphan") || word.starts_with("--orphan=")
             });
-            let operands = rest.iter().filter(|word| !word.starts_with('-')).count();
+            let operands: Vec<&str> = rest
+                .iter()
+                .copied()
+                .filter(|word| !word.starts_with('-'))
+                .collect();
+            let path_shaped =
+                |word: &str| word.starts_with(':') || word.contains(['.', '/', '*', '?', '[']);
             has("--")
                 || has(".")
                 || has("--force")
                 || rest.iter().any(|word| short_cluster_has(word, 'f'))
-                || (!creates_branch && operands >= 2)
+                || (!creates_branch
+                    && (operands.len() >= 2 || operands.iter().any(|word| path_shaped(word))))
         }
         "switch" => rest.iter().any(|word| {
             matches!(*word, "--discard-changes" | "--force") || short_cluster_has(word, 'f')
@@ -250,7 +260,7 @@ pub(super) fn other_inline_sources(
 /// `#` comments for Python, `//` and `/* */` comments for Node. A marker
 /// inside a quoted string is kept, so `os.system("git reset --hard # note")`
 /// still reads the whole command.
-fn without_comments(language: Language, source: &str) -> String {
+pub(super) fn without_comments(language: Language, source: &str) -> String {
     let mut code = String::with_capacity(source.len());
     let mut in_block = false;
     for line in source.lines() {
@@ -298,11 +308,9 @@ fn without_comments(language: Language, source: &str) -> String {
 
 fn programs_spell_destructive_git(model: &CanonicalCommandV1, context: PathContext<'_>) -> bool {
     let modeled = assess_programs(model, context, false).iter().any(|found| {
-        found.sources.iter().any(|source| {
-            // The language is not kept with the source, so a command counts
-            // only when it survives both comment styles being removed.
-            spells_destructive_git(&without_comments(Language::Python, source))
-                && spells_destructive_git(&without_comments(Language::Node, source))
+        found.sources.iter().any(|source| match found.language {
+            Some(language) => spells_destructive_git(&without_comments(language, source)),
+            None => spells_destructive_git(source),
         })
     });
     modeled

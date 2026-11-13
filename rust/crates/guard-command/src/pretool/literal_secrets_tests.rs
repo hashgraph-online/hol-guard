@@ -210,6 +210,13 @@ fn a_patch_that_adds_a_secret_is_a_write_of_it() {
         "tool_input": {"input": format!("[app/config.py#AB12]\nPUT 3\n+client_secret = \"{value}\"\n")}
     });
     assert!(writes_literal_secret(&omp));
+    let omp_opened_like_codex = json!({
+        "tool_name": "edit",
+        "tool_input": {"input": format!(
+            "*** Begin Patch\n[settings.py#AB12]\nPUT 1\nclient_secret = \"{value}\"\n*** End Patch\n"
+        )}
+    });
+    assert!(writes_literal_secret(&omp_opened_like_codex));
     let removed = json!({
         "tool_name": "apply_patch",
         "tool_input": {"command": format!(
@@ -250,4 +257,16 @@ fn placeholder_words_and_percent_signs_inside_a_real_value_do_not_hide_it() {
     ] {
         assert!(!holds_literal_secret(text), "{text}");
     }
+}
+
+#[test]
+fn a_live_payment_key_under_a_neutral_name_is_a_secret() {
+    let key = joined(&["sk_", "live_", "51Hq8T2eZvKYlo2C", "7mXp4RwN9bQs"]);
+    assert!(holds_literal_secret(&format!("{{\"value\": \"{key}\"}}")));
+    let restricted = joined(&["rk_", "live_", "51Hq8T2eZvKYlo2C", "7mXp4RwN9bQs"]);
+    assert!(holds_literal_secret(&format!("cfg = '{restricted}'")));
+    let stand_in = joined(&["sk_", "live_", "xxxxxxxxxxxxxxxxxxxxxxxx"]);
+    assert!(!holds_literal_secret(&format!(
+        "{{\"value\": \"{stand_in}\"}}"
+    )));
 }

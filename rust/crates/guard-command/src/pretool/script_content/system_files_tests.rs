@@ -86,3 +86,22 @@ fn ruby_perl_and_php_inline_source_is_read_for_system_files() {
     let local = "ruby -e 'puts File.read(\"Gemfile\")'";
     assert!(!super::text_names_system_file(local, context));
 }
+
+#[test]
+fn comment_markers_inside_strings_or_the_other_language_do_not_hide_a_path() {
+    let home = std::env::temp_dir();
+    let home = home.to_str().unwrap();
+    let context = crate::pretool::PathContext {
+        home_dir: Some(home),
+        cwd: Some(home),
+        ..Default::default()
+    };
+    for named in [
+        "python3 -c 'label = \"note # comment\"; print(open(\"/etc/passwd\").read())'",
+        "python3 -c 'n = 7 // 2; print(open(\"/etc/passwd\").read())'",
+    ] {
+        assert!(super::text_names_system_file(named, context), "{named}");
+    }
+    let commented = "python3 -c 'print(1)  # open(\"/etc/passwd\")'";
+    assert!(!super::text_names_system_file(commented, context));
+}

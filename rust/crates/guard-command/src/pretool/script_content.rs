@@ -121,6 +121,8 @@ pub(super) struct Findings {
     pub(super) loopback: Option<BTreeSet<u16>>,
     /// The program's source and the local modules read with it.
     pub(super) sources: Vec<String>,
+    /// The language the program is written in.
+    pub(super) language: Option<Language>,
 }
 
 /// What each script this command launches does, one entry per program whose
@@ -744,6 +746,7 @@ fn assess_programs(
             found.loopback = loopback::program_ports(&sources, context.home_dir);
         }
         found.sources = sources;
+        found.language = Some(language);
         findings.push(found);
     }
     findings
