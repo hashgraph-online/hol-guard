@@ -254,7 +254,7 @@ pub(crate) fn command_shape(
             return None;
         }
         let name = super::executable_basename(executable);
-        if matches!(name, "sed" | "gsed") && !sed::arguments_without_execution(&segment.arguments) {
+        if !sed::segment_without_execution(name, &segment.arguments) {
             return None;
         }
         // A scratch script outside the workspace is read as that one file.

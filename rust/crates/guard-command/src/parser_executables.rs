@@ -106,6 +106,7 @@ pub(super) fn is_nested_command_executor(executable: &str, arguments: &[String])
     basename == "find"
         && !is_contained_compile_check_arguments(arguments)
         && crate::read_only_fanout::find_exec(arguments).is_none()
+        && find_exec_sed(arguments).is_none()
         && arguments
             .iter()
             .any(|argument| matches!(argument.as_str(), "-exec" | "-execdir" | "-ok" | "-okdir"))
@@ -188,4 +189,38 @@ pub(super) fn is_contained_compile_check_arguments(arguments: &[String]) -> bool
             .iter()
             .zip(EXPECTED)
             .all(|(actual, expected)| actual == expected)
+}
+
+/// `find SHAPE -type f -exec sed|gsed ARGS {} +` (or `... {} \;`): one `sed`
+/// run over the regular files a name, type and depth walk found. Agents use it
+/// to apply one rename across a test tree, the same edit `sed -i ... tests/*.py`
+/// makes over a glob. Answers the `sed` words, program name first, so the
+/// caller can run the `sed` script screen over them.
+///
+/// This only recognizes the shape, so the parser can model the command
+/// exactly instead of treating `find` as running an unknown program. It admits
+/// nothing: the walk must be the flat shape read-only fan-out accepts, limited
+/// to regular files, with `{}` as the last word before the terminator and no
+/// other `{}`, `;` or `+` inside the body that could end it early and start a
+/// second action. Workspace containment still screens the `sed` script for
+/// execution and every operand for reach before the edit runs in the sandbox.
+pub(crate) fn find_exec_sed(arguments: &[String]) -> Option<&[String]> {
+    let at = arguments.iter().position(|argument| argument == "-exec")?;
+    let shape = crate::read_only_fanout::find_shape(&arguments[..at])?;
+    if shape.print0 || !shape.regular_files_only {
+        return None;
+    }
+    let (terminator, body) = arguments[at + 1..].split_last()?;
+    let (marker, child) = body.split_last()?;
+    let name = child.first()?;
+    if !matches!(terminator.as_str(), "+" | ";")
+        || marker != "{}"
+        || !matches!(name.as_str(), "sed" | "gsed")
+        || child
+            .iter()
+            .any(|argument| argument.contains("{}") || matches!(argument.as_str(), ";" | "+"))
+    {
+        return None;
+    }
+    Some(child)
 }

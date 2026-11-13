@@ -1,5 +1,17 @@
 //! Sed may edit workspace files, but must not execute its input as commands.
 use super::super::contained_wrapper::output_filters::sed_script::workspace_script;
+/// Whether a segment runs no `sed` script that executes a command: a `sed`
+/// itself, or the `sed` a `find ... -exec sed ... {} +` runs over each file it
+/// found. Every other program passes.
+pub(super) fn segment_without_execution(name: &str, arguments: &[String]) -> bool {
+    match name {
+        "sed" | "gsed" => arguments_without_execution(arguments),
+        "find" => crate::find_exec_sed(arguments)
+            .is_none_or(|edit| arguments_without_execution(&edit[1..])),
+        _ => true,
+    }
+}
+
 /// Execution commands/flags are GNU sed extensions, so screen the GNU argv
 /// interpretation. BSD sed rejects e rather than executing it; its separate
 /// -i suffix must not make a valid GNU edit fail this execution screen.
@@ -114,6 +126,12 @@ mod tests {
             ("sed -i '' -e 's/a/b/g' README.md", true),
             ("sed -i.bak 's/a/b/g' README.md", true),
             ("sed -n '1,5p' README.md", true),
+            ("find . -type f -exec sed -i '' 's/a/b/g' {} +", true),
+            (r"find . -type f -exec sed -i 's/\._reset(/x/g' {} +", true),
+            ("find . -type f -exec sed -i 's/a/b/g' {} +", true),
+            ("find . -type f -exec sed -i 's/a/b/e' {} +", false),
+            ("find . -type f -exec sed -i -f edits.sed {} +", false),
+            (r"find . -type f -exec sed -i 's/a/b/g' {} \;", true),
         ] {
             let model = crate::parse_command(&crate::CommandModelRequestV1 {
                 command: command.into(),
