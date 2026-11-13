@@ -2582,7 +2582,7 @@
       "arguments": {
         "document_id": "195j9eDD3ccgjQRttHhJPymLJUCOUjs-jmwTrekvdjFE",
         "start": 5000000,
-        "end": 480
+        "end": 5000400
       },
       "expect": "allow"
     },
@@ -2592,7 +2592,7 @@
       "actionId": "docs.documents.delete_range",
       "arguments": {
         "document_id": "195j9eDD3ccgjQRttHhJPymLJUCOUjs-jmwTrekvdjFE",
-        "start": 120,
+        "start": 1,
         "end": 2
       },
       "expect": "allow"
@@ -2603,7 +2603,7 @@
       "actionId": "docs.documents.delete_range",
       "arguments": {
         "document_id": "195j9eDD3ccgjQRttHhJPymLJUCOUjs-jmwTrekvdjFE",
-        "start": 120,
+        "start": 1,
         "end": 11
       },
       "expect": "allow"
@@ -2614,7 +2614,7 @@
       "actionId": "docs.documents.delete_range",
       "arguments": {
         "document_id": "195j9eDD3ccgjQRttHhJPymLJUCOUjs-jmwTrekvdjFE",
-        "start": 120,
+        "start": 10,
         "end": 20
       },
       "expect": "allow"
@@ -2625,7 +2625,7 @@
       "actionId": "docs.documents.delete_range",
       "arguments": {
         "document_id": "195j9eDD3ccgjQRttHhJPymLJUCOUjs-jmwTrekvdjFE",
-        "start": 120,
+        "start": 20,
         "end": 50
       },
       "expect": "allow"
