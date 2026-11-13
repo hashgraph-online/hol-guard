@@ -5,6 +5,9 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
+
+from codex_plugin_scanner.guard.adapters import cursor
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.adapters.cursor import CursorHarnessAdapter
 
@@ -301,3 +304,15 @@ class TestCursorAdapterContract:
         assert len(result.artifacts) == 1
         art = result.artifacts[0]
         assert art.artifact_type == "mcp_server"
+
+
+def test_frozen_hook_refuses_its_script_when_the_runtime_cannot_answer(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def unavailable(*_args: object, **_kwargs: object) -> dict[str, object]:
+        raise RuntimeError("resident unavailable")
+
+    script = tmp_path / "hol-guard-cursor-hook.py"
+    script.write_text("raise SystemExit(0)\n", encoding="utf-8")
+    monkeypatch.setattr(cursor, "ask", unavailable)
+    assert cursor.run_frozen_cursor_hook([str(script)]) == 3

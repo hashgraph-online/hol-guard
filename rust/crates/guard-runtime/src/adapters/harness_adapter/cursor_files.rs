@@ -251,3 +251,65 @@ pub(super) fn secret_private(ctx: &Ctx, path: &Path) -> bool {
     }
     super::files::mode(ctx, path).is_some_and(|mode| mode & 0o077 == 0)
 }
+
+#[cfg(all(test, unix))]
+mod tests {
+    use std::os::unix::fs::{symlink, PermissionsExt};
+
+    use super::*;
+
+    fn mode(path: &Path) -> u32 {
+        fs::metadata(path).unwrap().permissions().mode() & 0o777
+    }
+
+    #[test]
+    fn a_loose_key_is_tightened_and_reused() {
+        let dir = tempfile::tempdir().unwrap();
+        let key = dir.path().join("cursor-hook-attestation.key");
+        fs::write(&key, b"existing-key-bytes").unwrap();
+        fs::set_permissions(&key, fs::Permissions::from_mode(0o644)).unwrap();
+        assert_eq!(
+            private_secret(&key).as_deref(),
+            Some(&b"existing-key-bytes"[..])
+        );
+        assert_eq!(mode(&key), 0o600);
+    }
+
+    #[test]
+    fn an_empty_key_is_discarded_for_a_new_one() {
+        let dir = tempfile::tempdir().unwrap();
+        let key = dir.path().join("cursor-hook-attestation.key");
+        fs::write(&key, b"").unwrap();
+        fs::set_permissions(&key, fs::Permissions::from_mode(0o600)).unwrap();
+        assert!(private_secret(&key).is_none());
+        assert!(!key.exists());
+        write_secret(&key, &[7u8; 32]).unwrap();
+        assert_eq!(fs::read(&key).unwrap(), [7u8; 32]);
+        assert_eq!(mode(&key), 0o600);
+    }
+
+    #[test]
+    fn a_symlinked_key_is_replaced_without_touching_its_target() {
+        let dir = tempfile::tempdir().unwrap();
+        let key = dir.path().join("cursor-hook-attestation.key");
+        let target = dir.path().join("outside.key");
+        fs::write(&target, b"outside-key").unwrap();
+        symlink(&target, &key).unwrap();
+        assert!(private_secret(&key).is_none());
+        assert!(fs::symlink_metadata(&key).is_err());
+        write_secret(&key, &[9u8; 32]).unwrap();
+        assert!(!fs::symlink_metadata(&key).unwrap().file_type().is_symlink());
+        assert_eq!(fs::read(&target).unwrap(), b"outside-key");
+    }
+
+    #[test]
+    fn writing_a_key_never_follows_a_symlink() {
+        let dir = tempfile::tempdir().unwrap();
+        let key = dir.path().join("cursor-hook-attestation.key");
+        let target = dir.path().join("outside.key");
+        fs::write(&target, b"outside-key").unwrap();
+        symlink(&target, &key).unwrap();
+        assert!(write_secret(&key, b"replacement-key").is_err());
+        assert_eq!(fs::read(&target).unwrap(), b"outside-key");
+    }
+}

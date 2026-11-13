@@ -54,6 +54,24 @@ fn run(home: &Home, op: &str, bridge: Value) -> KindResult {
                 }
                 Value::Object(paths)
             }
+            // Windows asks Python to quote each hook line; any text will do.
+            "render" => {
+                let mut pairs = fields
+                    .get("rendered")
+                    .and_then(Value::as_array)
+                    .cloned()
+                    .unwrap_or_default();
+                for argv in value.as_array().unwrap() {
+                    let words: Vec<&str> = argv
+                        .as_array()
+                        .unwrap()
+                        .iter()
+                        .filter_map(Value::as_str)
+                        .collect();
+                    pairs.push(json!([argv, words.join(" ")]));
+                }
+                Value::Array(pairs)
+            }
             "relaunch" => json!(value
                 .as_array()
                 .unwrap()
@@ -65,10 +83,10 @@ fn run(home: &Home, op: &str, bridge: Value) -> KindResult {
             ),
             other => panic!("unexpected reply {other}"),
         };
-        let field = if key == "expand" {
-            "long_paths"
-        } else {
-            key.as_str()
+        let field = match key.as_str() {
+            "expand" => "long_paths",
+            "render" => "rendered",
+            other => other,
         };
         fields.insert(field.to_owned(), answered);
     }

@@ -193,7 +193,8 @@ def _manifest(answer: dict[str, Any]) -> dict[str, object]:
 
 def _install_hooks(context: HarnessContext, op: str) -> dict[str, object]:
     """Publish the plan, then require the hooks Cursor now reads to be Guard's."""
-    manifest = _prepared(_cursor_ask(op, context)).publish(context.guard_home)
+    # The plan also retires the project-local hooks an older install wrote.
+    manifest = _prepared(_cursor_ask(op, context)).publish(context.guard_home, removals=True)
     _cursor_ask("verify", context)
     return manifest
 
@@ -248,7 +249,13 @@ def run_frozen_cursor_hook(argv: Sequence[str]) -> int:
         return 2
     home = Path.home()
     context = HarnessContext(home_dir=home, guard_home=home / ".hol-guard", workspace_dir=None)
-    if ask("frozen_hook_script", context, harness=_HARNESS, script=str(argv[0])).get("accepted") is not True:
+    # A runtime that cannot answer refuses the script the way a bad path does.
+    # Gated events are ``failClosed``, so Cursor still blocks them.
+    try:
+        accepted = ask("frozen_hook_script", context, harness=_HARNESS, script=str(argv[0])).get("accepted")
+    except (OSError, RuntimeError, ValueError):
+        return 3
+    if accepted is not True:
         return 3
     try:
         runpy.run_path(str(argv[0]), run_name="__main__")
