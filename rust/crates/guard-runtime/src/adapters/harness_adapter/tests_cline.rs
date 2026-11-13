@@ -198,6 +198,35 @@ fn a_passing_canary_confirms_hooks_and_finish_records_the_transport() {
 }
 
 #[test]
+fn a_user_hook_in_a_later_slot_leaves_no_launcher_behind() {
+    let home = Home::new();
+    write(&hook_root(&home).join("PostToolUse"), "#!/bin/sh\nexit 0\n");
+    let answer = install_hooks(&home);
+    assert!(answer["runtime_error"].is_string());
+    assert!(!hook_root(&home).join("PreToolUse").exists());
+}
+
+#[test]
+fn a_user_package_manifest_blocks_the_plugin_install() {
+    let home = Home::new();
+    let package = home.home().join(".cline/plugins/hol-guard/package.json");
+    write(&package, "{\"name\": \"mine\"}\n");
+    let answer = home.ask(
+        "cline",
+        "install_transport",
+        json!({"transport": "plugin", "frozen": false, "facts": hook_facts(&home)}),
+    );
+    assert!(answer["runtime_error"]
+        .as_str()
+        .unwrap()
+        .contains("user-owned"));
+    assert_eq!(
+        fs::read_to_string(&package).unwrap(),
+        "{\"name\": \"mine\"}\n"
+    );
+}
+
+#[test]
 fn a_state_path_outside_the_slots_is_never_run_or_removed() {
     let home = Home::new();
     let outside = home.root.join("outside/PreToolUse");
@@ -256,6 +285,29 @@ fn mcp_proxies_keep_remote_servers_and_restore_the_exact_text() {
     assert_eq!(removed["manifest"]["mcp"]["complete"], true);
     assert_eq!(removed["remove_shim"], true);
     assert_eq!(fs::read_to_string(&settings).unwrap(), original);
+}
+
+#[test]
+fn two_spellings_of_one_settings_file_plan_it_once() {
+    let home = Home::new();
+    let settings = home
+        .home()
+        .join(".cline/data/settings/cline_mcp_settings.json");
+    write(
+        &settings,
+        r#"{"mcpServers": {"local": {"command": "node", "args": []}}}"#,
+    );
+    fs::create_dir_all(home.home().join(".cline/settings")).unwrap();
+    let alias = home
+        .home()
+        .join(".cline/settings/../data/settings/cline_mcp_settings.json");
+    let scan = home.ask_env(
+        "cline",
+        "mcp_scan",
+        json!({}),
+        json!({"CLINE_MCP_SETTINGS_PATH": alias}),
+    );
+    assert_eq!(scan["candidates"].as_array().unwrap().len(), 1);
 }
 
 #[test]

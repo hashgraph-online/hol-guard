@@ -313,17 +313,25 @@ pub(super) fn install(ctx: &Ctx, facts: &Map<String, Value>) -> Read<Value> {
     let mut digests = Map::new();
     let mut workers = Map::new();
     let mut worker_digests = Map::new();
+    let field = |event: &str, key: &str| {
+        rendered["files"][event]
+            .get(key)
+            .and_then(Value::as_str)
+            .map(str::to_owned)
+            .ok_or(Failure::Invalid)
+    };
+    // Claim every slot before writing any, so a user hook in a later slot
+    // leaves no earlier launcher behind without its state record.
+    let mut slots = Vec::new();
     for event in EVENTS {
-        let file = &rendered["files"][event];
-        let field = |key: &str| {
-            file.get(key)
-                .and_then(Value::as_str)
-                .ok_or(Failure::Invalid)
-        };
-        let slot = claim(&root, field("slot")?, event)?;
+        let slot = claim(&root, &field(event, "slot")?, event)?;
         let worker = worker_path(ctx, event);
         checked(ctx, &slot)?;
         checked(ctx, &worker)?;
+        slots.push((event, slot, worker));
+    }
+    for (event, slot, worker) in slots {
+        let field = |key: &str| field(event, key);
         write_file(&worker, field("worker")?.as_bytes(), FILE_MODE)?;
         let legacy = worker.with_extension("py");
         if managed(&legacy, MARKER) {

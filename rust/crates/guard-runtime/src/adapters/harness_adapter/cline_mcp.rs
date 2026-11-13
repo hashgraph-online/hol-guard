@@ -27,6 +27,8 @@ const EXTENSION: [&str; 5] = [
 ];
 const PLAN_FAILED: &str = "Could not plan the Cline MCP proxy install.";
 const FILE_MODE: u32 = 0o644;
+/// Backups hold the original settings text, server secrets included.
+const BACKUP_MODE: u32 = 0o600;
 
 fn backup_root(ctx: &Ctx) -> PathBuf {
     managed_root(ctx).join("mcp-backups")
@@ -44,7 +46,7 @@ pub(super) fn candidates(ctx: &Ctx) -> Step<Vec<PathBuf>> {
         .map(crate::context_digest::python_strip)
         .filter(|value| !value.is_empty())
     {
-        paths.push(expand_user(ctx, explicit));
+        paths.push(ctx.absolute(&expand_user(ctx, explicit)));
     }
     let cline = data_dir(ctx)?;
     paths.push(cline.join("data").join("settings").join(SETTINGS));
@@ -109,9 +111,12 @@ fn plan(text: &str) -> Step<Value> {
 /// `{path, digest, key, managed, remote}`.
 pub(super) fn scan(ctx: &Ctx) -> Step<Value> {
     let home = ctx.resolved(&ctx.home);
+    let mut seen = std::collections::HashSet::new();
     let mut found = Vec::new();
     for path in candidates(ctx)? {
-        if !path.is_file() || !ctx.resolved(&path).starts_with(&home) {
+        let resolved = ctx.resolved(&path);
+        // Two spellings of one file plan it once, so the rewrite sees its digest.
+        if !path.is_file() || !resolved.starts_with(&home) || !seen.insert(resolved) {
             continue;
         }
         let Ok(bytes) = fs::read(&path) else {
@@ -199,7 +204,7 @@ fn rewrite(ctx: &Ctx, entry: &Value, replacements: Vec<(String, PyVal)>) -> Step
             ("original_text".to_owned(), PyVal::Str(text)),
             ("managed_sha256".to_owned(), PyVal::Null),
         ];
-        write_file(&backup, backup_text(record).as_bytes(), FILE_MODE)?;
+        write_file(&backup, backup_text(record).as_bytes(), BACKUP_MODE)?;
     }
     let mut servers = match payload.iter().find(|(name, _)| name == key) {
         Some((_, PyVal::Dict(servers))) => servers.clone(),
@@ -211,7 +216,8 @@ fn rewrite(ctx: &Ctx, entry: &Value, replacements: Vec<(String, PyVal)>) -> Step
     set_member(&mut payload, key, PyVal::Dict(servers));
     let mut managed = super::files::render(&PyVal::Dict(payload))?;
     managed.push('\n');
-    write_file(&path, managed.as_bytes(), FILE_MODE)?;
+    let mode = super::files::mode(ctx, &path).unwrap_or(FILE_MODE);
+    write_file(&path, managed.as_bytes(), mode)?;
     let mut record = match state_text(&backup).map(|text| pyjson::parse(&text)) {
         Some(Ok(PyVal::Dict(record))) => record,
         _ => Vec::new(),
@@ -221,7 +227,7 @@ fn rewrite(ctx: &Ctx, entry: &Value, replacements: Vec<(String, PyVal)>) -> Step
         "managed_sha256",
         PyVal::Str(sha256_hex(managed.as_bytes())),
     );
-    write_file(&backup, backup_text(record).as_bytes(), FILE_MODE)?;
+    write_file(&backup, backup_text(record).as_bytes(), BACKUP_MODE)?;
     Ok(path_text(&path))
 }
 
@@ -339,7 +345,8 @@ pub(super) fn restore(ctx: &Ctx) -> Step<Value> {
                 continue;
             }
         }
-        write_file(path, original.as_bytes(), FILE_MODE)?;
+        let mode = super::files::mode(ctx, path).unwrap_or(FILE_MODE);
+        write_file(path, original.as_bytes(), mode)?;
         restored.push(config.to_owned());
         fs::remove_file(&backup).map_err(|error| Failure::Os(error.to_string()))?;
     }

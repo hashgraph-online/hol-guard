@@ -80,6 +80,12 @@ pub(super) fn install(ctx: &Ctx, facts: &Map<String, Value>) -> Step<Value> {
             index.display()
         )));
     }
+    if package.exists() && !owned_package(&package) {
+        return Err(runtime(format!(
+            "Cline plugin path is user-owned; Guard will not overwrite {}",
+            package.display()
+        )));
+    }
     for name in PROOFS {
         let _ = fs::remove_file(proof_path(ctx, name));
     }
@@ -198,6 +204,12 @@ pub(super) fn state(ctx: &Ctx) -> Value {
         }
         _ => false,
     };
+    let package = recorded
+        .get("package_path")
+        .and_then(Value::as_str)
+        .map(PathBuf::from);
+    // Cline loads the plugin through its package manifest.
+    let integrity_ok = integrity_ok && package.as_deref().is_some_and(owned_package);
     let loaded = proof_state(ctx, "loaded");
     let pretool = proof_state(ctx, "pretool");
     let posttool = proof_state(ctx, "posttool");
@@ -228,7 +240,7 @@ fn removed(path: &Path) -> Step<()> {
     fs::remove_file(path).map_err(|error| Failure::Os(error.to_string()))
 }
 
-/// Remove the managed plugin, keeping an index the user changed.
+/// Remove the managed plugin, keeping an index the user changed since install.
 pub(super) fn uninstall(ctx: &Ctx) -> Step<Value> {
     let recorded = load_state(ctx);
     let mut gone = Vec::new();
@@ -236,7 +248,10 @@ pub(super) fn uninstall(ctx: &Ctx) -> Step<Value> {
     if let Some(index) = recorded.get("index_path").and_then(Value::as_str) {
         let index = Path::new(index);
         if index.exists() {
-            if managed(index, MARKER) {
+            let expected = recorded.get("index_sha256").and_then(Value::as_str);
+            let unchanged = fs::read(index)
+                .is_ok_and(|bytes| Some(hex::encode(Sha256::digest(bytes)).as_str()) == expected);
+            if managed(index, MARKER) && unchanged {
                 removed(index)?;
                 gone.push(path_text(index));
             } else {
