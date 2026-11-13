@@ -1,0 +1,75 @@
+{
+  "schemaVersion": "guard.mcp-server-contribution.v1",
+  "id": "mcp.pursestring",
+  "version": "1.0.0",
+  "name": "PurseString",
+  "description": "Spend governance for AI agents: every purchase is checked against a local policies.yaml (vendor allowlist, per-purchase and daily limits) and auto-approved, sent to a human, or denied before a single-use, amount-capped card or a fixed-payee payout is issued. Policy checks and status reads inherit Guard's handling; issuing a card, sending a payout, refunds and pass-through PayPal tools need review. Off until you turn it on.",
+  "trustClass": "external",
+  "activation": "opt-in",
+  "publisher": {
+    "id": "io.github.suseendar1414",
+    "displayName": "suseendar1414",
+    "url": "https://github.com/suseendar1414"
+  },
+  "icon": {
+    "kind": "react-icon",
+    "name": "HiMiniBolt",
+    "background": "#0F2A1D"
+  },
+  "homepage": "https://github.com/suseendar1414/pursestring",
+  "license": "Apache-2.0",
+  "launch": {
+    "kind": "package-launcher",
+    "command": "npx",
+    "package": "github:suseendar1414/pursestring"
+  },
+  "riskClasses": [
+    "external-funds-transfer",
+    "external-payouts-and-refunds",
+    "external-purchases-and-order-writes",
+    "financial-data-read",
+    "local-file-write"
+  ],
+  "tools": [
+    {
+      "name": "check_policy_compliance",
+      "state": "inherit"
+    },
+    {
+      "name": "get_intent_status",
+      "state": "inherit"
+    },
+    {
+      "name": "submit_purchase_intent",
+      "state": "inherit"
+    },
+    {
+      "name": "request_ephemeral_card",
+      "state": "review"
+    },
+    {
+      "name": "send_payment",
+      "state": "review"
+    },
+    {
+      "name": "create_refund",
+      "state": "review"
+    },
+    {
+      "name": "other",
+      "state": "review"
+    }
+  ],
+  "referenceUrls": [
+    "https://github.com/suseendar1414/pursestring",
+    "https://github.com/suseendar1414/pursestring/blob/main/docs/how-it-works.md",
+    "https://github.com/suseendar1414/pursestring/blob/main/docs/policies.md"
+  ],
+  "saferAlternatives": [
+    "Run with PURSESTRING_ADAPTER=mock (the default with no card or PayPal keys): every tool works, but no real card is issued and no money moves.",
+    "check_policy_compliance is a dry run: it evaluates a purchase against the policy and issues nothing. submit_purchase_intent only records the request; nothing is spent until a card or payout is issued for an approved intent.",
+    "request_ephemeral_card hands the agent a single-use card capped at the approved amount with a short expiry, so it stays on review. send_payment pays only the payee fixed in policies.yaml and never pays an intent twice.",
+    "With paypal_tools enabled, PayPal's own MCP tools are re-exposed through PurseString; money-moving ones such as create_refund also pass PurseString's policy, and the rest stay on review here.",
+    "This entry matches npx -y github:suseendar1414/pursestring. Decisions and card events are written to a local, hash-chained audit log under ~/.pursestring; set PURSESTRING_AUDIT_KEY to sign it."
+  ]
+}
