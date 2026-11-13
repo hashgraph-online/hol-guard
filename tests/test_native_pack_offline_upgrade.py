@@ -71,15 +71,20 @@ def _move_head_off_activation(store, stale, active):
     # A current runtime on another catalog is served the rebinding in memory.
     store.read_extension_control_authority_for_registry(stale)
     assert _authority_head(store) == before
-    # An older one committed the migration its read asked for.
-    rebound = store.read_extension_control_authority_for_registry(stale, include_managed_controls=False, read_only=True)
+    # An older one committed the migration its read asked for, carrying the
+    # head's controls onto its own catalog unchanged.
+    held = store.read_extension_control_authority_for_registry(active, include_managed_controls=False, read_only=True)
+    layers = json.loads(layers_to_json(held.layers))
+    assert any(layer["controls"] for layer in layers)
+    for layer in layers:
+        layer["catalog_digest"] = stale.catalog_digest
     with store._extension_control_authority_lock():
         store._migrate_extension_control_catalog(
             {
                 "previous_revision": before[0],
                 "previous_catalog_digest": before[1],
                 "catalog_digest": stale.catalog_digest,
-                "layers": json.loads(layers_to_json(rebound.layers)),
+                "layers": layers,
             },
             registry=stale,
             key=store._authority_key(required=True),
