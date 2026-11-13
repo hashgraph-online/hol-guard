@@ -1,0 +1,43 @@
+{
+  "schemaVersion": "guard.extension-listing.v2",
+  "extensionId": "mcp.padam-nocturne",
+  "tagline": "Local memory for AI agents in one SQLite file: masks secrets, holds injected orders for the owner, fences search results as data.",
+  "summary": "Local memory for AI agents in one SQLite file on the user's machine. It masks secrets before storing, holds notes that look like orders or change who the owner is until the owner reviews them, and fences search and history results as data. Search, history and stats keep Guard's usual handling; every tool that changes memory or exports all of it is gated on review. Off until you turn it on.",
+  "category": "specialized-tools",
+  "limitations": [
+    "Coverage is limited to the reviewed operations and the surrounding Guard policy.",
+    "Recognition of orders and secrets is pattern-based and can be bypassed; results of every red-team round are in the repository's redteam/rounds.",
+    "padam_export returns plain JSON outside the data fence, so it stays on review.",
+    "A maintainer profile is not a security certification or an official upstream endorsement."
+  ],
+  "documentationUrl": "https://github.com/MaksimGalatin/padam-nocturne/blob/main/docs/SECURITY_REVIEW.md",
+  "tags": [
+    "mcp",
+    "memory",
+    "prompt-injection",
+    "secrets"
+  ],
+  "contributors": [
+    {
+      "githubId": "276288387",
+      "githubLogin": "MaksimGalatin",
+      "roles": [
+        "author",
+        "maintainer"
+      ]
+    }
+  ],
+  "originalContributions": [
+    {
+      "kind": "pull-request",
+      "url": "https://github.com/hashgraph-online/hol-guard/pull/7505"
+    }
+  ],
+  "upstream": {
+    "name": "PADAM NOCTURNE",
+    "url": "https://github.com/MaksimGalatin/padam-nocturne"
+  },
+  "maintainerGithubIds": [
+    "276288387"
+  ]
+}
