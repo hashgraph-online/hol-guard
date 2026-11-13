@@ -16,6 +16,12 @@ fn a_fetch_may_save_and_read_back_a_scratch_file() {
         "gh api repos/o/r/pulls/1 > {target}; jq .title {target}",
         "gh api repos/o/r --jq .x > {target} && cat {target}",
         "echo aGk= > {target} && base64 -D -i {target}",
+        // `base64` is a plain peer of a chain that only writes scratch files,
+        // so the shapes the single-pipeline route leaves alone get the chain
+        // answer `cat` already gets.
+        "echo aGk= |& base64 -d > {target}",
+        "echo aGk= | base64 -d > {target} | cat > {target}.b",
+        "(echo aGk= | base64 -d) > {target}",
     ]
     .iter()
     .enumerate()
