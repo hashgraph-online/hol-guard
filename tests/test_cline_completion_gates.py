@@ -220,7 +220,15 @@ def test_plugin_ready_requires_block_and_replacement_proofs(tmp_path: Path) -> N
     source = "// HOL_GUARD_MANAGED_CLINE_PLUGIN_V1\nexport default {};\n"
     index.write_bytes(source.encode("utf-8"))
     package = root / "package.json"
-    package.write_text('{"name":"hol-guard-cline-plugin"}\n', encoding="utf-8")
+    package.write_text(
+        json.dumps(
+            {
+                "name": "hol-guard-cline-plugin",
+                "cline": {"plugins": [{"paths": ["./index.js"], "capabilities": ["hooks"]}]},
+            }
+        ),
+        encoding="utf-8",
+    )
     state_path = context.guard_home / "managed" / "cline" / "plugin-state.json"
     state_path.parent.mkdir(parents=True)
     state_path.write_text(
