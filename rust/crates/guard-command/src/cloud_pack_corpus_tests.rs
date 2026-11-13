@@ -13,7 +13,7 @@ use guard_contracts::{ActionFactsV2, Fact, FindingV2, PiiKindV2, SensitivityV2, 
 use serde_json::{json, Value};
 
 use crate::cloud_action_inspect::{inspect, INSPECT_REQUEST_SCHEMA};
-use crate::cloud_pack::{parse_pack, CloudActionPack, PackAction};
+use crate::cloud_pack::{parse_pack, CloudActionPack, Executor, PackAction};
 use crate::cloud_pack_facts::extract;
 use crate::cloud_pack_request::{check_arguments, render};
 use crate::cloud_policy_pack::{shipped, FactCall, Preset};
@@ -136,7 +136,10 @@ fn decide(packs: &[CloudActionPack], case: &Value) -> String {
     let Ok(record) = check_arguments(action, &arguments) else {
         return REFUSED.to_string();
     };
-    if render(action, &arguments).is_err() {
+    // A remote MCP call has no HTTP request to render; its arguments were
+    // checked above.
+    let http = matches!(action.executor, Executor::DeclarativeHttp { .. });
+    if http && render(action, &arguments).is_err() {
         return REFUSED.to_string();
     }
     let facts = with_findings(
@@ -193,7 +196,7 @@ fn mismatches(decided: &[(Value, String)]) -> Vec<String> {
 fn benign_tasks_rarely_ask_and_are_never_blocked() {
     let (corpus, decided) = corpus(BENIGN, "benign");
     assert!(
-        decided.len() >= 150,
+        decided.len() >= 400,
         "benign corpus has {} cases",
         decided.len()
     );
@@ -225,7 +228,7 @@ fn benign_tasks_rarely_ask_and_are_never_blocked() {
 fn no_attack_runs_without_the_user() {
     let (_, decided) = corpus(ATTACK, "attack");
     assert!(
-        decided.len() >= 80,
+        decided.len() >= 200,
         "attack corpus has {} cases",
         decided.len()
     );
