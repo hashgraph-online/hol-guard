@@ -477,6 +477,7 @@
       "src/pretool/github_metadata_text.rs",
       "src/pretool/glob_words.rs",
       "src/pretool/guard_diagnostics.rs",
+      "src/pretool/guard_diagnostics_network.rs",
       "src/pretool/guard_diagnostics_cloud_actions.rs",
       "src/pretool/guard_names.rs",
       "src/pretool/helm_usage.rs",
