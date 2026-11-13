@@ -40,6 +40,13 @@ fn a_wildcard_include_is_proven_by_what_it_selects_below_the_root() {
         // A literal name never reached this proof and still passes the
         // name screen on its own.
         ("-rn x --include README.md docs".to_owned(), true),
+        // A root spelled from the home is the directory the shell expands
+        // it to, and the include is proven below that directory.
+        ("-rn x --include *.md ~/work/app/docs".to_owned(), true),
+        ("-rln x ~/work/app/docs --include=*.md".to_owned(), true),
+        ("-rn x --include *.md ~/.ssh".to_owned(), false),
+        ("-rn x --include *.md ~".to_owned(), false),
+        ("-rn x --include *.md ~root/docs".to_owned(), false),
         // `grep` matches a glob holding a separator against the whole name
         // it reached the file by, which this walk does not render.
         ("-rn x --include docs/*.md .".to_owned(), false),

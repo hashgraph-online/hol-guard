@@ -592,8 +592,14 @@ fn verified_directory_root(
     {
         return None;
     }
+    // `~/code/docs` is the directory the shell hands `grep` once it expands
+    // the tilde, so it is read below the home the screen above vetted.
     let candidate = if Path::new(target).is_absolute() {
         PathBuf::from(target)
+    } else if let Some(stripped) = target.strip_prefix("~/") {
+        Path::new(home_dir?).join(stripped)
+    } else if target.starts_with('~') {
+        return None;
     } else {
         Path::new(cwd?).join(target)
     };
