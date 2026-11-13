@@ -216,6 +216,18 @@ deletes. `airtable.json` lists, reads, adds, updates and deletes records, at mos
 `dropbox.json` lists, moves and deletes files one at a time or in batches, deletes permanently, creates public and
 team links, shares with people and makes four-hour download links.
 
+Seven packs cover provider-hosted MCP servers rather than REST APIs. `salesforce-mcp.json` and `notion-mcp.json` name
+each tool argument: Salesforce queries, searches, record reads, creates, updates and deletes (recoverable from the
+Recycle Bin), and Notion search, fetch, data source queries, page creation (at most twenty per call), updates, moves,
+duplicates, trash, version restore and comments. A record body or page list is a bounded JSON argument. `asana.json`,
+`atlassian.json`, `hubspot-mcp.json`, `box.json` and `stripe-mcp.json` cover providers that do not document their tool
+arguments, so each tool is one action whose arguments are open but bounded in total size, and whose facts are
+constants: the class and object the tool works on, never a count it cannot prove. HubSpot is read-only. Stripe money
+movement (`send_money`, `transfer_money`, `convert_currency`) is class `pay` and adding a payout recipient is `admin`.
+Tools that multiplex several operations behind one name (Stripe `stripe_api_write`, Atlassian `executeRead`,
+`executeWrite` and `executeDestructive`, HubSpot `manage_*`) and Linear, whose tool names are not published, are not
+covered.
+
 Pack authors choose reversibility from what the provider can undo. An Airtable record delete is marked permanent: the
 API has no undo, even where a plan keeps a history in the web app. Deletes that land in a trash, recycle bin or
 version history (Dropbox, OneDrive, Outlook mail in Deleted Items, Teams soft delete, cleared Sheets ranges) are
