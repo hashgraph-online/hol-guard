@@ -63,6 +63,24 @@ fn owner_marker_matches(pid: i64, expected: Option<&str>) -> bool {
     }
 }
 
+/// A generation-bound launch receipt may be cleared when its exact PID and
+/// owner are still present but the command is known to be foreign. This does
+/// not retire the process; it only prevents a stalled wrapper from keeping a
+/// pending launch open forever. An unreadable identity remains fail-closed.
+pub(super) fn known_foreign_process(
+    caller: &Caller,
+    pid: i64,
+    expected: &Expected<'_>,
+    deadline: Deadline,
+) -> bool {
+    if host::pid_is_proven_dead(pid) || deadline.passed() {
+        return false;
+    }
+    start_marker_matches(pid, expected.start_marker)
+        && owner_marker_matches(pid, expected.owner_marker)
+        && host::command_identity(caller, pid, Some(&caller.guard_home)) == Some(false)
+}
+
 /// `_retire_guard_daemon_process`: one recorded generation, by its start
 /// marker and owner.
 pub(super) fn retire_generation(
