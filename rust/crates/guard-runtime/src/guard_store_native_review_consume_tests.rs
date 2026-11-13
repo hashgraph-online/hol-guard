@@ -174,6 +174,67 @@ fn a_masked_stored_target_still_answers_the_raw_retry() {
     std::fs::remove_dir_all(home).unwrap();
 }
 
+/// An answer often arrives after the agent stopped waiting. It still covers
+/// the user's "try again" for an hour: the next identical try runs once, a
+/// second try or a changed command asks again, and after the hour it asks.
+#[test]
+fn a_late_answer_covers_one_identical_retry_within_the_hour() {
+    let vectors: Value = serde_json::from_str(VECTORS).unwrap();
+    let scenario = vectors["scenarios"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|scenario| scenario["name"] == "once_allow_then_replay")
+        .unwrap();
+    let base = scenario["calls"][0]["args"].clone();
+    let at = |now: &str| {
+        let mut args = base.clone();
+        args["now"] = Value::from(now);
+        args
+    };
+    let fresh = |label: &str| {
+        let home = temp_home(label);
+        seed(&home.join("guard.db"), &vectors);
+        insert_rows(
+            &Connection::open(home.join("guard.db")).unwrap(),
+            "approval_requests",
+            &scenario["rows"],
+        );
+        home
+    };
+
+    let home = fresh("late-answer");
+    let mut changed = at("2026-03-01T12:40:00+00:00");
+    changed["launch_target"] = Value::from(format!(
+        "{} --force",
+        base["launch_target"].as_str().unwrap()
+    ));
+    assert_eq!(
+        consume(&home, &changed)["payload"],
+        false,
+        "a changed command asks"
+    );
+    assert_eq!(
+        consume(&home, &at("2026-03-01T12:40:00+00:00"))["payload"],
+        true,
+        "the next identical try runs"
+    );
+    assert_eq!(
+        consume(&home, &at("2026-03-01T12:41:00+00:00"))["payload"],
+        false,
+        "a second try asks"
+    );
+    std::fs::remove_dir_all(home).unwrap();
+
+    let home = fresh("late-answer-expired");
+    assert_eq!(
+        consume(&home, &at("2026-03-01T13:01:00+00:00"))["payload"],
+        false,
+        "after the hour it asks"
+    );
+    std::fs::remove_dir_all(home).unwrap();
+}
+
 /// `settle_native_review_reuse` answers every recorded retry exactly as the
 /// separate block check followed by the spend does, and leaves the same
 /// effects behind, with the spend allowed or not.

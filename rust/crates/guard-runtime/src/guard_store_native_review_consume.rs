@@ -1,5 +1,6 @@
 //! `consume_native_review_approval` — spends the chronologically latest
-//! matching five-minute allow of a verified harness-native Accept.
+//! matching allow of a verified harness-native Accept, for up to one hour
+//! after it was given.
 //!
 //! A resolved inbox row is not a permanent capability: it is bound to the
 //! newly computed request identity and consumed at most once, in the same
@@ -26,7 +27,10 @@ use sha2::{Digest, Sha256};
 use crate::guard_store_args::Args;
 use crate::guard_store_db::{exec, query_all, StoreResult};
 
-const WINDOW_MICROS: i64 = 5 * 60 * 1_000_000;
+/// How long an answer covers the next identical try. An hour, so an answer
+/// given after the agent stopped waiting still lets the user say "try again";
+/// it is still spent once, on this machine, for this exact request.
+const WINDOW_MICROS: i64 = 60 * 60 * 1_000_000;
 const EVENT_NAME: &str = "native-review.once-consumed";
 
 pub(crate) fn binding_pattern() -> &'static Regex {
