@@ -421,3 +421,11 @@ pub(super) use signals::{extract_generic_signals, EMBEDDED_ARGUMENT_KEYS};
 
 #[path = "generic_tracked_names.rs"]
 mod tracked_names;
+
+/// Whether brief text handed to a delegated agent asks it to drop its
+/// instructions, send data somewhere or turn Guard off. A brief often pastes
+/// in records the parent agent read, so an injection riding in that data
+/// reaches the subagent as part of its task.
+pub(super) fn brief_carries_attack(values: &[String]) -> bool {
+    prompt_injection_intent(values) || exfil_prompt_intent(values) || guard_bypass_prompt(values)
+}

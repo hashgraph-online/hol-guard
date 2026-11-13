@@ -13,6 +13,9 @@ use regex::Regex;
 use std::sync::LazyLock;
 use url::{Host, Url};
 
+#[path = "web_fetch_payloads.rs"]
+mod payloads;
+
 const MAX_URL_BYTES: usize = 2048;
 const CREDENTIAL_QUERY_TERMS: [&str; 8] = [
     "token",
@@ -261,6 +264,8 @@ pub(in crate::pretool) fn plain_public_url(raw: &str) -> bool {
         let key = key.to_ascii_lowercase();
         CREDENTIAL_QUERY_TERMS.iter().any(|term| key.contains(term))
     }) && !url_carries_credential(raw, &url)
+        && !payloads::url_carries_payload(&url)
+        && !payloads::host_spells_data(&raw_host(raw))
 }
 
 /// True only for a bounded GET-style fetch or search of public web content.
