@@ -270,9 +270,7 @@ def test_alpha_deletion_falls_the_core_feed_back_to_the_last_good_alpha() -> Non
     assert job["needs"] == "delete"
     assert job["permissions"] == {"actions": "write", "contents": "read"}
     assert job["timeout-minutes"] >= 70
-    assert names.index("Route gh through the rate-limit retry wrapper") < names.index(
-        "Find the newest live main alpha"
-    )
+    assert names.index("Route gh through the rate-limit retry wrapper") < names.index("Find the newest live main alpha")
     find = steps["Find the newest live main alpha"]["run"]
     assert 'grep -vxF "$VERSION"' in find
     assert "sort -rV" in find
