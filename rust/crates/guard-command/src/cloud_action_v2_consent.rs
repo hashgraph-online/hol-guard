@@ -128,6 +128,11 @@ impl AppliedConsent<'_> {
 /// Record or recipient counts a bounded offer rounds up to.
 const BOUND_TIERS: [u64; 9] = [1, 5, 10, 25, 50, 100, 250, 500, 1000];
 
+/// The smallest tier that covers `count`, if any does.
+fn covering_tier(count: u64) -> Option<u64> {
+    BOUND_TIERS.iter().copied().find(|tier| *tier >= count)
+}
+
 /// Whether a scope wider than the exact call may answer this decision.
 fn broad_scope_allowed(action: GuardAction, subject: &FactSubjectV2<'_>) -> bool {
     let facts = subject.facts;
@@ -146,6 +151,12 @@ fn outbound(subject: &FactSubjectV2<'_>) -> bool {
     facts.class.is_egress()
         || (matches!(facts.class, ActionClassV2::Update | ActionClassV2::Execute)
             && facts.audience.external.known() != Some(&false))
+}
+
+/// A call known to reach outside never gets a bounded offer, so no bounded
+/// consent answers it either, whatever its selector left open.
+fn reaches_outside(subject: &FactSubjectV2<'_>) -> bool {
+    subject.facts.audience.external.known() == Some(&true)
 }
 
 fn tainted(subject: &FactSubjectV2<'_>) -> bool {
@@ -187,6 +198,7 @@ pub(crate) fn find_consent<'a>(
                     selector,
                     ..
                 } => (broad
+                    && !reaches_outside(context.subject)
                     && action_id == context.action_id
                     && connection_id == context.connection_id
                     && selector.matches(context.subject) == Match3::Yes)
@@ -226,10 +238,10 @@ pub(crate) fn consent_options(
 
 /// Up to two bounded Always allow choices: the smallest tier that covers this
 /// call and the next wider one. Each pins the provider, class, object and
-/// reversibility, plus the recipient domains for an outbound call. A payment,
-/// a call known to reach outside, an outbound call not known to stay inside,
-/// and a call whose bounding facts are unknown or larger than the widest tier
-/// get none.
+/// reversibility. An outbound call also pins its recipient domains, its record
+/// tier and, when known, a byte cap. A payment, a call known to reach outside,
+/// an outbound call not known to stay inside, and a call whose bounding facts
+/// are unknown or larger than the widest tier get none.
 fn bounded_offers(subject: &FactSubjectV2<'_>) -> Vec<Value> {
     let facts = subject.facts;
     // No selector bounds an amount, so a payment never gets a standing choice.
@@ -238,6 +250,9 @@ fn bounded_offers(subject: &FactSubjectV2<'_>) -> Vec<Value> {
     }
     // A call known to reach outside gets none, and an outbound call must be
     // known to stay inside: the selector then pins `external: false`.
+    if reaches_outside(subject) {
+        return Vec::new();
+    }
     let internal = match facts.audience.external.known() {
         Some(true) => return Vec::new(),
         Some(false) => true,
@@ -264,6 +279,22 @@ fn bounded_offers(subject: &FactSubjectV2<'_>) -> Vec<Value> {
             return Vec::new();
         }
         base.recipient_domains = Some(domains.clone());
+        // An outbound consent also caps what it carries: the records at the
+        // tier that covers this call, and the bytes when they are known. A
+        // call that does not say how many records it carries gets none.
+        let Some(&records) = facts.record_count.known() else {
+            return Vec::new();
+        };
+        let Some(tier) = covering_tier(records) else {
+            return Vec::new();
+        };
+        base.max_record_count = Some(tier);
+        if let Some(&bytes) = facts.byte_count.known() {
+            let Some(cap) = bytes.checked_next_power_of_two() else {
+                return Vec::new();
+            };
+            base.max_byte_count = Some(cap);
+        }
         facts.recipient_count.known()
     } else {
         facts.record_count.known()

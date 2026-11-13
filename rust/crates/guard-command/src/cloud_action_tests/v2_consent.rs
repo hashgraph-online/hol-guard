@@ -346,3 +346,86 @@ fn bounded_offers_never_reach_outside_or_bound_a_payment() {
         );
     }
 }
+
+fn internal_send(evaluator: &CloudActionEvaluator, class: &str) -> Value {
+    let mut request = archive_request(evaluator);
+    request["facts"]["class"] = class.into();
+    request["facts"]["audience"]["kind"] = json!({"state": "unknown"});
+    request["facts"]["audience"]["external"] = json!({"state": "known", "value": false});
+    request["facts"]["audience"]["recipient_domains"] =
+        json!({"state": "known", "value": ["example.org"]});
+    request["facts"]["recipient_count"] = json!({"state": "known", "value": 3});
+    request["facts"]["record_count"] = json!({"state": "known", "value": 1});
+    request
+}
+
+#[test]
+fn an_outbound_offer_caps_records_and_bytes_and_needs_a_record_count() {
+    let evaluator = evaluator();
+    let mut request = internal_send(&evaluator, "export");
+    request["facts"]["byte_count"] = json!({"state": "known", "value": 3000});
+    let offers = bounded_offers(&run(&evaluator, &request));
+    assert_eq!(offers.len(), 2, "{offers:?}");
+    for offer in &offers {
+        assert_eq!(offer["selector"]["max_record_count"], 1, "{offer}");
+        assert_eq!(offer["selector"]["max_byte_count"], 4096, "{offer}");
+    }
+
+    // An export that does not say how many records it carries gets none.
+    request["facts"]["record_count"] = json!({"state": "unknown"});
+    let review = run(&evaluator, &request);
+    assert_eq!(review["action"], "require-reapproval", "{review}");
+    assert!(bounded_offers(&review).is_empty(), "{review}");
+}
+
+#[test]
+fn a_saved_send_offer_covers_calls_within_its_bounds_only() {
+    let evaluator = evaluator();
+    let mut request = internal_send(&evaluator, "send");
+    let offers = bounded_offers(&run(&evaluator, &request));
+    assert_eq!(
+        offers[0]["selector"]["max_recipient_count"], 5,
+        "{offers:?}"
+    );
+    request["saved_consents"] = json!([save_offer(&offers[0], ARCHIVE)]);
+
+    let mut within = request.clone();
+    within["facts"]["recipient_count"] = json!({"state": "known", "value": 5});
+    let allowed = run(&evaluator, &within);
+    assert_eq!(allowed["action"], "allow", "{allowed}");
+    assert_eq!(allowed["consent_scope"], "bounded");
+
+    let mut more_recipients = request.clone();
+    more_recipients["facts"]["recipient_count"] = json!({"state": "known", "value": 6});
+    let mut new_domain = request.clone();
+    new_domain["facts"]["audience"]["recipient_domains"] =
+        json!({"state": "known", "value": ["example.net"]});
+    let mut more_records = request.clone();
+    more_records["facts"]["record_count"] = json!({"state": "known", "value": 2});
+    for wider in [more_recipients, new_domain, more_records] {
+        let held = run(&evaluator, &wider);
+        assert_eq!(held["action"], "require-reapproval", "{held}");
+        assert_eq!(held["consent_applied"], "none", "{held}");
+    }
+}
+
+#[test]
+fn a_bounded_consent_never_answers_a_call_known_to_reach_outside() {
+    let evaluator = evaluator();
+    let mut request = archive_request(&evaluator);
+    request["facts"]["audience"]["kind"] = json!({"state": "unknown"});
+    request["facts"]["audience"]["external"] = json!({"state": "unknown"});
+    let offers = bounded_offers(&run(&evaluator, &request));
+    assert!(!offers.is_empty(), "{request}");
+    assert!(
+        offers[0]["selector"].get("external").is_none(),
+        "{offers:?}"
+    );
+    request["saved_consents"] = json!([save_offer(&offers[0], ARCHIVE)]);
+    assert_eq!(run(&evaluator, &request)["action"], "allow");
+
+    request["facts"]["audience"]["external"] = json!({"state": "known", "value": true});
+    let held = run(&evaluator, &request);
+    assert_eq!(held["action"], "require-reapproval", "{held}");
+    assert_eq!(held["consent_applied"], "none", "{held}");
+}
