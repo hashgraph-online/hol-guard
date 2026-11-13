@@ -3239,7 +3239,9 @@ def _codex_backup_repair_contexts(context: HarnessContext) -> tuple[HarnessConte
 
 def build_guard_update_status_payload(*, guard_home: Path | None = None) -> dict[str, object]:
     resolved_guard_home = guard_home or resolve_guard_home()
-    update_channel = load_guard_config(resolved_guard_home).update_channel
+    guard_config = load_guard_config(resolved_guard_home)
+    update_channel = guard_config.update_channel
+    update_mode = getattr(guard_config, "update_mode", "automatic")
     include_alpha = update_channel == "alpha"
     install_surface = build_guard_install_surface_payload()
     installer = str(install_surface.get("installer") or "")
@@ -3380,6 +3382,7 @@ def build_guard_update_status_payload(*, guard_home: Path | None = None) -> dict
         "recovery_reinstall_available": recovery_reinstall_available,
         "recovery_reinstall_command": recovery_reinstall_command,
         "release_channel": "alpha" if include_alpha else update_channel,
+        "update_mode": update_mode,
     }
     if trusted_failure_reason is not None:
         payload["reason_code"] = trusted_failure_reason

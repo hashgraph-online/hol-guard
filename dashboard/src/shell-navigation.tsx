@@ -220,6 +220,7 @@ function PersistentSidebar(
               onUpdateGuard={props.onUpdateGuard}
               onReinstallGuard={props.onReinstallGuard}
               onSetUpdateChannel={props.onSetUpdateChannel}
+              onSetUpdateMode={props.onSetUpdateMode}
               approvalGate={props.approvalGate}
             />
           </div>

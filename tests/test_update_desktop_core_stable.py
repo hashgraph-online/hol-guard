@@ -138,6 +138,7 @@ def test_status_migrates_embedded_alpha_core_to_stable(monkeypatch: pytest.Monke
     assert payload["current_version"] == "3.0.0a138"
     assert payload["latest_version"] == "3.0.7"
     assert payload["release_channel"] == "stable"
+    assert payload["update_mode"] == "automatic"
     assert payload["auto_updatable"] is True
     assert payload["update_available"] is True
     assert payload["blocked_reason"] is None

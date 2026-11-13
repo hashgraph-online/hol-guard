@@ -125,6 +125,7 @@ class GuardConfig:
     approval_browser_immediate_severity: str = "critical"
     desktop_notifications: bool = True
     update_channel: str = "stable"
+    update_mode: str = "automatic"
     telemetry: bool = False
     sync: bool = False
     receipt_redaction_level: str = "full"
@@ -338,6 +339,7 @@ def editable_guard_settings(config: GuardConfig) -> dict[str, object]:
         "approval_browser_immediate_severity": config.approval_browser_immediate_severity,
         "desktop_notifications": config.desktop_notifications,
         "update_channel": config.update_channel,
+        "update_mode": config.update_mode,
         "telemetry": config.telemetry,
         "sync": config.sync,
         "receipt_redaction_level": config.receipt_redaction_level,
