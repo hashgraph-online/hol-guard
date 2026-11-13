@@ -27,19 +27,19 @@ def _write_mcp_json(path: Path, servers: dict[str, object]) -> None:
 
 class TestCursorAdapterIdentity:
     def test_harness_identifier_is_cursor(self) -> None:
-        assert CursorHarnessAdapter.harness == "cursor"
+        assert CursorHarnessAdapter().harness == "cursor"
 
     def test_executable_is_cursor_agent(self) -> None:
-        assert CursorHarnessAdapter.executable == "cursor-agent"
+        assert CursorHarnessAdapter().executable == "cursor-agent"
 
     def test_approval_tier_is_native_harness(self) -> None:
-        assert CursorHarnessAdapter.approval_tier == "native-harness"
+        assert CursorHarnessAdapter().approval_flow()["tier"] == "native-harness"
 
     def test_approval_prompt_channel_is_native(self) -> None:
-        assert CursorHarnessAdapter.approval_prompt_channel == "native"
+        assert CursorHarnessAdapter().approval_flow()["prompt_channel"] == "native"
 
     def test_auto_open_browser_is_disabled(self) -> None:
-        assert CursorHarnessAdapter.approval_auto_open_browser is False
+        assert CursorHarnessAdapter().approval_flow()["auto_open_browser"] is False
 
 
 class TestCursorPolicyPath:
