@@ -286,7 +286,7 @@ pub fn evaluate_pre_tool_envelope_with_execution_context(
     context: super::PathContext<'_>,
     execution_environment: Option<&guard_contracts::GuardExecutionEnvironmentV1>,
 ) -> PreToolResultV1 {
-    let _cursor = super::cursor_session_outputs::scope(harness);
+    let _cursor = super::cursor_session_outputs::scope(harness, context.cwd);
     let mut context =
         super::PathContext::for_session(context.home_dir, context.cwd, execution_environment);
     let (projected_payload, cline_payload);

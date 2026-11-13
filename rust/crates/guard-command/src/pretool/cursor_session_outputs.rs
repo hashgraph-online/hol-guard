@@ -10,36 +10,43 @@
 //! workspace. Every other harness keeps its review: the files echo command
 //! output, which can hold secrets, and only Cursor has already seen it.
 
-use std::cell::Cell;
+use std::cell::RefCell;
 use std::path::{Component, Path};
 
 thread_local! {
-    static CURSOR: Cell<bool> = const { Cell::new(false) };
+    /// The project directory names of the session's own workspace while a
+    /// Cursor call is evaluated, `None` otherwise.
+    static SESSION: RefCell<Option<Vec<String>>> = const { RefCell::new(None) };
 }
 
-/// Marks the evaluation on this thread as a Cursor call until the guard
-/// drops. A nested scope restores the outer one.
-pub(in crate::pretool) fn scope(harness: &str) -> Scope {
-    Scope(CURSOR.with(|cursor| cursor.replace(harness == "cursor")))
+/// Marks the evaluation on this thread as a Cursor call for the workspace
+/// `cwd` until the guard drops. The workspace is fixed here, from the
+/// session's directory, so a `cd` inside the command cannot name another
+/// workspace's directory as its own. A nested scope restores the outer one.
+pub(in crate::pretool) fn scope(harness: &str, cwd: Option<&str>) -> Scope {
+    let slugs = (harness == "cursor")
+        .then(|| super::generic::cursor_project_reads::workspace_slugs(cwd))
+        .filter(|slugs| !slugs.is_empty());
+    Scope(SESSION.with(|session| session.replace(slugs)))
 }
 
 #[must_use]
-pub(in crate::pretool) struct Scope(bool);
+pub(in crate::pretool) struct Scope(Option<Vec<String>>);
 
 impl Drop for Scope {
     fn drop(&mut self) {
-        let _ = CURSOR.try_with(|cursor| cursor.set(self.0));
+        let outer = self.0.take();
+        let _ = SESSION.try_with(|session| session.replace(outer));
     }
 }
 
 /// Whether `canonical`, a resolved regular file, is shell or tool output that
 /// Cursor saved for the session's own workspace, read during a Cursor call.
-pub(in crate::pretool) fn own_output(
-    canonical: &Path,
-    home_dir: Option<&str>,
-    cwd: Option<&str>,
-) -> bool {
-    if !CURSOR.with(Cell::get) || !canonical.is_file() {
+pub(in crate::pretool) fn own_output(canonical: &Path, home_dir: Option<&str>) -> bool {
+    let Some(own) = SESSION.with(|session| session.borrow().clone()) else {
+        return false;
+    };
+    if !canonical.is_file() {
         return false;
     }
     let Some(home) = home_dir.and_then(|home| std::fs::canonicalize(home).ok()) else {
@@ -67,9 +74,5 @@ pub(in crate::pretool) fn own_output(
     let Some([slug, "terminals" | "agent-tools", leaf]) = parts.as_deref() else {
         return false;
     };
-    !leaf.starts_with('.')
-        && leaf.ends_with(".txt")
-        && super::generic::cursor_project_reads::workspace_slugs(cwd)
-            .iter()
-            .any(|own| own == slug)
+    !leaf.starts_with('.') && leaf.ends_with(".txt") && own.iter().any(|own| own == slug)
 }
