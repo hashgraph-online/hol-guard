@@ -9,9 +9,8 @@
 //! directory and `.git`, so this module accepts that uncertainty for those
 //! programs only. command_shape screens sed scripts so shell execution cannot
 //! hide behind containment; perl's runs in the sandbox like any perl. A
-//! recursive removal could still take uncommitted work with it, so each of its
-//! targets must be missing or ignored by Git, and it must run before any other
-//! command, a perl script included, could create or move what it names.
+//! recursive removal could take uncommitted work, so its targets must be missing
+//! or Git-ignored, and it must run before any other command, perl included.
 use super::super::git_session_probe::Probe;
 use super::PathContext;
 use crate::CanonicalCommandV1;
@@ -417,8 +416,7 @@ pub(super) fn destroys_workspace(
 
 /// The positions of the script words of an in-place `sed` or `perl` edit.
 /// A script such as `s|href={a}|href={b}|g` is not a path, so reading it as
-/// one would take its braces for a glob at the workspace root. Every other
-/// word is still read as a target.
+/// one would take its braces for a root glob. Other words are still targets.
 fn edit_scripts(segment: &crate::CommandSegmentV1) -> Vec<usize> {
     let program = segment
         .executable
@@ -428,12 +426,14 @@ fn edit_scripts(segment: &crate::CommandSegmentV1) -> Vec<usize> {
     let mut scripts = Vec::new();
     if program == Some("perl") {
         // `-e` or `-E` at the end of a cluster of value-less switches takes
-        // the next word as the program. After `-i` the rest is a suffix.
+        // the next word as the program; switches end at `--` or an operand.
         let loop_flags = |flags: &str| flags.bytes().all(|byte| b"pnlaw".contains(&byte));
-        for (position, word) in arguments.iter().enumerate() {
-            let flags = word.strip_prefix('-').unwrap_or_default();
-            if flags.strip_suffix(['e', 'E']).is_some_and(loop_flags) {
+        let switch = |(_, word): &(usize, &String)| word.starts_with('-') && *word != "--";
+        let mut words = arguments.iter().enumerate();
+        while let Some((position, word)) = words.next().filter(switch) {
+            if word[1..].strip_suffix(['e', 'E']).is_some_and(loop_flags) {
                 scripts.push(position + 1);
+                words.next();
             }
         }
     } else if program == Some("sed") {

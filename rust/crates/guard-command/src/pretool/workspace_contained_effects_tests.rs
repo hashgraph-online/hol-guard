@@ -300,6 +300,7 @@ fn braces_in_an_in_place_edit_script_are_not_a_root_glob() {
     for command in [
         "perl -i -pe 's|{OLD}|{NEW}|' *",
         "perl -i -pe 's|{OLD}|{NEW}|' -- *",
+        "perl -i -pe 's/.*//' -- -e *",
         "sed -i 's|{OLD}|{NEW}|' *",
         "sed -i * -e 's|{OLD}|{NEW}|'",
         "sed -i -- 's|{OLD}|{NEW}|' {a,b}",
