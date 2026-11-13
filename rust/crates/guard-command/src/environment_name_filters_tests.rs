@@ -102,7 +102,6 @@ fn a_stage_that_could_render_a_value_keeps_the_review() {
 fn a_pattern_whose_match_can_start_anywhere_is_refused() {
     assert!(pattern_matches_inside_a_name("^ALPHA[A-Z_]*"));
     assert!(pattern_matches_inside_a_name("^(ALPHA|BETA)[A-Z0-9_]+"));
-    assert!(pattern_matches_inside_a_name("^A+[A-Z_]*"));
     assert!(!pattern_matches_inside_a_name("^A|[A-Za-z0-9_]+"));
     assert!(!pattern_matches_inside_a_name("^ALPHA|BETA"));
     assert!(!pattern_matches_inside_a_name("^ALPHA|S[A-Za-z0-9_]+"));
@@ -110,6 +109,36 @@ fn a_pattern_whose_match_can_start_anywhere_is_refused() {
     assert!(!pattern_matches_inside_a_name("^[A-Z_]*"));
     assert!(!pattern_matches_inside_a_name("^A*B"));
     assert!(!pattern_matches_inside_a_name("^A?B"));
+}
+
+/// A value can hold a newline, and the line after it reaches `grep` like a
+/// name line. When its first bytes happen to match the pattern, `-o` prints
+/// them. A pattern therefore has to spell out the first four characters of
+/// every match, so the command has to know how a secret line begins before it
+/// can print any of it, and may spell at most eight such beginnings, so it
+/// cannot try every short prefix at once.
+#[test]
+fn a_pattern_that_spells_a_short_or_open_prefix_is_refused() {
+    assert!(pattern_matches_inside_a_name("^PATH[A-Z_]*"));
+    assert!(pattern_matches_inside_a_name("^(PATH|HOME)[A-Z_]*"));
+    assert!(pattern_matches_inside_a_name("^(AB|CD)(EF|GH)[A-Z_]*"));
+    assert!(pattern_matches_inside_a_name(
+        "^(A|B|C|D|E|F|G|H)XYZ[A-Z_]*"
+    ));
+    assert!(pattern_matches_inside_a_name("^ALPHA+[A-Z_]*"));
+    assert!(!pattern_matches_inside_a_name("^D[A-F0-9]*"));
+    assert!(!pattern_matches_inside_a_name("^A[A-Z0-9_]*"));
+    assert!(!pattern_matches_inside_a_name("^ABC[A-Z_]*"));
+    assert!(!pattern_matches_inside_a_name("^A+[A-Z_]*"));
+    assert!(!pattern_matches_inside_a_name("^AB+CD[A-Z_]*"));
+    assert!(!pattern_matches_inside_a_name("^(PATH|HO)[A-Z_]*"));
+    assert!(!pattern_matches_inside_a_name(
+        "^(A|B|C|D|E|F|G|H|I)XYZ[A-Z_]*"
+    ));
+    assert!(!pattern_matches_inside_a_name(
+        "^(A|B|C)(A|B|C)(A|B|C)(A|B|C)[A-Z_]*"
+    ));
+    assert!(!pattern_matches_inside_a_name("^AB[A-Z]CD[A-Z_]*"));
 }
 
 #[test]

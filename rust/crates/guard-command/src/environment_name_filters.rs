@@ -17,16 +17,15 @@
 //! `grep -o` is different. It prints a match or nothing at all, so what it
 //! renders is bounded by the pattern rather than by the line. The pattern is
 //! accepted only when it is anchored at the start of the line, when every
-//! alternative has to begin with a character the user spelled out, and when
-//! every character it can match is an upper-case letter, a digit or `_`, the
-//! characters a variable name is written in. Case folding (`-i`) is refused
-//! for the same reason. A match is then the start of a line's leading run of
-//! those characters: on a name line that is the name, and it stops at the
-//! `=`. A line of value bytes matches only where the value itself holds a
-//! newline followed by the spelled prefix, and even then the match stops at
-//! the first lower-case letter, `+`, `/` or `=`, so the base64 body of a key
-//! or certificate, which mixes cases on every line, cannot be read through
-//! it.
+//! character it can match is an upper-case letter, a digit or `_`, and when
+//! every match has to begin with at least four characters the user spelled
+//! out, taken from at most eight spellings. Case folding (`-i`) is refused.
+//! On a name line a match is the name and stops at the `=`. A line of value
+//! bytes can match too, because a character set cannot tell it from a name
+//! line, but only when the value already holds a newline followed by one of
+//! the spelled prefixes. The command must guess those leading characters
+//! before it learns anything after them, and one command can try only a
+//! handful of guesses, so a secret cannot be read out through it.
 
 use crate::codex_output_py::py_strip;
 use crate::sfrs_patterns::SHELL_COMMAND_SEPARATORS;
@@ -94,17 +93,44 @@ fn class_stays_in_a_name(body: &str) -> bool {
 }
 
 /// A walk over an extended regular expression, far enough into it to answer
-/// two questions: can any match reach past the name, and must every match
-/// begin with a character the pattern spells out.
+/// two questions: can any match reach past the name, and which characters
+/// does every match have to begin with.
 struct PatternWalk<'a> {
     chars: &'a [char],
     index: usize,
 }
 
-/// Whether every match of the piece just read has to begin with a literal
-/// character. A piece that may begin with a bracket expression does not, so
-/// it could start a match on a line that carries no name at all.
-type LiteralLed = bool;
+/// The fewest characters a pattern spells out before any match may vary.
+const MIN_SPELLED_PREFIX: usize = 4;
+/// The most prefixes one pattern may spell out. Each is one guess at how a
+/// line of value bytes begins, so a pattern that spells many could try them
+/// all at once: `(A|B|...)(A|B|...)` spells every two-letter start.
+const MAX_SPELLED_PREFIXES: usize = 8;
+
+/// What every match of a piece of the pattern must begin with.
+#[derive(Clone, Copy)]
+struct Lead {
+    /// How many characters at the start of every match are spelled out.
+    spelled: usize,
+    /// Whether the piece is spelled out to its end, so the next piece's
+    /// spelled characters still extend the prefix.
+    whole: bool,
+    /// How many different spellings the piece allows.
+    spellings: usize,
+}
+
+impl Lead {
+    const LITERAL: Lead = Lead {
+        spelled: 1,
+        whole: true,
+        spellings: 1,
+    };
+    const VARYING: Lead = Lead {
+        spelled: 0,
+        whole: false,
+        spellings: 1,
+    };
+}
 
 impl PatternWalk<'_> {
     fn peek(&self) -> Option<char> {
@@ -115,46 +141,66 @@ impl PatternWalk<'_> {
     /// loosest, so `^A|B` anchors only its first alternative; the top level is
     /// therefore a single sequence, and a `|` there stops the walk short of the
     /// end and refuses the pattern. Inside a group every alternative sits at
-    /// the position the anchored sequence puts it, and the group is
-    /// literal-led only when all of them are.
-    fn alternation(&mut self) -> Option<LiteralLed> {
-        let mut literal_led = self.sequence()?;
+    /// the position the anchored sequence puts it, so the group spells out
+    /// only as much as its shortest alternative does.
+    fn alternation(&mut self) -> Option<Lead> {
+        let mut lead = self.sequence()?;
         while self.peek() == Some('|') {
             self.index += 1;
-            literal_led &= self.sequence()?;
+            let next = self.sequence()?;
+            lead = Lead {
+                spelled: lead.spelled.min(next.spelled),
+                whole: lead.whole && next.whole,
+                spellings: lead.spellings.saturating_add(next.spellings),
+            };
         }
-        Some(literal_led)
+        Some(lead)
     }
 
     /// `item*`, up to the end of the pattern or of this alternative.
-    fn sequence(&mut self) -> Option<LiteralLed> {
-        let mut first = None;
+    fn sequence(&mut self) -> Option<Lead> {
+        let mut lead = Lead {
+            spelled: 0,
+            whole: true,
+            spellings: 1,
+        };
         while !matches!(self.peek(), None | Some('|') | Some(')')) {
             let item = self.item()?;
-            first.get_or_insert(item);
+            if lead.whole {
+                lead.spelled += item.spelled;
+                lead.whole = item.whole;
+            }
+            lead.spellings = lead.spellings.saturating_mul(item.spellings);
         }
-        Some(first.unwrap_or(false))
+        Some(lead)
     }
 
     /// `atom quantifier?`. A quantifier that allows the atom to be absent
-    /// leaves the match free to begin at whatever follows it, so the item no
-    /// longer pins the start of the match to a literal.
-    fn item(&mut self) -> Option<LiteralLed> {
+    /// leaves the match free to begin at whatever follows it, and one that
+    /// repeats it leaves the length of the match open, so either ends the
+    /// spelled prefix.
+    fn item(&mut self) -> Option<Lead> {
         let atom = self.atom()?;
         match self.peek() {
             Some('*' | '?') => {
                 self.index += 1;
-                Some(false)
+                Some(Lead {
+                    spellings: atom.spellings,
+                    ..Lead::VARYING
+                })
             }
             Some('+') => {
                 self.index += 1;
-                Some(atom)
+                Some(Lead {
+                    whole: false,
+                    ..atom
+                })
             }
             _ => Some(atom),
         }
     }
 
-    fn atom(&mut self) -> Option<LiteralLed> {
+    fn atom(&mut self) -> Option<Lead> {
         match self.peek()? {
             '(' => {
                 self.index += 1;
@@ -174,11 +220,11 @@ impl PatternWalk<'_> {
                     return None;
                 }
                 self.index += close + 1;
-                Some(false)
+                Some(Lead::VARYING)
             }
             c if is_name_char(c) => {
                 self.index += 1;
-                Some(true)
+                Some(Lead::LITERAL)
             }
             _ => None,
         }
@@ -186,10 +232,11 @@ impl PatternWalk<'_> {
 }
 
 /// Whether every match of `pattern` stays inside a variable name and has to
-/// start with a character the pattern spells out. A wildcard, an escape, a
-/// negated class, a lower-case character, an unbalanced group or a top-level
-/// `|` refuses the pattern, and so does one whose match could begin anywhere
-/// on a line.
+/// start with a prefix the pattern spells out in full. A wildcard, an escape,
+/// a negated class, a lower-case character, an unbalanced group or a
+/// top-level `|` refuses the pattern, and so does one whose matches could
+/// begin with fewer than four spelled characters or with more than eight
+/// different spellings.
 pub(crate) fn pattern_matches_inside_a_name(pattern: &str) -> bool {
     let Some(rest) = pattern.strip_prefix('^') else {
         return false;
@@ -199,10 +246,12 @@ pub(crate) fn pattern_matches_inside_a_name(pattern: &str) -> bool {
         chars: &chars,
         index: 0,
     };
-    let Some(literal_led) = walk.sequence() else {
+    let Some(lead) = walk.sequence() else {
         return false;
     };
-    walk.index == chars.len() && literal_led
+    walk.index == chars.len()
+        && lead.spelled >= MIN_SPELLED_PREFIX
+        && lead.spellings <= MAX_SPELLED_PREFIXES
 }
 
 /// `grep -oE '^PREFIX[A-Z_]*'`: `-o` prints the match alone, and the pattern
