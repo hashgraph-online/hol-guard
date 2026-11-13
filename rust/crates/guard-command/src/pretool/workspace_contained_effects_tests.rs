@@ -171,6 +171,8 @@ fn recursive_removal_runs_in_the_sandbox_only_for_ignored_or_missing_targets() {
         "rm -rf dist src",
         "rm -rf *.egg-info",
         "npm run build && rm -rf dist",
+        // Perl's script can move source work into the ignored tree first.
+        "perl -i -e 'rename(q(src/a.ts), q(dist/a.ts))' && rm -rf dist",
         "cd src && rm -rf .",
         "rm -rf $DIR",
         "shred -u src/a.ts",
@@ -229,6 +231,79 @@ fn truncating_a_workspace_file_runs_in_the_workspace_sandbox() {
         "truncate --follow logs/app.log",
         // With no operand there is no target to hold to the workspace.
         "truncate -s 0",
+    ] {
+        assert_ne!(reason("omp", command, &ws, true), CONTAINED, "{command}");
+    }
+    let _ = std::fs::remove_dir_all(&ws);
+}
+
+/// `perl -i -pe 's/a/b/' file` is the same in-place edit as `perl -pi -e`.
+/// The destructive-shell rule flags the first spelling and not the second,
+/// so the sandbox accepts the flag for perl the way it does for `sed -i`.
+/// Perl runs its script there like any other perl program, and the reach
+/// check still holds each file to the workspace.
+#[test]
+fn a_perl_in_place_edit_runs_in_the_workspace_sandbox() {
+    let ws = workspace("perl-in-place", true);
+    std::fs::create_dir_all(ws.join("src")).unwrap();
+    std::fs::write(ws.join("src/a.py"), "x = _old\n").unwrap();
+    for command in [
+        "perl -i -pe 's/_old/_new/g' src/a.py",
+        "perl -i -p -e 's/_old/_new/g' src/a.py",
+        "perl -i.bak -pe 's/_old/_new/g' src/a.py",
+        "perl -pe 's/_old/_new/g' -i src/a.py",
+        "perl -pi -e 's/(?<![\\w-])_old(?![\\w-])/_new/g' src/a.py",
+        "perl -i -pe 's/_old/_new/g' src/a.py && rm -f src/a.py.bak",
+    ] {
+        let got = reason("omp", command, &ws, true);
+        if host() {
+            assert_eq!(got, CONTAINED, "{command}");
+        } else {
+            assert_ne!(got, CONTAINED, "{command}");
+        }
+    }
+    for command in [
+        "perl -i -pe 's/a/b/' ~/.bashrc",
+        "perl -i -pe 's/a/b/' $HOME/.bashrc",
+        "perl -i -pe 's/a/b/' ../outside.py",
+        "perl -i -pe 's/a/b/' /etc/hosts",
+        "perl -i -pe 's/a/b/' .git/config",
+        "PERL5OPT=-Mevil perl -i -pe 's/a/b/' src/a.py",
+    ] {
+        assert_ne!(reason("omp", command, &ws, true), CONTAINED, "{command}");
+    }
+    let _ = std::fs::remove_dir_all(&ws);
+}
+
+/// The script of an in-place edit is not a target, so braces in it are not a
+/// glob at the workspace root. A real root glob is still refused.
+#[test]
+fn braces_in_an_in_place_edit_script_are_not_a_root_glob() {
+    let ws = workspace("edit-script-braces", true);
+    std::fs::create_dir_all(ws.join("src")).unwrap();
+    std::fs::write(ws.join("src/a.tsx"), "href={OLD}\n").unwrap();
+    for command in [
+        "perl -i -pe 's|href={OLD}|href={NEW}|g' src/a.tsx",
+        "perl -pi -e 's/a{2}/b/' src/a.tsx",
+        "perl -pe 's|{OLD}|{NEW}|' -i src/a.tsx",
+        "sed -i 's|href={OLD}|href={NEW}|g' src/a.tsx",
+        "sed -i -e 's|{OLD}|{NEW}|' src/a.tsx",
+        "sed -i.bak --expression 's|{OLD}|{NEW}|' src/a.tsx",
+    ] {
+        let got = reason("omp", command, &ws, true);
+        if host() {
+            assert_eq!(got, CONTAINED, "{command}");
+        } else {
+            assert_ne!(got, CONTAINED, "{command}");
+        }
+    }
+    for command in [
+        "perl -i -pe 's|{OLD}|{NEW}|' *",
+        "perl -i -pe 's|{OLD}|{NEW}|' -- *",
+        "perl -i -pe 's/.*//' -- -e *",
+        "sed -i 's|{OLD}|{NEW}|' *",
+        "sed -i * -e 's|{OLD}|{NEW}|'",
+        "sed -i -- 's|{OLD}|{NEW}|' {a,b}",
     ] {
         assert_ne!(reason("omp", command, &ws, true), CONTAINED, "{command}");
     }

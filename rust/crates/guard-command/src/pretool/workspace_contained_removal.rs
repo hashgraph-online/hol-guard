@@ -4,14 +4,13 @@
 //! edit, and marks each match uncertain because the rule alone cannot prove a
 //! target is safe to lose. A plain `rm` or `rmdir` in the workspace is ordinary
 //! cleanup, `truncate` empties or resizes a file the same way `> file` does,
-//! and `sed -i` is the same file edit an agent's own edit tool makes: the
-//! sandbox keeps all of them off the network, credentials, the home directory
-//! and `.git`, so this module accepts that uncertainty for those programs
-//! only.
-//! Sed file effects are bounded here; command_shape separately screens scripts
-//! so shell execution cannot hide behind containment. A recursive removal could still take uncommitted work with it, so each of its
-//! targets must be missing or ignored by Git, and it must run before any other
-//! command could create or move what it names.
+//! and `sed -i` or `perl -i` is the same file edit an agent's own edit tool
+//! makes: the sandbox keeps all of them off the network, credentials, the home
+//! directory and `.git`, so this module accepts that uncertainty for those
+//! programs only. command_shape screens sed scripts so shell execution cannot
+//! hide behind containment; perl's runs in the sandbox like any perl. A
+//! recursive removal could take uncommitted work, so its targets must be missing
+//! or Git-ignored, and it must run before any other command, perl included.
 use super::super::git_session_probe::Probe;
 use super::PathContext;
 use crate::CanonicalCommandV1;
@@ -32,12 +31,12 @@ fn segment_indexes(observation: &NativeCommandObservationV1) -> impl Iterator<It
 }
 
 /// The operands of a plain `rm`, `rmdir` or `truncate` segment and whether it
-/// recurses, no operands for an in-place `sed` edit, or `None` for any other
-/// program, option or shell expansion.
+/// recurses, no operands for an in-place `sed` or `perl` edit, or `None` for
+/// any other program, option or shell expansion.
 fn removal(model: &CanonicalCommandV1, index: usize) -> Option<(bool, Vec<&str>)> {
     let segment = model.segments.get(index)?;
     let program = segment.executable.as_deref()?;
-    if !matches!(program, "rm" | "rmdir" | "sed" | "truncate")
+    if !matches!(program, "rm" | "rmdir" | "sed" | "perl" | "truncate")
         || segment.path_overridden
         || !segment.wrapper_chain.is_empty()
         || !segment.environment_names.is_empty()
@@ -46,6 +45,12 @@ fn removal(model: &CanonicalCommandV1, index: usize) -> Option<(bool, Vec<&str>)
     }
     if program == "sed" {
         return in_place_edit(&segment.arguments).then(|| (false, Vec::new()));
+    }
+    // Perl runs its script in the sandbox whatever the switches; the reach
+    // check still holds every operand to the workspace.
+    if program == "perl" {
+        return (super::super::inplace_edit_reason::inplace_editor(segment) == Some("perl"))
+            .then(|| (false, Vec::new()));
     }
     if program == "truncate" {
         return truncate_targets(&segment.arguments).map(|operands| (false, operands));
@@ -253,7 +258,9 @@ pub(super) fn loses_work(
         .segments
         .iter()
         .enumerate()
-        .position(|(index, _)| removal(model, index).is_none())
+        .position(|(index, segment)| {
+            removal(model, index).is_none() || segment.executable.as_deref() == Some("perl")
+        })
         .unwrap_or(model.segments.len());
     if removals.iter().any(|(index, _)| *index > first_other) {
         return true;
@@ -396,12 +403,77 @@ pub(super) fn destroys_workspace(
         .any(|index| {
             model.segments.get(index).is_none_or(|segment| {
                 let below = below.get(index).copied().unwrap_or(0);
+                let scripts = edit_scripts(segment);
                 segment
                     .arguments
                     .iter()
-                    .any(|argument| broad_target(argument, workspace, below))
+                    .enumerate()
+                    .filter(|(position, _)| !scripts.contains(position))
+                    .any(|(_, argument)| broad_target(argument, workspace, below))
             })
         })
+}
+
+/// The positions of the script words of an in-place `sed` or `perl` edit.
+/// A script such as `s|href={a}|href={b}|g` is not a path, so reading it as
+/// one would take its braces for a root glob. Other words are still targets.
+fn edit_scripts(segment: &crate::CommandSegmentV1) -> Vec<usize> {
+    let program = segment
+        .executable
+        .as_deref()
+        .map(super::super::executable_basename);
+    let arguments = &segment.arguments;
+    let mut scripts = Vec::new();
+    if program == Some("perl") {
+        // `-e` or `-E` at the end of a cluster of value-less switches takes
+        // the next word as the program; switches end at `--` or an operand.
+        let loop_flags = |flags: &str| flags.bytes().all(|byte| b"pnlaw".contains(&byte));
+        let switch = |(_, word): &(usize, &String)| word.starts_with('-') && *word != "--";
+        let mut words = arguments.iter().enumerate();
+        while let Some((position, word)) = words.next().filter(switch) {
+            if word[1..].strip_suffix(['e', 'E']).is_some_and(loop_flags) {
+                scripts.push(position + 1);
+                words.next();
+            }
+        }
+    } else if program == Some("sed") {
+        // GNU sed reads options anywhere before `--`, and a positional
+        // script only when no `-e` or `-f` names one.
+        let mut named = false;
+        let mut positional = None;
+        let mut words = arguments.iter().enumerate();
+        while let Some((position, word)) = words.next() {
+            if word == "--" {
+                positional = positional.or(words.next().map(|(next, _)| next));
+                break;
+            }
+            if let Some(long) = word.strip_prefix("--") {
+                if matches!(long, "expression" | "file") {
+                    named = true;
+                    scripts.push(position + 1);
+                    words.next();
+                }
+                named |= long.starts_with("expression=") || long.starts_with("file=");
+                continue;
+            }
+            let Some(flags) = word.strip_prefix('-').filter(|flags| !flags.is_empty()) else {
+                positional = positional.or(Some(position));
+                continue;
+            };
+            let Some(at) = flags.find(['e', 'f', 'i']) else {
+                continue;
+            };
+            if flags[at..].starts_with(['e', 'f']) {
+                named = true;
+                if at + 1 == flags.len() {
+                    scripts.push(position + 1);
+                    words.next();
+                }
+            }
+        }
+        scripts.extend(positional.filter(|_| !named));
+    }
+    scripts
 }
 
 #[cfg(test)]
