@@ -263,6 +263,10 @@ def test_real_packaged_cross_engine_and_changed_source_offline_api_upgrade(tmp_p
             original_migration = store._migrate_extension_control_catalog
 
             def check_upgrade_boundary(action, _migrate=original_migration, _old=old.engine, **kwargs):
+                if kwargs.get("installed_upgrade") is None:
+                    # The read that moves the stranded head home migrates
+                    # with no upgrade evidence; only the upgrade is probed.
+                    return _migrate(action, **kwargs)
                 changed = copy.deepcopy(action)
                 for layer in changed["layers"]:
                     layer["controls"] = []
