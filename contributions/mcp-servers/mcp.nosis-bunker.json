@@ -1,0 +1,50 @@
+{
+  "schemaVersion": "guard.mcp-server-contribution.v1",
+  "id": "mcp.nosis-bunker",
+  "version": "1.0.0",
+  "name": "Bunker by NosisTech",
+  "description": "Offline, read-only MCP server that classifies public crypto addresses for public-key exposure and returns a step-by-step plan. It never signs or submits transactions, and it rejects seed phrases and private keys. External integration; off until you turn it on.",
+  "trustClass": "external",
+  "activation": "opt-in",
+  "publisher": {
+    "id": "io.github.nosistech",
+    "displayName": "NosisTech LLC",
+    "url": "https://github.com/nosistech/nosis-bunker"
+  },
+  "icon": {
+    "kind": "none"
+  },
+  "homepage": "https://bunker.nosistech.com",
+  "license": "Apache-2.0",
+  "launch": {
+    "kind": "direct-command",
+    "command": "bunker-mcp"
+  },
+  "riskClasses": [
+    "local-data-access"
+  ],
+  "tools": [
+    {
+      "name": "scan_addresses",
+      "state": "inherit"
+    },
+    {
+      "name": "list_networks",
+      "state": "inherit"
+    },
+    {
+      "name": "other",
+      "state": "inherit"
+    }
+  ],
+  "referenceUrls": [
+    "https://github.com/nosistech/nosis-bunker",
+    "https://github.com/nosistech/nosis-bunker/blob/v1.2.2/docs/10-agents.md",
+    "https://bunker.nosistech.com"
+  ],
+  "saferAlternatives": [
+    "Pass only public addresses. Never send a seed phrase or private key; the server rejects those inputs and does not need them.",
+    "Treat the output as educational, not financial advice. Confirm each address on a block explorer and send a small test amount before moving funds.",
+    "Run the official local stdio server from the nosistech/nosis-bunker repository or the published release. Do not point a client at an untrusted copy."
+  ]
+}
