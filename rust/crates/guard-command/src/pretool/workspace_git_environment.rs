@@ -31,6 +31,11 @@ pub(crate) fn session_git_variables(
         .environment_names
         .iter()
         .filter(|name| git_variable(name))
+        // Entries the hook judged inert set no hooks path or other file.
+        .filter(|name| {
+            !(environment.git_config_environment_inert
+                && guard_contracts::git_config_count_entry(name))
+        })
         .map(|name| (name.clone(), None))
         .collect();
     if let Some(value) = &environment.xdg_config_home {

@@ -57217,6 +57217,141 @@
       },
       "cwd": "linked_sources",
       "expect": "not_allow"
+    },
+    {
+      "id": "git-status-editor-terminal-quote-path",
+      "fix_area": "git",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git status --short"
+      },
+      "cwd": "worktree",
+      "environment": {
+        "GIT_CONFIG_COUNT": "1",
+        "GIT_CONFIG_KEY_0": "core.quotePath",
+        "GIT_CONFIG_VALUE_0": "false"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "git-log-editor-terminal-quote-path",
+      "fix_area": "git",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git log --oneline -3"
+      },
+      "cwd": "worktree",
+      "environment": {
+        "GIT_CONFIG_COUNT": "1",
+        "GIT_CONFIG_KEY_0": "core.quotePath",
+        "GIT_CONFIG_VALUE_0": "false"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "git-diff-stat-editor-terminal-quote-path",
+      "fix_area": "git",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git diff --stat"
+      },
+      "cwd": "worktree",
+      "environment": {
+        "GIT_CONFIG_COUNT": "1",
+        "GIT_CONFIG_KEY_0": "core.quotePath",
+        "GIT_CONFIG_VALUE_0": "false"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "neg-git-log-config-entry-sets-pager",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git log --oneline -3"
+      },
+      "cwd": "worktree",
+      "environment": {
+        "GIT_CONFIG_COUNT": "1",
+        "GIT_CONFIG_KEY_0": "core.pager",
+        "GIT_CONFIG_VALUE_0": "touch /tmp/hol-guard-gate-config-pager-mark; cat"
+      },
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-git-status-config-entry-sets-fsmonitor",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git status --short"
+      },
+      "cwd": "worktree",
+      "environment": {
+        "GIT_CONFIG_COUNT": "2",
+        "GIT_CONFIG_KEY_0": "core.quotePath",
+        "GIT_CONFIG_VALUE_0": "false",
+        "GIT_CONFIG_KEY_1": "core.fsmonitor",
+        "GIT_CONFIG_VALUE_1": "touch /tmp/hol-guard-gate-fsmonitor-mark"
+      },
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-git-log-quote-path-beside-config-parameters",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git log --oneline -3"
+      },
+      "cwd": "worktree",
+      "environment": {
+        "GIT_CONFIG_COUNT": "1",
+        "GIT_CONFIG_KEY_0": "core.quotePath",
+        "GIT_CONFIG_VALUE_0": "false",
+        "GIT_CONFIG_PARAMETERS": "'core.pager'='touch /tmp/hol-guard-gate-parameters-mark; cat'"
+      },
+      "expect": "not_allow"
     }
   ],
   "mcp_cases": [

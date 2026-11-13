@@ -6,6 +6,7 @@ import hashlib
 import json
 import os
 import re
+from collections.abc import Mapping
 
 HOOK_EXECUTION_ENVIRONMENT_KEY = "guard_execution_environment"
 MAX_STAMPED_HOOK_INPUT_BYTES = 1_000_000
@@ -89,6 +90,29 @@ def cargo_home_default(home: str | None, cargo_home: str | None) -> bool:
     return bool(home) and cargo_home.rstrip("/") == f"{home}/.cargo"
 
 
+_INERT_GIT_CONFIG_KEYS = frozenset({"core.quotepath"})
+_MAX_INERT_GIT_CONFIG_ENTRIES = 8
+
+
+def git_config_environment_inert(environment: Mapping[str, str]) -> bool:
+    """Report whether the GIT_CONFIG_COUNT entries only set core.quotePath.
+
+    The verdict is owned by `guard_contracts::git_config_environment_inert`;
+    this sender only mirrors it so a Python-stamped hook and a Rust-stamped one
+    agree.
+    """
+    count = environment.get("GIT_CONFIG_COUNT")
+    if count is None or not (1 <= len(count) <= 2) or not all("0" <= char <= "9" for char in count):
+        return False
+    if int(count) > _MAX_INERT_GIT_CONFIG_ENTRIES:
+        return False
+    return all(
+        environment.get(f"GIT_CONFIG_KEY_{index}", "").lower() in _INERT_GIT_CONFIG_KEYS
+        and f"GIT_CONFIG_VALUE_{index}" in environment
+        for index in range(int(count))
+    )
+
+
 def library_search_paths() -> dict[str, str]:
     """Return the exported loader search paths that fit the native path bound."""
     return {
@@ -123,6 +147,8 @@ def collect_hook_execution_environment() -> dict[str, object]:
         stamp["node_options_inert"] = True
     if cargo_home_default(os.environ.get("HOME"), os.environ.get("CARGO_HOME")):
         stamp["cargo_home_default"] = True
+    if git_config_environment_inert(os.environ):
+        stamp["git_config_environment_inert"] = True
     return stamp
 
 
