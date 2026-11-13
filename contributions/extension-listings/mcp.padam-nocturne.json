@@ -1,8 +1,8 @@
 {
   "schemaVersion": "guard.extension-listing.v2",
   "extensionId": "mcp.padam-nocturne",
-  "tagline": "Local memory for AI agents in one SQLite file: masks secrets, holds injected orders for the owner, fences search results as data.",
-  "summary": "Local memory for AI agents in one SQLite file on the user's machine. It masks secrets before storing, holds notes that look like orders or change who the owner is until the owner reviews them, and fences search and history results as data. Search, history and stats keep Guard's usual handling; every tool that changes memory or exports all of it is gated on review. Off until you turn it on.",
+  "tagline": "Local memory for AI agents in one SQLite file: masks secrets, holds orders it recognises for the owner, fences search results as data.",
+  "summary": "Local memory for AI agents in one SQLite file on the user's machine. It masks secrets before storing, holds notes it recognises as orders or owner changes until the owner reviews them (recognition is pattern-based, so new phrasings can pass), and fences search and history results as data. Search, history and stats keep Guard's usual handling; every tool that changes memory or exports all of it is gated on review. Off until you turn it on.",
   "category": "specialized-tools",
   "limitations": [
     "Coverage is limited to the reviewed operations and the surrounding Guard policy.",
