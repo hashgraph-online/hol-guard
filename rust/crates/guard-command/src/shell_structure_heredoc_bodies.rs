@@ -94,12 +94,17 @@ pub(super) fn extract_parenthesized(chars: &[char], start: usize) -> (String, us
 /// Whether `index` directly follows a keyword that bash lets open `((`
 /// with no space, as in `for((i=0;i<n;i++))` or `while((x<<2))`.
 fn after_keyword(chars: &[char], start: usize, index: usize) -> bool {
-    ["for", "while", "until", "if", "elif"].iter().any(|keyword| {
-        let length = keyword.len();
-        index >= start + length
-            && chars[index - length..index].iter().copied().eq(keyword.chars())
-            && word_start(chars, start, index - length)
-    })
+    ["for", "while", "until", "if", "elif"]
+        .iter()
+        .any(|keyword| {
+            let length = keyword.len();
+            index >= start + length
+                && chars[index - length..index]
+                    .iter()
+                    .copied()
+                    .eq(keyword.chars())
+                && word_start(chars, start, index - length)
+        })
 }
 
 fn word_start(chars: &[char], start: usize, index: usize) -> bool {
