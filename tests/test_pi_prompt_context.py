@@ -64,6 +64,25 @@ const turn = async (text, source = 'interactive', expanded = text) => ({
 
 
 def run_handlers(tmp_path: Path, harness: str, steps: str, timeout_ms: int = 4250) -> dict[str, object]:
+    completed = run_node(handler_script(tmp_path, harness, steps, timeout_ms))
+    assert completed.stdout.strip(), completed.stderr
+    result = json.loads(completed.stdout)
+    # A stopped headless prompt ends the run nonzero and says why on stderr.
+    result["exit"] = {"code": completed.returncode, "stderr": completed.stderr.splitlines()}
+    return result
+
+
+def run_node(script: str) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        [shutil.which("node") or "node", "--input-type=module", "-e", script],
+        check=False,
+        capture_output=True,
+        text=True,
+        timeout=10,
+    )
+
+
+def handler_script(tmp_path: Path, harness: str, steps: str, timeout_ms: int = 4250) -> str:
     source = managed_extension_source(
         guard_home=tmp_path / "guard-home",
         home_dir=tmp_path,
@@ -74,20 +93,13 @@ def run_handlers(tmp_path: Path, harness: str, steps: str, timeout_ms: int = 425
     cache_end = source.index("  const approvalContinuationActivity", cache_start)
     input_start = source.index("  async function inputWorkspaceReadiness(")
     input_end = source.index('  pi.on("tool_call",', input_start)
-    script = (
+    return (
         PRELUDE.replace("FOUND_TEXT", json.dumps(FOUND)).replace("TIMEOUT_VALUE", str(timeout_ms))
-        + WATCH_POSTURE_STUB + source[cache_start:cache_end]
+        + WATCH_POSTURE_STUB
+        + source[cache_start:cache_end]
         + source[input_start:input_end]
         + steps
     )
-    completed = subprocess.run(
-        [shutil.which("node") or "node", "--input-type=module", "-e", script],
-        check=True,
-        capture_output=True,
-        text=True,
-        timeout=10,
-    )
-    return json.loads(completed.stdout)
 
 
 def context_message(prompt: str) -> dict[str, object]:
@@ -221,6 +233,7 @@ def test_headless_prompt_is_reviewed_when_its_turn_starts(tmp_path: Path, harnes
     assert "repeat" not in result, "a turn rerunning the typed prompt is not reviewed twice"
     assert "retried" not in result
     assert result["aborted"] == 3
+    assert result["exit"] == {"code": 1, "stderr": ["protected", "held", "protected"]}
     reviewed = [payload["prompt"] for payload in result["payloads"] if payload["hook_event_name"] == "UserPromptSubmit"]
     assert reviewed == [
         "fix the cart total",
@@ -234,3 +247,33 @@ def test_headless_prompt_is_reviewed_when_its_turn_starts(tmp_path: Path, harnes
     ]
     assert all(payload["guard_prompt_context"] is True for payload in result["payloads"])
     assert all(payload["session_id"] == "session-a" for payload in result["payloads"])
+
+
+PRINT_MODE_STEPS = """
+const printMode = {...ctx, hasUI: HAS_UI, abort() {}, ui: {notify() {}}};
+const begin = (prompt) => callbacks.before_agent_start({type: 'before_agent_start', prompt}, printMode);
+await begin('protected');
+await begin('needs approval');
+await begin('fix the cart total');
+console.log(JSON.stringify({done: true}));
+"""
+
+
+@pytest.mark.parametrize("harness", ["pi", "omp"])
+@node_required
+def test_stopped_print_mode_prompt_says_why_and_exits_nonzero(tmp_path: Path, harness: str) -> None:
+    # Print and JSON modes have no UI, so a notice alone reaches no one and the
+    # run used to exit 0 as if the prompt had finished.
+    completed = run_node(handler_script(tmp_path, harness, PRINT_MODE_STEPS.replace("HAS_UI", "false")))
+    assert json.loads(completed.stdout) == {"done": True}
+    assert completed.stderr.splitlines() == ["protected", "held"]
+    assert completed.returncode == 1
+
+
+@pytest.mark.parametrize("harness", ["pi", "omp"])
+@node_required
+def test_stopped_prompt_with_a_ui_leaves_the_exit_status_alone(tmp_path: Path, harness: str) -> None:
+    completed = run_node(handler_script(tmp_path, harness, PRINT_MODE_STEPS.replace("HAS_UI", "true")))
+    assert json.loads(completed.stdout) == {"done": True}
+    assert completed.stderr == ""
+    assert completed.returncode == 0
