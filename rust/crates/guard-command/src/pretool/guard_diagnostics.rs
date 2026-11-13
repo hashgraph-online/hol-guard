@@ -719,7 +719,8 @@ const HELP_SUBCOMMANDS: &[&str] = &[
 /// Guard's own read-only records: the local event log, the active exceptions,
 /// the remembered rules, the receipts, the decision history, the cached
 /// advisories, the artifact inventory and the local trust posture. Each prints
-/// what Guard already holds and writes nothing.
+/// what Guard already holds and, apart from the `mcp list` bookkeeping below,
+/// writes nothing.
 ///
 /// `extensions list` and `mcp list` print the same inventory, one kind at a
 /// time. Before it prints, `mcp list` records which harness configs declare a
