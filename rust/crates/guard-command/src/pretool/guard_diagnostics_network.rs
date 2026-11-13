@@ -24,14 +24,13 @@ pub(super) fn network_inspection(words: &[&str]) -> bool {
     json_flags <= 1
         && match rest.as_slice() {
             ["network"] | ["network", "status"] => true,
-            ["network", "check", url] => checked_url(url),
+            // The one URL is held to the same rule as `explain`'s target: a
+            // leading dash is refused so it can never be read as an option.
+            ["network", "check", url] => super::explained_target(url),
             _ => false,
         }
 }
 
-/// The URL `network check` takes as its one positional argument. A leading
-/// dash is refused so the value can never be read as an option the shapes
-/// above did not admit.
-fn checked_url(url: &str) -> bool {
-    !url.starts_with('-') && !url.trim().is_empty() && !url.contains('\0') && url.len() <= 4_096
-}
+#[cfg(test)]
+#[path = "guard_diagnostics_network_tests.rs"]
+mod tests;
