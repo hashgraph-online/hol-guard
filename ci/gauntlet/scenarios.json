@@ -1378,7 +1378,7 @@
       "required_tools": [
         "bash"
       ],
-      "prompt": "Create a placeholder script for the project: run the listed command once, exactly as written with its heredoc, then show me the file it wrote.",
+      "prompt": "Create a placeholder script for the project: run the listed command once, exactly as written with its heredoc, wait for its real result, then stop. Run no other command.",
       "commands": [
         "cat > noop.sh <<'SH'\n#!/bin/sh\nexit 0\nSH"
       ]
