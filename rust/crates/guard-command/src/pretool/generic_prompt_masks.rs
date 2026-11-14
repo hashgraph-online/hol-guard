@@ -193,22 +193,50 @@ pub(super) fn mask_transfer_tool_info(value: &str) -> String {
 }
 
 /// Whether a transfer the negation mask hid is one the prohibition does not
-/// cover. A negation names the verbs it forbids: the one right after it and
-/// each list item after a comma, `or`, `and` or `nor` ("do not change the
-/// command, request approval, or change policy"). A transfer word anywhere
-/// else in that clause is the object of a verb the prohibition does not
-/// forbid ("do not delay downloading metadata.internal"), so it is still a
-/// request, and erasing the only tool mention beside it would hide that
-/// request from the action scan.
+/// cover. A negation names the verbs it forbids: the one right after it, an
+/// item after `or` or `nor`, and an item after a comma in a list that an `or`
+/// or `nor` closes ("do not change the command, request approval, or change
+/// policy"). Any other transfer verb in that clause is not forbidden: it is
+/// the object of a verb the prohibition does not name ("do not delay
+/// downloading"), or a separate instruction ("do not pause, fetch ...",
+/// "do not wait and download ..."). A host or output option counts as
+/// forbidden only as the operand of a forbidden verb before it.
 fn transfer_outlives_negation(value: &str, transfer_context: &Regex) -> bool {
+    static VERB: OnceLock<Regex> = OnceLock::new();
     static LIST_HEAD: OnceLock<Regex> = OnceLock::new();
+    static LIST_CLOSE: OnceLock<Regex> = OnceLock::new();
+    static CLAUSE_END: OnceLock<Regex> = OnceLock::new();
+    let verb = VERB.get_or_init(|| {
+        Regex::new(r"(?i)\b(?:fetch|download|upload|send|post|transfer|grab|pull|retrieve|request|stage)(?:s|ed|ing)?\b")
+            .expect("bounded transfer verb")
+    });
     let list_head = LIST_HEAD.get_or_init(|| {
-        Regex::new(r"(?i)(?:\b(?:not|never|don't|dont|cannot|can't|won't|or|and|nor)|,)\s*$")
+        Regex::new(r"(?i)(?:\b(?:not|never|don't|dont|cannot|can't|won't|or|nor)|(?P<comma>,))\s*$")
             .expect("bounded negated list head")
     });
-    transfer_context
-        .find_iter(value)
-        .any(|found| !list_head.is_match(&value[..found.start()]))
+    let list_close =
+        LIST_CLOSE.get_or_init(|| Regex::new(r"(?i)\b(?:or|nor)\b").expect("bounded list close"));
+    let clause_end =
+        CLAUSE_END.get_or_init(|| Regex::new(r"[.!?;](?:\s|$)|\n").expect("bounded clause end"));
+    transfer_context.find_iter(value).any(|found| {
+        let start = clause_end
+            .find_iter(&value[..found.start()])
+            .last()
+            .map_or(0, |end| end.end());
+        let before = &value[start..found.start()];
+        if !verb.is_match(found.as_str()) {
+            return !verb.is_match(before);
+        }
+        let Some(head) = list_head.captures(before) else {
+            return true;
+        };
+        if head.name("comma").is_none() {
+            return false;
+        }
+        let tail = &value[found.end()..];
+        let end = clause_end.find(tail).map_or(tail.len(), |end| end.start());
+        !list_close.is_match(&tail[..end])
+    })
 }
 
 /// `then read it again` re-reads what the prompt already named, so it adds
