@@ -24,6 +24,8 @@ use sha2::{Digest, Sha256};
 pub(crate) mod discovery;
 #[path = "harness_version_manifest.rs"]
 mod manifest;
+#[path = "harness_protection_state.rs"]
+mod protection_state;
 
 const SCHEMA: &str = "harness-version-compatibility.v1";
 const MAX_REQUEST_BYTES: u64 = 1024 * 1024;
@@ -75,6 +77,9 @@ struct CapabilityRow {
     event: String,
     transport: String,
     declared_actions: Vec<String>,
+    /// The contract row's mode; `observe` rows run after execution.
+    #[serde(default)]
+    mode: Option<String>,
 }
 
 #[derive(Clone)]
@@ -121,7 +126,9 @@ fn answer(request: &Request) -> Result<Value, String> {
         return Err(invalid());
     }
     match request.op.as_str() {
-        "decide" => decide(request, &guard_home),
+        "decide" => decide(request, &guard_home).map(|payload| {
+            protection_state::with_event_states(payload, request.contracts.get(&request.harness))
+        }),
         "acknowledge" => acknowledge(request, &guard_home),
         "clear" => clear(request, &guard_home),
         _ => Err(invalid()),
