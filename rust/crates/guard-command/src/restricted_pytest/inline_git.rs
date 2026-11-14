@@ -52,12 +52,22 @@ pub(super) fn trusted_gits(
                 // for its tool, which a contained run cannot do (see
                 // `developer_shim`). Named by path, it stays out of the plan;
                 // a bare `git` resolves past the shim to the tool itself.
+                // Seatbelt checks exec against the resolved file, so a Git
+                // spelled through a symlink (Homebrew's `bin/git`) is granted
+                // as the binary it resolves to, once its chain is approved.
                 Some(directory) => {
-                    let git = PathBuf::from(format!("{}git", directory.as_str()));
-                    if super::developer_shim::forwarded_tool(&git).is_some() {
+                    let spelled = PathBuf::from(format!("{}git", directory.as_str()));
+                    if super::developer_shim::forwarded_tool(&spelled).is_some()
+                        || !executable_symlink_chain_is_approved(
+                            &spelled, workspace, None, &spelled,
+                        )
+                    {
                         continue;
                     }
-                    git
+                    match spelled.canonicalize() {
+                        Ok(git) => git,
+                        Err(_) => continue,
+                    }
                 }
                 None => match resolve_executable("git", cwd, search_path) {
                     Ok(git) => git,
@@ -92,7 +102,7 @@ pub(super) fn grant(plan: &mut Value, program: &[String], search_path: &str) {
     if gits.is_empty() {
         return;
     }
-    let Some(roots) = super::git_plan::repository_read_roots(&workspace, &cwd) else {
+    let Some(roots) = bound_read_roots(&workspace, &cwd) else {
         return;
     };
     let Some(allowed) = plan["allowed_executables"].as_array_mut() else {
@@ -117,4 +127,36 @@ pub(super) fn grant(plan: &mut Value, program: &[String], search_path: &str) {
             granted.push(root);
         }
     }
+}
+
+/// The repository metadata outside the work tree that the program's Git has
+/// to read, only when the repository is bound to this workspace. The `.git`
+/// pointer is a file the workspace controls, and the inline program can read
+/// everything granted, so the pointer alone cannot name another repository:
+/// a linked worktree is accepted only when its metadata points back at this
+/// pointer (written by `git worktree add`, outside the workspace), and any
+/// other separate metadata directory only when it sits inside the workspace.
+fn bound_read_roots(workspace: &Path, cwd: &Path) -> Option<Vec<PathBuf>> {
+    let roots = super::git_plan::repository_read_roots(workspace, cwd)?;
+    let Some(gitdir) = roots.first() else {
+        return Some(roots);
+    };
+    if roots.len() == 1 {
+        let workspace = workspace.canonicalize().ok()?;
+        return path_is_within_lexically(gitdir, &workspace).then_some(roots);
+    }
+    let pointer = cwd
+        .ancestors()
+        .take_while(|directory| directory.starts_with(workspace))
+        .map(|directory| directory.join(".git"))
+        .find(|pointer| pointer.exists())?
+        .canonicalize()
+        .ok()?;
+    let back = fs::read_to_string(gitdir.join("gitdir")).ok()?;
+    let back = back.strip_suffix('\n').unwrap_or(&back);
+    if back.contains('\n') {
+        return None;
+    }
+    let back = gitdir.join(back).canonicalize().ok()?;
+    (back == pointer).then_some(roots)
 }

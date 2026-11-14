@@ -210,3 +210,67 @@ fn a_linked_worktree_reads_its_shared_repository() {
     let stdout = run_contained(&fixture.0, &linked, READ);
     assert!(stdout.contains("?? notes.txt"), "{stdout}");
 }
+
+#[test]
+fn a_git_pointer_cannot_lend_the_program_another_repository() {
+    if !cfg!(target_os = "macos") || !host_git() {
+        return;
+    }
+    let fixture = fixture("guard-inline-git-pointer");
+    let main = fixture.0.join("main");
+    fs::create_dir(&main).unwrap();
+    git(&main, &["init", "-q"]);
+    fs::write(main.join("README"), "main\n").unwrap();
+    git(&main, &["add", "README"]);
+    git(&main, &["commit", "-qm", "init"]);
+    let linked = fixture.0.join("linked");
+    git(&main, &["worktree", "add", "-q", linked.to_str().unwrap()]);
+    let common = main.join(".git").canonicalize().unwrap();
+    // A workspace whose `.git` names an unrelated repository directly, and one
+    // that borrows another worktree's metadata, which points back elsewhere.
+    for (name, target) in [
+        ("borrowed", common.clone()),
+        ("forged", common.join("worktrees/linked")),
+    ] {
+        let workspace = fixture.0.join(name);
+        fs::create_dir(&workspace).unwrap();
+        fs::write(
+            workspace.join(".git"),
+            format!("gitdir: {}\n", target.display()),
+        )
+        .unwrap();
+        let reply = plan(&workspace, READ);
+        assert!(!names_git(&reply), "{name}: {reply}");
+        assert!(
+            reply["value"].get("read_only_roots").is_none(),
+            "{name}: {reply}"
+        );
+    }
+    assert!(names_git(&plan(&linked, READ)));
+}
+
+#[test]
+fn a_git_named_through_a_symlink_is_granted_as_its_binary() {
+    if !cfg!(target_os = "macos") {
+        return;
+    }
+    let Some(link) = ["/opt/homebrew/bin/git", "/usr/local/bin/git"]
+        .into_iter()
+        .map(PathBuf::from)
+        .find(|path| path.is_symlink() && path.is_file())
+    else {
+        return;
+    };
+    let fixture = fixture("guard-inline-git-symlink");
+    fs::create_dir(fixture.0.join(".git")).unwrap();
+    let program = READ.replace("\"git\"", &format!("{:?}", link.display().to_string()));
+    let reply = plan(&fixture.0, &program);
+    let binary = json!(link.canonicalize().unwrap());
+    assert!(
+        reply["value"]["allowed_executables"]
+            .as_array()
+            .unwrap_or_else(|| panic!("{reply}"))
+            .contains(&binary),
+        "{reply}"
+    );
+}
