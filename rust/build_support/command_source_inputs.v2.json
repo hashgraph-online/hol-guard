@@ -460,6 +460,7 @@
       "src/pretool/git_ref_listings.rs",
       "src/pretool/git_remote_config.rs",
       "src/pretool/git_remote_ops.rs",
+      "src/pretool/git_remote_route.rs",
       "src/pretool/git_remote_proof.rs",
       "src/pretool/git_remote_pull.rs",
       "src/pretool/git_rev_list.rs",
