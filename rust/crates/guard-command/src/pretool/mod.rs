@@ -1026,7 +1026,13 @@ const MAX_REWRITE_ROUNDS: usize = 3;
 /// The command list a rewrite reads this text as, in the order the
 /// recognizers are tried.
 fn rewritten_command_list(command: &str) -> Option<String> {
-    for_loop_unroll::unroll(command)
+    rewritten_command_list_at(command, None)
+}
+
+/// [`rewritten_command_list`] for a submission whose home directory is known,
+/// so a loop over words spelled from it unrolls too.
+fn rewritten_command_list_at(command: &str, home_dir: Option<&str>) -> Option<String> {
+    for_loop_unroll::unroll_at(command, home_dir)
         .or_else(|| control_flow_flatten::flatten(command))
         .or_else(|| control_flow_chain::spliced(command))
         .or_else(|| list_wrapper::unwrapped(command))
@@ -1061,7 +1067,11 @@ fn evaluate_rewritten(
     ) {
         return Ok(allowed);
     }
-    let Some(rewritten) = rewritten_command_list(&request.command) else {
+    // A loop word spelled `~/` names the home the shell expands, so it is
+    // written out only when that is shown to be the declared home.
+    let loop_home =
+        home_dir.filter(|_| PathContext::shell_home_matches_for(home_dir, execution_environment));
+    let Some(rewritten) = rewritten_command_list_at(&request.command, loop_home) else {
         return Ok(ungrouped_decision(
             request,
             decision,
