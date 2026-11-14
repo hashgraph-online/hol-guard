@@ -63,3 +63,14 @@ fn a_session_gets_the_hint_once() {
         assert!(note(harness, &other, true).ends_with(ending), "{harness}");
     }
 }
+
+/// Guard holds a shell command that writes files and then runs tests: it
+/// cannot match that script to the project's controls. The Codex hint so asks
+/// for the edit and the test as two tool calls from one exec script, and
+/// never for one script that does both.
+#[test]
+fn the_codex_hint_asks_for_the_edit_and_the_test_as_two_tool_calls() {
+    assert!(ACT_ON_IT.contains("call apply_patch and then run the test command, as two tool calls"));
+    assert!(ACT_ON_IT.contains("not with a shell or Python script that writes files"));
+    assert!(!ACT_ON_IT.contains("apply the patch and run the tests)"));
+}

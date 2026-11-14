@@ -74,17 +74,6 @@ const MATCHED_HEADER: &str = "HOL Guard CIGAR matched these project files to thi
 best first. Open them for context:";
 const REPEATED_HEADER: &str = "HOL Guard CIGAR matched code it already added earlier in this \
 session. Open the files if those excerpts are no longer in view.";
-/// Claude Code models tend to send one tool call per turn, and every turn
-/// re-sends the whole conversation, so the reads and edits a note makes
-/// possible cost least when they go out together.
-const BATCHING: &str = "Each tool call re-sends this whole conversation. When you already know \
-several ranges to read or several edits to make, make those tool calls together in one response, \
-not one per turn.";
-/// Codex models tend to read again lines a note already shows, then patch and
-/// test in separate turns; each turn re-sends the whole conversation.
-const ACT_ON_IT: &str = "The code and diffs in this note are what the files hold now: work from \
-them instead of reading those lines again. When you can, make the edit and run its check in the \
-same tool call (one exec script can apply the patch and run the tests).";
 
 /// A prompt's context and the excerpts it shows.
 #[derive(Clone, Debug, PartialEq)]
