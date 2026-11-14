@@ -133,6 +133,14 @@ pub(super) fn header_paths(input: &str) -> Option<Vec<&str>> {
 
 fn header_path(line: &str) -> Option<(&str, bool)> {
     let body = line.strip_prefix('[')?.strip_suffix(']')?;
+    // Oh My Pi trims the whole header body with JavaScript's `trim` before it
+    // cuts the `#TAG`, so `[ notes.md#FB48 ]` names `notes.md`. Without
+    // control characters or a byte order mark, that trims exactly what
+    // `str::trim` does; with one, the header stays unproven.
+    if body.chars().any(|c| c.is_control() || c == '\u{feff}') {
+        return None;
+    }
+    let body = body.trim();
     let (path, tagged) = match body.rsplit_once('#') {
         Some((path, tag))
             if tag.len() == TAG_LENGTH && tag.chars().all(|c| c.is_ascii_hexdigit()) =>
@@ -142,12 +150,8 @@ fn header_path(line: &str) -> Option<(&str, bool)> {
         Some(_) => return None,
         None => (body, false),
     };
-    // Oh My Pi trims the path with JavaScript's `trim`. Without control
-    // characters or a byte order mark, that trims exactly what `str::trim`
-    // does, so a padded path names the same file once trimmed.
-    if path.chars().any(|c| c.is_control() || c == '\u{feff}') {
-        return None;
-    }
+    // A space written before `#` stays in Oh My Pi's copy of the path; the
+    // file it opens is the trimmed name.
     let path = path.trim();
     // Oh My Pi rewrites quoted, starred and `Update File:`-prefixed paths
     // before opening them, and a scheme names another location, so only a

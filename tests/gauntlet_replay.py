@@ -58,6 +58,7 @@ FIXED = {
     # Gate cases name these tools for Claude Code only, so one spelling is enough.
     "web_fetch": "WebFetch",
     "agent": "Agent",
+    "edit": "edit",
 }
 # Abstract tools upstream Pi also ships; omp-only tools (eval, task, todo, glob, ...) are not mirrored.
 PI_TOOLS = frozenset({"shell", "read", "write", "grep", "ls"})
