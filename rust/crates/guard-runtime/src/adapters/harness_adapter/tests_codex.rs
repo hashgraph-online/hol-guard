@@ -261,3 +261,27 @@ fn shell_cleanup_removes_only_the_guard_block() {
         .filter(|other| other["path"] != change["path"])
         .all(|other| other["before"].is_null()));
 }
+
+#[test]
+fn managed_mcp_leaves_a_workspace_entry_shadowing_a_global_server() {
+    let home = Home::new();
+    let workspace = json!({"mcp_servers": {"shared": {"command": "mine"}}}).to_string();
+    let entry = "{\"command\":\"x\"}";
+    let servers = json!([
+        {"name": "shared", "source_scope": "global", "entry": entry},
+        {"name": "project", "source_scope": "project", "entry": entry},
+    ]);
+    let rendered = |workspace_payload: Value| {
+        let answer = ask(
+            &home,
+            "managed_mcp",
+            json!({"payload": "{}", "workspace_payload": workspace_payload, "servers": servers}),
+        );
+        let rendered: Value = serde_json::from_str(answer["rendered"].as_str().unwrap()).unwrap();
+        rendered["mcp_servers"].clone()
+    };
+    let shadowed = rendered(json!(workspace));
+    assert!(shadowed.get("shared").is_none());
+    assert_eq!(shadowed["project"], json!({"command": "x"}));
+    assert_eq!(rendered(Value::Null)["shared"], json!({"command": "x"}));
+}

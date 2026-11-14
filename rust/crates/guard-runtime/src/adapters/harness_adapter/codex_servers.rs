@@ -109,6 +109,10 @@ pub(super) fn alternate_cleanup(fields: &Map<String, Value>) -> Step<Value> {
 
 /// `render_codex_managed_mcp`: refresh each Guard proxy's launch, then write
 /// or drop the managed servers Python rendered (`null` drops one).
+///
+/// With a workspace (`workspace_payload` present), a workspace entry of the
+/// same name shadows a managed server that was not itself read from the project, so
+/// that server is dropped rather than written over it.
 pub(super) fn managed_mcp(fields: &Map<String, Value>) -> Step<Value> {
     let mut rendered = payload(fields, "payload")?;
     let mut servers: Entries = get(&rendered, "mcp_servers")
@@ -172,6 +176,18 @@ pub(super) fn managed_mcp(fields: &Map<String, Value>) -> Step<Value> {
         }
     }
     migrated.sort();
+    let workspace_names: Option<Vec<String>> = match fields.get("workspace_payload") {
+        None | Some(Value::Null) => None,
+        Some(_) => Some(
+            get(&payload(fields, "workspace_payload")?, "mcp_servers")
+                .and_then(PyVal::as_dict)
+                .unwrap_or_default()
+                .iter()
+                .filter(|(_, server)| server.as_dict().is_some())
+                .map(|(name, _)| name.clone())
+                .collect(),
+        ),
+    };
     for server in fields
         .get("servers")
         .and_then(Value::as_array)
@@ -181,12 +197,16 @@ pub(super) fn managed_mcp(fields: &Map<String, Value>) -> Step<Value> {
             .get("name")
             .and_then(Value::as_str)
             .ok_or(Failure::Invalid)?;
+        let shadowed = workspace_names.as_ref().is_some_and(|names| {
+            server.get("source_scope").and_then(Value::as_str) != Some("project")
+                && names.iter().any(|shadow| shadow == name)
+        });
         match server.get("entry").and_then(Value::as_str) {
-            Some(raw) => {
+            Some(raw) if !shadowed => {
                 let entry = pyjson::parse(raw).map_err(|_| Failure::Invalid)?;
                 set(&mut servers, name, entry);
             }
-            None => {
+            _ => {
                 pop(&mut servers, name);
             }
         }

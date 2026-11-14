@@ -127,7 +127,6 @@ from .mcp_servers import (
 )
 from .native_harness import NativeHarnessAdapter, ask, planned_files
 from .native_hook_bridge import native_hook_bridge_executable
-from .workspace_overrides import should_skip_workspace_override
 
 if TYPE_CHECKING:
     from ..runtime_transition import TransitionFile
@@ -780,27 +779,15 @@ def render_codex_managed_mcp(
 ) -> tuple[dict[str, object], tuple[str, ...]]:
     """Render proxy refresh and workspace precedence from captured payloads."""
     adapter = CodexHarnessAdapter()
-    workspace_servers = workspace_payload.get("mcp_servers")
-    workspace_names = (
-        {name for name, value in workspace_servers.items() if isinstance(name, str) and isinstance(value, dict)}
-        if isinstance(workspace_servers, dict)
-        else set()
-    )
-    entries = [
-        (
-            server.name,
-            None
-            if adapter._should_skip_workspace_override(
-                context=context, server=server, existing_workspace_server_names=workspace_names
-            )
-            else adapter._proxy_server_entry(context, server),
-        )
-        for server in managed_servers
-    ]
-    wire = _Wire(payload, *(entry for _name, entry in entries if entry is not None))
+    entries = [(server, adapter._proxy_server_entry(context, server)) for server in managed_servers]
+    wire = _Wire(payload, workspace_payload, *(entry for _server, entry in entries))
     fields: dict[str, object] = {
         "payload": wire.text(payload),
-        "servers": [{"name": name, "entry": None if entry is None else wire.text(entry)} for name, entry in entries],
+        "workspace_payload": None if context.workspace_dir is None else wire.text(workspace_payload),
+        "servers": [
+            {"name": server.name, "source_scope": server.source_scope, "entry": wire.text(entry)}
+            for server, entry in entries
+        ],
     }
     answer = _codex("managed_mcp", context, **fields)
     if set(answer) == {"reply"}:
@@ -1576,7 +1563,6 @@ class CodexHarnessAdapter(NativeHarnessAdapter):
             server=server,
         )
 
-    _should_skip_workspace_override = staticmethod(should_skip_workspace_override)
 
     def _load_hook_payloads(self, context: HarnessContext) -> dict[Path, dict[str, object]]:
         return {
