@@ -63,8 +63,11 @@ fn evaluate(root: &Path, command: &str, deadline: Instant) -> guard_contracts::P
 /// deadlines below. The resident runtime builds its hook worker before it
 /// starts any hook's deadline, so a hook never pays that cost either; under
 /// coverage instrumentation it alone can exceed `PROBE_FREE_DEADLINE`.
-fn warm_up() {
-    let (root, _cleanup) = checkout("warm-up");
+///
+/// Each test names its own checkout: tests in one binary run on threads of
+/// one process, and a shared directory would let one delete the other's.
+fn warm_up(label: &str) {
+    let (root, _cleanup) = checkout(&format!("warm-up-{label}"));
     evaluate(
         &root,
         "git status",
@@ -74,7 +77,7 @@ fn warm_up() {
 
 #[test]
 fn reads_whose_probe_ran_out_of_time_still_run() {
-    warm_up();
+    warm_up("reads");
     for (label, command, outcome) in [
         (
             "status",
@@ -103,7 +106,7 @@ fn reads_whose_probe_ran_out_of_time_still_run() {
 
 #[test]
 fn a_config_change_before_the_read_is_still_held() {
-    warm_up();
+    warm_up("config-first");
     let (root, _cleanup) = checkout("config-first");
     let result = evaluate(
         &root,
