@@ -50,7 +50,7 @@ Run it locally without an account. Use the CLI and local dashboard to manage pro
 
 ## Install HOL Guard
 
-Requires Python 3.10 or newer, [pipx](https://pipx.pypa.io/stable/installation/), and a matching native runtime. Check the [platform support and Windows ARM64 setup notes](docs/guard/get-started.md#platform-support) before installing.
+Requires Python 3.10 or newer, [pipx](https://pipx.pypa.io/stable/how-to/install-pipx.html), and a matching native runtime. Check the [platform support and Windows ARM64 setup notes](docs/guard/get-started.md#platform-support) before installing.
 
 ```bash
 pipx install hol-guard
