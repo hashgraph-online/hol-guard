@@ -1,7 +1,7 @@
 // Watch is recording-only. This fixture scope prevents model substitutions from executing.
 import { realpathSync } from "node:fs";
 import { win32 } from "node:path";
-export const WATCH_COMMAND = `python -I -S -c 'print("ordinary-watch-fixture")'`;
+export const WATCH_COMMAND = `python -I -S -c 'import os; print("ordinary-watch-fixture", os.path.isdir("."))'`;
 
 /** Spell a cwd the way its platform does, so equal directories compare equal:
  * macOS reports /tmp and /var under /private, and Windows accepts either slash
