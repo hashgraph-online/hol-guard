@@ -349,3 +349,15 @@ fn file_type_probes_proceed_but_magic_loads_and_secrets_ask() {
         assert!(!shell(&home, command).contains("allow"), "{command}");
     }
 }
+
+/// GNU stat reads `-f` and `-t` as flags, so the argument after one is still
+/// a file operand that must pass its own read proof.
+#[cfg(target_os = "linux")]
+#[test]
+fn gnu_stat_short_flags_do_not_hide_the_next_file_operand() {
+    let home = home();
+    for flag in ["-f", "-t"] {
+        let command = format!("stat {flag} /etc/shadow README.md");
+        assert!(!shell(&home, &command).contains("allow"), "{command}");
+    }
+}

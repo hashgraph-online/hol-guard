@@ -477,29 +477,3 @@ fn plain_path(value: &str) -> bool {
             '$', '`', '|', ';', '&', '<', '>', '\n', '\r', '\0', '*', '?', '{', '}', '[', ']',
         ])
 }
-
-#[cfg(all(test, target_os = "linux"))]
-mod stat_operand_regression_tests {
-    use super::*;
-
-    #[test]
-    fn gnu_short_flags_do_not_hide_the_next_file_operand() {
-        let root = env!("CARGO_MANIFEST_DIR");
-        let context = super::super::PathContext {
-            home_dir: Some(root),
-            cwd: Some(root),
-            ..Default::default()
-        };
-        for flag in ["-f", "-t"] {
-            let operands = vec![
-                flag.to_owned(),
-                "/etc/shadow".to_owned(),
-                "Cargo.toml".to_owned(),
-            ];
-            assert!(
-                !safe_stat_arguments(&operands, context),
-                "{flag} must prove every file"
-            );
-        }
-    }
-}
