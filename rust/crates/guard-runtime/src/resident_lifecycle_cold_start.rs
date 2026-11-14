@@ -6,8 +6,8 @@ use std::time::Duration;
 
 use super::{update_at, HourCounts, Journal, Totals};
 
-/// How long a cold start took, from the resident process starting to its
-/// being ready to serve. The bands are the readiness budget's: a start inside a
+/// How long a cold start took, from the resident entering its serve path to
+/// its transport publishing readiness. The bands are the readiness budget's: a start inside a
 /// second is the normal case, five seconds is the most a hook may wait, and
 /// anything slower missed it.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -74,11 +74,15 @@ impl Journal {
     }
 }
 
-/// Count how long this resident took from process start to ready to serve.
+/// Count how long this resident took from entering its serve path to its
+/// transport publishing readiness. Process exec and supervisor time before
+/// that are not included.
 ///
-/// The write runs on its own thread, so the journal lock and its file sync
-/// never delay the first request. A start that fails before it is ready is
-/// already counted as a failed or premature exit and gets no band.
+/// The transport calls this only after its listener is bound and its state is
+/// published, so a start that fails before then, including a failed bind, is
+/// counted as a failed or premature exit and gets no band. The write runs on
+/// its own thread, so the journal lock and its file sync never delay the
+/// first request.
 pub(in crate::managed_resident) fn record_ready_in_background(scope: &Path, elapsed: Duration) {
     let scope = scope.to_path_buf();
     let _ = std::thread::Builder::new()

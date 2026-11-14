@@ -23,6 +23,7 @@ pub(super) fn serve_unix_managed(
     digest: &str,
     token: [u8; crate::AUTH_TOKEN_BYTES],
     owner_alive: Arc<AtomicBool>,
+    on_ready: impl FnOnce(),
 ) -> Result<(), String> {
     use std::os::unix::fs::{FileTypeExt, PermissionsExt};
     use std::os::unix::net::UnixListener;
@@ -69,6 +70,7 @@ pub(super) fn serve_unix_managed(
         );
         return Err("native_socket_identity_changed".to_owned());
     }
+    on_ready();
     let result = managed_accept_loop(listener, Arc::new(token), owner_alive, policy_store);
     drop(ownership);
     resident_state_retirement::retire_state(
@@ -91,6 +93,7 @@ pub(super) fn serve_unix_managed(
     _digest: &str,
     _token: [u8; crate::AUTH_TOKEN_BYTES],
     _owner_alive: Arc<AtomicBool>,
+    _on_ready: impl FnOnce(),
 ) -> Result<(), String> {
     Err("native_unix_socket_not_available".to_owned())
 }
@@ -152,6 +155,7 @@ pub(super) fn serve_loopback_managed(
     digest: &str,
     token: [u8; crate::AUTH_TOKEN_BYTES],
     owner_alive: Arc<AtomicBool>,
+    on_ready: impl FnOnce(),
 ) -> Result<(), String> {
     let listener = TcpListener::bind((Ipv4Addr::LOCALHOST, 0))
         .map_err(|_| "native_resident_loopback_bind_failed".to_owned())?;
@@ -173,6 +177,7 @@ pub(super) fn serve_loopback_managed(
         address.to_string(),
         &token,
     )?;
+    on_ready();
     let admission = crate::resident_transport::start_resident_workers(
         Arc::new(token),
         Some(Arc::clone(&policy_store)),
@@ -233,3 +238,7 @@ pub(super) fn serve_loopback_managed(
     );
     result
 }
+
+#[cfg(all(test, unix))]
+#[path = "managed_resident_transport_ready_tests.rs"]
+mod ready_tests;
