@@ -16,6 +16,7 @@ pub(super) fn unused(
     deadline: Instant,
     named: &[&str],
     repository_optional: bool,
+    tracked_only: bool,
 ) -> Option<bool> {
     let query = |arguments: &[&str], input: Option<Vec<u8>>, root: Option<&Path>| {
         let mut command = Command::new(binary);
@@ -54,6 +55,9 @@ pub(super) fn unused(
         command.args(arguments);
         bounded_output(command, input, deadline)
     };
+    if named.is_empty() && tracked_only && sources::none_named(&query, deadline) {
+        return Some(true);
+    }
     if !named.is_empty() {
         // Operands resolve against the caller's directory. A path outside the
         // work tree makes check-attr fail, which keeps the command reviewed.
@@ -294,6 +298,9 @@ fn bounded_output(
     }
     status?.success().then_some(output)
 }
+
+#[path = "git_config_filter_sources.rs"]
+mod sources;
 
 #[cfg(test)]
 #[path = "git_config_filters_tests.rs"]

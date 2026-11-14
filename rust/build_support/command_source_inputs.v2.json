@@ -418,6 +418,7 @@
       "src/pretool/git_clone_local.rs",
       "src/pretool/git_conditional_include.rs",
       "src/pretool/git_config.rs",
+      "src/pretool/git_config_filter_sources.rs",
       "src/pretool/git_config_filters.rs",
       "src/pretool/git_config_home_tests.rs",
       "src/pretool/git_config_pager.rs",

@@ -120,7 +120,19 @@ fn a_checked_out_gitlink_keeps_status_unproven_when_no_path_has_a_filter() {
         "--cacheinfo",
         "160000,1111111111111111111111111111111111111111,module",
     ]);
-    let inspect = || unused(&git, &[], &repository, &home, None, soon(), &[], false);
+    let inspect = || {
+        unused(
+            &git,
+            &[],
+            &repository,
+            &home,
+            None,
+            soon(),
+            &[],
+            false,
+            true,
+        )
+    };
     // The gitlink is recorded but not checked out: nothing has a filter.
     assert_eq!(inspect(), Some(true));
     // Checked out in place, status would open it under its own configuration.
