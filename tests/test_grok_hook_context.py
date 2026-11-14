@@ -48,7 +48,7 @@ def _generated(context: HarnessContext, mode: str, monkeypatch: pytest.MonkeyPat
             lambda: sys.executable,
         )
         monkeypatch.setattr(
-            "codex_plugin_scanner.guard.adapters.cursor_hook_config.isolated_cursor_hook_python",
+            "codex_plugin_scanner.guard.adapters.isolated_hook_python.isolated_cursor_hook_python",
             lambda: sys.executable,
         )
         # Only a native runtime runs the isolated client; without one Grok registers the bridge.

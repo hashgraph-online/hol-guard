@@ -10,7 +10,7 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
-from codex_plugin_scanner.guard.adapters.cursor_hooks import install_cursor_hooks
+from codex_plugin_scanner.guard.adapters.cursor import install_cursor_hooks
 from tests.conftest import guard_commands_module
 from tests.cursor_bridge_support import live_cursor_daemon, run_cursor_hook
 

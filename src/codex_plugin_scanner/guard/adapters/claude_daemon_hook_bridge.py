@@ -27,11 +27,12 @@ from urllib.parse import parse_qs
 
 from ..codex_hook_launch_runtime import isolated_daemon_start_command
 from ..hook_execution_environment import stamp_hook_input_text
-from ._modules.claude.claude_daemon_state import state_path_for_query
-from .claude_hook_config import CLAUDE_GUARD_DAEMON_HOOK_MARKER
 from .hook_input_reader import read_stdin_text
 from .native_hook_bridge import native_hook_bridge_executable
 
+CLAUDE_GUARD_DAEMON_HOOK_MARKER = "HOL_GUARD_CLAUDE_DAEMON_HOOK"
+_NATIVE_CLAUDE_HOOK_COMMAND = "claude-hook-bridge"
+_NATIVE_CLAUDE_HOOK_FEATURE = "claude-hook-bridge-v1"
 _DEGRADED_DAEMON_MESSAGE = "HOL Guard could not complete native review ({reason}) and denied this action."
 _RISKY_PROMPT_SYSTEM_MESSAGE = (
     "HOL Guard intercepted this prompt because it asks Claude to access local secrets. If Claude "
@@ -85,13 +86,11 @@ def main(
 
 
 def _native_bridge_executable(guard_home: Path) -> Path | None:
-    from .claude_hook_argv import NATIVE_CLAUDE_HOOK_FEATURE
-
     # Claude's hook window is 10s, and the child reserves up to 8s of it.
     # Bound cold native capability probing before launching the child.
     deadline = time.monotonic() + 1.5
     runtime = native_hook_bridge_executable(
-        NATIVE_CLAUDE_HOOK_FEATURE, guard_home=guard_home, deadline_monotonic=deadline
+        _NATIVE_CLAUDE_HOOK_FEATURE, guard_home=guard_home, deadline_monotonic=deadline
     )
     # A quick transient probe miss may clear on the second check. Both attempts
     # share one deadline; a slow or missing runtime still fails closed.
@@ -103,15 +102,32 @@ def _native_bridge_executable(guard_home: Path) -> Path | None:
         if retry_at + 0.25 < deadline:
             time.sleep(max(0.0, retry_at - time.monotonic()))
             runtime = native_hook_bridge_executable(
-                NATIVE_CLAUDE_HOOK_FEATURE, guard_home=guard_home, deadline_monotonic=deadline
+                _NATIVE_CLAUDE_HOOK_FEATURE, guard_home=guard_home, deadline_monotonic=deadline
             )
     return runtime
 
 
 def _native_bridge_command() -> str:
-    from .claude_hook_argv import NATIVE_CLAUDE_HOOK_COMMAND
+    return _NATIVE_CLAUDE_HOOK_COMMAND
 
-    return NATIVE_CLAUDE_HOOK_COMMAND
+
+def _state_path_for_query(state_path: str | Path, query: str) -> Path:
+    raw_path = str(state_path)
+    if not raw_path or "\x00" in raw_path:
+        raise ValueError("daemon state path must be a non-empty filesystem path")
+    path = Path(raw_path)
+    if not path.is_absolute() or path.name != "daemon-state.json":
+        raise ValueError("daemon state path must be an absolute daemon-state.json path")
+    guard_home_values = parse_qs(query).get("guard-home")
+    if not guard_home_values or len(guard_home_values) != 1 or not guard_home_values[0]:
+        raise ValueError("daemon hook query must bind one Guard home")
+    guard_home_value = guard_home_values[0]
+    if "\x00" in guard_home_value:
+        raise ValueError("daemon hook query contains an invalid Guard home")
+    guard_home = Path(guard_home_value)
+    if not guard_home.is_absolute() or path.parent.resolve() != guard_home.resolve():
+        raise ValueError("daemon state path does not match the hook Guard home")
+    return path
 
 
 def _native_bridge_config(
@@ -130,7 +146,7 @@ def _native_bridge_config(
     """
 
     try:
-        recovery_root: str | Path = state_path_for_query(state_path, query)
+        recovery_root: str | Path = _state_path_for_query(state_path, query)
     except ValueError:
         recovery_root = state_path
     config = {

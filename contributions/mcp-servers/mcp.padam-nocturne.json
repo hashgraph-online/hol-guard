@@ -1,9 +1,9 @@
 {
   "schemaVersion": "guard.mcp-server-contribution.v1",
   "id": "mcp.padam-nocturne",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "name": "PADAM NOCTURNE",
-  "description": "Local memory for AI agents in one SQLite file on the user's machine, with sleep-style consolidation and verifiable forgetting. Search, history and stats keep Guard's usual handling; every tool that changes memory or exports all of it is gated on review. Off until you turn it on.",
+  "description": "Local memory for AI agents in one SQLite file on the user's machine: masks secrets, holds orders it recognises (pattern-based, not a guarantee) for the owner and fences search results as data. Search, history and stats keep Guard's usual handling; every tool that changes memory or exports all of it is gated on review. Off until you turn it on.",
   "trustClass": "external",
   "activation": "opt-in",
   "publisher": {

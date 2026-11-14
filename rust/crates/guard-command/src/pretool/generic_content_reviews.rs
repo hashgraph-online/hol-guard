@@ -65,6 +65,7 @@ pub(super) fn review_written_content(
     payload: &Value,
 ) -> PreToolResultV1 {
     let (inputs, unparsed) = argument_inputs(payload);
+    let cwd = payload.get("cwd").and_then(Value::as_str);
     // A key, token or password written into a file leaves the user's hands
     // once the file is committed, synced or read back, so a write that holds
     // a live-looking credential is reviewed rather than allowed as an
@@ -95,6 +96,20 @@ pub(super) fn review_written_content(
         "review",
         reason_code,
         "This write leaves an instruction for a later agent session that overrides a safety rule and tells the agent to keep it from you.",
+    );
+    }
+    if result.decision == "allow"
+        && result.action.action_type == PreToolActionTypeV1::FileWrite
+        && inputs
+            .iter()
+            .any(|input| super::super::install_script_writes::adds_install_script(input, cwd))
+    {
+        let (reason_code, _) = review_reason(PreToolActionTypeV1::FileWrite);
+        result = generic_result(
+        result.action.clone(),
+        "review",
+        reason_code,
+        "This write adds an install script to package.json. The package manager runs it on every later install, on this machine and on anyone else's, without asking.",
     );
     }
     // Both screens read a bounded prefix of each body, so a body longer than
@@ -133,6 +148,28 @@ pub(super) fn keeps_unsandboxed_program_review(
             command_text,
             context,
         )
+        || keeps_hook_neutering_review(result, model, command_text)
+}
+
+/// Keeps the review of a command that overwrites a git hook with a script
+/// that does nothing, or renames a hook away. The sandbox writes anywhere
+/// in the workspace, so the hook stays switched off after the run ends.
+fn keeps_hook_neutering_review(
+    result: &mut PreToolResultV1,
+    model: &crate::CanonicalCommandV1,
+    command_text: Option<&str>,
+) -> bool {
+    if !crate::pretool::hook_neutering::neuters_git_hooks(&model.normalized_text)
+        && !command_text.is_some_and(crate::pretool::hook_neutering::neuters_git_hooks)
+    {
+        return false;
+    }
+    result.reason = concat!(
+        "HOL Guard needs your review because this command switches off a git hook ",
+        "for every later commit, which Guard's sandbox does not undo."
+    )
+    .into();
+    true
 }
 
 #[cfg(test)]

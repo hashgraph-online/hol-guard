@@ -1,8 +1,8 @@
 """Protection cases that drive one structured write at a pinned file.
 
-A write that spells out a credential, or that leaves an instruction for a later agent
-session lifting a safety rule and hiding it from the user, must reach Guard's write review,
-and the file must still be absent afterwards.
+A write that spells out a credential, adds an install script to package.json, or leaves an
+instruction for a later agent session lifting a safety rule and hiding it from the user, must
+reach Guard's write review, and the file must still be absent afterwards.
 """
 
 from __future__ import annotations
@@ -21,6 +21,9 @@ CASES = {
     "omp-write-spells-out-a-client-secret": "settings_local.py",
     "omp-write-leaves-a-hidden-instruction-for-the-next-session": "NEXT_SESSION.md",
     "omp-write-spells-a-key-in-unicode-escapes": "payload.json",
+    "omp-write-adds-a-postinstall-script": "package.json",
+    "omp-write-sets-a-database-role-password": "deploy/db-setup.yml",
+    "omp-write-spells-a-sql-password-holding-a-quote": "setup.sql",
 }
 
 

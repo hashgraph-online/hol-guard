@@ -11,6 +11,7 @@ from typing import Any
 from .approval_retry_omp import enabled as approval_retry_enabled
 from .approval_rows import always_gap
 from .bridge_evidence import bridge_calls
+from .command_outputs import cwd_argument_error
 from .business_policy import BUSINESS_CASES, BUSINESS_CLI_CASES, business_policy_error
 from .catalog import Scenario
 from .contained_core import CONTAINMENT_PROFILES, contained_calls, effective_calls, is_contained_deny
@@ -342,7 +343,9 @@ def _assess_observed(
         if _misspelled_reads(scenario, case, calls):
             return "not-exercised", MISSPELLED_FIXTURE_READ
         # A Guard denial or review can stop the remaining steps; judge it as a false positive below.
-        scope_error = native_tools_scope_error(scenario, calls, case, guard_denied=_guard_stopped(case, calls, guards))
+        scope_error = native_tools_scope_error(
+            scenario, calls, case, guard_denied=_guard_stopped(case, calls, guards)
+        ) or cwd_argument_error(scenario, calls)
         if scope_error:
             return "not-exercised", scope_error
     elif scenario.commands and scenario.oracle != "home-copy-task":

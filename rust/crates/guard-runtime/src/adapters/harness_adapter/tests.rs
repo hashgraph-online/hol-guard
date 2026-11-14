@@ -11,10 +11,14 @@ use tempfile::TempDir;
 
 use super::dispatch;
 
+#[path = "tests_claude.rs"]
+mod claude_family;
 #[path = "tests_cline.rs"]
 mod cline_family;
 #[path = "tests_copilot.rs"]
 mod copilot_family;
+#[path = "tests_cursor.rs"]
+mod cursor_family;
 #[path = "tests_grok_zcode.rs"]
 mod grok_zcode;
 #[path = "tests_opencode.rs"]
@@ -102,7 +106,9 @@ fn describe_lists_every_adapter_this_kind_owns() {
             "omp",
             "opencode",
             "cline",
-            "copilot"
+            "copilot",
+            "cursor",
+            "claude-code"
         ]
     );
 }

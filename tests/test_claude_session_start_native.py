@@ -1,8 +1,7 @@
-"""The installer's native Claude SessionStart lane and its Python parity."""
+"""The installer's native Claude SessionStart lane and the Python command it falls back to."""
 
 from __future__ import annotations
 
-import copy
 import json
 import os
 import re
@@ -13,8 +12,7 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.guard import native_runtime
-from codex_plugin_scanner.guard.adapters import claude_hook_argv
-from codex_plugin_scanner.guard.adapters import claude_hook_config as config
+from codex_plugin_scanner.guard.adapters import claude_code
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.native_runtime_values import (
     NativeRuntimeCapabilities,
@@ -23,10 +21,13 @@ from codex_plugin_scanner.guard.native_runtime_values import (
 )
 
 _REPO = Path(__file__).resolve().parents[1]
-_FIXTURE = _REPO / "tests" / "fixtures" / "claude_session_start" / "settings-current.v1.json"
 _RUST_SOURCE = _REPO / "rust" / "crates" / "guard-runtime" / "src" / "claude_session_start.rs"
+_RUST_ARGV = _REPO / "rust" / "crates" / "guard-runtime" / "src" / "adapters" / "harness_adapter" / "claude_argv.rs"
 _CURSOR_ENV = ("CURSOR_VERSION", "CURSOR_PROJECT_DIR", "CURSOR_TRACE_ID", "CURSOR_SESSION_ID", "CURSOR_TRANSCRIPT_PATH")
-_BOTH_FEATURES = (claude_hook_argv.NATIVE_CLAUDE_HOOK_FEATURE, claude_hook_argv.NATIVE_CLAUDE_SESSION_START_FEATURE)
+_BOTH_FEATURES = (claude_code.NATIVE_CLAUDE_HOOK_FEATURE, claude_code.NATIVE_CLAUDE_SESSION_START_FEATURE)
+_MODE = "session-start"
+_SESSION_MARKER = claude_code.CLAUDE_GUARD_SESSION_START_HOOK_MARKER
+_ADAPTER = claude_code.ClaudeCodeHarnessAdapter
 
 posix_only = pytest.mark.skipif(os.name == "nt", reason="these lane fixtures are POSIX only")
 
@@ -60,28 +61,17 @@ def _own_home_context(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Harnes
     return HarnessContext(home_dir=home, workspace_dir=workspace, guard_home=home / ".hol-guard")
 
 
+def _python_argv(context: HarnessContext) -> tuple[str, ...]:
+    return claude_code._argv("python_session_start", context)  # pyright: ignore[reportPrivateUsage]
+
+
+def _handler(argv: tuple[str, ...] | list[str]) -> dict[str, object]:
+    return {"type": "command", "command": argv[0], "args": list(argv[1:]), "timeout": 10}
+
+
 def _use_runtime(monkeypatch: pytest.MonkeyPatch, runtime: Path, features: tuple[str, ...]) -> None:
     monkeypatch.setattr(native_runtime, "native_runtime_status", lambda **_kwargs: _status(features, runtime))
-
-
-def _refresh(hooks: dict[str, object], argv: tuple[str, ...]) -> None:
-    config.sync_runtime_hook_groups(hooks, argv)
-    config.remove_unsupported_guard_hook_groups(hooks)
-
-
-def test_shared_fixture_is_what_the_python_refresh_writes_and_keeps() -> None:
-    fixture = json.loads(_FIXTURE.read_text(encoding="utf-8"))
-    argv = (
-        *fixture["daemon_hook_command"],
-        claude_hook_argv.bridge_config_text(fixture["bridge_config"], fixture["daemon_url"]),
-    )
-    from_seed = copy.deepcopy(fixture["seed_hooks"])
-    _refresh(from_seed, argv)
-    assert from_seed == fixture["settings"]["hooks"]
-    # The Rust lane calls these settings current, so the refresh must leave them byte for byte.
-    again = copy.deepcopy(fixture["settings"])
-    _refresh(again["hooks"], argv)
-    assert json.dumps(again, indent=2) == json.dumps(fixture["settings"], indent=2)
+    monkeypatch.setattr(claude_code, "load_guard_daemon_url", lambda _guard_home: "http://127.0.0.1:43123")
 
 
 @posix_only
@@ -92,23 +82,21 @@ def test_installer_writes_the_native_lane_when_the_runtime_offers_it(
     runtime = tmp_path / "hol-guard-runtime"
     _use_runtime(monkeypatch, runtime, _BOTH_FEATURES)
 
-    argv = claude_hook_argv.session_start_command_parts(context)
+    argv = _ADAPTER._session_start_command_parts(context)
 
     assert argv[:4] == (
         str(runtime),
         "claude-hook-bridge",
-        "session-start",
-        config.CLAUDE_GUARD_SESSION_START_HOOK_MARKER,
+        _MODE,
+        _SESSION_MARKER,
     )
     lane = json.loads(argv[4])
-    python_argv = claude_hook_argv._python_session_start_command_parts(context)
+    python_argv = _python_argv(context)
     assert lane["fallback_command"] == list(python_argv)
     assert python_argv[1] == "-c"
     assert lane["home"] == str(Path.home())
     assert lane["home_dir"] == str(context.home_dir)
     assert lane["runtime_build"] == "9.9.9+" + "a" * 40
-    handler = config.guard_command_handler(argv, timeout=10)
-    assert config.prune_guard_hook_entries([{"matcher": "startup", "hooks": [handler]}]) == []
 
 
 @posix_only
@@ -119,15 +107,13 @@ def test_lane_describes_exactly_the_daemon_hook_the_refresh_writes(
     _use_runtime(monkeypatch, tmp_path / "hol-guard-runtime", _BOTH_FEATURES)
     url = "http://127.0.0.1:43123"
 
-    lane = json.loads(claude_hook_argv.session_start_command_parts(context)[4])
-    daemon_argv = claude_hook_argv.daemon_hook_command_parts(context, fallback_daemon_url=url)
+    lane = json.loads(_ADAPTER._session_start_command_parts(context)[4])
+    daemon_argv = _ADAPTER._daemon_hook_command_parts(context)
 
     assert tuple(lane["daemon_hook_command"]) == daemon_argv[:3]
-    assert claude_hook_argv.bridge_config_text(lane["bridge_config"], url) == daemon_argv[3]
-    assert set(lane["bridge_config"]) <= {
-        *config.CLAUDE_BRIDGE_CONFIG_REQUIRED_KEYS,
-        *config.CLAUDE_BRIDGE_CONFIG_OPTIONAL_KEYS,
-    }
+    bridge_config = json.loads(daemon_argv[3])
+    assert bridge_config.pop("fallback_daemon_url") == url
+    assert bridge_config == lane["bridge_config"]
 
 
 @posix_only
@@ -135,7 +121,7 @@ def test_lane_describes_exactly_the_daemon_hook_the_refresh_writes(
     "features",
     [
         pytest.param(None, id="native-runtime-missing"),
-        pytest.param((claude_hook_argv.NATIVE_CLAUDE_HOOK_FEATURE,), id="session-start-feature-missing"),
+        pytest.param((claude_code.NATIVE_CLAUDE_HOOK_FEATURE,), id="session-start-feature-missing"),
     ],
 )
 def test_installer_keeps_the_python_command_without_the_native_lane(
@@ -145,14 +131,13 @@ def test_installer_keeps_the_python_command_without_the_native_lane(
 ) -> None:
     context = _own_home_context(tmp_path, monkeypatch)
     if features is None:
-        monkeypatch.setattr(claude_hook_argv, "native_hook_bridge_executable", lambda _feature, **_kwargs: None)
-        monkeypatch.setattr(claude_hook_argv, "_native_bridge_executable", lambda *_args, **_kwargs: None)
+        monkeypatch.setattr(claude_code, "native_hook_bridge_executable", lambda _feature, **_kwargs: None)
     else:
         _use_runtime(monkeypatch, tmp_path / "hol-guard-runtime", features)
 
-    argv = claude_hook_argv.session_start_command_parts(context)
+    argv = _ADAPTER._session_start_command_parts(context)
 
-    assert argv == claude_hook_argv._python_session_start_command_parts(context)
+    assert argv == _python_argv(context)
     assert argv[1] == "-c"
 
 
@@ -163,20 +148,21 @@ def test_installer_keeps_the_python_command_for_another_home(tmp_path: Path, mon
     (tmp_path / "other").mkdir()
     _use_runtime(monkeypatch, tmp_path / "hol-guard-runtime", _BOTH_FEATURES)
 
-    assert claude_hook_argv.session_start_command_parts(other)[1] == "-c"
+    assert _ADAPTER._session_start_command_parts(other)[1] == "-c"
 
 
 def test_rust_lane_constants_match_the_installer() -> None:
     source = _RUST_SOURCE.read_text(encoding="utf-8")
 
-    def rust_const(name: str) -> str:
-        match = re.search(rf'const {name}: &str = "([^"]*)";', source)
+    def rust_const(name: str, text: str = source) -> str:
+        match = re.search(rf'const {name}: &str = "([^"]*)";', text)
         assert match is not None, name
         return match.group(1)
 
-    assert rust_const("SESSION_START_MODE") == claude_hook_argv.NATIVE_CLAUDE_SESSION_START_MODE
-    assert rust_const("SESSION_START_MARKER") == config.CLAUDE_GUARD_SESSION_START_HOOK_MARKER
-    assert rust_const("SESSION_START_FEATURE") == claude_hook_argv.NATIVE_CLAUDE_SESSION_START_FEATURE
+    assert rust_const("SESSION_START_MODE") == _MODE
+    assert rust_const("SESSION_START_MODE", _RUST_ARGV.read_text(encoding="utf-8")) == _MODE
+    assert rust_const("SESSION_START_MARKER") == _SESSION_MARKER
+    assert rust_const("SESSION_START_FEATURE") == claude_code.NATIVE_CLAUDE_SESSION_START_FEATURE
     for key in _CURSOR_ENV:
         assert f'"{key}"' in source
 
@@ -189,14 +175,18 @@ def test_compiled_lane_hands_a_stale_session_to_the_python_command(native_hook_f
         "home": str(tmp_path),
         "home_dir": str(tmp_path),
         "runtime_build": "0.0.0+stale",
-        "daemon_hook_command": [str(native_hook_force), "claude-hook-bridge", config.CLAUDE_GUARD_DAEMON_HOOK_MARKER],
+        "daemon_hook_command": [
+            str(native_hook_force),
+            "claude-hook-bridge",
+            claude_code.CLAUDE_GUARD_DAEMON_HOOK_MARKER,
+        ],
         "bridge_config": {"state_path": str(tmp_path / "daemon-state.json"), "fallback_command": ["x"], "query": ""},
     }
     argv = (
         str(native_hook_force),
         "claude-hook-bridge",
-        claude_hook_argv.NATIVE_CLAUDE_SESSION_START_MODE,
-        config.CLAUDE_GUARD_SESSION_START_HOOK_MARKER,
+        _MODE,
+        _SESSION_MARKER,
         json.dumps(lane),
     )
 
@@ -212,13 +202,10 @@ def test_compiled_lane_hands_a_stale_session_to_the_python_command(native_hook_f
 def test_python_refresh_moves_an_upgraded_install_back_onto_the_native_lane(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from codex_plugin_scanner.guard.adapters import claude_code
-
     context = _own_home_context(tmp_path, monkeypatch)
     runtime = tmp_path / "hol-guard-runtime"
     _use_runtime(monkeypatch, runtime, _BOTH_FEATURES)
-    monkeypatch.setattr(claude_code, "load_guard_daemon_url", lambda _guard_home: "http://127.0.0.1:43123")
-    stale = list(claude_hook_argv.session_start_command_parts(context))
+    stale = list(_ADAPTER._session_start_command_parts(context))
     lane = json.loads(stale[4])
     lane["runtime_build"] = "0.0.0+" + "b" * 40
     stale[4] = json.dumps(lane)
@@ -231,7 +218,7 @@ def test_python_refresh_moves_an_upgraded_install_back_onto_the_native_lane(
                 "hooks": {
                     "SessionStart": [
                         {"matcher": "startup", "hooks": [user_hook]},
-                        {"hooks": [config.guard_command_handler(tuple(stale), timeout=10)]},
+                        {"hooks": [_handler(stale)]},
                     ]
                 }
             }
@@ -239,15 +226,15 @@ def test_python_refresh_moves_an_upgraded_install_back_onto_the_native_lane(
         encoding="utf-8",
     )
 
-    claude_code.ClaudeCodeHarnessAdapter.refresh_installed_hook_urls(
+    _ADAPTER.refresh_installed_hook_urls(
         home_dir=context.home_dir, workspace_dir=context.workspace_dir, guard_home=context.guard_home
     )
 
     entries = json.loads(settings_path.read_text(encoding="utf-8"))["hooks"]["SessionStart"]
     handlers = [handler for entry in entries for handler in entry["hooks"]]
     assert user_hook in handlers
-    argvs = [config.command_handler_argv(handler) for handler in handlers if handler != user_hook]
-    lanes = [argv for argv in argvs if argv and argv[2:3] == (claude_hook_argv.NATIVE_CLAUDE_SESSION_START_MODE,)]
-    expected = claude_hook_argv.session_start_command_parts(context)
-    assert lanes == [expected] * len(config.CLAUDE_GUARD_SESSION_START_MATCHERS)
+    argvs = [(handler["command"], *handler["args"]) for handler in handlers if handler != user_hook]
+    lanes = [argv for argv in argvs if argv[2:3] == (_MODE,)]
+    expected = _ADAPTER._session_start_command_parts(context)
+    assert lanes == [expected] * 4
     assert json.loads(lanes[0][4])["runtime_build"] == "9.9.9+" + "a" * 40

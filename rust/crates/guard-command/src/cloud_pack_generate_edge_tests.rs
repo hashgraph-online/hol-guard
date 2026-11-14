@@ -204,15 +204,14 @@ fn a_zero_bound_is_never_widened() {
 }
 
 #[test]
-fn an_mcp_argument_is_never_renamed() {
-    let tools = json!([{ "name": "move_file", "inputSchema": { "type": "object",
-        "required": ["folderPath"],
-        "properties": { "folderPath": { "type": "string" }, "note": { "type": "string" } } } }]);
+fn an_mcp_list_with_a_zero_bound_is_never_widened() {
+    let tools = json!([{ "name": "tag_items", "inputSchema": { "type": "object",
+        "required": ["tags"],
+        "properties": { "tags": { "type": "array", "maxItems": 0, "items": { "type": "object" } },
+            "note": { "type": "string" } } } }]);
     let reply = reply(json!({ "op": "generate", "providerId": "files",
         "host": "mcp.files.example", "authMode": "oauth2", "mcpTools": tools }));
-    let arguments = &only(&reply)["arguments"];
-    assert!(arguments.get("folder_path").is_none(), "{arguments}");
-    assert_eq!(arguments["note"]["type"], json!("string"));
+    assert!(only(&reply)["arguments"].get("tags").is_none());
     assert!(noted(&reply, "required_argument_unsupported"));
 }
 

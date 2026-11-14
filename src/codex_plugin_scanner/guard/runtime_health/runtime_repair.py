@@ -7,7 +7,7 @@ from pathlib import Path
 from packaging.version import InvalidVersion, Version
 
 from ...version import __version__
-from ..cursor_hook_rebind import rebind_stale_cursor_hooks
+from ..adapters.cursor import rebind_stale_cursor_hooks
 from ..native_daemon_manage import (
     _guard_daemon_state_matches_current_runtime,
     clear_guard_daemon_state,

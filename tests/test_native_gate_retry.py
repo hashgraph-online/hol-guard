@@ -4,6 +4,7 @@ import pytest
 
 from tests.native_gate_retry import (
     EXTENSION_TIMEOUT_REASON,
+    GIT_CONTEXT_REASONS,
     REVIEW_DEADLINE_REASON,
     UNAVAILABLE_REASON,
     NativeUnavailableRetryWarning,
@@ -38,6 +39,24 @@ def test_other_denials_are_not_retried() -> None:
     review, calls = _scripted(denied)
     assert review_with_unavailable_retry("case", review) == denied
     assert len(calls) == 1
+
+
+@pytest.mark.parametrize("reason", sorted(GIT_CONTEXT_REASONS))
+def test_a_git_context_hold_is_retried_once(reason: str) -> None:
+    held = {"decision": "deny", "reason_code": reason}
+    review, calls = _scripted(held, _ALLOW)
+    with pytest.warns(NativeUnavailableRetryWarning, match="held on its configuration"):
+        assert review_with_unavailable_retry("case", review) == _ALLOW
+    assert len(calls) == 2
+
+
+@pytest.mark.parametrize("reason", sorted(GIT_CONTEXT_REASONS))
+def test_a_git_context_hold_on_both_attempts_is_the_answer(reason: str) -> None:
+    held = {"decision": "deny", "reason_code": reason}
+    review, calls = _scripted(held, held)
+    with pytest.warns(NativeUnavailableRetryWarning, match="re-running once"):
+        assert review_with_unavailable_retry("case", review) == held
+    assert len(calls) == 2
 
 
 def test_unavailable_then_answered_uses_the_second_result() -> None:

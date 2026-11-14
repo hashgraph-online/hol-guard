@@ -44,11 +44,24 @@ pub fn check_arguments<'a>(
     let record = args
         .as_object()
         .ok_or_else(|| error("not_an_object", None))?;
-    if let Some(name) = record
-        .keys()
-        .find(|name| !action.arguments.contains_key(*name))
-    {
-        return Err(error("unknown_argument", Some(name)));
+    let mut open_bytes = 0_usize;
+    for (name, value) in record {
+        if action.arguments.contains_key(name) {
+            continue;
+        }
+        let Some(open) = &action.open_arguments else {
+            return Err(error("unknown_argument", Some(name)));
+        };
+        if !crate::cloud_pack_validate::mcp_name(name) {
+            return Err(error("unknown_argument", Some(name)));
+        }
+        // Count each entry as it is encoded, name and separators included,
+        // so many empty values under long names still add up.
+        let entry = json_len(&Value::String(name.clone())) + json_len(value) + 2;
+        open_bytes = open_bytes.saturating_add(entry);
+        if open_bytes > open.max_bytes as usize {
+            return Err(error("open_arguments_too_large", Some(name)));
+        }
     }
     for (name, spec) in &action.arguments {
         let Some(value) = record.get(name) else {
@@ -72,6 +85,20 @@ fn check_value(spec: &ArgumentSpec, value: &Value) -> Result<(), &'static str> {
             .map(|_| ())
             .ok_or("invalid_argument"),
         ArgumentSpec::Boolean { .. } => value.as_bool().map(|_| ()).ok_or("invalid_argument"),
+        ArgumentSpec::Json {
+            max_bytes,
+            max_items,
+            ..
+        } => {
+            let shaped = value.is_object() || value.is_array();
+            let fits = shaped && json_len(value) <= *max_bytes as usize;
+            let counted = max_items.is_none_or(|max| {
+                value
+                    .as_array()
+                    .is_some_and(|list| list.len() <= max as usize)
+            });
+            (fits && counted).then_some(()).ok_or("invalid_argument")
+        }
         ArgumentSpec::String { .. } => check_text(spec.text_rule().as_ref(), value),
         ArgumentSpec::Array {
             min_items,
@@ -87,6 +114,11 @@ fn check_value(spec: &ArgumentSpec, value: &Value) -> Result<(), &'static str> {
                 .try_for_each(|item| check_text(Some(items), item))
         }
     }
+}
+
+/// The serialized size of a value; one that cannot be written counts as too large.
+fn json_len(value: &Value) -> usize {
+    serde_json::to_vec(value).map_or(usize::MAX, |bytes| bytes.len())
 }
 
 pub(crate) fn check_text(rule: Option<&TextRule>, value: &Value) -> Result<(), &'static str> {
@@ -132,10 +164,11 @@ pub fn render(action: &PackAction, args: &Value) -> Result<RenderedRequest, Argu
         .collect();
     let body = match &request.body {
         Some(template) => {
-            headers.push([
-                "content-type".into(),
-                "application/json; charset=utf-8".into(),
-            ]);
+            let content_type = match template {
+                Template::Form(_) => "application/x-www-form-urlencoded",
+                _ => "application/json; charset=utf-8",
+            };
+            headers.push(["content-type".into(), content_type.into()]);
             Some(render_body(template, record)?)
         }
         None => None,
@@ -303,6 +336,7 @@ fn write_template(
         Template::Arg(name) => write_json(args.get(name).unwrap_or(&Value::Null), out),
         Template::Const(value) => write_json(value, out),
         Template::Element(_) => write_json(element.ok_or_else(|| refused(None))?, out),
+        Template::Form(_) => Err(refused(None)),
         Template::Rfc822(mail) => {
             let encoded =
                 crate::cloud_pack_mail::render(mail, args).ok_or_else(|| refused(None))?;
@@ -382,7 +416,13 @@ pub(crate) fn render_body(
     args: &Map<String, Value>,
 ) -> Result<String, ArgumentError> {
     let mut out = String::new();
-    write_template(template, args, None, &mut out)?;
+    match template {
+        Template::Form(fields) => {
+            out = crate::cloud_pack_form::render(fields, args, MAX_BODY_BYTES)
+                .ok_or_else(|| refused(None))?;
+        }
+        _ => write_template(template, args, None, &mut out)?,
+    }
     if out.len() > MAX_BODY_BYTES {
         return Err(refused(None));
     }

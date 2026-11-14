@@ -157,6 +157,32 @@ fn mcp_tool_list_drafts_remote_actions() {
 }
 
 #[test]
+fn mcp_draft_keeps_tool_argument_names_and_bounds_objects() {
+    let tools = json!([
+        { "name": "updateSobjectRecord", "inputSchema": { "type": "object",
+            "required": ["sobject-name", "id", "body"],
+            "properties": {
+                "sobject-name": { "type": "string" },
+                "id": { "type": "string", "maxLength": 18 },
+                "body": { "type": "object" },
+                "pages": { "type": "array", "maxItems": 20, "items": { "type": "object" } },
+            } } },
+    ]);
+    let reply = generate(json!({
+        "op": "generate", "providerId": "crm", "host": "mcp.crm.example",
+        "authMode": "oauth2", "mcpTools": tools,
+    }));
+    let pack = reply["pack"].clone();
+    let arguments = &action(&pack, "crm.update_sobject_record")["arguments"];
+    assert_eq!(arguments["sobject-name"]["type"], json!("string"));
+    assert_eq!(arguments["body"]["type"], json!("json"));
+    assert_eq!(arguments["pages"]["maxItems"], json!(20));
+    assert!(arguments.get("sobject_name").is_none(), "{arguments}");
+    let accepted = line(json!({ "op": "validate", "pack": filled(pack) }));
+    assert_eq!(accepted["ok"], json!(true), "{accepted}");
+}
+
+#[test]
 fn generate_refuses_sources_it_cannot_pin() {
     let refuse = |request: Value| line(request)["error"]["code"].clone();
     let swagger = json!({ "swagger": "2.0", "paths": {} });

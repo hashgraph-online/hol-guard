@@ -27,7 +27,6 @@ def test_quality_preserves_existing_paths_and_checks_cleanup_diagnostics(name):
         "tests/test_native_offline_cache.py",
         "tests/test_native_policy_test_support.py",
         "tests/test_ci_native_evaluator_cache.py",
-        "tests/test_cursor_native_bridge.py",
         "tests/test_grok_native_bridge.py",
         "tests/test_frozen_windows_daemon_bootstrap.py",
         "tests/test_frozen_windows_daemon_cleanup_diagnostics.py",

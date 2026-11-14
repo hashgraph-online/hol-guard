@@ -29,17 +29,26 @@ def _post(pack: dict) -> dict:
 def test_the_shipped_packs_match_the_schema() -> None:
     assert [path.name for path in PACKS] == [
         "airtable.json",
+        "asana.json",
+        "atlassian.json",
+        "box.json",
         "calendar.json",
         "docs.json",
         "drive.json",
         "dropbox.json",
         "github.json",
         "gmail.json",
+        "hubspot-mcp.json",
+        "hubspot.json",
+        "notion-mcp.json",
         "notion.json",
         "onedrive.json",
         "outlook.json",
+        "salesforce-mcp.json",
         "sheets.json",
         "slack.json",
+        "stripe-mcp.json",
+        "stripe.json",
         "teams.json",
     ]
     validator = _validator()
@@ -79,6 +88,13 @@ def _both_links(pack: dict) -> None:
     _post(pack)["link"] = {"tool": "a", "permissionId": "b"}
 
 
+def _form_value(value: dict):
+    def change(pack: dict) -> None:
+        _post(pack)["executor"]["request"]["body"] = {"form": [{"name": "channel", "value": value}]}
+
+    return change
+
+
 @pytest.mark.parametrize(
     "change",
     [
@@ -94,6 +110,9 @@ def _both_links(pack: dict) -> None:
         _unanchored,
         _url_executor,
         _both_links,
+        _form_value({"object": []}),
+        _form_value({"const": {}}),
+        _form_value({"const": 1.5}),
     ],
     ids=[
         "authorization-header",
@@ -108,6 +127,9 @@ def _both_links(pack: dict) -> None:
         "unanchored-pattern",
         "unknown-executor",
         "two-links",
+        "nested-form-value",
+        "object-form-constant",
+        "fractional-form-constant",
     ],
 )
 def test_the_schema_refuses_unsafe_packs(change) -> None:

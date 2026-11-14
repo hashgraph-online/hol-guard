@@ -112,7 +112,7 @@
     },
     "argumentName": {
       "type": "string",
-      "pattern": "^[a-z_][a-z0-9_]{0,63}$"
+      "pattern": "^[A-Za-z_][A-Za-z0-9_-]{0,63}$"
     },
     "pattern": {
       "type": "string",
@@ -184,10 +184,25 @@
           "maxProperties": 32,
           "propertyNames": {
             "type": "string",
-            "pattern": "^[a-z_][a-z0-9_]{0,63}$"
+            "pattern": "^[A-Za-z_][A-Za-z0-9_-]{0,63}$"
           },
           "additionalProperties": {
             "$ref": "#/$defs/argument"
+          }
+        },
+        "openArguments": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "maxBytes"
+          ],
+          "description": "Remote MCP actions only: undeclared tool arguments may be sent, bounded in total size.",
+          "properties": {
+            "maxBytes": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 65536
+            }
           }
         },
         "facts": {
@@ -594,6 +609,77 @@
               }
             }
           }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "form"
+          ],
+          "properties": {
+            "form": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 64,
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "name",
+                  "value"
+                ],
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "pattern": "^[A-Za-z0-9_.\\[\\]-]{1,64}$"
+                  },
+                  "value": {
+                    "$ref": "#/$defs/formValue"
+                  }
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "formValue": {
+      "description": "A form field carries one scalar: an argument, or a constant string, integer or boolean.",
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "arg"
+          ],
+          "properties": {
+            "arg": {
+              "$ref": "#/$defs/argumentName"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "const"
+          ],
+          "properties": {
+            "const": {
+              "oneOf": [
+                {
+                  "type": "string",
+                  "maxLength": 256
+                },
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "boolean"
+                }
+              ]
+            }
+          }
         }
       ]
     },
@@ -716,6 +802,34 @@
             },
             "items": {
               "$ref": "#/$defs/textRule"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "required",
+            "maxBytes"
+          ],
+          "description": "A JSON object or array argument, sent as is. Remote MCP actions only.",
+          "properties": {
+            "type": {
+              "const": "json"
+            },
+            "required": {
+              "type": "boolean"
+            },
+            "maxBytes": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 65536
+            },
+            "maxItems": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 1000
             }
           }
         }
@@ -891,6 +1005,44 @@
         },
         "sensitivity": {
           "$ref": "#/$defs/extractor"
+        },
+        "money": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "amount",
+            "direction"
+          ],
+          "oneOf": [
+            {
+              "required": [
+                "currencyArgument"
+              ]
+            },
+            {
+              "required": [
+                "currency"
+              ]
+            }
+          ],
+          "properties": {
+            "amount": {
+              "$ref": "#/$defs/argumentName"
+            },
+            "currencyArgument": {
+              "$ref": "#/$defs/argumentName"
+            },
+            "currency": {
+              "type": "string",
+              "pattern": "^[A-Z]{3}$"
+            },
+            "direction": {
+              "enum": [
+                "out",
+                "in"
+              ]
+            }
+          }
         },
         "countReadback": {
           "type": "string",

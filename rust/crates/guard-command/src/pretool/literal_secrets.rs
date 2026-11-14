@@ -20,6 +20,8 @@ use serde_json::{Map, Value};
 
 #[path = "literal_secret_pairs.rs"]
 mod pairs;
+#[path = "literal_secret_strong.rs"]
+mod strong;
 #[path = "literal_secret_value.rs"]
 mod value;
 
@@ -66,7 +68,7 @@ static SHAPED: LazyLock<[Regex; 3]> = LazyLock::new(|| {
     ]
 });
 /// Shapes whose captured `v` is a credential when it also looks random.
-static NAMED: LazyLock<[Regex; 9]> = LazyLock::new(|| {
+static NAMED: LazyLock<[Regex; 11]> = LazyLock::new(|| {
     [
         pattern(
             r#"(?i)--?[a-z\-]*(?:password|passwd|passphrase|token|secret)[a-z\-]*["']?\s*[,=]?\s*["']?(?P<v>[A-Za-z0-9+/_\-]{6,})"#,
@@ -79,6 +81,9 @@ static NAMED: LazyLock<[Regex; 9]> = LazyLock::new(|| {
         pattern(r"\bBearer\s+(?P<v>[A-Za-z0-9._~+/\-]{16,}=*)"),
         pattern(r#"-pass(?:in|out)?\s+pass:(?P<v>[^\s"']{4,})"#),
         pattern(r#"(?i)\bIDENTIFIED\s+BY\s+(?:PASSWORD\s+)?["'](?P<v>[^"'\n]{4,64})["']"#),
+        // A quoted password may hold the other quote character.
+        pattern(r#"(?i)\bIDENTIFIED\s+BY\s+(?:PASSWORD\s+)?"(?P<v>[^"\n]{4,64})""#),
+        pattern(r"(?i)\bIDENTIFIED\s+BY\s+(?:PASSWORD\s+)?'(?P<v>[^'\n]{4,64})'"),
         pattern(r"(?i)\bPASSWORD\s+'(?P<v>[^'\n]{4,64})'"),
         pattern(
             r#"(?i)(?:getenv|environ\.get|env\.get|ENV\.fetch)\(\s*["'][A-Za-z0-9_]*(?:SECRET|TOKEN|PASSWORD|PASSWD|API_?KEY|KEY)[A-Za-z0-9_]*["']\s*,\s*["'](?P<v>[^"'\s]{6,})["']"#,
@@ -214,7 +219,7 @@ fn holds_spelled_secret(text: &str) -> bool {
         !text[whole.end()..].starts_with('(')
             && !NOT_A_SECRET_NAME.is_match(&found["k"])
             && value.is_some_and(|value| looks_random(value.as_str()))
-    })
+    }) || strong::holds_proven_secret(text)
 }
 
 /// The rows a patch adds: a Codex `apply_patch` body in `command`, or an Oh

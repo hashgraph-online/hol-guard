@@ -27,6 +27,16 @@ READ_ONLY_TEST_PROFILES = frozenset(
         NODE_EVAL_READ_ONLY_PROFILE_VERSION,
     }
 )
+# Profiles whose plan may grant extra read-only roots: the linked worktree
+# metadata a contained Git reads, whether Git runs directly or from an inline
+# program.
+READ_ONLY_ROOT_PROFILES = frozenset(
+    {
+        GIT_READ_ONLY_PROFILE_VERSION,
+        PYTHON_EVAL_READ_ONLY_PROFILE_VERSION,
+        NODE_EVAL_READ_ONLY_PROFILE_VERSION,
+    }
+)
 PYTEST_RESTRICTED_REASON_CODE = "pytest_restricted_profile_required"
 PYTEST_SANDBOX_UNAVAILABLE_REASON_CODE = "pytest_restricted_sandbox_unavailable"
 PYTEST_INVALID_COMMAND_REASON_CODE = "pytest_restricted_invalid_command"

@@ -81,7 +81,7 @@ def test_isolated_grok_client_is_recognized(tmp_path: Path, monkeypatch: pytest.
         lambda: "/usr/bin/python3",
     )
     monkeypatch.setattr(
-        "codex_plugin_scanner.guard.adapters.cursor_hook_config.isolated_cursor_hook_python",
+        "codex_plugin_scanner.guard.adapters.isolated_hook_python.isolated_cursor_hook_python",
         lambda: "/usr/bin/python3",
     )
     runtime = tmp_path / "hol-guard-runtime"

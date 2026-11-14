@@ -85,6 +85,8 @@ pub(crate) fn validate_request(
         (Some(_), HttpMethod::Get | HttpMethod::Delete) => {
             fail("cloud_pack_request_body_invalid", "/body")
         }
+        (Some(Template::Form(fields)), _) => crate::cloud_pack_form::validate(fields, args)
+            .map_err(|code| (code, "/body".to_owned())),
         (Some(template), _) if !matches!(template, Template::Object(_)) => {
             fail("cloud_pack_request_body_invalid", "/body")
         }
@@ -266,5 +268,6 @@ fn validate_template(
         Template::Rfc822(_) => Err("cloud_pack_template_mail_invalid"),
         Template::Element(true) if in_each => Ok(()),
         Template::Element(_) => Err("cloud_pack_template_each_invalid"),
+        Template::Form(_) => Err("cloud_pack_template_form_invalid"),
     }
 }

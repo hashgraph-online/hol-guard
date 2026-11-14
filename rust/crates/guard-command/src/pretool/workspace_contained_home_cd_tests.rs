@@ -57,6 +57,7 @@ fn every_guard_the_home_projection_applies_admits_a_plain_cd() {
         cargo_config_inert: false,
         npm_config_inert: false,
         pip_config_inert: false,
+        python_environment_inert: false,
         ripgrep_config_absent: false,
         gem_config_absent: false,
         http_config_absent: false,

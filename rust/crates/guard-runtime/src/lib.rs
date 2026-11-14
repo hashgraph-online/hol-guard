@@ -97,6 +97,7 @@ mod business_document_compile;
 mod business_review_page;
 mod business_source_codec;
 mod catalog_provenance;
+mod cigar_apps;
 mod cisco_containment;
 mod cisco_evidence;
 mod cisco_plan;

@@ -23,6 +23,11 @@ pub struct PathContext<'a> {
     /// directory can add an index query, a log file or another option to a
     /// pip command that names none. Literal contexts leave this false.
     pub pip_config_inert: bool,
+    /// No inherited `PYTHON*` variable other than a fixed list of output
+    /// and diagnostics switches can add a module path, a startup file or
+    /// another interpreter option to a `python3 -c` filter. Literal contexts
+    /// leave this false.
+    pub python_environment_inert: bool,
     /// The shell expands `~` to `home_dir`: its HOME names the same
     /// directory. Literal contexts leave this false.
     pub shell_home_matches: bool,
@@ -175,6 +180,7 @@ mod guard_home_option;
 mod guard_names;
 mod helm_usage;
 pub(crate) mod help_probes;
+mod hook_neutering;
 mod installed_program_path;
 mod list_wrapper;
 mod listing_reads;
@@ -204,6 +210,7 @@ pub(crate) use git_routes::{
 mod apply_patch_writes;
 mod ci_workflow_writes;
 mod data_heredocs;
+mod install_script_writes;
 mod literal_secrets;
 mod lockfile_install;
 mod omp_file_url;
@@ -211,6 +218,7 @@ mod omp_hashline_writes;
 pub(crate) mod pipe_attacks;
 mod planted_instructions;
 mod pure_expression;
+mod python_filter;
 mod read_paths;
 mod source_reads;
 use source_reads::{plain_source_code_path, sensitive_command_input, source_file_read_segment};

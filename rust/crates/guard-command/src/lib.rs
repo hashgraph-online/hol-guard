@@ -69,9 +69,11 @@ pub mod cloud_pack_explain;
 mod cloud_pack_explain_tests;
 pub mod cloud_pack_facts;
 pub mod cloud_pack_fixtures;
+mod cloud_pack_form;
 pub mod cloud_pack_generate;
 #[cfg(test)]
 mod cloud_pack_generate_edge_tests;
+mod cloud_pack_generate_mcp;
 mod cloud_pack_generate_openapi;
 mod cloud_pack_generate_response;
 #[cfg(test)]
@@ -81,6 +83,11 @@ mod cloud_pack_keyed_tests;
 pub mod cloud_pack_mail;
 #[cfg(test)]
 mod cloud_pack_mail_tests;
+#[cfg(test)]
+mod cloud_pack_mcp_tests;
+mod cloud_pack_money;
+#[cfg(test)]
+mod cloud_pack_money_tests;
 pub mod cloud_pack_pattern;
 pub mod cloud_pack_request;
 pub mod cloud_pack_response;
@@ -235,6 +242,7 @@ pub mod network_url;
 pub mod node_build_output;
 pub mod npm_source_spec;
 pub mod ordered_json;
+pub mod output_endpoint_lure;
 pub mod output_injection;
 #[cfg(unix)]
 pub mod package_context_build;
