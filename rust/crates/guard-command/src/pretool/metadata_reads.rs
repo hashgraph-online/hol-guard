@@ -7,7 +7,9 @@
 //! and with a depth of one only their direct children: the names a plain
 //! `ls -a` of the operand prints, so both take the `ls` read proof, including
 //! its proof for a hidden home directory outside every credential store
-//! (`du -sh ~/.cache/pip`). A deeper
+//! (`du -sh ~/.cache/pip`). That proof also opens every directory below the
+//! operand, because a directory `du` cannot read prints its full path as an
+//! error. A deeper
 //! or unlimited walk gets the same tree screen as `ls -R`. Following
 //! symbolic links (`-L`) is not admitted, and neither is any option that reads
 //! operand or pattern lists from a file (`--files0-from`, `-X`).
@@ -110,7 +112,7 @@ pub(super) fn safe_du_arguments(arguments: &[String], context: super::PathContex
                 search::safe_recursive_target(operand, context)
             } else {
                 safe_reads::bounded_read_target(operand, context.home_dir, context.cwd, true)
-                    || super::read_paths::home_hidden_directory(
+                    || super::read_paths::home_hidden_size_summary(
                         operand,
                         context.home_dir,
                         context.cwd,

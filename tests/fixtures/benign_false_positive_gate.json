@@ -15149,7 +15149,7 @@
       ],
       "tool": "shell",
       "tool_input": {
-        "command": "du -sh ${HOME}/.cache/hol-guard-test; du -sh ${ORG_WT}/node_modules"
+        "command": "du -sh ${HOME}/.cache/hol-guard-test; du -sh ${ORG_WT}/scripts"
       },
       "cwd": "org",
       "expect": "allow"

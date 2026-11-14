@@ -6,7 +6,9 @@
 //! `du -sh` of the same directory prints one number, and `du -d 1` prints the
 //! names `ls -a` would, so both take the same proof. Credential stores, nested
 //! hidden directories, links into them, link following, full walks and pipes
-//! into the network keep their review.
+//! into the network keep their review. So does a tree holding a directory `du`
+//! cannot open: `du -s` still walks it, and prints that directory's full path
+//! as an error.
 use guard_command::pretool::evaluate_pre_tool_envelope_with_context;
 use serde_json::json;
 use std::path::{Path, PathBuf};
@@ -96,5 +98,52 @@ fn credential_and_walking_sizes_keep_review() {
     ] {
         let seen = decision(&home, command);
         assert!(!seen.contains("allow"), "{command}: {seen}");
+    }
+}
+
+/// Sets `mode` on `path` and restores it on drop, so the fixture tree can
+/// still be cleaned up after a failed assertion.
+struct Locked(PathBuf);
+
+impl Locked {
+    fn new(path: PathBuf, mode: u32) -> Self {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(mode)).unwrap();
+        Self(path)
+    }
+}
+
+impl Drop for Locked {
+    fn drop(&mut self) {
+        use std::os::unix::fs::PermissionsExt;
+        let _ = std::fs::set_permissions(&self.0, std::fs::Permissions::from_mode(0o755));
+    }
+}
+
+#[test]
+fn unopenable_nested_directory_keeps_review() {
+    let home = home();
+    write(home.join(".cache/tool/.private/secret-name/entry"), "1\n");
+    write(home.join(".cache/other/listed-only/entry"), "1\n");
+    // No permission at all, and read without search: `du` prints an error
+    // naming the directory for both.
+    for (directory, mode, summary) in [
+        (".cache/tool/.private", 0o000, "du -sh ~/.cache/tool"),
+        (".cache/other/listed-only", 0o600, "du -sh ~/.cache/other"),
+    ] {
+        let locked = Locked::new(home.join(directory), mode);
+        // A superuser opens the directory anyway, and `du` then prints nothing.
+        if std::fs::read_dir(locked.0.join(".")).is_ok() {
+            return;
+        }
+        for command in [summary, "du -h -d 1 ~/.cache", "du -sh ~/.cache"] {
+            let seen = decision(&home, command);
+            assert!(
+                !seen.contains("allow"),
+                "{directory} {mode:o}: {command}: {seen}"
+            );
+        }
+        drop(locked);
+        assert_eq!(decision(&home, summary), "allow", "{summary} once opened");
     }
 }
