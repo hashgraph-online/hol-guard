@@ -39,6 +39,7 @@ UNAVAILABLE_REASON_CODES = frozenset(
         "daemon_request_failed",
     }
 )
+FAILED_REASON_CODES = frozenset({"native_evaluation_failed"})
 UNAVAILABLE_RECOVERY_COMMANDS = ("hol-guard daemon status", "hol-guard daemon repair")
 
 
@@ -57,8 +58,10 @@ def inspection_readiness(
     """Describe why an inspection has no verdict, without command text."""
 
     code = reason_code if reason_code in UNAVAILABLE_REASON_CODES else "native_review_unavailable"
+    # The state follows the code, as `native-readiness.v1.json` declares it, so
+    # a failed evaluation is never reported as a cold runtime worth retrying.
     return {
-        "state": "failed" if failed else "unavailable",
+        "state": "failed" if failed or code in FAILED_REASON_CODES else "unavailable",
         "reason_code": code,
         "verdict": "not_evaluated",
         "safe_verdict": False,
