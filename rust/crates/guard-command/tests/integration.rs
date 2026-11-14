@@ -61,6 +61,7 @@ pub mod package_request_redaction_parity;
 pub mod portable_command_source_fixtures;
 pub mod pretool_absent_hidden_listings;
 pub mod pretool_agent_metadata;
+pub mod pretool_archive_listing;
 pub mod pretool_bare_assignment_lists;
 pub mod pretool_blank_structured_field;
 pub mod pretool_brew_reads;
