@@ -31,7 +31,7 @@ pub(super) struct Lexed {
     pub(super) breaks: Vec<bool>,
     /// Whether each token is a template literal whose raw text is its value:
     /// no escape (a tag reads `strings.raw`, where `\n` stays two
-    /// characters) and no carriage return (which a template normalizes).
+    /// characters). Literal template line endings are normalized to LF.
     pub(super) raw_templates: Vec<bool>,
 }
 
@@ -100,8 +100,13 @@ pub(super) fn tokenize_lines(code: &str) -> Option<Lexed> {
                     ch => value.push(ch),
                 }
             }
+            // ECMAScript normalizes physical CR and CRLF line terminators
+            // in cooked and raw template strings before `sh` runs them.
+            if c == '`' {
+                value = value.replace("\r\n", "\n").replace('\r', "\n");
+            }
             if let Some(last) = raw_templates.last_mut() {
-                *last = raw && !value.contains('\r');
+                *last = raw;
             }
             tokens.push(Token::Str(value));
         } else if "(){}[],;:.=".contains(c) {
