@@ -140,7 +140,7 @@ fn unproven_size_and_comparison_reads_still_ask() {
         "du -sh ~/.ssh",
         "du -ah src",
         "du -h src",
-        "du -h -d 1 src",
+        "du -h -d 2 src",
         "du -shL src",
         "du -L -s src",
         "df -h $(cat list)",

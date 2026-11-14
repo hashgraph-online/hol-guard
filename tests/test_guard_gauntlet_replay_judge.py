@@ -369,6 +369,9 @@ def test_only_the_marked_cases_may_pass_on_containment() -> None:
         # script reaches nothing outside the workspace copy.
         "neg-perl-config-summary",
         "neg-ruby-version-then-script",
+        # BSD `ps e` adds each process's environment to its command column. A
+        # contained run sees only the sandbox's own processes.
+        "neg-ps-bsd-environment-column-list",
         # A removal git reads as the trailing part of a sibling checkout's registration: the
         # checkout it would take away stands outside the workspace, so a contained run removes
         # nothing of it.
