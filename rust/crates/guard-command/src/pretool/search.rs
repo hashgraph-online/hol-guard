@@ -15,6 +15,7 @@ mod options;
 mod repeat_walk_tests;
 mod rg;
 mod rg_whitelist;
+mod rg_whitelist_file;
 mod roots;
 mod sibling;
 mod tree;
