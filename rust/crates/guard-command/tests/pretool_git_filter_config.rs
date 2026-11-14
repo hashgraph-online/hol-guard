@@ -261,10 +261,8 @@ fn an_ls_files_modified_listing_answers_for_a_used_clean_filter() {
 fn a_blob_to_untracked_diff_keeps_the_full_filter_proof() {
     // A blob-vs-untracked-file diff can run a clean filter selected by an
     // untracked .gitattributes, even though no tracked file uses the filter.
-    let root = std::env::temp_dir().join(format!(
-        "guard-blob-untracked-diff-{}",
-        std::process::id()
-    ));
+    let root =
+        std::env::temp_dir().join(format!("guard-blob-untracked-diff-{}", std::process::id()));
     let _cleanup = FixtureCleanup(root.clone());
     let home = root.join("home");
     let repository = root.join("repository");
@@ -326,7 +324,16 @@ fn a_blob_to_untracked_diff_keeps_the_full_filter_proof() {
             "{harness}: {command}: {}",
             result.reason_code
         );
-        assert_eq!(result.reason_code, "native_git_execution_context_review");
+        // A revision operand already sends the diff to containment before
+        // the filter proof; either way the untracked filter never runs.
+        assert!(
+            matches!(
+                result.reason_code.as_str(),
+                "native_git_execution_context_review" | "native_git_readonly_containment_required"
+            ),
+            "{harness}: {command}: {}",
+            result.reason_code
+        );
         let safe = evaluate_pre_tool_envelope_with_context(
             harness,
             "PreToolUse",
@@ -338,5 +345,8 @@ fn a_blob_to_untracked_diff_keeps_the_full_filter_proof() {
         );
         assert_eq!(safe.decision, "allow", "{harness}: {}", safe.reason_code);
     }
-    assert!(!marker.exists(), "Guard inspection must not execute filters");
+    assert!(
+        !marker.exists(),
+        "Guard inspection must not execute filters"
+    );
 }

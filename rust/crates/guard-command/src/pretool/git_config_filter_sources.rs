@@ -88,7 +88,9 @@ fn named_nowhere(query: &GitQuery<'_>, deadline: Instant) -> Option<bool> {
             // The git-var result is not a safe filesystem locator when it is
             // relative or has path-traversal components.
             if !external.is_absolute()
-                || external.components().any(|component| matches!(component, Component::ParentDir))
+                || external
+                    .components()
+                    .any(|component| matches!(component, Component::ParentDir))
             {
                 return None;
             }

@@ -67,21 +67,24 @@ impl Fixture {
             .success());
     }
 
-    /// The quick check, run the way the filter proof runs Git.
+    /// Git 2.42 and later report the attributes files they read.
     fn external_attribute_variables_supported(&self) -> bool {
-        ["GIT_ATTR_GLOBAL", "GIT_ATTR_SYSTEM"].iter().all(|variable| {
-            Command::new(git_binary())
-                .env_clear()
-                .env("HOME", &self.home)
-                .env("PATH", std::env::var_os("PATH").unwrap())
-                .arg("-C")
-                .arg(&self.repository)
-                .args(["var", variable])
-                .output()
-                .is_ok_and(|output| output.status.success())
-        })
+        ["GIT_ATTR_GLOBAL", "GIT_ATTR_SYSTEM"]
+            .iter()
+            .all(|variable| {
+                Command::new(git_binary())
+                    .env_clear()
+                    .env("HOME", &self.home)
+                    .env("PATH", std::env::var_os("PATH").unwrap())
+                    .arg("-C")
+                    .arg(&self.repository)
+                    .args(["var", variable])
+                    .output()
+                    .is_ok_and(|output| output.status.success())
+            })
     }
 
+    /// The quick check, run the way the filter proof runs Git.
     fn none_named(&self) -> bool {
         let git = git_binary();
         let query = |arguments: &[&str], input: Option<Vec<u8>>, root: Option<&Path>| {
@@ -112,7 +115,10 @@ fn a_global_filter_no_attributes_file_names_needs_no_per_path_check() {
     let fixture = Fixture::new("quiet");
     // Git before 2.42 does not expose both variables. The shortcut must
     // fall back on those hosts, not fail the suite.
-    assert_eq!(fixture.none_named(), fixture.external_attribute_variables_supported());
+    assert_eq!(
+        fixture.none_named(),
+        fixture.external_attribute_variables_supported()
+    );
 }
 
 #[test]
