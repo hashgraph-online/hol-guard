@@ -41,6 +41,9 @@ def _snapshot(**overrides: Any) -> dict[str, Any]:
     return health
 
 
+_COLD_STARTS = {"cold_starts_within_1s": 5, "cold_starts_within_5s": 1, "cold_starts_slower": 1}
+
+
 def _installed(monkeypatch: pytest.MonkeyPatch, answer: str | None, *, asked: list[tuple[str, ...]] | None = None):
     identity = NativeRuntimeIdentity(path=Path("/opt/guard/hol-guard-runtime"), size=1, mtime_ns=2, sha256="a" * 64)
     status = NativeRuntimeStatus(
@@ -161,6 +164,11 @@ def test_a_failed_read_leaves_the_report_without_a_journal(
         # A field added or dropped is a file this reader does not know.
         json.dumps({"health": _snapshot(stderr="boom")}),
         json.dumps({"health": {key: value for key, value in _snapshot().items() if key != "starts"}}),
+        # The cold-start bands come as a set or not at all, and only as counts.
+        json.dumps({"health": _snapshot(cold_starts_within_1s=1)}),
+        json.dumps({"health": _snapshot(**{**_COLD_STARTS, "cold_starts_slower": -1})}),
+        json.dumps({"health": _snapshot(**{**_COLD_STARTS, "cold_starts_slower": 2**32})}),
+        json.dumps({"health": _snapshot(**{**_COLD_STARTS, "cold_starts_within_5s": "1.4s"})}),
     ],
 )
 def test_a_damaged_or_forged_journal_never_reaches_the_report(
@@ -197,6 +205,23 @@ def test_a_degraded_day_is_reported_even_while_the_runtime_is_up() -> None:
     assert "7 starts, 3 ended cleanly, 3 failed, 1 stopped early, 0 starts refused." in output
     assert "Last event: exited_failed, 2m ago." in output
     assert "hol-guard runtime status" in output
+
+
+def test_a_runtime_that_counts_cold_starts_reports_their_bands(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    _installed(monkeypatch, json.dumps({"health": _snapshot(**_COLD_STARTS)}))
+
+    lifecycle = doctor_native_runtime.native_resident_lifecycle(tmp_path)
+
+    assert lifecycle == _snapshot(**_COLD_STARTS)
+    output = _rendered(lifecycle)
+    assert "Cold starts: 5 answered within 1 second, 1 within 5 seconds, 1 slower." in output
+
+
+def test_a_day_without_cold_start_bands_prints_no_band_line() -> None:
+    assert "Cold starts" not in _rendered(_snapshot())
+    assert "Cold starts" not in _rendered(
+        _snapshot(cold_starts_within_1s=0, cold_starts_within_5s=0, cold_starts_slower=0)
+    )
 
 
 def test_a_runtime_that_is_not_being_restarted_is_reported_as_such() -> None:

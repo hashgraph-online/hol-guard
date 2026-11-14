@@ -115,6 +115,7 @@ fn the_journal_holds_nothing_but_counts_and_this_module_s_own_vocabulary() {
     ] {
         record(&scope, event);
     }
+    record_cold_start_without_waiting(&scope, Duration::from_millis(1_500));
 
     let encoded = fs::read(scope.join(JOURNAL_FILE)).unwrap();
     let text = String::from_utf8(encoded.clone()).unwrap();
@@ -129,6 +130,9 @@ fn the_journal_holds_nothing_but_counts_and_this_module_s_own_vocabulary() {
         "failed_exits",
         "premature_exits",
         "refused_starts",
+        "cold_starts_within_1s",
+        "cold_starts_within_5s",
+        "cold_starts_slower",
     ];
     let allowed_strings = [
         JOURNAL_SCHEMA,
@@ -338,6 +342,72 @@ fn every_event_has_its_own_counter() {
             totals.refused_starts,
         ),
         (1, 1, 1, 1, 1)
+    );
+
+    fs::remove_dir_all(scope).unwrap();
+}
+
+#[test]
+fn a_cold_start_is_counted_in_its_band() {
+    let scope = scope_named("cold-start");
+
+    record(&scope, Event::Started);
+    for elapsed in [0, 1_000, 1_001, 5_000, 5_001, 30_000] {
+        record_cold_start_without_waiting(&scope, Duration::from_millis(elapsed));
+    }
+
+    let health = health(&scope).unwrap().unwrap();
+    assert_eq!(
+        (
+            health.cold_starts_within_1s,
+            health.cold_starts_within_5s,
+            health.cold_starts_slower,
+        ),
+        (2, 2, 2)
+    );
+    // A band measures the start already counted; it is not an event, so it
+    // neither adds a start nor replaces the last event.
+    assert_eq!(health.starts, 1);
+    assert_eq!(health.last_event, "started");
+    assert_eq!(health.state, "healthy");
+
+    fs::remove_dir_all(scope).unwrap();
+}
+
+#[test]
+fn a_journal_written_before_the_bands_still_reads() {
+    let scope = scope_named("pre-band");
+    // Recorded first so the file exists with the runtime's own permissions.
+    record(&scope, Event::Started);
+    let now = now_ms().unwrap();
+    let earlier = serde_json::json!({
+        "schema": JOURNAL_SCHEMA,
+        "hours": [{
+            "hour": hour_of(now),
+            "starts": 3,
+            "orderly_exits": 2,
+            "failed_exits": 0,
+            "premature_exits": 0,
+            "refused_starts": 0,
+        }],
+        "last_event": "exited_orderly",
+        "last_event_ms": now,
+    });
+    fs::write(
+        scope.join(JOURNAL_FILE),
+        serde_json::to_vec(&earlier).unwrap(),
+    )
+    .unwrap();
+
+    let health = health(&scope).unwrap().unwrap();
+    assert_eq!(health.starts, 3);
+    assert_eq!(
+        (
+            health.cold_starts_within_1s,
+            health.cold_starts_within_5s,
+            health.cold_starts_slower,
+        ),
+        (0, 0, 0)
     );
 
     fs::remove_dir_all(scope).unwrap();

@@ -314,8 +314,8 @@ def native_resident_restart(guard_home: Path | None, runtime_sha256: str | None)
     }
 
 
-class NativeResidentLifecycle(TypedDict):
-    """A day of this install's resident lifecycle, as the runtime counts it."""
+class NativeResidentLifecycle(TypedDict, total=False):
+    """A day of this install's resident lifecycle; older runtimes omit the cold-start bands."""
 
     state: Literal["healthy", "degraded", "critical"]
     starts: int
@@ -326,12 +326,17 @@ class NativeResidentLifecycle(TypedDict):
     last_event: str
     last_event_age_seconds: int
     window_age_seconds: int
+    cold_starts_within_1s: int
+    cold_starts_within_5s: int
+    cold_starts_slower: int
 
 
 _LIFECYCLE_STATES = ("healthy", "degraded", "critical")
 _LIFECYCLE_COUNTS = ("starts", "orderly_exits", "failed_exits", "premature_exits", "refused_starts")
 _LIFECYCLE_AGES = ("last_event_age_seconds", "window_age_seconds")
+_LIFECYCLE_COLD_STARTS = ("cold_starts_within_1s", "cold_starts_within_5s", "cold_starts_slower")
 _LIFECYCLE_FIELDS = frozenset({"state", "last_event", *_LIFECYCLE_COUNTS, *_LIFECYCLE_AGES})
+_LIFECYCLE_FIELDS_WITH_COLD_STARTS = _LIFECYCLE_FIELDS | frozenset(_LIFECYCLE_COLD_STARTS)
 # The runtime writes the counts as a u32 and the ages as seconds inside a
 # one-day window, measured from the start of the hour an event fell in, so a
 # day plus that hour is the most either age can honestly be. Anything past it
@@ -364,7 +369,7 @@ def _validated_lifecycle(value: object) -> NativeResidentLifecycle | None:
     own in front of a reader.
     """
 
-    if not isinstance(value, dict) or set(value) != _LIFECYCLE_FIELDS:
+    if not isinstance(value, dict) or set(value) not in (_LIFECYCLE_FIELDS, _LIFECYCLE_FIELDS_WITH_COLD_STARTS):
         return None
     if value["state"] not in _LIFECYCLE_STATES:
         return None
@@ -375,6 +380,7 @@ def _validated_lifecycle(value: object) -> NativeResidentLifecycle | None:
         return None
     bounds: dict[str, int] = dict.fromkeys(_LIFECYCLE_COUNTS, _MAX_U32)
     bounds.update(dict.fromkeys(_LIFECYCLE_AGES, _MAX_LIFECYCLE_AGE_SECONDS))
+    bounds.update(dict.fromkeys(set(_LIFECYCLE_COLD_STARTS) & set(value), _MAX_U32))
     for field, bound in bounds.items():
         if _budget_counter(value[field], bound) is None:
             return None

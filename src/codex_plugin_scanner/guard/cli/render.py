@@ -1197,6 +1197,11 @@ def _print_resident_lifecycle_note(console: Console, payload: dict[str, object])
             f"{lifecycle.get('refused_starts', 0)} starts refused."
         ),
     ]
+    bands = [lifecycle.get(field) for field in ("cold_starts_within_1s", "cold_starts_within_5s", "cold_starts_slower")]
+    if all(isinstance(band, int) and not isinstance(band, bool) for band in bands) and sum(bands) > 0:
+        lines.append(
+            f"Cold starts: {bands[0]} answered within 1 second, {bands[1]} within 5 seconds, {bands[2]} slower."
+        )
     last_event = lifecycle.get("last_event")
     if isinstance(last_event, str) and last_event:
         lines.append(f"Last event: {last_event}, {_lifecycle_age(lifecycle.get('last_event_age_seconds'))}.")

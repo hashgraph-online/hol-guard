@@ -392,6 +392,7 @@ fn client_request_with_deadline_inner(
     })? {
         return Ok(response);
     }
+    let cold_start = Instant::now();
     let (generation, token, mut spawned) = observe(Phase::ClientSpawn, || -> Result<_, String> {
         await_owner_release(
             state_base,
@@ -426,7 +427,7 @@ fn client_request_with_deadline_inner(
             try_live_or_restart(state_base, payload, overall_deadline, &digest, last_failure)
         })
     });
-    start_wait::finish_request(request_result, || {
+    let response = start_wait::finish_request(request_result, || {
         containment::abort_spawned_managed(
             &mut spawned,
             &scope,
@@ -435,7 +436,10 @@ fn client_request_with_deadline_inner(
             &token,
             overall_deadline,
         )
-    })
+    })?;
+    // The new resident answered, so this start's band is known.
+    super::lifecycle_journal::record_cold_start_without_waiting(&scope, cold_start.elapsed());
+    Ok(response)
 }
 
 #[cfg(test)]
