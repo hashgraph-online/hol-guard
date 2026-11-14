@@ -1,0 +1,661 @@
+{
+  "schema": "guard.cloud-action-pack.v1",
+  "provider": {
+    "id": "discord",
+    "name": "Discord",
+    "publisher": {
+      "name": "HOL",
+      "verified": true
+    }
+  },
+  "hosts": [
+    "discord.com"
+  ],
+  "auth": {
+    "mode": "api-key",
+    "scopes": [
+      "bot"
+    ]
+  },
+  "actions": [
+    {
+      "actionId": "discord.messages.create",
+      "title": "Post a message to a channel",
+      "executor": {
+        "kind": "declarative-http",
+        "request": {
+          "method": "POST",
+          "host": "discord.com",
+          "path": "/api/v10/channels/{channel_id}/messages",
+          "headers": [
+            {
+              "name": "accept",
+              "value": "application/json"
+            }
+          ],
+          "body": {
+            "object": [
+              {
+                "name": "content",
+                "value": {
+                  "arg": "content"
+                }
+              },
+              {
+                "name": "allowed_mentions",
+                "value": {
+                  "object": [
+                    {
+                      "name": "parse",
+                      "value": {
+                        "const": []
+                      }
+                    }
+                  ]
+                }
+              }
+            ]
+          },
+          "maxPages": 1
+        }
+      },
+      "arguments": {
+        "channel_id": {
+          "type": "string",
+          "required": true,
+          "maxLength": 20,
+          "pattern": "^[0-9]{17,20}$"
+        },
+        "content": {
+          "type": "string",
+          "required": true,
+          "maxLength": 2000
+        }
+      },
+      "facts": {
+        "class": "send",
+        "object": {
+          "const": "message"
+        },
+        "scope": {
+          "const": "single"
+        },
+        "reversibility": {
+          "const": "reversible"
+        },
+        "recordCount": {
+          "const": 1
+        }
+      },
+      "response": {
+        "maxBytes": 131072,
+        "fields": [
+          {
+            "name": "id",
+            "value": {
+              "from": "id"
+            }
+          },
+          {
+            "name": "content",
+            "value": {
+              "from": "content"
+            },
+            "untrusted": true
+          }
+        ]
+      },
+      "safety": {
+        "effect": "write",
+        "requiredCapabilities": [
+          "bounded-output",
+          "egress-pinned"
+        ],
+        "idempotency": "none",
+        "scopes": [
+          "bot"
+        ],
+        "maxItems": 1,
+        "minIntervalMs": 1000,
+        "timeoutMs": 15000
+      },
+      "fixtures": [
+        {
+          "name": "posts a message with mentions turned off",
+          "kind": "safe",
+          "arguments": {
+            "channel_id": "1234567890123456789",
+            "content": "Build 42 is green. @everyone"
+          },
+          "expect": {
+            "facts": {
+              "class": "send"
+            },
+            "request": {
+              "body": "{\"content\":\"Build 42 is green. @everyone\",\"allowed_mentions\":{\"parse\":[]}}",
+              "headers": [
+                [
+                  "accept",
+                  "application/json"
+                ],
+                [
+                  "content-type",
+                  "application/json; charset=utf-8"
+                ]
+              ],
+              "maxPages": 1,
+              "method": "POST",
+              "url": "https://discord.com/api/v10/channels/1234567890123456789/messages"
+            },
+            "decisions": {
+              "relaxed": "allow",
+              "balanced": "review",
+              "strict": "review"
+            }
+          }
+        },
+        {
+          "name": "refuses a message over 2000 characters",
+          "kind": "risky",
+          "arguments": {
+            "channel_id": "1234567890123456789",
+            "content": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          },
+          "expect": {
+            "error": "invalid_argument"
+          }
+        }
+      ]
+    },
+    {
+      "actionId": "discord.messages.delete",
+      "title": "Delete a message",
+      "executor": {
+        "kind": "declarative-http",
+        "request": {
+          "method": "DELETE",
+          "host": "discord.com",
+          "path": "/api/v10/channels/{channel_id}/messages/{message_id}",
+          "headers": [
+            {
+              "name": "accept",
+              "value": "application/json"
+            }
+          ],
+          "maxPages": 1
+        }
+      },
+      "arguments": {
+        "channel_id": {
+          "type": "string",
+          "required": true,
+          "maxLength": 20,
+          "pattern": "^[0-9]{17,20}$"
+        },
+        "message_id": {
+          "type": "string",
+          "required": true,
+          "maxLength": 20,
+          "pattern": "^[0-9]{17,20}$"
+        }
+      },
+      "facts": {
+        "class": "delete",
+        "object": {
+          "const": "message"
+        },
+        "scope": {
+          "const": "single"
+        },
+        "reversibility": {
+          "const": "permanent"
+        },
+        "recordCount": {
+          "const": 1
+        }
+      },
+      "response": {
+        "maxBytes": 65536,
+        "emptyOk": true,
+        "fields": [
+          {
+            "name": "message",
+            "value": {
+              "from": "message"
+            },
+            "untrusted": true
+          }
+        ]
+      },
+      "safety": {
+        "effect": "destructive",
+        "requiredCapabilities": [
+          "bounded-output",
+          "egress-pinned"
+        ],
+        "idempotency": "none",
+        "scopes": [
+          "bot"
+        ],
+        "maxItems": 1,
+        "minIntervalMs": 3000,
+        "timeoutMs": 15000
+      },
+      "fixtures": [
+        {
+          "name": "deletes one message",
+          "kind": "safe",
+          "arguments": {
+            "channel_id": "1234567890123456789",
+            "message_id": "1234567890123456790"
+          },
+          "expect": {
+            "facts": {
+              "class": "delete"
+            },
+            "request": {
+              "body": null,
+              "headers": [
+                [
+                  "accept",
+                  "application/json"
+                ]
+              ],
+              "maxPages": 1,
+              "method": "DELETE",
+              "url": "https://discord.com/api/v10/channels/1234567890123456789/messages/1234567890123456790"
+            },
+            "decisions": {
+              "relaxed": "review",
+              "balanced": "review",
+              "strict": "block"
+            }
+          }
+        },
+        {
+          "name": "refuses a message id that is not a snowflake",
+          "kind": "risky",
+          "arguments": {
+            "channel_id": "1234567890123456789",
+            "message_id": "@me"
+          },
+          "expect": {
+            "error": "invalid_argument"
+          }
+        }
+      ]
+    },
+    {
+      "actionId": "discord.messages.bulk_delete",
+      "title": "Delete many messages at once",
+      "executor": {
+        "kind": "declarative-http",
+        "request": {
+          "method": "POST",
+          "host": "discord.com",
+          "path": "/api/v10/channels/{channel_id}/messages/bulk-delete",
+          "headers": [
+            {
+              "name": "accept",
+              "value": "application/json"
+            }
+          ],
+          "body": {
+            "object": [
+              {
+                "name": "messages",
+                "value": {
+                  "arg": "message_ids"
+                }
+              }
+            ]
+          },
+          "maxPages": 1
+        }
+      },
+      "arguments": {
+        "channel_id": {
+          "type": "string",
+          "required": true,
+          "maxLength": 20,
+          "pattern": "^[0-9]{17,20}$"
+        },
+        "message_ids": {
+          "type": "array",
+          "required": true,
+          "minItems": 2,
+          "maxItems": 100,
+          "items": {
+            "maxLength": 20,
+            "pattern": "^[0-9]{17,20}$"
+          }
+        }
+      },
+      "facts": {
+        "class": "delete",
+        "object": {
+          "const": "message"
+        },
+        "scope": {
+          "const": "query_selected"
+        },
+        "reversibility": {
+          "const": "permanent"
+        },
+        "recordCount": {
+          "count": {
+            "arguments": [
+              "message_ids"
+            ]
+          }
+        }
+      },
+      "response": {
+        "maxBytes": 65536,
+        "emptyOk": true,
+        "fields": [
+          {
+            "name": "message",
+            "value": {
+              "from": "message"
+            },
+            "untrusted": true
+          }
+        ]
+      },
+      "safety": {
+        "effect": "destructive",
+        "requiredCapabilities": [
+          "bounded-output",
+          "egress-pinned"
+        ],
+        "idempotency": "none",
+        "scopes": [
+          "bot"
+        ],
+        "maxItems": 1,
+        "minIntervalMs": 3000,
+        "timeoutMs": 15000
+      },
+      "fixtures": [
+        {
+          "name": "deletes two messages",
+          "kind": "safe",
+          "arguments": {
+            "channel_id": "1234567890123456789",
+            "message_ids": [
+              "1234567890123456800",
+              "1234567890123456801"
+            ]
+          },
+          "expect": {
+            "facts": {
+              "class": "delete",
+              "record_count": {
+                "state": "known",
+                "value": 2
+              }
+            },
+            "request": {
+              "body": "{\"messages\":[\"1234567890123456800\",\"1234567890123456801\"]}",
+              "headers": [
+                [
+                  "accept",
+                  "application/json"
+                ],
+                [
+                  "content-type",
+                  "application/json; charset=utf-8"
+                ]
+              ],
+              "maxPages": 1,
+              "method": "POST",
+              "url": "https://discord.com/api/v10/channels/1234567890123456789/messages/bulk-delete"
+            },
+            "decisions": {
+              "relaxed": "review",
+              "balanced": "review",
+              "strict": "block"
+            }
+          }
+        },
+        {
+          "name": "deletes a hundred messages",
+          "kind": "risky",
+          "arguments": {
+            "channel_id": "1234567890123456789",
+            "message_ids": [
+              "1234567890123456800",
+              "1234567890123456801",
+              "1234567890123456802",
+              "1234567890123456803",
+              "1234567890123456804",
+              "1234567890123456805",
+              "1234567890123456806",
+              "1234567890123456807",
+              "1234567890123456808",
+              "1234567890123456809",
+              "1234567890123456810",
+              "1234567890123456811",
+              "1234567890123456812",
+              "1234567890123456813",
+              "1234567890123456814",
+              "1234567890123456815",
+              "1234567890123456816",
+              "1234567890123456817",
+              "1234567890123456818",
+              "1234567890123456819",
+              "1234567890123456820",
+              "1234567890123456821",
+              "1234567890123456822",
+              "1234567890123456823",
+              "1234567890123456824",
+              "1234567890123456825",
+              "1234567890123456826",
+              "1234567890123456827",
+              "1234567890123456828",
+              "1234567890123456829",
+              "1234567890123456830",
+              "1234567890123456831",
+              "1234567890123456832",
+              "1234567890123456833",
+              "1234567890123456834",
+              "1234567890123456835",
+              "1234567890123456836",
+              "1234567890123456837",
+              "1234567890123456838",
+              "1234567890123456839",
+              "1234567890123456840",
+              "1234567890123456841",
+              "1234567890123456842",
+              "1234567890123456843",
+              "1234567890123456844",
+              "1234567890123456845",
+              "1234567890123456846",
+              "1234567890123456847",
+              "1234567890123456848",
+              "1234567890123456849",
+              "1234567890123456850",
+              "1234567890123456851",
+              "1234567890123456852",
+              "1234567890123456853",
+              "1234567890123456854",
+              "1234567890123456855",
+              "1234567890123456856",
+              "1234567890123456857",
+              "1234567890123456858",
+              "1234567890123456859",
+              "1234567890123456860",
+              "1234567890123456861",
+              "1234567890123456862",
+              "1234567890123456863",
+              "1234567890123456864",
+              "1234567890123456865",
+              "1234567890123456866",
+              "1234567890123456867",
+              "1234567890123456868",
+              "1234567890123456869",
+              "1234567890123456870",
+              "1234567890123456871",
+              "1234567890123456872",
+              "1234567890123456873",
+              "1234567890123456874",
+              "1234567890123456875",
+              "1234567890123456876",
+              "1234567890123456877",
+              "1234567890123456878",
+              "1234567890123456879",
+              "1234567890123456880",
+              "1234567890123456881",
+              "1234567890123456882",
+              "1234567890123456883",
+              "1234567890123456884",
+              "1234567890123456885",
+              "1234567890123456886",
+              "1234567890123456887",
+              "1234567890123456888",
+              "1234567890123456889",
+              "1234567890123456890",
+              "1234567890123456891",
+              "1234567890123456892",
+              "1234567890123456893",
+              "1234567890123456894",
+              "1234567890123456895",
+              "1234567890123456896",
+              "1234567890123456897",
+              "1234567890123456898",
+              "1234567890123456899"
+            ]
+          },
+          "expect": {
+            "facts": {
+              "class": "delete",
+              "record_count": {
+                "state": "known",
+                "value": 100
+              }
+            },
+            "decisions": {
+              "relaxed": "review",
+              "balanced": "require-reapproval",
+              "strict": "block"
+            }
+          }
+        },
+        {
+          "name": "refuses more than a hundred",
+          "kind": "risky",
+          "arguments": {
+            "channel_id": "1234567890123456789",
+            "message_ids": [
+              "1234567890123456800",
+              "1234567890123456801",
+              "1234567890123456802",
+              "1234567890123456803",
+              "1234567890123456804",
+              "1234567890123456805",
+              "1234567890123456806",
+              "1234567890123456807",
+              "1234567890123456808",
+              "1234567890123456809",
+              "1234567890123456810",
+              "1234567890123456811",
+              "1234567890123456812",
+              "1234567890123456813",
+              "1234567890123456814",
+              "1234567890123456815",
+              "1234567890123456816",
+              "1234567890123456817",
+              "1234567890123456818",
+              "1234567890123456819",
+              "1234567890123456820",
+              "1234567890123456821",
+              "1234567890123456822",
+              "1234567890123456823",
+              "1234567890123456824",
+              "1234567890123456825",
+              "1234567890123456826",
+              "1234567890123456827",
+              "1234567890123456828",
+              "1234567890123456829",
+              "1234567890123456830",
+              "1234567890123456831",
+              "1234567890123456832",
+              "1234567890123456833",
+              "1234567890123456834",
+              "1234567890123456835",
+              "1234567890123456836",
+              "1234567890123456837",
+              "1234567890123456838",
+              "1234567890123456839",
+              "1234567890123456840",
+              "1234567890123456841",
+              "1234567890123456842",
+              "1234567890123456843",
+              "1234567890123456844",
+              "1234567890123456845",
+              "1234567890123456846",
+              "1234567890123456847",
+              "1234567890123456848",
+              "1234567890123456849",
+              "1234567890123456850",
+              "1234567890123456851",
+              "1234567890123456852",
+              "1234567890123456853",
+              "1234567890123456854",
+              "1234567890123456855",
+              "1234567890123456856",
+              "1234567890123456857",
+              "1234567890123456858",
+              "1234567890123456859",
+              "1234567890123456860",
+              "1234567890123456861",
+              "1234567890123456862",
+              "1234567890123456863",
+              "1234567890123456864",
+              "1234567890123456865",
+              "1234567890123456866",
+              "1234567890123456867",
+              "1234567890123456868",
+              "1234567890123456869",
+              "1234567890123456870",
+              "1234567890123456871",
+              "1234567890123456872",
+              "1234567890123456873",
+              "1234567890123456874",
+              "1234567890123456875",
+              "1234567890123456876",
+              "1234567890123456877",
+              "1234567890123456878",
+              "1234567890123456879",
+              "1234567890123456880",
+              "1234567890123456881",
+              "1234567890123456882",
+              "1234567890123456883",
+              "1234567890123456884",
+              "1234567890123456885",
+              "1234567890123456886",
+              "1234567890123456887",
+              "1234567890123456888",
+              "1234567890123456889",
+              "1234567890123456890",
+              "1234567890123456891",
+              "1234567890123456892",
+              "1234567890123456893",
+              "1234567890123456894",
+              "1234567890123456895",
+              "1234567890123456896",
+              "1234567890123456897",
+              "1234567890123456898",
+              "1234567890123456899",
+              "1234567890123457000"
+            ]
+          },
+          "expect": {
+            "error": "invalid_argument"
+          }
+        }
+      ]
+    }
+  ]
+}
