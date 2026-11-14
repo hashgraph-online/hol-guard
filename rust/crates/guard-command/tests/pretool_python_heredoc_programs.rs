@@ -72,6 +72,10 @@ fn a_probe_that_imports_modules_runs_in_the_workspace_sandbox() {
         "python3 <<'EOF' | tee out.txt\nimport pkg\nprint(pkg.X)\nEOF",
         "python3 -I << 'EOF'\nimport glob\nimport re\nprint(sorted(glob.glob('pkg/*.py')))\nEOF",
         "python3 -I - <<'EOF'\nimport json\nprint(json.dumps([]))\nEOF",
+        // CRLF inside a quoted heredoc is a physical newline, not a bare CR.
+        "python3 <<'EOF'\nimport json\r\nprint(json.dumps({}))\r\nEOF",
+        // Builtins-only code takes a separate fast path and must accept CRLF.
+        "python3 <<'EOF'\nprint(1)\r\nprint(2)\r\nEOF",
         // `coding` past the second line is not an encoding declaration.
         "python3 <<'EOF'\nimport json\nprint(open('pyproject.toml', encoding='utf-8').read())\nEOF",
         "python3 <<'EOF'\nimport json\nimport sys\n# decoding note\nsys.stdout.reconfigure(encoding='utf-8')\nEOF",
