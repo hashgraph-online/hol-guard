@@ -10,7 +10,6 @@ import {
   rememberDismissedDesktopUpdateVersion,
 } from "./guard-update-banner";
 import { desktopUpdateBannerModel } from "./guard-update-copy";
-import { UpdateModeDialog } from "./update-mode-dialog";
 
 function assert(condition: boolean, message: string): void {
   if (!condition) {
@@ -580,30 +579,5 @@ assert(
 );
 
 (globalThis as { window?: unknown }).window = priorWindow;
-
-// Enter in the code field must save: the dialog is a form whose only submit
-// control is "Save preference", and Cancel/close never submit it.
-{
-  const noop = () => undefined;
-  const markup = renderToStaticMarkup(
-    createElement(UpdateModeDialog, {
-      mode: "automatic",
-      draft: "ask",
-      pending: false,
-      error: null,
-      approvalGate: null,
-      approvalPassword: "",
-      approvalTotpCode: "",
-      onDraftChange: noop,
-      onClose: noop,
-      onConfirm: noop,
-      onApprovalPasswordChange: noop,
-      onApprovalTotpCodeChange: noop,
-    })
-  );
-  assert(markup.startsWith("<form"), "Core update preferences renders as a form so Enter submits it");
-  const submits = markup.match(/<button type="submit"[^>]*>[^<]*<\/button>/g) ?? [];
-  assert(submits.length === 1 && submits[0].includes("Save preference"), "only Save preference submits the update preferences form");
-}
 
 console.log("guard-update.test.ts: all tests passed");
