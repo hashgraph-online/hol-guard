@@ -79,6 +79,18 @@ fn programs_that_reach_the_host_are_held() {
         "part = 'etc'\nprint(open(f'/{part}/passwd').read())\n",
         "print(f'{open(\"/etc/passwd\").read()}')\n",
         "import os\nos.system(f'kill -9 {pid}')\n",
+        "print(open(f'{\"/\"}etc/passwd').read())\n",
+        "print(open(f'{\"/\"!s}etc/passwd').read())\n",
+        "print(open(f'{\"/\" if a else \"\"}etc/passwd').read())\n",
+        "print(f'{len(\"}\") and open(\"/etc/passwd\").read()}')\n",
+        "import os\nos.system('taskset -c 0 kill 1')\n",
+        "import os\nos.system('flock l kill 1')\n",
+        "import os\nos.system('strace -o trace.txt kill 1')\n",
+        "import os\nos.system('some-launcher --opt v kill 4242')\n",
+        "import os\nos.system('>/dev/null kill -TERM 4242')\n",
+        "import os\nos.system('2> err.txt kill 1')\n",
+        "import os\nos.system('if true; then kill -TERM 4242; fi')\n",
+        "import os\nos.system('if true; then git config core.hooksPath x; fi')\n",
     ] {
         assert!(python_reaches_host(source), "{source}");
     }
@@ -123,6 +135,11 @@ fn workspace_programs_stay_contained() {
         "import os\nos.system('timeout 5 git status')\n",
         "import os\nos.system('env LC_ALL=C git log -1')\n",
         "import json\nprint('Press Ctrl-C to kill the server')\n",
+        "import json\nprint(f'{\"/\".join(parts)}', f'{x:>{width}}')\n",
+        "import json\nprint(f\"{'a' if x else 'b'}/file.txt\")\n",
+        "import json\nprint('the kill switch is off')\n",
+        "import os\nos.system('if true; then git status; fi')\n",
+        "import os\nos.system('>/tmp/out.txt git log -1')\n",
     ] {
         assert!(!python_reaches_host(source), "{source}");
     }

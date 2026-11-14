@@ -25,15 +25,19 @@
 //! - a command line, as one string or as an argument list, with a command
 //!   that signals processes (`kill`, `pkill`, `killall`) or writes Git
 //!   configuration (`git config` other than a read). Every command of a
-//!   string counts, with shell quotes removed. After a wrapper such as `env`,
-//!   `sudo`, `chroot` or `sh -c`, and after `find -exec`, any later word may
-//!   be the command, so an option value cannot hide it.
+//!   string counts, with shell quotes removed and after any leading
+//!   redirections and reserved words (`if ...; then`). After a wrapper such
+//!   as `env`, `sudo`, `taskset` or `sh -c`, and after `find -exec`, any
+//!   later word may be the command, so an option value cannot hide it; `kill`
+//!   with a process operand, `pkill` and `killall` count wherever they are.
 //!
 //! Strings are read as the value Python gives them, escapes decoded; one
 //! whose value the scan cannot resolve keeps its review. Literals joined
 //! with `+` or written next to each other are also read as the one string
-//! they make, and a formatted string is read with each replacement field
-//! standing in for an unknown word, its expression scanned on its own.
+//! they make. A formatted string is read with a field that is one string
+//! constant standing for that string and any other field for an unknown
+//! word, its expression scanned on its own, and again with each field
+//! replaced by every string constant inside it.
 //!
 //! Starting a program (`subprocess`, `os.system`) is not itself a reason to
 //! hold: the program runs in the same sandbox, and the command line it is
@@ -46,10 +50,13 @@ use regex::Regex;
 
 #[path = "host_reach_literals.rs"]
 mod literals;
+#[path = "host_reach_shell.rs"]
+mod shell;
 
 use super::system_files::lexical;
 use super::{code_lines, Language};
 use literals::{format_template, literal_value};
+use shell::{command_reaches, git_config_reads, unquote};
 
 const HOST_MODULES: &str = "psutil|pyperclip|pynput|pyautogui|mss|ctypes|PIL|keyboard|mouse|Xlib|Quartz|AppKit|win32api|win32gui|win32con|winreg";
 
@@ -147,48 +154,6 @@ static GIT_CONFIG_LIST: LazyLock<Regex> = LazyLock::new(|| {
 static QUOTED_WORD: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r#"["']([^"'\n]*)["']"#).unwrap());
 
-/// Commands that list, copy or enter what a root-directory operand names.
-const ROOT_COMMANDS: &[&str] = &[
-    "ls", "find", "du", "tree", "grep", "rg", "cat", "rm", "cp", "mv", "chmod", "chown", "tar",
-    "stat", "cd", "pushd",
-];
-const SIGNAL_COMMANDS: &[&str] = &["kill", "pkill", "killall"];
-const GIT_CONFIG_READS: &[&str] = &["--get", "--get-all", "--get-regexp", "--list", "-l"];
-/// Words that run a command named later on the line, after their own
-/// options, option values and operands, including the shells' `-c`.
-const COMMAND_PREFIXES: &[&str] = &[
-    "env",
-    "sudo",
-    "doas",
-    "nohup",
-    "exec",
-    "command",
-    "builtin",
-    "time",
-    "nice",
-    "ionice",
-    "timeout",
-    "setsid",
-    "stdbuf",
-    "xargs",
-    "watch",
-    "chroot",
-    "su",
-    "runuser",
-    "unbuffer",
-    "caffeinate",
-    "sh",
-    "bash",
-    "dash",
-    "zsh",
-    "ksh",
-    "fish",
-    "!",
-    "{",
-];
-/// Options of a command after which a later word runs as a command.
-const COMMAND_OPTIONS: &[&str] = &["-exec", "-execdir", "-ok", "-okdir"];
-
 /// Absolute paths a contained program may name: the shared temporary
 /// directory and the standard streams.
 fn absolute_path_stays_local(path: &str) -> bool {
@@ -246,74 +211,6 @@ fn path_reaches(path: &str, alone: bool) -> bool {
     path.contains("..") && climbs_out(path)
 }
 
-/// Whether a word is an environment assignment such as `LC_ALL=C`.
-fn assignment(word: &str) -> bool {
-    word.split_once('=').is_some_and(|(name, _)| {
-        !name.is_empty() && name.chars().all(|c| c.is_ascii_alphanumeric() || c == '_')
-    })
-}
-
-/// A shell word with its quotes and backslashes removed, as the shell
-/// reads it: `'kill'`, `k""ill` and `\kill` are all `kill`.
-fn unquote(word: &str) -> String {
-    word.chars()
-        .filter(|c| !matches!(c, '\'' | '"' | '\\'))
-        .collect()
-}
-
-fn command_name(word: &str) -> &str {
-    word.rsplit('/').next().unwrap_or(word)
-}
-
-/// The positions in one shell command's words where a command may start:
-/// the first word past assignments, and when that word is a wrapper, or
-/// after `find -exec`, every later word. A wrapper's options can take a
-/// value or an operand (`env -u NAME`, `sudo -u USER`, `chroot DIR`), so
-/// any of the words after it may be the one that runs.
-fn command_starts(words: &[String]) -> Vec<usize> {
-    let first = words.iter().take_while(|word| assignment(word)).count();
-    let mut starts = vec![first];
-    let wrapped = words
-        .get(first)
-        .is_some_and(|word| COMMAND_PREFIXES.contains(&command_name(word)));
-    let launched = if wrapped {
-        Some(first)
-    } else {
-        words
-            .iter()
-            .position(|word| COMMAND_OPTIONS.contains(&word.as_str()))
-    };
-    if let Some(launcher) = launched {
-        starts.extend(launcher + 1..words.len());
-    }
-    starts
-}
-
-/// Whether `git config` with these words only reads. Only the words before
-/// `--` are options; a `--get` after it is a value.
-fn git_config_reads<'a>(words: impl IntoIterator<Item = &'a str>) -> bool {
-    words
-        .into_iter()
-        .take_while(|word| *word != "--")
-        .any(|word| GIT_CONFIG_READS.contains(&word))
-}
-
-/// Whether one shell command signals processes, writes Git configuration or
-/// lists the root directory.
-fn command_reaches(command: &str) -> bool {
-    let words: Vec<String> = command.split_whitespace().map(unquote).collect();
-    command_starts(&words).into_iter().any(|start| {
-        let Some(first) = words.get(start) else {
-            return false;
-        };
-        let name = command_name(first);
-        let rest = || words[start + 1..].iter().map(String::as_str);
-        SIGNAL_COMMANDS.contains(&name)
-            || (name == "git" && rest().any(|word| word == "config") && !git_config_reads(rest()))
-            || (ROOT_COMMANDS.contains(&name) && rest().any(|word| word == "/"))
-    })
-}
-
 /// Whether one string value reaches past the workspace: through any shell
 /// command in it that signals processes, writes Git configuration or lists
 /// the root directory, or through any word that names an outside path.
@@ -351,6 +248,61 @@ struct Literal {
     value: Option<String>,
 }
 
+/// The value of a replacement field whose expression is one string constant,
+/// with any `!r`, `:spec` or `=` after it, as in `{"/"}`.
+fn constant_field(field: &str) -> Option<String> {
+    let mut nested = false;
+    let found = literals(field, &mut nested);
+    let [only] = found.as_slice() else {
+        return None;
+    };
+    let rest = field[only.end..].trim_start();
+    let alone = field[..only.start].trim().is_empty()
+        && (rest.is_empty() || rest.starts_with(['!', ':', '=']));
+    alone.then(|| only.value.clone()).flatten()
+}
+
+/// The value of a formatted string. A field whose expression is one string
+/// constant stands for that string; any other field stands for an unknown
+/// word, with its expression scanned as code of its own. The string is also
+/// read with each such field in turn replaced by every string constant its
+/// expression holds, so `f'{"/" if a else ""}etc/passwd'` is read as the
+/// path it can make. `reaches` records what any of these finds.
+fn formatted_value(body: &str, raw: bool, reaches: &mut bool) -> Option<String> {
+    let (pieces, fields) = format_template(body)?;
+    let pieces: Vec<String> = pieces
+        .iter()
+        .map(|piece| literal_value(piece, raw))
+        .collect::<Option<_>>()?;
+    let defaults: Vec<String> = fields
+        .iter()
+        .map(|field| constant_field(field).unwrap_or_else(|| "x".to_owned()))
+        .collect();
+    let fill = |at: usize, value: &str| {
+        let mut text = pieces[0].clone();
+        for (index, piece) in pieces[1..].iter().enumerate() {
+            text.push_str(if index == at {
+                value
+            } else {
+                defaults[index].as_str()
+            });
+            text.push_str(piece);
+        }
+        text
+    };
+    for (index, field) in fields.iter().enumerate() {
+        let mut nested = false;
+        let constants = literals(field, &mut nested);
+        *reaches |= nested
+            || names_outside_path(field)
+            || constants
+                .iter()
+                .filter_map(|constant| constant.value.as_deref())
+                .any(|constant| literal_reaches(&fill(index, constant)));
+    }
+    Some(fill(usize::MAX, ""))
+}
+
 /// The string literals in `code`, read as the values Python gives them. A
 /// formatted string's field expressions are scanned as code of their own;
 /// `reaches` records one that reaches past the workspace.
@@ -365,9 +317,7 @@ fn literals(code: &str, reaches: &mut bool) -> Vec<Literal> {
             let raw = prefix && word.as_str().contains(['r', 'R']);
             let formatted = prefix && word.as_str().contains(['f', 'F']);
             let value = if formatted {
-                let (template, fields) = format_template(body.as_str());
-                *reaches |= fields.into_iter().any(names_outside_path);
-                literal_value(&template, raw)
+                formatted_value(body.as_str(), raw, reaches)
             } else {
                 literal_value(body.as_str(), raw)
             };

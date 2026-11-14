@@ -2,7 +2,7 @@
 //! formatted string's replacement fields set apart.
 
 use std::iter::Peekable;
-use std::str::Chars;
+use std::str::{CharIndices, Chars};
 
 /// Reads up to `count` digits in `radix` and returns the character they
 /// number.
@@ -67,36 +67,60 @@ pub(super) fn literal_value(body: &str, raw: bool) -> Option<String> {
     Some(value)
 }
 
-/// A formatted string's body with each replacement field replaced by an
-/// unknown word, `{{` and `}}` read as braces, and the field expressions it
-/// held. A field left open runs to the end of the body.
-pub(super) fn format_template(body: &str) -> (String, Vec<&str>) {
-    let mut template = String::with_capacity(body.len());
+/// A formatted string's body split at its replacement fields: the text
+/// around them, with `{{` and `}}` read as braces, and the field expressions
+/// between, so there is always one more piece of text than fields. A quote
+/// inside a field opens a string that runs to its closing quote, so the `}`
+/// in `{len("}")}` does not end the field. `None` when a field or a string
+/// inside one is left open, as the scan cannot tell where the field ends.
+pub(super) fn format_template(body: &str) -> Option<(Vec<String>, Vec<&str>)> {
+    let mut pieces = vec![String::new()];
     let mut fields = Vec::new();
     let mut chars = body.char_indices().peekable();
     while let Some((index, c)) = chars.next() {
         match c {
-            '{' if chars.next_if(|(_, next)| *next == '{').is_some() => template.push('{'),
-            '}' if chars.next_if(|(_, next)| *next == '}').is_some() => template.push('}'),
-            '{' => {
-                let mut depth = 1usize;
-                let mut end = body.len();
-                for (inner, c) in chars.by_ref() {
-                    match c {
-                        '{' => depth += 1,
-                        '}' => depth -= 1,
-                        _ => {}
-                    }
-                    if depth == 0 {
-                        end = inner;
-                        break;
-                    }
-                }
-                fields.push(&body[index + 1..end]);
-                template.push('x');
+            '{' if chars.next_if(|(_, next)| *next == '{').is_some() => {
+                pieces.last_mut()?.push('{')
             }
-            _ => template.push(c),
+            '}' if chars.next_if(|(_, next)| *next == '}').is_some() => {
+                pieces.last_mut()?.push('}')
+            }
+            '{' => {
+                let end = field_end(&mut chars)?;
+                fields.push(&body[index + 1..end]);
+                pieces.push(String::new());
+            }
+            _ => pieces.last_mut()?.push(c),
         }
     }
-    (template, fields)
+    Some((pieces, fields))
+}
+
+/// Where the replacement field just opened ends, counting nested braces and
+/// skipping over the strings inside it.
+fn field_end(chars: &mut Peekable<CharIndices<'_>>) -> Option<usize> {
+    let mut depth = 1usize;
+    let mut quote = None;
+    while let Some((index, c)) = chars.next() {
+        if let Some(open) = quote {
+            if c == '\\' {
+                chars.next();
+            } else if c == open {
+                quote = None;
+            }
+            continue;
+        }
+        match c {
+            '\'' | '"' => quote = Some(c),
+            '{' => depth += 1,
+            '}' => {
+                depth -= 1;
+                if depth == 0 {
+                    return Some(index);
+                }
+            }
+            _ => {}
+        }
+    }
+    None
 }
