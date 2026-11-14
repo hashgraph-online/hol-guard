@@ -311,7 +311,7 @@ jobs:
           matrix.check != 'clippy' &&
           steps.runtime-archive.outputs.cache-hit != 'true' &&
           github.event_name == 'push' && github.ref == 'refs/heads/main'
-        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
         with:
           path: ${{ runner.temp }}/runtime-test-archive.tar.zst
           key: ${{ steps.runtime-archive.outputs.cache-primary-key }}
@@ -474,7 +474,7 @@ jobs:
           test -x rust/target/previous-client/release/hol-guard-runtime
       - name: Save pinned prior native evaluators and projections
         if: steps.previous-cache.outputs.cache-hit != 'true' && github.event_name == 'push' && github.ref == 'refs/heads/main'
-        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
         with:
           path: |
             rust/target/previous-client/release/guard-command-source
