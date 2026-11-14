@@ -21244,6 +21244,142 @@
       "expect": "allow"
     },
     {
+      "id": "python-heredoc-stdlib-import-probe",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "python3 << 'EOF'\nfrom collections import OrderedDict\n\nd = OrderedDict([('a', 1), ('b', 2), ('c', 3)])\nd.move_to_end('a', last=False)\nprint(list(d.keys()))\nEOF"
+      },
+      "cwd": "worktree",
+      "expect": "allow",
+      "requires_sandbox": true
+    },
+    {
+      "id": "python-heredoc-isolated-glob-probe",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "python3 -I << 'EOF'\nimport glob\nimport re\n\nfor path in sorted(glob.glob('*.md')):\n    print(path, bool(re.search(r'\\.md$', path)))\nEOF"
+      },
+      "cwd": "worktree",
+      "expect": "allow",
+      "requires_sandbox": true
+    },
+    {
+      "id": "python-heredoc-dash-json-probe",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "python3 - <<'EOF'\nimport json\nimport re\n\nprint(json.dumps({'match': bool(re.match(r'a+', 'aaa'))}))\nEOF"
+      },
+      "cwd": "worktree",
+      "expect": "allow",
+      "requires_sandbox": true
+    },
+    {
+      "id": "python-heredoc-continued-stdlib-import-probe",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "python3 <<'PY'\nimport \\\n json\nprint(json.dumps({'ok': True}))\nPY"
+      },
+      "cwd": "worktree",
+      "expect": "allow",
+      "requires_sandbox": true
+    },
+    {
+      "id": "neg-python-heredoc-network-client",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "python3 - <<'EOF'\nimport urllib.request\n\nprint(urllib.request.urlopen('https://example.invalid').read())\nEOF"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-python-heredoc-coding-declaration",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "python3 <<'EOF'\n# -*- coding: utf-7 -*-\nimport json\nprint(json.dumps({}))\nEOF"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-python-heredoc-inline-program-too",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "python3 -c 'import json' <<'EOF'\nimport json\nprint(json.dumps({}))\nEOF"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-python-heredoc-import-chained-to-other-commands",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "python3 <<'EOF'\nimport json\nprint(json.dumps({}))\nEOF\ngit add -A"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
       "id": "developer-checkout-fetch-chain",
       "fix_area": "developer-checkout",
       "harnesses": [

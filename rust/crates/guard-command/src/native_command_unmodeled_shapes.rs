@@ -5,7 +5,19 @@
 use super::SHELL_PREFIXES;
 
 /// Interpreters whose standard-input program is a heredoc this module reads.
-const HEREDOC_PYTHON: &[&str] = &["python", "python3", "python -", "python3 -"];
+/// `-I` only takes away what Python would otherwise load: the `PYTHON*`
+/// environment, the user's site directory and the current directory on the
+/// import path.
+const HEREDOC_PYTHON: &[&str] = &[
+    "python",
+    "python3",
+    "python -",
+    "python3 -",
+    "python -I",
+    "python3 -I",
+    "python -I -",
+    "python3 -I -",
+];
 
 /// Text a Python program needs to reach the operating system, load code it
 /// computes, or inspect its own objects. A program with none of it and no
@@ -33,9 +45,10 @@ const PYTHON_UNBOUNDED: &[&str] = &[
 ];
 
 /// Whether `command`, the whole simple command a heredoc feeds, is Python
-/// reading its program from standard input named as `-`.
+/// reading its program from standard input. With no script operand Python
+/// reads it from standard input whether or not it is named as `-`.
 pub(crate) fn python_stdin(command: &str) -> bool {
-    command.ends_with(" -") && HEREDOC_PYTHON.contains(&command)
+    HEREDOC_PYTHON.contains(&command)
 }
 
 /// Whether a Python program reads only builtins, so it cannot start another

@@ -12,13 +12,16 @@ use std::path::{Path, PathBuf};
 use std::sync::LazyLock;
 
 use regex::Regex;
+use source_lines::code_lines;
 
 mod argv;
 mod destructive_git;
+pub(in crate::pretool) mod fed;
 mod launch;
 mod loopback;
 mod loopback_bases;
 pub(in crate::pretool) mod read_only;
+mod source_lines;
 mod system_files;
 
 pub(in crate::pretool) use destructive_git::{
@@ -67,9 +70,10 @@ pub(in crate::pretool) enum Language {
 /// Network clients a script imports or calls.
 static PYTHON_NETWORK: LazyLock<Regex> = LazyLock::new(|| {
     let clients = "socket|ssl|http|urllib|urllib3|requests|httpx|aiohttp|websocket|websockets|smtplib|ftplib|poplib|imaplib|telnetlib|xmlrpc|paramiko|asyncssh|pycurl|httplib2|boto3|botocore|googleapiclient|google\\.cloud|google\\.analytics|google\\.auth\\.transport|openai|anthropic|grpc|kubernetes|psycopg|psycopg2|pymysql|MySQLdb|redis|pymongo|slack_sdk|github|gql|stripe";
-    // `from client import x`, or `client` anywhere in an `import a, b` list.
+    // `from client import x`, or `client` anywhere in an `import a, b` list,
+    // at the start of a line or after the colon of `if x: import client`.
     Regex::new(&format!(
-        r"(?m)^[ \t]*(?:from[ \t]+(?:{clients})\b|import[ \t]+(?:[\w.]+(?:[ \t]+as[ \t]+\w+)?[ \t]*,[ \t]*)*(?:{clients})\b)"
+        r"(?m)(?:^|:)[ \t]*(?:from[ \t]+(?:{clients})\b|import[ \t]+(?:[\w.]+(?:[ \t]+as[ \t]+\w+)?[ \t]*,[ \t]*)*(?:{clients})\b)"
     ))
     .unwrap()
 });
@@ -771,29 +775,7 @@ pub(in crate::pretool) fn standalone_clean(language: Language, path: &Path) -> b
     let [source] = sources.as_slice() else {
         return false;
     };
-    let code = code_lines(language, source);
-    let network = match language {
-        Language::Python => python_network(&code),
-        Language::Node => NODE_NETWORK.is_match(&code),
-    };
-    !network && !CREDENTIAL_STORE.is_match(&code)
-}
-
-/// Whether a program this command launches uses the network.
-pub(super) fn uses_network(model: &CanonicalCommandV1, context: PathContext<'_>) -> bool {
-    assess(model, context).iter().any(|found| found.network)
-}
-
-/// Whether a program the POSIX shell text `command` launches uses the
-/// network, for a caller that judges a projection of the text.
-pub(super) fn text_uses_network(command: &str, context: PathContext<'_>) -> bool {
-    crate::parse_command(&crate::CommandModelRequestV1 {
-        command: command.to_owned(),
-        dialect: "posix".to_owned(),
-        transport: "shell_string".to_owned(),
-        extraction_provenance: "guard-shell".to_owned(),
-    })
-    .is_ok_and(|model| uses_network(&model, context))
+    fed::source_clean(language, source)
 }
 
 /// Whether inline source or a program fed on standard input uses the
@@ -1156,74 +1138,6 @@ fn python_imports(source: &str, root: &Path, directory: &Path) -> Vec<PathBuf> {
         })
         .filter_map(|path| std::fs::canonicalize(path).ok())
         .collect()
-}
-
-/// The source without its comments, so a path named in a note is not read
-/// as one the script opens. Only whole-line comments, block comments that
-/// open a line and comments after whitespace are dropped; a comment marker
-/// inside a string can drop the rest of that line, which only lowers what
-/// the scan finds.
-fn code_lines(language: Language, source: &str) -> String {
-    let marker = match language {
-        Language::Python => "#",
-        Language::Node => "//",
-    };
-    let mut code = String::with_capacity(source.len());
-    let mut in_block = false;
-    for line in source.lines() {
-        let trimmed = line.trim_start();
-        if language == Language::Node && (in_block || trimmed.starts_with("/*")) {
-            in_block = !trimmed.contains("*/");
-            if in_block || trimmed.trim_end().ends_with("*/") {
-                continue;
-            }
-        }
-        if trimmed.starts_with(marker) {
-            continue;
-        }
-        let end = line
-            .match_indices(marker)
-            .find(|(at, _)| line[..*at].ends_with([' ', '\t']))
-            .map_or(line.len(), |(at, _)| at);
-        // `python -c 'import os; import socket'` puts statements on one line.
-        match language {
-            Language::Python => code.push_str(&split_statements(&line[..end])),
-            Language::Node => code.push_str(&line[..end]),
-        }
-        code.push('\n');
-    }
-    code
-}
-
-/// A Python line with each `;` outside a string literal starting a new line.
-/// A line whose strings this cannot follow, with a triple quote, an f-string
-/// field or a string left open, splits at every `;`, which only finds more.
-fn split_statements(line: &str) -> String {
-    let everywhere = || line.replace(';', "\n");
-    if line.contains("\"\"\"") || line.contains("'''") || line.contains('{') {
-        return everywhere();
-    }
-    let mut split = String::with_capacity(line.len());
-    let (mut quote, mut escaped) = (None, false);
-    for character in line.chars() {
-        match quote {
-            Some(_) if escaped => escaped = false,
-            Some(_) if character == '\\' => escaped = true,
-            Some(open) if character == open => quote = None,
-            Some(_) => {}
-            None if matches!(character, '\'' | '"') => quote = Some(character),
-            None if character == ';' => {
-                split.push('\n');
-                continue;
-            }
-            None => {}
-        }
-        split.push(character);
-    }
-    if quote.is_some() {
-        return everywhere();
-    }
-    split
 }
 
 fn extension(path: &Path) -> String {

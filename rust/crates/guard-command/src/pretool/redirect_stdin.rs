@@ -280,13 +280,14 @@ fn plain_expansion(chars: &[char], start: usize) -> Option<usize> {
 }
 
 /// Skips the bodies of the pending heredocs in order, as
-/// `skip_heredoc_bodies` does. A body that feeds Python must use only its
-/// builtins, the same check the extension controls apply to such a program.
+/// `skip_heredoc_bodies` does. A body that feeds Python must fit the sandbox
+/// ([`python_program_fits`]); `wide` is set once one uses more than builtins.
 pub(in crate::pretool) fn skip_bodies(
     chars: &[char],
     mut index: usize,
     heredocs: &mut Vec<(String, bool)>,
     programs: &mut Vec<bool>,
+    wide: &mut bool,
 ) -> Option<usize> {
     if heredocs.len() != programs.len() {
         return None;
@@ -302,10 +303,64 @@ pub(in crate::pretool) fn skip_bodies(
                 Some((body, _)) => body.split('\n').collect(),
                 None => Vec::new(),
             };
-            if !crate::native_command_controls::python_is_builtin_only(&body) {
+            // Apply physical-line safety even to builtins-only programs:
+            // the fast path otherwise skips python_program_fits entirely.
+            if !python_has_no_bare_cr(&format!("{}\n", body.join("\n"))) {
                 return None;
+            }
+            if !crate::native_command_controls::python_is_builtin_only(&body) {
+                *wide = true;
+                if !python_program_fits(&body) {
+                    return None;
+                }
             }
         }
     }
     Some(index)
+}
+
+/// Whether a program fed to Python on standard input may run in the
+/// workspace sandbox. A program that uses only builtins can start nothing.
+/// Any other program is held to the bar a script file in the workspace
+/// meets: it may import modules, the project's own included, but needs
+/// neither the network nor a credential store. The sandbox, not this scan,
+/// bounds what it does; the scan keeps a program that would fail there on
+/// review. The source has to be plain ASCII with no coding declaration, so
+/// the text scanned is the text Python runs.
+/// Such a program is only taken when it is the whole command
+/// (`script_content::fed::python_alone`).
+fn python_program_fits(body: &[&str]) -> bool {
+    // skip_bodies strips the LF before the closing heredoc delimiter.
+    // Restore it so final CRLF and Python physical lines are represented exactly.
+    let source = format!("{}\n", body.join("\n"));
+    // Python treats a bare CR as a physical line break. The heredoc parser
+    // splits on LF; reject only CR that is not part of CRLF, so the encoding
+    // header check and interpreter agree without holding ordinary CRLF input.
+    body.iter().all(|row| row.is_ascii())
+        && python_has_no_bare_cr(&source)
+        && !body.iter().take(2).any(|row| coding_comment(row))
+        && crate::pretool::script_content::fed::source_clean(
+            crate::pretool::script_content::Language::Python,
+            &source,
+        )
+}
+
+/// A bare CR changes Python's physical source-line boundaries; CRLF is fine.
+fn python_has_no_bare_cr(source: &str) -> bool {
+    let bytes = source.as_bytes();
+    bytes
+        .iter()
+        .enumerate()
+        .all(|(i, byte)| *byte != b'\r' || bytes.get(i + 1) == Some(&b'\n'))
+}
+
+/// Whether a row may be a source-encoding declaration. Python reads one only
+/// from a comment on the first or second line (PEP 263), so the caller asks
+/// just those two; anywhere else `coding` is ordinary text, as in
+/// `open(path, encoding="utf-8")`. Any comment naming `coding` there counts,
+/// looser than Python's own pattern.
+fn coding_comment(row: &str) -> bool {
+    row.trim_start_matches([' ', '\t', '\x0c'])
+        .strip_prefix('#')
+        .is_some_and(|comment| comment.to_ascii_lowercase().contains("coding"))
 }
