@@ -101,7 +101,10 @@ fn unmodeled_sibling_cannot_hide_a_secret_copy() {
     ] {
         let result = eval(&session, code);
         assert_ne!(result.minimum_action, "allow", "{code}: {result:?}");
-        assert_eq!(result.reason_code, "native_pre_tool_unknown_review", "{code}");
+        assert_eq!(
+            result.reason_code, "native_pre_tool_unknown_review",
+            "{code}"
+        );
     }
 }
 
@@ -166,14 +169,18 @@ fn sh_calls_the_grammar_cannot_pin_down_stay_reviewed() {
 #[test]
 fn sh_never_borrows_the_bash_tools_containment() {
     let session = with_env("omp-eval-sh-contained");
-    let command = "python3 -I -c 'print(1)'";
+    // An inline interpreter that touches the OS: macOS runs it contained.
+    let command = "python3 -I -c 'import os; print(os.getpid())'";
     let standalone = direct(&session, command);
     // Containment verdicts are only available on macOS. Assert that
     // platform's precondition rather than silently passing if it regresses.
     if !cfg!(target_os = "macos") {
         return;
     }
-    assert_eq!(standalone.minimum_action, "sandbox-required", "{standalone:?}");
+    assert_eq!(
+        standalone.minimum_action, "sandbox-required",
+        "{standalone:?}"
+    );
     let code = format!("await sh({})", serde_json::to_string(command).unwrap());
     let result = eval(&session, &code);
     assert_ne!(result.minimum_action, "allow", "{result:?}");
