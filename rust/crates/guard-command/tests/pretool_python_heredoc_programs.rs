@@ -111,6 +111,8 @@ fn a_probe_that_would_not_fit_the_sandbox_keeps_its_review() {
         "python3 <<'EOF'\n# first comment\r# coding: utf-7\n+AGk-mport socket\nEOF",
         // Source scanning and the interpreter must agree on line boundaries.
         "python3 - <<'EOF'\nimport json\rprint(json.dumps({}))\nEOF",
+        // A builtins-only probe must not bypass the physical-line check.
+        "python3 <<'EOF'\nprint(1)\rprint(2)\nEOF",
         "python3 <<'EOF'\nmarker = \" #\"; from urllib import request\nEOF",
         // Python joins this continued string before interpreting the semicolon.
         // The comment's unmatched quote must not hide the network import.
