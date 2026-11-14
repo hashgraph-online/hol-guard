@@ -168,9 +168,12 @@ fn sh_never_borrows_the_bash_tools_containment() {
     let session = with_env("omp-eval-sh-contained");
     let command = "python3 -I -c 'print(1)'";
     let standalone = direct(&session, command);
-    if standalone.minimum_action != "sandbox-required" {
+    // Containment verdicts are only available on macOS. Assert that
+    // platform's precondition rather than silently passing if it regresses.
+    if !cfg!(target_os = "macos") {
         return;
     }
+    assert_eq!(standalone.minimum_action, "sandbox-required", "{standalone:?}");
     let code = format!("await sh({})", serde_json::to_string(command).unwrap());
     let result = eval(&session, &code);
     assert_ne!(result.minimum_action, "allow", "{result:?}");
