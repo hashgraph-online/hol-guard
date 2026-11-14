@@ -8,6 +8,7 @@ calls hold only the Guard library work behind each route.
 
 from __future__ import annotations
 
+import re
 from collections.abc import Callable, Mapping
 from datetime import datetime, timezone
 from typing import Any
@@ -15,6 +16,19 @@ from typing import Any
 from .store import GuardStore
 
 RouteCall = Callable[[GuardStore, Mapping[str, Any]], dict[str, object]]
+
+# Install refusals meant for the person at the keyboard lead with their reason
+# code (``codex_hook_owner_conflict: ...``) and carry the one edit that clears
+# them; the CLI prints them verbatim. Anything else stays behind the generic
+# repair reply so internal failure text never reaches the app.
+_USER_FACING_INSTALL_ERROR = re.compile(r"([a-z][a-z0-9_]{2,63}): (\S.*)", re.DOTALL)
+
+
+def _user_facing_install_error(error: RuntimeError) -> tuple[str, str] | None:
+    match = _USER_FACING_INSTALL_ERROR.fullmatch(str(error).strip())
+    if match is None:
+        return None
+    return match.group(1), match.group(2)
 
 
 def _now() -> str:
@@ -232,8 +246,12 @@ def harness_action(store: GuardStore, args: Mapping[str, Any]) -> dict[str, obje
         )
     except ValueError as error:
         return _reply({"error": str(error)}, 400)
-    except RuntimeError:
+    except RuntimeError as error:
         logging.getLogger(__name__).exception("Guard could not complete %s repair for %s", action, adapter.harness)
+        refusal = _user_facing_install_error(error)
+        if refusal is not None:
+            code, message = refusal
+            return _reply({"error": code, "harness": adapter.harness, "message": message}, 409)
         return _reply(
             {
                 "error": "harness_repair_failed",

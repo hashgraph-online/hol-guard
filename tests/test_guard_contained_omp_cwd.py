@@ -220,3 +220,32 @@ def test_a_cwd_outside_any_project_never_roots_the_sandbox(monkeypatch, tmp_path
     # workspace and every sibling repository: the sandbox stays the workspace.
     assert authorized and all(asked == str(workspace) for asked in authorized)
     assert launched and all(root == workspace for root in launched)
+
+
+HOME_LAUNCHER = "cd app && ~/.bun/bin/bun build.js 2>&1 | tail -15"
+
+
+def test_a_home_spelled_launcher_rooted_at_cwd_runs_as_its_projection(monkeypatch, tmp_path) -> None:
+    home, workspace, _worktree = session(tmp_path)
+    launcher = home / ".bun/bin/bun"
+    launcher.parent.mkdir(parents=True)
+    launcher.write_text("#!/bin/sh\n")
+    launcher.chmod(0o755)
+    (workspace / "app/build.js").write_text("\n")
+    original = {
+        "hook_event_name": "PreToolUse",
+        "tool_name": "bash",
+        "tool_input": {"command": HOME_LAUNCHER, "cwd": str(workspace), "timeout": 3600},
+        "cwd": str(workspace),
+    }
+    exit_code, authorized, launched = run_rooted(
+        monkeypatch, original, workspace, home, lambda _payload: workspace_profile()
+    )
+    assert exit_code == 0
+    projected = f"cd app && {launcher} build.js 2>&1 | tail -15"
+    # The workspace planner refuses the home-spelled text, so the sandbox must
+    # be asked about, and run, the projection the pre-tool pass answered for.
+    assert authorized[-1] == (projected, str(workspace), False)
+    [(payload, root, cwd)] = launched
+    assert (root, cwd) == (workspace, workspace)
+    assert payload["tool_input"]["command"] == projected

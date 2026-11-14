@@ -7,23 +7,27 @@ import shlex
 import subprocess
 import sys
 from pathlib import Path
+from typing import Any
 
 import pytest
 
 from codex_plugin_scanner.guard.adapters import claude_code
 from codex_plugin_scanner.guard.adapters.base import HarnessContext, _shell_command
-from codex_plugin_scanner.guard.adapters.claude_code import ClaudeCodeHarnessAdapter
-from codex_plugin_scanner.guard.adapters.claude_hook_config import (
+from codex_plugin_scanner.guard.adapters.claude_code import (
+    CLAUDE_GUARD_DAEMON_HOOK_MARKER,
     CLAUDE_GUARD_SESSION_START_HOOK_MARKER,
-    command_handler_argv,
-    handler_identity,
+    NATIVE_CLAUDE_HOOK_FEATURE,
+    ClaudeCodeHarnessAdapter,
 )
 
 
 def _handler_argv(handler: dict[str, object]) -> tuple[str, ...]:
-    argv = command_handler_argv(handler)
-    assert argv is not None
-    return argv
+    assert handler["type"] == "command"
+    command = handler["command"]
+    args = handler["args"]
+    assert isinstance(command, str)
+    assert isinstance(args, list)
+    return (command, *(str(arg) for arg in args))
 
 
 def _runtime_hook_handlers(payload: dict[str, object]) -> list[dict[str, object]]:
@@ -121,12 +125,22 @@ def test_session_start_argv_preserves_exact_paths(
     def fake_refresh(*, home_dir: Path, workspace_dir: Path | None, guard_home: Path) -> None:
         captured["refresh"] = (home_dir, workspace_dir, guard_home)
 
+    real_ask = claude_code.ask
+
+    def recording_ask(op: str, context: HarnessContext, **kwargs: Any) -> dict[str, Any]:
+        from codex_plugin_scanner.guard.native_context import _BOUND_GUARD_HOME
+
+        captured["native_guard_home"] = _BOUND_GUARD_HOME.get()
+        return real_ask(op, context, **kwargs)
+
     monkeypatch.setattr(claude_code, "_daemon_module", lambda: FakeDaemonModule())
     monkeypatch.setattr(ClaudeCodeHarnessAdapter, "refresh_installed_hook_urls", fake_refresh)
+    monkeypatch.setattr(claude_code, "ask", recording_ask)
 
     result = claude_code._run_session_start_from_argv((guard_home, home_dir, workspace_dir))
 
     assert result == 0
+    assert captured["native_guard_home"] == Path(guard_home)
     assert captured["daemon_guard_home"] == Path(guard_home)
     assert captured["refresh"] == (Path(home_dir), Path(workspace_dir), Path(guard_home))
     assert json.loads(capsys.readouterr().out) == {
@@ -147,9 +161,17 @@ def test_session_start_argv_preserves_exact_paths(
         ("guard\x00home", "home"),
     ],
 )
-def test_session_start_rejects_malformed_argv(argv: tuple[str, ...]) -> None:
+def test_session_start_rejects_malformed_argv(
+    argv: tuple[str, ...], tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    work = tmp_path / "work"
+    work.mkdir()
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))
+    monkeypatch.chdir(work)
     with pytest.raises(SystemExit, match="claude_session_start_argv_invalid"):
         claude_code._run_session_start_from_argv(argv)
+    # A refused vector never names the Guard home, so nothing lands beside the hook.
+    assert list(work.iterdir()) == []
 
 
 def test_shell_command_round_trips_hostile_posix_arguments_without_running_marker(tmp_path: Path) -> None:
@@ -230,8 +252,6 @@ def test_install_uses_exec_argv_for_every_managed_hook_with_hostile_paths(tmp_pa
     assert tuple(bridge_config["fallback_command"]) == adapter._hook_command_parts(context)
     assert f"--workspace={context.workspace_dir}" in bridge_config["fallback_command"]
     assert bridge_config["state_path"] == str(context.guard_home / "daemon-state.json")
-    assert handler_identity(session_handlers[0]) == ("command", "exec", *expected_session_argv)
-    assert handler_identity(runtime_handlers[0]) == ("command", "exec", *expected_runtime_argv)
 
 
 def test_global_install_uses_exec_argv_without_workspace(tmp_path: Path) -> None:
@@ -326,26 +346,22 @@ def test_daemon_hook_uses_the_native_bridge_when_the_runtime_offers_it(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     from codex_plugin_scanner.guard import native_runtime
-    from codex_plugin_scanner.guard.adapters import claude_hook_argv
 
     runtime = tmp_path / "hol-guard-runtime"
     monkeypatch.setattr(
         native_runtime,
         "native_runtime_status",
-        lambda *, deadline_monotonic=None: _native_status((claude_hook_argv.NATIVE_CLAUDE_HOOK_FEATURE,), runtime),
+        lambda *, deadline_monotonic=None: _native_status((NATIVE_CLAUDE_HOOK_FEATURE,), runtime),
     )
+    monkeypatch.setattr(claude_code, "load_guard_daemon_url", lambda _guard_home: "http://127.0.0.1:1")
     context = HarnessContext(home_dir=tmp_path / "h", workspace_dir=None, guard_home=tmp_path / "g")
 
-    argv = claude_hook_argv.daemon_hook_command_parts(context, fallback_daemon_url="http://127.0.0.1:1")
+    argv = ClaudeCodeHarnessAdapter._daemon_hook_command_parts(context)
 
-    assert argv[:3] == (
-        str(runtime),
-        claude_hook_argv.NATIVE_CLAUDE_HOOK_COMMAND,
-        claude_hook_argv.CLAUDE_GUARD_DAEMON_HOOK_MARKER,
-    )
+    assert argv[:3] == (str(runtime), "claude-hook-bridge", CLAUDE_GUARD_DAEMON_HOOK_MARKER)
     config = json.loads(argv[3])
     assert config["state_path"] == str(context.guard_home / "daemon-state.json")
-    assert config["fallback_command"] == list(claude_hook_argv.guard_hook_command_parts(context))
+    assert config["fallback_command"] == list(ClaudeCodeHarnessAdapter._hook_command_parts(context))
     assert config["recovery_command"]
     assert all(isinstance(part, str) for part in config["recovery_command"])
 
@@ -354,16 +370,16 @@ def test_daemon_hook_keeps_the_python_bridge_without_the_native_feature(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     from codex_plugin_scanner.guard import native_runtime
-    from codex_plugin_scanner.guard.adapters import claude_hook_argv
 
     monkeypatch.setattr(
         native_runtime,
         "native_runtime_status",
         lambda *, deadline_monotonic=None: _native_status(("resident-protocol-v2",), tmp_path / "hol-guard-runtime"),
     )
+    monkeypatch.setattr(claude_code, "load_guard_daemon_url", lambda _guard_home: "http://127.0.0.1:1")
     context = HarnessContext(home_dir=tmp_path / "h", workspace_dir=None, guard_home=tmp_path / "g")
 
-    argv = claude_hook_argv.daemon_hook_command_parts(context, fallback_daemon_url="http://127.0.0.1:1")
+    argv = ClaudeCodeHarnessAdapter._daemon_hook_command_parts(context)
 
     assert argv[:2] == (sys.executable, "-c")
     assert "recovery_command" not in json.loads(argv[-1])

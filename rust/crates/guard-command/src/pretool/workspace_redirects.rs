@@ -241,6 +241,7 @@ pub(super) fn contained(
         || crate::pretool::script_content::text_names_system_file(command, context)
         || crate::pretool::script_content::text_spells_destructive_git(command, context)
         || crate::pretool::literal_secrets::holds_literal_secret(command)
+        || crate::pretool::hook_neutering::neuters_git_hooks(command)
     {
         return None;
     }

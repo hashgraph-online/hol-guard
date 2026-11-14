@@ -17,13 +17,30 @@ use crate::cloud_policy_pack::{shipped, FactCall, Preset};
 use serde_json::{json, Map, Value};
 use std::sync::LazyLock;
 
-const SHIPPED_SOURCES: [&str; 6] = [
+/// Every pack this build ships; tests read the same list.
+pub(crate) const SHIPPED_SOURCES: [&str; 22] = [
+    include_str!("../../../../contributions/cloud-actions/airtable.json"),
+    include_str!("../../../../contributions/cloud-actions/asana.json"),
+    include_str!("../../../../contributions/cloud-actions/atlassian.json"),
+    include_str!("../../../../contributions/cloud-actions/box.json"),
     include_str!("../../../../contributions/cloud-actions/calendar.json"),
+    include_str!("../../../../contributions/cloud-actions/docs.json"),
     include_str!("../../../../contributions/cloud-actions/drive.json"),
+    include_str!("../../../../contributions/cloud-actions/dropbox.json"),
     include_str!("../../../../contributions/cloud-actions/github.json"),
     include_str!("../../../../contributions/cloud-actions/gmail.json"),
+    include_str!("../../../../contributions/cloud-actions/hubspot.json"),
+    include_str!("../../../../contributions/cloud-actions/hubspot-mcp.json"),
     include_str!("../../../../contributions/cloud-actions/notion.json"),
+    include_str!("../../../../contributions/cloud-actions/notion-mcp.json"),
+    include_str!("../../../../contributions/cloud-actions/onedrive.json"),
+    include_str!("../../../../contributions/cloud-actions/outlook.json"),
+    include_str!("../../../../contributions/cloud-actions/salesforce-mcp.json"),
+    include_str!("../../../../contributions/cloud-actions/sheets.json"),
     include_str!("../../../../contributions/cloud-actions/slack.json"),
+    include_str!("../../../../contributions/cloud-actions/stripe.json"),
+    include_str!("../../../../contributions/cloud-actions/stripe-mcp.json"),
+    include_str!("../../../../contributions/cloud-actions/teams.json"),
 ];
 
 static SHIPPED_PACKS: LazyLock<Vec<CloudActionPack>> = LazyLock::new(|| {

@@ -1,5 +1,5 @@
 """Harness adapters the native runtime answers: Devin, Antigravity, Gemini, Kimi, OpenClaw, Paseo, Muse,
-Grok, ZCode, Pi, Oh My Pi, OpenCode and Cline.
+Grok, ZCode, Pi, Oh My Pi, OpenCode, Cline, Copilot, Cursor and Claude Code.
 
 The ``harness_adapter`` runner-authority kind owns their paths, detection, command lookup, install and
 uninstall plans, manifests, launch environment, runtime probe fields, approval flow, Paseo's delegated
@@ -44,6 +44,9 @@ NATIVE_HARNESSES: tuple[tuple[str, tuple[str, ...], str], ...] = (
     ("omp", ("omp", "oh-my-pi"), "omp"),
     ("opencode", (), ""),
     ("cline", ("cline-cli", "cline-vscode"), "cline"),
+    ("copilot", (), ""),
+    ("cursor", (), "cursor-agent"),
+    ("claude-code", ("claude",), "claude"),
 )
 
 #: Ops that render a Pi-family extension, so they carry this process's facts.
@@ -317,7 +320,9 @@ class NativeHarnessAdapter(HarnessAdapter):
             return {"harness": self.harness, "active": False, "config_path": shim["shim_path"], **shim}
         # Ask for the plan first, so a refusal leaves the launcher in place.
         plan = self._ask("prepare_uninstall", context)
-        shim = remove_guard_shim(self.harness, context, **self._shim_names())
+        shim = remove_guard_shim(
+            self.harness, context, legacy_launcher_names=self.legacy_launcher_names, **self._shim_names()
+        )
         for write in plan["writes"]:
             target = Path(write["path"])
             if write.get("parents"):

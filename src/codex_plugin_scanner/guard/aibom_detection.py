@@ -83,6 +83,17 @@ def _private_metadata_from_wire(item: Mapping[str, Any]) -> dict[str, object]:
         return {}
     if not isinstance(private, dict):
         raise NativeAibomError("native_runner_authority_result_invalid")
+    if set(private) == {"managed_mcp_origin", "managed_guard_home"}:
+        origin = private["managed_mcp_origin"]
+        guard_home = private["managed_guard_home"]
+        if (
+            not isinstance(origin, list)
+            or len(origin) != 2
+            or not all(isinstance(value, str) for value in origin)
+            or not isinstance(guard_home, str)
+        ):
+            raise NativeAibomError("native_runner_authority_result_invalid")
+        return {"managed_mcp_origin": tuple(origin), "managed_guard_home": guard_home}
     args = private.get("mcp_args")
     environment = private.get("mcp_env")
     if (

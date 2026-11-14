@@ -62,7 +62,7 @@ def _offer_native(monkeypatch: pytest.MonkeyPatch, runtime: Path) -> None:
 
 
 def _isolated_python(monkeypatch: pytest.MonkeyPatch) -> None:
-    for module in ("bounded_cli_hook_bridge", "cursor_hook_config"):
+    for module in ("bounded_cli_hook_bridge", "isolated_hook_python"):
         monkeypatch.setattr(
             f"codex_plugin_scanner.guard.adapters.{module}.isolated_cursor_hook_python",
             lambda: _PYTHON,

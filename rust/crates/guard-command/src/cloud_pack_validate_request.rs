@@ -47,10 +47,14 @@ pub(crate) fn validate_request(
             && match &param.value {
                 ValueSource::Const(value) => scalar(value),
                 ValueSource::Arg { name, default } => {
-                    scalar_argument(args.get(name))
-                        && default
-                            .as_ref()
-                            .is_none_or(|value| default_fits(args.get(name), value))
+                    // An array argument repeats the parameter once per item, with no default.
+                    let repeated = matches!(args.get(name), Some(ArgumentSpec::Array { .. }))
+                        && default.is_none();
+                    repeated
+                        || scalar_argument(args.get(name))
+                            && default
+                                .as_ref()
+                                .is_none_or(|value| default_fits(args.get(name), value))
                 }
             };
         if !ok {
@@ -81,6 +85,8 @@ pub(crate) fn validate_request(
         (Some(_), HttpMethod::Get | HttpMethod::Delete) => {
             fail("cloud_pack_request_body_invalid", "/body")
         }
+        (Some(Template::Form(fields)), _) => crate::cloud_pack_form::validate(fields, args)
+            .map_err(|code| (code, "/body".to_owned())),
         (Some(template), _) if !matches!(template, Template::Object(_)) => {
             fail("cloud_pack_request_body_invalid", "/body")
         }
@@ -91,6 +97,23 @@ pub(crate) fn validate_request(
     }
 }
 
+/// Split a trailing custom method (`:verb`, as in Google's `files/{id}:copy`)
+/// off a path segment. `None` when the segment holds a colon in any other form.
+pub(crate) fn custom_method(segment: &str) -> Option<(&str, Option<&str>)> {
+    match segment.split_once(':') {
+        None => Some((segment, None)),
+        Some((head, verb))
+            if !head.is_empty()
+                && !verb.is_empty()
+                && verb.len() <= 64
+                && verb.bytes().all(|b| b.is_ascii_alphabetic()) =>
+        {
+            Some((head, Some(verb)))
+        }
+        Some(_) => None,
+    }
+}
+
 /// Placeholders of a path template with whether each spans segments, or `None` when malformed.
 pub(crate) fn path_placeholders(path: &str) -> Option<BTreeMap<String, bool>> {
     if !path.starts_with('/') || path.len() > MAX_PATH_CHARS || path.contains("//") {
@@ -98,6 +121,7 @@ pub(crate) fn path_placeholders(path: &str) -> Option<BTreeMap<String, bool>> {
     }
     let mut found = BTreeMap::new();
     for segment in path[1..].split('/') {
+        let (segment, verb) = custom_method(segment)?;
         if let Some(inner) = segment
             .strip_prefix('{')
             .and_then(|rest| rest.strip_suffix('}'))
@@ -107,6 +131,7 @@ pub(crate) fn path_placeholders(path: &str) -> Option<BTreeMap<String, bool>> {
                 None => (inner, false),
             };
             if !crate::cloud_pack_validate::snake_name(name)
+                || (spans && verb.is_some())
                 || found.insert(name.to_owned(), spans).is_some()
             {
                 return None;
@@ -163,7 +188,9 @@ fn default_fits(spec: Option<&ArgumentSpec>, value: &Value) -> bool {
     }
 }
 
+/// A parameter name, optionally with one leading `$` (OData system options such as `$top`).
 fn query_name(name: &str) -> bool {
+    let name = name.strip_prefix('$').unwrap_or(name);
     (1..=64).contains(&name.len())
         && name
             .bytes()
@@ -241,5 +268,6 @@ fn validate_template(
         Template::Rfc822(_) => Err("cloud_pack_template_mail_invalid"),
         Template::Element(true) if in_each => Ok(()),
         Template::Element(_) => Err("cloud_pack_template_each_invalid"),
+        Template::Form(_) => Err("cloud_pack_template_form_invalid"),
     }
 }

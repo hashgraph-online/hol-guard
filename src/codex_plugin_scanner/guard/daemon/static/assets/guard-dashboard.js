@@ -1,4 +1,4 @@
-const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/chunks/home-dashboard-BTu-Dd20.js","assets/chunks/home-protection-module-CMu4ycX8.js","assets/chunks/supply-chain-protection-stats-C4S58svV.js","assets/chunks/workspace-model-hR3eI7UO.js","assets/chunks/brand-hero-COty1p6U.js","assets/chunks/about-content-Dr9zFg1V.js","assets/chunks/app-catalog-Ca_M7GbC.js","assets/chunks/fleet-workspace-CyNbRJJG.js","assets/chunks/harness-version-label-MLxWNcFW.js","assets/chunks/settings-save-proof-modal-_wjRK7LN.js","assets/chunks/connect-guard-cloud-button-BUnXYp-e.js","assets/chunks/guard-repair-control-BGQGnM8b.js","assets/chunks/settings-workspace-Dgt1mojz.js","assets/chunks/confirm-dialog-C_yrRR8f.js","assets/chunks/extensions-workspace-BJW9li9o.js","assets/chunks/app-detail-workspace-DDqFXF6A.js","assets/chunks/policy-workspace-page-DuL9PTDi.js","assets/chunks/about-workspace-BX-eCaXK.js","assets/about-workspace.css"])))=>i.map(i=>d[i]);
+const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/chunks/home-dashboard-BTu-Dd20.js","assets/chunks/home-protection-module-CMu4ycX8.js","assets/chunks/supply-chain-protection-stats-C4S58svV.js","assets/chunks/workspace-model-hR3eI7UO.js","assets/chunks/brand-hero-COty1p6U.js","assets/chunks/about-content-Dr9zFg1V.js","assets/chunks/app-catalog-Ca_M7GbC.js","assets/chunks/fleet-workspace-CyNbRJJG.js","assets/chunks/harness-version-label-MLxWNcFW.js","assets/chunks/settings-save-proof-modal-_wjRK7LN.js","assets/chunks/connect-guard-cloud-button-BUnXYp-e.js","assets/chunks/guard-repair-control-BGQGnM8b.js","assets/chunks/settings-workspace-Dgt1mojz.js","assets/chunks/confirm-dialog-C_yrRR8f.js","assets/chunks/extensions-workspace-BJW9li9o.js","assets/chunks/app-detail-workspace-BcDpRAjB.js","assets/chunks/harness-action-errors-x2AyNCK-.js","assets/chunks/supply-chain-hub-workspace-BJZR421D.js","assets/chunks/policy-workspace-page-DuL9PTDi.js","assets/chunks/about-workspace-BX-eCaXK.js","assets/about-workspace.css"])))=>i.map(i=>d[i]);
 (function polyfill() {
   const relList = document.createElement("link").relList;
   if (relList && relList.supports && relList.supports("modulepreload")) return;
@@ -14368,7 +14368,10 @@ function retryCannotReuseApproval(item) {
   return item.once_only_reason === "script_execution_binding_unavailable" || item.scope_restrictions?.includes("retry_cannot_reuse_approval") === true;
 }
 function oneTimeRetryWindowMinutes(item) {
-  return item.artifact_id.includes(":native-pretool:") ? 5 : 15;
+  return item.artifact_id.includes(":native-pretool:") ? 60 : 15;
+}
+function retryWindowText(minutes) {
+  return minutes === 60 ? "an hour" : `${minutes} minutes`;
 }
 function allowPermissionLabels(item) {
   const recommendation = item.extension_recommendation;
@@ -15141,7 +15144,7 @@ function buildRetryAfterApprovalCopy(item, action, persistedExactAction = false)
       return `Saved. Return to ${harness} to retry. Guard will allow this exact action next time; changed commands still need review.`;
     }
     if (retryCannotReuseApproval(item)) return retryBlockedApprovalCopy(item, harness);
-    return `Approved once. Return to ${harness} and retry within ${oneTimeRetryWindowMinutes(item)} minutes.`;
+    return `Approved once. Return to ${harness} and retry within ${retryWindowText(oneTimeRetryWindowMinutes(item))}.`;
   }
   return `Blocked. Return to ${harness} to continue with a different action, or ask it to try something else.`;
 }
@@ -32361,7 +32364,7 @@ function ExactActionPersistenceChoice(props) {
           }
         ),
         /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "block text-sm font-semibold text-brand-dark", children: props.versionBoundScript ? "Run once" : "This time" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "mt-0.5 block text-xs text-muted-foreground", children: `Retry within ${props.retryWindowMinutes} minutes.` })
+        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "mt-0.5 block text-xs text-muted-foreground", children: `Retry within ${retryWindowText(props.retryWindowMinutes)}.` })
       ] }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: exactActionChoiceClassName(props.checked), children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx(
@@ -39195,19 +39198,19 @@ const ExtensionsWorkspace = lazyWorkspace(
   "extensions-workspace",
   () => __vitePreload(() => import("./chunks/extensions-workspace-BJW9li9o.js"), true ? __vite__mapDeps([14,13]) : void 0).then((module) => ({ default: module.ExtensionsWorkspace }))
 );
-const AppDetailWorkspace = lazyWorkspace("app-detail-workspace", () => __vitePreload(() => import("./chunks/app-detail-workspace-DDqFXF6A.js"), true ? __vite__mapDeps([15,8,9]) : void 0).then((m) => ({ default: m.AppDetailWorkspace })));
+const AppDetailWorkspace = lazyWorkspace("app-detail-workspace", () => __vitePreload(() => import("./chunks/app-detail-workspace-BcDpRAjB.js"), true ? __vite__mapDeps([15,16,8,9]) : void 0).then((m) => ({ default: m.AppDetailWorkspace })));
 const HelpModal = lazyWorkspace("help-modal", () => __vitePreload(() => import("./chunks/help-modal-DUQGf9sy.js"), true ? [] : void 0).then((m) => ({ default: m.HelpModal })));
 const SupplyChainHubWorkspace = lazyWorkspace(
   "supply-chain-hub-workspace",
-  () => __vitePreload(() => import("./chunks/supply-chain-hub-workspace-DKEZ1NCt.js").then((n) => n.d), true ? [] : void 0).then((m) => ({ default: m.SupplyChainHubWorkspace }))
+  () => __vitePreload(() => import("./chunks/supply-chain-hub-workspace-BJZR421D.js").then((n) => n.d), true ? __vite__mapDeps([17,16]) : void 0).then((m) => ({ default: m.SupplyChainHubWorkspace }))
 );
 const PolicyWorkspacePage = lazyWorkspace(
   "policy-workspace-page",
-  () => __vitePreload(() => import("./chunks/policy-workspace-page-DuL9PTDi.js"), true ? __vite__mapDeps([16,10]) : void 0).then((m) => ({ default: m.PolicyWorkspacePage }))
+  () => __vitePreload(() => import("./chunks/policy-workspace-page-DuL9PTDi.js"), true ? __vite__mapDeps([18,10]) : void 0).then((m) => ({ default: m.PolicyWorkspacePage }))
 );
 const AboutWorkspace = lazyWorkspace(
   "about-workspace",
-  () => __vitePreload(() => import("./chunks/about-workspace-BX-eCaXK.js"), true ? __vite__mapDeps([17,4,5,18]) : void 0).then((m) => ({ default: m.AboutWorkspace }))
+  () => __vitePreload(() => import("./chunks/about-workspace-BX-eCaXK.js"), true ? __vite__mapDeps([19,4,5,20]) : void 0).then((m) => ({ default: m.AboutWorkspace }))
 );
 const ReleasesWorkspace = lazyWorkspace(
   "releases-workspace",

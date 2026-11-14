@@ -204,14 +204,72 @@ fn a_zero_bound_is_never_widened() {
 }
 
 #[test]
-fn an_mcp_argument_is_never_renamed() {
-    let tools = json!([{ "name": "move_file", "inputSchema": { "type": "object",
-        "required": ["folderPath"],
-        "properties": { "folderPath": { "type": "string" }, "note": { "type": "string" } } } }]);
+fn an_mcp_list_with_a_zero_bound_is_never_widened() {
+    let tools = json!([{ "name": "tag_items", "inputSchema": { "type": "object",
+        "required": ["tags"],
+        "properties": { "tags": { "type": "array", "maxItems": 0, "items": { "type": "object" } },
+            "note": { "type": "string" } } } }]);
     let reply = reply(json!({ "op": "generate", "providerId": "files",
         "host": "mcp.files.example", "authMode": "oauth2", "mcpTools": tools }));
-    let arguments = &only(&reply)["arguments"];
-    assert!(arguments.get("folder_path").is_none(), "{arguments}");
-    assert_eq!(arguments["note"]["type"], json!("string"));
+    assert!(only(&reply)["arguments"].get("tags").is_none());
     assert!(noted(&reply, "required_argument_unsupported"));
+}
+
+/// A draft with `/status` beside `extra`, so the draft is never empty.
+fn with_status(extra: Value) -> Value {
+    let mut paths = json!({ "/status": { "get": { "operationId": "getStatus" } } });
+    paths["/orders"] = extra;
+    draft(openapi(paths))
+}
+
+fn action_ids(reply: &Value) -> Vec<String> {
+    actions(reply)
+        .iter()
+        .filter_map(|action| action["actionId"].as_str().map(str::to_owned))
+        .collect()
+}
+
+#[test]
+fn an_operation_with_a_required_parameter_it_cannot_send_is_left_out() {
+    let required_array = with_status(json!({ "get": { "operationId": "listOrders",
+        "parameters": [{ "name": "ids", "in": "query", "required": true,
+            "schema": { "type": "array", "items": { "type": "string" } } }] } }));
+    assert_eq!(action_ids(&required_array).len(), 1, "{required_array}");
+    assert!(noted(&required_array, "required_argument_unsupported"));
+    let required_filter = with_status(json!({ "get": { "operationId": "listOrders",
+        "parameters": [{ "name": "$filter", "in": "query", "required": true,
+            "schema": { "type": "string" } }] } }));
+    assert_eq!(action_ids(&required_filter).len(), 1, "{required_filter}");
+    let optional_array = with_status(json!({ "get": { "operationId": "listOrders",
+        "parameters": [{ "name": "ids", "in": "query",
+            "schema": { "type": "array", "items": { "type": "string" } } }] } }));
+    assert_eq!(action_ids(&optional_array).len(), 2, "{optional_array}");
+}
+
+#[test]
+fn a_required_body_property_it_cannot_carry_leaves_the_operation_out() {
+    let reply = with_status(json!({ "post": { "operationId": "createOrder",
+        "requestBody": { "content": { "application/json": { "schema": {
+            "type": "object", "required": ["lines"],
+            "properties": { "lines": { "type": "array", "items": { "type": "object" } },
+                "note": { "type": "string" } } } } } } } }));
+    assert_eq!(action_ids(&reply).len(), 1, "{reply}");
+    assert!(noted(&reply, "required_argument_unsupported"));
+}
+
+#[test]
+fn a_custom_method_placeholder_is_renamed_with_its_verb_kept() {
+    let reply = draft(openapi(json!({ "/files/{fileId}:copy": { "post": {
+        "operationId": "copyFile",
+        "parameters": [{ "name": "fileId", "in": "path", "required": true,
+            "schema": { "type": "string" } }],
+        "requestBody": { "content": { "application/json": { "schema": {
+            "type": "object", "properties": { "name": { "type": "string" } } } } } } } } })));
+    let action = only(&reply);
+    assert_eq!(
+        action["executor"]["request"]["path"],
+        json!("/v1/files/{file_id}:copy"),
+        "{action}"
+    );
+    assert!(action["arguments"].get("file_id").is_some(), "{action}");
 }

@@ -12,7 +12,6 @@ import pytest
 from codex_plugin_scanner.guard.adapters import bounded_cli_hook_bridge as bridge
 from codex_plugin_scanner.guard.adapters import (
     cline_runtime,
-    copilot,
     hermes_runtime_hooks,
 )
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
@@ -134,9 +133,7 @@ def test_only_a_native_prefix_is_stripped(argv: list[object]) -> None:
 @_POSIX_ONLY
 def test_native_copilot_devin_and_hermes_commands_stay_managed(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     _offer_native(monkeypatch, tmp_path / "hol guard runtime", (NATIVE_BOUNDED_HOOK_FEATURE,))
-    context = HarnessContext(home_dir=tmp_path / "h", workspace_dir=None, guard_home=tmp_path / "g")
-
-    copilot_command = shlex.join(copilot._hook_command_parts(context, include_workspace=False))
+    copilot_command = shlex.join(_command(tmp_path, "copilot"))
     devin_command = shlex.join(_command(tmp_path, "devin"))
 
     assert NATIVE_BOUNDED_HOOK_COMMAND in copilot_command

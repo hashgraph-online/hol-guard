@@ -29,7 +29,7 @@ from packaging.version import InvalidVersion, Version
 from ... import version as package_version
 from ..adapters.base import HarnessContext
 from ..adapters.codex import CodexHarnessAdapter, codex_native_hook_state
-from ..adapters.cursor_hooks import cursor_native_hook_state
+from ..adapters.cursor import cursor_native_hook_state
 from ..adapters.native_extension import extension_is_current, legacy_omp_extension_is_verified
 from ..config import load_guard_config, resolve_guard_home
 from ..mdm.contracts import ManagedNetworkPolicy, ManagedPolicy

@@ -763,6 +763,38 @@
    "body": "53abbd254e3b"
   },
   {
+   "verdict": "windows-permissive",
+   "note": "Windows has no `openat`, so the write goes by the resolved path. Every ancestor is checked for a symlink first, as Python's Windows writer refused untrusted parent links, but a parent swapped between that check and the rename is not detected the way the Unix arm's held directory handles detect it.",
+   "file": "rust/crates/guard-runtime/src/adapters/harness_adapter/authorized_write.rs",
+   "item": "pub(super) fn write_beneath_parent(path: &Path, bytes: &[u8]) -> std::io::Result<()>",
+   "cfg": "not(unix)",
+   "body": "e5fdfbf635c7"
+  },
+  {
+   "verdict": "windows-permissive",
+   "note": "Identifies the Copilot lifecycle lock by its length instead of device and inode, so a lock replaced with one of the same length between the claim and the release reads as the same lock. The lock sits in the account's own Guard home and only serialises Guard's own install and uninstall runs.",
+   "file": "rust/crates/guard-runtime/src/adapters/harness_adapter/copilot_state.rs",
+   "item": "fn identity(metadata: &fs::Metadata) -> (u64, u64)",
+   "cfg": "not(unix)",
+   "body": "93c3bae2eb35"
+  },
+  {
+   "verdict": "posix-primitive",
+   "note": "Windows has no owner uid or POSIX mode bits to check, so the arm keeps the regular-file, non-empty and size-bounded checks, as the Python reader did when `os.getuid` was absent. The key sits in the account's own Guard home, whose ACL already limits it to that account.",
+   "file": "rust/crates/guard-runtime/src/adapters/harness_adapter/cursor_files.rs",
+   "item": "fn private_secret(path: &Path) -> Option<Vec<u8>>",
+   "cfg": "not(unix)",
+   "body": "e25ec712d75b"
+  },
+  {
+   "verdict": "posix-primitive",
+   "note": "Windows has no `O_NOFOLLOW` or 0o600 creation mode, so the key is created by path and inherits the Guard home's ACL, as Python's `os.open` did with `getattr(os, \"O_NOFOLLOW\", 0)`. A failed write still removes the partial key, so the next run generates a fresh one.",
+   "file": "rust/crates/guard-runtime/src/adapters/harness_adapter/cursor_files.rs",
+   "item": "fn write_secret(path: &Path, generated: &[u8]) -> std::io::Result<()>",
+   "cfg": "not(unix)",
+   "body": "824053787be2"
+  },
+  {
    "verdict": "posix-primitive",
    "note": "Windows has no `O_NOFOLLOW`, so the file is opened by path, as Python's `os.open` did with `getattr(os, \"O_NOFOLLOW\", 0)`. `snapshot` still refuses a link: after the read it takes `symlink_metadata` of the path and `same_file` rejects a symlink there, so a linked config is reported as `target_changed` instead of being followed.",
    "file": "rust/crates/guard-runtime/src/adapters/harness_adapter/files.rs",

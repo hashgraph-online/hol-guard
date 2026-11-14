@@ -1,6 +1,6 @@
 //! `runner_authority` kind `harness_adapter`: the Gemini, Antigravity, Kimi,
-//! Devin, Muse, OpenClaw, Paseo, Grok, ZCode, Pi, Oh My Pi and OpenCode
-//! harness adapters.
+//! Devin, Muse, OpenClaw, Paseo, Grok, ZCode, Pi, Oh My Pi, OpenCode,
+//! Cline, Copilot, Cursor and Claude Code harness adapters.
 //!
 //! Python keeps one generic adapter class that holds the ownership locks,
 //! prepares and removes the launcher shim, builds the bounded hook argv and
@@ -27,12 +27,30 @@ use crate::harness_coverage::artifacts::resolve_lenient;
 use crate::runner_authority_detector::args_object;
 use crate::runner_authority_op::{KindResult, ERR_INVALID};
 
+mod authorized_write;
+mod claude;
+mod claude_argv;
+mod claude_settings;
 mod cline;
 mod cline_hooks;
 mod cline_install;
 mod cline_mcp;
 mod cline_plugin;
 mod cloud_identity;
+mod copilot;
+mod copilot_install;
+mod copilot_mcp;
+mod copilot_state;
+mod copilot_uninstall;
+mod cursor;
+mod cursor_ask;
+mod cursor_editor;
+mod cursor_files;
+mod cursor_hooks;
+mod cursor_hooks_plan;
+mod cursor_hooks_uninstall;
+mod cursor_rebind;
+mod cursor_state;
 mod describe;
 mod desktop_core;
 mod files;
@@ -166,6 +184,8 @@ pub(crate) enum Failure {
     Integrity(&'static str),
     /// The `RuntimeError` an adapter raised.
     Runtime(String),
+    /// A fact only the Guard process can supply; Python answers and asks again.
+    Reply(Value),
     Invalid,
 }
 
@@ -185,6 +205,7 @@ fn answer(step: Step<Value>) -> KindResult {
         Err(Failure::NotFound(message)) => Ok(json!({ "not_found": message })),
         Err(Failure::Integrity(reason)) => Ok(json!({ "integrity": reason })),
         Err(Failure::Runtime(message)) => Ok(json!({ "runtime_error": message })),
+        Err(Failure::Reply(needed)) => Ok(json!({ "reply": needed })),
         Err(Failure::Invalid) => Err(ERR_INVALID),
     }
 }
@@ -218,6 +239,9 @@ pub(crate) fn dispatch(args: &Value) -> KindResult {
         "pi" | "omp" => pi::dispatch(spec, op, &ctx, fields),
         "opencode" => opencode::dispatch(spec, op, &ctx, fields),
         "cline" => cline::dispatch(spec, op, &ctx, fields),
+        "copilot" => copilot::dispatch(spec, op, &ctx, fields),
+        "cursor" => cursor::dispatch(spec, op, &ctx, fields),
+        "claude-code" => claude::dispatch(spec, op, &ctx, fields),
         _ => Err(Failure::Invalid),
     })
 }
