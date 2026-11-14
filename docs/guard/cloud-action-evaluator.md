@@ -142,6 +142,11 @@ A `guard.cloud-action-evaluation.v2` request carries everything a version 1 requ
 - `supported_obligations`: the obligations this caller can carry out.
 - `policy.fact_rules`: rules with an action pattern (as in version 1) plus a `facts` selector and optional
   `obligations`. `policy.pack_digest` names the policy pack the rules came from, or is `null`.
+- `unclassified` and `policy.unclassified` (both optional): when no admitted pack describes the action, the host
+  sends `{"destructive": <bool>}` (whether the classifier read the tool's name or schema as destructive) and the
+  pack's Unclassified section `{"action", "destructive_name_action"}`. The call's facts must then claim only a
+  class, with every other fact unknown; richer facts are refused with `unclassified_facts_invalid`. Both values
+  join the fact-rule digest only when sent.
 - `saved_consents` with a `scope`: `{"exact": {"action_identity_sha256"}}`,
   `{"resource": {"action_id", "connection_id", "resource_id"}}`, or
   `{"bounded": {"action_id", "connection_id", "selector", "selector_sha256"}}`.
@@ -164,7 +169,10 @@ The policy step changes as follows. Everything else in the precedence list above
    most 25 messages. An unknown fact never lowers anything, and rule order never matters. Reason codes add
    `fact_rule` when a rule definitely matched and `fact_unknown` when an unknown fact made the result stricter.
    `matched_rule_ids` lists definite matches. `unknown_fact_rule_ids` lists the rules that depended on an
-   unknown fact.
+   unknown fact. When the request carries both `unclassified` and `policy.unclassified`, `U` is set aside: the
+   outcome is the stricter of `outcome(D)` and the section's `destructive_name_action` (destructive name) or
+   `action`, the obligations come from `D` alone, and the reason code is `unclassified` instead of
+   `fact_unknown`. A class-only call would otherwise meet the strictest branch of every rule it might match.
 4. **Windows.** A selector bound `{"window", "at_most" | "above"}` compares the counter plus this call's known
    `record_count` with the bound. A missing counter counts as over the limit. An unknown record count is
    unknown.
