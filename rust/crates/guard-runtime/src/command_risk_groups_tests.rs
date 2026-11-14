@@ -550,3 +550,70 @@ fn sql_comments_and_subquery_predicates_do_not_limit_an_update() {
         ("psql -c 'UPDATE users SET plan=(SELECT 1) WHERE id=2'", &[]),
     ]);
 }
+
+#[test]
+fn heredoc_bodies_belong_to_the_command_that_opened_them() {
+    check(&[
+        ("bash <<'EOF'; echo ready\nrm -rf build\nEOF", &["deletes"]),
+        (
+            "ssh prod <<'EOF' | tee deploy.log\nkubectl delete ns app\nEOF",
+            &["deletes"],
+        ),
+        ("echo ready; cat <<'EOF'\nrm -rf build\nEOF", &[]),
+        ("cat <<'EOF' | bash\nrm -rf build\nEOF", &["deletes"]),
+        ("cat <<'EOF' | grep x\nrm -rf build\nEOF", &[]),
+        ("true || cat <<'EOF'\nrm -rf build\nEOF", &[]),
+    ]);
+}
+
+#[test]
+fn quoted_heredoc_delimiters_keep_their_spaces() {
+    check(&[
+        (
+            "cat <<'END HERE'\ntext\nEND HERE\nrm -rf build",
+            &["deletes"],
+        ),
+        ("cat <<\"A B\"\nrm x\nA B\nls", &[]),
+    ]);
+}
+
+#[test]
+fn sql_clients_reading_a_heredoc_run_it_as_sql() {
+    check(&[
+        ("psql <<'SQL'\nDROP TABLE users;\nSQL", &["deletes"]),
+        (
+            "mysql app <<SQL\nUPDATE users SET plan = 1;\nSQL",
+            &["bulk_changes"],
+        ),
+        ("cat <<'SQL' | psql\nDELETE FROM users;\nSQL", &["deletes"]),
+        ("psql <<'SQL'\nSELECT 1;\nSQL", &[]),
+    ]);
+}
+
+#[test]
+fn sql_client_options_are_not_read_as_comments() {
+    check(&[
+        ("psql --command 'DROP TABLE users'", &["deletes"]),
+        ("psql --dbname app -c 'DROP TABLE users'", &["deletes"]),
+        ("psql --command='DROP TABLE users'", &["deletes"]),
+        (
+            "psql -c 'UPDATE a SET x = 1 WHERE id = 2' -c 'UPDATE b SET y = 1'",
+            &["bulk_changes"],
+        ),
+        ("psql -c '-- note\nSELECT 1'", &[]),
+    ]);
+}
+
+#[test]
+fn httpie_raw_request_bodies_send() {
+    check(&[
+        (
+            "http --ignore-stdin --raw='{\"x\":1}' https://example.test/hook",
+            &["sending_and_sharing"],
+        ),
+        (
+            "http --raw '{\"x\":1}' https://example.test/hook",
+            &["sending_and_sharing"],
+        ),
+    ]);
+}

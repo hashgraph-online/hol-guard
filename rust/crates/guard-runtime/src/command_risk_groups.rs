@@ -49,6 +49,10 @@ const CONTROL_WORDS: [&str; 10] = [
 
 /// Programs that run the here-document they read as commands.
 const STDIN_SHELLS: [&str; 8] = ["bash", "sh", "zsh", "dash", "ksh", "fish", "ssh", "eval"];
+/// SQL clients that run the SQL they read on standard input.
+const SQL_CLIENTS: [&str; 5] = ["psql", "mysql", "sqlite3", "mongosh", "clickhouse-client"];
+/// Commands that hand their input on unchanged to the next command in a pipe.
+const PASS_THROUGH: [&str; 2] = ["cat", "tee"];
 
 /// How deep `bash -c`, `eval`, `ssh` and `watch` payloads are followed.
 const MAX_DEPTH: usize = 4;
@@ -84,15 +88,17 @@ pub(crate) fn command_risk_groups(command: &str) -> Vec<&'static str> {
 }
 
 fn collect(command: &str, depth: usize, found: &mut [bool; GROUPS.len()]) {
-    for segment in segments(tokens(command)) {
+    let segments = segments(tokens(command));
+    for (at, segment) in segments.iter().enumerate() {
         if depth < MAX_DEPTH {
             for inner in &segment.substitutions {
                 collect(inner, depth + 1, found);
             }
         }
         let program = program_index(&segment.words);
-        if depth < MAX_DEPTH {
-            collect_heredocs(&segment, program.as_ref(), depth, found);
+        if depth < MAX_DEPTH && !segment.heredocs.is_empty() {
+            let reader = stdin_reader(&segments, at);
+            collect_heredocs(segment, reader.as_deref(), depth, found);
         }
         let index = match program {
             Some(Program::At(index)) => index,
@@ -106,11 +112,7 @@ fn collect(command: &str, depth: usize, found: &mut [bool; GROUPS.len()]) {
         };
         let name = program_name(&segment.words[index]);
         let raw_args = &segment.words[index + 1..];
-        for group in segment_groups(&name, raw_args, &segment.redirects) {
-            if let Some(at) = GROUPS.iter().position(|known| *known == group) {
-                found[at] = true;
-            }
-        }
+        mark(found, segment_groups(&name, raw_args, &segment.redirects));
         if depth < MAX_DEPTH {
             if let Some(inner) = nested_command(&name, raw_args) {
                 collect(&inner, depth + 1, found);
@@ -119,29 +121,55 @@ fn collect(command: &str, depth: usize, found: &mut [bool; GROUPS.len()]) {
     }
 }
 
-/// A here-document is the command text when a shell or `ssh` reads it. For
-/// any other reader it is input, and only an unquoted body's command
-/// substitutions run.
+fn mark(found: &mut [bool; GROUPS.len()], groups: Vec<&'static str>) {
+    for group in groups {
+        if let Some(at) = GROUPS.iter().position(|known| *known == group) {
+            found[at] = true;
+        }
+    }
+}
+
+/// The program of a segment, by name.
+fn segment_program(segment: &Segment) -> Option<String> {
+    match program_index(&segment.words)? {
+        Program::At(index) => Some(program_name(&segment.words[index])),
+        Program::Split(inner) => inner.split_whitespace().next().map(program_name),
+    }
+}
+
+/// The program that ends up reading a segment's standard input: the segment's
+/// own program, or, past `cat` and `tee`, the command they pipe it to.
+fn stdin_reader(segments: &[Segment], mut at: usize) -> Option<String> {
+    loop {
+        let name = segment_program(&segments[at])?;
+        if PASS_THROUGH.contains(&name.as_str()) && segments[at].pipes && at + 1 < segments.len() {
+            at += 1;
+            continue;
+        }
+        return Some(name);
+    }
+}
+
+/// A here-document is the command text when a shell or `ssh` reads it, and
+/// SQL when a SQL client reads it. For any other reader it is input, and only
+/// an unquoted body's command substitutions run.
 fn collect_heredocs(
     segment: &Segment,
-    program: Option<&Program>,
+    reader: Option<&str>,
     depth: usize,
     found: &mut [bool; GROUPS.len()],
 ) {
-    let runs_body = match program {
-        Some(Program::At(index)) => {
-            STDIN_SHELLS.contains(&program_name(&segment.words[*index]).as_str())
-        }
-        Some(Program::Split(inner)) => inner
-            .split_whitespace()
-            .next()
-            .is_some_and(|first| STDIN_SHELLS.contains(&program_name(first).as_str())),
-        None => false,
-    };
+    let runs_body = reader.is_some_and(|name| STDIN_SHELLS.contains(&name));
+    let runs_sql = reader.is_some_and(|name| SQL_CLIENTS.contains(&name));
     for (body, quoted) in &segment.heredocs {
         if runs_body {
             collect(body, depth + 1, found);
-        } else if !quoted {
+            continue;
+        }
+        if runs_sql {
+            mark(found, sql_groups(&[body.to_ascii_lowercase()]));
+        }
+        if !quoted {
             for inner in body_substitutions(body) {
                 collect(&inner, depth + 1, found);
             }
@@ -160,6 +188,11 @@ fn segments(tokens: Vec<Token>) -> Vec<Segment> {
                 out.push(std::mem::take(&mut current));
                 redirect_next = false;
             }
+            Token::Pipe => {
+                current.pipes = true;
+                out.push(std::mem::take(&mut current));
+                redirect_next = false;
+            }
             Token::Redirect => redirect_next = true,
             Token::Word(word) if redirect_next => {
                 current.redirects.push(word);
@@ -167,7 +200,16 @@ fn segments(tokens: Vec<Token>) -> Vec<Segment> {
             }
             Token::Word(word) => current.words.push(word),
             Token::Substitution(inner) => current.substitutions.push(inner),
-            Token::Heredoc { body, quoted } => current.heredocs.push((body, quoted)),
+            // The body belongs to the command that opened it, which a `|`
+            // or `;` later on the same line may already have ended.
+            Token::Heredoc {
+                body,
+                quoted,
+                opener,
+            } => match out.get_mut(opener) {
+                Some(segment) => segment.heredocs.push((body, quoted)),
+                None => current.heredocs.push((body, quoted)),
+            },
         }
     }
     out.push(current);
@@ -187,6 +229,8 @@ struct Segment {
     substitutions: Vec<String>,
     /// Here-document bodies, each with whether its delimiter was quoted.
     heredocs: Vec<(String, bool)>,
+    /// The next segment reads this one's output.
+    pipes: bool,
 }
 
 /// Where a segment's program is: a word, or the command line `env -S` splits.

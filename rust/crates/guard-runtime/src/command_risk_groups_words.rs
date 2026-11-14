@@ -18,15 +18,21 @@ pub(super) enum Token {
     Word(String),
     /// Ends a simple command.
     Boundary,
+    /// `|`: ends a simple command whose output the next one reads.
+    Pipe,
     /// `<`, `>` and their variants: the next word is a redirection target.
     Redirect,
     /// A command substitution's text, run as its own command.
     Substitution(String),
     /// A here-document body. `quoted` is true when the delimiter was quoted,
     /// so the shell expands nothing in the body.
+    /// `opener` counts the boundaries before the `<<`, so it is the index
+    /// of the command that reads the body, even when `|` or `;` follows on
+    /// the same line.
     Heredoc {
         body: String,
         quoted: bool,
+        opener: usize,
     },
 }
 
@@ -92,11 +98,22 @@ pub(super) fn tokens(command: &str) -> Vec<Token> {
                     out.push(Token::Heredoc {
                         body: heredoc_body(&mut chars, &heredoc),
                         quoted: heredoc.quoted,
+                        opener: heredoc.opener,
                     });
                 }
                 out.push(Token::Boundary);
             }
-            ';' | '|' | '(' | ')' => {
+            '|' => {
+                finish(&mut out, &mut word, &mut in_word);
+                if chars.next_if_eq(&'|').is_some() {
+                    out.push(Token::Boundary);
+                } else {
+                    // `|&` pipes standard error too.
+                    chars.next_if_eq(&'&');
+                    out.push(Token::Pipe);
+                }
+            }
+            ';' | '(' | ')' => {
                 finish(&mut out, &mut word, &mut in_word);
                 out.push(Token::Boundary);
             }
@@ -129,10 +146,15 @@ pub(super) fn tokens(command: &str) -> Vec<Token> {
                 if operator == "<<" {
                     let strip_tabs = chars.next_if_eq(&'-').is_some();
                     if let Some((delimiter, quoted)) = heredoc_delimiter(&mut chars) {
+                        let opener = out
+                            .iter()
+                            .filter(|token| matches!(token, Token::Boundary | Token::Pipe))
+                            .count();
                         heredocs.push(Heredoc {
                             delimiter,
                             strip_tabs,
                             quoted,
+                            opener,
                         });
                     }
                 } else if chars.next_if_eq(&'&').is_some() {
@@ -224,21 +246,40 @@ struct Heredoc {
     delimiter: String,
     strip_tabs: bool,
     quoted: bool,
+    opener: usize,
 }
 
 /// The word after `<<`, with its quotes removed, as the body's end line, and
-/// whether any part of it was quoted.
+/// whether any part of it was quoted. Quoted text, spaces included, is part
+/// of the word.
 fn heredoc_delimiter(chars: &mut Peekable<Chars>) -> Option<(String, bool)> {
     while chars.next_if(|next| matches!(next, ' ' | '\t')).is_some() {}
     let mut delimiter = String::new();
     let mut quoted = false;
-    while let Some(c) = chars.next_if(|next| {
-        !next.is_whitespace() && !matches!(next, ';' | '|' | '&' | '<' | '>' | '(' | ')')
-    }) {
-        if matches!(c, '\'' | '"' | '\\') {
-            quoted = true;
-        } else {
-            delimiter.push(c);
+    while let Some(&c) = chars.peek() {
+        match c {
+            '\'' | '"' => {
+                chars.next();
+                quoted = true;
+                for inner in chars.by_ref() {
+                    if inner == c {
+                        break;
+                    }
+                    delimiter.push(inner);
+                }
+            }
+            '\\' => {
+                chars.next();
+                quoted = true;
+                if let Some(escaped) = chars.next_if(|next| *next != '\n') {
+                    delimiter.push(escaped);
+                }
+            }
+            _ if c.is_whitespace() || matches!(c, ';' | '|' | '&' | '<' | '>' | '(' | ')') => break,
+            _ => {
+                chars.next();
+                delimiter.push(c);
+            }
         }
     }
     Some((delimiter, quoted)).filter(|(delimiter, _)| !delimiter.is_empty())

@@ -235,7 +235,22 @@ pub(super) fn deploy_groups(name: &str, args: &[String]) -> Vec<&'static str> {
 pub(super) fn sql_groups(args: &[String]) -> Vec<&'static str> {
     let mut text = String::new();
     let mut in_string = false;
-    let joined = args.join(" ");
+    // Client options are not SQL: `--command` would read as a comment. An
+    // attached value (`--command=DROP TABLE x`) is kept. A word with a space
+    // before any `=` is SQL even when it starts with `--`. Each argument is
+    // its own statement, so a `WHERE` in one never limits another.
+    let joined = args
+        .iter()
+        .filter_map(|arg| {
+            let name = arg.split('=').next().unwrap_or(arg);
+            if !arg.starts_with('-') || name.contains(char::is_whitespace) {
+                Some(arg.as_str())
+            } else {
+                arg.split_once('=').map(|(_, value)| value)
+            }
+        })
+        .collect::<Vec<_>>()
+        .join(";\n");
     let mut chars = joined.chars().peekable();
     while let Some(c) = chars.next() {
         if c == '\'' {

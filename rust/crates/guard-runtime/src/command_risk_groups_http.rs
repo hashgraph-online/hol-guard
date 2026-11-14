@@ -190,6 +190,10 @@ fn httpie_sends(args: &[String]) -> bool {
     let mut index = 0;
     while let Some(arg) = args.get(index) {
         index += 1;
+        // `--raw` is the request body itself.
+        if arg == "--raw" || arg.starts_with("--raw=") {
+            return true;
+        }
         if let Some(long) = arg.strip_prefix("--") {
             if !long.contains('=') && HTTPIE_VALUE_FLAGS.contains(&arg.as_str()) {
                 index += 1;
