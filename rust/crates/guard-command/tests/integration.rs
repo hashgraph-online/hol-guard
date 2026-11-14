@@ -112,6 +112,7 @@ pub mod pretool_find_age_size_tests;
 pub mod pretool_find_brace_expansion;
 pub mod pretool_find_exec_programs;
 pub mod pretool_find_exec_sed_edits;
+pub mod pretool_find_hidden_home_links;
 pub mod pretool_find_hidden_home_match;
 pub mod pretool_find_project_skill_root;
 pub mod pretool_for_loop_conditionals;
