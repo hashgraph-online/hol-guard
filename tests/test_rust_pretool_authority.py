@@ -358,3 +358,50 @@ def test_a_caller_that_cannot_name_the_shell_sends_no_environment(
         _FEATURES,
     )
     assert "execution_environment" not in sent["request"]
+
+
+@pytest.mark.parametrize(
+    ("floor", "reason_code"),
+    [
+        ("require-reapproval", "native_git_execution_context_review"),
+        ("sandbox-required", "native_sandbox_required"),
+    ],
+)
+def test_a_command_review_keeps_a_reapproval_or_containment_floor(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    floor: str,
+    reason_code: str,
+) -> None:
+    # `hol-guard command explain 'git status'` reported the runtime as
+    # unavailable because the resident's reapproval floor was dropped here.
+    answer = {
+        "authority": "rust",
+        "decision": "deny",
+        "minimum_action": floor,
+        "policy_action": floor,
+        "reason_code": reason_code,
+        "reason": "Guard reviews this command before it runs.",
+        "explicitly_benign": False,
+        "command_model": {"normalized_text": "git status"},
+    }
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.native_pretool.native_runtime_status",
+        lambda: _status(tmp_path, _FEATURES),
+    )
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.native_pretool.native_resident_client_request",
+        lambda **_: json.dumps(answer).encode(),
+    )
+    routes.reset_native_hook_route()
+
+    reviewed = pretool.review_pre_tool_native(
+        "git status",
+        guard_home=tmp_path,
+        cwd=tmp_path,
+        home_dir=tmp_path,
+        record_health=False,
+        extension_evidence=True,
+    )
+
+    assert reviewed == answer
