@@ -115,6 +115,55 @@ pub(super) fn mask_liveness_probes(value: &str) -> String {
     masked.into_owned()
 }
 
+/// Asking which `curl` or `wget` build a machine has (`which curl build this
+/// machine has`, `the curl binary`, `curl --version`, `wget --help`) moves no
+/// data, so those mentions are masked before the action scan. A flag counts
+/// only where it ends the clause (`curl --help -o out host/x` still fetches),
+/// and a noun only after a determiner and before no transfer word (`the curl
+/// binary data to the server`). Nothing is masked when another mention of
+/// either tool remains, or when the text names a URL or an `@` source: the
+/// transfer is then the only reading the scan can give that text.
+pub(super) fn mask_transfer_tool_info(value: &str) -> String {
+    static INFO: OnceLock<Regex> = OnceLock::new();
+    static TRANSFER_WORD: OnceLock<Regex> = OnceLock::new();
+    static OTHER_TOOL: OnceLock<Regex> = OnceLock::new();
+    if value.contains("://") || value.contains('@') {
+        return value.to_owned();
+    }
+    let info = INFO.get_or_init(|| {
+        Regex::new(concat!(
+            r"(?i)\b(?P<noun>(?:which|what|the|this|that|my|our|your|its|installed|local|current|system|[a-z]+'s)\s+(?:curl|wget)\s+(?:build|version|release|binary))\b",
+            r"|\b(?P<flag>(?:curl|wget)\s+(?:--help|--version|--manual)(?:\s+all)?)",
+            r"(?:\s*$|\s*[\n`'\x22,;:!?)\]]|\.(?:\s|$)|\s+(?:and|or|then)\b)",
+        ))
+        .expect("bounded transfer tool information mention")
+    });
+    let transfer_word = TRANSFER_WORD.get_or_init(|| {
+        Regex::new(r"(?i)^\s*(?:data|files?|payloads?|to|into|onto|over|via|at|from)\b")
+            .expect("bounded transfer follow-up")
+    });
+    let mut masked = String::with_capacity(value.len());
+    let mut copied = 0;
+    for captures in info.captures_iter(value) {
+        let Some(mention) = captures.name("noun").or_else(|| captures.name("flag")) else {
+            continue;
+        };
+        if captures.name("noun").is_some() && transfer_word.is_match(&value[mention.end()..]) {
+            continue;
+        }
+        masked.push_str(&value[copied..mention.start()]);
+        masked.push_str("tool-info");
+        copied = mention.end();
+    }
+    masked.push_str(&value[copied..]);
+    let other_tool = OTHER_TOOL
+        .get_or_init(|| Regex::new(r"(?i)\b(?:curl|wget)\b").expect("bounded transfer tool word"));
+    if other_tool.is_match(&masked) {
+        return value.to_owned();
+    }
+    masked
+}
+
 /// `then read it again` re-reads what the prompt already named, so it adds
 /// no target of its own. Without `again`, `then read it` can point back at
 /// anything earlier in the text and stays in for the guarded reading.
