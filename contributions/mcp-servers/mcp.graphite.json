@@ -1,0 +1,106 @@
+{
+  "schemaVersion": "guard.mcp-server-contribution.v1",
+  "id": "mcp.graphite",
+  "version": "1.0.0",
+  "name": "Graphite",
+  "description": "Graphite queries program graphs built from JVM (Java, Kotlin, Android), JavaScript/TypeScript and Apple (Swift) code. Local stdio server: graphite mcp --graph <id>:<path>. Guard matches only the executable basename graphite. Every tool is a read-only query over graphs saved on local disk, and the server opens no socket. resource returns the content of a file packaged in the analyzed input, such as a config file, so it is reviewed. Off until you turn it on.",
+  "trustClass": "external",
+  "activation": "opt-in",
+  "publisher": {
+    "id": "io.github.johnsonlee",
+    "displayName": "Johnson Lee",
+    "url": "https://github.com/johnsonlee/graphite"
+  },
+  "icon": {
+    "kind": "react-icon",
+    "name": "HiMiniCube",
+    "background": "#0F172A"
+  },
+  "homepage": "https://github.com/johnsonlee/graphite",
+  "license": "Apache-2.0",
+  "launch": {
+    "kind": "direct-command",
+    "command": "graphite"
+  },
+  "riskClasses": [
+    "local-data-access",
+    "local-packaged-resource-read"
+  ],
+  "tools": [
+    {
+      "name": "annotations",
+      "state": "inherit"
+    },
+    {
+      "name": "c4",
+      "state": "inherit"
+    },
+    {
+      "name": "cypher",
+      "state": "inherit"
+    },
+    {
+      "name": "endpoints",
+      "state": "inherit"
+    },
+    {
+      "name": "graphs",
+      "state": "inherit"
+    },
+    {
+      "name": "incoming",
+      "state": "inherit"
+    },
+    {
+      "name": "node",
+      "state": "inherit"
+    },
+    {
+      "name": "openapi",
+      "state": "inherit"
+    },
+    {
+      "name": "outgoing",
+      "state": "inherit"
+    },
+    {
+      "name": "overview",
+      "state": "inherit"
+    },
+    {
+      "name": "resource",
+      "state": "review"
+    },
+    {
+      "name": "resources",
+      "state": "inherit"
+    },
+    {
+      "name": "schema",
+      "state": "inherit"
+    },
+    {
+      "name": "subgraph",
+      "state": "inherit"
+    },
+    {
+      "name": "other",
+      "state": "review"
+    }
+  ],
+  "referenceUrls": [
+    "https://github.com/johnsonlee/graphite",
+    "https://github.com/johnsonlee/graphite/blob/v2.17.0/README.md#mcp-integration",
+    "https://github.com/johnsonlee/graphite/blob/v2.17.0/backend/explore/src/mcp.rs",
+    "https://github.com/johnsonlee/graphite/blob/v2.17.0/backend/explore/src/routes.rs",
+    "https://github.com/johnsonlee/graphite/blob/v2.17.0/backend/cypher/src/engine/pipeline.rs",
+    "https://github.com/johnsonlee/graphite/releases/tag/v2.17.0"
+  ],
+  "saferAlternatives": [
+    "Each tool maps to one GET route of the in-process Explorer API, except cypher, which POSTs a query to it. The stdio server dispatches to the router in-process and opens no socket.",
+    "Graphs are opened read-only. cypher refuses CREATE, MERGE, SET, DELETE and REMOVE with \"graph is immutable\", and its timeout is capped by the server (60 seconds by default).",
+    "resources lists only the paths and sources of files packaged in the analyzed input. resource returns one file's content, which can include credentials in config files such as application.yml.",
+    "Load only graphs built from code you may share with the agent. The server reads only what its command line names: the graph directory, each --graph, the *.graphite files in --data, and --topology.",
+    "For a shared HTTP setup, run graphite serve on loopback and keep the default /mcp Origin check; do not pass --mcp-allowed-origin '*'."
+  ]
+}
