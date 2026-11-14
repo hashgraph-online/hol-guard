@@ -62,12 +62,11 @@ fn only_the_first_absolute_match_is_renamed_and_nothing_else_moves() {
 #[test]
 fn shell_builtins_do_not_borrow_trust_from_path_executables() {
     use std::os::unix::fs::PermissionsExt;
-    let root = std::env::temp_dir().join(format!(
-        "guard-path-builtin-{}",
-        std::process::id()
-    ));
+    let root = std::env::temp_dir().join(format!("guard-path-builtin-{}", std::process::id()));
     std::fs::create_dir_all(&root).unwrap();
-    for name in ["pwd", "echo", "test", "true", "false", "which", "whence", "where", "print"] {
+    for name in [
+        "pwd", "echo", "test", "true", "false", "which", "whence", "where", "print",
+    ] {
         let file = root.join(name);
         std::fs::write(&file, "#!/bin/sh\nexit 0\n").unwrap();
         let mut permissions = std::fs::metadata(&file).unwrap().permissions();
