@@ -12046,7 +12046,7 @@
       "expect": "allow"
     },
     {
-      "id": "neg-cd-dir-bracket-test-if-delete",
+      "id": "neg-cd-dir-bracket-test-if-reads-key",
       "fix_area": "shell",
       "harnesses": [
         "codex",
@@ -12057,7 +12057,7 @@
       ],
       "tool": "shell",
       "tool_input": {
-        "command": "cd dashboard && if [ -f package.json ]; then rm package.json; fi"
+        "command": "cd dashboard && if [ -f package.json ]; then cat ${HOME}/.ssh/id_rsa; fi"
       },
       "cwd": "worktree",
       "expect": "not_allow"
