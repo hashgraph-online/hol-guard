@@ -510,5 +510,4 @@ fn a_ref_read_after_a_step_routed_elsewhere_still_waits_for_review() {
     }
 }
 
-#[path = "pretool_extension_allow_git_order_linked.rs"]
 mod linked;
