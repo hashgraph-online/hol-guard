@@ -162,6 +162,7 @@ pub(crate) fn benign_command_segments(
                         | "od"
                         | "stat"
                         | "test"
+                        | "["
                         | "find"
                         | "du"
                         | "diff"
