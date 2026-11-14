@@ -42,6 +42,11 @@ struct StoredCall {
     session_flow: Option<SessionFlowV2>,
     #[serde(default)]
     usage_windows: Option<BTreeMap<String, u64>>,
+    /// The call was decided as Unclassified (R16). Its facts hold the class
+    /// the classifier proposed from the tool's name and schema, which also
+    /// tells whether it looks destructive.
+    #[serde(default)]
+    unclassified: bool,
 }
 
 /// Keeps an explicit `null` apart from an absent field.
@@ -104,6 +109,9 @@ pub fn simulate(pack: &PolicyPack, calls: Value) -> Result<Value, (&'static str,
             .ok()
             .and_then(|bytes| ActionFactsV2::from_bounded_json(&bytes).ok())
             .ok_or(("facts_invalid", format!("{pointer}/facts")))?;
+        if call.unclassified && facts != crate::cloud_pack_facts::class_only_facts(facts.class) {
+            return Err(("facts_invalid", format!("{pointer}/facts")));
+        }
         let decision = pack.decide_with_rules(&FactCall {
             provider: &call.provider,
             action_id: &call.action_id,
@@ -113,6 +121,9 @@ pub fn simulate(pack: &PolicyPack, calls: Value) -> Result<Value, (&'static str,
             facts: &facts,
             session: call.session_flow.as_ref(),
             windows: call.usage_windows.as_ref(),
+            unclassified: call
+                .unclassified
+                .then(|| crate::cloud_action_classifier::destructive_class(facts.class)),
         });
         results.push(json!({
             "action": decision.action,
