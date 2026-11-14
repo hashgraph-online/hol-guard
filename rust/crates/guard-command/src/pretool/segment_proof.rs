@@ -122,6 +122,7 @@ fn segment_proofs(
         })
         .collect();
     let mut all_previous_benign = true;
+    let mut tree_may_change = false;
     model
         .segments
         .iter()
@@ -269,8 +270,16 @@ fn segment_proofs(
             let covered = benign
                 && (ls_has_explicit_target || (alone && path_context_verified()))
                 && (!requires_path_context || path_context_verified())
-                && (alone || path_free || all_previous_benign);
+                // Judged alone, a file step needs no proven predecessor unless
+                // one before it may have changed files (a checkout that swaps
+                // a file for a symlink). A step that runs code, such as a
+                // container start, still needs every predecessor proven.
+                && (path_free
+                    || all_previous_benign
+                    || (alone && requires_path_context && !tree_may_change));
             all_previous_benign = all_previous_benign && benign;
+            tree_may_change =
+                tree_may_change || (!benign && super::tree_writers::may_rewrite_tree(original));
             covered.then_some(index)
         })
         .collect()

@@ -265,6 +265,7 @@ mod stdin_filters;
 mod symlink_writes;
 mod tool_inventory_reads;
 mod tree_reads;
+mod tree_writers;
 pub(crate) mod version_probes;
 pub(crate) mod wget_reads;
 #[cfg(test)]
