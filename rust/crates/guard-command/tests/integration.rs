@@ -241,6 +241,7 @@ pub mod pretool_outside_workspace_files;
 pub mod pretool_package_directory_flags;
 pub mod pretool_package_script_routes;
 pub mod pretool_parent_relative_writes;
+pub mod pretool_path_lookup_program;
 pub mod pretool_pi_tools;
 pub mod pretool_pip_reads;
 pub mod pretool_plan_note_writes;
