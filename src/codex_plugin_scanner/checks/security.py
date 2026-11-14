@@ -69,6 +69,7 @@ PLACEHOLDER_MARKERS = (
 EXAMPLE_GENERIC_VALUES = {
     "admin123",
     "adminpass123",
+    "fake-not-a-real-token",
     "mypassword123",
     "password123",
     "secret-value",
@@ -314,7 +315,13 @@ _PURE_TEMPLATE_EXPANSION_RE = re.compile(r"^\{\{[^}]+\}\}$")
 
 
 def _looks_like_interpolated_secret(value: str) -> bool:
-    """True only for complete env/template references with no literal payload."""
+    """True only for complete env/template references with no literal payload.
+
+    Note: $(VAR) command-substitution forms are intentionally not treated as pure
+    interpolations, because a quoted literal such as '$(mysecret...)' can be a
+    real credential (command substitution is not the same as $VAR / ${VAR} env
+    expansion).
+    """
     normalized = _normalize_secret_candidate(value)
     return bool(_PURE_SHELL_EXPANSION_RE.fullmatch(normalized) or _PURE_TEMPLATE_EXPANSION_RE.fullmatch(normalized))
 
@@ -565,6 +572,9 @@ def _should_skip_secret_match(
     if not _is_example_surface(relative_path):
         return False
     if _looks_like_placeholder_secret(candidate):
+        return True
+    # Exact dummy installation token used in docs/tests; keep before provider promotion.
+    if _normalize_secret_candidate(candidate).lower() == "ghs_installation":
         return True
     effective_kind = detector.kind
     if effective_kind == "generic" and _provider_payload(candidate) is not None:
