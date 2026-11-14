@@ -15,6 +15,7 @@ use crate::resident_state::publish_state;
 use crate::resident_state::socket_directory;
 
 #[cfg(unix)]
+#[allow(clippy::too_many_arguments)]
 pub(super) fn serve_unix_managed(
     owner: (&Path, &super::ManagedOwnerLock),
     policy_store: std::sync::Arc<crate::policy_store::PolicySnapshotStore>,
@@ -85,6 +86,7 @@ pub(super) fn serve_unix_managed(
 }
 
 #[cfg(not(unix))]
+#[allow(clippy::too_many_arguments)]
 pub(super) fn serve_unix_managed(
     _owner: (&Path, &super::ManagedOwnerLock),
     _policy_store: std::sync::Arc<crate::policy_store::PolicySnapshotStore>,
@@ -147,6 +149,7 @@ fn managed_accept_loop(
     result
 }
 
+#[allow(clippy::too_many_arguments)]
 pub(super) fn serve_loopback_managed(
     scope: &Path,
     policy_store: std::sync::Arc<crate::policy_store::PolicySnapshotStore>,
