@@ -334,3 +334,26 @@ fn a_live_payment_key_under_a_neutral_name_is_a_secret() {
         "{{\"value\": \"{stand_in}\"}}"
     )));
 }
+
+#[test]
+fn a_quoted_sql_password_holding_the_other_quote_is_a_secret() {
+    for text in [
+        format!(
+            "CREATE USER root@'hostname' IDENTIFIED BY \"{}\";",
+            joined(&["4v'w", "C4j2bn"])
+        ),
+        format!(
+            "ALTER USER app IDENTIFIED BY '{}';",
+            joined(&["Fq8v\"Zt", "2mWx9LpR"])
+        ),
+    ] {
+        assert!(holds_literal_secret(&text), "{text}");
+    }
+    for text in [
+        "CREATE USER app@'localhost' IDENTIFIED BY \"password\";",
+        "CREATE USER app@'localhost' IDENTIFIED BY \"<password>\";",
+        "ALTER USER app IDENTIFIED BY '${DB_PASSWORD}';",
+    ] {
+        assert!(!holds_literal_secret(text), "{text}");
+    }
+}
