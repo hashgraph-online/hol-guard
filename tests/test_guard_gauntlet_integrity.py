@@ -288,13 +288,17 @@ def test_anchor_path_metadata_is_checked_instead_of_rejecting_real_omp_edits():
     assert not input_matches("edit", sibling_args, {**sibling_args, "paths": [sibling_args["path"]]})
 
 
-@pytest.mark.parametrize(("before", "after"), [(" ", ""), ("\t", "\t"), (" \t", "  ")])
-def test_native_header_padding_keeps_exact_patch_bytes_and_reviewed_target(before, after):
+@pytest.mark.parametrize(
+    ("before", "after", "closing"),
+    [(" ", "", ""), ("\t", "\t", ""), (" \t", "  ", ""), (" ", "", " "), ("", "", "\t "), (" ", " ", " ")],
+)
+def test_native_header_padding_keeps_exact_patch_bytes_and_reviewed_target(before, after, closing):
+    """Oh My Pi trims the whole header body, so `[ notes.md#FB48 ]` names notes.md."""
     from ci.gauntlet.input_evidence import input_matches
     from ci.gauntlet.proofs import _edit_path
 
     target = "src/a file.ts"
-    args = {"input": f"[{before}{target}{after}#3BE2]\nPUT 1.=1:\n+changed"}
+    args = {"input": f"[{before}{target}{after}#3BE2{closing}]\nPUT 1.=1:\n+changed"}
     reviewed = {**args, "path": target, "paths": [target]}
     assert input_matches("edit", args, reviewed)
     assert _edit_path(args) == target
