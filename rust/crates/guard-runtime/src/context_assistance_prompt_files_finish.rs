@@ -47,9 +47,10 @@ pub(super) fn holds_word(text: &str, word: &str) -> bool {
     let joins = |c: Option<char>| c.is_some_and(|c| c.is_alphanumeric() || matches!(c, '_' | '-'));
     !word.is_empty()
         && (text.match_indices(word)).any(|(at, _)| {
-            !joins(text[..at].chars().next_back())
-                && !joins(text[at + word.len()..].chars().next())
-                && !(word.starts_with('_') && link_label(&text[..at]))
+            let label = word.starts_with('_') && link_label(&text[..at]);
+            !(label
+                || joins(text[..at].chars().next_back())
+                || joins(text[at + word.len()..].chars().next()))
         })
 }
 
