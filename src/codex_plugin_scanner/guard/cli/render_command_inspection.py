@@ -53,7 +53,7 @@ def render_command_inspection(console: Console, payload: dict[str, object]) -> N
     summary.add_row("Result", Text(_command_inspection_result_label(payload), style=f"bold {border_style}"))
     action_class = classification.get("action_class")
     summary.add_row("Action class", Text(str(action_class or _command_inspection_unmatched_label(status))))
-    if unavailable:
+    if _shows_minimum_action(payload):
         summary.add_row(
             "Minimum action",
             Text(str(payload.get("minimum_action") or "review").upper(), style=f"bold {border_style}"),
@@ -95,6 +95,12 @@ def render_command_inspection(console: Console, payload: dict[str, object]) -> N
         console.print(trace_table)
 
 
+def _shows_minimum_action(payload: PayloadDict) -> bool:
+    # A "review" result can still be a block; name it so the result line is
+    # not read as an approval prompt.
+    return payload.get("status") == "native_unavailable" or payload.get("minimum_action") == "block"
+
+
 def _command_inspection_readiness(payload: PayloadDict) -> dict[str, object]:
     return _coerce_object_dict(payload.get("readiness"))
 
@@ -134,7 +140,7 @@ def plain_text_command_inspection(payload: PayloadDict) -> str:
         f"Reason: {classification.get('reason') or ''}",
         "Policy: Not evaluated; this inspection creates no approvals or receipts.",
     ]
-    if status == "native_unavailable":
+    if _shows_minimum_action(payload):
         lines.insert(3, f"Minimum action: {str(payload.get('minimum_action') or 'review').upper()}")
     recovery = classification.get("recovery")
     if isinstance(recovery, str) and recovery:
