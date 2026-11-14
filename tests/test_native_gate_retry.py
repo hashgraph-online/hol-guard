@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+import time
+
 import pytest
 
 from tests.native_gate_retry import (
+    DAEMON_BUDGET_SECONDS,
     EXTENSION_TIMEOUT_REASON,
     GIT_CONTEXT_REASONS,
     REVIEW_DEADLINE_REASON,
@@ -18,11 +21,13 @@ _EXTENSION_TIMEOUT = {"decision": "deny", "reason_code": EXTENSION_TIMEOUT_REASO
 _ALLOW = {"decision": "allow", "reason_code": "native_allow"}
 
 
-def _scripted(*results: dict[str, object]):
+def _scripted(*results: dict[str, object], deadlines: list[float | None] | None = None):
     calls: list[int] = []
 
-    def review() -> dict[str, object]:
+    def review(deadline: float | None) -> dict[str, object]:
         calls.append(1)
+        if deadlines is not None:
+            deadlines.append(deadline)
         return results[len(calls) - 1]
 
     return review, calls
@@ -48,6 +53,29 @@ def test_a_git_context_hold_is_retried_once(reason: str) -> None:
     with pytest.warns(NativeUnavailableRetryWarning, match="held on its configuration"):
         assert review_with_unavailable_retry("case", review) == _ALLOW
     assert len(calls) == 2
+
+
+@pytest.mark.parametrize("reason", sorted(GIT_CONTEXT_REASONS))
+def test_a_git_context_hold_is_retried_at_the_daemon_budget(reason: str) -> None:
+    # The live hook hands this hold to the daemon with the bridge's longer budget, so
+    # retrying it at the hook budget a loaded runner just missed would fail it again.
+    deadlines: list[float | None] = []
+    review, _ = _scripted({"decision": "deny", "reason_code": reason}, _ALLOW, deadlines=deadlines)
+    started = time.monotonic()
+    with pytest.warns(NativeUnavailableRetryWarning):
+        review_with_unavailable_retry("case", review)
+    first, retry = deadlines
+    assert first is None
+    assert retry is not None
+    assert retry - started >= DAEMON_BUDGET_SECONDS - 0.5
+
+
+def test_a_missed_budget_is_retried_at_the_hook_budget() -> None:
+    deadlines: list[float | None] = []
+    review, _ = _scripted(_UNAVAILABLE, _ALLOW, deadlines=deadlines)
+    with pytest.warns(NativeUnavailableRetryWarning):
+        review_with_unavailable_retry("case", review)
+    assert deadlines == [None, None]
 
 
 @pytest.mark.parametrize("reason", sorted(GIT_CONTEXT_REASONS))

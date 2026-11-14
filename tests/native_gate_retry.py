@@ -20,9 +20,14 @@ evaluation error and is never retried.
 
 A Git read whose configuration probe ran out of time is held under the same
 reason code as one whose checkout really runs a helper. The live hook sends
-that hold on to the daemon's longer budget instead of showing it, so the gate
-gives it the same single retry. A checkout that runs a helper is held on both
-attempts and the case is judged on that second hold.
+that hold on to the daemon, which reviews it again with the bridge's longer
+budget, instead of showing it. The gate's single retry for that hold runs at
+the same longer budget: retried at the hook budget, a loaded runner missed it
+the same way twice and failed ordinary Git reads the live hook allows. A
+checkout that runs a helper is held on both attempts and the case is judged
+on that second hold.
+
+``review`` takes the deadline to review under. ``None`` is the hook budget.
 """
 
 from __future__ import annotations
@@ -43,15 +48,21 @@ BUDGET_MISS_REASONS = frozenset({UNAVAILABLE_REASON, REVIEW_DEADLINE_REASON, EXT
 # A Git read held because its configuration could not be settled, possibly in time.
 GIT_CONTEXT_REASONS = frozenset({"native_git_execution_context_review", "native_git_helper_context_review"})
 RETRIED_REASONS = BUDGET_MISS_REASONS | GIT_CONTEXT_REASONS
+# The budget the hook bridge gives the daemon for a `PreToolUse` it hands on
+# (`DAEMON_BUDGET` in `rust/crates/guard-runtime/src/bounded_hook_bridge.rs`).
+DAEMON_BUDGET_SECONDS = 5.0
 
 
 class NativeUnavailableRetryWarning(UserWarning):
     """A gate case was re-run after the native review missed its budget."""
 
 
-def _timed(review: Callable[[], dict[str, object]]) -> tuple[dict[str, object], str]:
+Review = Callable[[float | None], dict[str, object]]
+
+
+def _timed(review: Review, deadline: float | None) -> tuple[dict[str, object], str]:
     started = time.monotonic()
-    result = review()
+    result = review(deadline)
     # The elapsed time and the client's failure code tell a missed budget from
     # a refusal when a case fails.
     return result, f"after {time.monotonic() - started:.2f}s, client failure {native_resident_client_failure_code()}"
@@ -103,11 +114,11 @@ class RetryApprovals:
 
 def review_with_unavailable_retry(
     case_id: str,
-    review: Callable[[], dict[str, object]],
+    review: Review,
     *,
     on_retry: Callable[[], None] | None = None,
 ) -> dict[str, object]:
-    result, detail = _timed(review)
+    result, detail = _timed(review, None)
     reason = result.get("reason_code")
     if reason not in RETRIED_REASONS:
         return result
@@ -120,7 +131,10 @@ def review_with_unavailable_retry(
     if on_retry is not None:
         # The caller judges approval rows, and the interrupted attempt may have queued one.
         on_retry()
-    retried, detail = _timed(review)
+    # A held Git read goes to the daemon's budget, as the live hook sends it; a
+    # missed budget is retried at the same hook budget it missed.
+    deadline = time.monotonic() + DAEMON_BUDGET_SECONDS if reason in GIT_CONTEXT_REASONS else None
+    retried, detail = _timed(review, deadline)
     if retried.get("reason_code") in BUDGET_MISS_REASONS:
         warnings.warn(
             f"{case_id}: native review unavailable on both attempts ({detail}); the case fails",
