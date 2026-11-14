@@ -53,10 +53,11 @@ NEGATED_CLAIM = re.compile(r"\b(?:not|never|no|nor)\s+(?:\w+\s+){0,2}$", re.IGNO
 FOLLOWING_PROSE_BLOCKS = 2
 
 # Public pages that describe what Guard protects. Planning notes, research,
-# execution logs and ADRs are working documents, not product claims.
+# execution logs, ADRs and audits are working documents, not product claims.
 PUBLIC_PAGES = ("README.md",)
 PUBLIC_DOC_DIRECTORY = Path("docs/guard")
 WORKING_DOCUMENT = re.compile(r"(?:^|[-_.])(?:prd|todo|research|plan|log|handoff|ledger)(?:[-_.]|$)", re.IGNORECASE)
+WORKING_DIRECTORIES = frozenset({"adr", "audits"})
 
 
 @dataclass(frozen=True)
@@ -202,8 +203,12 @@ def check_package_description(path: str, text: str) -> list[Finding]:
 
 def public_markdown(root: Path) -> list[Path]:
     pages = [root / page for page in PUBLIC_PAGES if (root / page).is_file()]
+    base = root / PUBLIC_DOC_DIRECTORY
     pages.extend(
-        page for page in sorted((root / PUBLIC_DOC_DIRECTORY).rglob("*.md")) if not WORKING_DOCUMENT.search(page.stem)
+        page
+        for page in sorted(base.rglob("*.md"))
+        if not WORKING_DOCUMENT.search(page.stem)
+        and not WORKING_DIRECTORIES.intersection(page.relative_to(base).parts[:-1])
     )
     return pages
 

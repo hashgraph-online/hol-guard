@@ -87,6 +87,7 @@ def test_catalog_pages_and_nested_guides_are_public():
     assert "docs/guard/extensions/README.md" in pages
     assert public_claims.WORKING_DOCUMENT.search("release-log")
     assert not public_claims.WORKING_DOCUMENT.search("catalog-discovery-preparation")
+    assert not any(page.startswith(("docs/guard/adr/", "docs/guard/audits/")) for page in pages)
 
 
 def test_a_heading_claim_cannot_borrow_a_limit_from_a_sibling_section():
