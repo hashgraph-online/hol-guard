@@ -36,13 +36,24 @@ if phase == "commit_cleanup":
     codex_hook_recovery._remove_record = lambda *_: os._exit(17)
     codex.CodexHarnessAdapter().install(context)
     raise RuntimeError("commit cleanup was not reached")
-name = {"prepared": "prepare_hook_publication", "manifest": "write_hook_manifest",
-        "config": "atomic_write_text", "committed": "commit_hook_publication"}[phase]
-original = getattr(codex, name)
-def crash_after(*args, **kwargs):
-    original(*args, **kwargs)
-    os._exit(17)
-setattr(codex, name, crash_after)
+if phase == "manifest":
+    from codex_plugin_scanner.guard.runtime_transition import RuntimeTransition
+    original_write = RuntimeTransition._write_file
+    def crash_after_manifest(change, generation):
+        original_write(change, generation)
+        if generation == "after" and str(change["path"]).endswith(".manifest.json"):
+            os._exit(17)
+    RuntimeTransition._write_file = staticmethod(crash_after_manifest)
+else:
+    from codex_plugin_scanner.guard import codex_hook_recovery
+    owner = codex_hook_recovery if phase == "config" else codex
+    name = {"prepared": "prepare_hook_publication", "config": "record_owned_hook_config_publication",
+            "committed": "commit_hook_publication"}[phase]
+    original = getattr(owner, name)
+    def crash_after(*args, **kwargs):
+        original(*args, **kwargs)
+        os._exit(17)
+    setattr(owner, name, crash_after)
 codex.CodexHarnessAdapter().install(context)
 raise RuntimeError("crash boundary was not reached")
 """
@@ -54,12 +65,15 @@ from codex_plugin_scanner.guard.adapters import codex
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 home = Path(sys.argv[1])
 context = HarnessContext(home_dir=home, guard_home=home / '.hol-guard', workspace_dir=None)
-original = codex.atomic_write_text
-def publish_without_record(*args, **kwargs):
-    kwargs.pop('on_publish', None)
-    original(*args, **kwargs)
-    os._exit(17)
-codex.atomic_write_text = publish_without_record
+# Drop the installed hooks so this install must publish a new config inode.
+(home / '.codex/config.toml').write_text('[features]\nhooks = true\n', encoding='utf-8')
+from codex_plugin_scanner.guard.runtime_transition import RuntimeTransition
+original = RuntimeTransition._write_file
+def publish_without_record(change, generation):
+    original(change, generation)
+    if generation == 'after' and str(change['path']).endswith('config.toml'):
+        os._exit(17)
+RuntimeTransition._write_file = staticmethod(publish_without_record)
 codex.CodexHarnessAdapter().install(context)
 raise RuntimeError('unrecorded publication boundary was not reached')
 """
@@ -142,8 +156,11 @@ from codex_plugin_scanner.guard.adapters import codex
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 home, substitution = Path(sys.argv[1]), sys.argv[2]
 config = home / '.codex/config.toml'
-original_write = codex.atomic_write_text
-def competing_write(*args, **kwargs):
+from codex_plugin_scanner.guard.runtime_transition import RuntimeTransition
+original_write = RuntimeTransition._write_file
+def competing_write(*args):
+    if args[1] != 'after' or Path(str(args[0]['path'])) != config:
+        return original_write(*args)
     manifest = codex.hook_manifest_path(home / '.hol-guard', config)
     receipt = manifest.with_name(manifest.name.replace('.manifest.json', '.authority-receipt.json'))
     participants = [manifest, receipt, codex.hook_secret_path(home / '.hol-guard')]
@@ -158,7 +175,7 @@ def competing_write(*args, **kwargs):
         config.unlink()
     elif substitution in ('matching_original', 'matching_after'):
         if substitution == 'matching_after':
-            original_write(*args, **kwargs)
+            original_write(*args)
         replacement = config.parent / 'foreign-replacement.toml'
         replacement.write_bytes(config.read_bytes())
         replacement.chmod(0o600)
@@ -166,7 +183,7 @@ def competing_write(*args, **kwargs):
     else:
         config.write_bytes(b'# competing config\n')
     raise OSError('injected publication failure')
-codex.atomic_write_text = competing_write
+RuntimeTransition._write_file = staticmethod(competing_write)
 original_record_write = recovery.atomic_write_bytes
 def crash_after_conflict_record(*args, **kwargs):
     original_record_write(*args, **kwargs)

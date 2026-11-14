@@ -9,7 +9,7 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.adapters._modules.zcode.zcode_hooks import zcode_hook_process_exit
+from codex_plugin_scanner.guard.cli.native_hook_exit_code import zcode_hook_process_exit
 from codex_plugin_scanner.guard.runtime.actions import normalize_harness_payload
 
 from .zcode_remediation_reference import (

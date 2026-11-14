@@ -78,7 +78,7 @@ def test_competing_lifecycle_call_is_rejected_before_discovery(tmp_path, monkeyp
     release = Event()
     calls = []
 
-    def paused_discovery(self, current_context):
+    def paused_discovery(self, current_context, **_kwargs):
         calls.append(current_context)
         entered.set()
         assert release.wait(5), "test owner was not released"

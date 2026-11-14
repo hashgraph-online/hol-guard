@@ -4,8 +4,8 @@ Probes run through the same bounded runner Guard uses to launch its native
 runtime: no input, their own process group (a job object on Windows), a hard
 deadline and one byte budget that stdout and stderr share. Probe output keeps
 the exact bytes the probe wrote, so callers can still decode it strictly. It
-needs no native runtime, so a Python-only install can still attest its hook
-interpreter and run the evaluator's host checks.
+needs no native runtime, so a Python-only install can still run the
+evaluator's host checks.
 """
 
 from __future__ import annotations
@@ -15,7 +15,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Final
 
-from ..codex_hook_launch_runtime import run_isolated_hook_process
+from .codex_hook_launch_runtime import run_isolated_hook_process
 
 _PROBE_TIMEOUT_SECONDS: Final = 15
 _PROBE_OUTPUT_LIMIT_BYTES: Final = 64 * 1024

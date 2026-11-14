@@ -81,19 +81,28 @@ def test_configured_server_names_cover_stdio_and_remote_servers_per_harness() ->
 
 
 def test_omp_flattened_name_shares_a_connector_with_its_configured_remote_server(tmp_path: Path) -> None:
-    from codex_plugin_scanner.guard.adapters.harness_mcp_remote import _remote_server
+    from codex_plugin_scanner.guard.adapters.harness_mcp_remote import _remote_servers
 
-    remote = _remote_server(
-        GuardArtifact(
-            artifact_id="omp:mcp:truenas-pilot",
-            name="truenas-pilot",
-            harness="omp",
-            artifact_type="mcp_server",
-            source_scope="global",
-            config_path="mcp.json",
-            url="https://pilot.example.com/mcp",
-        ),
-        "https://pilot.example.com/mcp",
+    (remote,) = _remote_servers(
+        [
+            HarnessDetection(
+                harness="omp",
+                installed=True,
+                command_available=True,
+                config_paths=(),
+                artifacts=(
+                    GuardArtifact(
+                        artifact_id="omp:mcp:truenas-pilot",
+                        name="truenas-pilot",
+                        harness="omp",
+                        artifact_type="mcp_server",
+                        source_scope="global",
+                        config_path="mcp.json",
+                        url="https://pilot.example.com/mcp",
+                    ),
+                ),
+            )
+        ]
     )
     store = GuardStore(tmp_path / "guard-home")
     seed_observed_mcp_history(
@@ -109,7 +118,6 @@ def test_omp_flattened_name_shares_a_connector_with_its_configured_remote_server
         server_name=connector["server_name"],
     )
 
-    assert remote is not None
     assert (observed.server_name, observed.name) == ("truenas-pilot", "status")
     assert remote.tool.namespace == observed.namespace
     assert remote.tool.identity.cli_id == observed.identity.cli_id

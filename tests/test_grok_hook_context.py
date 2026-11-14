@@ -72,7 +72,7 @@ def _generated(context: HarnessContext, mode: str, monkeypatch: pytest.MonkeyPat
     command = grok_hook_command_parts(context)
     if mode != "desktop":
         return command
-    from codex_plugin_scanner.guard.adapters import desktop_hook_proxy as proxy
+    from .desktop_proxy_test_support import launch_script, sign_every_path
 
     bundle = context.home_dir / "Guard.app"
     candidate = bundle / "Contents/MacOS/proxy"
@@ -80,13 +80,11 @@ def _generated(context: HarnessContext, mode: str, monkeypatch: pytest.MonkeyPat
     config = json.loads(command[-1])
     config.update(frozen_launcher=True, python_executable=str(core))
     monkeypatch.setattr(sys, "platform", "darwin")
-    monkeypatch.setattr(proxy, "_trusted_desktop_path", lambda _path: True)
-    monkeypatch.setattr(proxy, "_codesign_team", lambda _path: "TEAM123")
+    sign_every_path(monkeypatch, "TEAM123")
     return (
         "/bin/sh",
         "-c",
-        proxy._DESKTOP_PROXY_LAUNCH_SCRIPT,
-        "hol-guard-desktop-proxy",
+        *launch_script(),
         str(candidate),
         "TEAM123",
         str(bundle),

@@ -13,35 +13,17 @@ from typing import TYPE_CHECKING, cast
 
 from ..stable_guard_cli import prune_safe_cli_executable
 from .adapter_safe_output import write_text_at_authorized_path
-from .bounded_cli_hook_envelope import (
-    _canonical_event_token as _canonical_event_token,
-)
-from .bounded_cli_hook_envelope import (
-    _event_name as _event_name,
-)
-from .bounded_cli_hook_envelope import (
-    _grok_pretool_event_conflict as _grok_pretool_event_conflict,
-)
-from .bounded_cli_hook_envelope import (
-    _json_object as _json_object,
-)
+from .bounded_cli_hook_envelope import _event_name, _grok_pretool_event_conflict, _json_object
 from .bounded_cli_hook_failure import failure_payload as _failure_payload
 from .bounded_cli_hook_native import (
     NATIVE_BOUNDED_HOOK_COMMAND,
     NATIVE_BOUNDED_HOOK_FEATURE,
     NATIVE_MUSE_HOOK_FEATURE,
     bounded_python_argv,
-    daemon_start_command,
-    frozen_daemon_start_command,
     native_bridge_executable,
 )
 from .bounded_cli_hook_script_template import BOUNDED_HOOK_SCRIPT_TEMPLATE
-from .desktop_hook_proxy import (
-    _DESKTOP_PROXY_LAUNCH_SCRIPT as _DESKTOP_PROXY_LAUNCH_SCRIPT,
-)
-from .desktop_hook_proxy import (
-    _trusted_desktop_hook_proxy_command,
-)
+from .desktop_hook_proxy import _trusted_desktop_hook_proxy_command
 from .hook_input_reader import read_hook_input
 from .isolated_hook_python import isolated_cursor_hook_python
 
@@ -165,11 +147,9 @@ def bounded_cli_hook_command(  # NOSONAR(S8495) an argv whose length depends on 
         "timeout_seconds": timeout_seconds,
         "frozen_launcher": frozen_launcher,
     }
+    # The native bridge derives the daemon-start command from this launcher
+    # when the daemon is unreachable.
     grok = harness.strip().lower() == "grok"
-    if frozen_launcher and not grok:
-        config["start_command"] = frozen_daemon_start_command(python_executable, guard_home, cli_args)
-    elif not grok:
-        config["start_command"] = daemon_start_command(python_executable, package_root, guard_home, cli_args)
     bootstrap = _bridge_bootstrap(str(package_root.resolve()))
     config_json = json.dumps(config, ensure_ascii=True, separators=(",", ":"))
     if frozen_launcher:
@@ -229,22 +209,13 @@ def _read_bounded_stdin(deadline_monotonic: float) -> tuple[str | None, str]:
     return text, text
 
 
-def _emit_failure(
-    *,
-    harness: str,
-    input_text: str,
-    reason: str = _FAILURE_REASON,
-    guard_home: Path | None = None,
-    continue_session: bool = False,
-    deadline_monotonic: float | None = None,
-) -> int:
-    # Retain the legacy caller argument; a state-home path supplies no mode authority.
+def _emit_failure(*, harness: str, input_text: str) -> int:
     payload, returncode = _failure_payload(
         harness=harness,
         event_name="PreToolUse"
         if harness == "grok" and _grok_pretool_event_conflict(input_text)
         else _event_name(input_text),
-        reason=reason,
+        reason=_FAILURE_REASON,
         # Failed evaluation supplies no authenticated recording-only authority.
         recording_only=False,
     )
@@ -289,47 +260,6 @@ def _config_fields(config: Mapping[str, object] | None) -> tuple[str, Path | Non
         package_root if isinstance(package_root, str) else "",
         float(cast(float, timeout)) if valid_timeout else None,
     )
-
-
-def run_bounded_cli_hook(
-    config: Mapping[str, object],
-    *,
-    input_text: str,
-    deadline_monotonic: float | None = None,
-) -> int:
-    """Answer one hook through the native bridge in its native stdout contract.
-
-    The native runtime asks the daemon and renders its answer; Python never
-    evaluates or renders a hook. Without a native runtime the hook fails closed.
-    """
-
-    started_monotonic = time.monotonic()
-    harness, guard_home, package_root, timeout = _config_fields(config)
-    if timeout is None:
-        return _emit_failure(harness=harness, input_text=input_text)
-    deadline = started_monotonic + timeout if deadline_monotonic is None else deadline_monotonic
-    native = _native_runtime(harness, guard_home, deadline)
-    remaining = deadline - time.monotonic()
-    if native is None or remaining <= 0:
-        return _emit_failure(harness=harness, input_text=input_text)
-    try:
-        completed = subprocess.run(
-            _native_argv(native, package_root, [_config_with_budget(config, remaining)]),
-            input=input_text.encode("utf-8", "surrogatepass"),
-            capture_output=True,
-            timeout=remaining + _NATIVE_EXIT_GRACE_SECONDS,
-            check=False,
-        )
-    except (OSError, subprocess.SubprocessError):
-        return _emit_failure(harness=harness, input_text=input_text)
-    if time.monotonic() > deadline:
-        # An answer that arrives after the hook's deadline is not forwarded.
-        return _emit_failure(harness=harness, input_text=input_text)
-    if completed.stdout:
-        _ = sys.stdout.write(completed.stdout.decode("utf-8", "replace"))
-    if completed.stderr:
-        _ = sys.stderr.write(completed.stderr.decode("utf-8", "replace"))
-    return completed.returncode
 
 
 def _is_config_argv(argv: Sequence[str]) -> bool:
@@ -396,5 +326,4 @@ __all__ = [
     "bounded_hook_script_path",
     "bounded_python_argv",
     "main_from_argv",
-    "run_bounded_cli_hook",
 ]

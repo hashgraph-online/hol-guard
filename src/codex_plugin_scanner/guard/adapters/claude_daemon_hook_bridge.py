@@ -9,10 +9,8 @@ runtime shipped: it runs the same native command with the same config.
 
 There is no Python evaluator behind it. Every hook review needs the native
 runtime, so an install without one has nothing left to ask and the hook denies.
-
-The render helpers below decide no verdict of their own. They are the recorded
-oracle for the Rust port's parity vectors
-(``scripts/ci/record_claude_hook_bridge_vectors.py``).
+The runtime also builds the daemon recovery command: this launcher only names
+the program that recovers the daemon, which is itself.
 """
 
 from __future__ import annotations
@@ -23,10 +21,7 @@ import sys
 import time
 from pathlib import Path
 from typing import Any
-from urllib.parse import parse_qs
 
-from ..codex_hook_launch_runtime import isolated_daemon_start_command
-from ..hook_execution_environment import stamp_hook_input_text
 from .hook_input_reader import read_stdin_text
 from .native_hook_bridge import native_hook_bridge_executable
 
@@ -34,14 +29,6 @@ CLAUDE_GUARD_DAEMON_HOOK_MARKER = "HOL_GUARD_CLAUDE_DAEMON_HOOK"
 _NATIVE_CLAUDE_HOOK_COMMAND = "claude-hook-bridge"
 _NATIVE_CLAUDE_HOOK_FEATURE = "claude-hook-bridge-v1"
 _DEGRADED_DAEMON_MESSAGE = "HOL Guard could not complete native review ({reason}) and denied this action."
-_RISKY_PROMPT_SYSTEM_MESSAGE = (
-    "HOL Guard intercepted this prompt because it asks Claude to access local secrets. If Claude "
-    "asks to continue, HOL Guard will route the decision through a branded approval prompt."
-)
-_RISKY_PROMPT_ADDITIONAL_CONTEXT = (
-    "HOL Guard will intercept Claude's next attempt to access local secrets and open a branded "
-    "approval question to protect you."
-)
 _MAX_HOOK_INPUT_BYTES = 1_000_000
 _NATIVE_RUNTIME_UNAVAILABLE = "the native runtime is unavailable"
 
@@ -111,25 +98,6 @@ def _native_bridge_command() -> str:
     return _NATIVE_CLAUDE_HOOK_COMMAND
 
 
-def _state_path_for_query(state_path: str | Path, query: str) -> Path:
-    raw_path = str(state_path)
-    if not raw_path or "\x00" in raw_path:
-        raise ValueError("daemon state path must be a non-empty filesystem path")
-    path = Path(raw_path)
-    if not path.is_absolute() or path.name != "daemon-state.json":
-        raise ValueError("daemon state path must be an absolute daemon-state.json path")
-    guard_home_values = parse_qs(query).get("guard-home")
-    if not guard_home_values or len(guard_home_values) != 1 or not guard_home_values[0]:
-        raise ValueError("daemon hook query must bind one Guard home")
-    guard_home_value = guard_home_values[0]
-    if "\x00" in guard_home_value:
-        raise ValueError("daemon hook query contains an invalid Guard home")
-    guard_home = Path(guard_home_value)
-    if not guard_home.is_absolute() or path.parent.resolve() != guard_home.resolve():
-        raise ValueError("daemon state path does not match the hook Guard home")
-    return path
-
-
 def _native_bridge_config(
     *,
     state_path: str | Path,
@@ -137,44 +105,42 @@ def _native_bridge_config(
     fallback_command: tuple[str, ...],
     query: str,
 ) -> str:
-    """The config the installed native command carries, rebuilt from this call.
+    """The config the installed native command carries, rebuilt from this call."""
 
-    A query naming another Guard home resolves to no state path. The runtime
-    refuses that query itself, so the raw path goes over unchanged and only
-    the recovery command, which the runtime then never runs, is left pointing
-    at the install's own home.
-    """
-
-    try:
-        recovery_root: str | Path = _state_path_for_query(state_path, query)
-    except ValueError:
-        recovery_root = state_path
     config = {
         "state_path": str(state_path),
         "fallback_daemon_url": fallback_daemon_url,
         "fallback_command": list(fallback_command),
         "query": query,
-        "recovery_command": list(_recovery_command(recovery_root, query)),
+        "recovery_launcher": _recovery_launcher(),
     }
     return json.dumps(config, ensure_ascii=False, separators=(",", ":"))
 
 
+def _recovery_launcher() -> dict[str, object]:
+    """The program the runtime starts to recover the daemon: this Guard."""
+
+    from ..frozen_runtime_commands import is_frozen_guard_runtime
+    from ..stable_guard_cli import resolve_frozen_guard_cli
+
+    if is_frozen_guard_runtime():
+        # A frozen desktop core has no interpreter to run a Python bootstrap.
+        return {"executable": resolve_frozen_guard_cli(), "frozen": True}
+    return {"executable": sys.executable, "package_root": str(Path(__file__).resolve().parents[3])}
+
+
 def _deny_without_a_runtime() -> int:
     body, oversized = read_stdin_text(_MAX_HOOK_INPUT_BYTES)
+    event = _event_name(body if oversized else body.strip() or "{}")
     if oversized:
-        event = _event_name(body)
-        if not (event.startswith("Permission") or event in {"UserPromptSubmit", "PostToolUse", "Stop"}):
-            event = "PreToolUse"
-        sys.stdout.write(_limit_denied("hook input", event))
-        return 0
-    data = stamp_hook_input_text(body.strip() or "{}")
-    if _event_name(data) == "UserPromptSubmit":
-        # A legacy prompt hook must not silently accept unreviewed text when
-        # its native authority is unavailable.
+        message = "HOL Guard blocked this action because hook input exceeded the safe size limit."
+    elif event in {"UserPromptSubmit", "PreToolUse"} or event.startswith("Permission"):
+        # A legacy prompt hook must not silently accept unreviewed text either.
         message = _DEGRADED_DAEMON_MESSAGE.format(reason=_NATIVE_RUNTIME_UNAVAILABLE)
-        sys.stdout.write(_deny_event("UserPromptSubmit", message))
+    else:
+        sys.stdout.write("{}")
         return 0
-    sys.stdout.write(_degraded(_NATIVE_RUNTIME_UNAVAILABLE, data))
+    sys.stdout.write(_deny_event(event, message))
     return 0
 
 
@@ -196,38 +162,6 @@ def _event_name(data: str) -> str:
     return "PreToolUse"
 
 
-def _prompt_text(data: str) -> str:
-    try:
-        payload = json.loads(data or "{}")
-    except json.JSONDecodeError:
-        return ""
-    if not isinstance(payload, dict):
-        return ""
-    prompt = payload.get("prompt", payload.get("user_prompt", ""))
-    return str(prompt or "")
-
-
-def _degraded_prompt(data: str) -> str:
-    prompt = _prompt_text(data).lower()
-    risky = any(token in prompt for token in (".env", "secret", "api key", "token"))
-    if risky:
-        return json.dumps(
-            {
-                "systemMessage": _RISKY_PROMPT_SYSTEM_MESSAGE,
-                "hookSpecificOutput": {
-                    "hookEventName": "UserPromptSubmit",
-                    "additionalContext": _RISKY_PROMPT_ADDITIONAL_CONTEXT,
-                },
-            },
-            separators=(",", ":"),
-        )
-    return json.dumps({"hookSpecificOutput": {"hookEventName": "UserPromptSubmit"}}, separators=(",", ":"))
-
-
-def _limit_denied(kind: str, event: str = "PreToolUse") -> str:
-    return _deny_event(event, f"HOL Guard blocked this action because {kind} exceeded the safe size limit.")
-
-
 def _deny_event(event: str, message: str) -> str:
     if event.startswith("Permission"):
         output: dict[str, object] = {
@@ -244,36 +178,6 @@ def _deny_event(event: str, message: str) -> str:
         "permissionDecisionReason": message,
     }
     return json.dumps({"systemMessage": message, "hookSpecificOutput": output}, separators=(",", ":"))
-
-
-def _degraded(reason: str, data: str) -> str:
-    event = _event_name(data)
-    if event == "UserPromptSubmit":
-        return _degraded_prompt(data)
-    if event == "PreToolUse" or event.startswith("Permission"):
-        # An unavailable or malformed evaluator grants no execution authority.
-        # This bridge has no authenticated Watch snapshot to authorize a bypass.
-        message = _DEGRADED_DAEMON_MESSAGE.format(reason=reason)
-        return _deny_event(event, message)
-    return "{}"
-
-
-def _recovery_command(state_path: str | Path, query: str) -> tuple[str, ...]:
-    query_values = parse_qs(query)
-    home_values = query_values.get("home")
-    home_dir = Path(home_values[0]) if home_values and home_values[0] else Path.home()
-    from ..frozen_runtime_commands import frozen_daemon_recovery_command, is_frozen_guard_runtime
-
-    if is_frozen_guard_runtime():
-        # A frozen desktop core cannot run the Python ``-I -c`` bootstrap below.
-        return frozen_daemon_recovery_command(Path(state_path).parent, home_dir)
-    package_root = Path(__file__).resolve().parents[3]
-    return isolated_daemon_start_command(
-        sys.executable,
-        package_root,
-        Path(state_path).parent,
-        home_dir,
-    )
 
 
 def _bridge_config_from_argv(argv: list[str]) -> dict[str, Any]:

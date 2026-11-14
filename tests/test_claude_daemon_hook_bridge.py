@@ -3,8 +3,8 @@
 The launcher runs the runtime's own `claude-hook-bridge` command; the daemon
 request, its recovery and its retry live there and are tested in
 `rust/crates/guard-runtime/src/claude_hook_bridge_tests.rs`. What is left here
-is the fail-closed answer an install without a runtime gets, and the render
-helpers that are the recorded oracle for that port's parity vectors.
+is the fail-closed answer an install without a runtime gets, and the program
+the launcher names for the runtime to recover the daemon with.
 """
 
 from __future__ import annotations
@@ -68,8 +68,15 @@ def test_an_oversized_hook_without_a_runtime_keeps_its_event_denial(
 
     assert _run(tmp_path) == 0
 
-    expected = event if event != "Notification" else "PreToolUse"
-    assert capsys.readouterr().out == bridge._limit_denied("hook input", expected)
+    payload = json.loads(capsys.readouterr().out)
+    if event.startswith("Permission"):
+        assert payload["hookSpecificOutput"]["decision"]["behavior"] == "deny"
+    elif event in {"UserPromptSubmit", "PostToolUse", "Stop"}:
+        assert payload["decision"] == "block"
+    else:
+        assert payload["hookSpecificOutput"]["hookEventName"] == "PreToolUse"
+        assert payload["hookSpecificOutput"]["permissionDecision"] == "deny"
+    assert "exceeded the safe size limit" in json.dumps(payload)
 
 
 def test_native_spawn_error_denies_the_tool_instead_of_failing_open(
@@ -178,7 +185,11 @@ def test_the_launcher_hands_the_runtime_this_call_s_config(
     assert config["fallback_daemon_url"] == "http://127.0.0.1:5474"
     assert config["fallback_command"] == ["fallback", "--harness", "claude"]
     assert config["query"] == f"guard-home={guard_home.as_posix()}"
-    assert "schedule_guard_daemon_recovery" in config["recovery_command"][3]
+    assert config["recovery_launcher"] == {
+        "executable": bridge.sys.executable,
+        "package_root": str(Path(bridge.__file__).resolve().parents[3]),
+    }
+    assert "recovery_command" not in config
     # The child reads the hook body and writes the verdict itself.
     assert seen["kwargs"] == {"check": False}
 
@@ -187,12 +198,7 @@ def test_a_query_naming_another_guard_home_still_reaches_the_runtime(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """The runtime refuses that query; the launcher does not pre-empt it.
-
-    No state path resolves for a query that names a different home, so the
-    recovery command falls back to this install's own home -- which the
-    runtime then never runs, because it refuses the query first.
-    """
+    """The runtime refuses that query; the launcher does not pre-empt it."""
 
     native = tmp_path / "hol-guard-runtime"
     seen: dict[str, object] = {}
@@ -207,66 +213,33 @@ def test_a_query_naming_another_guard_home_still_reaches_the_runtime(
 
     config = json.loads(seen["argv"][3])
     assert config["query"] == "guard-home=/somewhere/else"
-    assert repr(str(tmp_path)) in config["recovery_command"][3]
 
 
-@pytest.mark.parametrize("reason", ["missing authority", "fallback timed out", "capacity exhausted", "validator fault"])
-@pytest.mark.parametrize("event", ["PreToolUse", "PermissionRequest"])
-def test_unverified_degradation_never_grants_tool_permission(reason: str, event: str) -> None:
-    response = json.loads(bridge._degraded(reason, json.dumps({"hook_event_name": event})))
-    output = response["hookSpecificOutput"]
+@pytest.mark.usefixtures("without_a_runtime")
+@pytest.mark.parametrize("event", ["PreToolUse", "PermissionRequest", "PermissionDenied"])
+def test_a_tool_without_a_runtime_is_never_granted_permission(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str], event: str
+) -> None:
+    body = {"hook_event_name": event, "tool_name": "Read", "tool_input": {"file_path": "src/app.ts"}}
+    monkeypatch.setattr(bridge.sys, "stdin", io.StringIO(json.dumps(body)))
+
+    assert _run(tmp_path) == 0
+
+    output = json.loads(capsys.readouterr().out)["hookSpecificOutput"]
     if event == "PreToolUse":
         assert output["permissionDecision"] == "deny"
-        assert reason in output["permissionDecisionReason"]
     else:
         assert output["decision"]["behavior"] == "deny"
-        assert reason in output["decision"]["message"]
+    assert bridge._NATIVE_RUNTIME_UNAVAILABLE in json.dumps(output)
 
 
-def test_degraded_pretool_requires_review_even_for_read() -> None:
-    response = bridge._degraded(
-        "daemon unavailable",
-        json.dumps(
-            {
-                "hook_event_name": "PreToolUse",
-                "tool_name": "Read",
-                "tool_input": {"file_path": "src/app.ts"},
-            }
-        ),
-    )
+def test_a_frozen_core_names_itself_as_the_recovery_program(monkeypatch: pytest.MonkeyPatch) -> None:
+    from codex_plugin_scanner.guard import frozen_runtime_commands, stable_guard_cli
 
-    payload = json.loads(response)
-    assert payload["hookSpecificOutput"]["permissionDecision"] == "deny"
+    monkeypatch.setattr(frozen_runtime_commands, "is_frozen_guard_runtime", lambda: True)
+    monkeypatch.setattr(stable_guard_cli, "resolve_frozen_guard_cli", lambda: "/opt/guard/hol-guard")
 
-
-def test_oversized_permission_request_uses_nested_deny() -> None:
-    payload = json.loads(bridge._limit_denied("hook input", "PermissionRequest"))
-    decision = payload["hookSpecificOutput"]["decision"]
-    assert payload["hookSpecificOutput"]["hookEventName"] == "PermissionRequest"
-    assert decision["behavior"] == "deny"
-    assert "exceeded the safe size limit" in decision["message"]
-    truncated = '{"hook_event_name":"PermissionRequest","tool_name":"Write","prompt":"' + "x" * 80
-    assert bridge._event_name(truncated) == "PermissionRequest"
-    prompt = json.loads(bridge._limit_denied("hook input", "UserPromptSubmit"))
-    assert prompt["decision"] == "block"
-    notice = json.loads(bridge._limit_denied("hook input", "Notification"))
-    assert notice["hookSpecificOutput"]["permissionDecision"] == "deny"
-    assert notice["hookSpecificOutput"]["hookEventName"] == "PreToolUse"
-
-
-def test_recovery_command_preserves_custom_home_and_guard_home(tmp_path: Path) -> None:
-    guard_home = tmp_path / "guard home"
-    home_dir = tmp_path / "user home"
-
-    command = bridge._recovery_command(
-        guard_home / "daemon-state.json",
-        f"guard-home={guard_home.as_posix()}&home={home_dir.as_posix()}",
-    )
-
-    assert command[1:3] == ("-I", "-c")
-    assert "schedule_guard_daemon_recovery" in command[3]
-    assert str(guard_home) in command[3]
-    assert str(home_dir) in command[3]
+    assert bridge._recovery_launcher() == {"executable": "/opt/guard/hol-guard", "frozen": True}
 
 
 def test_remaining_hint_preserves_unicode_and_omits_itself_when_it_will_not_fit() -> None:

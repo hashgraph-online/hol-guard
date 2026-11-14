@@ -1,6 +1,7 @@
 """A failed Codex transaction must preserve intervening configuration edits."""
 
 import os
+from collections.abc import Callable
 from pathlib import Path
 
 import pytest
@@ -12,6 +13,29 @@ from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.adapters.codex import CodexHarnessAdapter
 from codex_plugin_scanner.guard.codex_hook_file_integrity import CodexHookIntegrityError
 from codex_plugin_scanner.guard.codex_hook_integrity import hook_manifest_path, hook_secret_path
+from codex_plugin_scanner.guard.codex_hook_recovery import _decode
+from codex_plugin_scanner.guard.runtime_transition import RuntimeTransition
+
+
+def _interrupt_config_write(
+    monkeypatch: pytest.MonkeyPatch, config_path: Path, interfere: Callable[[bytes], None]
+) -> None:
+    """Run ``interfere`` in place of the install's first config write, which then fails."""
+
+    original = RuntimeTransition._write_file
+    pending = True
+
+    def interrupted(change: dict[str, object], generation: str) -> None:
+        nonlocal pending
+        if pending and generation == "after" and Path(str(change["path"])) == config_path:
+            pending = False
+            rendered = _decode(change["after"])
+            assert rendered is not None
+            interfere(rendered)
+            raise OSError("injected configuration write failure")
+        original(change, generation)
+
+    monkeypatch.setattr(RuntimeTransition, "_write_file", staticmethod(interrupted))
 
 
 @pytest.mark.parametrize("existing_installation", [False, True])
@@ -30,25 +54,21 @@ def test_config_edit_during_failed_write_survives_rollback(
     if existing_installation:
         adapter.install(context)
     config_path = adapter._hook_config_path(context)
-    original_write = adapter_module.atomic_write_text
     concurrent_text = 'model = "user-selected-model"\n'
     injected = False
     transaction_files: dict[Path, bytes] = {}
 
-    def interrupted_write(path: Path, text: str, *, mode: int = 0o600, on_publish=None) -> None:
+    def concurrent_edit(_rendered: bytes) -> None:
         nonlocal injected
-        if path == config_path and not injected:
-            injected = True
-            for participant in (
-                hook_manifest_path(context.guard_home, config_path),
-                hook_secret_path(context.guard_home),
-            ):
-                transaction_files[participant] = participant.read_bytes()
-            original_write(path, concurrent_text, mode=mode)
-            raise OSError("injected configuration write failure after another writer")
-        original_write(path, text, mode=mode, on_publish=on_publish)
+        injected = True
+        for participant in (
+            hook_manifest_path(context.guard_home, config_path),
+            hook_secret_path(context.guard_home),
+        ):
+            transaction_files[participant] = participant.read_bytes()
+        adapter_module.atomic_write_text(config_path, concurrent_text, mode=0o600)
 
-    monkeypatch.setattr(adapter_module, "atomic_write_text", interrupted_write)
+    _interrupt_config_write(monkeypatch, config_path, concurrent_edit)
     with pytest.raises(CodexHookIntegrityError, match="Codex publication needs recovery"):
         adapter.install(context)
 
@@ -121,22 +141,18 @@ def test_failed_write_preserves_substituted_config_targets(
     config_path = adapter._hook_config_path(context)
     target = config_path.parent / "user-target.toml"
     target.write_bytes(b'owner = "other-writer"\n')
-    original_write = adapter_module.atomic_write_text
     injected = False
 
-    def interrupted_write(path: Path, text: str, *, mode: int = 0o600, on_publish=None) -> None:
+    def substitute(_rendered: bytes) -> None:
         nonlocal injected
-        if path == config_path and not injected:
-            injected = True
-            path.unlink()
-            if substitution == "symlink":
-                path.symlink_to(target)
-            elif substitution == "hardlink":
-                os.link(target, path)
-            raise OSError("injected write failure after target substitution")
-        original_write(path, text, mode=mode, on_publish=on_publish)
+        injected = True
+        config_path.unlink()
+        if substitution == "symlink":
+            config_path.symlink_to(target)
+        elif substitution == "hardlink":
+            os.link(target, config_path)
 
-    monkeypatch.setattr(adapter_module, "atomic_write_text", interrupted_write)
+    _interrupt_config_write(monkeypatch, config_path, substitute)
     with pytest.raises(CodexHookIntegrityError, match="Codex publication needs recovery"):
         adapter.install(context)
 
@@ -188,20 +204,16 @@ def test_matching_replacement_is_not_owned_by_the_failed_transaction(
     if existing_installation:
         adapter.install(context)
     config_path = adapter._hook_config_path(context)
-    original_write = adapter_module.atomic_write_text
     replacement: bytes | None = None
     replacement_identity = None
 
-    def interrupted_write(path: Path, text: str, *, mode: int = 0o600, on_publish=None):
+    def matching_replacement(rendered: bytes) -> None:
         nonlocal replacement, replacement_identity
-        if path == config_path and replacement is None:
-            replacement = text.encode("utf-8")
-            original_write(path, text, mode=mode)
-            replacement_identity = path.stat().st_ino
-            raise OSError("injected write failure after a matching external replacement")
-        return original_write(path, text, mode=mode, on_publish=on_publish)
+        replacement = rendered
+        adapter_module.atomic_write_text(config_path, rendered.decode("utf-8"), mode=0o600)
+        replacement_identity = config_path.stat().st_ino
 
-    monkeypatch.setattr(adapter_module, "atomic_write_text", interrupted_write)
+    _interrupt_config_write(monkeypatch, config_path, matching_replacement)
     with pytest.raises(CodexHookIntegrityError, match="Codex publication needs recovery"):
         adapter.install(context)
     assert replacement is not None

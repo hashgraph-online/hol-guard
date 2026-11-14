@@ -1,21 +1,18 @@
 from __future__ import annotations
 
-import io
 import json
-from contextlib import redirect_stdout
 from pathlib import Path
 from typing import cast
 
 import pytest
 
-from codex_plugin_scanner.guard.adapters import (
-    bounded_cli_hook_bridge,
-    desktop_hook_proxy,
-)
+from codex_plugin_scanner.guard.adapters import bounded_cli_hook_bridge
 from codex_plugin_scanner.guard.codex_hook_launch_runtime import isolated_hook_environment
 
 from .bounded_cli_hook_test_support import config as _config
 from .bounded_cli_hook_test_support import json_object as _json_object
+from .bounded_cli_hook_test_support import run_hook as _run_hook
+from .desktop_proxy_test_support import launch_script, sign_every_path
 
 
 def _native_answers(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -63,7 +60,7 @@ def test_frozen_hook_command_prefers_runtime_verified_signed_macos_proxy(
     monkeypatch.setattr(bounded_cli_hook_bridge.sys, "platform", "darwin")
     monkeypatch.setenv("HOL_GUARD_DESKTOP", forwarded["HOL_GUARD_DESKTOP"])
     monkeypatch.setenv("HOL_GUARD_DESKTOP_HOOK_PROXY", forwarded["HOL_GUARD_DESKTOP_HOOK_PROXY"])
-    monkeypatch.setattr(desktop_hook_proxy, "_codesign_team", lambda path: "TEAMID")
+    requests = sign_every_path(monkeypatch)
 
     command = bounded_cli_hook_bridge.bounded_cli_hook_command(
         python_executable=str(core),
@@ -81,13 +78,11 @@ def test_frozen_hook_command_prefers_runtime_verified_signed_macos_proxy(
         timeout_seconds=25,
     )
 
-    assert command[:4] == (
-        "/bin/sh",
-        "-c",
-        bounded_cli_hook_bridge._DESKTOP_PROXY_LAUNCH_SCRIPT,
-        "hol-guard-desktop-proxy",
-    )
+    assert command[:4] == ("/bin/sh", "-c", *launch_script())
     assert command[4:7] == (str(proxy), "TEAMID", str(bundle))
+    assert [(request["desktop"], request["proxy"], request["core"]) for request in requests] == [
+        ("1", str(proxy), str(core))
+    ]
     config = json.loads(command[7])
     assert config == {
         "python_executable": str(core),
@@ -175,8 +170,8 @@ def test_frozen_bounded_hook_runs_the_durable_native_bridge(
     )
     config = json.loads(command[4])
     assert config["frozen_launcher"] is True
-    # The runtime recovers the daemon through the frozen Guard, never a Python interpreter.
-    assert config["start_command"][:2] == ["/app/hol-guard", "--_hol-guard-codex-daemon-recover"]
+    # The runtime derives the frozen Guard's recovery from the launcher itself.
+    assert "start_command" not in config
 
 
 def test_frozen_bounded_hook_prefers_isolated_stdlib_client(
@@ -220,40 +215,22 @@ def test_frozen_bounded_hook_prefers_isolated_stdlib_client(
     assert "__guard-bounded-hook" not in source
 
 
-def test_desktop_proxy_requires_one_real_team_and_same_bundle(
+def test_desktop_proxy_keeps_core_for_an_unsigned_writable_or_cross_bundle_proxy(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
+    # The kind's team and layout checks are unit tested in Rust; here the real kind
+    # answers for fixtures no Apple team signed.
     _bundle, proxy, core = _signed_bundle_fixture(tmp_path)
+    _other_bundle, other_proxy, _other_core = _signed_bundle_fixture(tmp_path / "other")
     monkeypatch.setattr(bounded_cli_hook_bridge.sys, "frozen", True, raising=False)
     monkeypatch.setattr(bounded_cli_hook_bridge.sys, "platform", "darwin")
     monkeypatch.setenv("HOL_GUARD_DESKTOP", "1")
+
     monkeypatch.setenv("HOL_GUARD_DESKTOP_HOOK_PROXY", str(proxy))
-
-    for teams in (
-        {proxy: None, core: None, proxy.parents[2]: None},
-        {proxy: "not set", core: "not set", proxy.parents[2]: "not set"},
-        {proxy: "TEAM-A", core: "TEAM-B", proxy.parents[2]: "TEAM-A"},
-    ):
-        monkeypatch.setattr(desktop_hook_proxy, "_codesign_team", teams.get)
-        assert bounded_cli_hook_bridge._trusted_desktop_hook_proxy_command(str(core), "{}") is None
-
-
-def test_desktop_proxy_rejects_writable_or_cross_bundle_paths(
-    monkeypatch: pytest.MonkeyPatch,
-    tmp_path: Path,
-) -> None:
-    _bundle, proxy, core = _signed_bundle_fixture(tmp_path)
-    other_bundle, other_proxy, _other_core = _signed_bundle_fixture(tmp_path / "other")
-    del other_bundle
-    monkeypatch.setattr(bounded_cli_hook_bridge.sys, "frozen", True, raising=False)
-    monkeypatch.setattr(bounded_cli_hook_bridge.sys, "platform", "darwin")
-    monkeypatch.setenv("HOL_GUARD_DESKTOP", "1")
-    monkeypatch.setattr(desktop_hook_proxy, "_codesign_team", lambda path: "TEAMID")
-
+    assert bounded_cli_hook_bridge._trusted_desktop_hook_proxy_command(str(core), "{}") is None
     monkeypatch.setenv("HOL_GUARD_DESKTOP_HOOK_PROXY", str(other_proxy))
     assert bounded_cli_hook_bridge._trusted_desktop_hook_proxy_command(str(core), "{}") is None
-
     monkeypatch.setenv("HOL_GUARD_DESKTOP_HOOK_PROXY", str(proxy))
     proxy.chmod(0o777)
     assert bounded_cli_hook_bridge._trusted_desktop_hook_proxy_command(str(core), "{}") is None
@@ -279,7 +256,7 @@ def test_linux_never_uses_caller_controlled_appimage_as_proxy_provenance(
 
 
 def test_macos_launcher_reverifies_normal_paths_and_falls_back_by_status() -> None:
-    launcher = bounded_cli_hook_bridge._DESKTOP_PROXY_LAUNCH_SCRIPT
+    launcher, _name = launch_script()
     assert "/dev/fd" not in launcher
     assert "HOL_GUARD_DESKTOP_E2E_ALLOW_ADHOC_SIGNATURE" not in launcher
     assert 'verify_team "$bundle"' in launcher
@@ -311,6 +288,7 @@ def _frozen_config(tmp_path: Path, variant: str) -> dict[str, object]:
 @pytest.mark.parametrize("variant", ["grok", "noncanonical-home", "hermes", "openclaw", "forged-mode", "forged-args"])
 def test_a_frozen_config_without_a_daemon_answer_fails_closed(
     monkeypatch: pytest.MonkeyPatch,
+    capfd: pytest.CaptureFixture[str],
     tmp_path: Path,
     native_hook_force: Path,
     variant: str,
@@ -322,11 +300,7 @@ def test_a_frozen_config_without_a_daemon_answer_fails_closed(
     # The runtime never runs a config's argv, so a forged one changes nothing.
     monkeypatch.setattr(bounded_cli_hook_bridge.sys, "frozen", frozen, raising=False)
     monkeypatch.setattr(bounded_cli_hook_bridge.sys, "executable", str(tmp_path / "missing" / "hol-guard"))
-    output = io.StringIO()
-    with redirect_stdout(output):
-        returncode = bounded_cli_hook_bridge.run_bounded_cli_hook(
-            config, input_text=json.dumps({"hook_event_name": "PreToolUse"})
-        )
+    returncode = _run_hook(monkeypatch, config, json.dumps({"hook_event_name": "PreToolUse"}))
 
     expected = ("block", 2) if variant == "hermes" else ("deny", 0)
-    assert (_json_object(output.getvalue())["decision"], returncode) == expected
+    assert (_json_object(capfd.readouterr().out)["decision"], returncode) == expected

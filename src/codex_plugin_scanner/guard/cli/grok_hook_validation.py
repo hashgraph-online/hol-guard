@@ -97,25 +97,10 @@ def _matches_context(options: dict[str, str], context: HarnessContext) -> bool:
 
 def _desktop_proxy(args: tuple[str, ...], context: HarnessContext | None) -> bool:
     """Accept only the generated macOS script and its verified same-team app paths."""
-    from ..adapters import desktop_hook_proxy as proxy
+    from ..adapters.desktop_hook_proxy import verified_desktop_proxy_launch
 
-    if sys.platform != "darwin" or len(args) != 9:
-        return False
-    if args[:4] != ("/bin/sh", "-c", proxy._DESKTOP_PROXY_LAUNCH_SCRIPT, "hol-guard-desktop-proxy"):
-        return False
-    candidate, team, bundle, config, core = args[4:]
-    candidate_path, core_path, bundle_path = Path(candidate), Path(core), Path(bundle)
-    if not all(path.is_absolute() for path in (candidate_path, core_path, bundle_path)):
-        return False
-    if not proxy._trusted_desktop_path(candidate_path) or not proxy._trusted_desktop_path(core_path):
-        return False
-    if candidate_path.parent != core_path.parent or proxy._bundle_for_executable(candidate_path) != bundle_path:
-        return False
-    if proxy._bundle_for_executable(core_path) != bundle_path or not team or team == "not set":
-        return False
-    if not _config(config, core, frozen=True, context=context):
-        return False
-    return all(proxy._codesign_team(path) == team for path in (candidate_path, core_path, bundle_path))
+    launch = verified_desktop_proxy_launch(args)
+    return launch is not None and _config(launch[0], launch[1], frozen=True, context=context) is not None
 
 
 def is_grok_hook_command(command: str, context: HarnessContext | None = None) -> bool:

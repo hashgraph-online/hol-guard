@@ -26,14 +26,14 @@ Search [open adapter PRs](https://github.com/hashgraph-online/hol-guard/pulls?q=
 | Public Python adapter classes and registrations | `src/codex_plugin_scanner/guard/adapters/<harness>.py` and `adapters/__init__.py` |
 | Shared adapter context and install ownership | `adapters/base.py` |
 | Static setup, event coverage, and known blind spots | `guard/contracts/harness-protection-contracts.v1.json`, loaded by `adapters/contract_registry.py` and served by `adapters/contracts.py` |
-| Python helper modules grouped by harness | `adapters/_modules/<family>/` |
+| Native harness install, render and hook decisions | `rust/crates/guard-runtime/src/adapters/harness_adapter/<harness>.rs` |
 | Native harness discovery | `rust/crates/guard-runtime/src/adapters/detection/<harness>_detect.rs` |
 | Native hook request handling | `rust/crates/guard-runtime/src/adapters/hook_adapter_op.rs` |
 | Native hook payload preparation and redaction | `rust/crates/guard-command/src/adapters/hook/` |
 | Wire contracts | `rust/crates/guard-contracts/src/hook_adapter.rs` |
 | Existing adapter tests | `tests/test_<harness>_adapter.py`, `tests/test_guard_harness_*.py`, and native vector tests |
 
-Public harness classes stay at their existing adapter entrypoints. Internal helpers use ordinary Python package imports, such as `codex_plugin_scanner.guard.adapters._modules.zcode`. Each family and `_modules/` has an `__init__.py`, so Python, static analysis, and frozen builds discover the same modules. Put a new public harness class at the adapter root and its supporting files in the corresponding family package; do not extend `__path__` or create a second import identity.
+Public harness classes stay at their existing adapter entrypoints. Harness logic belongs in the native runtime: the Python adapter sends its context to the `harness_adapter` kind and applies the answer. Do not add Python helper packages under `adapters/`.
 
 Begin with [Gemini and Antigravity](../../rust/crates/guard-runtime/src/adapters/harness_adapter/simple.rs) for discovery-only examples, and [Cline](../../rust/crates/guard-runtime/src/adapters/harness_adapter/cline.rs) or [Cursor](../../src/codex_plugin_scanner/guard/adapters/cursor.py) for hook installation. Review the actual host contract before copying a strategy.
 

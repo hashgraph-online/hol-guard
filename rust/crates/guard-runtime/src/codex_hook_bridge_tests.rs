@@ -270,6 +270,32 @@ fn inline_browser_wait_stays_within_the_consumer_limit() {
     );
 }
 
+/// The daemon checks Git helpers against the environment Codex runs the
+/// command in, so a model-supplied environment is replaced on every event.
+#[test]
+fn every_event_carries_the_bridge_environment_not_the_model_one() {
+    let pairs = timeouts(&[
+        ("PreToolUse", 10),
+        ("PostToolUse", 10),
+        ("UserPromptSubmit", 10),
+    ]);
+    for event in ["PreToolUse", "PostToolUse", "UserPromptSubmit"] {
+        let raw = json!({
+            "hook_event_name": event,
+            "tool_input": {"command": "git status"},
+            "guard_execution_environment": {"path": "/model-supplied"},
+        })
+        .to_string();
+        let data: Value =
+            serde_json::from_str(&prepare(&raw, &pairs).expect("prepared").data).unwrap();
+        let environment = &data["guard_execution_environment"];
+        assert_ne!(environment["path"], json!("/model-supplied"), "{event}");
+        let digest = environment["environment_digest"].as_str().unwrap();
+        assert_eq!(digest.len(), 64, "{event}");
+        assert_eq!(data["tool_input"], json!({"command": "git status"}));
+    }
+}
+
 #[test]
 fn other_events_forward_their_own_input() {
     let pairs = timeouts(&[("Stop", 5), ("PreToolUse", 30)]);

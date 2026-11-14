@@ -8,7 +8,9 @@ use std::time::{Duration, Instant};
 use super::{emit, fail, prepare, read_hook_input, Input, DEFAULT_EVENT};
 
 use crate::bounded_hook_bridge_render::NATIVE_HARNESSES;
-use crate::guard_store_json::py_repr_str;
+use crate::claude_hook_bridge::home_directory;
+use crate::claude_hook_bridge_recovery::frozen_recovery_command;
+use crate::hook_process_spawn::isolated_daemon_start_command;
 use crate::pyjson::{self, PyVal};
 
 pub(super) const MANAGED_MARKER: &str = "HOL_GUARD_MANAGED_ZCODE";
@@ -64,9 +66,10 @@ pub(crate) fn positive_seconds(value: Option<&PyVal>) -> Option<Duration> {
 
 /// The config a POSIX install wrote for the launcher its argv named, or
 /// `None` for anything Python would refuse or handle in a step the native
-/// bridge does not port. A frozen config must say it is frozen, and one
-/// without a `start_command` gets none: the command derived for an older
-/// config starts a Python interpreter a frozen Guard has not got.
+/// bridge does not port. A frozen config must say it is frozen. A config
+/// without a `start_command` gets the one its launcher would have written:
+/// the interpreter's isolated recovery bootstrap, or the frozen Guard's
+/// private recovery argument.
 pub(crate) fn parse_launch_config(argument: &str, frozen: bool) -> Option<BridgeConfig> {
     let parsed = pyjson::parse_mapping_lone_surrogates(argument).ok()?;
     if parsed.mapped {
@@ -81,10 +84,15 @@ pub(crate) fn parse_launch_config(argument: &str, frozen: bool) -> Option<Bridge
     let harness = payload.get("harness")?.as_str()?;
     let timeout = positive_seconds(payload.get("timeout_seconds"))?;
     let start_command = match payload.get("start_command") {
-        None if frozen => Vec::new(),
         None => {
             let cli_args: Vec<&str> = cli_args.iter().filter_map(PyVal::as_str).collect();
-            daemon_start_command(python_executable, package_root, guard_home, &cli_args)
+            daemon_start_command(
+                python_executable,
+                package_root,
+                guard_home,
+                &cli_args,
+                frozen,
+            )
         }
         Some(value) => value
             .as_list()?
@@ -112,51 +120,35 @@ pub(crate) fn parse_launch_config(argument: &str, frozen: bool) -> Option<Bridge
     })
 }
 
-/// `daemon_start_command(python_executable, package_root, guard_home,
-/// cli_args)` (`bounded_cli_hook_native.py`) for an install whose config
-/// predates `start_command`: the config already holds the resolved package
-/// root and Guard home, and the canonical home is the `--home` argument,
-/// else `Path.home()`.
+/// The daemon-start command an install derives from its launcher
+/// (`daemon_start_command` or `frozen_daemon_start_command`,
+/// `bounded_cli_hook_native.py`): the canonical home is the `--home`
+/// argument, else `Path.home()`. Empty when there is no home to name.
 pub(super) fn daemon_start_command(
     python_executable: &str,
     package_root: &str,
     guard_home: &str,
     cli_args: &[&str],
+    frozen: bool,
 ) -> Vec<String> {
-    let home_dir = cli_args
+    let named_home = cli_args
         .windows(2)
         .find(|pair| pair[0] == "--home")
-        .map(|pair| pair[1].to_owned())
-        .or_else(python_home);
-    let Some(home_dir) = home_dir else {
-        return Vec::new();
-    };
-    let bootstrap = format!(
-        "import os,sys;\
-sys.path.insert(0, {});\
-from pathlib import Path;\
-from codex_plugin_scanner.guard.daemon import schedule_guard_daemon_recovery;\
-failure_kind=os.environ.get('HOL_GUARD_HOOK_FAILURE_KIND','transport-failure');\
-failure_kind=failure_kind if failure_kind in \
-{{'overload','transport-failure','authenticated-control-plane-failure'}} \
-else 'transport-failure';\
-schedule_guard_daemon_recovery(Path({}),home_dir=Path({}),failure_kind=failure_kind)",
-        py_repr_str(package_root),
-        py_repr_str(guard_home),
-        py_repr_str(&home_dir),
-    );
-    vec![
-        python_executable.to_owned(),
-        "-I".to_owned(),
-        "-c".to_owned(),
-        bootstrap,
-    ]
-}
-
-/// `str(Path.home())`: `HOME` on POSIX, `USERPROFILE` on Windows.
-fn python_home() -> Option<String> {
-    let name = if cfg!(windows) { "USERPROFILE" } else { "HOME" };
-    std::env::var(name).ok().filter(|home| !home.is_empty())
+        .map(|pair| PathBuf::from(pair[1]));
+    let guard_home = Path::new(guard_home);
+    if frozen {
+        let Some(home_dir) = named_home.or_else(home_directory) else {
+            return Vec::new();
+        };
+        return frozen_recovery_command(python_executable, guard_home, &home_dir)
+            .unwrap_or_default();
+    }
+    isolated_daemon_start_command(
+        python_executable,
+        Path::new(package_root),
+        guard_home,
+        named_home.as_deref(),
+    )
 }
 
 /// `main_from_argv` for a config the native bridge does not serve: the

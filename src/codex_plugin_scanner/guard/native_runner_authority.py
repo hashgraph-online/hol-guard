@@ -32,6 +32,9 @@ _MAX_REQUEST_BYTES = 4 * 1024 * 1024
 # The authority answer gates a launch, so a slow resident fails closed rather
 # than degrading; the budget is generous but bounded below the resident cap.
 _TIMEOUT_SECONDS = 5.0
+# Kinds that run a bounded child process (a hook canary, an interpreter probe, a
+# CLI probe) widen their budget past the default resident cap; this bounds them.
+_MAX_BUDGET_MS = 60_000
 
 
 class NativeRunnerAuthorityError(ValueError):
@@ -55,6 +58,7 @@ _CALL = BoundCall(
     # Rust bounds the ASCII-escaped request: refuse it as too large here first.
     bound_canonical=True,
     clock_after_prerequisite=True,
+    max_budget_ms=_MAX_BUDGET_MS,
 )
 
 

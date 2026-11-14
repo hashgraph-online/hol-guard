@@ -261,9 +261,7 @@
    "id": "harness_adapter_registry_and_installation",
    "class": "python_control",
    "paths": [
-    "src/codex_plugin_scanner/guard/adapters/*.py",
-    "src/codex_plugin_scanner/guard/adapters/_modules/*.py",
-    "src/codex_plugin_scanner/guard/adapters/_modules/*/*.py"
+    "src/codex_plugin_scanner/guard/adapters/*.py"
    ],
    "current": "harness registry, detection, installation, and adapter control surfaces; transport and semantic subsets are classified below",
    "target": "control-plane registration and installation only"
@@ -273,7 +271,6 @@
    "class": "python_transport",
    "paths": [
     "src/codex_plugin_scanner/guard/adapters/*bridge*.py",
-    "src/codex_plugin_scanner/guard/adapters/*resume*.py",
     "src/codex_plugin_scanner/guard/adapters/*script_template*.py",
     "src/codex_plugin_scanner/guard/adapters/hook_python*.py",
     "src/codex_plugin_scanner/guard/codex_hook_launch_runtime.py",
@@ -287,14 +284,10 @@
    "id": "harness_semantic_normalization",
    "class": "python_semantic",
    "paths": [
-    "src/codex_plugin_scanner/guard/adapters/*_hooks.py",
-    "src/codex_plugin_scanner/guard/adapters/_modules/*/*_hooks.py",
-    "src/codex_plugin_scanner/guard/adapters/*hook_payload*.py",
     "src/codex_plugin_scanner/guard/adapters/codex.py",
     "src/codex_plugin_scanner/guard/adapters/contracts.py",
     "src/codex_plugin_scanner/guard/adapters/copilot.py",
-    "src/codex_plugin_scanner/guard/adapters/hermes.py",
-    "src/codex_plugin_scanner/guard/adapters/hook_payloads.py"
+    "src/codex_plugin_scanner/guard/adapters/hermes.py"
    ],
    "current": "transport-only harness envelope forwarding; Rust owns event, tool, action, and payload normalization",
    "target": "Rust raw-envelope normalization"
@@ -697,8 +690,6 @@
   "rust/crates/*/src/approval*.rs",
   "rust/crates/guard-runtime/src/resident_protocol.rs",
   "src/codex_plugin_scanner/guard/adapters/*.py",
-  "src/codex_plugin_scanner/guard/adapters/_modules/*.py",
-  "src/codex_plugin_scanner/guard/adapters/_modules/*/*.py",
   "src/codex_plugin_scanner/guard/hook_review/*hook*.py",
   "src/codex_plugin_scanner/guard/evidence_drains/*hook*.py",
   "src/codex_plugin_scanner/guard/routes/request_handler.py",

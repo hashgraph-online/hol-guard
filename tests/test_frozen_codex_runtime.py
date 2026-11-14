@@ -30,9 +30,6 @@ from codex_plugin_scanner.guard.native_daemon_peer import DaemonArtifactBinding
 @pytest.fixture
 def frozen_codex_contract(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
     original_interpreter = codex_adapter._guard_python_executable
-    original_local = codex_adapter._local_hook_command_parts_for_home_mode
-    original_daemon = codex_adapter._daemon_start_command
-    original_hook = codex_adapter._hook_command_parts_for_home_mode
     original_paths = codex_adapter._hook_packaged_file_paths
     original_validator = codex_hook_runtime_trust.validate_codex_hook_launch
     had_marker = hasattr(codex_adapter, "_HOL_GUARD_FROZEN_CODEX_RUNTIME")
@@ -46,9 +43,6 @@ def frozen_codex_contract(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
         # later monkeypatch teardown reinstates a temporary frozen function.
         monkeypatch.undo()
         codex_adapter._guard_python_executable = original_interpreter
-        codex_adapter._local_hook_command_parts_for_home_mode = original_local
-        codex_adapter._daemon_start_command = original_daemon
-        codex_adapter._hook_command_parts_for_home_mode = original_hook
         codex_adapter._hook_packaged_file_paths = original_paths
         codex_hook_runtime_trust.validate_codex_hook_launch = original_validator
         if had_marker:

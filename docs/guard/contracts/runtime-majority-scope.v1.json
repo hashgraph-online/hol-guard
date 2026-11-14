@@ -537,13 +537,6 @@
       },
       {
         "path": [
-          "src/codex_plugin_scanner/guard/adapters/_modules/__init__.py",
-          "src/codex_plugin_scanner/guard/adapters/_modules/zcode/__init__.py"
-        ],
-        "reason": "Reviewed adapter family package initializers introduced by the source-layout refactor. Each contains only its package docstring; these modules are reached through lazy hook imports and remain counted in runtime scope. No runtime behavior is excluded."
-      },
-      {
-        "path": [
           "src/codex_plugin_scanner/guard/runtime/extension_catalog_completion.py",
           "src/codex_plugin_scanner/guard/runtime/extension_catalog_pages.py"
         ],
@@ -620,12 +613,9 @@
           "src/codex_plugin_scanner/guard/adapters/codex_detect_sources.py",
           "src/codex_plugin_scanner/guard/adapters/codex_lifecycle_lock.py",
           "src/codex_plugin_scanner/guard/adapters/codex_remote_control.py",
-          "src/codex_plugin_scanner/guard/adapters/grok_approval_resume.py",
           "src/codex_plugin_scanner/guard/adapters/guard_cli_attestation.py",
-          "src/codex_plugin_scanner/guard/adapters/managed_mcp_upstream.py",
           "src/codex_plugin_scanner/guard/adapters/mcp_relay_native.py",
           "src/codex_plugin_scanner/guard/adapters/mcp_servers.py",
-          "src/codex_plugin_scanner/guard/adapters/workspace_overrides.py",
           "src/codex_plugin_scanner/guard/contained_sink_command.py",
           "src/codex_plugin_scanner/guard/windows_paths.py"
         ],
@@ -636,17 +626,15 @@
           "src/codex_plugin_scanner/guard/codex_hook_health.py",
           "src/codex_plugin_scanner/guard/codex_hook_identity.py",
           "src/codex_plugin_scanner/guard/codex_hook_inventory.py",
-          "src/codex_plugin_scanner/guard/codex_hook_owned_paths.py",
           "src/codex_plugin_scanner/guard/codex_hook_owner_commands.py",
           "src/codex_plugin_scanner/guard/codex_hook_owner_message.py",
-          "src/codex_plugin_scanner/guard/codex_hook_owner_preflight.py",
           "src/codex_plugin_scanner/guard/codex_hook_registration.py",
           "src/codex_plugin_scanner/guard/codex_hook_runtime_trust.py",
           "src/codex_plugin_scanner/guard/codex_hook_self_binding.py",
           "src/codex_plugin_scanner/guard/codex_hook_sources.py",
           "src/codex_plugin_scanner/guard/codex_hook_trust.py"
         ],
-        "reason": "Reviewed: codex hook inventory, identity, sources, trust, registration, owner commands/preflight and health modules: codex_hook_trust_stale is called from codex_native_hook_state, which gates launch_command/preview_launch_commands for codex, and it imports registration and owner_commands; runtime_trust is used by frozen_codex_runtime.trusted_hook_launch; inventory/identity/sources are used by the same adapter. codex_hook_owner_preflight and codex_hook_health are tiny status/install-only modules left in scope under the in-doubt rule. codex_hook_self_binding and codex_hook_owned_paths decide whether an existing Codex handler belongs to this installation, which registration consults before it will replace or refuse one, and codex_hook_owner_message writes the refusal that decision produces; all three are reached from the same adapter and stay in scope with it."
+        "reason": "Reviewed: codex hook inventory, identity, sources, trust, registration, owner commands and health modules: codex_hook_trust_stale is called from codex_native_hook_state, which gates launch_command/preview_launch_commands for codex, and it imports registration and owner_commands; runtime_trust is used by frozen_codex_runtime.trusted_hook_launch; inventory/identity/sources are used by the same adapter. codex_hook_health is a tiny status/install-only module left in scope under the in-doubt rule. codex_hook_self_binding asks the native runtime whether an existing Codex handler belongs to this installation, which registration consults before it will replace or refuse one, and codex_hook_owner_message writes the refusal that decision produces; both are reached from the same adapter and stay in scope with it."
       },
       {
         "path": [
@@ -719,7 +707,6 @@
       },
       {
         "path": [
-          "src/codex_plugin_scanner/guard/adapters/adapter_state_integrity.py",
           "src/codex_plugin_scanner/guard/adapters/cline_runtime.py",
           "src/codex_plugin_scanner/guard/adapters/copilot.py",
           "src/codex_plugin_scanner/guard/adapters/cursor.py",
@@ -727,7 +714,6 @@
           "src/codex_plugin_scanner/guard/adapters/native_extension.py",
           "src/codex_plugin_scanner/guard/adapters/native_harness.py",
           "src/codex_plugin_scanner/guard/adapters/opencode_runtime.py",
-          "src/codex_plugin_scanner/guard/adapters/state_files.py",
           "src/codex_plugin_scanner/json_comment_stripping.py"
         ],
         "reason": "Reviewed: adapter implementations behind the harness registry. Adapters normalize harness payloads into hook requests, so they sit on the hook path, and hook-path authority is never excluded. Install and setup methods that have a function_exclusions entry are excluded as install_config, not hook path; install helpers without an entry (for example in the Cline support modules) stay counted, which understates the Rust share."
@@ -1107,38 +1093,32 @@
         "symbols": [
           "_migrate_hooks_json_into_config",
           "_install_manifest",
+          "_located",
           "_require_hook_semantics_readback",
           "_unmanaged_migration_payload",
           "_prepare_hook_migration_backup",
-          "_write_hook_migration_backup",
           "prepare_codex_hook_migration",
           "prepare_codex_main_backup",
           "render_codex_managed_mcp",
           "render_codex_alternate_cleanup",
           "prepare_codex_alternate_cleanup",
-          "_publish_codex_alternate_cleanup",
-          "_require_complete_preactivation_inventory",
+          "_preactivation_owners",
+          "_require_preactivation_owners",
           "prepare_codex_shell_cleanup",
           "CodexHarnessAdapter._all_hook_paths",
           "CodexHarnessAdapter.prepare_install",
+          "CodexHarnessAdapter._prepare_plan",
           "CodexHarnessAdapter.install",
           "CodexHarnessAdapter._install_owned",
           "CodexHarnessAdapter.uninstall",
           "CodexHarnessAdapter._uninstall_owned",
+          "CodexHarnessAdapter._prepare_uninstall",
           "CodexHarnessAdapter._target_config_path",
           "CodexHarnessAdapter._backup_path",
           "CodexHarnessAdapter._proxy_server_entry",
-          "CodexHarnessAdapter._load_hook_payloads",
-          "CodexHarnessAdapter._migrate_alternate_hook_configs",
-          "CodexHarnessAdapter._remove_managed_hooks_from_alternate_configs",
-          "CodexHarnessAdapter._remove_managed_mcp_servers_from_alternate_configs",
-          "CodexHarnessAdapter._verify_json_hook_migrations",
-          "CodexHarnessAdapter._remove_json_hook_files",
           "CodexHarnessAdapter._install_config_hooks",
           "CodexHarnessAdapter._write_authenticated_hook_config",
-          "CodexHarnessAdapter._write_authenticated_hook_config_owned",
-          "CodexHarnessAdapter._uninstall_shell_guard",
-          "CodexHarnessAdapter._remove_hooks"
+          "CodexHarnessAdapter._write_authenticated_hook_config_owned"
         ],
         "entry_points": [],
         "reason": "Codex config.toml and hooks.json install, uninstall, migration, alternate-config cleanup and shell-guard cleanup, plus the helpers only they use; the shell-guard block ranges and the Guard proxy recognition they act on run in the native codex_install_plan runner-authority kind.",
@@ -1517,12 +1497,11 @@
           "ClineHarnessAdapter.uninstall",
           "_reconcile",
           "_facts",
-          "_node_check",
           "install_mcp_proxies",
           "proxy_entry"
         ],
         "entry_points": [],
-        "reason": "Cline adapter install and uninstall; the native harness_adapter kind chooses the transport, writes the native hooks or the AgentPlugin, rewrites the MCP settings and removes them, and Python keeps the attested Guard CLI, the node --check and hook-canary subprocesses, the launcher shim and Guard's proxy argv.",
+        "reason": "Cline adapter install and uninstall; the native harness_adapter kind chooses the transport, writes the native hooks or the AgentPlugin, runs the hook canary and the plugin's node --check, rewrites the MCP settings and removes them, and Python keeps the attested Guard CLI and Guard's proxy argv.",
         "evidence": "install, prepare_install and uninstall have no caller in any in-scope module; they are invoked by the excluded install, uninstall and repair dispatchers. The report validates that no retained symbol or in-scope module references the excluded names."
       },
       {

@@ -8,7 +8,7 @@ import shutil
 import tempfile
 from pathlib import Path
 
-from .adapters.hook_python_subprocess import run_probe
+from .probe_subprocess import run_probe
 
 _VERSION_TIMEOUT_SECONDS = 2.0
 _VERSION_OUTPUT_LIMIT_BYTES = 64 * 1024

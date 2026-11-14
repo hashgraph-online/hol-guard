@@ -68,11 +68,14 @@ fn a_frozen_config_is_served_only_from_a_frozen_argv() {
 }
 
 #[test]
-fn a_frozen_config_without_a_start_command_never_starts_python() {
+fn a_frozen_config_without_a_start_command_recovers_through_the_frozen_guard() {
     let config = config_text(&[
         ("frozen_launcher", Some(json!(true))),
         ("start_command", None),
     ]);
     let parsed = parse_launch_config(&config, true).unwrap();
-    assert!(parsed.start_command.is_empty());
+    assert_eq!(
+        parsed.start_command[..2],
+        argv(&["/usr/bin/python3", "--_hol-guard-codex-daemon-recover"])
+    );
 }

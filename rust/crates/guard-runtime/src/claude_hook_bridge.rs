@@ -1,5 +1,5 @@
-//! Native Claude Code hook bridge: a port of `main` in
-//! `adapters/claude_daemon_hook_bridge.py`. Claude Code runs this once per
+//! Native Claude Code hook bridge, started by the installed hook command or
+//! by the legacy launcher `adapters/claude_daemon_hook_bridge.py`. Claude Code runs this once per
 //! hook. It forwards the hook to the authenticated loopback Guard daemon and
 //! recovers a dead daemon once, waiting for it to come back up, all inside the harness's hook deadline. Every
 //! failure ends in a hook response that denies or degrades the action; nothing
@@ -11,6 +11,7 @@ use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
 use crate::claude_hook_bridge_http::{remaining, MINIMUM_OPERATION};
+use crate::claude_hook_bridge_recovery::launcher_recovery;
 use crate::claude_hook_bridge_render::{
     control_plane_failure, degraded, event_name, limit_denied, py_strip, should_suppress_output,
     valid_hook_json_or_degraded,
@@ -67,14 +68,21 @@ pub(crate) fn parse_config(text: &str) -> Option<BridgeConfig> {
     if string_list(payload.get("fallback_command"))?.is_empty() {
         return None;
     }
-    let recovery_command = match payload.get("recovery_command") {
-        None => Vec::new(),
-        value => string_list(value)?,
+    let state_path = text_field("state_path")?;
+    let query = text_field("query")?;
+    let recovery_command = match (
+        payload.get("recovery_command"),
+        payload.get("recovery_launcher"),
+    ) {
+        (None, None) => Vec::new(),
+        (None, Some(launcher)) => launcher_recovery(&state_path, &query, launcher.as_object()?)?,
+        (value, None) => string_list(value)?,
+        (Some(_), Some(_)) => return None,
     };
     Some(BridgeConfig {
-        state_path: text_field("state_path")?,
+        state_path,
         fallback_daemon_url: text_field("fallback_daemon_url")?,
-        query: text_field("query")?,
+        query,
         recovery_command,
     })
 }

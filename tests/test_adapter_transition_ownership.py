@@ -192,15 +192,22 @@ def test_frozen_copilot_preparation_plans_no_helper_and_publishes_nothing(
 ):
     del native_adapter_state_integrity_runtime
     from codex_plugin_scanner.guard.adapters import bounded_cli_hook_bridge as bridge
-    from codex_plugin_scanner.guard.adapters.adapter_state_integrity import authenticate_adapter_state
     from codex_plugin_scanner.guard.adapters.copilot import CopilotHarnessAdapter
+    from codex_plugin_scanner.guard.native_adapter_state_integrity import native_adapter_state_integrity
 
     ctx = HarnessContext(
         home_dir=tmp_path,
         guard_home=tmp_path / "guard",
         workspace_dir=tmp_path / "workspace" if workspace_enabled else None,
     )
-    authenticate_adapter_state(ctx.guard_home, harness="copilot", payload={"enrollment": "fixture"})
+    native_adapter_state_integrity(
+        action="authenticate",
+        harness="copilot",
+        payload={"enrollment": "fixture"},
+        key_home=ctx.guard_home,
+        create_key=True,
+        guard_home=ctx.guard_home,
+    )
     monkeypatch.setattr(bridge.sys, "frozen", True, raising=False)
     monkeypatch.setattr(bridge, "isolated_cursor_hook_python", lambda: sys.executable)
     monkeypatch.setattr(bridge, "_trusted_desktop_hook_proxy_command", lambda *args: None)
@@ -218,15 +225,22 @@ def test_copilot_prepared_generation_matches_normal_install(
     native_adapter_state_integrity_runtime,
 ):
     del native_adapter_state_integrity_runtime
-    from codex_plugin_scanner.guard.adapters.adapter_state_integrity import authenticate_adapter_state
     from codex_plugin_scanner.guard.adapters.copilot import CopilotHarnessAdapter
+    from codex_plugin_scanner.guard.native_adapter_state_integrity import native_adapter_state_integrity
 
     ctx = HarnessContext(
         home_dir=tmp_path,
         guard_home=tmp_path / "guard",
         workspace_dir=tmp_path / "workspace" if workspace_enabled else None,
     )
-    authenticate_adapter_state(ctx.guard_home, harness="copilot", payload={"enrollment": "fixture"})
+    native_adapter_state_integrity(
+        action="authenticate",
+        harness="copilot",
+        payload={"enrollment": "fixture"},
+        key_home=ctx.guard_home,
+        create_key=True,
+        guard_home=ctx.guard_home,
+    )
     adapter = CopilotHarnessAdapter()
     prepared = adapter.prepare_install(ctx)
     assert adapter.install(ctx) == prepared.manifest

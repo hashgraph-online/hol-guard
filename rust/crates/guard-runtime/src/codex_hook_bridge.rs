@@ -70,7 +70,7 @@ fn non_empty_strings(value: Option<&PyVal>) -> bool {
 /// `decode_bridge_config_argument`: POSIX installs pass the JSON itself,
 /// Windows installs unpadded base64url of its UTF-8. Anything Python
 /// refuses is `None`.
-fn decode_config_argument(argument: &str) -> Option<Cow<'_, str>> {
+pub(crate) fn decode_config_argument(argument: &str) -> Option<Cow<'_, str>> {
     if argument.starts_with('{') {
         return Some(Cow::Borrowed(argument));
     }
@@ -387,9 +387,11 @@ fn write_stdout(text: &str) {
         .and_then(|()| stdout.flush());
 }
 
-/// `guard-runtime codex-hook-bridge <python argv...> <config>`: the exit
-/// code Codex sees.
-pub(crate) fn run(python_argv: &[String]) -> i32 {
+/// `guard-runtime codex-hook-bridge [lane flags] <python argv...> <config>`:
+/// the exit code Codex sees (see `desktop` for the flags the Python
+/// launcher adds).
+pub(crate) fn run(argv: &[String]) -> i32 {
+    let (lane, python_argv) = desktop::split_lane(argv);
     let mut raw = Vec::new();
     let read = io::stdin()
         .lock()
@@ -413,6 +415,9 @@ pub(crate) fn run(python_argv: &[String]) -> i32 {
         return 0;
     };
     let input_ready = Instant::now();
+    if let Some(code) = desktop::settle(&lane, &config, &raw_data, input_ready) {
+        return code;
+    }
     match route_hook(&config, &raw_data, input_ready) {
         (Route::Respond(text), _) => {
             write_stdout(&text);
@@ -452,6 +457,8 @@ mod approval;
 mod client;
 #[path = "codex_hook_bridge_contain.rs"]
 pub(crate) mod contain;
+#[path = "codex_hook_bridge_desktop.rs"]
+mod desktop;
 #[path = "codex_hook_bridge_handoff.rs"]
 mod handoff;
 #[path = "codex_hook_bridge_observation.rs"]

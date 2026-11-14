@@ -5,7 +5,6 @@ from __future__ import annotations
 import json
 import os
 import shlex
-import shutil
 import subprocess
 from collections.abc import Callable, Mapping, Sequence
 from contextlib import ExitStack
@@ -41,11 +40,20 @@ class PreparedHarnessInstall:
     files: tuple[TransitionFile, ...]
     manifest: dict[str, object]
 
-    def publish(self, guard_home: Path, *, removals: bool = False) -> dict[str, object]:
+    def publish(
+        self,
+        guard_home: Path,
+        *,
+        removals: bool = False,
+        rollback: bool = True,
+        on_write: Callable[[TransitionFile], None] | None = None,
+    ) -> dict[str, object]:
         """Publish an ordinary install under ownership; pending transitions use their signed plan.
 
         ``removals`` admits planned deletions, for a plan that retires files an
-        older install left behind. Rollback still restores them.
+        older install left behind. Rollback still restores them. A caller that
+        journals the plan itself passes ``rollback=False`` and recovers from its
+        own record; ``on_write`` sees each file just after it is written.
         """
         from ..codex_install_transaction import require_codex_install_owner
         from ..runtime_transition import RuntimeTransition, TransitionError, assert_transition_mutation_allowed
@@ -66,8 +74,12 @@ class PreparedHarnessInstall:
                 RuntimeTransition._compare({"files": [payload]}, "before")
                 RuntimeTransition._write_file(payload, "after")
                 written.append(payload)
+                if on_write is not None:
+                    on_write(change)
             RuntimeTransition._compare(changes, "after")
         except Exception as error:
+            if not rollback:
+                raise
             restore_error: Exception | None = None
             for payload in reversed(written):
                 try:
@@ -111,44 +123,6 @@ def detection_request(harness: str, context: HarnessContext) -> dict[str, object
     return request
 
 
-def _which_from_user_directories(
-    command: str, home: Path | None = None, extra_directories: tuple[Path, ...] = ()
-) -> str | None:
-    """Locate a CLI the user installed outside the process PATH.
-
-    The native ``user_command_lookup`` kind searches the usual user install
-    directories under the bare desktop launch PATH and ``extra_directories``
-    (a tool's own installer directory) under any PATH, with the same ownership
-    and write checks for every candidate. Only availability checks use this;
-    nothing found here is ever executed. No answer finds nothing.
-    """
-
-    # The runtime never finds a command on Windows or one with a separator, so
-    # those skip the call.
-    if os.name == "nt" or "/" in command:
-        return None
-    from ..native_runner_authority import NativeRunnerAuthorityError, native_runner_authority
-
-    request = {
-        "command": command,
-        "home": str(Path.home() if home is None else home),
-        "path": os.environ.get("PATH"),
-        "extra": [str(directory) for directory in extra_directories],
-    }
-    try:
-        answer = native_runner_authority("user_command_lookup", request)
-    except NativeRunnerAuthorityError:
-        return None
-    found = answer.get("path")
-    return found if isinstance(found, str) else None
-
-
-def _command_available(command: str, home: Path | None = None, extra_directories: tuple[Path, ...] = ()) -> bool:
-    return (
-        shutil.which(command) is not None or _which_from_user_directories(command, home, extra_directories) is not None
-    )
-
-
 def _shell_command(command: tuple[str, ...], *, windows: bool | None = None) -> str:
     """Return a shell-escaped command string appropriate for the target OS."""
 
@@ -158,14 +132,25 @@ def _shell_command(command: tuple[str, ...], *, windows: bool | None = None) -> 
     return shlex.join(command)
 
 
-def _resolve_command(command: str, candidates: tuple[Path, ...] = ()) -> str | None:
-    resolved = shutil.which(command)
-    if resolved is not None:
-        return resolved
-    for candidate in candidates:
-        if candidate.is_file() and os.access(candidate, os.X_OK):
-            return str(candidate)
-    return None
+#: The caller environment a harness CLI probe runs with.
+_PROBE_ENV_KEYS = (
+    "PATH",
+    "PATHEXT",
+    "HOME",
+    "USERPROFILE",
+    "SYSTEMROOT",
+    "WINDIR",
+    "COMSPEC",
+    "TEMP",
+    "TMP",
+    "TMPDIR",
+    "APPDATA",
+    "LOCALAPPDATA",
+    "XDG_CONFIG_HOME",
+    "XDG_DATA_HOME",
+    "LANG",
+    "LC_ALL",
+)
 
 
 def _run_command_probe(
@@ -175,43 +160,24 @@ def _run_command_probe(
     cwd: Path | None = None,
     env: Mapping[str, str] | None = None,
 ) -> dict[str, object]:
+    """Run a harness CLI's ``--help`` or ``--version`` through the native ``command_probe`` kind."""
+
     skipped = skipped_command_probe(command)
     if skipped is not None:
         return skipped
-    try:
-        result = subprocess.run(
-            command,
-            capture_output=True,
-            check=False,
-            cwd=cwd,
-            env=env,
-            text=True,
-            timeout=timeout_seconds,
-        )
-    except FileNotFoundError:
-        return {
-            "command": command,
-            "ok": False,
-            "return_code": None,
-            "stdout": "",
-            "stderr": "command not found",
-        }
-    except subprocess.TimeoutExpired as exc:
-        return {
-            "command": command,
-            "ok": False,
-            "return_code": None,
-            "stdout": (exc.stdout or "").strip(),
-            "stderr": (exc.stderr or "").strip(),
-            "timed_out": True,
-        }
-    return {
-        "command": command,
-        "ok": result.returncode == 0,
-        "return_code": result.returncode,
-        "stdout": result.stdout.strip(),
-        "stderr": result.stderr.strip(),
+    from ..native_runner_authority import NativeRunnerAuthorityError, native_runner_authority
+
+    request = {
+        "command": [str(part) for part in command],
+        "cwd": str((cwd or Path.cwd()).absolute()),
+        "env": {key: os.environ[key] for key in _PROBE_ENV_KEYS if key in os.environ} if env is None else dict(env),
+        "timeout_seconds": timeout_seconds,
     }
+    try:
+        return native_runner_authority("command_probe", request, timeout_seconds=timeout_seconds + 10.0)
+    except NativeRunnerAuthorityError:
+        # A diagnostic probe never fails the doctor; it reports that nothing ran.
+        return {"command": command, "ok": False, "return_code": None, "stdout": "", "stderr": "probe unavailable"}
 
 
 def _ensure_path_within_root(root: Path, path: Path, *, label: str) -> None:
@@ -381,12 +347,9 @@ class HarnessAdapter:
     def coverage_summary(self) -> HarnessCoverageSummary:
         return self.setup_contract().coverage
 
-    def executable_candidates(self, context: HarnessContext) -> tuple[Path, ...]:
-        del context
-        return ()
-
     def resolved_executable(self, context: HarnessContext) -> str | None:
-        return _resolve_command(self.executable, self.executable_candidates(context))
+        del context
+        return None
 
     def guard_launcher_paths(self, context: HarnessContext) -> tuple[Path, ...]:
         shim_name = self.launcher_name or self.harness
@@ -395,10 +358,7 @@ class HarnessAdapter:
         return tuple(shim_dir / f"guard-{name}{suffix}" for name in names for suffix in ("", ".cmd"))
 
     def launch_command(self, context: HarnessContext, passthrough_args: list[str]) -> list[str]:
-        command = [self.resolved_executable(context) or self.executable]
-        if context.workspace_dir is not None and self.harness in {"opencode", "claude-code"}:
-            command.append(str(context.workspace_dir))
-        return [*command, *passthrough_args]
+        return [self.resolved_executable(context) or self.executable, *passthrough_args]
 
     def preview_launch_commands(
         self,
@@ -530,9 +490,15 @@ class HarnessAdapter:
         context: HarnessContext,
         detection: HarnessDetection,
     ) -> HarnessDetection:
-        shim_path = next((path for path in self.guard_launcher_paths(context) if _is_guard_launcher_shim(path)), None)
-        if shim_path is None:
+        paths = self.guard_launcher_paths(context)
+        index = _harness_diagnostics(
+            "launcher_shim",
+            lambda value: value is None or (type(value) is int and 0 <= value < len(paths)),
+            paths=[str(path.absolute()) for path in paths],
+        )
+        if index is None:
             return detection
+        shim_path = paths[index]
         artifact = GuardArtifact(
             artifact_id=f"{self.harness}:guard-launcher-shim",
             name=shim_path.name,
@@ -621,40 +587,12 @@ def artifacts_use_guard(artifacts: Sequence[GuardArtifact]) -> bool:
     )
 
 
-def _is_guard_launcher_shim(path: Path) -> bool:
-    if not path.is_file():
-        return False
-    try:
-        contents = path.read_text(encoding="utf-8")
-    except (OSError, UnicodeDecodeError):
-        return False
-    return "codex_plugin_scanner.cli" in contents and "guard" in contents and "run" in contents
-
-
-_MISSING_COMMAND_MARKER = "command is not available"
-
-
-def setup_failures_besides_missing_command(warnings: Sequence[str]) -> bool:
-    """Whether any warning remains once the one about the missing tool command is set aside.
-
-    Adapters word their own faults, from a rejected executable override to duplicate
-    managed entries, so a list of known phrases would quietly drop the ones it does
-    not know. Anything the missing command does not already explain keeps the setup
-    broken, which is what Guard reported before leftover configuration was recognised.
-    """
-
-    return any(_MISSING_COMMAND_MARKER not in warning.lower() for warning in warnings)
-
-
 __all__ = [
     "GuardArtifact",
     "HarnessAdapter",
     "HarnessContext",
-    "_command_available",
     "_ensure_path_within_root",
     "_json_payload",
-    "_resolve_command",
     "_run_command_probe",
     "artifacts_use_guard",
-    "setup_failures_besides_missing_command",
 ]

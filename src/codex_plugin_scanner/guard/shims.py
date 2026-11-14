@@ -194,26 +194,56 @@ def _remove_guard_shim_owned(
     legacy_launcher_names: tuple[str, ...],
     display_name: str | None,
 ) -> dict[str, object]:
+    from .runtime_transition import RuntimeTransition
+
+    prepared = prepare_guard_shim_removal(
+        harness,
+        context,
+        launcher_name=launcher_name,
+        legacy_launcher_names=legacy_launcher_names,
+        display_name=display_name,
+    )
+    for change in prepared.files:
+        RuntimeTransition._write_file(change.payload(), "after")
+    return prepared.manifest
+
+
+def prepare_guard_shim_removal(
+    harness: str,
+    context: HarnessContextLike,
+    *,
+    launcher_name: str | None = None,
+    legacy_launcher_names: tuple[str, ...] = (),
+    display_name: str | None = None,
+) -> PreparedGuardShim:
+    """Snapshot every launcher an uninstall deletes, without changing files."""
+    from .codex_hook_recovery import _snapshot
+    from .runtime_transition import TransitionFile
 
     shim_dir = context.guard_home / "bin"
     shim_name = launcher_name or harness
     harness_label = display_name or harness
-    shim_paths = [
-        shim_dir / f"guard-{name}{suffix}" for name in (shim_name, *legacy_launcher_names) for suffix in ("", ".cmd")
-    ]
+    files: list[TransitionFile] = []
     removed_paths: list[str] = []
-    for path in shim_paths:
-        if path.exists():
-            path.unlink()
+    for name in (shim_name, *legacy_launcher_names):
+        for suffix in ("", ".cmd"):
+            path = shim_dir / f"guard-{name}{suffix}"
+            before = _snapshot(path)
+            if before is None:
+                continue
+            mode = path.stat().st_mode & 0o777
+            target = path.parent.resolve(strict=False) / path.name
+            files.append(TransitionFile(target, before, None, before_mode=mode, after_mode=mode, no_follow=True))
             removed_paths.append(str(path))
     posix_path = shim_dir / f"guard-{shim_name}"
-    return {
+    manifest: dict[str, object] = {
         "shim_path": str(posix_path),
         "shim_dir": str(shim_dir),
         "removed_paths": removed_paths,
         "shim_command": posix_path.name,
         "notes": [f"Removed the Guard launcher shim for {harness_label}."],
     }
+    return PreparedGuardShim(tuple(files), manifest)
 
 
 def _build_python_shim(harness: str, context: HarnessContextLike, workspace_args: list[str]) -> str:
@@ -373,6 +403,7 @@ __all__ = [
     "package_shim_protection",
     "package_shim_status",
     "package_shim_supported_managers",
+    "prepare_guard_shim_removal",
     "probe_package_shim_intercepts",
     "remove_guard_profile_blocks",
     "remove_guard_shim",

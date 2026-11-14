@@ -129,6 +129,7 @@ mod claude_hook_bridge_auth_windows;
 mod claude_hook_bridge_fixture;
 mod claude_hook_bridge_http;
 mod claude_hook_bridge_http_text;
+mod claude_hook_bridge_recovery;
 mod claude_hook_bridge_render;
 mod claude_hook_bridge_transport;
 mod claude_hook_bridge_url;
@@ -221,6 +222,7 @@ mod codex_request_resume_store;
 mod codex_sandbox_check;
 mod codex_sources;
 mod codex_thread_continue_op;
+mod codex_toml_render;
 mod codex_value;
 #[cfg(all(test, unix))]
 mod codex_vectors_tests;
@@ -231,6 +233,8 @@ mod command_envelope_op;
 mod command_expression_validate_op;
 mod command_policy_decide_op;
 mod command_policy_repair;
+#[path = "adapters/command_probe.rs"]
+mod command_probe;
 mod command_risk_groups;
 mod composio_role_op;
 mod compound_git_args;
@@ -394,6 +398,8 @@ mod delivery_object;
 mod desktop_core_onedir;
 mod desktop_foreign_installs;
 mod desktop_foreign_remove;
+#[path = "adapters/desktop_hook_proxy.rs"]
+mod desktop_hook_proxy;
 mod desktop_notification;
 mod desktop_review_link;
 mod developer_inspection_authority_op;
@@ -757,6 +763,8 @@ mod hook_direct_counters;
 mod hook_direct_evidence;
 mod hook_env_stamp;
 mod hook_launch_scan;
+#[path = "adapters/hook_python_identity.rs"]
+mod hook_python_identity;
 mod hook_removal_prune;
 mod hook_removal_sweep;
 mod html_unescape;

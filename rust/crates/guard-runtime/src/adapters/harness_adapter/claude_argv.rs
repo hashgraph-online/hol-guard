@@ -6,17 +6,21 @@
 //! process knows: the native runtimes that carry each hook feature, whether it
 //! is a frozen build and its stable launcher, its interpreter and package
 //! root, the daemon URL, the query extras the attributed harness adds, and the
-//! daemon recovery commands.
+//! launcher a frozen build recovers its daemon through.
+
+use std::path::Path;
 
 use serde_json::{json, Map, Value};
 
 use super::cursor::get;
 use super::{path_text, Ctx, Failure, Step};
+use crate::claude_hook_bridge_recovery::frozen_recovery_command;
 use crate::claude_hook_plan::py_repr_str;
 use crate::claude_session_start_contract::{
     bridge_config_text, DaemonHookTemplate, HookGroupsContract,
 };
 use crate::hook_env_stamp::json_string;
+use crate::hook_process_spawn::isolated_daemon_start_command;
 use crate::pyjson::{self, PyVal};
 
 pub(super) const NATIVE_COMMAND: &str = "claude-hook-bridge";
@@ -37,10 +41,9 @@ pub(super) struct Facts {
     package_root: String,
     daemon_url: String,
     query_extras: Vec<(String, String)>,
-    /// The daemon recovery command for the caller's own home.
-    recovery_home: Option<Vec<String>>,
-    /// The daemon recovery command for the context's home.
-    recovery_context: Option<Vec<String>>,
+    /// `resolve_frozen_guard_cli()`: the program a frozen build recovers
+    /// its daemon through.
+    recovery_launcher: Option<String>,
 }
 
 fn optional_text(value: Option<&PyVal>) -> Step<Option<String>> {
@@ -62,13 +65,6 @@ fn strings(value: &PyVal) -> Step<Vec<String>> {
         .iter()
         .map(|item| item.as_str().map(str::to_owned).ok_or(Failure::Invalid))
         .collect()
-}
-
-fn optional_strings(value: Option<&PyVal>) -> Step<Option<Vec<String>>> {
-    match value {
-        None | Some(PyVal::Null) => Ok(None),
-        Some(value) => strings(value).map(Some),
-    }
 }
 
 /// The facts merged into this request, or the reply that asks for them.
@@ -99,8 +95,7 @@ pub(super) fn facts(fields: &Map<String, Value>) -> Step<Facts> {
         package_root: required_text(get(&facts, "package_root"))?,
         daemon_url: required_text(get(&facts, "daemon_url"))?,
         query_extras,
-        recovery_home: optional_strings(get(&facts, "recovery_home"))?,
-        recovery_context: optional_strings(get(&facts, "recovery_context"))?,
+        recovery_launcher: optional_text(get(&facts, "recovery_launcher"))?,
     })
 }
 
@@ -166,15 +161,28 @@ fn query(ctx: &Ctx, extras: &[(String, String)]) -> String {
     crate::runner_sync_url::urlencode(&pairs)
 }
 
-/// The recovery command the bridge config carries: the query names the home
-/// only when it is not the caller's own.
-fn recovery<'a>(ctx: &Ctx, facts: &'a Facts) -> Step<&'a [String]> {
-    let recovery = if ctx.default_home() {
-        &facts.recovery_home
+/// The recovery command the bridge config carries (`_recovery`): it binds
+/// the caller's own home unless the context names another one.
+fn recovery(ctx: &Ctx, facts: &Facts) -> Step<Vec<String>> {
+    if facts.bridge.is_none() {
+        return Err(Failure::Invalid);
+    }
+    let home = if ctx.default_home() {
+        &ctx.user_home
     } else {
-        &facts.recovery_context
+        &ctx.home
     };
-    recovery.as_deref().ok_or(Failure::Invalid)
+    if facts.frozen {
+        // A frozen desktop core cannot run the Python `-I -c` bootstrap.
+        let launcher = facts.recovery_launcher.as_deref().ok_or(Failure::Invalid)?;
+        return frozen_recovery_command(launcher, &ctx.guard_home, home).ok_or(Failure::Invalid);
+    }
+    Ok(isolated_daemon_start_command(
+        &facts.python,
+        Path::new(&facts.package_root),
+        &ctx.guard_home,
+        Some(home),
+    ))
 }
 
 /// `bridge_config_template`: the daemon hook config, less the daemon URL.
@@ -191,7 +199,7 @@ fn template(ctx: &Ctx, facts: &Facts, query: String, native: bool) -> Step<Templ
         fallback_command: hook_argv(ctx, facts)?,
         query,
         recovery_command: if native {
-            Some(recovery(ctx, facts)?.to_vec())
+            Some(recovery(ctx, facts)?)
         } else {
             None
         },

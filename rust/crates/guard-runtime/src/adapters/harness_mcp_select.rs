@@ -1,4 +1,6 @@
-//! The `harness_mcp_discovery` `select`, `server_id` and `launch_env` ops:
+//! The `harness_mcp_discovery` `select`, `server_id` and `launch_env` ops
+//! (and, through `proxy_args` and `remote`, the proxy launch and remote
+//! server ops):
 //! `managed_stdio_servers`, `observable_stdio_servers_with_proxy` and
 //! `stable_mcp_server_identifier`, which `guard/adapters/mcp_servers.py`
 //! computed per server before they moved here, and the env choice of
@@ -76,6 +78,10 @@ pub(super) fn dispatch(op: &str, map: &Map<String, Value>) -> KindResult {
         "select" => select(map),
         "server_id" => server_ids(map),
         "launch_env" => launch_env(map),
+        "proxy_args" => proxy_args::proxy_args(map),
+        "proxy_env" => proxy_args::proxy_env(map),
+        "remote" => remote::remote(map),
+        "remote_rank" => remote::remote_rank(map),
         _ => Err(ERR_INVALID),
     }
 }
@@ -347,6 +353,11 @@ fn string_list(map: &Map<String, Value>, key: &str) -> Result<Vec<String>, &'sta
 fn borrowed(values: &[String]) -> Vec<&str> {
     values.iter().map(String::as_str).collect()
 }
+
+#[path = "harness_mcp_proxy_args.rs"]
+mod proxy_args;
+#[path = "harness_mcp_remote.rs"]
+mod remote;
 
 #[cfg(test)]
 #[path = "harness_mcp_select_tests.rs"]

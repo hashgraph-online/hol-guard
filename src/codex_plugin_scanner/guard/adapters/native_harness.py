@@ -193,9 +193,8 @@ class NativeHarnessAdapter(HarnessAdapter):
         return detection_from(self.harness, context, answer)
 
     def launch_command(self, context: HarnessContext, passthrough_args: list[str]) -> list[str]:
-        if not self._spec.get("trusted_launcher"):
-            return super().launch_command(context, passthrough_args)
-        return [str(part) for part in self._ask("launch_command", context, args=passthrough_args)["argv"]]
+        op = "launch_command" if self._spec.get("trusted_launcher") else "default_launch"
+        return [str(part) for part in self._ask(op, context, args=passthrough_args)["argv"]]
 
     def preview_launch_commands(self, context: HarnessContext, passthrough_args: list[str]) -> tuple[list[str], ...]:
         if not self._spec.get("trusted_launcher"):

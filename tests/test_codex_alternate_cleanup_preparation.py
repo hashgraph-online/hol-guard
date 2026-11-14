@@ -7,10 +7,17 @@ import pytest
 from codex_plugin_scanner.guard.adapters import codex as adapter
 from codex_plugin_scanner.guard.codex_config import dump_toml
 from codex_plugin_scanner.guard.codex_hook_sources import parse_toml_object
-from codex_plugin_scanner.guard.runtime_transition import TransitionError
+from codex_plugin_scanner.guard.runtime_transition import RuntimeTransition, TransitionError
 
 from .test_codex_publication_preparation import _context, _tree
 from .test_runtime_transition import begin, transition  # noqa: F401 -- shared pytest fixture
+
+
+def _publish(change):
+    payload = {"files": [change.payload()]}
+    RuntimeTransition._compare(payload, "before")
+    RuntimeTransition._write_file(payload["files"][0], "after")
+    RuntimeTransition._compare(payload, "after")
 
 
 def _source(tmp_path, monkeypatch, payload):
@@ -69,10 +76,10 @@ def test_mcp_only_publication_preserves_mode_and_repeated_cleanup_inode(tmp_path
         context, config_path=path, remove_hooks=False, managed_server_names=("original",)
     )
     assert change.after_mode == 0o644
-    adapter._publish_codex_alternate_cleanup(change)
+    _publish(change)
     assert path.read_bytes() == b"" and path.stat().st_mode & 0o777 == 0o644
     before = _tree(tmp_path)
-    adapter._publish_codex_alternate_cleanup(
+    _publish(
         adapter.prepare_codex_alternate_cleanup(
             context, config_path=path, remove_hooks=False, managed_server_names=("original",)
         )

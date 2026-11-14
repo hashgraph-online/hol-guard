@@ -771,12 +771,28 @@
    "body": "53abbd254e3b"
   },
   {
+   "verdict": "windows-unsupported",
+   "note": "The Desktop hook proxy is a signed macOS app-bundle launch; off macOS no path is trusted, so `command` answers no proxy and the Core bridge is kept. The caller only asks on darwin and the kind's own `macos` gate refuses elsewhere.",
+   "file": "rust/crates/guard-runtime/src/adapters/desktop_hook_proxy.rs",
+   "item": "fn trusted_path(_path: &Path) -> bool",
+   "cfg": "not(unix)",
+   "body": "d7a1782efff1"
+  },
+  {
    "verdict": "windows-permissive",
    "note": "Windows has no `openat`, so the write goes by the resolved path. Every ancestor is checked for a symlink first, as Python's Windows writer refused untrusted parent links, but a parent swapped between that check and the rename is not detected the way the Unix arm's held directory handles detect it.",
    "file": "rust/crates/guard-runtime/src/adapters/harness_adapter/authorized_write.rs",
    "item": "pub(super) fn write_beneath_parent(path: &Path, bytes: &[u8]) -> std::io::Result<()>",
    "cfg": "not(unix)",
    "body": "e5fdfbf635c7"
+  },
+  {
+   "verdict": "windows-equivalent",
+   "note": "Both paths are canonicalized first, so the same file has the same spelling on Windows; Python's os.path.samefile compares the volume serial and file index, which canonical equality matches for the non-linked files a Guard home or package directory holds.",
+   "file": "rust/crates/guard-runtime/src/adapters/harness_adapter/codex_owner_home.rs",
+   "item": "fn same_file(left: &Path, right: &Path) -> bool",
+   "cfg": "not(unix)",
+   "body": "44a70e0ed079"
   },
   {
    "verdict": "windows-permissive",
@@ -835,6 +851,14 @@
    "body": "dc474b94f640"
   },
   {
+   "verdict": "windows-unsupported",
+   "note": "Python names no isolated interpreter off macOS and Linux, so a Windows hook client never runs under one; the caller keeps the Guard launcher it already has.",
+   "file": "rust/crates/guard-runtime/src/adapters/harness_adapter/isolated_python.rs",
+   "item": "fn usable(_path: &Path, _system_root: Option<&str>) -> bool",
+   "cfg": "not(unix)",
+   "body": "50e90393da09"
+  },
+  {
    "verdict": "posix-primitive",
    "note": "Windows has no POSIX owner or permission bits. The Python launcher refresh skipped its owner check there (`os.name != \"nt\"`) and kept `S_IMODE(st_mode)`, which on Windows reflects only the read-only attribute; this arm answers the same: owned, with 0o444 or 0o666 from that attribute.",
    "file": "rust/crates/guard-runtime/src/adapters/harness_adapter/opencode_checks.rs",
@@ -873,6 +897,38 @@
    "item": "pub(crate) fn executable(path: &Path) -> bool",
    "cfg": "not(unix)",
    "body": "83ab4ae09a42"
+  },
+  {
+   "verdict": "posix-primitive",
+   "note": "Windows has no POSIX mode to narrow, so the probe directory is left as created; access there is the user profile ACL. The Python probe it replaced also skipped the chmod on Windows.",
+   "file": "rust/crates/guard-runtime/src/adapters/hook_python_expect.rs",
+   "item": "fn restrict -- non-Unix block",
+   "cfg": "not(unix)",
+   "body": "e94fca40c81d"
+  },
+  {
+   "verdict": "posix-primitive",
+   "note": "Windows has no POSIX permission bits, so no mode is reported and `owned_private` relies on ownership alone. The Python check it replaced skipped the mode test on Windows the same way.",
+   "file": "rust/crates/guard-runtime/src/adapters/hook_python_expect.rs",
+   "item": "fn mode -- non-Unix block",
+   "cfg": "not(unix)",
+   "body": "d81909b3680e"
+  },
+  {
+   "verdict": "windows-permissive",
+   "note": "Ownership is not compared on Windows: any directory counts as owned. Reading the owner SID needs `GetSecurityInfo`, which is not ported. The Python check it replaced also skipped the owner test where `os.getuid` is missing.",
+   "file": "rust/crates/guard-runtime/src/adapters/hook_python_expect.rs",
+   "item": "fn owned -- non-Unix block",
+   "cfg": "not(unix)",
+   "body": "f91ab042cceb"
+  },
+  {
+   "verdict": "posix-primitive",
+   "note": "Executability on Windows is an ACL and `PATHEXT` property, not a mode bit, so an existing file is accepted. The Python probe it replaced used `os.access(X_OK)`, which on Windows also only checks existence.",
+   "file": "rust/crates/guard-runtime/src/adapters/hook_python_identity.rs",
+   "item": "fn executable -- non-Unix block",
+   "cfg": "not(unix)",
+   "body": "7d66a3fed34b"
   },
   {
    "verdict": "windows-equivalent",

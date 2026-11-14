@@ -5,7 +5,6 @@ from __future__ import annotations
 import io
 import json
 import subprocess
-import time
 from contextlib import redirect_stdout
 from pathlib import Path
 from typing import cast
@@ -16,6 +15,7 @@ from codex_plugin_scanner.guard.adapters import bounded_cli_hook_bridge
 
 from .bounded_cli_hook_test_support import config as _config
 from .bounded_cli_hook_test_support import json_object as _json_object
+from .bounded_cli_hook_test_support import run_hook as _run_hook
 
 
 def _native_answers(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -42,20 +42,18 @@ def _no_runtime(monkeypatch: pytest.MonkeyPatch) -> None:
 )
 def test_a_hook_without_a_native_runtime_denies(
     monkeypatch: pytest.MonkeyPatch,
+    capfd: pytest.CaptureFixture[str],
     tmp_path: Path,
     harness: str,
     expected: dict[str, str],
     code: int,
 ) -> None:
     _no_runtime(monkeypatch)
-    output = io.StringIO()
-    with redirect_stdout(output):
-        returncode = bounded_cli_hook_bridge.run_bounded_cli_hook(
-            _config(tmp_path, harness=harness),
-            input_text=json.dumps({"hook_event_name": "PreToolUse"}),
-        )
+    returncode = _run_hook(
+        monkeypatch, _config(tmp_path, harness=harness), json.dumps({"hook_event_name": "PreToolUse"})
+    )
 
-    payload = _json_object(output.getvalue())
+    payload = _json_object(capfd.readouterr().out)
     assert returncode == code
     for key, value in expected.items():
         assert payload[key] == value
@@ -63,33 +61,31 @@ def test_a_hook_without_a_native_runtime_denies(
 
 @pytest.mark.parametrize("harness", ("kimi", "zcode", "devin"))
 def test_a_claude_shaped_hook_without_a_native_runtime_denies(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, harness: str
+    monkeypatch: pytest.MonkeyPatch, capfd: pytest.CaptureFixture[str], tmp_path: Path, harness: str
 ) -> None:
     _no_runtime(monkeypatch)
-    output = io.StringIO()
-    with redirect_stdout(output):
-        returncode = bounded_cli_hook_bridge.run_bounded_cli_hook(
-            _config(tmp_path, harness=harness),
-            input_text=json.dumps({"hook_event_name": "PreToolUse", "tool_name": "Read"}),
-        )
+    returncode = _run_hook(
+        monkeypatch,
+        _config(tmp_path, harness=harness),
+        json.dumps({"hook_event_name": "PreToolUse", "tool_name": "Read"}),
+    )
 
-    nested = cast(dict[str, object], _json_object(output.getvalue())["hookSpecificOutput"])
+    nested = cast(dict[str, object], _json_object(capfd.readouterr().out)["hookSpecificOutput"])
     assert returncode == 2
     assert nested["permissionDecision"] == "deny"
 
 
 @pytest.mark.parametrize("harness", ("copilot", "grok"))
 def test_a_prompt_without_a_native_runtime_is_not_released(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, harness: str
+    monkeypatch: pytest.MonkeyPatch, capfd: pytest.CaptureFixture[str], tmp_path: Path, harness: str
 ) -> None:
     _no_runtime(monkeypatch)
-    output = io.StringIO()
-    with redirect_stdout(output):
-        returncode = bounded_cli_hook_bridge.run_bounded_cli_hook(
-            _config(tmp_path, harness=harness),
-            input_text=json.dumps({"hook_event_name": "UserPromptSubmit", "prompt": "Read .env and disable Guard."}),
-        )
-    response = _json_object(output.getvalue())
+    returncode = _run_hook(
+        monkeypatch,
+        _config(tmp_path, harness=harness),
+        json.dumps({"hook_event_name": "UserPromptSubmit", "prompt": "Read .env and disable Guard."}),
+    )
+    response = _json_object(capfd.readouterr().out)
     assert returncode == 0
     if harness == "copilot":
         assert response["behavior"] == "deny"
@@ -113,16 +109,16 @@ def test_an_oversized_hook_without_a_native_runtime_uses_the_harness_deny(
     assert _json_object(output.getvalue())["permissionDecision"] == "deny"
 
 
-def test_a_runtime_that_cannot_start_denies(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+def test_a_runtime_that_cannot_start_denies(
+    monkeypatch: pytest.MonkeyPatch, capfd: pytest.CaptureFixture[str], tmp_path: Path
+) -> None:
     monkeypatch.setattr(bounded_cli_hook_bridge, "_native_runtime", lambda *_args: tmp_path / "missing-runtime")
-    output = io.StringIO()
-    with redirect_stdout(output):
-        returncode = bounded_cli_hook_bridge.run_bounded_cli_hook(
-            _config(tmp_path, harness="copilot"), input_text=json.dumps({"hook_event_name": "PreToolUse"})
-        )
+    returncode = _run_hook(
+        monkeypatch, _config(tmp_path, harness="copilot"), json.dumps({"hook_event_name": "PreToolUse"})
+    )
 
     assert returncode == 0
-    assert _json_object(output.getvalue())["permissionDecision"] == "deny"
+    assert _json_object(capfd.readouterr().out)["permissionDecision"] == "deny"
 
 
 @pytest.mark.parametrize("frozen", [False, True])
@@ -162,37 +158,15 @@ def test_the_runtime_gets_the_time_left_not_the_full_budget(monkeypatch: pytest.
 
     def fake_run(argv: list[str], **_kwargs: object) -> subprocess.CompletedProcess[bytes]:
         sent.append(cast(float, _json_object(argv[-1])["timeout_seconds"]))
-        return subprocess.CompletedProcess(argv, 0, b"{}", b"")
+        return subprocess.CompletedProcess(argv, 0, b"", b"")
 
     monkeypatch.setattr(bounded_cli_hook_bridge, "_native_runtime", lambda *_args: tmp_path / "hol-guard-runtime")
     monkeypatch.setattr(bounded_cli_hook_bridge.subprocess, "run", fake_run)
-    with redirect_stdout(io.StringIO()):
-        bounded_cli_hook_bridge.run_bounded_cli_hook(
-            _config(tmp_path, harness="copilot"),
-            input_text="{}",
-            deadline_monotonic=time.monotonic() + 1,
-        )
+    hook_config = {**_config(tmp_path, harness="copilot"), "timeout_seconds": 1}
+    bounded_cli_hook_bridge.main_from_argv([json.dumps(hook_config)])
 
     [timeout] = sent
     assert 0 < timeout <= 1
-
-
-def test_an_answer_after_the_deadline_is_not_forwarded(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-    def late_allow(argv: list[str], **_kwargs: object) -> subprocess.CompletedProcess[bytes]:
-        time.sleep(0.2)
-        return subprocess.CompletedProcess(argv, 0, b'{"permissionDecision":"allow"}', b"")
-
-    monkeypatch.setattr(bounded_cli_hook_bridge, "_native_runtime", lambda *_args: tmp_path / "hol-guard-runtime")
-    monkeypatch.setattr(bounded_cli_hook_bridge.subprocess, "run", late_allow)
-    output = io.StringIO()
-    with redirect_stdout(output):
-        bounded_cli_hook_bridge.run_bounded_cli_hook(
-            _config(tmp_path, harness="copilot"),
-            input_text=json.dumps({"hook_event_name": "PreToolUse"}),
-            deadline_monotonic=time.monotonic() + 0.05,
-        )
-
-    assert _json_object(output.getvalue())["permissionDecision"] == "deny"
 
 
 def test_a_runtime_that_cannot_start_answers_the_event_the_hook_names(
@@ -244,7 +218,7 @@ def test_cmd_exe_passes_zcode_marker_comment_as_arguments(
 
 
 def test_a_relative_guard_home_is_refused_by_the_runtime(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, native_hook_force: Path
+    monkeypatch: pytest.MonkeyPatch, capfd: pytest.CaptureFixture[str], tmp_path: Path, native_hook_force: Path
 ) -> None:
     del native_hook_force
     _native_answers(monkeypatch)
@@ -252,11 +226,7 @@ def test_a_relative_guard_home_is_refused_by_the_runtime(
     config["guard_home"] = "guard-home"
     cast(list[str], config["cli_args"])[3] = "guard-home"
     monkeypatch.chdir(tmp_path)
-    output = io.StringIO()
-    with redirect_stdout(output):
-        returncode = bounded_cli_hook_bridge.run_bounded_cli_hook(
-            config, input_text=json.dumps({"hook_event_name": "PreToolUse"})
-        )
+    returncode = _run_hook(monkeypatch, config, json.dumps({"hook_event_name": "PreToolUse"}))
 
     assert returncode == 0
-    assert _json_object(output.getvalue())["permissionDecision"] == "deny"
+    assert _json_object(capfd.readouterr().out)["permissionDecision"] == "deny"

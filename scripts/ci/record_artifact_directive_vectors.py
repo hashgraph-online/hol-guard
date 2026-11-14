@@ -388,7 +388,7 @@ def _recorded_should_emit_native_hook_exit_block(case: Case, *, event_name: str,
     blocking = compact_event in {"pretooluse", "userpromptsubmit", "pretoolcall"}
     if canonical in {"kimi", "grok", "hermes", "pi", "omp", "zcode", "devin"} and blocking:
         if canonical == "zcode":
-            from codex_plugin_scanner.guard.adapters._modules.zcode.zcode_hooks import zcode_hook_process_exit
+            from codex_plugin_scanner.guard.cli.native_hook_exit_code import zcode_hook_process_exit
 
             return zcode_hook_process_exit(policy_action=policy_action, event_name=event_name) == 2
         return policy_action in {"review", "require-reapproval", "sandbox-required", "block"}

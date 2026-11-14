@@ -1,0 +1,199 @@
+use std::collections::BTreeMap;
+use std::path::Path;
+
+use serde_json::{json, Value};
+
+use super::super::dispatch;
+use super::{answered, environment, settled};
+use crate::hook_process_spawn::BoundedHookProcessResult;
+
+fn ended(
+    returncode: Option<i32>,
+    timed_out: bool,
+    overflow: bool,
+    contained: bool,
+) -> BoundedHookProcessResult {
+    BoundedHookProcessResult {
+        returncode,
+        stdout: String::new(),
+        stderr: "private path".into(),
+        output_limit_exceeded: overflow,
+        timed_out,
+        containment_failed: !contained,
+    }
+}
+
+#[test]
+fn the_probe_sees_only_the_inherited_values_and_a_neutral_home() {
+    let inherited = BTreeMap::from([("LANG".to_owned(), "C.UTF-8".to_owned())]);
+    let environment = environment(inherited, Path::new("/guard/runtime/python-probe"));
+    assert_eq!(
+        environment,
+        BTreeMap::from(
+            [
+                ("HOME", "/guard/runtime/python-probe"),
+                ("LANG", "C.UTF-8"),
+                ("PYTHONDONTWRITEBYTECODE", "1"),
+                ("PYTHONIOENCODING", "utf-8"),
+                ("PYTHONNOUSERSITE", "1"),
+                ("PYTHONSAFEPATH", "1"),
+                ("USERPROFILE", "/guard/runtime/python-probe"),
+            ]
+            .map(|(key, value)| (key.to_owned(), value.to_owned()))
+        )
+    );
+}
+
+#[test]
+fn how_the_probe_ended_has_a_reason_that_names_no_path() {
+    for (result, reason) in [
+        (
+            ended(Some(1), true, false, true),
+            "guard_hook_python_probe_timeout",
+        ),
+        (
+            ended(Some(1), false, true, true),
+            "guard_hook_python_probe_output_limit",
+        ),
+        (
+            ended(Some(0), false, false, false),
+            "guard_hook_python_probe_capture_incomplete",
+        ),
+        (
+            ended(Some(1), false, false, true),
+            "guard_hook_python_probe_rejected",
+        ),
+        (
+            ended(None, false, false, true),
+            "guard_hook_python_probe_rejected",
+        ),
+    ] {
+        assert_eq!(settled(&result), Err(reason));
+    }
+    assert_eq!(settled(&ended(Some(0), false, false, true)), Ok(()));
+}
+
+#[test]
+fn only_one_line_equal_to_the_record_is_accepted() {
+    let record = json!({"schema": 2, "version": "1.0"});
+    assert_eq!(
+        answered("{\"schema\":2,\"version\":\"1.0\"}\n", &record),
+        Ok(())
+    );
+    for (stdout, reason) in [
+        ("noise\n{}\n", "guard_hook_python_probe_output_invalid"),
+        ("", "guard_hook_python_probe_output_invalid"),
+        ("\n", "guard_hook_python_probe_output_invalid"),
+        ("{not json}\n", "guard_hook_python_probe_output_invalid"),
+        (
+            "{\"schema\":2,\"version\":\"1.0\u{FFFD}\"}\n",
+            "guard_hook_python_probe_output_invalid",
+        ),
+        (
+            "{\"schema\":2,\"version\":\"2.0\"}\n",
+            "guard_hook_python_probe_identity_mismatch",
+        ),
+        ("[]\n", "guard_hook_python_probe_identity_mismatch"),
+    ] {
+        assert_eq!(answered(stdout, &record), Err(reason), "{stdout:?}");
+    }
+}
+
+fn facts() -> Value {
+    json!({
+        "package_file": "/p/codex_plugin_scanner/__init__.py",
+        "package_root": null,
+        "version": "1.0",
+        "cryptography_root": "/p",
+        "hol": null,
+    })
+}
+
+#[test]
+fn a_malformed_attest_request_is_refused() {
+    let request = |inherited: Value, probe: Value, facts: Value| {
+        json!({
+            "op": "attest",
+            "python": "/usr/bin/python3",
+            "inherited": inherited,
+            "probe": probe,
+            "facts": facts,
+        })
+    };
+    let scoped = json!({"scoped": "/guard/runtime/python-probe"});
+    let mut short = facts();
+    short.as_object_mut().unwrap().remove("version");
+    for args in [
+        request(json!({"PYTHONPATH": "/x"}), scoped.clone(), facts()),
+        request(json!({"LANG": 1}), scoped.clone(), facts()),
+        request(json!({}), scoped.clone(), short),
+        request(json!({}), json!({"scoped": "relative"}), facts()),
+        json!({"op": "attest", "python": "python3", "inherited": {}, "probe": scoped, "facts": facts()}),
+        json!({"op": "attest", "python": "/usr/bin/python3", "inherited": {}, "probe": scoped}),
+    ] {
+        assert!(dispatch(&args).is_err(), "{args}");
+    }
+}
+
+#[cfg(unix)]
+#[test]
+fn an_unusable_directory_or_package_is_answered_before_anything_runs() {
+    let home = tempfile::tempdir().unwrap();
+    let root = std::fs::canonicalize(home.path()).unwrap();
+    let request = |probe: Value| {
+        json!({
+            "op": "attest",
+            "python": root.join("absent"),
+            "inherited": {},
+            "probe": probe,
+            "facts": facts(),
+        })
+    };
+    let guard_home = json!({"guard_home": root.join("guard")});
+    for (probe, error) in [
+        (
+            json!({"scoped": root.join("absent")}),
+            "guard_hook_python_neutral_cwd_unavailable",
+        ),
+        (guard_home, "guard_hook_python_active_package_unavailable"),
+    ] {
+        assert_eq!(
+            dispatch(&request(probe)).unwrap(),
+            json!({ "error": error })
+        );
+    }
+}
+
+#[cfg(unix)]
+#[test]
+fn an_interpreter_that_cannot_be_read_is_unavailable_before_anything_runs() {
+    let home = tempfile::tempdir().unwrap();
+    let root = std::fs::canonicalize(home.path()).unwrap();
+    for path in [
+        "site/codex_plugin_scanner/__init__.py",
+        "site/cryptography/__init__.py",
+    ] {
+        let file = root.join(path);
+        std::fs::create_dir_all(file.parent().unwrap()).unwrap();
+        std::fs::write(file, "").unwrap();
+    }
+    let site = root.join("site");
+    let answer = dispatch(&json!({
+        "op": "attest",
+        "python": root.join("absent"),
+        "inherited": {},
+        "probe": {"guard_home": root.join("guard")},
+        "facts": {
+            "package_file": site.join("codex_plugin_scanner/__init__.py"),
+            "package_root": null,
+            "version": "1.0",
+            "cryptography_root": site,
+            "hol": {"root": site, "version": "1.0", "entry_point": "codex_plugin_scanner.cli:main", "direct_url": null},
+        },
+    }))
+    .unwrap();
+    assert_eq!(
+        answer,
+        json!({"error": "guard_hook_python_interpreter_unavailable"})
+    );
+}
