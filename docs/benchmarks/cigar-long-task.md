@@ -256,3 +256,20 @@ Three setups per harness: no Guard, CIGAR only (the prompt note, no tool checks)
 Oh My Pi has no CIGAR-only setup: its Guard extension carries both.
 
 CIGAR alone halves the tokens on every harness and seed set without costing tasks; Claude Code with CIGAR passed two held-out tasks the run without Guard missed. With enforcement on, the gap to CIGAR only is commands Guard held for review and the turns the agent spent working around them: inline Python (`python -c`, heredocs), `perl -pi`, `find … -exec sed -i`, shell `for` loops and `git add … && git commit`. Not every enforcement failure is a hold: three Codex held-out misses (204, 207, 212) show no Guard message, and the two Claude Code random misses left a rename or a test unfinished. The Oh My Pi misses do trace to Guard: reads of its own `xd://` and `proc://` resources held for review, and a malformed edit sent for approval instead of back to the model.
+
+### Enforcement + CIGAR after the review-hold fixes
+
+The table above was run while Guard still held many of the agents' routine edit and probe commands for review. These runs repeat the enforcement + CIGAR setup, every Guard hook on, on later 3.59.0 builds. Codex, Oh My Pi and the random Claude Code seeds ran on the morning of 2026-11-13. Claude Code on seeds 116–131 and 200–215 still saved only 47.3% of tokens on that build, so it was run again on 2026-11-14 on main at `0ba8d232`. By then Guard no longer held inline Python that only reads or reshapes data (#7685, #7709), `find … -exec sed -i` edits (#7679) or Git probes that ran past the hook's time budget (#7672, #7711).
+
+Each row is paired with a no-Guard run of the same seeds made on 2026-11-13, so the no-Guard totals differ a little from the table above. Same models, prices and token count (input plus output).
+
+| harness | seeds | no Guard cost | no Guard tokens | no Guard passed | enforcement + CIGAR cost | enforcement + CIGAR tokens | enforcement + CIGAR passed | cost saved | tokens saved |
+|---|---|---|---|---|---|---|---|---|---|
+| Codex | random 16 | $0.29 | 17.8M | 16/16 | $0.16 | 8.4M | 16/16 | 45.7% | 52.9% |
+| Codex | 116–131, 200–215 | $0.58 | 34.2M | 31/32 | $0.27 | 14.1M | 32/32 | 52.7% | 58.8% |
+| Claude Code | random 16 | $9.10 | 60.9M | 14/16 | $3.96 | 22.4M | 16/16 | 56.4% | 63.3% |
+| Claude Code | 116–131, 200–215 | $16.91 | 113.7M | 30/32 | $7.85 | 43.8M | 30/32 | 53.6% | 61.5% |
+| Oh My Pi | random 16 | $0.40 | 22.0M | 16/16 | $0.21 | 10.0M | 16/16 | 48.1% | 54.5% |
+| Oh My Pi | 116–131, 200–215 | $0.77 | 46.5M | 32/32 | $0.40 | 19.3M | 31/32 | 48.0% | 58.6% |
+
+With every Guard hook on, all three harnesses now use less than half the tokens they use without Guard, on the benchmark seeds, the held-out seeds and the random ones. Each run with Guard passed as many tasks as its paired run without Guard, or more, except one Oh My Pi seed. On Claude Code's benchmark and held-out seeds, the same setup saved 48.2% of tokens in the table above and 47.3% on the 2026-11-13 build. With those holds gone it saved 61.5%, with the same tasks passed.
