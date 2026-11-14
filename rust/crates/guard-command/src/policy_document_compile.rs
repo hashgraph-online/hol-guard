@@ -250,7 +250,7 @@ fn exact_shell_command_id(command: &str) -> String {
     )
 }
 
-fn has_selector(matcher: &Value, key: &str) -> bool {
+pub(super) fn has_selector(matcher: &Value, key: &str) -> bool {
     !matcher[key].is_null() && matcher[key] != json!([])
 }
 
@@ -275,52 +275,6 @@ fn command_artifact_selectors(matcher: &Value, id: &str) -> Result<Option<Vec<Va
                 return Err(error("invalid_policy_match_selector", id));
             }
             Ok(json!(exact_shell_command_id(command)))
-        })
-        .collect::<Result<Vec<_>, _>>()
-        .map(Some)
-}
-
-/// Command risk groups a Guard Cloud rule may name. They match the groups the
-/// hook reads from a command (`guard_runtime::command_risk_groups`); "other"
-/// names no group, so a rule on it would ask about nothing.
-pub(super) const RISK_GROUPS: &[&str] = &[
-    "deletes",
-    "bulk_changes",
-    "sending_and_sharing",
-    "secrets",
-    "code_and_deploys",
-    "packages_and_scripts",
-];
-
-/// `riskGroups` selectors as `risk-group:<group>` artifact ids. A group rule
-/// only asks or blocks: a command named by its group is never allowed by it,
-/// so an Allow is refused, and it cannot be narrowed by artifact, command,
-/// tool or publisher selectors the hook would not apply.
-fn risk_group_selectors(
-    matcher: &Value,
-    effect: &Value,
-    id: &str,
-) -> Result<Option<Vec<Value>>, Error> {
-    if !has_selector(matcher, "riskGroups") {
-        return Ok(None);
-    }
-    if ["artifacts", "commands", "tools", "publishers"]
-        .iter()
-        .any(|key| has_selector(matcher, key))
-    {
-        return Err(error("unsupported_policy_match", id));
-    }
-    if !matches!(effect.as_str(), Some("review" | "block")) {
-        return Err(error("unsupported_risk_group_effect", id));
-    }
-    selectors(matcher, "riskGroups", id)?
-        .iter()
-        .map(|group| {
-            let group = group.as_str().unwrap_or("");
-            if !RISK_GROUPS.contains(&group) {
-                return Err(error("unsupported_risk_group", id));
-            }
-            Ok(json!(format!("risk-group:{group}")))
         })
         .collect::<Result<Vec<_>, _>>()
         .map(Some)
@@ -482,7 +436,7 @@ fn compile_range(
             return Err(error("unsupported_policy_match", id));
         }
         let matcher = &rule["match"];
-        let group_artifacts = risk_group_selectors(matcher, &rule["effect"], id)?;
+        let group_artifacts = super::risk_groups::selectors(matcher, &rule["effect"], id)?;
         let command_artifacts = command_artifact_selectors(matcher, id)?;
         let exact_command = command_artifacts.is_some();
         // The hook applies only a block saved under an exact command, so a

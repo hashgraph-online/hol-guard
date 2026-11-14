@@ -1,7 +1,7 @@
 //! Guard Cloud rules that name a command risk group, as the hook applies them.
 
-use super::tests::{allowed, call, home, result, rule, NOW};
-use super::*;
+use super::super::tests::{allowed, call, home, result, rule, NOW};
+use super::super::*;
 use crate::policy_enforcement::validate_pre_tool_result_matrix;
 
 /// A Guard home whose store holds one risk-group rule per `(group, action,
