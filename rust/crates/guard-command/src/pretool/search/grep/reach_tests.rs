@@ -145,3 +145,54 @@ fn a_command_that_is_not_one_recursive_search_has_no_reach_reason() {
     }
     std::fs::remove_dir_all(home.parent().unwrap()).unwrap();
 }
+
+/// A checkout whose installed packages hold more entries than the walk
+/// inspects, with a hidden skill file the search pattern appears in.
+fn large_fixture(name: &str) -> (PathBuf, PathBuf) {
+    let (home, repo) = fixture(name);
+    write(
+        repo.join(".agents/skills/dev/SKILL.md"),
+        "Search for needle here.\n",
+    );
+    write(repo.join("src/schedule.ts"), "export const needle = 1;\n");
+    for package in 0..30 {
+        let directory = repo.join(format!("node_modules/pkg-{package}"));
+        std::fs::create_dir_all(&directory).unwrap();
+        for file in 0..80 {
+            std::fs::write(directory.join(format!("m{file}.d.ts")), "").unwrap();
+        }
+    }
+    (home, repo)
+}
+
+#[test]
+fn a_file_no_include_selects_is_never_the_one_named() {
+    let (home, repo) = large_fixture("large-include");
+    // Without an include grep opens the skill file, which sorts first.
+    let reason = reason_for("grep -rn needle .", &home, &repo);
+    assert!(reason.contains("`.agents/skills/dev/SKILL.md`"), "{reason}");
+    // `*.ts` never opens it. The walk then runs out before it proves the
+    // tree, so the reason says so and points at naming folders.
+    for command in [
+        "grep -rn needle --include=*.ts .",
+        "grep -rn \"needle\" --include=\"*.ts\" --include=\"*.tsx\" . | grep -v node_modules",
+    ] {
+        let reason = reason_for(command, &home, &repo);
+        assert!(!reason.contains("SKILL.md"), "{command}: {reason}");
+        assert!(!reason.contains("--exclude-dir"), "{command}: {reason}");
+        assert!(
+            reason.contains("more files than Guard can check")
+                && reason.contains("Name the folders you need"),
+            "{command}: {reason}"
+        );
+    }
+    std::fs::remove_dir_all(home.parent().unwrap()).unwrap();
+}
+
+#[test]
+fn an_include_that_selects_the_sensitive_file_still_names_it() {
+    let (home, repo) = large_fixture("large-selected");
+    let reason = reason_for("grep -rn needle --include=*.md .", &home, &repo);
+    assert!(reason.contains("`.agents/skills/dev/SKILL.md`"), "{reason}");
+    std::fs::remove_dir_all(home.parent().unwrap()).unwrap();
+}
