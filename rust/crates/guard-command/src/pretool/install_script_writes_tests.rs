@@ -98,6 +98,28 @@ fn the_manifest_on_disk_is_the_baseline_of_a_rewrite() {
 }
 
 #[test]
+fn moving_a_file_onto_a_manifest_carries_its_scripts() {
+    let project = tempfile::tempdir().expect("project dir");
+    std::fs::write(
+        project.path().join("template.json"),
+        "{\"name\": \"app\", \"scripts\": {\"postinstall\": \"node setup.js\"}}",
+    )
+    .expect("template");
+    std::fs::write(
+        project.path().join("plain.json"),
+        "{\"name\": \"app\", \"scripts\": {\"test\": \"vitest\"}}",
+    )
+    .expect("plain");
+    let moved = |from: &str| {
+        json!({
+            "input": format!("*** Begin Patch\n*** Update File: {from}\n*** Move to: package.json\n@@\n-  \"name\": \"app\",\n+  \"name\": \"app2\",\n*** End Patch")
+        })
+    };
+    assert!(adds_in(moved("template.json"), project.path()));
+    assert!(!adds_in(moved("plain.json"), project.path()));
+}
+
+#[test]
 fn ordinary_manifest_edits_are_not_install_scripts() {
     assert!(!adds(json!({
         "file_path": "/w/project/package.json",
@@ -140,6 +162,21 @@ fn ordinary_manifest_edits_are_not_install_scripts() {
         "old_string": "\"lodash\": \"^4.17.21\"",
         "new_string": "\"lodash\": \"^4.17.21\",\n    \"install\": \"^0.13.0\""
     })));
+    for range in [
+        "^1.0.0 || ^2.0.0",
+        ">=1.2.0 <2.0.0",
+        "1.2.3 - 2.3.4",
+        "~1.2 || =1.4.0",
+    ] {
+        assert!(
+            !adds(json!({
+                "file_path": "/w/project/package.json",
+                "old_string": "\"lodash\": \"^4.17.21\"",
+                "new_string": format!("\"lodash\": \"^4.17.21\",\n    \"install\": \"{range}\"")
+            })),
+            "{range}"
+        );
+    }
     assert!(!adds(json!({
         "input": "[README.md#1a2b]\nPUT 3\n+Add \"postinstall\": \"node setup.js\" to scripts."
     })));

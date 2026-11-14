@@ -100,9 +100,9 @@ fn local(host: &Host<String>) -> bool {
 /// The site a domain belongs to: its registered name, one label under a
 /// country's second level (`shop.co.uk`) or under a shared hosting domain
 /// (`project.github.io`), and otherwise its last two labels. Under
-/// `amazonaws.com` each whole host is its own site: S3 names a bucket
-/// before its service and region labels (`bucket.s3.us-east-1`), so no fixed
-/// label count separates one customer from another.
+/// `amazonaws.com` each whole host is its own site, since no fixed label
+/// count separates one customer from another; S3 buckets are compared by
+/// name in `owner`.
 fn site(domain: &str) -> &str {
     if domain.ends_with(".amazonaws.com") {
         return domain;
@@ -133,12 +133,42 @@ fn site(domain: &str) -> &str {
     &domain[skipped..]
 }
 
-/// Whether two hosts belong to the same owner: the same site for names,
-/// the same address for IP addresses.
-fn same_owner(page: &Host<String>, target: &Host<String>) -> bool {
-    match (page, target) {
-        (Host::Domain(page), Host::Domain(target)) => site(page) == site(target),
-        _ => page == target,
+/// The S3 bucket `url` addresses, from a virtual-hosted name
+/// (`bucket.s3.amazonaws.com`, `bucket.s3.us-east-1.amazonaws.com`,
+/// `bucket.s3-us-west-2.amazonaws.com`) or the first path segment of a
+/// path-style one (`s3.amazonaws.com/bucket/key`). Region labels are dropped,
+/// so one bucket written two ways is one owner.
+fn s3_bucket(domain: &str, url: &str) -> Option<String> {
+    let service = domain.strip_suffix(".amazonaws.com")?;
+    let labels: Vec<&str> = service.split('.').collect();
+    let at = labels
+        .iter()
+        .rposition(|label| *label == "s3" || label.starts_with("s3-"))?;
+    if at > 0 {
+        return Some(labels[..at].join("."));
+    }
+    let parsed = Url::parse(url).ok()?;
+    let bucket = parsed
+        .path_segments()?
+        .next()
+        .filter(|first| !first.is_empty())?;
+    Some(bucket.to_ascii_lowercase())
+}
+
+/// Who answers at a URL: an S3 bucket, the site for any other name, or the
+/// address itself for an IP address.
+#[derive(PartialEq)]
+enum Owner {
+    Bucket(String),
+    Site(String),
+    Address(Host<String>),
+}
+
+fn owner(host: &Host<String>, url: &str) -> Owner {
+    match host {
+        Host::Domain(domain) => s3_bucket(domain, url)
+            .map_or_else(|| Owner::Site(site(domain).to_owned()), Owner::Bucket),
+        address => Owner::Address(address.clone()),
     }
 }
 
@@ -147,14 +177,15 @@ fn same_owner(page: &Host<String>, target: &Host<String>) -> bool {
 /// compare against, so nothing is found.
 #[must_use]
 pub fn outside_endpoint_lure(text: &str, page_url: Option<&str>) -> bool {
-    let Some(page) = page_url.and_then(host) else {
+    let Some((page_url, page)) = page_url.and_then(|url| Some((url, host(url)?))) else {
         return false;
     };
+    let page = owner(&page, page_url);
     STEERING.captures_iter(text).any(|found| {
-        found
-            .name("url")
-            .and_then(|url| host(url.as_str()))
-            .is_some_and(|target| !local(&target) && !same_owner(&page, &target))
+        found.name("url").is_some_and(|url| {
+            host(url.as_str())
+                .is_some_and(|target| !local(&target) && owner(&target, url.as_str()) != page)
+        })
     })
 }
 

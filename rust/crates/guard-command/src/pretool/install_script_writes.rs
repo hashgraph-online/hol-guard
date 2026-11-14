@@ -25,7 +25,7 @@ static DEPENDENCY_SPEC: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(concat!(
         r"^\s*(?:",
         r"(?:[\^~]|[<>]=?|=)?\s*v?\d+(?:\.[\dx*]+){0,2}(?:-[0-9A-Za-z.-]+)?",
-        r"(?:\s*(?:\|\||-|[<>]=?)\s*v?\d+(?:\.[\dx*]+){0,2}(?:-[0-9A-Za-z.-]+)?)*",
+        r"(?:\s*(?:\|\||-|\s)\s*(?:[\^~]|[<>]=?|=)?\s*v?\d+(?:\.[\dx*]+){0,2}(?:-[0-9A-Za-z.-]+)?)*",
         r"|\*|latest|next",
         r"|(?:npm|workspace|file|link|github|git(?:\+[a-z]+)?|https?):[^\s;&|`$<>()]+",
         r")\s*$",
@@ -168,6 +168,7 @@ fn hashline_header(line: &str) -> Option<&str> {
 /// in the same file or one the manifest already declares.
 fn patch_adds(patch: &str, cwd: Option<&str>) -> bool {
     let mut target: Option<String> = None;
+    let mut source: Option<String> = None;
     let (mut hashline, mut in_put) = (false, false);
     let (mut removed, mut added) = (String::new(), String::new());
     let mut found = false;
@@ -189,15 +190,27 @@ fn patch_adds(patch: &str, cwd: Option<&str>) -> bool {
             .or_else(|| hashline_header(line).map(|path| (path.to_owned(), true)));
         if let Some((path, is_hashline)) = header {
             close(&target, &mut removed, &mut added);
+            source = (!is_hashline).then(|| path.clone());
             target = manifest(&path).then_some(path);
             (hashline, in_put) = (is_hashline, false);
             continue;
         }
-        // The hunks after `*** Move to:` are written to the destination.
+        // `*** Move to:` writes the source file, with the hunks that follow,
+        // to the destination. A script the source already holds on disk
+        // arrives in the manifest without appearing on a `+` row.
         if let Some(destination) = line.strip_prefix("*** Move to:") {
             let destination = destination.trim();
             close(&target, &mut removed, &mut added);
             target = manifest(destination).then(|| destination.to_owned());
+            if target.is_some() {
+                for key in source
+                    .as_deref()
+                    .map(|path| existing_keys(path, cwd))
+                    .unwrap_or_default()
+                {
+                    added.push_str(&["\"", key.as_str(), "\": \"moved\"\n"].concat());
+                }
+            }
             continue;
         }
         if line.starts_with("*** ") {
