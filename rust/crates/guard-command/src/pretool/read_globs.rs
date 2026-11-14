@@ -209,7 +209,7 @@ fn readable_name(name: &str, base: &Path) -> bool {
 }
 
 /// `*` and `?` over ASCII names, ignoring case.
-fn wildcard_matches(pattern: &[u8], name: &[u8]) -> bool {
+pub(in crate::pretool) fn wildcard_matches(pattern: &[u8], name: &[u8]) -> bool {
     let mut previous = vec![false; name.len() + 1];
     previous[0] = true;
     for &token in pattern {

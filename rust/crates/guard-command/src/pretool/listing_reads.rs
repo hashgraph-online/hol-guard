@@ -273,12 +273,19 @@ fn leaf_glob_operand(value: &str, context: super::PathContext<'_>) -> bool {
     {
         return false;
     }
-    // A superset of every match: the literal text before the first wildcard
-    // and after the last one, compared without case.
+    // A superset of every match. A pattern of only `*` and `?` is matched
+    // as the shell matches it, without case, so `*pr7519*` is judged by the
+    // names it can expand to and not by every sibling, such as a hidden
+    // `.factory` beside it. A bracket class falls back to the literal text
+    // before the first wildcard and after the last one.
     let lowered = pattern.to_ascii_lowercase();
     let prefix = &lowered[..lowered.find(['*', '?', '[']).unwrap_or(lowered.len())];
     let suffix = &lowered[lowered.rfind(['*', '?', ']']).map_or(0, |at| at + 1)..];
+    let bracketed = pattern.contains(['[', ']']);
     let candidate = |name: &str| {
+        if !bracketed {
+            return safe_reads::wildcard_matches(pattern.as_bytes(), name.as_bytes());
+        }
         let name = name.to_ascii_lowercase();
         name.len() >= prefix.len() + suffix.len()
             && name.starts_with(prefix)

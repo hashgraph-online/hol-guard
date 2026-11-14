@@ -201,6 +201,7 @@ pub mod pretool_installed_package_source;
 pub mod pretool_jq_command_bindings;
 pub mod pretool_jq_sibling_filters;
 pub mod pretool_kubectl_output_templates;
+pub mod pretool_leaf_glob_exact_matches;
 pub mod pretool_link_chains;
 pub mod pretool_linked_writes;
 pub mod pretool_links_removals;
