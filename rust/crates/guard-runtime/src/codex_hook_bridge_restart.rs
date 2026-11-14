@@ -12,7 +12,9 @@
 use std::path::Path;
 use std::time::{Duration, Instant};
 
-use super::{clear_start_failure, guard_home, route_response, BridgeConfig, Prepared, Route};
+use super::{
+    clear_start_failure, guard_home, recovery, route_response, BridgeConfig, Prepared, Route,
+};
 use crate::claude_hook_bridge_http::remaining;
 use crate::codex_hook_bridge_direct::{direct_answer_reporting, CODEX};
 use crate::codex_hook_bridge_direct_resident::DirectMiss;
@@ -63,14 +65,14 @@ pub(super) fn daemon_route(
     let first = match direct {
         // A resident answer never touched the daemon, so its start-failure
         // marker stays as it was.
-        Ok(text) => match route_response(&text, &prepared.event_name) {
+        Ok(text) => match settle(prepared, &text) {
             Route::Restart => TRANSPORT_FAILURE,
             route => return Some(route),
         },
         Err(reported) => {
             miss = reported;
             match ask_daemon(config, prepared, deadline, cap, miss) {
-                Ok(text) => match route_response(&text, &prepared.event_name) {
+                Ok(text) => match settle(prepared, &text) {
                     Route::Restart => TRANSPORT_FAILURE,
                     route => return Some(answered(config, route)),
                 },
@@ -82,6 +84,16 @@ pub(super) fn daemon_route(
         return None;
     }
     restarted_route(config, prepared, deadline, cap, first, miss)
+}
+
+/// `route_response` for one daemon answer. An answer that says the daemon
+/// could not decide is replaced only for a recovery command; a restart
+/// request and every verdict are left as they are.
+fn settle(prepared: &Prepared, text: &str) -> Route {
+    match route_response(text, &prepared.event_name) {
+        Route::Restart => Route::Restart,
+        route => recovery::bootstrap_for_answer(prepared, text).unwrap_or(route),
+    }
 }
 
 /// A daemon answered: its start-failure marker is cleared, as Python does.
@@ -116,7 +128,7 @@ fn restarted_route(
             Err(_) => Attempt::Settled(None),
         }
     })??;
-    match route_response(&text, &prepared.event_name) {
+    match settle(prepared, &text) {
         Route::Restart => None,
         route => Some(answered(config, route)),
     }
