@@ -1,6 +1,6 @@
 import { r as reactExports, h as harnessDisplayName, c6 as fetchSettings, e9 as runHarnessAction, ea as GuardHarnessActionError, j as jsxRuntimeExports, S as SectionLabel, A as ActionButton, eb as HiMiniRocketLaunch, a3 as HiMiniShieldCheck, i as HiMiniArrowPath, b as formatRelativeTime, ag as HiMiniExclamationTriangle, v as HiMiniCheckCircle, ec as HiMiniTrash, aN as ApprovalProofModal, bq as isGuardDemoMode, ed as fetchGuardApi, ee as formatHarnessCommand, b3 as HiMiniAdjustmentsHorizontal, aE as appModesNote, ef as appModes, eg as fetchApprovalPage, eh as fetchPolicy, a5 as guardActionDisposition, X as protectionHealthFor, W as useProtectionPresentationState, bI as HiMiniArrowLeft, H as HiMiniChevronRight, aI as GuardHero, aJ as ProofStrip, ei as appSetupTarget, bv as HiMiniHome, ah as HiMiniBolt, ej as guardActionPresentation, ai as Badge, ek as DEFAULT_FILTER_STATE, el as filterEvidence, em as sortEvidence, en as computeMetrics, eo as CommandActivityWorkspace, aa as EmptyState, ep as EvidenceFilterBar, eq as EvidenceInsightStrip, er as EvidenceActionList, es as EvidenceActionDetail, ae as useFocusTrap, et as policyIdentityKey, ac as HiMiniCloud, T as Tag, aH as HiMiniXCircle, eu as clearLabelForScope, ev as HiMiniChartBar } from "../guard-dashboard.js";
 import { s as setupActionErrorMessage } from "./harness-action-errors-x2AyNCK-.js";
-import { u as useFleetAppPosture, c as versionCheckUnsupported, e as versionReasonCopy, H as HarnessVersionLabel, f as refreshVersionCompatibility, g as acknowledgeUntestedVersion, h as clearVersionAcknowledgement, a as useHarnessDetection, b as versionCompatibilityFor, j as isHarnessDetected } from "./harness-version-label-MLxWNcFW.js";
+import { u as useFleetAppPosture, c as versionCheckUnsupported, e as versionReasonCopy, H as HarnessVersionLabel, f as refreshVersionCompatibility, g as acknowledgeUntestedVersion, h as clearVersionAcknowledgement, p as protectionStateLabel, j as protectionStateTone, k as eventReasonCopy, a as useHarnessDetection, b as versionCompatibilityFor, l as isHarnessDetected } from "./harness-version-label-AHHz92zk.js";
 import "./settings-save-proof-modal-_wjRK7LN.js";
 function HarnessSetupPanel(props) {
   const [setupState, setSetupState] = reactExports.useState({ kind: "idle" });
@@ -439,6 +439,44 @@ function EvidenceSummary({ compatibility }) {
     ] }) : null
   ] });
 }
+const TONE_CLASSES = {
+  success: "bg-emerald-50 text-emerald-800 ring-emerald-200",
+  warning: "bg-amber-50 text-amber-900 ring-amber-200",
+  neutral: "bg-slate-50 text-slate-700 ring-slate-200",
+  danger: "bg-rose-50 text-rose-800 ring-rose-200"
+};
+function ProtectionProof({ compatibility }) {
+  const overall = compatibility.protectionState;
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-4", "data-testid": "protection-proof", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "text-sm text-brand-dark", children: [
+      "Protection proof:",
+      " ",
+      /* @__PURE__ */ jsxRuntimeExports.jsx(
+        "span",
+        {
+          className: `inline-flex rounded-full px-2 py-0.5 text-xs font-medium ring-1 ring-inset ${TONE_CLASSES[protectionStateTone(overall)]}`,
+          children: protectionStateLabel(overall)
+        }
+      )
+    ] }),
+    compatibility.eventStates.length > 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx("ul", { className: "mt-2 divide-y divide-slate-100 rounded-lg border border-slate-100 text-sm", children: compatibility.eventStates.map((item) => {
+      const why = eventReasonCopy(item.reason);
+      return /* @__PURE__ */ jsxRuntimeExports.jsxs("li", { className: "flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5 px-3 py-2", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "font-mono text-xs text-brand-dark", children: item.event }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "flex min-w-0 flex-col items-end text-right", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx(
+            "span",
+            {
+              className: `inline-flex rounded-full px-2 py-0.5 text-xs font-medium ring-1 ring-inset ${TONE_CLASSES[protectionStateTone(item.state)]}`,
+              children: protectionStateLabel(item.state)
+            }
+          ),
+          why ? /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "mt-0.5 text-xs text-slate-500", children: why }) : null
+        ] })
+      ] }, item.event);
+    }) }) : null
+  ] });
+}
 function AppVersionCompatibilityCard({ initial }) {
   const [compatibility, setCompatibility] = reactExports.useState(initial);
   const [busy, setBusy] = reactExports.useState(false);
@@ -522,6 +560,7 @@ function AppVersionCompatibilityCard({ initial }) {
         }
       )
     ] }) : null,
+    /* @__PURE__ */ jsxRuntimeExports.jsx(ProtectionProof, { compatibility }),
     /* @__PURE__ */ jsxRuntimeExports.jsx(EvidenceSummary, { compatibility }),
     /* @__PURE__ */ jsxRuntimeExports.jsxs("dl", { className: "mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsxs(Fact, { label: "Detected", children: [
