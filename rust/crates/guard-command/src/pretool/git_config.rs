@@ -677,6 +677,14 @@ fn probe(
             deadline,
             hashed.as_deref().unwrap_or_default(),
             operation == "status",
+            // Status and the working-tree diffs clean only tracked files.
+            (matches!(operation, "status" | "diff-files" | "diff-index")
+                || (operation == "diff"
+                    && remaining[1..]
+                        .iter()
+                        .take_while(|argument| *argument != "--")
+                        .all(|argument| argument.starts_with('-'))))
+                && !remaining.iter().any(|argument| argument == "--no-index"),
         )?;
     for (key, value) in effective {
         let disabled = disabled_boolean(value);
