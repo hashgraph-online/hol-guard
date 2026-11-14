@@ -189,6 +189,16 @@ def list_harness_setup_items(context: HarnessContext, store: GuardStore | None =
     return items
 
 
+def _claude_settings_target(context: HarnessContext) -> dict[str, object]:
+    """The native answer for where Claude Code hooks go, shown before anything is written."""
+    from ..adapters.native_harness import ask
+
+    try:
+        return ask("install_target", context, harness="claude-code")
+    except (NativeRunnerAuthorityError, OSError, ValueError) as error:
+        return {"unavailable": True, "reason": str(error) or type(error).__name__}
+
+
 def build_harness_setup_plan(
     action: str,
     requested_harness: str,
@@ -218,6 +228,8 @@ def build_harness_setup_plan(
             "No app config was changed and Guard Cloud was not connected. "
             f"Run hol-guard apps {action} {adapter.harness} without --dry-run to finish setup."
         )
+    if adapter.harness == "claude-code" and action in {"connect", "repair"}:
+        payload["settings_target"] = _claude_settings_target(context)
     if action == "uninstall":
         confirmation_phrase = uninstall_confirmation_token(adapter.harness)
         payload["confirmation_phrase"] = confirmation_phrase

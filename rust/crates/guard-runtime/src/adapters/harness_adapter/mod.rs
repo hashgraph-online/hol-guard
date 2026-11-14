@@ -30,6 +30,7 @@ use crate::runner_authority_op::{KindResult, ERR_INVALID};
 mod authorized_write;
 mod claude;
 mod claude_argv;
+mod claude_install_target;
 mod claude_settings;
 mod cline;
 mod cline_hooks;

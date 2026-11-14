@@ -226,3 +226,95 @@ fn refresh_leaves_settings_without_hooks_alone() {
     let answer = ask(&home, "refresh", &Map::new());
     assert_eq!(answer["text"], Value::Null);
 }
+
+fn target(home: &Home, workspace: Option<&std::path::Path>, env: Value) -> Value {
+    let mut context = home.context(env);
+    context["workspace"] = json!(workspace);
+    dispatch(&json!({"harness": "claude-code", "op": "install_target", "context": context}))
+        .unwrap()
+}
+
+#[test]
+fn install_target_names_the_user_file_and_never_a_project_file() {
+    let home = Home::new();
+    let workspace = home.root.join("project");
+    let answer = target(&home, Some(&workspace), json!({"PATH": ""}));
+    assert_eq!(answer["scope"], "user");
+    assert_eq!(answer["settings_path"], json!(settings(&home)));
+    assert!(answer["workspace_note"]
+        .as_str()
+        .unwrap()
+        .contains("does not install into"));
+    let scopes: Vec<_> = answer["precedence"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|layer| (layer["scope"].clone(), layer["guard_writes"].clone()))
+        .collect();
+    assert_eq!(
+        scopes,
+        vec![
+            (json!("managed"), json!(false)),
+            (json!("project_local"), json!(false)),
+            (json!("project"), json!(false)),
+            (json!("user"), json!(true)),
+        ]
+    );
+    assert_eq!(
+        answer["rollback"]["command"],
+        json!(["hol-guard", "uninstall", "claude-code"])
+    );
+    assert_eq!(answer["hook_overrides"], json!([]));
+    assert!(!workspace.exists());
+}
+
+#[test]
+fn install_target_reports_hooks_turned_off_by_a_project_file() {
+    let home = Home::new();
+    let workspace = home.root.join("project");
+    fs::create_dir_all(workspace.join(".claude")).unwrap();
+    fs::write(
+        workspace.join(".claude/settings.local.json"),
+        r#"{"disableAllHooks": true}"#,
+    )
+    .unwrap();
+    fs::write(workspace.join(".claude/settings.json"), "not json").unwrap();
+    let answer = target(&home, Some(&workspace), json!({"PATH": ""}));
+    let overrides = answer["hook_overrides"].as_array().unwrap();
+    assert_eq!(overrides.len(), 1);
+    assert_eq!(overrides[0]["code"], "disable_all_hooks");
+    assert_eq!(overrides[0]["scope"], "project_local");
+}
+
+#[test]
+fn install_target_reports_a_claude_config_dir_elsewhere() {
+    let home = Home::new();
+    let elsewhere = home.root.join("other-claude");
+    let answer = target(
+        &home,
+        None,
+        json!({"PATH": "", "CLAUDE_CONFIG_DIR": elsewhere}),
+    );
+    assert_eq!(answer["hook_overrides"][0]["code"], "config_dir_elsewhere");
+    let same = target(
+        &home,
+        None,
+        json!({"PATH": "", "CLAUDE_CONFIG_DIR": home.home().join(".claude")}),
+    );
+    assert_eq!(same["hook_overrides"], json!([]));
+}
+
+#[test]
+fn install_notes_name_the_settings_file_and_the_rollback() {
+    let home = Home::new();
+    let answer = run(
+        &home,
+        "prepare_install",
+        json!({"shim": shim()}),
+        &facts(None, false),
+    );
+    let manifest: Value = serde_json::from_str(answer["manifest"].as_str().unwrap()).unwrap();
+    let notes = manifest["notes"].to_string();
+    assert!(notes.contains(&format!("user settings at {}", settings(&home).display())));
+    assert!(notes.contains("hol-guard uninstall claude-code"));
+}

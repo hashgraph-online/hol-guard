@@ -12,6 +12,7 @@ use std::path::PathBuf;
 use serde_json::{json, Map, Value};
 
 use super::claude_argv::{self as argv, Facts};
+use super::claude_install_target as install_target;
 use super::claude_settings as settings;
 use super::files::{self, Change, Doc, Object};
 use super::{
@@ -156,6 +157,11 @@ fn prepare_install(spec: &Spec, ctx: &Ctx, fields: &Map<String, Value>) -> Step<
     };
     let change = Change::at(ctx, &path, before, Some(after), mode);
     let mut notes = vec![files::text(INSTALL_NOTE)];
+    notes.extend(
+        install_target::notes(&install_target::target(ctx, &path))
+            .into_iter()
+            .map(files::text),
+    );
     if let Some(workspace) = &ctx.workspace {
         notes.push(files::text(format!(
             "Hooks are installed globally (not in {}/.claude); the workspace only scopes the \
@@ -260,6 +266,7 @@ pub(crate) fn dispatch(
 ) -> Step<Value> {
     match op {
         "policy_path" => path_answer(&policy_path(ctx)),
+        "install_target" => Ok(install_target::target(ctx, &settings_path(ctx))),
         "resolved_executable" => resolved_executable(spec, ctx, &[candidate(ctx)]),
         "detect" => detect(spec, ctx),
         "diagnostics" => diagnostics(ctx, fields),
