@@ -318,9 +318,8 @@ def test_denial_before_the_runtime_names_its_reason_code(
 def test_unauthenticated_registration_reports_the_validator_reason(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
-    capsys: pytest.CaptureFixture[str],
 ) -> None:
-    """The validator's own reason reaches the evidence channel, not a guess at it."""
+    """The validator's own reason reaches the runtime, which fails the hook closed with it."""
     guard_home = tmp_path / "guard-home"
     monkeypatch.setattr(bridge, "_native_bridge_executable", lambda _guard_home: Path("/nonexistent/runtime"))
     monkeypatch.setattr(
@@ -328,15 +327,21 @@ def test_unauthenticated_registration_reports_the_validator_reason(
         "trusted_hook_launch",
         _refusing_launch(CodexHookIntegrityError("codex_hook_manifest_missing", "no manifest")),
     )
-    monkeypatch.setattr("sys.stdin", io.StringIO(json.dumps({"hook_event_name": "PreToolUse", "tool_name": "Bash"})))
+    launched: list[tuple[str, ...]] = []
+
+    def run_runtime(command, **_kwargs):
+        launched.append(tuple(command))
+        return subprocess.CompletedProcess(command, 0)
+
+    monkeypatch.setattr(subprocess, "run", run_runtime)
     config = _bridge_config(guard_home, 5474)
     config["manifest_path"] = str(guard_home / "managed" / "codex" / "hooks.manifest.json")
     config["config_json"] = "{}"
 
     assert bridge.main(**config) == 0
-    captured = capsys.readouterr()
-    assert json.loads(captured.out)["hookSpecificOutput"]["permissionDecision"] == "deny"
-    assert json.loads(captured.err)["causes"] == [{"reason_code": "codex_hook_manifest_missing"}]
+    assert launched == [
+        ("/nonexistent/runtime", "codex-hook-bridge", "--guard-registration-failure=codex_hook_manifest_missing", "{}")
+    ]
 
 
 def test_a_runtime_that_cannot_be_started_denies_the_hook(

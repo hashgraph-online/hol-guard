@@ -106,11 +106,50 @@ fn command(map: &Map<String, Value>, macos: bool, runner: &mut impl Runner) -> K
         .and_then(Value::as_bool)
         .ok_or(ERR_INVALID)?;
     let (desktop, proxy) = (optional("desktop")?, optional("proxy")?);
-    let launch = match proxy.filter(|proxy| macos && desktop == Some("1") && !proxy.is_empty()) {
-        Some(proxy) => verified(Path::new(proxy), Path::new(core), runner),
-        None => None,
+    let selector = Selector {
+        desktop,
+        proxy,
+        macos,
     };
-    Ok(json!({ "argv": launch.map(|launch| argv(&launch, config, require)) }))
+    Ok(json!({ "argv": launch_argv(core, config, require, &selector, runner) }))
+}
+
+/// What says the Desktop app launched this process with a proxy.
+struct Selector<'a> {
+    desktop: Option<&'a str>,
+    proxy: Option<&'a str>,
+    macos: bool,
+}
+
+/// The strict signed launch of `core` with `config` when the Desktop app
+/// launched this process with a proxy that verifies, as `command` answers it.
+pub(crate) fn signed_argv(
+    core: &str,
+    config: &str,
+    require: bool,
+    desktop: Option<&str>,
+    proxy: Option<&str>,
+) -> Option<Vec<String>> {
+    let selector = Selector {
+        desktop,
+        proxy,
+        macos: cfg!(target_os = "macos"),
+    };
+    launch_argv(core, config, require, &selector, &mut SystemRunner)
+}
+
+fn launch_argv(
+    core: &str,
+    config: &str,
+    require: bool,
+    selector: &Selector<'_>,
+    runner: &mut impl Runner,
+) -> Option<Vec<String>> {
+    let proxy = selector
+        .proxy
+        .filter(|proxy| selector.macos && selector.desktop == Some("1") && !proxy.is_empty())?;
+    let launch = verified(Path::new(proxy), Path::new(core), runner)?;
+    Some(argv(&launch, config, require))
 }
 
 fn argv(launch: &Launch, config: &str, require: bool) -> Vec<String> {

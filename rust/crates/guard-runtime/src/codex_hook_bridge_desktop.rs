@@ -3,18 +3,19 @@
 //!
 //! A transition probe on that lane must be answered by the signed bundle
 //! executable, not by this runtime, so the bridge reads the hook, and when it
-//! is a probe hands the stamped body and the paths the signed command needs
-//! back to the launcher (exit code [`PROBE_HANDOFF_EXIT`]) instead of asking
-//! the daemon. Any other hook is reviewed here as on every other lane.
+//! is a probe runs the strict signed-proxy command for it (see `probe`)
+//! instead of asking the daemon. Any other hook is reviewed here as on every
+//! other lane. The Desktop flag carries the frozen package root, which the
+//! signed command's config names.
 //!
 //! The launcher authenticates the hook's registration before it starts this
-//! runtime, but on the Desktop lane it cannot read the body first, so a
-//! registration that failed reaches here as `--guard-registration-failure`
-//! and the hook fails closed once it is known not to be a probe.
+//! runtime, and passes a registration that failed on as
+//! `--guard-registration-failure`: the hook fails closed once it is known not
+//! to be a Desktop probe.
 
 use std::io::{self, Write};
 use std::path::Path;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 use serde_json::json;
 
@@ -24,17 +25,15 @@ use crate::runner_sync_url::parse_qsl;
 
 use super::{observation, prepare, write_stdout, BridgeConfig, Unprepared, STATE_FILE};
 
-const DESKTOP_FLAG: &str = "--guard-desktop-lane";
+const DESKTOP_FLAG: &str = "--guard-desktop-lane=";
 const FAILURE_FLAG: &str = "--guard-registration-failure=";
-const PROBE_HANDOFF_SCHEMA: &str = "hol-guard.codex-desktop-probe.v1";
 const BRIDGE_FAILURE_SCHEMA: &str = "hol-guard.codex-bridge-failure.v1";
-/// `EX_TEMPFAIL`: the launcher runs the signed probe command itself.
-pub(super) const PROBE_HANDOFF_EXIT: i32 = 75;
 
 /// What the launcher said about this call before the config argument.
 #[derive(Debug, Default, PartialEq)]
 pub(super) struct Lane {
-    desktop: bool,
+    /// The frozen package root, on the Desktop lane.
+    desktop: Option<String>,
     registration_failure: Option<String>,
 }
 
@@ -53,8 +52,11 @@ pub(super) fn split_lane(argv: &[String]) -> (Lane, &[String]) {
     let mut lane = Lane::default();
     let mut rest = argv;
     while let Some((first, tail)) = rest.split_first() {
-        if first == DESKTOP_FLAG && !lane.desktop {
-            lane.desktop = true;
+        if let Some(root) = first.strip_prefix(DESKTOP_FLAG) {
+            if lane.desktop.is_some() || usable_path(root).is_none() {
+                break;
+            }
+            lane.desktop = Some(root.to_owned());
         } else if let Some(code) = first.strip_prefix(FAILURE_FLAG) {
             if lane.registration_failure.is_some() {
                 break;
@@ -82,12 +84,11 @@ pub(super) fn settle(
     input_ready: Instant,
 ) -> Option<i32> {
     let prepared = prepare(raw_data, &config.hook_timeouts);
-    if lane.desktop {
-        if let Ok(prepared) = &prepared {
-            if let Some(code) = probe_handoff(config, &prepared.data, prepared.timeout, input_ready)
-            {
-                return Some(code);
-            }
+    if let (Some(root), Ok(prepared)) = (&lane.desktop, &prepared) {
+        if let Some(code) =
+            desktop_probe(root, config, &prepared.data, prepared.timeout, input_ready)
+        {
+            return Some(code);
         }
     }
     let reason = lane.registration_failure.as_deref()?;
@@ -112,12 +113,14 @@ fn usable_path(text: &str) -> Option<&str> {
     (!text.contains('\0') && Path::new(text).is_absolute()).then_some(text)
 }
 
-/// The probe handoff for a `PreToolUse` probe, or `None` when the hook is
-/// not one. A probe the signed command cannot be built for fails closed.
-fn probe_handoff(
+/// The exit code of a `PreToolUse` probe answered by the signed command, or
+/// `None` when the hook is not one. A probe that command cannot answer fails
+/// closed.
+fn desktop_probe(
+    package_root: &str,
     config: &BridgeConfig,
     data: &str,
-    timeout: std::time::Duration,
+    timeout: Duration,
     input_ready: Instant,
 ) -> Option<i32> {
     let payload = pyjson::parse_mapping_lone_surrogates(data).ok()?.value;
@@ -125,21 +128,27 @@ fn probe_handoff(
         return None;
     }
     observation::probe(&payload)?;
-    let Some(handoff) = handoff_document(config, &payload, data, timeout, input_ready) else {
+    let answered = probe_target(config, &payload, data, input_ready + timeout)
+        .and_then(|target| probe::answer(package_root, &target, &probe::environment()));
+    let Some(answer) = answered else {
         write_stdout(&fail_closed(PRE_TOOL_USE));
         return Some(1);
     };
-    write_stdout(&handoff.to_string());
-    Some(PROBE_HANDOFF_EXIT)
+    write_stdout(&answer.stdout);
+    let mut stderr = io::stderr().lock();
+    let _ = stderr
+        .write_all(answer.stderr.as_bytes())
+        .and_then(|()| stderr.flush());
+    Some(0)
 }
 
-fn handoff_document(
+/// The paths and budget the signed command answers a probe with.
+fn probe_target<'a>(
     config: &BridgeConfig,
     payload: &PyVal,
-    data: &str,
-    timeout: std::time::Duration,
-    input_ready: Instant,
-) -> Option<serde_json::Value> {
+    data: &'a str,
+    deadline: Instant,
+) -> Option<probe::Target<'a>> {
     let state = Path::new(&config.state_path);
     let guard_home = if state.file_name().is_some_and(|name| name == STATE_FILE) {
         state.parent()?
@@ -147,7 +156,7 @@ fn handoff_document(
         state
     };
     let guard_home = usable_path(guard_home.to_str()?)?;
-    let configured = config
+    let timeout_seconds = config
         .hook_timeouts
         .iter()
         .find(|(event, _)| event == PRE_TOOL_USE)
@@ -160,19 +169,18 @@ fn handoff_document(
     let [home] = homes.as_slice() else {
         return None;
     };
-    let home = usable_path(home)?;
-    let workspace = usable_path(payload.get("cwd")?.as_str()?)?;
-    let remaining = timeout.saturating_sub(input_ready.elapsed()).as_secs_f64();
-    Some(json!({
-        "schema": PROBE_HANDOFF_SCHEMA,
-        "data": data,
-        "guard_home": guard_home,
-        "home": home,
-        "workspace": workspace,
-        "timeout_seconds": configured,
-        "remaining_seconds": remaining,
-    }))
+    Some(probe::Target {
+        data,
+        guard_home: guard_home.to_owned(),
+        home: usable_path(home)?.to_owned(),
+        workspace: usable_path(payload.get("cwd")?.as_str()?)?.to_owned(),
+        timeout_seconds,
+        deadline,
+    })
 }
+
+#[path = "codex_hook_bridge_desktop_probe.rs"]
+mod probe;
 
 #[cfg(test)]
 #[path = "codex_hook_bridge_desktop_tests.rs"]
