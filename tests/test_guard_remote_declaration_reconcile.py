@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import sqlite3
 from pathlib import Path
+from typing import cast
 
 import pytest
 
@@ -93,40 +94,49 @@ def test_a_failed_record_skips_reconciliation() -> None:
     assert store.reconciled == []
 
 
-def _record_native_calls(monkeypatch: pytest.MonkeyPatch) -> list[list[str]]:
-    calls: list[list[str]] = []
+def _record_native_calls(monkeypatch: pytest.MonkeyPatch) -> list[dict[str, object]]:
+    calls: list[dict[str, object]] = []
     native = harness_mcp_remote.native_runner_authority
 
-    def recording(kind: str, args: dict[str, list[str]], guard_home: Path | None = None) -> dict[str, object]:
-        calls.append(list(args["urls"]))
+    def recording(kind: str, args: dict[str, object], guard_home: Path | None = None) -> dict[str, object]:
+        calls.append(args)
         return native(kind, args, guard_home=guard_home)
 
     monkeypatch.setattr(harness_mcp_remote, "native_runner_authority", recording)
     return calls
 
 
-def test_remote_origins_come_from_the_native_runtime_in_one_batch(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_remote_servers_come_from_the_native_runtime(monkeypatch: pytest.MonkeyPatch) -> None:
     calls = _record_native_calls(monkeypatch)
     urls = ("https://user:pw@MCP.Example.Test/v1/a1b2c3d4e5?key=secret", "file:///tmp/sock")
     detections = [_detection("codex", ("echo-mcp", urls[0]), ("local-sock", urls[1]))]
     remote = _remote_servers(detections)
     assert [server.origin for server in remote] == ["https://mcp.example.test/v1/[masked]"]
-    assert calls == [list(urls)]
+    assert [server.tool.namespace for server in remote] == ["mcp__echo-mcp__"]
+    assert [call["op"] for call in calls] == ["remote", "remote_rank"]
+    assert calls[0]["candidates"] == [
+        {"harness": "codex", "name": "echo-mcp", "url": urls[0]},
+        {"harness": "codex", "name": "local-sock", "url": urls[1]},
+    ]
     # A config with no remote servers never asks the runtime.
     assert _remote_servers([_detection("codex")]) == ()
-    assert len(calls) == 1
+    assert len(calls) == 2
 
 
 def test_many_remote_servers_are_read_in_bounded_batches(monkeypatch: pytest.MonkeyPatch) -> None:
     calls = _record_native_calls(monkeypatch)
-    urls = [f"https://mcp{index}.example.test/mcp" for index in range(600)]
-    origins = harness_mcp_remote.remote_mcp_origins(urls)
-    assert origins == urls
-    assert [len(batch) for batch in calls] == [256, 256, 88]
-    assert [url for batch in calls for url in batch] == urls
+    servers = [(f"echo-{index}", f"https://mcp{index}.example.test/mcp") for index in range(600)]
+    remote = _remote_servers([_detection("codex", *servers)])
+    batches = [cast("list[object]", call["candidates"]) for call in calls if call["op"] == "remote"]
+    assert [len(batch) for batch in batches] == [256, 256, 88]
+    assert len(remote) == MAX_DISCOVERED_MCP_SERVERS
+    assert [server.tool.server_name for server in remote] == sorted(name for name, _url in servers)[:100]
 
 
-@pytest.mark.parametrize("answer", [None, {"origins": []}, {"origins": [1]}, {"origins": "x"}])
+@pytest.mark.parametrize(
+    "answer",
+    [None, {"servers": []}, {"servers": [1]}, {"servers": "x"}, {"servers": [{"origin": "x"}]}],
+)
 def test_an_unusable_origin_answer_fails_the_remote_read(monkeypatch: pytest.MonkeyPatch, answer: object) -> None:
     def native(*_args: object, **_kwargs: object) -> object:
         if answer is None:
