@@ -2,7 +2,7 @@
 //! project on disk.
 use super::tests::{files, later, looking_for, CORE};
 use super::*;
-use crate::context_assistance_prompt_files::{plain, walk};
+use crate::context_assistance_prompt_files::{plain, walk_exact};
 use std::path::PathBuf;
 use std::time::{Duration, Instant};
 
@@ -37,13 +37,9 @@ fn changes_map(home: &Path, root: &Path, prompt: &str, about_changes: bool) -> O
     let terms = crate::context_assistance_prompt_words::marked_terms(prompt);
     let words: Vec<String> = terms.iter().map(|(term, _)| term.clone()).collect();
     let quoted = crate::context_assistance_prompt_files::phrases(prompt);
-    let found = walk(
-        root,
-        &words,
-        &quoted,
-        &named(prompt),
-        Duration::from_secs(5),
-    );
+    let (named, exact) = (named(prompt), spellings(prompt));
+    let budget = Duration::from_secs(5);
+    let found = walk_exact(root, &words, &quoted, &named, &exact, budget);
     let until = Instant::now() + Duration::from_secs(5);
     let map = mapped(
         home,

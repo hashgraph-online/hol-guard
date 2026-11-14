@@ -304,3 +304,39 @@ fn a_rename_command_runs_no_helper_beside_the_tests() {
     assert!(text.contains("One command makes"), "{text}");
     assert!(!text.contains("pytest -q tests/support.py"), "{text}");
 }
+
+/// Renaming `_cache` in a project where many more files say `lru_cache`:
+/// the walk counts the files holding `_cache` as a word, so the note says
+/// its list is every line naming it, though it read only some of the files
+/// holding `cache`, and gives the one command making the rename.
+#[test]
+fn a_rename_list_is_whole_when_only_longer_names_are_left_unread() {
+    let store = "class Store:\n    def __init__(self):\n        self._cache = {}\n\n    def get(self, key):\n        return self._cache.get(key)\n";
+    let users: Vec<(String, String)> = (0..40)
+        .map(|i| {
+            let text = format!("from functools import lru_cache\n\n\n@lru_cache\ndef load_{i}():\n    return {i}\n");
+            (format!("src/users/user_{i}.py"), text)
+        })
+        .collect();
+    let mut list = vec![("src/store.py", store)];
+    list.extend(
+        users
+            .iter()
+            .map(|(path, text)| (path.as_str(), text.as_str())),
+    );
+    let (home, _project, root) = project(ON, &list);
+    let text = prompt_map(
+        home.path(),
+        &root,
+        "Rename `_cache` to `_entries` in Store.",
+    )
+    .unwrap();
+    assert!(
+        text.contains(
+            "Every line naming `_cache`; no other project file holds it:\n\
+             src/store.py:3:        self._cache = {}\nsrc/store.py:6:        return self._cache.get(key)"
+        ),
+        "{text}"
+    );
+    assert!(text.contains("perl -pi -e"), "{text}");
+}

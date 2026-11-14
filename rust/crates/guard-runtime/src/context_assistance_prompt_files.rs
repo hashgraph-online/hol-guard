@@ -135,6 +135,9 @@ pub(crate) struct Walk {
     /// `ab`; and whether the walk read every file, none too big or unreadable.
     pub(crate) spelled: Vec<usize>,
     pub(crate) complete: bool,
+    /// How many files hold each name `walk_exact` was given, as a word, when
+    /// the walk read them all; empty when it did not.
+    pub(crate) exact: Vec<(String, usize)>,
 }
 
 impl Walk {
@@ -172,6 +175,18 @@ pub(crate) fn walk(
     named: &[String],
     budget: Duration,
 ) -> Walk {
+    walk_exact(root, terms, phrases, named, &[], budget)
+}
+
+/// `walk`, also counting the files holding each of `exact` as a word.
+pub(crate) fn walk_exact(
+    root: &Path,
+    terms: &[String],
+    phrases: &[String],
+    named: &[String],
+    exact: &[String],
+    budget: Duration,
+) -> Walk {
     let budget = budget.min(WALK_BUDGET);
     if terms.is_empty() && phrases.is_empty() && named.is_empty() {
         return Walk::default();
@@ -187,6 +202,8 @@ pub(crate) fn walk(
     let mut seen = Vec::new();
     let mut complete = true;
     let mut spelled_in = vec![0_usize; terms.len()];
+    let mut held: Vec<(String, usize)> = exact.iter().map(|word| (word.clone(), 0)).collect();
+    let lowered: Vec<String> = exact.iter().map(|word| word.to_lowercase()).collect();
     while let Some((dir, prefix, depth, rules)) = stack.pop() {
         let Ok(entries) = fs::read_dir(&dir) else {
             complete = false;
@@ -198,7 +215,7 @@ pub(crate) fn walk(
         for entry in entries.flatten() {
             visited += 1;
             if visited > MAX_VISITED || started.elapsed() >= budget {
-                return finish(seen, files, terms, phrases.len(), (spelled_in, false));
+                return finish(seen, files, terms, phrases, (spelled_in, held, false));
             }
             let name = entry.file_name().to_string_lossy().into_owned();
             // `file_type` never follows a link, so a linked folder or file is skipped.
@@ -268,6 +285,9 @@ pub(crate) fn walk(
             for (count, held) in spelled_in.iter_mut().zip(spelled(&text, terms, &hits)) {
                 *count += usize::from(held);
             }
+            for ((_, count), word) in held.iter_mut().zip(&lowered) {
+                *count += usize::from(holds_word(&text, word));
+            }
             let quoted = quoted(&text, phrases);
             let named = named_as(&relative, named);
             if in_path.contains(&true)
@@ -290,40 +310,7 @@ pub(crate) fn walk(
         inside.sort_by_key(|(tests, _)| !tests);
         stack.extend(inside.into_iter().map(|(_, dir)| dir));
     }
-    finish(seen, files, terms, phrases.len(), (spelled_in, complete))
-}
-
-fn finish(
-    seen: Vec<Seen>,
-    checked: usize,
-    terms: &[String],
-    phrases: usize,
-    (spelled, complete): (Vec<usize>, bool),
-) -> Walk {
-    let holding = (0..terms.len())
-        .map(|i| {
-            seen.iter()
-                .filter(|s| s.in_path[i] || s.hits[i] > 0)
-                .count()
-        })
-        .collect();
-    let words = (0..terms.len())
-        .map(|i| seen.iter().filter(|s| s.whole[i]).count())
-        .collect();
-    let quoting = (0..phrases)
-        .map(|i| seen.iter().filter(|s| s.quoted[i]).count())
-        .collect();
-    let (files, tests) = ranked(scores(seen, checked, terms.len(), phrases));
-    Walk {
-        files,
-        tests,
-        checked,
-        holding,
-        quoting,
-        words,
-        spelled,
-        complete,
-    }
+    finish(seen, files, terms, phrases, (spelled_in, held, complete))
 }
 
 /// A word counts for more the fewer files contain it, so a name like
@@ -493,6 +480,10 @@ pub(crate) fn plain(path: PathBuf) -> PathBuf {
     }
     path
 }
+
+#[path = "context_assistance_prompt_files_finish.rs"]
+mod finish;
+use finish::{finish, holds_word};
 
 #[cfg(test)]
 #[path = "context_assistance_prompt_files_tests.rs"]

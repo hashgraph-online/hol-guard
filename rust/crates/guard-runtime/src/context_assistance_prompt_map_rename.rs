@@ -58,9 +58,11 @@ pub(super) fn blocks(
             let spelled = (asked.spellings.iter()).find(|word| term_form(word) == item.text);
             let found = spelled.and_then(|word| {
                 let new = renamed_to(&asked.renames, word);
-                every_line(files, &kept, item, Some(word.as_str()), new, until)
+                let counted = (asked.exact.iter()).find(|(held, _)| held == word);
+                let word = (Some(word.as_str()), new, counted.map(|(_, count)| *count));
+                every_line(files, &kept, item, word, until)
             });
-            found.or_else(|| every_line(files, &kept, item, None, None, until))
+            found.or_else(|| every_line(files, &kept, item, (None, None, None), until))
         })
         .take(MAX_NAMES)
         .collect();
@@ -193,13 +195,13 @@ fn builds_on(line: &str, name: &str) -> bool {
 /// can be written without opening them; then the lines naming a longer name
 /// holding it, which a search for it finds too. The list says it is
 /// complete only when the walk read every project file, found no file
-/// holding it beyond these, and every line fits.
+/// holding it beyond these, and every line fits. `counted`, the files the
+/// walk found holding `exact` as a word, is the count to match when given.
 fn every_line(
     files: &[File],
     kept: &[File],
     item: &Sought,
-    exact: Option<&str>,
-    new: Option<&str>,
+    (exact, new, counted): (Option<&str>, Option<&str>, Option<usize>),
     until: Instant,
 ) -> Option<(Blocks, Option<Rewrite>)> {
     let mut written = None;
@@ -273,12 +275,18 @@ fn every_line(
             building.push(entry);
         }
     }
+    let mut longer_fit = true;
     for entry in others {
         let count = entries.len() + longer.len();
-        whole &= fits(entry, &mut longer, count);
+        longer_fit &= fits(entry, &mut longer, count);
     }
     let name = written?;
-    whole &= item.spelled == Some(holding);
+    // `spelled` also counts the files holding a longer name, as `lru_cache`
+    // holds `cache`, which no list of `_cache` reads all of.
+    whole &= match counted {
+        Some(count) => count == holders.len(),
+        None => longer_fit && item.spelled == Some(holding),
+    };
     let title = if whole {
         format!("Every line naming `{name}`; no other project file holds it:")
     } else {
