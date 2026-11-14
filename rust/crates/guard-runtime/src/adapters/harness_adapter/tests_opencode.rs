@@ -233,6 +233,28 @@ fn refresh_skips_an_invalid_config_with_a_warning() {
 }
 
 #[test]
+fn detect_finds_the_cli_in_its_installer_directory_under_a_terminal_path() {
+    use std::os::unix::fs::PermissionsExt;
+    let home = Home::new();
+    let installer = home.home().join(".opencode").join("bin");
+    let cli = installer.join("opencode");
+    write(&cli, "#!/bin/sh\n");
+    fs::set_permissions(&installer, fs::Permissions::from_mode(0o755)).unwrap();
+    fs::set_permissions(&cli, fs::Permissions::from_mode(0o755)).unwrap();
+    // A terminal PATH that names a user directory but not ~/.opencode/bin.
+    let other = home.root.join("other-bin");
+    fs::create_dir_all(&other).unwrap();
+    let path = format!("{}:/usr/bin:/bin", other.display());
+    let answer = home.ask_env("opencode", "detect", json!({}), json!({"PATH": path}));
+    assert_eq!(answer["command_available"], json!(true));
+
+    // A group-writable installer directory is still refused.
+    fs::set_permissions(&installer, fs::Permissions::from_mode(0o775)).unwrap();
+    let answer = home.ask_env("opencode", "detect", json!({}), json!({"PATH": path}));
+    assert_eq!(answer["command_available"], json!(false));
+}
+
+#[test]
 fn runtime_probe_needs_the_command_on_path() {
     let home = Home::new();
     let answer = home.ask("opencode", "runtime_probe", json!({}));
