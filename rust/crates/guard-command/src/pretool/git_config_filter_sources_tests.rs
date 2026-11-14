@@ -68,6 +68,20 @@ impl Fixture {
     }
 
     /// The quick check, run the way the filter proof runs Git.
+    fn external_attribute_variables_supported(&self) -> bool {
+        ["GIT_ATTR_GLOBAL", "GIT_ATTR_SYSTEM"].iter().all(|variable| {
+            Command::new(git_binary())
+                .env_clear()
+                .env("HOME", &self.home)
+                .env("PATH", std::env::var_os("PATH").unwrap())
+                .arg("-C")
+                .arg(&self.repository)
+                .args(["var", variable])
+                .output()
+                .is_ok_and(|output| output.status.success())
+        })
+    }
+
     fn none_named(&self) -> bool {
         let git = git_binary();
         let query = |arguments: &[&str], input: Option<Vec<u8>>, root: Option<&Path>| {
@@ -96,7 +110,9 @@ impl Drop for Fixture {
 #[test]
 fn a_global_filter_no_attributes_file_names_needs_no_per_path_check() {
     let fixture = Fixture::new("quiet");
-    assert!(fixture.none_named());
+    // Git before 2.42 does not expose both variables. The shortcut must
+    // fall back on those hosts, not fail the suite.
+    assert_eq!(fixture.none_named(), fixture.external_attribute_variables_supported());
 }
 
 #[test]
@@ -183,4 +199,13 @@ fn the_full_check_still_finds_a_filter_the_quick_check_passed_on() {
     assert_eq!(inspect(), Some(false));
     std::fs::remove_file(fixture.repository.join("src/.gitattributes")).unwrap();
     assert_eq!(inspect(), Some(true));
+}
+
+#[test]
+fn a_custom_attributes_file_uses_the_full_proof() {
+    // git var may lexically collapse a configured path that Git resolves
+    // through a symlink before ".."; never rely on that path for an exemption.
+    let custom = Fixture::new("custom-attributes");
+    custom.git(&["config", "core.attributesFile", "../external/attrs"]);
+    assert!(!custom.none_named());
 }
