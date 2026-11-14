@@ -15,13 +15,10 @@ use std::path::Path;
 const WORDS: [&str; 4] = ["docstring", "docstrings", "doctest", "doctests"];
 const EXAMPLES: [&str; 4] = ["doctest", "doctests", "example", "examples"];
 /// Words of a prompt that reads a docstring for what code should do.
-const BEHAVIOR: [&str; 10] = [
+const BEHAVIOR: [&str; 7] = [
     "implement",
     "implemented",
-    "say",
     "says",
-    "explain",
-    "explains",
     "describe",
     "describes",
     "bug",
@@ -272,13 +269,18 @@ fn command(file: &File, at: usize, root: &Path) -> Option<String> {
     })
 }
 
-/// Whether the definition at `at` holds a doctest example.
+/// Whether the docstring of the function at `at` holds a doctest example.
+/// Only its own: an example in a nested helper's docstring is not its
+/// doctest.
 fn holds_example(file: &File, at: usize) -> bool {
-    let section = &file.sections[at];
-    (file.lines.get(section.start.saturating_sub(1)..section.end)).is_some_and(|lines| {
-        lines
-            .iter()
-            .any(|line| line.trim_start().starts_with(">>>"))
+    let start = file.sections[at].start;
+    head(file, at).is_some_and(|(last, raw)| {
+        raw.is_some()
+            && (file.lines.get(start - 1..start + last)).is_some_and(|lines| {
+                lines
+                    .iter()
+                    .any(|line| line.trim_start().starts_with(">>>"))
+            })
     })
 }
 

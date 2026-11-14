@@ -73,17 +73,17 @@ fn prompts_about_docstrings_or_doctests_are_told_apart_from_docs() {
     ));
 }
 
-/// A stub's docstring says what to build, so a prompt pointing at it asks
-/// for code, and a docstring with no example has no doctest to run: named
-/// one, agents ran the command, read "not found" and tried others.
+/// A docstring with no example has no doctest to run: named one for a stub
+/// ("the tests and docstring say what it should do"), agents ran the
+/// command, read "not found" and tried others. A nested helper's example is
+/// not the function's doctest.
 #[test]
 fn a_docstring_without_an_example_gets_no_doctest_command() {
-    assert!(!asks_for_docstring(
-        "someone left rr_cache as a NotImplementedError stub in src/cachetools/func.py. \
-fill it in please, the tests and docstring say what it should do"
+    assert!(asks_for_docstring(
+        "Write a docstring to explain what remap returns"
     ));
-    assert!(!asks_for_docstring(
-        "make remap do what its docstring explains"
+    assert!(asks_for_docstring(
+        "Add a docstring that explains remap's behavior"
     ));
     let plain = "def remap(root):\n    \"\"\"Remap it.\"\"\"\n    raise NotImplementedError\n";
     let shown_with = |asks: Asks, text: &str| {
@@ -105,6 +105,11 @@ fill it in please, the tests and docstring say what it should do"
     let example =
         "def remap(root):\n    \"\"\"Remap it.\n\n    >>> remap(1)\n    1\n    \"\"\"\n    \
 raise NotImplementedError\n";
+    let nested = "def remap(root):\n    \"\"\"Remap it.\"\"\"\n\n    def visit(x):\n        \
+\"\"\"Visit.\n\n        >>> visit(1)\n        1\n        \"\"\"\n        return x\n\n    \
+raise NotImplementedError\n";
+    let shown = shown_with(docstring, nested);
+    assert!(!shown.contains("--doctest-modules"), "{shown}");
     let shown = shown_with(docstring, example);
     assert!(shown.contains(RUN), "{shown}");
     assert!(shown.contains("not a raw string"), "{shown}");
