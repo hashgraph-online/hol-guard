@@ -721,7 +721,6 @@
         "path": [
           "src/codex_plugin_scanner/guard/adapters/adapter_state_integrity.py",
           "src/codex_plugin_scanner/guard/adapters/cline_runtime.py",
-          "src/codex_plugin_scanner/guard/adapters/cloud_identity.py",
           "src/codex_plugin_scanner/guard/adapters/copilot.py",
           "src/codex_plugin_scanner/guard/adapters/cursor.py",
           "src/codex_plugin_scanner/guard/adapters/hermes.py",
@@ -1312,6 +1311,18 @@
         "entry_points": [],
         "reason": "OpenCode adapter install and uninstall; the native harness_adapter kind plans the config, backup, plugin and runtime overlay changes, and Python keeps the config lock, Guard's proxy argv and the attested plugin facts.",
         "evidence": "install, prepare_install and uninstall have no caller in any in-scope module; they are invoked by the excluded install, uninstall and repair dispatchers. The report validates that no retained symbol or in-scope module references the excluded names."
+      },
+      {
+        "id": "adapter-hermes-setup",
+        "category": "install_config",
+        "path": "src/codex_plugin_scanner/guard/adapters/hermes.py",
+        "symbols": [
+          "HermesHarnessAdapter.install",
+          "HermesHarnessAdapter.prepare_install"
+        ],
+        "entry_points": [],
+        "reason": "Hermes adapter install; the native harness_adapter kind plans the config, overlay, pretool and manifest changes, and Python publishes them.",
+        "evidence": "install and prepare_install have no caller in any in-scope module; they are invoked by the excluded install, uninstall and repair dispatchers. The report validates that no retained symbol or in-scope module references the excluded names."
       },
       {
         "id": "store2-connect-cli-helpers",
