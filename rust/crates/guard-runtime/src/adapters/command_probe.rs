@@ -67,6 +67,8 @@ pub(crate) fn dispatch(args: &Value) -> KindResult {
 
 /// Whether `program` names a file to start: a path (relative to `cwd`), or
 /// a bare name found on the caller's `PATH` as the platform would look it up.
+/// The child starts in `cwd`, so a relative `PATH` entry is read from there
+/// and an empty one names `cwd` itself.
 fn startable(program: &str, cwd: &Path, env: &BTreeMap<String, String>) -> bool {
     let path = Path::new(program);
     if path.components().count() > 1 || path.is_absolute() {
@@ -77,13 +79,11 @@ fn startable(program: &str, cwd: &Path, env: &BTreeMap<String, String>) -> bool 
     let Some(search) = env.get("PATH") else {
         return false;
     };
-    std::env::split_paths(search)
-        .filter(|directory| !directory.as_os_str().is_empty())
-        .any(|directory| {
-            candidates(&directory.join(program))
-                .iter()
-                .any(|file| file.is_file())
-        })
+    std::env::split_paths(search).any(|directory| {
+        candidates(&cwd.join(directory).join(program))
+            .iter()
+            .any(|file| file.is_file())
+    })
 }
 
 /// The file itself, and on Windows the extensions `CreateProcess` tries.

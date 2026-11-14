@@ -867,6 +867,38 @@
    "body": "83ab4ae09a42"
   },
   {
+   "verdict": "posix-primitive",
+   "note": "Windows has no POSIX mode to narrow, so the probe directory is left as created; access there is the user profile ACL. The Python probe it replaced also skipped the chmod on Windows.",
+   "file": "rust/crates/guard-runtime/src/adapters/hook_python_expect.rs",
+   "item": "fn restrict -- non-Unix block",
+   "cfg": "not(unix)",
+   "body": "e94fca40c81d"
+  },
+  {
+   "verdict": "posix-primitive",
+   "note": "Windows has no POSIX permission bits, so no mode is reported and `owned_private` relies on ownership alone. The Python check it replaced skipped the mode test on Windows the same way.",
+   "file": "rust/crates/guard-runtime/src/adapters/hook_python_expect.rs",
+   "item": "fn mode -- non-Unix block",
+   "cfg": "not(unix)",
+   "body": "d81909b3680e"
+  },
+  {
+   "verdict": "windows-permissive",
+   "note": "Ownership is not compared on Windows: any directory counts as owned. Reading the owner SID needs `GetSecurityInfo`, which is not ported. The Python check it replaced also skipped the owner test where `os.getuid` is missing.",
+   "file": "rust/crates/guard-runtime/src/adapters/hook_python_expect.rs",
+   "item": "fn owned -- non-Unix block",
+   "cfg": "not(unix)",
+   "body": "f91ab042cceb"
+  },
+  {
+   "verdict": "posix-primitive",
+   "note": "Executability on Windows is an ACL and `PATHEXT` property, not a mode bit, so an existing file is accepted. The Python probe it replaced used `os.access(X_OK)`, which on Windows also only checks existence.",
+   "file": "rust/crates/guard-runtime/src/adapters/hook_python_identity.rs",
+   "item": "fn executable -- non-Unix block",
+   "cfg": "not(unix)",
+   "body": "7d66a3fed34b"
+  },
+  {
    "verdict": "windows-equivalent",
    "note": "Windows has no directory descriptors, so the support files are named by path: before every read, replacement and removal the support directory is checked to still be the opened directory (same file ID, not a link or junction), each file is opened with `FILE_FLAG_OPEN_REPARSE_POINT` and refused when it is a reparse point, and a file whose ID, size, time or digest changed since it was read is left alone. Only the POSIX mode is approximated by the read-only attribute and the directory fsync is left out, as the Python path backend did. The tests in `agent_safety_guidance_tests.rs` that are not `cfg(unix)`-gated run this arm on Windows.",
    "file": "rust/crates/guard-runtime/src/agent_safety_guidance.rs",

@@ -70,6 +70,7 @@ runs:
     if: runner.os == 'Windows'
     env:
       HOL_GUARD_NATIVE_BINARY: ${{ runner.temp }}/hol-guard-native-runtime/hol-guard-runtime.exe
+      HOL_GUARD_NATIVE: force
       HOL_GUARD_NATIVE_SOURCE_COMPILER: ${{ runner.temp }}/hol-guard-native-runtime/hol-guard-runtime.exe
     run: uv run --no-sync pytest tests/test_mcp_relay_handoff.py tests/test_mcp_relay_lane_ready_install.py
       tests/test_mcp_relay_native_launch.py --tb=short

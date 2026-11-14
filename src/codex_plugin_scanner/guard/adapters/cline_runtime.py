@@ -25,6 +25,8 @@ _HARNESS = "cline"
 _DISPLAY_NAME = "Cline CLI"
 _HOOK_WORKER_FEATURE = "cline-hook-worker-v1"
 _BRIDGE_TIMEOUT_SECONDS = 8
+# Ops that may run the hook canary (10s) and `node --check` (5s) inside the request.
+_PROBE_TIMEOUT_SECONDS = 20.0
 
 
 def _facts(context: HarnessContext, transport: str) -> dict[str, object]:
@@ -68,6 +70,7 @@ def _reconcile(context: HarnessContext, transport: str, *, frozen: bool) -> dict
         "install_transport",
         context,
         harness=_HARNESS,
+        timeout_seconds=_PROBE_TIMEOUT_SECONDS,
         transport=transport,
         frozen=frozen,
         facts=_facts(context, transport),
@@ -172,6 +175,8 @@ class ClineHarnessAdapter(NativeHarnessAdapter):
         return ask(
             "finish_install",
             context,
+            harness=_HARNESS,
+            timeout_seconds=_PROBE_TIMEOUT_SECONDS,
             surface=plan["surface"],
             transport=transport,
             transport_manifest=json.dumps(transport_manifest),
@@ -190,7 +195,8 @@ class ClineHarnessAdapter(NativeHarnessAdapter):
         return manifest
 
     def runtime_probe(self, context: HarnessContext) -> dict[str, object] | None:
-        return ask("runtime_probe", context, harness=_HARNESS, cli=self._cli(context))["probe"]
+        cli = self._cli(context)
+        return ask("runtime_probe", context, harness=_HARNESS, timeout_seconds=_PROBE_TIMEOUT_SECONDS, cli=cli)["probe"]
 
     def diagnostic_warnings(
         self,

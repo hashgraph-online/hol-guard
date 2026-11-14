@@ -86,6 +86,33 @@ fn a_cli_ended_by_a_signal_is_not_reported_as_missing() {
     assert_eq!(answer["stderr"], "command did not exit normally");
 }
 
+#[cfg(unix)]
+#[test]
+fn relative_and_empty_path_entries_are_read_from_the_probe_cwd() {
+    use std::os::unix::fs::PermissionsExt;
+    let home = tempfile::tempdir().unwrap();
+    for directory in [home.path().join("bin"), home.path().to_path_buf()] {
+        std::fs::create_dir_all(&directory).unwrap();
+        let script = directory.join("probe-cli");
+        std::fs::write(&script, "#!/bin/sh\necho found\n").unwrap();
+        std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o755)).unwrap();
+    }
+    for search in ["bin:/usr/bin:/bin", ":/usr/bin:/bin"] {
+        let answer = dispatch(&json!({
+            "command": ["probe-cli"],
+            "cwd": home.path(),
+            "env": {"PATH": search},
+            "timeout_seconds": 5,
+        }))
+        .unwrap();
+        assert_eq!(
+            (&answer["ok"], &answer["stdout"]),
+            (&json!(true), &json!("found")),
+            "{search}"
+        );
+    }
+}
+
 #[test]
 fn a_malformed_probe_request_is_refused() {
     let cwd = std::env::temp_dir();

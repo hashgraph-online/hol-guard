@@ -57,6 +57,7 @@ mod cursor_hooks_uninstall;
 mod cursor_rebind;
 mod cursor_state;
 mod describe;
+mod describe_env;
 mod desktop_core;
 mod files;
 mod grok;
