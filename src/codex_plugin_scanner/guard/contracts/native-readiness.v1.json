@@ -1,0 +1,76 @@
+{
+  "schema": "hol-guard.native-readiness.v1",
+  "states": {
+    "ready": {
+      "verdict": "evaluated",
+      "retry": false,
+      "summary": "The native runtime answered for this Guard home."
+    },
+    "starting": {
+      "verdict": "not_evaluated",
+      "retry": true,
+      "summary": "The native runtime is starting or recovering and has not answered yet."
+    },
+    "overloaded": {
+      "verdict": "not_evaluated",
+      "retry": true,
+      "summary": "The native runtime is busy and turned this request away."
+    },
+    "unavailable": {
+      "verdict": "not_evaluated",
+      "retry": false,
+      "summary": "No native runtime is reachable for this Guard home."
+    },
+    "incompatible": {
+      "verdict": "not_evaluated",
+      "retry": false,
+      "summary": "The native runtime does not match this Guard build or protocol."
+    },
+    "unauthenticated": {
+      "verdict": "not_evaluated",
+      "retry": false,
+      "summary": "The native runtime could not prove it belongs to this Guard home."
+    },
+    "failed": {
+      "verdict": "not_evaluated",
+      "retry": false,
+      "summary": "The native runtime answered, but its answer could not be used."
+    }
+  },
+  "default_state": "unavailable",
+  "reasons": {
+    "native_ready": "ready",
+    "native_oneshot_fallback": "ready",
+    "native_starting": "starting",
+    "native_recovering": "starting",
+    "native_state_uninitialized": "starting",
+    "native_circuit_half_open": "starting",
+    "native_overloaded": "overloaded",
+    "native_oneshot_capacity": "overloaded",
+    "native_unavailable": "unavailable",
+    "native_disabled": "unavailable",
+    "native_circuit_open": "unavailable",
+    "native_resident_failed": "unavailable",
+    "native_oneshot_failed": "unavailable",
+    "native_review_unavailable": "unavailable",
+    "daemon_not_running": "unavailable",
+    "daemon_start_failed": "unavailable",
+    "daemon_start_timeout": "unavailable",
+    "daemon_request_failed": "unavailable",
+    "native_version_mismatch": "incompatible",
+    "native_manifest_missing": "incompatible",
+    "native_manifest_invalid": "incompatible",
+    "native_manifest_runtime_mismatch": "incompatible",
+    "native_manifest_version_mismatch": "incompatible",
+    "native_manifest_protocol_mismatch": "incompatible",
+    "native_manifest_rule_mismatch": "incompatible",
+    "native_manifest_build_mismatch": "incompatible",
+    "native_capabilities_protocol_version_mismatch": "incompatible",
+    "native_capabilities_missing_resident_protocol": "incompatible",
+    "native_resident_spawn_auth_failed": "unauthenticated",
+    "native_resident_state_token_invalid": "unauthenticated",
+    "native_integrity_failed": "failed",
+    "native_evaluation_failed": "failed"
+  },
+  "recovery_commands": ["hol-guard daemon status", "hol-guard daemon repair"]
+}
