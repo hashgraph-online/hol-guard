@@ -341,16 +341,15 @@ def _sample_hook_config(tmp_path: Path) -> dict[str, object]:
 
 def test_hook_config_from_desktop_proxy_command_ignores_script_braces(tmp_path: Path) -> None:
     from codex_plugin_scanner.guard.adapters.base import _shell_command
-    from codex_plugin_scanner.guard.adapters.desktop_hook_proxy import _DESKTOP_PROXY_LAUNCH_SCRIPT
     from codex_plugin_scanner.guard.cli.update_grok_repair import _hook_config_from_command
+    from tests.desktop_proxy_test_support import launch_script
 
     config = _sample_hook_config(tmp_path)
     command = _shell_command(
         (
             "/bin/sh",
             "-c",
-            _DESKTOP_PROXY_LAUNCH_SCRIPT,
-            "hol-guard-desktop-proxy",
+            *launch_script(),
             str(tmp_path / "proxy"),
             "TEAMID",
             str(tmp_path / "HOL Guard.app"),

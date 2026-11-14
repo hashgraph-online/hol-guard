@@ -101,7 +101,7 @@ def test_isolated_grok_client_is_recognized(tmp_path: Path, monkeypatch: pytest.
 @pytest.mark.skipif(os.name == "nt", reason="macOS signed proxy uses POSIX shell serialization")
 def test_desktop_grok_proxy_requires_all_signatures(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """The known proxy script needs matching verified bundle, proxy, and Core teams."""
-    from codex_plugin_scanner.guard.adapters import desktop_hook_proxy as proxy
+    from .desktop_proxy_test_support import launch_script, sign_every_path
 
     base = _command(tmp_path)
     config = json.loads(base[-1])
@@ -112,8 +112,7 @@ def test_desktop_grok_proxy_requires_all_signatures(tmp_path: Path, monkeypatch:
     command = (
         "/bin/sh",
         "-c",
-        proxy._DESKTOP_PROXY_LAUNCH_SCRIPT,
-        "hol-guard-desktop-proxy",
+        *launch_script(),
         str(candidate),
         "TEAM123",
         str(bundle),
@@ -121,10 +120,9 @@ def test_desktop_grok_proxy_requires_all_signatures(tmp_path: Path, monkeypatch:
         str(core),
     )
     monkeypatch.setattr(sys, "platform", "darwin")
-    monkeypatch.setattr(proxy, "_trusted_desktop_path", lambda _path: True)
-    monkeypatch.setattr(proxy, "_codesign_team", lambda _path: "TEAM123")
+    sign_every_path(monkeypatch, "TEAM123")
     assert is_grok_hook_command(_shell_command(command)) is True
-    monkeypatch.setattr(proxy, "_codesign_team", lambda path: None if path == core else "TEAM123")
+    sign_every_path(monkeypatch, None)
     assert is_grok_hook_command(_shell_command(command)) is False
     altered = (*command[:2], "echo hol-guard hook", *command[3:])
     assert is_grok_hook_command(_shell_command(altered)) is False

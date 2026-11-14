@@ -10,7 +10,7 @@ import pytest
 
 from codex_plugin_scanner.guard import runtime_transition_codex_observer as observer
 from codex_plugin_scanner.guard.adapters import codex as codex_adapter
-from codex_plugin_scanner.guard.adapters import codex_daemon_hook_bridge, desktop_hook_proxy
+from codex_plugin_scanner.guard.adapters import codex_daemon_hook_bridge
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.adapters.codex import CodexHarnessAdapter
 from codex_plugin_scanner.guard.codex_hook_integrity import hook_manifest_path
@@ -29,6 +29,7 @@ from codex_plugin_scanner.guard.runtime_transition_hook_probe import (
 )
 from codex_plugin_scanner.guard.store import GuardStore
 from tests.command_activity_correlation_key_support import write_correlation_key
+from tests.desktop_proxy_test_support import sign_every_path
 from tests.native_store_shims import count_command_shadow_observations
 from tests.test_native_decision_receipt import _receipt
 
@@ -100,7 +101,7 @@ def test_frozen_desktop_configured_bridge_routes_probe_through_signed_proxy(monk
     proxy.chmod(0o755)
     monkeypatch.setattr(codex_daemon_hook_bridge.sys, "frozen", True, raising=False)
     monkeypatch.setattr(codex_daemon_hook_bridge.sys, "platform", "darwin")
-    monkeypatch.setattr(desktop_hook_proxy, "_codesign_team", lambda _path: "TEAMID")
+    sign_every_path(monkeypatch)
     monkeypatch.setenv("HOL_GUARD_DESKTOP", "1")
     monkeypatch.setenv("HOL_GUARD_DESKTOP_HOOK_PROXY", str(proxy))
 

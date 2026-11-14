@@ -396,6 +396,8 @@ mod delivery_object;
 mod desktop_core_onedir;
 mod desktop_foreign_installs;
 mod desktop_foreign_remove;
+#[path = "adapters/desktop_hook_proxy.rs"]
+mod desktop_hook_proxy;
 mod desktop_notification;
 mod desktop_review_link;
 mod developer_inspection_authority_op;

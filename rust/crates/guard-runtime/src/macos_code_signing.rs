@@ -123,7 +123,7 @@ fn codesign(arguments: &[&str], timeout: Duration) -> Invocation {
 
 /// The verified Team ID, or `None` for a signature that does not verify,
 /// carries no team or could not be read.
-fn signing_team(
+pub(crate) fn signing_team(
     runner: &mut impl Runner,
     path: &str,
     deep: bool,
