@@ -270,7 +270,8 @@ def _handle_daemon_repair(guard_home: Path, as_json: bool, *, home_dir: Path | N
     try:
         result: dict[str, object] = dict(repair_guard_daemon_runtime(guard_home, home_dir=home_dir))
     except DaemonRepairBusyError as busy:
-        # A bounded, typed answer: the repair did not run, and nothing was changed.
+        # A bounded, typed answer: the daemon repair did not run. Only the stale
+        # resident-update marker above may have been rewritten, which is itself a repair.
         _emit(
             "daemon",
             {
