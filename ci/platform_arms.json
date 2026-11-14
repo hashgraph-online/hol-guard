@@ -779,6 +779,14 @@
    "body": "e5fdfbf635c7"
   },
   {
+   "verdict": "windows-equivalent",
+   "note": "Both paths are canonicalized first, so the same file has the same spelling on Windows; Python's os.path.samefile compares the volume serial and file index, which canonical equality matches for the non-linked files a Guard home or package directory holds.",
+   "file": "rust/crates/guard-runtime/src/adapters/harness_adapter/codex_owner_home.rs",
+   "item": "fn same_file(left: &Path, right: &Path) -> bool",
+   "cfg": "not(unix)",
+   "body": "44a70e0ed079"
+  },
+  {
    "verdict": "windows-permissive",
    "note": "Identifies the Copilot lifecycle lock by its length instead of device and inode, so a lock replaced with one of the same length between the claim and the release reads as the same lock. The lock sits in the account's own Guard home and only serialises Guard's own install and uninstall runs.",
    "file": "rust/crates/guard-runtime/src/adapters/harness_adapter/copilot_state.rs",

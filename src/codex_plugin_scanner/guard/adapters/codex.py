@@ -67,20 +67,17 @@ from ..codex_hook_recovery import (
     recover_hook_publication,
 )
 from ..codex_hook_registration import (
-    exact_legacy_hook_bindings,
     finalize_codex_doctor_setup_status,
     finalize_codex_doctor_warnings,
     install_managed_codex_hook_groups,
+    legacy_binding_fields,
     overlay_live_owned_event_matches,
 )
 from ..codex_hook_registration import (
     remove_manifest_bound_hook_events as _remove_manifest_bound_hook_events,
 )
-from ..codex_hook_registration import (
-    remove_unlaunchable_guard_hook_events as _remove_unlaunchable_guard_hook_events,
-)
 from ..codex_hook_rollback import require_unchanged_config_for_rollback, rollback_file_identity
-from ..codex_hook_self_binding import self_bound_hook_bindings
+from ..codex_hook_self_binding import answer_text, ask_hook_owners, install_fields, self_bound_hook_bindings
 from ..codex_hook_sources import parse_json_object, parse_toml_object
 from ..codex_hook_sources import (
     require_hook_inventory_sources_unchanged as _require_hook_inventory_sources_unchanged,
@@ -371,6 +368,22 @@ def _hook_manifest_spec(context: HarnessContext) -> CodexHookManifestSpec:
     )
 
 
+def _legacy_fields(context: HarnessContext, registration: _HookRegistration | None = None) -> dict[str, Any]:
+    """What an exact current bridge entry is matched against for legacy re-adoption."""
+
+    registration = registration or _hook_registration(context)
+    current_argv = list(registration.argv)
+    # python_bridge_argv keeps the object sequence it was given. This argv is
+    # a string command, so only those strings identify the legacy registration.
+    legacy_tail = [part for part in python_bridge_argv(current_argv)[1:] if isinstance(part, str)]
+    return legacy_binding_fields(
+        expected_bindings=json.loads(registration.bindings),
+        current_argv=current_argv,
+        legacy_argv=[sys.executable, *legacy_tail],
+        legacy_status_messages=_LEGACY_MANAGED_HOOK_STATUS_MESSAGES,
+    )
+
+
 def _current_install_legacy_bindings(
     context: HarnessContext,
     hooks: dict[str, object],
@@ -378,18 +391,9 @@ def _current_install_legacy_bindings(
 ) -> list[dict[str, object]]:
     """Select exact current bridge entries for explicit legacy re-adoption only."""
 
-    registration = registration or _hook_registration(context)
-    current_argv = list(registration.argv)
-    # python_bridge_argv keeps the object sequence it was given. This argv is
-    # a string command, so only those strings identify the legacy registration.
-    legacy_tail = [part for part in python_bridge_argv(current_argv)[1:] if isinstance(part, str)]
-    return exact_legacy_hook_bindings(
-        hooks,
-        expected_bindings=json.loads(registration.bindings),
-        current_argv=current_argv,
-        legacy_argv=[sys.executable, *legacy_tail],
-        legacy_status_messages=_LEGACY_MANAGED_HOOK_STATUS_MESSAGES,
-    )
+    wire = _Wire(hooks)
+    answer = ask_hook_owners("legacy", hooks=wire.text(hooks), **_legacy_fields(context, registration))
+    return wire.decode(answer_text(answer, "bindings"))
 
 
 def _recorded_handler_commands(bindings: Sequence[Mapping[str, object]]) -> list[str]:
@@ -448,23 +452,33 @@ def _strip_owned_hooks(
     context: HarnessContext,
     hooks: dict[str, object],
     owned_bindings: Sequence[Mapping[str, object]],
+    *,
+    unlaunchable: bool = True,
+    hold_recorded: bool = False,
 ) -> dict[str, object]:
-    """The JSON hooks left to migrate once every Guard-owned handler is gone."""
+    """The hooks left once every Guard-owned handler is gone.
 
-    cleaned, _ = _remove_manifest_bound_hook_events(hooks, owned_bindings)
-    legacy_bindings = _current_install_legacy_bindings(context, cleaned)
-    cleaned, _ = _remove_manifest_bound_hook_events(cleaned, legacy_bindings)
-    # A legacy registration whose launcher no longer exists is a leftover
-    # from an install that is gone, not a handler to adopt: folding it into
-    # the active config would leave the harness invoking a missing program.
-    cleaned, _ = _remove_unlaunchable_guard_hook_events(
-        cleaned, legacy_status_messages=_LEGACY_MANAGED_HOOK_STATUS_MESSAGES
+    The owned handlers go first, then this package's legacy registrations,
+    then (``unlaunchable``) legacy registrations whose launcher no longer
+    exists, which folding into the active config would leave the harness
+    invoking a missing program, and last the handlers an earlier generation
+    of this install left. The manifest authenticates the config entries, not
+    hooks.json, so only a config cleanup (``hold_recorded``) holds back a
+    handler still running a command the owned bindings record.
+    """
+
+    owned = list(owned_bindings)
+    wire = _Wire(hooks, owned)
+    answer = ask_hook_owners(
+        "strip",
+        hooks=wire.text(hooks),
+        owned=wire.text(owned),
+        unlaunchable=unlaunchable,
+        hold_recorded=hold_recorded,
+        **_legacy_fields(context),
+        **install_fields(_runtime_guard_home(context), None),
     )
-    # The manifest authenticates the config entries, not hooks.json, so no
-    # recorded command holds a JSON handler back, matching its inventory.
-    self_bindings = _current_install_self_bindings(context, cleaned)
-    cleaned, _ = _remove_manifest_bound_hook_events(cleaned, self_bindings)
-    return cleaned
+    return wire.decode(answer_text(answer, "hooks"))
 
 
 def _migrate_hooks_json_into_config(
@@ -1642,11 +1656,7 @@ class CodexHarnessAdapter(NativeHarnessAdapter):
         if not isinstance(hooks, dict):
             hooks = {}
         before = deepcopy(hooks)
-        cleaned_hooks, _ = _remove_manifest_bound_hook_events(hooks, owned_bindings)
-        legacy_bindings = _current_install_legacy_bindings(context, cleaned_hooks)
-        cleaned_hooks, _ = _remove_manifest_bound_hook_events(cleaned_hooks, legacy_bindings)
-        self_bindings = _current_install_self_bindings(context, cleaned_hooks, authenticated_bindings=owned_bindings)
-        cleaned_hooks, _ = _remove_manifest_bound_hook_events(cleaned_hooks, self_bindings)
+        cleaned_hooks = _strip_owned_hooks(context, hooks, owned_bindings, unlaunchable=False, hold_recorded=True)
         install_managed_codex_hook_groups(
             cleaned_hooks,
             _managed_hook_groups(context),

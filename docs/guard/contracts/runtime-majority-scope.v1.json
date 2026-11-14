@@ -626,7 +626,6 @@
           "src/codex_plugin_scanner/guard/codex_hook_health.py",
           "src/codex_plugin_scanner/guard/codex_hook_identity.py",
           "src/codex_plugin_scanner/guard/codex_hook_inventory.py",
-          "src/codex_plugin_scanner/guard/codex_hook_owned_paths.py",
           "src/codex_plugin_scanner/guard/codex_hook_owner_commands.py",
           "src/codex_plugin_scanner/guard/codex_hook_owner_message.py",
           "src/codex_plugin_scanner/guard/codex_hook_owner_preflight.py",
@@ -636,7 +635,7 @@
           "src/codex_plugin_scanner/guard/codex_hook_sources.py",
           "src/codex_plugin_scanner/guard/codex_hook_trust.py"
         ],
-        "reason": "Reviewed: codex hook inventory, identity, sources, trust, registration, owner commands/preflight and health modules: codex_hook_trust_stale is called from codex_native_hook_state, which gates launch_command/preview_launch_commands for codex, and it imports registration and owner_commands; runtime_trust is used by frozen_codex_runtime.trusted_hook_launch; inventory/identity/sources are used by the same adapter. codex_hook_owner_preflight and codex_hook_health are tiny status/install-only modules left in scope under the in-doubt rule. codex_hook_self_binding and codex_hook_owned_paths decide whether an existing Codex handler belongs to this installation, which registration consults before it will replace or refuse one, and codex_hook_owner_message writes the refusal that decision produces; all three are reached from the same adapter and stay in scope with it."
+        "reason": "Reviewed: codex hook inventory, identity, sources, trust, registration, owner commands/preflight and health modules: codex_hook_trust_stale is called from codex_native_hook_state, which gates launch_command/preview_launch_commands for codex, and it imports registration and owner_commands; runtime_trust is used by frozen_codex_runtime.trusted_hook_launch; inventory/identity/sources are used by the same adapter. codex_hook_owner_preflight and codex_hook_health are tiny status/install-only modules left in scope under the in-doubt rule. codex_hook_self_binding asks the native runtime whether an existing Codex handler belongs to this installation, which registration consults before it will replace or refuse one, and codex_hook_owner_message writes the refusal that decision produces; both are reached from the same adapter and stay in scope with it."
       },
       {
         "path": [

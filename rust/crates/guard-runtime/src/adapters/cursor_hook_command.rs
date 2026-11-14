@@ -232,7 +232,7 @@ impl Syntax {
     }
 
     /// `split_hook_command_line`.
-    fn split_hook(&mut self, command: &str) -> Option<Vec<String>> {
+    pub(crate) fn split_hook(&mut self, command: &str) -> Option<Vec<String>> {
         let leading = command.trim_start_matches(py_space);
         if !self.windows || leading.starts_with('\'') {
             return shlex_split(command);
@@ -273,7 +273,7 @@ impl Syntax {
     }
 
     /// `hook_token_name`: the final path component of one token.
-    fn name(&self, token: &str) -> String {
+    pub(crate) fn name(&self, token: &str) -> String {
         if !self.windows {
             return last_part(token, '/');
         }

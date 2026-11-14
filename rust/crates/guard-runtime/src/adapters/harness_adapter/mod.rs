@@ -41,6 +41,8 @@ mod cloud_identity;
 mod codex;
 mod codex_files;
 mod codex_merge;
+mod codex_owner_home;
+mod codex_owners;
 mod codex_servers;
 mod copilot;
 mod copilot_install;
@@ -87,6 +89,10 @@ mod zcode;
 #[cfg(test)]
 #[path = "tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "codex_owners_tests.rs"]
+mod codex_owners_tests;
 
 pub(crate) use describe::Spec;
 
@@ -219,6 +225,11 @@ fn answer(step: Step<Value>) -> KindResult {
         Err(Failure::Reply(needed)) => Ok(json!({ "reply": needed })),
         Err(Failure::Invalid) => Err(ERR_INVALID),
     }
+}
+
+/// The `codex_hook_owners` kind: which Codex hook handlers this install owns.
+pub(crate) fn codex_owners(args: &Value) -> KindResult {
+    answer(codex_owners::dispatch(args_object(args)?))
 }
 
 pub(crate) fn dispatch(args: &Value) -> KindResult {

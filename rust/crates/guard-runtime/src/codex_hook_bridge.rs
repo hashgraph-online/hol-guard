@@ -70,7 +70,7 @@ fn non_empty_strings(value: Option<&PyVal>) -> bool {
 /// `decode_bridge_config_argument`: POSIX installs pass the JSON itself,
 /// Windows installs unpadded base64url of its UTF-8. Anything Python
 /// refuses is `None`.
-fn decode_config_argument(argument: &str) -> Option<Cow<'_, str>> {
+pub(crate) fn decode_config_argument(argument: &str) -> Option<Cow<'_, str>> {
     if argument.starts_with('{') {
         return Some(Cow::Borrowed(argument));
     }

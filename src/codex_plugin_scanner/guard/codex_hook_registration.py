@@ -2,24 +2,24 @@
 
 from __future__ import annotations
 
+import json
 import os
 from collections.abc import Collection, Mapping, Sequence
 from copy import deepcopy
 from pathlib import Path
 
+from .codex_config import _Wire
 from .codex_hook_command_line import (
     hook_command_launchable,
     hook_command_tokens,
     hook_commands_use_windows_syntax,
     hook_token_name,
-    plain_json_hook_argv,
 )
 from .codex_hook_compatibility import NATIVE_CODEX_HOOK_COMMAND
 from .codex_hook_events import MANAGED_CODEX_HOOK_EVENTS
-from .codex_hook_file_integrity import split_hook_command
 from .codex_hook_owner_commands import has_codex_harness_tokens, python_codex_hook_command
 from .codex_hook_owner_message import owner_conflict_message
-from .codex_hook_self_binding import codex_hook_binds_guard_home
+from .codex_hook_self_binding import answer_text, ask_hook_owners, codex_hook_binds_guard_home
 from .frozen_runtime_commands import frozen_codex_bridge_tokens_are_live
 
 
@@ -35,73 +35,18 @@ def remove_unlaunchable_guard_hook_events(
     its ``--harness codex`` arguments (or as a native bridge launcher) and
     carried one of the status messages Guard wrote for that generation. When
     the program such a handler names no longer exists, the registration is a
-    leftover from an install that is gone: folding it into the active config
-    would leave the harness running a command that cannot start on every
-    matching tool call. Removal is limited to that exact shape - a managed
-    event, the legacy status message, Guard's own codex hook arguments, and a
-    first program token that does not exist. User handlers, handlers Guard
-    cannot attribute to itself, and handlers naming a program that exists are
-    all left alone.
+    leftover from an install that is gone. The native ``codex_hook_owners``
+    kind removes exactly that shape and leaves every other handler alone.
     """
 
-    updated_hooks = deepcopy(hooks)
-    changed = False
-    for event_name in MANAGED_CODEX_HOOK_EVENTS:
-        groups = updated_hooks.get(event_name)
-        if not isinstance(groups, list):
-            continue
-        remaining_groups: list[object] = []
-        for group in groups:
-            if not isinstance(group, dict):
-                remaining_groups.append(group)
-                continue
-            handlers = group.get("hooks")
-            if not isinstance(handlers, list):
-                remaining_groups.append(group)
-                continue
-            remaining_handlers = [
-                handler
-                for handler in handlers
-                if not _is_unlaunchable_legacy_guard_handler(
-                    handler, legacy_status_messages=legacy_status_messages, windows=windows
-                )
-            ]
-            if len(remaining_handlers) != len(handlers):
-                changed = True
-            if remaining_handlers:
-                updated_group = dict(group)
-                updated_group["hooks"] = remaining_handlers
-                remaining_groups.append(updated_group)
-        if remaining_groups:
-            updated_hooks[event_name] = remaining_groups
-        else:
-            updated_hooks.pop(event_name, None)
-    return updated_hooks, changed
-
-
-def _is_unlaunchable_legacy_guard_handler(
-    handler: object,
-    *,
-    legacy_status_messages: Collection[str],
-    windows: bool | None,
-) -> bool:
-    if not isinstance(handler, Mapping):
-        return False
-    if handler.get("statusMessage") not in legacy_status_messages:
-        return False
-    command = handler.get("command")
-    if not isinstance(command, str):
-        return False
-    if hook_commands_use_windows_syntax(windows) != (os.name == "nt"):
-        return False
-    tokens = hook_command_tokens(command, windows=windows)
-    arguments = handler.get("args")
-    argument_tokens = [str(argument) for argument in arguments] if isinstance(arguments, list) else []
-    if not has_codex_harness_tokens([*tokens, *argument_tokens]):
-        return False
-    program = tokens[0] if tokens else ""
-    path = Path(program)
-    return path.is_absolute() and not path.exists()
+    wire = _Wire(hooks)
+    answer = ask_hook_owners(
+        "unlaunchable",
+        windows=windows,
+        hooks=wire.text(hooks),
+        statuses=sorted(legacy_status_messages),
+    )
+    return wire.decode(answer_text(answer, "hooks")), answer.get("changed") is True
 
 
 def remove_manifest_bound_hook_events(
@@ -110,52 +55,26 @@ def remove_manifest_bound_hook_events(
 ) -> tuple[dict[str, object], bool]:
     """Remove only handlers whose exact identity is authenticated by a manifest."""
 
-    updated_hooks = deepcopy(hooks)
-    changed = False
-    for binding in bindings:
-        event_name = binding.get("event")
-        expected_group = binding.get("group")
-        expected_handler = binding.get("handler")
-        if (
-            not isinstance(event_name, str)
-            or event_name not in MANAGED_CODEX_HOOK_EVENTS
-            or not isinstance(expected_group, dict)
-            or not isinstance(expected_handler, dict)
-        ):
-            continue
-        groups = updated_hooks.get(event_name)
-        if not isinstance(groups, list):
-            continue
-        remaining_groups: list[object] = []
-        removed_for_binding = False
-        for group in groups:
-            if removed_for_binding or not isinstance(group, dict):
-                remaining_groups.append(group)
-                continue
-            if group == expected_group:
-                removed_for_binding = True
-                changed = True
-                continue
-            if group.get("matcher") != expected_group.get("matcher"):
-                remaining_groups.append(group)
-                continue
-            handlers = group.get("hooks")
-            if not isinstance(handlers, list) or expected_handler not in handlers:
-                remaining_groups.append(group)
-                continue
-            remaining_handlers = list(handlers)
-            remaining_handlers.remove(expected_handler)
-            removed_for_binding = True
-            changed = True
-            if remaining_handlers:
-                updated_group = dict(group)
-                updated_group["hooks"] = remaining_handlers
-                remaining_groups.append(updated_group)
-        if remaining_groups:
-            updated_hooks[event_name] = remaining_groups
-        else:
-            updated_hooks.pop(event_name, None)
-    return updated_hooks, changed
+    wire = _Wire(hooks, list(bindings))
+    answer = ask_hook_owners("remove", hooks=wire.text(hooks), bindings=wire.text(list(bindings)))
+    return wire.decode(answer_text(answer, "hooks")), answer.get("changed") is True
+
+
+def legacy_binding_fields(
+    *,
+    expected_bindings: Sequence[Mapping[str, object]],
+    current_argv: Sequence[str],
+    legacy_argv: Sequence[str],
+    legacy_status_messages: Collection[str],
+) -> dict[str, object]:
+    """What a pre-manifest handler of the current package is matched against."""
+
+    return {
+        "expected": json.dumps(list(expected_bindings), separators=(",", ":")),
+        "argv": list(current_argv),
+        "legacy_argv": list(legacy_argv),
+        "statuses": sorted(legacy_status_messages),
+    }
 
 
 def exact_legacy_hook_bindings(
@@ -169,41 +88,19 @@ def exact_legacy_hook_bindings(
 ) -> list[dict[str, object]]:
     """Select exact current-package entries for explicit pre-manifest adoption."""
 
-    accepted_argvs = [list(current_argv), list(legacy_argv)]
-    if hook_commands_use_windows_syntax(windows):
-        # Earlier Windows installs passed the config as plain JSON.
-        accepted_argvs.extend(plain_json_hook_argv(argv) for argv in tuple(accepted_argvs))
-
-    expected_by_event = {
-        event: binding for binding in expected_bindings if isinstance((event := binding.get("event")), str)
-    }
-    bindings: list[dict[str, object]] = []
-    for event_name in MANAGED_CODEX_HOOK_EVENTS:
-        groups = hooks.get(event_name)
-        expected = expected_by_event.get(event_name)
-        expected_group = expected.get("group") if isinstance(expected, Mapping) else None
-        if not isinstance(groups, list) or not isinstance(expected_group, dict):
-            continue
-        for group in groups:
-            if not isinstance(group, dict) or group.get("matcher") != expected_group.get("matcher"):
-                continue
-            handlers = group.get("hooks")
-            if not isinstance(handlers, list):
-                continue
-            handler = next(
-                (
-                    item
-                    for item in handlers
-                    if isinstance(item, dict)
-                    and split_hook_command(item.get("command"), windows=windows) in accepted_argvs
-                    and item.get("statusMessage") in legacy_status_messages
-                ),
-                None,
-            )
-            if handler is not None:
-                bindings.append({"event": event_name, "group": group, "handler": handler})
-                break
-    return bindings
+    wire = _Wire(hooks)
+    answer = ask_hook_owners(
+        "legacy",
+        windows=windows,
+        hooks=wire.text(hooks),
+        **legacy_binding_fields(
+            expected_bindings=expected_bindings,
+            current_argv=current_argv,
+            legacy_argv=legacy_argv,
+            legacy_status_messages=legacy_status_messages,
+        ),
+    )
+    return wire.decode(answer_text(answer, "bindings"))
 
 
 def _has_codex_harness(blob: str, *, windows: bool | None = None) -> bool:
