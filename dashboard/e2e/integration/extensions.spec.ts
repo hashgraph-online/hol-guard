@@ -211,7 +211,9 @@ test("the Test Lab shows what Guard would decide for a command without running i
   // The decision depends on whether the daemon has its native command
   // evaluator (without it, Guard asks first about everything), so the check is
   // that the page reports exactly what the daemon answered.
-  for (const command of ["git reset --hard HEAD~1", "git status"]) {
+  // The safe case carries a flag so the whole command cannot appear inside
+  // the catalog's own rule text ("Identifies git status operations.").
+  for (const command of ["git reset --hard HEAD~1", "git status --short"]) {
     await page.getByLabel("Command to check").fill(command);
     const answered = page.waitForResponse(
       (response) => new URL(response.url()).pathname === "/v1/extension-controls/test" && response.status() === 200,

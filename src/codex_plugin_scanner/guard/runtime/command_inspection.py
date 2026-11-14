@@ -124,10 +124,18 @@ def unavailable_command_inspection(
     }
 
 
+_NATIVE_REVIEW_TIER_ACTIONS = frozenset({"require-reapproval", "sandbox-required"})
+
+
 def _native_hold(native: Mapping[str, object]) -> dict[str, object] | None:
     """Return the native hook decision when it would hold the command."""
 
     if native.get("decision") != "deny":
+        return None
+    # Only a review-tier native action the decoder translated is reported
+    # here. A plain native review with no extension match keeps the catalog's
+    # no_match answer, as before.
+    if native.get("native_minimum_action") not in _NATIVE_REVIEW_TIER_ACTIONS:
         return None
     minimum_action = native.get("minimum_action")
     reason_code = native.get("reason_code")
@@ -139,7 +147,7 @@ def _native_hold(native: Mapping[str, object]) -> dict[str, object] | None:
     return {
         "decision": "deny",
         "minimum_action": minimum_action,
-        "native_minimum_action": native.get("native_minimum_action") or minimum_action,
+        "native_minimum_action": native["native_minimum_action"],
         "reason_code": reason_code,
         "reason": reason,
     }
