@@ -78,6 +78,33 @@ fn a_literal_sh_secret_copy_is_blocked_with_nothing_to_approve() {
     }
 }
 
+/// An unmodeled tool call does not make an earlier or later sh() secret
+/// copy approvable. Only the unsafe literal shell command gets precedence;
+/// a harmless shell command beside an unmodeled call remains reviewed.
+#[test]
+fn unmodeled_sibling_cannot_hide_a_secret_copy() {
+    let session = with_env("omp-eval-sh-unmodeled-sibling");
+    for code in [
+        "await sh('cp .env output/copied.env'); await tool.read({path:'tracked.txt', unknown:'x'})",
+        "await tool.read({path:'tracked.txt', unknown:'x'}); await sh('cp .env output/copied.env')",
+        "await sh('cat .env'); await tool.read({path:'tracked.txt', unknown:'x'})",
+    ] {
+        let result = eval(&session, code);
+        assert_eq!(result.minimum_action, "block", "{code}: {result:?}");
+        assert_eq!(result.decision, "deny", "{code}: {result:?}");
+        assert_eq!(result.reason_code, "native_secret_exfiltration", "{code}");
+    }
+
+    for code in [
+        "await sh('git status --short'); await tool.read({path:'tracked.txt', unknown:'x'})",
+        "await tool.read({path:'tracked.txt', unknown:'x'}); await sh('git status --short')",
+    ] {
+        let result = eval(&session, code);
+        assert_ne!(result.minimum_action, "allow", "{code}: {result:?}");
+        assert_eq!(result.reason_code, "native_pre_tool_unknown_review", "{code}");
+    }
+}
+
 /// A command the direct call blocks stays blocked through `sh()`.
 #[test]
 fn a_command_the_direct_call_blocks_stays_blocked() {
