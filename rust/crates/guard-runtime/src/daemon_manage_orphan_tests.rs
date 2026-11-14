@@ -199,7 +199,10 @@ fn a_live_launch_receipt_still_protects_its_daemon() {
     pending.insert("owner".into(), owner.into());
     pending.insert("runtime_fingerprint".into(), "new-runtime".into());
     write_signed_record(home.path(), "daemon-launch-pending.json", pending).unwrap();
-    let answer = ensure(home.path(), orphan.pid());
+    // Gate the stand-in on a pid that is already gone, so any launch at all
+    // leaves the sentinel this test expects to stay absent.
+    let gone = u32::try_from(dead_pid()).unwrap();
+    let answer = ensure(home.path(), gone);
     assert!(!orphan.exited(), "a live launch was retired: {answer}");
     assert!(!home.path().join("launch-sentinel").exists(), "{answer}");
 }
