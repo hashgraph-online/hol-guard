@@ -25,6 +25,23 @@ use crate::pyjson::PyVal;
 const SHELL_TOOLS: [&str; 4] = ["Bash", "bash", "exec_command", "functions.exec_command"];
 const GUARD_PROGRAM: &str = "hol-guard";
 
+/// The only keys a recovery call may carry. Anything else could change what
+/// runs: Codex's `exec_command` takes a model-supplied `shell` path and a
+/// `login` flag, so a call that names one is not a recovery call.
+const ALLOWED_INPUT_KEYS: [&str; 11] = [
+    "command",
+    "cmd",
+    "workdir",
+    "description",
+    "timeout",
+    "timeout_ms",
+    "yield_time_ms",
+    "max_output_tokens",
+    "justification",
+    "sandbox_permissions",
+    "with_escalated_permissions",
+];
+
 /// The argument lists, after `hol-guard`, that read Guard's own state or
 /// restart its daemon. Each one is read-only or repairs only Guard's own
 /// runtime; none takes a path, a program or a home to act on.
@@ -118,6 +135,12 @@ pub(super) fn is_recovery_call(data: &str) -> bool {
     else {
         return false;
     };
+    if input
+        .keys()
+        .any(|key| !ALLOWED_INPUT_KEYS.contains(&key.as_str()))
+    {
+        return false;
+    }
     // A call that asks to run outside the sandbox is not a recovery step.
     let escalated = input
         .get("sandbox_permissions")
