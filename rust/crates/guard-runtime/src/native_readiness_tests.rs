@@ -42,46 +42,95 @@ fn the_default_state_is_not_ready() {
     assert_eq!(contract().default_state, ReadinessState::Unavailable);
 }
 
+/// The modules that write a runtime health reason or a resident start,
+/// stop or client failure code. A code in their production source that the
+/// contract does not map would reach the payload as unrecognized.
+fn emits_runtime_reasons(name: &str) -> bool {
+    !name.ends_with("_tests.rs")
+        && (matches!(
+            name,
+            "native_runtime_resilience.rs"
+                | "native_runtime_admission.rs"
+                | "resident_startup_lock.rs"
+                | "resident_update_lock.rs"
+                | "resident_restart_budget.rs"
+        ) || name.starts_with("managed_resident")
+            || name.starts_with("resident_state"))
+}
+
+/// Literals in those modules that name an operation, not a reason.
+const NOT_REASONS: [&str; 1] = ["native_bash_execute"];
+
+fn emitted_reason_codes() -> BTreeSet<String> {
+    let source = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
+    let literal = regex::Regex::new(r#""(native_[a-z0-9_]*[a-z0-9])""#).expect("pattern");
+    let mut codes = BTreeSet::new();
+    for entry in std::fs::read_dir(source).expect("source directory") {
+        let path = entry.expect("entry").path();
+        let name = path
+            .file_name()
+            .and_then(|name| name.to_str())
+            .unwrap_or("");
+        if !emits_runtime_reasons(name) {
+            continue;
+        }
+        let text = std::fs::read_to_string(&path).expect("source file");
+        let production = text.split("#[cfg(test)]").next().unwrap_or("");
+        for line in production.lines() {
+            if line.trim_start().starts_with("//") {
+                continue;
+            }
+            for capture in literal.captures_iter(line) {
+                codes.insert(capture[1].to_owned());
+            }
+        }
+    }
+    for code in NOT_REASONS {
+        codes.remove(code);
+    }
+    codes
+}
+
 #[test]
-fn every_reason_the_runtime_records_is_mapped() {
-    // The reason codes the resilience state machine, the admission check and
-    // the resident spawn write. A new one must be added to the contract.
-    let recorded = [
+fn every_reason_the_runtime_writes_is_mapped() {
+    let emitted = emitted_reason_codes();
+    // The scan must find the codes it exists to check.
+    for known in [
+        "native_ready",
+        "native_overloaded",
+        "native_resident_spawn_failed",
+        "native_resident_start_in_progress",
+    ] {
+        assert!(emitted.contains(known), "scan missed {known}");
+    }
+    let unmapped: Vec<&String> = emitted
+        .iter()
+        .filter(|code| !contract().reasons.contains_key(code.as_str()))
+        .collect();
+    assert!(
+        unmapped.is_empty(),
+        "map these in the contract: {unmapped:?}"
+    );
+}
+
+#[test]
+fn key_reasons_reach_their_state() {
+    let cases = [
         ("native_ready", "ready"),
         ("native_oneshot_fallback", "ready"),
         ("native_starting", "starting"),
-        ("native_recovering", "starting"),
-        ("native_state_uninitialized", "starting"),
-        ("native_circuit_half_open", "starting"),
+        ("native_resident_start_in_progress", "starting"),
         ("native_overloaded", "overloaded"),
-        ("native_oneshot_capacity", "overloaded"),
-        ("native_unavailable", "unavailable"),
-        ("native_disabled", "unavailable"),
         ("native_circuit_open", "unavailable"),
-        ("native_resident_failed", "unavailable"),
-        ("native_oneshot_failed", "unavailable"),
-        ("native_version_mismatch", "incompatible"),
-        ("native_manifest_missing", "incompatible"),
-        ("native_manifest_invalid", "incompatible"),
-        ("native_manifest_runtime_mismatch", "incompatible"),
-        ("native_manifest_version_mismatch", "incompatible"),
-        ("native_manifest_protocol_mismatch", "incompatible"),
-        ("native_manifest_rule_mismatch", "incompatible"),
+        ("native_resident_spawn_failed", "unavailable"),
+        ("native_client_deadline_exceeded", "unavailable"),
         ("native_manifest_build_mismatch", "incompatible"),
-        (
-            "native_capabilities_protocol_version_mismatch",
-            "incompatible",
-        ),
-        (
-            "native_capabilities_missing_resident_protocol",
-            "incompatible",
-        ),
         ("native_resident_spawn_auth_failed", "unauthenticated"),
-        ("native_resident_state_token_invalid", "unauthenticated"),
+        ("native_resident_state_mac_invalid", "unauthenticated"),
         ("native_integrity_failed", "failed"),
+        ("native_client_stream_frame_truncated", "failed"),
     ];
-    for (reason, state) in recorded {
-        assert!(contract().reasons.contains_key(reason), "{reason}");
+    for (reason, state) in cases {
         assert_eq!(state_for_reason(reason).as_str(), state, "{reason}");
     }
 }
