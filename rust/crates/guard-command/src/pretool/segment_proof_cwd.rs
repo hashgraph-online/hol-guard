@@ -504,6 +504,7 @@ pub(in crate::pretool) fn cwd_read_executable(executable: Option<&str>) -> bool 
                 | "base32"
                 | "stat"
                 | "test"
+                | "["
                 | "find"
                 | "head"
                 | "tail"
