@@ -33,6 +33,10 @@ fn checkout(label: &str) -> (PathBuf, FixtureCleanup) {
         "import os as proc\nproc.kill(4242, 15)\n",
     )
     .unwrap();
+    std::fs::create_dir_all(project.join("wide")).unwrap();
+    for index in 0..40 {
+        std::fs::write(project.join(format!("wide/m{index}.py")), "X = 1\n").unwrap();
+    }
     std::fs::write(
         project.join("keys.py"),
         "print(open('/home/user/.aws/credentials').read())\n",
@@ -163,6 +167,10 @@ fn a_probe_that_would_not_fit_the_sandbox_keeps_its_review() {
         "python3 - <<'PY'\nimport os\nprint(os.listdir('/'))\nPY",
         // A local module the program imports counts too.
         "python3 - <<'PY'\nimport pkg.stopper\nPY",
+        // Every command of a command line, and a path spelled with escapes.
+        "python3 - <<'PY'\nimport os\nos.system('true; pkill gdm')\nPY",
+        "python3 - <<'PY'\nprint(open(\"\\x2fetc/passwd\").read())\nPY",
+        "python3 - <<'PY'\nimport os\nprint(os.listdir('pkg/../..'))\nPY",
     ] {
         let (action, _) = outcome(&root, command);
         assert!(
@@ -170,4 +178,18 @@ fn a_probe_that_would_not_fit_the_sandbox_keeps_its_review() {
             "{command}: {action}"
         );
     }
+}
+
+#[test]
+fn a_probe_whose_local_imports_are_not_all_read_keeps_its_review() {
+    let (root, _cleanup) = checkout("wide");
+    let imports: String = (0..40)
+        .map(|index| format!("import wide.m{index}\n"))
+        .collect();
+    let command = format!("python3 - <<'PY'\n{imports}print(1)\nPY");
+    let (action, _) = outcome(&root, &command);
+    assert!(
+        action != "allow" && action != "sandbox-required",
+        "{command}: {action}"
+    );
 }

@@ -743,6 +743,7 @@ fn assess_programs(
             }
             Entry::Text { .. } => false,
         };
+        let fed_python = fed_text && language == Language::Python;
         let Some((sources, complete)) = read_graph(language, entry) else {
             continue;
         };
@@ -754,9 +755,10 @@ fn assess_programs(
                 Language::Node => NODE_NETWORK.is_match(&code),
             };
             found.credential_store |= CREDENTIAL_STORE.is_match(&code);
-            found.host_reach |=
-                fed_text && language == Language::Python && host_reach::python_reaches_host(source);
+            found.host_reach |= fed_python && host_reach::python_reaches_host(source);
         }
+        // A local module the graph left unread could reach the host too.
+        found.host_reach |= fed_python && !complete;
         if (inline || workspace_script) && complete && language == Language::Node {
             found.loopback = loopback::program_ports(&sources, context.home_dir);
         }

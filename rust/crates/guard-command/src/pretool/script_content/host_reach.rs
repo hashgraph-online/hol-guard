@@ -19,18 +19,24 @@
 //!   cannot read;
 //! - a string that names a path outside the workspace, on its own or as a
 //!   word of a command line: an absolute path other than the shared temporary
-//!   directory and the standard streams, the root directory, a
-//!   parent-directory path, or a home-directory path;
-//! - a string that names a path inside a `.git` directory;
-//! - a command line, as one string or as an argument list, that signals
-//!   processes (`kill`, `pkill`, `killall`) or writes Git configuration
-//!   (`git config` other than a read).
+//!   directory and the standard streams, the root directory, a relative path
+//!   that climbs above where it starts, or a home-directory path;
+//! - a string that names a path inside a `.git` directory, wherever it is;
+//! - a command line, as one string or as an argument list, with a command
+//!   that signals processes (`kill`, `pkill`, `killall`) or writes Git
+//!   configuration (`git config` other than a read). Every command of a
+//!   string counts, past wrappers such as `env` or `sudo`.
+//!
+//! Strings are read as the value Python gives them, escapes decoded; one
+//! whose value the scan cannot resolve keeps its review.
 //!
 //! Starting a program (`subprocess`, `os.system`) is not itself a reason to
 //! hold: the program runs in the same sandbox, and the command line it is
 //! given is read here like any other string.
 
 use std::collections::BTreeSet;
+use std::iter::Peekable;
+use std::str::Chars;
 use std::sync::LazyLock;
 
 use regex::Regex;
@@ -89,21 +95,40 @@ static DYNAMIC_CODE: LazyLock<Regex> = LazyLock::new(|| {
     .unwrap()
 });
 
-/// A string literal: triple-quoted across lines, or single-line.
-static STRING: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new(r#"(?s)"""(.*?)"""|'''(.*?)'''|"([^"\n]*)"|'([^'\n]*)'"#).unwrap());
-
-/// The root directory passed as the first argument of a call that reads or
-/// walks a path. `'/'.join(...)` and `s.split('/')` are not such calls.
-static ROOT_ARGUMENT: LazyLock<Regex> = LazyLock::new(|| {
+/// A string literal with the word before its opening quote, which holds the
+/// prefix (`r`, `b`, `f`, ...): triple-quoted across lines, or single-line
+/// with backslash escapes, so `'it\'s'` is one literal.
+static STRING: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(concat!(
-        r"\b(?:listdir|scandir|walk|chdir|Path|PurePath|PosixPath|glob|iglob|open|join|",
-        r#"rmtree|iterdir|stat|lstat|exists|isdir|access)\s*\(\s*[rbuRBU]?["']/["']"#,
+        r#"(?s)(\w*)(?:"""(.*?)"""|'''(.*?)'''"#,
+        r#"|"((?:[^"\\\n]|\\.)*)"|'((?:[^'\\\n]|\\.)*)')"#,
     ))
     .unwrap()
 });
 
-/// An argument list that runs `git ... config`, with the arguments after it.
+/// Calls that read or walk the path they are given first.
+const PATH_CALLS: &[&str] = &[
+    "listdir",
+    "scandir",
+    "walk",
+    "chdir",
+    "Path",
+    "PurePath",
+    "PosixPath",
+    "glob",
+    "iglob",
+    "open",
+    "join",
+    "rmtree",
+    "iterdir",
+    "stat",
+    "lstat",
+    "exists",
+    "isdir",
+    "access",
+];
+
+/// The rest of an argument list for `git ... config`.
 static GIT_CONFIG_LIST: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(concat!(
         r#"["']git["']\s*,\s*(?:["'][^"'\n]*["']\s*,\s*)*?["']config["']"#,
@@ -115,13 +140,18 @@ static GIT_CONFIG_LIST: LazyLock<Regex> = LazyLock::new(|| {
 static QUOTED_WORD: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r#"["']([^"'\n]*)["']"#).unwrap());
 
-/// Commands that list or copy what a root-directory operand names.
+/// Commands that list, copy or enter what a root-directory operand names.
 const ROOT_COMMANDS: &[&str] = &[
     "ls", "find", "du", "tree", "grep", "rg", "cat", "rm", "cp", "mv", "chmod", "chown", "tar",
-    "stat",
+    "stat", "cd", "pushd",
 ];
 const SIGNAL_COMMANDS: &[&str] = &["kill", "pkill", "killall"];
 const GIT_CONFIG_READS: &[&str] = &["--get", "--get-all", "--get-regexp", "--list", "-l"];
+/// Words that run the command after them, with their own options.
+const COMMAND_PREFIXES: &[&str] = &[
+    "env", "sudo", "doas", "nohup", "exec", "command", "builtin", "time", "nice", "ionice",
+    "timeout", "setsid", "stdbuf", "xargs", "!", "{",
+];
 
 /// Absolute paths a contained program may name: the shared temporary
 /// directory and the standard streams.
@@ -134,72 +164,239 @@ fn absolute_path_stays_local(path: &str) -> bool {
         || resolved.starts_with("/private/tmp/")
 }
 
+/// Whether a relative path climbs above the directory it starts from once
+/// its `..` components are applied, as `..`, `../x` and `pkg/../..` do.
+fn climbs_out(path: &str) -> bool {
+    let mut depth = 0usize;
+    for part in path.split('/') {
+        match part {
+            "" | "." => {}
+            ".." => match depth.checked_sub(1) {
+                Some(up) => depth = up,
+                None => return true,
+            },
+            _ => depth += 1,
+        }
+    }
+    false
+}
+
 /// Whether one word of a string names a path outside the workspace or inside
-/// a `.git` directory. A bare `~name` counts only as the whole string, so
-/// prose such as `'~ approx'` does not.
+/// a `.git` directory, the latter even under the temporary directory. A bare
+/// `~name` counts only as the whole string, so prose such as `'~ approx'`
+/// does not.
 fn word_reaches(word: &str, alone: bool) -> bool {
-    let mut chars = word.chars();
+    word.split(['/', '=']).any(|part| part == ".git")
+        || word.split('=').any(|path| path_reaches(path, alone))
+}
+
+fn path_reaches(path: &str, alone: bool) -> bool {
+    let mut chars = path.chars();
     let first = chars.next();
     let second = chars.next();
     if first == Some('/')
         && second.is_some_and(|c| c.is_ascii_alphanumeric() || c == '_' || c == '.')
     {
-        return !absolute_path_stays_local(word);
+        return !absolute_path_stays_local(path);
     }
-    if word == ".." || word.starts_with("../") {
-        return true;
-    }
-    if let Some(rest) = word.strip_prefix('~') {
+    if let Some(rest) = path.strip_prefix('~') {
         let name_end = rest
             .find(|c: char| !(c.is_alphanumeric() || c == '_' || c == '.' || c == '-'))
             .unwrap_or(rest.len());
-        if rest[name_end..].starts_with('/') || (alone && name_end == rest.len()) {
-            return true;
-        }
+        return rest[name_end..].starts_with('/') || (alone && name_end == rest.len());
     }
-    word.split(['/', '=']).any(|part| part == ".git")
+    path.contains("..") && climbs_out(path)
 }
 
-/// Whether one string literal reaches past the workspace: as a command line
-/// that signals processes, writes Git configuration or lists the root
-/// directory, or through any word that names an outside path.
-fn literal_reaches(text: &str) -> bool {
-    let words: Vec<&str> = text.split_whitespace().collect();
+/// Whether a word is an environment assignment such as `LC_ALL=C`.
+fn assignment(word: &str) -> bool {
+    word.split_once('=').is_some_and(|(name, _)| {
+        !name.is_empty() && name.chars().all(|c| c.is_ascii_alphanumeric() || c == '_')
+    })
+}
+
+/// The words of one shell command from the command name on, past
+/// assignments and wrappers such as `env`, `sudo` or `timeout 5`.
+fn command_words(command: &str) -> Vec<&str> {
+    let words: Vec<&str> = command.split_whitespace().collect();
+    let mut wrapped = false;
+    let mut start = 0;
+    while let Some(word) = words.get(start) {
+        let prefix = COMMAND_PREFIXES.contains(word);
+        let skip = prefix
+            || assignment(word)
+            || (wrapped
+                && (word.starts_with('-')
+                    || word
+                        .chars()
+                        .all(|c| c.is_ascii_digit() || ".smhd".contains(c))));
+        if !skip {
+            break;
+        }
+        wrapped |= prefix;
+        start += 1;
+    }
+    words[start..].to_vec()
+}
+
+/// Whether `git config` with these words only reads. Only the words before
+/// `--` are options; a `--get` after it is a value.
+fn git_config_reads<'a>(words: impl IntoIterator<Item = &'a str>) -> bool {
+    words
+        .into_iter()
+        .take_while(|word| *word != "--")
+        .any(|word| GIT_CONFIG_READS.contains(&word))
+}
+
+/// Whether one shell command signals processes, writes Git configuration or
+/// lists the root directory.
+fn command_reaches(command: &str) -> bool {
+    let words = command_words(command);
     let Some(first) = words.first() else {
         return false;
     };
-    if SIGNAL_COMMANDS.contains(first) {
-        return true;
-    }
-    if *first == "git"
-        && words.contains(&"config")
-        && !words.iter().any(|word| GIT_CONFIG_READS.contains(word))
-    {
-        return true;
-    }
-    if ROOT_COMMANDS.contains(first) && words[1..].contains(&"/") {
-        return true;
-    }
-    let alone = words.len() == 1;
-    words.iter().any(|word| word_reaches(word, alone))
+    let name = first.rsplit('/').next().unwrap_or(first);
+    SIGNAL_COMMANDS.contains(&name)
+        || (name == "git" && words.contains(&"config") && !git_config_reads(words.iter().copied()))
+        || (ROOT_COMMANDS.contains(&name) && words[1..].contains(&"/"))
 }
 
+/// Whether one string value reaches past the workspace: through any shell
+/// command in it that signals processes, writes Git configuration or lists
+/// the root directory, or through any word that names an outside path.
+fn literal_reaches(text: &str) -> bool {
+    let alone = text.split_whitespace().count() == 1;
+    text.split([';', '&', '|', '\n', '(', ')', '`', '{', '}'])
+        .any(command_reaches)
+        || text
+            .split_whitespace()
+            .any(|word| word_reaches(word, alone))
+}
+
+/// Reads up to `count` digits in `radix` and returns the character they
+/// number.
+fn escaped_char(chars: &mut Peekable<Chars<'_>>, count: usize, radix: u32) -> Option<char> {
+    let mut digits = String::new();
+    while digits.len() < count {
+        let digit = chars.next_if(|c| c.is_digit(radix))?;
+        digits.push(digit);
+    }
+    u32::from_str_radix(&digits, radix)
+        .ok()
+        .and_then(char::from_u32)
+}
+
+/// The value Python gives a string literal's body. `None` when an escape
+/// names a character the scan does not resolve (`\N{...}`) or is malformed.
+fn literal_value(body: &str, raw: bool) -> Option<String> {
+    if raw || !body.contains('\\') {
+        return Some(body.to_owned());
+    }
+    let mut value = String::with_capacity(body.len());
+    let mut chars = body.chars().peekable();
+    while let Some(c) = chars.next() {
+        if c != '\\' {
+            value.push(c);
+            continue;
+        }
+        let Some(escape) = chars.next() else {
+            value.push('\\');
+            break;
+        };
+        match escape {
+            '\n' => {}
+            '\\' | '\'' | '"' => value.push(escape),
+            'n' => value.push('\n'),
+            't' => value.push('\t'),
+            'r' => value.push('\r'),
+            'a' => value.push('\x07'),
+            'b' => value.push('\x08'),
+            'f' => value.push('\x0c'),
+            'v' => value.push('\x0b'),
+            'x' => value.push(escaped_char(&mut chars, 2, 16)?),
+            'u' => value.push(escaped_char(&mut chars, 4, 16)?),
+            'U' => value.push(escaped_char(&mut chars, 8, 16)?),
+            '0'..='7' => {
+                let mut code = escape.to_digit(8)?;
+                for _ in 0..2 {
+                    match chars.next_if(|c| c.is_digit(8)) {
+                        Some(digit) => code = code * 8 + digit.to_digit(8)?,
+                        None => break,
+                    }
+                }
+                value.push(char::from_u32(code)?);
+            }
+            'N' => return None,
+            other => {
+                value.push('\\');
+                value.push(other);
+            }
+        }
+    }
+    Some(value)
+}
+
+/// Whether the text before a literal ends in a call that reads or walks the
+/// path it is given first, as in `os.listdir(`.
+fn path_call_before(before: &str) -> bool {
+    let Some(rest) = before.trim_end().strip_suffix('(') else {
+        return false;
+    };
+    let rest = rest.trim_end();
+    let name_start = rest
+        .char_indices()
+        .rev()
+        .take_while(|(_, c)| c.is_alphanumeric() || *c == '_')
+        .last()
+        .map_or(rest.len(), |(index, _)| index);
+    PATH_CALLS.contains(&&rest[name_start..])
+}
+
+/// Whether the text after a literal adds another string to it, as in
+/// `'/' + 'etc/passwd'`. The caller asks only for a literal that starts the
+/// sum, so `'a' + '/' + 'b'` is not a root path.
+fn joined_to_literal(after: &str) -> bool {
+    after
+        .trim_start()
+        .strip_prefix('+')
+        .map(|rest| rest.trim_start_matches(|c: char| c.is_whitespace() || "rbufRBUF".contains(c)))
+        .is_some_and(|rest| rest.starts_with(['"', '\'']))
+}
+
+/// Whether any string literal in `code` reaches past the workspace, read as
+/// the value Python gives it. A literal whose value the scan cannot resolve
+/// counts, as does the root directory passed to a path call or joined to
+/// another literal.
 fn names_outside_path(code: &str) -> bool {
     STRING.captures_iter(code).any(|captures| {
-        captures
-            .iter()
-            .skip(1)
-            .flatten()
-            .next()
-            .is_some_and(|text| literal_reaches(text.as_str()))
+        let Some(word) = captures.get(1) else {
+            return false;
+        };
+        let prefix = word.len() <= 2 && word.as_str().chars().all(|c| "rbufRBUF".contains(c));
+        let raw = prefix && word.as_str().contains(['r', 'R']);
+        let Some(body) = captures.iter().skip(2).flatten().next() else {
+            return false;
+        };
+        let Some(value) = literal_value(body.as_str(), raw) else {
+            return true;
+        };
+        if value == "/" {
+            let end = captures.get(0).map_or(code.len(), |whole| whole.end());
+            let before = &code[..word.start()];
+            return path_call_before(before)
+                || (!before.trim_end().ends_with('+') && joined_to_literal(&code[end..]));
+        }
+        literal_reaches(&value)
     })
 }
 
 fn git_config_list_writes(code: &str) -> bool {
     GIT_CONFIG_LIST.captures_iter(code).any(|captures| {
-        !QUOTED_WORD
+        let words: Vec<&str> = QUOTED_WORD
             .captures_iter(&captures[1])
-            .any(|word| GIT_CONFIG_READS.contains(&&word[1]))
+            .filter_map(|word| word.get(1).map(|word| word.as_str()))
+            .collect();
+        !git_config_reads(words)
     })
 }
 
@@ -240,7 +437,6 @@ pub(in crate::pretool) fn python_reaches_host(source: &str) -> bool {
     HOST_MODULE.is_match(&code)
         || signals_processes(&code)
         || DYNAMIC_CODE.is_match(&code)
-        || ROOT_ARGUMENT.is_match(&code)
         || git_config_list_writes(&code)
         || names_outside_path(&code)
 }
@@ -291,6 +487,27 @@ mod tests {
             "from pathlib import Path\nPath('.git/config').write_text('[core]\\nhooksPath=/dev/null\\n')\n",
             "from pathlib import Path\nprint((Path('.git') / 'config').read_text())\n",
             "import json\nprint(open(\"sub/.git/HEAD\").read())\n",
+            "import os\nos.system('true; pkill gdm')\n",
+            "import os\nos.system('sleep 1 && kill -9 1')\n",
+            "import os\nos.system('env kill 1')\n",
+            "import os\nos.system('sudo -n timeout 5 killall python')\n",
+            "import os\nos.system('cd / && ls')\n",
+            "import os\nos.system('echo $(kill 1)')\n",
+            "import os\nos.system('true; git config core.hooksPath x')\n",
+            "import os\nos.system('git config -- user.email --get')\n",
+            "import subprocess\nsubprocess.run(['git', 'config', '--', 'user.email', '--get'])\n",
+            "print('it\\'s', open('/etc/passwd').read())\n",
+            "print(open(\"\\x2fetc/passwd\").read())\n",
+            "print(open('\\057etc/passwd').read())\n",
+            "print(open('\\u002fetc/passwd').read())\n",
+            "print(open('\\N{SOLIDUS}etc/passwd').read())\n",
+            "import os\nprint(os.listdir('\\x2f'))\n",
+            "print(open('/' + 'etc/passwd').read())\n",
+            "import os\nprint(os.listdir(r'/'))\n",
+            "print(open('/tmp/project/.git/config').read())\n",
+            "import os\nprint(os.listdir('pkg/../..'))\n",
+            "import os\nprint(open('a/./../../b').read())\n",
+            "import os\nos.system('cat --file=../secret')\n",
         ] {
             assert!(python_reaches_host(source), "{source}");
         }
@@ -321,6 +538,14 @@ mod tests {
             "import os\nos.system('git status --short')\n",
             "import subprocess\np = subprocess.Popen(['sleep', '1'])\np.kill()\n",
             "import json\nprint('see https://example.invalid/docs for more')\n",
+            "import json\nprint('it\\'s fine', open('README.md').read())\n",
+            "import json\nprint(r'\\d+\\.\\w', 'a\\tb\\n')\n",
+            "import json\nprint(open('pkg/../README.md').read())\n",
+            "import json\nprint('a' + '/' + 'b', base + '/' + name)\n",
+            "import json\nprint('Usage: tool (skill list)')\n",
+            "import subprocess\nsubprocess.run(['git', 'config', '--get', 'user.name', '--'])\n",
+            "import os\nos.system('git status; git log -1')\n",
+            "import json\nprint(open('/tmp/scratch/out.txt').read())\n",
         ] {
             assert!(!python_reaches_host(source), "{source}");
         }
