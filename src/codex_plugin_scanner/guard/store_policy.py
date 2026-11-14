@@ -47,6 +47,7 @@ if TYPE_CHECKING:
     from .store import GuardStore
 
 # ruff: noqa: F403,F405
+from .artifact_identity import scoped_policy_artifact_key
 from .native_approval_proof import approval_reuse_claim_disposition as native_claim_disposition
 from .native_execution import _resident_request
 from .native_memory_pattern import memory_pattern_verdict
@@ -1378,7 +1379,7 @@ class StorePolicyMixin:
     @staticmethod
     def _normalized_policy_keys(decision: PolicyDecision) -> tuple[str | None, str | None, str | None, str | None]:
         if decision.scope in {"harness", "global"}:
-            artifact_id = _artifact_family_key(decision.artifact_id)
+            artifact_id = scoped_policy_artifact_key(decision.artifact_id, allowed_families=_SCOPED_HARNESS_FAMILIES)
         else:
             artifact_id = decision.artifact_id if decision.scope in {"artifact", "workspace"} else None
         artifact_hash = (
