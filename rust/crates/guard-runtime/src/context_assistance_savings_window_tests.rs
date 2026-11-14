@@ -148,4 +148,43 @@ fn a_huge_line_is_skipped_and_the_rest_still_counts() {
     help(&rig, &["src/a.rs"], NOW);
     let total = report(&rig, NOW);
     assert_eq!((total.measured_sessions, total.used_tokens), (1, 42));
+    // The skipped line could have opened the shown file, so it is not checked.
+    assert_eq!((total.files_checked, total.files_opened_anyway), (0, 0));
+}
+
+#[test]
+fn days_without_help_before_this_weeks_first_help_do_not_count() {
+    let rig = rig(&[tokens(NOW - DAY + 60, 50_000), tokens(NOW + 60, 1_000)]);
+    help(&rig, &["src/a.rs"], NOW - 3 * DAY);
+    help(&rig, &["src/a.rs"], NOW);
+    // The window now opens the day before NOW, a day CIGAR did not help.
+    assert_eq!(report(&rig, NOW + 5 * DAY).used_tokens, 1_000);
+}
+
+#[test]
+fn files_shown_before_the_window_free_their_slots() {
+    let rig = rig(&[tokens(NOW + 7 * DAY, 1_000)]);
+    let old: Vec<String> = (0..MAX_FILES).map(|n| format!("src/{n}.rs")).collect();
+    let old: Vec<&str> = old.iter().map(String::as_str).collect();
+    help(&rig, &old, NOW);
+    help(&rig, &[], NOW + 3 * DAY);
+    // A week later the first files are outside the window.
+    help(&rig, &["src/new.rs"], NOW + 7 * DAY);
+    let total = report(&rig, NOW + 7 * DAY);
+    assert_eq!((total.sessions, total.files_shown), (1, 1));
+}
+
+#[test]
+fn showing_a_file_again_keeps_the_read_going() {
+    let first = |last| Shown {
+        path: "src/a.rs".into(),
+        at: NOW,
+        last,
+    };
+    assert!(read::same_files(&[first(NOW)], &[first(NOW + 60)]));
+    let later = Shown {
+        at: NOW + 1,
+        ..first(NOW)
+    };
+    assert!(!read::same_files(&[first(NOW)], &[later]));
 }

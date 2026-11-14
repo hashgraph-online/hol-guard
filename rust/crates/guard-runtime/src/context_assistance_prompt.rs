@@ -283,7 +283,7 @@ fn attach(
         && !marked.iter().any(|(_, name)| *name)
     {
         let at = (store.guard_home(), &*root, harness, session.as_ref());
-        changes::used::add_tests(response, at, changed, &earlier, budget, context_on);
+        changes::used::add_tests(response, at, changed, &earlier, budget, context_on, shown);
         return;
     }
     let (names, exact) = (named(prompt), spellings(prompt));

@@ -60,13 +60,16 @@ export function CigarSavingsPanel({ savings }: { savings: Savings | null | undef
     "About " + count(total.context_tokens) + " tokens of code handed over",
     checked ? exact.format(skipped) + " of " + plural(checked, "file", "files") + " shown, the AI didn't need to open again" : null,
   ].filter((fact): fact is string => fact !== null);
-  const measured = total.measured_sessions > 0 && used > 0;
+  const readable = total.measured_sessions > 0;
+  const measured = readable && used > 0;
   const share = measured ? Math.max(4, Math.round((used / (used + saved)) * 100)) : 100;
   return <section className="cigar-savings" aria-labelledby="cigar-savings-title">
     <h3 id="cigar-savings-title">{measured ? <>CIGAR saved about <strong>{spoken.format(saved)}</strong> tokens {when}</> : <>CIGAR helped {plural(total.sessions, "session", "sessions")} {when}</>}</h3>
     <p className="cigar-savings-lede">{measured
       ? "That's our best estimate. In the sessions CIGAR helped, your AI apps used " + spoken.format(used) + " tokens. Without CIGAR, the same work would likely have taken about " + spoken.format(used + saved) + "."
-      : "Guard could not read those sessions' own records, so it can't estimate the tokens saved. What it did measure is below."}</p>
+      : readable
+        ? "Guard read those sessions' records but found no tokens used, so it can't estimate the tokens saved. What it did measure is below."
+        : "Guard could not read those sessions' own records, so it can't estimate the tokens saved. What it did measure is below."}</p>
     {measured ? <>
       <div className="cigar-savings-bar" role="img" aria-label={"Used " + spoken.format(used) + " tokens. Without CIGAR, about " + spoken.format(saved) + " more."} style={{ ["--used" as string]: share + "%" }}>
         <span className="cigar-savings-used" /><span className="cigar-savings-saved" />

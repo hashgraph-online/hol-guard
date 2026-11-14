@@ -346,7 +346,7 @@ def test_the_cli_labels_the_savings_estimate_and_says_why_it_has_none(
     monkeypatch.setenv("USERPROFILE", str(homes.home))
     monkeypatch.setattr(sys, "argv", ["hol-guard"])
     monkeypatch.setattr(install_integrity, "warn_if_shadowed", lambda: None)
-    answers = iter([_report(2, 2, 52_000), _report(2, 0, 0), _report(0, 0, 0)])
+    answers = iter([_report(2, 2, 52_000), _report(3, 1, 52_000), _report(2, 0, 0), _report(0, 0, 0)])
     monkeypatch.setattr(native_context_assistance, "savings", lambda guard_home: next(answers))
     run = lambda: cli.main(["context", "usage", "--guard-home", str(homes.guard)])  # noqa: E731
     assert run() == 0
@@ -354,6 +354,9 @@ def test_the_cli_labels_the_savings_estimate_and_says_why_it_has_none(
     assert "CIGAR saved about 52,000 tokens in the last 7 days. This is an estimate." in text
     assert "Of 4 files it showed, the agent opened 1 again anyway." in text
     assert "(Codex 52%)" in text
+    assert "The estimate covers" not in text
+    assert run() == 0
+    assert "The estimate covers 1 of 3 sessions. Guard could not read the rest." in capsys.readouterr().out
     assert run() == 0
     assert "could not read those sessions' records" in capsys.readouterr().out
     assert run() == 0

@@ -7,6 +7,10 @@ const totals = (over: Record<string, number> = {}) => ({
   sessions: 3, prompts: 12, context_tokens: 9_400, files_shown: 22, files_checked: 22, files_opened_anyway: 4,
   measured_sessions: 3, used_tokens: 1_200_000, estimated_saved_tokens: 1_400_000, ...over,
 });
+// Expected numbers use the same formatters as the page, so the test passes in any locale.
+const spoken = (n: number) => new Intl.NumberFormat(undefined, { notation: "compact", compactDisplay: "long", maximumSignificantDigits: 2 }).format(n);
+const exact = (n: number) => new Intl.NumberFormat().format(n);
+const text = (value: string) => new RegExp(value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
 const wire = (total = totals(), apps = [{ app: "codex", rate_percent: 52, ...total }]) =>
   ({ schema: "guard-cigar-savings.v1", window_days: 7, estimate: true, total, apps });
 
@@ -21,14 +25,14 @@ assert.equal(parseUsageMeter({ ...meter, savings: { broken: true } }).savings, n
 assert.equal(parseUsageMeter(meter).savings, null);
 
 const full = renderToStaticMarkup(<CigarSavingsPanel savings={parseSavings(wire())} />);
-assert.match(full, /CIGAR saved about <strong>1\.4 million<\/strong> tokens this week/);
+assert.match(full, text("CIGAR saved about <strong>" + spoken(1_400_000) + "</strong> tokens this week"));
 assert.match(full, /That&#x27;s our best estimate/);
-assert.match(full, /used 1\.2 million tokens\. Without CIGAR, the same work would likely have taken about 2\.6 million\./);
+assert.match(full, text("used " + spoken(1_200_000) + " tokens. Without CIGAR, the same work would likely have taken about " + spoken(2_600_000) + "."));
 assert.match(full, /Saved \(estimate\)/);
 assert.match(full, /12 prompts got project code from CIGAR/);
-assert.match(full, /About 9,400 tokens of code handed over/);
+assert.match(full, text("About " + exact(9_400) + " tokens of code handed over"));
 assert.match(full, /18 of 22 files shown, the AI didn&#x27;t need to open again/);
-assert.match(full, /role="img" aria-label="Used 1\.2 million tokens\. Without CIGAR, about 1\.4 million more\."/);
+assert.match(full, text('role="img" aria-label="Used ' + spoken(1_200_000) + " tokens. Without CIGAR, about " + spoken(1_400_000) + ' more."'));
 assert.match(full, /--used:46%/);
 assert.match(full, /How we estimate/);
 assert.match(full, /about ¾ of a word/);
@@ -49,6 +53,11 @@ assert.match(blind, /cut tokens by about half\./, "with no app measured the meth
 assert.match(blind, /12 prompts got project code/);
 assert.doesNotMatch(blind, /didn&#x27;t need to open again/, "unread sessions never claim files went unopened");
 
+// Sessions read but no tokens found: say so instead of blaming unreadable records.
+const zero = renderToStaticMarkup(<CigarSavingsPanel savings={parseSavings(wire(totals({ used_tokens: 0, estimated_saved_tokens: 0 })))} />);
+assert.match(zero, /found no tokens used/);
+assert.doesNotMatch(zero, /could not read|saved about|role="img"/);
+
 // Nothing helped yet, or no estimate at all.
 const empty = renderToStaticMarkup(<CigarSavingsPanel savings={parseSavings(wire(totals({ sessions: 0, prompts: 0, context_tokens: 0, files_shown: 0, files_checked: 0, files_opened_anyway: 0, measured_sessions: 0, used_tokens: 0, estimated_saved_tokens: 0 }), []))} />);
 assert.match(empty, /No savings to show yet/);
@@ -57,7 +66,7 @@ assert.equal(renderToStaticMarkup(<CigarSavingsPanel savings={null} />), "");
 
 // One session, one prompt, one file: singular words.
 const one = renderToStaticMarkup(<CigarSavingsPanel savings={parseSavings(wire(totals({ sessions: 1, prompts: 1, files_shown: 1, files_checked: 1, files_opened_anyway: 1, measured_sessions: 1, used_tokens: 900, estimated_saved_tokens: 970 })))} />);
-assert.match(one, /CIGAR saved about <strong>970<\/strong> tokens this week/);
+assert.match(one, text("CIGAR saved about <strong>" + spoken(970) + "</strong> tokens this week"));
 assert.match(one, /1 prompt got project code/);
 assert.match(one, /0 of 1 file shown/);
 console.log("CIGAR savings estimate panel passed.");

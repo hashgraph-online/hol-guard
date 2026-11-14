@@ -52,6 +52,9 @@ pub(crate) struct Day {
     pub(crate) day: u64,
     pub(crate) prompts: u64,
     pub(crate) chars: u64,
+    /// When CIGAR first helped that day, so tokens count from there.
+    #[serde(default)]
+    pub(crate) first: u64,
 }
 
 /// A file the context showed: when it was first shown, so only later opens
@@ -178,13 +181,22 @@ pub(crate) fn record_at(guard_home: &Path, added: Added<'_>, at: u64) {
         Some(day) => {
             day.prompts += 1;
             day.chars += added.chars as u64;
+            if day.first == 0 {
+                day.first = at;
+            }
         }
         None => session.days.push(Day {
             day: today,
             prompts: 1,
             chars: added.chars as u64,
+            first: at,
         }),
     }
+    // Files last shown before the window leave first, so they never hold
+    // the slots a newly shown file needs.
+    session
+        .files
+        .retain(|shown| shown.last.max(shown.at) >= start);
     for file in added.files {
         if file.is_empty() || file.len() > MAX_PATH_BYTES {
             continue;

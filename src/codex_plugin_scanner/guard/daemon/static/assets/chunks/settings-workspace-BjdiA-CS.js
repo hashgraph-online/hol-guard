@@ -5885,7 +5885,8 @@ function CigarSavingsPanel({ savings }) {
     "About " + count$3(total.context_tokens) + " tokens of code handed over",
     checked ? exact$1.format(skipped) + " of " + plural(checked, "file", "files") + " shown, the AI didn't need to open again" : null
   ].filter((fact) => fact !== null);
-  const measured = total.measured_sessions > 0 && used > 0;
+  const readable = total.measured_sessions > 0;
+  const measured = readable && used > 0;
   const share = measured ? Math.max(4, Math.round(used / (used + saved) * 100)) : 100;
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "cigar-savings", "aria-labelledby": "cigar-savings-title", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { id: "cigar-savings-title", children: measured ? /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
@@ -5899,7 +5900,7 @@ function CigarSavingsPanel({ savings }) {
       " ",
       when2
     ] }) }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "cigar-savings-lede", children: measured ? "That's our best estimate. In the sessions CIGAR helped, your AI apps used " + spoken.format(used) + " tokens. Without CIGAR, the same work would likely have taken about " + spoken.format(used + saved) + "." : "Guard could not read those sessions' own records, so it can't estimate the tokens saved. What it did measure is below." }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "cigar-savings-lede", children: measured ? "That's our best estimate. In the sessions CIGAR helped, your AI apps used " + spoken.format(used) + " tokens. Without CIGAR, the same work would likely have taken about " + spoken.format(used + saved) + "." : readable ? "Guard read those sessions' records but found no tokens used, so it can't estimate the tokens saved. What it did measure is below." : "Guard could not read those sessions' own records, so it can't estimate the tokens saved. What it did measure is below." }),
     measured ? /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "cigar-savings-bar", role: "img", "aria-label": "Used " + spoken.format(used) + " tokens. Without CIGAR, about " + spoken.format(saved) + " more.", style: { ["--used"]: share + "%" }, children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "cigar-savings-used" }),

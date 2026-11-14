@@ -107,11 +107,16 @@ def render_savings(report: dict[str, Any] | None, output: TextIO) -> None:
     if not total["sessions"]:
         say(f"CIGAR has not handed code to a prompt in the last {days} days, so there is nothing to estimate.")
         return
-    if not total["measured_sessions"]:
+    measured, sessions = total["measured_sessions"], total["sessions"]
+    if not measured:
         say("CIGAR helped, but Guard could not read those sessions' records, so it cannot estimate yet.")
+    elif not total["used_tokens"]:
+        say("CIGAR helped, but those sessions' records show no tokens used, so Guard cannot estimate yet.")
     else:
         saved = total["estimated_saved_tokens"]
         say(f"CIGAR saved about {saved:,} tokens in the last {days} days. This is an estimate.")
+        if measured < sessions:
+            say(f"  The estimate covers {measured:,} of {sessions:,} sessions. Guard could not read the rest.")
     prompts = "prompt" if total["prompts"] == 1 else "prompts"
     say(f"  It handed {total['prompts']:,} {prompts} about {total['context_tokens']:,} tokens of code.")
     checked, opened = total.get("files_checked", 0), total["files_opened_anyway"]

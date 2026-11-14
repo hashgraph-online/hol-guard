@@ -120,6 +120,7 @@ assert Group([]).split_value(\"a b\") == [\"a\", \"b\"]\n";
         &[],
         Duration::from_secs(5),
         || true,
+        &mut Vec::new(),
     );
     let text = response["hookSpecificOutput"]["additionalContext"].as_str();
     text.unwrap_or_default().to_owned()

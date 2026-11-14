@@ -95,9 +95,19 @@ fn session(helped: &Helped, roots: &[PathBuf], start: u64, rate_percent: u32) ->
         files_shown: files.len() as u64,
         ..Totals::default()
     };
-    // Tokens count from the first help in the window, not from the start of
-    // a session resumed from an earlier week.
-    let since = start.max(helped.first);
+    // Tokens count from the first help inside the window, not from the start
+    // of a session resumed from an earlier week or from days with no help.
+    let since = helped
+        .days
+        .iter()
+        .filter(|day| day.day >= first_day)
+        .map(|day| match day.first {
+            0 => day.day * DAY_SECS,
+            first => first,
+        })
+        .min()
+        .unwrap_or(start)
+        .max(start);
     let usage = helped
         .transcript
         .as_deref()
@@ -105,7 +115,13 @@ fn session(helped: &Helped, roots: &[PathBuf], start: u64, rate_percent: u32) ->
         .filter(|usage| usage.requests > 0);
     if let Some(usage) = usage {
         totals.measured_sessions = 1;
-        totals.files_checked = totals.files_shown;
+        // A skipped oversized line may have opened a shown file, so only
+        // files seen opened count as checked once anything was skipped.
+        totals.files_checked = if usage.skipped {
+            usage.opened.len() as u64
+        } else {
+            totals.files_shown
+        };
         totals.files_opened_anyway = usage.opened.len() as u64;
         totals.used_tokens = usage.tokens;
         totals.estimated_saved_tokens = saved(usage.tokens, rate_percent);

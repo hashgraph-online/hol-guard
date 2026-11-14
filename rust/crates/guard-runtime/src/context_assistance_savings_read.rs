@@ -31,6 +31,9 @@ pub(crate) struct Usage {
     pub(crate) requests: u64,
     /// Shown files a tool call named after they were shown.
     pub(crate) opened: Vec<String>,
+    /// A line too long to read was passed over, so a file not seen opened
+    /// may still have been opened there.
+    pub(crate) skipped: bool,
 }
 
 /// How far one record was read, and what it said up to there.
@@ -108,6 +111,17 @@ pub(crate) fn allowed(path: &str, roots: &[PathBuf]) -> Option<PathBuf> {
     (inside && real.is_file()).then_some(real)
 }
 
+/// Whether a read of `known` answers the question for `files`. Only the path
+/// and when a file was first shown change what a read finds; the last time
+/// it was shown does not, so showing a file again keeps the read going.
+pub(super) fn same_files(known: &[Shown], files: &[Shown]) -> bool {
+    known.len() == files.len()
+        && known
+            .iter()
+            .zip(files)
+            .all(|(known, file)| known.path == file.path && known.at == file.at)
+}
+
 /// Reads one record, or `None` when it is gone or not allowed.
 pub(crate) fn usage(path: &str, roots: &[PathBuf], since: u64, files: &[Shown]) -> Option<Usage> {
     let real = allowed(path, roots)?;
@@ -117,7 +131,7 @@ pub(crate) fn usage(path: &str, roots: &[PathBuf], since: u64, files: &[Shown]) 
         known.identity == identity(&meta)
             && known.offset <= meta.len()
             && known.since == since
-            && known.files == files
+            && same_files(&known.files, files)
     });
     if !reusable {
         if held.len() >= MAX_CACHE {
@@ -199,6 +213,7 @@ fn scan(path: &Path, progress: &mut Progress) -> std::io::Result<()> {
             break;
         }
         progress.offset += passed;
+        progress.usage.skipped |= !whole;
         let parsed = whole.then(|| serde_json::from_slice::<Value>(&line).ok());
         let Some(record) = parsed.flatten() else {
             continue;
