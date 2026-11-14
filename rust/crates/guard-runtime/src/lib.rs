@@ -97,6 +97,7 @@ mod business_document_compile;
 mod business_review_page;
 mod business_source_codec;
 mod catalog_provenance;
+mod cigar_apps;
 mod cisco_containment;
 mod cisco_evidence;
 mod cisco_plan;
@@ -476,7 +477,6 @@ mod grok_user_config_op;
 #[path = "adapters/detection/grok_user_config_tests.rs"]
 mod grok_user_config_tests;
 mod guard_config_coerce;
-mod cigar_apps;
 mod guard_config_harness;
 mod guard_config_iso;
 mod guard_config_load;
