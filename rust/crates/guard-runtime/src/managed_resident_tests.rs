@@ -102,14 +102,16 @@ fn concurrent_callers_share_the_start_in_flight() {
 
 #[cfg(unix)]
 fn walk_names(root: &std::path::Path) -> Vec<String> {
+    // An unreadable directory fails the test: skipping it could hide a
+    // start attempt's marks.
     let mut names = Vec::new();
     let mut pending = vec![root.to_path_buf()];
     while let Some(directory) = pending.pop() {
-        let Ok(entries) = fs::read_dir(&directory) else {
-            continue;
-        };
-        for entry in entries.filter_map(Result::ok) {
-            if entry.file_type().is_ok_and(|kind| kind.is_dir()) {
+        let entries = fs::read_dir(&directory)
+            .unwrap_or_else(|error| panic!("read {}: {error}", directory.display()));
+        for entry in entries {
+            let entry = entry.expect("directory entry");
+            if entry.file_type().expect("entry type").is_dir() {
                 pending.push(entry.path());
             }
             names.push(entry.file_name().to_string_lossy().into_owned());
