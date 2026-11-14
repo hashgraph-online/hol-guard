@@ -12,12 +12,20 @@ groups come from `src/codex_plugin_scanner/guard/contracts/claude-hook-groups.v1
 | `~/.claude/settings.json` | `hol-guard install claude-code`, the `SessionStart` refresh, `hol-guard uninstall claude-code`, `hol-guard hooks remove --all` | Guard's handlers inside the `hooks` object only |
 | `~/.hol-guard/bin/guard-claude-code` (`.cmd` on Windows) | install | The launcher shim. Guard owns the whole file |
 | `<guard-home>/backups/hook-removal-<UTC stamp>/` | `hooks remove --all` | Copies of every config file it edited |
+| `.claude/settings.json` and `.claude/settings.local.json` in the current workspace | `hooks remove --all` only | Removes Guard's handlers, after a backup |
 
 Hooks are always written to the user settings file, even when you install from a workspace. The workspace
 only scopes the hook URL and the Guard policy. Install says so in its output.
 
-Guard does not write `.claude/settings.json` or `.claude/settings.local.json` in a project, managed
-settings, or `~/.claude.json`. It reads project files for inventory and for the workspace hook scan.
+Guard does not follow `CLAUDE_CONFIG_DIR`. It writes `~/.claude/settings.json` under your home directory
+even when that variable is set. If Claude Code runs with `CLAUDE_CONFIG_DIR` pointing elsewhere, it does
+not read the file Guard wrote, and Guard's hooks do not run.
+
+Install, refresh and uninstall never write a project's `.claude/settings.json` or
+`.claude/settings.local.json`, managed settings, or `~/.claude.json`. Guard reads project files for
+inventory and for the workspace hook scan. The one exception is `hol-guard hooks remove --all`: it removes
+Guard's handlers from the current workspace's `.claude/settings.json` and `.claude/settings.local.json`
+when they contain any, after backing them up (see [Removal](#removal)).
 
 ## Entries Guard treats as its own
 
@@ -33,7 +41,7 @@ Every other handler, matcher group, event and top-level setting is left as it wa
 
 ## Install and refresh
 
-Install and the `SessionStart` refresh make the same edit:
+Install makes this edit:
 
 1. Read `~/.claude/settings.json`. A missing file starts empty. A file that is not JSON, or not a JSON
    object, stops the install with an error, and Guard does not rewrite it.
@@ -44,11 +52,21 @@ Install and the `SessionStart` refresh make the same edit:
 3. Remove Guard's handlers from retired events (`PermissionDenied`), and drop a retired event left empty.
 4. Write the file with its original mode. A new file is created as `0644`.
 
-The refresh runs on each `SessionStart`. After a Guard upgrade it rewrites the handlers with the new
-build's command line, so they do not keep pointing at an old build.
+On each `SessionStart`, Guard checks whether its installed handlers already match what this build would
+write. When they match, nothing is written. When they do not, for example after a Guard upgrade, the
+refresh rewrites Guard's handlers with steps 2 and 3, so they do not keep pointing at an old build.
 
-If Guard's entries go missing while setup is `active`, doctor reports the setup as `broken` and names the
-missing events. Run `hol-guard repair` or `hol-guard install claude-code` to restore them.
+The refresh repairs less than install does:
+
+- it does nothing when the file is missing or has no `hooks` object;
+- it reads the file leniently and does not stop with an error on a file that is not a JSON object.
+
+Run `hol-guard install claude-code` to recreate missing entries.
+
+Doctor checks two events. If Guard's `PreToolUse` or `PermissionRequest` handler is missing while setup is
+`active`, doctor reports the setup as `broken` and names the missing event. It does not check the other
+events, so a missing `UserPromptSubmit` or `Stop` handler is not reported. Run `hol-guard repair` or
+`hol-guard install claude-code` to restore them.
 
 ## Removal
 
