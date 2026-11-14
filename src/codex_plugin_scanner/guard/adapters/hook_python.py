@@ -9,7 +9,6 @@ parent-derived record.
 
 from __future__ import annotations
 
-import hashlib
 import importlib.metadata
 import json
 import os
@@ -28,6 +27,7 @@ from typing import Final, cast
 import codex_plugin_scanner
 
 from ...version import __version__
+from ..native_runner_authority import NativeRunnerAuthorityError, native_runner_authority
 from ..stable_guard_cli import guard_cli_launcher
 from .base import HarnessContext
 from .hook_python_probe_code import PROBE_CODE as _PROBE_CODE
@@ -212,62 +212,66 @@ def _active_package_root() -> Path:
     return _active_package_paths()[1]
 
 
-def _file_metadata(value: os.stat_result) -> HookPythonFileMetadata:
-    return HookPythonFileMetadata(
-        device=value.st_dev,
-        inode=value.st_ino,
-        mode=value.st_mode,
-        size=value.st_size,
-        mtime_ns=value.st_mtime_ns,
-    )
+_TEXT_KEYS: Final = ("invocation_path", "invocation_type", "target_path", "target_sha256")
+_IDENTITY_KEYS: Final = frozenset((*_TEXT_KEYS, "invocation_link_target", "invocation_stat", "target_stat"))
+_STAT_KEYS: Final = ("device", "inode", "mode", "size", "mtime_ns")
+_IDENTITY_ERRORS: Final = frozenset(
+    f"guard_hook_python_interpreter_{kind}" for kind in ("unavailable", "untrusted", "changed")
+)
+# Hashing a frozen Guard CLI reads tens of megabytes.
+_IDENTITY_TIMEOUT_SECONDS: Final = 30.0
 
 
-def _file_sha256(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as handle:
-        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
+def _file_metadata(value: object) -> HookPythonFileMetadata:
+    if not isinstance(value, dict):
+        raise RuntimeError("guard_hook_python_interpreter_unavailable")
+    fields = cast(dict[str, object], value)
+    numbers = [fields.get(key) for key in _STAT_KEYS]
+    if set(fields) != set(_STAT_KEYS) or not all(
+        isinstance(number, int) and not isinstance(number, bool) for number in numbers
+    ):
+        raise RuntimeError("guard_hook_python_interpreter_unavailable")
+    device, inode, mode, size, mtime_ns = cast(list[int], numbers)
+    return HookPythonFileMetadata(device=device, inode=inode, mode=mode, size=size, mtime_ns=mtime_ns)
 
 
 def _executable_identity(path: Path) -> HookPythonExecutableIdentity:
+    """Read the executable's identity natively; see `hook_python_identity.rs`."""
+
     invocation = path.expanduser().absolute()
     try:
-        invocation_before = invocation.lstat()
-        target = invocation.resolve(strict=True)
-        target_before = target.stat()
-        link_target = os.readlink(invocation) if stat.S_ISLNK(invocation_before.st_mode) else None
-    except (OSError, RuntimeError) as error:
+        answer = native_runner_authority(
+            "hook_python_identity",
+            {"op": "executable", "path": str(invocation)},
+            timeout_seconds=_IDENTITY_TIMEOUT_SECONDS,
+        )
+    except NativeRunnerAuthorityError as error:
         raise RuntimeError("guard_hook_python_interpreter_unavailable") from error
-    if stat.S_ISLNK(invocation_before.st_mode):
-        invocation_type = "symlink"
-    elif stat.S_ISREG(invocation_before.st_mode):
-        invocation_type = "file"
-    else:
-        raise RuntimeError("guard_hook_python_interpreter_untrusted")
-    if not stat.S_ISREG(target_before.st_mode) or not os.access(invocation, os.X_OK):
-        raise RuntimeError("guard_hook_python_interpreter_untrusted")
-    try:
-        target_sha256 = _file_sha256(target)
-        invocation_after = invocation.lstat()
-        target_after_path = invocation.resolve(strict=True)
-        target_after = target_after_path.stat()
-    except (OSError, RuntimeError) as error:
-        raise RuntimeError("guard_hook_python_interpreter_changed") from error
+    error = answer.get("error")
+    if set(answer) == {"error"} and error in _IDENTITY_ERRORS:
+        raise RuntimeError(cast(str, error))
+    identity = answer.get("identity")
+    if set(answer) != {"identity"} or not isinstance(identity, dict):
+        raise RuntimeError("guard_hook_python_interpreter_unavailable")
+    fields = cast(dict[str, object], identity)
+    link_target = fields.get("invocation_link_target")
+    texts = [fields.get(key) for key in _TEXT_KEYS]
     if (
-        _file_metadata(invocation_before) != _file_metadata(invocation_after)
-        or target_after_path != target
-        or _file_metadata(target_before) != _file_metadata(target_after)
+        set(fields) != _IDENTITY_KEYS
+        or not all(isinstance(text, str) for text in texts)
+        or fields["invocation_path"] != str(invocation)
+        or fields["invocation_type"] not in {"file", "symlink"}
+        or not (link_target is None or isinstance(link_target, str))
     ):
-        raise RuntimeError("guard_hook_python_interpreter_changed")
+        raise RuntimeError("guard_hook_python_interpreter_unavailable")
     return HookPythonExecutableIdentity(
         invocation_path=invocation,
-        invocation_type=invocation_type,
-        invocation_link_target=link_target,
-        invocation_stat=_file_metadata(invocation_before),
-        target_path=target,
-        target_stat=_file_metadata(target_before),
-        target_sha256=target_sha256,
+        invocation_type=cast(str, fields["invocation_type"]),
+        invocation_link_target=cast("str | None", link_target),
+        invocation_stat=_file_metadata(fields["invocation_stat"]),
+        target_path=Path(cast(str, fields["target_path"])),
+        target_stat=_file_metadata(fields["target_stat"]),
+        target_sha256=cast(str, fields["target_sha256"]),
     )
 
 

@@ -757,6 +757,8 @@ mod hook_direct_counters;
 mod hook_direct_evidence;
 mod hook_env_stamp;
 mod hook_launch_scan;
+#[path = "adapters/hook_python_identity.rs"]
+mod hook_python_identity;
 mod hook_removal_prune;
 mod hook_removal_sweep;
 mod html_unescape;
