@@ -22,7 +22,8 @@
 
 use super::GitQuery;
 use std::collections::BTreeSet;
-use std::path::{Path, PathBuf};
+use std::io::Read;
+use std::path::{Component, Path, PathBuf};
 use std::time::Instant;
 
 /// More directories than this go to the full proof.
@@ -55,6 +56,17 @@ fn named_nowhere(query: &GitQuery<'_>, deadline: Instant) -> Option<bool> {
         return None;
     }
     let root = std::fs::canonicalize(root).ok()?;
+    // A user-set attributes path can contain symlinks and ".." segments.
+    // Git's variable output may normalize them differently from its reader;
+    // keep the full per-path proof rather than guess at the effective file.
+    if text(query(
+        &["config", "--default=", "--get", "core.attributesfile"],
+        None,
+        None,
+    )?)? != "\n"
+    {
+        return None;
+    }
     // `attr.tree` reads attributes out of a tree instead of these files.
     if text(query(
         &["config", "--default=", "--get", "attr.tree"],
@@ -72,7 +84,15 @@ fn named_nowhere(query: &GitQuery<'_>, deadline: Instant) -> Option<bool> {
         let path = text(query(&["var", variable], None, None)?)?;
         let path = path.strip_suffix('\n')?;
         if !path.is_empty() {
-            outside.push(PathBuf::from(path));
+            let external = PathBuf::from(path);
+            // The git-var result is not a safe filesystem locator when it is
+            // relative or has path-traversal components.
+            if !external.is_absolute()
+                || external.components().any(|component| matches!(component, Component::ParentDir))
+            {
+                return None;
+            }
+            outside.push(external);
         }
     }
     for path in outside {
@@ -149,7 +169,13 @@ fn quiet(path: &Path, follow: bool) -> Option<bool> {
     if !metadata.is_file() || metadata.len() > MAX_ATTRIBUTES_BYTES {
         return None;
     }
-    let bytes = std::fs::read(path).ok()?;
+    // Bound the actual read too: a file can be replaced or enlarged after
+    // metadata, and a hook must not read an unbounded replacement.
+    let file = std::fs::File::open(path).ok()?;
+    let mut bytes = Vec::new();
+    file.take(MAX_ATTRIBUTES_BYTES + 1)
+        .read_to_end(&mut bytes)
+        .ok()?;
     if bytes.len() as u64 > MAX_ATTRIBUTES_BYTES {
         return None;
     }
