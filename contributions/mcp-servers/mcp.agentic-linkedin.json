@@ -1,0 +1,207 @@
+{
+  "schemaVersion": "guard.mcp-server-contribution.v1",
+  "id": "mcp.agentic-linkedin",
+  "version": "1.0.0",
+  "name": "agentic-linkedin",
+  "description": "Reviews agentic-linkedin MCP tools that post, message, connect and edit a signed-in LinkedIn account. Reads of public profile data are allowed; private messages and every write need review. Off until you turn it on.",
+  "trustClass": "external",
+  "activation": "opt-in",
+  "publisher": {
+    "id": "github.darklvrd",
+    "displayName": "DarkLvrd",
+    "url": "https://github.com/DarkLvrd"
+  },
+  "icon": {
+    "kind": "react-icon",
+    "name": "HiMiniGlobeAlt",
+    "background": "#0A66C2"
+  },
+  "homepage": "https://github.com/DarkLvrd/linkedin-mcp",
+  "license": "MIT",
+  "launch": {
+    "kind": "package-launcher",
+    "command": "npx",
+    "package": "agentic-linkedin@0.1.0"
+  },
+  "riskClasses": [
+    "external-account-read",
+    "external-private-data-and-messaging",
+    "external-public-publishing",
+    "external-message-egress",
+    "external-content-deletion",
+    "external-shared-state-write",
+    "external-signed-in-browser-actions",
+    "local-file-write"
+  ],
+  "tools": [
+    {
+      "name": "session_status",
+      "state": "allow"
+    },
+    {
+      "name": "get_me",
+      "state": "allow"
+    },
+    {
+      "name": "get_profile",
+      "state": "allow"
+    },
+    {
+      "name": "get_posts",
+      "state": "allow"
+    },
+    {
+      "name": "get_connections_summary",
+      "state": "allow"
+    },
+    {
+      "name": "get_invitations",
+      "state": "review"
+    },
+    {
+      "name": "get_jobs",
+      "state": "allow"
+    },
+    {
+      "name": "get_analytics",
+      "state": "review"
+    },
+    {
+      "name": "get_voice_profile",
+      "state": "allow"
+    },
+    {
+      "name": "audit_draft",
+      "state": "allow"
+    },
+    {
+      "name": "dry_run",
+      "state": "allow"
+    },
+    {
+      "name": "plan",
+      "state": "allow"
+    },
+    {
+      "name": "reject",
+      "state": "allow"
+    },
+    {
+      "name": "get_conversations",
+      "state": "review"
+    },
+    {
+      "name": "get_conversation_history",
+      "state": "review"
+    },
+    {
+      "name": "show_artifact",
+      "state": "review"
+    },
+    {
+      "name": "login",
+      "state": "review"
+    },
+    {
+      "name": "approve",
+      "state": "review"
+    },
+    {
+      "name": "update_registry",
+      "state": "review"
+    },
+    {
+      "name": "set_voice_profile",
+      "state": "review"
+    },
+    {
+      "name": "bootstrap_voice_profile",
+      "state": "review"
+    },
+    {
+      "name": "update_profile",
+      "state": "review"
+    },
+    {
+      "name": "add_skill",
+      "state": "review"
+    },
+    {
+      "name": "remove_skill",
+      "state": "review"
+    },
+    {
+      "name": "reorder_skills",
+      "state": "review"
+    },
+    {
+      "name": "delete_ghost_entry",
+      "state": "review"
+    },
+    {
+      "name": "create_post",
+      "state": "review"
+    },
+    {
+      "name": "edit_post",
+      "state": "review"
+    },
+    {
+      "name": "delete_post",
+      "state": "review"
+    },
+    {
+      "name": "comment",
+      "state": "review"
+    },
+    {
+      "name": "react",
+      "state": "review"
+    },
+    {
+      "name": "send_message",
+      "state": "review"
+    },
+    {
+      "name": "recall_message",
+      "state": "review"
+    },
+    {
+      "name": "react_to_message",
+      "state": "review"
+    },
+    {
+      "name": "connect",
+      "state": "review"
+    },
+    {
+      "name": "respond_invitation",
+      "state": "review"
+    },
+    {
+      "name": "follow",
+      "state": "review"
+    },
+    {
+      "name": "endorse_skill",
+      "state": "review"
+    },
+    {
+      "name": "remove_connection",
+      "state": "review"
+    },
+    {
+      "name": "other",
+      "state": "review"
+    }
+  ],
+  "referenceUrls": [
+    "https://github.com/DarkLvrd/linkedin-mcp",
+    "https://www.npmjs.com/package/agentic-linkedin"
+  ],
+  "saferAlternatives": [
+    "Set LINKEDIN_READ_ONLY=1 to block every write tool in the server itself; reads keep working.",
+    "Use plan or dry_run to preview writes (field diffs, rendered posts and messages) and keep approve on review.",
+    "Writes are paced and budgeted (AGENTIC_LINKEDIN_BUDGET_PER_HOUR, default 60); lower it to cap account activity."
+  ]
+}

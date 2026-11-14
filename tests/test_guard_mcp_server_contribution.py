@@ -16,6 +16,7 @@ from .mcp_contribution_client import mcp_tool_state
 
 _FILESYSTEM = Path(__file__).resolve().parents[1] / "contributions/mcp-servers/mcp.filesystem.json"
 _TETHER = _FILESYSTEM.with_name("mcp.tether.json")
+_AGENTIC_LINKEDIN = _FILESYSTEM.with_name("mcp.agentic-linkedin.json")
 _DEV_MCP = _FILESYSTEM.with_name("mcp.dev-mcp.json")
 _REI_SKILLS = _FILESYSTEM.with_name("mcp.rei-skills.json")
 
@@ -29,6 +30,12 @@ def _filesystem_payload() -> dict[str, object]:
 def _tether_payload() -> dict[str, object]:
     """Read the authored Tether manifest so missing tools cannot hide behind fallback defaults."""
     payload = json.loads(_TETHER.read_text(encoding="utf-8"))
+    assert isinstance(payload, dict)
+    return payload
+
+
+def _agentic_linkedin_payload() -> dict[str, object]:
+    payload = json.loads(_AGENTIC_LINKEDIN.read_text(encoding="utf-8"))
     assert isinstance(payload, dict)
     return payload
 
@@ -84,6 +91,20 @@ def test_tether_contribution_is_external_opt_in() -> None:
     assert payload["trustClass"] == "external"
     assert payload["activation"] == "opt-in"
     assert payload["launch"] == {"kind": "package-launcher", "command": "uvx", "package": "tether-memory"}
+
+
+def test_agentic_linkedin_launch_package_is_version_pinned() -> None:
+    """Keep the reviewed agentic-linkedin launch on the exact npm version."""
+    payload = _agentic_linkedin_payload()
+    validate_mcp_contribution(payload, filename=_AGENTIC_LINKEDIN.name)
+    assert payload["id"] == "mcp.agentic-linkedin"
+    assert payload["trustClass"] == "external"
+    assert payload["activation"] == "opt-in"
+    assert payload["launch"] == {
+        "kind": "package-launcher",
+        "command": "npx",
+        "package": "agentic-linkedin@0.1.0",
+    }
 
 
 def test_tether_declares_every_memory_tool_with_inherited_policy() -> None:
