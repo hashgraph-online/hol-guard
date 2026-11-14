@@ -34,6 +34,20 @@ fn plain_hashline_patches_report_each_file_once() {
         targets("*** Begin Patch\n[ src/a.ts#0AC4]\nPUT 1.=1:\n+x\n[  src/b.ts ]\nPUT >$:\n+y\n[src/a.ts]\nPUT 2.=2:\n+z\n*** End Patch\n"),
         Some(vec!["src/a.ts".to_owned(), "src/b.ts".to_owned()])
     );
+    // Oh My Pi trims the whole header body before it cuts the tag, so a
+    // space before the closing bracket still leaves a plain tagged header.
+    assert_eq!(
+        hashline_targets("[ /home/u/other-project/notes.md#FB48 ]\nPUT 1.=1:\n+Verified settings change.\n"),
+        Some(vec![("/home/u/other-project/notes.md".to_owned(), true)])
+    );
+    assert_eq!(
+        super::header_paths("[ src/a.ts #0AC4 ]\nPUT 1.=1:\n+x\n[src/b.ts\t]\nPUT 1.=1:\n+y\n"),
+        None
+    );
+    assert_eq!(
+        super::header_paths("[ src/a.ts #0AC4 ]\nPUT 1.=1:\n+x\n"),
+        Some(vec!["src/a.ts"])
+    );
     // Oh My Pi opens a leading `~/` under the home folder, padded or not.
     assert_eq!(
         targets("*** Begin Patch\n[~/project/src/a.ts#0AC4]\nPUT 1.=1:\n+x\n[ ~/src/b.ts]\nPUT >$:\n+y\n*** End Patch\n"),

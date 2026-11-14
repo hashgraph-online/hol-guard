@@ -6922,6 +6922,24 @@
       "expect": "allow"
     },
     {
+      "id": "omp-hashline-edit-padded-header-sibling-note",
+      "fix_area": "write",
+      "harnesses": [
+        "omp"
+      ],
+      "mirror_pi": false,
+      "tool": "edit",
+      "tool_input": {
+        "input": "[ ${HOME}/other-project/notes.md#FB48 ]\nPUT 1.=1:\n+Verified notes kept outside the project.",
+        "path": "${HOME}/other-project/notes.md",
+        "paths": [
+          "${HOME}/other-project/notes.md"
+        ]
+      },
+      "cwd": "home_project",
+      "expect": "allow"
+    },
+    {
       "id": "omp-read-file-url-localhost-sibling-source",
       "fix_area": "read",
       "harnesses": [
