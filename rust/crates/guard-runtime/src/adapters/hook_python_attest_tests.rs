@@ -99,53 +99,97 @@ fn only_one_line_equal_to_the_record_is_accepted() {
     }
 }
 
-fn expected() -> Value {
+fn facts() -> Value {
     json!({
         "package_file": "/p/codex_plugin_scanner/__init__.py",
-        "package_root": "/p",
-        "cryptography_file": "/p/cryptography/__init__.py",
-        "import_roots": ["/p"],
-        "hol_distribution_root": null,
-        "cryptography_distribution_root": "/p",
+        "package_root": null,
         "version": "1.0",
-        "entry_point": "codex_plugin_scanner.cli:main",
+        "cryptography_root": "/p",
+        "hol": null,
     })
 }
 
 #[test]
 fn a_malformed_attest_request_is_refused() {
-    let request = |inherited: Value, expected: Value| {
+    let request = |inherited: Value, probe: Value, facts: Value| {
         json!({
             "op": "attest",
             "python": "/usr/bin/python3",
-            "cwd": "/guard/runtime/python-probe",
             "inherited": inherited,
-            "expected": expected,
+            "probe": probe,
+            "facts": facts,
         })
     };
-    let mut short = expected();
+    let scoped = json!({"scoped": "/guard/runtime/python-probe"});
+    let mut short = facts();
     short.as_object_mut().unwrap().remove("version");
     for args in [
-        request(json!({"PYTHONPATH": "/x"}), expected()),
-        request(json!({"LANG": 1}), expected()),
-        request(json!({}), short),
-        json!({"op": "attest", "python": "python3", "cwd": "/", "inherited": {}, "expected": expected()}),
-        json!({"op": "attest", "python": "/usr/bin/python3", "cwd": "/", "inherited": {}}),
+        request(json!({"PYTHONPATH": "/x"}), scoped.clone(), facts()),
+        request(json!({"LANG": 1}), scoped.clone(), facts()),
+        request(json!({}), scoped.clone(), short),
+        request(json!({}), json!({"scoped": "relative"}), facts()),
+        json!({"op": "attest", "python": "python3", "inherited": {}, "probe": scoped, "facts": facts()}),
+        json!({"op": "attest", "python": "/usr/bin/python3", "inherited": {}, "probe": scoped}),
     ] {
         assert!(dispatch(&args).is_err(), "{args}");
     }
 }
 
+#[cfg(unix)]
+#[test]
+fn an_unusable_directory_or_package_is_answered_before_anything_runs() {
+    let home = tempfile::tempdir().unwrap();
+    let root = std::fs::canonicalize(home.path()).unwrap();
+    let request = |probe: Value| {
+        json!({
+            "op": "attest",
+            "python": root.join("absent"),
+            "inherited": {},
+            "probe": probe,
+            "facts": facts(),
+        })
+    };
+    let guard_home = json!({"guard_home": root.join("guard")});
+    for (probe, error) in [
+        (
+            json!({"scoped": root.join("absent")}),
+            "guard_hook_python_neutral_cwd_unavailable",
+        ),
+        (guard_home, "guard_hook_python_active_package_unavailable"),
+    ] {
+        assert_eq!(
+            dispatch(&request(probe)).unwrap(),
+            json!({ "error": error })
+        );
+    }
+}
+
+#[cfg(unix)]
 #[test]
 fn an_interpreter_that_cannot_be_read_is_unavailable_before_anything_runs() {
     let home = tempfile::tempdir().unwrap();
     let root = std::fs::canonicalize(home.path()).unwrap();
+    for path in [
+        "site/codex_plugin_scanner/__init__.py",
+        "site/cryptography/__init__.py",
+    ] {
+        let file = root.join(path);
+        std::fs::create_dir_all(file.parent().unwrap()).unwrap();
+        std::fs::write(file, "").unwrap();
+    }
+    let site = root.join("site");
     let answer = dispatch(&json!({
         "op": "attest",
         "python": root.join("absent"),
-        "cwd": root,
         "inherited": {},
-        "expected": expected(),
+        "probe": {"guard_home": root.join("guard")},
+        "facts": {
+            "package_file": site.join("codex_plugin_scanner/__init__.py"),
+            "package_root": null,
+            "version": "1.0",
+            "cryptography_root": site,
+            "hol": {"root": site, "version": "1.0", "entry_point": "codex_plugin_scanner.cli:main", "direct_url": null},
+        },
     }))
     .unwrap();
     assert_eq!(

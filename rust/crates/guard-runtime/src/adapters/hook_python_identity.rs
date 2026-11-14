@@ -15,7 +15,7 @@
 //! from the read-only attribute and the four extensions the shell runs.
 //!
 //! `attest` runs that interpreter to confirm what it imports; see
-//! `hook_python_attest.rs`.
+//! `hook_python_attest.rs` and `hook_python_expect.rs`.
 
 use std::fs;
 use std::io::{self, Read};
@@ -266,6 +266,8 @@ mod platform {
 
 #[path = "hook_python_attest.rs"]
 mod attest;
+#[path = "hook_python_expect.rs"]
+mod expect;
 
 #[cfg(test)]
 #[path = "hook_python_identity_tests.rs"]

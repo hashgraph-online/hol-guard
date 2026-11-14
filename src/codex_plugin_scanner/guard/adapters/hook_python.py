@@ -1,22 +1,18 @@
 """Attest the already-running Guard Python for persisted harness hooks.
 
-The OpenCode integration never discovers a second interpreter.  It resolves
-the Python that is already running Guard, derives every trusted import path in
-the parent, and probes the resolved executable with site initialization
-disabled.  Child output is accepted only when it exactly matches the complete
-parent-derived record.
+The OpenCode integration never discovers a second interpreter.  It sends the
+native runtime where the running Guard's package and distributions live; the
+runtime derives every trusted import path from those facts, probes the
+resolved executable with site initialization disabled and accepts its output
+only when it exactly matches that record.  See `hook_python_attest.rs`.
 """
 
 from __future__ import annotations
 
 import importlib.metadata
-import json
 import os
-import stat
 import sys
 import tempfile
-import urllib.parse
-import urllib.request
 from collections.abc import Iterator
 from contextlib import contextmanager
 from contextvars import ContextVar
@@ -87,30 +83,6 @@ class HookPythonAttestation:
         return self.identity.invocation_path
 
 
-@dataclass(frozen=True, slots=True)
-class _ParentExpectation:
-    package_file: Path
-    package_root: Path
-    cryptography_file: Path
-    import_roots: tuple[Path, ...]
-    hol_distribution_root: Path | None
-    cryptography_distribution_root: Path
-
-    def probe_record(self) -> dict[str, object]:
-        return {
-            "package_file": str(self.package_file),
-            "package_root": str(self.package_root),
-            "cryptography_file": str(self.cryptography_file),
-            "import_roots": [str(root) for root in self.import_roots],
-            "hol_distribution_root": (
-                str(self.hol_distribution_root) if self.hol_distribution_root is not None else None
-            ),
-            "cryptography_distribution_root": str(self.cryptography_distribution_root),
-            "version": __version__,
-            "entry_point": _EXPECTED_ENTRY_POINT,
-        }
-
-
 @contextmanager
 def disposable_guard_hook_probe() -> Iterator[None]:
     """Keep attestation writes in an owned temporary directory during preparation.
@@ -121,75 +93,24 @@ def disposable_guard_hook_probe() -> Iterator[None]:
     """
 
     with tempfile.TemporaryDirectory(prefix="hol-guard-hook-probe-") as directory:
-        path = Path(directory).resolve(strict=True)
-        if not _path_is_owned_private_directory(path):
-            raise RuntimeError("guard_hook_python_neutral_cwd_unavailable")
-        token = _PREPARATION_PROBE.set((os.getpid(), path))
+        token = _PREPARATION_PROBE.set((os.getpid(), Path(directory).resolve(strict=True)))
         try:
             yield
         finally:
             _PREPARATION_PROBE.reset(token)
 
 
-def _attestation_probe_cwd(context: HarnessContext) -> Path:
+def _attestation_probe(context: HarnessContext) -> dict[str, str]:
+    """Where the probe runs: the preparation scope, or the native runtime makes
+    `runtime/python-probe` under the Guard home.  Either must be private."""
+
     scoped = _PREPARATION_PROBE.get()
     if scoped is None:
-        return _private_probe_cwd(context)
+        return {"guard_home": str(context.guard_home.expanduser().absolute())}
     pid, path = scoped
-    if pid != os.getpid() or path.is_symlink() or not _path_is_owned_private_directory(path):
+    if pid != os.getpid():
         raise RuntimeError("guard_hook_python_neutral_cwd_unavailable")
-    return path
-
-
-def _private_probe_cwd(context: HarnessContext) -> Path:
-    context.guard_home.mkdir(mode=0o700, parents=True, exist_ok=True)
-    guard_home = context.guard_home.resolve(strict=True)
-    if not _path_is_owned_directory(guard_home) or (
-        os.name != "nt" and stat.S_IMODE(guard_home.stat().st_mode) & 0o022 != 0
-    ):
-        raise RuntimeError("guard_hook_python_neutral_cwd_unavailable")
-    runtime_dir = guard_home / "runtime"
-    probe_dir = runtime_dir / "python-probe"
-    for directory in (runtime_dir, probe_dir):
-        directory.mkdir(mode=0o700, exist_ok=True)
-        if directory.is_symlink() or not _path_is_owned_directory(directory):
-            raise RuntimeError("guard_hook_python_neutral_cwd_unavailable")
-        try:
-            directory.chmod(0o700)
-        except OSError:
-            if os.name != "nt":
-                raise RuntimeError("guard_hook_python_neutral_cwd_unavailable") from None
-        if not _path_is_owned_private_directory(directory):
-            raise RuntimeError("guard_hook_python_neutral_cwd_unavailable")
-    return probe_dir.resolve(strict=True)
-
-
-def _path_is_owned_private_directory(path: Path) -> bool:
-    return _path_is_owned_directory(path) and (os.name == "nt" or stat.S_IMODE(path.stat().st_mode) & 0o077 == 0)
-
-
-def _path_is_owned_directory(path: Path) -> bool:
-    try:
-        metadata = path.stat()
-    except OSError:
-        return False
-    getuid = getattr(os, "getuid", None)
-    return stat.S_ISDIR(metadata.st_mode) and (getuid is None or metadata.st_uid == getuid())
-
-
-def _active_package_paths() -> tuple[Path, Path]:
-    package_file = getattr(codex_plugin_scanner, "__file__", None)
-    if not isinstance(package_file, str) or not package_file:
-        raise RuntimeError("guard_hook_python_active_package_unavailable")
-    resolved_file = Path(package_file).resolve(strict=True)
-    package_root = resolved_file.parent.parent
-    if not package_root.is_dir():
-        raise RuntimeError("guard_hook_python_active_package_unavailable")
-    return resolved_file, package_root
-
-
-def _active_package_root() -> Path:
-    return _active_package_paths()[1]
+    return {"scoped": str(path)}
 
 
 _TEXT_KEYS: Final = ("invocation_path", "invocation_type", "target_path", "target_sha256")
@@ -198,9 +119,29 @@ _STAT_KEYS: Final = ("device", "inode", "mode", "size", "mtime_ns")
 _IDENTITY_ERRORS: Final = frozenset(
     f"guard_hook_python_interpreter_{kind}" for kind in ("unavailable", "untrusted", "changed")
 )
-_ATTEST_ERRORS: Final = _IDENTITY_ERRORS | frozenset(
-    f"guard_hook_python_probe_{kind}"
-    for kind in ("timeout", "output_limit", "capture_incomplete", "rejected", "output_invalid", "identity_mismatch")
+_ATTEST_ERRORS: Final = (
+    _IDENTITY_ERRORS
+    | frozenset(
+        f"guard_hook_python_probe_{kind}"
+        for kind in ("timeout", "output_limit", "capture_incomplete", "rejected", "output_invalid", "identity_mismatch")
+    )
+    | frozenset(
+        f"guard_hook_python_{kind}"
+        for kind in (
+            "neutral_cwd_unavailable",
+            "active_package_unavailable",
+            "package_root_mismatch",
+            "cryptography_distribution_unavailable",
+            "cryptography_unavailable",
+            "cryptography_distribution_mismatch",
+            "hol_guard_distribution_unavailable",
+            "hol_guard_distribution_mismatch",
+        )
+    )
+)
+_EXPECTED_PATH_KEYS: Final = ("package_file", "package_root", "cryptography_file", "cryptography_distribution_root")
+_EXPECTED_KEYS: Final = frozenset(
+    (*_EXPECTED_PATH_KEYS, "import_roots", "hol_distribution_root", "version", "entry_point")
 )
 # Hashing a frozen Guard CLI reads tens of megabytes; attesting also runs the
 # interpreter for up to 15 seconds.
@@ -226,15 +167,16 @@ def _executable_identity(path: Path) -> HookPythonExecutableIdentity:
 
     invocation = path.expanduser().absolute()
     request: dict[str, object] = {"op": "executable", "path": str(invocation)}
-    return _native_identity(request, invocation, _IDENTITY_ERRORS, _IDENTITY_TIMEOUT_SECONDS)
+    answer = _native_answer(request, frozenset({"identity"}), _IDENTITY_ERRORS, _IDENTITY_TIMEOUT_SECONDS)
+    return _native_identity(answer["identity"], invocation)
 
 
-def _native_identity(
+def _native_answer(
     request: dict[str, object],
-    invocation: Path,
+    keys: frozenset[str],
     errors: frozenset[str],
     timeout_seconds: float,
-) -> HookPythonExecutableIdentity:
+) -> dict[str, object]:
     try:
         answer = native_runner_authority("hook_python_identity", request, timeout_seconds=timeout_seconds)
     except NativeRunnerAuthorityError as error:
@@ -242,8 +184,13 @@ def _native_identity(
     error = answer.get("error")
     if set(answer) == {"error"} and error in errors:
         raise RuntimeError(cast(str, error))
-    identity = answer.get("identity")
-    if set(answer) != {"identity"} or not isinstance(identity, dict):
+    if set(answer) != keys:
+        raise RuntimeError("guard_hook_python_interpreter_unavailable")
+    return answer
+
+
+def _native_identity(identity: object, invocation: Path) -> HookPythonExecutableIdentity:
+    if not isinstance(identity, dict):
         raise RuntimeError("guard_hook_python_interpreter_unavailable")
     fields = cast(dict[str, object], identity)
     link_target = fields.get("invocation_link_target")
@@ -274,155 +221,104 @@ def _identity_is_unchanged(identity: HookPythonExecutableIdentity) -> bool:
         return False
 
 
-def _distribution_root(name: str) -> Path:
+def _distribution(name: str) -> importlib.metadata.Distribution | None:
     try:
-        distribution = importlib.metadata.distribution(name)
-        root = Path(str(distribution.locate_file(""))).resolve(strict=True)
-    except (importlib.metadata.PackageNotFoundError, OSError, RuntimeError) as error:
-        raise RuntimeError(f"guard_hook_python_{name.replace('-', '_')}_distribution_unavailable") from error
-    if not root.is_dir():
-        raise RuntimeError(f"guard_hook_python_{name.replace('-', '_')}_distribution_unavailable")
-    return root
+        return importlib.metadata.distribution(name)
+    except importlib.metadata.PackageNotFoundError:
+        return None
 
 
-def _is_explicit_editable_source_root(package_root: Path) -> bool:
-    return (
-        package_root.name == "src"
-        and (package_root / "codex_plugin_scanner" / "__init__.py").is_file()
-        and (package_root.parent / "pyproject.toml").is_file()
-    )
-
-
-def _editable_distribution_source_root(
-    distribution: importlib.metadata.Distribution,
-) -> Path | None:
-    raw_direct_url = distribution.read_text("direct_url.json")
-    if not raw_direct_url:
+def _distribution_location(distribution: importlib.metadata.Distribution | None) -> str | None:
+    if distribution is None:
         return None
     try:
-        value: object = json.loads(raw_direct_url)
-    except json.JSONDecodeError:
-        return None
-    if not isinstance(value, dict):
-        return None
-    direct_url = cast(dict[str, object], value)
-    directory_info = direct_url.get("dir_info")
-    url = direct_url.get("url")
-    if not isinstance(directory_info, dict) or directory_info.get("editable") is not True or not isinstance(url, str):
-        return None
-    parsed = urllib.parse.urlparse(url)
-    if (
-        parsed.scheme != "file"
-        or parsed.netloc not in {"", "localhost"}
-        or parsed.params
-        or parsed.query
-        or parsed.fragment
-    ):
-        return None
-    try:
-        return Path(urllib.request.url2pathname(urllib.parse.unquote(parsed.path))).resolve(strict=True)
+        return str(Path(str(distribution.locate_file(""))).absolute())
     except (OSError, RuntimeError):
         return None
 
 
-def _parent_expectation() -> _ParentExpectation:
-    package_file, package_root = _active_package_paths()
-    cryptography_distribution_root = _distribution_root("cryptography")
-    try:
-        crypto_file = (cryptography_distribution_root / "cryptography" / "__init__.py").resolve(strict=True)
-    except (OSError, RuntimeError) as error:
-        raise RuntimeError("guard_hook_python_cryptography_unavailable") from error
-    if not crypto_file.is_file() or not _path_within(crypto_file, cryptography_distribution_root):
-        raise RuntimeError("guard_hook_python_cryptography_distribution_mismatch")
-    try:
-        hol_distribution = importlib.metadata.distribution("hol-guard")
-    except importlib.metadata.PackageNotFoundError:
-        if not _is_explicit_editable_source_root(package_root):
-            raise RuntimeError("guard_hook_python_hol_guard_distribution_unavailable") from None
-        hol_distribution_root = None
-    else:
-        try:
-            hol_distribution_root = Path(str(hol_distribution.locate_file(""))).resolve(strict=True)
-        except (OSError, RuntimeError) as error:
-            raise RuntimeError("guard_hook_python_hol_guard_distribution_unavailable") from error
+def _parent_facts(expected_package_root: Path | None) -> dict[str, object]:
+    """What only the running Python can read; the native runtime decides
+    whether it agrees.  See `hook_python_expect.rs`."""
+
+    package_file = getattr(codex_plugin_scanner, "__file__", None)
+    if not isinstance(package_file, str) or not package_file:
+        raise RuntimeError("guard_hook_python_active_package_unavailable")
+    hol: dict[str, object] | None = None
+    hol_distribution = _distribution("hol-guard")
+    if hol_distribution is not None:
+        hol_root = _distribution_location(hol_distribution)
+        if hol_root is None:
+            raise RuntimeError("guard_hook_python_hol_guard_distribution_unavailable")
         entry_points = {
             item.name: item.value for item in hol_distribution.entry_points if item.group == "console_scripts"
         }
-        if hol_distribution.version != __version__ or entry_points.get("hol-guard") != _EXPECTED_ENTRY_POINT:
-            raise RuntimeError("guard_hook_python_hol_guard_distribution_mismatch")
-        if not _path_within(package_file, hol_distribution_root):
-            editable_root = _editable_distribution_source_root(hol_distribution)
-            if (
-                editable_root is None
-                or package_root != editable_root / "src"
-                or not _is_explicit_editable_source_root(package_root)
-            ):
-                raise RuntimeError("guard_hook_python_hol_guard_distribution_mismatch")
-    import_roots: list[Path] = []
-    for root in (package_root, hol_distribution_root, cryptography_distribution_root):
-        if root is not None and root not in import_roots:
-            import_roots.append(root)
-    return _ParentExpectation(
-        package_file=package_file,
-        package_root=package_root,
-        cryptography_file=crypto_file,
-        import_roots=tuple(import_roots),
-        hol_distribution_root=hol_distribution_root,
-        cryptography_distribution_root=cryptography_distribution_root,
-    )
+        hol = {
+            "root": hol_root,
+            "version": str(hol_distribution.version),
+            "entry_point": entry_points.get("hol-guard"),
+            "direct_url": hol_distribution.read_text("direct_url.json") or None,
+        }
+    return {
+        "package_file": str(Path(package_file).absolute()),
+        "package_root": None if expected_package_root is None else str(expected_package_root.absolute()),
+        "version": __version__,
+        "cryptography_root": _distribution_location(_distribution("cryptography")),
+        "hol": hol,
+    }
 
 
 def _attest_python(
     python: Path,
     *,
-    neutral_cwd: Path,
+    probe: dict[str, str],
     expected_package_root: Path | None = None,
 ) -> HookPythonAttestation:
     current = Path(sys.executable).absolute()
     if python.expanduser().absolute() != current:
         raise RuntimeError("guard_hook_python_not_running_interpreter")
-    expectation = _parent_expectation()
-    if expected_package_root is not None and expected_package_root.resolve(strict=True) != expectation.package_root:
-        raise RuntimeError("guard_hook_python_package_root_mismatch")
-    # The native runtime runs the interpreter and compares its report; see
-    # `hook_python_attest.rs`.
     request: dict[str, object] = {
         "op": "attest",
         "python": str(current),
-        "cwd": str(neutral_cwd),
         "inherited": {key: os.environ[key] for key in _PROBE_INHERITED_ENV_KEYS if key in os.environ},
-        "expected": expectation.probe_record(),
+        "probe": probe,
+        "facts": _parent_facts(expected_package_root),
     }
-    identity = _native_identity(request, current, _ATTEST_ERRORS, _ATTEST_TIMEOUT_SECONDS)
+    answer = _native_answer(request, frozenset({"identity", "expected"}), _ATTEST_ERRORS, _ATTEST_TIMEOUT_SECONDS)
+    identity = _native_identity(answer["identity"], current)
+    expected = answer["expected"]
+    if not isinstance(expected, dict):
+        raise RuntimeError("guard_hook_python_interpreter_unavailable")
+    fields = cast(dict[str, object], expected)
+    roots = fields.get("import_roots")
+    hol_root = fields.get("hol_distribution_root")
+    if (
+        set(fields) != _EXPECTED_KEYS
+        or not all(isinstance(fields[key], str) for key in _EXPECTED_PATH_KEYS)
+        or not isinstance(roots, list)
+        or not all(isinstance(root, str) for root in cast(list[object], roots))
+        or not (hol_root is None or isinstance(hol_root, str))
+        or fields["version"] != __version__
+        or fields["entry_point"] != _EXPECTED_ENTRY_POINT
+    ):
+        raise RuntimeError("guard_hook_python_interpreter_unavailable")
     return HookPythonAttestation(
         identity=identity,
-        package_file=expectation.package_file,
-        package_root=expectation.package_root,
-        cryptography_file=expectation.cryptography_file,
-        import_roots=expectation.import_roots,
-        hol_distribution_root=expectation.hol_distribution_root,
-        cryptography_distribution_root=expectation.cryptography_distribution_root,
+        package_file=Path(cast(str, fields["package_file"])),
+        package_root=Path(cast(str, fields["package_root"])),
+        cryptography_file=Path(cast(str, fields["cryptography_file"])),
+        import_roots=tuple(Path(root) for root in cast(list[str], roots)),
+        hol_distribution_root=None if hol_root is None else Path(cast(str, hol_root)),
+        cryptography_distribution_root=Path(cast(str, fields["cryptography_distribution_root"])),
         version=__version__,
         entry_point=_EXPECTED_ENTRY_POINT,
     )
 
 
-def _path_within(path: Path, root: Path) -> bool:
-    try:
-        _ = path.relative_to(root)
-    except ValueError:
-        return False
-    return True
-
-
 def attest_guard_hook_python(context: HarnessContext) -> HookPythonAttestation:
     """Attest only the interpreter already running this Guard process."""
 
-    return _attest_python(
-        Path(sys.executable).absolute(),
-        neutral_cwd=_attestation_probe_cwd(context),
-        expected_package_root=_active_package_root(),
-    )
+    return _attest_python(Path(sys.executable).absolute(), probe=_attestation_probe(context))
 
 
 def resolve_guard_hook_python(context: HarnessContext) -> Path:
