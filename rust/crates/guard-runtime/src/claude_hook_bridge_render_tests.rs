@@ -1,6 +1,6 @@
-//! Parity with the Python Claude bridge's event read, deny shapes and
-//! response validation, from vectors recorded by
-//! `scripts/ci/record_claude_hook_bridge_vectors.py`.
+//! Parity with the retired Python Claude bridge's event read, deny shapes
+//! and response validation, from the vectors it recorded before it was
+//! deleted.
 
 use super::*;
 use crate::hook_env_stamp::tests::{excerpt, expand, expected, items, text, vectors};

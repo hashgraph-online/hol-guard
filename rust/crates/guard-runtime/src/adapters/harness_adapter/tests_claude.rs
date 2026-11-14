@@ -23,6 +23,26 @@ fn facts(bridge: Option<&str>, frozen: bool) -> String {
     .to_string()
 }
 
+const RUNTIME: &str = "/g/hol-guard-runtime";
+
+#[test]
+fn install_without_a_native_runtime_asks_for_repair() {
+    let home = Home::new();
+    for frozen in [false, true] {
+        let answer = run(
+            &home,
+            "prepare_install",
+            json!({"shim": shim()}),
+            &facts(None, frozen),
+        );
+        assert_eq!(
+            answer["runtime_error"],
+            crate::harness_adapter::claude_argv::RUNTIME_MISSING,
+            "{frozen}"
+        );
+    }
+}
+
 fn ask(home: &Home, op: &str, fields: &Map<String, Value>) -> Value {
     let mut request =
         json!({"harness": "claude-code", "op": op, "context": home.context(json!({"PATH": ""}))});
@@ -143,11 +163,11 @@ fn install_keeps_user_entries_and_replaces_stale_guard_ones() {
         },
     });
     fs::write(settings(&home), before.to_string()).unwrap();
-    let payload = installed(&home, None);
+    let payload = installed(&home, Some(RUNTIME));
     assert_eq!(payload["theme"], "dark");
     let pre = payload["hooks"]["PreToolUse"].as_array().unwrap();
     assert_eq!(pre[0]["hooks"], json!([user]));
-    assert_eq!(pre[1]["hooks"][0]["command"], "/usr/bin/python3");
+    assert_eq!(pre[1]["hooks"][0]["command"], RUNTIME);
     assert!(payload["hooks"].get("PermissionDenied").is_none());
 }
 
@@ -174,7 +194,6 @@ fn frozen_builds_launch_the_stable_cli() {
     let argv = |which: &str| run(&home, "argv", json!({"which": which}), &frozen)["argv"].clone();
     assert_eq!(argv("hook")[0], "/g/bin/hol-guard");
     assert_eq!(argv("hook")[1], "hook");
-    assert_eq!(argv("daemon")[1], "__guard-claude-hook");
     let session = argv("session_start");
     assert_eq!(session[1], "__guard-claude-hook");
     assert_eq!(session[2], "HOL_GUARD_CLAUDE_SESSION_START_HOOK");
@@ -206,7 +225,7 @@ fn source_checkout_argv_imports_from_the_package_root() {
 #[test]
 fn uninstall_prunes_guard_entries_only() {
     let home = Home::new();
-    let payload = installed(&home, None);
+    let payload = installed(&home, Some(RUNTIME));
     let mut payload = payload.as_object().unwrap().clone();
     payload["hooks"]["Stop"]
         .as_array_mut()
@@ -237,7 +256,7 @@ fn diagnostics_mark_an_active_setup_without_hooks_broken() {
         .as_str()
         .unwrap()
         .contains("(PreToolUse, PermissionRequest)"));
-    let payload = installed(&home, None);
+    let payload = installed(&home, Some(RUNTIME));
     fs::create_dir_all(settings(&home).parent().unwrap()).unwrap();
     fs::write(settings(&home), payload.to_string()).unwrap();
     let answer = ask(&home, "diagnostics", fields.as_object().unwrap());

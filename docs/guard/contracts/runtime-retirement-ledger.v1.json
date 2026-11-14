@@ -4,6 +4,7 @@
  "scope": "RMN-009 resident retirement complete; offline archive inspection retired to guard-archive via hol-guard-runtime archive-inspect; RMN-008 and RMN-010 through RMN-014 hook-oracle cutover incomplete pending live prompt, permission, and package caller closure",
  "retired_source_paths": [
   "src/codex_plugin_scanner/guard/runtime/restricted_archive_deadline.py",
+  "src/codex_plugin_scanner/guard/adapters/claude_daemon_hook_bridge.py",
   "src/codex_plugin_scanner/guard/runtime/restricted_archive_destination.py",
   "src/codex_plugin_scanner/guard/runtime/restricted_archive_stream.py",
   "src/codex_plugin_scanner/guard/cli/commands_hook_claude.py",

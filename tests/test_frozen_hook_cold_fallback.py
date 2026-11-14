@@ -1,8 +1,7 @@
 """A frozen Guard never starts a cold `hol-guard hook` evaluator from a hook bridge.
 
-The Claude bridge has no local evaluator left to forbid: its launcher runs the
-native command or denies, so `tests/test_claude_daemon_hook_bridge.py` covers
-it from the other side.
+Claude has no Python launcher left: Guard installs the native command, and
+`tests/test_claude_daemon_hook_bridge.py` covers an older frozen command.
 """
 
 from __future__ import annotations

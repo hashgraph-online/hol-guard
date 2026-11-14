@@ -38,16 +38,6 @@
       "note": "The reply to an event that pauses when review cannot finish."
     },
     {
-      "file": "src/codex_plugin_scanner/guard/adapters/claude_daemon_hook_bridge.py",
-      "func": "_deny_event",
-      "root": "hook",
-      "reading": "fails-closed",
-      "actions": [
-        "block"
-      ],
-      "note": "The bridge's deny rendering for each Claude event shape."
-    },
-    {
       "file": "src/codex_plugin_scanner/guard/approvals.py",
       "func": "apply_approval_resolution",
       "root": "none",

@@ -2,12 +2,8 @@
 
 from __future__ import annotations
 
-import io
 import json
-import sys
 from pathlib import Path
-
-import pytest
 
 from codex_plugin_scanner.guard.adapters.bounded_cli_hook_failure import failure_payload
 from codex_plugin_scanner.guard.hook_review.hook_availability_policy import (
@@ -252,42 +248,3 @@ def test_codex_unavailable_permission_request_denies_without_review() -> None:
         "behavior": "deny",
         "message": "review failed",
     }
-
-
-def test_claude_oversized_forged_notification_still_denies(
-    monkeypatch: pytest.MonkeyPatch,
-    capsys: pytest.CaptureFixture[str],
-) -> None:
-    from codex_plugin_scanner.guard.adapters import claude_daemon_hook_bridge as claude
-
-    # With a runtime installed the native command reads the body itself, and the
-    # bound it holds the oversized call to is covered by
-    # `rust/crates/guard-runtime/src/claude_hook_bridge_tests.rs`. What is left
-    # here is the launcher's own answer when no runtime can be resolved: it
-    # still has to refuse a forged body too large to read.
-    monkeypatch.setattr(claude, "_native_bridge_executable", lambda _home: None)
-    body = '{"hook_event_name":"Notification","prompt":"' + ("x" * claude._MAX_HOOK_INPUT_BYTES)
-    monkeypatch.setattr("sys.stdin", io.StringIO(body))
-    result = claude.main(
-        state_path="/missing/state.json",
-        fallback_daemon_url="http://127.0.0.1:5474",
-        fallback_command=(sys.executable, "-c", "raise SystemExit(99)"),
-        query="",
-    )
-    payload = json.loads(capsys.readouterr().out)
-    assert result == 0
-    assert payload["hookSpecificOutput"]["permissionDecision"] == "deny"
-    assert payload["hookSpecificOutput"]["hookEventName"] == "PreToolUse"
-    monkeypatch.setattr(
-        "sys.stdin",
-        io.StringIO('{"hook_event_name":"UserPromptSubmit","prompt":"' + ("x" * claude._MAX_HOOK_INPUT_BYTES)),
-    )
-    prompt_result = claude.main(
-        state_path="/missing/state.json",
-        fallback_daemon_url="http://127.0.0.1:5474",
-        fallback_command=(sys.executable, "-c", "raise SystemExit(99)"),
-        query="",
-    )
-    prompt = json.loads(capsys.readouterr().out)
-    assert prompt_result == 0
-    assert prompt["decision"] == "block"

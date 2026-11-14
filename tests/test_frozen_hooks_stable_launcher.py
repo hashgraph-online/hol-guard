@@ -81,12 +81,13 @@ def test_claude_frozen_hooks_use_the_stable_launcher(
     adapter = claude_code.ClaudeCodeHarnessAdapter
 
     hook = adapter._hook_command_parts(context)  # pyright: ignore[reportPrivateUsage]
-    daemon = adapter._daemon_hook_command_parts(context)  # pyright: ignore[reportPrivateUsage]
     session = adapter._session_start_command_parts(context)  # pyright: ignore[reportPrivateUsage]
 
-    assert [hook[0], daemon[0], session[0]] == [launcher, launcher, launcher]
+    assert [hook[0], session[0]] == [launcher, launcher]
     assert hook[1] == "hook"
-    assert daemon[1] == session[1] == "__guard-claude-hook"
+    assert session[1] == "__guard-claude-hook"
+    with pytest.raises(RuntimeError, match="hol-guard repair"):
+        adapter._daemon_hook_command_parts(context)  # pyright: ignore[reportPrivateUsage]
 
 
 def _hermes_launch_command(context: HarnessContext) -> object:

@@ -102,12 +102,12 @@ def test_claude_hooks_use_entrypoint_not_dash_c_when_frozen(monkeypatch: pytest.
     _frozen(monkeypatch)
     monkeypatch.setattr(claude_code, "native_hook_bridge_executable", lambda *_args, **_kwargs: None)
     context = HarnessContext(home_dir=tmp_path / "h", workspace_dir=None, guard_home=tmp_path / "g")
-    daemon = ClaudeCodeHarnessAdapter._daemon_hook_command_parts(context)  # pyright: ignore[reportPrivateUsage]
     session = ClaudeCodeHarnessAdapter._session_start_command_parts(context)  # pyright: ignore[reportPrivateUsage]
     fallback = ClaudeCodeHarnessAdapter._hook_command_parts(context)  # pyright: ignore[reportPrivateUsage]
-    for argv in (daemon, session, fallback):
+    for argv in (session, fallback):
         assert "-c" not in argv and "-m" not in argv
-    assert daemon[1:3] == (_FROZEN_CLAUDE_HOOK_COMMAND, CLAUDE_GUARD_DAEMON_HOOK_MARKER)
+    with pytest.raises(RuntimeError, match="hol-guard repair"):
+        ClaudeCodeHarnessAdapter._daemon_hook_command_parts(context)  # pyright: ignore[reportPrivateUsage]
     assert session[1:3] == (_FROZEN_CLAUDE_HOOK_COMMAND, CLAUDE_GUARD_SESSION_START_HOOK_MARKER)
     assert fallback[1] == "hook"
 
