@@ -18,12 +18,19 @@ fn a_read_leaves_a_later_step_running_what_guard_read() {
         "status --short --branch",
         "log --oneline -5",
         "ls-remote --heads origin",
+        "diff-tree -r --name-only HEAD",
+        "diff-index --cached --name-only HEAD",
+        "diff-files --name-only",
     ] {
         assert!(super::writes_nothing(&words(command)), "{command}");
     }
     // Each of these writes somewhere a later step could read.
     for command in [
         "diff --output=hook",
+        "diff-tree --output=hook -r HEAD",
+        "diff-tree -r --out hook HEAD",
+        "diff-index --output=run.sh HEAD",
+        "diff-files --outp=hook",
         "archive -o out.tar HEAD",
         "config a.b c",
     ] {

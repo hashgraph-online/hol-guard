@@ -13,7 +13,7 @@ from .extension_catalog_fixtures import CATALOG_CASE, CATALOG_CHECK
 from .fast_forward_fixtures import FAST_FORWARD_CASE, FAST_FORWARD_HOOK_CASE
 from .file_write_cases import FILE_WRITE_BLOCK_REASONS, FILE_WRITE_CHECK, FILE_WRITE_ORACLE
 from .task_brief_cases import TASK_BRIEF_BLOCK_REASONS, TASK_BRIEF_ORACLE
-from .input_evidence import input_digest, input_matches, post_input_matches
+from .input_evidence import edit_headers, input_digest, input_matches, post_input_matches
 from .native_routes import native_route_error
 from .remote_code import REMOTE_CODE_CASES
 from .review_fixtures import (
@@ -259,7 +259,7 @@ def _edit_path(args: dict[str, Any]) -> str | None:
     text = args["input"]
     if not isinstance(text, str):
         return None
-    headers = [header.strip(" \t") for header in re.findall(r"^\[([^\n]+)#[0-9A-Fa-f]{4}\]$", text, re.MULTILINE)]
+    headers = edit_headers(text)
     if len(headers) != 1 or not headers[0]:
         return None
     path = _fixture_path(headers[0])

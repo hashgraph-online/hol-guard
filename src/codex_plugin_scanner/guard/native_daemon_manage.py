@@ -1102,6 +1102,10 @@ def _trusted_frozen_bootloader_parent_pid(guard_home: Path) -> int | None:
 # --- locks ---------------------------------------------------------------------------------------
 
 
+class GuardDaemonStartLockTimeoutError(RuntimeError):
+    """Another process kept the daemon start lock for the whole wait."""
+
+
 def _lock_file(handle: BinaryIO, deadline: float | None) -> bool:
     """Take the exclusive lock on `handle`, waiting until `deadline` (forever when `None`)."""
 
@@ -1144,13 +1148,13 @@ def guard_daemon_start_lock(guard_home: Path, *, deadline: float | None = None) 
                     _ = _START_DEPTHS.pop(depth_key, None)
         return
     if not thread_lock.acquire(timeout=-1 if deadline is None else max(0.0, deadline - time.monotonic())):
-        raise RuntimeError("Timed out waiting to start the Guard daemon.")
+        raise GuardDaemonStartLockTimeoutError("Timed out waiting to start the Guard daemon.")
     try:
         lock_path = guard_home / _START_LOCK_FILE
         lock_path.parent.mkdir(parents=True, exist_ok=True)
         with lock_path.open("a+b") as handle:
             if not _lock_file(handle, deadline):
-                raise RuntimeError("Timed out waiting to start the Guard daemon.")
+                raise GuardDaemonStartLockTimeoutError("Timed out waiting to start the Guard daemon.")
             try:
                 with _LOCKS_GUARD:
                     _START_DEPTHS[depth_key] = 1

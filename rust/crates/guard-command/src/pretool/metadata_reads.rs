@@ -5,7 +5,11 @@
 //! walks its operands and prints the name of every directory below them (every
 //! file too with `-a`). With `-s` or a zero depth it prints only the operands,
 //! and with a depth of one only their direct children: the names a plain
-//! `ls -a` of the operand prints, so both take the `ls` read proof. A deeper
+//! `ls -a` of the operand prints, so both take the `ls` read proof, including
+//! its proof for a hidden home directory outside every credential store
+//! (`du -sh ~/.cache/pip`). That proof also opens every directory below the
+//! operand, because a directory `du` cannot read prints its full path as an
+//! error. A deeper
 //! or unlimited walk gets the same tree screen as `ls -R`. Following
 //! symbolic links (`-L`) is not admitted, and neither is any option that reads
 //! operand or pattern lists from a file (`--files0-from`, `-X`).
@@ -41,6 +45,9 @@ const MAX_OPERANDS: usize = 16;
 pub(super) fn safe_du_arguments(arguments: &[String], context: super::PathContext<'_>) -> bool {
     let mut summarize = false;
     let mut all = false;
+    // -H follows operand symlinks; the pathname-only hidden-home proof is
+    // not stable against a symlink replacing an inspected operand.
+    let mut dereference_arguments = false;
     let mut depth: Option<u32> = None;
     let mut limit = |value: &str| match value.parse::<u32>() {
         Ok(level) => {
@@ -86,6 +93,7 @@ pub(super) fn safe_du_arguments(arguments: &[String], context: super::PathContex
             }
             summarize |= flags.contains('s');
             all |= flags.contains('a');
+            dereference_arguments |= flags.contains('H');
         } else if option == "-" {
             return false;
         } else {
@@ -108,6 +116,12 @@ pub(super) fn safe_du_arguments(arguments: &[String], context: super::PathContex
                 search::safe_recursive_target(operand, context)
             } else {
                 safe_reads::bounded_read_target(operand, context.home_dir, context.cwd, true)
+                    || (!dereference_arguments
+                        && super::read_paths::home_hidden_size_summary(
+                            operand,
+                            context.home_dir,
+                            context.cwd,
+                        ))
             };
             present || super::listing_reads::absent_listing_operand(operand, context)
         })

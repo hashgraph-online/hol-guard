@@ -8740,6 +8740,48 @@
       "expect": "allow"
     },
     {
+      "id": "home-cache-find-tool-links",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "/usr/bin/find ${HOME}/.cache/hol-guard-test -mindepth 2 -maxdepth 2 -type l -print 2>/dev/null | /usr/bin/head -100"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "neg-home-ssh-find-links",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "find ${HOME}/.ssh -maxdepth 2 -type l"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-home-cache-find-links-or-files",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "find ${HOME}/.cache/hol-guard-test -maxdepth 2 -type l -o -type f"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
       "id": "home-toolchain-ls-home-braces",
       "fix_area": "shell",
       "harnesses": [
@@ -15118,6 +15160,74 @@
         "command": "du -sh ${HOME}/.ssh"
       },
       "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "session-du-home-cache-tool-summary",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "du -sh ${HOME}/.cache/pip 2>&1"
+      },
+      "cwd": "org",
+      "expect": "allow"
+    },
+    {
+      "id": "session-du-home-cache-and-sibling-modules",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "du -sh ${HOME}/.cache/hol-guard-test; du -sh ${ORG_WT}/scripts"
+      },
+      "cwd": "org",
+      "expect": "allow"
+    },
+    {
+      "id": "neg-du-home-gh-config",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "du -sh ${HOME}/.config/gh"
+      },
+      "cwd": "org",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-du-home-aws",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "du -sh ${HOME}/.aws"
+      },
+      "cwd": "org",
       "expect": "not_allow"
     },
     {
@@ -38525,6 +38635,74 @@
       "expect": "allow"
     },
     {
+      "id": "shell-tz-zone-name-date",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "TZ=America/Los_Angeles date"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "shell-tz-zone-name-after-utc-date",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "date -u +%Y-%m-%dT%H:%M:%SZ && TZ=America/Los_Angeles date +%H:%M"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "neg-tz-zone-path-climbs-out",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "TZ=America/../../tmp/zone date"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-tz-zone-file-path",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "TZ=:/tmp/zone date"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
       "id": "neg-env-all",
       "fix_area": "shell",
       "harnesses": [
@@ -45362,6 +45540,40 @@
       "tool": "shell",
       "tool_input": {
         "command": "git status --short --branch && rg --files -g 'src/**'"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "rg-anywhere-path-glob-docs-tree",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "rg --files -g '**/docs/**' -g '!output'"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "rg-anywhere-path-glob-after-git-status",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git status --short --branch && rg --files -g '**/src/**'"
       },
       "cwd": "worktree",
       "expect": "allow"

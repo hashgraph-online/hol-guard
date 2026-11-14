@@ -20,7 +20,7 @@ def test_repair_restarts_authenticated_older_runtime(
     events: list[str] = []
 
     @contextmanager
-    def lifecycle_lock(_home: Path):
+    def lifecycle_lock(_home: Path, *, deadline: float | None = None):
         events.append("lock-enter")
         yield
         events.append("lock-exit")

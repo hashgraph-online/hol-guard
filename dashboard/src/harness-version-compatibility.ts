@@ -1,4 +1,10 @@
 import { fetchGuardApi } from "./guard-api";
+import {
+  normalizeEventStates,
+  normalizeProtectionState,
+  type EventProtection,
+  type ProtectionState,
+} from "./harness-protection-state";
 
 // The daemon decides compatibility. This module only checks the payload's
 // shape: anything missing, unknown, or malformed renders as "version unknown",
@@ -38,6 +44,9 @@ export type HarnessVersionCompatibility = {
   limitations: string[];
   remediation: { label: string; url: string }[];
   acknowledgement: { eligible: boolean; acknowledged: boolean; key: string | null };
+  /** Null when the daemon does not report it; renders as "Protection unknown". */
+  protectionState: ProtectionState | null;
+  eventStates: EventProtection[];
 };
 
 const STATES: ReadonlySet<string> = new Set(["tested", "untested", "version_unknown", "coverage_unavailable"]);
@@ -118,6 +127,8 @@ export function unknownCompatibility(harness: string, reason: string): HarnessVe
     limitations: [],
     remediation: [],
     acknowledgement: { eligible: false, acknowledged: false, key: null },
+    protectionState: null,
+    eventStates: [],
   };
 }
 
@@ -162,6 +173,8 @@ export function normalizeVersionCompatibility(harness: string, raw: unknown): Ha
       acknowledged: ackEligible && ack?.acknowledged === true,
       key: ackEligible ? ackKey : null,
     },
+    protectionState: normalizeProtectionState(payload.protection_state),
+    eventStates: normalizeEventStates(payload.event_states),
   };
 }
 
