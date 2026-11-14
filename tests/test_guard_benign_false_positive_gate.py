@@ -285,13 +285,14 @@ def _review(case: GateCase, fixture: BenignFixture, worker: HookWorker) -> tuple
     with outbound_network_attempts() as attempts:
         result = review_with_unavailable_retry(
             case.case_id,
-            lambda: worker.review_http_payload(
+            lambda deadline: worker.review_http_payload(
                 payload=payload,
                 params={},
                 default_harness=case.harness,
                 home_dir=fixture.home,
                 guard_home=fixture.guard_home,
                 workspace=fixture.cwd(case.cwd),
+                deadline=deadline,
             ),
             on_retry=approvals.mark_retry,
         )
