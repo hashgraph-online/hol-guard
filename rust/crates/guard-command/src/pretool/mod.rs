@@ -180,6 +180,7 @@ mod guard_home_option;
 mod guard_names;
 mod helm_usage;
 pub(crate) mod help_probes;
+mod hook_neutering;
 mod installed_program_path;
 mod list_wrapper;
 mod listing_reads;
@@ -209,6 +210,7 @@ pub(crate) use git_routes::{
 mod apply_patch_writes;
 mod ci_workflow_writes;
 mod data_heredocs;
+mod install_script_writes;
 mod literal_secrets;
 mod lockfile_install;
 mod omp_file_url;
