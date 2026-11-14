@@ -29,6 +29,8 @@ fn home() -> PathBuf {
     write(project.join("dist/tool.whl"), "PK\u{5}\u{6}");
     write(home.join(".ssh/id_rsa"), "synthetic key\n");
     std::os::unix::fs::symlink(home.join(".ssh/id_rsa"), project.join("report.zip")).unwrap();
+    write(project.join("pkg/lib.whl"), "not a zip\n");
+    std::os::unix::fs::symlink(home.join(".ssh/id_rsa"), project.join("pkg/lib.whl.zip")).unwrap();
     std::fs::canonicalize(home).unwrap()
 }
 
@@ -107,6 +109,12 @@ fn extracting_or_changing_attributes_keeps_its_review() {
         // `unzip` retries a missing name with `.zip` appended, and here that
         // name links to a private key.
         "unzip -l report",
+        // A name the shell expands from a wildcard gets the same retry when
+        // it is not a zip archive, and `lib.whl.zip` links to a private key.
+        "unzip -l pkg/*.whl",
+        // A wildcard that matches nothing reaches `unzip`, which matches it
+        // against the directory itself.
+        "unzip -l dist/*.jar",
         // No archive at all.
         "unzip -l",
         "zipinfo -M dist/app.zip",

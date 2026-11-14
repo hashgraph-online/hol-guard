@@ -13,8 +13,9 @@
 //!
 //! The archive and attribute operands go through the same bounded,
 //! sensitive-path-aware read proof `cat` uses. When the archive name opens
-//! nothing, `unzip` retries it with `.zip` and `.ZIP` appended, which stays
-//! within fixed suffixes of the proven operand, as `zcat` already does.
+//! nothing or no zip archive, `unzip` retries it with `.zip` and `.ZIP`
+//! appended, so those names are proven too, for each file a wildcard expands
+//! to as well.
 //!
 //! `tar -t` is deliberately absent. GNU tar reads further options from the
 //! `TAR_OPTIONS` environment variable, including `--checkpoint-action=exec`,
@@ -140,11 +141,11 @@ fn split_options<'a>(
 /// the shell cannot turn a file name in the working directory, or a brace
 /// alternative, into an option.
 ///
-/// When the archive name opens nothing, Info-ZIP retries it with `.zip` and
-/// then `.ZIP` appended, so each of those names has to pass the read proof
-/// too. A wildcard in the archive name is kept only below a directory
-/// (`dist/*.whl`), where every name it expands to starts with that
-/// directory and none can read as an option.
+/// When the archive name opens nothing, or opens something that is not a zip
+/// archive, Info-ZIP retries it with `.zip` and then `.ZIP` appended, so each
+/// of those names has to pass the read proof too. A wildcard in the archive
+/// name is kept only below a directory (`dist/*.whl`), where every name it
+/// expands to starts with that directory and none can read as an option.
 fn archive_operands(operands: &[String], context: super::PathContext<'_>) -> bool {
     let Some((archive, members)) = operands.split_first() else {
         return false;
@@ -158,17 +159,29 @@ fn archive_operands(operands: &[String], context: super::PathContext<'_>) -> boo
             .all(|member| !member.is_empty() && !member.contains(EXPANDING))
         && !archive.contains(['{', '}'])
         && wildcard_below_directory
-        && suffixes(archive).iter().all(|suffix| {
-            safe_reads::command_read_target(&format!("{archive}{suffix}"), context, false)
+        && archive_names(archive, context).is_some_and(|names| {
+            names.iter().all(|name| {
+                RETRY_SUFFIXES.iter().all(|suffix| {
+                    safe_reads::command_read_target(&format!("{name}{suffix}"), context, false)
+                })
+            })
         })
 }
 
-/// The names Info-ZIP may open for `archive`. A wildcard the shell expands
-/// only names files that exist, so the retry never happens for it.
-fn suffixes(archive: &str) -> &'static [&'static str] {
+/// The names Info-ZIP may open for an archive operand: the name itself, then
+/// with `.zip` and then `.ZIP` appended. It retries both when the name opens
+/// nothing and when it opens a file that is not a zip archive.
+const RETRY_SUFFIXES: [&str; 3] = ["", ".zip", ".ZIP"];
+
+/// The archive names `unzip` receives for `archive`. A wildcard counts only
+/// when the shell expands it to files the glob proof admits, so every retry
+/// name is spelled out and proven. A wildcard that matches nothing reaches
+/// Info-ZIP unchanged, which then matches it against the directory itself,
+/// suffixed names included, so that form keeps its review.
+fn archive_names(archive: &str, context: super::PathContext<'_>) -> Option<Vec<String>> {
     if archive.contains(['*', '?', '[']) {
-        &[""]
+        safe_reads::glob_file_matches(archive, context)
     } else {
-        &["", ".zip", ".ZIP"]
+        Some(vec![archive.to_owned()])
     }
 }
