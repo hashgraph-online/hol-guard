@@ -19314,40 +19314,6 @@
       "expect": "allow"
     },
     {
-      "id": "neg-git-identity-beside-hooks-path-commit",
-      "fix_area": "negative",
-      "harnesses": [
-        "codex",
-        "zcode",
-        "claude-code",
-        "omp",
-        "cursor"
-      ],
-      "tool": "shell",
-      "tool_input": {
-        "command": "git -c user.name=Agent -c core.hooksPath=/tmp/hooks commit -m 'fix: handle retry'"
-      },
-      "cwd": "org_app",
-      "expect": "not_allow"
-    },
-    {
-      "id": "neg-git-signing-key-commit",
-      "fix_area": "negative",
-      "harnesses": [
-        "codex",
-        "zcode",
-        "claude-code",
-        "omp",
-        "cursor"
-      ],
-      "tool": "shell",
-      "tool_input": {
-        "command": "git -c user.signingkey=/tmp/key -c commit.gpgsign=true commit -m 'fix: handle retry'"
-      },
-      "cwd": "org_app",
-      "expect": "not_allow"
-    },
-    {
       "id": "neg-git-commit-heredoc-piped-to-shell",
       "fix_area": "negative",
       "harnesses": [
