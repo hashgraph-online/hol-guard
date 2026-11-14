@@ -539,6 +539,7 @@
       "src/pretool/package_script_route.rs",
       "src/pretool/package_scripts_disabled.rs",
       "src/pretool/package_source_reads.rs",
+      "src/pretool/path_lookup_program.rs",
       "src/pretool/path_trust.rs",
       "src/pretool/path_word_reads.rs",
       "src/pretool/pip_reads.rs",
