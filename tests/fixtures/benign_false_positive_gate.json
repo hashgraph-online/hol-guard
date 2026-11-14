@@ -9365,6 +9365,74 @@
       "expect": "allow"
     },
     {
+      "id": "metadata-ls-nvm-version-bin-node",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "ls -la ${HOME}/.nvm/versions/node/v25.2.1/bin/node"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "metadata-ls-asdf-install-bin-tool",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "ls -la ${HOME}/.asdf/installs/sqlite/3.46.1/bin/sqlite3"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "neg-metadata-ls-nvm-version-bin-climb-to-ssh-key",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "ls -la ${HOME}/.nvm/versions/node/v25.2.1/bin/../../../../../.ssh/id_rsa"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-cat-nvm-version-bin-node",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "cat ${HOME}/.nvm/versions/node/v25.2.1/bin/node"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
       "id": "inbox-npx-vitest-three-files",
       "fix_area": "shell",
       "harnesses": [

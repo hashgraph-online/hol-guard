@@ -323,6 +323,7 @@ pub mod pretool_workspace_harness_config_writes;
 pub mod pretool_workspace_rg_grep_search;
 pub mod pretool_wrangler_reads;
 pub mod pretool_zcode_dual_input;
+pub mod pretool_version_manager_bin_listing;
 pub mod pretool_zcode_dx_paths;
 pub mod privileged_wrapper_floor;
 pub mod reapproval_copy;
