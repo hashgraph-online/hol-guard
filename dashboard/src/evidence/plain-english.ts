@@ -7,6 +7,7 @@ import { isRiskSignalEvidence } from "../guard-types";
 import { harnessDisplayName, resolveActionEnvelopeDetailText } from "../approval-center-utils";
 import { detectCategory, type ReceiptCategory } from "./categories";
 import { approvalLeftActionStopped } from "./approval-outcome";
+import { resolveMcpToolCallView } from "../mcp-tool-call-view";
 import {
   guardActionActivityCopy,
   guardActionPresentation,
@@ -379,6 +380,10 @@ function isPackageDependencyMutationRequest(request: GuardApprovalRequest): bool
 export function plainEnglishRequestTitle(request: GuardApprovalRequest): string {
   if (request.artifact_type === "native_bash_request") {
     return "Run this script?";
+  }
+  const mcpView = resolveMcpToolCallView(request);
+  if (mcpView !== null) {
+    return `${harnessDisplayName(request.harness)} wants to ${mcpView.sentence}`;
   }
   const category = detectCategory({
     ...request,

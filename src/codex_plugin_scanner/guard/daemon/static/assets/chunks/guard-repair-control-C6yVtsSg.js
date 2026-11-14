@@ -1,4 +1,4 @@
-import { bq as isGuardDemoMode, bd as isRecord, bc as fetchWithGuardAuth, r as reactExports, aM as fetchResolvedApprovalGate, j as jsxRuntimeExports, A as ActionButton, aN as ApprovalProofModal, T as Tag } from "../guard-dashboard.js";
+import { br as isGuardDemoMode, be as isRecord, bd as fetchWithGuardAuth, r as reactExports, aN as fetchResolvedApprovalGate, j as jsxRuntimeExports, A as ActionButton, aO as ApprovalProofModal, T as Tag } from "../guard-dashboard.js";
 const HOOK_REMOVAL_CONFIRMATION = "remove-guard-hooks";
 class GuardRepairRequestError extends Error {
   status;

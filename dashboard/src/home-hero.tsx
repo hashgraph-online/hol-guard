@@ -5,6 +5,7 @@ import { SectionLabel } from "./approval-center-primitives";
 import { formatNumber, formatRelativeTime, harnessDisplayName } from "./approval-center-utils";
 import type { GuardApprovalRequest, GuardReceipt, GuardReceiptAnalytics } from "./guard-types";
 import { BrandHero, BrandHeroBadge, BrandHeroFacts } from "./brand-hero";
+import { resolveMcpToolCallView } from "./mcp-tool-call-view";
 import type { HeroParticleMood } from "./home-hero-particles";
 
 export type HomeHeroStatus = "clear" | "needs_review" | "setup_gap" | "partial" | "degraded" | "checking";
@@ -39,8 +40,10 @@ export function describeQueueItem(item: GuardApprovalRequest): string {
       return "wants to read a file";
     case "file_write":
       return "wants to change a file";
-    case "mcp_tool":
-      return `wants to use a tool${suffix}`;
+    case "mcp_tool": {
+      const mcpView = resolveMcpToolCallView(item);
+      return mcpView === null ? `wants to use a tool${suffix}` : `wants to ${mcpView.sentence}`;
+    }
     case "package_script":
       return `wants to run a package script${suffix}`;
     case "network_request":

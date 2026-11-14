@@ -24,6 +24,8 @@ import type {
 } from "./guard-types";
 import { normalizeGuardAction } from "./guard-action";
 import { LoggedActionPanel } from "./logged-action-panel";
+import { McpToolCallPanel } from "./mcp-tool-call-panel";
+import { resolveMcpToolCallView } from "./mcp-tool-call-view";
 import { protectionHealthFor, unavailableProtectionHealth, useProtectionPresentationState } from "./protection-health";
 
 const PROTECTION_APPEARANCE = {
@@ -204,7 +206,8 @@ export function PrimaryActionCard({ item }: { item: GuardApprovalRequest }) {
   const agentIntent = resolveAgentStatedIntent(item);
   const watchOnlyObservation = isWatchOnlyObservation(item);
   const actionDescription = watchOnlyObservation ? "observed action" : "stopped action";
-  const actionLabel = watchOnlyObservation ? "Would have stopped" : action.label;
+  const mcpView = resolveMcpToolCallView(item);
+  const actionLabel = watchOnlyObservation ? "Would have stopped" : mcpView !== null ? "Tool call" : action.label;
 
   return (
     <div className="mt-5 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
@@ -222,14 +225,23 @@ export function PrimaryActionCard({ item }: { item: GuardApprovalRequest }) {
         </span>
       </div>
       <div className="mt-3">
-        <LoggedActionPanel
-          key={item.request_id}
-          label={actionLabel}
-          text={action.text}
-          copyAriaLabel={`Copy full ${actionDescription} to clipboard`}
-          expandAriaLabel={`Expand full ${actionDescription}`}
-          collapseAriaLabel={`Collapse full ${actionDescription}`}
-        />
+        {mcpView !== null ? (
+          <McpToolCallPanel
+            key={item.request_id}
+            view={mcpView}
+            appName={harnessDisplayName(item.harness)}
+            observed={watchOnlyObservation}
+          />
+        ) : (
+          <LoggedActionPanel
+            key={item.request_id}
+            label={actionLabel}
+            text={action.text}
+            copyAriaLabel={`Copy full ${actionDescription} to clipboard`}
+            expandAriaLabel={`Expand full ${actionDescription}`}
+            collapseAriaLabel={`Collapse full ${actionDescription}`}
+          />
+        )}
         {workingDirectory !== null && (
           <div className="mt-3 flex min-w-0 items-start gap-2 text-xs text-muted-foreground">
             <HiMiniFolder className="mt-0.5 h-4 w-4 shrink-0 text-brand-blue" aria-hidden="true" />
@@ -248,7 +260,8 @@ export function PrimaryActionCard({ item }: { item: GuardApprovalRequest }) {
               “{agentIntent.text}”
             </blockquote>
             <p className="mt-1 text-[11px] leading-snug text-muted-foreground">
-              In the agent's own words. Guard has not checked this, so decide from the command above.
+              In the agent's own words. Guard has not checked this, so decide from the{" "}
+              {mcpView !== null ? "tool call" : "command"} above.
             </p>
           </figure>
         )}

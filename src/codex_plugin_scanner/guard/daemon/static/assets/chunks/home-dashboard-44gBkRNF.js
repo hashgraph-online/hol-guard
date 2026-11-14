@@ -1,11 +1,11 @@
-import { r as reactExports, f as fetchContextAssistance, j as jsxRuntimeExports, c as controlContextAssistance, a as contextStatusCopy, S as SectionLabel, H as HiMiniChevronRight, b as formatRelativeTime, h as harnessDisplayName, d as formatNumber, n as normalizeHarnessSlug, e as HiMiniChevronUp, g as HiMiniChevronDown, A as ActionButton, i as HiMiniArrowPath, k as HiMiniCheck, l as HiMiniNoSymbol, m as HiMiniHandRaised, o as HiMiniArrowUpTray, p as HiMiniCube, q as HiMiniPencilSquare, s as HiMiniCommandLine, t as HiMiniMagnifyingGlass, u as HiMiniDocumentText, v as HiMiniCheckCircle, T as Tag, w as HiMiniArrowRight, x as isConnectableAppHarness, y as HiMiniLockClosed, z as getHeatmapLevel, E as EvidenceInsightsShareButton, G as GuardStatMetric, B as HomeInsightsMetrics, C as EvidenceActivityHeatmapMini, D as homeCommandActivityModel, F as createCommandActivityClient, I as fetchCommandActivityApi, J as getRecoveryCapabilities, K as recoveryRunsInDesktopWindow, L as resolveDesktopWindowRecoveryInstructions, M as resolveRecoveryInstructions, N as HiMiniShieldExclamation, O as DESKTOP_WINDOW_RECOVERY_MESSAGE, P as HiMiniClipboardDocument, Q as openRecoveryView, R as useReceiptAnalytics, U as updateSettings, V as turnProtectionOnUpdate, W as useProtectionPresentationState, X as protectionHealthFor, Y as unavailableProtectionHealth, Z as buildHomeRuntimeErrorCopy, _ as RuntimeErrorState, $ as watchBannerModel, a0 as WatchProtectionBanner, a1 as EvidenceInsightsShareModal, a2 as OperatorHealthCard, a3 as HiMiniShieldCheck, a4 as DeviceProofCard, a5 as guardActionDisposition, a6 as approvalLeftActionStopped, a7 as guardActionActivityCopy, a8 as HiMiniSparkles, a9 as HiMiniXMark, aa as EmptyState, ab as resolveCloudIntelCopy, ac as HiMiniCloud, ad as HiMiniQuestionMarkCircle, ae as useFocusTrap, af as approvalProofRequiresPassword, ag as HiMiniExclamationTriangle, ah as HiMiniBolt, ai as Badge, aj as HiMiniMinusCircle } from "../guard-dashboard.js";
-import { ak } from "../guard-dashboard.js";
-import { H as HomeProtectionModule } from "./home-protection-module-CMu4ycX8.js";
+import { r as reactExports, f as fetchContextAssistance, j as jsxRuntimeExports, c as controlContextAssistance, a as contextStatusCopy, S as SectionLabel, H as HiMiniChevronRight, b as formatRelativeTime, h as harnessDisplayName, d as formatNumber, e as resolveMcpToolCallView, n as normalizeHarnessSlug, g as HiMiniChevronUp, i as HiMiniChevronDown, A as ActionButton, k as HiMiniArrowPath, l as HiMiniCheck, m as HiMiniNoSymbol, o as HiMiniHandRaised, p as HiMiniArrowUpTray, q as HiMiniCube, s as HiMiniPencilSquare, t as HiMiniCommandLine, u as HiMiniMagnifyingGlass, v as HiMiniDocumentText, w as HiMiniCheckCircle, T as Tag, x as HiMiniArrowRight, y as isConnectableAppHarness, z as HiMiniLockClosed, B as getHeatmapLevel, E as EvidenceInsightsShareButton, G as GuardStatMetric, C as HomeInsightsMetrics, D as EvidenceActivityHeatmapMini, F as homeCommandActivityModel, I as createCommandActivityClient, J as fetchCommandActivityApi, K as getRecoveryCapabilities, L as recoveryRunsInDesktopWindow, M as resolveDesktopWindowRecoveryInstructions, N as resolveRecoveryInstructions, O as HiMiniShieldExclamation, P as DESKTOP_WINDOW_RECOVERY_MESSAGE, Q as HiMiniClipboardDocument, R as openRecoveryView, U as useReceiptAnalytics, V as updateSettings, W as turnProtectionOnUpdate, X as useProtectionPresentationState, Y as protectionHealthFor, Z as unavailableProtectionHealth, _ as buildHomeRuntimeErrorCopy, $ as RuntimeErrorState, a0 as watchBannerModel, a1 as WatchProtectionBanner, a2 as EvidenceInsightsShareModal, a3 as OperatorHealthCard, a4 as HiMiniShieldCheck, a5 as DeviceProofCard, a6 as guardActionDisposition, a7 as approvalLeftActionStopped, a8 as guardActionActivityCopy, a9 as HiMiniSparkles, aa as HiMiniXMark, ab as EmptyState, ac as resolveCloudIntelCopy, ad as HiMiniCloud, ae as HiMiniQuestionMarkCircle, af as useFocusTrap, ag as approvalProofRequiresPassword, ah as HiMiniExclamationTriangle, ai as HiMiniBolt, aj as Badge, ak as HiMiniMinusCircle } from "../guard-dashboard.js";
+import { al } from "../guard-dashboard.js";
+import { H as HomeProtectionModule } from "./home-protection-module-Yx_zihsG.js";
 import { c as cigarHomeCopy } from "./workspace-model-hR3eI7UO.js";
 import { B as BrandHero, a as BrandHeroFacts, b as BrandHeroBadge, u as useReducedMotion, c as brandMarkSvg } from "./brand-hero-COty1p6U.js";
 import { A as ABOUT_LOCAL_SECTION_TITLE, a as ABOUT_LOCAL_SECTION_BODY } from "./about-content-Dr9zFg1V.js";
 import { S as SUPPORTED_APPS_FULL } from "./app-catalog-Ca_M7GbC.js";
-import "./supply-chain-protection-stats-C4S58svV.js";
+import "./supply-chain-protection-stats-DrZwlWNs.js";
 const button = "min-h-11 rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-brand-dark disabled:cursor-not-allowed disabled:opacity-50";
 function homeStatusLabel(props) {
   if (props.stopping) return "Stopping";
@@ -148,8 +148,10 @@ function describeQueueItem(item) {
       return "wants to read a file";
     case "file_write":
       return "wants to change a file";
-    case "mcp_tool":
-      return `wants to use a tool${suffix}`;
+    case "mcp_tool": {
+      const mcpView = resolveMcpToolCallView(item);
+      return mcpView === null ? `wants to use a tool${suffix}` : `wants to ${mcpView.sentence}`;
+    }
     case "package_script":
       return `wants to run a package script${suffix}`;
     case "network_request":
@@ -1964,7 +1966,7 @@ function CollapsibleCard(props) {
 export {
   HomeWorkspace,
   STREAK_MILESTONE_MESSAGES,
-  ak as buildDaemonErrorCopy,
+  al as buildDaemonErrorCopy,
   buildDailyStory,
   buildEmptyStateCopy,
   buildHomeRuntimeErrorCopy,

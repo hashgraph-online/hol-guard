@@ -1,4 +1,4 @@
-import { r as reactExports, ae as useFocusTrap, j as jsxRuntimeExports, eE as HiMiniKey, S as SectionLabel, A as ActionButton } from "../guard-dashboard.js";
+import { r as reactExports, af as useFocusTrap, j as jsxRuntimeExports, eF as HiMiniKey, S as SectionLabel, A as ActionButton } from "../guard-dashboard.js";
 function resolveSettingsSaveProofKind(input) {
   if (input.draftGateEnabled && !input.savedGateEnabled) {
     return "setup-gate";

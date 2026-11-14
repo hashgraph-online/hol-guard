@@ -7987,6 +7987,10 @@
       grid-template-columns: minmax(0, 1fr) auto;
     }
 
+    .sm\:grid-cols-\[minmax\(8rem\,12rem\)_1fr\] {
+      grid-template-columns: minmax(8rem, 12rem) 1fr;
+    }
+
     .sm\:flex-col {
       flex-direction: column;
     }

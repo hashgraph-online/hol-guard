@@ -50,6 +50,7 @@ __all__ = [
     "recent_totp_satisfied",
     "require_approval_decision",
     "require_extension_control",
+    "require_fresh_approval_decision",
     "require_high_risk",
     "require_local_cli_trust",
     "require_policy_clear",
@@ -353,6 +354,35 @@ def require_high_risk(
         now=now,
     )
     return None if payload is None else _grant(payload)
+
+
+def require_fresh_approval_decision(
+    guard_home: Path,
+    *,
+    action: str,
+    scope: str,
+    approval_gate_input: ApprovalGateInput | None,
+    subject: str,
+    now: str | None = None,
+) -> ApprovalGateGrant:
+    """Issue an approval-decision proof checked against the factor itself.
+
+    The proof is strict, so an open password cooldown never stands in for the
+    password and the check never opens one. Callers that also want a fresh
+    authenticator code set ``require_fresh_totp`` on the input.
+    """
+
+    return _issued(
+        _native(
+            "verify",
+            guard_home,
+            params={"action": action, "scope": scope, "subject": subject},
+            approval_gate_input=approval_gate_input,
+            strict=True,
+            purpose="approval_decision",
+            now=now,
+        )
+    )
 
 
 def require_extension_control(
