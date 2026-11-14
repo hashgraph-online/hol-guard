@@ -20,12 +20,18 @@ pub(super) struct Call {
     pub(super) tool: String,
     pub(super) args: Vec<(String, Lit)>,
     pub(super) sdk_read_helper: bool,
+    /// Oh My Pi's `sh(command)` helper, which runs the command on the eval
+    /// shell bridge rather than through the `bash` tool, so no hook of its
+    /// own fires for it.
+    pub(super) shell_helper: bool,
 }
 
 struct Parser {
     tokens: Vec<Token>,
     /// Whether a line terminator came before each token.
     breaks: Vec<bool>,
+    /// Whether each token is a template literal whose raw text is its value.
+    raw_templates: Vec<bool>,
     pos: usize,
     declared: HashSet<String>,
     calls: Vec<Call>,
@@ -33,6 +39,7 @@ struct Parser {
 
 const RESERVED: &[&str] = &[
     "read",
+    "sh",
     "tool",
     "display",
     "print",
@@ -235,6 +242,7 @@ impl Parser {
                 "tool" => self.tool_call(depth)?,
                 // An un-awaited `read(...)`, as inside `Promise.all([...])`.
                 "read" => self.read_helper()?,
+                "sh" => self.shell_helper()?,
                 "Promise" => self.promise_all(depth)?,
                 "JSON" => {
                     self.eat('.')?;
@@ -335,6 +343,7 @@ impl Parser {
         match self.next()? {
             Token::Ident(word) if word == "tool" => self.tool_call(depth),
             Token::Ident(word) if word == "read" => self.read_helper(),
+            Token::Ident(word) if word == "sh" => self.shell_helper(),
             Token::Ident(word) if word == "Promise" => self.promise_all(depth),
             Token::Punct('(') => {
                 self.value(depth + 1)?;
@@ -355,6 +364,38 @@ impl Parser {
         let call = read_helper_call(path)?;
         self.eat(')')?;
         self.calls.push(call);
+        Some(())
+    }
+
+    /// `sh(literal)` with one string literal and nothing else, or `sh` tagging
+    /// a template with no interpolation and no escape, whose raw text the
+    /// prelude runs. The `{ cwd, timeout }` options, interpolation and any
+    /// computed command stay outside the grammar, so the command judged is
+    /// the command run.
+    fn shell_helper(&mut self) -> Option<()> {
+        let command = if self.at('(') {
+            self.pos += 1;
+            let Token::Str(command) = self.next()? else {
+                return None;
+            };
+            self.eat(')')?;
+            command
+        } else {
+            let raw = self.raw_templates.get(self.pos).copied().unwrap_or(false);
+            match self.next()? {
+                Token::Str(command) if raw => command,
+                _ => return None,
+            }
+        };
+        if self.calls.len() >= MAX_CALLS || command.trim().is_empty() {
+            return None;
+        }
+        self.calls.push(Call {
+            tool: "bash".to_owned(),
+            args: vec![("command".to_owned(), Lit::Str(command))],
+            sdk_read_helper: false,
+            shell_helper: true,
+        });
         Some(())
     }
 
@@ -407,6 +448,7 @@ impl Parser {
             tool,
             args,
             sdk_read_helper: false,
+            shell_helper: false,
         });
         Some(())
     }
@@ -418,10 +460,11 @@ pub(super) fn parse_program(code: &str) -> Option<Vec<Call>> {
     if code.len() > MAX_CODE_BYTES {
         return None;
     }
-    let (tokens, breaks) = tokenize_lines(code)?;
+    let lexed = tokenize_lines(code)?;
     let mut parser = Parser {
-        tokens,
-        breaks,
+        tokens: lexed.tokens,
+        breaks: lexed.breaks,
+        raw_templates: lexed.raw_templates,
         pos: 0,
         declared: HashSet::new(),
         calls: Vec::new(),
@@ -447,6 +490,7 @@ fn read_helper_call(path: String) -> Option<Call> {
         tool: "read".to_owned(),
         args: vec![("path".to_owned(), Lit::Str(path))],
         sdk_read_helper: true,
+        shell_helper: false,
     })
 }
 
