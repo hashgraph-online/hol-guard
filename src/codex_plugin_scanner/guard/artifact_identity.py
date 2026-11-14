@@ -24,3 +24,39 @@ def artifact_family_key(
     if family not in allowed_families:
         return None
     return f"family:{family}"
+
+
+# The command risk groups a Guard Cloud rule may name. They match the groups
+# the native compiler accepts (`policy_document_risk_groups::RISK_GROUPS`).
+RISK_GROUPS = frozenset(
+    {
+        "deletes",
+        "bulk_changes",
+        "sending_and_sharing",
+        "secrets",
+        "code_and_deploys",
+        "packages_and_scripts",
+    }
+)
+RISK_GROUP_PREFIX = "risk-group:"
+
+
+def scoped_policy_artifact_key(
+    artifact_id: str | None,
+    *,
+    allowed_families: Collection[str],
+) -> str | None:
+    """The artifact key a harness- or global-scoped policy row is stored under.
+
+    A risk-group rule keeps its ``risk-group:<group>`` id: the hook looks the
+    row up by that id, and the same row without an id would read as a rule for
+    every action in the harness. An id that names no known group is refused for
+    the same reason rather than stored without one.
+    """
+
+    if artifact_id is not None and artifact_id.startswith(RISK_GROUP_PREFIX):
+        if artifact_id.removeprefix(RISK_GROUP_PREFIX) in RISK_GROUPS:
+            return artifact_id
+        msg = "unsupported_scoped_policy_risk_group"
+        raise ValueError(msg)
+    return artifact_family_key(artifact_id, allowed_families=allowed_families)

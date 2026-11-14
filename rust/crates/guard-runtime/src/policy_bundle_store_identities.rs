@@ -329,6 +329,19 @@ fn decisions(
     Some(rows)
 }
 
+/// The key a harness- or global-scoped row is stored under, as
+/// `scoped_policy_artifact_key` stores it: a known `risk-group:<group>` id is
+/// kept, so the hook can find the row and it never reads as a rule for every
+/// action in the harness.
+fn scoped_artifact_key(artifact_id: Option<&str>) -> Option<String> {
+    match artifact_id.and_then(|id| id.strip_prefix("risk-group:")) {
+        Some(group) if crate::command_risk_groups::is_risk_group(group) => {
+            artifact_id.map(str::to_owned)
+        }
+        _ => artifact_family_key(artifact_id),
+    }
+}
+
 /// The 11-field identity of one materialized decision, keyed the way
 /// `_normalized_policy_keys` stores it. Bundle decisions carry no artifact
 /// hash or publisher, so both stay unset.
@@ -336,7 +349,7 @@ fn identity(decision: &Map<String, Value>) -> Option<Identity> {
     let text = |name: &str| decision.get(name).and_then(Value::as_str);
     let scope = text("scope")?;
     let artifact_id = match scope {
-        "harness" | "global" => artifact_family_key(text("artifact_id")),
+        "harness" | "global" => scoped_artifact_key(text("artifact_id")),
         "artifact" | "workspace" => text("artifact_id").map(str::to_owned),
         _ => None,
     };
