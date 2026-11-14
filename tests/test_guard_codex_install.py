@@ -134,6 +134,13 @@ env = { API_BASE = "https://hol.org", FEATURE_FLAG = "1" }
     )
 
 
+def _registered_hook_command(context: HarnessContext) -> str:
+    """The command line the native runtime renders into every registered handler."""
+
+    groups = json.loads(codex_adapter._hook_registration(context).groups)
+    return str(groups["PreToolUse"]["hooks"][0]["command"])
+
+
 def test_guard_codex_hook_command_does_not_pin_custom_guard_home_in_real_global_config(
     tmp_path,
     monkeypatch,
@@ -143,7 +150,7 @@ def test_guard_codex_hook_command_does_not_pin_custom_guard_home_in_real_global_
     stale_guard_home = tmp_path / "pytest-stale-guard-home"
     monkeypatch.setattr(codex_adapter.Path, "home", lambda: home_dir)
 
-    command = codex_adapter._hook_command(
+    command = _registered_hook_command(
         HarnessContext(
             home_dir=home_dir,
             workspace_dir=workspace_dir,
@@ -160,7 +167,7 @@ def test_guard_codex_hook_command_uses_lightweight_authenticated_daemon_bridge(t
     workspace_dir = tmp_path / "workspace"
     guard_home = tmp_path / "guard-home"
 
-    command = codex_adapter._hook_command(
+    command = _registered_hook_command(
         HarnessContext(
             home_dir=home_dir,
             workspace_dir=workspace_dir,
@@ -193,7 +200,7 @@ def test_guard_codex_native_hook_state_requires_authenticated_manifest(tmp_path:
     direct_argv = list(codex_adapter._current_launch(context)["fallback"])
     bridge_config = json.dumps({"fallback_command": direct_argv}, separators=(",", ":"))
     forged_commands = [
-        codex_adapter._hook_command(context),
+        _registered_hook_command(context),
         shlex.join([str(tmp_path / "hol-guard-codex-hook.sh"), "--forged"]),
         shlex.join(
             [

@@ -15,8 +15,8 @@ use sha2::{Digest, Sha256};
 
 use super::files::{self, Doc};
 use super::{
-    codex_files, codex_merge, codex_servers, common, path_answer, path_text, Ctx, Failure, Spec,
-    Step,
+    codex_files, codex_merge, codex_servers, common, hook_render, path_answer, path_text, Ctx,
+    Failure, Spec, Step,
 };
 use crate::claude_hook_bridge_recovery::frozen_recovery_command;
 use crate::harness_diagnostics::setup_failures_besides_missing_command;
@@ -67,7 +67,7 @@ pub(super) fn dispatch(
         "policy_path" => path_answer(&config_path(ctx)),
         "paths" => Ok(paths(ctx)),
         "argv" => argv(ctx, fields),
-        "groups" => groups(fields),
+        "groups" => groups(ctx, fields),
         "hook_state" => hook_state(fields),
         "doctor_status" => doctor_status(fields),
         "migration_backup" => codex_files::migration_backup(ctx, fields),
@@ -271,9 +271,14 @@ fn argv(ctx: &Ctx, fields: &Map<String, Value>) -> Step<Value> {
 }
 
 /// `_managed_hook_groups` and `_manifest_event_bindings`, as ordered JSON.
-fn groups(fields: &Map<String, Value>) -> Step<Value> {
+fn groups(ctx: &Ctx, fields: &Map<String, Value>) -> Step<Value> {
     let argv = strings(fields.get("argv"))?;
-    let command = text(fields, "command")?;
+    let names = hook_render::short_names(fields)?;
+    let unnamed = hook_render::unnamed([&argv[..]], ctx.windows, &names);
+    if !unnamed.is_empty() {
+        return Err(hook_render::ask_for(unnamed));
+    }
+    let command = &hook_render::render(&argv, ctx.windows, &names)?;
     let env = PyVal::Dict(dict(fields, "env")?);
     let long = fields
         .get("long_timeout")

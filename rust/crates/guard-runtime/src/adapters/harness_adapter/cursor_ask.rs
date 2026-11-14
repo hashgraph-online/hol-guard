@@ -1,11 +1,11 @@
 //! What Python answers between Cursor ops: the facts about the attested
 //! Guard CLI and the native hook bridge, the long form of 8.3 names, Windows
-//! hook command lines, Guard's proxy relaunches and the managed servers.
+//! the 8.3 names of hook command paths, Guard's proxy relaunches and the managed servers.
 
 use serde_json::{json, Map, Value};
 
 use super::cursor::{get, malformed, runtime, BRIDGE_UNAVAILABLE};
-use super::{Ctx, Failure, Step};
+use super::{hook_render, Ctx, Failure, Step};
 use crate::pyjson::{self, PyVal};
 /// The Python interpreter the attested Guard CLI runs on.
 pub(super) struct HookPython {
@@ -178,44 +178,20 @@ impl Ask<'_> {
         Ok(answer)
     }
 
-    /// `render_hook_command` of each argv: POSIX quoting here, Windows by
-    /// Python. A line Windows cannot carry fails only its own command.
+    /// `render_hook_command` of each argv. A Windows path is asked of the host
+    /// for its 8.3 name first; a line Windows cannot carry fails only its own
+    /// command.
     pub(super) fn render(&self, argvs: &[Vec<String>]) -> Step<Vec<Step<String>>> {
-        if !self.ctx.windows {
-            return Ok(argvs
-                .iter()
-                .map(|argv| Ok(crate::mcp_proxy_shlex::join(argv)))
-                .collect());
+        let names = hook_render::short_names(self.fields)?;
+        let unnamed =
+            hook_render::unnamed(argvs.iter().map(Vec::as_slice), self.ctx.windows, &names);
+        if !unnamed.is_empty() {
+            return Err(hook_render::ask_for(unnamed));
         }
-        let known = self
-            .fields
-            .get("rendered")
-            .and_then(Value::as_array)
-            .map_or(&[][..], Vec::as_slice);
-        let lookup = |argv: &Vec<String>| {
-            known
-                .iter()
-                .find(|pair| pair.get(0) == Some(&json!(argv)))
-                .and_then(|pair| pair.get(1))
-        };
-        let missing: Vec<&Vec<String>> =
-            argvs.iter().filter(|argv| lookup(argv).is_none()).collect();
-        if !missing.is_empty() {
-            return Err(Self::reply("render", json!(missing)));
-        }
-        argvs
+        Ok(argvs
             .iter()
-            .map(|argv| {
-                match lookup(argv) {
-                Some(Value::String(line)) => Ok(Ok(line.clone())),
-                Some(Value::Null) => Ok(Err(Failure::Refusal(
-                    "Codex hook arguments cannot be empty or contain line breaks or NUL on Windows."
-                        .into(),
-                ))),
-                _ => Err(Failure::Invalid),
-            }
-            })
-            .collect()
+            .map(|argv| hook_render::render(argv, self.ctx.windows, &names))
+            .collect())
     }
 
     /// Guard's MCP proxy launch `(command, args)` for each set of proxy args.

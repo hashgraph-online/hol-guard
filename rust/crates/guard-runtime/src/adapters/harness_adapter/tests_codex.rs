@@ -122,7 +122,7 @@ fn groups_register_every_event_with_one_bound_handler() {
     let answer = ask(
         &home,
         "groups",
-        json!({"argv": ["/py", "-I"], "command": "/py -I", "env": "{}", "long_timeout": 85}),
+        json!({"argv": ["/py", "-I"], "env": "{}", "long_timeout": 85}),
     );
     let groups: Value = serde_json::from_str(answer["groups"].as_str().unwrap()).unwrap();
     let mut events: Vec<&String> = groups.as_object().unwrap().keys().collect();
@@ -144,6 +144,38 @@ fn groups_register_every_event_with_one_bound_handler() {
         "codex:PreToolUse:guard-handler-v1"
     );
     assert_eq!(bindings[0]["handler"]["timeout"], 85);
+    assert_eq!(bindings[0]["handler"]["command"], "/py -I");
+}
+
+#[cfg(unix)]
+#[test]
+fn a_posix_groups_command_is_shlex_joined() {
+    let home = Home::new();
+    let fields = json!({"argv": ["/a b/py", "-I"], "env": "{}", "long_timeout": 85});
+    let answer = ask(&home, "groups", fields);
+    let groups: Value = serde_json::from_str(answer["groups"].as_str().unwrap()).unwrap();
+    assert_eq!(groups["PreToolUse"]["hooks"][0]["command"], "'/a b/py' -I");
+}
+
+#[cfg(windows)]
+#[test]
+fn a_windows_groups_command_asks_the_host_to_shorten_spaced_paths() {
+    let home = Home::new();
+    let fields =
+        json!({"argv": ["C:\\Program Files\\py.exe", "-I"], "env": "{}", "long_timeout": 85});
+    assert_eq!(
+        ask(&home, "groups", fields.clone())["reply"],
+        json!({"shorten": ["C:\\Program Files\\py.exe"]})
+    );
+    let mut fields = fields;
+    fields["short_names"] =
+        json!({"C:\\Program Files\\py.exe": ["C:\\PROGRA~1\\py.exe", "C:\\Program Files\\py.exe"]});
+    let answer = ask(&home, "groups", fields);
+    let groups: Value = serde_json::from_str(answer["groups"].as_str().unwrap()).unwrap();
+    assert_eq!(
+        groups["PreToolUse"]["hooks"][0]["command"],
+        "C:\\PROGRA~1\\py.exe -I"
+    );
 }
 
 #[test]

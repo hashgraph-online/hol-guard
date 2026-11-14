@@ -1,4 +1,4 @@
-"""Render and parse Guard-managed Codex hook command lines.
+"""Parse Guard-managed Codex hook command lines.
 
 Codex hands a hook command to the session's shell: ``$SHELL -c`` on POSIX. On
 Windows it uses the session shell when it knows it, usually
@@ -16,11 +16,13 @@ integrity checks keep comparing the long argv. When a volume has no short
 names, the command falls back to PowerShell's call operator with single-quoted
 literals. That fallback only launches under a PowerShell session shell; a
 ``cmd.exe`` hook shell cannot run it.
+
+The native runtime renders these command lines (``hook_render``); this module
+parses them and names the host's 8.3 short forms the renderer asks for.
 """
 
 from __future__ import annotations
 
-import base64
 import ctypes
 import os
 import re
@@ -31,10 +33,8 @@ from pathlib import Path, PureWindowsPath
 
 from .codex_hook_bridge_runtime import decode_bridge_config_argument
 
-_WINDOWS_BARE_TOKEN = re.compile(r"[A-Za-z0-9_.:\\/-]+")
 # An 8.3 name such as C:\PROGRA~1\python.exe; never a leading tilde.
 _WINDOWS_SHORT_PATH_TOKEN = re.compile(r"[A-Za-z]:[A-Za-z0-9_.~\\-]+")
-_WINDOWS_UNSAFE_CHARACTERS = frozenset("\r\n\x00")
 _POWERSHELL_TOKEN = re.compile(r"'((?:[^']|'')*)'|([^\s'\"`$;|&(){}@#<>,]+)")
 
 
@@ -48,14 +48,6 @@ def hook_token_name(token: str, *, windows: bool | None = None) -> str:
     """Return the final path component of one hook argv token."""
 
     return PureWindowsPath(token).name if hook_commands_use_windows_syntax(windows) else Path(token).name
-
-
-def encode_hook_config_argument(config_json: str, *, windows: bool | None = None) -> str:
-    """Return the bridge config argument in a form the platform shell passes intact."""
-
-    if not hook_commands_use_windows_syntax(windows):
-        return config_json
-    return base64.urlsafe_b64encode(config_json.encode("utf-8")).decode("ascii").rstrip("=")
 
 
 def plain_json_hook_argv(argv: Sequence[str]) -> list[str]:
@@ -106,40 +98,20 @@ _short_path: Callable[[str], str | None] = _windows_short_path
 _long_path: Callable[[str], str | None] = _windows_long_path
 
 
-def _plain_windows_token(argument: str) -> str | None:
-    """Return a token both Windows shells read as ``argument``, or ``None``."""
+def short_path_facts(paths: Sequence[object]) -> dict[str, list[str | None]]:
+    """Each path's 8.3 name and that name's long form, for the native renderer."""
 
-    if _WINDOWS_BARE_TOKEN.fullmatch(argument):
-        return argument
-    short = _short_path(argument)
-    # Use the short name only when parsing maps it back to exactly this path.
-    if short is None or not _WINDOWS_SHORT_PATH_TOKEN.fullmatch(short) or _long_path(short) != argument:
-        return None
-    return short
+    facts: dict[str, list[str | None]] = {}
+    for path in paths:
+        short = _short_path(str(path))
+        facts[str(path)] = [short, None if short is None else _long_path(short)]
+    return facts
 
 
 def _expand_short_token(token: str) -> str:
     if "~" not in token or not _WINDOWS_SHORT_PATH_TOKEN.fullmatch(token):
         return token
     return _long_path(token) or token
-
-
-def _powershell_literal(argument: str) -> str:
-    return "'" + argument.replace("'", "''") + "'"
-
-
-def render_hook_command(argv: Sequence[str], *, windows: bool | None = None) -> str:
-    """Return the command string Codex hands to the session shell."""
-
-    if not hook_commands_use_windows_syntax(windows):
-        return shlex.join(argv)
-    if not argv or any(_WINDOWS_UNSAFE_CHARACTERS.intersection(argument) for argument in argv):
-        raise ValueError("Codex hook arguments cannot be empty or contain line breaks or NUL on Windows.")
-    if not argv[0].startswith("-"):
-        tokens = [_plain_windows_token(argument) for argument in argv]
-        if all(token is not None for token in tokens):
-            return " ".join(token for token in tokens if token is not None)
-    return "& " + " ".join(_powershell_literal(argument) for argument in argv)
 
 
 def _split_windows_command_line(command: str) -> list[str] | None:
@@ -238,13 +210,12 @@ def hook_command_launchable(command: str, *, windows: bool | None = None) -> boo
 
 
 __all__ = [
-    "encode_hook_config_argument",
     "hook_command_launchable",
     "hook_command_tokens",
     "hook_commands_use_windows_syntax",
     "hook_token_name",
     "is_legacy_posix_hook_command",
     "plain_json_hook_argv",
-    "render_hook_command",
+    "short_path_facts",
     "split_hook_command_line",
 ]

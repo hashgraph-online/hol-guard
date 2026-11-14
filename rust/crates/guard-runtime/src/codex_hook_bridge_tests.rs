@@ -11,8 +11,8 @@ use super::*;
 use crate::claude_hook_bridge_fixture::{spawn_daemon, write_private, Exchange, GuardHome};
 
 const VECTORS: &str = include_str!("../testdata/codex_hook_bridge/vectors.json");
-/// Windows config arguments from `encode_hook_config_argument(windows=True)`
-/// and the text `decode_bridge_config_argument` returns for each (`null`
+/// Windows config arguments in the unpadded base64url form the Windows launch
+/// argv carries, and the text `decode_bridge_config_argument` returns for each (`null`
 /// where Python refuses the argument).
 const BASE64URL_CONFIGS: &str =
     include_str!("../testdata/codex_hook_bridge/base64url_configs.json");

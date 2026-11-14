@@ -28,7 +28,7 @@ from ..aibom_detection import (
     native_adapter_detection_payload,
 )
 from ..codex_config import _Wire, dump_toml, read_toml_payload
-from ..codex_hook_command_line import render_hook_command
+from ..codex_hook_command_line import short_path_facts
 from ..codex_hook_compatibility import NATIVE_CODEX_HOOK_FEATURE, python_bridge_argv
 from ..codex_hook_file_integrity import validate_regular_file
 from ..codex_hook_integrity import (
@@ -245,10 +245,6 @@ def _hook_command_parts(context: HarnessContext) -> tuple[str, ...]:
     )
 
 
-def _hook_command(context: HarnessContext) -> str:
-    return render_hook_command(_hook_command_parts(context))
-
-
 def _post_tool_hook_timeout_seconds(context: HarnessContext) -> int:
     configured_wait_timeout = load_guard_config(
         context.guard_home,
@@ -277,14 +273,15 @@ def _hook_registration(context: HarnessContext) -> _HookRegistration:
     argv = _hook_command_parts(context)
     environment = merge_guard_launcher_env(pin_package=True)
     environment.update(codex_remote_launch_environment(context.home_dir))
-    answer = _codex(
-        "groups",
-        context,
-        argv=list(argv),
-        command=render_hook_command(argv),
-        env=json.dumps(environment),
-        long_timeout=_post_tool_hook_timeout_seconds(context),
-    )
+    fields: dict[str, object] = {
+        "argv": list(argv),
+        "env": json.dumps(environment),
+        "long_timeout": _post_tool_hook_timeout_seconds(context),
+    }
+    answer = _codex("groups", context, **fields)
+    if set(answer) == {"reply"}:
+        # A Windows path is rendered by its 8.3 name, which only this host knows.
+        answer = _codex("groups", context, **fields, short_names=short_path_facts(answer["reply"]["shorten"]))
     return _HookRegistration(argv, _reply_text(answer, "groups"), _reply_text(answer, "bindings"))
 
 

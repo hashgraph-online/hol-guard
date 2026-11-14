@@ -71,6 +71,7 @@ mod hermes_config;
 mod hermes_hooks;
 mod hermes_install;
 mod hermes_uninstall;
+mod hook_render;
 mod isolated_python;
 mod kimi;
 mod openclaw;

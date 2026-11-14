@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 import json
 import os
 import re
@@ -13,9 +14,8 @@ from codex_plugin_scanner.guard.adapters import codex as codex_adapter
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.codex_hook_bridge_runtime import bridge_config_from_argv, decode_bridge_config_argument
 from codex_plugin_scanner.guard.codex_hook_command_line import (
-    encode_hook_config_argument,
     hook_command_launchable,
-    render_hook_command,
+    short_path_facts,
     split_hook_command_line,
 )
 from codex_plugin_scanner.guard.codex_hook_file_integrity import split_hook_command
@@ -43,6 +43,24 @@ _CONFIG = {
     "trailing": "C:\\Users\\",
 }
 _STATUS = "HOL Guard is reviewing this action"
+
+
+def encode_hook_config_argument(config_json: str, *, windows: bool) -> str:
+    """The config argument as the native renderer writes it: base64url on Windows."""
+
+    if not windows:
+        return config_json
+    return base64.urlsafe_b64encode(config_json.encode("utf-8")).decode("ascii").rstrip("=")
+
+
+def _rendered(argv: list[str], *, windows: bool) -> str:
+    """The native renderer's line for an argv of plain tokens."""
+
+    return " ".join(argv) if windows else shlex.join(argv)
+
+
+def _powershell_call(argv: list[str]) -> str:
+    return "& " + " ".join("'" + argument.replace("'", "''") + "'" for argument in argv)
 
 
 def _config_json(*, windows: bool) -> str:
@@ -84,7 +102,7 @@ def _hooks(command: str) -> dict[str, object]:
 @pytest.mark.parametrize("windows", [False, True])
 def test_hook_command_round_trips_argv_and_json(windows: bool) -> None:
     argv = _argv(windows=windows)
-    command = render_hook_command(argv, windows=windows)
+    command = _rendered(argv, windows=windows)
 
     assert split_hook_command_line(command, windows=windows) == argv
     assert split_hook_command(command, windows=windows) == argv
@@ -92,19 +110,10 @@ def test_hook_command_round_trips_argv_and_json(windows: bool) -> None:
     assert hook_command_launchable(command, windows=windows)
 
 
-def test_posix_rendering_is_unchanged() -> None:
-    argv = _argv(windows=False)
-
-    assert argv[-1] == json.dumps(_CONFIG, separators=(",", ":"))
-    assert render_hook_command(argv, windows=False) == shlex.join(argv)
-
-
-def test_windows_rendering_uses_plain_tokens_both_shells_read() -> None:
-    argv = _argv(windows=True)
-    command = render_hook_command(argv, windows=True)
-
-    assert command == " ".join(argv)
-    assert re.fullmatch(r"[A-Za-z0-9_-]+", argv[-1])
+def test_the_config_argument_is_plain_json_on_posix_and_a_plain_token_on_windows() -> None:
+    assert _argv(windows=False)[-1] == json.dumps(_CONFIG, separators=(",", ":"))
+    command = _rendered(_argv(windows=True), windows=True)
+    assert re.fullmatch(r"[A-Za-z0-9_-]+", _argv(windows=True)[-1])
     assert not any(character in command for character in "\"'%!^&|<>$`;")
 
 
@@ -117,13 +126,21 @@ def _short_names(monkeypatch: pytest.MonkeyPatch, names: dict[str, str]) -> None
     monkeypatch.setattr(codex_hook_command_line, "_long_path", longs.get)
 
 
-def test_windows_rendering_uses_short_names_for_spaced_paths(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_the_host_names_short_forms_for_the_native_renderer(monkeypatch: pytest.MonkeyPatch) -> None:
+    _short_names(monkeypatch, {_SPACED_PYTHON: _SHORT_PYTHON})
+
+    assert short_path_facts([_SPACED_PYTHON, "C:\\no short"]) == {
+        _SPACED_PYTHON: [_SHORT_PYTHON, _SPACED_PYTHON],
+        "C:\\no short": [None, None],
+    }
+
+
+def test_windows_short_name_commands_parse_back_to_the_long_path(monkeypatch: pytest.MonkeyPatch) -> None:
     _short_names(monkeypatch, {_SPACED_PYTHON: _SHORT_PYTHON})
     argv = [_SPACED_PYTHON, *_argv(windows=True)[1:]]
-    command = render_hook_command(argv, windows=True)
-
     # Plain tokens read the same under PowerShell and under cmd.exe /C.
-    assert command == " ".join([_SHORT_PYTHON, *argv[1:]])
+    command = " ".join([_SHORT_PYTHON, *argv[1:]])
+
     assert not any(character in command for character in "\"'%!^&|<>$`;")
     assert split_hook_command_line(command, windows=True) == argv
     assert split_hook_command(command, windows=True) == argv
@@ -146,46 +163,15 @@ def test_windows_rendering_uses_short_names_for_spaced_paths(monkeypatch: pytest
     assert [binding["event"] for binding in bindings] == list(MANAGED_CODEX_HOOK_EVENTS)
 
 
-@pytest.mark.parametrize(
-    "short",
-    [
-        None,
-        r"C:\Program Files\HOLGUA~1\.venv\Scripts\python.exe",
-        r"C:\Program Files\HOL Guard's\.venv\Scripts\python.exe",
-    ],
-)
-def test_windows_rendering_skips_short_names_that_are_not_plain_or_exact(
-    monkeypatch: pytest.MonkeyPatch, short: str | None
-) -> None:
-    monkeypatch.setattr(codex_hook_command_line, "_short_path", lambda _path: short)
-    monkeypatch.setattr(codex_hook_command_line, "_long_path", lambda _path: _SPACED_PYTHON)
-    command = render_hook_command([_SPACED_PYTHON, *_argv(windows=True)[1:]], windows=True)
-
-    assert command.startswith("& 'C:\\Program Files\\HOL Guard''s\\")
-
-
-def test_windows_short_name_must_map_back_to_the_same_path(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(codex_hook_command_line, "_short_path", lambda _path: _SHORT_PYTHON)
-    monkeypatch.setattr(codex_hook_command_line, "_long_path", lambda _path: r"C:\Other\python.exe")
-
-    assert render_hook_command([_SPACED_PYTHON, "-I"], windows=True).startswith("& ")
-
-
-def test_windows_rendering_quotes_paths_for_powershell_call(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_windows_powershell_call_commands_parse_back(monkeypatch: pytest.MonkeyPatch) -> None:
     _short_names(monkeypatch, {})
     argv = [_SPACED_PYTHON, *_argv(windows=True)[1:]]
-    command = render_hook_command(argv, windows=True)
+    command = _powershell_call(argv)
 
     assert command.startswith("& 'C:\\Program Files\\HOL Guard''s\\")
     assert '"' not in command
     assert split_hook_command_line(command, windows=True) == argv
     assert hook_command_launchable(command, windows=True)
-
-
-@pytest.mark.parametrize("argv", [[], [_PYTHON, "-I", "line\nbreak"]])
-def test_windows_rendering_rejects_unrepresentable_arguments(argv: list[str]) -> None:
-    with pytest.raises(ValueError):
-        render_hook_command(argv, windows=True)
 
 
 def test_bridge_accepts_encoded_and_plain_config_arguments(tmp_path: Path) -> None:
@@ -216,13 +202,13 @@ def test_windows_treats_legacy_posix_entries_as_guard_but_not_launchable() -> No
 def test_health_and_ownership_recognise_rendered_guard_hooks(windows: bool, monkeypatch: pytest.MonkeyPatch) -> None:
     # The fixture paths are illustrative; this test covers command-line recognition only.
     monkeypatch.setattr(codex_hook_registration, "missing_guard_hook_program", lambda *_args, **_kwargs: None)
-    hooks = _hooks(render_hook_command(_argv(windows=windows), windows=windows))
+    hooks = _hooks(_rendered(_argv(windows=windows), windows=windows))
 
     assert live_guard_codex_hooks_intercept(hooks, windows=windows)
     assert all(live_owned_codex_event_matches(hooks, windows=windows).values())
     with pytest.raises(RuntimeError, match="codex_hook_owner_conflict"):
         require_codex_hook_owner(
-            render_hook_command(_argv(windows=windows), windows=windows), ownership="unmanaged", windows=windows
+            _rendered(_argv(windows=windows), windows=windows), ownership="unmanaged", windows=windows
         )
 
 
@@ -236,7 +222,7 @@ def test_windows_health_fails_while_legacy_posix_hooks_cannot_launch() -> None:
 @pytest.mark.parametrize("legacy", [False, True])
 def test_windows_legacy_adoption_matches_current_and_plain_json_entries(legacy: bool) -> None:
     argv = _argv(windows=True)
-    command = _legacy_command() if legacy else render_hook_command(argv, windows=True)
+    command = _legacy_command() if legacy else _rendered(argv, windows=True)
     hooks = _hooks(command)
     expected = [{"event": event, "group": {"matcher": "Bash"}} for event in MANAGED_CODEX_HOOK_EVENTS]
 
@@ -265,7 +251,8 @@ def test_installed_posix_hook_command_is_byte_identical(tmp_path: Path) -> None:
     context = _context(tmp_path)
     parts = codex_adapter._hook_command_parts(context)
 
-    assert codex_adapter._hook_command(context) == shlex.join(parts)
+    groups = json.loads(json.dumps(codex_adapter._managed_hook_groups(context)))
+    assert {group["hooks"][0]["command"] for group in groups.values()} == {shlex.join(parts)}
     assert parts[-1] == json.dumps(json.loads(parts[-1]), separators=(",", ":"))
 
 

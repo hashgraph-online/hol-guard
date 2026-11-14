@@ -37,7 +37,7 @@ fn separator(ch: char) -> bool {
 }
 
 /// `[A-Za-z]:[A-Za-z0-9_.~\\-]+`, the shape of an 8.3 Windows path token.
-fn is_short_token(token: &str) -> bool {
+pub(crate) fn is_short_token(token: &str) -> bool {
     let mut chars = token.chars();
     let drive = chars.next().is_some_and(|ch| ch.is_ascii_alphabetic());
     if !drive || chars.next() != Some(':') {
