@@ -226,6 +226,7 @@ fn first_path_match(executable: &str, search_path: &str) -> Option<String> {
             | "zparseopts"
             | "ttyctl"
     ) {
+
         return None;
     }
     let directory = std::fs::canonicalize(path.parent()?).ok()?;
