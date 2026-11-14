@@ -19300,6 +19300,105 @@
       "expect": "allow"
     },
     {
+      "id": "session-cursor-git-commit-substituted-heredoc-message",
+      "fix_area": "git",
+      "harnesses": [
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git commit -m \"$(cat <<'EOF'\nfix(report): handle retry\n\nIt's the second paragraph.\nEOF\n)\""
+      },
+      "cwd": "org_app",
+      "expect": "allow"
+    },
+    {
+      "id": "session-git-add-commit-substituted-heredoc-message",
+      "fix_area": "git",
+      "harnesses": [
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git add -A && git commit -m \"$(cat <<'EOF'\nfix(report): handle retry\n\nIt's the second paragraph.\nEOF\n)\""
+      },
+      "cwd": "org_app",
+      "expect": "allow"
+    },
+    {
+      "id": "session-git-commit-multiline-quoted-message",
+      "fix_area": "git",
+      "harnesses": [
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git commit -m 'fix(report): handle retry\n\nSecond paragraph.'"
+      },
+      "cwd": "org_app",
+      "expect": "allow"
+    },
+    {
+      "id": "session-git-identity-commit",
+      "fix_area": "git",
+      "harnesses": [
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git -c user.name=Agent -c user.email=agent@example.test commit -m 'fix: handle retry'"
+      },
+      "cwd": "org_app",
+      "expect": "allow"
+    },
+    {
+      "id": "session-sibling-identity-commit-heredoc-message",
+      "fix_area": "git-sibling-worktree",
+      "harnesses": [
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git -C ${ORG}/service-api -c user.name=Agent -c user.email=agent@example.test commit -m \"$(cat <<'EOF'\nfix(report): handle retry\n\nIt's the second paragraph.\nEOF\n)\""
+      },
+      "cwd": "org_app",
+      "expect": "allow"
+    },
+    {
+      "id": "neg-git-commit-heredoc-piped-to-shell",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git commit -m \"$(cat <<'EOF' | sh\nrm -rf src\nEOF\n)\""
+      },
+      "cwd": "org_app",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-git-commit-unquoted-line-break",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git commit -m 'fix: handle retry'\nrm -rf src"
+      },
+      "cwd": "org_app",
+      "expect": "not_allow"
+    },
+    {
       "id": "session-git-commit-heredoc-long-file-option",
       "fix_area": "git",
       "harnesses": [

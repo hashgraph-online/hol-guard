@@ -156,6 +156,35 @@ pub(crate) fn project(command: &str, allowed: impl Fn(&str) -> bool) -> Option<S
         .then_some(out)
 }
 
+/// Whether a bare `cat`, judged as a command of its own, runs without any
+/// control refusing it.
+///
+/// It is the program a `$(cat <<'EOF' ...)` substitution runs, it reads only
+/// the literal heredoc the projection already read, and no rule names it. On
+/// a host with a workspace sandbox it therefore runs contained. A host with
+/// no sandbox, Cursor's among them, has nowhere to contain it, so it gets the
+/// plain review every command no rule proves gets, with nothing matched. That
+/// review is not a refusal: the same `cat` prints the same message either
+/// way, and judging the projected command is what decides the chain. A
+/// control that did refuse it matches a rule or blocks, which this keeps.
+pub(super) fn cat_unrefused(verdict: &guard_contracts::PreToolResultV1) -> bool {
+    let contained = verdict.minimum_action == "sandbox-required"
+        && verdict.reason_code == "native_workspace_containment_required";
+    let unmatched = verdict
+        .command_extensions
+        .as_ref()
+        .is_some_and(|extensions| {
+            extensions.observations.is_empty()
+                && extensions.permission_observations.is_empty()
+                && extensions.evaluation_error.is_none()
+                && extensions.binding.uncertainty_count == 0
+        });
+    contained
+        || (verdict.minimum_action == "review"
+            && verdict.reason_code == "native_command_review_required"
+            && unmatched)
+}
+
 /// The literal text a `$(cat <<'EOF' ... EOF)` prints, when that is the whole
 /// of the substitution and it stands alone inside double quotes.
 ///

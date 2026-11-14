@@ -41,8 +41,10 @@ pub(super) fn write_hooks(
         || segment.path_overridden
         || !segment.wrapper_chain.is_empty()
         || !super::identity_only(segment)
-        || segment.text.contains(['$', '`', '\n', '\r'])
-        // A quoted `<` or `>` (`--author="A <a@example.test>"`) is data.
+        || segment.text.contains(['$', '`', '\r'])
+        // A quoted `<` or `>` (`--author="A <a@example.test>"`) is data, and
+        // so is a quoted line break in a multi-line `-m` message. Unquoted,
+        // either one ends the command, and this screen refuses it.
         || crate::codex_output_search::has_unquoted_shell_control(&segment.text)
     {
         return None;
