@@ -66,6 +66,15 @@ pub(super) fn safe_find_listing_arguments(
                                 root,
                                 context.home_dir,
                                 context.cwd,
+                            ))
+                        && (!entries_only_bound(expression)
+                            || !selects_links(expression)
+                            || super::read_paths::hidden_listing::home_hidden_link_names(
+                                root,
+                                context.home_dir,
+                                context.cwd,
+                                walk_depth(expression),
+                                selects_ordinary_names,
                             ))))
         })
         && safe_expression(expression)
@@ -131,6 +140,11 @@ fn entries_only_bound(expression: &[String]) -> bool {
 /// below the root would otherwise have its own layout printed. A `-name`
 /// pattern in the same expression already decides what may be printed, so a
 /// walk carrying one keeps its existing proof.
+///
+/// `-type l` bounds it the same way: it prints link names and follows none.
+/// Each name it could print is read from the tree itself first, so a link
+/// with a hidden or secret-style name, or one inside a store, keeps the
+/// review.
 fn match_bounded(expression: &[String]) -> bool {
     let mut bounded = false;
     let mut index = 0;
@@ -156,7 +170,7 @@ fn match_bounded(expression: &[String]) -> bool {
             // `find ~/.codex -print -name run.sh` prints the whole tree.
             "-print" | "-print0" if !bounded => return false,
             "-type" => {
-                if expression.get(index).map(String::as_str) == Some("d") {
+                if matches!(expression.get(index).map(String::as_str), Some("d" | "l")) {
                     bounded = true;
                 }
                 index += 1;
@@ -166,6 +180,27 @@ fn match_bounded(expression: &[String]) -> bool {
         }
     }
     bounded
+}
+
+/// Whether the expression selects links. Without a `-name` pattern,
+/// `-type l` prints every link name the walk reaches, each of which
+/// [`super::read_paths::hidden_listing::home_hidden_link_names`] reads
+/// before the walk proceeds.
+fn selects_links(expression: &[String]) -> bool {
+    expression
+        .windows(2)
+        .any(|pair| pair[0] == "-type" && pair[1] == "l")
+}
+
+/// The deepest level the walk reaches: the largest `-maxdepth`, or the
+/// depth limit when none is given.
+fn walk_depth(expression: &[String]) -> usize {
+    expression
+        .windows(2)
+        .filter(|pair| pair[0] == "-maxdepth")
+        .filter_map(|pair| pair[1].parse::<usize>().ok())
+        .max()
+        .unwrap_or(usize::from(MAX_FIND_DEPTH))
 }
 
 /// Names prose is written under. A pattern anchored to one of these ends
