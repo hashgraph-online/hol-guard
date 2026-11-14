@@ -318,3 +318,49 @@ def test_a_refresh_keeps_the_old_totals_and_says_it_is_still_counting(
 
 def _week_of(summary: dict) -> dict:
     return next(tool for tool in summary["week"] if tool["harness"] == "codex")
+
+
+def _report(sessions: int, measured: int, saved: int) -> dict:
+    total = {
+        "sessions": sessions,
+        "prompts": 3,
+        "context_tokens": 2400,
+        "files_shown": 5,
+        "files_opened_anyway": 1,
+        "measured_sessions": measured,
+        "used_tokens": 48_000,
+        "estimated_saved_tokens": saved,
+    }
+    app = {"app": "codex", "rate_percent": 52, **total}
+    return {"schema": "guard-cigar-savings.v1", "window_days": 7, "estimate": True, "total": total, "apps": [app]}
+
+
+def test_the_cli_labels_the_savings_estimate_and_says_why_it_has_none(
+    homes: SimpleNamespace, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    from codex_plugin_scanner import cli, install_integrity
+    from codex_plugin_scanner.guard import native_context_assistance
+
+    monkeypatch.setenv("HOME", str(homes.home))
+    monkeypatch.setenv("USERPROFILE", str(homes.home))
+    monkeypatch.setattr(sys, "argv", ["hol-guard"])
+    monkeypatch.setattr(install_integrity, "warn_if_shadowed", lambda: None)
+    answers = iter([_report(2, 2, 52_000), _report(2, 0, 0), _report(0, 0, 0)])
+    monkeypatch.setattr(native_context_assistance, "savings", lambda guard_home: next(answers))
+    run = lambda: cli.main(["context", "usage", "--guard-home", str(homes.guard)])  # noqa: E731
+    assert run() == 0
+    text = capsys.readouterr().out
+    assert "CIGAR saved about 52,000 tokens in the last 7 days. This is an estimate." in text
+    assert "the agent opened 1 of them anyway" in text
+    assert "(Codex 52%)" in text
+    assert run() == 0
+    assert "could not read those sessions' records" in capsys.readouterr().out
+    assert run() == 0
+    assert "nothing to estimate" in capsys.readouterr().out
+
+    def unavailable(guard_home: Path) -> dict:
+        raise native_context_assistance.ContextAssistanceError("native_context_assistance_unavailable")
+
+    monkeypatch.setattr(native_context_assistance, "savings", unavailable)
+    assert cli.main(["context", "usage", "--guard-home", str(homes.guard), "--json"]) == 0
+    assert json.loads(capsys.readouterr().out)["savings"] is None

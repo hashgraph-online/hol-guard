@@ -11,11 +11,18 @@ from pathlib import Path
 from typing import Any
 
 from ..context_usage_meter import METER
+from ..native_context_assistance import ContextAssistanceError, savings
 
 PATH = "/v1/context-assistance/usage"
 KIND = "usage"
 
 
 def respond(handler: Any) -> None:
-    state = METER.read(Path.home(), handler.server.store.guard_home, os.environ)
+    guard_home = handler.server.store.guard_home
+    state = METER.read(Path.home(), guard_home, os.environ)
+    # An older or stopped resident has no estimate; the meter still shows.
+    try:
+        state = {**state, "savings": savings(guard_home=guard_home)}
+    except ContextAssistanceError:
+        state = {**state, "savings": None}
     handler._write_json(state, extra_headers={"Cache-Control": "no-store"})

@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { ActionButton } from "../approval-center-primitives";
 import { isGuardDemoMode } from "../guard-demo";
 import { ContextAssistanceApiError } from "./api";
+import { CigarSavingsPanel } from "./savings-panel";
 import { readUsageMeter, type UsageMeter, type UsageTool, type UsageTotals } from "./usage-api";
 
 const NAMES: Record<string, string> = {
@@ -95,6 +96,7 @@ export function CigarUsagePanel() {
   }
   const today = new Map(meter.today.map((tool) => [tool.harness, tool]));
   return <div className="cigar-usage">
+    <CigarSavingsPanel savings={meter.savings} />
     <div className="cigar-usage-grid">{meter.week.map((tool) => <ToolCard key={tool.harness} week={tool} today={today.get(tool.harness)} days={meter.window_days} />)}</div>
     <p className="cigar-usage-foot">Input read from cache is billed at a fraction of the full input price. A chat summary is when the app shortens the conversation so it can keep going.</p>
     {meter.unread.length ? <p className="cigar-usage-foot">Guard does not read usage records from {listNames(meter.unread)}, so they are not shown here.</p> : null}
