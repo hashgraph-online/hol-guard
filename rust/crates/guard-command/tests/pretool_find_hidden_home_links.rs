@@ -58,6 +58,14 @@ fn home() -> PathBuf {
         )
         .unwrap();
     }
+    // A narrow chain deeper than the walk follows on its own, with a
+    // secret-named link at the bottom.
+    let mut deep = home.join(".cache/deep");
+    for level in 0..33 {
+        deep = deep.join(format!("d{level}"));
+    }
+    std::fs::create_dir_all(&deep).unwrap();
+    symlink(home.join(".ssh/id_ed25519"), deep.join("id_ed25519")).unwrap();
     std::fs::canonicalize(home).unwrap()
 }
 
@@ -96,6 +104,8 @@ fn ordinary_link_names_in_a_tool_cache_proceed() {
         "find ~/.cache/builds -type l".to_owned(),
         // The secret-named links sit two levels down, past this bound.
         "find ~/.cache/keyed -maxdepth 1 -type l".to_owned(),
+        // The deep link sits far below this bound.
+        "find ~/.cache/deep -maxdepth 3 -type l".to_owned(),
     ] {
         assert_eq!(decision(&home, &command), "allow", "{command}");
     }
@@ -108,6 +118,13 @@ fn secret_names_stores_and_wider_walks_keep_review() {
         "find ~/.cache/keyed -maxdepth 2 -type l",
         "find ~/.cache/dotted -maxdepth 2 -type l",
         "find ~/.cache/named -type l",
+        // `find` has no depth limit of its own, so a tree deeper than the
+        // walk follows keeps the review rather than vouching for links it
+        // never read.
+        "find ~/.cache/deep -type l",
+        // The print runs before the pattern, so every link name is printed.
+        "find ~/.cache/keyed -type l -print -name current",
+        "find ~/.cache/keyed -maxdepth 2 -type l -print0 -iname current",
         "find ~/.ssh -maxdepth 2 -type l",
         "find -L ~/.cache/builds -maxdepth 2 -type l",
         "find ~/.cache/builds -maxdepth 2 -type f",

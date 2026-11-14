@@ -105,12 +105,25 @@ fn entries_only(expression: &[String]) -> bool {
     bounded
 }
 
-/// Whether `-type d` is all that bounds the expression, with no `-name`
-/// pattern to decide which paths may be printed.
+/// Whether `-type d` or `-type l` is all that bounds the expression, with no
+/// `-name` pattern to decide which paths may be printed.
+///
+/// `find` evaluates left to right, so a pattern only decides what is printed
+/// when it comes before the print: `find ~/.cache/tool -type l -print -name x`
+/// prints every link before the pattern is tested, and is bounded by the type
+/// alone.
 fn entries_only_bound(expression: &[String]) -> bool {
-    !expression
-        .iter()
-        .any(|token| matches!(token.as_str(), "-name" | "-iname"))
+    let mut index = 0;
+    while let Some(token) = expression.get(index) {
+        index += 1;
+        match token.as_str() {
+            "-name" | "-iname" => return false,
+            "-print" | "-print0" => return true,
+            "-type" | "-maxdepth" | "-mindepth" => index += 1,
+            _ => {}
+        }
+    }
+    true
 }
 
 /// Whether the expression prints only the paths a name pattern selects.
@@ -192,15 +205,14 @@ fn selects_links(expression: &[String]) -> bool {
         .any(|pair| pair[0] == "-type" && pair[1] == "l")
 }
 
-/// The deepest level the walk reaches: the largest `-maxdepth`, or the
-/// depth limit when none is given.
-fn walk_depth(expression: &[String]) -> usize {
+/// The deepest level the walk reaches: the largest `-maxdepth`, or `None`
+/// when none is given and `find` walks the whole tree.
+fn walk_depth(expression: &[String]) -> Option<usize> {
     expression
         .windows(2)
         .filter(|pair| pair[0] == "-maxdepth")
         .filter_map(|pair| pair[1].parse::<usize>().ok())
         .max()
-        .unwrap_or(usize::from(MAX_FIND_DEPTH))
 }
 
 /// Names prose is written under. A pattern anchored to one of these ends

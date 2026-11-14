@@ -224,9 +224,14 @@ pub(in crate::pretool) fn home_hidden_walk_clears_stores(
 /// How many entries a link-name walk reads before its proof gives up.
 const MAX_LINK_WALK_ENTRIES: usize = 4_096;
 
+/// How deep a walk with no `-maxdepth` is followed before it keeps the
+/// review: `find` itself has no limit, so a tree that goes deeper than this
+/// is one whose every link name was not read.
+const MAX_UNBOUNDED_LINK_DEPTH: usize = 32;
+
 /// Whether every link a `-type l` walk of `value` would print, down to
 /// `max_depth`, has a name `ordinary_name` accepts outside every credential
-/// store.
+/// store. With no `max_depth` the walk has to reach the bottom of the tree.
 ///
 /// `find -type l` prints link names and never follows them, so what it can
 /// disclose is the names themselves. Rather than reason about a glob, the
@@ -239,7 +244,7 @@ pub(in crate::pretool) fn home_hidden_link_names(
     value: &str,
     home_dir: Option<&str>,
     cwd: Option<&str>,
-    max_depth: usize,
+    max_depth: Option<usize>,
     ordinary_name: impl Fn(&str) -> bool,
 ) -> bool {
     let Some((canonical, relative)) = resolved_home_entry(value, home_dir, cwd) else {
@@ -248,8 +253,12 @@ pub(in crate::pretool) fn home_hidden_link_names(
     let mut pending = vec![(canonical, relative, 0_usize)];
     let mut inspected = 0_usize;
     while let Some((directory, relative, depth)) = pending.pop() {
-        if depth >= max_depth {
-            continue;
+        match max_depth {
+            Some(limit) if depth >= limit => continue,
+            // An unbounded `find` keeps descending; stopping here would
+            // leave the links below unread and still answer for them.
+            None if depth >= MAX_UNBOUNDED_LINK_DEPTH => return false,
+            _ => {}
         }
         let Ok(entries) = std::fs::read_dir(&directory) else {
             return false;
