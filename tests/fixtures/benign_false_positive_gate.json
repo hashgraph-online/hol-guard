@@ -14820,6 +14820,23 @@
       "expect": "allow"
     },
     {
+      "id": "metadata-diff-against-null-device",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "diff -u /dev/null README.md"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
       "id": "metadata-cmp-files",
       "fix_area": "shell",
       "harnesses": [
@@ -15723,6 +15740,23 @@
       "tool": "shell",
       "tool_input": {
         "command": "diff ${HOME}/.ssh/id_rsa README.md"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-diff-null-device-against-ssh-key",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "diff -u /dev/null ${HOME}/.ssh/id_rsa"
       },
       "cwd": "worktree",
       "expect": "not_allow"
