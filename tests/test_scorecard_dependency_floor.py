@@ -38,7 +38,7 @@ def _locked_versions(path: str) -> dict[str, list[str]]:
 
 def test_python_vulnerability_floors_are_locked() -> None:
     project = _toml("pyproject.toml")
-    assert any(dep.startswith("mcp>=1.30.0,<2;") for dep in project["project"]["dependencies"])
+    assert any(dep.startswith("mcp>=1.30.0,<3;") for dep in project["project"]["dependencies"])
     overrides = project["tool"]["uv"]["override-dependencies"]
     assert "pyjwt==2.15.0" in overrides
     assert "multidict>=6.9.1" in overrides
