@@ -37,7 +37,7 @@ pub fn extract(action: &PackAction, args: &Map<String, Value>) -> ActionFactsV2 
             external: Fact::Unknown,
         },
         environment: choice(spec.environment.as_ref(), args),
-        money: Fact::Unknown,
+        money: crate::cloud_pack_money::extract(spec.money.as_ref(), args),
         sensitivity: match &spec.sensitivity {
             Some(Extractor::Const(value)) => known(value),
             _ => Fact::Unknown,

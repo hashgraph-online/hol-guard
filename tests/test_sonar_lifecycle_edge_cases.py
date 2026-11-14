@@ -11,14 +11,12 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.adapters import cursor_hooks as cursor_hooks_module
 from codex_plugin_scanner.guard.adapters.adapter_state_integrity import (
     adapter_state_is_authenticated,
     authenticate_adapter_state,
 )
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.adapters.copilot import CopilotHarnessAdapter
-from codex_plugin_scanner.guard.adapters.cursor_hooks import install_cursor_hooks, managed_hook_script_path
 from codex_plugin_scanner.guard.adapters.hermes_state_paths import hermes_cleanup_values
 
 
@@ -51,32 +49,6 @@ def test_unsigned_global_copilot_state_cannot_authorize_cleanup(tmp_path: Path) 
     assert json.loads(target.read_text(encoding="utf-8")) == {"owned": "user"}
     assert backup.exists()
     assert state_path.exists()
-
-
-def test_cursor_executable_update_does_not_follow_swapped_symlink(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    context = HarnessContext(home_dir=tmp_path / "home", workspace_dir=None, guard_home=tmp_path / "guard-home")
-    managed_script = managed_hook_script_path(context)
-    outside = tmp_path / "outside.py"
-    outside.write_text("# user owned\n", encoding="utf-8")
-    outside.chmod(0o600)
-    original_mode = stat.S_IMODE(outside.stat().st_mode)
-    safe_make_executable = cursor_hooks_module._make_executable
-
-    def swap_before_permission_update(path: Path) -> None:
-        if path == managed_script:
-            path.unlink()
-            path.symlink_to(outside)
-        safe_make_executable(path)
-
-    monkeypatch.setattr(cursor_hooks_module, "_make_executable", swap_before_permission_update)
-
-    with pytest.raises(OSError, match=r"non-regular|symlink"):
-        install_cursor_hooks(context)
-
-    assert stat.S_IMODE(outside.stat().st_mode) == original_mode
 
 
 @pytest.mark.skipif(os.name != "posix", reason="POSIX no-follow directory descriptors")

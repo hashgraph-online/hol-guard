@@ -527,6 +527,8 @@ impl<'a> super::PathContext<'a> {
         // is pip's own surface, so [`super::pip_reads`] reads it.
         let pip_config_inert =
             super::pip_reads::environment_configuration_inert(execution_environment);
+        let python_environment_inert =
+            super::python_filter::environment_inert(execution_environment);
         // ripgrep reads RIPGREP_CONFIG_PATH unless the command passes
         // `--no-config`, and ignores it only when it is empty. A stamped
         // environment carries names without values, so any name counts.
@@ -655,6 +657,7 @@ impl<'a> super::PathContext<'a> {
             cargo_config_inert,
             npm_config_inert,
             pip_config_inert,
+            python_environment_inert,
             shell_home_matches,
             ripgrep_config_absent,
             gem_config_absent,

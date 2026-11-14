@@ -609,6 +609,77 @@
               }
             }
           }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "form"
+          ],
+          "properties": {
+            "form": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 64,
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "name",
+                  "value"
+                ],
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "pattern": "^[A-Za-z0-9_.\\[\\]-]{1,64}$"
+                  },
+                  "value": {
+                    "$ref": "#/$defs/formValue"
+                  }
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "formValue": {
+      "description": "A form field carries one scalar: an argument, or a constant string, integer or boolean.",
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "arg"
+          ],
+          "properties": {
+            "arg": {
+              "$ref": "#/$defs/argumentName"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "const"
+          ],
+          "properties": {
+            "const": {
+              "oneOf": [
+                {
+                  "type": "string",
+                  "maxLength": 256
+                },
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "boolean"
+                }
+              ]
+            }
+          }
         }
       ]
     },
@@ -934,6 +1005,44 @@
         },
         "sensitivity": {
           "$ref": "#/$defs/extractor"
+        },
+        "money": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "amount",
+            "direction"
+          ],
+          "oneOf": [
+            {
+              "required": [
+                "currencyArgument"
+              ]
+            },
+            {
+              "required": [
+                "currency"
+              ]
+            }
+          ],
+          "properties": {
+            "amount": {
+              "$ref": "#/$defs/argumentName"
+            },
+            "currencyArgument": {
+              "$ref": "#/$defs/argumentName"
+            },
+            "currency": {
+              "type": "string",
+              "pattern": "^[A-Z]{3}$"
+            },
+            "direction": {
+              "enum": [
+                "out",
+                "in"
+              ]
+            }
+          }
         },
         "countReadback": {
           "type": "string",

@@ -20,6 +20,8 @@ use serde_json::{Map, Value};
 
 #[path = "literal_secret_pairs.rs"]
 mod pairs;
+#[path = "literal_secret_strong.rs"]
+mod strong;
 #[path = "literal_secret_value.rs"]
 mod value;
 
@@ -214,7 +216,7 @@ fn holds_spelled_secret(text: &str) -> bool {
         !text[whole.end()..].starts_with('(')
             && !NOT_A_SECRET_NAME.is_match(&found["k"])
             && value.is_some_and(|value| looks_random(value.as_str()))
-    })
+    }) || strong::holds_proven_secret(text)
 }
 
 /// The rows a patch adds: a Codex `apply_patch` body in `command`, or an Oh

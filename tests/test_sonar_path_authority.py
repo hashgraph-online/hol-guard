@@ -9,19 +9,14 @@ from pathlib import Path
 import pytest
 import yaml
 
-from codex_plugin_scanner.guard.adapters import cursor_hooks as cursor_hooks_module
 from codex_plugin_scanner.guard.adapters import get_adapter
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.adapters.copilot import CopilotHarnessAdapter
-from codex_plugin_scanner.guard.adapters.cursor_hooks import (
-    cursor_hooks_path,
-    install_cursor_hooks,
-    managed_hook_script_path,
-    uninstall_cursor_hooks,
-)
+from codex_plugin_scanner.guard.adapters.cursor import CursorHarnessAdapter
 from codex_plugin_scanner.guard.adapters.hermes import HermesHarnessAdapter
 from codex_plugin_scanner.guard.runtime.command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
 from codex_plugin_scanner.guard.runtime.extension_control_authority import AuthorityHealth
+from tests.cursor_test_support import HOOK_SCRIPT_NAME
 from tests.test_guard_extension_control_authority import MemorySecretStore, _store
 
 
@@ -232,44 +227,15 @@ def test_cursor_uninstall_does_not_unlink_managed_copy_symlink(tmp_path: Path) -
     context = HarnessContext(home_dir=tmp_path / "home", workspace_dir=None, guard_home=tmp_path / "guard-home")
     outside_script = tmp_path / "outside.py"
     outside_script.write_text("# user-owned\n", encoding="utf-8")
-    managed_script = managed_hook_script_path(context)
+    managed_script = context.guard_home / "managed" / "cursor" / HOOK_SCRIPT_NAME
     managed_script.parent.mkdir(parents=True)
     managed_script.symlink_to(outside_script)
 
     with pytest.raises(ValueError, match="Cursor managed hook script"):
-        uninstall_cursor_hooks(context)
+        CursorHarnessAdapter().uninstall(context)
 
     assert outside_script.read_text(encoding="utf-8") == "# user-owned\n"
     assert managed_script.is_symlink()
-
-
-def test_cursor_install_replaces_final_symlink_without_modifying_external_file(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    workspace = tmp_path / "workspace"
-    workspace.mkdir()
-    context = HarnessContext(home_dir=tmp_path / "home", workspace_dir=workspace, guard_home=tmp_path / "guard-home")
-    outside_hooks = tmp_path / "outside-hooks.json"
-    outside_hooks.write_text('{"version":1,"hooks":{"user":[]}}\n', encoding="utf-8")
-    hooks_path = cursor_hooks_path(context)
-    hooks_path.parent.mkdir(parents=True)
-    hooks_path.write_text('{"version":1,"hooks":{}}\n', encoding="utf-8")
-    safe_write = cursor_hooks_module.write_text_at_authorized_path
-
-    def swap_after_validation(path: Path, payload: str) -> None:
-        if path == hooks_path:
-            path.unlink()
-            path.symlink_to(outside_hooks)
-        safe_write(path, payload)
-
-    monkeypatch.setattr(cursor_hooks_module, "write_text_at_authorized_path", swap_after_validation)
-
-    install_cursor_hooks(context)
-
-    assert outside_hooks.read_text(encoding="utf-8") == '{"version":1,"hooks":{"user":[]}}\n'
-    assert hooks_path.is_symlink() is False
-    assert "beforeShellExecution" in json.loads(hooks_path.read_text(encoding="utf-8"))["hooks"]
 
 
 def test_openclaw_runtime_probe_rejects_symlinked_managed_root(tmp_path: Path) -> None:

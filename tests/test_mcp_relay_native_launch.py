@@ -9,11 +9,11 @@ from pathlib import Path
 
 import pytest
 
+from codex_plugin_scanner.guard.adapters import cursor as cursor_adapter
 from codex_plugin_scanner.guard.adapters import hermes as hermes_adapter
 from codex_plugin_scanner.guard.adapters import mcp_relay_native, mcp_servers, native_hook_bridge
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.adapters.codex import CodexHarnessAdapter
-from codex_plugin_scanner.guard.adapters.cursor import CursorHarnessAdapter
 from codex_plugin_scanner.guard.adapters.harness_mcp_discovery import discover_harness_mcp_servers
 from codex_plugin_scanner.guard.adapters.mcp_relay_native import (
     NATIVE_MCP_RELAY_COMMAND,
@@ -257,13 +257,10 @@ def test_hermes_remote_and_bare_servers_keep_the_manifest_resolved_proxy(tmp_pat
 def test_refresh_moves_entries_between_launchers(tmp_path: Path, advertised: set[str]) -> None:
     args = _python_args(tmp_path, "cursor-mcp-proxy", "cursor")
     stale_native = {"command": "/old/runtime", "args": [NATIVE_MCP_RELAY_COMMAND, "/old/python", *args]}
-    refreshed = CursorHarnessAdapter._refresh_guard_proxy_entry(stale_native)
-    assert refreshed["command"] == sys.executable
-    assert refreshed["args"] == args
+    assert cursor_adapter._relaunch(stale_native["args"]) == [sys.executable, args]  # pyright: ignore[reportPrivateUsage]
     advertised.add(NATIVE_MCP_RELAY_FEATURE)
-    refreshed = CursorHarnessAdapter._refresh_guard_proxy_entry({"command": "/old/python", "args": args})
-    assert refreshed["command"] == str(_RUNTIME)
-    assert refreshed["args"] == [NATIVE_MCP_RELAY_COMMAND, sys.executable, *args]
+    refreshed = cursor_adapter._relaunch(args)  # pyright: ignore[reportPrivateUsage]
+    assert refreshed == [str(_RUNTIME), [NATIVE_MCP_RELAY_COMMAND, sys.executable, *args]]
 
 
 @pytest.mark.skipif(sys.platform == "win32", reason="the Guard proxy recognition needs the resident runtime")

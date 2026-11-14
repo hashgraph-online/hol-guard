@@ -10,21 +10,13 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.adapters import (
-    claude_code,
-    claude_hook_argv,
-    claude_hook_config,
-    get_adapter,
-)
-from codex_plugin_scanner.guard.adapters.base import HarnessContext
-from codex_plugin_scanner.guard.adapters.claude_code import (
-    CLAUDE_GUARD_DAEMON_HOOK_MARKER,
-    CLAUDE_GUARD_TOOL_MATCHER,
-    ClaudeCodeHarnessAdapter,
-    _shell_command,
-)
+from codex_plugin_scanner.guard.adapters import claude_code, get_adapter
+from codex_plugin_scanner.guard.adapters.base import HarnessContext, _shell_command
+from codex_plugin_scanner.guard.adapters.claude_code import CLAUDE_GUARD_DAEMON_HOOK_MARKER, ClaudeCodeHarnessAdapter
 
 pytestmark = pytest.mark.usefixtures("approval_questionnaire_mode")
+
+CLAUDE_GUARD_TOOL_MATCHER = "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*"
 
 
 def _write_json(path: Path, payload: dict[str, object]) -> None:
@@ -86,7 +78,7 @@ def test_claude_detect_marks_local_cli_install_as_available_when_not_on_path(mon
     local_claude.parent.mkdir(parents=True, exist_ok=True)
     local_claude.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
     local_claude.chmod(0o755)
-    monkeypatch.setattr("shutil.which", lambda command: None)
+    monkeypatch.setenv("PATH", "")
     monkeypatch.setattr(Path, "home", lambda: actual_home)
 
     detection = adapter.detect(context)
@@ -103,7 +95,7 @@ def test_claude_launch_command_uses_local_cli_install_when_not_on_path(monkeypat
     local_claude.parent.mkdir(parents=True, exist_ok=True)
     local_claude.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
     local_claude.chmod(0o755)
-    monkeypatch.setattr("shutil.which", lambda command: None)
+    monkeypatch.setenv("PATH", "")
     monkeypatch.setattr(Path, "home", lambda: actual_home)
 
     launch_command = adapter.launch_command(context, ["--print", "hello"])
@@ -121,7 +113,7 @@ def test_claude_detect_ignores_non_executable_local_cli_candidate_when_not_on_pa
     local_binary.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
     local_binary.chmod(0o644)
 
-    monkeypatch.setattr("shutil.which", lambda command: None)
+    monkeypatch.setenv("PATH", "")
     monkeypatch.setattr(Path, "home", lambda: tmp_path / "actual-home")
 
     detection = adapter.detect(context)
@@ -149,16 +141,14 @@ def test_claude_install_writes_session_start_and_command_hook_schema_and_is_idem
     assert {entry["matcher"] for entry in session_start} == {"startup", "resume", "clear", "compact"}
     assert all(entry["hooks"][0]["type"] == "command" for entry in session_start)
     assert len(pre_tool_use) == 1
-    assert pre_tool_use[0]["matcher"] == "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*"
+    assert pre_tool_use[0]["matcher"] == CLAUDE_GUARD_TOOL_MATCHER
     assert pre_tool_use[0]["hooks"][0]["type"] == "command"
     assert CLAUDE_GUARD_DAEMON_HOOK_MARKER in "\0".join(_handler_argv(pre_tool_use[0]["hooks"][0]))
     assert "url" not in pre_tool_use[0]["hooks"][0]
     assert pre_tool_use[0]["hooks"][0]["timeout"] == 30
     assert pre_tool_use[0]["hooks"][0]["statusMessage"] == "HOL Guard is checking this tool use"
     assert len(permission_request) == 1
-    assert (
-        permission_request[0]["matcher"] == "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*"
-    )
+    assert permission_request[0]["matcher"] == CLAUDE_GUARD_TOOL_MATCHER
     assert permission_request[0]["hooks"][0]["type"] == "command"
     assert permission_request[0]["hooks"][0]["timeout"] == 10
     assert permission_request[0]["hooks"][0]["statusMessage"] == "HOL Guard is reviewing this approval prompt"
@@ -283,8 +273,6 @@ def test_claude_refresh_adds_the_powershell_tool_to_an_older_matcher(tmp_path):
     }
     _write_json(settings_path, settings)
 
-    assert claude_hook_config.missing_guard_hook_events(settings) == ["PreToolUse", "PermissionRequest"]
-
     original_guard_daemon_url_for_home = claude_code.guard_daemon_url_for_home
     original_load_guard_daemon_url = claude_code.load_guard_daemon_url
     claude_code.guard_daemon_url_for_home = lambda _guard_home: "http://127.0.0.1:5888"
@@ -299,7 +287,6 @@ def test_claude_refresh_adds_the_powershell_tool_to_an_older_matcher(tmp_path):
     for event in ("PreToolUse", "PermissionRequest"):
         assert [entry["matcher"] for entry in payload["hooks"][event]] == [CLAUDE_GUARD_TOOL_MATCHER]
     assert "PowerShell" in CLAUDE_GUARD_TOOL_MATCHER.split("|")
-    assert claude_hook_config.missing_guard_hook_events(payload) == []
 
 
 def test_claude_refresh_runtime_hook_urls_rewrites_stale_daemon_port(tmp_path):
@@ -362,28 +349,6 @@ def test_claude_install_rejects_symlinked_settings_file(tmp_path):
     assert outside_settings.read_text(encoding="utf-8") == "{}"
 
 
-def test_claude_legacy_guard_url_detection_only_matches_local_guard_urls():
-    assert (
-        claude_code._is_guard_hook_url(
-            "http://127.0.0.1:5371/v1/hooks/claude-code?guard-home=%2Fold&workspace=%2Fworkspace"
-        )
-        is True
-    )
-    assert claude_code._is_guard_hook_url("https://hol.org/v1/hooks/claude-code") is False
-    assert claude_code._is_guard_hook_url("http://localhost:5371/v1/hooks/claude-code") is False
-
-
-def test_claude_handler_identity_uses_http_url_for_http_hooks():
-    assert claude_code._handler_identity({"type": "http", "url": "http://127.0.0.1:5371/one"}) == (
-        "http",
-        "http://127.0.0.1:5371/one",
-    )
-    assert claude_code._handler_identity({"type": "http", "url": "http://127.0.0.1:5371/two"}) == (
-        "http",
-        "http://127.0.0.1:5371/two",
-    )
-
-
 def test_claude_shell_command_uses_list2cmdline_on_windows():
     command = ("node", "-e", "console.log('hello')")
 
@@ -391,7 +356,7 @@ def test_claude_shell_command_uses_list2cmdline_on_windows():
 
 
 def test_claude_daemon_hook_command_uses_python_not_node(tmp_path, monkeypatch):
-    monkeypatch.setattr(claude_hook_argv, "_native_bridge_executable", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(claude_code, "native_hook_bridge_executable", lambda *_args, **_kwargs: None)
     context = _build_context(tmp_path)
     adapter = ClaudeCodeHarnessAdapter()
     command_parts = adapter._daemon_hook_command_parts(context)

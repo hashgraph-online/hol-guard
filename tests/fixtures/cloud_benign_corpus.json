@@ -1728,6 +1728,3462 @@
         "title": "Tasks"
       },
       "expect": "allow"
+    },
+    {
+      "id": "b167",
+      "task": "lists open tasks in a view",
+      "actionId": "airtable.records.list",
+      "arguments": {
+        "base_id": "appA1b2C3d4E5f6G7",
+        "table_id": "tblH8i9J0k1L2m3N4",
+        "page_size": 50,
+        "formula": "{Status}='Open'"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b168",
+      "task": "lists open tasks in a view",
+      "actionId": "airtable.records.list",
+      "arguments": {
+        "base_id": "appA1b2C3d4E5f6G7",
+        "table_id": "tblH8i9J0k1L2m3N4",
+        "page_size": 1,
+        "formula": "{Status}='Open'"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b169",
+      "task": "lists open tasks in a view",
+      "actionId": "airtable.records.list",
+      "arguments": {
+        "base_id": "appA1b2C3d4E5f6G7",
+        "table_id": "tblH8i9J0k1L2m3N4",
+        "page_size": 10,
+        "formula": "{Status}='Open'"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b170",
+      "task": "lists open tasks in a view",
+      "actionId": "airtable.records.list",
+      "arguments": {
+        "base_id": "appA1b2C3d4E5f6G7",
+        "table_id": "tblH8i9J0k1L2m3N4",
+        "page_size": 20,
+        "formula": "{Status}='Open'"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b171",
+      "task": "lists open tasks in a view",
+      "actionId": "airtable.records.list",
+      "arguments": {
+        "base_id": "appA1b2C3d4E5f6G8",
+        "table_id": "tblH8i9J0k1L2m3N4",
+        "page_size": 50,
+        "formula": "{Status}='Open'"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b172",
+      "task": "lists open tasks in a view",
+      "actionId": "airtable.records.list",
+      "arguments": {
+        "base_id": "appA1b2C3d4E5f6G9",
+        "table_id": "tblH8i9J0k1L2m3N4",
+        "page_size": 50,
+        "formula": "{Status}='Open'"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b173",
+      "task": "lists open tasks in a view",
+      "actionId": "airtable.records.list",
+      "arguments": {
+        "base_id": "appA1b2C3d4E5f6G0",
+        "table_id": "tblH8i9J0k1L2m3N4",
+        "page_size": 50,
+        "formula": "{Status}='Open'"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b174",
+      "task": "lists open tasks in a view",
+      "actionId": "airtable.records.list",
+      "arguments": {
+        "base_id": "appA1b2C3d4E5f6G7",
+        "table_id": "tblH8i9J0k1L2m3N5",
+        "page_size": 50,
+        "formula": "{Status}='Open'"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b175",
+      "task": "lists open tasks in a view",
+      "actionId": "airtable.records.list",
+      "arguments": {
+        "base_id": "appA1b2C3d4E5f6G7",
+        "table_id": "tblH8i9J0k1L2m3N6",
+        "page_size": 50,
+        "formula": "{Status}='Open'"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b176",
+      "task": "lists open tasks in a view",
+      "actionId": "airtable.records.list",
+      "arguments": {
+        "base_id": "appA1b2C3d4E5f6G7",
+        "table_id": "tblH8i9J0k1L2m3N7",
+        "page_size": 50,
+        "formula": "{Status}='Open'"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b177",
+      "task": "reads one record",
+      "actionId": "airtable.records.get",
+      "arguments": {
+        "base_id": "appA1b2C3d4E5f6G7",
+        "table_id": "tblH8i9J0k1L2m3N4",
+        "record_id": "recO5p6Q7r8S9t0U1"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b178",
+      "task": "reads one record",
+      "actionId": "airtable.records.get",
+      "arguments": {
+        "base_id": "appA1b2C3d4E5f6G8",
+        "table_id": "tblH8i9J0k1L2m3N4",
+        "record_id": "recO5p6Q7r8S9t0U1"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b179",
+      "task": "reads one record",
+      "actionId": "airtable.records.get",
+      "arguments": {
+        "base_id": "appA1b2C3d4E5f6G9",
+        "table_id": "tblH8i9J0k1L2m3N4",
+        "record_id": "recO5p6Q7r8S9t0U1"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b180",
+      "task": "reads one record",
+      "actionId": "airtable.records.get",
+      "arguments": {
+        "base_id": "appA1b2C3d4E5f6G0",
+        "table_id": "tblH8i9J0k1L2m3N4",
+        "record_id": "recO5p6Q7r8S9t0U1"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b181",
+      "task": "reads one record",
+      "actionId": "airtable.records.get",
+      "arguments": {
+        "base_id": "appA1b2C3d4E5f6G7",
+        "table_id": "tblH8i9J0k1L2m3N5",
+        "record_id": "recO5p6Q7r8S9t0U1"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b182",
+      "task": "reads one record",
+      "actionId": "airtable.records.get",
+      "arguments": {
+        "base_id": "appA1b2C3d4E5f6G7",
+        "table_id": "tblH8i9J0k1L2m3N6",
+        "record_id": "recO5p6Q7r8S9t0U1"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b183",
+      "task": "reads one record",
+      "actionId": "airtable.records.get",
+      "arguments": {
+        "base_id": "appA1b2C3d4E5f6G7",
+        "table_id": "tblH8i9J0k1L2m3N7",
+        "record_id": "recO5p6Q7r8S9t0U1"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b184",
+      "task": "reads one record",
+      "actionId": "airtable.records.get",
+      "arguments": {
+        "base_id": "appA1b2C3d4E5f6G7",
+        "table_id": "tblH8i9J0k1L2m3N4",
+        "record_id": "recO5p6Q7r8S9t0U2"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b185",
+      "task": "reads one record",
+      "actionId": "airtable.records.get",
+      "arguments": {
+        "base_id": "appA1b2C3d4E5f6G7",
+        "table_id": "tblH8i9J0k1L2m3N4",
+        "record_id": "recO5p6Q7r8S9t0U3"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b186",
+      "task": "reads one record",
+      "actionId": "airtable.records.get",
+      "arguments": {
+        "base_id": "appA1b2C3d4E5f6G7",
+        "table_id": "tblH8i9J0k1L2m3N4",
+        "record_id": "recO5p6Q7r8S9t0U4"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b187",
+      "task": "adds a task by name",
+      "actionId": "airtable.records.create",
+      "arguments": {
+        "base_id": "appA1b2C3d4E5f6G7",
+        "table_id": "tblH8i9J0k1L2m3N4",
+        "field": "Name",
+        "value": "Write release notes"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b188",
+      "task": "adds a task by name",
+      "actionId": "airtable.records.create",
+      "arguments": {
+        "base_id": "appA1b2C3d4E5f6G8",
+        "table_id": "tblH8i9J0k1L2m3N4",
+        "field": "Name",
+        "value": "Write release notes"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b189",
+      "task": "adds a task by name",
+      "actionId": "airtable.records.create",
+      "arguments": {
+        "base_id": "appA1b2C3d4E5f6G9",
+        "table_id": "tblH8i9J0k1L2m3N4",
+        "field": "Name",
+        "value": "Write release notes"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b190",
+      "task": "adds a task by name",
+      "actionId": "airtable.records.create",
+      "arguments": {
+        "base_id": "appA1b2C3d4E5f6G0",
+        "table_id": "tblH8i9J0k1L2m3N4",
+        "field": "Name",
+        "value": "Write release notes"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b191",
+      "task": "adds a task by name",
+      "actionId": "airtable.records.create",
+      "arguments": {
+        "base_id": "appA1b2C3d4E5f6G7",
+        "table_id": "tblH8i9J0k1L2m3N5",
+        "field": "Name",
+        "value": "Write release notes"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b192",
+      "task": "adds a task by name",
+      "actionId": "airtable.records.create",
+      "arguments": {
+        "base_id": "appA1b2C3d4E5f6G7",
+        "table_id": "tblH8i9J0k1L2m3N6",
+        "field": "Name",
+        "value": "Write release notes"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b193",
+      "task": "adds a task by name",
+      "actionId": "airtable.records.create",
+      "arguments": {
+        "base_id": "appA1b2C3d4E5f6G7",
+        "table_id": "tblH8i9J0k1L2m3N7",
+        "field": "Name",
+        "value": "Write release notes"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b194",
+      "task": "marks three tasks done",
+      "actionId": "airtable.records.set_field",
+      "arguments": {
+        "base_id": "appA1b2C3d4E5f6G7",
+        "table_id": "tblH8i9J0k1L2m3N4",
+        "record_ids": [
+          "rec00000000000000",
+          "rec00000000000001",
+          "rec00000000000002"
+        ],
+        "field": "Status",
+        "value": "Done"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b195",
+      "task": "marks three tasks done",
+      "actionId": "airtable.records.set_field",
+      "arguments": {
+        "base_id": "appA1b2C3d4E5f6G8",
+        "table_id": "tblH8i9J0k1L2m3N4",
+        "record_ids": [
+          "rec00000000000000",
+          "rec00000000000001",
+          "rec00000000000002"
+        ],
+        "field": "Status",
+        "value": "Done"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b196",
+      "task": "marks three tasks done",
+      "actionId": "airtable.records.set_field",
+      "arguments": {
+        "base_id": "appA1b2C3d4E5f6G9",
+        "table_id": "tblH8i9J0k1L2m3N4",
+        "record_ids": [
+          "rec00000000000000",
+          "rec00000000000001",
+          "rec00000000000002"
+        ],
+        "field": "Status",
+        "value": "Done"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b197",
+      "task": "marks three tasks done",
+      "actionId": "airtable.records.set_field",
+      "arguments": {
+        "base_id": "appA1b2C3d4E5f6G0",
+        "table_id": "tblH8i9J0k1L2m3N4",
+        "record_ids": [
+          "rec00000000000000",
+          "rec00000000000001",
+          "rec00000000000002"
+        ],
+        "field": "Status",
+        "value": "Done"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b198",
+      "task": "marks three tasks done",
+      "actionId": "airtable.records.set_field",
+      "arguments": {
+        "base_id": "appA1b2C3d4E5f6G7",
+        "table_id": "tblH8i9J0k1L2m3N5",
+        "record_ids": [
+          "rec00000000000000",
+          "rec00000000000001",
+          "rec00000000000002"
+        ],
+        "field": "Status",
+        "value": "Done"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b199",
+      "task": "marks three tasks done",
+      "actionId": "airtable.records.set_field",
+      "arguments": {
+        "base_id": "appA1b2C3d4E5f6G7",
+        "table_id": "tblH8i9J0k1L2m3N6",
+        "record_ids": [
+          "rec00000000000000",
+          "rec00000000000001",
+          "rec00000000000002"
+        ],
+        "field": "Status",
+        "value": "Done"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b200",
+      "task": "marks three tasks done",
+      "actionId": "airtable.records.set_field",
+      "arguments": {
+        "base_id": "appA1b2C3d4E5f6G7",
+        "table_id": "tblH8i9J0k1L2m3N7",
+        "record_ids": [
+          "rec00000000000000",
+          "rec00000000000001",
+          "rec00000000000002"
+        ],
+        "field": "Status",
+        "value": "Done"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b201",
+      "task": "lists the tables in a base",
+      "actionId": "airtable.tables.list",
+      "arguments": {
+        "base_id": "appA1b2C3d4E5f6G7"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b202",
+      "task": "lists the tables in a base",
+      "actionId": "airtable.tables.list",
+      "arguments": {
+        "base_id": "appA1b2C3d4E5f6G8"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b203",
+      "task": "lists the tables in a base",
+      "actionId": "airtable.tables.list",
+      "arguments": {
+        "base_id": "appA1b2C3d4E5f6G9"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b204",
+      "task": "lists the tables in a base",
+      "actionId": "airtable.tables.list",
+      "arguments": {
+        "base_id": "appA1b2C3d4E5f6G0"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b205",
+      "task": "calls search_objects",
+      "actionId": "asana.search_objects",
+      "arguments": {
+        "query": "launch",
+        "resource_type": "task"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b206",
+      "task": "calls get_task",
+      "actionId": "asana.get_task",
+      "arguments": {
+        "task_id": "1209876543210123"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b207",
+      "task": "calls get_task",
+      "actionId": "asana.get_task",
+      "arguments": {
+        "task_id": "1209876543210124"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b208",
+      "task": "calls get_task",
+      "actionId": "asana.get_task",
+      "arguments": {
+        "task_id": "1209876543210125"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b209",
+      "task": "calls get_task",
+      "actionId": "asana.get_task",
+      "arguments": {
+        "task_id": "1209876543210126"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b210",
+      "task": "calls get_tasks",
+      "actionId": "asana.get_tasks",
+      "arguments": {
+        "project": "1209876543210123"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b211",
+      "task": "calls get_tasks",
+      "actionId": "asana.get_tasks",
+      "arguments": {
+        "project": "1209876543210124"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b212",
+      "task": "calls get_tasks",
+      "actionId": "asana.get_tasks",
+      "arguments": {
+        "project": "1209876543210125"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b213",
+      "task": "calls get_tasks",
+      "actionId": "asana.get_tasks",
+      "arguments": {
+        "project": "1209876543210126"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b214",
+      "task": "calls search_tasks",
+      "actionId": "asana.search_tasks",
+      "arguments": {
+        "text": "invoice"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b215",
+      "task": "calls getJiraIssue",
+      "actionId": "atlassian.getjiraissue",
+      "arguments": {
+        "cloudId": "c1",
+        "issueIdOrKey": "OPS-12"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b216",
+      "task": "calls searchJiraIssuesUsingJql",
+      "actionId": "atlassian.searchjiraissuesusingjql",
+      "arguments": {
+        "cloudId": "c1",
+        "jql": "project = OPS"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b217",
+      "task": "calls createJiraIssue",
+      "actionId": "atlassian.createjiraissue",
+      "arguments": {
+        "cloudId": "c1",
+        "projectKey": "OPS",
+        "summary": "x"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b218",
+      "task": "calls editJiraIssue",
+      "actionId": "atlassian.editjiraissue",
+      "arguments": {
+        "cloudId": "c1",
+        "issueIdOrKey": "OPS-12"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b219",
+      "task": "calls transitionJiraIssue",
+      "actionId": "atlassian.transitionjiraissue",
+      "arguments": {
+        "cloudId": "c1",
+        "issueIdOrKey": "OPS-12"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b220",
+      "task": "calls getConfluenceContent",
+      "actionId": "atlassian.getconfluencecontent",
+      "arguments": {
+        "cloudId": "c1",
+        "contentId": "123"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b221",
+      "task": "calls createConfluenceContent",
+      "actionId": "atlassian.createconfluencecontent",
+      "arguments": {
+        "cloudId": "c1",
+        "spaceId": "1",
+        "title": "x"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b222",
+      "task": "calls updateConfluenceContent",
+      "actionId": "atlassian.updateconfluencecontent",
+      "arguments": {
+        "cloudId": "c1",
+        "pageId": "123"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b223",
+      "task": "calls search_files_keyword",
+      "actionId": "box.search_files_keyword",
+      "arguments": {
+        "query": "contract"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b224",
+      "task": "calls search_files_keyword",
+      "actionId": "box.search_files_keyword",
+      "arguments": {
+        "query": "contracu"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b225",
+      "task": "calls search_files_keyword",
+      "actionId": "box.search_files_keyword",
+      "arguments": {
+        "query": "contracv"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b226",
+      "task": "calls search_files_keyword",
+      "actionId": "box.search_files_keyword",
+      "arguments": {
+        "query": "contracw"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b227",
+      "task": "calls get_file_content",
+      "actionId": "box.get_file_content",
+      "arguments": {
+        "file_id": "12345"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b228",
+      "task": "calls update_file_properties",
+      "actionId": "box.update_file_properties",
+      "arguments": {
+        "file_id": "12345"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b229",
+      "task": "calls upload_file",
+      "actionId": "box.upload_file",
+      "arguments": {
+        "folder_id": "0",
+        "file_name": "a.txt"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b230",
+      "task": "reads a document's title",
+      "actionId": "docs.documents.get",
+      "arguments": {
+        "document_id": "195j9eDD3ccgjQRttHhJPymLJUCOUjs-jmwTrekvdjFE"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b231",
+      "task": "reads a document's title",
+      "actionId": "docs.documents.get",
+      "arguments": {
+        "document_id": "195j9eDD3ccgjQRttHhJPymLJUCOUjs-jmwTrekvdjFF"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b232",
+      "task": "reads a document's title",
+      "actionId": "docs.documents.get",
+      "arguments": {
+        "document_id": "195j9eDD3ccgjQRttHhJPymLJUCOUjs-jmwTrekvdjFG"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b233",
+      "task": "reads a document's title",
+      "actionId": "docs.documents.get",
+      "arguments": {
+        "document_id": "195j9eDD3ccgjQRttHhJPymLJUCOUjs-jmwTrekvdjFH"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b234",
+      "task": "creates a blank document",
+      "actionId": "docs.documents.create",
+      "arguments": {
+        "title": "Meeting notes 2026-11-13"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b235",
+      "task": "appends a paragraph",
+      "actionId": "docs.documents.append_text",
+      "arguments": {
+        "document_id": "195j9eDD3ccgjQRttHhJPymLJUCOUjs-jmwTrekvdjFE",
+        "text": "\nAction items: ship it."
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b236",
+      "task": "appends a paragraph",
+      "actionId": "docs.documents.append_text",
+      "arguments": {
+        "document_id": "195j9eDD3ccgjQRttHhJPymLJUCOUjs-jmwTrekvdjFF",
+        "text": "\nAction items: ship it."
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b237",
+      "task": "appends a paragraph",
+      "actionId": "docs.documents.append_text",
+      "arguments": {
+        "document_id": "195j9eDD3ccgjQRttHhJPymLJUCOUjs-jmwTrekvdjFG",
+        "text": "\nAction items: ship it."
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b238",
+      "task": "appends a paragraph",
+      "actionId": "docs.documents.append_text",
+      "arguments": {
+        "document_id": "195j9eDD3ccgjQRttHhJPymLJUCOUjs-jmwTrekvdjFH",
+        "text": "\nAction items: ship it."
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b239",
+      "task": "deletes one paragraph, restorable from version history",
+      "actionId": "docs.documents.delete_range",
+      "arguments": {
+        "document_id": "195j9eDD3ccgjQRttHhJPymLJUCOUjs-jmwTrekvdjFE",
+        "start": 120,
+        "end": 480
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b240",
+      "task": "deletes one paragraph, restorable from version history",
+      "actionId": "docs.documents.delete_range",
+      "arguments": {
+        "document_id": "195j9eDD3ccgjQRttHhJPymLJUCOUjs-jmwTrekvdjFE",
+        "start": 1,
+        "end": 480
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b241",
+      "task": "deletes one paragraph, restorable from version history",
+      "actionId": "docs.documents.delete_range",
+      "arguments": {
+        "document_id": "195j9eDD3ccgjQRttHhJPymLJUCOUjs-jmwTrekvdjFE",
+        "start": 10,
+        "end": 480
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b242",
+      "task": "deletes one paragraph, restorable from version history",
+      "actionId": "docs.documents.delete_range",
+      "arguments": {
+        "document_id": "195j9eDD3ccgjQRttHhJPymLJUCOUjs-jmwTrekvdjFE",
+        "start": 20,
+        "end": 480
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b243",
+      "task": "deletes one paragraph, restorable from version history",
+      "actionId": "docs.documents.delete_range",
+      "arguments": {
+        "document_id": "195j9eDD3ccgjQRttHhJPymLJUCOUjs-jmwTrekvdjFE",
+        "start": 50,
+        "end": 480
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b244",
+      "task": "deletes one paragraph, restorable from version history",
+      "actionId": "docs.documents.delete_range",
+      "arguments": {
+        "document_id": "195j9eDD3ccgjQRttHhJPymLJUCOUjs-jmwTrekvdjFE",
+        "start": 5000000,
+        "end": 5000400
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b245",
+      "task": "deletes one paragraph, restorable from version history",
+      "actionId": "docs.documents.delete_range",
+      "arguments": {
+        "document_id": "195j9eDD3ccgjQRttHhJPymLJUCOUjs-jmwTrekvdjFE",
+        "start": 1,
+        "end": 2
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b246",
+      "task": "deletes one paragraph, restorable from version history",
+      "actionId": "docs.documents.delete_range",
+      "arguments": {
+        "document_id": "195j9eDD3ccgjQRttHhJPymLJUCOUjs-jmwTrekvdjFE",
+        "start": 1,
+        "end": 11
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b247",
+      "task": "deletes one paragraph, restorable from version history",
+      "actionId": "docs.documents.delete_range",
+      "arguments": {
+        "document_id": "195j9eDD3ccgjQRttHhJPymLJUCOUjs-jmwTrekvdjFE",
+        "start": 10,
+        "end": 20
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b248",
+      "task": "deletes one paragraph, restorable from version history",
+      "actionId": "docs.documents.delete_range",
+      "arguments": {
+        "document_id": "195j9eDD3ccgjQRttHhJPymLJUCOUjs-jmwTrekvdjFE",
+        "start": 20,
+        "end": 50
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b249",
+      "task": "deletes one paragraph, restorable from version history",
+      "actionId": "docs.documents.delete_range",
+      "arguments": {
+        "document_id": "195j9eDD3ccgjQRttHhJPymLJUCOUjs-jmwTrekvdjFE",
+        "start": 120,
+        "end": 5000001
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b250",
+      "task": "deletes one paragraph, restorable from version history",
+      "actionId": "docs.documents.delete_range",
+      "arguments": {
+        "document_id": "195j9eDD3ccgjQRttHhJPymLJUCOUjs-jmwTrekvdjFF",
+        "start": 120,
+        "end": 480
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b251",
+      "task": "lists a folder",
+      "actionId": "dropbox.files.list_folder",
+      "arguments": {
+        "path": "/Reports",
+        "limit": 50
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b252",
+      "task": "lists a folder",
+      "actionId": "dropbox.files.list_folder",
+      "arguments": {
+        "path": "/Reports",
+        "limit": 1
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b253",
+      "task": "lists a folder",
+      "actionId": "dropbox.files.list_folder",
+      "arguments": {
+        "path": "/Reports",
+        "limit": 10
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b254",
+      "task": "lists a folder",
+      "actionId": "dropbox.files.list_folder",
+      "arguments": {
+        "path": "/Reports",
+        "limit": 20
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b255",
+      "task": "lists a folder",
+      "actionId": "dropbox.files.list_folder",
+      "arguments": {
+        "path": "/Reports",
+        "limit": 250
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b256",
+      "task": "lists the top folder",
+      "actionId": "dropbox.files.list_root",
+      "arguments": {
+        "limit": 100
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b257",
+      "task": "lists the top folder",
+      "actionId": "dropbox.files.list_root",
+      "arguments": {
+        "limit": 1
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b258",
+      "task": "lists the top folder",
+      "actionId": "dropbox.files.list_root",
+      "arguments": {
+        "limit": 10
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b259",
+      "task": "lists the top folder",
+      "actionId": "dropbox.files.list_root",
+      "arguments": {
+        "limit": 20
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b260",
+      "task": "lists the top folder",
+      "actionId": "dropbox.files.list_root",
+      "arguments": {
+        "limit": 50
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b261",
+      "task": "lists the top folder",
+      "actionId": "dropbox.files.list_root",
+      "arguments": {
+        "limit": 250
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b262",
+      "task": "reads one file's details",
+      "actionId": "dropbox.files.get_metadata",
+      "arguments": {
+        "path": "/Reports/Q3 budget.xlsx"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b263",
+      "task": "creates a folder",
+      "actionId": "dropbox.files.create_folder",
+      "arguments": {
+        "path": "/Reports/2026"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b264",
+      "task": "renames a report",
+      "actionId": "dropbox.files.move",
+      "arguments": {
+        "from_path": "/Reports/Q3 budget.xlsx",
+        "to_path": "/Reports/Q3 budget (final).xlsx"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b265",
+      "task": "calls get_user_details",
+      "actionId": "hubspot-mcp.get_user_details",
+      "arguments": {},
+      "expect": "allow"
+    },
+    {
+      "id": "b266",
+      "task": "calls search_crm_objects",
+      "actionId": "hubspot-mcp.search_crm_objects",
+      "arguments": {
+        "objectType": "contacts",
+        "query": "acme"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b267",
+      "task": "calls search_crm_objects",
+      "actionId": "hubspot-mcp.search_crm_objects",
+      "arguments": {
+        "objectType": "contactt",
+        "query": "acme"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b268",
+      "task": "calls search_crm_objects",
+      "actionId": "hubspot-mcp.search_crm_objects",
+      "arguments": {
+        "objectType": "contactu",
+        "query": "acme"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b269",
+      "task": "calls search_crm_objects",
+      "actionId": "hubspot-mcp.search_crm_objects",
+      "arguments": {
+        "objectType": "contactv",
+        "query": "acme"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b270",
+      "task": "calls get_crm_objects",
+      "actionId": "hubspot-mcp.get_crm_objects",
+      "arguments": {
+        "objectType": "contacts",
+        "objectIds": [
+          "101"
+        ]
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b271",
+      "task": "calls get_crm_objects",
+      "actionId": "hubspot-mcp.get_crm_objects",
+      "arguments": {
+        "objectType": "contactt",
+        "objectIds": [
+          "101"
+        ]
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b272",
+      "task": "calls get_crm_objects",
+      "actionId": "hubspot-mcp.get_crm_objects",
+      "arguments": {
+        "objectType": "contactu",
+        "objectIds": [
+          "101"
+        ]
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b273",
+      "task": "calls get_crm_objects",
+      "actionId": "hubspot-mcp.get_crm_objects",
+      "arguments": {
+        "objectType": "contactv",
+        "objectIds": [
+          "101"
+        ]
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b274",
+      "task": "lists contacts",
+      "actionId": "hubspot.objects.list",
+      "arguments": {
+        "object_type": "contacts",
+        "limit": 20
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b275",
+      "task": "lists contacts",
+      "actionId": "hubspot.objects.list",
+      "arguments": {
+        "object_type": "contacts",
+        "limit": 1
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b276",
+      "task": "lists contacts",
+      "actionId": "hubspot.objects.list",
+      "arguments": {
+        "object_type": "contacts",
+        "limit": 10
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b277",
+      "task": "lists contacts",
+      "actionId": "hubspot.objects.list",
+      "arguments": {
+        "object_type": "contacts",
+        "limit": 50
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b278",
+      "task": "updates 99 deals",
+      "actionId": "hubspot.objects.set_property",
+      "arguments": {
+        "object_type": "deals",
+        "record_ids": [
+          "1000",
+          "1001",
+          "1002",
+          "1003",
+          "1004",
+          "1005",
+          "1006",
+          "1007",
+          "1008",
+          "1009",
+          "1010",
+          "1011",
+          "1012",
+          "1013",
+          "1014",
+          "1015",
+          "1016",
+          "1017",
+          "1018",
+          "1019",
+          "1020",
+          "1021",
+          "1022",
+          "1023",
+          "1024",
+          "1025",
+          "1026",
+          "1027",
+          "1028",
+          "1029",
+          "1030",
+          "1031",
+          "1032",
+          "1033",
+          "1034",
+          "1035",
+          "1036",
+          "1037",
+          "1038",
+          "1039",
+          "1040",
+          "1041",
+          "1042",
+          "1043",
+          "1044",
+          "1045",
+          "1046",
+          "1047",
+          "1048",
+          "1049",
+          "1050",
+          "1051",
+          "1052",
+          "1053",
+          "1054",
+          "1055",
+          "1056",
+          "1057",
+          "1058",
+          "1059",
+          "1060",
+          "1061",
+          "1062",
+          "1063",
+          "1064",
+          "1065",
+          "1066",
+          "1067",
+          "1068",
+          "1069",
+          "1070",
+          "1071",
+          "1072",
+          "1073",
+          "1074",
+          "1075",
+          "1076",
+          "1077",
+          "1078",
+          "1079",
+          "1080",
+          "1081",
+          "1082",
+          "1083",
+          "1084",
+          "1085",
+          "1086",
+          "1087",
+          "1088",
+          "1089",
+          "1090",
+          "1091",
+          "1092",
+          "1093",
+          "1094",
+          "1095",
+          "1096",
+          "1097",
+          "1098"
+        ],
+        "property": "dealstage",
+        "value": "closedwon"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b279",
+      "task": "updates 99 deals",
+      "actionId": "hubspot.objects.set_property",
+      "arguments": {
+        "object_type": "deals",
+        "record_ids": [
+          "1000",
+          "1001",
+          "1002",
+          "1003",
+          "1004",
+          "1005",
+          "1006",
+          "1007",
+          "1008",
+          "1009",
+          "1010",
+          "1011",
+          "1012",
+          "1013",
+          "1014",
+          "1015",
+          "1016",
+          "1017",
+          "1018",
+          "1019",
+          "1020",
+          "1021",
+          "1022",
+          "1023",
+          "1024",
+          "1025",
+          "1026",
+          "1027",
+          "1028",
+          "1029",
+          "1030",
+          "1031",
+          "1032",
+          "1033",
+          "1034",
+          "1035",
+          "1036",
+          "1037",
+          "1038",
+          "1039",
+          "1040",
+          "1041",
+          "1042",
+          "1043",
+          "1044",
+          "1045",
+          "1046",
+          "1047",
+          "1048",
+          "1049",
+          "1050",
+          "1051",
+          "1052",
+          "1053",
+          "1054",
+          "1055",
+          "1056",
+          "1057",
+          "1058",
+          "1059",
+          "1060",
+          "1061",
+          "1062",
+          "1063",
+          "1064",
+          "1065",
+          "1066",
+          "1067",
+          "1068",
+          "1069",
+          "1070",
+          "1071",
+          "1072",
+          "1073",
+          "1074",
+          "1075",
+          "1076",
+          "1077",
+          "1078",
+          "1079",
+          "1080",
+          "1081",
+          "1082",
+          "1083",
+          "1084",
+          "1085",
+          "1086",
+          "1087",
+          "1088",
+          "1089",
+          "1090",
+          "1091",
+          "1092",
+          "1093",
+          "1094",
+          "1095",
+          "1096",
+          "1097",
+          "1098"
+        ],
+        "property": "dealstagf",
+        "value": "closedwon"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b280",
+      "task": "updates 99 deals",
+      "actionId": "hubspot.objects.set_property",
+      "arguments": {
+        "object_type": "deals",
+        "record_ids": [
+          "1000",
+          "1001",
+          "1002",
+          "1003",
+          "1004",
+          "1005",
+          "1006",
+          "1007",
+          "1008",
+          "1009",
+          "1010",
+          "1011",
+          "1012",
+          "1013",
+          "1014",
+          "1015",
+          "1016",
+          "1017",
+          "1018",
+          "1019",
+          "1020",
+          "1021",
+          "1022",
+          "1023",
+          "1024",
+          "1025",
+          "1026",
+          "1027",
+          "1028",
+          "1029",
+          "1030",
+          "1031",
+          "1032",
+          "1033",
+          "1034",
+          "1035",
+          "1036",
+          "1037",
+          "1038",
+          "1039",
+          "1040",
+          "1041",
+          "1042",
+          "1043",
+          "1044",
+          "1045",
+          "1046",
+          "1047",
+          "1048",
+          "1049",
+          "1050",
+          "1051",
+          "1052",
+          "1053",
+          "1054",
+          "1055",
+          "1056",
+          "1057",
+          "1058",
+          "1059",
+          "1060",
+          "1061",
+          "1062",
+          "1063",
+          "1064",
+          "1065",
+          "1066",
+          "1067",
+          "1068",
+          "1069",
+          "1070",
+          "1071",
+          "1072",
+          "1073",
+          "1074",
+          "1075",
+          "1076",
+          "1077",
+          "1078",
+          "1079",
+          "1080",
+          "1081",
+          "1082",
+          "1083",
+          "1084",
+          "1085",
+          "1086",
+          "1087",
+          "1088",
+          "1089",
+          "1090",
+          "1091",
+          "1092",
+          "1093",
+          "1094",
+          "1095",
+          "1096",
+          "1097",
+          "1098"
+        ],
+        "property": "dealstagg",
+        "value": "closedwon"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b281",
+      "task": "updates 99 deals",
+      "actionId": "hubspot.objects.set_property",
+      "arguments": {
+        "object_type": "deals",
+        "record_ids": [
+          "1000",
+          "1001",
+          "1002",
+          "1003",
+          "1004",
+          "1005",
+          "1006",
+          "1007",
+          "1008",
+          "1009",
+          "1010",
+          "1011",
+          "1012",
+          "1013",
+          "1014",
+          "1015",
+          "1016",
+          "1017",
+          "1018",
+          "1019",
+          "1020",
+          "1021",
+          "1022",
+          "1023",
+          "1024",
+          "1025",
+          "1026",
+          "1027",
+          "1028",
+          "1029",
+          "1030",
+          "1031",
+          "1032",
+          "1033",
+          "1034",
+          "1035",
+          "1036",
+          "1037",
+          "1038",
+          "1039",
+          "1040",
+          "1041",
+          "1042",
+          "1043",
+          "1044",
+          "1045",
+          "1046",
+          "1047",
+          "1048",
+          "1049",
+          "1050",
+          "1051",
+          "1052",
+          "1053",
+          "1054",
+          "1055",
+          "1056",
+          "1057",
+          "1058",
+          "1059",
+          "1060",
+          "1061",
+          "1062",
+          "1063",
+          "1064",
+          "1065",
+          "1066",
+          "1067",
+          "1068",
+          "1069",
+          "1070",
+          "1071",
+          "1072",
+          "1073",
+          "1074",
+          "1075",
+          "1076",
+          "1077",
+          "1078",
+          "1079",
+          "1080",
+          "1081",
+          "1082",
+          "1083",
+          "1084",
+          "1085",
+          "1086",
+          "1087",
+          "1088",
+          "1089",
+          "1090",
+          "1091",
+          "1092",
+          "1093",
+          "1094",
+          "1095",
+          "1096",
+          "1097",
+          "1098"
+        ],
+        "property": "dealstagh",
+        "value": "closedwon"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b282",
+      "task": "updates 99 deals",
+      "actionId": "hubspot.objects.set_property",
+      "arguments": {
+        "object_type": "deals",
+        "record_ids": [
+          "1000",
+          "1001",
+          "1002",
+          "1003",
+          "1004",
+          "1005",
+          "1006",
+          "1007",
+          "1008",
+          "1009",
+          "1010",
+          "1011",
+          "1012",
+          "1013",
+          "1014",
+          "1015",
+          "1016",
+          "1017",
+          "1018",
+          "1019",
+          "1020",
+          "1021",
+          "1022",
+          "1023",
+          "1024",
+          "1025",
+          "1026",
+          "1027",
+          "1028",
+          "1029",
+          "1030",
+          "1031",
+          "1032",
+          "1033",
+          "1034",
+          "1035",
+          "1036",
+          "1037",
+          "1038",
+          "1039",
+          "1040",
+          "1041",
+          "1042",
+          "1043",
+          "1044",
+          "1045",
+          "1046",
+          "1047",
+          "1048",
+          "1049",
+          "1050",
+          "1051",
+          "1052",
+          "1053",
+          "1054",
+          "1055",
+          "1056",
+          "1057",
+          "1058",
+          "1059",
+          "1060",
+          "1061",
+          "1062",
+          "1063",
+          "1064",
+          "1065",
+          "1066",
+          "1067",
+          "1068",
+          "1069",
+          "1070",
+          "1071",
+          "1072",
+          "1073",
+          "1074",
+          "1075",
+          "1076",
+          "1077",
+          "1078",
+          "1079",
+          "1080",
+          "1081",
+          "1082",
+          "1083",
+          "1084",
+          "1085",
+          "1086",
+          "1087",
+          "1088",
+          "1089",
+          "1090",
+          "1091",
+          "1092",
+          "1093",
+          "1094",
+          "1095",
+          "1096",
+          "1097",
+          "1098"
+        ],
+        "property": "dealstage",
+        "value": "closedwoo"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b283",
+      "task": "updates 99 deals",
+      "actionId": "hubspot.objects.set_property",
+      "arguments": {
+        "object_type": "deals",
+        "record_ids": [
+          "1000",
+          "1001",
+          "1002",
+          "1003",
+          "1004",
+          "1005",
+          "1006",
+          "1007",
+          "1008",
+          "1009",
+          "1010",
+          "1011",
+          "1012",
+          "1013",
+          "1014",
+          "1015",
+          "1016",
+          "1017",
+          "1018",
+          "1019",
+          "1020",
+          "1021",
+          "1022",
+          "1023",
+          "1024",
+          "1025",
+          "1026",
+          "1027",
+          "1028",
+          "1029",
+          "1030",
+          "1031",
+          "1032",
+          "1033",
+          "1034",
+          "1035",
+          "1036",
+          "1037",
+          "1038",
+          "1039",
+          "1040",
+          "1041",
+          "1042",
+          "1043",
+          "1044",
+          "1045",
+          "1046",
+          "1047",
+          "1048",
+          "1049",
+          "1050",
+          "1051",
+          "1052",
+          "1053",
+          "1054",
+          "1055",
+          "1056",
+          "1057",
+          "1058",
+          "1059",
+          "1060",
+          "1061",
+          "1062",
+          "1063",
+          "1064",
+          "1065",
+          "1066",
+          "1067",
+          "1068",
+          "1069",
+          "1070",
+          "1071",
+          "1072",
+          "1073",
+          "1074",
+          "1075",
+          "1076",
+          "1077",
+          "1078",
+          "1079",
+          "1080",
+          "1081",
+          "1082",
+          "1083",
+          "1084",
+          "1085",
+          "1086",
+          "1087",
+          "1088",
+          "1089",
+          "1090",
+          "1091",
+          "1092",
+          "1093",
+          "1094",
+          "1095",
+          "1096",
+          "1097",
+          "1098"
+        ],
+        "property": "dealstage",
+        "value": "closedwop"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b284",
+      "task": "updates 99 deals",
+      "actionId": "hubspot.objects.set_property",
+      "arguments": {
+        "object_type": "deals",
+        "record_ids": [
+          "1000",
+          "1001",
+          "1002",
+          "1003",
+          "1004",
+          "1005",
+          "1006",
+          "1007",
+          "1008",
+          "1009",
+          "1010",
+          "1011",
+          "1012",
+          "1013",
+          "1014",
+          "1015",
+          "1016",
+          "1017",
+          "1018",
+          "1019",
+          "1020",
+          "1021",
+          "1022",
+          "1023",
+          "1024",
+          "1025",
+          "1026",
+          "1027",
+          "1028",
+          "1029",
+          "1030",
+          "1031",
+          "1032",
+          "1033",
+          "1034",
+          "1035",
+          "1036",
+          "1037",
+          "1038",
+          "1039",
+          "1040",
+          "1041",
+          "1042",
+          "1043",
+          "1044",
+          "1045",
+          "1046",
+          "1047",
+          "1048",
+          "1049",
+          "1050",
+          "1051",
+          "1052",
+          "1053",
+          "1054",
+          "1055",
+          "1056",
+          "1057",
+          "1058",
+          "1059",
+          "1060",
+          "1061",
+          "1062",
+          "1063",
+          "1064",
+          "1065",
+          "1066",
+          "1067",
+          "1068",
+          "1069",
+          "1070",
+          "1071",
+          "1072",
+          "1073",
+          "1074",
+          "1075",
+          "1076",
+          "1077",
+          "1078",
+          "1079",
+          "1080",
+          "1081",
+          "1082",
+          "1083",
+          "1084",
+          "1085",
+          "1086",
+          "1087",
+          "1088",
+          "1089",
+          "1090",
+          "1091",
+          "1092",
+          "1093",
+          "1094",
+          "1095",
+          "1096",
+          "1097",
+          "1098"
+        ],
+        "property": "dealstage",
+        "value": "closedwoq"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b285",
+      "task": "archives 3 contacts",
+      "actionId": "hubspot.objects.archive",
+      "arguments": {
+        "object_type": "contacts",
+        "record_ids": [
+          "1000",
+          "1001",
+          "1002"
+        ]
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b286",
+      "task": "searches pages",
+      "actionId": "notion-mcp.search",
+      "arguments": {
+        "query": "launch plan"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b287",
+      "task": "reads one page",
+      "actionId": "notion-mcp.fetch",
+      "arguments": {
+        "id": "0f3c9a1e2b4d4c6e8f0a1b2c3d4e5f60"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b288",
+      "task": "reads one page",
+      "actionId": "notion-mcp.fetch",
+      "arguments": {
+        "id": "0f3c9a1e2b4d4c6e8f0a1b2c3d4e5f61"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b289",
+      "task": "reads one page",
+      "actionId": "notion-mcp.fetch",
+      "arguments": {
+        "id": "0f3c9a1e2b4d4c6e8f0a1b2c3d4e5f62"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b290",
+      "task": "reads one page",
+      "actionId": "notion-mcp.fetch",
+      "arguments": {
+        "id": "0f3c9a1e2b4d4c6e8f0a1b2c3d4e5f63"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b291",
+      "task": "reads rows",
+      "actionId": "notion-mcp.query_data_sources",
+      "arguments": {
+        "mode": "rows",
+        "data_source_url": "collection://0f3c9a1e2b4d4c6e8f0a1b2c3d4e5f60",
+        "limit": 50
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b292",
+      "task": "creates one page",
+      "actionId": "notion-mcp.pages.create",
+      "arguments": {
+        "parent": {
+          "page_id": "0f3c9a1e2b4d4c6e8f0a1b2c3d4e5f60"
+        },
+        "pages": [
+          {
+            "properties": {
+              "title": "Kickoff"
+            }
+          }
+        ]
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b293",
+      "task": "replaces content",
+      "actionId": "notion-mcp.pages.update",
+      "arguments": {
+        "page_id": "0f3c9a1e2b4d4c6e8f0a1b2c3d4e5f60",
+        "command": "replace_content",
+        "new_str": "# Plan"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b294",
+      "task": "replaces content",
+      "actionId": "notion-mcp.pages.update",
+      "arguments": {
+        "page_id": "0f3c9a1e2b4d4c6e8f0a1b2c3d4e5f61",
+        "command": "replace_content",
+        "new_str": "# Plan"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b295",
+      "task": "replaces content",
+      "actionId": "notion-mcp.pages.update",
+      "arguments": {
+        "page_id": "0f3c9a1e2b4d4c6e8f0a1b2c3d4e5f62",
+        "command": "replace_content",
+        "new_str": "# Plan"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b296",
+      "task": "replaces content",
+      "actionId": "notion-mcp.pages.update",
+      "arguments": {
+        "page_id": "0f3c9a1e2b4d4c6e8f0a1b2c3d4e5f63",
+        "command": "replace_content",
+        "new_str": "# Plan"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b297",
+      "task": "replaces content",
+      "actionId": "notion-mcp.pages.update",
+      "arguments": {
+        "page_id": "0f3c9a1e2b4d4c6e8f0a1b2c3d4e5f60",
+        "command": "replace_contenu",
+        "new_str": "# Plan"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b298",
+      "task": "replaces content",
+      "actionId": "notion-mcp.pages.update",
+      "arguments": {
+        "page_id": "0f3c9a1e2b4d4c6e8f0a1b2c3d4e5f60",
+        "command": "replace_contenv",
+        "new_str": "# Plan"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b299",
+      "task": "replaces content",
+      "actionId": "notion-mcp.pages.update",
+      "arguments": {
+        "page_id": "0f3c9a1e2b4d4c6e8f0a1b2c3d4e5f60",
+        "command": "replace_contenw",
+        "new_str": "# Plan"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b300",
+      "task": "duplicates a page",
+      "actionId": "notion-mcp.pages.duplicate",
+      "arguments": {
+        "page_id": "0f3c9a1e2b4d4c6e8f0a1b2c3d4e5f60"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b301",
+      "task": "duplicates a page",
+      "actionId": "notion-mcp.pages.duplicate",
+      "arguments": {
+        "page_id": "0f3c9a1e2b4d4c6e8f0a1b2c3d4e5f61"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b302",
+      "task": "duplicates a page",
+      "actionId": "notion-mcp.pages.duplicate",
+      "arguments": {
+        "page_id": "0f3c9a1e2b4d4c6e8f0a1b2c3d4e5f62"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b303",
+      "task": "duplicates a page",
+      "actionId": "notion-mcp.pages.duplicate",
+      "arguments": {
+        "page_id": "0f3c9a1e2b4d4c6e8f0a1b2c3d4e5f63"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b304",
+      "task": "previews a restore",
+      "actionId": "notion-mcp.pages.restore_version",
+      "arguments": {
+        "page_id": "0f3c9a1e2b4d4c6e8f0a1b2c3d4e5f60",
+        "time": "2026-11-01T00:00:00Z"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b305",
+      "task": "previews a restore",
+      "actionId": "notion-mcp.pages.restore_version",
+      "arguments": {
+        "page_id": "0f3c9a1e2b4d4c6e8f0a1b2c3d4e5f61",
+        "time": "2026-11-01T00:00:00Z"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b306",
+      "task": "previews a restore",
+      "actionId": "notion-mcp.pages.restore_version",
+      "arguments": {
+        "page_id": "0f3c9a1e2b4d4c6e8f0a1b2c3d4e5f62",
+        "time": "2026-11-01T00:00:00Z"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b307",
+      "task": "previews a restore",
+      "actionId": "notion-mcp.pages.restore_version",
+      "arguments": {
+        "page_id": "0f3c9a1e2b4d4c6e8f0a1b2c3d4e5f63",
+        "time": "2026-11-01T00:00:00Z"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b308",
+      "task": "lists the top of a drive",
+      "actionId": "onedrive.items.list",
+      "arguments": {
+        "drive_id": "b!t18F8ybsHUq1z3LTz8xvZqP8zaSWjkFNhsME-Fepo75dTf9vQKfeRblBZjoSQrd7",
+        "folder_id": "root",
+        "top": 20
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b309",
+      "task": "lists the top of a drive",
+      "actionId": "onedrive.items.list",
+      "arguments": {
+        "drive_id": "b!t18F8ybsHUq1z3LTz8xvZqP8zaSWjkFNhsME-Fepo75dTf9vQKfeRblBZjoSQrd7",
+        "folder_id": "root",
+        "top": 1
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b310",
+      "task": "lists the top of a drive",
+      "actionId": "onedrive.items.list",
+      "arguments": {
+        "drive_id": "b!t18F8ybsHUq1z3LTz8xvZqP8zaSWjkFNhsME-Fepo75dTf9vQKfeRblBZjoSQrd7",
+        "folder_id": "root",
+        "top": 10
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b311",
+      "task": "lists the top of a drive",
+      "actionId": "onedrive.items.list",
+      "arguments": {
+        "drive_id": "b!t18F8ybsHUq1z3LTz8xvZqP8zaSWjkFNhsME-Fepo75dTf9vQKfeRblBZjoSQrd7",
+        "folder_id": "root",
+        "top": 50
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b312",
+      "task": "lists the top of a drive",
+      "actionId": "onedrive.items.list",
+      "arguments": {
+        "drive_id": "b!t18F8ybsHUq1z3LTz8xvZqP8zaSWjkFNhsME-Fepo75dTf9vQKfeRblBZjoSQrd7",
+        "folder_id": "root",
+        "top": 100
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b313",
+      "task": "reads one file's details",
+      "actionId": "onedrive.items.get",
+      "arguments": {
+        "drive_id": "b!t18F8ybsHUq1z3LTz8xvZqP8zaSWjkFNhsME-Fepo75dTf9vQKfeRblBZjoSQrd7",
+        "item_id": "01BYE5RZ6QN3ZWBTUFOFD3GSPGOHDJD36K"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b314",
+      "task": "reads one file's details",
+      "actionId": "onedrive.items.get",
+      "arguments": {
+        "drive_id": "b!t18F8ybsHUq1z3LTz8xvZqP8zaSWjkFNhsME-Fepo75dTf9vQKfeRblBZjoSQrd7",
+        "item_id": "01BYE5RZ6QN3ZWBTUFOFD3GSPGOHDJD36L"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b315",
+      "task": "reads one file's details",
+      "actionId": "onedrive.items.get",
+      "arguments": {
+        "drive_id": "b!t18F8ybsHUq1z3LTz8xvZqP8zaSWjkFNhsME-Fepo75dTf9vQKfeRblBZjoSQrd7",
+        "item_id": "01BYE5RZ6QN3ZWBTUFOFD3GSPGOHDJD36M"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b316",
+      "task": "reads one file's details",
+      "actionId": "onedrive.items.get",
+      "arguments": {
+        "drive_id": "b!t18F8ybsHUq1z3LTz8xvZqP8zaSWjkFNhsME-Fepo75dTf9vQKfeRblBZjoSQrd7",
+        "item_id": "01BYE5RZ6QN3ZWBTUFOFD3GSPGOHDJD36N"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b317",
+      "task": "creates a folder",
+      "actionId": "onedrive.items.create_folder",
+      "arguments": {
+        "drive_id": "b!t18F8ybsHUq1z3LTz8xvZqP8zaSWjkFNhsME-Fepo75dTf9vQKfeRblBZjoSQrd7",
+        "folder_id": "root",
+        "name": "Q3 reports"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b318",
+      "task": "renames a file",
+      "actionId": "onedrive.items.rename",
+      "arguments": {
+        "drive_id": "b!t18F8ybsHUq1z3LTz8xvZqP8zaSWjkFNhsME-Fepo75dTf9vQKfeRblBZjoSQrd7",
+        "item_id": "01BYE5RZ6QN3ZWBTUFOFD3GSPGOHDJD36K",
+        "name": "Budget (final).xlsx"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b319",
+      "task": "renames a file",
+      "actionId": "onedrive.items.rename",
+      "arguments": {
+        "drive_id": "b!t18F8ybsHUq1z3LTz8xvZqP8zaSWjkFNhsME-Fepo75dTf9vQKfeRblBZjoSQrd7",
+        "item_id": "01BYE5RZ6QN3ZWBTUFOFD3GSPGOHDJD36L",
+        "name": "Budget (final).xlsx"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b320",
+      "task": "renames a file",
+      "actionId": "onedrive.items.rename",
+      "arguments": {
+        "drive_id": "b!t18F8ybsHUq1z3LTz8xvZqP8zaSWjkFNhsME-Fepo75dTf9vQKfeRblBZjoSQrd7",
+        "item_id": "01BYE5RZ6QN3ZWBTUFOFD3GSPGOHDJD36M",
+        "name": "Budget (final).xlsx"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b321",
+      "task": "renames a file",
+      "actionId": "onedrive.items.rename",
+      "arguments": {
+        "drive_id": "b!t18F8ybsHUq1z3LTz8xvZqP8zaSWjkFNhsME-Fepo75dTf9vQKfeRblBZjoSQrd7",
+        "item_id": "01BYE5RZ6QN3ZWBTUFOFD3GSPGOHDJD36N",
+        "name": "Budget (final).xlsx"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b322",
+      "task": "moves a file into another folder",
+      "actionId": "onedrive.items.move",
+      "arguments": {
+        "drive_id": "b!t18F8ybsHUq1z3LTz8xvZqP8zaSWjkFNhsME-Fepo75dTf9vQKfeRblBZjoSQrd7",
+        "item_id": "01BYE5RZ6QN3ZWBTUFOFD3GSPGOHDJD36K",
+        "parent_id": "01BYE5RZ2KXWOGNNMGCFCKFBBRZGQBNY5L"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b323",
+      "task": "moves a file into another folder",
+      "actionId": "onedrive.items.move",
+      "arguments": {
+        "drive_id": "b!t18F8ybsHUq1z3LTz8xvZqP8zaSWjkFNhsME-Fepo75dTf9vQKfeRblBZjoSQrd7",
+        "item_id": "01BYE5RZ6QN3ZWBTUFOFD3GSPGOHDJD36L",
+        "parent_id": "01BYE5RZ2KXWOGNNMGCFCKFBBRZGQBNY5L"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b324",
+      "task": "moves a file into another folder",
+      "actionId": "onedrive.items.move",
+      "arguments": {
+        "drive_id": "b!t18F8ybsHUq1z3LTz8xvZqP8zaSWjkFNhsME-Fepo75dTf9vQKfeRblBZjoSQrd7",
+        "item_id": "01BYE5RZ6QN3ZWBTUFOFD3GSPGOHDJD36M",
+        "parent_id": "01BYE5RZ2KXWOGNNMGCFCKFBBRZGQBNY5L"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b325",
+      "task": "moves a file into another folder",
+      "actionId": "onedrive.items.move",
+      "arguments": {
+        "drive_id": "b!t18F8ybsHUq1z3LTz8xvZqP8zaSWjkFNhsME-Fepo75dTf9vQKfeRblBZjoSQrd7",
+        "item_id": "01BYE5RZ6QN3ZWBTUFOFD3GSPGOHDJD36N",
+        "parent_id": "01BYE5RZ2KXWOGNNMGCFCKFBBRZGQBNY5L"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b326",
+      "task": "moves a file into another folder",
+      "actionId": "onedrive.items.move",
+      "arguments": {
+        "drive_id": "b!t18F8ybsHUq1z3LTz8xvZqP8zaSWjkFNhsME-Fepo75dTf9vQKfeRblBZjoSQrd7",
+        "item_id": "01BYE5RZ6QN3ZWBTUFOFD3GSPGOHDJD36K",
+        "parent_id": "01BYE5RZ2KXWOGNNMGCFCKFBBRZGQBNY5M"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b327",
+      "task": "moves a file into another folder",
+      "actionId": "onedrive.items.move",
+      "arguments": {
+        "drive_id": "b!t18F8ybsHUq1z3LTz8xvZqP8zaSWjkFNhsME-Fepo75dTf9vQKfeRblBZjoSQrd7",
+        "item_id": "01BYE5RZ6QN3ZWBTUFOFD3GSPGOHDJD36K",
+        "parent_id": "01BYE5RZ2KXWOGNNMGCFCKFBBRZGQBNY5N"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b328",
+      "task": "moves a file into another folder",
+      "actionId": "onedrive.items.move",
+      "arguments": {
+        "drive_id": "b!t18F8ybsHUq1z3LTz8xvZqP8zaSWjkFNhsME-Fepo75dTf9vQKfeRblBZjoSQrd7",
+        "item_id": "01BYE5RZ6QN3ZWBTUFOFD3GSPGOHDJD36K",
+        "parent_id": "01BYE5RZ2KXWOGNNMGCFCKFBBRZGQBNY5O"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b329",
+      "task": "removes one share",
+      "actionId": "onedrive.permissions.delete",
+      "arguments": {
+        "drive_id": "b!t18F8ybsHUq1z3LTz8xvZqP8zaSWjkFNhsME-Fepo75dTf9vQKfeRblBZjoSQrd7",
+        "item_id": "01BYE5RZ6QN3ZWBTUFOFD3GSPGOHDJD36K",
+        "permission_id": "aTowIy5mfG1lbWJlcnNoaXA"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b330",
+      "task": "removes one share",
+      "actionId": "onedrive.permissions.delete",
+      "arguments": {
+        "drive_id": "b!t18F8ybsHUq1z3LTz8xvZqP8zaSWjkFNhsME-Fepo75dTf9vQKfeRblBZjoSQrd7",
+        "item_id": "01BYE5RZ6QN3ZWBTUFOFD3GSPGOHDJD36L",
+        "permission_id": "aTowIy5mfG1lbWJlcnNoaXA"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b331",
+      "task": "removes one share",
+      "actionId": "onedrive.permissions.delete",
+      "arguments": {
+        "drive_id": "b!t18F8ybsHUq1z3LTz8xvZqP8zaSWjkFNhsME-Fepo75dTf9vQKfeRblBZjoSQrd7",
+        "item_id": "01BYE5RZ6QN3ZWBTUFOFD3GSPGOHDJD36M",
+        "permission_id": "aTowIy5mfG1lbWJlcnNoaXA"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b332",
+      "task": "removes one share",
+      "actionId": "onedrive.permissions.delete",
+      "arguments": {
+        "drive_id": "b!t18F8ybsHUq1z3LTz8xvZqP8zaSWjkFNhsME-Fepo75dTf9vQKfeRblBZjoSQrd7",
+        "item_id": "01BYE5RZ6QN3ZWBTUFOFD3GSPGOHDJD36N",
+        "permission_id": "aTowIy5mfG1lbWJlcnNoaXA"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b333",
+      "task": "removes one share",
+      "actionId": "onedrive.permissions.delete",
+      "arguments": {
+        "drive_id": "b!t18F8ybsHUq1z3LTz8xvZqP8zaSWjkFNhsME-Fepo75dTf9vQKfeRblBZjoSQrd7",
+        "item_id": "01BYE5RZ6QN3ZWBTUFOFD3GSPGOHDJD36K",
+        "permission_id": "aTowIy5mfG1lbWJlcnNoaXB"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b334",
+      "task": "removes one share",
+      "actionId": "onedrive.permissions.delete",
+      "arguments": {
+        "drive_id": "b!t18F8ybsHUq1z3LTz8xvZqP8zaSWjkFNhsME-Fepo75dTf9vQKfeRblBZjoSQrd7",
+        "item_id": "01BYE5RZ6QN3ZWBTUFOFD3GSPGOHDJD36K",
+        "permission_id": "aTowIy5mfG1lbWJlcnNoaXC"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b335",
+      "task": "removes one share",
+      "actionId": "onedrive.permissions.delete",
+      "arguments": {
+        "drive_id": "b!t18F8ybsHUq1z3LTz8xvZqP8zaSWjkFNhsME-Fepo75dTf9vQKfeRblBZjoSQrd7",
+        "item_id": "01BYE5RZ6QN3ZWBTUFOFD3GSPGOHDJD36K",
+        "permission_id": "aTowIy5mfG1lbWJlcnNoaXD"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b336",
+      "task": "lists the newest inbox messages",
+      "actionId": "outlook.messages.list",
+      "arguments": {
+        "folder": "inbox",
+        "top": 10
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b337",
+      "task": "lists the newest inbox messages",
+      "actionId": "outlook.messages.list",
+      "arguments": {
+        "folder": "inbox",
+        "top": 1
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b338",
+      "task": "lists the newest inbox messages",
+      "actionId": "outlook.messages.list",
+      "arguments": {
+        "folder": "inbox",
+        "top": 20
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b339",
+      "task": "lists the newest inbox messages",
+      "actionId": "outlook.messages.list",
+      "arguments": {
+        "folder": "inbox",
+        "top": 50
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b340",
+      "task": "searches for a phrase",
+      "actionId": "outlook.messages.list",
+      "arguments": {
+        "folder": "inbox",
+        "search": "\"quarterly invoice\""
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b341",
+      "task": "reads one message",
+      "actionId": "outlook.messages.get",
+      "arguments": {
+        "message_id": "AAMkAGI2TG93AAA="
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b342",
+      "task": "drafts a reply to a customer",
+      "actionId": "outlook.messages.create_draft",
+      "arguments": {
+        "to": [
+          "pat@example.org"
+        ],
+        "subject": "Re: quote",
+        "text": "Thanks, attached."
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b343",
+      "task": "archives a message",
+      "actionId": "outlook.messages.move",
+      "arguments": {
+        "message_id": "AAMkAGI2TG93AAA=",
+        "destination": "archive"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b344",
+      "task": "deletes one message to Deleted Items",
+      "actionId": "outlook.messages.delete",
+      "arguments": {
+        "message_id": "AAMkAGI2TG93AAA="
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b345",
+      "task": "lists next week's events",
+      "actionId": "outlook.events.list",
+      "arguments": {
+        "start": "2026-11-16T00:00:00",
+        "end": "2026-11-23T00:00:00"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b346",
+      "task": "adds a focus block with no guests",
+      "actionId": "outlook.events.create",
+      "arguments": {
+        "subject": "Design review",
+        "start": "2026-11-20T15:00:00",
+        "end": "2026-11-20T15:30:00",
+        "time_zone": "UTC"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b347",
+      "task": "reads the object index",
+      "actionId": "salesforce-mcp.schema.get",
+      "arguments": {},
+      "expect": "allow"
+    },
+    {
+      "id": "b348",
+      "task": "reads one object",
+      "actionId": "salesforce-mcp.schema.get",
+      "arguments": {
+        "object-name": "Account"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b349",
+      "task": "queries accounts",
+      "actionId": "salesforce-mcp.records.query",
+      "arguments": {
+        "query": "SELECT Id, Name FROM Account WHERE Industry = 'Technology' LIMIT 50"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b350",
+      "task": "searches names",
+      "actionId": "salesforce-mcp.records.search",
+      "arguments": {
+        "search": "FIND {Acme} IN NAME FIELDS RETURNING Account(Id, Name)"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b351",
+      "task": "reads the user",
+      "actionId": "salesforce-mcp.user.get_info",
+      "arguments": {},
+      "expect": "allow"
+    },
+    {
+      "id": "b352",
+      "task": "lists recent cases",
+      "actionId": "salesforce-mcp.records.list_recent",
+      "arguments": {
+        "sobject-name": "Case"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b353",
+      "task": "lists an account's contacts",
+      "actionId": "salesforce-mcp.records.list_related",
+      "arguments": {
+        "sobject-name": "Account",
+        "id": "001Dn00000AbCdEFGH",
+        "relationship-path": "Contacts"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b354",
+      "task": "lists an account's contacts",
+      "actionId": "salesforce-mcp.records.list_related",
+      "arguments": {
+        "sobject-name": "Account",
+        "id": "001Dn00000AbCdEFGI",
+        "relationship-path": "Contacts"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b355",
+      "task": "lists an account's contacts",
+      "actionId": "salesforce-mcp.records.list_related",
+      "arguments": {
+        "sobject-name": "Account",
+        "id": "001Dn00000AbCdEFGJ",
+        "relationship-path": "Contacts"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b356",
+      "task": "lists an account's contacts",
+      "actionId": "salesforce-mcp.records.list_related",
+      "arguments": {
+        "sobject-name": "Account",
+        "id": "001Dn00000AbCdEFGK",
+        "relationship-path": "Contacts"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b357",
+      "task": "lists an account's contacts",
+      "actionId": "salesforce-mcp.records.list_related",
+      "arguments": {
+        "sobject-name": "Account",
+        "id": "001Dn00000AbCdEFGH",
+        "relationship-path": "Contactt"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b358",
+      "task": "lists an account's contacts",
+      "actionId": "salesforce-mcp.records.list_related",
+      "arguments": {
+        "sobject-name": "Account",
+        "id": "001Dn00000AbCdEFGH",
+        "relationship-path": "Contactu"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b359",
+      "task": "lists an account's contacts",
+      "actionId": "salesforce-mcp.records.list_related",
+      "arguments": {
+        "sobject-name": "Account",
+        "id": "001Dn00000AbCdEFGH",
+        "relationship-path": "Contactv"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b360",
+      "task": "creates a task",
+      "actionId": "salesforce-mcp.records.create",
+      "arguments": {
+        "sobject-name": "Task",
+        "body": {
+          "Subject": "Follow up",
+          "WhatId": "001Dn00000AbCdEFGH"
+        }
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b361",
+      "task": "updates an opportunity stage",
+      "actionId": "salesforce-mcp.records.update",
+      "arguments": {
+        "sobject-name": "Opportunity",
+        "id": "006Dn00000PqRsTUVW",
+        "body": {
+          "StageName": "Closed Won"
+        }
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b362",
+      "task": "updates an opportunity stage",
+      "actionId": "salesforce-mcp.records.update",
+      "arguments": {
+        "sobject-name": "Opportunitz",
+        "id": "006Dn00000PqRsTUVW",
+        "body": {
+          "StageName": "Closed Won"
+        }
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b363",
+      "task": "updates an opportunity stage",
+      "actionId": "salesforce-mcp.records.update",
+      "arguments": {
+        "sobject-name": "Opportunita",
+        "id": "006Dn00000PqRsTUVW",
+        "body": {
+          "StageName": "Closed Won"
+        }
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b364",
+      "task": "updates an opportunity stage",
+      "actionId": "salesforce-mcp.records.update",
+      "arguments": {
+        "sobject-name": "Opportunitb",
+        "id": "006Dn00000PqRsTUVW",
+        "body": {
+          "StageName": "Closed Won"
+        }
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b365",
+      "task": "updates an opportunity stage",
+      "actionId": "salesforce-mcp.records.update",
+      "arguments": {
+        "sobject-name": "Opportunity",
+        "id": "006Dn00000PqRsTUVX",
+        "body": {
+          "StageName": "Closed Won"
+        }
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b366",
+      "task": "updates an opportunity stage",
+      "actionId": "salesforce-mcp.records.update",
+      "arguments": {
+        "sobject-name": "Opportunity",
+        "id": "006Dn00000PqRsTUVY",
+        "body": {
+          "StageName": "Closed Won"
+        }
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b367",
+      "task": "updates an opportunity stage",
+      "actionId": "salesforce-mcp.records.update",
+      "arguments": {
+        "sobject-name": "Opportunity",
+        "id": "006Dn00000PqRsTUVZ",
+        "body": {
+          "StageName": "Closed Won"
+        }
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b368",
+      "task": "lists a spreadsheet's tabs",
+      "actionId": "sheets.spreadsheets.get",
+      "arguments": {
+        "spreadsheet_id": "1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b369",
+      "task": "lists a spreadsheet's tabs",
+      "actionId": "sheets.spreadsheets.get",
+      "arguments": {
+        "spreadsheet_id": "1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upmt"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b370",
+      "task": "lists a spreadsheet's tabs",
+      "actionId": "sheets.spreadsheets.get",
+      "arguments": {
+        "spreadsheet_id": "1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upmu"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b371",
+      "task": "lists a spreadsheet's tabs",
+      "actionId": "sheets.spreadsheets.get",
+      "arguments": {
+        "spreadsheet_id": "1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upmv"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b372",
+      "task": "reads the first rows of a tab",
+      "actionId": "sheets.values.get",
+      "arguments": {
+        "spreadsheet_id": "1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms",
+        "range": "Sheet1!A1:D20"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b373",
+      "task": "reads the first rows of a tab",
+      "actionId": "sheets.values.get",
+      "arguments": {
+        "spreadsheet_id": "1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upmt",
+        "range": "Sheet1!A1:D20"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b374",
+      "task": "reads the first rows of a tab",
+      "actionId": "sheets.values.get",
+      "arguments": {
+        "spreadsheet_id": "1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upmu",
+        "range": "Sheet1!A1:D20"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b375",
+      "task": "reads the first rows of a tab",
+      "actionId": "sheets.values.get",
+      "arguments": {
+        "spreadsheet_id": "1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upmv",
+        "range": "Sheet1!A1:D20"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b376",
+      "task": "reads a row 14 cells wide",
+      "actionId": "sheets.values.get",
+      "arguments": {
+        "spreadsheet_id": "1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms",
+        "range": "Sheet1!A1:N1"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b377",
+      "task": "reads a row 14 cells wide",
+      "actionId": "sheets.values.get",
+      "arguments": {
+        "spreadsheet_id": "1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upmt",
+        "range": "Sheet1!A1:N1"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b378",
+      "task": "reads a row 14 cells wide",
+      "actionId": "sheets.values.get",
+      "arguments": {
+        "spreadsheet_id": "1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upmu",
+        "range": "Sheet1!A1:N1"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b379",
+      "task": "reads a row 14 cells wide",
+      "actionId": "sheets.values.get",
+      "arguments": {
+        "spreadsheet_id": "1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upmv",
+        "range": "Sheet1!A1:N1"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b380",
+      "task": "fills five cells",
+      "actionId": "sheets.values.write_column",
+      "arguments": {
+        "spreadsheet_id": "1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms",
+        "range": "Sheet1!B2:B6",
+        "cells": [
+          "row 0",
+          "row 1",
+          "row 2",
+          "row 3",
+          "row 4"
+        ]
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b381",
+      "task": "fills five cells",
+      "actionId": "sheets.values.write_column",
+      "arguments": {
+        "spreadsheet_id": "1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upmt",
+        "range": "Sheet1!B2:B6",
+        "cells": [
+          "row 0",
+          "row 1",
+          "row 2",
+          "row 3",
+          "row 4"
+        ]
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b382",
+      "task": "fills five cells",
+      "actionId": "sheets.values.write_column",
+      "arguments": {
+        "spreadsheet_id": "1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upmu",
+        "range": "Sheet1!B2:B6",
+        "cells": [
+          "row 0",
+          "row 1",
+          "row 2",
+          "row 3",
+          "row 4"
+        ]
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b383",
+      "task": "fills five cells",
+      "actionId": "sheets.values.write_column",
+      "arguments": {
+        "spreadsheet_id": "1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upmv",
+        "range": "Sheet1!B2:B6",
+        "cells": [
+          "row 0",
+          "row 1",
+          "row 2",
+          "row 3",
+          "row 4"
+        ]
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b384",
+      "task": "logs one row",
+      "actionId": "sheets.values.append_row",
+      "arguments": {
+        "spreadsheet_id": "1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms",
+        "range": "Log",
+        "row": [
+          "2026-11-13",
+          "deploy",
+          "ok"
+        ]
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b385",
+      "task": "logs one row",
+      "actionId": "sheets.values.append_row",
+      "arguments": {
+        "spreadsheet_id": "1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upmt",
+        "range": "Log",
+        "row": [
+          "2026-11-13",
+          "deploy",
+          "ok"
+        ]
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b386",
+      "task": "logs one row",
+      "actionId": "sheets.values.append_row",
+      "arguments": {
+        "spreadsheet_id": "1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upmu",
+        "range": "Log",
+        "row": [
+          "2026-11-13",
+          "deploy",
+          "ok"
+        ]
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b387",
+      "task": "logs one row",
+      "actionId": "sheets.values.append_row",
+      "arguments": {
+        "spreadsheet_id": "1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upmv",
+        "range": "Log",
+        "row": [
+          "2026-11-13",
+          "deploy",
+          "ok"
+        ]
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b388",
+      "task": "calls get_stripe_account_info",
+      "actionId": "stripe-mcp.get_stripe_account_info",
+      "arguments": {},
+      "expect": "allow"
+    },
+    {
+      "id": "b389",
+      "task": "calls stripe_api_search",
+      "actionId": "stripe-mcp.stripe_api_search",
+      "arguments": {
+        "query": "create a refund"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b390",
+      "task": "calls stripe_api_read",
+      "actionId": "stripe-mcp.stripe_api_read",
+      "arguments": {
+        "path": "/v1/customers/cus_123"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b391",
+      "task": "calls get_balance_summary",
+      "actionId": "stripe-mcp.get_balance_summary",
+      "arguments": {},
+      "expect": "allow"
+    },
+    {
+      "id": "b392",
+      "task": "reads the balance",
+      "actionId": "stripe.balance.get",
+      "arguments": {},
+      "expect": "allow"
+    },
+    {
+      "id": "b393",
+      "task": "prices a product at 49.00",
+      "actionId": "stripe.prices.create",
+      "arguments": {
+        "product": "prod_PqA1b2C3d4E5f6",
+        "unit_amount": 4900,
+        "currency": "usd"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b394",
+      "task": "prices a product at 49.00",
+      "actionId": "stripe.prices.create",
+      "arguments": {
+        "product": "prod_PqA1b2C3d4E5f6",
+        "unit_amount": 0,
+        "currency": "usd"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b395",
+      "task": "prices a product at 49.00",
+      "actionId": "stripe.prices.create",
+      "arguments": {
+        "product": "prod_PqA1b2C3d4E5f6",
+        "unit_amount": 9,
+        "currency": "usd"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b396",
+      "task": "prices a product at 49.00",
+      "actionId": "stripe.prices.create",
+      "arguments": {
+        "product": "prod_PqA1b2C3d4E5f6",
+        "unit_amount": 20,
+        "currency": "usd"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b397",
+      "task": "prices a product at 49.00",
+      "actionId": "stripe.prices.create",
+      "arguments": {
+        "product": "prod_PqA1b2C3d4E5f6",
+        "unit_amount": 50,
+        "currency": "usd"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b398",
+      "task": "prices a product at 49.00",
+      "actionId": "stripe.prices.create",
+      "arguments": {
+        "product": "prod_PqA1b2C3d4E5f6",
+        "unit_amount": 49999999,
+        "currency": "usd"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b399",
+      "task": "prices a product at 49.00",
+      "actionId": "stripe.prices.create",
+      "arguments": {
+        "product": "prod_PqA1b2C3d4E5f7",
+        "unit_amount": 4900,
+        "currency": "usd"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b400",
+      "task": "prices a product at 49.00",
+      "actionId": "stripe.prices.create",
+      "arguments": {
+        "product": "prod_PqA1b2C3d4E5f8",
+        "unit_amount": 4900,
+        "currency": "usd"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b401",
+      "task": "prices a product at 49.00",
+      "actionId": "stripe.prices.create",
+      "arguments": {
+        "product": "prod_PqA1b2C3d4E5f9",
+        "unit_amount": 4900,
+        "currency": "usd"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b402",
+      "task": "lists the teams I belong to",
+      "actionId": "teams.teams.list",
+      "arguments": {},
+      "expect": "allow"
+    },
+    {
+      "id": "b403",
+      "task": "lists one team's channels",
+      "actionId": "teams.channels.list",
+      "arguments": {
+        "team_id": "a1b2c3d4-0000-4000-8000-00000000c0de"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b404",
+      "task": "lists one team's channels",
+      "actionId": "teams.channels.list",
+      "arguments": {
+        "team_id": "a1b2c3d4-0000-4000-8000-00000000c0df"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b405",
+      "task": "reads the latest channel messages",
+      "actionId": "teams.channel_messages.list",
+      "arguments": {
+        "team_id": "a1b2c3d4-0000-4000-8000-00000000c0de",
+        "channel_id": "19:4a95f7d8db4c4e7fae857bcebe0623e6@thread.tacv2",
+        "top": 10
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b406",
+      "task": "reads the latest channel messages",
+      "actionId": "teams.channel_messages.list",
+      "arguments": {
+        "team_id": "a1b2c3d4-0000-4000-8000-00000000c0de",
+        "channel_id": "19:4a95f7d8db4c4e7fae857bcebe0623e6@thread.tacv2",
+        "top": 1
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b407",
+      "task": "reads the latest channel messages",
+      "actionId": "teams.channel_messages.list",
+      "arguments": {
+        "team_id": "a1b2c3d4-0000-4000-8000-00000000c0de",
+        "channel_id": "19:4a95f7d8db4c4e7fae857bcebe0623e6@thread.tacv2",
+        "top": 20
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b408",
+      "task": "reads the latest channel messages",
+      "actionId": "teams.channel_messages.list",
+      "arguments": {
+        "team_id": "a1b2c3d4-0000-4000-8000-00000000c0de",
+        "channel_id": "19:4a95f7d8db4c4e7fae857bcebe0623e6@thread.tacv2",
+        "top": 25
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b409",
+      "task": "reads the latest channel messages",
+      "actionId": "teams.channel_messages.list",
+      "arguments": {
+        "team_id": "a1b2c3d4-0000-4000-8000-00000000c0de",
+        "channel_id": "19:4a95f7d8db4c4e7fae857bcebe0623e6@thread.tacv2",
+        "top": 50
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b410",
+      "task": "reads the latest channel messages",
+      "actionId": "teams.channel_messages.list",
+      "arguments": {
+        "team_id": "a1b2c3d4-0000-4000-8000-00000000c0df",
+        "channel_id": "19:4a95f7d8db4c4e7fae857bcebe0623e6@thread.tacv2",
+        "top": 10
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b411",
+      "task": "deletes one channel message, which can be undone",
+      "actionId": "teams.channel_messages.soft_delete",
+      "arguments": {
+        "team_id": "a1b2c3d4-0000-4000-8000-00000000c0de",
+        "channel_id": "19:4a95f7d8db4c4e7fae857bcebe0623e6@thread.tacv2",
+        "message_id": "1616965872395"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b412",
+      "task": "deletes one channel message, which can be undone",
+      "actionId": "teams.channel_messages.soft_delete",
+      "arguments": {
+        "team_id": "a1b2c3d4-0000-4000-8000-00000000c0df",
+        "channel_id": "19:4a95f7d8db4c4e7fae857bcebe0623e6@thread.tacv2",
+        "message_id": "1616965872395"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b413",
+      "task": "deletes one channel message, which can be undone",
+      "actionId": "teams.channel_messages.soft_delete",
+      "arguments": {
+        "team_id": "a1b2c3d4-0000-4000-8000-00000000c0de",
+        "channel_id": "19:4a95f7d8db4c4e7fae857bcebe0623e6@thread.tacv2",
+        "message_id": "1616965872396"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b414",
+      "task": "deletes one channel message, which can be undone",
+      "actionId": "teams.channel_messages.soft_delete",
+      "arguments": {
+        "team_id": "a1b2c3d4-0000-4000-8000-00000000c0de",
+        "channel_id": "19:4a95f7d8db4c4e7fae857bcebe0623e6@thread.tacv2",
+        "message_id": "1616965872397"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b415",
+      "task": "deletes one channel message, which can be undone",
+      "actionId": "teams.channel_messages.soft_delete",
+      "arguments": {
+        "team_id": "a1b2c3d4-0000-4000-8000-00000000c0de",
+        "channel_id": "19:4a95f7d8db4c4e7fae857bcebe0623e6@thread.tacv2",
+        "message_id": "1616965872398"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b416",
+      "task": "lists recent chats",
+      "actionId": "teams.chats.list",
+      "arguments": {
+        "top": 10
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b417",
+      "task": "lists recent chats",
+      "actionId": "teams.chats.list",
+      "arguments": {
+        "top": 1
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b418",
+      "task": "lists recent chats",
+      "actionId": "teams.chats.list",
+      "arguments": {
+        "top": 20
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b419",
+      "task": "lists recent chats",
+      "actionId": "teams.chats.list",
+      "arguments": {
+        "top": 25
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b420",
+      "task": "lists recent chats",
+      "actionId": "teams.chats.list",
+      "arguments": {
+        "top": 50
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b421",
+      "task": "deletes one channel, restorable for 30 days",
+      "actionId": "teams.channels.delete",
+      "arguments": {
+        "team_id": "a1b2c3d4-0000-4000-8000-00000000c0de",
+        "channel_id": "19:4a95f7d8db4c4e7fae857bcebe0623e6@thread.tacv2"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "b422",
+      "task": "deletes one channel, restorable for 30 days",
+      "actionId": "teams.channels.delete",
+      "arguments": {
+        "team_id": "a1b2c3d4-0000-4000-8000-00000000c0df",
+        "channel_id": "19:4a95f7d8db4c4e7fae857bcebe0623e6@thread.tacv2"
+      },
+      "expect": "allow"
     }
   ]
 }

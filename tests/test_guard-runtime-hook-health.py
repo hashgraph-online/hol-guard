@@ -8,10 +8,10 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
+from codex_plugin_scanner.guard.adapters.cursor import cursor_runtime_hooks_verified
 from codex_plugin_scanner.guard.approvals import _live_hook_verification
 from codex_plugin_scanner.guard.codex_hook_health import codex_runtime_hooks_verified
 from codex_plugin_scanner.guard.codex_hook_registration import live_guard_codex_hooks_intercept
-from codex_plugin_scanner.guard.cursor_hook_health import cursor_runtime_hooks_verified
 from codex_plugin_scanner.guard.store import GuardStore
 
 _GUARD_CODEX_HOOK_COMMAND = (

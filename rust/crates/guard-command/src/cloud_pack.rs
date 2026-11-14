@@ -207,6 +207,8 @@ pub enum Template {
         key: String,
         value: Box<Template>,
     },
+    /// A form-encoded body of scalar fields; only as the whole body.
+    Form(Vec<TemplateField>),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -307,6 +309,8 @@ pub struct FactSpec {
     pub recipient_domains: Option<Extractor>,
     pub environment: Option<Extractor>,
     pub sensitivity: Option<Extractor>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub money: Option<crate::cloud_pack_money::MoneySpec>,
     /// A read action in this pack the gateway may run to learn the volume.
     pub count_readback: Option<String>,
 }

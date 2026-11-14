@@ -530,6 +530,10 @@ pub(super) fn convert(
         // A spelled-out key, token or password is already in the transcript,
         // and the sandbox still lets the command write it into the workspace.
         || model.is_some_and(|model| super::literal_secrets::holds_literal_secret(&model.normalized_text))
+        // The sandbox writes anywhere in the workspace, so a hook overwritten
+        // with a do-nothing script, or renamed away, stays switched off once
+        // the contained run ends.
+        || model.is_some_and(|model| super::hook_neutering::neuters_git_hooks(&model.normalized_text))
     {
         return;
     }
