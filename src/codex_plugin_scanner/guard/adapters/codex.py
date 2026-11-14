@@ -104,7 +104,7 @@ from ..native_codex_hook_identity import wire_codex_hook_bindings as _wire_bindi
 from ..native_path_anchor import anchor_to_process_directory
 from ..shims import install_guard_shim, prepare_guard_shim, remove_guard_shim
 from ..stable_guard_cli import resolve_frozen_guard_cli
-from .base import HarnessContext, PreparedHarnessInstall, _command_available
+from .base import HarnessContext, PreparedHarnessInstall
 from .codex_detect_sources import (
     json_payload_from_bytes,
     path_restorations,
@@ -151,6 +151,12 @@ _EXACT_INT_MAX = 2**64 - 1
 
 def _codex(op: str, context: HarnessContext, **fields: Any) -> dict[str, Any]:
     return ask(op, context, harness="codex", **fields)
+
+
+def _command_available(context: HarnessContext) -> bool:
+    """Whether the Codex CLI is on the caller's PATH or in a user install directory."""
+
+    return _codex("command_available", context).get("available") is True
 
 
 def _reply_text(answer: Mapping[str, object], key: str) -> str:
@@ -1147,10 +1153,11 @@ class CodexHarnessAdapter(NativeHarnessAdapter):
             ],
         }
         artifacts, found_paths, warnings = native_adapter_detection_with_warnings("codex_detect", request)
+        command_available = _command_available(context)
         detection = HarnessDetection(
             harness=self.harness,
-            installed=bool(found_paths) or _command_available(self.executable, context.home_dir),
-            command_available=_command_available(self.executable, context.home_dir),
+            installed=bool(found_paths) or command_available,
+            command_available=command_available,
             config_paths=found_paths,
             artifacts=artifacts,
             warnings=warnings,

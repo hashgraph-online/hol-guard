@@ -371,3 +371,29 @@ fn a_hermes_install_without_its_hook_reviews_launches_only() {
     assert!(warned(true).is_empty());
     assert!(probe_warnings("hermes", detection(&[], true, &[]), true, Value::Null).is_empty());
 }
+
+#[test]
+fn the_first_file_running_guard_is_the_launcher_shim() {
+    let home = tempfile::tempdir().unwrap();
+    let bin = home.path().join("bin");
+    std::fs::create_dir(&bin).unwrap();
+    let other = bin.join("guard-codex");
+    std::fs::write(&other, "#!/bin/sh\nexec codex \"$@\"\n").unwrap();
+    let binary = bin.join("guard-codex.bin");
+    std::fs::write(&binary, [0xff, 0xfe, 0x00]).unwrap();
+    let shim = bin.join("guard-codex.cmd");
+    std::fs::write(
+        &shim,
+        "python -m codex_plugin_scanner.cli guard run codex %*\r\n",
+    )
+    .unwrap();
+    let ask = |paths: Value| dispatch(&json!({"op": "launcher_shim", "paths": paths}));
+    let paths = json!([bin.join("absent"), bin, other, binary, shim, shim]);
+    assert_eq!(ask(paths).unwrap(), json!({"launcher_shim": 4}));
+    assert_eq!(ask(json!([other])).unwrap(), json!({"launcher_shim": null}));
+    assert_eq!(ask(json!([])).unwrap(), json!({"launcher_shim": null}));
+    for paths in [json!(["relative/guard-codex"]), json!([1]), json!("x")] {
+        assert!(ask(paths).is_err());
+    }
+    assert!(dispatch(&json!({"op": "launcher_shim"})).is_err());
+}

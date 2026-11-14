@@ -237,24 +237,56 @@ pub(crate) fn dispatch(args: &Value) -> KindResult {
         .and_then(Value::as_str)
         .ok_or(ERR_INVALID)?;
     let spec = describe::spec(harness).ok_or(ERR_INVALID)?;
-    answer(match spec.harness {
-        "gemini" | "antigravity" => simple::dispatch(spec, op, &ctx, fields),
-        "kimi" => kimi::dispatch(spec, op, &ctx, fields),
-        "devin" | "muse" => settings_hooks::dispatch(spec, op, &ctx, fields),
-        "openclaw" => openclaw::dispatch(spec, op, &ctx, fields),
-        "paseo" => paseo::dispatch(spec, op, &ctx, fields),
-        "grok" => grok::dispatch(spec, op, &ctx, fields),
-        "zcode" => zcode::dispatch(spec, op, &ctx, fields),
-        "pi" | "omp" => pi::dispatch(spec, op, &ctx, fields),
-        "opencode" => opencode::dispatch(spec, op, &ctx, fields),
-        "cline" => cline::dispatch(spec, op, &ctx, fields),
-        "copilot" => copilot::dispatch(spec, op, &ctx, fields),
-        "cursor" => cursor::dispatch(spec, op, &ctx, fields),
-        "claude-code" => claude::dispatch(spec, op, &ctx, fields),
-        "hermes" => hermes::dispatch(spec, op, &ctx, fields),
-        "codex" => codex::dispatch(spec, op, &ctx, fields),
-        _ => Err(Failure::Invalid),
+    answer(if op == "default_launch" {
+        default_launch(spec, &ctx, fields)
+    } else {
+        route(spec, op, &ctx, fields)
     })
+}
+
+fn route(spec: &Spec, op: &str, ctx: &Ctx, fields: &Map<String, Value>) -> Step<Value> {
+    match spec.harness {
+        "gemini" | "antigravity" => simple::dispatch(spec, op, ctx, fields),
+        "kimi" => kimi::dispatch(spec, op, ctx, fields),
+        "devin" | "muse" => settings_hooks::dispatch(spec, op, ctx, fields),
+        "openclaw" => openclaw::dispatch(spec, op, ctx, fields),
+        "paseo" => paseo::dispatch(spec, op, ctx, fields),
+        "grok" => grok::dispatch(spec, op, ctx, fields),
+        "zcode" => zcode::dispatch(spec, op, ctx, fields),
+        "pi" | "omp" => pi::dispatch(spec, op, ctx, fields),
+        "opencode" => opencode::dispatch(spec, op, ctx, fields),
+        "cline" => cline::dispatch(spec, op, ctx, fields),
+        "copilot" => copilot::dispatch(spec, op, ctx, fields),
+        "cursor" => cursor::dispatch(spec, op, ctx, fields),
+        "claude-code" => claude::dispatch(spec, op, ctx, fields),
+        "hermes" => hermes::dispatch(spec, op, ctx, fields),
+        "codex" => codex::dispatch(spec, op, ctx, fields),
+        _ => Err(Failure::Invalid),
+    }
+}
+
+/// `{"argv": [...]}`, the launch for a harness with no launcher of its own:
+/// its resolved executable or else its bare name, the workspace for the two
+/// harnesses that open one, then the caller's `args`.
+fn default_launch(spec: &Spec, ctx: &Ctx, fields: &Map<String, Value>) -> Step<Value> {
+    let args = fields
+        .get("args")
+        .and_then(Value::as_array)
+        .ok_or(Failure::Invalid)?
+        .iter()
+        .map(|arg| arg.as_str().map(str::to_owned).ok_or(Failure::Invalid))
+        .collect::<Step<Vec<_>>>()?;
+    let resolved = route(spec, "resolved_executable", ctx, fields)?;
+    let mut argv = vec![resolved
+        .get("path")
+        .and_then(Value::as_str)
+        .unwrap_or(spec.executable)
+        .to_owned()];
+    if matches!(spec.harness, "opencode" | "claude-code") {
+        argv.extend(ctx.workspace.as_deref().map(path_text));
+    }
+    argv.extend(args);
+    Ok(json!({ "argv": argv }))
 }
 
 /// `{"path": ...}` for `resolved_executable`, shared by every harness.
@@ -293,6 +325,9 @@ pub(crate) fn path_answer(path: &Path) -> Step<Value> {
 pub(crate) fn common(spec: &Spec, op: &str, ctx: &Ctx) -> Step<Value> {
     match op {
         "resolved_executable" => resolved_executable(spec, ctx, &[]),
+        "command_available" => Ok(json!({
+            "available": which::command_available(ctx, spec.executable, Some(&ctx.home), &[]),
+        })),
         "launch_env" => Ok(json!({ "env": {} })),
         "runtime_probe" => Ok(json!({ "probe": null })),
         "approval_flow" => Ok(spec.approval_flow()),

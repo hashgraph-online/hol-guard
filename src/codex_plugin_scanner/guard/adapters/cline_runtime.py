@@ -204,12 +204,6 @@ class ClineHarnessAdapter(NativeHarnessAdapter):
             raise NativeAibomError(str(error)) from error
         return detection_from(_HARNESS, context, answer)
 
-    def launch_command(self, context: HarnessContext, passthrough_args: list[str]) -> list[str]:
-        return [self.resolved_executable(context) or self.executable, *passthrough_args]
-
-    def preview_launch_commands(self, context: HarnessContext, passthrough_args: list[str]) -> tuple[list[str], ...]:
-        return (self.launch_command(context, passthrough_args),)
-
     def prepare_install(self, context: HarnessContext) -> PreparedHarnessInstall:
         from ..runtime_transition import TransitionError
 

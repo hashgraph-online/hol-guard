@@ -349,6 +349,42 @@ fn command_lookup_follows_the_callers_path() {
     let env = json!({"PATH": bin});
     let answer = home.ask_env("gemini", "resolved_executable", json!({}), env);
     assert_eq!(Path::new(answer["path"].as_str().unwrap()), gemini);
+    let found = home.ask_env(
+        "codex",
+        "command_available",
+        json!({}),
+        json!({"PATH": bin}),
+    );
+    assert_eq!(found, json!({"available": false}));
+    let found = home.ask_env(
+        "gemini",
+        "command_available",
+        json!({}),
+        json!({"PATH": bin}),
+    );
+    assert_eq!(found, json!({"available": true}));
+
+    let launch = |harness: &str, workspace: Value| {
+        let mut context = home.context(json!({"PATH": bin}));
+        context["workspace"] = workspace;
+        let extra = json!({"args": ["--flag"], "context": context});
+        home.ask_env(harness, "default_launch", extra, json!({}))["argv"].clone()
+    };
+    let workspace = home.root.join("project");
+    assert_eq!(
+        launch("gemini", json!(workspace)),
+        json!([gemini, "--flag"])
+    );
+    assert_eq!(
+        launch("opencode", Value::Null),
+        json!(["opencode", "--flag"])
+    );
+    assert_eq!(
+        launch("opencode", json!(workspace)),
+        json!(["opencode", workspace, "--flag"])
+    );
+    let request = json!({"harness": "gemini", "op": "default_launch", "context": home.context(json!({})), "args": [1]});
+    assert!(dispatch(&request).is_err());
 }
 
 #[test]
