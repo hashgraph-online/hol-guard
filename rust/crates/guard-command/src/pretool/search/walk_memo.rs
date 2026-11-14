@@ -208,9 +208,59 @@ pub(super) fn cleared(
 
 #[cfg(test)]
 mod tests {
-    use super::{memoized, memoized_keyed, memoized_proof, with_walk_memo};
+    use super::{cleared, memoized, memoized_keyed, memoized_proof, take_walks, with_walk_memo};
+    use crate::pretool::search_pattern_clearance::PatternClearance;
     use std::cell::Cell;
-    use std::path::Path;
+    use std::path::{Path, PathBuf};
+
+    /// A remembered clearance walk leaves the counters where the walk itself
+    /// would have, so a later root gets no more of either budget than it
+    /// would have had. Started from other counts, the walk is not remembered.
+    #[test]
+    fn a_remembered_clearance_walk_spends_the_same_budget() {
+        // A hidden component anywhere in the path fails the read screens, and
+        // `tempfile`'s default prefix is `.tmp`, so the fixture names its root.
+        let scratch = tempfile::Builder::new()
+            .prefix("guard-cleared-memo")
+            .tempdir()
+            .expect("temp root");
+        let base = std::fs::canonicalize(scratch.path()).expect("canonical root");
+        let (first, second) = (base.join("first"), base.join("second"));
+        for root in [&first, &second] {
+            std::fs::create_dir_all(root).expect("directory");
+            // Four bytes the pattern cannot match, in a file it must read.
+            std::fs::write(root.join(".env"), "X=1\n").expect("fixture file");
+        }
+        let walk = |root: &PathBuf, clearance: &PatternClearance| {
+            cleared(root.clone(), &[], &[], (false, false, false), clearance)
+        };
+        let started = |spent: u64, files: u64| {
+            let clearance = PatternClearance::new("handler").expect("plain pattern");
+            clearance.recharge(spent, files);
+            clearance
+        };
+        // One file short of the file budget, then a byte short of the bytes.
+        for (spent, files) in [(0, 63), (2 * 1024 * 1024 - 4, 0)] {
+            with_walk_memo(|| {
+                take_walks();
+                let warm = started(spent, files);
+                assert!(walk(&first, &warm));
+                let (spent_after, files_after) = warm.charged();
+                assert_eq!((spent_after, files_after), (spent + 4, files + 1));
+                let remembered = started(spent, files);
+                assert!(walk(&first, &remembered));
+                assert_eq!(remembered.charged(), (spent_after, files_after));
+                assert_eq!(take_walks().len(), 1, "the repeat walk was remembered");
+                // Both budgets are spent now, as they would be had the walk run.
+                assert!(!walk(&second, &remembered));
+                take_walks();
+                let fresh = started(0, 0);
+                assert!(walk(&first, &fresh));
+                assert_eq!(fresh.charged(), (4, 1));
+                assert_eq!(take_walks().len(), 1, "other counts walk again");
+            });
+        }
+    }
 
     #[test]
     fn one_evaluation_answers_each_keyed_walk_once() {
