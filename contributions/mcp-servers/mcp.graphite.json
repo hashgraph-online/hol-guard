@@ -101,6 +101,6 @@
     "Graphs are opened read-only. cypher refuses CREATE, MERGE, SET, DELETE and REMOVE with \"graph is immutable\", and its timeout is capped by the server (60 seconds by default).",
     "resources lists only the paths and sources of files packaged in the analyzed input. resource returns one file's content, which can include credentials in config files such as application.yml.",
     "Load only graphs built from code you may share with the agent. The server reads only what its command line names: the graph directory, each --graph, the *.graphite files in --data, and --topology.",
-    "For a shared HTTP setup, run graphite serve on loopback and keep the default /mcp Origin check; do not pass --mcp-allowed-origin '*'."
+    "Prefer the stdio server. graphite serve listens on all interfaces (0.0.0.0) with no bind option, and the /mcp Origin check accepts requests without Origin, so firewall its port and never pass --mcp-allowed-origin '*'."
   ]
 }
