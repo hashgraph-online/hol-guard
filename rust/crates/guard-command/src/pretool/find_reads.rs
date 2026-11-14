@@ -276,7 +276,20 @@ fn safe_expression(expression: &[String]) -> bool {
                 };
                 depth = next;
             }
-            "!" | "-not" | "-a" | "-and" | "-o" | "-or" | "-print" | "-print0" | "-prune" => {}
+            "!" | "-not" | "-a" | "-and" | "-o" | "-or" | "-print" | "-print0" | "-prune"
+            | "-empty" => {}
+            // Age and size tests compare each entry's own metadata with a
+            // number written in the command, so they only narrow which names
+            // are printed. `-newer FILE` is left out: it reads another path.
+            "-mtime" | "-mmin" | "-atime" | "-amin" | "-ctime" | "-cmin" | "-size" => {
+                let Some(value) = expression.get(index) else {
+                    return false;
+                };
+                if !metadata_test_value(value, token == "-size") {
+                    return false;
+                }
+                index += 1;
+            }
             "-name" | "-iname" | "-path" | "-ipath" | "-wholename" | "-iwholename" => {
                 let Some(pattern) = expression.get(index) else {
                     return false;
@@ -312,4 +325,15 @@ fn safe_expression(expression: &[String]) -> bool {
         }
     }
     depth == 0
+}
+
+/// A `find` age or size operand: an optional `+` or `-`, digits, and for
+/// `-size` one unit letter, as in `+1`, `-30` or `+10M`.
+fn metadata_test_value(value: &str, size: bool) -> bool {
+    let unsigned = value.strip_prefix(['+', '-']).unwrap_or(value);
+    let digits = match unsigned.strip_suffix(|unit: char| size && "bckwMGTP".contains(unit)) {
+        Some(digits) => digits,
+        None => unsigned,
+    };
+    !digits.is_empty() && digits.len() <= 12 && digits.bytes().all(|byte| byte.is_ascii_digit())
 }

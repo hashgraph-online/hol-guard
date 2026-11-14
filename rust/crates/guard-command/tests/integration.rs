@@ -106,6 +106,7 @@ pub mod pretool_file_bodies;
 pub mod pretool_file_copies;
 pub mod pretool_file_mutations;
 pub mod pretool_file_reads;
+pub mod pretool_find_age_size_tests;
 pub mod pretool_find_brace_expansion;
 pub mod pretool_find_exec_programs;
 pub mod pretool_find_exec_sed_edits;
