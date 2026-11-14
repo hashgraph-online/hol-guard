@@ -679,6 +679,7 @@ mod harness_mcp_discovery;
 #[cfg(test)]
 #[path = "adapters/harness_mcp_discovery_tests.rs"]
 mod harness_mcp_discovery_tests;
+mod harness_protection_contract;
 #[path = "adapters/harness_settings_file.rs"]
 mod harness_settings_file;
 #[path = "adapters/harness_shim_refresh.rs"]

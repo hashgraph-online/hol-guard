@@ -26,6 +26,11 @@
           "event": "PreToolUse",
           "transport": "native_hook",
           "mode": "blocking",
+          "surface": "foreground",
+          "failure_behavior": "fail_closed",
+          "claim": {
+            "state": "configured"
+          },
           "declared_actions": [
             "observe",
             "block",
@@ -42,6 +47,11 @@
           "event": "PermissionRequest",
           "transport": "native_hook",
           "mode": "approval",
+          "surface": "foreground",
+          "failure_behavior": "fail_closed",
+          "claim": {
+            "state": "configured"
+          },
           "declared_actions": [
             "observe",
             "block",
@@ -58,6 +68,11 @@
           "event": "UserPromptSubmit",
           "transport": "native_hook",
           "mode": "screening",
+          "surface": "foreground",
+          "failure_behavior": "fail_closed",
+          "claim": {
+            "state": "configured"
+          },
           "declared_actions": [
             "observe",
             "block",
@@ -74,6 +89,11 @@
           "event": "PostToolUse",
           "transport": "native_hook",
           "mode": "observe",
+          "surface": "foreground",
+          "failure_behavior": "observe_only",
+          "claim": {
+            "state": "observe_only"
+          },
           "declared_actions": [
             "observe"
           ],
@@ -113,6 +133,11 @@
           "event": "PreToolUse",
           "transport": "native_hook",
           "mode": "blocking",
+          "surface": "foreground",
+          "failure_behavior": "fail_closed",
+          "claim": {
+            "state": "configured"
+          },
           "declared_actions": [
             "observe",
             "block",
@@ -129,6 +154,11 @@
           "event": "PermissionRequest",
           "transport": "native_hook",
           "mode": "approval",
+          "surface": "foreground",
+          "failure_behavior": "fail_closed",
+          "claim": {
+            "state": "configured"
+          },
           "declared_actions": [
             "observe",
             "block",
@@ -145,6 +175,11 @@
           "event": "PostToolUse",
           "transport": "native_hook",
           "mode": "observe",
+          "surface": "foreground",
+          "failure_behavior": "observe_only",
+          "claim": {
+            "state": "observe_only"
+          },
           "declared_actions": [
             "observe"
           ],
@@ -159,6 +194,11 @@
           "event": "UserPromptSubmit",
           "transport": "native_hook",
           "mode": "screening",
+          "surface": "foreground",
+          "failure_behavior": "fail_open",
+          "claim": {
+            "state": "configured"
+          },
           "declared_actions": [
             "observe",
             "block",
@@ -195,6 +235,11 @@
           "event": "shell",
           "transport": "adapter_declared",
           "mode": "declared",
+          "surface": "foreground",
+          "failure_behavior": "unsupported",
+          "claim": {
+            "state": "unsupported"
+          },
           "declared_actions": [
             "observe"
           ],
@@ -209,6 +254,11 @@
           "event": "mcp_tool",
           "transport": "adapter_declared",
           "mode": "declared",
+          "surface": "foreground",
+          "failure_behavior": "unsupported",
+          "claim": {
+            "state": "unsupported"
+          },
           "declared_actions": [
             "observe"
           ],
@@ -223,6 +273,11 @@
           "event": "UserPromptSubmit",
           "transport": "none",
           "mode": "unsupported",
+          "surface": "foreground",
+          "failure_behavior": "unsupported",
+          "claim": {
+            "state": "unsupported"
+          },
           "declared_actions": [
             "unavailable"
           ],
@@ -257,6 +312,11 @@
           "event": "shell",
           "transport": "adapter_declared",
           "mode": "declared",
+          "surface": "foreground",
+          "failure_behavior": "unsupported",
+          "claim": {
+            "state": "unsupported"
+          },
           "declared_actions": [
             "observe"
           ],
@@ -271,6 +331,11 @@
           "event": "prompt",
           "transport": "adapter_declared",
           "mode": "declared",
+          "surface": "foreground",
+          "failure_behavior": "unsupported",
+          "claim": {
+            "state": "unsupported"
+          },
           "declared_actions": [
             "observe"
           ],
@@ -324,6 +389,11 @@
           "event": "beforeShellExecution",
           "transport": "native_hook",
           "mode": "blocking",
+          "surface": "editor",
+          "failure_behavior": "fail_closed",
+          "claim": {
+            "state": "configured"
+          },
           "declared_actions": [
             "observe",
             "block",
@@ -340,6 +410,11 @@
           "event": "beforeMCPExecution",
           "transport": "native_hook",
           "mode": "blocking",
+          "surface": "editor",
+          "failure_behavior": "fail_closed",
+          "claim": {
+            "state": "configured"
+          },
           "declared_actions": [
             "observe",
             "block",
@@ -356,6 +431,11 @@
           "event": "beforeReadFile",
           "transport": "native_hook",
           "mode": "blocking",
+          "surface": "editor",
+          "failure_behavior": "fail_closed",
+          "claim": {
+            "state": "configured"
+          },
           "declared_actions": [
             "observe",
             "block",
@@ -372,6 +452,11 @@
           "event": "preToolUse",
           "transport": "native_hook",
           "mode": "blocking",
+          "surface": "editor",
+          "failure_behavior": "fail_closed",
+          "claim": {
+            "state": "configured"
+          },
           "declared_actions": [
             "observe",
             "block",
@@ -388,6 +473,11 @@
           "event": "afterShellExecution",
           "transport": "native_hook",
           "mode": "observe",
+          "surface": "editor",
+          "failure_behavior": "observe_only",
+          "claim": {
+            "state": "observe_only"
+          },
           "declared_actions": [
             "observe"
           ],
@@ -402,6 +492,11 @@
           "event": "afterMCPExecution",
           "transport": "native_hook",
           "mode": "observe",
+          "surface": "editor",
+          "failure_behavior": "observe_only",
+          "claim": {
+            "state": "observe_only"
+          },
           "declared_actions": [
             "observe"
           ],
@@ -416,6 +511,11 @@
           "event": "UserPromptSubmit",
           "transport": "none",
           "mode": "unsupported",
+          "surface": "editor",
+          "failure_behavior": "unsupported",
+          "claim": {
+            "state": "unsupported"
+          },
           "declared_actions": [
             "unavailable"
           ],
@@ -493,6 +593,11 @@
           "event": "PreToolUse",
           "transport": "native_hook",
           "mode": "blocking",
+          "surface": "foreground",
+          "failure_behavior": "fail_closed",
+          "claim": {
+            "state": "configured"
+          },
           "declared_actions": [
             "observe",
             "block",
@@ -510,6 +615,11 @@
           "event": "PreToolUse",
           "transport": "agent_plugin",
           "mode": "blocking",
+          "surface": "foreground",
+          "failure_behavior": "fail_closed",
+          "claim": {
+            "state": "configured"
+          },
           "declared_actions": [
             "observe",
             "block",
@@ -526,6 +636,11 @@
           "event": "PostToolUse",
           "transport": "native_hook",
           "mode": "observe",
+          "surface": "foreground",
+          "failure_behavior": "observe_only",
+          "claim": {
+            "state": "observe_only"
+          },
           "declared_actions": [
             "observe"
           ],
@@ -540,6 +655,11 @@
           "event": "PostToolUse",
           "transport": "agent_plugin",
           "mode": "replace_or_withhold",
+          "surface": "foreground",
+          "failure_behavior": "fail_closed",
+          "claim": {
+            "state": "configured"
+          },
           "declared_actions": [
             "observe",
             "block",
@@ -556,6 +676,11 @@
           "event": "UserPromptSubmit",
           "transport": "native_hook",
           "mode": "observe",
+          "surface": "foreground",
+          "failure_behavior": "observe_only",
+          "claim": {
+            "state": "observe_only"
+          },
           "declared_actions": [
             "observe"
           ],
@@ -570,6 +695,11 @@
           "event": "TaskStart",
           "transport": "native_hook",
           "mode": "observe",
+          "surface": "foreground",
+          "failure_behavior": "observe_only",
+          "claim": {
+            "state": "observe_only"
+          },
           "declared_actions": [
             "observe"
           ],
@@ -584,6 +714,11 @@
           "event": "TaskError",
           "transport": "native_hook",
           "mode": "observe",
+          "surface": "foreground",
+          "failure_behavior": "observe_only",
+          "claim": {
+            "state": "observe_only"
+          },
           "declared_actions": [
             "observe"
           ],
@@ -598,6 +733,11 @@
           "event": "SessionShutdown",
           "transport": "native_hook",
           "mode": "observe",
+          "surface": "foreground",
+          "failure_behavior": "observe_only",
+          "claim": {
+            "state": "observe_only"
+          },
           "declared_actions": [
             "observe"
           ],
@@ -632,6 +772,11 @@
           "event": "shell",
           "transport": "adapter_declared",
           "mode": "declared",
+          "surface": "foreground",
+          "failure_behavior": "unsupported",
+          "claim": {
+            "state": "unsupported"
+          },
           "declared_actions": [
             "observe"
           ],
@@ -646,6 +791,11 @@
           "event": "mcp_tool",
           "transport": "adapter_declared",
           "mode": "declared",
+          "surface": "foreground",
+          "failure_behavior": "unsupported",
+          "claim": {
+            "state": "unsupported"
+          },
           "declared_actions": [
             "observe"
           ],
@@ -679,6 +829,11 @@
           "event": "shell",
           "transport": "adapter_declared",
           "mode": "declared",
+          "surface": "foreground",
+          "failure_behavior": "unsupported",
+          "claim": {
+            "state": "unsupported"
+          },
           "declared_actions": [
             "observe"
           ],
@@ -693,6 +848,11 @@
           "event": "mcp_tool",
           "transport": "adapter_declared",
           "mode": "declared",
+          "surface": "foreground",
+          "failure_behavior": "unsupported",
+          "claim": {
+            "state": "unsupported"
+          },
           "declared_actions": [
             "observe"
           ],
@@ -707,6 +867,11 @@
           "event": "prompt",
           "transport": "adapter_declared",
           "mode": "declared",
+          "surface": "foreground",
+          "failure_behavior": "unsupported",
+          "claim": {
+            "state": "unsupported"
+          },
           "declared_actions": [
             "observe"
           ],
@@ -740,6 +905,11 @@
           "event": "mcp_tool",
           "transport": "adapter_declared",
           "mode": "declared",
+          "surface": "foreground",
+          "failure_behavior": "unsupported",
+          "claim": {
+            "state": "unsupported"
+          },
           "declared_actions": [
             "observe"
           ],
@@ -776,6 +946,11 @@
           "event": "mcp_tool",
           "transport": "adapter_declared",
           "mode": "declared",
+          "surface": "editor",
+          "failure_behavior": "unsupported",
+          "claim": {
+            "state": "unsupported"
+          },
           "declared_actions": [
             "observe"
           ],
@@ -790,6 +965,11 @@
           "event": "prompt",
           "transport": "adapter_declared",
           "mode": "declared",
+          "surface": "editor",
+          "failure_behavior": "unsupported",
+          "claim": {
+            "state": "unsupported"
+          },
           "declared_actions": [
             "observe"
           ],
@@ -826,6 +1006,11 @@
           "event": "shell",
           "transport": "adapter_declared",
           "mode": "declared",
+          "surface": "foreground",
+          "failure_behavior": "unsupported",
+          "claim": {
+            "state": "unsupported"
+          },
           "declared_actions": [
             "observe"
           ],
@@ -840,6 +1025,11 @@
           "event": "prompt",
           "transport": "adapter_declared",
           "mode": "declared",
+          "surface": "foreground",
+          "failure_behavior": "unsupported",
+          "claim": {
+            "state": "unsupported"
+          },
           "declared_actions": [
             "observe"
           ],
@@ -882,6 +1072,11 @@
           "event": "PreToolUse",
           "transport": "native_hook",
           "mode": "blocking",
+          "surface": "foreground",
+          "failure_behavior": "fail_closed",
+          "claim": {
+            "state": "configured"
+          },
           "declared_actions": [
             "observe",
             "block",
@@ -898,6 +1093,11 @@
           "event": "UserPromptSubmit",
           "transport": "native_hook",
           "mode": "blocking",
+          "surface": "foreground",
+          "failure_behavior": "fail_closed",
+          "claim": {
+            "state": "configured"
+          },
           "declared_actions": [
             "observe",
             "block"
@@ -913,6 +1113,11 @@
           "event": "PostToolUse",
           "transport": "native_hook",
           "mode": "observe",
+          "surface": "foreground",
+          "failure_behavior": "observe_only",
+          "claim": {
+            "state": "observe_only"
+          },
           "declared_actions": [
             "observe"
           ],
@@ -955,6 +1160,11 @@
           "event": "UserPromptSubmit",
           "transport": "managed_extension",
           "mode": "screening",
+          "surface": "foreground",
+          "failure_behavior": "fail_closed",
+          "claim": {
+            "state": "configured"
+          },
           "declared_actions": [
             "observe",
             "block",
@@ -971,6 +1181,11 @@
           "event": "PreToolUse",
           "transport": "managed_extension",
           "mode": "blocking",
+          "surface": "foreground",
+          "failure_behavior": "fail_closed",
+          "claim": {
+            "state": "configured"
+          },
           "declared_actions": [
             "observe",
             "block",
@@ -987,6 +1202,11 @@
           "event": "PostToolUse",
           "transport": "managed_extension",
           "mode": "replace_or_withhold",
+          "surface": "foreground",
+          "failure_behavior": "fail_closed",
+          "claim": {
+            "state": "configured"
+          },
           "declared_actions": [
             "observe",
             "block",
@@ -1030,6 +1250,11 @@
           "event": "UserPromptSubmit",
           "transport": "managed_extension",
           "mode": "screening",
+          "surface": "foreground",
+          "failure_behavior": "fail_closed",
+          "claim": {
+            "state": "configured"
+          },
           "declared_actions": [
             "observe",
             "block",
@@ -1046,6 +1271,11 @@
           "event": "PreToolUse",
           "transport": "managed_extension",
           "mode": "blocking",
+          "surface": "foreground",
+          "failure_behavior": "fail_closed",
+          "claim": {
+            "state": "configured"
+          },
           "declared_actions": [
             "observe",
             "block",
@@ -1062,6 +1292,11 @@
           "event": "PostToolUse",
           "transport": "managed_extension",
           "mode": "replace_or_withhold",
+          "surface": "foreground",
+          "failure_behavior": "fail_closed",
+          "claim": {
+            "state": "configured"
+          },
           "declared_actions": [
             "observe",
             "block",
@@ -1104,6 +1339,11 @@
           "event": "shell",
           "transport": "adapter_declared",
           "mode": "declared",
+          "surface": "foreground",
+          "failure_behavior": "unsupported",
+          "claim": {
+            "state": "unsupported"
+          },
           "declared_actions": [
             "observe"
           ],
@@ -1118,6 +1358,11 @@
           "event": "prompt",
           "transport": "adapter_declared",
           "mode": "declared",
+          "surface": "foreground",
+          "failure_behavior": "unsupported",
+          "claim": {
+            "state": "unsupported"
+          },
           "declared_actions": [
             "observe"
           ],
@@ -1132,6 +1377,11 @@
           "event": "mcp_tool",
           "transport": "adapter_declared",
           "mode": "declared",
+          "surface": "foreground",
+          "failure_behavior": "unsupported",
+          "claim": {
+            "state": "unsupported"
+          },
           "declared_actions": [
             "observe"
           ],
@@ -1146,6 +1396,11 @@
           "event": "file_read",
           "transport": "adapter_declared",
           "mode": "declared",
+          "surface": "foreground",
+          "failure_behavior": "unsupported",
+          "claim": {
+            "state": "unsupported"
+          },
           "declared_actions": [
             "observe"
           ],
@@ -1191,6 +1446,11 @@
           "event": "PreToolUse",
           "transport": "native_hook",
           "mode": "blocking",
+          "surface": "foreground",
+          "failure_behavior": "fail_closed",
+          "claim": {
+            "state": "configured"
+          },
           "declared_actions": [
             "observe",
             "block",
@@ -1207,6 +1467,11 @@
           "event": "PermissionRequest",
           "transport": "native_hook",
           "mode": "approval",
+          "surface": "foreground",
+          "failure_behavior": "fail_closed",
+          "claim": {
+            "state": "configured"
+          },
           "declared_actions": [
             "observe",
             "block",
@@ -1223,6 +1488,11 @@
           "event": "UserPromptSubmit",
           "transport": "native_hook",
           "mode": "screening",
+          "surface": "foreground",
+          "failure_behavior": "fail_closed",
+          "claim": {
+            "state": "configured"
+          },
           "declared_actions": [
             "observe",
             "block",
@@ -1239,6 +1509,11 @@
           "event": "PostToolUse",
           "transport": "native_hook",
           "mode": "observe",
+          "surface": "foreground",
+          "failure_behavior": "observe_only",
+          "claim": {
+            "state": "observe_only"
+          },
           "declared_actions": [
             "observe"
           ],
@@ -1282,6 +1557,11 @@
           "event": "PreToolUse",
           "transport": "native_hook",
           "mode": "blocking",
+          "surface": "foreground",
+          "failure_behavior": "fail_closed",
+          "claim": {
+            "state": "configured"
+          },
           "declared_actions": [
             "observe",
             "block",
@@ -1298,6 +1578,11 @@
           "event": "PermissionRequest",
           "transport": "native_hook",
           "mode": "approval",
+          "surface": "foreground",
+          "failure_behavior": "fail_closed",
+          "claim": {
+            "state": "configured"
+          },
           "declared_actions": [
             "observe",
             "block",
@@ -1314,6 +1599,11 @@
           "event": "UserPromptSubmit",
           "transport": "native_hook",
           "mode": "screening",
+          "surface": "foreground",
+          "failure_behavior": "fail_closed",
+          "claim": {
+            "state": "configured"
+          },
           "declared_actions": [
             "observe",
             "block",
@@ -1330,6 +1620,11 @@
           "event": "PostToolUse",
           "transport": "native_hook",
           "mode": "observe",
+          "surface": "foreground",
+          "failure_behavior": "observe_only",
+          "claim": {
+            "state": "observe_only"
+          },
           "declared_actions": [
             "observe"
           ],
@@ -1344,6 +1639,11 @@
           "event": "SessionStart",
           "transport": "native_hook",
           "mode": "observe",
+          "surface": "foreground",
+          "failure_behavior": "observe_only",
+          "claim": {
+            "state": "observe_only"
+          },
           "declared_actions": [
             "observe"
           ],
@@ -1358,6 +1658,11 @@
           "event": "Stop",
           "transport": "native_hook",
           "mode": "observe",
+          "surface": "foreground",
+          "failure_behavior": "observe_only",
+          "claim": {
+            "state": "observe_only"
+          },
           "declared_actions": [
             "observe"
           ],
@@ -1391,6 +1696,11 @@
           "event": "*",
           "transport": "none",
           "mode": "unsupported",
+          "surface": "foreground",
+          "failure_behavior": "unsupported",
+          "claim": {
+            "state": "unsupported"
+          },
           "declared_actions": [
             "unavailable"
           ],
