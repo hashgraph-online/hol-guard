@@ -231,6 +231,7 @@ mod command_envelope_op;
 mod command_expression_validate_op;
 mod command_policy_decide_op;
 mod command_policy_repair;
+mod command_risk_groups;
 mod composio_role_op;
 mod compound_git_args;
 mod compound_git_chain;
