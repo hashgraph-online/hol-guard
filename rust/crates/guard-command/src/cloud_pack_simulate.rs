@@ -42,8 +42,9 @@ struct StoredCall {
     session_flow: Option<SessionFlowV2>,
     #[serde(default)]
     usage_windows: Option<BTreeMap<String, u64>>,
-    /// The call was decided as Unclassified (R16); its tool name is read again
-    /// to tell whether it looks destructive.
+    /// The call was decided as Unclassified (R16). Its facts hold the class
+    /// the classifier proposed from the tool's name and schema, which also
+    /// tells whether it looks destructive.
     #[serde(default)]
     unclassified: bool,
 }
@@ -120,10 +121,9 @@ pub fn simulate(pack: &PolicyPack, calls: Value) -> Result<Value, (&'static str,
             facts: &facts,
             session: call.session_flow.as_ref(),
             windows: call.usage_windows.as_ref(),
-            unclassified: call.unclassified.then(|| {
-                let name = call.action_id.rsplit('.').next().unwrap_or(&call.action_id);
-                crate::cloud_action_classifier::classify(name, None).destructive
-            }),
+            unclassified: call
+                .unclassified
+                .then(|| crate::cloud_action_classifier::destructive_class(facts.class)),
         });
         results.push(json!({
             "action": decision.action,

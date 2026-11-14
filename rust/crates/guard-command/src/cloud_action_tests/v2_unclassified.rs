@@ -114,12 +114,12 @@ fn the_marker_is_refused_on_pack_facts_and_a_lenient_section() {
     );
 }
 
-fn simulate(preset: &str, unclassified: bool, action_id: &str) -> String {
+fn simulate(preset: &str, unclassified: bool, class: ActionClassV2) -> String {
     let mut call = json!({
         "provider": "remote_mcp",
-        "actionId": action_id,
-        "facts": class_only(ActionClassV2::Update),
-        "effect": "write",
+        "actionId": "mcp.qualify.record_note",
+        "facts": class_only(class),
+        "effect": crate::cloud_action_v2::class_effect(class),
         "resourceId": null,
     });
     if unclassified {
@@ -135,15 +135,20 @@ fn simulate(preset: &str, unclassified: bool, action_id: &str) -> String {
 
 #[test]
 fn the_shipped_presets_decide_an_unclassified_update_as_r16_says() {
-    let note = "mcp.qualify.record_note";
-    assert_eq!(simulate("relaxed", true, note), "review");
-    assert_eq!(simulate("balanced", true, note), "review");
-    assert_eq!(simulate("strict", true, note), "block");
+    let update = ActionClassV2::Update;
+    assert_eq!(simulate("relaxed", true, update), "review");
+    assert_eq!(simulate("balanced", true, update), "review");
+    assert_eq!(simulate("strict", true, update), "block");
     // The same facts without the marker keep the unknown-fact branch.
-    assert_eq!(simulate("balanced", false, note), "block");
-    // A destructive-looking name asks again.
+    assert_eq!(simulate("balanced", false, update), "block");
+    // A destructive proposal asks again, including one the classifier raised
+    // to a payment from the input schema alone: the stored class carries it.
     assert_eq!(
-        simulate("balanced", true, "mcp.qualify.delete_note"),
+        simulate("balanced", true, ActionClassV2::Delete),
+        "require-reapproval"
+    );
+    assert_eq!(
+        simulate("balanced", true, ActionClassV2::Pay),
         "require-reapproval"
     );
 }
