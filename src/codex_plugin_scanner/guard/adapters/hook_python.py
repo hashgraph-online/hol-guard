@@ -30,10 +30,7 @@ from ...version import __version__
 from ..native_runner_authority import NativeRunnerAuthorityError, native_runner_authority
 from ..stable_guard_cli import guard_cli_launcher
 from .base import HarnessContext
-from .hook_python_probe_code import PROBE_CODE as _PROBE_CODE
-from .hook_python_subprocess import run_probe as _run_probe
 
-_PROBE_SCHEMA: Final = 2
 _EXPECTED_ENTRY_POINT: Final = "codex_plugin_scanner.cli:main"
 _PREPARATION_PROBE: ContextVar[tuple[int, Path] | None] = ContextVar("guard_preparation_probe", default=None)
 _PROBE_INHERITED_ENV_KEYS: Final = (
@@ -99,10 +96,8 @@ class _ParentExpectation:
     hol_distribution_root: Path | None
     cryptography_distribution_root: Path
 
-    def probe_record(self, target: Path) -> dict[str, object]:
+    def probe_record(self) -> dict[str, object]:
         return {
-            "schema": _PROBE_SCHEMA,
-            "resolved_executable": str(target),
             "package_file": str(self.package_file),
             "package_root": str(self.package_root),
             "cryptography_file": str(self.cryptography_file),
@@ -114,21 +109,6 @@ class _ParentExpectation:
             "version": __version__,
             "entry_point": _EXPECTED_ENTRY_POINT,
         }
-
-
-def _probe_environment(neutral_cwd: Path) -> dict[str, str]:
-    env = {key: os.environ[key] for key in _PROBE_INHERITED_ENV_KEYS if key in os.environ}
-    env.update(
-        {
-            "HOME": str(neutral_cwd),
-            "USERPROFILE": str(neutral_cwd),
-            "PYTHONIOENCODING": "utf-8",
-            "PYTHONDONTWRITEBYTECODE": "1",
-            "PYTHONNOUSERSITE": "1",
-            "PYTHONSAFEPATH": "1",
-        }
-    )
-    return env
 
 
 @contextmanager
@@ -218,8 +198,14 @@ _STAT_KEYS: Final = ("device", "inode", "mode", "size", "mtime_ns")
 _IDENTITY_ERRORS: Final = frozenset(
     f"guard_hook_python_interpreter_{kind}" for kind in ("unavailable", "untrusted", "changed")
 )
-# Hashing a frozen Guard CLI reads tens of megabytes.
+_ATTEST_ERRORS: Final = _IDENTITY_ERRORS | frozenset(
+    f"guard_hook_python_probe_{kind}"
+    for kind in ("timeout", "output_limit", "capture_incomplete", "rejected", "output_invalid", "identity_mismatch")
+)
+# Hashing a frozen Guard CLI reads tens of megabytes; attesting also runs the
+# interpreter for up to 15 seconds.
 _IDENTITY_TIMEOUT_SECONDS: Final = 30.0
+_ATTEST_TIMEOUT_SECONDS: Final = 60.0
 
 
 def _file_metadata(value: object) -> HookPythonFileMetadata:
@@ -239,16 +225,22 @@ def _executable_identity(path: Path) -> HookPythonExecutableIdentity:
     """Read the executable's identity natively; see `hook_python_identity.rs`."""
 
     invocation = path.expanduser().absolute()
+    request: dict[str, object] = {"op": "executable", "path": str(invocation)}
+    return _native_identity(request, invocation, _IDENTITY_ERRORS, _IDENTITY_TIMEOUT_SECONDS)
+
+
+def _native_identity(
+    request: dict[str, object],
+    invocation: Path,
+    errors: frozenset[str],
+    timeout_seconds: float,
+) -> HookPythonExecutableIdentity:
     try:
-        answer = native_runner_authority(
-            "hook_python_identity",
-            {"op": "executable", "path": str(invocation)},
-            timeout_seconds=_IDENTITY_TIMEOUT_SECONDS,
-        )
+        answer = native_runner_authority("hook_python_identity", request, timeout_seconds=timeout_seconds)
     except NativeRunnerAuthorityError as error:
         raise RuntimeError("guard_hook_python_interpreter_unavailable") from error
     error = answer.get("error")
-    if set(answer) == {"error"} and error in _IDENTITY_ERRORS:
+    if set(answer) == {"error"} and error in errors:
         raise RuntimeError(cast(str, error))
     identity = answer.get("identity")
     if set(answer) != {"identity"} or not isinstance(identity, dict):
@@ -389,47 +381,19 @@ def _attest_python(
     current = Path(sys.executable).absolute()
     if python.expanduser().absolute() != current:
         raise RuntimeError("guard_hook_python_not_running_interpreter")
-    identity = _executable_identity(current)
     expectation = _parent_expectation()
     if expected_package_root is not None and expected_package_root.resolve(strict=True) != expectation.package_root:
         raise RuntimeError("guard_hook_python_package_root_mismatch")
-    expected_record = expectation.probe_record(identity.target_path)
-    result = _run_probe(
-        [
-            str(identity.target_path),
-            "-I",
-            "-S",
-            "-s",
-            "-c",
-            _PROBE_CODE,
-            json.dumps(expected_record, sort_keys=True, separators=(",", ":")),
-        ],
-        cwd=neutral_cwd,
-        env=_probe_environment(neutral_cwd),
-    )
-    if result.timed_out:
-        raise RuntimeError("guard_hook_python_probe_timeout")
-    if result.output_overflow:
-        raise RuntimeError("guard_hook_python_probe_output_limit")
-    if result.capture_incomplete:
-        raise RuntimeError("guard_hook_python_probe_capture_incomplete")
-    if result.returncode != 0:
-        raise RuntimeError("guard_hook_python_probe_rejected")
-    if not _identity_is_unchanged(identity):
-        raise RuntimeError("guard_hook_python_interpreter_changed")
-    try:
-        text = result.stdout.decode("utf-8", errors="strict")
-    except UnicodeDecodeError as error:
-        raise RuntimeError("guard_hook_python_probe_output_invalid") from error
-    lines = text.splitlines()
-    if len(lines) != 1 or not lines[0]:
-        raise RuntimeError("guard_hook_python_probe_output_invalid")
-    try:
-        payload = cast(object, json.loads(lines[0]))
-    except json.JSONDecodeError as error:
-        raise RuntimeError("guard_hook_python_probe_output_invalid") from error
-    if not isinstance(payload, dict) or cast(dict[str, object], payload) != expected_record:
-        raise RuntimeError("guard_hook_python_probe_identity_mismatch")
+    # The native runtime runs the interpreter and compares its report; see
+    # `hook_python_attest.rs`.
+    request: dict[str, object] = {
+        "op": "attest",
+        "python": str(current),
+        "cwd": str(neutral_cwd),
+        "inherited": {key: os.environ[key] for key in _PROBE_INHERITED_ENV_KEYS if key in os.environ},
+        "expected": expectation.probe_record(),
+    }
+    identity = _native_identity(request, current, _ATTEST_ERRORS, _ATTEST_TIMEOUT_SECONDS)
     return HookPythonAttestation(
         identity=identity,
         package_file=expectation.package_file,

@@ -10,7 +10,6 @@ import pytest
 
 from codex_plugin_scanner.guard.adapters import hook_python
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
-from codex_plugin_scanner.guard.adapters.hook_python_subprocess import ProbeResult
 
 
 def _context(tmp_path: Path, *, workspace: Path | None = None) -> HarnessContext:
@@ -58,40 +57,6 @@ def test_preparation_rejects_probe_that_loses_private_permissions(tmp_path: Path
     assert not probe.exists()
 
 
-def test_probe_environment_drops_python_virtualenv_and_loader_controls(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    hostile = {
-        "PATH": str(tmp_path / "fake-bin"),
-        "PYTHONPATH": str(tmp_path / "fake-package"),
-        "PYTHONHOME": str(tmp_path / "fake-home"),
-        "PYTHONSTARTUP": str(tmp_path / "startup.py"),
-        "PYTHONINSPECT": "1",
-        "PYTHONWARNINGS": "error",
-        "PYTHONBREAKPOINT": "evil.breakpoint",
-        "VIRTUAL_ENV": str(tmp_path / "workspace" / ".venv"),
-        "UV_PROJECT_ENVIRONMENT": str(tmp_path / "uv-project"),
-        "UV_PYTHON": str(tmp_path / "uv-python"),
-        "CONDA_PREFIX": str(tmp_path / "conda"),
-        "__PYVENV_LAUNCHER__": str(tmp_path / "launcher"),
-        "LD_PRELOAD": str(tmp_path / "preload.so"),
-        "DYLD_INSERT_LIBRARIES": str(tmp_path / "inject.dylib"),
-    }
-    for key, value in hostile.items():
-        monkeypatch.setenv(key, value)
-
-    neutral = tmp_path / "neutral"
-    neutral.mkdir()
-    env = hook_python._probe_environment(neutral)
-
-    assert hostile.keys().isdisjoint(env)
-    assert env["HOME"] == str(neutral)
-    assert env["USERPROFILE"] == str(neutral)
-    assert env["PYTHONNOUSERSITE"] == "1"
-    assert env["PYTHONSAFEPATH"] == "1"
-
-
 def test_workspace_shadow_modules_and_sitecustomize_never_execute(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -122,65 +87,6 @@ def test_workspace_shadow_modules_and_sitecustomize_never_execute(
 
     assert resolved == Path(sys.executable).absolute()
     assert not marker.exists()
-
-
-def test_probe_rejects_noisy_stdout_before_parsing_identity(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.setattr(
-        hook_python,
-        "_run_probe",
-        lambda *_args, **_kwargs: ProbeResult(
-            returncode=0,
-            stdout=b"noise\n{}\n",
-            stderr=b"",
-            timed_out=False,
-            output_overflow=False,
-        ),
-    )
-
-    with pytest.raises(RuntimeError, match="guard_hook_python_probe_output_invalid"):
-        hook_python._attest_python(
-            Path(sys.executable),
-            neutral_cwd=tmp_path,
-            expected_package_root=hook_python._active_package_root(),
-        )
-
-
-@pytest.mark.parametrize(
-    ("result", "reason"),
-    [
-        (
-            ProbeResult(1, b"", b"private path", True, False),
-            "guard_hook_python_probe_timeout",
-        ),
-        (
-            ProbeResult(1, b"", b"private path", False, True),
-            "guard_hook_python_probe_output_limit",
-        ),
-        (
-            ProbeResult(0, b'{"status":"ok"}\n', b"private path", False, False, True),
-            "guard_hook_python_probe_capture_incomplete",
-        ),
-    ],
-)
-def test_probe_execution_failures_have_redacted_reason_codes(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-    result: ProbeResult,
-    reason: str,
-) -> None:
-    monkeypatch.setattr(hook_python, "_run_probe", lambda *_args, **_kwargs: result)
-
-    with pytest.raises(RuntimeError, match=reason) as error:
-        hook_python._attest_python(
-            Path(sys.executable),
-            neutral_cwd=tmp_path,
-            expected_package_root=hook_python._active_package_root(),
-        )
-
-    assert "private path" not in str(error.value)
 
 
 def test_interpreter_symlink_identity_is_canonicalized_without_losing_invocation_path(tmp_path: Path) -> None:

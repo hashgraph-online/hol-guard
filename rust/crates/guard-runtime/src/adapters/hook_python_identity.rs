@@ -13,6 +13,9 @@
 //! recorded before reads the same here. On Windows the device is the volume
 //! serial, the inode the `FILE_ID_INFO` identifier, and the mode is spelled
 //! from the read-only attribute and the four extensions the shell runs.
+//!
+//! `attest` runs that interpreter to confirm what it imports; see
+//! `hook_python_attest.rs`.
 
 use std::fs;
 use std::io::{self, Read};
@@ -31,8 +34,10 @@ const CHUNK: usize = 1024 * 1024;
 
 pub(crate) fn dispatch(args: &Value) -> KindResult {
     let map = args_object(args)?;
-    if map.len() != 2 || map.get("op").and_then(Value::as_str) != Some("executable") {
-        return Err(ERR_INVALID);
+    match map.get("op").and_then(Value::as_str) {
+        Some("executable") if map.len() == 2 => {}
+        Some("attest") => return attest::attest(map),
+        _ => return Err(ERR_INVALID),
     }
     let path = map
         .get("path")
@@ -258,6 +263,9 @@ mod platform {
         }
     }
 }
+
+#[path = "hook_python_attest.rs"]
+mod attest;
 
 #[cfg(test)]
 #[path = "hook_python_identity_tests.rs"]
