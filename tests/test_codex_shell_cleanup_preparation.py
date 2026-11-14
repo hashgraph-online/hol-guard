@@ -74,15 +74,14 @@ def test_ordinary_cleanup_uses_captured_bytes_and_retains_permissions(tmp_path, 
 
 def test_foreign_profile_during_capture_prevents_all_cleanup(tmp_path, monkeypatch):
     context, profile, only_managed, guard = _sources(tmp_path, monkeypatch)
-    render = adapter._remove_managed_shell_guard_blocks
+    plan = adapter.planned_files
 
-    def foreign_write(content):
-        result = render(content)
-        if content.startswith(b"\xffKEEP"):
-            profile.write_bytes(b"foreign profile")
-        return result
+    def foreign_write(answer):
+        files = plan(answer)
+        profile.write_bytes(b"foreign profile")
+        return files
 
-    monkeypatch.setattr(adapter, "_remove_managed_shell_guard_blocks", foreign_write)
+    monkeypatch.setattr(adapter, "planned_files", foreign_write)
     with pytest.raises(TransitionError, match="generation_changed"):
         adapter.CodexHarnessAdapter._uninstall_shell_guard(context)
     assert profile.read_bytes() == b"foreign profile"

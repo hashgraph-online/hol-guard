@@ -14,7 +14,7 @@ from codex_plugin_scanner.guard.adapters import cursor as cursor_adapter
 from codex_plugin_scanner.guard.adapters import hermes as hermes_adapter
 from codex_plugin_scanner.guard.adapters import mcp_relay_native, mcp_servers, native_hook_bridge
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
-from codex_plugin_scanner.guard.adapters.codex import CodexHarnessAdapter
+from codex_plugin_scanner.guard.adapters.codex import render_codex_managed_mcp
 from codex_plugin_scanner.guard.adapters.harness_mcp_discovery import discover_harness_mcp_servers
 from codex_plugin_scanner.guard.adapters.mcp_relay_native import (
     NATIVE_MCP_RELAY_COMMAND,
@@ -240,18 +240,26 @@ def test_refresh_moves_entries_between_launchers(tmp_path: Path, advertised: set
 @pytest.mark.skipif(sys.platform == "win32", reason="the Guard proxy recognition needs the resident runtime")
 def test_codex_interpreter_refresh_reselects_the_launcher(tmp_path: Path, advertised: set[str]) -> None:
     args = _python_args(tmp_path)
-    servers: dict[str, object] = {"fixture": {"command": "/old/python", "args": list(args)}}
+    context = HarnessContext(home_dir=tmp_path, workspace_dir=None, guard_home=tmp_path / "guard-home")
+
+    def refresh(payload: dict[str, object]) -> tuple[dict[str, object], tuple[str, ...]]:
+        return render_codex_managed_mcp(context, payload, managed_servers=(), workspace_payload={})
+
+    payload: dict[str, object] = {"mcp_servers": {"fixture": {"command": "/old/python", "args": list(args)}}}
     advertised.add(NATIVE_MCP_RELAY_FEATURE)
-    assert CodexHarnessAdapter._refresh_managed_proxy_interpreters(servers) == ("fixture",)
-    entry = servers["fixture"]
+    payload, migrated = refresh(payload)
+    assert migrated == ("fixture",)
+    entry = payload["mcp_servers"]["fixture"]  # type: ignore[index]
     assert isinstance(entry, dict)
     assert entry["command"] == str(_RUNTIME)
     assert entry["args"][:2] == [NATIVE_MCP_RELAY_COMMAND, entry["args"][1]]
     assert entry["args"][2:] == args
-    assert CodexHarnessAdapter._refresh_managed_proxy_interpreters(servers) == ()
+    payload, migrated = refresh(payload)
+    assert migrated == ()
     advertised.clear()
-    assert CodexHarnessAdapter._refresh_managed_proxy_interpreters(servers) == ("fixture",)
-    assert entry["args"] == args
+    payload, migrated = refresh(payload)
+    assert migrated == ("fixture",)
+    assert payload["mcp_servers"]["fixture"]["args"] == args  # type: ignore[index]
 
 
 @pytest.mark.skipif(sys.platform == "win32", reason="the server identity digest needs the resident runtime")

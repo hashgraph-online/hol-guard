@@ -11,6 +11,7 @@ import pytest
 from codex_plugin_scanner.guard.adapters import codex as codex_adapter
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.codex_config import dump_toml, read_toml_payload
+from codex_plugin_scanner.guard.codex_hook_identity import CodexHookGroupQuestion, canonical_codex_hook_group_identities
 from codex_plugin_scanner.guard.codex_hook_inventory import enumerate_codex_hooks
 from codex_plugin_scanner.guard.config import GuardConfig
 from codex_plugin_scanner.guard.consumer.service import (
@@ -146,16 +147,21 @@ def test_event_name_is_part_of_canonical_identity(tmp_path: Path) -> None:
 def test_migration_identity_uses_the_written_hook_activation_state() -> None:
     payload: dict[str, object] = {"hooks": {"PreToolUse": [_group()]}}
 
-    disabled = codex_adapter._migration_group_identities(
-        payload,
-        source_scope="global",
-        source_hooks_enabled=False,
-    )
-    enabled = codex_adapter._migration_group_identities(
-        payload,
-        source_scope="global",
-        source_hooks_enabled=True,
-    )
+    def identities(enabled: bool) -> tuple[str, ...]:
+        return canonical_codex_hook_group_identities(
+            [
+                CodexHookGroupQuestion(
+                    source_scope="global",
+                    source_hooks_enabled=enabled,
+                    event_name="PreToolUse",
+                    group=group,
+                )
+                for group in payload["hooks"]["PreToolUse"]  # type: ignore[index]
+            ]
+        )
+
+    disabled = identities(False)
+    enabled = identities(True)
 
     assert len(disabled) == 1
     assert len(enabled) == 1

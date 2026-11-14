@@ -99,7 +99,7 @@ pub(crate) const ENV_PREFIXES: [&str; 14] = [
     "OMP_PROFILE",
 ];
 
-pub(crate) const SPECS: [Spec; 17] = [
+pub(crate) const SPECS: [Spec; 18] = [
     Spec {
         harness: "devin",
         aliases: &["devin", "devin-cli", "cognition-devin"],
@@ -410,6 +410,27 @@ pub(crate) const SPECS: [Spec; 17] = [
         hook: Hook::Argv,
         install: Install::Plan,
         dynamic: true,
+    },
+    Spec {
+        harness: "codex",
+        aliases: &[],
+        executable: "codex",
+        launcher_name: "",
+        display_name: None,
+        tier: "native-or-center",
+        summary: "Guard uses native Codex PreToolUse hooks as the authoritative complete-command \
+                  boundary, PermissionRequest hooks for Codex approval prompts, prompt hooks for \
+                  sensitive file-read requests, keeps same-chat approvals for managed MCP tool \
+                  calls, and falls back to the local approval center when Codex cannot answer.",
+        fallback: "If Codex cannot render or return the inline approval request, or the native \
+                   PreToolUse hook blocks a sensitive complete command, Guard will queue it in the \
+                   local approval center.",
+        channel: "native",
+        auto_open: false,
+        workspace_aibom: true,
+        hook: Hook::None,
+        install: Install::Plan,
+        dynamic: false,
     },
 ];
 
