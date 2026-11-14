@@ -183,8 +183,14 @@ pub(super) fn evaluate(
         parse_program(code)?
     };
     let mut evaluated = Vec::with_capacity(calls.len());
+    let mut saw_unmodeled_call = false;
     for call in &calls {
-        let inner = standalone_payload(call, context)?;
+        // A malformed sibling call cannot erase a protection verdict already
+        // established for a literal sh() command elsewhere in this eval.
+        let Some(inner) = standalone_payload(call, context) else {
+            saw_unmodeled_call = true;
+            continue;
+        };
         // The entry point a direct call takes, so the bridged call gets the
         // same `cwd` resolution and compound re-judging as that call.
         let result = crate::pretool::generic::evaluate_pre_tool_envelope_with_execution_context(
@@ -206,6 +212,11 @@ pub(super) fn evaluate(
         .find_map(|(_, result)| shell_helper_protection(result, context))
     {
         return Some(stopped);
+    }
+    // Unsupported calls still require an unknown-program review. Only an
+    // established sh() block may take precedence over that fallback.
+    if saw_unmodeled_call {
+        return None;
     }
     let mut ran_shell = false;
     for (call, result) in evaluated {
