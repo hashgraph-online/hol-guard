@@ -45,6 +45,9 @@ const MAX_OPERANDS: usize = 16;
 pub(super) fn safe_du_arguments(arguments: &[String], context: super::PathContext<'_>) -> bool {
     let mut summarize = false;
     let mut all = false;
+    // -H follows operand symlinks; the pathname-only hidden-home proof is
+    // not stable against a symlink replacing an inspected operand.
+    let mut dereference_arguments = false;
     let mut depth: Option<u32> = None;
     let mut limit = |value: &str| match value.parse::<u32>() {
         Ok(level) => {
@@ -90,6 +93,7 @@ pub(super) fn safe_du_arguments(arguments: &[String], context: super::PathContex
             }
             summarize |= flags.contains('s');
             all |= flags.contains('a');
+            dereference_arguments |= flags.contains('H');
         } else if option == "-" {
             return false;
         } else {
@@ -112,11 +116,12 @@ pub(super) fn safe_du_arguments(arguments: &[String], context: super::PathContex
                 search::safe_recursive_target(operand, context)
             } else {
                 safe_reads::bounded_read_target(operand, context.home_dir, context.cwd, true)
-                    || super::read_paths::home_hidden_size_summary(
-                        operand,
-                        context.home_dir,
-                        context.cwd,
-                    )
+                    || (!dereference_arguments
+                        && super::read_paths::home_hidden_size_summary(
+                            operand,
+                            context.home_dir,
+                            context.cwd,
+                        ))
             };
             present || super::listing_reads::absent_listing_operand(operand, context)
         })
