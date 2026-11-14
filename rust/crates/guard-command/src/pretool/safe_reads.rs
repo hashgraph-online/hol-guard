@@ -54,10 +54,7 @@ pub(super) fn safe_file_predicate_arguments(
             context.cwd,
             matches!(predicate.as_str(), "-d" | "-e" | "-x"),
         ) || metadata_only_target(target, context)
-            // A loop guard over `tests/*.py` tests names a glob may spell, the
-            // question `echo tests/*` already answers.
-            || (target.contains(['*', '?', '['])
-                && super::listing_reads::listable_glob(target, context)))
+            || super::listing_reads::tested_glob_operand(target, context))
 }
 
 /// A target a read screen holds back although the predicate returns nothing

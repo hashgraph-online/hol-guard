@@ -134,6 +134,20 @@ pub(super) fn listable_glob(value: &str, context: super::PathContext<'_>) -> boo
         || leaf_glob_operand(value, context)
 }
 
+/// A file-test operand the shell may hand over as a pattern, as in a loop
+/// guard `[ -f tests/*.py ]`. The test reports one bit about whatever word
+/// arrives: the literal spelling when nothing matches, or a match. So the
+/// literal spelling must name nothing, which keeps a file called
+/// `tests/[ab].py` from standing in for the pattern, and every match must clear
+/// the read proof `cat` needs, or the pattern must match nothing.
+pub(super) fn tested_glob_operand(value: &str, context: super::PathContext<'_>) -> bool {
+    value.contains(['*', '?', '['])
+        && expanded_path(value, context)
+            .is_some_and(|path| std::fs::symlink_metadata(path).is_err_and(|error| absent(&error)))
+        && (safe_reads::glob_file_matches(value, context).is_some()
+            || search::safe_unmatched_glob_operand(value, context, false))
+}
+
 /// `ls` of a path that does not exist prints only an error. Agents probe for
 /// optional directories this way (`ls ~/work/scripts 2>/dev/null`). The
 /// nearest existing ancestor must be a directory a listing may name, and the

@@ -7,7 +7,8 @@
 //! the ordinary proofs judge each step, which hands `[` the pattern itself,
 //! and the file test refused any target holding `*`, `?` or `[`. The same
 //! loop without the guard was allowed. A file test only reads metadata, so a
-//! pattern now takes the listing proof `echo tests/*.py` already takes.
+//! pattern is now accepted when no file carries its literal spelling and every
+//! match clears the read proof, or nothing matches.
 
 use guard_command::pretool::evaluate_pre_tool_envelope_with_context;
 use serde_json::json;
@@ -19,11 +20,17 @@ fn a_file_test_over_a_workspace_pattern_reads_only_metadata() {
         .join(format!("fixture-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&root);
     std::fs::create_dir_all(root.join("work/tests")).unwrap();
+    std::fs::create_dir_all(root.join("work/links")).unwrap();
     std::fs::create_dir_all(root.join(".aws")).unwrap();
     let root = std::fs::canonicalize(&root).unwrap();
     std::fs::write(root.join("work/tests/one.py"), "def test_one(): pass\n").unwrap();
     std::fs::write(root.join("work/tests/two.py"), "def test_two(): pass\n").unwrap();
     std::fs::write(root.join(".aws/credentials"), "[default]\n").unwrap();
+    std::os::unix::fs::symlink(
+        root.join(".aws/credentials"),
+        root.join("work/links/[ab].py"),
+    )
+    .unwrap();
     let home = root.to_str().unwrap();
     let cwd = root.join("work");
     let cwd = cwd.to_str().unwrap();
@@ -39,6 +46,14 @@ fn a_file_test_over_a_workspace_pattern_reads_only_metadata() {
                 "for f in tests/*.py; do test -f \"$f\" && echo \"$f\"; done",
                 true,
             ),
+            // A pattern that matches nothing reaches the test as its own text.
+            (
+                "for f in tests/*.py tests/*.tsx; do [ -f \"$f\" ] || continue; rg -l download \"$f\"; done",
+                true,
+            ),
+            // A file named as the pattern is spelled is what the test reads.
+            ("test -s links/[ab].py", false),
+            ("test -s 'links/[ab].py'", false),
             // The pattern still has to name what a listing may name.
             ("[ -f ~/.aws/* ]", false),
             (
