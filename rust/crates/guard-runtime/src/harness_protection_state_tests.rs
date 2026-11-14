@@ -87,7 +87,11 @@ fn live_evidence_for_another_event_proves_nothing_here() {
     let payload = json!({
         "state": "tested",
         "reason": null,
-        "evidence": [{ "evidence_level": "live_block", "events": ["UserPromptSubmit"] }],
+        "evidence": [{
+            "evidence_level": "live_block",
+            "transport": "native_hook",
+            "events": ["UserPromptSubmit"],
+        }],
     });
     let answered = with_event_states(payload, Some(&vec![row]));
     assert_eq!(answered["event_states"][0]["state"], "configured");
@@ -99,4 +103,44 @@ fn a_harness_without_rows_is_unsupported() {
     let answered = with_event_states(json!({ "state": "version_unknown", "reason": null }), None);
     assert_eq!(answered["event_states"], json!([]));
     assert_eq!(answered["protection_state"], "unsupported");
+}
+
+#[test]
+fn live_evidence_on_another_transport_proves_nothing_here() {
+    let rows: Vec<CapabilityRow> = serde_json::from_value(json!([
+        { "event": "PreToolUse", "transport": "native_hook", "mode": "blocking", "declared_actions": ["block"] },
+        { "event": "PreToolUse", "transport": "agent_plugin", "mode": "blocking", "declared_actions": ["block"] },
+    ]))
+    .expect("rows");
+    let payload = json!({
+        "state": "tested",
+        "reason": null,
+        "evidence": [{
+            "evidence_level": "live_block",
+            "transport": "native_hook",
+            "events": ["PreToolUse"],
+        }],
+    });
+    let answered = with_event_states(payload, Some(&rows));
+    assert_eq!(answered["event_states"][0]["state"], "live_block_proven");
+    assert_eq!(answered["event_states"][1]["state"], "configured");
+    assert_eq!(answered["protection_state"], "partial");
+}
+
+#[test]
+fn live_evidence_without_a_transport_proves_nothing() {
+    let row: CapabilityRow = serde_json::from_value(json!({
+        "event": "PreToolUse",
+        "transport": "native_hook",
+        "mode": "blocking",
+        "declared_actions": ["block"],
+    }))
+    .expect("row");
+    let payload = json!({
+        "state": "tested",
+        "reason": null,
+        "evidence": [{ "evidence_level": "live_block", "events": ["PreToolUse"] }],
+    });
+    let answered = with_event_states(payload, Some(&vec![row]));
+    assert_eq!(answered["event_states"][0]["state"], "configured");
 }

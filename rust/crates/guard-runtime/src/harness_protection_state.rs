@@ -44,15 +44,18 @@ fn unsupported(row: &CapabilityRow) -> bool {
             .any(|action| action == "unavailable")
 }
 
-/// Whether a live-block record in the answer's evidence names `event`.
-fn live_block_proven(payload: &Value, event: &str) -> bool {
+/// Whether a live-block record in the answer's evidence names this row's
+/// event on this row's transport. A harness can declare one event on more
+/// than one transport, and a block proven on one proves nothing on another.
+fn live_block_proven(payload: &Value, row: &CapabilityRow) -> bool {
     payload["state"] == "tested"
         && payload["evidence"].as_array().is_some_and(|records| {
             records.iter().any(|record| {
                 record["evidence_level"] == "live_block"
+                    && record["transport"].as_str() == Some(row.transport.as_str())
                     && record["events"]
                         .as_array()
-                        .is_some_and(|events| events.iter().any(|item| item == event))
+                        .is_some_and(|events| events.iter().any(|item| item == &row.event))
             })
         })
 }
@@ -64,7 +67,7 @@ fn event_state(payload: &Value, row: &CapabilityRow) -> (&'static str, Option<&'
     if row.mode.as_deref() == Some("observe") {
         return ("observe_only", Some("runs_after_execution"));
     }
-    if live_block_proven(payload, &row.event) {
+    if live_block_proven(payload, row) {
         return ("live_block_proven", None);
     }
     let reason = payload["reason"].as_str().unwrap_or_default();

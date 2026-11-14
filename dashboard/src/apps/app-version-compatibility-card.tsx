@@ -85,9 +85,14 @@ function ProtectionProof({ compatibility }: { compatibility: HarnessVersionCompa
         <ul className="mt-2 divide-y divide-slate-100 rounded-lg border border-slate-100 text-sm">
           {compatibility.eventStates.map((item) => {
             const why = eventReasonCopy(item.reason);
+            const repeated = compatibility.eventStates.filter((other) => other.event === item.event).length > 1;
+            const name = repeated && item.transport ? `${item.event} (${item.transport})` : item.event;
             return (
-              <li key={item.event} className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5 px-3 py-2">
-                <span className="font-mono text-xs text-brand-dark">{item.event}</span>
+              <li
+                key={`${item.event}:${item.transport ?? ""}`}
+                className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5 px-3 py-2"
+              >
+                <span className="font-mono text-xs text-brand-dark">{name}</span>
                 <span className="flex min-w-0 flex-col items-end text-right">
                   <span
                     className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ring-1 ring-inset ${TONE_CLASSES[protectionStateTone(item.state)]}`}
@@ -134,7 +139,18 @@ export function AppVersionCompatibilityCard({ initial }: { initial: HarnessVersi
     }
   }, []);
 
-  if (!compatibility || versionCheckUnsupported(compatibility)) return null;
+  if (!compatibility) return null;
+  if (versionCheckUnsupported(compatibility)) {
+    // Version discovery covers few apps, but every app has a protection answer.
+    return (
+      <section className="rounded-xl border border-slate-100 p-4 sm:p-5" aria-labelledby="app-protection-heading">
+        <SectionLabel>
+          <span id="app-protection-heading">Protection</span>
+        </SectionLabel>
+        <ProtectionProof compatibility={compatibility} />
+      </section>
+    );
+  }
   const harness = compatibility.harness;
   const reason = versionReasonCopy(compatibility);
   const ack = compatibility.acknowledgement;

@@ -53,6 +53,25 @@ def test_proof_rows_list_the_overall_state_then_each_event() -> None:
     ]
 
 
+def test_one_event_on_two_transports_names_each_transport() -> None:
+    rows = protection_proof_rows(
+        {
+            "protection_state": "configured",
+            "event_states": [
+                {"event": "PreToolUse", "transport": "native_hook", "state": "live_block_proven"},
+                {"event": "PreToolUse", "transport": "agent_plugin", "state": "configured"},
+                {"event": "Stop", "transport": "native_hook", "state": "configured"},
+            ],
+        }
+    )
+    assert [label for label, _text in rows] == [
+        "Protection proof",
+        "  PreToolUse (native_hook)",
+        "  PreToolUse (agent_plugin)",
+        "  Stop",
+    ]
+
+
 def test_a_missing_payload_reports_unknown_protection() -> None:
     rows = protection_proof_rows(None)
     assert [(label, text.plain) for label, text in rows] == [("Protection proof", "Protection unknown")]

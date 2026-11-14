@@ -461,19 +461,28 @@ function ProtectionProof({ compatibility }) {
     ] }),
     compatibility.eventStates.length > 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx("ul", { className: "mt-2 divide-y divide-slate-100 rounded-lg border border-slate-100 text-sm", children: compatibility.eventStates.map((item) => {
       const why = eventReasonCopy(item.reason);
-      return /* @__PURE__ */ jsxRuntimeExports.jsxs("li", { className: "flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5 px-3 py-2", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "font-mono text-xs text-brand-dark", children: item.event }),
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "flex min-w-0 flex-col items-end text-right", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx(
-            "span",
-            {
-              className: `inline-flex rounded-full px-2 py-0.5 text-xs font-medium ring-1 ring-inset ${TONE_CLASSES[protectionStateTone(item.state)]}`,
-              children: protectionStateLabel(item.state)
-            }
-          ),
-          why ? /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "mt-0.5 text-xs text-slate-500", children: why }) : null
-        ] })
-      ] }, item.event);
+      const repeated = compatibility.eventStates.filter((other) => other.event === item.event).length > 1;
+      const name = repeated && item.transport ? `${item.event} (${item.transport})` : item.event;
+      return /* @__PURE__ */ jsxRuntimeExports.jsxs(
+        "li",
+        {
+          className: "flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5 px-3 py-2",
+          children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "font-mono text-xs text-brand-dark", children: name }),
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "flex min-w-0 flex-col items-end text-right", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx(
+                "span",
+                {
+                  className: `inline-flex rounded-full px-2 py-0.5 text-xs font-medium ring-1 ring-inset ${TONE_CLASSES[protectionStateTone(item.state)]}`,
+                  children: protectionStateLabel(item.state)
+                }
+              ),
+              why ? /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "mt-0.5 text-xs text-slate-500", children: why }) : null
+            ] })
+          ]
+        },
+        `${item.event}:${item.transport ?? ""}`
+      );
     }) }) : null
   ] });
 }
@@ -503,7 +512,13 @@ function AppVersionCompatibilityCard({ initial }) {
       if (currentHarness.current === requested) setBusy(false);
     }
   }, []);
-  if (!compatibility || versionCheckUnsupported(compatibility)) return null;
+  if (!compatibility) return null;
+  if (versionCheckUnsupported(compatibility)) {
+    return /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "rounded-xl border border-slate-100 p-4 sm:p-5", "aria-labelledby": "app-protection-heading", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: /* @__PURE__ */ jsxRuntimeExports.jsx("span", { id: "app-protection-heading", children: "Protection" }) }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(ProtectionProof, { compatibility })
+    ] });
+  }
   const harness = compatibility.harness;
   const reason = versionReasonCopy(compatibility);
   const ack = compatibility.acknowledgement;

@@ -9,7 +9,7 @@ import {
   protectionStateLabel,
   UNKNOWN_PROTECTION_LABEL,
 } from "./harness-protection-state";
-import { normalizeVersionCompatibility, unknownCompatibility } from "./harness-version-compatibility";
+import { normalizeVersionCompatibility } from "./harness-version-compatibility";
 
 function assert(condition: boolean, message: string): void {
   if (!condition) {
@@ -38,7 +38,6 @@ assert(UNKNOWN_PROTECTION_LABEL === fixture.unknown_state_label, "unknown label 
 assert(normalizeProtectionState("protected") === null, "unknown states are dropped");
 assert(normalizeProtectionState(undefined) === null, "a missing state is unknown");
 assert(protectionStateLabel(null) === "Protection unknown", "a missing state renders as unknown");
-assert(unknownCompatibility("codex", "legacy_daemon").protectionState === null, "an older daemon proves nothing");
 const events = normalizeEventStates([
   { event: "PreToolUse", transport: "native_hook", mode: "blocking", state: "live_block_proven", reason: null },
   { event: "PostToolUse", transport: "native_hook", mode: "observe", state: "proven", reason: null },
@@ -67,5 +66,25 @@ assert(card.includes("Configured, not proven"), "card names the overall state");
 assert(card.includes("Observe only"), "card lists each event");
 assert(card.includes("No live run has proven a block on this event yet."), "card explains an unproven event");
 assert(!card.includes("Live block proven"), "an unproven app never shows a proven label");
+
+// An app Guard cannot read a version for still shows its protection proof.
+const undiscovered = normalizeVersionCompatibility("cline", {
+  schema: "hol-guard-harness-version-compatibility.v1",
+  harness: "cline",
+  state: "version_unknown",
+  reason: "discovery_unsupported",
+  enforcement_effect: "none",
+  protection_state: "configured",
+  event_states: [
+    { event: "PreToolUse", transport: "native_hook", mode: "blocking", state: "configured", reason: "no_live_evidence" },
+    { event: "PreToolUse", transport: "agent_plugin", mode: "blocking", state: "configured", reason: "no_live_evidence" },
+  ],
+});
+const undiscoveredCard = renderToStaticMarkup(<AppVersionCompatibilityCard initial={undiscovered} />);
+assert(undiscoveredCard.includes("Configured, not proven"), "an app without version discovery shows its proof");
+assert(!undiscoveredCard.includes("Version coverage"), "an app without version discovery hides version coverage");
+// One event on two transports renders as two named rows.
+assert(undiscoveredCard.includes("PreToolUse (native_hook)"), "a repeated event names its first transport");
+assert(undiscoveredCard.includes("PreToolUse (agent_plugin)"), "a repeated event names its second transport");
 
 console.log("harness protection state tests passed");

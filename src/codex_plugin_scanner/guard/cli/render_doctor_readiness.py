@@ -42,9 +42,18 @@ def protection_proof_rows(compatibility: object) -> list[tuple[str, Text]]:
     payload = compatibility if isinstance(compatibility, Mapping) else {}
     rows = [("Protection proof", protection_state_text(payload.get("protection_state")))]
     events = payload.get("event_states")
-    for entry in events if isinstance(events, list) else []:
-        if isinstance(entry, Mapping) and isinstance(entry.get("event"), str):
-            rows.append((f"  {entry['event']}", protection_state_text(entry.get("state"))))
+    entries = [
+        entry
+        for entry in (events if isinstance(events, list) else [])
+        if isinstance(entry, Mapping) and isinstance(entry.get("event"), str)
+    ]
+    repeated = {entry["event"] for entry in entries if sum(other["event"] == entry["event"] for other in entries) > 1}
+    for entry in entries:
+        name = entry["event"]
+        transport = entry.get("transport")
+        if name in repeated and isinstance(transport, str) and transport:
+            name = f"{name} ({transport})"
+        rows.append((f"  {name}", protection_state_text(entry.get("state"))))
     return rows
 
 

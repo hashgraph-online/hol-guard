@@ -29,7 +29,7 @@
       "coverage": {
         "state": "tested",
         "reason": null,
-        "evidence": [{"evidence_level": "live_block", "events": ["PreToolUse", "PermissionRequest", "PostToolUse"]}]
+        "evidence": [{"evidence_level": "live_block", "transport": "native_hook", "events": ["PreToolUse", "PermissionRequest", "PostToolUse"]}]
       },
       "event_states": ["live_block_proven", "live_block_proven", "observe_only", "unsupported"],
       "protection_state": "live_block_proven"
@@ -39,7 +39,7 @@
       "coverage": {
         "state": "tested",
         "reason": null,
-        "evidence": [{"evidence_level": "live_block", "events": ["PreToolUse"]}]
+        "evidence": [{"evidence_level": "live_block", "transport": "native_hook", "events": ["PreToolUse"]}]
       },
       "event_states": ["live_block_proven", "configured", "observe_only", "unsupported"],
       "protection_state": "partial"
@@ -49,7 +49,7 @@
       "coverage": {
         "state": "tested",
         "reason": null,
-        "evidence": [{"evidence_level": "unit_test", "events": ["PreToolUse", "PermissionRequest"]}]
+        "evidence": [{"evidence_level": "unit_test", "transport": "native_hook", "events": ["PreToolUse", "PermissionRequest"]}]
       },
       "event_states": ["configured", "configured", "observe_only", "unsupported"],
       "protection_state": "configured"
