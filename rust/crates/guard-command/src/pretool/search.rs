@@ -9,6 +9,8 @@ pub(super) mod grep;
 mod hint;
 mod names_only;
 mod options;
+#[cfg(test)]
+mod repeat_walk_tests;
 mod rg;
 mod rg_whitelist;
 mod roots;
@@ -27,7 +29,9 @@ pub(super) use tree::{
     safe_literal_bracket_tree, safe_recursive_listing_target, safe_recursive_target,
     safe_recursive_target_through_links, safe_unmatched_glob_operand, SECRET_EXTENSIONS,
 };
-pub(super) use walk_memo::with_walk_memo;
+#[cfg(test)]
+pub(super) use walk_memo::{count_walk, take_walks};
+pub(super) use walk_memo::{memoized_keyed, memoized_proof, with_walk_memo};
 
 /// Whether no step of `model` creates a filesystem entry.
 ///

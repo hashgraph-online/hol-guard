@@ -138,8 +138,14 @@ pub(super) fn grep_include_scope_proven(
 ) -> bool {
     roots.iter().all(
         |target| match verified_directory_root(target, home_dir, cwd) {
-            Some(root) => include_filter(globs, target)
-                .is_some_and(|filter| directory_include_proven(&root, &filter, home_dir)),
+            Some(root) => include_filter(globs, target).is_some_and(|filter| {
+                // The filter is built from `globs` alone, so they and the root
+                // and home decide the walk.
+                super::search::memoized_keyed(
+                    format!("include\0{root:?}\0{}\0{home_dir:?}", globs.join("\0")),
+                    || directory_include_proven(&root, &filter, home_dir),
+                )
+            }),
             // A root that is a regular file was screened as a path already,
             // and an include can only keep `grep` from opening it.
             None => cwd.is_some_and(|cwd| {
@@ -245,6 +251,8 @@ fn misses_every_rendered_path(glob: &str, operand: &str) -> bool {
 }
 
 fn directory_include_proven(root: &Path, filter: &SearchFilter, home_dir: Option<&str>) -> bool {
+    #[cfg(test)]
+    super::search::count_walk("include-scope", root);
     !super::read_paths::inside_agent_state_tree(root, home_dir)
         && walk_scope(root, filter, Ignores::None, false, home_dir, &mut None).is_ok()
 }
