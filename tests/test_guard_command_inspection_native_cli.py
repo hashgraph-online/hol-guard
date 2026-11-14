@@ -252,6 +252,22 @@ def test_native_hold_reports_review_tier_decisions():
     }
 
 
+def test_native_hold_reads_a_floor_named_only_as_policy_action():
+    from codex_plugin_scanner.guard.runtime.command_inspection import _native_hold
+
+    hold = _native_hold(
+        {
+            "decision": "deny",
+            "policy_action": "sandbox-required",
+            "reason_code": "native_sandbox_required",
+            "reason": "Synthetic containment floor.",
+        }
+    )
+    assert hold is not None
+    assert hold["minimum_action"] == "review"
+    assert hold["native_minimum_action"] == "sandbox-required"
+
+
 @pytest.mark.parametrize(
     "native",
     [

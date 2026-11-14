@@ -8,6 +8,7 @@ from pathlib import Path
 
 from codex_plugin_scanner.guard.config import resolve_guard_home
 from codex_plugin_scanner.guard.native_context import bound_context_digest_home
+from codex_plugin_scanner.guard.native_pretool import REVIEW_TIER_ACTIONS
 from codex_plugin_scanner.guard.native_rich_command_model import NativeCommandModelError
 from codex_plugin_scanner.guard.native_sensitive_request import NativeSensitiveRequestError
 from codex_plugin_scanner.guard.native_tool_action_identity import NativeToolActionIdentityError
@@ -136,9 +137,6 @@ def unavailable_command_inspection(
     }
 
 
-_NATIVE_REVIEW_TIER_ACTIONS = frozenset({"require-reapproval", "sandbox-required"})
-
-
 def _native_hold(native: Mapping[str, object]) -> dict[str, object] | None:
     """Return the native hook decision when it would hold the command."""
 
@@ -146,8 +144,10 @@ def _native_hold(native: Mapping[str, object]) -> dict[str, object] | None:
         return None
     # Only a reapproval or containment floor is reported here. A plain native
     # review with no extension match keeps the catalog's no_match answer.
-    native_action = native.get("minimum_action")
-    if native_action not in _NATIVE_REVIEW_TIER_ACTIONS:
+    # The decoder reads the same fallback, so a floor named only as
+    # ``policy_action`` is reported too.
+    native_action = native.get("minimum_action") or native.get("policy_action")
+    if native_action not in REVIEW_TIER_ACTIONS:
         return None
     reason_code = native.get("reason_code")
     reason = native.get("reason")
