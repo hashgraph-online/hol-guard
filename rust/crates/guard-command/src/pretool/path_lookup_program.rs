@@ -109,6 +109,27 @@ fn first_path_match(executable: &str, search_path: &str) -> Option<String> {
         return None;
     }
     let name = path.file_name()?.to_str()?;
+    // A bare builtin does not consult PATH. For example, `pwd` runs the
+    // shell builtin, but `/home/user/tools/pwd` executes a file. Rewriting
+    // that path would lend an arbitrary executable the builtin's allow rule.
+    // Keep the cross-shell builtin/reserved-word list conservative.
+    if matches!(
+        name,
+        "." | ":" | "[" | "alias" | "bg" | "bind" | "break" | "builtin" | "caller"
+            | "cd" | "command" | "compgen" | "complete" | "compopt" | "continue"
+            | "declare" | "dirs" | "disown" | "do" | "done" | "echo" | "enable"
+            | "eval" | "exec" | "exit" | "export" | "false" | "fc" | "fg" | "fi"
+            | "for" | "function" | "getopts" | "hash" | "help" | "history"
+            | "if" | "in" | "jobs" | "kill" | "let" | "local" | "logout"
+            | "mapfile" | "popd" | "printf" | "pushd" | "pwd" | "read"
+            | "readarray" | "readonly" | "return" | "select" | "set"
+            | "shift" | "shopt" | "source" | "suspend" | "test" | "then"
+            | "time" | "times" | "trap" | "true" | "type" | "typeset"
+            | "ulimit" | "umask" | "unalias" | "unset" | "until" | "wait"
+            | "while"
+    ) {
+        return None;
+    }
     let directory = std::fs::canonicalize(path.parent()?).ok()?;
     for entry in std::env::split_paths(search_path) {
         // An empty or relative entry resolves against the working directory.
