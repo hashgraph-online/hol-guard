@@ -44,18 +44,75 @@ fn the_default_state_is_not_ready() {
 
 /// The modules that write a runtime health reason or a resident start,
 /// stop or client failure code. A code in their production source that the
-/// contract does not map would reach the payload as unrecognized.
+/// contract does not map would reach the payload as unrecognized. The
+/// resident's listener setup (`resident_transport_service.rs`) is left out:
+/// its failures stop the resident before it serves, and the client reports
+/// that as a start failure or timeout.
 fn emits_runtime_reasons(name: &str) -> bool {
     !name.ends_with("_tests.rs")
         && (matches!(
             name,
             "native_runtime_resilience.rs"
                 | "native_runtime_admission.rs"
+                | "resident_client.rs"
+                | "resident_endpoint.rs"
+                | "resident_health_op.rs"
+                | "resident_lifecycle_journal.rs"
+                | "resident_private_file.rs"
+                | "resident_process_identity.rs"
+                | "resident_requested_stop.rs"
+                | "resident_runtime_verification.rs"
                 | "resident_startup_lock.rs"
+                | "resident_transport.rs"
                 | "resident_update_lock.rs"
                 | "resident_restart_budget.rs"
         ) || name.starts_with("managed_resident")
             || name.starts_with("resident_state"))
+}
+
+/// Production lines of a source file. An item gated on a test cfg is
+/// dropped whole (its attributes, then the item up to its `;` or the brace
+/// that closes it); everything after it is still read.
+fn production_lines(text: &str) -> Vec<&str> {
+    let mut kept = Vec::new();
+    let mut lines = text.lines();
+    while let Some(line) = lines.next() {
+        if !is_test_gate(line) {
+            kept.push(line);
+            continue;
+        }
+        let mut depth = 0i64;
+        let mut opened = false;
+        for item in lines.by_ref() {
+            let trimmed = item.trim();
+            if !opened && (trimmed.is_empty() || trimmed.starts_with("#[")) {
+                continue;
+            }
+            for character in item.chars() {
+                match character {
+                    '{' => {
+                        depth += 1;
+                        opened = true;
+                    }
+                    '}' => depth -= 1,
+                    _ => {}
+                }
+            }
+            if depth <= 0 && (opened || trimmed.ends_with(';')) {
+                break;
+            }
+        }
+    }
+    kept
+}
+
+fn is_test_gate(line: &str) -> bool {
+    let trimmed = line.trim();
+    trimmed.starts_with("#[cfg(")
+        && !trimmed.contains("not(test")
+        && regex::Regex::new(r"\btest\b")
+            .expect("pattern")
+            .is_match(trimmed)
 }
 
 /// Literals in those modules that name an operation, not a reason.
@@ -75,8 +132,7 @@ fn emitted_reason_codes() -> BTreeSet<String> {
             continue;
         }
         let text = std::fs::read_to_string(&path).expect("source file");
-        let production = text.split("#[cfg(test)]").next().unwrap_or("");
-        for line in production.lines() {
+        for line in production_lines(&text) {
             if line.trim_start().starts_with("//") {
                 continue;
             }
@@ -100,6 +156,11 @@ fn every_reason_the_runtime_writes_is_mapped() {
         "native_overloaded",
         "native_resident_spawn_failed",
         "native_resident_start_in_progress",
+        // Written after a test-gated item near the top of their files.
+        "native_resident_lease_lock_failed",
+        "native_resident_state_invalid",
+        // Written by the client, not the resident.
+        "native_client_auth_rejected",
     ] {
         assert!(emitted.contains(known), "scan missed {known}");
     }
