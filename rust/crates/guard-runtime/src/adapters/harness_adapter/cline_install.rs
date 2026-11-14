@@ -1,17 +1,16 @@
 //! Cline install and uninstall: the surface and transport choice, one
 //! transport's install and its confirmation, the manifest and the removal.
 //!
-//! Python runs the shim, the MCP proxy entries and the probes between ops: an
-//! install answers the probe it needs (`node --check` or the hook canary), and
-//! `confirm_transport` takes the result back.
+//! Python runs the shim and the MCP proxy entries. An install answers its
+//! probe (the `node --check` verdict or the hook canary's run), and
+//! `confirm_transport` takes it back with the manifest.
 
 use std::fs;
 
 use serde_json::{json, Map, Value};
 
 use super::cline::{
-    adapter_state, adapter_state_path, canary_run, hosts, runtime, settle, write_file, Hosts, Need,
-    Read,
+    adapter_state, adapter_state_path, canary_run, hosts, runtime, write_file, Hosts,
 };
 use super::cline_hooks::{self, judged};
 use super::{cline_mcp, cline_plugin, Ctx, Failure, Step};
@@ -83,24 +82,24 @@ fn install_plan(ctx: &Ctx, fields: &Map<String, Value>) -> Step<Value> {
     }))
 }
 
-fn install_transport(ctx: &Ctx, fields: &Map<String, Value>) -> Read<Value> {
+fn install_transport(ctx: &Ctx, fields: &Map<String, Value>) -> Step<Value> {
     let facts = match fields.get("facts") {
         Some(Value::Object(facts)) => facts,
-        _ => return Err(Need::Fail(Failure::Invalid)),
+        _ => return Err(Failure::Invalid),
     };
     match text(fields, "transport")? {
         "plugin" => Ok(cline_plugin::install(ctx, facts)?),
-        "hooks" if flag(fields, "frozen")? => Err(Need::Fail(runtime(
+        "hooks" if flag(fields, "frozen")? => Err(runtime(
             "Cline native-hook repair requires the managed plugin in HOL Guard Desktop.",
-        ))),
+        )),
         "hooks" => cline_hooks::install(ctx, facts),
-        other => Err(Need::Fail(Failure::Refusal(format!(
+        other => Err(Failure::Refusal(format!(
             "Unsupported Cline enforcement transport: {other}"
-        )))),
+        ))),
     }
 }
 
-fn hook_state(ctx: &Ctx, fields: &Map<String, Value>) -> Read<Value> {
+fn hook_state(ctx: &Ctx, fields: &Map<String, Value>) -> Step<Value> {
     cline_hooks::state(ctx, true, canary_run(fields))
 }
 
@@ -124,14 +123,14 @@ fn uninstall_transport(ctx: &Ctx, transport: &str) -> Step<Value> {
 }
 
 /// `_install_transport`'s probe check and `_reconcile_transport`.
-fn confirm_transport(ctx: &Ctx, fields: &Map<String, Value>) -> Read<Value> {
+fn confirm_transport(ctx: &Ctx, fields: &Map<String, Value>) -> Step<Value> {
     let transport = text(fields, "transport")?;
     if !matches!(transport, "plugin" | "hooks") {
-        return Err(Need::Fail(Failure::Invalid));
+        return Err(Failure::Invalid);
     }
     let mut manifest = match serde_json::from_str::<Value>(text(fields, "manifest")?) {
         Ok(Value::Object(manifest)) => manifest,
-        _ => return Err(Need::Fail(Failure::Invalid)),
+        _ => return Err(Failure::Invalid),
     };
     let verdict = match fields.get("verdict") {
         Some(Value::Object(verdict)) => Value::Object(verdict.clone()),
@@ -139,11 +138,11 @@ fn confirm_transport(ctx: &Ctx, fields: &Map<String, Value>) -> Read<Value> {
     };
     if verdict.get("ok") != Some(&json!(true)) {
         uninstall_transport(ctx, transport)?;
-        return Err(Need::Fail(runtime(if transport == "plugin" {
+        return Err(runtime(if transport == "plugin" {
             "Guard-generated Cline plugin did not pass its syntax probe"
         } else {
             "Guard-generated Cline native hooks did not pass their bounded canary"
-        })));
+        }));
     }
     let key = if transport == "plugin" {
         "syntax_probe"
@@ -209,7 +208,7 @@ fn write_adapter_state(ctx: &Ctx, transport: &str, surface: &str) -> Step<()> {
     write_file(&adapter_state_path(ctx), text.as_bytes(), FILE_MODE)
 }
 
-fn finish_install(ctx: &Ctx, fields: &Map<String, Value>) -> Read<Value> {
+fn finish_install(ctx: &Ctx, fields: &Map<String, Value>) -> Step<Value> {
     let surface = surface(fields, "auto")?;
     let transport = text(fields, "transport")?;
     let transport_manifest = embedded(fields, "transport_manifest")?;
@@ -302,9 +301,9 @@ fn uninstall(ctx: &Ctx, fields: &Map<String, Value>) -> Step<Value> {
 pub(super) fn dispatch(op: &str, ctx: &Ctx, fields: &Map<String, Value>) -> Step<Value> {
     match op {
         "install_plan" => install_plan(ctx, fields),
-        "install_transport" => settle(install_transport(ctx, fields)),
-        "confirm_transport" => settle(confirm_transport(ctx, fields)),
-        "finish_install" => settle(finish_install(ctx, fields)),
+        "install_transport" => install_transport(ctx, fields),
+        "confirm_transport" => confirm_transport(ctx, fields),
+        "finish_install" => finish_install(ctx, fields),
         "uninstall" => uninstall(ctx, fields),
         _ => Err(Failure::Invalid),
     }

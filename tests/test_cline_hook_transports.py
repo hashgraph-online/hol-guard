@@ -7,10 +7,11 @@ import subprocess
 import sys
 from hashlib import sha256
 from pathlib import Path
+from typing import Any
 
 import pytest
 
-from codex_plugin_scanner.guard.adapters import cline_runtime, guard_cli_attestation
+from codex_plugin_scanner.guard.adapters import guard_cli_attestation
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.adapters.native_harness import ask
 from tests.cline_test_support import hook_state, install_plugin, uninstall
@@ -84,9 +85,13 @@ def _run_plugin(source: str, tmp_path: Path, expression: str) -> subprocess.Comp
     )
 
 
-def _install_hooks(context: HarnessContext, tmp_path: Path) -> dict[str, object]:
+def _install_hooks(context: HarnessContext, tmp_path: Path, *, runtime_script: str = "") -> dict[str, Any]:
     runtime = tmp_path / "native-runtime"
-    runtime.write_bytes(b"")
+    if runtime_script:
+        runtime.write_text(f"#!/bin/sh\n{runtime_script}\n", encoding="utf-8")
+        runtime.chmod(0o755)
+    else:
+        runtime.write_bytes(b"")
     facts = {"python": True, "runtime": str(runtime), "hook_argv": ["guard", "hook"], "identity": None}
     return ask("install_transport", context, harness="cline", transport="hooks", frozen=False, facts=facts)
 
@@ -109,14 +114,18 @@ def test_frozen_cline_plugin_persists_signed_executable_command(tmp_path: Path, 
     assert identity["command"] == [str(executable)]
 
 
+@pytest.mark.skipif(os.name == "nt", reason="the stand-in runtime is a POSIX shell script")
 def test_cline_canary_runs_only_the_canonical_managed_slot(tmp_path: Path) -> None:
     context = _context(tmp_path / "home parent with spaces")
-    installed = _install_hooks(context, tmp_path)
+    log = tmp_path / "runtime.log"
+    script = f"printf '%s\\n' \"$@\" > '{log}'; cat >> '{log}'; printf '{{\"cancel\": false}}\\n'"
+    installed = _install_hooks(context, tmp_path, runtime_script=script)
 
-    hook = context.home_dir / "Documents" / "Cline" / "Hooks" / ("PreToolUse.ps1" if os.name == "nt" else "PreToolUse")
-    canary = installed["probe"]["canary"]
-    assert canary["argv"][-1] == str(hook)
-    assert json.loads(canary["input"])["hookName"] == "PreToolUse"
+    assert installed["probe"]["canary"] == {"returncode": 0, "stdout": '{"cancel": false}\n', "error": None}
+    worker = context.guard_home / "managed" / "cline" / "hook-workers" / "PreToolUse.json"
+    argv, _, payload = log.read_text(encoding="utf-8").partition("\n{")
+    assert argv.splitlines()[-1] == str(worker)
+    assert json.loads("{" + payload)["hookName"] == "PreToolUse"
 
 
 def test_cline_saved_custom_root_survives_environment_change(tmp_path: Path, monkeypatch) -> None:
@@ -126,27 +135,22 @@ def test_cline_saved_custom_root_survives_environment_change(tmp_path: Path, mon
     installed = _install_hooks(context, tmp_path)
     assert installed["manifest"]["managed_hooks_root"] == str(custom_root)
     monkeypatch.delenv("CLINE_DATA_DIR")
-    monkeypatch.setattr(
-        cline_runtime, "_run_canary", lambda _request: {"returncode": 0, "stdout": '{"cancel":false}\n', "error": None}
-    )
 
     health = hook_state(context)
     assert health["installed"] is True
     assert health["integrity_ok"] is True
-    assert health["synthetic_canary_ok"] is True
     removed = uninstall(context, "hooks")["native_hooks"]
     assert removed["complete"] is True
     assert len(removed["removed"]) == 2 * len(installed["manifest"]["managed_hook_paths"])
     assert not custom_root.exists() or not any(custom_root.iterdir())
 
 
-def test_cline_state_cannot_execute_or_remove_managed_files_outside_canonical_slots(
-    tmp_path: Path, monkeypatch
-) -> None:
+def test_cline_state_cannot_execute_or_remove_managed_files_outside_canonical_slots(tmp_path: Path) -> None:
     context = _context(tmp_path)
     attacker_hook = tmp_path / "outside" / "PreToolUse"
     attacker_hook.parent.mkdir()
-    attacker_hook.write_text("# HOL_GUARD_MANAGED_CLINE_HOOK_V1\n", encoding="utf-8")
+    executed = tmp_path / "executed"
+    attacker_hook.write_text(f"#!/bin/sh\n# HOL_GUARD_MANAGED_CLINE_HOOK_V1\ntouch '{executed}'\n", encoding="utf-8")
     attacker_hook.chmod(0o700)
     state = context.guard_home / "managed" / "cline" / "native-hooks-state.json"
     state.parent.mkdir(parents=True, exist_ok=True)
@@ -160,12 +164,8 @@ def test_cline_state_cannot_execute_or_remove_managed_files_outside_canonical_sl
         encoding="utf-8",
     )
 
-    def fail_run(_request: object) -> dict[str, object]:
-        raise AssertionError("an unbound Cline state path must not be executed")
-
-    monkeypatch.setattr(cline_runtime, "_run_canary", fail_run)
-
     assert hook_state(context)["installed"] is False
+    assert not executed.exists(), "an unbound Cline state path must not be executed"
     removed = uninstall(context, "hooks")["native_hooks"]
     assert removed["complete"] is False
     assert str(attacker_hook) in removed["retained_modified_or_unowned"]

@@ -13,7 +13,8 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use serde_json::{json, Map, Value};
 use sha2::{Digest, Sha256};
 
-use super::cline::{managed_root, paths, runtime, state_text, write_file, Need, Read};
+use super::cline::{managed_root, paths, runtime, state_text, write_file};
+use super::cline_run;
 use super::{path_text, Ctx, Failure, Step};
 use crate::hook_env_stamp::write_string;
 
@@ -170,22 +171,30 @@ pub(super) fn judged(run: &Value) -> Step<Value> {
     Ok(json!({ "ok": exited && output.is_object() && cancel }))
 }
 
-/// The canary verdict over the bound PreToolUse launcher, asking Python to
-/// run it when no run came with the request.
-fn canary(ctx: &Ctx, launchers: &Map<String, Value>, run: Option<&Value>) -> Read<Value> {
+/// The bound PreToolUse launcher's argv, or the verdict that stops the
+/// canary before anything runs.
+fn canary_argv(launchers: &Map<String, Value>) -> Result<Vec<String>, Value> {
     let Some(path) = bound_path(launchers, "PreToolUse").filter(|path| managed(path, MARKER))
     else {
-        return Ok(refused("pretool_hook_missing"));
+        return Err(refused("pretool_hook_missing"));
     };
     let argv = hook_command(&path);
     if argv.is_empty() {
-        return Ok(refused("hook_interpreter_not_available"));
+        return Err(refused("hook_interpreter_not_available"));
     }
+    Ok(argv)
+}
+
+/// The canary verdict over the bound PreToolUse launcher, judged from `run`
+/// when an earlier answer of this install carried it.
+fn canary(ctx: &Ctx, launchers: &Map<String, Value>, run: Option<&Value>) -> Step<Value> {
+    let argv = match canary_argv(launchers) {
+        Ok(argv) => argv,
+        Err(verdict) => return Ok(verdict),
+    };
     match run {
-        Some(run) => Ok(judged(run)?),
-        None => Err(Need::Canary(
-            json!({"argv": argv, "input": canary_input(ctx)}),
-        )),
+        Some(run) => judged(run),
+        None => judged(&cline_run::canary(ctx, &argv, &canary_input(ctx))),
     }
 }
 
@@ -197,7 +206,7 @@ fn now() -> f64 {
 
 /// The installed, integrity and live-proof state; with `run` given or asked
 /// for, the canary decides `ready` over intact files.
-pub(super) fn state(ctx: &Ctx, check: bool, run: Option<&Value>) -> Read<Value> {
+pub(super) fn state(ctx: &Ctx, check: bool, run: Option<&Value>) -> Step<Value> {
     let text = state_text(&state_path(ctx));
     let recorded = load_state(text.as_deref());
     let (launchers, workers) = bound(ctx, &recorded)?;
@@ -270,15 +279,17 @@ fn checked(ctx: &Ctx, path: &Path) -> Step<()> {
 
 /// Write every event's worker and launcher, then the state record; the
 /// manifest carries everything but the canary verdict, and the probe is the
-/// canary Python runs or the verdict when it cannot run.
-pub(super) fn install(ctx: &Ctx, facts: &Map<String, Value>) -> Read<Value> {
+/// canary's run or the verdict when it cannot run.
+pub(super) fn install(ctx: &Ctx, facts: &Map<String, Value>) -> Step<Value> {
     if facts.get("python") != Some(&Value::Bool(true)) {
-        return Err(
-            runtime("Cline native hooks require a standalone Python Guard runtime.").into(),
-        );
+        return Err(runtime(
+            "Cline native hooks require a standalone Python Guard runtime.",
+        ));
     }
     let Some(bridge) = facts.get("runtime").and_then(Value::as_str) else {
-        return Err(runtime("Cline native hooks require the HOL Guard native runtime.").into());
+        return Err(runtime(
+            "Cline native hooks require the HOL Guard native runtime.",
+        ));
     };
     let guard_cli = string_list(facts.get("hook_argv"))?;
     let roots = paths(ctx, "roots", Map::new())?;
@@ -361,10 +372,11 @@ pub(super) fn install(ctx: &Ctx, facts: &Map<String, Value>) -> Read<Value> {
     });
     let text = serde_json::to_string_pretty(&record).map_err(|_| Failure::Invalid)? + "\n";
     write_file(&state_path(ctx), text.as_bytes(), FILE_MODE)?;
-    let probe = match canary(ctx, &bound(ctx, &record_map(record.clone()))?.0, None) {
-        Ok(verdict) => json!({ "result": verdict }),
-        Err(Need::Canary(request)) => json!({ "canary": request }),
-        Err(need) => return Err(need),
+    // The run goes back with the manifest so confirming the install judges
+    // and reuses it rather than starting the launcher again.
+    let probe = match canary_argv(&bound(ctx, &record_map(record.clone()))?.0) {
+        Ok(argv) => json!({ "canary": cline_run::canary(ctx, &argv, &canary_input(ctx)) }),
+        Err(verdict) => json!({ "result": verdict }),
     };
     Ok(json!({
         "manifest": {

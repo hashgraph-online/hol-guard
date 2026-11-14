@@ -4,16 +4,13 @@ The kind owns Cline's paths, host and MCP discovery, both enforcement
 transports (native hooks and the managed AgentPlugin), their state and
 removal, the transport choice and the MCP settings rewrite. This module keeps
 what must run in the Guard process: the attested Guard CLI the transports
-run, the ``--version``, ``node --check`` and hook-canary subprocesses, the
-launcher shim and Guard's own MCP proxy entries.
+run, the ``--version`` probe, the launcher shim and Guard's own MCP proxy
+entries. The kind runs the hook canary and ``node --check`` itself.
 """
 
 from __future__ import annotations
 
 import json
-import os
-import shutil
-import subprocess
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -28,56 +25,6 @@ _HARNESS = "cline"
 _DISPLAY_NAME = "Cline CLI"
 _HOOK_WORKER_FEATURE = "cline-hook-worker-v1"
 _BRIDGE_TIMEOUT_SECONDS = 8
-_CANARY_TIMEOUT_SECONDS = 10
-_NODE_CHECK_TIMEOUT_SECONDS = 5
-
-
-def _run_canary(canary: dict[str, Any]) -> dict[str, object]:
-    """Run the bound PreToolUse launcher once with the synthetic read."""
-    env = {**os.environ, "HOL_GUARD_CLINE_CANARY": "1"}
-    try:
-        result = subprocess.run(
-            [str(part) for part in canary["argv"]],
-            input=str(canary["input"]),
-            capture_output=True,
-            text=True,
-            timeout=_CANARY_TIMEOUT_SECONDS,
-            env=env,
-            check=False,
-            shell=False,
-        )
-    except (OSError, subprocess.SubprocessError) as exc:
-        return {"returncode": None, "stdout": "", "error": type(exc).__name__}
-    return {"returncode": result.returncode, "stdout": result.stdout, "error": None}
-
-
-def _node_check(path: str) -> dict[str, object]:
-    """Syntax-check the generated plugin without executing it."""
-    from ..codex_hook_launch_runtime import isolated_hook_environment
-
-    node = shutil.which("node")
-    if node is None:
-        return {"ok": True, "skipped": True, "reason": "node_not_available"}
-    try:
-        result = subprocess.run(
-            [node, "--check", "--", path],
-            capture_output=True,
-            text=True,
-            timeout=_NODE_CHECK_TIMEOUT_SECONDS,
-            check=False,
-            env=isolated_hook_environment(),
-        )
-    except (OSError, subprocess.SubprocessError) as exc:
-        return {"ok": False, "reason": type(exc).__name__}
-    return {"ok": result.returncode == 0, "return_code": result.returncode}
-
-
-def _ask(op: str, context: HarnessContext, **fields: Any) -> dict[str, Any]:
-    """One op, asked again with the hook canary's run when the answer needs it."""
-    answer = ask(op, context, harness=_HARNESS, **fields)
-    if set(answer) == {"canary"} and isinstance(answer["canary"], dict):
-        answer = ask(op, context, harness=_HARNESS, canary=_run_canary(answer["canary"]), **fields)
-    return answer
 
 
 def _facts(context: HarnessContext, transport: str) -> dict[str, object]:
@@ -126,17 +73,9 @@ def _reconcile(context: HarnessContext, transport: str, *, frozen: bool) -> dict
         facts=_facts(context, transport),
     )
     probe = installed["probe"]
-    fields: dict[str, Any] = {}
-    if "node_check" in probe:
-        fields["verdict"] = _node_check(str(probe["node_check"]))
-    elif "canary" in probe:
-        fields["canary"] = _run_canary(probe["canary"])
-    else:
-        fields["verdict"] = probe["result"]
+    fields = {"canary": probe["canary"]} if "canary" in probe else {"verdict": probe["result"]}
     manifest = json.dumps(installed["manifest"])
-    if "canary" in fields:
-        return ask("confirm_transport", context, harness=_HARNESS, transport=transport, manifest=manifest, **fields)
-    return _ask("confirm_transport", context, transport=transport, manifest=manifest, **fields)
+    return ask("confirm_transport", context, harness=_HARNESS, transport=transport, manifest=manifest, **fields)
 
 
 def proxy_entry(context: HarnessContext, server: ManagedMcpServer) -> dict[str, object]:
@@ -230,7 +169,7 @@ class ClineHarnessAdapter(NativeHarnessAdapter):
             shim = install_guard_shim(_HARNESS, context, launcher_name="cline", display_name=_DISPLAY_NAME)
             shim["shell_profile"] = ensure_guard_shim_path_in_shell_profile(context)
         mcp_install = install_mcp_proxies(context) if plan["mcp"] else None
-        return _ask(
+        return ask(
             "finish_install",
             context,
             surface=plan["surface"],
@@ -251,7 +190,7 @@ class ClineHarnessAdapter(NativeHarnessAdapter):
         return manifest
 
     def runtime_probe(self, context: HarnessContext) -> dict[str, object] | None:
-        return _ask("runtime_probe", context, cli=self._cli(context))["probe"]
+        return ask("runtime_probe", context, harness=_HARNESS, cli=self._cli(context))["probe"]
 
     def diagnostic_warnings(
         self,

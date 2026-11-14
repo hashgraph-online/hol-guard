@@ -1505,12 +1505,11 @@
           "ClineHarnessAdapter.uninstall",
           "_reconcile",
           "_facts",
-          "_node_check",
           "install_mcp_proxies",
           "proxy_entry"
         ],
         "entry_points": [],
-        "reason": "Cline adapter install and uninstall; the native harness_adapter kind chooses the transport, writes the native hooks or the AgentPlugin, rewrites the MCP settings and removes them, and Python keeps the attested Guard CLI, the node --check and hook-canary subprocesses, the launcher shim and Guard's proxy argv.",
+        "reason": "Cline adapter install and uninstall; the native harness_adapter kind chooses the transport, writes the native hooks or the AgentPlugin, runs the hook canary and the plugin's node --check, rewrites the MCP settings and removes them, and Python keeps the attested Guard CLI and Guard's proxy argv.",
         "evidence": "install, prepare_install and uninstall have no caller in any in-scope module; they are invoked by the excluded install, uninstall and repair dispatchers. The report validates that no retained symbol or in-scope module references the excluded names."
       },
       {

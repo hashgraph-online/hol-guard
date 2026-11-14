@@ -36,6 +36,7 @@ mod cline_hooks;
 mod cline_install;
 mod cline_mcp;
 mod cline_plugin;
+mod cline_run;
 mod cloud_identity;
 mod codex;
 mod codex_files;

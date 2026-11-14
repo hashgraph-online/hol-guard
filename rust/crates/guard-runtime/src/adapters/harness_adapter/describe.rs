@@ -48,7 +48,7 @@ pub(crate) const PASEO_DELEGATES: [&str; 6] =
     ["claude-code", "codex", "copilot", "opencode", "pi", "omp"];
 
 /// Every variable a request's `env` may carry.
-pub(crate) const ENV_NAMES: [&str; 30] = [
+pub(crate) const ENV_NAMES: [&str; 47] = [
     "PATH",
     "PATHEXT",
     "NoDefaultCurrentDirectoryInExePath",
@@ -79,10 +79,29 @@ pub(crate) const ENV_NAMES: [&str; 30] = [
     "HOL_GUARD_TEST_MODE",
     "HERMES_HOME",
     "HERMES_HOST_HOME",
+    // The hook environment a Cline install's canary and `node --check` run
+    // with (`isolated_hook_environment`); nothing else reads them.
+    "HOME",
+    "USERPROFILE",
+    "LANG",
+    "TEMP",
+    "TMP",
+    "TMPDIR",
+    "SYSTEMROOT",
+    "WINDIR",
+    "COMSPEC",
+    "HOL_GUARD_HOOK_FAILURE_KIND",
+    "HOL_GUARD_NATIVE",
+    "HOL_GUARD_NATIVE_BINARY",
+    "HOL_GUARD_NATIVE_DIAGNOSTIC",
+    "HOL_GUARD_RESIDENT_TEST_SEAMS",
+    "HOL_GUARD_RUNTIME_DIR",
+    "HOL_GUARD_DESKTOP",
+    "HOL_GUARD_DESKTOP_HOOK_PROXY",
 ];
 
 /// Prefixes of the variables that redirect Paseo's native runtimes.
-pub(crate) const ENV_PREFIXES: [&str; 14] = [
+pub(crate) const ENV_PREFIXES: [&str; 15] = [
     "CLAUDE_CONFIG_DIR",
     "CLAUDE_CODE_DISABLE_HOOKS",
     "CLAUDE_CODE_SIMPLE",
@@ -97,6 +116,8 @@ pub(crate) const ENV_PREFIXES: [&str; 14] = [
     "PI_PROFILE",
     "OMP_AGENT_DIR",
     "OMP_PROFILE",
+    // The locale a Cline install's canary runs with.
+    "LC_",
 ];
 
 pub(crate) const SPECS: [Spec; 18] = [
@@ -490,7 +511,7 @@ impl Spec {
 pub(crate) fn describe() -> Value {
     json!({
         "adapters": SPECS.iter().map(Spec::describe).collect::<Vec<_>>(),
-        "env_names": ENV_NAMES,
+        "env_names": ENV_NAMES.as_slice(),
         "env_prefixes": ENV_PREFIXES,
     })
 }

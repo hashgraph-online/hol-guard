@@ -109,7 +109,7 @@ fn hook_install_never_overwrites_a_user_hook() {
 }
 
 #[test]
-fn hook_install_replaces_legacy_workers_and_asks_for_the_canary() {
+fn hook_install_replaces_legacy_workers_and_runs_the_canary() {
     let home = Home::new();
     let workers = managed(&home).join("hook-workers");
     write(&workers.join("PreToolUse.py"), MARKER);
@@ -124,11 +124,14 @@ fn hook_install_replaces_legacy_workers_and_asks_for_the_canary() {
         .unwrap();
     assert_eq!(worker, workers.join("PreToolUse.json").to_str().unwrap());
     assert!(Path::new(worker).is_file());
-    let canary = &answer["probe"]["canary"];
-    let launcher = hook_root(&home).join("PreToolUse");
-    assert_eq!(canary["argv"], json!([launcher]));
-    let input: Value = serde_json::from_str(canary["input"].as_str().unwrap()).unwrap();
-    assert_eq!(input["hookName"], "PreToolUse");
+    // The launcher ran and its run comes back for the confirmation to judge;
+    // the fixture's runtime is an empty file, so it cannot answer.
+    let canary = answer["probe"]["canary"].as_object().unwrap();
+    assert_eq!(
+        canary.keys().collect::<Vec<_>>(),
+        ["error", "returncode", "stdout"]
+    );
+    assert_ne!(canary["returncode"], json!(0));
 }
 
 #[test]
