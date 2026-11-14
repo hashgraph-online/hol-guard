@@ -214,7 +214,7 @@ def test_a_runtime_that_counts_cold_starts_reports_their_bands(monkeypatch: pyte
 
     assert lifecycle == _snapshot(**_COLD_STARTS)
     output = _rendered(lifecycle)
-    assert "Cold starts: 5 answered within 1 second, 1 within 5 seconds, 1 slower." in output
+    assert "Cold starts: 5 ready within 1 second, 1 within 5 seconds, 1 slower." in output
 
 
 def test_a_day_without_cold_start_bands_prints_no_band_line() -> None:
@@ -231,7 +231,25 @@ def test_a_runtime_that_is_not_being_restarted_is_reported_as_such() -> None:
     assert "Last event: start_refused, 2h ago." in output
 
 
-@pytest.mark.parametrize("lifecycle", [_snapshot(state="healthy"), "degraded", None, {}])
+def test_a_healthy_day_still_reports_its_cold_starts() -> None:
+    output = _rendered(_snapshot(state="healthy", **_COLD_STARTS))
+
+    expected = "Native runtime, last 24 hours. Cold starts: 5 ready within 1 second, 1 within 5 seconds, 1 slower."
+    assert expected in output
+    assert "unhealthy" not in output
+    assert "Last event" not in output
+
+
+@pytest.mark.parametrize(
+    "lifecycle",
+    [
+        _snapshot(state="healthy"),
+        _snapshot(state="healthy", cold_starts_within_1s=0, cold_starts_within_5s=0, cold_starts_slower=0),
+        "degraded",
+        None,
+        {},
+    ],
+)
 def test_a_healthy_or_absent_journal_says_nothing(lifecycle: object) -> None:
     output = _rendered(lifecycle)
 

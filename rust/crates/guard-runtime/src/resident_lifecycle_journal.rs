@@ -37,7 +37,7 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 #[path = "resident_lifecycle_cold_start.rs"]
 mod cold_start;
-pub(super) use cold_start::record_cold_start_without_waiting;
+pub(super) use cold_start::record_ready_in_background;
 
 #[cfg(windows)]
 use super::private_file::recover_interrupted_replace;

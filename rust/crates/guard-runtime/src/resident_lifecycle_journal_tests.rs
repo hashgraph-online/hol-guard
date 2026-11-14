@@ -115,7 +115,7 @@ fn the_journal_holds_nothing_but_counts_and_this_module_s_own_vocabulary() {
     ] {
         record(&scope, event);
     }
-    record_cold_start_without_waiting(&scope, Duration::from_millis(1_500));
+    cold_start::record_ready(&scope, Duration::from_millis(1_500));
 
     let encoded = fs::read(scope.join(JOURNAL_FILE)).unwrap();
     let text = String::from_utf8(encoded.clone()).unwrap();
@@ -353,7 +353,7 @@ fn a_cold_start_is_counted_in_its_band() {
 
     record(&scope, Event::Started);
     for elapsed in [0, 1_000, 1_001, 5_000, 5_001, 30_000] {
-        record_cold_start_without_waiting(&scope, Duration::from_millis(elapsed));
+        cold_start::record_ready(&scope, Duration::from_millis(elapsed));
     }
 
     let health = health(&scope).unwrap().unwrap();
@@ -409,6 +409,36 @@ fn a_journal_written_before_the_bands_still_reads() {
         ),
         (0, 0, 0)
     );
+
+    fs::remove_dir_all(scope).unwrap();
+}
+
+#[test]
+fn a_full_day_at_every_ceiling_still_reads_back() {
+    let scope = scope_named("full-day");
+    let now = now_ms().unwrap();
+    for hours_ago in (0..JOURNAL_BUCKETS).rev() {
+        let at = now - hours_ago * JOURNAL_BUCKET_MS;
+        update_at(&scope, Some(at), true, |journal, now| {
+            let bucket = journal.hour(now);
+            bucket.starts = u32::MAX;
+            bucket.orderly_exits = u32::MAX;
+            bucket.failed_exits = u32::MAX;
+            bucket.premature_exits = u32::MAX;
+            bucket.refused_starts = u32::MAX;
+            bucket.cold_starts_within_1s = u32::MAX;
+            bucket.cold_starts_within_5s = u32::MAX;
+            bucket.cold_starts_slower = u32::MAX;
+        })
+        .unwrap();
+    }
+
+    let size = fs::metadata(scope.join(JOURNAL_FILE)).unwrap().len();
+    assert!(size > 4096, "the old 4 KiB ceiling would have lost this day: {size}");
+    assert!(size <= super::super::private_file::PRIVATE_FILE_MAX_BYTES, "{size}");
+    let health = health(&scope).unwrap().unwrap();
+    assert_eq!(health.cold_starts_slower, u32::MAX);
+    assert_eq!(health.starts, u32::MAX);
 
     fs::remove_dir_all(scope).unwrap();
 }

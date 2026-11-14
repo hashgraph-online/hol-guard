@@ -1,13 +1,13 @@
 //! The cold-start bands the lifecycle journal counts beside its events: how
-//! long each new resident took to answer its first request.
+//! long each new resident took to become ready to serve.
 
 use std::path::Path;
 use std::time::Duration;
 
 use super::{update_at, HourCounts, Journal, Totals};
 
-/// How long a cold start took, from the spawn to the first answer the new
-/// resident gave. The bands are the readiness budget's: a start inside a
+/// How long a cold start took, from the resident process starting to its
+/// being ready to serve. The bands are the readiness budget's: a start inside a
 /// second is the normal case, five seconds is the most a hook may wait, and
 /// anything slower missed it.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -74,14 +74,20 @@ impl Journal {
     }
 }
 
-/// Count how long a cold start took to answer, without waiting for the lock.
-/// The client is still holding the answer it is about to return, so a busy
-/// journal loses the band rather than delay it.
-pub(in crate::managed_resident) fn record_cold_start_without_waiting(
-    scope: &Path,
-    elapsed: Duration,
-) {
-    let _ = update_at(scope, None, false, |journal, now| {
+/// Count how long this resident took from process start to ready to serve.
+///
+/// The write runs on its own thread, so the journal lock and its file sync
+/// never delay the first request. A start that fails before it is ready is
+/// already counted as a failed or premature exit and gets no band.
+pub(in crate::managed_resident) fn record_ready_in_background(scope: &Path, elapsed: Duration) {
+    let scope = scope.to_path_buf();
+    let _ = std::thread::Builder::new()
+        .name("hol-guard-lifecycle-cold-start".to_owned())
+        .spawn(move || record_ready(&scope, elapsed));
+}
+
+pub(super) fn record_ready(scope: &Path, elapsed: Duration) {
+    let _ = update_at(scope, None, true, |journal, now| {
         journal.apply_cold_start(ColdStart::of(elapsed), now);
     });
 }
