@@ -44,7 +44,8 @@ fn an_include_search_reads_past_a_few_thousand_generated_files() {
     }
     let home = std::fs::canonicalize(home).unwrap();
     let tools = std::fs::canonicalize(tools).unwrap();
-    let folder = tools.to_string_lossy().into_owned();
+    // Quoted so a checkout path holding a space stays one argument.
+    let folder = format!("'{}'", tools.to_string_lossy().replace('\'', r"'\''"));
     for harness in ["claude-code", "codex", "omp"] {
         for (command, expected) in [
             (

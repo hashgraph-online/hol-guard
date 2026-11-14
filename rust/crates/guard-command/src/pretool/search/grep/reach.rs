@@ -69,6 +69,12 @@ pub(in crate::pretool) fn sensitive_reach_reason(
     let mut largest = 0_usize;
     let mut expired = false;
     let shown = scan.targets.iter().find_map(|target| {
+        // A short walk never reaches the periodic check, so the clock is
+        // also read before each folder, and spent folders are skipped.
+        if expired || deadline.is_some_and(|at| std::time::Instant::now() >= at) {
+            expired = true;
+            return None;
+        }
         let mut inspected = 0_usize;
         let walk = Walk {
             scan: &scan,
