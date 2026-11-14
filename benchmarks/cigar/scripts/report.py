@@ -138,6 +138,9 @@ def claude_calls(row):
                 if not isinstance(b, dict):
                     continue
                 if b.get("type") == "tool_use":
+                    # Claude Code writes a tool call twice when a hook answers it; count it once.
+                    if b.get("id") in pending:
+                        continue
                     inp = b.get("input") or {}
                     pending[b.get("id")] = (step, len(out[step]))
                     out[step].append([call_kind(b.get("name", ""), inp.get("command", "")), False])
