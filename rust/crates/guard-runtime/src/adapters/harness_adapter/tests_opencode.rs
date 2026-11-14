@@ -242,10 +242,11 @@ fn detect_finds_the_cli_in_its_installer_directory_under_a_terminal_path() {
     write(&cli, "#!/bin/sh\n");
     fs::set_permissions(&installer, fs::Permissions::from_mode(0o755)).unwrap();
     fs::set_permissions(&cli, fs::Permissions::from_mode(0o755)).unwrap();
-    // A terminal PATH that names a user directory but not ~/.opencode/bin.
+    // A terminal PATH that names a user directory but not ~/.opencode/bin,
+    // and no host directory where an installed opencode could be found.
     let other = home.root.join("other-bin");
     fs::create_dir_all(&other).unwrap();
-    let path = format!("{}:/usr/bin:/bin", other.display());
+    let path = other.display().to_string();
     let answer = home.ask_env("opencode", "detect", json!({}), json!({"PATH": path}));
     assert_eq!(answer["command_available"], json!(true));
 
