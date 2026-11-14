@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-import subprocess
 from io import StringIO
 
 import pytest
@@ -219,10 +218,16 @@ def test_doctor_identifies_known_nested_probe_failures(key, timed_out) -> None:
 
 
 def test_global_doctor_validates_registration_without_executable_probes(tmp_path, monkeypatch, capsys) -> None:
-    def unexpected_subprocess(*_args, **_kwargs):
-        pytest.fail("Global doctor must not run harness CLI probes")
+    from codex_plugin_scanner.guard import native_runner_authority as authority_module
 
-    monkeypatch.setattr("codex_plugin_scanner.guard.adapters.base.subprocess.run", unexpected_subprocess)
+    original = authority_module.native_runner_authority
+
+    def no_probes(kind, *args, **kwargs):
+        if kind == "command_probe":
+            pytest.fail("Global doctor must not run harness CLI probes")
+        return original(kind, *args, **kwargs)
+
+    monkeypatch.setattr(authority_module, "native_runner_authority", no_probes)
     home = tmp_path / "home"
     codex_home = home / ".codex"
     codex_home.mkdir(parents=True)
@@ -281,11 +286,12 @@ def test_global_doctor_validates_registration_without_executable_probes(tmp_path
 def test_passive_probe_scope_resets_after_nested_scope_and_exception(monkeypatch) -> None:
     calls = []
 
-    def run(command, **_kwargs):
-        calls.append(command)
-        return subprocess.CompletedProcess(command, returncode=0, stdout="probe", stderr="")
+    def run(kind, request, **_kwargs):
+        assert kind == "command_probe"
+        calls.append(request["command"])
+        return {"command": request["command"], "ok": True, "return_code": 0, "stdout": "probe", "stderr": ""}
 
-    monkeypatch.setattr("codex_plugin_scanner.guard.adapters.base.subprocess.run", run)
+    monkeypatch.setattr("codex_plugin_scanner.guard.native_runner_authority.native_runner_authority", run)
     with pytest.raises(ValueError, match="fixture failure"), without_command_probes():
         with without_command_probes():
             skipped = _run_command_probe(["fixture-cli", "--help"])

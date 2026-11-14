@@ -168,6 +168,27 @@ def _resolve_command(command: str, candidates: tuple[Path, ...] = ()) -> str | N
     return None
 
 
+#: The caller environment a harness CLI probe runs with.
+_PROBE_ENV_KEYS = (
+    "PATH",
+    "PATHEXT",
+    "HOME",
+    "USERPROFILE",
+    "SYSTEMROOT",
+    "WINDIR",
+    "COMSPEC",
+    "TEMP",
+    "TMP",
+    "TMPDIR",
+    "APPDATA",
+    "LOCALAPPDATA",
+    "XDG_CONFIG_HOME",
+    "XDG_DATA_HOME",
+    "LANG",
+    "LC_ALL",
+)
+
+
 def _run_command_probe(
     command: list[str],
     timeout_seconds: int = 5,
@@ -175,43 +196,24 @@ def _run_command_probe(
     cwd: Path | None = None,
     env: Mapping[str, str] | None = None,
 ) -> dict[str, object]:
+    """Run a harness CLI's ``--help`` or ``--version`` through the native ``command_probe`` kind."""
+
     skipped = skipped_command_probe(command)
     if skipped is not None:
         return skipped
-    try:
-        result = subprocess.run(
-            command,
-            capture_output=True,
-            check=False,
-            cwd=cwd,
-            env=env,
-            text=True,
-            timeout=timeout_seconds,
-        )
-    except FileNotFoundError:
-        return {
-            "command": command,
-            "ok": False,
-            "return_code": None,
-            "stdout": "",
-            "stderr": "command not found",
-        }
-    except subprocess.TimeoutExpired as exc:
-        return {
-            "command": command,
-            "ok": False,
-            "return_code": None,
-            "stdout": (exc.stdout or "").strip(),
-            "stderr": (exc.stderr or "").strip(),
-            "timed_out": True,
-        }
-    return {
-        "command": command,
-        "ok": result.returncode == 0,
-        "return_code": result.returncode,
-        "stdout": result.stdout.strip(),
-        "stderr": result.stderr.strip(),
+    from ..native_runner_authority import NativeRunnerAuthorityError, native_runner_authority
+
+    request = {
+        "command": [str(part) for part in command],
+        "cwd": str((cwd or Path.cwd()).absolute()),
+        "env": {key: os.environ[key] for key in _PROBE_ENV_KEYS if key in os.environ} if env is None else dict(env),
+        "timeout_seconds": timeout_seconds,
     }
+    try:
+        return native_runner_authority("command_probe", request, timeout_seconds=timeout_seconds + 10.0)
+    except NativeRunnerAuthorityError:
+        # A diagnostic probe never fails the doctor; it reports that nothing ran.
+        return {"command": command, "ok": False, "return_code": None, "stdout": "", "stderr": "probe unavailable"}
 
 
 def _ensure_path_within_root(root: Path, path: Path, *, label: str) -> None:

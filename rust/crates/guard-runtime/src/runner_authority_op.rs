@@ -246,6 +246,7 @@ pub(crate) fn dispatch(kind: &str, args: &Value) -> KindResult {
         "harness_diagnostics" => crate::harness_diagnostics::dispatch(args),
         "harness_mcp_discovery" => crate::harness_mcp_discovery::dispatch(args),
         "hook_python_identity" => crate::hook_python_identity::dispatch(args),
+        "command_probe" => crate::command_probe::dispatch(args),
         "hermes_hook_config" => crate::hermes_hook_config::dispatch(args),
         "opencode_command_replace" => crate::opencode_command_replace::dispatch(args),
         "local_cli_change_request" => crate::local_cli_change_request::dispatch(args),
