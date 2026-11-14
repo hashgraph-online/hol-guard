@@ -167,12 +167,8 @@ fn text_change(ctx: &Ctx, path: &Path, after: String) -> Step<Change> {
 
 /// The existing manifest, its key order kept, and whether it authenticates.
 fn existing_manifest(ctx: &Ctx, path: &Path) -> (bool, bool, Option<PyVal>) {
-    let payload = super::openclaw::json_payload(ctx, path);
+    let (payload, ordered) = hermes::manifest_snapshot(ctx, path);
     let verified = hermes::verified(ctx, &payload);
-    let ordered = std::fs::read(ctx.absolute(path))
-        .ok()
-        .and_then(|bytes| String::from_utf8(bytes).ok())
-        .and_then(|raw| pyjson::parse(&raw).ok());
     (payload.is_empty(), verified, ordered)
 }
 

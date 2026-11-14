@@ -74,10 +74,28 @@ pub(super) fn bundle(ctx: &Ctx) -> (PathBuf, PathBuf, PathBuf) {
 }
 
 /// `hermes_manifest`: the manifest after its root check.
-pub(super) fn manifest(ctx: &Ctx) -> Step<Map<String, Value>> {
+pub(super) fn manifest(ctx: &Ctx) -> Step<(Map<String, Value>, Option<PyVal>)> {
     let (path, _, _) = bundle(ctx);
     files::within_root(ctx, &ctx.guard_home, &path, "Hermes manifest")?;
-    Ok(json_payload(ctx, &path))
+    Ok(manifest_snapshot(ctx, &path))
+}
+
+/// The manifest read once: the payload its MAC covers and the ordered form
+/// the install and cleanup read, so both come from the same bytes.
+pub(super) fn manifest_snapshot(ctx: &Ctx, path: &Path) -> (Map<String, Value>, Option<PyVal>) {
+    let bytes = std::fs::read(ctx.absolute(path)).ok();
+    let payload = bytes
+        .as_deref()
+        .and_then(|raw| serde_json::from_slice(raw).ok())
+        .and_then(|value| match value {
+            Value::Object(map) => Some(map),
+            _ => None,
+        })
+        .unwrap_or_default();
+    let ordered = bytes
+        .and_then(|raw| String::from_utf8(raw).ok())
+        .and_then(|raw| crate::pyjson::parse(&raw).ok());
+    (payload, ordered)
 }
 
 /// `_read_managed_server_names`: the `servers` recorded by the last install.
@@ -171,7 +189,7 @@ fn detect(spec: &Spec, ctx: &Ctx, fields: &Map<String, Value>) -> Step<Value> {
 }
 
 fn launch_env(ctx: &Ctx) -> Step<Value> {
-    let Some((overlay, pretool)) = validated_paths(ctx, &manifest(ctx)?) else {
+    let Some((overlay, pretool)) = validated_paths(ctx, &manifest(ctx)?.0) else {
         return Ok(json!({"env": {}}));
     };
     let mut env = Map::new();
@@ -194,7 +212,7 @@ fn hook_registered(ctx: &Ctx) -> bool {
 
 /// The probe fields; Python runs `command_argv` and puts its result first.
 fn runtime_probe(spec: &Spec, ctx: &Ctx) -> Step<Value> {
-    let manifest = manifest(ctx)?;
+    let (manifest, _) = manifest(ctx)?;
     let registered = hook_registered(ctx);
     let ready = registered
         && validated_paths(ctx, &manifest).is_some_and(|(overlay, pretool)| {
@@ -215,7 +233,7 @@ fn runtime_probe(spec: &Spec, ctx: &Ctx) -> Step<Value> {
 /// A managed install whose hook is not registered only reviews launches;
 /// `harness_diagnostics` adds the matching warning.
 fn diagnostics(ctx: &Ctx) -> Step<Value> {
-    if manifest(ctx)?.is_empty() || hook_registered(ctx) {
+    if manifest(ctx)?.0.is_empty() || hook_registered(ctx) {
         return Ok(json!({ "update": "{}" }));
     }
     let update = json!({ "runtime_protection_label": LAUNCH_REVIEW_ONLY });

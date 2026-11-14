@@ -11,7 +11,7 @@ use super::hermes::{self, HARNESS};
 use super::{hermes_config, hermes_hooks, path_text, Ctx, Failure, Step};
 use crate::adapter_state_integrity_op::state_field;
 use crate::hermes_inspect::{inspect_config, Syntax};
-use crate::pyjson::{self, PyVal};
+use crate::pyjson::PyVal;
 
 const MANAGED_LABEL: &str = "Hermes managed";
 const REMOVED_NOTE: &str =
@@ -144,7 +144,7 @@ fn rewrite(
 
 pub(super) fn prepare(ctx: &Ctx, fields: &Map<String, Value>) -> Step<Value> {
     let root = hermes::managed_root(ctx);
-    let manifest = hermes::manifest(ctx)?;
+    let (manifest, ordered) = hermes::manifest(ctx)?;
     let authenticated = hermes::verified(ctx, &manifest);
     let config = config_path(ctx, &manifest, authenticated);
     let (manifest_path, overlay_path, pretool_path) = hermes::bundle(ctx);
@@ -155,10 +155,6 @@ pub(super) fn prepare(ctx: &Ctx, fields: &Map<String, Value>) -> Step<Value> {
             deletes.push(path_text(path));
         }
     }
-    let ordered = std::fs::read(ctx.absolute(&manifest_path))
-        .ok()
-        .and_then(|bytes| String::from_utf8(bytes).ok())
-        .and_then(|raw| pyjson::parse(&raw).ok());
     let writes = match &config {
         None => Vec::new(),
         Some(config) => {
