@@ -17,7 +17,9 @@ The machine-readable copy is [`generated/harness-claims.v1.json`](generated/harn
 
 | Event | Surface | Transport | Mode | If Guard fails | Claim | Expires |
 | --- | --- | --- | --- | --- | --- | --- |
-| `PreToolUse` | foreground | `native_hook` | `blocking` | Stops the action | `configured` | n/a |
+| `PreToolUse`: `Bash`, `Read`, `mcp__*` | foreground | `native_hook` | `blocking` | Stops the action | `configured` | n/a |
+| `PreToolUse`: `apply_patch` | foreground | `native_hook` | `blocking` | Stops the action | `configured` | n/a |
+| `PreToolUse`: `Write`, `Edit`, `MultiEdit` | foreground | `native_hook` | `blocking` | Stops the action | `configured` | n/a |
 | `PermissionRequest` | foreground | `native_hook` | `approval` | Stops the action | `configured` | n/a |
 | `UserPromptSubmit` | foreground | `native_hook` | `screening` | Stops the action | `configured` | n/a |
 | `PostToolUse` | foreground | `native_hook` | `observe` | Records only | `observe_only` | n/a |
@@ -171,7 +173,9 @@ Rows that do not stop the action when Guard fails, and the blind spots each row 
 
 | Harness | Event | Surface | If Guard fails | Blind spots and limitations |
 | --- | --- | --- | --- | --- |
-| codex | `PreToolUse` | foreground | Stops the action | A source declaration does not prove that a live Codex process honored a deny response. |
+| codex | `PreToolUse`: `Bash`, `Read`, `mcp__*` | foreground | Stops the action | A source declaration does not prove that a live Codex process honored a deny response. |
+| codex | `PreToolUse`: `apply_patch` | foreground | Stops the action | Edits the model applies without an apply_patch tool call are not visible to Guard. PostToolUse does not match apply_patch, so the written result is not observed. A source declaration does not prove that a live Codex process honored a deny response. |
+| codex | `PreToolUse`: `Write`, `Edit`, `MultiEdit` | foreground | Stops the action | Codex applies its own file edits through apply_patch; these names cover only tools that report them, and no live Codex run on record shows a version that emits them. PostToolUse does not match these tools, so the written result is not observed. A source declaration does not prove that a live Codex process honored a deny response. |
 | codex | `PermissionRequest` | foreground | Stops the action | Native approval UX and Guard evidence still require a live host/version check. |
 | codex | `UserPromptSubmit` | foreground | Stops the action | Prompt screening does not prove downstream model or host request rewriting. |
 | codex | `PostToolUse` | foreground | Records only | Native post-tool observation does not prove model-visible output replacement. |

@@ -67,6 +67,11 @@ struct Contract {
 #[derive(Deserialize)]
 struct Event {
     event: String,
+    /// Host tool names this row covers, when one event serves several kinds
+    /// of action. A trailing `*` stands for any suffix. Empty means every
+    /// tool the event's matcher sends.
+    #[serde(default)]
+    tools: Vec<String>,
     transport: String,
     mode: String,
     #[serde(default)]
@@ -257,6 +262,16 @@ fn check_claim(claim: &Claim, problems: &mut Vec<String>) {
 /// Problems with one capability row. Empty when the row is well formed.
 fn check_event(event: &Event) -> Vec<String> {
     let mut problems = Vec::new();
+    let mut named = std::collections::BTreeSet::new();
+    for tool in &event.tools {
+        let pattern = tool.strip_suffix('*').unwrap_or(tool);
+        if pattern.is_empty() || pattern.contains(['*', ' ', '|']) {
+            problems.push(format!("tool {tool:?} is not a tool name or name prefix"));
+        }
+        if !named.insert(tool) {
+            problems.push(format!("tool {tool:?} is listed twice"));
+        }
+    }
     match event.surface.as_deref() {
         None => problems.push("missing surface".to_owned()),
         Some(surface) if !SURFACES.contains(&surface) => {
@@ -327,10 +342,22 @@ fn check_document(text: &str) -> (usize, Vec<String>) {
         for event in &contract.capability_events {
             rows += 1;
             if !seen.insert((&event.event, &event.transport, &event.surface)) {
-                problems.push(format!(
-                    "{} {} ({}): declared twice for one surface",
-                    contract.harness, event.event, event.transport
-                ));
+                // Rows for one event and surface may split it by tool, but
+                // only when each names its tools and no tool is in two rows.
+                let split = contract.capability_events.iter().filter(|other| {
+                    (&other.event, &other.transport, &other.surface)
+                        == (&event.event, &event.transport, &event.surface)
+                });
+                let mut tools = std::collections::BTreeSet::new();
+                let disjoint = split.into_iter().all(|other| {
+                    !other.tools.is_empty() && other.tools.iter().all(|tool| tools.insert(tool))
+                });
+                if !disjoint {
+                    problems.push(format!(
+                        "{} {} ({}): declared twice for one surface",
+                        contract.harness, event.event, event.transport
+                    ));
+                }
             }
             problems.extend(check_event(event).into_iter().map(|problem| {
                 format!(
@@ -376,6 +403,7 @@ fn claims(text: &str, now: Option<&str>) -> Vec<Value> {
             rows.push(json!({
                 "harness": contract.harness,
                 "event": event.event,
+                "tools": event.tools,
                 "transport": event.transport,
                 "mode": event.mode,
                 "surface": event.surface,
@@ -391,6 +419,25 @@ fn claims(text: &str, now: Option<&str>) -> Vec<Value> {
     rows
 }
 
+/// `harness event [tools] (transport)`, naming the tools only when the row
+/// splits its event by tool.
+fn row_label(row: &Value) -> String {
+    let tools: Vec<&str> = row["tools"]
+        .as_array()
+        .map(|tools| tools.iter().filter_map(Value::as_str).collect())
+        .unwrap_or_default();
+    let tools = if tools.is_empty() {
+        String::new()
+    } else {
+        format!(" [{}]", tools.join(", "))
+    };
+    format!(
+        "{} {}{tools} ({})",
+        row["harness"], row["event"], row["transport"]
+    )
+    .replace('"', "")
+}
+
 /// The check result and claim rows for the contract built into this runtime.
 /// With `now`, evidence that has expired by then is listed and shown `stale`.
 pub(crate) fn check_payload_at(now: Option<&str>) -> Result<Value, &'static str> {
@@ -402,9 +449,7 @@ pub(crate) fn check_payload_at(now: Option<&str>) -> Result<Value, &'static str>
     let expired: Vec<String> = claims
         .iter()
         .filter(|row| row["effective_state"] == "stale" && row["state"] != "stale")
-        .map(|row| {
-            format!("{} {} ({})", row["harness"], row["event"], row["transport"]).replace('"', "")
-        })
+        .map(row_label)
         .collect();
     Ok(json!({
         "schema": PAYLOAD_SCHEMA,

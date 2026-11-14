@@ -352,6 +352,63 @@ fn an_event_is_declared_once_per_surface_and_transport() {
     );
 }
 
+fn split(rows: Vec<Value>) -> Vec<String> {
+    let text = json!({
+        "schema": "hol-guard.harness-protection-contracts.v1",
+        "contracts": [{"harness": "codex", "capability_events": rows}],
+    })
+    .to_string();
+    check_document(&text).1
+}
+
+fn with_tools(tools: Value) -> Value {
+    let mut row = blocking(json!({"state": "configured"}));
+    row["tools"] = tools;
+    row
+}
+
+#[test]
+fn an_event_may_be_split_into_rows_by_disjoint_tools() {
+    let shell = with_tools(json!(["Bash", "mcp__*"]));
+    let write = with_tools(json!(["apply_patch"]));
+    assert_eq!(
+        split(vec![shell.clone(), write.clone()]),
+        Vec::<String>::new()
+    );
+
+    let overlapping = with_tools(json!(["apply_patch", "Bash"]));
+    let unnamed = blocking(json!({"state": "configured"}));
+    for rows in [vec![shell.clone(), overlapping], vec![write, unnamed]] {
+        let problems = split(rows);
+        assert!(
+            problems
+                .iter()
+                .any(|problem| problem.contains("declared twice")),
+            "{problems:?}"
+        );
+    }
+}
+
+#[test]
+fn a_tool_is_a_name_or_a_name_prefix_listed_once() {
+    for (tools, needle) in [
+        (json!(["*"]), "not a tool name"),
+        (json!(["Bash|Read"]), "not a tool name"),
+        (json!(["mcp__*__x"]), "not a tool name"),
+        (json!(["Bash", "Bash"]), "listed twice"),
+    ] {
+        rejects(with_tools(tools), needle);
+    }
+}
+
+#[test]
+fn a_split_row_is_labelled_with_its_tools() {
+    let mut row = with_tools(json!(["apply_patch"]));
+    row["claim"] = proven();
+    let label = super::row_label(&claims(&document(row), None)[0]);
+    assert_eq!(label, "codex PreToolUse [apply_patch] (native_hook)");
+}
+
 #[test]
 fn expired_evidence_is_shown_stale_and_listed() {
     let text = document(blocking(proven()));
@@ -401,6 +458,7 @@ fn the_generated_claims_file_matches_the_runtime_projection() {
         for field in [
             "harness",
             "event",
+            "tools",
             "transport",
             "mode",
             "surface",

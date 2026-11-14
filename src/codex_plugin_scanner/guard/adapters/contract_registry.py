@@ -43,6 +43,7 @@ _EVENT_KEYS: Final = frozenset(
         "os_arch",
         "local_hosted",
         "event",
+        "tools",
         "transport",
         "mode",
         "surface",
