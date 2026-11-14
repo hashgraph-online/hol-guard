@@ -254,3 +254,113 @@ fn an_expired_budget_stops_the_compare() {
     }));
     assert_eq!(answer["error"], json!({"transition": "deadline_exceeded"}));
 }
+
+fn journal_request(home: &Path, dropped: u64, path: &Path) -> Value {
+    json!({
+        "op": "journal",
+        "guard_home": home.to_string_lossy(),
+        "owner": {
+            "operation_id": "op", "config_target_id": "cfg", "actor": "install",
+            "pid": 7, "process_identity": "proc", "dropped_events": dropped,
+        },
+        "mutations": [{
+            "operation": "write", "path": path.to_string_lossy(),
+            "before_present": false, "after_present": true,
+            "before_digest": "aa", "after_digest": "bb",
+        }],
+    })
+}
+
+#[test]
+fn journal_appends_rotates_and_withholds_key_digests() {
+    let fixture = Fixture::new();
+    let codex = fixture.path("managed/codex");
+    fs::create_dir_all(&codex).unwrap();
+    let journal = codex.join("authority-mutations.jsonl");
+    let answer = dispatch(&journal_request(&fixture.0, 2, &fixture.path("hooks.json"))).unwrap();
+    assert_eq!(answer, json!({ "ok": true, "dropped_events": 2 }));
+    let line: Value = serde_json::from_str(fs::read_to_string(&journal).unwrap().trim()).unwrap();
+    assert_eq!(line["schema"], "hol-guard.codex-authority-mutation.v1");
+    assert_eq!(line["dropped_events"], 2);
+    assert_eq!(line["before_digest"], Value::Null);
+    assert_eq!(line["after_digest"], "bb");
+    let target = fixture.path("hooks.json");
+    assert_eq!(
+        line["target_id"],
+        sha256_hex(target.to_string_lossy().as_bytes())
+    );
+    let key = fixture.path("hook-manifest.key");
+    dispatch(&journal_request(&fixture.0, 0, &key)).unwrap();
+    let last = fs::read_to_string(&journal).unwrap();
+    let last: Value = serde_json::from_str(last.lines().last().unwrap()).unwrap();
+    assert_eq!(last["after_digest"], Value::Null);
+    fs::write(&journal, vec![b'x'; 1024 * 1024]).unwrap();
+    dispatch(&journal_request(&fixture.0, 0, &target)).unwrap();
+    assert_eq!(
+        fs::read(codex.join("authority-mutations.jsonl.1"))
+            .unwrap()
+            .len(),
+        1024 * 1024
+    );
+    assert_eq!(fs::read_to_string(&journal).unwrap().lines().count(), 1);
+}
+
+#[cfg(unix)]
+#[test]
+fn journal_counts_an_unsafe_file_as_dropped() {
+    use std::os::unix::fs::PermissionsExt;
+    let fixture = Fixture::new();
+    let codex = fixture.path("managed/codex");
+    fs::create_dir_all(&codex).unwrap();
+    let journal = codex.join("authority-mutations.jsonl");
+    fs::write(&journal, b"").unwrap();
+    fs::set_permissions(&journal, fs::Permissions::from_mode(0o644)).unwrap();
+    let answer = dispatch(&journal_request(&fixture.0, 1, &fixture.path("a"))).unwrap();
+    assert_eq!(answer["dropped_events"], 2);
+    assert!(fs::read(&journal).unwrap().is_empty());
+}
+
+#[test]
+fn install_lease_excludes_a_second_owner_until_released() {
+    let fixture = Fixture::new();
+    let acquire = json!({
+        "op": "lease_acquire", "lock": "install",
+        "guard_home": fixture.0.to_string_lossy(), "client_pid": std::process::id(),
+    });
+    let first = dispatch(&acquire).unwrap();
+    let lease = first["lease"].as_str().unwrap().to_owned();
+    assert_eq!(
+        dispatch(&acquire).unwrap(),
+        json!({ "ok": false, "busy": true })
+    );
+    let check = json!({ "op": "lease_check", "lease": lease });
+    assert_eq!(dispatch(&check).unwrap()["held"], true);
+    let release = json!({ "op": "lease_release", "lease": lease });
+    assert_eq!(dispatch(&release).unwrap()["released"], true);
+    assert_eq!(dispatch(&check).unwrap()["held"], false);
+    let again = dispatch(&acquire).unwrap();
+    assert_eq!(again["ok"], true);
+    dispatch(&json!({ "op": "lease_release", "lease": again["lease"] })).unwrap();
+    assert!(fixture.path("managed/codex/installation.lock").is_file());
+}
+
+#[cfg(unix)]
+#[test]
+fn install_lease_refuses_a_shared_lock_file() {
+    use std::os::unix::fs::PermissionsExt;
+    let fixture = Fixture::new();
+    let codex = fixture.path("managed/codex");
+    fs::create_dir_all(&codex).unwrap();
+    let lock = codex.join("installation.lock");
+    fs::write(&lock, b"").unwrap();
+    fs::set_permissions(&lock, fs::Permissions::from_mode(0o644)).unwrap();
+    let answer = dispatch(&json!({
+        "op": "lease_acquire", "lock": "install",
+        "guard_home": fixture.0.to_string_lossy(), "client_pid": std::process::id(),
+    }))
+    .unwrap();
+    assert_eq!(
+        answer,
+        json!({ "ok": false, "error": "codex_hook_transaction_lock_unsafe" })
+    );
+}

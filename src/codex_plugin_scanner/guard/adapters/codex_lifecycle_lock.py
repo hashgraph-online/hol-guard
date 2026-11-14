@@ -1,38 +1,29 @@
-"""Serialize cooperating Codex lifecycle writers across installation owners."""
+"""Serialize cooperating Codex lifecycle writers across installation owners.
+
+The resident opens, checks and holds each lifecycle lock file for this
+process (see ``transition_files/lease.rs``); this module keeps which locks
+the current thread already owns, so a nested writer reuses its owner's lock.
+"""
 
 from __future__ import annotations
 
-import errno
 import os
-import re
-import stat
 import threading
 import time
 from collections.abc import Generator, Iterable
 from contextlib import ExitStack, contextmanager
 from contextvars import ContextVar
-from hashlib import sha256
 from pathlib import Path
-from typing import BinaryIO
 
-from ..mdm.file_lock import release_file_lock
-from ..native_daemon_manage import try_lock_daemon_file
-from ..windows_paths import trusted_windows_user_profile
 from .base import HarnessContext
 
 _TargetOwnerKey = tuple[str, int, int]
-_HELD_TARGETS: ContextVar[frozenset[_TargetOwnerKey]] = ContextVar("codex_lifecycle_targets", default=frozenset())
-_open_target_handles: dict[_TargetOwnerKey, BinaryIO] = {}
+_HELD_TARGETS: ContextVar[dict[_TargetOwnerKey, str] | None] = ContextVar("codex_lifecycle_targets", default=None)
 
 
 def _after_fork_child() -> None:
-    global _open_target_handles
-    # Close inherited references without explicitly unlocking the parent's
-    # open-file description. Child operations must acquire their own ownership.
-    for handle in _open_target_handles.values():
-        handle.close()
-    _open_target_handles = {}
-    _HELD_TARGETS.set(frozenset())
+    # The parent's leases stay the parent's; child operations acquire their own.
+    _HELD_TARGETS.set(None)
 
 
 if hasattr(os, "register_at_fork"):
@@ -44,49 +35,6 @@ def _check_deadline(deadline: float | None) -> None:
         raise TimeoutError("Codex lifecycle transaction deadline exceeded.")
 
 
-def _account_home() -> Path:
-    if os.name == "nt":
-        return trusted_windows_user_profile()
-    import pwd
-
-    try:
-        return Path(pwd.getpwuid(os.getuid()).pw_dir)
-    except KeyError as error:
-        raise OSError("codex_lifecycle_account_home_unavailable") from error
-
-
-def _lock_base() -> Path:
-    # CLI and Desktop environments may disagree on HOME, TMPDIR or XDG paths.
-    # Resolve the account through the OS so both owners use the same locks.
-    return _account_home() / ".hol-guard-codex-lifecycle-locks"
-
-
-def _lifecycle_lock_path(directory: Path) -> Path:
-    base = _lock_base()
-    target = os.path.normcase(str(directory.resolve()))
-    return base / f"{sha256(os.fsencode(target)).hexdigest()}.lock"
-
-
-def _unavailable_lock(stage: str, error: OSError) -> RuntimeError:
-    # Preserve a bounded OS reason without disclosing a private pathname.
-    if error.errno is not None:
-        reason = errno.errorcode.get(error.errno, "UNKNOWN")
-    else:
-        token = error.args[0] if len(error.args) == 1 and isinstance(error.args[0], str) else ""
-        reason = token if re.fullmatch(r"[a-z_]{1,64}", token) else "UNKNOWN"
-    return RuntimeError(f"codex_lifecycle_lock_invalid: lifecycle lock {stage} is unavailable (reason={reason})")
-
-
-def _lock_identity(path: Path) -> tuple[int, int] | None:
-    try:
-        metadata = path.lstat()
-    except FileNotFoundError:
-        return None
-    if not stat.S_ISREG(metadata.st_mode) or metadata.st_nlink != 1:
-        raise RuntimeError("codex_lifecycle_lock_invalid: lifecycle lock must be a regular file with one link")
-    return metadata.st_dev, metadata.st_ino
-
-
 @contextmanager
 def _target_lock(
     directory: Path,
@@ -95,82 +43,34 @@ def _target_lock(
     allow_owned: bool = False,
     wait: bool = False,
 ) -> Generator[None, None, None]:
+    from ..native_transition_files import acquire_lease, lease_held, release_lease
+
     if wait and deadline is None:
         raise ValueError("Codex lifecycle waiting requires an absolute deadline.")
     _check_deadline(deadline)
-    try:
-        path = _lifecycle_lock_path(directory)
-    except OSError as error:
-        raise _unavailable_lock("directory", error) from error
-    owner_key = str(path), os.getpid(), threading.get_ident()
-    if allow_owned and owner_key in _HELD_TARGETS.get():
-        try:
-            handle = _open_target_handles.get(owner_key)
-            if handle is None or handle.closed:
-                raise RuntimeError("codex_lifecycle_lock_invalid: lifecycle owner is no longer live")
-            opened = os.fstat(handle.fileno())
-            if _lock_identity(path) != (opened.st_dev, opened.st_ino):
-                raise RuntimeError("codex_lifecycle_lock_invalid: lifecycle lock changed during ownership")
-        except OSError as error:
-            raise _unavailable_lock("file", error) from error
+    owner_key = os.path.normcase(str(directory.resolve())), os.getpid(), threading.get_ident()
+    held = _HELD_TARGETS.get() or {}
+    if allow_owned and owner_key in held:
+        if not lease_held(held[owner_key]):
+            raise RuntimeError("codex_lifecycle_lock_invalid: lifecycle lock changed during ownership")
         _check_deadline(deadline)
         yield
         return
     try:
-        path.parent.mkdir(mode=0o700, exist_ok=True)
-        # lstat rejects a substituted symlink instead of following it.
-        metadata = path.parent.lstat()
-        if not stat.S_ISDIR(metadata.st_mode) or (
-            hasattr(os, "getuid") and (metadata.st_uid != os.getuid() or metadata.st_mode & 0o077)
-        ):
-            raise RuntimeError("codex_lifecycle_lock_invalid: lifecycle lock directory is not private")
-    except OSError as error:
-        raise _unavailable_lock("directory", error) from error
-    prior = _lock_identity(path)
-    flags = os.O_RDWR | os.O_CREAT | getattr(os, "O_CLOEXEC", 0) | getattr(os, "O_NOFOLLOW", 0)
+        lease = acquire_lease({"lock": "lifecycle", "directory": str(directory)}, wait=wait, deadline=deadline)
+    except BlockingIOError:
+        raise RuntimeError("codex_lifecycle_busy: another lifecycle operation owns this Codex configuration") from None
+    except TimeoutError:
+        raise TimeoutError("Codex lifecycle transaction deadline exceeded.") from None
+    owner_pid = os.getpid()
+    token = _HELD_TARGETS.set({**held, owner_key: lease})
     try:
-        descriptor = os.open(path, flags, 0o600)
-    except OSError as error:
-        raise _unavailable_lock("file", error) from error
-    try:
-        metadata = os.fstat(descriptor)
-        identity = metadata.st_dev, metadata.st_ino
-        if _lock_identity(path) != identity or (prior is not None and prior != identity):
-            raise RuntimeError("codex_lifecycle_lock_invalid: lifecycle lock changed while opening")
-        with os.fdopen(descriptor, "a+b") as handle:
-            descriptor = -1
-            owner_pid = os.getpid()
-            # Register before the kernel can grant ownership. A fork during
-            # acquisition must close the child's inherited descriptor even
-            # when the parent has not yet published its ContextVar owner.
-            _open_target_handles[owner_key] = handle
-            token = None
-            acquired = False
-            try:
-                while not try_lock_daemon_file(handle):
-                    if not wait:
-                        raise RuntimeError(
-                            "codex_lifecycle_busy: another lifecycle operation owns this Codex configuration"
-                        )
-                    _check_deadline(deadline)
-                    assert deadline is not None
-                    time.sleep(min(0.025, max(0, deadline - time.monotonic())))
-                acquired = True
-                token = _HELD_TARGETS.set(_HELD_TARGETS.get() | {owner_key})
-                _check_deadline(deadline)
-                yield
-            finally:
-                if token is not None:
-                    _HELD_TARGETS.reset(token)
-                try:
-                    if acquired and os.getpid() == owner_pid and not handle.closed:
-                        release_file_lock(handle)
-                finally:
-                    if _open_target_handles.get(owner_key) is handle:
-                        del _open_target_handles[owner_key]
+        _check_deadline(deadline)
+        yield
     finally:
-        if descriptor >= 0:
-            os.close(descriptor)
+        _HELD_TARGETS.reset(token)
+        if os.getpid() == owner_pid:
+            release_lease(lease)
 
 
 @contextmanager

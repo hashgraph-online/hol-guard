@@ -91,6 +91,7 @@ def test_probe_receives_original_short_parent_and_detects_changed_binary(native_
         # rather than writing into the busy one.
         replacement = tmp_path / "native-replacement"
         replacement.write_bytes(b"foreign native fixture generation")
+        replacement.chmod(0o700)
         os.replace(replacement, comparison)
         return result
 

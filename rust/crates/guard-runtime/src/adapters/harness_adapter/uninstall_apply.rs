@@ -6,7 +6,8 @@
 //! managed write hands back the mutation record the caller's install
 //! transaction appends; those records come back under `events` with the
 //! answer or the failure, so a plan stopped partway still journals what it
-//! changed. A shim-only adapter removes its launchers and answers.
+//! changed. A shim-only adapter removes its launchers and answers with no
+//! events.
 
 use std::fs;
 use std::path::Path;
@@ -121,26 +122,26 @@ fn shim_only(spec: &Spec, ctx: &Ctx) -> Step<Value> {
 }
 
 pub(super) fn apply(spec: &Spec, ctx: &Ctx, fields: &Map<String, Value>) -> KindResult {
-    if spec.install == Install::Shim {
-        return answer(shim_only(spec, ctx));
-    }
-    // The plan comes first, so a refusal leaves the launcher in place.
-    let plan = match route(spec, "prepare_uninstall", ctx, fields) {
-        Ok(plan) => plan,
-        Err(failure) => return answer(Err(failure)),
-    };
     let mut events = Vec::new();
-    let step = shim_remove::remove(spec, ctx).and_then(|(shim, _)| {
-        let removed = execute(ctx, &plan, &mut events)?;
-        let mut finish = fields.clone();
-        finish.insert("shim".into(), json!(render(&PyVal::Dict(shim))?));
-        finish.insert(
-            "finish".into(),
-            plan.get("finish").cloned().unwrap_or(Value::Null),
-        );
-        finish.insert("removed".into(), json!(removed));
-        route(spec, "finish_uninstall", ctx, &finish)
-    });
+    let step = if spec.install == Install::Shim {
+        shim_only(spec, ctx)
+    } else {
+        // The plan comes first, so a refusal leaves the launcher in place.
+        route(spec, "prepare_uninstall", ctx, fields).and_then(|plan| {
+            let (shim, _) = shim_remove::remove(spec, ctx)?;
+            let removed = execute(ctx, &plan, &mut events)?;
+            let mut finish = fields.clone();
+            finish.insert("shim".into(), json!(render(&PyVal::Dict(shim))?));
+            finish.insert(
+                "finish".into(),
+                plan.get("finish").cloned().unwrap_or(Value::Null),
+            );
+            finish.insert("removed".into(), json!(removed));
+            route(spec, "finish_uninstall", ctx, &finish)
+        })
+    };
+    // Every answer carries `events`, empty when nothing was written, so the
+    // caller journals one shape.
     let mut out = answer(step)?;
     out.as_object_mut()
         .ok_or(crate::runner_authority_op::ERR_INVALID)?

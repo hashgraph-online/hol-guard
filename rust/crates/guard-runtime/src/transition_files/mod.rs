@@ -9,15 +9,17 @@
 //! compare, write each file after re-comparing it, compare the result, and on
 //! failure restore what it wrote.
 //!
-//! Two facts stay with the asking interpreter. The Codex mutation journal is
-//! appended by the process that owns the install transaction, so each write
-//! hands back the identity record it would append, in order, interleaved
-//! with the index of every file written so the caller's `on_write` sees the
-//! same sequence. Whether a POSIX group is private to its owner means
+//! Each write hands back the Codex mutation identity record, in order,
+//! interleaved with the index of every file written so the caller's
+//! `on_write` sees the same sequence; `journal` appends those records to the
+//! owning transaction's journal. One fact stays with the asking interpreter:
+//! whether a POSIX group is private to its owner means
 //! enumerating the account database, so an answer that turns on it asks
 //! back with `reply.private_group` before anything is written.
 
 mod inspect;
+mod journal;
+mod lease;
 mod output;
 #[cfg(test)]
 mod tests;
@@ -228,6 +230,8 @@ pub(crate) fn dispatch(args: &Value) -> KindResult {
             Ok(settle(write(change, generation("generation")?, &ask)))
         }
         "publish" => Ok(publish(files()?, flag("removals"), flag("rollback"), &ask)),
+        "journal" => journal::dispatch(args),
+        op @ ("lease_acquire" | "lease_release" | "lease_check") => lease::dispatch(op, args),
         _ => Err(ERR_INVALID),
     }
 }
