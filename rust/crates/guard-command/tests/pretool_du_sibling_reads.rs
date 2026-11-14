@@ -120,10 +120,8 @@ fn a_depth_of_one_takes_the_listing_proof() {
     ] {
         assert_eq!(decision(&home, cwd, command), "allow", "{command}");
     }
-    assert_ne!(
-        decision(&home, &portal, "du -h -d 2 ../../app-portal-fix"),
-        "allow"
-    );
+    let deeper = decision(&home, &portal, "du -h -d 2 ../../app-portal-fix");
+    assert!(!deeper.contains("allow"), "{deeper}");
     // GNU and BSD du apply the last depth option. A shallow first option
     // must not suppress the recursive screen for a deeper final option.
     for command in [
@@ -131,7 +129,8 @@ fn a_depth_of_one_takes_the_listing_proof() {
         "du -ah --max-depth=1 --max-depth=2 ../../app-portal-fix",
         "du -h --max-depth 1 -d 2 ../../app-portal-fix",
     ] {
-        assert_ne!(decision(&home, &portal, command), "allow", "{command}");
+        let seen = decision(&home, &portal, command);
+        assert!(!seen.contains("allow"), "{command}: {seen}");
     }
     assert_eq!(
         decision(&home, &portal, "du -h -d2 -d1 ../../app-portal-fix"),
@@ -151,7 +150,7 @@ fn du_keeps_the_ls_decision_for_secret_and_absent_paths() {
     ] {
         let listing = decision(&home, &portal, &format!("ls -ld {target}"));
         let sizes = decision(&home, &portal, &format!("du -sh {target}"));
-        assert_ne!(sizes, "allow", "{target}");
+        assert!(!sizes.contains("allow"), "{target}: {sizes}");
         assert_eq!(sizes == "allow", listing == "allow", "{target}");
     }
 }
@@ -193,6 +192,7 @@ fn unproven_sibling_sizes_still_ask() {
         ),
         (&org, "du -sh ~/.ssh".to_owned()),
     ] {
-        assert_ne!(decision(&home, cwd, &command), "allow", "{command}");
+        let seen = decision(&home, cwd, &command);
+        assert!(!seen.contains("allow"), "{command}: {seen}");
     }
 }
