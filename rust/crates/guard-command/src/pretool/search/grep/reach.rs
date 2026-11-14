@@ -59,10 +59,14 @@ pub(in crate::pretool) fn sensitive_reach_reason(
         return None;
     }
     let clearance = scan.clearance();
-    let mut inspected = 0_usize;
+    // The include proof counts the entries below each folder separately.
+    let mut largest = 0_usize;
     let shown = scan.targets.iter().find_map(|target| {
+        let mut inspected = 0_usize;
         let entry =
-            first_sensitive_entry(target, context, &scan, clearance.as_ref(), &mut inspected)?;
+            first_sensitive_entry(target, context, &scan, clearance.as_ref(), &mut inspected);
+        largest = largest.max(inspected);
+        let entry = entry?;
         let folder = target.trim_end_matches('/');
         let shown = if matches!(folder, "" | ".") {
             entry
@@ -75,7 +79,7 @@ pub(in crate::pretool) fn sensitive_reach_reason(
     let Some(shown) = shown else {
         // Only the include proof's limit is known to be below this walk's;
         // a plain recursive search past this walk's limit stays unexplained.
-        let too_large = !scan.included.is_empty() && inspected > INCLUDE_PROOF_ENTRIES;
+        let too_large = !scan.included.is_empty() && largest > INCLUDE_PROOF_ENTRIES;
         return too_large.then(|| {
             "HOL Guard requires review because the search covers more files than Guard can check before it runs. Name the folders you need instead of the whole tree, for example `grep -rn PATTERN src app`.".to_owned()
         });

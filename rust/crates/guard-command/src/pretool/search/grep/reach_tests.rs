@@ -196,3 +196,34 @@ fn an_include_that_selects_the_sensitive_file_still_names_it() {
     assert!(reason.contains("`.agents/skills/dev/SKILL.md`"), "{reason}");
     std::fs::remove_dir_all(home.parent().unwrap()).unwrap();
 }
+
+#[cfg(unix)]
+#[test]
+fn folders_each_within_the_include_limit_are_not_called_too_large() {
+    let (home, repo) = fixture("split-include");
+    for folder in ["a", "b"] {
+        let directory = repo.join("packages").join(folder);
+        std::fs::create_dir_all(&directory).unwrap();
+        for file in 0..1_200 {
+            std::fs::write(directory.join(format!("m{file}.d.ts")), "").unwrap();
+        }
+    }
+    // A folder Guard cannot list keeps the include proof from passing.
+    use std::os::unix::fs::PermissionsExt;
+    let locked = repo.join("packages/b/zz-locked");
+    std::fs::create_dir_all(&locked).unwrap();
+    std::fs::set_permissions(&locked, std::fs::Permissions::from_mode(0o000)).unwrap();
+    // Together the folders hold more entries than the include proof
+    // inspects, but it counts each one separately and neither is too large.
+    let reason = reason_for(
+        "grep -rn needle --include=*.ts packages/a packages/b",
+        &home,
+        &repo,
+    );
+    std::fs::set_permissions(&locked, std::fs::Permissions::from_mode(0o755)).unwrap();
+    assert!(
+        !reason.contains("more files than Guard can check"),
+        "{reason}"
+    );
+    std::fs::remove_dir_all(home.parent().unwrap()).unwrap();
+}
