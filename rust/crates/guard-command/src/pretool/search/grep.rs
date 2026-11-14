@@ -154,6 +154,8 @@ struct Scan {
     /// the review however the walk is narrowed. An `--exclude-dir` beside an
     /// include stays part of the proof.
     include_beside_exclusion: bool,
+    /// The `--include` globs: the only names the walk opens when present.
+    included: Vec<String>,
     /// Exact names the command leaves out of its walk.
     excluded_files: Vec<String>,
     excluded_directories: Vec<String>,
@@ -390,6 +392,7 @@ fn scan_into(
         return scan_into(arguments, context, stdin_only, absent, true, scan);
     }
     scan.recursive = recursive;
+    scan.included = includes.globs().to_vec();
     scan.include_beside_exclusion = includes_present && !exclusions.leave_includes_exact();
     scan.excluded_files = exclusions
         .files
