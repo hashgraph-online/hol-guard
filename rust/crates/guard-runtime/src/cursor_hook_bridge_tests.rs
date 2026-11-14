@@ -121,7 +121,7 @@ fn scratch(label: &str) -> std::path::PathBuf {
 
 /// A guard home with the daemon auth token file the client may sign a
 /// loopback review link with, or without it.
-fn guard_home(label: &str, tokened: bool) -> std::path::PathBuf {
+pub(super) fn guard_home(label: &str, tokened: bool) -> std::path::PathBuf {
     use std::os::unix::fs::PermissionsExt;
     let root = scratch(label);
     if tokened {
@@ -135,7 +135,7 @@ fn guard_home(label: &str, tokened: bool) -> std::path::PathBuf {
     root
 }
 
-fn map(value: Value) -> OMap {
+pub(super) fn map(value: Value) -> OMap {
     let OValue::Map(map) = parse_python_json(&value.to_string()).unwrap() else {
         panic!("not a map");
     };
@@ -498,42 +498,4 @@ fn an_unreadable_hook_past_its_deadline_answers_as_the_client_does() {
             "user_message": "HOL Guard could not complete the native hook decision safely.",
         })
     );
-}
-
-/// The daemon edge's answer when it has no native decision for a hook, as
-/// the shared fail-closed envelope builds it for Cursor.
-fn edge_fail_safe(code: &str) -> OMap {
-    map(json!({
-        "policy_action": "block",
-        "reason_code": code,
-        "hookSpecificOutput": {
-            "hookEventName": "PreToolUse",
-            "permissionDecision": "deny",
-            "permissionDecisionReason": "HOL Guard could not complete the native hook decision safely.",
-        },
-    }))
-}
-
-#[test]
-fn an_edge_answer_without_a_native_decision_denies_every_cursor_tool_hook() {
-    let home = guard_home("no-decision", false);
-    for event in [
-        "preToolUse",
-        "beforeShellExecution",
-        "beforeMCPExecution",
-        "beforeReadFile",
-    ] {
-        for code in [
-            "native_hook_worker_unavailable",
-            "daemon_hook_deadline_exhausted",
-            "daemon_hook_queue_capacity",
-            "daemon_hook_queue_bytes",
-        ] {
-            let (stdout, exit) = rendered(event, &edge_fail_safe(code), &home, false)
-                .unwrap_or_else(|| panic!("{event} {code} has no answer"));
-            let answer: Value = serde_json::from_str(&stdout).unwrap();
-            assert_eq!(answer["permission"], "deny", "{event} {code}");
-            assert_eq!(exit, 2, "{event} {code}");
-        }
-    }
 }
