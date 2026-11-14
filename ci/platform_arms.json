@@ -1700,11 +1700,11 @@
   },
   {
    "verdict": "windows-equivalent",
-   "note": "Unix serves over a unix socket; the else arm serves the authenticated loopback transport that the Windows build advertises as `authenticated-loopback-resident-v1`. Both are real transports. The requested-stop note the block leaves afterwards is written the same way on either arm.",
+   "note": "Unix serves over a unix socket; the else arm serves the authenticated loopback transport that the Windows build advertises as `authenticated-loopback-resident-v1`. Both are real transports. Both arms call the ready callback once the listener is published, so cold-start readiness is recorded the same way on either transport. The requested-stop note the block leaves afterwards is written the same way on either arm.",
    "file": "rust/crates/guard-runtime/src/managed_resident.rs",
    "item": "fn serve_managed -- cfg! expression",
    "cfg": "unix",
-   "body": "e0bcc9f4d23c"
+   "body": "0368d199c6d8"
   },
   {
    "file": "rust/crates/guard-runtime/src/managed_resident_lease_identity.rs",
@@ -1811,12 +1811,12 @@
    "body": "dbc3c4827679"
   },
   {
-   "file": "rust/crates/guard-runtime/src/managed_resident_transport.rs",
-   "item": "pub(super) fn serve_unix_managed( _owner: (&Path, &super::ManagedOwnerLock), _policy_store: std::sync::Arc<crate::policy_store::PolicySnapshotStore>, _generation: u64, _owner_process_id: u32, _digest: &str, _token: [u8; crate::AUTH_TOKEN_BYTES],",
    "verdict": "windows-unsupported",
    "note": "There is no AF_UNIX managed listener off Unix; Windows serves the authenticated loopback transport instead.",
+   "file": "rust/crates/guard-runtime/src/managed_resident_transport.rs",
+   "item": "pub(super) fn serve_unix_managed( _owner: (&Path, &super::ManagedOwnerLock), _policy_store: std::sync::Arc<crate::policy_store::PolicySnapshotStore>, _generation: u64, _owner_process_id: u32, _digest: &str, _token: [u8; crate::AUTH_TOKEN_BYTES],",
    "cfg": "not(unix)",
-   "body": "b1f3dc9f9630"
+   "body": "33f5bf454344"
   },
   {
    "verdict": "other-platform",

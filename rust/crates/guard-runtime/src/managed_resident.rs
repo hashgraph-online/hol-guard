@@ -244,10 +244,9 @@ pub(crate) fn serve_managed(
     expected_digest: &str,
 ) -> Result<(), String> {
     MANAGED_SHUTDOWN_REQUESTED.store(false, Ordering::Release);
-    let startup_started = crate::resident_diagnostics::enabled().then(Instant::now);
-    // Decode the packaged command program while the executable self-check
-    // runs. Policy admission waits on the same OnceLock, so nothing uses the
-    // program before the identity check below has passed.
+    let entered = Instant::now();
+    let startup_started = crate::resident_diagnostics::enabled().then_some(entered);
+    // Decode the command program during the self-check; admission waits on its OnceLock.
     thread::spawn(|| {
         let _ = guard_command::native_command_program::packaged_command_program();
     });
@@ -292,6 +291,7 @@ pub(crate) fn serve_managed(
         );
     }
     let (policy_store, token, owner_alive) = startup?;
+    let ready = || lifecycle_journal::record_ready_in_background(&scope, entered.elapsed());
     let served = if cfg!(unix) {
         managed_resident_transport::serve_unix_managed(
             (&scope, &owner_lock),
@@ -301,6 +301,7 @@ pub(crate) fn serve_managed(
             expected_digest,
             token,
             owner_alive,
+            ready,
         )
     } else {
         managed_resident_transport::serve_loopback_managed(
@@ -311,14 +312,13 @@ pub(crate) fn serve_managed(
             expected_digest,
             token,
             owner_alive,
+            ready,
         )
     };
-    // The serve loops end on a `shutdown` operation by returning, so a
-    // requested stop reaches the supervisor as a clean exit and nothing else.
-    // Leave the note here, where the reason is still known, named after this
-    // process so the supervisor that reaps it reads this run's note and no
-    // other, and does not charge a stop it was asked for to the crash-loop
-    // budget.
+    // The serve loops end on a `shutdown` operation by returning, so a requested stop reaches
+    // the supervisor as a clean exit and nothing else. Leave the note here, where the reason is
+    // still known, named after this process so the supervisor that reaps it reads this run's
+    // note and no other, and does not charge a stop it was asked for to the crash-loop budget.
     if served.is_ok() && shutdown_requested() {
         let _ = requested_stop::record(&scope, std::process::id());
     }
