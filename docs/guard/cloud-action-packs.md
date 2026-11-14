@@ -83,6 +83,27 @@ one-field object whose name is a string argument:
 The key argument must be required, carry a pattern, and allow at most 256 characters. The name is written as a
 JSON string, so it cannot add a sibling field. A call without the key is refused rather than rendered.
 
+## SQL statements
+
+An action that runs SQL adds `sql`: the argument holding the statement text, and `field` when the text is one key of
+a JSON argument. The value may be one string or an array of strings. Guard reads the text without running it and
+raises the declared class when a statement does more:
+
+- `SELECT`, `WITH`, `VALUES`, `SHOW`, `DESCRIBE`, `EXPLAIN` without `ANALYZE`, and transaction control read.
+- `INSERT`, `MERGE`, `CREATE`, `ALTER` that adds, `SET`, and `UPDATE` or `DELETE` with a real top-level `WHERE`
+  write. A write that a `WHERE` narrows reports scope `query_selected`.
+- `DROP`, `TRUNCATE`, `UPDATE` or `DELETE` without a `WHERE` (or with a constant-true one such as `WHERE 1=1`),
+  `ALTER ... DROP`, `CREATE OR REPLACE`, `EXPLAIN ANALYZE` of a write, and any statement the reader does not know
+  (`CALL`, `DO`, `COPY`, `EXECUTE`) are a permanent delete on a table, or on a database for `DROP DATABASE` and
+  `DROP SCHEMA`. A delete with no `WHERE` reports scope `all`.
+- `GRANT`, `REVOKE`, `SET ROLE` and changes to users, roles and policies are `admin`.
+
+Every statement in a batch is read, and the strictest one decides. Write and side-effect functions inside a query
+(`nextval`, `dblink`, `pg_terminate_backend`) count as the statement they cause. Text the reader cannot follow the
+way every dialect would is destructive: an unclosed quote or comment, a backslash inside a string, a `#` comment,
+`--` without a following space, nested or MySQL executable comments (`/*! ... */`), more than 64 statements, an empty
+batch, or a value that is not text. The SQL can only raise the declared class, never lower it.
+
 ## Rendering and projection
 
 Rendering checks every argument against its rule, then builds the request. Path segments and query values are
@@ -156,7 +177,7 @@ Both read one JSON request per line on standard input and write one JSON result 
 | `extract` | `pack` or `artifact`, `actionId`, `arguments` | `facts` |
 | `project` | `pack` or `artifact`, `actionId`, `response` | `projection` |
 | `policy` | `preset` name or `policyPack` | `preset`, `packDigest`, `factRules`, `unclassified` |
-| `classify` | `name`, optional `inputSchema`, optional `preset` or `policyPack` | `proposal`, and `action` when a preset is named |
+| `classify` | `name`, optional `inputSchema`, optional `class`, optional `preset` or `policyPack` | `proposal`; `facts` that claim only one class (the proposal's, or `class` when a workspace admin approved one for the tool); and `action` when a preset is named |
 | `explain` | `actionId`, `arguments`, optional `pack` or `artifact` (defaults to the shipped packs) | `providerId`, `effect`, `facts`, `decisions` by preset |
 | `simulate` | `preset` or `policyPack`, and `calls`: up to 1000 stored calls, each `provider`, `actionId`, `facts`, optional `effect`, `connectionId`, `resourceId`, `sessionFlow` and `usageWindows` | `results`: per call `action`, `matchedRuleIds`, `unknownRuleIds` |
 | `generate` | `providerId`; `openapi` or `mcpTools`, or `from` and `document` text; optional `providerName`, `publisher`, `host`, `authMode` | draft `pack`, `proposals`, `notes` |
@@ -239,7 +260,7 @@ deletes. `airtable.json` lists, reads, adds, updates and deletes records, at mos
 `dropbox.json` lists, moves and deletes files one at a time or in batches, deletes permanently, creates public and
 team links, shares with people and makes four-hour download links.
 
-Seven packs cover provider-hosted MCP servers rather than REST APIs. `salesforce-mcp.json` and `notion-mcp.json` name
+Twenty-three packs cover provider-hosted MCP servers rather than REST APIs. `salesforce-mcp.json` and `notion-mcp.json` name
 each tool argument: Salesforce queries, searches, record reads, creates, updates and deletes (recoverable from the
 Recycle Bin), and Notion search, fetch, data source queries, page creation (at most twenty per call), updates, moves,
 duplicates, trash, version restore and comments. A record body or page list is a bounded JSON argument. `asana.json`,
@@ -250,6 +271,53 @@ movement (`send_money`, `transfer_money`, `convert_currency`) is class `pay` and
 Tools that multiplex several operations behind one name (Stripe `stripe_api_write`, Atlassian `executeRead`,
 `executeWrite` and `executeDestructive`, HubSpot `manage_*`) and Linear, whose tool names are not published, are not
 covered.
+
+Fourteen more tool-level packs follow the same pattern for developer, operations and support servers:
+`github-mcp.json` (GitHub's hosted MCP server), `gitlab-mcp.json`, `azure-devops-mcp.json`, `buildkite-mcp.json`,
+`vercel-mcp.json`, `render-mcp.json`, `sentry-mcp.json`, `pagerduty-mcp.json`, `postman-mcp.json`,
+`huggingface-mcp.json`, `webflow-mcp.json`, `monday-mcp.json`, `paypal-mcp.json` and `intercom-mcp.json`. Each tool
+name comes from the provider's published tool list. Reads are class `read`. Tools that start a deployment, run a
+pipeline, run a command in a sandbox, merge a pull or merge request, or roll a release forward or back are class
+`execute`. Tools that write an environment variable, a project secret, a DSN or an SDK key are writes on a `secret`.
+Tools that change who can reach a project or a workspace (firewall rules, deployment protection and bypasses,
+signing keys, team roles, private networks, governance rules, webhooks and log drains) are class `admin`, which
+every preset blocks. Buying a domain and PayPal money movement are class `pay`. A tool whose single name covers
+several operations takes the class of its riskiest one. Every tool's arguments are open but bounded in total size,
+and a key that no tool argument could have (such as `$where`) is refused. monday.com's `all_monday_api`, which sends
+any GraphQL query, is not covered.
+
+`supabase-mcp.json` and `neon-mcp.json` cover the Supabase and Neon MCP servers. Their SQL tools (`execute_sql`,
+`apply_migration`, `run_sql`, `run_sql_transaction`, `explain_sql_statement` and `prepare_database_migration`) carry
+an `sql` fact, so a query is allowed, a narrowed write is reviewed in Balanced, and dropping or emptying a table is
+blocked in Balanced and Strict and needs a fresh approval in Relaxed. Deleting a Neon project, which removes every
+branch and backup, and deleting or resetting a Supabase or Neon branch are permanent deletes on a database. Deploying
+a Supabase Edge Function is a production deployment.
+
+`bigquery.json` and `cloudflare.json` cover data stores over REST. BigQuery lists datasets and tables, reads a table
+schema, runs a GoogleSQL query through `jobs.query` with the `sql` fact, and deletes a table or a dataset (with or
+without `deleteContents`). Cloudflare lists and queries D1 databases with the `sql` fact, lists Workers KV namespaces
+and Workers scripts, and deletes a D1 database, a KV namespace or a Worker. Every delete is permanent: a dataset, D1
+database or KV namespace is a database-wide delete, so Balanced and Strict block it and Relaxed needs a fresh
+approval. Deleting a Worker removes one production deployment: Relaxed and Balanced review it and Strict blocks it. Cloudflare's OAuth scopes are the ones Wrangler
+requests (`d1:write`, `workers_kv:write`, `workers_scripts:write`); R2 has no OAuth scope there and is not packed.
+Snowflake (a host per account), MongoDB Atlas (service-account credentials without OAuth scopes), Railway (one
+GraphQL endpoint) and AWS (SigV4 request signing) are not packed.
+
+`quickbooks.json` and `monday.json` cover accounting and work management. QuickBooks Online reads an invoice, emails
+it to one named address, and voids or deletes it; deleting an invoice is permanent, so Relaxed and Balanced review
+it and Strict blocks it. monday.com creates and deletes items and deletes boards through fixed GraphQL mutations
+whose ids travel only as variables, so an argument cannot add a second operation. A deleted board takes every item
+with it, so Balanced and Strict block it. Zendesk and Shopify (a host per account), Xero (a tenant header per call),
+Trello (credentials in the query string), and the Intercom and ClickUp REST APIs (OAuth without scopes) are not
+packed; Intercom's MCP server is, as described below.
+
+`sendgrid.json`, `zoom.json`, `figma.json` and `discord.json` cover messaging and collaboration. SendGrid sends one
+plain-text message whose recipients come only from the `to` argument, so the recipient facts name every address.
+Zoom lists upcoming meetings, deletes a meeting, and moves a meeting's recordings to the trash or deletes them
+permanently as separate actions with different reversibility. Figma reads, adds and deletes file comments. Discord
+posts with every mention turned off, deletes one message, and bulk-deletes up to 100; a bulk delete of 100 needs a
+fresh approval in Balanced. Twilio, Mailchimp, DocuSign, Calendly and Zapier are not packed: their credentials carry
+no scopes Guard can name, or the action needs a per-account host.
 
 `stripe.json` covers the Stripe REST API for money movement the MCP server multiplexes: reading the balance,
 refunds, payouts, transfers to connected accounts and new prices, all with form bodies. Payouts, transfers and

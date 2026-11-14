@@ -1044,6 +1044,23 @@
             }
           }
         },
+        "sql": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "argument"
+          ],
+          "properties": {
+            "argument": {
+              "$ref": "#/$defs/argumentName"
+            },
+            "field": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64
+            }
+          }
+        },
         "countReadback": {
           "type": "string",
           "maxLength": 128

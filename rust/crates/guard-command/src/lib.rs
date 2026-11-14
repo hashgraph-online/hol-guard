@@ -98,6 +98,10 @@ mod cloud_pack_shape_tests;
 pub mod cloud_pack_simulate;
 #[cfg(test)]
 mod cloud_pack_simulate_tests;
+pub mod cloud_pack_sql;
+mod cloud_pack_sql_lex;
+#[cfg(test)]
+mod cloud_pack_sql_tests;
 #[cfg(test)]
 mod cloud_pack_tests;
 pub mod cloud_pack_validate;

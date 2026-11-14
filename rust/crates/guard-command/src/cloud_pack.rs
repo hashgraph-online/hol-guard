@@ -311,6 +311,9 @@ pub struct FactSpec {
     pub sensitivity: Option<Extractor>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub money: Option<crate::cloud_pack_money::MoneySpec>,
+    /// A string argument holding SQL whose statements can raise the class.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sql: Option<crate::cloud_pack_sql::SqlSpec>,
     /// A read action in this pack the gateway may run to learn the volume.
     pub count_readback: Option<String>,
 }

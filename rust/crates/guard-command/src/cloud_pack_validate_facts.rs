@@ -47,6 +47,7 @@ pub(crate) fn validate_facts(
         Some(_) => return Err("cloud_pack_extractor_kind_invalid"),
     }
     crate::cloud_pack_money::validate(facts.money.as_ref(), args)?;
+    crate::cloud_pack_sql::validate(facts.sql.as_ref(), args)?;
     match &facts.sensitivity {
         None => {}
         Some(Extractor::Const(value)) => typed::<Vec<SensitivityV2>>(value)?,
