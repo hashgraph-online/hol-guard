@@ -132,6 +132,15 @@ fn naming(file: &File, term: &str, exact: Option<&str>, until: Instant) -> Optio
             continue;
         }
         found.held = true;
+        // `.. _cache algorithm:` is a link label, not the name `_cache`.
+        let unlabeled;
+        let line = match line.trim_start().strip_prefix(".. _") {
+            Some(rest) if exact.is_some() => {
+                unlabeled = format!(".. {rest}");
+                unlabeled.as_str()
+            }
+            _ => line,
+        };
         let words = line
             .split(|c: char| !(c.is_alphanumeric() || matches!(c, '_' | '-')))
             .filter(|word| !word.is_empty());

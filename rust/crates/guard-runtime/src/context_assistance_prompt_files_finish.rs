@@ -47,8 +47,20 @@ pub(super) fn holds_word(text: &str, word: &str) -> bool {
     let joins = |c: Option<char>| c.is_some_and(|c| c.is_alphanumeric() || matches!(c, '_' | '-'));
     !word.is_empty()
         && (text.match_indices(word)).any(|(at, _)| {
-            !joins(text[..at].chars().next_back()) && !joins(text[at + word.len()..].chars().next())
+            !joins(text[..at].chars().next_back())
+                && !joins(text[at + word.len()..].chars().next())
+                && !(word.starts_with('_') && link_label(&text[..at]))
         })
+}
+
+/// Whether a name starting with `_` right after `before` opens a
+/// reStructuredText link target, `.. _cache algorithm:`, where the `_` is
+/// markup and the label is `cache algorithm`, not the name `_cache`.
+fn link_label(before: &str) -> bool {
+    before
+        .rsplit('\n')
+        .next()
+        .is_some_and(|line| line.trim() == "..")
 }
 
 #[cfg(test)]
@@ -59,6 +71,7 @@ mod tests {
         assert!(holds("self._cache = {}") && holds("_cache"));
         assert!(!holds("@lru_cache") && !holds("x-_cache") && !holds("_cache_size"));
         assert!(!super::holds_word("anything", ""));
+        assert!(!holds(".. _cache algorithm: https://example.org") && holds("x\n.. f(_cache)"));
     }
 
     /// The count reads each file as written, as the rename list does, so

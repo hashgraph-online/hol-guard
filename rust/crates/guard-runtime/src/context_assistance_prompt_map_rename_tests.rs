@@ -340,3 +340,31 @@ fn a_rename_list_is_whole_when_only_longer_names_are_left_unread() {
     );
     assert!(text.contains("perl -pi -e"), "{text}");
 }
+
+/// In reStructuredText `.. _cache algorithm:` opens a link labelled
+/// `cache algorithm`; its `_` is markup. Renaming `_cache` leaves the label
+/// alone: the note neither lists it nor counts its file, and is still whole.
+#[test]
+fn a_rename_leaves_a_link_label_alone() {
+    let source = "def _cache(size):\n    return {}\n\n\ndef lru(size):\n    return _cache(size)\n";
+    let readme = "Caches\n======\n\nSee the `cache algorithm`_.\n\n.. _cache algorithm: https://example.org/cache\n";
+    let (home, _project, root) = project(ON, &[("src/func.py", source), ("README.rst", readme)]);
+    let text = prompt_map(
+        home.path(),
+        &root,
+        "Rename `_cache` to `_cache_impl` in func.py.",
+    )
+    .unwrap();
+    assert!(
+        text.contains(
+            "Every line naming `_cache`; no other project file holds it:\n\
+             src/func.py:1:def _cache(size):\nsrc/func.py:6:    return _cache(size)"
+        ),
+        "{text}"
+    );
+    assert!(!text.contains("README.rst:6"), "{text}");
+    assert!(
+        text.contains("perl -pi -e") && !text.contains("README.rst "),
+        "{text}"
+    );
+}

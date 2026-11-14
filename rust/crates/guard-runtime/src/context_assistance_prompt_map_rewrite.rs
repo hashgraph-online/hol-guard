@@ -107,6 +107,8 @@ fn alone(line: &str, name: &str) -> bool {
         !([before, after].iter()).any(|c| c.is_some_and(|c| !c.is_ascii()))
             && before != Some('}')
             && !joined
+            // `.. _cache algorithm:` is a link label `perl` would rewrite.
+            && line[..at].trim() != ".."
     })
 }
 
