@@ -21,6 +21,7 @@ import argparse
 import json
 import re
 import sys
+from datetime import datetime
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -30,6 +31,23 @@ MARKDOWN_OUTPUT = ROOT / "docs/guard/harness-claims.md"
 SCHEMA = "hol-guard.harness-claims.v1"
 EVIDENCE_STATES = frozenset({"transport_ready", "live_block_proven", "live_allow_proven", "partial", "stale"})
 TIMESTAMP = re.compile(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z\Z")
+
+
+def valid_timestamp(value: object) -> bool:
+    """A real UTC instant in the fixed ``YYYY-MM-DDTHH:MM:SSZ`` form.
+
+    The pattern alone accepts impossible dates such as ``2026-11-31``, which
+    would then compare as a future expiry.
+    """
+    if not isinstance(value, str) or not TIMESTAMP.match(value):
+        return False
+    try:
+        datetime.strptime(value, "%Y-%m-%dT%H:%M:%SZ")
+    except ValueError:
+        return False
+    return True
+
+
 FAILURE_TEXT = {
     "fail_closed": "Stops the action",
     "fail_open": "Lets the action continue",
@@ -195,7 +213,7 @@ def expired(contract: dict[str, object], as_of: str) -> list[str]:
             continue
         label = f"{row['harness']} {row['event']} ({row['transport']})"
         expires_at = row["expires_at"]
-        if not isinstance(expires_at, str) or not TIMESTAMP.match(expires_at):
+        if not valid_timestamp(expires_at):
             failures.append(f"{label} claims {row['state']} without a valid expires_at")
         elif expires_at <= as_of:
             failures.append(f"{label} expired {expires_at}")
@@ -211,7 +229,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--check", action="store_true", help="Fail when a generated file is out of date")
     parser.add_argument("--as-of", help="Also fail when evidence has expired at this UTC time (YYYY-MM-DDTHH:MM:SSZ)")
     args = parser.parse_args(argv)
-    if args.as_of is not None and not TIMESTAMP.match(args.as_of):
+    if args.as_of is not None and not valid_timestamp(args.as_of):
         print("--as-of must be YYYY-MM-DDTHH:MM:SSZ", file=sys.stderr)
         return 2
     contract = json.loads(CONTRACT.read_text(encoding="utf-8"))
