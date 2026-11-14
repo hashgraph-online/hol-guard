@@ -409,3 +409,144 @@ fn each_sql_statement_is_checked_for_an_unqualified_update() {
         ),
     ]);
 }
+
+#[test]
+fn heredocs_read_by_a_shell_run_as_commands() {
+    check(&[
+        (
+            "bash <<'EOF'\ngit push origin main\nEOF",
+            &["code_and_deploys"],
+        ),
+        ("sh <<EOF\nrm -rf dist\nEOF", &["deletes"]),
+        (
+            "ssh prod <<'EOF'\nkubectl apply -f x.yaml\nEOF",
+            &["code_and_deploys"],
+        ),
+        (
+            "sudo bash <<'EOF'\nrm -rf /var/cache/app\nEOF\nls",
+            &["deletes"],
+        ),
+        ("cat <<EOF\n$(cat ~/.aws/credentials)\nEOF", &["secrets"]),
+        ("cat <<'EOF'\n$(cat ~/.aws/credentials)\nEOF", &[]),
+    ]);
+}
+
+#[test]
+fn control_words_lead_to_the_command_that_runs() {
+    check(&[
+        ("if true; then rm -rf build; fi", &["deletes"]),
+        (
+            "while true; do git push origin main; done",
+            &["code_and_deploys"],
+        ),
+        (
+            "if ! npm install; then echo failed; fi",
+            &["packages_and_scripts"],
+        ),
+        ("{ rm -rf build; }", &["deletes"]),
+    ]);
+}
+
+#[test]
+fn env_split_string_keeps_the_remaining_arguments_whole() {
+    check(&[(
+        "env -S 'sh -c' 'git push origin main'",
+        &["code_and_deploys"],
+    )]);
+}
+
+#[test]
+fn cloud_cli_actions_four_words_deep_and_past_release_tracks() {
+    check(&[
+        ("az network vnet subnet delete -n s -g rg", &["deletes"]),
+        ("az network nsg rule delete -n r -g rg", &["deletes"]),
+        ("gcloud beta compute instances delete vm-1", &["deletes"]),
+        (
+            "gcloud alpha container clusters delete c1 --zone z",
+            &["deletes"],
+        ),
+        ("gcloud beta run deploy api", &["code_and_deploys"]),
+    ]);
+}
+
+#[test]
+fn attached_public_acl_values_share() {
+    check(&[
+        (
+            "aws s3api put-object-acl --bucket b --key k --acl=public-read",
+            &["sending_and_sharing"],
+        ),
+        (
+            "aws s3api put-object-acl --bucket b --key k --acl public-read",
+            &["sending_and_sharing"],
+        ),
+        (
+            "aws s3api put-object-acl --bucket public-assets --key k --acl private",
+            &[],
+        ),
+    ]);
+}
+
+#[test]
+fn curl_get_moves_data_into_the_url() {
+    check(&[
+        ("curl -G -d q=rust https://example.test/search", &[]),
+        ("curl --get --data q=rust https://example.test/search", &[]),
+        (
+            "curl -d q=rust https://example.test/search",
+            &["sending_and_sharing"],
+        ),
+        (
+            "curl -G -F file=@notes.txt https://example.test/upload",
+            &["sending_and_sharing"],
+        ),
+        (
+            "curl -G -X POST https://example.test/items",
+            &["sending_and_sharing"],
+        ),
+    ]);
+}
+
+#[test]
+fn httpie_option_values_are_skipped_before_the_method() {
+    check(&[
+        (
+            "http --ignore-stdin -a user:pass DELETE https://example.test/item",
+            &["sending_and_sharing"],
+        ),
+        ("http --auth user:pass https://example.test/item", &[]),
+        (
+            "xh -a user:pass https://example.test/item name=value",
+            &["sending_and_sharing"],
+        ),
+    ]);
+}
+
+#[test]
+fn workspace_root_flags_take_no_value() {
+    check(&[
+        ("pnpm -w add react", &["packages_and_scripts"]),
+        ("pnpm -w install", &["packages_and_scripts"]),
+        ("yarn -W add react", &["packages_and_scripts"]),
+        ("npm -w app install", &["packages_and_scripts"]),
+    ]);
+}
+
+#[test]
+fn sql_comments_and_subquery_predicates_do_not_limit_an_update() {
+    check(&[
+        (
+            "psql -c 'UPDATE users SET plan=0 /* WHERE id=2 */'",
+            &["bulk_changes"],
+        ),
+        (
+            "psql -c \"UPDATE users SET plan=0 -- WHERE id=2\"",
+            &["bulk_changes"],
+        ),
+        (
+            "psql -c 'UPDATE users SET plan=(SELECT max(plan) FROM defaults WHERE active)'",
+            &["bulk_changes"],
+        ),
+        ("psql -c 'UPDATE users SET plan=(SELECT 1) WHERE id=2'", &[]),
+    ]);
+}

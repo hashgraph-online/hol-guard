@@ -24,7 +24,7 @@ use tools::{
     deploy_groups, gh_groups, git_groups, has, is_remote_target, package_groups, sql_groups,
     subcommand,
 };
-use words::{tokens, Token};
+use words::{body_substitutions, tokens, Token};
 
 /// Cloud's group names, in Cloud's display order.
 const GROUPS: [&str; 6] = [
@@ -40,6 +40,15 @@ const GROUPS: [&str; 6] = [
 const WRAPPERS: [&str; 11] = [
     "sudo", "doas", "env", "nohup", "time", "nice", "ionice", "command", "exec", "xargs", "timeout",
 ];
+
+/// Shell words that open or continue a compound command; the simple command
+/// after them is the one that runs (`if true; then rm -rf build; fi`).
+const CONTROL_WORDS: [&str; 10] = [
+    "if", "then", "else", "elif", "do", "while", "until", "!", "{", "case",
+];
+
+/// Programs that run the here-document they read as commands.
+const STDIN_SHELLS: [&str; 8] = ["bash", "sh", "zsh", "dash", "ksh", "fish", "ssh", "eval"];
 
 /// How deep `bash -c`, `eval`, `ssh` and `watch` payloads are followed.
 const MAX_DEPTH: usize = 4;
@@ -81,7 +90,11 @@ fn collect(command: &str, depth: usize, found: &mut [bool; GROUPS.len()]) {
                 collect(inner, depth + 1, found);
             }
         }
-        let index = match program_index(&segment.words) {
+        let program = program_index(&segment.words);
+        if depth < MAX_DEPTH {
+            collect_heredocs(&segment, program.as_ref(), depth, found);
+        }
+        let index = match program {
             Some(Program::At(index)) => index,
             Some(Program::Split(inner)) => {
                 if depth < MAX_DEPTH {
@@ -106,6 +119,36 @@ fn collect(command: &str, depth: usize, found: &mut [bool; GROUPS.len()]) {
     }
 }
 
+/// A here-document is the command text when a shell or `ssh` reads it. For
+/// any other reader it is input, and only an unquoted body's command
+/// substitutions run.
+fn collect_heredocs(
+    segment: &Segment,
+    program: Option<&Program>,
+    depth: usize,
+    found: &mut [bool; GROUPS.len()],
+) {
+    let runs_body = match program {
+        Some(Program::At(index)) => {
+            STDIN_SHELLS.contains(&program_name(&segment.words[*index]).as_str())
+        }
+        Some(Program::Split(inner)) => inner
+            .split_whitespace()
+            .next()
+            .is_some_and(|first| STDIN_SHELLS.contains(&program_name(first).as_str())),
+        None => false,
+    };
+    for (body, quoted) in &segment.heredocs {
+        if runs_body {
+            collect(body, depth + 1, found);
+        } else if !quoted {
+            for inner in body_substitutions(body) {
+                collect(&inner, depth + 1, found);
+            }
+        }
+    }
+}
+
 /// One simple command per segment, with redirection targets kept apart.
 fn segments(tokens: Vec<Token>) -> Vec<Segment> {
     let mut out = Vec::new();
@@ -124,11 +167,16 @@ fn segments(tokens: Vec<Token>) -> Vec<Segment> {
             }
             Token::Word(word) => current.words.push(word),
             Token::Substitution(inner) => current.substitutions.push(inner),
+            Token::Heredoc { body, quoted } => current.heredocs.push((body, quoted)),
         }
     }
     out.push(current);
     out.into_iter()
-        .filter(|segment| !segment.words.is_empty() || !segment.substitutions.is_empty())
+        .filter(|segment| {
+            !segment.words.is_empty()
+                || !segment.substitutions.is_empty()
+                || !segment.heredocs.is_empty()
+        })
         .collect()
 }
 
@@ -137,6 +185,8 @@ struct Segment {
     words: Vec<String>,
     redirects: Vec<String>,
     substitutions: Vec<String>,
+    /// Here-document bodies, each with whether its delimiter was quoted.
+    heredocs: Vec<(String, bool)>,
 }
 
 /// Where a segment's program is: a word, or the command line `env -S` splits.
@@ -216,7 +266,7 @@ fn program_index(words: &[String]) -> Option<Program> {
     let mut index = 0;
     loop {
         let word = words.get(index)?;
-        if is_assignment(word) {
+        if is_assignment(word) || CONTROL_WORDS.contains(&word.as_str()) {
             index += 1;
             continue;
         }
@@ -254,7 +304,8 @@ fn program_index(words: &[String]) -> Option<Program> {
 }
 
 /// The command `env -S STRING`, `-SSTRING` or `--split-string=STRING` runs:
-/// the string, split into words, followed by the remaining words.
+/// the string, split into words, followed by the remaining words, each kept
+/// as one word as `env` passes them.
 fn env_split_string(flag: &str, rest: &[String]) -> Option<String> {
     let (value, rest) = match flag {
         "-S" | "--split-string" => (rest.first()?.as_str(), rest.get(1..).unwrap_or(&[])),
@@ -267,8 +318,9 @@ fn env_split_string(flag: &str, rest: &[String]) -> Option<String> {
     };
     let mut command = value.to_string();
     for word in rest {
-        command.push(' ');
-        command.push_str(word);
+        command.push_str(" '");
+        command.push_str(&word.replace('\'', "'\\''"));
+        command.push('\'');
     }
     Some(command)
 }

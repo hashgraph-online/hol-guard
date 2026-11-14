@@ -109,15 +109,15 @@ const DEPLOY_TOOLS: [DeployTool; 12] = [
     },
 ];
 
-/// Package-manager options before the subcommand that take a value.
-const PACKAGE_VALUE_FLAGS: [&str; 16] = [
+/// Package-manager options before the subcommand that take a value. npm's
+/// `-w` takes a workspace name; pnpm's `-w` and yarn's `-W` take none.
+const PACKAGE_VALUE_FLAGS: [&str; 15] = [
     "--prefix",
     "-C",
     "--dir",
     "--cwd",
     "--filter",
     "--workspace",
-    "-w",
     "--registry",
     "--cache",
     "--userconfig",
@@ -167,7 +167,13 @@ pub(super) fn is_remote_target(word: &str) -> bool {
 }
 
 pub(super) fn package_groups(name: &str, args: &[String]) -> Vec<&'static str> {
-    let sub = subcommand(args, &PACKAGE_VALUE_FLAGS).map(|(_, verb)| verb);
+    let npm_flags: Vec<&str> = PACKAGE_VALUE_FLAGS.iter().copied().chain(["-w"]).collect();
+    let value_flags: &[&str] = if name == "npm" {
+        &npm_flags
+    } else {
+        &PACKAGE_VALUE_FLAGS
+    };
+    let sub = subcommand(args, value_flags).map(|(_, verb)| verb);
     let mut groups = Vec::new();
     if PACKAGE_MANAGERS.contains(&name) {
         if sub.is_some_and(|verb| PACKAGE_VERBS.contains(&verb))
@@ -225,15 +231,31 @@ pub(super) fn deploy_groups(name: &str, args: &[String]) -> Vec<&'static str> {
     groups
 }
 
-/// SQL statements, read as words outside string literals.
+/// SQL statements, read as words outside string literals and comments.
 pub(super) fn sql_groups(args: &[String]) -> Vec<&'static str> {
     let mut text = String::new();
     let mut in_string = false;
-    for c in args.join(" ").chars() {
+    let joined = args.join(" ");
+    let mut chars = joined.chars().peekable();
+    while let Some(c) = chars.next() {
         if c == '\'' {
             in_string = !in_string;
             text.push(' ');
-        } else if !in_string {
+        } else if in_string {
+            continue;
+        } else if c == '-' && chars.next_if_eq(&'-').is_some() {
+            while chars.next_if(|next| *next != '\n').is_some() {}
+            text.push(' ');
+        } else if c == '/' && chars.next_if_eq(&'*').is_some() {
+            let mut last = ' ';
+            for inner in chars.by_ref() {
+                if last == '*' && inner == '/' {
+                    break;
+                }
+                last = inner;
+            }
+            text.push(' ');
+        } else {
             text.push(c);
         }
     }
@@ -257,8 +279,23 @@ pub(super) fn sql_groups(args: &[String]) -> Vec<&'static str> {
     }
     // Each statement on its own: `UPDATE a SET x WHERE y; UPDATE a SET x`
     // updates every row in its second statement.
+    // A `WHERE` inside a subquery (`SET x = (SELECT ... WHERE ...)`) does not
+    // limit the outer update, so only the statement's top level is read.
     let bulk_update = text.split(';').any(|statement| {
-        let words = words_of(statement);
+        let mut depth = 0usize;
+        let top: String = statement
+            .chars()
+            .map(|c| {
+                match c {
+                    '(' => depth += 1,
+                    ')' => depth = depth.saturating_sub(1),
+                    _ if depth == 0 => return c,
+                    _ => {}
+                }
+                ' '
+            })
+            .collect();
+        let words = words_of(&top);
         words
             .iter()
             .position(|word| word == "update")

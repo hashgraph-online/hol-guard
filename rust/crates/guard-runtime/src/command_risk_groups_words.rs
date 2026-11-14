@@ -5,9 +5,10 @@
 //! `echo ready` followed by `rm x` on the next line becomes two. Quoted text
 //! stays inside its word. A command substitution (`$(...)`, backticks, and
 //! `<(...)`/`>(...)`) is handed back as its own command without ending the
-//! outer one, also inside double quotes. Here-document bodies are input, not
-//! commands, and are skipped. An unclosed quote runs to the end of the
-//! command, so a malformed command still yields its words.
+//! outer one, also inside double quotes. A here-document body is handed back
+//! with the command that reads it, which decides whether the body runs. An
+//! unclosed quote runs to the end of the command, so a malformed command
+//! still yields its words.
 
 use std::iter::Peekable;
 use std::str::Chars;
@@ -21,13 +22,19 @@ pub(super) enum Token {
     Redirect,
     /// A command substitution's text, run as its own command.
     Substitution(String),
+    /// A here-document body. `quoted` is true when the delimiter was quoted,
+    /// so the shell expands nothing in the body.
+    Heredoc {
+        body: String,
+        quoted: bool,
+    },
 }
 
 pub(super) fn tokens(command: &str) -> Vec<Token> {
     let mut out = Vec::new();
     let mut word = String::new();
     let mut in_word = false;
-    let mut heredocs: Vec<(String, bool)> = Vec::new();
+    let mut heredocs: Vec<Heredoc> = Vec::new();
     let mut chars = command.chars().peekable();
     while let Some(c) = chars.next() {
         match c {
@@ -79,10 +86,15 @@ pub(super) fn tokens(command: &str) -> Vec<Token> {
             ' ' | '\t' | '\r' => finish(&mut out, &mut word, &mut in_word),
             '\n' => {
                 finish(&mut out, &mut word, &mut in_word);
-                out.push(Token::Boundary);
-                for (delimiter, strip_tabs) in heredocs.drain(..) {
-                    skip_heredoc_body(&mut chars, &delimiter, strip_tabs);
+                // The bodies follow this newline and belong to the command
+                // that opened them, so they are handed back before it ends.
+                for heredoc in heredocs.drain(..) {
+                    out.push(Token::Heredoc {
+                        body: heredoc_body(&mut chars, &heredoc),
+                        quoted: heredoc.quoted,
+                    });
                 }
+                out.push(Token::Boundary);
             }
             ';' | '|' | '(' | ')' => {
                 finish(&mut out, &mut word, &mut in_word);
@@ -116,8 +128,12 @@ pub(super) fn tokens(command: &str) -> Vec<Token> {
                 }
                 if operator == "<<" {
                     let strip_tabs = chars.next_if_eq(&'-').is_some();
-                    if let Some(delimiter) = heredoc_delimiter(&mut chars) {
-                        heredocs.push((delimiter, strip_tabs));
+                    if let Some((delimiter, quoted)) = heredoc_delimiter(&mut chars) {
+                        heredocs.push(Heredoc {
+                            delimiter,
+                            strip_tabs,
+                            quoted,
+                        });
                     }
                 } else if chars.next_if_eq(&'&').is_some() {
                     // `>&2` copies a descriptor and names no file.
@@ -204,35 +220,69 @@ fn until_backtick(chars: &mut Peekable<Chars>) -> String {
     text
 }
 
-/// The word after `<<`, with its quotes removed, as the body's end line.
-fn heredoc_delimiter(chars: &mut Peekable<Chars>) -> Option<String> {
+struct Heredoc {
+    delimiter: String,
+    strip_tabs: bool,
+    quoted: bool,
+}
+
+/// The word after `<<`, with its quotes removed, as the body's end line, and
+/// whether any part of it was quoted.
+fn heredoc_delimiter(chars: &mut Peekable<Chars>) -> Option<(String, bool)> {
     while chars.next_if(|next| matches!(next, ' ' | '\t')).is_some() {}
     let mut delimiter = String::new();
+    let mut quoted = false;
     while let Some(c) = chars.next_if(|next| {
         !next.is_whitespace() && !matches!(next, ';' | '|' | '&' | '<' | '>' | '(' | ')')
     }) {
-        if !matches!(c, '\'' | '"' | '\\') {
+        if matches!(c, '\'' | '"' | '\\') {
+            quoted = true;
+        } else {
             delimiter.push(c);
         }
     }
-    Some(delimiter).filter(|delimiter| !delimiter.is_empty())
+    Some((delimiter, quoted)).filter(|(delimiter, _)| !delimiter.is_empty())
 }
 
-/// Skips the lines of a here-document body, through its delimiter line.
-fn skip_heredoc_body(chars: &mut Peekable<Chars>, delimiter: &str, strip_tabs: bool) {
+/// The lines of a here-document body, read through its delimiter line.
+fn heredoc_body(chars: &mut Peekable<Chars>, heredoc: &Heredoc) -> String {
+    let mut body = String::new();
     while chars.peek().is_some() {
         let mut line = String::new();
         while let Some(c) = chars.next_if(|next| *next != '\n') {
             line.push(c);
         }
         chars.next_if_eq(&'\n');
-        let line = if strip_tabs {
+        let line = if heredoc.strip_tabs {
             line.trim_start_matches('\t')
         } else {
             line.as_str()
         };
-        if line == delimiter {
-            return;
+        if line == heredoc.delimiter {
+            break;
+        }
+        body.push_str(line);
+        body.push('\n');
+    }
+    body
+}
+
+/// The command substitutions in an unquoted here-document body. Quotes are
+/// plain text there, so only `\\`, `$(` and backticks are read.
+pub(super) fn body_substitutions(body: &str) -> Vec<String> {
+    let mut found = Vec::new();
+    let mut chars = body.chars().peekable();
+    while let Some(c) = chars.next() {
+        match c {
+            '\\' => {
+                chars.next();
+            }
+            '$' if chars.next_if_eq(&'(').is_some() => {
+                found.push(until_close_paren(&mut chars));
+            }
+            '`' => found.push(until_backtick(&mut chars)),
+            _ => {}
         }
     }
+    found
 }

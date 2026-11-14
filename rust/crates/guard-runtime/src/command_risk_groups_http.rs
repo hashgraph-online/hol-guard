@@ -31,6 +31,32 @@ const CURL_LONG_VALUE_FLAGS: [&str; 24] = [
     "--limit-rate",
 ];
 
+/// HTTPie and xh options that take the next word as their value.
+const HTTPIE_VALUE_FLAGS: [&str; 19] = [
+    "--auth",
+    "--auth-type",
+    "--session",
+    "--session-read-only",
+    "--output",
+    "--proxy",
+    "--verify",
+    "--cert",
+    "--cert-key",
+    "--cert-key-pass",
+    "--timeout",
+    "--max-redirects",
+    "--pretty",
+    "--style",
+    "--print",
+    "--format-options",
+    "--default-scheme",
+    "--boundary",
+    "--ssl",
+];
+
+/// HTTPie and xh short options whose value follows them.
+const HTTPIE_SHORT_VALUE_FLAGS: &str = "aAoPps";
+
 /// HTTP-client long options that send a body or a file.
 const SEND_LONG_OPTIONS: [&str; 8] = [
     "--data",
@@ -72,13 +98,16 @@ pub(super) fn http_sends(name: &str, raw_args: &[String]) -> bool {
 }
 
 /// curl, read left to right so an option's value (`-o -Tname`) is never read
-/// as an option of its own.
+/// as an option of its own. Form fields, uploads and write methods send;
+/// `-d` data sends unless `-G` moves it into a GET request's URL.
 fn curl_sends(args: &[String]) -> bool {
+    let mut data = false;
+    let mut get = false;
     let mut index = 0;
     while let Some(arg) = args.get(index) {
         index += 1;
         if arg == "--" {
-            return false;
+            break;
         }
         if let Some(long) = arg.strip_prefix("--") {
             let (option, attached) = match long.split_once('=') {
@@ -86,7 +115,16 @@ fn curl_sends(args: &[String]) -> bool {
                 None => (long, None),
             };
             let option = format!("--{option}");
-            if SEND_LONG_OPTIONS
+            if option.starts_with("--data") {
+                data = true;
+                if attached.is_none() {
+                    index += 1;
+                }
+                continue;
+            }
+            if option == "--get" {
+                get = true;
+            } else if SEND_LONG_OPTIONS
                 .iter()
                 .any(|send| option.starts_with(send))
             {
@@ -110,7 +148,15 @@ fn curl_sends(args: &[String]) -> bool {
         };
         for (at, flag) in flags.char_indices() {
             match flag {
-                'd' | 'F' | 'T' => return true,
+                'F' | 'T' => return true,
+                'G' => get = true,
+                'd' => {
+                    data = true;
+                    if at + 1 == flags.len() {
+                        index += 1;
+                    }
+                    break;
+                }
                 'X' => {
                     let attached = &flags[at + 1..];
                     let method = if attached.is_empty() {
@@ -134,17 +180,31 @@ fn curl_sends(args: &[String]) -> bool {
             }
         }
     }
-    false
+    data && !get
 }
 
 /// HTTPie: a write method word, or `name=value`, `name:=json` or `name@file`
 /// body items after the URL.
 fn httpie_sends(args: &[String]) -> bool {
-    let words: Vec<&str> = args
-        .iter()
-        .filter(|arg| !arg.starts_with('-'))
-        .map(String::as_str)
-        .collect();
+    let mut words: Vec<&str> = Vec::new();
+    let mut index = 0;
+    while let Some(arg) = args.get(index) {
+        index += 1;
+        if let Some(long) = arg.strip_prefix("--") {
+            if !long.contains('=') && HTTPIE_VALUE_FLAGS.contains(&arg.as_str()) {
+                index += 1;
+            }
+        } else if let Some(flags) = arg.strip_prefix('-').filter(|flags| !flags.is_empty()) {
+            // `-a user:pass` and `-va user:pass`; `-auser:pass` keeps its value.
+            if let Some(at) = flags.find(|flag| HTTPIE_SHORT_VALUE_FLAGS.contains(flag)) {
+                if at + 1 == flags.len() {
+                    index += 1;
+                }
+            }
+        } else {
+            words.push(arg);
+        }
+    }
     let Some(first) = words.first() else {
         return false;
     };

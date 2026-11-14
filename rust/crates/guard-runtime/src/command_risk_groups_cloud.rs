@@ -31,6 +31,8 @@ struct CloudCli {
     value_flags: &'static [&'static str],
     /// How many leading words name the service and action.
     action_words: usize,
+    /// Leading release-track words that come before the service.
+    tracks: &'static [&'static str],
 }
 
 const CLOUD_CLIS: [CloudCli; 4] = [
@@ -49,6 +51,7 @@ const CLOUD_CLIS: [CloudCli; 4] = [
             "--cli-connect-timeout",
         ],
         action_words: 2,
+        tracks: &[],
     },
     CloudCli {
         name: "gcloud",
@@ -63,7 +66,8 @@ const CLOUD_CLIS: [CloudCli; 4] = [
             "--zone",
             "--impersonate-service-account",
         ],
-        action_words: 3,
+        action_words: 4,
+        tracks: &["alpha", "beta", "preview"],
     },
     CloudCli {
         name: "az",
@@ -76,13 +80,15 @@ const CLOUD_CLIS: [CloudCli; 4] = [
             "-o",
             "--query",
         ],
-        action_words: 3,
+        action_words: 4,
+        tracks: &[],
     },
     CloudCli {
         name: "gsutil",
         deletes: &["rm", "rb"],
         value_flags: &["-o", "-h", "-u"],
         action_words: 1,
+        tracks: &[],
     },
 ];
 
@@ -92,10 +98,9 @@ pub(super) fn cloud_storage_groups(name: &str, args: &[String]) -> Vec<&'static 
     let Some(cli) = CLOUD_CLIS.iter().find(|cli| cli.name == name) else {
         return Vec::new();
     };
-    let actions: Vec<(usize, &str)> = command_words(args, cli.value_flags)
-        .into_iter()
-        .take(cli.action_words)
-        .collect();
+    let mut words = command_words(args, cli.value_flags).into_iter().peekable();
+    words.next_if(|(_, word)| cli.tracks.contains(word));
+    let actions: Vec<(usize, &str)> = words.take(cli.action_words).collect();
     let is = |wanted: &[&str]| actions.iter().any(|(_, word)| wanted.contains(word));
     let pair = |first: &str, second: &str| {
         actions
@@ -120,7 +125,15 @@ pub(super) fn cloud_storage_groups(name: &str, args: &[String]) -> Vec<&'static 
     if uploads || copies_out {
         groups.push("sending_and_sharing");
     }
-    if has(args, "--acl") && args.iter().any(|arg| arg.contains("public")) {
+    let public_acl = args.iter().enumerate().any(|(at, arg)| {
+        let value = match arg.strip_prefix("--acl") {
+            Some("") => args.get(at + 1).map(String::as_str),
+            Some(attached) => attached.strip_prefix('='),
+            None => None,
+        };
+        value.is_some_and(|value| value.contains("public"))
+    });
+    if public_acl {
         groups.push("sending_and_sharing");
     }
     if pair("secretsmanager", "get-secret-value") || pair("configure", "get") {
