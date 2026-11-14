@@ -140,7 +140,7 @@ fn a_full_path_the_bare_name_would_not_run_keeps_its_review() {
     // executes an actual file. Never grant a synthetic executable the builtin
     // allow just because its name matches a first PATH entry.
     let synthetic_pwd = home.join("tools/pwd");
-    std::fs::write(&synthetic_pwd, "#!/bin/sh\\nexit 0\\n").unwrap();
+    std::fs::write(&synthetic_pwd, "#!/bin/sh\nexit 0\n").unwrap();
     set_executable(&synthetic_pwd);
     reviewed(Some(&stamped), synthetic_pwd.to_str().unwrap());
     // The bare name's own proof still decides what the program may do.
