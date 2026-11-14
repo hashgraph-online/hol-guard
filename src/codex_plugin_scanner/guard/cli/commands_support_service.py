@@ -264,8 +264,25 @@ def _repair_resident_update_marker(guard_home: Path) -> dict[str, object] | None
 
 
 def _handle_daemon_repair(guard_home: Path, as_json: bool, *, home_dir: Path | None = None) -> int:
+    from ..runtime_health.runtime_repair import DaemonRepairBusyError
+
     marker = _repair_resident_update_marker(guard_home)
-    result: dict[str, object] = dict(repair_guard_daemon_runtime(guard_home, home_dir=home_dir))
+    try:
+        result: dict[str, object] = dict(repair_guard_daemon_runtime(guard_home, home_dir=home_dir))
+    except DaemonRepairBusyError as busy:
+        # A bounded, typed answer: the repair did not run, and nothing was changed.
+        _emit(
+            "daemon",
+            {
+                "repaired": False,
+                "status": "busy",
+                "reason_code": busy.reason_code,
+                "waited_seconds": busy.waited_seconds,
+                "recovery": busy.recovery,
+            },
+            as_json,
+        )
+        return 1
     if marker is not None:
         result["resident_update_marker"] = marker
     _emit("daemon", result, as_json)
