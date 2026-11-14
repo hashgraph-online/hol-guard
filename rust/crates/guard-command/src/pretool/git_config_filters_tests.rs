@@ -1,4 +1,4 @@
-use super::{filters_unset_in, populated_gitlink, GitQuery};
+use super::{filters_unset_in, populated_gitlink, unused, GitQuery};
 use std::path::Path;
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
@@ -81,5 +81,50 @@ fn a_directory_with_its_own_git_entry_is_a_populated_gitlink() {
     let populated = [root.join("file.txt"), root.join("module")];
     assert_eq!(populated_gitlink(&populated, soon()), Some(true));
     assert_eq!(populated_gitlink(&populated, Instant::now()), None);
+    std::fs::remove_dir_all(&root).unwrap();
+}
+
+fn git_binary() -> std::path::PathBuf {
+    std::env::split_paths(&std::env::var_os("PATH").unwrap())
+        .map(|directory| directory.join(if cfg!(windows) { "git.exe" } else { "git" }))
+        .find(|candidate| candidate.is_file())
+        .unwrap()
+}
+
+#[test]
+fn a_checked_out_gitlink_keeps_status_unproven_when_no_path_has_a_filter() {
+    let root = std::env::temp_dir().join(format!("guard-filter-unused-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&root);
+    let (home, repository) = (root.join("home"), root.join("repository"));
+    std::fs::create_dir_all(&home).unwrap();
+    std::fs::create_dir_all(&repository).unwrap();
+    let git = git_binary();
+    let run = |arguments: &[&str]| {
+        assert!(std::process::Command::new(&git)
+            .env_remove("GIT_DIR")
+            .env_remove("GIT_INDEX_FILE")
+            .env("HOME", &home)
+            .arg("-C")
+            .arg(&repository)
+            .args(arguments)
+            .status()
+            .unwrap()
+            .success());
+    };
+    run(&["init", "--quiet"]);
+    std::fs::write(repository.join("README.md"), "fixture\n").unwrap();
+    run(&["add", "README.md"]);
+    run(&[
+        "update-index",
+        "--add",
+        "--cacheinfo",
+        "160000,1111111111111111111111111111111111111111,module",
+    ]);
+    let inspect = || unused(&git, &[], &repository, &home, None, soon(), &[], false);
+    // The gitlink is recorded but not checked out: nothing has a filter.
+    assert_eq!(inspect(), Some(true));
+    // Checked out in place, status would open it under its own configuration.
+    std::fs::create_dir_all(repository.join("module/.git")).unwrap();
+    assert_eq!(inspect(), Some(false));
     std::fs::remove_dir_all(&root).unwrap();
 }
