@@ -105,3 +105,75 @@ fn an_unmanaged_app_passes_through_in_its_own_envelope() {
         json!({"continue": true, "reason_code": "harness_not_managed"})
     );
 }
+
+/// Every code the edge answers with when it has no native decision: the
+/// worker could not review the hook, or the scheduler refused it.
+const NO_DECISION_CODES: [&str; 4] = [
+    WORKER_UNAVAILABLE_CODE,
+    hook_scheduler::DEADLINE_EXHAUSTED,
+    hook_scheduler::QUEUE_CAPACITY,
+    hook_scheduler::QUEUE_BYTES,
+];
+
+/// The enforcing harnesses and the pre-execution events each one sends.
+const PRE_TOOL_EVENTS: [(&str, &[&str]); 3] = [
+    ("claude-code", &["PreToolUse"]),
+    ("codex", &["PreToolUse", "pre_tool_use"]),
+    (
+        "cursor",
+        &[
+            "preToolUse",
+            "beforeShellExecution",
+            "beforeMCPExecution",
+            "beforeReadFile",
+        ],
+    ),
+];
+
+/// The observation events that follow a tool call on the same harnesses.
+const POST_TOOL_EVENTS: [(&str, &[&str]); 3] = [
+    ("claude-code", &["PostToolUse"]),
+    ("codex", &["PostToolUse"]),
+    (
+        "cursor",
+        &["postToolUse", "afterShellExecution", "afterMCPExecution"],
+    ),
+];
+
+#[test]
+fn no_pre_tool_event_is_allowed_without_a_native_decision() {
+    for (harness, events) in PRE_TOOL_EVENTS {
+        for event in events {
+            for code in NO_DECISION_CODES {
+                let body = fail_safe(harness, event, WORKER_UNAVAILABLE_REASON, code);
+                let context = format!("{harness} {event} {code}");
+                assert_eq!(body["policy_action"], "block", "{context}");
+                assert_eq!(body["reason_code"], code, "{context}");
+                assert_eq!(
+                    body["hookSpecificOutput"]["permissionDecision"], "deny",
+                    "{context}"
+                );
+                assert_ne!(body["continue"], true, "{context}");
+            }
+        }
+    }
+}
+
+#[test]
+fn a_post_tool_event_without_a_native_decision_never_blocks() {
+    for (harness, events) in POST_TOOL_EVENTS {
+        for event in events {
+            for code in NO_DECISION_CODES {
+                let body = fail_safe(harness, event, WORKER_UNAVAILABLE_REASON, code);
+                let context = format!("{harness} {event} {code}");
+                assert_eq!(body["continue"], true, "{context}");
+                assert_ne!(body["policy_action"], "block", "{context}");
+                assert!(body.get("decision").is_none(), "{context}");
+                assert_eq!(
+                    body["hookSpecificOutput"]["hookEventName"], *event,
+                    "{context}"
+                );
+            }
+        }
+    }
+}

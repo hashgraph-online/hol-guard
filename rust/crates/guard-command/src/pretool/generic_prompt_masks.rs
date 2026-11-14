@@ -97,10 +97,19 @@ pub(super) fn mask_credential_categories(value: &str) -> String {
 /// option is masked so the probe does not read as a request to stop a
 /// process. When the text names any other `kill`, `pkill` or `killall`
 /// (`kill -0 "$pid" && kill "$target"`), nothing is masked: the probe is then
-/// the only spelling the action scan can recognise the real signal by.
+/// the only spelling the action scan can recognise the real signal by. Both
+/// signal options must sit in one command line for the text to be left as is.
 pub(super) fn mask_liveness_probes(value: &str) -> String {
     static PROBE: OnceLock<Regex> = OnceLock::new();
     static OTHER_KILL: OnceLock<Regex> = OnceLock::new();
+    static MULTI_SIGNAL: OnceLock<Regex> = OnceLock::new();
+    let multi_signal = MULTI_SIGNAL.get_or_init(|| {
+        Regex::new(r"(?i)\bkill\b[^;&|\r\n]*(?:-[sn][ \t]+|--signal(?:=|[ \t]+))\S+[^;&|\r\n]*(?:-[sn][ \t]+|--signal(?:=|[ \t]+))\S+")
+            .expect("bounded multiple signal options")
+    });
+    if multi_signal.is_match(value) {
+        return value.to_owned();
+    }
     let masked = PROBE
         .get_or_init(|| {
             Regex::new(r"(?i)\bkill\s+(?:-0|-[sn]\s+0|--signal(?:=|\s+)0)\b")
