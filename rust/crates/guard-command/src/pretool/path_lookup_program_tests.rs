@@ -67,7 +67,7 @@ fn shell_builtins_do_not_borrow_trust_from_path_executables() {
         std::process::id()
     ));
     std::fs::create_dir_all(&root).unwrap();
-    for name in ["pwd", "echo", "test", "true", "false"] {
+    for name in ["pwd", "echo", "test", "true", "false", "which", "whence", "where", "print"] {
         let file = root.join(name);
         std::fs::write(&file, "#!/bin/sh\nexit 0\n").unwrap();
         let mut permissions = std::fs::metadata(&file).unwrap().permissions();
