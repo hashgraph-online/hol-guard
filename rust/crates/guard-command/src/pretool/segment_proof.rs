@@ -491,6 +491,9 @@ pub(super) fn exact_safe_segment_with_context(
         "cmp" => super::metadata_reads::safe_cmp_arguments(segment, context),
         "file" => super::metadata_reads::safe_file_arguments(&segment.arguments, context),
         "stat" => super::metadata_reads::safe_stat_arguments(&segment.arguments, context),
+        "unzip" => super::archive_listing::safe_unzip_arguments(&segment.arguments, context),
+        "zipinfo" => super::archive_listing::safe_zipinfo_arguments(&segment.arguments, context),
+        "xattr" => super::archive_listing::safe_xattr_arguments(&segment.arguments, context),
         "dirname" | "basename" => {
             super::path_word_reads::safe_path_word_arguments(basename, &segment.arguments)
                 && super::glob_words::printed_globs_listable(model, segment, context)
