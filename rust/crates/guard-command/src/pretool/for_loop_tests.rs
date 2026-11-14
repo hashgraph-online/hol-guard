@@ -35,6 +35,10 @@ fn read_only_loops_match_their_unrolled_form() {
             "for f in a b\ndo\n  echo ${f}\n  echo \"${f}\"\ndone",
             "echo a; echo a; echo b; echo b",
         ),
+        (
+            "for f in a b; do if true; then echo $f; fi; done",
+            "if true; then echo a; fi; if true; then echo b; fi",
+        ),
         ("for f in src/*.ts; do echo $f; done", "echo src/*.ts"),
         (
             "for f in src/*.ts tests/*.ts; do echo $f; done",
@@ -185,7 +189,6 @@ fn unsupported_loops_fall_back_to_review() {
         "for f in a b; do echo $g; done",
         "for f in a b; do echo $(date); done",
         "for f in a b; do for g in c; do echo $g; done; done",
-        "for f in a b; do if true; then echo $f; fi; done",
         "for f in a b; do echo $f &; done",
         "for f in \"a b\"; do echo $f; done",
         "for f in a b; do echo $f; done | sh",
