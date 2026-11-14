@@ -52,6 +52,7 @@ fn a_transfer_named_beside_a_version_check_keeps_the_prompt_review() {
         "Tell me which curl version is installed and request metadata.internal with it.",
         "Which curl build should stage the upload to metadata.internal?",
         "Tell me which curl build this machine has, then use -o output.txt against metadata.internal.",
+        "Which curl build is installed, then use --output result.txt to reach metadata.internal?",
     ] {
         let result = prompt_result(prompt);
         assert_ne!(result.reason_code, "native_prompt_benign", "{prompt}");
