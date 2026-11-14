@@ -48,8 +48,7 @@ impl Probe {
         deadline: Option<Instant>,
         execution_environment: Option<&guard_contracts::GuardExecutionEnvironmentV1>,
     ) -> Option<Self> {
-        let probe_deadline = Instant::now() + super::git_probe::PROBE_BUDGET;
-        let deadline = deadline.unwrap_or(probe_deadline).min(probe_deadline);
+        let deadline = super::git_probe::probe_deadline(deadline);
         let environment = execution_environment?;
         let declared_home = Path::new(context.home_dir?);
         let declared_cwd = Path::new(context.cwd?);

@@ -1,0 +1,471 @@
+{
+  "schema": "guard.cloud-action-pack.v1",
+  "provider": {
+    "id": "monday",
+    "name": "monday.com",
+    "publisher": {
+      "name": "HOL",
+      "verified": true
+    }
+  },
+  "hosts": [
+    "api.monday.com"
+  ],
+  "auth": {
+    "mode": "oauth2",
+    "scopes": [
+      "boards:read",
+      "boards:write"
+    ]
+  },
+  "actions": [
+    {
+      "actionId": "monday.items.create",
+      "title": "Create an item",
+      "executor": {
+        "kind": "declarative-http",
+        "request": {
+          "method": "POST",
+          "host": "api.monday.com",
+          "path": "/v2",
+          "headers": [
+            {
+              "name": "accept",
+              "value": "application/json"
+            }
+          ],
+          "body": {
+            "object": [
+              {
+                "name": "query",
+                "value": {
+                  "const": "mutation ($board: ID!, $name: String!) { create_item (board_id: $board, item_name: $name) { id } }"
+                }
+              },
+              {
+                "name": "variables",
+                "value": {
+                  "object": [
+                    {
+                      "name": "board",
+                      "value": {
+                        "arg": "board_id"
+                      }
+                    },
+                    {
+                      "name": "name",
+                      "value": {
+                        "arg": "name"
+                      }
+                    }
+                  ]
+                }
+              }
+            ]
+          },
+          "maxPages": 1
+        }
+      },
+      "arguments": {
+        "board_id": {
+          "type": "string",
+          "required": true,
+          "maxLength": 20,
+          "pattern": "^[0-9]{1,20}$"
+        },
+        "name": {
+          "type": "string",
+          "required": true,
+          "maxLength": 255
+        }
+      },
+      "facts": {
+        "class": "update",
+        "object": {
+          "const": "record"
+        },
+        "scope": {
+          "const": "single"
+        },
+        "reversibility": {
+          "const": "reversible"
+        },
+        "recordCount": {
+          "const": 1
+        }
+      },
+      "response": {
+        "maxBytes": 131072,
+        "fields": [
+          {
+            "name": "id",
+            "value": {
+              "from": "data.create_item.id"
+            }
+          },
+          {
+            "name": "errors",
+            "value": {
+              "list": {
+                "from": "errors",
+                "maxItems": 20,
+                "fields": [
+                  {
+                    "name": "message",
+                    "value": {
+                      "from": "message"
+                    },
+                    "untrusted": true
+                  }
+                ]
+              }
+            }
+          }
+        ]
+      },
+      "safety": {
+        "effect": "write",
+        "requiredCapabilities": [
+          "bounded-output",
+          "egress-pinned"
+        ],
+        "idempotency": "none",
+        "scopes": [
+          "boards:write"
+        ],
+        "maxItems": 1,
+        "minIntervalMs": 1000,
+        "timeoutMs": 15000
+      },
+      "fixtures": [
+        {
+          "name": "creates an item",
+          "kind": "safe",
+          "arguments": {
+            "board_id": "1234567890",
+            "name": "Ship the release notes"
+          },
+          "expect": {
+            "facts": {
+              "class": "update"
+            },
+            "request": {
+              "body": "{\"query\":\"mutation ($board: ID!, $name: String!) { create_item (board_id: $board, item_name: $name) { id } }\",\"variables\":{\"board\":\"1234567890\",\"name\":\"Ship the release notes\"}}",
+              "headers": [
+                [
+                  "accept",
+                  "application/json"
+                ],
+                [
+                  "content-type",
+                  "application/json; charset=utf-8"
+                ]
+              ],
+              "maxPages": 1,
+              "method": "POST",
+              "url": "https://api.monday.com/v2"
+            },
+            "decisions": {
+              "relaxed": "allow",
+              "balanced": "allow",
+              "strict": "review"
+            }
+          }
+        },
+        {
+          "name": "refuses a board id that is not a number",
+          "kind": "risky",
+          "arguments": {
+            "board_id": "1 } }",
+            "name": "x"
+          },
+          "expect": {
+            "error": "invalid_argument"
+          }
+        }
+      ]
+    },
+    {
+      "actionId": "monday.items.delete",
+      "title": "Delete an item",
+      "executor": {
+        "kind": "declarative-http",
+        "request": {
+          "method": "POST",
+          "host": "api.monday.com",
+          "path": "/v2",
+          "headers": [
+            {
+              "name": "accept",
+              "value": "application/json"
+            }
+          ],
+          "body": {
+            "object": [
+              {
+                "name": "query",
+                "value": {
+                  "const": "mutation ($item: ID!) { delete_item (item_id: $item) { id } }"
+                }
+              },
+              {
+                "name": "variables",
+                "value": {
+                  "object": [
+                    {
+                      "name": "item",
+                      "value": {
+                        "arg": "item_id"
+                      }
+                    }
+                  ]
+                }
+              }
+            ]
+          },
+          "maxPages": 1
+        }
+      },
+      "arguments": {
+        "item_id": {
+          "type": "string",
+          "required": true,
+          "maxLength": 20,
+          "pattern": "^[0-9]{1,20}$"
+        }
+      },
+      "facts": {
+        "class": "delete",
+        "object": {
+          "const": "record"
+        },
+        "scope": {
+          "const": "single"
+        },
+        "reversibility": {
+          "const": "recoverable"
+        },
+        "recordCount": {
+          "const": 1
+        }
+      },
+      "response": {
+        "maxBytes": 131072,
+        "fields": [
+          {
+            "name": "id",
+            "value": {
+              "from": "data.delete_item.id"
+            }
+          },
+          {
+            "name": "errors",
+            "value": {
+              "list": {
+                "from": "errors",
+                "maxItems": 20,
+                "fields": [
+                  {
+                    "name": "message",
+                    "value": {
+                      "from": "message"
+                    },
+                    "untrusted": true
+                  }
+                ]
+              }
+            }
+          }
+        ]
+      },
+      "safety": {
+        "effect": "destructive",
+        "requiredCapabilities": [
+          "bounded-output",
+          "egress-pinned"
+        ],
+        "idempotency": "none",
+        "scopes": [
+          "boards:write"
+        ],
+        "maxItems": 1,
+        "minIntervalMs": 3000,
+        "timeoutMs": 15000
+      },
+      "fixtures": [
+        {
+          "name": "deletes one item to the trash",
+          "kind": "safe",
+          "arguments": {
+            "item_id": "9876543210"
+          },
+          "expect": {
+            "facts": {
+              "class": "delete",
+              "reversibility": {
+                "state": "known",
+                "value": "recoverable"
+              }
+            },
+            "decisions": {
+              "relaxed": "allow",
+              "balanced": "allow",
+              "strict": "review"
+            }
+          }
+        },
+        {
+          "name": "refuses an item id with GraphQL",
+          "kind": "risky",
+          "arguments": {
+            "item_id": "1) { id } delete_board (board_id: 2"
+          },
+          "expect": {
+            "error": "invalid_argument"
+          }
+        }
+      ]
+    },
+    {
+      "actionId": "monday.boards.delete",
+      "title": "Delete a board",
+      "executor": {
+        "kind": "declarative-http",
+        "request": {
+          "method": "POST",
+          "host": "api.monday.com",
+          "path": "/v2",
+          "headers": [
+            {
+              "name": "accept",
+              "value": "application/json"
+            }
+          ],
+          "body": {
+            "object": [
+              {
+                "name": "query",
+                "value": {
+                  "const": "mutation ($board: ID!) { delete_board (board_id: $board) { id } }"
+                }
+              },
+              {
+                "name": "variables",
+                "value": {
+                  "object": [
+                    {
+                      "name": "board",
+                      "value": {
+                        "arg": "board_id"
+                      }
+                    }
+                  ]
+                }
+              }
+            ]
+          },
+          "maxPages": 1
+        }
+      },
+      "arguments": {
+        "board_id": {
+          "type": "string",
+          "required": true,
+          "maxLength": 20,
+          "pattern": "^[0-9]{1,20}$"
+        }
+      },
+      "facts": {
+        "class": "delete",
+        "object": {
+          "const": "table"
+        },
+        "scope": {
+          "const": "single"
+        },
+        "reversibility": {
+          "const": "recoverable"
+        },
+        "recordCount": {
+          "const": 1
+        }
+      },
+      "response": {
+        "maxBytes": 131072,
+        "fields": [
+          {
+            "name": "id",
+            "value": {
+              "from": "data.delete_board.id"
+            }
+          },
+          {
+            "name": "errors",
+            "value": {
+              "list": {
+                "from": "errors",
+                "maxItems": 20,
+                "fields": [
+                  {
+                    "name": "message",
+                    "value": {
+                      "from": "message"
+                    },
+                    "untrusted": true
+                  }
+                ]
+              }
+            }
+          }
+        ]
+      },
+      "safety": {
+        "effect": "destructive",
+        "requiredCapabilities": [
+          "bounded-output",
+          "egress-pinned"
+        ],
+        "idempotency": "none",
+        "scopes": [
+          "boards:write"
+        ],
+        "maxItems": 1,
+        "minIntervalMs": 3000,
+        "timeoutMs": 15000
+      },
+      "fixtures": [
+        {
+          "name": "deletes a board and every item on it",
+          "kind": "risky",
+          "arguments": {
+            "board_id": "1234567890"
+          },
+          "expect": {
+            "facts": {
+              "class": "delete",
+              "object": {
+                "state": "known",
+                "value": "table"
+              }
+            },
+            "decisions": {
+              "relaxed": "require-reapproval",
+              "balanced": "block",
+              "strict": "block"
+            }
+          }
+        },
+        {
+          "name": "refuses an empty id",
+          "kind": "safe",
+          "arguments": {
+            "board_id": ""
+          },
+          "expect": {
+            "error": "invalid_argument"
+          }
+        }
+      ]
+    }
+  ]
+}

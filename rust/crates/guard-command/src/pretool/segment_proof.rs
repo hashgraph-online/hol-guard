@@ -1,6 +1,6 @@
 use super::{
-    executable_basename, pure_expression, safe_directory_target, safe_gh_arguments,
-    safe_git_arguments, safe_reads, search, sensitive_path_argument,
+    executable_basename, safe_directory_target, safe_gh_arguments, safe_git_arguments, safe_reads,
+    search, sensitive_path_argument,
 };
 use crate::CanonicalCommandV1;
 
@@ -74,6 +74,7 @@ pub(crate) fn benign_command_segments(
         cargo_config_inert: context.cargo_config_inert,
         npm_config_inert: context.npm_config_inert,
         pip_config_inert: context.pip_config_inert,
+        python_environment_inert: context.python_environment_inert,
         shell_home_matches: context.shell_home_matches,
         ripgrep_config_absent: context.ripgrep_config_absent,
         gem_config_absent: context.gem_config_absent,
@@ -161,6 +162,7 @@ pub(crate) fn benign_command_segments(
                         | "od"
                         | "stat"
                         | "test"
+                        | "["
                         | "find"
                         | "du"
                         | "diff"
@@ -255,11 +257,12 @@ pub(crate) fn benign_command_segments(
 /// `jq ". as \$x | $x"` reaches jq with whatever `$x` holds spliced into the
 /// code. Every `$` in the raw text must be single-quoted or escaped.
 fn jq_dollars_literal(segment: &crate::CommandSegmentV1) -> bool {
-    !segment
-        .arguments
-        .iter()
-        .any(|argument| argument.contains('$'))
-        || super::shell_literal::literal_everywhere(&segment.text, '$')
+    super::glob_words::jq_bound_values_literal(segment)
+        && (!segment
+            .arguments
+            .iter()
+            .any(|argument| argument.contains('$'))
+            || super::shell_literal::literal_everywhere(&segment.text, '$'))
 }
 
 /// A later pipeline stage that only filters its standard input.
@@ -489,6 +492,9 @@ pub(super) fn exact_safe_segment_with_context(
         "cmp" => super::metadata_reads::safe_cmp_arguments(segment, context),
         "file" => super::metadata_reads::safe_file_arguments(&segment.arguments, context),
         "stat" => super::metadata_reads::safe_stat_arguments(&segment.arguments, context),
+        "unzip" => super::archive_listing::safe_unzip_arguments(&segment.arguments, context),
+        "zipinfo" => super::archive_listing::safe_zipinfo_arguments(&segment.arguments, context),
+        "xattr" => super::archive_listing::safe_xattr_arguments(&segment.arguments, context),
         "dirname" | "basename" => {
             super::path_word_reads::safe_path_word_arguments(basename, &segment.arguments)
                 && super::glob_words::printed_globs_listable(model, segment, context)
@@ -582,16 +588,13 @@ pub(super) fn exact_safe_segment_with_context(
         // reading would act on. The spelling is handed on, because on Windows
         // the one without a suffix reaches that same shim through `PATHEXT`
         // and the proof has to read its arguments as the shim would.
-        "hol-guard" | "hol-guard.exe" => super::guard_diagnostics::safe_hol_guard_segment(
-            basename,
-            &segment.arguments,
-            context.cwd,
-            segment.pipeline_index,
-        ),
+        "hol-guard" | "hol-guard.exe" => {
+            super::guard_home_option::safe_hol_guard_segment(basename, segment, context)
+        }
         "jq" => {
             jq_dollars_literal(segment)
                 && ((segment.pipeline_index > 0
-                    && safe_reads::safe_jq_stdin_arguments(&segment.arguments))
+                    && safe_reads::safe_jq_piped_arguments(&segment.arguments, context))
                     || (segment.pipeline_index == 0
                         && safe_reads::safe_jq_file_arguments(&segment.arguments, context)))
         }
@@ -668,7 +671,7 @@ pub(super) fn exact_safe_segment_with_context(
         ),
         "python" | "python3" | "node" | "nodejs" => {
             super::safe_scalar::version_probe_arguments(basename, &segment.arguments)
-                || pure_expression::safe_inline_expression(basename, &segment.arguments)
+                || super::python_filter::inline_program(basename, model, segment, context)
                 || (matches!(basename, "node" | "nodejs")
                     && super::safe_scalar::node_syntax_check_arguments(
                         &segment.arguments,

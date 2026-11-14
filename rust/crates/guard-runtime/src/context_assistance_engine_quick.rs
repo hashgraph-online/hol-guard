@@ -109,7 +109,9 @@ pub(crate) fn project_context_on(home: &Path, workspace: &Path, app: &str) -> bo
 /// The project root a prompt may draw on: an agent app, a folder outside
 /// Guard's home, and agent context on with workspace files for that folder.
 pub(super) fn screened(home: &Path, workspace: &Path, app: &str) -> Option<SourceRoot> {
-    if crate::guard_config_harness::canonical_harness_id(app) != Some(app) {
+    if crate::guard_config_harness::canonical_harness_id(app) != Some(app)
+        || crate::guard_config_load::cigar_off_for(home, Some(workspace), app)
+    {
         return None;
     }
     let root = SourceRoot::inspect(workspace).ok()?;

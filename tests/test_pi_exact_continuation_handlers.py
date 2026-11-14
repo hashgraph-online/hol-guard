@@ -7,7 +7,6 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.adapters.pi_extension_source import managed_extension_source
 from tests.pi_continuation_support import (
     WATCH_POSTURE_STUB,
     _decode_json_object,
@@ -15,6 +14,7 @@ from tests.pi_continuation_support import (
     _node_executable,
     _run_child,
 )
+from tests.pi_extension_support import managed_extension_source
 
 
 @pytest.mark.parametrize("harness", ("pi", "omp"))

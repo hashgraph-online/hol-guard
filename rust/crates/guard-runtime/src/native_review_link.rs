@@ -183,34 +183,33 @@ fn handoff_url(url: &str, auth_token: &str, now_micros: i64) -> Option<String> {
     let expires = now_micros
         .div_euclid(1_000_000)
         .checked_add(HANDOFF_TTL_SECONDS)?;
-    let mut mac = <Hmac<Sha256>>::new_from_slice(auth_token.as_bytes()).ok()?;
-    mac.update(format!("{HANDOFF_VERSION}\n{request_id}\n{expires}").as_bytes());
-    let digest = mac.finalize().into_bytes();
-    let code = hex::encode(digest.get(..HANDOFF_MAC_BYTES)?);
+    let code = repair::handoff_mac(auth_token, request_id, expires)?;
     Some(format!("{url}/{expires}-{code}"))
 }
 
-/// `approval_handoff_location`: where `/requests/<id>/<code>` lands. A valid
-/// code opens the request page with an approval session bound to that
-/// request, started when the code was issued and ending when it does; any
-/// other code lands on the unsigned page. `None` when `path` is not a short
-/// link.
+/// `approval_handoff_location`: where `/requests/<id>/<code>` lands. A code
+/// signed for the request opens its page with an approval session bound to
+/// it, started when the code was issued and ending when it does; one slipped
+/// character in a relayed link is undone first (`native_review_link_repair`).
+/// Any other code on a 32-hex id lands on the unsigned page. `None` when
+/// `path` is not a short link.
 pub(crate) fn handoff_location(path: &str, auth_key: &str, now_micros: i64) -> Option<String> {
     let rest = path.strip_prefix("/requests/")?;
-    let (request_id, code) = rest.split_once('/')?;
-    if request_id.len() != 32
-        || !request_id
-            .bytes()
-            .all(|byte| matches!(byte, b'0'..=b'9' | b'a'..=b'f'))
+    let (presented_id, code) = rest.split_once('/')?;
+    if !repair::within_one_of(presented_id.len(), repair::HANDOFF_ID_HEX)
+        || !repair::is_lower_hex(presented_id)
         || code.is_empty()
         || code.contains('/')
     {
         return None;
     }
-    let page = format!("/requests/{request_id}");
-    let Some(expires) = handoff_code_expiry(request_id, code, auth_key, now_micros) else {
-        return Some(page);
+    let Some((request_id, expires)) =
+        repair::handoff_signed_request(presented_id, code, auth_key, now_micros)
+    else {
+        return (presented_id.len() == repair::HANDOFF_ID_HEX)
+            .then(|| format!("/requests/{presented_id}"));
     };
+    let page = format!("/requests/{request_id}");
     let remaining = (expires * 1_000_000 - now_micros)
         .div_euclid(1_000_000)
         .max(1);
@@ -227,39 +226,6 @@ pub(crate) fn handoff_location(path: &str, auth_key: &str, now_micros: i64) -> O
         "{page}#guard-{}={SESSION_PREFIX}.{encoded}.{signature}",
         "token"
     ))
-}
-
-/// `handoff_code_expiry`: the signed expiry, in seconds, of a valid
-/// `<expires>-<mac>` code for `request_id`.
-fn handoff_code_expiry(
-    request_id: &str,
-    code: &str,
-    auth_key: &str,
-    now_micros: i64,
-) -> Option<i64> {
-    let (digits, presented) = code.split_once('-')?;
-    if !(1..=12).contains(&digits.len())
-        || !digits.bytes().all(|byte| byte.is_ascii_digit())
-        || presented.len() != HANDOFF_MAC_HEX
-        || !presented
-            .bytes()
-            .all(|byte| matches!(byte, b'0'..=b'9' | b'a'..=b'f'))
-    {
-        return None;
-    }
-    let expires: i64 = digits.parse().ok()?;
-    let expires_micros = expires.checked_mul(1_000_000)?;
-    let latest =
-        now_micros.checked_add((HANDOFF_TTL_SECONDS + HANDOFF_CLOCK_SKEW_SECONDS) * 1_000_000)?;
-    if expires_micros <= now_micros || expires_micros > latest {
-        return None;
-    }
-    let mut mac = <Hmac<Sha256>>::new_from_slice(auth_key.as_bytes()).ok()?;
-    mac.update(format!("{HANDOFF_VERSION}\n{request_id}\n{expires}").as_bytes());
-    let digest = mac.finalize().into_bytes();
-    let expected = hex::encode(digest.get(..HANDOFF_MAC_BYTES)?);
-    crate::resident_transport::constant_time_eq(expected.as_bytes(), presented.as_bytes())
-        .then_some(expires)
 }
 
 #[cfg(test)]
@@ -493,6 +459,9 @@ pub(crate) fn native_review_reason(
     }
     Some(format!("{stripped} {OPEN_GUARD} {signed_url}."))
 }
+
+#[path = "native_review_link_repair.rs"]
+mod repair;
 
 #[cfg(test)]
 #[path = "native_review_link_tests.rs"]

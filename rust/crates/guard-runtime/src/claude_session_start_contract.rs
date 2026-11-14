@@ -2,10 +2,9 @@
 //! native SessionStart lane.
 //!
 //! `guard/contracts/claude-hook-groups.v1.json` is the one declaration both
-//! sides read: Python builds `~/.claude/settings.json` from it, and this
-//! module shape-checks the same bytes (a port of
-//! `parse_claude_hook_groups_contract` in `adapters/claude_hook_config.py`)
-//! and decides whether the installed Guard hook entries already equal what
+//! sides read: `harness_adapter::claude_settings` builds
+//! `~/.claude/settings.json` from it, and this module shape-checks the same
+//! bytes and decides whether the installed Guard hook entries already equal what
 //! `refresh_runtime_hook_urls` would write. Entries without a Guard marker
 //! are ignored, as the Python merge keeps them. Any doubt is a mismatch, and
 //! a mismatch hands the session start to the Python transaction.
@@ -34,6 +33,8 @@ pub(crate) struct HookGroupsContract {
     pub(crate) runtime_groups: Vec<RuntimeGroup>,
     pub(crate) pruned_events: Vec<String>,
     pub(crate) session_start_event: String,
+    pub(crate) session_start_matchers: Vec<String>,
+    pub(crate) session_start_timeout_seconds: u64,
     pub(crate) session_start_context: String,
     pub(crate) daemon_hook_marker: String,
     pub(crate) session_start_hook_marker: String,
@@ -123,10 +124,9 @@ pub(crate) fn parse_contract(document: &Value) -> Result<HookGroupsContract, Str
     {
         return Err(invalid("runtime_groups.event"));
     }
-    // Shape-checked like Python; this lane leaves the SessionStart group to
-    // the installer, so the values are not kept.
-    texts(field(session_start, "matchers")?, "session_start.matchers")?;
-    seconds(
+    let session_start_matchers =
+        texts(field(session_start, "matchers")?, "session_start.matchers")?;
+    let session_start_timeout_seconds = seconds(
         field(session_start, "timeout_seconds")?,
         "session_start.timeout_seconds",
     )?;
@@ -135,6 +135,8 @@ pub(crate) fn parse_contract(document: &Value) -> Result<HookGroupsContract, Str
         runtime_groups,
         pruned_events: texts(field(contract, "pruned_events")?, "pruned_events")?,
         session_start_event: text(field(session_start, "event")?, "session_start.event")?,
+        session_start_matchers,
+        session_start_timeout_seconds,
         session_start_context: text(
             field(session_start, "additional_context")?,
             "session_start.additional_context",

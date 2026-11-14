@@ -106,8 +106,8 @@ assert(unboundCopy.includes("run the command again"), "unbound approval copy sen
 assert(!unboundCopy.includes("Extensions"), "approval copy without a verified allow hint never promises Extensions");
 assert(!/run it yourself/i.test(unboundCopy), "approval copy never tells the user to run the command themselves");
 assert(
-  buildRetryAfterApprovalCopy(bound, "allow").includes("retry within 5 minutes"),
-  "bound native approval copy uses the native 5-minute retry window",
+  buildRetryAfterApprovalCopy(bound, "allow").includes("retry within an hour"),
+  "bound native approval copy uses the native one-hour retry window",
 );
 
 // #3838: where "Always allow exact action" is offered, point to it instead of extension patterns.

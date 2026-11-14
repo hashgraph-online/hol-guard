@@ -273,8 +273,9 @@ def test_a_lifecycle_change_is_refused_before_its_first_write(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Hermes asks for the resident before it rewrites ``config.yaml``."""
+    """Hermes asks the resident for its whole plan before it rewrites ``config.yaml``."""
 
+    from codex_plugin_scanner.guard import native_runner_authority
     from codex_plugin_scanner.guard.adapters.base import HarnessContext
     from codex_plugin_scanner.guard.adapters.hermes import HermesHarnessAdapter
 
@@ -289,9 +290,13 @@ def test_a_lifecycle_change_is_refused_before_its_first_write(
     context = HarnessContext(home_dir=home_dir, workspace_dir=workspace_dir, guard_home=guard_home)
 
     _provision_verifier_key(guard_home)
-    _silence_the_resident(monkeypatch)
 
-    with pytest.raises(AdapterStateIntegrityUnavailableError):
+    def unavailable(*_args: object, **_kwargs: object) -> dict[str, object]:
+        raise native_runner_authority.NativeRunnerAuthorityError("native_runner_authority_unavailable")
+
+    monkeypatch.setattr(native_runner_authority, "native_runner_authority", unavailable)
+
+    with pytest.raises(ValueError, match="native_runner_authority_unavailable"):
         HermesHarnessAdapter().install(context)
 
     assert config_yaml.read_text(encoding="utf-8") == "mcp_servers: {}\n"

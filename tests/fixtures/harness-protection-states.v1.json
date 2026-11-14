@@ -1,0 +1,90 @@
+{
+  "schema_version": "hol-guard-harness-protection-states.v1",
+  "states": [
+    {"state": "configured", "label": "Configured, not proven", "tone": "warning"},
+    {"state": "transport_ready", "label": "Hook answers, block not proven", "tone": "warning"},
+    {"state": "live_block_proven", "label": "Live block proven", "tone": "success"},
+    {"state": "live_allow_proven", "label": "Live allow proven, block not proven", "tone": "warning"},
+    {"state": "observe_only", "label": "Observe only", "tone": "neutral"},
+    {"state": "partial", "label": "Partly proven", "tone": "warning"},
+    {"state": "unsupported", "label": "Not supported", "tone": "danger"},
+    {"state": "stale", "label": "Evidence out of date", "tone": "danger"}
+  ],
+  "unknown_state_label": "Protection unknown",
+  "rows": [
+    {"event": "PreToolUse", "transport": "native_hook", "mode": "blocking", "declared_actions": ["block"]},
+    {"event": "PermissionRequest", "transport": "native_hook", "mode": "approval", "declared_actions": ["approval"]},
+    {"event": "PostToolUse", "transport": "native_hook", "mode": "observe", "declared_actions": ["observe"]},
+    {"event": "Stop", "transport": "none", "mode": "unavailable", "declared_actions": ["unavailable"]}
+  ],
+  "cases": [
+    {
+      "id": "configured_without_evidence",
+      "coverage": {"state": "coverage_unavailable", "reason": "harness_not_covered", "evidence": []},
+      "event_states": ["configured", "configured", "observe_only", "unsupported"],
+      "protection_state": "configured"
+    },
+    {
+      "id": "live_block_for_every_enforceable_event",
+      "coverage": {
+        "state": "tested",
+        "reason": null,
+        "evidence": [{"evidence_level": "live_block", "transport": "native_hook", "events": ["PreToolUse", "PermissionRequest", "PostToolUse"]}]
+      },
+      "event_states": ["live_block_proven", "live_block_proven", "observe_only", "unsupported"],
+      "protection_state": "live_block_proven"
+    },
+    {
+      "id": "live_block_for_some_events",
+      "coverage": {
+        "state": "tested",
+        "reason": null,
+        "evidence": [{"evidence_level": "live_block", "transport": "native_hook", "events": ["PreToolUse"]}]
+      },
+      "event_states": ["live_block_proven", "configured", "observe_only", "unsupported"],
+      "protection_state": "partial"
+    },
+    {
+      "id": "unit_test_evidence_is_not_live",
+      "coverage": {
+        "state": "tested",
+        "reason": null,
+        "evidence": [{"evidence_level": "unit_test", "transport": "native_hook", "events": ["PreToolUse", "PermissionRequest"]}]
+      },
+      "event_states": ["configured", "configured", "observe_only", "unsupported"],
+      "protection_state": "configured"
+    },
+    {
+      "id": "untested_version_is_stale",
+      "coverage": {"state": "untested", "reason": "version_not_in_evidence", "evidence": []},
+      "event_states": ["stale", "stale", "observe_only", "unsupported"],
+      "protection_state": "stale"
+    },
+    {
+      "id": "stale_observation_is_stale",
+      "coverage": {"state": "version_unknown", "reason": "observation_stale", "evidence": []},
+      "event_states": ["stale", "stale", "observe_only", "unsupported"],
+      "protection_state": "stale"
+    },
+    {
+      "id": "other_guard_build_is_stale",
+      "coverage": {"state": "coverage_unavailable", "reason": "no_evidence_for_this_build", "evidence": []},
+      "event_states": ["stale", "stale", "observe_only", "unsupported"],
+      "protection_state": "stale"
+    },
+    {
+      "id": "observe_rows_only",
+      "rows": [2],
+      "coverage": {"state": "coverage_unavailable", "reason": "harness_not_covered", "evidence": []},
+      "event_states": ["observe_only"],
+      "protection_state": "observe_only"
+    },
+    {
+      "id": "no_enforceable_rows",
+      "rows": [3],
+      "coverage": {"state": "coverage_unavailable", "reason": "harness_not_covered", "evidence": []},
+      "event_states": ["unsupported"],
+      "protection_state": "unsupported"
+    }
+  ]
+}

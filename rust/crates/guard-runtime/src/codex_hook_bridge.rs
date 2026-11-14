@@ -28,7 +28,7 @@ use std::time::{Duration, Instant};
 use crate::claude_hook_bridge_render::py_strip;
 use crate::codex_hook_identity::current_process_identity;
 use crate::codex_hook_response::{
-    codex_hook_response, fail_closed, runtime_hook_event_name, PRE_TOOL_USE,
+    codex_hook_response, fail_closed, runtime_hook_event_name, unavailable, PRE_TOOL_USE,
 };
 use crate::hook_env_stamp::{current_environment, dumps, set_member, stamp_hook_input_text, Stamp};
 use crate::pyjson::{self, in_surrogate_plane, PyVal};
@@ -375,7 +375,10 @@ pub(crate) fn route_hook(
             contain::settle(config, &prepared, response, mapped, deadline)
         }
         Some(route) => route,
-        None => Route::Respond(fail_closed(&prepared.event_name)),
+        // No verdict at all: only a command that repairs the daemon runs, and
+        // everything else is refused with the typed recovery state.
+        None => recovery::bootstrap_route(&prepared)
+            .unwrap_or_else(|| Route::Respond(unavailable(&prepared.event_name))),
     };
     (route, Some(prepared))
 }
@@ -456,6 +459,8 @@ pub(crate) mod contain;
 mod handoff;
 #[path = "codex_hook_bridge_observation.rs"]
 mod observation;
+#[path = "codex_hook_bridge_recovery.rs"]
+mod recovery;
 #[path = "codex_hook_bridge_restart.rs"]
 mod restart;
 

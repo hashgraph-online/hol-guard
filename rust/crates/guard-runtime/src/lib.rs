@@ -97,6 +97,7 @@ mod business_document_compile;
 mod business_review_page;
 mod business_source_codec;
 mod catalog_provenance;
+mod cigar_apps;
 mod cisco_containment;
 mod cisco_evidence;
 mod cisco_plan;
@@ -230,6 +231,7 @@ mod command_envelope_op;
 mod command_expression_validate_op;
 mod command_policy_decide_op;
 mod command_policy_repair;
+mod command_risk_groups;
 mod composio_role_op;
 mod compound_git_args;
 mod compound_git_chain;
@@ -657,6 +659,8 @@ mod guard_store_wfcap_wire;
 mod guard_store_workflow_capability_vectors_tests;
 mod guard_store_write_cache;
 mod hardening;
+#[path = "adapters/harness_adapter/mod.rs"]
+mod harness_adapter;
 #[path = "adapters/harness_backup_restore.rs"]
 mod harness_backup_restore;
 #[cfg(test)]

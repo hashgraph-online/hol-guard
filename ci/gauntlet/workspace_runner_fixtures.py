@@ -159,6 +159,10 @@ WORKSPACE_RUNNER_CASES = frozenset(
 # The same installed build, launched through the Bun the installer leaves in the
 # caller's home, spelled by the path its install instructions print.
 HOME_BUN_ENTRY_CASE = "omp-native-shell-home-spelled-bun-entry"
+# The same call with Oh My Pi's `cwd` argument naming the project, which Guard's
+# sink settles before it projects the home-spelled launcher.
+HOME_BUN_ENTRY_CWD_CASE = "omp-native-shell-home-spelled-bun-entry-with-cwd"
+HOME_BUN_ENTRY_CASES = frozenset({HOME_BUN_ENTRY_CASE, HOME_BUN_ENTRY_CWD_CASE})
 # Where Bun's own installer puts it, and the path its instructions tell you to run.
 _BUN_BIN = ".bun/bin"
 # Where nvm, the way most developers install Node, keeps each release.
@@ -926,7 +930,7 @@ def add_home_bun_runtime(home: Path, scenario_id: str | None) -> None:
     ``~/.bun/bin/bun``. The host's binary is copied rather than linked, so
     nothing the fixture does can reach the file the host runs.
     """
-    if scenario_id != HOME_BUN_ENTRY_CASE:
+    if scenario_id not in HOME_BUN_ENTRY_CASES:
         return
     located = _host_bun()
     if located is None:

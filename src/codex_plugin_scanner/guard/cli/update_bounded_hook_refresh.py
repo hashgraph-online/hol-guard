@@ -7,10 +7,25 @@ import sqlite3
 from collections.abc import Callable
 from pathlib import Path
 
-from ..adapters import copilot, devin, hermes, kimi, muse, openclaw_support, zcode
+from ..adapters import copilot
 from ..adapters.base import HarnessContext
 from ..adapters.bounded_cli_hook_bridge import _render_bounded_hook_script, bounded_hook_script_path
 from ..store import GuardStore
+
+
+def _native_hook_timeout(harness: str) -> Callable[[HarnessContext], float]:
+    """The timeout the native ``harness_adapter`` kind renders into ``harness``'s hook."""
+
+    def timeout(context: HarnessContext) -> float:
+        from ..adapters.native_harness import ask
+
+        value = ask("hook_spec", context, harness=harness).get("timeout_seconds")
+        if not isinstance(value, int):
+            raise ValueError("Harness adapter answer is malformed")
+        return value
+
+    return timeout
+
 
 # Harnesses whose managed hook command points at a stable client script under
 # ``managed/bounded-hooks``. The command line never changes across releases, so
@@ -20,13 +35,13 @@ from ..store import GuardStore
 # wait, a callable that recomputes the same value for this context. Rendering a
 # constant for such a harness would shorten its approval wait on every update.
 _BOUNDED_HOOK_TIMEOUTS: tuple[tuple[str, str, float | Callable[[HarnessContext], float]], ...] = (
-    ("zcode", "ZCode", zcode._GUARD_HOOK_INTERNAL_TIMEOUT_SECONDS),
-    ("devin", "Devin", devin._GUARD_HOOK_INTERNAL_TIMEOUT_SECONDS),
-    ("kimi", "Kimi", kimi._GUARD_HOOK_INTERNAL_TIMEOUT_SECONDS),
+    ("zcode", "ZCode", _native_hook_timeout("zcode")),
+    ("devin", "Devin", _native_hook_timeout("devin")),
+    ("kimi", "Kimi", _native_hook_timeout("kimi")),
     ("copilot", "Copilot", copilot._GUARD_HOOK_INTERNAL_TIMEOUT_SECONDS),
-    ("openclaw", "OpenClaw", openclaw_support._GUARD_PRETOOL_INTERNAL_TIMEOUT_SECONDS),
-    ("hermes", "Hermes", hermes._GUARD_PRETOOL_INTERNAL_TIMEOUT_SECONDS),
-    ("muse", "Muse", muse.MuseHarnessAdapter._bridge_timeout_seconds),
+    ("openclaw", "OpenClaw", _native_hook_timeout("openclaw")),
+    ("hermes", "Hermes", _native_hook_timeout("hermes")),
+    ("muse", "Muse", _native_hook_timeout("muse")),
 )
 
 

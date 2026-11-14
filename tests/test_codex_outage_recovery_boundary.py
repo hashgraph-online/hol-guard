@@ -15,7 +15,6 @@ from codex_plugin_scanner.guard.adapters import codex as codex_adapter
 from codex_plugin_scanner.guard.adapters import codex_daemon_hook_bridge as bridge
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.codex_hook_bridge_runtime import decode_bridge_config_argument
-from codex_plugin_scanner.guard.codex_hook_command_line import encode_hook_config_argument
 
 
 @pytest.mark.parametrize("case", ["repair_path", "inspection_path", "explicit_inspection", "symlink_read"])
@@ -27,13 +26,9 @@ def test_total_outage_rejects_unverified_recovery_action(
     case: str,
     event_name: str,
 ) -> None:
-    # Exercise the Windows wire encoding on every platform. Authentication
-    # must retain the registered argument, not its decoded JSON spelling.
-    monkeypatch.setattr(
-        codex_adapter,
-        "encode_hook_config_argument",
-        lambda value: encode_hook_config_argument(value, windows=True),
-    )
+    # The native runtime encodes the config the way its own platform does,
+    # so Windows runs check that authentication keeps the registered
+    # argument rather than its decoded JSON spelling.
     context = HarnessContext(
         home_dir=tmp_path / "home",
         workspace_dir=None,

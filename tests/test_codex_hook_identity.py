@@ -11,6 +11,7 @@ import pytest
 from codex_plugin_scanner.guard.adapters import codex as codex_adapter
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.codex_config import dump_toml, read_toml_payload
+from codex_plugin_scanner.guard.codex_hook_identity import CodexHookGroupQuestion, canonical_codex_hook_group_identities
 from codex_plugin_scanner.guard.codex_hook_inventory import enumerate_codex_hooks
 from codex_plugin_scanner.guard.config import GuardConfig
 from codex_plugin_scanner.guard.consumer.service import (
@@ -146,16 +147,21 @@ def test_event_name_is_part_of_canonical_identity(tmp_path: Path) -> None:
 def test_migration_identity_uses_the_written_hook_activation_state() -> None:
     payload: dict[str, object] = {"hooks": {"PreToolUse": [_group()]}}
 
-    disabled = codex_adapter._migration_group_identities(
-        payload,
-        source_scope="global",
-        source_hooks_enabled=False,
-    )
-    enabled = codex_adapter._migration_group_identities(
-        payload,
-        source_scope="global",
-        source_hooks_enabled=True,
-    )
+    def identities(enabled: bool) -> tuple[str, ...]:
+        return canonical_codex_hook_group_identities(
+            [
+                CodexHookGroupQuestion(
+                    source_scope="global",
+                    source_hooks_enabled=enabled,
+                    event_name="PreToolUse",
+                    group=group,
+                )
+                for group in payload["hooks"]["PreToolUse"]  # type: ignore[index]
+            ]
+        )
+
+    disabled = identities(False)
+    enabled = identities(True)
 
     assert len(disabled) == 1
     assert len(enabled) == 1
@@ -383,3 +389,24 @@ def test_partial_unlink_failure_restores_every_legacy_source_and_keeps_toml_back
         original_workspace_config,
     }
     print("H4 pass stage=legacy_json_removal config_restored=true manifest_absent=true key_absent=true")
+
+
+def test_hook_comparisons_ignore_settings_too_large_to_send(tmp_path: Path) -> None:
+    context = HarnessContext(home_dir=tmp_path / "home", workspace_dir=None, guard_home=tmp_path / "guard")
+    unrelated = {"notes": "x" * (5 * 1024 * 1024), "features": {"hooks": True, "other": "y" * 1024}}
+    expected = {**unrelated, "hooks": {"PreToolUse": [_group()]}}
+    actual = {"hooks": {"PreToolUse": [_group()]}, **unrelated}
+    source = tmp_path / "config.toml"
+
+    codex_adapter._require_hook_semantics_readback(
+        expected, actual, source_scope="global", source_path=source, context=context
+    )
+    codex_adapter._require_migrated_hooks(context, expected, actual, source_scope="global")
+
+    changed = {**unrelated, "hooks": {"PreToolUse": [_group("python3 other.py")]}}
+    with pytest.raises(Exception, match="codex_hook_migration_readback_mismatch"):
+        codex_adapter._require_hook_semantics_readback(
+            expected, changed, source_scope="global", source_path=source, context=context
+        )
+    with pytest.raises(Exception, match="codex_hook_migration_readback_mismatch"):
+        codex_adapter._require_migrated_hooks(context, expected, changed, source_scope="global")

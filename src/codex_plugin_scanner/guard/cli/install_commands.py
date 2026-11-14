@@ -9,7 +9,7 @@ from pathlib import Path
 
 from ..adapters import get_adapter, list_adapters
 from ..adapters.base import HarnessAdapter, HarnessContext
-from ..adapters.cline import ClineHarnessAdapter
+from ..adapters.cline_runtime import ClineHarnessAdapter
 from ..adapters.contracts import contract_for
 from ..adapters.cursor import CursorHarnessAdapter
 from ..agent_safety_guidance import install_agent_safety_guidance, uninstall_agent_safety_guidance
@@ -35,7 +35,6 @@ from .native_install_checks import _grok_managed_config_is_active as _grok_manag
 from .native_install_checks import _grok_pretool_is_catchall as _grok_pretool_is_catchall
 from .native_install_checks import _grok_prompt_hook_is_observe as _grok_prompt_hook_is_observe
 from .native_install_checks import _grok_protection_checks as _grok_protection_checks
-from .native_install_checks import _native_mcp_server_names as _native_mcp_server_names
 from .native_install_checks import _opencode_protection_checks as _opencode_protection_checks
 from .native_install_checks import grok_hooks_protection_ready as grok_hooks_protection_ready
 

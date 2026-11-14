@@ -49,10 +49,17 @@ def maybe_auto_update(store: GuardStore, context: HarnessContext) -> None:
         return
     state["last_check_at"] = now_str
     state["last_status"] = status
+    if status.get("update_mode", "automatic") != "automatic":
+        store.set_sync_payload(AUTO_UPDATE_STATE_KEY, state, now_str)
+        return
     if not status.get("auto_updatable") or status.get("blocked_reason"):
         store.set_sync_payload(AUTO_UPDATE_STATE_KEY, state, now_str)
         return
     if not status.get("update_available"):
+        store.set_sync_payload(AUTO_UPDATE_STATE_KEY, state, now_str)
+        return
+    latest_version = status.get("latest_version")
+    if state.get("failed_version") == latest_version:
         store.set_sync_payload(AUTO_UPDATE_STATE_KEY, state, now_str)
         return
     _LOGGER.info(
@@ -72,8 +79,13 @@ def maybe_auto_update(store: GuardStore, context: HarnessContext) -> None:
         state["last_update_result"] = update_payload
         state["last_update_exit_code"] = exit_code
         state["last_update_at"] = now_str
+        if exit_code == 0 and update_payload.get("status") != "failed":
+            state.pop("failed_version", None)
+        else:
+            state["failed_version"] = latest_version
     except Exception:
         _LOGGER.warning("Auto-update failed", exc_info=True)
         state["last_update_error"] = True
+        state["failed_version"] = latest_version
     finally:
         store.set_sync_payload(AUTO_UPDATE_STATE_KEY, state, now_str)

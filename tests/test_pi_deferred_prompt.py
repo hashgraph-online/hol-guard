@@ -9,17 +9,15 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.adapters.pi_extension_source import managed_extension_source
 from tests.pi_continuation_support import WATCH_POSTURE_STUB
+from tests.pi_extension_support import managed_extension_source
 
 
 @pytest.mark.parametrize("harness", ["pi", "omp"])
 @pytest.mark.parametrize(
     "change", ["none", "cwd", "session", "prompt", "abort", "generation", "unavailable", "deny", "unknown"]
 )
-def test_cold_prompt_resumes_only_after_bound_successful_review(
-    tmp_path: Path, harness: str, change: str
-) -> None:
+def test_cold_prompt_resumes_only_after_bound_successful_review(tmp_path: Path, harness: str, change: str) -> None:
     node = shutil.which("node")
     if node is None:
         pytest.skip("Node is required to execute the generated input handler")
@@ -89,7 +87,10 @@ console.log(JSON.stringify({result, beforeReady, queued, reviewed, notices, appr
     )
     completed = subprocess.run(
         [node, "--input-type=module", "-e", script],
-        check=True, capture_output=True, text=True, timeout=10,
+        check=True,
+        capture_output=True,
+        text=True,
+        timeout=10,
     )
     result = json.loads(completed.stdout)
     assert result["result"] == {"action": "handled", "handled": True}

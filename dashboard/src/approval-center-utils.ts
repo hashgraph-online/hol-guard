@@ -13,6 +13,7 @@ import { resolveQueueCategory } from "./queue-state";
 import {
   bulkLineCommand,
   oneTimeRetryWindowMinutes,
+  retryWindowText,
   retryBlockedApprovalCopy,
   retryCannotReuseApproval,
 } from "./approval-retry-guidance";
@@ -149,7 +150,7 @@ export function buildRetryAfterApprovalCopy(
       return `Saved. Return to ${harness} to retry. Guard will allow this exact action next time; changed commands still need review.`;
     }
     if (retryCannotReuseApproval(item)) return retryBlockedApprovalCopy(item, harness);
-    return `Approved once. Return to ${harness} and retry within ${oneTimeRetryWindowMinutes(item)} minutes.`;
+    return `Approved once. Return to ${harness} and retry within ${retryWindowText(oneTimeRetryWindowMinutes(item))}.`;
   }
   return `Blocked. Return to ${harness} to continue with a different action, or ask it to try something else.`;
 }

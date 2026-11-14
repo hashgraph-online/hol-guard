@@ -167,7 +167,7 @@ def hook_integrity_key(store: GuardStore, args: Mapping[str, Any]) -> dict[str, 
 def hook_sink_command(store: GuardStore, args: Mapping[str, Any]) -> dict[str, object]:
     """The argv prefix of the contained sink, for the daemon's Cursor sink admission."""
 
-    from ..adapters.zcode_contained_tests import contained_sink_command_prefix
+    from ..contained_sink_command import contained_sink_command_prefix
 
     return {"sink_command": list(contained_sink_command_prefix())}
 

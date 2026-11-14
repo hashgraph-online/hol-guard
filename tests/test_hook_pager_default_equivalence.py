@@ -10,13 +10,13 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.adapters import pi_extension_source
 from codex_plugin_scanner.guard.hook_execution_environment import (
     HOOK_EXECUTION_ENVIRONMENT_KEY,
     LIBRARY_SEARCH_PATH_NAMES,
     pager_default_equivalent,
     stamp_hook_input_text,
 )
+from tests import pi_extension_support as pi_extension_source
 
 PAGER_CASES = [
     (None, False),

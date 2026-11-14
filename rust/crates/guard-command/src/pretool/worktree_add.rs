@@ -58,6 +58,7 @@ pub(super) fn exact_safe_command(
         cargo_config_inert: context.cargo_config_inert,
         npm_config_inert: context.npm_config_inert,
         pip_config_inert: context.pip_config_inert,
+        python_environment_inert: context.python_environment_inert,
         shell_home_matches: context.shell_home_matches,
         ripgrep_config_absent: context.ripgrep_config_absent,
         gem_config_absent: context.gem_config_absent,

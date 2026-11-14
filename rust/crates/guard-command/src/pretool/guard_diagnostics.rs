@@ -420,6 +420,7 @@ pub(super) fn safe_hol_guard_arguments(arguments: &[String]) -> bool {
         || artifact_explanation(&words)
         || posture_inspection(&words)
         || cloud_actions::cloud_actions_inspection(&words)
+        || network::network_inspection(&words)
 }
 
 /// `hol-guard explain <target>` prints the evidence Guard already holds for
@@ -482,8 +483,8 @@ fn posture_inspection(words: &[&str]) -> bool {
 
 /// The approval queue and the retry hint of one resolved request. The
 /// decision subcommands (`approve`, `deny`), `resume`, `open`, `lock`,
-/// `unlock` and `clear-history`, and every root override (`--home`,
-/// `--guard-home`, `--workspace`), are not admitted. `open` launches the
+/// `unlock` and `clear-history`, and every root override but a `--home` that
+/// names Guard's own home ([`super::guard_home_option`]), are not admitted. `open` launches the
 /// user's own approval center rather than printing anything, so it stays on
 /// the review path with the other launches. `--json` is lifted out before the
 /// path is read, so neither it nor `--timeout` has to be written last.
@@ -640,6 +641,7 @@ fn subcommand_verb(word: &str) -> bool {
 /// flag the same way; [`VERBS_TAKING_A_REMAINDER`] names those.
 const HELP_SUBCOMMANDS: &[&str] = &[
     "abom",
+    "ack-bound-bash",
     "admin",
     "advisories",
     "aibom",
@@ -668,6 +670,8 @@ const HELP_SUBCOMMANDS: &[&str] = &[
     "doctor",
     "events",
     "exceptions",
+    "execute-bound-bash",
+    "execute-contained-test",
     "explain",
     "export",
     "extensions",
@@ -719,7 +723,13 @@ const HELP_SUBCOMMANDS: &[&str] = &[
 /// Guard's own read-only records: the local event log, the active exceptions,
 /// the remembered rules, the receipts, the decision history, the cached
 /// advisories, the artifact inventory and the local trust posture. Each prints
-/// what Guard already holds and writes nothing.
+/// what Guard already holds and, apart from the `mcp list` bookkeeping below,
+/// writes nothing.
+///
+/// `extensions list` and `mcp list` print the same inventory, one kind at a
+/// time. Before it prints, `mcp list` records which harness configs declare a
+/// remote server, the bookkeeping Guard does on its own when it next sees
+/// those configs; it changes no grant and sends nothing.
 ///
 /// The subcommands that leave the local store are not admitted: `advisories
 /// sync` and `inventory --sync` report to Guard Cloud, and `policies clear`,
@@ -738,6 +748,7 @@ fn record_inspection(words: &[&str]) -> bool {
             ["events" | "exceptions" | "receipts" | "history" | "advisories" | "inventory"
             | "policies" | "trust"]
             | ["advisories", "list"]
+            | ["extensions" | "mcp", "list"]
             | ["policies", "verify" | "integrity-status"]
             | ["trust", "status"] => true,
             ["events", "--name", value]
@@ -763,6 +774,9 @@ fn plain_value(value: &str) -> bool {
 
 #[path = "guard_diagnostics_cloud_actions.rs"]
 mod cloud_actions;
+
+#[path = "guard_diagnostics_network.rs"]
+mod network;
 
 #[cfg(test)]
 #[path = "guard_diagnostics_tests.rs"]

@@ -7,9 +7,11 @@
 
 #[path = "for_loop_unroll_body.rs"]
 pub(super) mod body;
+#[path = "for_loop_unroll_conditional.rs"]
+mod conditional;
 
 use body::{
-    body_items, rebinds, redirect_tail, references_are_quoted, references_stand_alone, substitute,
+    body_items, rebinds, redirect_tail, references_are_quoted, references_stand_alone,
     unquote_whole_references,
 };
 
@@ -95,17 +97,12 @@ pub(super) fn unroll(command: &str) -> Option<String> {
     };
     let mut out = prefix;
     for word in &words {
-        for (text, separator) in &items {
-            // The unrolled list runs the items the loop ran. A leading `!`
-            // only inverts an item's exit status, so it is dropped wherever
-            // the separator after it shows nothing reads that outcome.
-            let step =
-                super::control_flow_flatten::unnegated_part(&substitute(text, word)?, separator);
+        // The unrolled list runs the items the loop ran. A leading `!` only
+        // inverts an item's exit status, so it is dropped wherever the
+        // separator after it shows nothing reads that outcome. An `if … fi`
+        // statement is written out whole as one step.
+        for (step, separator) in conditional::written_steps(&items, word, &tail)? {
             out.push_str(&step);
-            if !tail.is_empty() {
-                out.push(' ');
-                out.push_str(&tail);
-            }
             out.push_str(separator);
         }
         if out.len() > MAX_UNROLLED_BYTES {

@@ -91,6 +91,12 @@ pub(crate) fn run_command(reader: impl Read) -> Result<Vec<u8>, String> {
     answer(&request).map(|value| value.to_string().into_bytes())
 }
 
+/// One request already parsed, answered in-process for the `harness_adapter` kind.
+pub(crate) fn answer_value(request: &Value) -> Result<Value, String> {
+    let request = Request::deserialize(request).map_err(|_| invalid())?;
+    answer(&request)
+}
+
 fn invalid() -> String {
     "grok_executable_request_invalid".to_owned()
 }

@@ -142,6 +142,11 @@ A `guard.cloud-action-evaluation.v2` request carries everything a version 1 requ
 - `supported_obligations`: the obligations this caller can carry out.
 - `policy.fact_rules`: rules with an action pattern (as in version 1) plus a `facts` selector and optional
   `obligations`. `policy.pack_digest` names the policy pack the rules came from, or is `null`.
+- `unclassified` and `policy.unclassified` (both optional): when no admitted pack describes the action, the host
+  sends `{"destructive": <bool>}` (whether the classifier read the tool's name or schema as destructive) and the
+  pack's Unclassified section `{"action", "destructive_name_action"}`. The call's facts must then claim only a
+  class, with every other fact unknown; richer facts are refused with `unclassified_facts_invalid`. Both values
+  join the fact-rule digest only when sent.
 - `saved_consents` with a `scope`: `{"exact": {"action_identity_sha256"}}`,
   `{"resource": {"action_id", "connection_id", "resource_id"}}`, or
   `{"bounded": {"action_id", "connection_id", "selector", "selector_sha256"}}`.
@@ -164,7 +169,10 @@ The policy step changes as follows. Everything else in the precedence list above
    most 25 messages. An unknown fact never lowers anything, and rule order never matters. Reason codes add
    `fact_rule` when a rule definitely matched and `fact_unknown` when an unknown fact made the result stricter.
    `matched_rule_ids` lists definite matches. `unknown_fact_rule_ids` lists the rules that depended on an
-   unknown fact.
+   unknown fact. When the request carries both `unclassified` and `policy.unclassified`, `U` is set aside: the
+   outcome is the stricter of `outcome(D)` and the section's `destructive_name_action` (destructive name) or
+   `action`, the obligations come from `D` alone, and the reason code is `unclassified` instead of
+   `fact_unknown`. A class-only call would otherwise meet the strictest branch of every rule it might match.
 4. **Windows.** A selector bound `{"window", "at_most" | "above"}` compares the counter plus this call's known
    `record_count` with the bound. A missing counter counts as over the limit. An unknown record count is
    unknown.
@@ -177,11 +185,25 @@ The policy step changes as follows. Everything else in the precedence list above
    `bounded` matches this action on this connection only when its selector answers yes, so an unknown fact never
    satisfies it. `selector_sha256` must equal the digest of the selector's canonical JSON. Resource and bounded
    scopes do not answer `require-reapproval` unless the facts say the change is reversible or recoverable. A
-   permanent or unknown change needs exact consent. When several match, `always` beats `once`, and then the
-   narrowest scope wins.
+   permanent or unknown change needs exact consent. Resource and bounded scopes also never answer a call in a
+   session that saw an injection signal, or an outbound call (a send, share, export or payment, or an update or
+   execute whose audience is not known to be internal) when the session read untrusted or sensitive content or
+   `session_flow` is `null`. Only exact consent answers those. When several match, `always` beats `once`, and
+   then the narrowest scope wins.
 
 Every reviewable result lists `consent_options`. Both kinds, Allow once and Always allow, are always offered for
-the exact call, and for the resource too when a resource scope could apply. The result also reports
+the exact call, and for the resource too when a resource scope could apply. When a wider scope could apply and
+the call's object, reversibility and count are known, up to two bounded Always allow choices follow:
+`{"kind": "always", "scope": "bounded", "selector", "selector_sha256"}`. The selector pins the provider, class,
+object and reversibility and bounds the count at the smallest of 1, 5, 10, 25, 50, 100, 250, 500 and 1000 that
+covers this call, then at the next one. It bounds `max_record_count`. It pins `external: false` only when the
+audience is known to be internal. A call known to reach outside gets none, and so does an outbound call (a send,
+share or export, or an update or execute) whose audience is not known to stay inside. A payment gets none, because
+no selector bounds its amount. An outbound call is bounded by `max_recipient_count` and pinned to its known
+`recipient_domains`. It also keeps `max_record_count` at the tier that covers its records, and adds
+`max_byte_count` (the next power of two) when its size is known; an outbound call whose record count is unknown
+gets none. Store a choice as given: the evaluator matches
+the selector against later calls and checks the digest. The result also reports
 `consent_scope`, `facts_digest` and `pack_digest`. `evaluation_provenance_digest` additionally covers the fact
 rules, the facts, the windows, and the session flow.
 

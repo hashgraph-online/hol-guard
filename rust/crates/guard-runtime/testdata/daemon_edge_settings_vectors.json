@@ -28,6 +28,7 @@
           "changed_hash_action": "require-reapproval",
           "default_action": "warn",
           "desktop_notifications": true,
+          "harness_cigar": {},
           "harness_posture_status": [
             {
               "harness": "codex",
@@ -233,6 +234,7 @@
           "telemetry": false,
           "unknown_publisher_action": "review",
           "update_channel": "stable",
+          "update_mode": "automatic",
           "watch_auto_revert_hours": 24
         }
       },
@@ -463,9 +465,12 @@
           "changed_hash_action": "require-reapproval",
           "context_assistance": null,
           "context_assistance_diagnostic": null,
+          "cigar_apps": ["claude-code", "codex", "pi", "omp", "devin", "muse", "zcode", "kimi", "cline"],
+          "context_assistance_effective_ready": false,
           "context_assistance_requested": null,
           "default_action": "warn",
           "desktop_notifications": true,
+          "harness_cigar": {},
           "harness_posture_status": [
             {
               "harness": "codex",
@@ -671,6 +676,7 @@
           "telemetry": false,
           "unknown_publisher_action": "review",
           "update_channel": "stable",
+          "update_mode": "automatic",
           "watch_auto_revert_hours": 24
         }
       }
@@ -703,6 +709,7 @@
           "changed_hash_action": "require-reapproval",
           "default_action": "warn",
           "desktop_notifications": true,
+          "harness_cigar": {},
           "harness_posture_status": [
             {
               "harness": "codex",
@@ -908,6 +915,7 @@
           "telemetry": false,
           "unknown_publisher_action": "review",
           "update_channel": "stable",
+          "update_mode": "automatic",
           "watch_auto_revert_hours": 0
         }
       },
@@ -1138,9 +1146,12 @@
           "changed_hash_action": "require-reapproval",
           "context_assistance": null,
           "context_assistance_diagnostic": null,
+          "cigar_apps": ["claude-code", "codex", "pi", "omp", "devin", "muse", "zcode", "kimi", "cline"],
+          "context_assistance_effective_ready": false,
           "context_assistance_requested": null,
           "default_action": "warn",
           "desktop_notifications": true,
+          "harness_cigar": {},
           "harness_posture_status": [
             {
               "harness": "codex",
@@ -1346,6 +1357,7 @@
           "telemetry": false,
           "unknown_publisher_action": "review",
           "update_channel": "stable",
+          "update_mode": "automatic",
           "watch_auto_revert_hours": 0
         }
       }
@@ -1378,6 +1390,7 @@
           "changed_hash_action": "require-reapproval",
           "default_action": "warn",
           "desktop_notifications": true,
+          "harness_cigar": {},
           "harness_posture_status": [
             {
               "harness": "codex",
@@ -1587,6 +1600,7 @@
           "telemetry": false,
           "unknown_publisher_action": "review",
           "update_channel": "stable",
+          "update_mode": "automatic",
           "watch_auto_revert_hours": 24
         }
       },
@@ -1817,9 +1831,12 @@
           "changed_hash_action": "require-reapproval",
           "context_assistance": null,
           "context_assistance_diagnostic": null,
+          "cigar_apps": ["claude-code", "codex", "pi", "omp", "devin", "muse", "zcode", "kimi", "cline"],
+          "context_assistance_effective_ready": false,
           "context_assistance_requested": null,
           "default_action": "warn",
           "desktop_notifications": true,
+          "harness_cigar": {},
           "harness_posture_status": [
             {
               "harness": "codex",
@@ -2029,6 +2046,7 @@
           "telemetry": false,
           "unknown_publisher_action": "review",
           "update_channel": "stable",
+          "update_mode": "automatic",
           "watch_auto_revert_hours": 24
         }
       }
@@ -2089,6 +2107,7 @@
           },
           "default_action": "warn",
           "desktop_notifications": false,
+          "harness_cigar": {},
           "harness_posture_status": [
             {
               "harness": "codex",
@@ -2294,6 +2313,7 @@
           "telemetry": true,
           "unknown_publisher_action": "review",
           "update_channel": "stable",
+          "update_mode": "automatic",
           "watch_auto_revert_hours": 24
         }
       },
@@ -2551,6 +2571,8 @@
             }
           },
           "context_assistance_diagnostic": "context_assistance_runtime_id_invalid",
+          "cigar_apps": ["claude-code", "codex", "pi", "omp", "devin", "muse", "zcode", "kimi", "cline"],
+          "context_assistance_effective_ready": false,
           "context_assistance_requested": {
             "enabled": false,
             "features": {
@@ -2581,6 +2603,7 @@
           },
           "default_action": "warn",
           "desktop_notifications": false,
+          "harness_cigar": {},
           "harness_posture_status": [
             {
               "harness": "codex",
@@ -2786,6 +2809,7 @@
           "telemetry": true,
           "unknown_publisher_action": "review",
           "update_channel": "stable",
+          "update_mode": "automatic",
           "watch_auto_revert_hours": 24
         }
       }

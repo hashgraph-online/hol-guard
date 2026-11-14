@@ -10,11 +10,7 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.guard.adapters import bounded_cli_hook_bridge as bridge
-from codex_plugin_scanner.guard.adapters import (
-    cline_hooks,
-    copilot,
-    hermes_runtime_hooks,
-)
+from codex_plugin_scanner.guard.adapters import cline_runtime
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.adapters.bounded_cli_hook_native import (
     NATIVE_BOUNDED_HOOK_COMMAND,
@@ -134,9 +130,7 @@ def test_only_a_native_prefix_is_stripped(argv: list[object]) -> None:
 @_POSIX_ONLY
 def test_native_copilot_devin_and_hermes_commands_stay_managed(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     _offer_native(monkeypatch, tmp_path / "hol guard runtime", (NATIVE_BOUNDED_HOOK_FEATURE,))
-    context = HarnessContext(home_dir=tmp_path / "h", workspace_dir=None, guard_home=tmp_path / "g")
-
-    copilot_command = shlex.join(copilot._hook_command_parts(context, include_workspace=False))
+    copilot_command = shlex.join(_command(tmp_path, "copilot"))
     devin_command = shlex.join(_command(tmp_path, "devin"))
 
     assert NATIVE_BOUNDED_HOOK_COMMAND in copilot_command
@@ -144,7 +138,7 @@ def test_native_copilot_devin_and_hermes_commands_stay_managed(tmp_path: Path, m
     assert NATIVE_BOUNDED_HOOK_COMMAND in devin_command
     assert '"harness":"devin"' in devin_command
     # The Hermes install recognizes its own native command by the inline bridge bootstrap.
-    hermes_tokens = shlex.split(hermes_runtime_hooks.hermes_hook_command_string(_command(tmp_path, "hermes")))
+    hermes_tokens = shlex.split(shlex.join(_command(tmp_path, "hermes")))
     assert "bounded_cli_hook_bridge" in hermes_tokens[hermes_tokens.index("-c") + 1]
 
 
@@ -155,14 +149,15 @@ def test_cline_worker_runs_the_native_bridge_once_per_payload(tmp_path: Path, mo
     _offer_native(monkeypatch, runtime, (NATIVE_BOUNDED_HOOK_FEATURE,))
     context = HarnessContext(home_dir=tmp_path / "h", workspace_dir=None, guard_home=tmp_path / "g")
 
-    argv = cline_hooks._bounded_hook_argv(context, sys.executable)
+    argv = tuple(cline_runtime._facts(context, "plugin")["hook_argv"])  # pyright: ignore[reportPrivateUsage]
     worker = json.loads(worker_config(context, event_name="PreToolUse", guard_cli=list(argv)))
 
     assert argv[:2] == (str(runtime), NATIVE_BOUNDED_HOOK_COMMAND)
     config = json.loads(argv[-1])
     assert config["harness"] == "cline"
     assert config["cli_args"][:2] == ["guard", "hook"]
-    assert config["timeout_seconds"] < cline_hooks._TIMEOUT
+    # The native worker gives the bridge 9 seconds; the bridge answers inside it.
+    assert config["timeout_seconds"] < 9
     assert worker["guard"] == list(argv)
 
 

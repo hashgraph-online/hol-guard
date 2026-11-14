@@ -231,7 +231,8 @@ pub(super) fn retire_stalled(
         start_marker: Some(marker),
         owner_marker: records::owner(&pending).and_then(Value::as_str),
     };
-    retire::retire_pid(caller, pid, &expected, deadline)
+    (retire::retire_pid(caller, pid, &expected, deadline)
+        || retire::known_foreign_process(caller, pid, &expected, deadline))
         && records::clear_pending_if_current(
             home,
             pid,

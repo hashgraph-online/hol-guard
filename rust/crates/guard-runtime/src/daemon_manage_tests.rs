@@ -183,6 +183,93 @@ fn ask_with(home: &Path, op: &str, extra: Value) -> Value {
 }
 
 #[test]
+fn a_live_command_mismatch_preserves_state_and_prevents_replacement() {
+    use crate::daemon_edge::standalone::write_signed_record;
+    use crate::daemon_policy_authority::load_authenticated_daemon_identity;
+    use sha2::{Digest, Sha256};
+
+    struct Running(std::process::Child);
+    impl Drop for Running {
+        fn drop(&mut self) {
+            let _ = self.0.kill();
+            let _ = self.0.wait();
+        }
+    }
+
+    for with_marker in [true, false] {
+        let home = private_home();
+        let mut child = Running(
+            std::process::Command::new("/bin/sleep")
+                .arg("60")
+                .spawn()
+                .unwrap(),
+        );
+        let pid = i64::from(child.0.id());
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let auth = "test-daemon-auth";
+        write_private(&home.path().join("daemon-auth-token"), auth);
+        let mut state = json!({
+            "pid": pid, "port": port, "guard_home": home.path(),
+            "process_start_marker": super::host::start_marker(pid).unwrap(),
+            "user": super::host::owner_marker(pid).unwrap(),
+            "state_id": "live-record", "auth_token_id": hex::encode(Sha256::digest(auth.as_bytes())),
+            "compatibility_version": 2, "package_version": "1.0.0",
+            "runtime_fingerprint": "old-runtime",
+        }).as_object().unwrap().clone();
+        if !with_marker {
+            state.remove("process_start_marker");
+        }
+        write_signed_record(home.path(), "daemon-state.json", state).unwrap();
+        assert!(load_authenticated_daemon_identity(home.path()).is_some());
+        let state_path = records::state_path(home.path());
+        let before = fs::read(&state_path).unwrap();
+        assert_eq!(ask(home.path(), "retire").unwrap(), json!({"retired": []}));
+        assert_eq!(fs::read(&state_path).unwrap(), before);
+        assert!(child.0.try_wait().unwrap().is_none());
+        assert_eq!(
+            ask(home.path(), "retirement_complete").unwrap(),
+            json!({"complete": false})
+        );
+
+        let core = home.path().join("replacement-core");
+        fs::write(&core, "#!/bin/sh\n: > launch-sentinel\n").unwrap();
+        fs::set_permissions(&core, fs::Permissions::from_mode(0o700)).unwrap();
+        let answer = ask_with(
+            home.path(),
+            "ensure",
+            json!({
+                "launch": {"state": {"package_version": "2.0.0", "runtime_fingerprint": "new-runtime"}},
+                "executable": core, "home_dir": home.path(), "launch_cwd": home.path(),
+                "preferred_port": port,
+            }),
+        );
+        assert_eq!(
+            answer,
+            json!({
+                "kind": "runtime", "error": "Stale Guard daemon could not be retired safely.",
+            })
+        );
+        assert_eq!(fs::read(&state_path).unwrap(), before);
+        assert!(!records::pending_path(home.path()).exists());
+        assert!(!home.path().join("launch-sentinel").exists());
+        assert!(child.0.try_wait().unwrap().is_none());
+
+        child.0.kill().unwrap();
+        child.0.wait().unwrap();
+        assert_eq!(
+            ask(home.path(), "retire").unwrap(),
+            json!({"retired": [pid]})
+        );
+        assert!(records::is_exact_tombstone(&state_path));
+        assert_eq!(
+            ask(home.path(), "retirement_complete").unwrap(),
+            json!({"complete": true})
+        );
+    }
+}
+
+#[test]
 fn recovery_posture_follows_watch_and_harness_overrides() {
     let home = private_home();
     assert_eq!(ask(home.path(), "posture").unwrap()["posture"], "on");

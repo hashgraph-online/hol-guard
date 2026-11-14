@@ -103,7 +103,7 @@ pub(super) struct Asked {
     pub(super) docs: bool,
     /// About a docstring or doctest, which a long function's head is enough
     /// for.
-    pub(super) docstring: bool,
+    pub(super) docstring: docstring::Asks,
     pub(super) changelog: bool,
     pub(super) named: Vec<String>,
     /// A rename: every use of a named definition is listed, not only the
@@ -123,6 +123,9 @@ pub(super) struct Asked {
     pub(super) root: PathBuf,
     /// Files Guard keeps out of the context for what they hold, by path.
     pub(super) kept_out: Vec<(String, String)>,
+    /// How many project files hold each spelling as a word, when the walk
+    /// read them all.
+    pub(super) exact: Vec<(String, usize)>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -210,7 +213,7 @@ pub(super) fn mapped(
     let kept_out = withheld_texts(home, root, app, &files, &texts, until);
     let asked = Asked {
         docs: more::asks_for_docs(prompt),
-        docstring: docstring::asks_for_docstring(prompt),
+        docstring: docstring::asks(prompt),
         changelog: more::asks_for_changelog(prompt),
         named: named(prompt),
         changes: about_changes,
@@ -221,6 +224,7 @@ pub(super) fn mapped(
         renames: renames(prompt),
         root: root.to_path_buf(),
         kept_out,
+        exact: walk.exact.clone(),
     };
     let mapped = map(&texts, &sought, &asked, until);
     withheld::added(mapped, &asked.kept_out, &sought, &asked, until)
@@ -472,29 +476,23 @@ fn kind(path: &str) -> Kind {
 }
 
 #[cfg(test)]
-#[path = "context_assistance_prompt_map_tests.rs"]
-mod tests;
-
-#[cfg(test)]
-#[path = "context_assistance_prompt_map_nested_tests.rs"]
-mod nested_tests;
-
-#[cfg(test)]
-#[path = "context_assistance_prompt_map_project_tests.rs"]
-mod project_tests;
-
-#[cfg(test)]
-#[path = "context_assistance_prompt_map_rename_tests.rs"]
-mod rename_tests;
-
-#[cfg(test)]
-#[path = "context_assistance_prompt_map_imports_tests.rs"]
-mod imports_tests;
-
-#[cfg(test)]
 #[path = "context_assistance_prompt_map_beside_tests.rs"]
 mod beside_tests;
-
 #[cfg(test)]
 #[path = "context_assistance_prompt_map_docstring_tests.rs"]
 mod docstring_tests;
+#[cfg(test)]
+#[path = "context_assistance_prompt_map_imports_tests.rs"]
+mod imports_tests;
+#[cfg(test)]
+#[path = "context_assistance_prompt_map_nested_tests.rs"]
+mod nested_tests;
+#[cfg(test)]
+#[path = "context_assistance_prompt_map_project_tests.rs"]
+mod project_tests;
+#[cfg(test)]
+#[path = "context_assistance_prompt_map_rename_tests.rs"]
+mod rename_tests;
+#[cfg(test)]
+#[path = "context_assistance_prompt_map_tests.rs"]
+mod tests;

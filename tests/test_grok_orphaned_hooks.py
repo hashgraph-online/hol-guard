@@ -8,8 +8,8 @@ import pytest
 import tomlkit
 
 from codex_plugin_scanner.guard.adapters.base import _shell_command
-from codex_plugin_scanner.guard.adapters.grok_user_config import prepare_user_config_text
 from codex_plugin_scanner.guard.cli.grok_hook_validation import is_missing_grok_hook_command
+from tests.grok_test_support import prepare_user_config_text
 
 
 def command(home: Path, *, workspace: Path | None = None) -> str:
@@ -96,10 +96,10 @@ def test_repair_recognizes_orphan_after_isolated_python_disappears(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, frozen: bool
 ) -> None:
     from codex_plugin_scanner.guard.adapters import bounded_cli_hook_bridge as bridge
-    from codex_plugin_scanner.guard.adapters import cursor_hook_config
+    from codex_plugin_scanner.guard.adapters import isolated_hook_python
 
     stale = command(tmp_path / "old")
-    monkeypatch.setattr(cursor_hook_config, "isolated_cursor_hook_python", lambda: None)
+    monkeypatch.setattr(isolated_hook_python, "isolated_cursor_hook_python", lambda: None)
     monkeypatch.setattr(bridge, "isolated_cursor_hook_python", lambda: None)
     monkeypatch.setattr(bridge.sys, "frozen", frozen, raising=False)
     monkeypatch.setattr(bridge, "prune_safe_cli_executable", lambda value: value)

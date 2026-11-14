@@ -24,7 +24,7 @@ from .protect_output import (
 )
 from .render_approval_gate_nudge import print_approval_gate_nudge
 from .render_connectors import print_connector_setup_line, render_mcp_list
-from .render_doctor_readiness import build_doctor_harness_table, readiness_text
+from .render_doctor_readiness import build_doctor_harness_table, protection_proof_rows, readiness_text
 from .render_skill_scan import skill_scan_rows, skill_scan_title
 from .render_uninstall import render_self_uninstall
 from .update_repair_notes import render_protection_repair_failures
@@ -1037,6 +1037,9 @@ def _render_doctor(console: Console, payload: dict[str, object]) -> None:
         readiness = doctor_runtime_readiness(payload)
         summary.add_row("Runtime readiness", readiness_text(readiness))
         summary.add_row("Evidence", Text(readiness["detail"]))
+        if "version_compatibility" in payload:
+            for label, value in protection_proof_rows(payload.get("version_compatibility")):
+                summary.add_row(label, value)
         summary.add_row("Command", _bool_label(bool(payload.get("command_available"))))
         summary.add_row("Artifacts", str(len(_coerce_dict_list(payload.get("artifacts")))))
         registry = payload.get("runtime_detector_registry")

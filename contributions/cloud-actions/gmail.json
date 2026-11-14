@@ -1405,6 +1405,7 @@
       },
       "response": {
         "maxBytes": 4096,
+        "emptyOk": true,
         "fields": [
           {
             "name": "error",
@@ -1474,6 +1475,10 @@
               "relaxed": "allow",
               "balanced": "allow",
               "strict": "review"
+            },
+            "response": "{\"id\": \"m1\", \"labelIds\": []}",
+            "projection": {
+              "error": false
             }
           }
         },
@@ -2004,6 +2009,7 @@
       },
       "response": {
         "maxBytes": 4096,
+        "emptyOk": true,
         "fields": [
           {
             "name": "error",
@@ -2058,6 +2064,10 @@
               "relaxed": "review",
               "balanced": "review",
               "strict": "block"
+            },
+            "response": "",
+            "projection": {
+              "error": false
             }
           }
         },
@@ -2137,6 +2147,7 @@
       },
       "response": {
         "maxBytes": 4096,
+        "emptyOk": true,
         "fields": [
           {
             "name": "error",
@@ -2199,6 +2210,10 @@
               "relaxed": "review",
               "balanced": "review",
               "strict": "block"
+            },
+            "response": "",
+            "projection": {
+              "error": false
             }
           }
         },

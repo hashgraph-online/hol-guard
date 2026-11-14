@@ -10,12 +10,12 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.adapters import pi_extension_source
 from codex_plugin_scanner.guard.hook_execution_environment import (
     HOOK_EXECUTION_ENVIRONMENT_KEY,
     node_options_inert,
     stamp_hook_input_text,
 )
+from tests import pi_extension_support as pi_extension_source
 
 # Mirrors the cases in guard-contracts' execution_environment_tests.rs, which
 # the native receiver applies to the value it inherits.

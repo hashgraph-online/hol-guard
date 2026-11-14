@@ -23,7 +23,7 @@ fn contained_host() -> bool {
 #[test]
 fn isolated_python_inline_code_requires_containment_not_unrestricted_allow() {
     for flags in ["-I", "-S", "-I -S", "-S -I", "-IS", "-SI"] {
-        let command = format!("python3 {flags} -c 'print(1)'");
+        let command = format!("python3 {flags} -c 'import os; print(os.getpid())'");
         let result = classify("omp", &command);
         assert_eq!(result.decision, "deny", "{command}");
         if cfg!(target_os = "macos") {
@@ -37,12 +37,12 @@ fn isolated_python_inline_code_requires_containment_not_unrestricted_allow() {
     for command in [
         "python3 -I -m arbitrary",
         "python3 -S file.py",
-        "python3 -W ignore -c 'print(1)'",
-        "python3 -I -I -c 'print(1)'",
-        "python3 -IS -S -c 'print(1)'",
-        "python3 -I -S -c 'print(1)' extra",
-        "PYTHONPATH=/tmp python3 -I -S -c 'print(1)'",
-        "python3 -I -S -c 'print(1)' && rm -rf /",
+        "python3 -W ignore -c 'import os; print(os.getpid())'",
+        "python3 -I -I -c 'import os; print(os.getpid())'",
+        "python3 -IS -S -c 'import os; print(os.getpid())'",
+        "python3 -I -S -c 'import os; print(os.getpid())' extra",
+        "PYTHONPATH=/tmp python3 -I -S -c 'import os; print(os.getpid())'",
+        "python3 -I -S -c 'import os; print(os.getpid())' && rm -rf /",
     ] {
         let result = classify("omp", command);
         assert_ne!(result.decision, "allow", "{command}");
@@ -884,6 +884,7 @@ fn windows_contains_direct_vite_builds_of_a_flat_install() {
                 cargo_config_inert: false,
                 npm_config_inert: false,
                 pip_config_inert: false,
+                python_environment_inert: false,
                 shell_home_matches: false,
                 ripgrep_config_absent: false,
                 gem_config_absent: false,

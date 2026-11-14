@@ -1,4 +1,4 @@
-"""Saved plugin state must not control Node options or probe arbitrary paths."""
+"""The plugin's ``node --check`` must not execute inherited preloads or the plugin."""
 
 from __future__ import annotations
 
@@ -6,12 +6,13 @@ import json
 import shutil
 import subprocess
 from pathlib import Path
-from unittest.mock import ANY, Mock
+from unittest.mock import Mock
 
 import pytest
 
-from codex_plugin_scanner.guard.adapters import cline_plugin, cline_plugin_probe
+from codex_plugin_scanner.guard.adapters import cline_runtime
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
+from codex_plugin_scanner.guard.adapters.native_harness import ask
 from tests.coverage_ci import under_coverage_scale
 
 
@@ -23,73 +24,48 @@ def _context(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> HarnessContext:
     return HarnessContext(home, None, home / ".hol-guard")
 
 
-def _write_state(context: HarnessContext, value: object) -> None:
-    state = cline_plugin._state_path(context)
-    state.parent.mkdir(parents=True, exist_ok=True)
-    state.write_text(json.dumps({"index_path": value}), encoding="utf-8")
+def _install(context: HarnessContext) -> dict[str, object]:
+    facts = {"guard_cli": ["guard"], "hook_argv": None, "identity": None}
+    return ask("install_transport", context, harness="cline", transport="plugin", frozen=False, facts=facts)
 
 
-@pytest.mark.parametrize("value", ["--require=untrusted.js", "--eval=process.exit(0)", "../index.js", None, 7])
-def test_bad_recorded_plugin_path_never_starts_node(tmp_path, monkeypatch, value) -> None:
+@pytest.mark.parametrize("custom", [False, True])
+def test_install_asks_node_to_check_the_managed_index(tmp_path, monkeypatch, custom) -> None:
     context = _context(tmp_path, monkeypatch)
-    _write_state(context, value)
-    run = Mock(side_effect=AssertionError("must not start Node"))
-    monkeypatch.setattr(cline_plugin_probe.shutil, "which", Mock(return_value="node"))
-    monkeypatch.setattr(cline_plugin_probe.subprocess, "run", run)
-
-    result = cline_plugin.cline_plugin_syntax_probe(context)
-
-    assert result["ok"] is False
-    run.assert_not_called()
+    if custom:
+        monkeypatch.setenv("CLINE_DATA_DIR", str(context.home_dir / "custom-cline"))
+    answer = _install(context)
+    index = answer["manifest"]["managed_plugin_path"]
+    assert answer["probe"] == {"node_check": index}
+    expected = context.home_dir / ("custom-cline" if custom else ".cline") / "plugins" / "hol-guard" / "index.js"
+    assert Path(index) == expected
 
 
-def test_external_regular_file_is_not_a_plugin_probe_target(tmp_path, monkeypatch) -> None:
-    context = _context(tmp_path, monkeypatch)
-    external = tmp_path / "external.js"
-    external.write_text("export default {};", encoding="utf-8")
-    _write_state(context, str(external))
-    run = Mock(side_effect=AssertionError("must not start Node"))
-    monkeypatch.setattr(cline_plugin_probe.subprocess, "run", run)
-
-    assert cline_plugin.cline_plugin_syntax_probe(context) == {"ok": False, "reason": "plugin_state_path_mismatch"}
-    run.assert_not_called()
-
-
-def test_managed_probe_ends_option_parsing_and_preserves_exit_status(tmp_path, monkeypatch) -> None:
-    context = _context(tmp_path, monkeypatch)
-    path = cline_plugin.cline_plugin_root(context) / "index.js"
-    _write_state(context, str(path))
+def test_node_check_ends_option_parsing_and_drops_inherited_preloads(monkeypatch) -> None:
+    monkeypatch.setenv("NODE_OPTIONS", "--require=untrusted.js")
+    monkeypatch.setenv("NODE_PATH", "/untrusted/modules")
+    monkeypatch.setenv("LD_PRELOAD", "/untrusted/library.so")
+    monkeypatch.setattr(cline_runtime.shutil, "which", Mock(return_value="/trusted/node"))
     run = Mock(return_value=subprocess.CompletedProcess([], 1))
-    monkeypatch.setattr(cline_plugin_probe.shutil, "which", Mock(return_value="node"))
-    monkeypatch.setattr(cline_plugin_probe.subprocess, "run", run)
+    monkeypatch.setattr(cline_runtime.subprocess, "run", run)
 
-    assert cline_plugin.cline_plugin_syntax_probe(context) == {"ok": False, "return_code": 1}
-    run.assert_called_once_with(
-        ["node", "--check", "--", str(path)], capture_output=True, text=True, timeout=5, check=False, env=ANY
-    )
-
-
-def test_unsafe_managed_root_never_starts_node(tmp_path, monkeypatch) -> None:
-    context = _context(tmp_path, monkeypatch)
-    _write_state(context, "index.js")
-    run = Mock(side_effect=AssertionError("must not start Node"))
-    monkeypatch.setattr(cline_plugin_probe.subprocess, "run", run)
-    monkeypatch.setattr(cline_plugin_probe, "cline_plugin_root", Mock(side_effect=RuntimeError("symlink")))
-
-    assert cline_plugin.cline_plugin_syntax_probe(context) == {"ok": False, "reason": "plugin_path_unsafe"}
-    run.assert_not_called()
+    assert cline_runtime._node_check("--eval=index.js") == {"ok": False, "return_code": 1}  # pyright: ignore[reportPrivateUsage]
+    run.assert_called_once()
+    assert run.call_args.args[0] == ["/trusted/node", "--check", "--", "--eval=index.js"]
+    assert run.call_args.kwargs["check"] is False
+    assert run.call_args.kwargs["timeout"] == 5
+    for name in ("NODE_OPTIONS", "NODE_PATH", "LD_PRELOAD"):
+        assert name not in run.call_args.kwargs["env"]
 
 
 @pytest.mark.skipif(shutil.which("node") is None, reason="Node is not installed")
 @pytest.mark.parametrize("source,ok", [("export default {};", True), ("function broken( {", False)])
 def test_real_node_checks_managed_source_without_executing_it(tmp_path, monkeypatch, source, ok) -> None:
     context = _context(tmp_path, monkeypatch)
-    path = cline_plugin.cline_plugin_root(context) / "index.js"
-    path.parent.mkdir(parents=True)
+    index = Path(_install(context)["manifest"]["managed_plugin_path"])
     marker = tmp_path / "must-not-run"
     prelude = f"require('node:fs').writeFileSync({json.dumps(str(marker))}, 'executed');\n"
-    path.write_text(prelude + source, encoding="utf-8")
-    _write_state(context, str(path))
+    index.write_text(prelude + source, encoding="utf-8")
 
     original_run = subprocess.run
 
@@ -99,7 +75,7 @@ def test_real_node_checks_managed_source_without_executing_it(tmp_path, monkeypa
         kwargs["timeout"] = max(kwargs["timeout"] * under_coverage_scale(3.0), 15)
         return original_run(*args, **kwargs)
 
-    monkeypatch.setattr(cline_plugin_probe.subprocess, "run", traced_run)
-    result = cline_plugin.cline_plugin_syntax_probe(context)
+    monkeypatch.setattr(cline_runtime.subprocess, "run", traced_run)
+    result = cline_runtime._node_check(str(index))  # pyright: ignore[reportPrivateUsage]
     assert result["ok"] is ok, result
     assert not marker.exists()

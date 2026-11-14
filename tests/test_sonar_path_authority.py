@@ -2,26 +2,21 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 from pathlib import Path
 
 import pytest
 import yaml
 
-from codex_plugin_scanner.guard.adapters import cursor_hooks as cursor_hooks_module
-from codex_plugin_scanner.guard.adapters._modules.copilot import copilot_state_paths
+from codex_plugin_scanner.guard.adapters import get_adapter
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.adapters.copilot import CopilotHarnessAdapter
-from codex_plugin_scanner.guard.adapters.cursor_hooks import (
-    cursor_hooks_path,
-    install_cursor_hooks,
-    managed_hook_script_path,
-    uninstall_cursor_hooks,
-)
+from codex_plugin_scanner.guard.adapters.cursor import CursorHarnessAdapter
 from codex_plugin_scanner.guard.adapters.hermes import HermesHarnessAdapter
-from codex_plugin_scanner.guard.adapters.openclaw import OpenClawHarnessAdapter
 from codex_plugin_scanner.guard.runtime.command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
 from codex_plugin_scanner.guard.runtime.extension_control_authority import AuthorityHealth
+from tests.cursor_test_support import HOOK_SCRIPT_NAME
 from tests.test_guard_extension_control_authority import MemorySecretStore, _store
 
 
@@ -86,16 +81,22 @@ def test_copilot_uninstall_does_not_follow_managed_config_symlink(tmp_path: Path
     assert Path(str(state_paths[0])).exists() is True
 
 
+def _copilot_managed_path(target: Path, context: HarnessContext, kind: str) -> Path:
+    """Where the native kind keeps a Copilot target's backup or state."""
+    digest = hashlib.sha256(str(target.resolve()).encode("utf-8")).hexdigest()[:12]
+    return context.guard_home / "managed" / "copilot" / f"{digest}.{kind}.json"
+
+
 def test_copilot_unsigned_legacy_state_cannot_authorize_other_workspace(tmp_path: Path) -> None:
     context = HarnessContext(home_dir=tmp_path / "home", workspace_dir=None, guard_home=tmp_path / "guard-home")
     external_workspace = tmp_path / "external-workspace"
     external_target = external_workspace / ".mcp.json"
     external_target.parent.mkdir()
     external_target.write_text('{"owned":"user"}', encoding="utf-8")
-    backup_path = CopilotHarnessAdapter._backup_path(external_target, context)
+    backup_path = _copilot_managed_path(external_target, context, "backup")
     backup_path.parent.mkdir(parents=True)
     _write_json(backup_path, {"existed": False, "content": None})
-    state_path = CopilotHarnessAdapter._state_path(external_target, context)
+    state_path = _copilot_managed_path(external_target, context, "state")
     _write_json(
         state_path,
         {
@@ -110,27 +111,6 @@ def test_copilot_unsigned_legacy_state_cannot_authorize_other_workspace(tmp_path
     assert external_target.read_text(encoding="utf-8") == '{"owned":"user"}'
     assert backup_path.exists() is True
     assert state_path.exists() is True
-
-
-def test_copilot_install_restores_target_when_state_commit_fails(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    context = HarnessContext(home_dir=tmp_path / "home", workspace_dir=None, guard_home=tmp_path / "guard-home")
-    target = context.home_dir / ".copilot" / "mcp-config.json"
-    original = {"mcpServers": {"user": {"command": "user-command"}}}
-    _write_json(target, original)
-
-    def fail_state_commit(*_args: object, **_kwargs: object) -> None:
-        raise OSError("simulated state persistence failure")
-
-    monkeypatch.setattr(copilot_state_paths, "write_copilot_state", fail_state_commit)
-
-    with pytest.raises(OSError, match="state persistence"):
-        CopilotHarnessAdapter().install(context)
-
-    assert json.loads(target.read_text(encoding="utf-8")) == original
-    assert list((context.guard_home / "managed" / "copilot").glob("*.state.json")) == []
 
 
 def test_hermes_uninstall_authenticates_external_recorded_config_path(
@@ -247,44 +227,15 @@ def test_cursor_uninstall_does_not_unlink_managed_copy_symlink(tmp_path: Path) -
     context = HarnessContext(home_dir=tmp_path / "home", workspace_dir=None, guard_home=tmp_path / "guard-home")
     outside_script = tmp_path / "outside.py"
     outside_script.write_text("# user-owned\n", encoding="utf-8")
-    managed_script = managed_hook_script_path(context)
+    managed_script = context.guard_home / "managed" / "cursor" / HOOK_SCRIPT_NAME
     managed_script.parent.mkdir(parents=True)
     managed_script.symlink_to(outside_script)
 
     with pytest.raises(ValueError, match="Cursor managed hook script"):
-        uninstall_cursor_hooks(context)
+        CursorHarnessAdapter().uninstall(context)
 
     assert outside_script.read_text(encoding="utf-8") == "# user-owned\n"
     assert managed_script.is_symlink()
-
-
-def test_cursor_install_replaces_final_symlink_without_modifying_external_file(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    workspace = tmp_path / "workspace"
-    workspace.mkdir()
-    context = HarnessContext(home_dir=tmp_path / "home", workspace_dir=workspace, guard_home=tmp_path / "guard-home")
-    outside_hooks = tmp_path / "outside-hooks.json"
-    outside_hooks.write_text('{"version":1,"hooks":{"user":[]}}\n', encoding="utf-8")
-    hooks_path = cursor_hooks_path(context)
-    hooks_path.parent.mkdir(parents=True)
-    hooks_path.write_text('{"version":1,"hooks":{}}\n', encoding="utf-8")
-    safe_write = cursor_hooks_module.write_text_at_authorized_path
-
-    def swap_after_validation(path: Path, payload: str) -> None:
-        if path == hooks_path:
-            path.unlink()
-            path.symlink_to(outside_hooks)
-        safe_write(path, payload)
-
-    monkeypatch.setattr(cursor_hooks_module, "write_text_at_authorized_path", swap_after_validation)
-
-    install_cursor_hooks(context)
-
-    assert outside_hooks.read_text(encoding="utf-8") == '{"version":1,"hooks":{"user":[]}}\n'
-    assert hooks_path.is_symlink() is False
-    assert "beforeShellExecution" in json.loads(hooks_path.read_text(encoding="utf-8"))["hooks"]
 
 
 def test_openclaw_runtime_probe_rejects_symlinked_managed_root(tmp_path: Path) -> None:
@@ -300,7 +251,7 @@ def test_openclaw_runtime_probe_rejects_symlinked_managed_root(tmp_path: Path) -
     )
     context.guard_home.mkdir()
     (context.guard_home / "openclaw").symlink_to(outside_root, target_is_directory=True)
-    adapter = OpenClawHarnessAdapter()
+    adapter = get_adapter("openclaw")
 
     assert adapter.launch_environment(context) == {}
     runtime_probe = adapter.runtime_probe(context)

@@ -6,8 +6,8 @@ from pathlib import Path
 
 import pytest
 
+from codex_plugin_scanner.guard.adapters import get_adapter
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
-from codex_plugin_scanner.guard.adapters.muse import MuseHarnessAdapter
 from codex_plugin_scanner.guard.inventory_contract import (
     inventory_snapshot_from_detection,
     serialize_inventory_snapshot,
@@ -27,7 +27,7 @@ def test_skill_discovery_issues_sync_with_distinct_path_free_ids(tmp_path: Path)
         except (NotImplementedError, OSError) as exc:
             pytest.skip(f"symlink creation unavailable: {exc}")
 
-    result = MuseHarnessAdapter().detect(ctx)
+    result = get_adapter("muse").detect(ctx)
     issues = [a for a in result.artifacts if ":skill-discovery:" in a.artifact_id]
     assert len(issues) == 2
     assert all(str(tmp_path) not in a.artifact_id for a in issues)

@@ -14,6 +14,9 @@
 //! comes back as `{"fault": "tampered"}`; any other failure, which the Python
 //! readers turned into a degraded view, as `{"fault": "degraded"}`.
 
+mod activation_binding;
+#[cfg(test)]
+mod activation_binding_tests;
 mod catalog;
 mod chain;
 mod change_event;

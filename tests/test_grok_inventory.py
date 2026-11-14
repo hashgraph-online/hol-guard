@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from codex_plugin_scanner.guard.adapters.grok import GrokHarnessAdapter
+from codex_plugin_scanner.guard.adapters import get_adapter
 from codex_plugin_scanner.guard.inventory_contract import _agent_type, inventory_snapshot_from_detection
 from codex_plugin_scanner.guard.models import HarnessDetection
 from codex_plugin_scanner.guard.runtime.actions import normalize_harness_payload
@@ -26,7 +26,7 @@ args = ["-y", "@modelcontextprotocol/server-github"]
             + "\n",
             encoding="utf-8",
         )
-        result = GrokHarnessAdapter().detect(ctx)
+        result = get_adapter("grok").detect(ctx)
         mcp = [artifact for artifact in result.artifacts if artifact.artifact_type == "mcp_server"]
         assert any(artifact.name == "github" for artifact in mcp)
 
@@ -52,7 +52,7 @@ Authorization = "Bearer redacted"
             + "\n",
             encoding="utf-8",
         )
-        result = GrokHarnessAdapter().detect(ctx)
+        result = get_adapter("grok").detect(ctx)
         github = next(artifact for artifact in result.artifacts if artifact.name == "github")
         remote = next(artifact for artifact in result.artifacts if artifact.name == "remote")
         assert github.metadata["env_keys"] == ["GITHUB_TOKEN"]
@@ -75,7 +75,7 @@ args = ["-y", "@modelcontextprotocol/server-github"]
             + "\n",
             encoding="utf-8",
         )
-        adapter = GrokHarnessAdapter()
+        adapter = get_adapter("grok")
         baseline = next(artifact for artifact in adapter.detect(ctx).artifacts if artifact.name == "github")
         config.write_text(
             """
@@ -107,7 +107,7 @@ url = "https://mcp.example.com/mcp"
             + "\n",
             encoding="utf-8",
         )
-        adapter = GrokHarnessAdapter()
+        adapter = get_adapter("grok")
         baseline = next(artifact for artifact in adapter.detect(ctx).artifacts if artifact.name == "remote")
         config.write_text(
             """
@@ -143,9 +143,7 @@ GITHUB_TOKEN = "redacted"
             + "\n",
             encoding="utf-8",
         )
-        artifact = next(
-            artifact for artifact in GrokHarnessAdapter().detect(ctx).artifacts if artifact.name == "github"
-        )
+        artifact = next(artifact for artifact in get_adapter("grok").detect(ctx).artifacts if artifact.name == "github")
         signal_ids = {signal.signal_id for signal in artifact_risk_signals_typed(artifact)}
         assert "secret:env-keys" in signal_ids
         assert "secret:env-semantic" in signal_ids
@@ -155,7 +153,7 @@ GITHUB_TOKEN = "redacted"
         config = ctx.home_dir / ".grok" / "config.toml"
         config.parent.mkdir(parents=True, exist_ok=True)
         config.write_text('sandbox = "off"\n', encoding="utf-8")
-        result = GrokHarnessAdapter().detect(ctx)
+        result = get_adapter("grok").detect(ctx)
         assert any("degraded" in warning.lower() or "sandbox" in warning.lower() for warning in result.warnings)
 
     def test_install_preserves_user_config(self, tmp_path: Path, monkeypatch) -> None:
@@ -163,7 +161,7 @@ GITHUB_TOKEN = "redacted"
         user_config = ctx.home_dir / ".grok" / "config.toml"
         user_config.parent.mkdir(parents=True, exist_ok=True)
         user_config.write_text("[ui]\nsimple_mode = true\n", encoding="utf-8")
-        GrokHarnessAdapter().install(ctx)
+        get_adapter("grok").install(ctx)
         assert user_config.read_text(encoding="utf-8").startswith("[ui]\nsimple_mode = true\n")
 
 
@@ -287,7 +285,7 @@ class TestGrokInventoryAndResponses:
         (grok_root / "workflows").mkdir(parents=True)
         (grok_root / "agents").mkdir(parents=True)
         (grok_root / "sandbox.toml").write_text('[profiles.project]\nextends = "workspace"\n', encoding="utf-8")
-        result = GrokHarnessAdapter().detect(ctx)
+        result = get_adapter("grok").detect(ctx)
         assert any(path.endswith(".grok/workflows") for path in result.config_paths)
         assert any(path.endswith(".grok/agents") for path in result.config_paths)
         assert any(path.endswith(".grok/sandbox.toml") for path in result.config_paths)

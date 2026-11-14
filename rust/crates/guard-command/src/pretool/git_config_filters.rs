@@ -16,6 +16,7 @@ pub(super) fn unused(
     deadline: Instant,
     named: &[&str],
     repository_optional: bool,
+    tracked_only: bool,
 ) -> Option<bool> {
     let query = |arguments: &[&str], input: Option<Vec<u8>>, root: Option<&Path>| {
         let mut command = Command::new(binary);
@@ -54,6 +55,9 @@ pub(super) fn unused(
         command.args(arguments);
         bounded_output(command, input, deadline)
     };
+    if named.is_empty() && tracked_only && sources::none_named(&query, deadline) {
+        return Some(true);
+    }
     if !named.is_empty() {
         // Operands resolve against the caller's directory. A path outside the
         // work tree makes check-attr fail, which keeps the command reviewed.
@@ -112,30 +116,67 @@ pub(super) fn unused(
     // without a trailing slash and can make status inspect another repository,
     // whose filter configuration this proof does not cover.
     let mut covered = Vec::with_capacity(paths.len());
+    let mut candidates = Vec::new();
     for path in paths
         .split(|byte| *byte == 0)
         .filter(|path| !path.is_empty())
     {
-        if Instant::now() >= deadline {
-            return None;
-        }
         if path.ends_with(b"/") {
             continue;
         }
-        let candidate = root.join(std::str::from_utf8(path).ok()?);
-        if candidate.is_dir() && candidate.join(".git").exists() {
-            return Some(false);
-        }
+        candidates.push(root.join(std::str::from_utf8(path).ok()?));
         covered.extend_from_slice(path);
         covered.push(0);
     }
-    let paths = covered;
-    if paths.is_empty() {
+    if covered.is_empty() {
         return Some(true);
     }
-    // Attribute output repeats each path plus two fields. Batch by the
-    // expected response size while retaining the per-query output cap.
-    const BATCH_BYTES: usize = 512 * 1024;
+    // The attribute query and the populated-gitlink check read the same
+    // listing and answer on their own, so the file checks run while Git
+    // reports attributes. Together they used to take more than a hook's
+    // whole budget in a checkout of a few tens of thousands of files.
+    std::thread::scope(|scope| {
+        let attributes = scope
+            .spawn(|| filters_unset_in(&query, &covered, &root, deadline, ATTRIBUTE_BATCH_BYTES));
+        let nested = populated_gitlink(&candidates, deadline);
+        let attributes = attributes.join().ok()?;
+        match nested? {
+            true => Some(false),
+            false => attributes,
+        }
+    })
+}
+
+/// Whether any listed path is a directory holding its own `.git`, which a
+/// tracked gitlink checked out in place looks like. `None` past the deadline.
+fn populated_gitlink(candidates: &[std::path::PathBuf], deadline: Instant) -> Option<bool> {
+    for candidate in candidates {
+        if Instant::now() >= deadline {
+            return None;
+        }
+        if candidate.is_dir() && candidate.join(".git").exists() {
+            return Some(true);
+        }
+    }
+    Some(false)
+}
+
+// Attribute output repeats each path plus two fields, about twenty bytes more
+// than the path. One query covers a checkout of a few hundred thousand files;
+// half the output cap leaves room for longer values.
+const ATTRIBUTE_BATCH_BYTES: usize = (super::super::git_probe::LISTING_LIMIT / 2) as usize;
+
+/// A git invocation with optional standard input and working directory.
+type GitQuery<'a> = dyn Fn(&[&str], Option<Vec<u8>>, Option<&Path>) -> Option<Vec<u8>> + Sync + 'a;
+
+/// Whether no path in the NUL-separated `paths` has a filter attribute.
+fn filters_unset_in(
+    query: &GitQuery<'_>,
+    paths: &[u8],
+    root: &Path,
+    deadline: Instant,
+    batch_bytes: usize,
+) -> Option<bool> {
     let mut offset = 0;
     let mut batches = 0;
     while offset < paths.len() {
@@ -149,10 +190,10 @@ pub(super) fn unused(
                 break;
             }
             let cost = path.len().checked_add(20)?;
-            if cost > BATCH_BYTES {
+            if cost > batch_bytes {
                 return None;
             }
-            if expected_bytes + cost > BATCH_BYTES {
+            if expected_bytes + cost > batch_bytes {
                 break;
             }
             expected_bytes += cost;
@@ -165,7 +206,7 @@ pub(super) fn unused(
         let attributes = query(
             &["check-attr", "-z", "--stdin", "filter"],
             Some(batch.to_vec()),
-            Some(&root),
+            Some(root),
         )?;
         if !filters_unset(&attributes, batch)? {
             return Some(false);
@@ -257,3 +298,100 @@ fn bounded_output(
     }
     status?.success().then_some(output)
 }
+
+/// Whether an index comparison also reads the files on disk.
+///
+/// `git diff-index HEAD` compares the index against the working tree, so Git
+/// runs a configured clean filter over every file it has to re-examine.
+/// `--cached` (or `--staged`) compares the index against the named tree alone
+/// and never opens a working-tree file, so that spelling consumes no filter.
+/// `git diff` takes the same spellings, and its `--no-index` form compares
+/// two paths on disk. `diff-files` always compares the index against the
+/// working tree and has no such spelling, so it is screened without asking
+/// here. `diff-tree` compares two trees and reaches neither the index nor the
+/// working tree.
+///
+/// An option such as `-S` or `--output` takes the next word as its value, so
+/// in `git diff -S --cached` the `--cached` is the search text and the diff
+/// still reads the working tree. The spelling counts only where the word
+/// before it cannot be such an option: nothing, a word that is not an option,
+/// or one of the options below that never take a separate value.
+pub(super) fn reads_working_tree(operation: &str, rest: &[String]) -> bool {
+    let options: Vec<&str> = rest
+        .iter()
+        .map(String::as_str)
+        .take_while(|argument| *argument != "--")
+        .collect();
+    let index_only = options.iter().enumerate().any(|(position, argument)| {
+        matches!(*argument, "--cached" | "--staged")
+            && position
+                .checked_sub(1)
+                .is_none_or(|previous| takes_no_separate_value(options[previous]))
+    });
+    (operation == "diff" && options.contains(&"--no-index")) || !index_only
+}
+
+/// Whether a `diff` word leaves the following word alone. Long options with
+/// an optional value only ever take it after `=`.
+fn takes_no_separate_value(word: &str) -> bool {
+    if let Some(long) = word.strip_prefix("--") {
+        return long.contains('=')
+            || matches!(
+                long,
+                "cached"
+                    | "staged"
+                    | "merge-base"
+                    | "stat"
+                    | "numstat"
+                    | "shortstat"
+                    | "name-only"
+                    | "name-status"
+                    | "summary"
+                    | "compact-summary"
+                    | "raw"
+                    | "patch"
+                    | "no-patch"
+                    | "minimal"
+                    | "patience"
+                    | "histogram"
+                    | "check"
+                    | "exit-code"
+                    | "quiet"
+                    | "color"
+                    | "no-color"
+                    | "word-diff"
+                    | "no-renames"
+                    | "find-renames"
+                    | "find-copies"
+                    | "text"
+                    | "binary"
+                    | "full-index"
+                    | "no-prefix"
+                    | "relative"
+                    | "no-relative"
+                    | "ignore-all-space"
+                    | "ignore-space-change"
+                    | "ignore-space-at-eol"
+                    | "ignore-blank-lines"
+                    | "ignore-cr-at-eol"
+                    | "no-ext-diff"
+                    | "no-textconv"
+                    | "irreversible-delete"
+                    | "function-context"
+            );
+    }
+    let Some(short) = word.strip_prefix('-') else {
+        return true;
+    };
+    // `-M`, `-C` and `-B` read a value only when it is attached (`-M50%`).
+    !short.is_empty()
+        && (short.starts_with(['M', 'C', 'B'])
+            || short.bytes().all(|flag| b"puszRabwWD".contains(&flag)))
+}
+
+#[path = "git_config_filter_sources.rs"]
+mod sources;
+
+#[cfg(test)]
+#[path = "git_config_filters_tests.rs"]
+mod tests;
