@@ -643,6 +643,7 @@
       "src/pretool/search_scope.rs",
       "src/pretool/search_scope_budget.rs",
       "src/pretool/search_scope_claude.rs",
+      "src/pretool/search_scope_grok.rs",
       "src/pretool/search_scope_filter.rs",
       "src/pretool/search_scope_glob.rs",
       "src/pretool/search_scope_grep_include.rs",

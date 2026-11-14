@@ -16,7 +16,9 @@
 use super::{scan_arguments, tree, AbsentOperands, ReadContext};
 use crate::pretool::search_pattern_clearance::PatternClearance;
 
-const MAX_ENTRIES: usize = 10_000;
+/// Above the include proof's limit, so a tree that limit refuses is one this
+/// walk can still count past it and call too large.
+const MAX_ENTRIES: usize = 25_000;
 
 /// The entries the include proof may inspect. Past this many, an include
 /// search is reviewed for its size whatever the globs select.

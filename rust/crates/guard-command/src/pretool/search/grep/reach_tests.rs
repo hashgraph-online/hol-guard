@@ -155,10 +155,11 @@ fn large_fixture(name: &str) -> (PathBuf, PathBuf) {
         "Search for needle here.\n",
     );
     write(repo.join("src/schedule.ts"), "export const needle = 1;\n");
+    let per_package = super::INCLUDE_PROOF_ENTRIES / 30 + 10;
     for package in 0..30 {
         let directory = repo.join(format!("node_modules/pkg-{package}"));
         std::fs::create_dir_all(&directory).unwrap();
-        for file in 0..80 {
+        for file in 0..per_package {
             std::fs::write(directory.join(format!("m{file}.d.ts")), "").unwrap();
         }
     }
@@ -204,7 +205,8 @@ fn folders_each_within_the_include_limit_are_not_called_too_large() {
     for folder in ["a", "b"] {
         let directory = repo.join("packages").join(folder);
         std::fs::create_dir_all(&directory).unwrap();
-        for file in 0..1_200 {
+        // Each folder stays within the limit; the two together pass it.
+        for file in 0..super::INCLUDE_PROOF_ENTRIES / 2 + 100 {
             std::fs::write(directory.join(format!("m{file}.d.ts")), "").unwrap();
         }
     }
