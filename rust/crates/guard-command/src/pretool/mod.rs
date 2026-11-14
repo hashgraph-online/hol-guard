@@ -192,6 +192,7 @@ mod metadata_reads;
 mod npm_environment;
 mod npm_reads;
 mod npmrc_keys;
+mod path_lookup_program;
 mod path_word_reads;
 mod pip_reads;
 mod pnpm_reads;
@@ -1377,7 +1378,10 @@ fn evaluate_single_command(
             "The Rust command authority proved this push sends the checked-out branch to a credential-free GitHub HTTPS origin through trusted Git, credential helpers and hooks.",
         ));
     }
-    if exact_safe_command_with_context(&model, false, context)
+    // A full path to the file the bare name finds on `PATH` is proven as that bare name.
+    if (exact_safe_command_with_context(&model, false, context)
+        || path_lookup_program::bare_name_model(&model, execution_environment)
+            .is_some_and(|bare| exact_safe_command_with_context(&bare, false, context)))
         && !bun_eval::inherited_preload_configured(&model, execution_environment)
     {
         let reason_code = docker_start::proven_reason_code(&model)

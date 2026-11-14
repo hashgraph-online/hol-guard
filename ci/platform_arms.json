@@ -387,6 +387,14 @@
    "body": "7483a30be05b"
   },
   {
+   "file": "rust/crates/guard-command/src/pretool/path_lookup_program.rs",
+   "item": "fn first_path_match(_executable: &str, _search_path: &str) -> Option<String>",
+   "verdict": "windows-unsupported",
+   "note": "On Windows the PATH-equivalence shortcut is explicitly disabled: this arm returns None, so bare_name_model does not rewrite an absolute executable into its bare name and the original, stricter full-path proof remains in force. The Unix-only integration tests prove the enabled path; the Windows behavior is fail-closed by this function and its Option gate.",
+   "cfg": "not(unix)",
+   "body": "586e43330142"
+  },
+  {
    "file": "rust/crates/guard-command/src/pretool/process_probes.rs",
    "item": "fn trusted_postgres_socket -- non-Unix block",
    "verdict": "windows-permissive",
