@@ -103,7 +103,7 @@ pub(super) struct Asked {
     pub(super) docs: bool,
     /// About a docstring or doctest, which a long function's head is enough
     /// for.
-    pub(super) docstring: bool,
+    pub(super) docstring: docstring::Asks,
     pub(super) changelog: bool,
     pub(super) named: Vec<String>,
     /// A rename: every use of a named definition is listed, not only the
@@ -213,7 +213,7 @@ pub(super) fn mapped(
     let kept_out = withheld_texts(home, root, app, &files, &texts, until);
     let asked = Asked {
         docs: more::asks_for_docs(prompt),
-        docstring: docstring::asks_for_docstring(prompt),
+        docstring: docstring::asks(prompt),
         changelog: more::asks_for_changelog(prompt),
         named: named(prompt),
         changes: about_changes,
