@@ -70,6 +70,6 @@
     "check_policy_compliance is a dry run: it evaluates a purchase against the policy and issues nothing. submit_purchase_intent only records the request; nothing is spent until a card or payout is issued for an approved intent.",
     "request_ephemeral_card hands the agent a single-use card capped at the approved amount with a short expiry, so it stays on review. send_payment pays only the payee fixed in policies.yaml and never pays an intent twice.",
     "With paypal_tools enabled, PayPal's own MCP tools are re-exposed through PurseString; money-moving ones such as create_refund also pass PurseString's policy, and the rest stay on review here.",
-    "This entry matches npx -y github:suseendar1414/pursestring#ed43fbed42bc713cc373ea51a93e25e5886d5649 (the same pin as launch.package). Decisions and card events are written to a local, hash-chained audit log under ~/.pursestring; set PURSESTRING_AUDIT_KEY to sign it."
+    "This entry matches npx -y github:suseendar1414/pursestring#ed43fbed42bc713cc373ea51a93e25e5886d5649. Decisions and card events are written to a local, hash-chained audit log under ~/.pursestring; set PURSESTRING_AUDIT_KEY to sign it."
   ]
 }
