@@ -206,6 +206,7 @@ fn transfer_outlives_negation(value: &str, transfer_context: &Regex) -> bool {
     static LIST_HEAD: OnceLock<Regex> = OnceLock::new();
     static LIST_CLOSE: OnceLock<Regex> = OnceLock::new();
     static CLAUSE_END: OnceLock<Regex> = OnceLock::new();
+    static FOLLOWUP_ACTION: OnceLock<Regex> = OnceLock::new();
     let verb = VERB.get_or_init(|| {
         Regex::new(r"(?i)\b(?:fetch|download|upload|send|post|transfer|grab|pull|retrieve|request|stage)(?:s|ed|ing)?\b")
             .expect("bounded transfer verb")
@@ -225,7 +226,13 @@ fn transfer_outlives_negation(value: &str, transfer_context: &Regex) -> bool {
             .map_or(0, |end| end.end());
         let before = &value[start..found.start()];
         if !verb.is_match(found.as_str()) {
-            return !verb.is_match(before);
+            // A following imperative starts a separate instruction. An option
+            // after `, use -o` is not an operand of `do not request approval`.
+            let followup = FOLLOWUP_ACTION.get_or_init(|| {
+                Regex::new(r"(?i),\s*(?:use|run|execute|invoke|call|apply|set|write|save|copy|fetch|download|upload|send|post|transfer|stage|request)\b")
+                    .expect("bounded transfer follow-up instruction")
+            });
+            return !verb.is_match(before) || followup.is_match(before);
         }
         let Some(head) = list_head.captures(before) else {
             return true;
