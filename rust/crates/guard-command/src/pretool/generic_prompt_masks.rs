@@ -127,9 +127,23 @@ pub(super) fn mask_transfer_tool_info(value: &str) -> String {
     static INFO: OnceLock<Regex> = OnceLock::new();
     static TRANSFER_WORD: OnceLock<Regex> = OnceLock::new();
     static OTHER_TOOL: OnceLock<Regex> = OnceLock::new();
-    if value.contains("://") || value.contains('@') {
+    static TRANSFER_CONTEXT: OnceLock<Regex> = OnceLock::new();
+    static INFO_QUESTION: OnceLock<Regex> = OnceLock::new();
+    // Never erase the only transfer-tool mention when another clause asks for
+    // a network action. A scheme-less host is a valid curl/wget operand too.
+    let transfer_context = TRANSFER_CONTEXT.get_or_init(|| {
+        Regex::new(r"(?i)\\b(?:fetch|download|upload|send|post|transfer|grab|pull|retrieve|request|stage)(?:s|ed|ing)?\\b|\\b[a-z0-9-]+(?:\\.[a-z0-9-]+)+/[^\\s]*")
+            .expect("bounded transfer-action context")
+    });
+    if value.contains("://") || value.contains('@') || transfer_context.is_match(value) {
         return value.to_owned();
     }
+    // A noun is merely descriptive only in an explicit information question.
+    // "Use the local curl build with -F ..." must keep its curl word.
+    let info_question = INFO_QUESTION.get_or_init(|| {
+        Regex::new(r"(?i)\\b(?:which|what|how|whether)\\b")
+            .expect("bounded tool-information question")
+    });
     let info = INFO.get_or_init(|| {
         Regex::new(concat!(
             r"(?i)\b(?P<noun>(?:which|what|the|this|that|my|our|your|its|installed|local|current|system|[a-z]+'s)\s+(?:curl|wget)\s+(?:build|version|release|binary))\b",
@@ -148,8 +162,15 @@ pub(super) fn mask_transfer_tool_info(value: &str) -> String {
         let Some(mention) = captures.name("noun").or_else(|| captures.name("flag")) else {
             continue;
         };
-        if captures.name("noun").is_some() && transfer_word.is_match(&value[mention.end()..]) {
-            continue;
+        if captures.name("noun").is_some() {
+            let clause_start = value[..mention.start()]
+                .rfind(['.', '?', '!', ';', '\\n'])
+                .map_or(0, |offset| offset + 1);
+            if !info_question.is_match(&value[clause_start..mention.end()])
+                || transfer_word.is_match(&value[mention.end()..])
+            {
+                continue;
+            }
         }
         masked.push_str(&value[copied..mention.start()]);
         masked.push_str("tool-info");
