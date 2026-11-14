@@ -39,6 +39,8 @@ GIT_ALLOW_REF_READS_CASE = "git-allow-ref-reads-after-checkout"
 GIT_ALLOW_NAMED_CHECKOUT_CASE = "git-allow-guard-named-checkout"
 # The worktree permission allows an ordinary sibling checkout...
 GIT_ALLOW_WORKTREE_CASE = "git-allow-worktree-sibling-then-status"
+# The same sibling worktree chain, ending with a step that only prints.
+GIT_ALLOW_ECHO_WORKTREE_CASE = "git-allow-worktree-sibling-then-status-and-echo"
 # ...but never settles a checkout into a folder Git runs code from.
 GIT_ALLOW_HOOKS_WORKTREE_CASE = "git-allow-worktree-into-hooks-folder"
 # An allowed step never carries a blocked step in the same compound with it.
@@ -77,6 +79,7 @@ GIT_ALLOW_CASES = frozenset(
         GIT_ALLOW_REF_READS_CASE,
         GIT_ALLOW_NAMED_CHECKOUT_CASE,
         GIT_ALLOW_WORKTREE_CASE,
+        GIT_ALLOW_ECHO_WORKTREE_CASE,
         GIT_ALLOW_HOOKS_WORKTREE_CASE,
         GIT_ALLOW_MIXED_WORKTREE_CASE,
         GIT_ALLOW_UNMODELLED_CASE,
@@ -100,6 +103,7 @@ NAMED_FILE = "scripts/hol-guard.wxs"
 NAMED_COMMITTED = "<Wix />\n"
 NAMED_WORKTREE = "pr/hol-guard-pr-12"
 SIBLING_WORKTREE = "review-wt"
+ECHO_WORKTREE = "report-wt"
 HOOKS_WORKTREE = ".git/hooks/review-wt"
 MIXED_WORKTREE = "mixed-wt"
 CONFIG_WORKTREE = "cfg-wt"
@@ -229,6 +233,10 @@ def git_allow_checks(workspace: Path, scenario_id: str) -> dict[str, bool]:
         sibling = workspace.parent / SIBLING_WORKTREE
         heads = _heads(sibling) if (sibling / ".git").is_file() else None
         return {"git-allow-sibling-worktree-at-origin": heads is not None and heads[0] == heads[1]}
+    if scenario_id == GIT_ALLOW_ECHO_WORKTREE_CASE:
+        sibling = workspace.parent / ECHO_WORKTREE
+        heads = _heads(sibling) if (sibling / ".git").is_file() else None
+        return {"git-allow-echo-worktree-at-origin": heads is not None and heads[0] == heads[1]}
     if scenario_id == GIT_ALLOW_HOOKS_WORKTREE_CASE:
         return {"git-allow-hooks-worktree-absent": not (workspace / HOOKS_WORKTREE).exists()}
     if scenario_id == GIT_ALLOW_PLUMBING_CASE:
