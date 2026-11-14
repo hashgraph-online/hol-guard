@@ -74,8 +74,10 @@ fn compare_accepts_the_named_generation_and_refuses_another() {
         mismatched["error"],
         json!({"transition": "generation_changed"})
     );
+    // An inverse compare also accepts the file already at its "after" bytes.
+    fs::write(&target, b"new").unwrap();
     let inverse = ask(&json!({
-        "op": "compare", "files": files, "generation": "after", "inverse": true,
+        "op": "compare", "files": files, "generation": "before", "inverse": true,
     }));
     assert_eq!(inverse["ok"], true);
 }

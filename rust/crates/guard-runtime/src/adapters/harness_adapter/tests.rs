@@ -211,7 +211,10 @@ fn apply_uninstall_runs_the_plan_it_prepares_and_journals_managed_writes() {
         json!("publish")
     );
     assert!(!Path::new(&state).exists());
-    assert!(!fs::read_to_string(&config).unwrap().contains("/py hook"));
+    assert_eq!(
+        fs::read_to_string(&config).unwrap(),
+        plan["writes"][0]["text"].as_str().unwrap()
+    );
 }
 
 #[test]

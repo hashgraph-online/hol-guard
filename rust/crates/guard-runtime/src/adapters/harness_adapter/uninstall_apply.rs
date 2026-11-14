@@ -74,7 +74,7 @@ fn write(ctx: &Ctx, entry: &Value, events: &mut Vec<Value>) -> Step<()> {
                 .and_then(|mode| u32::try_from(mode).ok())
                 .ok_or(Failure::Invalid)?;
             let mutation = managed_write(&target, payload, mode).map_err(fault)?;
-            events.push(json!({ "mutation": mutation }));
+            events.push(mutation);
             Ok(())
         }
     }

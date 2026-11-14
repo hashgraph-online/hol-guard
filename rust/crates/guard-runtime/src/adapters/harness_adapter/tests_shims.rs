@@ -34,7 +34,11 @@ fn the_python_launcher_re_enters_guard_through_the_trusted_loader() {
     );
     let (posix, windows) = launchers(&answer);
     assert!(posix.starts_with("#!/opt/python/bin/python3\n"), "{posix}");
-    assert!(posix.contains("'-c', 'import importlib.util, os, sys; "));
+    // `repr` picks double quotes because the launcher source holds single quotes.
+    assert!(
+        posix.contains("'-c', \"import importlib.util, os, sys; "),
+        "{posix}"
+    );
     assert!(posix.contains("'guard', 'run', 'devin', '--guard-home', "));
     assert!(posix.contains("base_env = {'HOL_GUARD_LAUNCHER': '1'}"));
     assert!(posix.contains("os.execvpe(argv[0], argv, combined_env)"));
@@ -52,7 +56,12 @@ fn the_python_launcher_re_enters_guard_through_the_trusted_loader() {
 fn a_desktop_core_launcher_is_run_directly_with_cmd_safe_arguments() {
     use std::os::unix::fs::PermissionsExt;
     let home = Home::new();
-    let data = home.root.join("data");
+    // A desktop core under a temporary root is never baked into a launcher,
+    // so it sits in the workspace's build directory instead.
+    let durable = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../target");
+    fs::create_dir_all(&durable).unwrap();
+    let durable = tempfile::TempDir::new_in(durable).unwrap();
+    let data = fs::canonicalize(durable.path()).unwrap().join("data");
     let core = data.join("org.hol.guard.desktop").join("core");
     fs::create_dir_all(&core).unwrap();
     let desktop = core.join("current-hol-guard");
@@ -69,7 +78,10 @@ fn a_desktop_core_launcher_is_run_directly_with_cmd_safe_arguments() {
     let answer = super::dispatch(&request).unwrap();
     let (posix, windows) = launchers(&answer);
     assert!(posix.starts_with("#!/bin/sh\n# base_command = "), "{posix}");
-    assert!(posix.contains(&desktop.to_string_lossy().into_owned()));
+    assert!(
+        posix.contains(&desktop.to_string_lossy().into_owned()),
+        "{posix}"
+    );
     assert!(windows.contains("setlocal DisableDelayedExpansion"));
     assert!(windows.contains("run-shim"));
     let quoted = format!("\"{}\"", workspace.to_string_lossy().replace('%', "%%"));

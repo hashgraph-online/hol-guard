@@ -13,6 +13,7 @@ from pathlib import Path
 import pytest
 
 from tests.daemon_control_patching import patch_daemon_global
+from tests.durable_fixture_root import durable_tmp_path  # noqa: F401
 from tests.guard_test_invariants import TEST_INVARIANTS, invariant_markers_for_nodeid
 from tests.home_isolation import isolate_user_home
 from tests.outbound_network_guard import outbound_network_attempts

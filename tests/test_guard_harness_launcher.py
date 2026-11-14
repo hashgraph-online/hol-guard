@@ -31,10 +31,13 @@ def _launchers(harness: str, context: SimpleNamespace) -> tuple[str, str]:
     return posix.after.decode("utf-8"), windows.after.decode("utf-8")
 
 
-def _desktop_core(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, body: str) -> Path:
-    """Install Desktop's `current-hol-guard`, which outranks the Python launcher."""
+def _desktop_core(root: Path, monkeypatch: pytest.MonkeyPatch, body: str) -> Path:
+    """Install Desktop's `current-hol-guard`, which outranks the Python launcher.
 
-    data = tmp_path / "data"
+    ``root`` must be durable: a desktop core under a temporary root is skipped.
+    """
+
+    data = root / "data"
     monkeypatch.setenv("XDG_DATA_HOME", str(data))
     name = "current-hol-guard.exe" if os.name == "nt" else "current-hol-guard"
     desktop = data / "org.hol.guard.desktop" / "core" / name
@@ -45,8 +48,10 @@ def _desktop_core(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, body: str) ->
 
 
 @pytest.mark.skipif(os.name == "nt", reason="POSIX launcher execution")
-def test_python_repair_launcher_uses_desktop_core(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    _desktop_core(tmp_path, monkeypatch, '#!/bin/sh\nprintf "%s\\n" "$@"\n')
+def test_python_repair_launcher_uses_desktop_core(
+    tmp_path: Path, durable_tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _desktop_core(durable_tmp_path, monkeypatch, '#!/bin/sh\nprintf "%s\\n" "$@"\n')
     workspace = tmp_path / "project root"
     context = _context(tmp_path, workspace)
     source, _ = _launchers("omp", context)
@@ -93,8 +98,10 @@ def test_run_shim_keeps_windows_forwarded_arguments_verbatim() -> None:
     assert args.passthrough_args == ["--help", "prompt with spaces"]
 
 
-def test_desktop_windows_launcher_invokes_guard_directly(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    desktop = _desktop_core(tmp_path, monkeypatch, "#!/bin/sh\n")
+def test_desktop_windows_launcher_invokes_guard_directly(
+    tmp_path: Path, durable_tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    desktop = _desktop_core(durable_tmp_path, monkeypatch, "#!/bin/sh\n")
     workspace = tmp_path / "100%" / "a&b"
     context = _context(tmp_path, workspace)
 

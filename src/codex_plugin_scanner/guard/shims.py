@@ -78,7 +78,7 @@ def prepare_guard_shim(
 
     answer = ask(
         "prepare_guard_shim",
-        context,  # type: ignore[arg-type]
+        context,  # pyright: ignore[reportArgumentType]
         harness=harness,
         launcher_name=launcher_name,
         display_name=display_name,
@@ -173,7 +173,7 @@ def prepare_guard_shim_removal(
 
     answer = ask(
         "prepare_guard_shim_removal",
-        context,  # type: ignore[arg-type]
+        context,  # pyright: ignore[reportArgumentType]
         harness=harness,
         launcher_name=launcher_name,
         display_name=display_name,
