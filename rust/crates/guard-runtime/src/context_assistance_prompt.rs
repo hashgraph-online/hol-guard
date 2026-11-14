@@ -12,6 +12,7 @@
 use crate::context_assistance_engine::{project_context_on, quick_excerpts};
 use crate::context_assistance_prompt_files::{named, phrases, project_root, walk_exact};
 use crate::context_assistance_prompt_words::{marked_terms, spellings};
+use crate::context_assistance_savings as savings;
 use crate::policy_store::PolicySnapshotStore;
 use guard_contracts::GuardHookEnvelopeV2;
 use lookup::{lookup, Miss, Request};
@@ -125,7 +126,11 @@ pub(crate) fn harness_response(
     if let Some(store) = store.filter(|store| !cigar_off(store, workspace, harness)) {
         let slot = envelope.recording_only && open_slot(&mut response);
         let before = context_len(&response);
-        attach(&mut response, envelope, harness, store, started);
+        let mut shown = Vec::new();
+        attach(&mut response, envelope, harness, store, started, &mut shown);
+        let added = context_len(&response).saturating_sub(before);
+        let payload = &envelope.raw_payload;
+        savings::noted(store.guard_home(), payload, harness, added, shown);
         let session = prompt_session(envelope, harness, store);
         end_note(&mut response, harness, before, session.as_ref());
         if harness == "kimi" {
@@ -214,6 +219,7 @@ fn attach(
     harness: &str,
     store: &PolicySnapshotStore,
     started: Instant,
+    shown: &mut Vec<String>,
 ) {
     if !takes_context(harness, &envelope.raw_payload) || !allowed(response) {
         return;
@@ -277,7 +283,7 @@ fn attach(
         && !marked.iter().any(|(_, name)| *name)
     {
         let at = (store.guard_home(), &*root, harness, session.as_ref());
-        changes::used::add_tests(response, at, changed, &earlier, budget, context_on);
+        changes::used::add_tests(response, at, changed, &earlier, budget, context_on, shown);
         return;
     }
     let (names, exact) = (named(prompt), spellings(prompt));
@@ -316,9 +322,7 @@ fn attach(
         .map(|context| changes::removed::added(context, home, envelope, &root, harness, deadline))
         .filter(|_| service.prompt_context_chosen() && project_context_on(home, &root, harness));
     if let Some(context) = mapped {
-        if let Some(session) = &session {
-            seen::remember(session, &context.shown);
-        }
+        seen::keep(session.as_ref(), &context.shown, shown);
         add_context(response, &context.text);
         return;
     }
@@ -353,9 +357,7 @@ fn attach(
     let Some(context) = context else {
         return;
     };
-    if let Some(session) = &session {
-        seen::remember(session, &context.shown);
-    }
+    seen::keep(session.as_ref(), &context.shown, shown);
     add_context(response, &context.text);
 }
 

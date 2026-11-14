@@ -4109,7 +4109,7 @@ function ContextAgentsPanel({ ready, enabled, dirty, generation, scopes, gate, s
 const record = (value) => value !== null && typeof value === "object" && !Array.isArray(value);
 const id$4 = (value) => typeof value === "string" && /^[A-Za-z0-9_.:-]{1,128}$/.test(value);
 const digest$1 = (value) => typeof value === "string" && /^[a-f0-9]{64}$/.test(value);
-const count$3 = (value, max) => Number.isSafeInteger(value) && value >= 0 && value <= max;
+const count$4 = (value, max) => Number.isSafeInteger(value) && value >= 0 && value <= max;
 const documents = (value) => Array.isArray(value) && value.length <= 32 && value.every((item) => record(item) && id$4(item.id) && item.id.startsWith("note:") && item.start_line === 1 && typeof item.text === "string" && item.text.length <= 16384) && value.reduce((total, item) => total + item.text.length, 0) <= 16384;
 function invalid$5() {
   throw new ContextAssistanceApiError("proposal_payload_invalid", "Guard returned incompatible shared-note data. Refresh the proposal list.");
@@ -4121,7 +4121,7 @@ async function listContextProposals(scopeId, signal) {
   const result = await ask("workspace", { action: "proposals", scope_id: scopeId }, void 0, signal);
   const scope = parseContextScope(result.scope);
   const permitted = ["guard:policy", "guard:receipts", ...scope.sources.map((source) => source.source_id)];
-  if (scope.scope_id !== scopeId || scope.sharing?.notes.read !== true || !Array.isArray(result.proposals) || result.proposals.length > 32 || !result.proposals.every((item) => common(item) && count$3(item.documents, 32) && count$3(item.bytes, 16384) && Object.keys(item.basis).every((source) => permitted.includes(source)))) invalid$5();
+  if (scope.scope_id !== scopeId || scope.sharing?.notes.read !== true || !Array.isArray(result.proposals) || result.proposals.length > 32 || !result.proposals.every((item) => common(item) && count$4(item.documents, 32) && count$4(item.bytes, 16384) && Object.keys(item.basis).every((source) => permitted.includes(source)))) invalid$5();
   return result.proposals;
 }
 async function loadContextProposal(scopeId, proposalId, signal) {
@@ -5127,14 +5127,14 @@ function FileRow({ file, checked, disabled, onToggle }) {
 }
 const question = "text-sm font-semibold text-brand-dark";
 const folderName = (path) => path.split(/[\\/]/).filter(Boolean).pop() ?? path;
-const plural = (count2, word2) => `${count2} ${word2}${count2 === 1 ? "" : "s"}`;
+const plural$1 = (count2, word2) => `${count2} ${word2}${count2 === 1 ? "" : "s"}`;
 function proofDetail(input, executionAllowed) {
-  const files = input.files.length ? plural(input.files.length, "file") : "no files";
+  const files = input.files.length ? plural$1(input.files.length, "file") : "no files";
   const execution = executionAllowed ? " This does not approve any command." : "";
   return `CIGAR can read ${files} in ${folderName(input.workspace)}, plus Guard's own safety facts for that folder, for prompts in every AI app. Nothing else in it is opened.${execution}`;
 }
 function summary$2(workspace, files, documentsAllowed) {
-  if (documentsAllowed && files) return `Prompts about ${folderName(workspace)} will use these ${plural(files, "file")}, in every AI app.`;
+  if (documentsAllowed && files) return `Prompts about ${folderName(workspace)} will use these ${plural$1(files, "file")}, in every AI app.`;
   return `No files picked, so your AI apps keep finding matching files in ${folderName(workspace)} on their own.`;
 }
 function AddProjectPanel({ busy, dirty, documentsAllowed, executionAllowed, gate, error, first, allowFiles, active = [], initialWorkspace = null, onGrant }) {
@@ -5262,7 +5262,7 @@ function RecentProjects({ projects, onReuse, onForget }) {
           /* @__PURE__ */ jsxRuntimeExports.jsx("span", { "aria-hidden": "true", className: "flex size-9 shrink-0 items-center justify-center rounded-lg bg-brand-dark/[0.05] text-brand-dark/55", children: /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniClock, { className: "size-4" }) }),
           /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "min-w-0", children: [
             /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "block truncate text-sm font-semibold text-brand-dark", children: name }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "block truncate text-xs text-brand-dark/60", children: project.files.length ? plural(project.files.length, "file") : "Guard's safety facts only" })
+            /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "block truncate text-xs text-brand-dark/60", children: project.files.length ? plural$1(project.files.length, "file") : "Guard's safety facts only" })
           ] })
         ] }),
         /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", "aria-label": `Remove ${name} from this list`, className: "mr-1.5 flex size-9 shrink-0 items-center justify-center rounded-lg text-brand-dark/40 hover:bg-brand-dark/[0.05] hover:text-brand-dark focus-visible:outline-none", onClick: () => onForget(project.workspace), children: /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniXMark, { className: "size-4" }) })
@@ -5921,6 +5921,120 @@ function ExploreRow({ icon, title, text: text2, onClick }) {
     /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniArrowRight, { "aria-hidden": "true", className: "cigar-explore-arrow" })
   ] }) });
 }
+const NAMES$1 = { codex: "Codex", "claude-code": "Claude Code" };
+const exact$1 = new Intl.NumberFormat();
+const compact$1 = new Intl.NumberFormat(void 0, { notation: "compact", maximumFractionDigits: 1 });
+const rough = new Intl.NumberFormat(void 0, { notation: "compact", maximumSignificantDigits: 2 });
+const spoken = new Intl.NumberFormat(void 0, { notation: "compact", compactDisplay: "long", maximumSignificantDigits: 2 });
+function count$3(value) {
+  return value >= 1e4 ? compact$1.format(value) : exact$1.format(value);
+}
+function plural(value, one, many) {
+  return exact$1.format(value) + " " + (value === 1 ? one : many);
+}
+function period(days) {
+  return days === 7 ? "this week" : "in the last " + days + " days";
+}
+function rates(apps) {
+  const named = apps.filter((app) => app.measured_sessions > 0).map((app) => (NAMES$1[app.app] ?? app.app) + " " + app.rate_percent + "%");
+  return named.length ? named.join(", ") : "about half";
+}
+function AppRows({ apps }) {
+  const measured = apps.filter((app) => app.measured_sessions > 0);
+  if (!measured.length) return null;
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("table", { className: "cigar-usage-table cigar-savings-apps", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx("caption", { className: "sr-only", children: "Tokens by app" }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("thead", { children: /* @__PURE__ */ jsxRuntimeExports.jsxs("tr", { children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("th", { scope: "col", children: "App" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("th", { scope: "col", children: "Used" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("th", { scope: "col", children: "Saved (estimate)" })
+    ] }) }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("tbody", { children: measured.map((app) => /* @__PURE__ */ jsxRuntimeExports.jsxs("tr", { children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("th", { scope: "row", children: NAMES$1[app.app] ?? app.app }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("td", { title: exact$1.format(app.used_tokens) + " tokens", children: count$3(app.used_tokens) }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("td", { title: "About " + exact$1.format(app.estimated_saved_tokens) + " tokens, at " + app.rate_percent + "%", children: [
+        "~",
+        rough.format(app.estimated_saved_tokens)
+      ] })
+    ] }, app.app)) })
+  ] });
+}
+function CigarSavingsPanel({ savings }) {
+  if (!savings) return null;
+  const { total } = savings;
+  const when2 = period(savings.window_days);
+  if (!total.sessions) {
+    return /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "cigar-savings cigar-savings-quiet", "aria-label": "Tokens CIGAR saved", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { children: "No savings to show yet" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { children: [
+        "Once CIGAR hands project code to Codex or Claude Code, this shows how much work it saved the AI ",
+        when2,
+        "."
+      ] })
+    ] });
+  }
+  const used = total.used_tokens;
+  const saved = total.estimated_saved_tokens;
+  const checked = total.files_checked;
+  const skipped = Math.max(0, checked - total.files_opened_anyway);
+  const facts = [
+    plural(total.prompts, "prompt", "prompts") + " got project code from CIGAR",
+    "About " + count$3(total.context_tokens) + " tokens of code handed over",
+    checked ? exact$1.format(skipped) + " of " + plural(checked, "file", "files") + " shown, the AI didn't need to open again" : null
+  ].filter((fact) => fact !== null);
+  const readable = total.measured_sessions > 0;
+  const measured = readable && used > 0;
+  const share = measured ? Math.max(4, Math.round(used / (used + saved) * 100)) : 100;
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "cigar-savings", "aria-labelledby": "cigar-savings-title", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { id: "cigar-savings-title", children: measured ? /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
+      "CIGAR saved about ",
+      /* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: spoken.format(saved) }),
+      " tokens ",
+      when2
+    ] }) : /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
+      "CIGAR helped ",
+      plural(total.sessions, "session", "sessions"),
+      " ",
+      when2
+    ] }) }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "cigar-savings-lede", children: measured ? "That's our best estimate. In the sessions CIGAR helped, your AI apps used " + spoken.format(used) + " tokens. Without CIGAR, the same work would likely have taken about " + spoken.format(used + saved) + "." : readable ? "Guard read those sessions' records but found no tokens used, so it can't estimate the tokens saved. What it did measure is below." : "Guard could not read those sessions' own records, so it can't estimate the tokens saved. What it did measure is below." }),
+    measured ? /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "cigar-savings-bar", role: "img", "aria-label": "Used " + spoken.format(used) + " tokens. Without CIGAR, about " + spoken.format(saved) + " more.", style: { ["--used"]: share + "%" }, children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "cigar-savings-used" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "cigar-savings-saved" })
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("ul", { className: "cigar-savings-key", "aria-hidden": "true", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("li", { children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "cigar-savings-swatch is-used" }),
+          "Used (measured)"
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("li", { children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "cigar-savings-swatch is-saved" }),
+          "Saved (estimate)"
+        ] })
+      ] })
+    ] }) : null,
+    /* @__PURE__ */ jsxRuntimeExports.jsx("ul", { className: "cigar-savings-facts", children: facts.map((fact) => /* @__PURE__ */ jsxRuntimeExports.jsx("li", { children: fact }, fact)) }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx(AppRows, { apps: savings.apps }),
+    measured && total.measured_sessions < total.sessions ? /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "cigar-usage-foot", children: [
+      "The estimate covers ",
+      exact$1.format(total.measured_sessions),
+      " of ",
+      plural(total.sessions, "session", "sessions"),
+      ". Guard could not read the rest."
+    ] }) : null,
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("details", { className: "cigar-usage-recent cigar-savings-how", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("summary", { children: "How we estimate" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: "A token is a small piece of text, about ¾ of a word. AI apps read and write in tokens, and you pay for them." }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: "Guard counts the tokens each helped session really used, from the app's own records on this computer. Nothing leaves this computer." }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { children: [
+        "Guard can't rerun your work without CIGAR, so the saved number comes from our own tests, where CIGAR cut tokens by ",
+        rates(savings.apps),
+        ". Your real savings may be higher or lower."
+      ] })
+    ] })
+  ] });
+}
 const PATH$1 = "/v1/context-assistance/usage";
 const USAGE_FIELDS = ["uncached_input_tokens", "cached_input_tokens", "cache_write_tokens", "output_tokens", "requests", "compactions"];
 const object$6 = (v) => v !== null && typeof v === "object" && !Array.isArray(v);
@@ -5932,11 +6046,24 @@ function totals(v) {
 function tool(v) {
   return object$6(v) && typeof v.harness === "string" && count$2(v.sessions) && totals(v.totals) && Array.isArray(v.recent) && v.recent.every((s) => object$6(s) && typeof s.last_active === "string" && text(s.model) && text(s.folder) && totals(s.totals));
 }
+const SAVINGS_FIELDS = ["sessions", "prompts", "context_tokens", "files_shown", "files_checked", "files_opened_anyway", "measured_sessions", "used_tokens", "estimated_saved_tokens"];
+function savingsTotals(v) {
+  return object$6(v) && SAVINGS_FIELDS.every((field) => count$2(v[field]));
+}
+function savingsApp(v) {
+  return savingsTotals(v) && object$6(v) && typeof v.app === "string" && count$2(v.rate_percent) && v.rate_percent < 100;
+}
+function parseSavings(v) {
+  if (!object$6(v) || v.schema !== "guard-cigar-savings.v1" || v.estimate !== true || !count$2(v.window_days) || !savingsTotals(v.total) || !Array.isArray(v.apps) || !v.apps.every(savingsApp)) {
+    return null;
+  }
+  return { window_days: v.window_days, total: v.total, apps: v.apps };
+}
 function parseUsageMeter(body) {
   if (!object$6(body) || body.state !== "ready" && body.state !== "counting" && body.state !== "unavailable" || !count$2(body.window_days) || !Array.isArray(body.today) || !body.today.every(tool) || !Array.isArray(body.week) || !body.week.every(tool) || !Array.isArray(body.unread) || !body.unread.every((name) => typeof name === "string") || body.refreshing !== void 0 && typeof body.refreshing !== "boolean") {
     throw new ContextAssistanceApiError("usage_payload_invalid", "Guard returned usage numbers this page does not understand.");
   }
-  return body;
+  return { ...body, savings: parseSavings(body.savings) };
 }
 async function readUsageMeter(signal) {
   const timeout = AbortSignal.timeout(12e3);
@@ -6075,6 +6202,7 @@ function CigarUsagePanel() {
   }
   const today = new Map(meter.today.map((tool2) => [tool2.harness, tool2]));
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "cigar-usage", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx(CigarSavingsPanel, { savings: meter.savings }),
     /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "cigar-usage-grid", children: meter.week.map((tool2) => /* @__PURE__ */ jsxRuntimeExports.jsx(ToolCard, { week: tool2, today: today.get(tool2.harness), days: meter.window_days }, tool2.harness)) }),
     /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "cigar-usage-foot", children: "Input read from cache is billed at a fraction of the full input price. A chat summary is when the app shortens the conversation so it can keep going." }),
     meter.unread.length ? /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "cigar-usage-foot", children: [
