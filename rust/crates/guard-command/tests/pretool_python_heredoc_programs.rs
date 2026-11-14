@@ -106,6 +106,11 @@ fn a_probe_that_would_not_fit_the_sandbox_keeps_its_review() {
         // A hash inside a string must not erase the executable suffix.
         "python3 <<'EOF'\nmarker = \" #\"; import socket\nEOF",
         "python3 <<'EOF'\nprint(1) #\rimport socket\nEOF",
+        // A bare CR can reframe the encoding declaration as Python's second
+        // physical line even when the heredoc parser split only on LF.
+        "python3 <<'EOF'\n# first comment\r# coding: utf-7\n+AGk-mport socket\nEOF",
+        // Source scanning and the interpreter must agree on line boundaries.
+        "python3 - <<'EOF'\nimport json\rprint(json.dumps({}))\nEOF",
         "python3 <<'EOF'\nmarker = \" #\"; from urllib import request\nEOF",
         // Python joins this continued string before interpreting the semicolon.
         // The comment's unmatched quote must not hide the network import.
