@@ -23,6 +23,11 @@ pub struct PathContext<'a> {
     /// directory can add an index query, a log file or another option to a
     /// pip command that names none. Literal contexts leave this false.
     pub pip_config_inert: bool,
+    /// No inherited `PYTHON*` variable other than a fixed list of output
+    /// and diagnostics switches can add a module path, a startup file or
+    /// another interpreter option to a `python3 -c` filter. Literal contexts
+    /// leave this false.
+    pub python_environment_inert: bool,
     /// The shell expands `~` to `home_dir`: its HOME names the same
     /// directory. Literal contexts leave this false.
     pub shell_home_matches: bool,
@@ -40,6 +45,11 @@ pub struct PathContext<'a> {
     /// `config.json` whose `default_options` HTTPie and `xh` prepend to
     /// every request. Literal contexts leave this false.
     pub http_config_absent: bool,
+    /// No inherited `OPENSSL_CONF`, `OPENSSL_CONF_INCLUDE`, `OPENSSL_MODULES`
+    /// or `OPENSSL_ENGINES` can point the `openssl` command at a
+    /// configuration that loads a provider or engine library before it
+    /// hashes a file. Literal contexts leave this false.
+    pub openssl_config_absent: bool,
     /// No step of this command creates a filesystem entry, so a path with
     /// nothing at it now still has nothing at it when a read runs and cannot
     /// be a link a peer step planted. Literal contexts leave this false.
@@ -48,6 +58,10 @@ pub struct PathContext<'a> {
     /// read without `-X` runs, and the server libpq picks. Literal contexts
     /// leave both false.
     pub psql_environment: PsqlEnvironment,
+    /// Words of the segment being proven whose glob characters all sit
+    /// inside quotes, so the shell passes them through as written. Empty
+    /// when the segment text is beyond the simple quoting the lexer reads.
+    pub literal_words: &'a [String],
 }
 
 mod brace_group;
@@ -65,6 +79,7 @@ pub fn contained_matcher_stage(program: &str, arguments: &[String]) -> bool {
     contained_wrapper::output_filters::matcher_stage(program, arguments)
 }
 pub(crate) mod curl_reads;
+mod cursor_session_outputs;
 pub use curl_reads::bound_curl_read_destinations;
 
 /// Whether this host runs Guard's contained execution sink for a read-only
@@ -138,6 +153,7 @@ pub(crate) mod git_side_record_reads;
 pub(crate) mod git_stash_reads;
 pub(crate) mod git_submodule_reads;
 pub(crate) mod git_tag_listing;
+mod inplace_edit_reason;
 pub(crate) mod recoverable_removal;
 mod repo_create_reason;
 mod root_removal;
@@ -160,9 +176,11 @@ mod git_worktree;
 pub(crate) mod github_conversation;
 mod glob_words;
 mod guard_diagnostics;
+mod guard_home_option;
 mod guard_names;
 mod helm_usage;
 pub(crate) mod help_probes;
+mod hook_neutering;
 mod installed_program_path;
 mod list_wrapper;
 mod listing_reads;
@@ -190,12 +208,17 @@ pub(crate) use git_routes::{
     reads_without_repository,
 };
 mod apply_patch_writes;
+mod ci_workflow_writes;
 mod data_heredocs;
+mod install_script_writes;
+mod literal_secrets;
 mod lockfile_install;
 mod omp_file_url;
 mod omp_hashline_writes;
 pub(crate) mod pipe_attacks;
+mod planted_instructions;
 mod pure_expression;
+mod python_filter;
 mod read_paths;
 mod source_reads;
 use source_reads::{plain_source_code_path, sensitive_command_input, source_file_read_segment};
@@ -214,6 +237,7 @@ mod script_content;
 pub(crate) use script_content::{argv_script, ArgvScript};
 mod decompress_reads;
 mod dump_filter_options;
+mod name_pattern_text;
 mod search;
 mod search_pattern_clearance;
 mod search_pattern_text;
@@ -222,6 +246,7 @@ mod search_scope_budget;
 mod search_scope_filter;
 mod search_scope_glob;
 mod search_scope_ignore;
+mod search_scope_plain_skips;
 pub(crate) mod search_scope_tracked;
 mod search_scope_walk;
 mod secret_aliases;
@@ -246,6 +271,9 @@ mod workspace_contained_effects_tests;
 #[cfg(test)]
 #[path = "workspace_contained_git_tests.rs"]
 mod workspace_contained_git_tests;
+#[cfg(test)]
+#[path = "workspace_contained_name_pattern_tests.rs"]
+mod workspace_contained_name_pattern_tests;
 #[cfg(test)]
 #[path = "workspace_contained_package_tests.rs"]
 mod workspace_contained_package_tests;
@@ -348,9 +376,10 @@ pub(crate) fn removes_a_root(command: &str) -> bool {
 }
 
 /// Floors no extension permission can settle: Guard self-protection, secret
-/// exfiltration, a glob that could name a secret file, and Git configuration
-/// that runs a program Guard cannot read. An unproven model has no segments
-/// to screen, so it is a floor itself rather than passing every screen.
+/// exfiltration, a spelled-out key, token or password, a glob that could name
+/// a secret file, and Git configuration that runs a program Guard cannot
+/// read. An unproven model has no segments to screen, so it is a floor itself
+/// rather than passing every screen.
 pub(crate) fn fixed_command_floor(model: &CanonicalCommandV1) -> bool {
     model.confidence != "exact"
         || model.segments.is_empty()
@@ -369,6 +398,9 @@ pub(crate) fn fixed_command_floor(model: &CanonicalCommandV1) -> bool {
             names_guard_outside_message(segment, &guard_names::moved_by(&model.segments[..index]))
         })
         || model.segments.iter().any(selects_secret_outside_message)
+        // A spelled-out key, token or password is in the transcript and the
+        // shell history the moment the command runs, whatever the program.
+        || literal_secrets::holds_literal_secret(&model.normalized_text)
 }
 
 /// A Git alias, hook or config value can carry a program the parser never
@@ -717,6 +749,8 @@ fn sensitive_location_text(value: &str) -> bool {
     let needles = [
         "/.ssh/",
         "~/.ssh",
+        // A `.secrets` directory is a credential store (see guard-secure-fs).
+        "/.secrets/",
         "/.aws/credentials",
         "~/.aws/credentials",
         "/.docker/config.json",
@@ -740,8 +774,7 @@ fn sensitive_location_text(value: &str) -> bool {
         ".env",
     ];
     needles.iter().any(|needle| lowered.contains(needle))
-        || (crate::environment_secret_dump::printenv_may_print_secret(&lowered)
-            && !crate::environment_name_filters::printenv_renders_only_names(value))
+        || crate::environment_secret_dump::printenv_may_print_secret(&lowered)
         || lowered.contains("os.environ")
         || lowered.contains("process.env")
 }
@@ -860,6 +893,12 @@ fn exact_safe_command_with_context(
     {
         return false;
     }
+    // A read may name a path that is missing now. It stays missing only when
+    // no step of the whole command can create an entry.
+    let context = PathContext {
+        creates_nothing: search::command_creates_nothing(model),
+        ..context
+    };
     if segment_proof::exact_safe_cwd_compound(model, allow_git_helper_context, context)
         || segment_proof::exact_safe_absolute_cd_chain(model, allow_git_helper_context, context)
         || safe_reads::exact_safe_sequence(model, allow_git_helper_context, context)
@@ -968,7 +1007,8 @@ pub(super) fn evaluate_pre_tool_with_execution_context(
     // starting one of its own, and the budget ends when the outermost
     // reading returns.
     let _budget = search_scope_budget::begin_include_scope_budget();
-    evaluate_rewritten(request, home_dir, cwd, deadline, execution_environment, 0)
+    let decision = evaluate_rewritten(request, home_dir, cwd, deadline, execution_environment, 0)?;
+    Ok(literal_secrets::review_command(request, decision))
 }
 
 /// How many rewrites one submission may go through. A wrapper around a loop
@@ -1285,7 +1325,7 @@ fn evaluate_single_command(
             model,
             "allow",
             "native_exact_safe_command",
-            "The Rust command authority proved this pipeline prints variable names with their values removed.",
+            "The Rust command authority proved this awk program prints environment variable names and never reads their values.",
         ));
     }
     if worktree_add::exact_safe_command(&model, context, deadline, execution_environment) {
@@ -1394,6 +1434,7 @@ fn evaluate_single_command(
         .or_else(|| fanout_reads::whitespace_split_reason(&model))
         .or_else(|| search::rg_hidden_whitelist_reason(&model, context))
         .or_else(|| search::grep::sensitive_reach_reason(&model, context))
+        .or_else(|| inplace_edit_reason::inplace_edit_reason(&model))
         .or_else(|| compound_reason::unproven_steps_reason(&model, context))
         .or_else(|| worktree_add::outside_home_reason(&model, context));
     // `;2>&1 python3 evil.py` is an unread script. A glued redirect keeps the

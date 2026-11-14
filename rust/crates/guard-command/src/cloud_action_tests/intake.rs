@@ -168,7 +168,7 @@ fn unknown_and_missing_fields_are_invalid_requests() {
 fn a_wrong_or_missing_schema_is_an_unsupported_version() {
     let evaluator = evaluator();
     let mut request = request_for(&evaluator);
-    request["schema"] = "guard.cloud-action-evaluation.v2".into();
+    request["schema"] = "guard.cloud-action-evaluation.v3".into();
     assert_error(&run(&evaluator, &request), "unsupported_version");
     request["schema"] = 1.into();
     assert_error(&run(&evaluator, &request), "unsupported_version");
@@ -177,7 +177,7 @@ fn a_wrong_or_missing_schema_is_an_unsupported_version() {
     // The version check comes before the field check, so a future request
     // with new fields is reported as a version problem.
     let mut future = request_for(&evaluator);
-    future["schema"] = "guard.cloud-action-evaluation.v2".into();
+    future["schema"] = "guard.cloud-action-evaluation.v3".into();
     future["new_field"] = true.into();
     assert_error(&run(&evaluator, &future), "unsupported_version");
 }

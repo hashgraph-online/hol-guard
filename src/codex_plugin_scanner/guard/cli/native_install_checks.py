@@ -4,95 +4,17 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import Any
 
 from ..adapters.base import HarnessContext
 from ..store import GuardStore
 
 
-def _native_mcp_server_names(config_path: Path) -> set[str]:
-    """Read configured native MCP names while excluding Guard companion identities."""
-    from ...ecosystems.opencode import _load_json_or_jsonc
-
-    payload, parse_error, _ = _load_json_or_jsonc(config_path)
-    if parse_error or not isinstance(payload, dict):
-        return set()
-    mcp = payload.get("mcp")
-    if not isinstance(mcp, dict):
-        return set()
-    return {name for name in mcp if isinstance(name, str) and not name.startswith("hol-guard::")}
-
-
 def _opencode_protection_checks(context: HarnessContext, store: GuardStore | None) -> dict[str, object]:
     """Verify the managed OpenCode plugin, launcher, and MCP routing configuration."""
-    from ..adapters.opencode import OpenCodeHarnessAdapter
-    from ..adapters.opencode_artifacts import runtime_config_path
-    from ..adapters.opencode_pretool import (
-        global_plugin_path,
-        opencode_config_has_mcp_servers,
-        opencode_config_uses_guard_proxy,
-    )
+    from ..adapters.opencode_runtime import opencode_protection_checks
 
-    adapter = OpenCodeHarnessAdapter()
-    managed = store.get_managed_install("opencode") if store is not None else None
-    config_path = adapter._managed_install_config_path(context)
-    shim_path = context.guard_home / "bin" / "guard-opencode"
-    plugin_path = global_plugin_path(context)
-    loaded_config_paths = [Path(path) for path in adapter.detect(context).config_paths if Path(path).is_file()] or (
-        [config_path] if config_path.is_file() else []
-    )
-    has_loaded_mcp = any(opencode_config_has_mcp_servers(path) for path in loaded_config_paths)
-    if not has_loaded_mcp:
-        mcp_proxy_configured = False
-    else:
-        mcp_proxy_configured = all(
-            (not opencode_config_has_mcp_servers(path)) or opencode_config_uses_guard_proxy(path)
-            for path in loaded_config_paths
-        )
-        runtime_overlay_path = runtime_config_path(context)
-        if not mcp_proxy_configured and runtime_overlay_path.is_file():
-            try:
-                runtime_payload = json.loads(runtime_overlay_path.read_text(encoding="utf-8"))
-            except (OSError, json.JSONDecodeError):
-                runtime_payload = {}
-            runtime_mcp = runtime_payload.get("mcp")
-            if isinstance(runtime_mcp, dict) and runtime_mcp:
-                managed_server_names = {
-                    name
-                    for path in loaded_config_paths
-                    if opencode_config_has_mcp_servers(path)
-                    for name in _native_mcp_server_names(path)
-                }
-                mcp_proxy_configured = managed_server_names.issubset(set(runtime_mcp))
-    has_unproxied_mcp = has_loaded_mcp and not mcp_proxy_configured
-    warnings: list[str] = []
-    if not (managed and managed.get("active")):
-        warnings.append("Run `hol-guard install opencode` to activate Guard-managed OpenCode protection.")
-    if not plugin_path.is_file():
-        warnings.append(
-            "OpenCode pretool plugin is missing from ~/.config/opencode/plugins/. Re-run `hol-guard install opencode`."
-        )
-    if not config_path.is_file():
-        warnings.append(
-            "OpenCode root config is missing at ~/.config/opencode/opencode.json. Re-run `hol-guard install opencode`."
-        )
-    if has_unproxied_mcp:
-        warnings.append(
-            "OpenCode MCP servers are not routed through hol-guard companion servers or the runtime overlay. "
-            "Re-run `hol-guard install opencode`."
-        )
-    if not shim_path.is_file():
-        warnings.append(
-            f"guard-opencode launcher shim is missing. Add {context.guard_home / 'bin'} to PATH or launch with "
-            "`hol-guard run opencode` for pre-launch checks."
-        )
-    return {
-        "pretool_plugin_installed": plugin_path.is_file(),
-        "mcp_proxy_configured": mcp_proxy_configured,
-        "launch_shim_installed": shim_path.is_file(),
-        "managed_install_active": bool(managed and managed.get("active")),
-        "warnings": warnings,
-        "ready": not warnings,
-    }
+    return opencode_protection_checks(context, store)
 
 
 def _grok_pretool_is_catchall(pretool_hook: Path, context: HarnessContext | None = None) -> bool:
@@ -168,9 +90,28 @@ def _grok_event_has_command_hook(entries: object, context: HarnessContext | None
     return False
 
 
-def _grok_managed_config_is_active(managed_text: str, context: HarnessContext | None = None) -> bool:
+def grok_protection(context: HarnessContext) -> dict[str, Any]:
+    """Grok's protection paths, deny rules and hook timeouts, as the native adapter names them."""
+    from ..adapters.native_harness import ask
+
+    return ask("protection", context, harness="grok")
+
+
+def grok_runtime_hooks_verified(context: HarnessContext) -> bool:
+    """Return whether Grok catch-all PreToolUse and prompt screening hooks are installed.
+
+    Managed permission rules in ``managed_config.toml`` are a second layer. Missing
+    that file must not fail machine-wide local protection health while hooks still
+    intercept every tool.
+    """
+    protection = grok_protection(context)
+    return _grok_pretool_is_catchall(Path(protection["pretool_hook_path"]), context) and _grok_prompt_hook_is_observe(
+        Path(protection["prompt_hook_path"]), context
+    )
+
+
+def _grok_managed_config_is_active(managed_text: str, context: HarnessContext) -> bool:
     """Verify durable permission floors, compatibility, and catch-all backup hooks."""
-    from ..adapters.grok_config import MANAGED_DENY_RULES
     from ..codex_config import tomllib
 
     try:
@@ -182,7 +123,7 @@ def _grok_managed_config_is_active(managed_text: str, context: HarnessContext | 
     compat = payload.get("compat")
     if (
         not isinstance(denied, list)
-        or not all(rule in denied for rule in MANAGED_DENY_RULES)
+        or not all(rule in denied for rule in grok_protection(context)["managed_deny_rules"])
         or not isinstance(compat, dict)
     ):
         return False
@@ -222,8 +163,7 @@ def grok_hooks_protection_ready(context: HarnessContext) -> bool:
     )
 
 
-def _grok_has_legacy_deny_rules(text: str) -> bool:
-    from ..adapters.grok_config import MANAGED_DENY_RULES
+def _grok_has_legacy_deny_rules(text: str, deny_rules: list[str]) -> bool:
     from ..codex_config import tomllib
 
     try:
@@ -234,20 +174,17 @@ def _grok_has_legacy_deny_rules(text: str) -> bool:
     denied = permission.get("deny") if isinstance(permission, dict) else None
     return isinstance(denied, list) and any(
         rule not in denied and rule.replace("**/", "~/", 1) in denied
-        for rule in MANAGED_DENY_RULES
+        for rule in deny_rules
         if rule.startswith("Read(**/")
     )
 
 
 def _grok_protection_checks(context: HarnessContext) -> dict[str, object]:
     """Report missing or stale Grok protection artifacts with repair instructions."""
-    from ..adapters.grok import GrokHarnessAdapter
-
-    adapter = GrokHarnessAdapter()
-    hooks_dir = adapter._hooks_dir(context)
-    managed_config = adapter._protection_config_path(context)
-    pretool_hook = hooks_dir / "hol-guard-pretooluse.json"
-    prompt_hook = hooks_dir / "hol-guard-prompt.json"
+    protection = grok_protection(context)
+    managed_config = Path(protection["config_path"])
+    pretool_hook = Path(protection["pretool_hook_path"])
+    prompt_hook = Path(protection["prompt_hook_path"])
     warnings: list[str] = []
     if not pretool_hook.is_file() or not prompt_hook.is_file():
         warnings.append("Grok Guard hook files are missing from ~/.grok/hooks/. Re-run `hol-guard apps connect grok`.")
@@ -265,7 +202,7 @@ def _grok_protection_checks(context: HarnessContext) -> dict[str, object]:
         managed_read_error = True
     if managed_read_error:
         warnings.append("Grok managed config could not be read. Re-run `hol-guard apps repair grok`.")
-    elif _grok_has_legacy_deny_rules(managed_text):
+    elif _grok_has_legacy_deny_rules(managed_text, protection["managed_deny_rules"]):
         warnings.append(
             "Grok managed deny rules still use literal home prefixes that Grok does not expand. "
             "Re-run `hol-guard apps repair grok`."

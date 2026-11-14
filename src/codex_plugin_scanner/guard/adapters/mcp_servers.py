@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
-from pathlib import Path, PurePath
+from pathlib import Path
 from typing import Any, cast
 
 from ..launcher import merge_guard_launcher_env
@@ -12,7 +12,7 @@ from ..models import GuardArtifact, HarnessDetection
 from ..runtime.mcp_protection import McpServerIdentity
 from ..stable_guard_cli import guard_cli_launcher
 from .base import HarnessContext
-from .managed_mcp_upstream import PROXY_LAUNCHER_ENV_KEYS, proxy_argument_tail
+from .managed_mcp_upstream import PROXY_LAUNCHER_ENV_KEYS
 from .mcp_relay_native import mcp_proxy_launch
 
 
@@ -46,18 +46,6 @@ def is_verified_guard_mcp_companion(
 ) -> bool:
     return is_guard_mcp_companion_name(name) and is_guard_proxy_command(command, args)
 
-
-_GUARD_PROXY_COMMANDS = frozenset(
-    {
-        "cline-mcp-proxy",
-        "codex-mcp-proxy",
-        "opencode-mcp-proxy",
-        "copilot-mcp-proxy",
-        "cursor-mcp-proxy",
-        "hermes-mcp-proxy",
-        "mcp-proxy",
-    }
-)
 
 _PROXY_ENV_BLOCKLIST = PROXY_LAUNCHER_ENV_KEYS
 
@@ -328,25 +316,12 @@ def _text(value: object) -> str:
     return value
 
 
-def _hol_guard_command_name(command: str) -> str | None:
-    cmd_name = PurePath(command.replace("\\", "/")).name.lower()
-    for suffix in (".exe", ".cmd", ".bat"):
-        if cmd_name.endswith(suffix):
-            cmd_name = cmd_name[: -len(suffix)]
-            break
-    return cmd_name if cmd_name in {"hol-guard", "current-hol-guard"} else None
-
-
 def is_guard_proxy_command(command: str | None, args: tuple[str, ...]) -> bool:
-    if not isinstance(command, str):
-        return False
-    if _hol_guard_command_name(command) is not None:
-        # Packaged launchers also receive generated Python-module argv from
-        # existing adapter installations. Recognize that exact prefix too.
-        return proxy_argument_tail(args, _GUARD_PROXY_COMMANDS) is not None
-    if "codex_plugin_scanner.cli" not in args or "guard" not in args:
-        return False
-    return any(value in _GUARD_PROXY_COMMANDS for value in args)
+    """Whether the launch is a Guard MCP proxy, as the native runtime reads it."""
+
+    from .codex_install_plan import guard_proxy_server_names
+
+    return bool(guard_proxy_server_names({"launch": {"command": command, "args": list(args)}}))
 
 
 __all__ = [

@@ -94,14 +94,14 @@ def test_empty_or_malformed_mcp_entries_are_preserved(tmp_path, monkeypatch, pay
 
 def test_foreign_generation_during_render_is_preserved(tmp_path, monkeypatch):
     context, path = _source(tmp_path, monkeypatch, {"features": {"hooks": True}})
-    render = adapter.render_codex_alternate_cleanup
+    render = adapter._alternate_cleanup  # pyright: ignore[reportPrivateUsage]
 
     def foreign_write(*args, **kwargs):
         result = render(*args, **kwargs)
         path.write_text('model = "foreign"\n')
         return result
 
-    monkeypatch.setattr(adapter, "render_codex_alternate_cleanup", foreign_write)
+    monkeypatch.setattr(adapter, "_alternate_cleanup", foreign_write)
     with pytest.raises(TransitionError, match="generation_changed"):
         adapter.prepare_codex_alternate_cleanup(context, config_path=path)
     assert path.read_text() == 'model = "foreign"\n'

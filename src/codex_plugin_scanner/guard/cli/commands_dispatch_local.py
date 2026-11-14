@@ -286,6 +286,10 @@ def _run_guard_command_inspection_command(
         if command_command not in {"test", "explain"}:
             print("Choose command test, command explain, command extensions, or command setup.", file=sys.stderr)
             return 2
+        if command_command == "explain" and getattr(args, "cloud", False):
+            from .cloud_pack_explain_command import run_cloud_explain
+
+            return run_cloud_explain(args, output=output_stream)
         command_text = str(getattr(args, "command_text", "")).strip()
         if not command_text:
             raise ValueError("Command text cannot be empty")

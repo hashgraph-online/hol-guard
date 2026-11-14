@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.adapters.antigravity import AntigravityHarnessAdapter
+from codex_plugin_scanner.guard.adapters import get_adapter
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.consumer.service import artifact_hash
 
@@ -41,7 +41,7 @@ def test_antigravity_skill_identity_covers_primary_and_nested_files(tmp_path: Pa
     _write_text(script_path, "print('one')\n")
     _write_text(resource_path, "Template one.\n")
 
-    adapter = AntigravityHarnessAdapter()
+    adapter = get_adapter("antigravity")
 
     def detected_skill_hash() -> tuple[str, dict[str, object]]:
         detection = adapter.detect(context)
@@ -91,7 +91,7 @@ def test_antigravity_incomplete_skill_identity_warns_without_external_path_discl
     except (NotImplementedError, OSError) as exc:
         pytest.skip(f"symlink creation unavailable: {exc}")
 
-    result = AntigravityHarnessAdapter().detect(context)
+    result = get_adapter("antigravity").detect(context)
     skill = next(item for item in result.artifacts if item.artifact_type == "skill")
     identity_metadata = skill.metadata.get("skillDirectoryIdentity")
 
@@ -103,13 +103,18 @@ def test_antigravity_incomplete_skill_identity_warns_without_external_path_discl
 
 
 def test_antigravity_policy_path_workspace_and_global(tmp_path: Path) -> None:
-    adapter = AntigravityHarnessAdapter()
+    adapter = get_adapter("antigravity")
     global_context = _context(tmp_path, workspace=False)
-    assert adapter.policy_path(global_context) == global_context.home_dir / ".gemini" / "antigravity" / "mcp_config.json"
+    assert (
+        adapter.policy_path(global_context) == global_context.home_dir / ".gemini" / "antigravity" / "mcp_config.json"
+    )
 
     workspace_context = _context(tmp_path, workspace=True)
     assert workspace_context.workspace_dir is not None
-    assert adapter.policy_path(workspace_context) == workspace_context.workspace_dir / ".gemini" / "antigravity" / "mcp_config.json"
+    assert (
+        adapter.policy_path(workspace_context)
+        == workspace_context.workspace_dir / ".gemini" / "antigravity" / "mcp_config.json"
+    )
 
 
 def test_antigravity_detect_xdg_lowercase_settings(tmp_path: Path) -> None:
@@ -118,7 +123,7 @@ def test_antigravity_detect_xdg_lowercase_settings(tmp_path: Path) -> None:
     _write_text(settings_path, '{"mcpServers": {"demo_server": {"command": "demo"}}}\n')
 
     upper = context.home_dir / ".config" / "Antigravity" / "User" / "settings.json"
-    detection = AntigravityHarnessAdapter().detect(context)
+    detection = get_adapter("antigravity").detect(context)
     same_file = upper.exists() and upper.stat().st_ino == settings_path.stat().st_ino
     expected = (
         "antigravity:global:mcp:settings:xdg-user:demo_server"
@@ -138,7 +143,7 @@ def test_xdg_case_variants_keep_distinct_mcp_ids_when_both_files_exist(tmp_path:
     _write_text(lower, '{"mcpServers": {"shared": {"command": "lower"}}}\n')
     same_file = lower.stat().st_ino == upper_inode
 
-    detection = AntigravityHarnessAdapter().detect(context)
+    detection = get_adapter("antigravity").detect(context)
     shared = [item for item in detection.artifacts if item.artifact_type == "mcp_server" and item.name == "shared"]
     if same_file:
         assert [item.artifact_id for item in shared] == ["antigravity:global:mcp:settings:xdg-user:shared"]
@@ -158,7 +163,7 @@ def test_same_skill_name_in_two_roots_keeps_distinct_ids(tmp_path: Path) -> None
         "---\nname: custom\n---\nBuiltin.\n",
     )
 
-    detection = AntigravityHarnessAdapter().detect(context)
+    detection = get_adapter("antigravity").detect(context)
     skill_ids = {item.artifact_id for item in detection.artifacts if item.artifact_type == "skill"}
     assert "antigravity:global:skill:skills/custom" in skill_ids
     assert "antigravity:global:skill:builtin-skills/custom" in skill_ids
@@ -176,18 +181,16 @@ def test_home_agents_skills_are_not_antigravity(tmp_path: Path) -> None:
         '{"mcpServers": {"editor": {"command": "code"}}}\n',
     )
 
-    detection = AntigravityHarnessAdapter().detect(context)
+    detection = get_adapter("antigravity").detect(context)
     assert all("other-tool" not in item.artifact_id and item.name != "editor" for item in detection.artifacts)
 
 
 def test_antigravity_detect_plugin_skills(tmp_path: Path) -> None:
     context = _context(tmp_path, workspace=False)
-    plugin_skill = (
-        context.home_dir / ".gemini" / "config" / "plugins" / "my-plugin" / "skills" / "custom" / "SKILL.md"
-    )
+    plugin_skill = context.home_dir / ".gemini" / "config" / "plugins" / "my-plugin" / "skills" / "custom" / "SKILL.md"
     _write_text(plugin_skill, "---\nname: custom\n---\nCustom plugin skill.\n")
 
-    detection = AntigravityHarnessAdapter().detect(context)
+    detection = get_adapter("antigravity").detect(context)
     skill_artifact = next(
         (item for item in detection.artifacts if item.artifact_type == "skill" and "custom" in item.name),
         None,
@@ -206,7 +209,7 @@ def test_antigravity_detect_workspace_agent_skills(tmp_path: Path) -> None:
     agent_skill = context.workspace_dir / ".agents" / "skills" / "team-helper" / "SKILL.md"
     _write_text(agent_skill, "---\nname: team-helper\n---\nTeam agent skill.\n")
 
-    detection = AntigravityHarnessAdapter().detect(context)
+    detection = get_adapter("antigravity").detect(context)
     skill_artifact = next(
         (item for item in detection.artifacts if item.artifact_type == "skill" and "team-helper" in item.name),
         None,
@@ -239,6 +242,6 @@ def test_antigravity_detect_mcp_config_and_extensions(tmp_path: Path) -> None:
     mcp_path = context.home_dir / ".gemini" / "antigravity" / "mcp_config.json"
     _write_text(mcp_path, json.dumps({"mcpServers": {"remote": {"url": "https://mcp.corp.internal"}}}))
 
-    detection = AntigravityHarnessAdapter().detect(context)
+    detection = get_adapter("antigravity").detect(context)
     assert any(item.artifact_type == "extension" and item.name == "Corp Tool" for item in detection.artifacts)
     assert any(item.artifact_type == "mcp_server" and item.name == "remote" for item in detection.artifacts)

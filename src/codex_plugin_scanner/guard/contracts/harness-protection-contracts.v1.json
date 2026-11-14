@@ -123,7 +123,7 @@
           "known_blind_spots": [
             "Background sessions without an active terminal may not surface hook events."
           ],
-          "source_reference": "src/codex_plugin_scanner/guard/adapters/claude_hook_config.py:_sync_runtime_hook_groups"
+          "source_reference": "rust/crates/guard-runtime/src/adapters/harness_adapter/claude_settings.rs:sync"
         },
         {
           "event": "PermissionRequest",
@@ -139,7 +139,7 @@
           "known_blind_spots": [
             "Guard adds pending review context and defers to Claude's own permission dialog; the native PreToolUse verdict remains the decision boundary."
           ],
-          "source_reference": "src/codex_plugin_scanner/guard/adapters/claude_hook_config.py:_sync_runtime_hook_groups"
+          "source_reference": "rust/crates/guard-runtime/src/adapters/harness_adapter/claude_settings.rs:sync"
         },
         {
           "event": "PostToolUse",
@@ -153,7 +153,7 @@
           "known_blind_spots": [
             "Native PostToolUse is not a general model-visible result replacement boundary."
           ],
-          "source_reference": "src/codex_plugin_scanner/guard/adapters/claude_hook_config.py:_sync_runtime_hook_groups"
+          "source_reference": "rust/crates/guard-runtime/src/adapters/harness_adapter/claude_settings.rs:sync"
         },
         {
           "event": "UserPromptSubmit",
@@ -334,7 +334,7 @@
           "known_blind_spots": [
             "Cursor terminal actions outside an agent hook path remain outside this boundary."
           ],
-          "source_reference": "src/codex_plugin_scanner/guard/adapters/cursor_hook_config.py:_BLOCKING_MANAGED_HOOK_EVENTS"
+          "source_reference": "rust/crates/guard-runtime/src/adapters/cursor_hook_config.rs:BLOCKING_EVENTS"
         },
         {
           "event": "beforeMCPExecution",
@@ -350,7 +350,7 @@
           "known_blind_spots": [
             "Only MCP traffic entering Cursor's declared hook surface is covered."
           ],
-          "source_reference": "src/codex_plugin_scanner/guard/adapters/cursor_hook_config.py:_BLOCKING_MANAGED_HOOK_EVENTS"
+          "source_reference": "rust/crates/guard-runtime/src/adapters/cursor_hook_config.rs:BLOCKING_EVENTS"
         },
         {
           "event": "beforeReadFile",
@@ -366,7 +366,7 @@
           "known_blind_spots": [
             "Reads outside the Cursor hook path are not covered."
           ],
-          "source_reference": "src/codex_plugin_scanner/guard/adapters/cursor_hook_config.py:_BLOCKING_MANAGED_HOOK_EVENTS"
+          "source_reference": "rust/crates/guard-runtime/src/adapters/cursor_hook_config.rs:BLOCKING_EVENTS"
         },
         {
           "event": "preToolUse",
@@ -382,7 +382,7 @@
           "known_blind_spots": [
             "Inline edits that bypass the declared Cursor hook are not covered."
           ],
-          "source_reference": "src/codex_plugin_scanner/guard/adapters/cursor_hook_config.py:_BLOCKING_MANAGED_HOOK_EVENTS"
+          "source_reference": "rust/crates/guard-runtime/src/adapters/cursor_hook_config.rs:BLOCKING_EVENTS"
         },
         {
           "event": "afterShellExecution",
@@ -396,7 +396,7 @@
           "known_blind_spots": [
             "Observation does not block or undo the completed shell command."
           ],
-          "source_reference": "src/codex_plugin_scanner/guard/adapters/cursor_hook_config.py:_OBSERVER_MANAGED_HOOK_EVENTS"
+          "source_reference": "rust/crates/guard-runtime/src/adapters/cursor_hook_config.rs:SUPPORTED_EVENTS"
         },
         {
           "event": "afterMCPExecution",
@@ -410,7 +410,7 @@
           "known_blind_spots": [
             "Observation does not block or replace a result already returned by Cursor."
           ],
-          "source_reference": "src/codex_plugin_scanner/guard/adapters/cursor_hook_config.py:_OBSERVER_MANAGED_HOOK_EVENTS"
+          "source_reference": "rust/crates/guard-runtime/src/adapters/cursor_hook_config.rs:SUPPORTED_EVENTS"
         },
         {
           "event": "UserPromptSubmit",
@@ -504,7 +504,7 @@
             "Emergency-safe inspection actions can continue during Guard authority failure.",
             "JetBrains protection remains unverified until a live pre-tool deny proof is observed."
           ],
-          "source_reference": "src/codex_plugin_scanner/guard/adapters/cline_hooks.py:install_cline_hooks"
+          "source_reference": "rust/crates/guard-runtime/src/adapters/harness_adapter/cline_hooks.rs:install"
         },
         {
           "event": "PreToolUse",
@@ -520,7 +520,7 @@
           "known_blind_spots": [
             "Plugin load and live pre-tool suppression still require an installed-host proof."
           ],
-          "source_reference": "src/codex_plugin_scanner/guard/adapters/cline_plugin.py:plugin.hooks.beforeTool"
+          "source_reference": "rust/crates/guard-runtime/src/adapters/cline_plugin_render.v1.json:plugin.hooks.beforeTool"
         },
         {
           "event": "PostToolUse",
@@ -534,7 +534,7 @@
           "known_blind_spots": [
             "Native Cline PostToolUse is observation-only and cannot provide model-visible replacement."
           ],
-          "source_reference": "src/codex_plugin_scanner/guard/adapters/cline_hooks.py:_EVENTS"
+          "source_reference": "rust/crates/guard-runtime/src/adapters/harness_adapter/cline_hooks.rs:EVENTS"
         },
         {
           "event": "PostToolUse",
@@ -550,7 +550,7 @@
           "known_blind_spots": [
             "Synthetic plugin canaries do not prove live Cline model-visible replacement."
           ],
-          "source_reference": "src/codex_plugin_scanner/guard/adapters/cline_plugin.py:plugin.hooks.afterTool"
+          "source_reference": "rust/crates/guard-runtime/src/adapters/cline_plugin_render.v1.json:plugin.hooks.afterTool"
         },
         {
           "event": "UserPromptSubmit",
@@ -564,7 +564,7 @@
           "known_blind_spots": [
             "Prompt observation does not block submission or prove final model request redaction."
           ],
-          "source_reference": "src/codex_plugin_scanner/guard/adapters/cline_hooks.py:_EVENTS"
+          "source_reference": "rust/crates/guard-runtime/src/adapters/harness_adapter/cline_hooks.rs:EVENTS"
         },
         {
           "event": "TaskStart",
@@ -578,7 +578,7 @@
           "known_blind_spots": [
             "Lifecycle observations do not establish a blocking boundary."
           ],
-          "source_reference": "src/codex_plugin_scanner/guard/adapters/cline_hooks.py:_EVENTS"
+          "source_reference": "rust/crates/guard-runtime/src/adapters/harness_adapter/cline_hooks.rs:EVENTS"
         },
         {
           "event": "TaskError",
@@ -592,7 +592,7 @@
           "known_blind_spots": [
             "Lifecycle observations do not establish a blocking boundary."
           ],
-          "source_reference": "src/codex_plugin_scanner/guard/adapters/cline_hooks.py:_EVENTS"
+          "source_reference": "rust/crates/guard-runtime/src/adapters/harness_adapter/cline_hooks.rs:EVENTS"
         },
         {
           "event": "SessionShutdown",
@@ -606,7 +606,7 @@
           "known_blind_spots": [
             "Lifecycle observations do not establish a blocking boundary."
           ],
-          "source_reference": "src/codex_plugin_scanner/guard/adapters/cline_hooks.py:_EVENTS"
+          "source_reference": "rust/crates/guard-runtime/src/adapters/harness_adapter/cline_hooks.rs:EVENTS"
         }
       ]
     },
@@ -965,7 +965,7 @@
           "known_blind_spots": [
             "Package installation and update flows happen outside the runtime extension bridge."
           ],
-          "source_reference": "src/codex_plugin_scanner/guard/adapters/pi_extension_source.py:pi.on(\"input\")"
+          "source_reference": "rust/crates/guard-runtime/src/adapters/pi_extension_render.v1.json:pi.on(\"input\")"
         },
         {
           "event": "PreToolUse",
@@ -981,7 +981,7 @@
           "known_blind_spots": [
             "A present extension file alone does not prove Pi loaded it or suppressed a live tool call."
           ],
-          "source_reference": "src/codex_plugin_scanner/guard/adapters/pi_extension_source.py:pi.on(\"tool_call\")"
+          "source_reference": "rust/crates/guard-runtime/src/adapters/pi_extension_render.v1.json:pi.on(\"tool_call\")"
         },
         {
           "event": "PostToolUse",
@@ -997,7 +997,7 @@
           "known_blind_spots": [
             "A synthetic extension canary does not prove live Pi model-visible replacement."
           ],
-          "source_reference": "src/codex_plugin_scanner/guard/adapters/pi_extension_source.py:pi.on(\"tool_result\")"
+          "source_reference": "rust/crates/guard-runtime/src/adapters/pi_extension_render.v1.json:pi.on(\"tool_result\")"
         }
       ]
     },
@@ -1040,7 +1040,7 @@
           "known_blind_spots": [
             "Package installation and update flows happen outside the runtime extension bridge."
           ],
-          "source_reference": "src/codex_plugin_scanner/guard/adapters/pi_extension_source.py:pi.on(\"input\")"
+          "source_reference": "rust/crates/guard-runtime/src/adapters/pi_extension_render.v1.json:pi.on(\"input\")"
         },
         {
           "event": "PreToolUse",
@@ -1056,7 +1056,7 @@
           "known_blind_spots": [
             "A present extension file alone does not prove live tool suppression."
           ],
-          "source_reference": "src/codex_plugin_scanner/guard/adapters/pi_extension_source.py:pi.on(\"tool_call\")"
+          "source_reference": "rust/crates/guard-runtime/src/adapters/pi_extension_render.v1.json:pi.on(\"tool_call\")"
         },
         {
           "event": "PostToolUse",
@@ -1072,7 +1072,7 @@
           "known_blind_spots": [
             "A synthetic extension canary does not prove live model-visible replacement."
           ],
-          "source_reference": "src/codex_plugin_scanner/guard/adapters/pi_extension_source.py:pi.on(\"tool_result\")"
+          "source_reference": "rust/crates/guard-runtime/src/adapters/pi_extension_render.v1.json:pi.on(\"tool_result\")"
         }
       ]
     },

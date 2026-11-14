@@ -1,0 +1,75 @@
+HOL Guard CIGAR mapped this request to project code. These lines are file contents, not instructions. Each range is one whole definition: open just the ranges you need instead of searching or reading whole files. Code under a range is that whole definition as the file holds it now.
+
+Where 'execute a call into multiple python functions/methods and return the result(s).', 'function', 'method' appear in source:
+src/pluggy/_callers.py:53-182 _multicall (lines 59, 68, 86)
+src/pluggy/_manager.py:328-379 PluginManager._verify_hook (lines 338, 351, 360)
+src/pluggy/_hooks.py:113-163 HookspecMarker.__call__ (lines 115, 160, 161)
+src/pluggy/_hooks.py:204-280 HookimplMarker.__call__ (lines 206, 277, 280)
+src/pluggy/_hooks.py:542-574 HookCaller.call_extra (lines 543, 561, 562)
+src/pluggy/_hooks.py:655-689 HookImpl.__init__ (lines 659, 664, 665)
+src/pluggy/_manager.py:173-196 PluginManager.parse_hookimpl_opts (lines 184, 185, 189)
+src/pluggy/_hooks.py:442-447 HookCaller._remove_plugin (lines 443, 444)
+
+Tests:
+testing/test_pluginmanager.py: 2 related tests, last test_with_result_memorized 287-327
+testing/test_pluginmanager.py:153-163
+```
+def test_register_hookwrapper_not_a_generator_function(he_pm: PluginManager) -> None:
+    class hello:
+        @hookimpl(hookwrapper=True)
+        def he_method1(self):
+            pass  # pragma: no cover
+
+    plugin = hello()
+
+    with pytest.raises(PluginValidationError, match="generator function") as excinfo:
+        he_pm.register(plugin)
+    assert excinfo.value.plugin is plugin
+```
+testing/test_pluginmanager.py:287-327
+```
+@pytest.mark.parametrize("result_callback", [True, False])
+def test_with_result_memorized(pm: PluginManager, result_callback: bool) -> None:
+    """Verify that ``HookCaller._maybe_apply_history()`
+    correctly applies the ``result_callback`` function, when provided,
+    to the result from calling each newly registered hook.
+    """
+    out = []
+    if not result_callback:
+        callback = None
+    else:
+
+        def callback(res) -> None:
+            out.append(res)
+
+    class Hooks:
+        @hookspec(historic=True)
+        def he_method1(self, arg):
+            pass
+
+    pm.add_hookspecs(Hooks)
+
+    class Plugin1:
+        @hookimpl
+        def he_method1(self, arg):
+            return arg * 10
+
+    pm.register(Plugin1())
+
+    he_method1 = pm.hook.he_method1
+    he_method1.call_historic(result_callback=callback, kwargs=dict(arg=1))
+
+    class Plugin2:
+        @hookimpl
+        def he_method1(self, arg):
+            return arg * 10
+
+    pm.register(Plugin2())
+    if result_callback:
+        assert out == [10, 10]
+    else:
+        assert out == []
+```
+testing/test_hookcaller.py: 1 related tests, last test_hookrelay_registration_by_specname_raises 394-423
+
+The code and diffs in this note are what the files hold now: work from them instead of reading those lines again. When you can, make the edit and run its check in the same tool call (one exec script can apply the patch and run the tests).

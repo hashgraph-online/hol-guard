@@ -3,8 +3,10 @@
 //! `du` and `df` report sizes from metadata and never open a file. `df` only
 //! asks which filesystem holds each operand, so a plain path is enough. `du`
 //! walks its operands and prints the name of every directory below them (every
-//! file too with `-a`), so unless `-s` or a zero depth limits the output to the
-//! operands, each operand gets the same tree screen as `ls -R`. Following
+//! file too with `-a`). With `-s` or a zero depth it prints only the operands,
+//! and with a depth of one only their direct children: the names a plain
+//! `ls -a` of the operand prints, so both take the `ls` read proof. A deeper
+//! or unlimited walk gets the same tree screen as `ls -R`. Following
 //! symbolic links (`-L`) is not admitted, and neither is any option that reads
 //! operand or pattern lists from a file (`--files0-from`, `-X`).
 //!
@@ -37,26 +39,36 @@ use super::{safe_reads, search};
 const MAX_OPERANDS: usize = 16;
 
 pub(super) fn safe_du_arguments(arguments: &[String], context: super::PathContext<'_>) -> bool {
-    let mut names_descendants = true;
+    let mut summarize = false;
+    let mut all = false;
+    let mut depth: Option<u32> = None;
+    let mut limit = |value: &str| match value.parse::<u32>() {
+        Ok(level) => {
+            // `du` applies the last -d/--max-depth option, not the minimum.
+            depth = Some(level);
+            true
+        }
+        Err(_) => false,
+    };
     let mut operands = Vec::new();
     let mut values = arguments.iter();
     while let Some(argument) = values.next() {
         let option = argument.as_str();
         if option == "-d" || option == "--max-depth" {
             match values.next() {
-                Some(depth) if digits(depth) => names_descendants &= !zero(depth),
+                Some(level) if digits(level) && limit(level) => {}
                 _ => return false,
             }
-        } else if let Some(depth) = option.strip_prefix("-d").filter(|depth| digits(depth)) {
-            names_descendants &= !zero(depth);
+        } else if let Some(level) = option.strip_prefix("-d").filter(|level| digits(level)) {
+            if !limit(level) {
+                return false;
+            }
         } else if let Some(long) = option.strip_prefix("--") {
             match long.split_once('=') {
-                Some(("max-depth", depth)) if digits(depth) => {
-                    names_descendants &= !zero(depth);
-                }
+                Some(("max-depth", level)) if digits(level) && limit(level) => {}
                 Some(("exclude", pattern)) if !pattern.is_empty() => {}
-                None if long == "all" => names_descendants = true,
-                None if long == "summarize" => names_descendants = false,
+                None if long == "all" => all = true,
+                None if long == "summarize" => summarize = true,
                 None if matches!(
                     long,
                     "human-readable"
@@ -72,9 +84,8 @@ pub(super) fn safe_du_arguments(arguments: &[String], context: super::PathContex
             if !flags.bytes().all(|flag| b"abchkmsxAHP".contains(&flag)) {
                 return false;
             }
-            if flags.contains('s') {
-                names_descendants = false;
-            }
+            summarize |= flags.contains('s');
+            all |= flags.contains('a');
         } else if option == "-" {
             return false;
         } else {
@@ -84,9 +95,16 @@ pub(super) fn safe_du_arguments(arguments: &[String], context: super::PathContex
     if operands.is_empty() {
         operands.push(".");
     }
+    // `-s` beside `-a` is an error for GNU `du` and a full walk for some BSD
+    // builds, so only a summary without `-a` counts as listing nothing below.
+    let walks_tree = if summarize && !all {
+        false
+    } else {
+        depth.is_none_or(|level| level > 1)
+    };
     operands.len() <= MAX_OPERANDS
         && operands.iter().all(|operand| {
-            let present = if names_descendants {
+            let present = if walks_tree {
                 search::safe_recursive_target(operand, context)
             } else {
                 safe_reads::bounded_read_target(operand, context.home_dir, context.cwd, true)
@@ -119,7 +137,20 @@ pub(super) fn safe_df_arguments(arguments: &[String]) -> bool {
     operands <= MAX_OPERANDS
 }
 
-pub(super) fn safe_diff_arguments(arguments: &[String], context: super::PathContext<'_>) -> bool {
+/// `diff` of two readable files, or of two directories that pass the
+/// recursive search screen.
+///
+/// After a pipe one operand may be `-`, which compares what the proven
+/// producer printed against a file: `git show HEAD:a.rs | diff - a.rs`. The
+/// dash reads only that output, the way `sed` and `comm` read it, so the
+/// other operand takes the ordinary file proof. Both operands as `-`, or a
+/// dash with nothing piped into the segment, keeps the review.
+pub(super) fn safe_diff_arguments(
+    segment: &crate::CommandSegmentV1,
+    context: super::PathContext<'_>,
+) -> bool {
+    let arguments = &segment.arguments;
+    let piped_input = segment.pipeline_index > 0;
     let mut operands = Vec::new();
     let mut after_options = false;
     let mut values = arguments.iter();
@@ -140,6 +171,9 @@ pub(super) fn safe_diff_arguments(arguments: &[String], context: super::PathCont
     let [left, right] = operands.as_slice() else {
         return false;
     };
+    if let Some(file) = piped_comparison_file(left, right, piped_input) {
+        return compared_file_readable(file, context);
+    }
     if *left == "-" || *right == "-" {
         return false;
     }
@@ -199,7 +233,14 @@ fn diff_option(option: &str) -> bool {
 /// first differ, or with `-l`/`-b` the differing bytes. Each file needs the
 /// same proof as a `diff` file operand. Byte counts after the two files only
 /// skip input. A directory makes `cmp` fail, so there is no recursive form.
-pub(super) fn safe_cmp_arguments(arguments: &[String], context: super::PathContext<'_>) -> bool {
+///
+/// After a pipe one of the two files may be `-`, as for `diff`.
+pub(super) fn safe_cmp_arguments(
+    segment: &crate::CommandSegmentV1,
+    context: super::PathContext<'_>,
+) -> bool {
+    let arguments = &segment.arguments;
+    let piped_input = segment.pipeline_index > 0;
     let mut operands = Vec::new();
     let mut after_options = false;
     let mut values = arguments.iter();
@@ -221,17 +262,44 @@ pub(super) fn safe_cmp_arguments(arguments: &[String], context: super::PathConte
     let [left, right] = files else {
         return false;
     };
-    if *left == "-" || *right == "-" || !skips.iter().all(|skip| digits(skip)) {
+    if !skips.iter().all(|skip| digits(skip)) {
         return false;
     }
-    [left, right].iter().all(|operand| {
-        safe_reads::bounded_read_target(operand, context.home_dir, context.cwd, false)
-            || super::chain_temporary::absent_temporary_read_target(
-                operand,
-                context.home_dir,
-                context.cwd,
-            )
-    })
+    if let Some(file) = piped_comparison_file(left, right, piped_input) {
+        return compared_file_readable(file, context);
+    }
+    if *left == "-" || *right == "-" {
+        return false;
+    }
+    [left, right]
+        .iter()
+        .all(|operand| compared_file_readable(operand, context))
+}
+
+/// The file operand of a two-operand comparison whose other operand is `-`
+/// reading a pipe. `None` when nothing is piped in, when neither or both
+/// operands are `-`, so the caller applies its ordinary proof.
+fn piped_comparison_file<'a>(left: &'a str, right: &'a str, piped_input: bool) -> Option<&'a str> {
+    if !piped_input {
+        return None;
+    }
+    match (left == "-", right == "-") {
+        (true, false) => Some(right),
+        (false, true) => Some(left),
+        _ => None,
+    }
+}
+
+/// The read proof a compared file takes. A chain may compare against a
+/// temporary copy it makes first, which is absent when the hook runs; reading
+/// it can only report a missing file.
+fn compared_file_readable(operand: &str, context: super::PathContext<'_>) -> bool {
+    safe_reads::bounded_read_target(operand, context.home_dir, context.cwd, false)
+        || super::chain_temporary::absent_temporary_read_target(
+            operand,
+            context.home_dir,
+            context.cwd,
+        )
 }
 
 /// Report-format options and byte limits. None of them names another file.
@@ -379,10 +447,6 @@ pub(super) fn safe_file_arguments(arguments: &[String], context: super::PathCont
                 && (safe_reads::bounded_read_target(operand, context.home_dir, context.cwd, true)
                     || super::listing_reads::absent_listing_operand(operand, context))
         })
-}
-
-fn zero(depth: &str) -> bool {
-    depth.bytes().all(|byte| byte == b'0')
 }
 
 fn digits(value: &str) -> bool {

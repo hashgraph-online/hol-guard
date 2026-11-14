@@ -354,6 +354,8 @@ def extra_env_for_mcp_launch(
 ) -> dict[str, str]:
     """Return harness-configured env for a listing probe. Values stay in memory."""
 
+    from ..native_runner_authority import native_runner_authority
+
     matched = None
     if cli_id:
         matched = discovered_server_for_observation(servers, cli_id=cli_id)
@@ -374,16 +376,21 @@ def extra_env_for_mcp_launch(
     if matched is None:
         return {}
     extra = dict(matched.env)
-    for key in matched.server_identity.env_keys:
-        current = extra.get(key)
-        if key in os.environ and (current is None or _looks_unresolved(current)):
-            extra[key] = os.environ[key]
+    present = [key for key in matched.server_identity.env_keys if key in os.environ]
+    if not present:
+        return extra
+    # The runtime chooses which keys come from Guard's environment; their
+    # values never leave this process.
+    answer: object = native_runner_authority(
+        "harness_mcp_discovery",
+        {"op": "launch_env", "configured": [[key, value] for key, value in extra.items()], "present": present},
+    )
+    from_process = _exact(answer, frozenset({"from_process"}))["from_process"]
+    if not isinstance(from_process, list) or not all(key in present for key in cast(list[object], from_process)):
+        raise ValueError("harness_mcp_discovery launch_env answer is malformed")
+    for key in cast(list[str], from_process):
+        extra[key] = os.environ[key]
     return extra
-
-
-def _looks_unresolved(value: str) -> bool:
-    stripped = value.strip()
-    return len(stripped) >= 4 and stripped.startswith("${") and stripped.endswith("}")
 
 
 def apply_source_labels(items: list[dict[str, object]], labels: dict[str, str]) -> list[dict[str, object]]:

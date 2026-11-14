@@ -1,0 +1,124 @@
+{
+ "repo": "click",
+ "seed": 82,
+ "steps": [
+  {
+   "kind": "question",
+   "prompt": "Question, no code changes: which function does this? \"Writes a paragraph into the buffer.\" Reply with its file path and function name.",
+   "question": {
+    "name": "write_paragraph",
+    "path": "src/click/formatting.py",
+    "qual": "HelpFormatter.write_paragraph",
+    "sentence": "Writes a paragraph into the buffer."
+   }
+  },
+  {
+   "kind": "stub",
+   "prompt": "Tests fail because Context.forward is not implemented (src/click/core.py). Write the implementation; the docstring and tests describe the expected behavior.",
+   "stub": {
+    "body": "        if not isinstance(__cmd, Command):\n            raise TypeError(\"Callback is not a command.\")\n\n        for param in __self.params:\n            if param not in kwargs:\n                kwargs[param] = __self.params[param]\n\n        return __self.invoke(__cmd, *args, **kwargs)\n",
+    "body_start": 800,
+    "end": 807,
+    "failing": [
+     "tests/test_commands.py::test_forwarded_params_consistency",
+     "tests/test_commands.py::test_other_command_forward"
+    ],
+    "indent": 8,
+    "path": "src/click/core.py",
+    "qual": "Context.forward"
+   }
+  },
+  {
+   "kind": "rename",
+   "prompt": "Rename the internal helper `_make_sub_context` to `_make_sub_context_impl` everywhere in the project, including tests. Behavior must not change.",
+   "rename": {
+    "count": 3,
+    "files": [
+     "src/click/core.py"
+    ],
+    "new": "_make_sub_context_impl",
+    "old": "_make_sub_context",
+    "path": "src/click/core.py"
+   }
+  },
+  {
+   "kind": "bug2",
+   "prompt": "The last commit broke several tests in different places. Find every root cause in the library code and fix them all without changing the tests.",
+   "setup": [
+    {
+     "failing": [
+      "tests/test_arguments.py::test_nargs_envvar[-1-a",
+      "tests/test_arguments.py::test_nargs_envvar[2-a",
+      "tests/test_arguments.py::test_nargs_envvar[2-a-Takes",
+      "tests/test_arguments.py::test_nargs_envvar_only_if_values_empty",
+      "tests/test_options.py::test_multiple_envvar",
+      "tests/test_options.py::test_nargs_envvar"
+     ],
+     "line": 128,
+     "new": "        return (rv and \"\").split(self.envvar_list_splitter)\n",
+     "orig": "        return (rv or \"\").split(self.envvar_list_splitter)\n",
+     "path": "src/click/types.py",
+     "qual": "ParamType.split_envvar_value"
+    },
+    {
+     "failing": [
+      "tests/test_basic.py::test_basic_group",
+      "tests/test_basic.py::test_summary_line",
+      "tests/test_commands.py::test_auto_shorthelp",
+      "tests/test_formatting.py::test_removing_multiline_marker",
+      "tests/test_shell_completion.py::test_full_complete[fish-env4-plain,a\\nplain,b\\tbee\\n]",
+      "tests/test_shell_completion.py::test_full_complete[fish-env5-plain,b\\tbee\\n]",
+      "tests/test_shell_completion.py::test_full_complete[zsh-env2-plain\\na\\n_\\nplain\\nb\\nbee\\n]",
+      "tests/test_shell_completion.py::test_full_complete[zsh-env3-plain\\nb\\nbee\\n]",
+      "tests/test_utils.py::test_make_default_short_help[-equal",
+      "tests/test_utils.py::test_make_default_short_help[-ignore",
+      "tests/test_utils.py::test_make_default_short_help[-length",
+      "tests/test_utils.py::test_make_default_short_help[-paragraph",
+      "tests/test_utils.py::test_make_default_short_help[-sentence",
+      "tests/test_utils.py::test_make_default_short_help[-truncate]",
+      "tests/test_utils.py::test_make_default_short_help[no-wrap"
+     ],
+     "line": 71,
+     "new": "    if words[0] != \"\\b\":\n",
+     "orig": "    if words[0] == \"\\b\":\n",
+     "path": "src/click/utils.py",
+     "qual": "make_default_short_help"
+    }
+   ]
+  },
+  {
+   "kind": "bug",
+   "prompt": "Something in `password_option` broke recently and its tests fail now. Track it down and fix it. Leave the tests alone.",
+   "setup": [
+    {
+     "failing": [
+      "tests/test_basic.py::test_basic_group",
+      "tests/test_basic.py::test_summary_line",
+      "tests/test_commands.py::test_auto_shorthelp",
+      "tests/test_formatting.py::test_removing_multiline_marker",
+      "tests/test_shell_completion.py::test_full_complete[fish-env4-plain,a\\nplain,b\\tbee\\n]",
+      "tests/test_shell_completion.py::test_full_complete[fish-env5-plain,b\\tbee\\n]",
+      "tests/test_shell_completion.py::test_full_complete[zsh-env2-plain\\na\\n_\\nplain\\nb\\nbee\\n]",
+      "tests/test_shell_completion.py::test_full_complete[zsh-env3-plain\\nb\\nbee\\n]",
+      "tests/test_utils.py::test_make_default_short_help[-equal",
+      "tests/test_utils.py::test_make_default_short_help[-ignore",
+      "tests/test_utils.py::test_make_default_short_help[-length",
+      "tests/test_utils.py::test_make_default_short_help[-paragraph",
+      "tests/test_utils.py::test_make_default_short_help[-sentence",
+      "tests/test_utils.py::test_make_default_short_help[-truncate]",
+      "tests/test_utils.py::test_make_default_short_help[no-wrap"
+     ],
+     "line": 408,
+     "new": "    kwargs.setdefault(\"hide_input\", False)\n",
+     "orig": "    kwargs.setdefault(\"hide_input\", True)\n",
+     "path": "src/click/decorators.py",
+     "qual": "password_option"
+    }
+   ]
+  },
+  {
+   "kind": "review",
+   "prompt": "Review every change made in this session. Remove leftovers or duplication, match the style of the surrounding code, and make sure the full test suite passes."
+  }
+ ]
+}

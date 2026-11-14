@@ -1,5 +1,6 @@
 //! Every search pattern one command writes: Git's own (`git grep`,
-//! `git log -S`) and a stdin-only pipeline filter's (`… | rg -n password`).
+//! `git log -S`), a stdin-only pipeline filter's (`… | rg -n password`), and
+//! a name pattern (`find -name "*password*"`, `pytest -k password`).
 //! Both kinds make the same claim about a word -- it selects lines of text
 //! the command already produced, and names nothing the command opens -- and a
 //! single command can hold both, so the whole-command screen sets them aside
@@ -19,9 +20,11 @@ pub(super) fn command_without_patterns(model: &CanonicalCommandV1) -> Option<Str
     let parts = model
         .segments
         .iter()
-        .map(|segment| {
+        .enumerate()
+        .map(|(index, segment)| {
             match super::git_search_text::segment_without_patterns(segment)
                 .or_else(|| super::filter_pattern_text::segment_without_patterns(segment))
+                .or_else(|| super::name_pattern_text::segment_without_patterns(model, index))
             {
                 Some(text) => {
                     masked = true;

@@ -39,6 +39,7 @@ import { sortEvidence } from "../evidence/evidence-sort";
 import { computeMetrics } from "../evidence/evidence-metrics";
 import { guardActionDisposition, guardActionPresentation } from "../guard-action";
 import { HarnessSetupPanel } from "./harness-setup-panel";
+import { AppModesPanel } from "./app-modes-panel";
 import { appSetupTarget } from "./harness-setup-target";
 import { DEFAULT_FILTER_STATE } from "../evidence/evidence-url-state";
 import type { EvidenceFilterState, EvidenceSortKey } from "../evidence/evidence-types";
@@ -414,6 +415,15 @@ export function AppDetailWorkspace(props: AppDetailWorkspaceProps) {
           },
         ]}
       />
+
+      {appSetupTarget(harness) === "harness" ? (
+        <AppModesPanel
+          harness={harness}
+          managed={isActive}
+          onSetUp={handleGoSettings}
+          onChanged={props.onManagedInstallChanged}
+        />
+      ) : null}
 
       <div
         className="relative"

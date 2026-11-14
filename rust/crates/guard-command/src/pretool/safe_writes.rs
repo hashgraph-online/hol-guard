@@ -70,6 +70,7 @@ pub(super) fn bounded_native_temporary_write_target(
     bounded_temporary_copy_target(
         value,
         super::PathContext {
+            literal_words: &[],
             home_dir,
             cwd,
             cdpath_unset: false,
@@ -77,10 +78,12 @@ pub(super) fn bounded_native_temporary_write_target(
             cargo_config_inert: false,
             npm_config_inert: false,
             pip_config_inert: false,
+            python_environment_inert: false,
             shell_home_matches: false,
             ripgrep_config_absent: false,
             gem_config_absent: false,
             http_config_absent: false,
+            openssl_config_absent: false,
             psql_environment: Default::default(),
             creates_nothing: false,
         },

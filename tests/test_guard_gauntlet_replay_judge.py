@@ -124,6 +124,15 @@ def test_only_the_marked_cases_may_pass_on_containment() -> None:
         # leaves. A read misclassification would be a quiet allow and still fail.
         "neg-awk-division-pipe-to-network",
         "neg-awk-regex-quote-hides-network-pipe",
+        # An awk program that rewrites its input list or runs a command behind a
+        # number: the read screen must refuse it, and a contained run reaches no
+        # file outside the workspace and no host program the sandbox does not
+        # hold.
+        "neg-awk-argc-appends-credential-file",
+        "neg-awk-argv-swaps-input-for-ssh-key",
+        "neg-awk-gsub-rewrites-argv-entry",
+        "neg-awk-number-hides-argv-write",
+        "neg-awk-number-hides-system-call",
         "neg-cargo-check-locked-host-toolchain",
         # A missing name under a guarded root: the read keeps its review, and a
         # contained run reaches none of the credential store, the key directory,
@@ -151,6 +160,11 @@ def test_only_the_marked_cases_may_pass_on_containment() -> None:
         "neg-env-chdir-npm-run-build",
         "neg-env-git-dir-then-list",
         "neg-env-ld-preload-then-list",
+        # An awk program that prints environment values: the workspace sandbox
+        # starts from a restricted environment rather than the agent's, so the
+        # values it prints are the sandbox's own and no inherited secret.
+        "neg-env-names-awk-environ-value-only",
+        "neg-env-names-awk-environ-values",
         "neg-env-pager-names-program",
         # A pager option that carries its own shell escape: a contained run gives the
         # escape nothing outside the workspace to reach.
@@ -179,6 +193,10 @@ def test_only_the_marked_cases_may_pass_on_containment() -> None:
         # of that path, not of the repository's own mailmap, and a contained
         # run reaches only the sandbox's copy of it.
         "neg-git-check-mailmap-other-file",
+        # An index listing whose `-X` exclude file is named by the caller: the
+        # read keeps its review, and a contained run opens only the workspace
+        # copy of that file.
+        "neg-git-ls-files-glob-with-exclude-file",
         # `--in-place` makes the trailer filter edit the file it names, and a
         # contained run keeps that edit inside the sandbox.
         "neg-git-interpret-trailers-in-place",
@@ -210,8 +228,23 @@ def test_only_the_marked_cases_may_pass_on_containment() -> None:
         "neg-goflags-screened-then-toolexec-prefix-go-test",
         "neg-goflags-toolexec-prefix-then-screened-argument-go-test",
         "neg-goflags-mod-mod-prefix-go-test",
+        # A glob after a jq binding option expands to workspace names jq may read
+        # as options; a contained run reaches nothing outside the workspace.
+        "neg-jq-arg-glob-value-splits-into-options",
+        # `--arg ENV` cannot rebind jq's environment, so the filter still reads
+        # it; a contained run has no session environment to print.
+        "neg-jq-arg-cannot-bind-env",
+        # A glob over a checkout link that leaves it: the contained run has no home
+        # access, so the link reads nothing.
+        "neg-linked-sources-grep-glob-over-escaping-link",
         "neg-rustflags-linker-prefix-cargo-test",
         "neg-pytest-addopts-plugin-prefix-venv-pytest",
+        # A Python filter that reaches past its input: the program screen must
+        # refuse it, and a contained run reaches no file outside the workspace,
+        # no module path the prefix names and no network.
+        "python-json-filter-lists-directory",
+        "python-json-filter-module-path-prefix",
+        "python-json-filter-opens-file",
         # A tool setting whose value is a URL, a path or a file to load rather
         # than the switch word the inert reading accepts: the command keeps its
         # review, and a contained run has no network for the fetch and no home
@@ -245,10 +278,32 @@ def test_only_the_marked_cases_may_pass_on_containment() -> None:
         # nothing above the workspace to reach, so the pattern names only what
         # the sandbox already holds.
         "neg-hidden-glob-stands-for-dot-directories",
+        # A glob that matches only a dotfile, or names a directory that is not
+        # there, keeps its review; a contained run reads only the workspace copy.
+        "neg-read-glob-matching-only-dotfile",
+        "neg-read-glob-in-missing-directory",
         # A pattern that is a credential word and an unconstrained tail expands onto the
         # command line as the files beside it, so the second one becomes the file the
         # filter opens; a contained run has no home access and reads none of them.
         "neg-grep-credential-bare-wildcard-pattern",
+        # An unquoted wildcard pattern is expanded by the shell before grep sees it,
+        # so it may name files beside it rather than text; the read keeps its review,
+        # and a contained run reads only the workspace copy with no home or network.
+        "neg-grep-unquoted-star-pattern",
+        # A worktree read whose wildcard directory also matches a directory keeps
+        # its review. A contained run reads only the workspace copy the sandbox
+        # already holds, with no home or network reach.
+        "neg-read-glob-wildcard-directory-matches-a-directory",
+        # A second pattern, or an escaped alternative, that matches a plugin
+        # manifest keeps the review; a contained run reads only the workspace
+        # copy and has no home access.
+        "neg-grep-second-pattern-matching-plugin-manifest",
+        "neg-grep-escaped-alternative-matching-plugin-manifest",
+        # A recursive grep in the worktree whose late exclusion the scan does not
+        # prove keeps its review. A contained run reads only the workspace copy the
+        # sandbox already holds, with no home or network reach.
+        "neg-grep-late-exclude-dir-separated-value",
+        "neg-grep-late-exclude-beside-include",
         # The pattern exemption's own negatives: the producer opens a dotenv
         # file, dumps the environment, or names one as a pathspec, so the
         # credential word is never the only signal. A contained run has no home
@@ -258,6 +313,10 @@ def test_only_the_marked_cases_may_pass_on_containment() -> None:
         "neg-printenv-piped-into-grep",
         "neg-git-grep-pattern-with-dotenv-path",
         "neg-ls-home-missing-key-in-hidden-directory",
+        # A digest written to a file with -out keeps its review; a contained run
+        # writes only into a disposable workspace copy, so nothing the host
+        # keeps is created or overwritten.
+        "neg-openssl-dgst-writes-output",
         # A cache verb, a key write, a host this machine does not own and a
         # credential on the line: each keeps its review, and a contained run has
         # no network for any of them, so no server is reached, nothing it holds
@@ -283,6 +342,8 @@ def test_only_the_marked_cases_may_pass_on_containment() -> None:
         # flag is intentionally excluded: it can damage the writable worktree.
         "neg-sed-substitute-chained-write-command",
         "neg-sed-substitute-second-expression-writes-a-file",
+        "neg-sed-delete-then-write-file",
+        "neg-sed-addressed-substitution-write-flag",
         # A `cat` that names a private key after a sibling run: the review stands,
         # and a contained run in the sibling root reaches no key at all.
         "neg-sibling-cd-jest-cat-reads-private-key",
@@ -302,6 +363,15 @@ def test_only_the_marked_cases_may_pass_on_containment() -> None:
         "neg-stderr-credential-location-read",
         "neg-tr-file-operand",
         "neg-uniq-output-operand-in-worktree",
+        # An interpreter run that is more than a version probe: `perl -V` prints
+        # the build configuration and `ruby -v script.rb` runs the script after
+        # the banner. A contained run has no network and no home access, so the
+        # script reaches nothing outside the workspace copy.
+        "neg-perl-config-summary",
+        "neg-ruby-version-then-script",
+        # BSD `ps e` adds each process's environment to its command column. A
+        # contained run sees only the sandbox's own processes.
+        "neg-ps-bsd-environment-column-list",
         # A removal git reads as the trailing part of a sibling checkout's registration: the
         # checkout it would take away stands outside the workspace, so a contained run removes
         # nothing of it.

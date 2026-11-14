@@ -6,14 +6,17 @@ use super::{
     ReadContext, SearchValueRole,
 };
 
-pub(in crate::pretool) fn safe_rg_stdin_arguments(arguments: &[String]) -> bool {
-    safe_rg_arguments_inner(
-        arguments,
-        crate::pretool::PathContext::default(),
-        true,
-        true,
-        true,
-    )
+/// `literal_words` are the segment's quoted words, as
+/// `listing_reads::literal_words` reads them.
+pub(in crate::pretool) fn safe_rg_stdin_arguments(
+    arguments: &[String],
+    literal_words: &[String],
+) -> bool {
+    let context = crate::pretool::PathContext {
+        literal_words,
+        ..Default::default()
+    };
+    safe_rg_arguments_inner(arguments, context, true, true, true)
 }
 
 /// An `rg` segment inside its command. A missing operand is proven only
@@ -32,9 +35,14 @@ pub(super) fn safe_rg_segment(
     // `git diff | rg PATTERN` in a repository whose `.gitignore` carries a
     // `!.env.example` rule went to review for a search that never touches
     // the tree.
+    let words = crate::pretool::listing_reads::literal_words(&segment.text);
+    let context = ReadContext {
+        literal_words: &words,
+        ..context
+    };
     if segment.pipeline_index > 0
         && config_cannot_add_arguments(&segment.arguments, context)
-        && safe_rg_stdin_arguments(&segment.arguments)
+        && safe_rg_stdin_arguments(&segment.arguments, &words)
     {
         return true;
     }
@@ -542,6 +550,7 @@ mod tests {
             ripgrep_config_absent: true,
             gem_config_absent: true,
             http_config_absent: false,
+            openssl_config_absent: false,
             ..Default::default()
         };
         let r = repo.display();
@@ -622,6 +631,7 @@ mod tests {
                 ripgrep_config_absent: true,
                 gem_config_absent: true,
                 http_config_absent: false,
+                openssl_config_absent: false,
                 shell_home_matches,
                 ..Default::default()
             };
@@ -668,6 +678,7 @@ mod tests {
             ripgrep_config_absent: true,
             gem_config_absent: true,
             http_config_absent: false,
+            openssl_config_absent: false,
             shell_home_matches: true,
             ..Default::default()
         };
@@ -748,10 +759,10 @@ mod tests {
             "token.*expired",
             "-e auth.*header",
         ] {
-            assert!(safe_rg_stdin_arguments(&arguments(line)), "{line}");
+            assert!(safe_rg_stdin_arguments(&arguments(line), &[]), "{line}");
         }
         for line in [".env{,.local}", "-e .env{,.local}", ".env*", ".ssh/*"] {
-            assert!(!safe_rg_stdin_arguments(&arguments(line)), "{line}");
+            assert!(!safe_rg_stdin_arguments(&arguments(line), &[]), "{line}");
         }
     }
 }

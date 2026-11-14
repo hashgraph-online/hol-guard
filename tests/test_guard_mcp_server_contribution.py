@@ -18,6 +18,7 @@ _FILESYSTEM = Path(__file__).resolve().parents[1] / "contributions/mcp-servers/m
 _TETHER = _FILESYSTEM.with_name("mcp.tether.json")
 _AGENTIC_LINKEDIN = _FILESYSTEM.with_name("mcp.agentic-linkedin.json")
 _DEV_MCP = _FILESYSTEM.with_name("mcp.dev-mcp.json")
+_REI_SKILLS = _FILESYSTEM.with_name("mcp.rei-skills.json")
 
 
 def _filesystem_payload() -> dict[str, object]:
@@ -43,6 +44,43 @@ def _dev_mcp_payload() -> dict[str, object]:
     payload = json.loads(_DEV_MCP.read_text(encoding="utf-8"))
     assert isinstance(payload, dict)
     return payload
+
+
+def _rei_skills_payload() -> dict[str, object]:
+    payload = json.loads(_REI_SKILLS.read_text(encoding="utf-8"))
+    assert isinstance(payload, dict)
+    return payload
+
+
+def test_rei_skills_launch_package_is_version_pinned() -> None:
+    """Keep the reviewed rei-skills launch on the exact npm version."""
+    payload = _rei_skills_payload()
+    validate_mcp_contribution(payload, filename=_REI_SKILLS.name)
+    assert payload["id"] == "mcp.rei-skills"
+    assert payload["trustClass"] == "external"
+    assert payload["activation"] == "opt-in"
+    assert payload["launch"] == {
+        "kind": "package-launcher",
+        "command": "npx",
+        "package": "rei-skills@6.2.0",
+    }
+
+
+def test_rei_skills_tool_defaults_preserve_review_boundary() -> None:
+    payload = _rei_skills_payload()
+    defaults = {tool["name"]: tool["state"] for tool in payload["tools"]}
+    assert defaults == {
+        "rei_recommend_skills": "inherit",
+        "rei_search_skills": "inherit",
+        "rei_get_skill": "inherit",
+        "rei_get_workflow": "inherit",
+        "rei_list_bundles": "inherit",
+        "rei_compile_skill": "inherit",
+        "rei_list_ai_targets": "inherit",
+        "rei_install_skill": "review",
+        "other": "review",
+    }
+    assert mcp_tool_state(payload, "unlisted_tool") == "review"
 
 
 def test_tether_contribution_is_external_opt_in() -> None:

@@ -14,7 +14,7 @@ import {
 } from "react-icons/hi2";
 
 import type { AppView } from "./approval-center-primitives";
-import type { GuardUpdateChannelProof } from "./guard-api";
+import type { GuardUpdateChannelProof, GuardUpdateMode } from "./guard-api";
 import type {
   GuardApprovalGatePublicConfig,
   GuardCloudUserProfile,
@@ -48,6 +48,7 @@ export type ShellNavigationProps = {
   onUpdateGuard?: () => void;
   onReinstallGuard?: () => void;
   onSetUpdateChannel?: (channel: "stable" | "alpha", proof?: GuardUpdateChannelProof) => void | Promise<void>;
+  onSetUpdateMode?: (mode: GuardUpdateMode, proof?: GuardUpdateChannelProof) => void | Promise<void>;
   updatePhase?: GuardUpdatePhase;
   updateError?: string | null;
   approvalGate?: GuardApprovalGatePublicConfig | null;

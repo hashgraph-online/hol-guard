@@ -54,7 +54,9 @@ const OFF_OR_ON: &[&str] = &["0", "1", "false", "true"];
 /// `CYPRESS_INSTALL_BINARY` is the one exception to the shared value list.
 /// It is listed with `0` alone, because its other accepted values are a URL
 /// or a path to a zip file, which is exactly the redirection the name test
-/// refuses it for.
+/// refuses it for. `PYTEST_DISABLE_PLUGIN_AUTOLOAD` is listed with the two
+/// words that switch pytest's plugin autoload off, so a contained run still
+/// loads fewer plugins rather than the caller's whole installed set.
 const TOOL_SWITCHES: &[(&str, &[&str])] = &[
     ("BROWSERSLIST_DISABLE_CACHE", OFF_OR_ON),
     ("BROWSERSLIST_IGNORE_OLD_DATA", OFF_OR_ON),
@@ -64,6 +66,7 @@ const TOOL_SWITCHES: &[(&str, &[&str])] = &[
     ("HUSKY_SKIP_HOOKS", OFF_OR_ON),
     ("PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD", OFF_OR_ON),
     ("PUPPETEER_SKIP_DOWNLOAD", OFF_OR_ON),
+    ("PYTEST_DISABLE_PLUGIN_AUTOLOAD", &["1", "true"]),
     ("SHARP_IGNORE_GLOBAL_LIBVIPS", OFF_OR_ON),
 ];
 

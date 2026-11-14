@@ -1,0 +1,278 @@
+{
+  "schema": "guard-codex-install-plan-vectors.v1",
+  "shell_blocks": [
+    {
+      "content": "",
+      "cleaned": ""
+    },
+    {
+      "content": "export PATH=/bin\n",
+      "cleaned": "export PATH=/bin\n"
+    },
+    {
+      "content": "# >>> HOL Guard Codex shell guard >>>\nexport HOL_GUARD=1\n# <<< HOL Guard Codex shell guard <<<",
+      "cleaned": ""
+    },
+    {
+      "content": "# >>> HOL Guard Codex shell guard >>>\nexport HOL_GUARD=1\n# <<< HOL Guard Codex shell guard <<<\n",
+      "cleaned": ""
+    },
+    {
+      "content": "export A=1\n\n# >>> HOL Guard Codex shell guard >>>\nexport HOL_GUARD=1\n# <<< HOL Guard Codex shell guard <<<\n",
+      "cleaned": "export A=1\n"
+    },
+    {
+      "content": "export A=1\n\n# >>> HOL Guard Codex shell guard >>>\nexport HOL_GUARD=1\n# <<< HOL Guard Codex shell guard <<<\nexport B=2\n",
+      "cleaned": "export A=1\nexport B=2\n"
+    },
+    {
+      "content": "export A=1\r\n\r\n# >>> HOL Guard Codex shell guard >>>\r\nexport HOL_GUARD=1\r\n# <<< HOL Guard Codex shell guard <<<\r\nexport B=2\r\n",
+      "cleaned": "export A=1\r\nexport B=2\r\n"
+    },
+    {
+      "content": "export A=1\n# >>> HOL Guard Codex shell guard >>>\nexport HOL_GUARD=1\n# <<< HOL Guard Codex shell guard <<<\nexport B=2\n",
+      "cleaned": "export A=1\nexport B=2\n"
+    },
+    {
+      "content": "export A=1\n\n\n# >>> HOL Guard Codex shell guard >>>\nexport HOL_GUARD=1\n# <<< HOL Guard Codex shell guard <<<\n",
+      "cleaned": "export A=1\n\n"
+    },
+    {
+      "content": "\n# >>> HOL Guard Codex shell guard >>>\nexport HOL_GUARD=1\n# <<< HOL Guard Codex shell guard <<<\n",
+      "cleaned": "\n"
+    },
+    {
+      "content": "\n\n# >>> HOL Guard Codex shell guard >>>\nexport HOL_GUARD=1\n# <<< HOL Guard Codex shell guard <<<\n",
+      "cleaned": "\n"
+    },
+    {
+      "content": "# >>> HOL Guard Codex shell guard >>>\nexport HOL_GUARD=1\n# <<< HOL Guard Codex shell guard <<<\n# >>> HOL Guard Codex shell guard >>>\nexport HOL_GUARD=1\n# <<< HOL Guard Codex shell guard <<<\n",
+      "cleaned": ""
+    },
+    {
+      "content": "a\n\n# >>> HOL Guard Codex shell guard >>>\nexport HOL_GUARD=1\n# <<< HOL Guard Codex shell guard <<<\n\n# >>> HOL Guard Codex shell guard >>>\nexport HOL_GUARD=1\n# <<< HOL Guard Codex shell guard <<<\nz\n",
+      "cleaned": "a\nz\n"
+    },
+    {
+      "content": "a\n\n# >>> HOL Guard Codex shell guard >>>\nexport HOL_GUARD=1\n# <<< HOL Guard Codex shell guard <<<\n# >>> HOL Guard Codex shell guard >>>\nexport HOL_GUARD=1\n# <<< HOL Guard Codex shell guard <<<\n",
+      "cleaned": "a\n"
+    },
+    {
+      "content": "# >>> HOL Guard Codex shell guard >>>\nunterminated\n",
+      "cleaned": "# >>> HOL Guard Codex shell guard >>>\nunterminated\n"
+    },
+    {
+      "content": "x# >>> HOL Guard Codex shell guard >>>\nexport HOL_GUARD=1\n# <<< HOL Guard Codex shell guard <<<\n",
+      "cleaned": "x# >>> HOL Guard Codex shell guard >>>\nexport HOL_GUARD=1\n# <<< HOL Guard Codex shell guard <<<\n"
+    },
+    {
+      "content": "# >>> HOL Guard Codex shell guard >>> trailing\n# <<< HOL Guard Codex shell guard <<<\n",
+      "cleaned": "# >>> HOL Guard Codex shell guard >>> trailing\n# <<< HOL Guard Codex shell guard <<<\n"
+    },
+    {
+      "content": "# >>> HOL Guard Codex shell guard >>>\n# <<< HOL Guard Codex shell guard <<< trailing\n# <<< HOL Guard Codex shell guard <<<\nrest\n",
+      "cleaned": "rest\n"
+    },
+    {
+      "content": "# >>> HOL Guard Codex shell guard >>>\n# <<< HOL Guard Codex shell guard <<<\rrest\n",
+      "cleaned": "\rrest\n"
+    },
+    {
+      "content": "# >>> HOL Guard Codex shell guard >>>\n# >>> HOL Guard Codex shell guard >>>\n# <<< HOL Guard Codex shell guard <<<\n",
+      "cleaned": ""
+    },
+    {
+      "content": "# <<< HOL Guard Codex shell guard <<<\n# >>> HOL Guard Codex shell guard >>>\nexport HOL_GUARD=1\n# <<< HOL Guard Codex shell guard <<<\n",
+      "cleaned": "# <<< HOL Guard Codex shell guard <<<\n"
+    },
+    {
+      "content": "café\n\n# >>> HOL Guard Codex shell guard >>>\nexport HOL_GUARD=1\n# <<< HOL Guard Codex shell guard <<<\nÿþ\n",
+      "cleaned": "café\nÿþ\n"
+    },
+    {
+      "content": "a\n# >>> HOL Guard Codex shell guard >>>\n# <<< HOL Guard Codex shell guard <<<",
+      "cleaned": "a\n"
+    },
+    {
+      "content": "keep\n\n# >>> HOL Guard Codex shell guard >>>\nexport HOL_GUARD=1\n# <<< HOL Guard Codex shell guard <<<\n\n# >>> HOL Guard Codex shell guard >>>\nexport HOL_GUARD=1\n# <<< HOL Guard Codex shell guard <<<",
+      "cleaned": "keep\n"
+    }
+  ],
+  "guard_proxies": [
+    {
+      "command": null,
+      "args": [
+        "codex-mcp-proxy"
+      ],
+      "guard": false
+    },
+    {
+      "command": "hol-guard",
+      "args": [
+        "codex-mcp-proxy",
+        "--server",
+        "x"
+      ],
+      "guard": true
+    },
+    {
+      "command": "/opt/bin/hol-guard",
+      "args": [
+        "guard",
+        "codex-mcp-proxy"
+      ],
+      "guard": true
+    },
+    {
+      "command": "C:\\Tools\\HOL-GUARD.EXE",
+      "args": [
+        "cursor-mcp-proxy"
+      ],
+      "guard": true
+    },
+    {
+      "command": "current-hol-guard.cmd",
+      "args": [
+        "mcp-proxy"
+      ],
+      "guard": true
+    },
+    {
+      "command": "hol-guard.bat",
+      "args": [
+        "-m",
+        "codex_plugin_scanner.cli",
+        "guard",
+        "hermes-mcp-proxy"
+      ],
+      "guard": true
+    },
+    {
+      "command": "hol-guard",
+      "args": [
+        "mcp-relay",
+        "/usr/bin/python3",
+        "-m",
+        "codex_plugin_scanner.cli",
+        "guard",
+        "codex-mcp-proxy"
+      ],
+      "guard": true
+    },
+    {
+      "command": "hol-guard",
+      "args": [
+        "mcp-relay",
+        "/usr/bin/python3",
+        "codex-mcp-proxy"
+      ],
+      "guard": false
+    },
+    {
+      "command": "hol-guard",
+      "args": [
+        "serve"
+      ],
+      "guard": false
+    },
+    {
+      "command": "hol-guard",
+      "args": [],
+      "guard": false
+    },
+    {
+      "command": "hol-guard-extra",
+      "args": [
+        "codex-mcp-proxy"
+      ],
+      "guard": false
+    },
+    {
+      "command": "hol-guard/",
+      "args": [
+        "codex-mcp-proxy"
+      ],
+      "guard": true
+    },
+    {
+      "command": "/usr/bin/python3",
+      "args": [
+        "-m",
+        "codex_plugin_scanner.cli",
+        "guard",
+        "codex-mcp-proxy"
+      ],
+      "guard": true
+    },
+    {
+      "command": "/usr/bin/python3",
+      "args": [
+        "-I",
+        "-m",
+        "codex_plugin_scanner.cli",
+        "guard",
+        "opencode-mcp-proxy",
+        "--x"
+      ],
+      "guard": true
+    },
+    {
+      "command": "/usr/bin/python3",
+      "args": [
+        "codex_plugin_scanner.cli",
+        "copilot-mcp-proxy"
+      ],
+      "guard": false
+    },
+    {
+      "command": "/usr/bin/python3",
+      "args": [
+        "guard",
+        "codex-mcp-proxy"
+      ],
+      "guard": false
+    },
+    {
+      "command": "/usr/bin/python3",
+      "args": [
+        "-m",
+        "codex_plugin_scanner.cli",
+        "guard",
+        "scan"
+      ],
+      "guard": false
+    },
+    {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-filesystem",
+        "/tmp"
+      ],
+      "guard": false
+    },
+    {
+      "command": "/runtime/hol-guard-runtime",
+      "args": [
+        "mcp-relay",
+        "/usr/bin/python3",
+        "-m",
+        "codex_plugin_scanner.cli",
+        "guard"
+      ],
+      "guard": false
+    },
+    {
+      "command": "/runtime/hol-guard-runtime",
+      "args": [
+        "mcp-relay",
+        "/usr/bin/python3",
+        "-m",
+        "codex_plugin_scanner.cli",
+        "guard",
+        "cline-mcp-proxy"
+      ],
+      "guard": true
+    }
+  ]
+}

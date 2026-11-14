@@ -7,6 +7,7 @@
 use super::*;
 
 const INVALID: &str = "inline_eval_invalid_command";
+const NO_ENV_FILE: &str = "--no-env-file";
 
 /// A root- or user-owned native Bun image that no other account can replace,
 /// installed by the system, Homebrew, Bun's own installer in one of the
@@ -31,6 +32,47 @@ pub(super) fn approved_bun(executable: &Path, home: Option<&Path>) -> bool {
     .any(|root| path_is_within(executable, root))
         || managed_bun(executable, home);
     trusted && native_image(executable)
+}
+
+/// The contained Bun command: the approved image, `--no-env-file`, then the
+/// caller's own arguments.
+///
+/// Bun loads `.env`, `.env.local` and the `NODE_ENV` variants from the working
+/// directory before it runs anything. The read-only profiles deny reading
+/// those credential files, and from Bun 1.4 a refused automatic load stops the
+/// whole run with `An internal error occurred (EPERM)` where earlier releases
+/// skipped it. Turning the automatic load off keeps the credential denial and
+/// gives every release the behaviour the boundary already enforced: the run
+/// sees no `.env` values. Releases before the flag existed ignore it.
+fn contained_command(executable: &Path, arguments: &[String]) -> Vec<String> {
+    let mut command = vec![
+        executable.to_string_lossy().into_owned(),
+        NO_ENV_FILE.to_owned(),
+    ];
+    command.extend_from_slice(arguments);
+    command
+}
+
+/// The argv a sink asks the resident about for a planned command: the plan's
+/// own argv, less the `--no-env-file` [`contained_command`] put in front of a
+/// Bun run.
+///
+/// A sink asks again for the argv a plan runs, so a planner that rewrote the
+/// call cannot run something its route never covered. The resident routes
+/// the caller's spelling, which never carried the flag, and the flag only
+/// turns Bun's automatic `.env` load off, so the argv without it is the one
+/// the route was earned for. Any other argv is returned unchanged.
+pub fn planned_route_argv(command: &[String]) -> Vec<String> {
+    match command {
+        [bun, flag, arguments @ ..]
+            if flag == NO_ENV_FILE && Path::new(bun).file_name() == Some(OsStr::new("bun")) =>
+        {
+            let mut argv = vec![bun.clone()];
+            argv.extend_from_slice(arguments);
+            argv
+        }
+        _ => command.to_vec(),
+    }
 }
 
 /// Plan for an `inline_eval` Bun argv: `[bun, -e|--eval|-p|--print, program]`.
@@ -61,8 +103,7 @@ pub(super) fn prepare_eval(input: &Input, argv: &[String]) -> Result<Value, Rest
     if !allowed.contains(&executable) {
         allowed.push(executable.clone());
     }
-    let mut command = vec![executable.to_string_lossy().into_owned()];
-    command.extend_from_slice(&argv[1..]);
+    let command = contained_command(&executable, &argv[1..]);
     Ok(
         json!({"profile_version":"node-eval-readonly-v1","backend":backend,"backend_executable":backend_executable,
         "workspace":workspace,"cwd":cwd,"executable":executable,"command":command,"allowed_executables":allowed,
@@ -106,11 +147,14 @@ pub(super) fn prepare_test(input: &Input, argv: &[String]) -> Result<Value, Rest
     if !allowed.contains(&executable) {
         allowed.push(executable.clone());
     }
-    let mut command = vec![executable.to_string_lossy().into_owned()];
-    command.extend_from_slice(&argv[1..]);
+    let command = contained_command(&executable, &argv[1..]);
     Ok(
         json!({"profile_version":"node-test-readonly-v1","backend":backend,"backend_executable":backend_executable,
         "workspace":workspace,"cwd":cwd,"executable":executable,"command":command,"allowed_executables":allowed,
         "denied_capabilities":["host-home-read","host-secret-environment","network","docker-socket","workspace-write","workspace-credential-read","unapproved-process-exec","privileged-operation"]}),
     )
 }
+
+#[cfg(test)]
+#[path = "contained_bun_tests.rs"]
+mod tests;

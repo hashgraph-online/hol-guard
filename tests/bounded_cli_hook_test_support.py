@@ -1,30 +1,8 @@
 from __future__ import annotations
 
 import json
-from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
 from typing import cast
-
-from codex_plugin_scanner.guard.codex_hook_launch_runtime import BoundedHookProcessResult
-
-
-def runner_result(result: BoundedHookProcessResult) -> Callable[..., BoundedHookProcessResult]:
-    def run(
-        command: Sequence[str],
-        *,
-        input_text: str,
-        cwd: Path,
-        environment: Mapping[str, str],
-        timeout_seconds: float,
-        deadline_monotonic: float | None = None,
-        output_limit: int = 1_000_000,
-        allow_windows_breakaway: bool = False,
-    ) -> BoundedHookProcessResult:
-        del command, input_text, cwd, environment, timeout_seconds, output_limit, deadline_monotonic
-        del allow_windows_breakaway
-        return result
-
-    return run
 
 
 def json_object(text: str) -> dict[str, object]:

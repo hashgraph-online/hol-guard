@@ -149,6 +149,7 @@ pub(crate) fn capabilities() -> RuntimeCapabilitiesV1 {
     features.push(crate::claude_hook_bridge::BRIDGE_FEATURE.into());
     features.push(crate::codex_hook_bridge::BRIDGE_FEATURE.into());
     features.push(crate::bounded_hook_bridge::BRIDGE_FEATURE.into());
+    features.push(crate::bounded_hook_bridge::MUSE_BRIDGE_FEATURE.into());
     features.push(crate::cursor_hook_bridge::BRIDGE_FEATURE.into());
     features.push(crate::pi_hook_bridge::BRIDGE_FEATURE.into());
     features.push(crate::cline_hook_worker::WORKER_FEATURE.into());

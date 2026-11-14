@@ -1,4 +1,4 @@
-const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/chunks/home-dashboard-OxpCh2cB.js","assets/chunks/home-protection-module-CKLh5X9E.js","assets/chunks/supply-chain-protection-stats--m3HVz8Q.js","assets/chunks/workspace-model-hR3eI7UO.js","assets/chunks/brand-hero-COty1p6U.js","assets/chunks/about-content-Dr9zFg1V.js","assets/chunks/app-catalog-Ca_M7GbC.js","assets/chunks/fleet-workspace-BVvg6Lpo.js","assets/chunks/harness-version-label-xEsgWKwG.js","assets/chunks/connect-guard-cloud-button-Xk2GIeZa.js","assets/chunks/settings-save-proof-modal-B1l5ib5t.js","assets/chunks/settings-workspace-C_CNq8AH.js","assets/chunks/confirm-dialog-CjbF_rrG.js","assets/chunks/extensions-workspace-DeE0MG3h.js","assets/chunks/app-detail-workspace-DqHWwK_5.js","assets/chunks/policy-workspace-page-ChvzniW9.js","assets/chunks/about-workspace-DSZDVR66.js","assets/about-workspace.css"])))=>i.map(i=>d[i]);
+const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/chunks/home-dashboard-BTu-Dd20.js","assets/chunks/home-protection-module-CMu4ycX8.js","assets/chunks/supply-chain-protection-stats-C4S58svV.js","assets/chunks/workspace-model-hR3eI7UO.js","assets/chunks/brand-hero-COty1p6U.js","assets/chunks/about-content-Dr9zFg1V.js","assets/chunks/app-catalog-Ca_M7GbC.js","assets/chunks/fleet-workspace-CyNbRJJG.js","assets/chunks/harness-version-label-MLxWNcFW.js","assets/chunks/settings-save-proof-modal-_wjRK7LN.js","assets/chunks/connect-guard-cloud-button-BUnXYp-e.js","assets/chunks/guard-repair-control-BGQGnM8b.js","assets/chunks/settings-workspace-CnxO1Xjx.js","assets/chunks/confirm-dialog-C_yrRR8f.js","assets/chunks/extensions-workspace-BJW9li9o.js","assets/chunks/app-detail-workspace-BcDpRAjB.js","assets/chunks/harness-action-errors-x2AyNCK-.js","assets/chunks/supply-chain-hub-workspace-BJZR421D.js","assets/chunks/policy-workspace-page-DuL9PTDi.js","assets/chunks/about-workspace-BX-eCaXK.js","assets/about-workspace.css"])))=>i.map(i=>d[i]);
 (function polyfill() {
   const relList = document.createElement("link").relList;
   if (relList && relList.supports && relList.supports("modulepreload")) return;
@@ -14368,7 +14368,10 @@ function retryCannotReuseApproval(item) {
   return item.once_only_reason === "script_execution_binding_unavailable" || item.scope_restrictions?.includes("retry_cannot_reuse_approval") === true;
 }
 function oneTimeRetryWindowMinutes(item) {
-  return item.artifact_id.includes(":native-pretool:") ? 5 : 15;
+  return item.artifact_id.includes(":native-pretool:") ? 60 : 15;
+}
+function retryWindowText(minutes) {
+  return minutes === 60 ? "an hour" : `${minutes} minutes`;
 }
 function allowPermissionLabels(item) {
   const recommendation = item.extension_recommendation;
@@ -15141,7 +15144,7 @@ function buildRetryAfterApprovalCopy(item, action, persistedExactAction = false)
       return `Saved. Return to ${harness} to retry. Guard will allow this exact action next time; changed commands still need review.`;
     }
     if (retryCannotReuseApproval(item)) return retryBlockedApprovalCopy(item, harness);
-    return `Approved once. Return to ${harness} and retry within ${oneTimeRetryWindowMinutes(item)} minutes.`;
+    return `Approved once. Return to ${harness} and retry within ${retryWindowText(oneTimeRetryWindowMinutes(item))}.`;
   }
   return `Blocked. Return to ${harness} to continue with a different action, or ask it to try something else.`;
 }
@@ -16548,16 +16551,16 @@ function reloadDocument(reload) {
   }
   return false;
 }
-function storageGet(storage, key) {
+function storageGet(storage2, key) {
   try {
-    return storage.getItem(key);
+    return storage2.getItem(key);
   } catch {
     return null;
   }
 }
-function storageSet(storage, key, value) {
+function storageSet(storage2, key, value) {
   try {
-    storage.setItem(key, value);
+    storage2.setItem(key, value);
     return true;
   } catch {
     return false;
@@ -16580,13 +16583,13 @@ async function loadWorkspaceModule(loader, options = {}) {
     if (!isChunkLoadError(error)) {
       throw error;
     }
-    const storage = options.storage;
+    const storage2 = options.storage;
     const failureMessage = error instanceof Error ? error.message : String(error);
     const failureFingerprint = `${options.moduleId ?? "anonymous-workspace-module"}:${failureMessage}`;
-    if (!storage || storageGet(storage, CHUNK_RELOAD_STORAGE_KEY) === failureFingerprint) {
+    if (!storage2 || storageGet(storage2, CHUNK_RELOAD_STORAGE_KEY) === failureFingerprint) {
       throw error;
     }
-    if (!storageSet(storage, CHUNK_RELOAD_STORAGE_KEY, failureFingerprint)) {
+    if (!storageSet(storage2, CHUNK_RELOAD_STORAGE_KEY, failureFingerprint)) {
       throw error;
     }
     const wait = options.wait ?? defaultWait;
@@ -16626,23 +16629,23 @@ function responseDashboardBuild(response, pageOrigin) {
     return null;
   }
 }
-function claimStaleBuildReload(state, storage) {
-  if (!isDashboardBuildStale(state) || !storage || state.serverBuild === null) {
+function claimStaleBuildReload(state, storage2) {
+  if (!isDashboardBuildStale(state) || !storage2 || state.serverBuild === null) {
     return false;
   }
   try {
-    if (storage.getItem(DASHBOARD_BUILD_RELOAD_STORAGE_KEY) === state.serverBuild) {
+    if (storage2.getItem(DASHBOARD_BUILD_RELOAD_STORAGE_KEY) === state.serverBuild) {
       return false;
     }
-    storage.setItem(DASHBOARD_BUILD_RELOAD_STORAGE_KEY, state.serverBuild);
+    storage2.setItem(DASHBOARD_BUILD_RELOAD_STORAGE_KEY, state.serverBuild);
     return true;
   } catch {
     return false;
   }
 }
-function releaseStaleBuildClaim(storage) {
+function releaseStaleBuildClaim(storage2) {
   try {
-    storage?.removeItem?.(DASHBOARD_BUILD_RELOAD_STORAGE_KEY);
+    storage2?.removeItem?.(DASHBOARD_BUILD_RELOAD_STORAGE_KEY);
   } catch {
   }
 }
@@ -16733,12 +16736,12 @@ function releaseClaimIfLeaveIsCancelled(build) {
       if (!event.defaultPrevented) {
         return;
       }
-      const storage = browserSessionStorage();
-      releaseStaleBuildClaim(storage);
+      const storage2 = browserSessionStorage();
+      releaseStaleBuildClaim(storage2);
       const restore = () => {
         restoreClaimOnLeave = null;
         try {
-          storage?.setItem(DASHBOARD_BUILD_RELOAD_STORAGE_KEY, build);
+          storage2?.setItem(DASHBOARD_BUILD_RELOAD_STORAGE_KEY, build);
         } catch {
         }
       };
@@ -16750,8 +16753,8 @@ function releaseClaimIfLeaveIsCancelled(build) {
 }
 function loadCurrentDashboardBuild(href) {
   const state = currentBuildState();
-  const storage = browserSessionStorage();
-  if (typeof window === "undefined" || state.serverBuild === null || !claimStaleBuildReload(state, storage)) {
+  const storage2 = browserSessionStorage();
+  if (typeof window === "undefined" || state.serverBuild === null || !claimStaleBuildReload(state, storage2)) {
     return false;
   }
   releaseClaimIfLeaveIsCancelled(state.serverBuild);
@@ -16765,6 +16768,341 @@ function loadCurrentDashboardBuild(href) {
     window.location.assign(target2.href);
   }
   return true;
+}
+const PROTECTION_POSTURE_COPY = {
+  protected: {
+    label: "Protected",
+    help: "Stops theft, wipes, and Guard bypass. Asks once about new tools or first-time secret access, then remembers."
+  },
+  extra_careful: {
+    label: "Extra careful",
+    help: "Same as Protected, and also asks the first time this project talks to a new site or installs a new tool."
+  },
+  watch: {
+    label: "Watch",
+    help: "Records what Guard would have stopped, but does not stop anything. Use only while debugging."
+  }
+};
+const WATCH_BANNER_COPY = "Protection is off. Guard is only recording.";
+const POSTURE_OUTCOME_COLUMNS = {
+  protected: {
+    stops: "Credential theft, Guard bypass, encoded exfil, known-bad tools",
+    asks: "First secret read, new destructive command, first package script, new MCP or skill",
+    runs: "Remembered actions, routine browsing, verified-benign work"
+  },
+  extra_careful: {
+    stops: "The same automatic stops as Protected",
+    asks: "Everything Protected asks, plus first new site, first new tool, and cloud advisories",
+    runs: "Remembered actions and verified-benign work"
+  },
+  watch: {
+    stops: "Nothing. Guard only records.",
+    asks: "Nothing. Inbox shows what would have stopped.",
+    runs: "Every action, including known-bad work"
+  }
+};
+function isProtectionPosture(value) {
+  return value === "protected" || value === "extra_careful" || value === "watch";
+}
+function deriveProtectionPosture(mode, securityLevel) {
+  if (mode === "observe") return "watch";
+  if (securityLevel === "strict" || securityLevel === "paranoid") return "extra_careful";
+  return "protected";
+}
+const POSTURE_LABEL = {
+  protected: "Protected",
+  extra_careful: "Extra careful",
+  watch: "Watch"
+};
+function normalizeHarnessPostures(value) {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) return {};
+  const result = {};
+  for (const [harness, posture] of Object.entries(value)) {
+    if (harness.length > 0 && typeof posture === "string" && isProtectionPosture(posture)) {
+      result[harness] = posture;
+    }
+  }
+  return result;
+}
+function globalPosture(settings) {
+  if (isProtectionPosture(settings.protection_posture)) return settings.protection_posture;
+  if (settings.mode === "observe") return "watch";
+  return "protected";
+}
+function protectedLevel(effective, baseline) {
+  if (effective !== "watch") return effective;
+  if (baseline !== "watch") return baseline;
+  return "protected";
+}
+function effectiveHarnessPosture(settings, harness) {
+  const override = settings.harness_postures?.[harness];
+  const baseline = globalPosture(settings);
+  if (override === void 0) return baseline;
+  if (override === "watch") return "watch";
+  return baseline === "extra_careful" ? baseline : override;
+}
+function harnessPostureRows(settings, capabilities) {
+  return capabilities.map((capability) => {
+    const effective = effectiveHarnessPosture(settings, capability.harness);
+    return {
+      harness: capability.harness,
+      displayName: capability.display_name,
+      effective,
+      hasOverride: settings.harness_postures?.[capability.harness] !== void 0,
+      selected: effective === "watch" ? "watch" : "on"
+    };
+  });
+}
+function harnessPostureOptions(settings, harness) {
+  const onLevel = protectedLevel(effectiveHarnessPosture(settings, harness), globalPosture(settings));
+  return [
+    { choice: "on", label: POSTURE_LABEL[onLevel] },
+    { choice: "watch", label: POSTURE_LABEL.watch }
+  ];
+}
+function selectHarnessPosture(settings, harness, choice) {
+  const baseline = globalPosture(settings);
+  if (choice === "on" && effectiveHarnessPosture(settings, harness) !== "watch") return settings;
+  const next = { ...settings.harness_postures ?? {} };
+  if (choice === "watch") {
+    if (baseline === "watch") delete next[harness];
+    else next[harness] = "watch";
+  } else if (baseline === "watch") {
+    next[harness] = "protected";
+  } else {
+    delete next[harness];
+  }
+  return { ...settings, harness_postures: next };
+}
+function canRestartHarnessWatch(settings, harness) {
+  return settings.harness_postures?.[harness] === "watch" && settings.harness_watch_entered_at?.[harness] !== void 0 && (settings.watch_auto_revert_hours ?? 24) > 0;
+}
+function restartHarnessWatch(settings, harness) {
+  if (!canRestartHarnessWatch(settings, harness)) return settings;
+  const restarts = new Set(settings.harness_watch_restart ?? []);
+  restarts.add(harness);
+  return { ...settings, harness_watch_restart: [...restarts].sort() };
+}
+function harnessPosturePatch(draft, saved) {
+  const before = saved?.harness_postures ?? {};
+  const after = draft.harness_postures ?? {};
+  const restarts = new Set(draft.harness_watch_restart ?? []);
+  const patch = {};
+  for (const harness of /* @__PURE__ */ new Set([...Object.keys(before), ...Object.keys(after)])) {
+    const posture = after[harness] ?? null;
+    const restart = posture === "watch" && restarts.has(harness);
+    if (restart || posture !== (before[harness] ?? null)) patch[harness] = posture;
+  }
+  return Object.keys(patch).length > 0 ? patch : null;
+}
+function clearHarnessWatchOverrides(settings) {
+  const next = Object.fromEntries(
+    Object.entries(settings.harness_postures ?? {}).filter(([, posture]) => posture !== "watch")
+  );
+  return { ...settings, harness_postures: next };
+}
+function settingsWatchBannerModel(settings, capabilities) {
+  const rows = harnessPostureRows(settings, capabilities);
+  return watchBannerModel({
+    protection_posture: globalPosture(settings),
+    harness_postures: settings.harness_postures,
+    harnesses_in_watch: rows.filter((row) => row.effective === "watch").map((row) => row.harness),
+    protection_capabilities: capabilities
+  });
+}
+function withHarnessPosturePatch(payload, draft, saved) {
+  const {
+    harness_postures: _postures,
+    harness_postures_effective: _effective,
+    harness_postures_locked: _locked,
+    harness_watch_entered_at: _enteredAt,
+    harness_watch_restart: _restart,
+    ...rest
+  } = payload;
+  const patch = harnessPosturePatch(draft, saved);
+  return patch === null ? rest : { ...rest, harness_postures: patch };
+}
+function harnessPostureSummary(rows) {
+  if (rows.length === 0) return "";
+  const watching = rows.filter((row) => row.effective === "watch");
+  if (watching.length === 0) return "Every app is protected.";
+  if (watching.length === rows.length) return "Every app is in Watch.";
+  return `${watching.length} of ${rows.length} apps in Watch: ${joinNames(watching.map((row) => row.displayName))}.`;
+}
+function harnessRowTone(row) {
+  return row.effective === "watch" ? "watch" : "protected";
+}
+function harnessRowStatus(row) {
+  if (row.effective === "watch") {
+    return row.hasOverride ? "Watch · recording only" : "Watch · follows the machine setting";
+  }
+  if (!row.hasOverride) return "Follows the machine setting";
+  return "Set for this app";
+}
+function sortHarnessRows(rows) {
+  const watching = rows.filter((row) => row.effective === "watch");
+  const rest = rows.filter((row) => row.effective !== "watch");
+  return [...watching, ...rest];
+}
+function overrideRows(rows) {
+  return rows.filter((row) => row.hasOverride);
+}
+function harnessWatchPrompt(rows, harness) {
+  const row = rows.find((candidate) => candidate.harness === harness);
+  const name = row?.displayName ?? harness;
+  const others = rows.filter((candidate) => candidate.harness !== harness);
+  const protectedOthers = others.filter((candidate) => candidate.effective !== "watch");
+  const lead = `Guard will only record in ${name}.`;
+  if (others.length === 0) return lead;
+  if (protectedOthers.length === 0) return `${lead} Every app will then be in Watch.`;
+  if (protectedOthers.length === others.length) return `${lead} Your other apps stay protected.`;
+  const verb = protectedOthers.length === 1 ? "stays" : "stay";
+  return `${lead} ${joinNames(protectedOthers.map((candidate) => candidate.displayName))} ${verb} protected.`;
+}
+function joinNames(names) {
+  if (names.length <= 1) return names[0] ?? "";
+  if (names.length === 2) return `${names[0]} and ${names[1]}`;
+  return `${names.slice(0, -1).join(", ")}, and ${names[names.length - 1]}`;
+}
+function displayNameFor(harness, capabilities) {
+  return capabilities?.find((capability) => capability.harness === harness)?.display_name ?? harness;
+}
+function watchBannerModel(snapshot) {
+  const globalWatch = snapshot.protection_posture === "watch";
+  const watchOverrides = Object.entries(snapshot.harness_postures ?? {}).filter(([, posture]) => posture === "watch").map(([harness]) => harness);
+  const inWatch = globalWatch ? [] : snapshot.harnesses_in_watch ?? watchOverrides;
+  if (!globalWatch && inWatch.length === 0) return null;
+  const appNames = inWatch.map((harness) => displayNameFor(harness, snapshot.protection_capabilities));
+  if (globalWatch) {
+    return {
+      globalWatch,
+      appNames: [],
+      message: WATCH_BANNER_COPY,
+      confirmMessage: "Guard will start stopping dangerous actions in every app."
+    };
+  }
+  const names = joinNames(appNames);
+  return {
+    globalWatch,
+    appNames,
+    message: `Guard is only recording in ${names}. Other apps are protected.`,
+    confirmMessage: `Guard will start stopping dangerous actions in ${names}.`
+  };
+}
+function turnProtectionOnUpdate(snapshot) {
+  const update = {};
+  if (snapshot.protection_posture === "watch") update.protection_posture = "protected";
+  const cleared = {};
+  for (const [harness, posture] of Object.entries(snapshot.harness_postures ?? {})) {
+    if (posture === "watch") cleared[harness] = null;
+  }
+  if (Object.keys(cleared).length > 0) update.harness_postures = cleared;
+  return update;
+}
+const CIGAR_APPS = /* @__PURE__ */ new Set(["claude-code", "codex", "pi", "omp", "devin", "muse", "zcode", "kimi", "cline"]);
+function cigarReady(settings) {
+  const config2 = settings.context_assistance;
+  const requested = config2?.enabled === true && config2.features.agent_context && config2.sources.workspace_documents;
+  return requested && settings.context_assistance_effective_ready !== false;
+}
+function cigarLocked(settings) {
+  return settings.managed_locked_settings?.includes("harness_cigar") === true;
+}
+function cigarSupported(harness) {
+  return CIGAR_APPS.has(harness);
+}
+function cigarReachesApp(settings, harness) {
+  return cigarSupported(harness) && (settings.cigar_apps?.includes(harness) ?? true);
+}
+function cigarAvailable(settings, harness) {
+  return cigarReady(settings) && cigarReachesApp(settings, harness);
+}
+function appModes(settings, harness) {
+  return {
+    guard: effectiveHarnessPosture(settings, harness) !== "watch",
+    cigar: cigarAvailable(settings, harness) && settings.harness_cigar?.[harness] !== "off"
+  };
+}
+function watchIsUntimed(settings, harness) {
+  return settings.harness_postures?.[harness] === "watch" && settings.harness_watch_entered_at?.[harness] === void 0;
+}
+function appModesUpdate(settings, harness, next) {
+  const update = {};
+  const available = cigarAvailable(settings, harness);
+  const cigarOnly = !next.guard && next.cigar && available;
+  if (settings.harness_postures_locked === true) ;
+  else if (cigarOnly) {
+    if (!watchIsUntimed(settings, harness)) {
+      update.harness_postures = { [harness]: "watch" };
+      update.harness_watch_untimed = true;
+    }
+  } else if (next.guard) {
+    const patch = harnessPosturePatch(selectHarnessPosture(settings, harness, "on"), settings);
+    if (patch !== null) update.harness_postures = patch;
+  } else {
+    const draft = selectHarnessPosture(settings, harness, "watch");
+    const patch = harnessPosturePatch(draft, settings) ?? {};
+    if (watchIsUntimed(settings, harness) && globalPosture(settings) !== "watch") patch[harness] = "watch";
+    if (Object.keys(patch).length > 0) update.harness_postures = patch;
+  }
+  if (available) {
+    const off = settings.harness_cigar?.[harness] === "off";
+    if (next.cigar === off) update.harness_cigar = { [harness]: next.cigar ? null : "off" };
+  }
+  return Object.keys(update).length > 0 ? update : null;
+}
+function needsConfirm(current, next, locked = false) {
+  if (next.guard || locked) return false;
+  return current.guard || next.cigar && !current.cigar;
+}
+function cigarUnavailableReason(settings, harness, displayName) {
+  if (cigarAvailable(settings, harness)) {
+    return cigarLocked(settings) ? "Your organization manages CIGAR for each app." : void 0;
+  }
+  if (cigarSupported(harness) && !cigarReachesApp(settings, harness)) {
+    return `Guard is set up in ${displayName} through its plugin, which doesn't send Guard your prompts. Set up ${displayName} with its native hooks to use CIGAR.`;
+  }
+  if (cigarSupported(harness)) return "CIGAR is off on this machine. Set it up on the CIGAR page.";
+  return `${displayName} doesn't let Guard add context to its prompts yet.`;
+}
+function applyHarnessCigarPatch(current, patch) {
+  const next = { ...current ?? {} };
+  for (const [harness, choice] of Object.entries(patch)) {
+    if (choice === null) delete next[harness];
+    else next[harness] = choice;
+  }
+  return next;
+}
+function appModesNote(settings, harness) {
+  const modes = appModes(settings, harness);
+  const available = cigarAvailable(settings, harness);
+  if (modes.guard) return available && !modes.cigar ? "Guard only · CIGAR off for this app" : null;
+  if (modes.cigar) return "CIGAR only · Guard is not checking actions";
+  return globalPosture(settings) === "watch" && settings.harness_postures?.[harness] === void 0 ? "Watch · follows the machine setting" : "Watch · recording only";
+}
+function appModesStatusMessage(next, displayName) {
+  if (next.guard && next.cigar) return `Guard and CIGAR are on in ${displayName}.`;
+  if (next.guard) return `Guard is on in ${displayName}. CIGAR is off.`;
+  if (next.cigar) return `CIGAR is on in ${displayName}. Guard is not checking actions.`;
+  return `Guard is only recording in ${displayName}.`;
+}
+function guardOffPrompt(settings, harness, next, displayName) {
+  if (next.cigar && !appModes(settings, harness).guard) {
+    return `CIGAR will start adding project context in ${displayName}. Guard stays off and no longer turns back on by itself.`;
+  }
+  if (next.cigar) {
+    return `Guard will stop checking ${displayName}'s actions until you turn it back on. CIGAR keeps adding project context.`;
+  }
+  const ownWatch = appModesUpdate(settings, harness, next)?.harness_postures?.[harness] === "watch";
+  if (globalPosture(settings) === "watch" && !ownWatch) {
+    return `Guard will only record in ${displayName}, following this machine's Watch setting.`;
+  }
+  const revertHours = settings.watch_auto_revert_hours ?? 24;
+  if (revertHours > 0) {
+    const hours = revertHours === 1 ? "1 hour" : `${revertHours} hours`;
+    return `Guard will only record in ${displayName}. Protection comes back on its own after ${hours}.`;
+  }
+  return `Guard will only record in ${displayName} until you turn it back on.`;
 }
 function isRecord$5(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -18534,13 +18872,14 @@ function applyHarnessPosturePatch(current, patch) {
 async function updateSettings(settings) {
   if (isGuardDemoMode()) {
     const current = await fetchSettings();
-    const { harness_postures: posturePatch, ...rest } = settings;
+    const { harness_postures: posturePatch, harness_cigar: cigarPatch, harness_watch_untimed: _untimed, ...rest } = settings;
     return {
       ...current,
       settings: {
         ...current.settings,
         ...rest,
-        ...posturePatch === void 0 ? {} : { harness_postures: applyHarnessPosturePatch(current.settings.harness_postures, posturePatch) }
+        ...posturePatch === void 0 ? {} : { harness_postures: applyHarnessPosturePatch(current.settings.harness_postures, posturePatch) },
+        ...cigarPatch === void 0 ? {} : { harness_cigar: applyHarnessCigarPatch(current.settings.harness_cigar, cigarPatch) }
       }
     };
   }
@@ -19313,7 +19652,8 @@ function normalizeGuardUpdateStatus(raw, fallbackReleaseChannel = null) {
     update_suppressed: value.update_suppressed === true ? true : void 0,
     retry_command: typeof value.retry_command === "string" ? value.retry_command : void 0,
     update_attempt_message: typeof value.update_attempt_message === "string" ? value.update_attempt_message : void 0,
-    release_channel: isGuardUpdateChannel(value.release_channel) ? value.release_channel : fallbackReleaseChannel ?? "stable"
+    release_channel: isGuardUpdateChannel(value.release_channel) ? value.release_channel : fallbackReleaseChannel ?? "stable",
+    update_mode: value.update_mode === "ask" || value.update_mode === "off" ? value.update_mode : "automatic"
   };
 }
 async function fetchGuardUpdateStatus() {
@@ -19393,6 +19733,25 @@ async function requestGuardDesktopHandoff() {
     handoff_requested: payload.handoff_requested === true,
     latest_version: stringValue$1(payload.latest_version)
   };
+}
+async function setGuardUpdateMode(mode, proof) {
+  if (isGuardDemoMode()) {
+    return normalizeGuardUpdateStatus({
+      ...await fetchGuardUpdateStatus(),
+      update_mode: mode
+    });
+  }
+  const response = await fetchWithGuardAuth("/v1/settings", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ settings: { update_mode: mode }, ...proof })
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    const value = isRecord$4(payload) ? payload : {};
+    throw new Error(stringValue$1(value.message) ?? `Update preference failed with ${response.status}`);
+  }
+  return fetchGuardUpdateStatus();
 }
 async function setGuardUpdateChannel(channel, proof) {
   if (isGuardDemoMode()) {
@@ -21261,6 +21620,59 @@ function AlphaChannelDialog({
     ] })
   ] });
 }
+const MODE_COPY = {
+  automatic: "Guard checks periodically and installs Core updates in the background.",
+  ask: "Guard checks periodically and waits for you to start an available Core update.",
+  off: "Guard still shows available Core updates, but never installs them in the background."
+};
+function UpdateModeDialog({
+  mode,
+  draft,
+  pending,
+  error,
+  approvalGate,
+  approvalPassword,
+  approvalTotpCode,
+  onDraftChange,
+  onClose,
+  onConfirm,
+  onApprovalPasswordChange,
+  onApprovalTotpCodeChange
+}) {
+  const confirmDisabled = pending || draft === mode || approvalGate?.enabled === true && isApprovalProofSubmitDisabled(approvalGate, { approvalPassword, approvalTotpCode }, false);
+  const handleSubmit = (event) => {
+    event.preventDefault();
+    if (!confirmDisabled) onConfirm();
+  };
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("form", { onSubmit: handleSubmit, className: "rounded-lg bg-white shadow-xl", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start justify-between gap-4 border-b border-slate-100 px-5 py-4", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { className: "text-base font-semibold text-brand-dark", children: "Core update preferences" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-sm leading-relaxed text-brand-dark/70", children: "Choose whether Guard can install Core updates without asking." })
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: onClose, disabled: pending, "aria-label": "Close Core update preferences", className: "inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-brand-dark/55 transition-colors hover:bg-slate-100 hover:text-brand-dark disabled:cursor-not-allowed disabled:opacity-50", children: /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniXMark, { className: "h-5 w-5", "aria-hidden": "true" }) })
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-3 px-5 py-4 text-sm leading-relaxed text-brand-dark/75", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("label", { className: "block text-sm font-semibold text-brand-dark", htmlFor: "guard-update-mode", children: "Install behavior" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("select", { id: "guard-update-mode", value: draft, onChange: onDraftChange, disabled: pending, className: "w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-brand-dark", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "automatic", children: "Automatic" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "ask", children: "Ask first" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "off", children: "Off" })
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: MODE_COPY[draft] }),
+      draft !== mode ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: "Changing this preference only saves the setting. It does not install an update immediately." }) : null,
+      approvalGate?.enabled ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-lg border border-brand-blue/20 bg-brand-blue/[0.04] p-3", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mb-3 text-sm font-semibold text-brand-dark", children: "Confirm this preference change" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(ApprovalProofFieldInputs, { approvalGate, approvalPassword, approvalTotpCode, onApprovalPasswordChange, onApprovalTotpCodeChange })
+      ] }) : null,
+      error ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "rounded-md bg-red-50 px-3 py-2 text-sm text-red-700", children: error }) : null
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col-reverse gap-2 border-t border-slate-100 px-5 py-4 sm:flex-row sm:justify-end", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: onClose, disabled: pending, className: "min-h-10 rounded-lg border border-slate-200 px-4 py-2 text-sm font-semibold text-brand-dark transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50", children: "Cancel" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "submit", disabled: confirmDisabled, className: "min-h-10 rounded-lg bg-brand-blue px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-brand-blue/90 disabled:cursor-not-allowed disabled:opacity-60", children: pending ? "Saving…" : "Save preference" })
+    ] })
+  ] });
+}
 let embeddedLatch = false;
 let memoForHref = null;
 let memoResult = false;
@@ -21586,137 +21998,6 @@ function GuardUpdateChannelSummary(props) {
 const UPDATE_STATUS_POLL_MS = 6e4;
 const RECONNECT_POLL_MS = 1500;
 const RECONNECT_TIMEOUT_MS = 18e4;
-function GuardUpdatePanel(props) {
-  const version2 = props.guardVersion ?? props.updateStatus?.current_version ?? null;
-  const phase = props.updatePhase ?? "idle";
-  const embeddedInDesktop = dashboardEmbedsInDesktop();
-  const helpCopy = updateHelpCopy(props.updateStatus, phase, props.updateError, embeddedInDesktop);
-  const showUpdateButton = !embeddedInDesktop && props.updateStatus?.update_available === true && props.updateStatus.auto_updatable && props.updateStatus.update_suppressed !== true && phase !== "updating" && phase !== "reconnecting";
-  const showReinstallButton = !embeddedInDesktop && shouldPromptRecoveryReinstall(props.updateStatus) && phase !== "updating" && phase !== "reconnecting";
-  const busy = phase === "updating" || phase === "reconnecting";
-  const useAlpha = props.updateStatus?.release_channel === "alpha" || props.updateStatus == null && readRememberedGuardUpdateChannel() === "alpha";
-  const [alphaModalOpen, setAlphaModalOpen] = reactExports.useState(false);
-  const [alphaSavePending, setAlphaSavePending] = reactExports.useState(false);
-  const [alphaSaveError, setAlphaSaveError] = reactExports.useState(null);
-  const [alphaApprovalPassword, setAlphaApprovalPassword] = reactExports.useState("");
-  const [alphaApprovalTotpCode, setAlphaApprovalTotpCode] = reactExports.useState("");
-  const targetChannel = useAlpha ? "stable" : "alpha";
-  const modalTitle = useAlpha ? "Return to stable updates" : "Try alpha updates";
-  const handleOpenAlphaModal = reactExports.useCallback(() => {
-    setAlphaSaveError(null);
-    setAlphaApprovalPassword("");
-    setAlphaApprovalTotpCode("");
-    setAlphaModalOpen(true);
-  }, []);
-  const handleCloseAlphaModal = reactExports.useCallback(() => {
-    if (alphaSavePending) {
-      return;
-    }
-    setAlphaModalOpen(false);
-    setAlphaSaveError(null);
-    setAlphaApprovalPassword("");
-    setAlphaApprovalTotpCode("");
-  }, [alphaSavePending]);
-  const handleConfirmAlphaChannel = reactExports.useCallback(async () => {
-    if (!props.onSetUpdateChannel) {
-      return;
-    }
-    setAlphaSavePending(true);
-    setAlphaSaveError(null);
-    try {
-      const proof = props.approvalGate?.enabled ? buildApprovalProofCredentials(props.approvalGate, {
-        approvalPassword: alphaApprovalPassword,
-        approvalTotpCode: alphaApprovalTotpCode
-      }) : void 0;
-      await props.onSetUpdateChannel(targetChannel, proof);
-      setAlphaModalOpen(false);
-    } catch (error) {
-      setAlphaSaveError(error instanceof Error ? error.message : "Guard could not change the update channel. Try again.");
-    } finally {
-      setAlphaSavePending(false);
-    }
-  }, [alphaApprovalPassword, alphaApprovalTotpCode, props.approvalGate, props.onSetUpdateChannel, targetChannel]);
-  const handleApprovalPasswordChange = reactExports.useCallback((event) => {
-    setAlphaApprovalPassword(event.target.value);
-  }, []);
-  const handleApprovalTotpCodeChange = reactExports.useCallback((event) => {
-    setAlphaApprovalTotpCode(event.target.value);
-  }, []);
-  let updateChannelSummary = null;
-  if (props.onSetUpdateChannel) {
-    updateChannelSummary = /* @__PURE__ */ jsxRuntimeExports.jsx(
-      GuardUpdateChannelSummary,
-      {
-        version: version2,
-        useAlpha,
-        busy,
-        onManage: handleOpenAlphaModal
-      }
-    );
-  } else if (version2) {
-    updateChannelSummary = /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "font-mono text-[10px] text-brand-dark/70", "aria-label": `Guard version ${version2}`, children: [
-      "v",
-      version2
-    ] });
-  }
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs(
-    "div",
-    {
-      className: props.compact ? "space-y-1 border-t border-brand-blue/10 pt-1.5" : "space-y-1.5 border-t border-brand-blue/10 pt-2",
-      children: [
-        updateChannelSummary,
-        props.updateStatus?.update_available ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center justify-between gap-2", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "min-w-0 text-[11px] leading-4 text-brand-dark/75 [overflow-wrap:anywhere]", children: updateStatusLabel(props.updateStatus) }),
-          showUpdateButton && props.onUpdateGuard ? /* @__PURE__ */ jsxRuntimeExports.jsxs(
-            "button",
-            {
-              type: "button",
-              onClick: props.onUpdateGuard,
-              "aria-label": "Update Guard to the latest version",
-              className: GUARD_UPDATE_ACTION_BUTTON_CLASS,
-              children: [
-                /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniArrowPath, { className: "h-3 w-3 shrink-0", "aria-hidden": "true" }),
-                /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: GUARD_UPDATE_CONTROL_TEXT_CLASS, children: "Update" })
-              ]
-            }
-          ) : null
-        ] }) : null,
-        helpCopy ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-[10px] leading-4 text-brand-dark/70", children: helpCopy }) : null,
-        showReinstallButton && props.onReinstallGuard ? /* @__PURE__ */ jsxRuntimeExports.jsxs(
-          "button",
-          {
-            type: "button",
-            onClick: props.onReinstallGuard,
-            className: GUARD_UPDATE_ACTION_BUTTON_CLASS,
-            children: [
-              /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniArrowPath, { className: "h-3 w-3 shrink-0", "aria-hidden": "true" }),
-              /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: GUARD_UPDATE_CONTROL_TEXT_CLASS, children: "Reinstall from PyPI" })
-            ]
-          }
-        ) : null,
-        busy && /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "inline-flex items-center gap-1.5 text-[11px] font-medium leading-4 text-brand-blue", role: "status", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniArrowPath, { className: "h-3 w-3 animate-spin", "aria-hidden": "true" }),
-          phase === "updating" ? "Updating Guard…" : "Reconnecting…"
-        ] }),
-        alphaModalOpen ? /* @__PURE__ */ jsxRuntimeExports.jsx(GuardModalLayer, { ariaLabel: modalTitle, onClose: handleCloseAlphaModal, panelClassName: "w-full max-w-md", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
-          AlphaChannelDialog,
-          {
-            useAlpha,
-            pending: alphaSavePending,
-            error: alphaSaveError,
-            approvalGate: props.approvalGate ?? null,
-            approvalPassword: alphaApprovalPassword,
-            approvalTotpCode: alphaApprovalTotpCode,
-            onClose: handleCloseAlphaModal,
-            onConfirm: handleConfirmAlphaChannel,
-            onApprovalPasswordChange: handleApprovalPasswordChange,
-            onApprovalTotpCodeChange: handleApprovalTotpCodeChange
-          }
-        ) }) : null
-      ]
-    }
-  );
-}
 function useGuardUpdate(options) {
   const enabled = options?.enabled !== false;
   const [updateStatus, setUpdateStatus] = reactExports.useState(null);
@@ -21727,6 +22008,8 @@ function useGuardUpdate(options) {
   const updateStatusEpoch = reactExports.useRef(0);
   const channelMutationId = reactExports.useRef(0);
   const channelMutationPending = reactExports.useRef(false);
+  const modeMutationId = reactExports.useRef(0);
+  const modeMutationPending = reactExports.useRef(false);
   const isMounted = reactExports.useRef(false);
   reactExports.useEffect(() => {
     updatePhaseRef.current = updatePhase;
@@ -21738,14 +22021,14 @@ function useGuardUpdate(options) {
     };
   }, []);
   const refreshUpdateStatus = reactExports.useCallback(async () => {
-    if (!enabled || !isMounted.current || channelMutationPending.current) {
+    if (!enabled || !isMounted.current || channelMutationPending.current || modeMutationPending.current) {
       return;
     }
     const epoch = updateStatusEpoch.current;
     const mutationId = channelMutationId.current;
     try {
       const status = await fetchGuardUpdateStatus();
-      if (!isMounted.current || epoch !== updateStatusEpoch.current || mutationId !== channelMutationId.current || channelMutationPending.current) {
+      if (!isMounted.current || epoch !== updateStatusEpoch.current || mutationId !== channelMutationId.current || channelMutationPending.current || modeMutationPending.current) {
         return;
       }
       setUpdateStatus(status);
@@ -21767,7 +22050,7 @@ function useGuardUpdate(options) {
     const epoch = updateStatusEpoch.current;
     const mutationId = channelMutationId.current;
     void fetchGuardUpdateStatus().then((status) => {
-      if (cancelled || epoch !== updateStatusEpoch.current || mutationId !== channelMutationId.current || channelMutationPending.current) {
+      if (cancelled || epoch !== updateStatusEpoch.current || mutationId !== channelMutationId.current || channelMutationPending.current || modeMutationPending.current) {
         return;
       }
       setUpdateStatus(status);
@@ -21908,6 +22191,21 @@ function useGuardUpdate(options) {
       }
     }
   }, []);
+  const onSetUpdateMode = reactExports.useCallback(async (mode, proof) => {
+    const mutationId = ++modeMutationId.current;
+    updateStatusEpoch.current += 1;
+    modeMutationPending.current = true;
+    try {
+      const status = await setGuardUpdateMode(mode, proof);
+      if (mutationId === modeMutationId.current) {
+        updateStatusEpoch.current += 1;
+        setUpdateStatus(status);
+        if (updatePhaseRef.current === "checking" || updatePhaseRef.current === "idle") setUpdatePhase("idle");
+      }
+    } finally {
+      if (mutationId === modeMutationId.current) modeMutationPending.current = false;
+    }
+  }, []);
   return {
     guardVersion: updateStatus?.current_version ?? null,
     updateStatus,
@@ -21916,8 +22214,199 @@ function useGuardUpdate(options) {
     onUpdateGuard,
     onReinstallGuard,
     onSetUpdateChannel,
+    onSetUpdateMode,
     refreshUpdateStatus
   };
+}
+function GuardUpdatePanel(props) {
+  const version2 = props.guardVersion ?? props.updateStatus?.current_version ?? null;
+  const phase = props.updatePhase ?? "idle";
+  const embeddedInDesktop = dashboardEmbedsInDesktop();
+  const helpCopy = updateHelpCopy(props.updateStatus, phase, props.updateError, embeddedInDesktop);
+  const showUpdateButton = !embeddedInDesktop && props.updateStatus?.update_available === true && props.updateStatus.auto_updatable && props.updateStatus.update_suppressed !== true && phase !== "updating" && phase !== "reconnecting";
+  const showReinstallButton = !embeddedInDesktop && shouldPromptRecoveryReinstall(props.updateStatus) && phase !== "updating" && phase !== "reconnecting";
+  const busy = phase === "updating" || phase === "reconnecting";
+  const useAlpha = props.updateStatus?.release_channel === "alpha" || props.updateStatus == null && readRememberedGuardUpdateChannel() === "alpha";
+  const [alphaModalOpen, setAlphaModalOpen] = reactExports.useState(false);
+  const [alphaSavePending, setAlphaSavePending] = reactExports.useState(false);
+  const [alphaSaveError, setAlphaSaveError] = reactExports.useState(null);
+  const [alphaApprovalPassword, setAlphaApprovalPassword] = reactExports.useState("");
+  const [alphaApprovalTotpCode, setAlphaApprovalTotpCode] = reactExports.useState("");
+  const [updateModeModalOpen, setUpdateModeModalOpen] = reactExports.useState(false);
+  const [updateModeDraft, setUpdateModeDraft] = reactExports.useState(props.updateStatus?.update_mode ?? "automatic");
+  const [updateModeSavePending, setUpdateModeSavePending] = reactExports.useState(false);
+  const [updateModeSaveError, setUpdateModeSaveError] = reactExports.useState(null);
+  const [updateModeApprovalPassword, setUpdateModeApprovalPassword] = reactExports.useState("");
+  const [updateModeApprovalTotpCode, setUpdateModeApprovalTotpCode] = reactExports.useState("");
+  const targetChannel = useAlpha ? "stable" : "alpha";
+  const modalTitle = useAlpha ? "Return to stable updates" : "Try alpha updates";
+  const handleOpenAlphaModal = reactExports.useCallback(() => {
+    setAlphaSaveError(null);
+    setAlphaApprovalPassword("");
+    setAlphaApprovalTotpCode("");
+    setAlphaModalOpen(true);
+  }, []);
+  const handleCloseAlphaModal = reactExports.useCallback(() => {
+    if (alphaSavePending) {
+      return;
+    }
+    setAlphaModalOpen(false);
+    setAlphaSaveError(null);
+    setAlphaApprovalPassword("");
+    setAlphaApprovalTotpCode("");
+  }, [alphaSavePending]);
+  const handleConfirmAlphaChannel = reactExports.useCallback(async () => {
+    if (!props.onSetUpdateChannel) {
+      return;
+    }
+    setAlphaSavePending(true);
+    setAlphaSaveError(null);
+    try {
+      const proof = props.approvalGate?.enabled ? buildApprovalProofCredentials(props.approvalGate, {
+        approvalPassword: alphaApprovalPassword,
+        approvalTotpCode: alphaApprovalTotpCode
+      }) : void 0;
+      await props.onSetUpdateChannel(targetChannel, proof);
+      setAlphaModalOpen(false);
+    } catch (error) {
+      setAlphaSaveError(error instanceof Error ? error.message : "Guard could not change the update channel. Try again.");
+    } finally {
+      setAlphaSavePending(false);
+    }
+  }, [alphaApprovalPassword, alphaApprovalTotpCode, props.approvalGate, props.onSetUpdateChannel, targetChannel]);
+  const handleApprovalPasswordChange = reactExports.useCallback((event) => {
+    setAlphaApprovalPassword(event.target.value);
+  }, []);
+  const handleApprovalTotpCodeChange = reactExports.useCallback((event) => {
+    setAlphaApprovalTotpCode(event.target.value);
+  }, []);
+  const handleOpenUpdateModeModal = reactExports.useCallback(() => {
+    setUpdateModeDraft(props.updateStatus?.update_mode ?? "automatic");
+    setUpdateModeSaveError(null);
+    setUpdateModeApprovalPassword("");
+    setUpdateModeApprovalTotpCode("");
+    setUpdateModeModalOpen(true);
+  }, [props.updateStatus?.update_mode]);
+  const handleCloseUpdateModeModal = reactExports.useCallback(() => {
+    if (updateModeSavePending) return;
+    setUpdateModeModalOpen(false);
+    setUpdateModeSaveError(null);
+  }, [updateModeSavePending]);
+  const handleConfirmUpdateMode = reactExports.useCallback(async () => {
+    if (!props.onSetUpdateMode) return;
+    setUpdateModeSavePending(true);
+    setUpdateModeSaveError(null);
+    try {
+      const proof = props.approvalGate?.enabled ? buildApprovalProofCredentials(props.approvalGate, {
+        approvalPassword: updateModeApprovalPassword,
+        approvalTotpCode: updateModeApprovalTotpCode
+      }) : void 0;
+      await props.onSetUpdateMode(updateModeDraft, proof);
+      setUpdateModeModalOpen(false);
+    } catch (error) {
+      setUpdateModeSaveError(error instanceof Error ? error.message : "Guard could not save the update preference. Try again.");
+    } finally {
+      setUpdateModeSavePending(false);
+    }
+  }, [props.approvalGate, props.onSetUpdateMode, updateModeApprovalPassword, updateModeApprovalTotpCode, updateModeDraft]);
+  let updateChannelSummary = null;
+  if (props.onSetUpdateChannel) {
+    updateChannelSummary = /* @__PURE__ */ jsxRuntimeExports.jsx(
+      GuardUpdateChannelSummary,
+      {
+        version: version2,
+        useAlpha,
+        busy,
+        onManage: handleOpenAlphaModal
+      }
+    );
+  } else if (version2) {
+    updateChannelSummary = /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "font-mono text-[10px] text-brand-dark/70", "aria-label": `Guard version ${version2}`, children: [
+      "v",
+      version2
+    ] });
+  }
+  let updateModeLabel = "Automatic Core updates on";
+  if (props.updateStatus?.update_mode === "ask") {
+    updateModeLabel = "Ask before installing";
+  } else if (props.updateStatus?.update_mode === "off") {
+    updateModeLabel = "Automatic Core updates off";
+  }
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs(
+    "div",
+    {
+      className: props.compact ? "space-y-1 border-t border-brand-blue/10 pt-1.5" : "space-y-1.5 border-t border-brand-blue/10 pt-2",
+      children: [
+        updateChannelSummary,
+        props.onSetUpdateMode ? /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: handleOpenUpdateModeModal, disabled: busy, className: "text-[11px] font-medium text-brand-blue hover:underline", "aria-label": "Manage Core update preferences", children: updateModeLabel }) : null,
+        props.updateStatus?.update_available ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center justify-between gap-2", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "min-w-0 text-[11px] leading-4 text-brand-dark/75 [overflow-wrap:anywhere]", children: updateStatusLabel(props.updateStatus) }),
+          showUpdateButton && props.onUpdateGuard ? /* @__PURE__ */ jsxRuntimeExports.jsxs(
+            "button",
+            {
+              type: "button",
+              onClick: props.onUpdateGuard,
+              "aria-label": "Update Guard to the latest version",
+              className: GUARD_UPDATE_ACTION_BUTTON_CLASS,
+              children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniArrowPath, { className: "h-3 w-3 shrink-0", "aria-hidden": "true" }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: GUARD_UPDATE_CONTROL_TEXT_CLASS, children: "Update" })
+              ]
+            }
+          ) : null
+        ] }) : null,
+        helpCopy ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-[10px] leading-4 text-brand-dark/70", children: helpCopy }) : null,
+        showReinstallButton && props.onReinstallGuard ? /* @__PURE__ */ jsxRuntimeExports.jsxs(
+          "button",
+          {
+            type: "button",
+            onClick: props.onReinstallGuard,
+            className: GUARD_UPDATE_ACTION_BUTTON_CLASS,
+            children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniArrowPath, { className: "h-3 w-3 shrink-0", "aria-hidden": "true" }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: GUARD_UPDATE_CONTROL_TEXT_CLASS, children: "Reinstall from PyPI" })
+            ]
+          }
+        ) : null,
+        busy && /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "inline-flex items-center gap-1.5 text-[11px] font-medium leading-4 text-brand-blue", role: "status", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniArrowPath, { className: "h-3 w-3 animate-spin", "aria-hidden": "true" }),
+          phase === "updating" ? "Updating Guard…" : "Reconnecting…"
+        ] }),
+        alphaModalOpen ? /* @__PURE__ */ jsxRuntimeExports.jsx(GuardModalLayer, { ariaLabel: modalTitle, onClose: handleCloseAlphaModal, panelClassName: "w-full max-w-md", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
+          AlphaChannelDialog,
+          {
+            useAlpha,
+            pending: alphaSavePending,
+            error: alphaSaveError,
+            approvalGate: props.approvalGate ?? null,
+            approvalPassword: alphaApprovalPassword,
+            approvalTotpCode: alphaApprovalTotpCode,
+            onClose: handleCloseAlphaModal,
+            onConfirm: handleConfirmAlphaChannel,
+            onApprovalPasswordChange: handleApprovalPasswordChange,
+            onApprovalTotpCodeChange: handleApprovalTotpCodeChange
+          }
+        ) }) : null,
+        updateModeModalOpen ? /* @__PURE__ */ jsxRuntimeExports.jsx(GuardModalLayer, { ariaLabel: "Core update preferences", onClose: handleCloseUpdateModeModal, panelClassName: "w-full max-w-md", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
+          UpdateModeDialog,
+          {
+            mode: props.updateStatus?.update_mode ?? "automatic",
+            draft: updateModeDraft,
+            pending: updateModeSavePending,
+            error: updateModeSaveError,
+            approvalGate: props.approvalGate ?? null,
+            approvalPassword: updateModeApprovalPassword,
+            approvalTotpCode: updateModeApprovalTotpCode,
+            onDraftChange: (event) => setUpdateModeDraft(event.target.value),
+            onClose: handleCloseUpdateModeModal,
+            onConfirm: handleConfirmUpdateMode,
+            onApprovalPasswordChange: (event) => setUpdateModeApprovalPassword(event.target.value),
+            onApprovalTotpCodeChange: (event) => setUpdateModeApprovalTotpCode(event.target.value)
+          }
+        ) }) : null
+      ]
+    }
+  );
 }
 const SHELL_NAV_ITEMS = [
   {
@@ -22316,6 +22805,7 @@ function NavigationDrawer(props) {
                       onUpdateGuard: props.onUpdateGuard,
                       onReinstallGuard: props.onReinstallGuard,
                       onSetUpdateChannel: props.onSetUpdateChannel,
+                      onSetUpdateMode: props.onSetUpdateMode,
                       approvalGate: props.approvalGate
                     }
                   )
@@ -22529,6 +23019,7 @@ function PersistentSidebar(props) {
                   onUpdateGuard: props.onUpdateGuard,
                   onReinstallGuard: props.onReinstallGuard,
                   onSetUpdateChannel: props.onSetUpdateChannel,
+                  onSetUpdateMode: props.onSetUpdateMode,
                   approvalGate: props.approvalGate
                 }
               )
@@ -23880,41 +24371,41 @@ function store() {
     return null;
   }
 }
-function rememberTurnOn(now2, storage = store()) {
+function rememberTurnOn(now2, storage2 = store()) {
   try {
-    storage?.setItem(KEY, String(now2));
+    storage2?.setItem(KEY, String(now2));
   } catch {
   }
 }
-function rememberTurnOnJob(jobId, storage = store()) {
+function rememberTurnOnJob(jobId, storage2 = store()) {
   try {
-    storage?.setItem(JOB_KEY, jobId);
+    storage2?.setItem(JOB_KEY, jobId);
   } catch {
   }
 }
-function forgetTurnOnClick(storage = store()) {
+function forgetTurnOnClick(storage2 = store()) {
   try {
-    storage?.removeItem(KEY);
+    storage2?.removeItem(KEY);
   } catch {
   }
 }
-function forgetTurnOn(storage = store()) {
+function forgetTurnOn(storage2 = store()) {
   try {
-    storage?.removeItem(KEY);
-    storage?.removeItem(JOB_KEY);
+    storage2?.removeItem(KEY);
+    storage2?.removeItem(JOB_KEY);
   } catch {
   }
 }
-function turnOnJob(storage = store()) {
+function turnOnJob(storage2 = store()) {
   try {
-    return storage?.getItem(JOB_KEY) || null;
+    return storage2?.getItem(JOB_KEY) || null;
   } catch {
     return null;
   }
 }
-function turnOnRequestedAt(storage = store()) {
+function turnOnRequestedAt(storage2 = store()) {
   try {
-    const value = Number(storage?.getItem(KEY) ?? NaN);
+    const value = Number(storage2?.getItem(KEY) ?? NaN);
     return Number.isFinite(value) ? value : null;
   } catch {
     return null;
@@ -23969,8 +24460,8 @@ const revision = (value) => typeof value === "string" && /^[1-9][0-9]{0,19}$/.te
 const version$1 = (value) => Array.isArray(value) && value.length === 3 && value.every((part) => Number.isSafeInteger(part) && part >= 0 && part <= 65535);
 function config(value) {
   if (!record$5(value) || value.schema_version !== 1 || typeof value.enabled !== "boolean" || !text$3(value.runtime_id, 128) || !["low_memory", "balanced", "custom"].includes(String(value.resource_profile)) || !record$5(value.features) || !record$5(value.sources) || !record$5(value.storage) || !record$5(value.limits)) return false;
-  const { features, sources, storage, limits } = value;
-  return ["review_briefs", "agent_context", "shared_agents"].every((key) => typeof features[key] === "boolean") && (features.execution_context === void 0 || typeof features.execution_context === "boolean") && ["native_policy_facts", "sanitized_receipt_facts", "workspace_documents"].every((key) => typeof sources[key] === "boolean") && text$3(sources.source_set_id, 128) && (storage.mode === "memory" || storage.mode === "sqlite") && Number.isSafeInteger(storage.retention_hours) && ["context_tokens", "reserve_tokens", "max_active_workspaces", "idle_shutdown_seconds"].every((key) => Number.isSafeInteger(limits[key]));
+  const { features, sources, storage: storage2, limits } = value;
+  return ["review_briefs", "agent_context", "shared_agents"].every((key) => typeof features[key] === "boolean") && (features.execution_context === void 0 || typeof features.execution_context === "boolean") && ["native_policy_facts", "sanitized_receipt_facts", "workspace_documents"].every((key) => typeof sources[key] === "boolean") && text$3(sources.source_set_id, 128) && (storage2.mode === "memory" || storage2.mode === "sqlite") && Number.isSafeInteger(storage2.retention_hours) && ["context_tokens", "reserve_tokens", "max_active_workspaces", "idle_shutdown_seconds"].every((key) => Number.isSafeInteger(limits[key]));
 }
 function runtime(value) {
   if (!record$5(value) || value.schema !== "guard-cigar-runtime-status.v1" || !record$5(value.interpreter)) return false;
@@ -31270,14 +31761,16 @@ function approvalProofModalTitle(locked, recentlySatisfied, needsPassword) {
 function ApprovalPasswordModal(props) {
   const passwordRef = reactExports.useRef(null);
   const [now2, setNow] = reactExports.useState(() => Date.now());
-  const recentlySatisfied = approvalProofRecentlySatisfied(props.gate);
+  const requireFreshTotp = props.requireFreshTotp === true;
+  const recentlySatisfied = !requireFreshTotp && approvalProofRecentlySatisfied(props.gate);
   const needsPassword = approvalProofRequiresPassword(props.gate);
   const lockRemainingSeconds = approvalGateLockRemainingSeconds(props.gate, now2);
   const gateLocked = lockRemainingSeconds > 0;
   const submitDisabled = isApprovalProofSubmitDisabled(
     props.gate,
     { approvalPassword: props.approvalPassword, approvalTotpCode: props.approvalTotpCode },
-    props.busy === true
+    props.busy === true,
+    requireFreshTotp
   );
   reactExports.useEffect(() => {
     if (!gateLocked) return void 0;
@@ -31343,6 +31836,7 @@ function ApprovalPasswordModal(props) {
               approvalPassword: props.approvalPassword,
               approvalTotpCode: props.approvalTotpCode,
               passwordRef,
+              requireFreshTotp,
               onApprovalPasswordChange: props.onApprovalPasswordChange,
               onApprovalTotpCodeChange: props.onApprovalTotpCodeChange
             }
@@ -31880,7 +32374,7 @@ function ExactActionPersistenceChoice(props) {
           }
         ),
         /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "block text-sm font-semibold text-brand-dark", children: props.versionBoundScript ? "Run once" : "This time" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "mt-0.5 block text-xs text-muted-foreground", children: `Retry within ${props.retryWindowMinutes} minutes.` })
+        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "mt-0.5 block text-xs text-muted-foreground", children: `Retry within ${retryWindowText(props.retryWindowMinutes)}.` })
       ] }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: exactActionChoiceClassName(props.checked), children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx(
@@ -33831,7 +34325,10 @@ function resolvedStateForItem(state, item) {
 function approvalGateRefreshNeeded(err) {
   if (!(err instanceof GuardRequestResolutionError)) return false;
   const code = err.payload?.["error"];
-  return err.status === 423 && code === "approval_gate_locked" || code === "approval_gate_totp_required";
+  return err.status === 423 && code === "approval_gate_locked" || approvalGateDemandedCode(err);
+}
+function approvalGateDemandedCode(err) {
+  return err instanceof GuardRequestResolutionError && err.payload?.["error"] === "approval_gate_totp_required";
 }
 function useShownRequestCheck(requestId) {
   const shown = reactExports.useRef(requestId);
@@ -33903,6 +34400,7 @@ function useReviewDecisionResolve(params) {
   const [pendingContractKey, setPendingContractKey] = reactExports.useState(null);
   const [preflighting, setPreflighting] = reactExports.useState(false);
   const [effectiveApprovalGate, setEffectiveApprovalGate] = reactExports.useState(params.approvalGate);
+  const [freshCodeRequired, setFreshCodeRequired] = reactExports.useState(false);
   const approvalGate = effectiveApprovalGate;
   const useCooldown = defaultUseApprovalCooldown(approvalGate) && !cooldownOptOut;
   const decisionBusy = submitting !== null || preflighting;
@@ -33921,6 +34419,7 @@ function useReviewDecisionResolve(params) {
     setCooldownOptOut(false);
     setPendingAction(null);
     setPendingContractKey(null);
+    setFreshCodeRequired(false);
   }, [decisionSubjectKey]);
   const handleResolve = reactExports.useCallback(
     async (action, gateOverride) => {
@@ -33948,12 +34447,12 @@ function useReviewDecisionResolve(params) {
           requestedScope,
           action === "allow" ? rememberExactAction : watchOnlyObservation
         );
-        const includeGateFields = gateRequired && gate?.configured === true && requiresApprovalPasswordPrompt(
+        const includeGateFields = gateRequired && gate?.configured === true && (freshCodeRequired || requiresApprovalPasswordPrompt(
           gate.cooldown_active,
           gate.strict_all_decisions,
           requestedScope
-        );
-        const proof = includeGateFields ? buildApprovalProofCredentials(gate, { approvalPassword, approvalTotpCode }) : {};
+        ));
+        const proof = includeGateFields ? buildApprovalProofCredentials(gate, { approvalPassword, approvalTotpCode }, freshCodeRequired) : {};
         await onResolve({
           ...buildDecisionPayload({
             item,
@@ -33974,6 +34473,7 @@ function useReviewDecisionResolve(params) {
         setCooldownOptOut(false);
         setPendingAction(null);
         setPendingContractKey(null);
+        setFreshCodeRequired(false);
         if (gateRequired && (gate?.cooldown_seconds ?? 0) > 0) {
           void fetchResolvedApprovalGate().then((refreshed) => {
             if (isStillShown(requestId)) setEffectiveApprovalGate(refreshed);
@@ -33984,6 +34484,7 @@ function useReviewDecisionResolve(params) {
         if (!isStillShown(requestId)) return;
         const message = err instanceof Error ? err.message : "Something went wrong. Try again.";
         setErrorMessage(message);
+        if (approvalGateDemandedCode(err)) setFreshCodeRequired(true);
         if (approvalGateRefreshNeeded(err)) {
           setSubmitting(null);
           try {
@@ -34009,6 +34510,7 @@ function useReviewDecisionResolve(params) {
       approvalPassword,
       approvalTotpCode,
       cooldownOptOut,
+      freshCodeRequired,
       resolutionBlockReason,
       canSubmitAllow,
       hasAllowScope
@@ -34061,17 +34563,17 @@ function useReviewDecisionResolve(params) {
             );
             return;
           }
-          const gateEnabled = approvalGateRequiredForResolution(current, action, requestedScope) && current?.configured === true && requiresApprovalPasswordPrompt(
+          const gateEnabled = approvalGateRequiredForResolution(current, action, requestedScope) && current?.configured === true && (freshCodeRequired || requiresApprovalPasswordPrompt(
             current.cooldown_active,
             current.strict_all_decisions,
             requestedScope
-          );
+          ));
           if (!gateEnabled) {
             void handleResolve(action, current);
             return;
           }
           setErrorMessage(null);
-          if (!approvalProofRecentlySatisfied(current)) {
+          if (freshCodeRequired || !approvalProofRecentlySatisfied(current)) {
             setPendingAction(action);
             setPendingContractKey(decisionContractKey);
             return;
@@ -34096,6 +34598,7 @@ function useReviewDecisionResolve(params) {
       blockScopeOptions.length,
       decisionBusy,
       decisionContractKey,
+      freshCodeRequired,
       handleResolve,
       hasAllowScope,
       canSubmitAllow,
@@ -34183,6 +34686,7 @@ function useReviewDecisionResolve(params) {
     approvalPassword,
     approvalTotpCode,
     errorMessage,
+    freshCodeRequired,
     handleAllow,
     handleApprovalPasswordChange,
     handleApprovalTotpCodeChange,
@@ -34437,6 +34941,7 @@ function ReviewDecisionCard(props) {
     approvalPassword,
     approvalTotpCode,
     errorMessage,
+    freshCodeRequired,
     handleAllow,
     handleApprovalPasswordChange,
     handleApprovalTotpCodeChange,
@@ -34732,6 +35237,7 @@ function ReviewDecisionCard(props) {
         onUseCooldownChange: handleUseCooldownChange,
         onSubmit: handleModalSubmit,
         busy: submitting !== null,
+        requireFreshTotp: freshCodeRequired,
         onCancel: handleModalCancel,
         submitLabel: pendingAction === "allow" ? resolvedAllowButtonLabel : resolvedBlockButtonLabel
       }
@@ -37488,6 +37994,9 @@ const QUEUE_CONNECTION_ERROR_INSTRUCTION = "Start Guard on this machine, then re
 const QUEUE_SESSION_ERROR_HEADLINE = "This approval link needs a signed local session";
 const QUEUE_SESSION_ERROR_DETAIL = "Guard is still running on this device. This browser is not signed in to the local dashboard.";
 const QUEUE_SESSION_ERROR_INSTRUCTION = "Use the signed link from the paused tool, or open Inbox from Guard on this device.";
+const QUEUE_DESKTOP_HANDOFF_HEADLINE = "Opened this request in HOL Guard Desktop";
+const QUEUE_DESKTOP_HANDOFF_DETAIL = "Approve it or keep it blocked in HOL Guard Desktop. This browser tab is not signed in to the local dashboard, so it cannot decide the request.";
+const QUEUE_DESKTOP_HANDOFF_INSTRUCTION = "If HOL Guard Desktop did not open, open the request again below.";
 const QUEUE_SESSION_COMMAND_INSTRUCTION = "Or run this in your own terminal. It opens the request signed in, in HOL Guard Desktop when you use it.";
 const REQUEST_ID = /^[0-9a-f]{32}$/;
 function desktopRequestUrl(requestId) {
@@ -37506,11 +38015,115 @@ function queueErrorIsUnauthorizedSession(message) {
   }
   return /request failed with 401(?:\D|$)/.test(lower);
 }
+const DESKTOP_REQUESTS_META = "guard-desktop-requests";
+const HANDOFF_KEY_PREFIX = "guard-desktop-handoff:";
+const EMBEDDED_KEY = "guard-desktop-embedded";
+const REQUEST_PATH = /^\/requests\/([0-9a-f]{32})\/?$/;
+function requestPageId(pathname) {
+  return REQUEST_PATH.exec(pathname)?.[1] ?? null;
+}
+function desktopHandoffTarget(page) {
+  if (!page.desktopOpensRequests || page.embedded) {
+    return null;
+  }
+  const requestId = requestPageId(page.pathname);
+  if (requestId === null || page.alreadyHandedOff(requestId)) {
+    return null;
+  }
+  return desktopRequestUrl(requestId);
+}
+function pageDesktopOpensRequests() {
+  try {
+    const meta = document.querySelector(`meta[name="${DESKTOP_REQUESTS_META}"]`);
+    return meta?.getAttribute("content") === "1";
+  } catch {
+    return false;
+  }
+}
+function storage() {
+  try {
+    return window.sessionStorage;
+  } catch {
+    return null;
+  }
+}
+function readTabFlag(store2, key) {
+  try {
+    return store2?.getItem(key) === "1";
+  } catch {
+    return false;
+  }
+}
+function writeTabFlag(store2, key) {
+  if (store2 === null) {
+    return false;
+  }
+  try {
+    store2.setItem(key, "1");
+    return true;
+  } catch {
+    return false;
+  }
+}
+function clearTabFlag(store2, key) {
+  try {
+    store2?.removeItem(key);
+  } catch {
+  }
+}
+function tabIsEmbedded() {
+  const store2 = storage();
+  let embedded = false;
+  try {
+    embedded = dashboardEmbedsInDesktop();
+  } catch {
+    embedded = false;
+  }
+  if (embedded) {
+    writeTabFlag(store2, EMBEDDED_KEY);
+    return true;
+  }
+  return readTabFlag(store2, EMBEDDED_KEY);
+}
+function requestHandedOffToDesktop(requestId) {
+  if (!requestId) {
+    return false;
+  }
+  return readTabFlag(storage(), HANDOFF_KEY_PREFIX + requestId);
+}
+function handOffRequestPageToDesktop() {
+  let pathname;
+  try {
+    pathname = window.location.pathname;
+  } catch {
+    return;
+  }
+  const target2 = desktopHandoffTarget({
+    pathname,
+    desktopOpensRequests: pageDesktopOpensRequests(),
+    embedded: tabIsEmbedded(),
+    alreadyHandedOff: requestHandedOffToDesktop
+  });
+  const requestId = requestPageId(pathname);
+  const store2 = storage();
+  if (target2 === null || requestId === null) {
+    return;
+  }
+  if (!writeTabFlag(store2, HANDOFF_KEY_PREFIX + requestId)) {
+    return;
+  }
+  try {
+    window.location.assign(target2);
+  } catch {
+    clearTabFlag(store2, HANDOFF_KEY_PREFIX + requestId);
+  }
+}
 function QueueConnectionError(props) {
   const [repairing, setRepairing] = reactExports.useState(false);
   const sessionMissing = queueErrorIsUnauthorizedSession(props.message);
   const desktopUrl = sessionMissing ? desktopRequestUrl(props.requestId ?? null) : null;
   const openCommand = sessionMissing ? approvalsOpenCommand(props.requestId ?? null) : null;
+  const handedOff = desktopUrl !== null && (props.handedOffToDesktop ?? requestHandedOffToDesktop(props.requestId));
   const handleRepair = reactExports.useCallback(async () => {
     if (props.onRepair === void 0) {
       return;
@@ -37529,19 +38142,24 @@ function QueueConnectionError(props) {
       void handleRepair();
     }
   }, [handleRepair, props.approvalUrl]);
-  const headline = sessionMissing ? QUEUE_SESSION_ERROR_HEADLINE : QUEUE_CONNECTION_ERROR_HEADLINE;
-  const detail = sessionMissing ? QUEUE_SESSION_ERROR_DETAIL : props.message;
-  const instruction = sessionMissing ? QUEUE_SESSION_ERROR_INSTRUCTION : QUEUE_CONNECTION_ERROR_INSTRUCTION;
+  let headline = sessionMissing ? QUEUE_SESSION_ERROR_HEADLINE : QUEUE_CONNECTION_ERROR_HEADLINE;
+  let detail = sessionMissing ? QUEUE_SESSION_ERROR_DETAIL : props.message;
+  let instruction = sessionMissing ? QUEUE_SESSION_ERROR_INSTRUCTION : QUEUE_CONNECTION_ERROR_INSTRUCTION;
+  if (handedOff) {
+    headline = QUEUE_DESKTOP_HANDOFF_HEADLINE;
+    detail = QUEUE_DESKTOP_HANDOFF_DETAIL;
+    instruction = QUEUE_DESKTOP_HANDOFF_INSTRUCTION;
+  }
   let sessionRetryVariant;
   if (desktopUrl !== null) {
     sessionRetryVariant = "outline";
   }
-  return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "space-y-4", children: /* @__PURE__ */ jsxRuntimeExports.jsxs(Surface, { tone: "danger", children: [
+  return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "space-y-4", children: /* @__PURE__ */ jsxRuntimeExports.jsxs(Surface, { tone: handedOff ? "default" : "danger", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-semibold text-brand-purple", role: "alert", children: headline }),
     /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-sm text-brand-purple/80", children: detail }),
     /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-sm text-brand-purple/70", children: instruction }),
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-4 flex flex-wrap gap-3", children: [
-      desktopUrl !== null && /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { href: desktopUrl, children: "Open in HOL Guard Desktop" }),
+      desktopUrl !== null && /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { href: desktopUrl, children: handedOff ? "Open in HOL Guard Desktop again" : "Open in HOL Guard Desktop" }),
       sessionMissing ? props.onRetry !== void 0 && /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { onClick: props.onRetry, variant: sessionRetryVariant, children: "Retry" }) : /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { onClick: handleOpenDaemon, children: "Repair" }),
       sessionMissing ? null : props.onRepair !== void 0 && /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { onClick: handleRepair, disabled: repairing, variant: "outline", children: repairing ? "Repairing..." : "Reconnect" }),
       sessionMissing ? null : /* @__PURE__ */ jsxRuntimeExports.jsx("code", { className: "inline-flex min-h-10 items-center rounded-lg border border-brand-purple/30 bg-slate-50 px-3 py-2 font-mono text-sm text-brand-purple select-all", children: "hol-guard start" }),
@@ -37830,46 +38448,6 @@ function GuardUpdateBanner(props) {
     }
   );
 }
-const PROTECTION_POSTURE_COPY = {
-  protected: {
-    label: "Protected",
-    help: "Stops theft, wipes, and Guard bypass. Asks once about new tools or first-time secret access, then remembers."
-  },
-  extra_careful: {
-    label: "Extra careful",
-    help: "Same as Protected, and also asks the first time this project talks to a new site or installs a new tool."
-  },
-  watch: {
-    label: "Watch",
-    help: "Records what Guard would have stopped, but does not stop anything. Use only while debugging."
-  }
-};
-const WATCH_BANNER_COPY = "Protection is off. Guard is only recording.";
-const POSTURE_OUTCOME_COLUMNS = {
-  protected: {
-    stops: "Credential theft, Guard bypass, encoded exfil, known-bad tools",
-    asks: "First secret read, new destructive command, first package script, new MCP or skill",
-    runs: "Remembered actions, routine browsing, verified-benign work"
-  },
-  extra_careful: {
-    stops: "The same automatic stops as Protected",
-    asks: "Everything Protected asks, plus first new site, first new tool, and cloud advisories",
-    runs: "Remembered actions and verified-benign work"
-  },
-  watch: {
-    stops: "Nothing. Guard only records.",
-    asks: "Nothing. Inbox shows what would have stopped.",
-    runs: "Every action, including known-bad work"
-  }
-};
-function isProtectionPosture(value) {
-  return value === "protected" || value === "extra_careful" || value === "watch";
-}
-function deriveProtectionPosture(mode, securityLevel) {
-  if (mode === "observe") return "watch";
-  if (securityLevel === "strict" || securityLevel === "paranoid") return "extra_careful";
-  return "protected";
-}
 const DEFAULT_CONFIRM = "Guard will start stopping dangerous actions.";
 function WatchProtectionBanner(props) {
   const [confirming, setConfirming] = reactExports.useState(false);
@@ -37934,199 +38512,9 @@ function WatchProtectionBanner(props) {
     }
   );
 }
-const POSTURE_LABEL = {
-  protected: "Protected",
-  extra_careful: "Extra careful",
-  watch: "Watch"
-};
-function normalizeHarnessPostures(value) {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) return {};
-  const result = {};
-  for (const [harness, posture] of Object.entries(value)) {
-    if (harness.length > 0 && typeof posture === "string" && isProtectionPosture(posture)) {
-      result[harness] = posture;
-    }
-  }
-  return result;
-}
-function globalPosture(settings) {
-  if (isProtectionPosture(settings.protection_posture)) return settings.protection_posture;
-  if (settings.mode === "observe") return "watch";
-  return "protected";
-}
-function protectedLevel(effective, baseline) {
-  if (effective !== "watch") return effective;
-  if (baseline !== "watch") return baseline;
-  return "protected";
-}
-function effectiveHarnessPosture(settings, harness) {
-  const override = settings.harness_postures?.[harness];
-  const baseline = globalPosture(settings);
-  if (override === void 0) return baseline;
-  if (override === "watch") return "watch";
-  return baseline === "extra_careful" ? baseline : override;
-}
-function harnessPostureRows(settings, capabilities) {
-  return capabilities.map((capability) => {
-    const effective = effectiveHarnessPosture(settings, capability.harness);
-    return {
-      harness: capability.harness,
-      displayName: capability.display_name,
-      effective,
-      hasOverride: settings.harness_postures?.[capability.harness] !== void 0,
-      selected: effective === "watch" ? "watch" : "on"
-    };
-  });
-}
-function harnessPostureOptions(settings, harness) {
-  const onLevel = protectedLevel(effectiveHarnessPosture(settings, harness), globalPosture(settings));
-  return [
-    { choice: "on", label: POSTURE_LABEL[onLevel] },
-    { choice: "watch", label: POSTURE_LABEL.watch }
-  ];
-}
-function selectHarnessPosture(settings, harness, choice) {
-  const baseline = globalPosture(settings);
-  if (choice === "on" && effectiveHarnessPosture(settings, harness) !== "watch") return settings;
-  const next = { ...settings.harness_postures ?? {} };
-  if (choice === "watch") {
-    if (baseline === "watch") delete next[harness];
-    else next[harness] = "watch";
-  } else if (baseline === "watch") {
-    next[harness] = "protected";
-  } else {
-    delete next[harness];
-  }
-  return { ...settings, harness_postures: next };
-}
-function canRestartHarnessWatch(settings, harness) {
-  return settings.harness_postures?.[harness] === "watch" && (settings.watch_auto_revert_hours ?? 24) > 0;
-}
-function restartHarnessWatch(settings, harness) {
-  if (!canRestartHarnessWatch(settings, harness)) return settings;
-  const restarts = new Set(settings.harness_watch_restart ?? []);
-  restarts.add(harness);
-  return { ...settings, harness_watch_restart: [...restarts].sort() };
-}
-function harnessPosturePatch(draft, saved) {
-  const before = saved?.harness_postures ?? {};
-  const after = draft.harness_postures ?? {};
-  const restarts = new Set(draft.harness_watch_restart ?? []);
-  const patch = {};
-  for (const harness of /* @__PURE__ */ new Set([...Object.keys(before), ...Object.keys(after)])) {
-    const posture = after[harness] ?? null;
-    const restart = posture === "watch" && restarts.has(harness);
-    if (restart || posture !== (before[harness] ?? null)) patch[harness] = posture;
-  }
-  return Object.keys(patch).length > 0 ? patch : null;
-}
-function clearHarnessWatchOverrides(settings) {
-  const next = Object.fromEntries(
-    Object.entries(settings.harness_postures ?? {}).filter(([, posture]) => posture !== "watch")
-  );
-  return { ...settings, harness_postures: next };
-}
-function settingsWatchBannerModel(settings, capabilities) {
-  const rows = harnessPostureRows(settings, capabilities);
-  return watchBannerModel({
-    protection_posture: globalPosture(settings),
-    harness_postures: settings.harness_postures,
-    harnesses_in_watch: rows.filter((row) => row.effective === "watch").map((row) => row.harness),
-    protection_capabilities: capabilities
-  });
-}
-function withHarnessPosturePatch(payload, draft, saved) {
-  const {
-    harness_postures: _postures,
-    harness_postures_effective: _effective,
-    harness_postures_locked: _locked,
-    harness_watch_entered_at: _enteredAt,
-    harness_watch_restart: _restart,
-    ...rest
-  } = payload;
-  const patch = harnessPosturePatch(draft, saved);
-  return patch === null ? rest : { ...rest, harness_postures: patch };
-}
-function harnessPostureSummary(rows) {
-  if (rows.length === 0) return "";
-  const watching = rows.filter((row) => row.effective === "watch");
-  if (watching.length === 0) return "Every app is protected.";
-  if (watching.length === rows.length) return "Every app is in Watch.";
-  return `${watching.length} of ${rows.length} apps in Watch: ${joinNames(watching.map((row) => row.displayName))}.`;
-}
-function harnessRowTone(row) {
-  return row.effective === "watch" ? "watch" : "protected";
-}
-function harnessRowStatus(row) {
-  if (row.effective === "watch") {
-    return row.hasOverride ? "Watch · recording only" : "Watch · follows the machine setting";
-  }
-  if (!row.hasOverride) return "Follows the machine setting";
-  return "Set for this app";
-}
-function sortHarnessRows(rows) {
-  const watching = rows.filter((row) => row.effective === "watch");
-  const rest = rows.filter((row) => row.effective !== "watch");
-  return [...watching, ...rest];
-}
-function overrideRows(rows) {
-  return rows.filter((row) => row.hasOverride);
-}
-function harnessWatchPrompt(rows, harness) {
-  const row = rows.find((candidate) => candidate.harness === harness);
-  const name = row?.displayName ?? harness;
-  const others = rows.filter((candidate) => candidate.harness !== harness);
-  const protectedOthers = others.filter((candidate) => candidate.effective !== "watch");
-  const lead = `Guard will only record in ${name}.`;
-  if (others.length === 0) return lead;
-  if (protectedOthers.length === 0) return `${lead} Every app will then be in Watch.`;
-  if (protectedOthers.length === others.length) return `${lead} Your other apps stay protected.`;
-  const verb = protectedOthers.length === 1 ? "stays" : "stay";
-  return `${lead} ${joinNames(protectedOthers.map((candidate) => candidate.displayName))} ${verb} protected.`;
-}
-function joinNames(names) {
-  if (names.length <= 1) return names[0] ?? "";
-  if (names.length === 2) return `${names[0]} and ${names[1]}`;
-  return `${names.slice(0, -1).join(", ")}, and ${names[names.length - 1]}`;
-}
-function displayNameFor(harness, capabilities) {
-  return capabilities?.find((capability) => capability.harness === harness)?.display_name ?? harness;
-}
-function watchBannerModel(snapshot) {
-  const globalWatch = snapshot.protection_posture === "watch";
-  const watchOverrides = Object.entries(snapshot.harness_postures ?? {}).filter(([, posture]) => posture === "watch").map(([harness]) => harness);
-  const inWatch = globalWatch ? [] : snapshot.harnesses_in_watch ?? watchOverrides;
-  if (!globalWatch && inWatch.length === 0) return null;
-  const appNames = inWatch.map((harness) => displayNameFor(harness, snapshot.protection_capabilities));
-  if (globalWatch) {
-    return {
-      globalWatch,
-      appNames: [],
-      message: WATCH_BANNER_COPY,
-      confirmMessage: "Guard will start stopping dangerous actions in every app."
-    };
-  }
-  const names = joinNames(appNames);
-  return {
-    globalWatch,
-    appNames,
-    message: `Guard is only recording in ${names}. Other apps are protected.`,
-    confirmMessage: `Guard will start stopping dangerous actions in ${names}.`
-  };
-}
-function turnProtectionOnUpdate(snapshot) {
-  const update = {};
-  if (snapshot.protection_posture === "watch") update.protection_posture = "protected";
-  const cleared = {};
-  for (const [harness, posture] of Object.entries(snapshot.harness_postures ?? {})) {
-    if (posture === "watch") cleared[harness] = null;
-  }
-  if (Object.keys(cleared).length > 0) update.harness_postures = cleared;
-  return update;
-}
 const McpPolicyRequestPanel = lazyWorkspace(
   "mcp-policy-request-panel",
-  () => __vitePreload(() => import("./chunks/mcp-policy-request-panel-C_EJjR5Y.js"), true ? [] : void 0).then((m) => ({ default: m.McpPolicyRequestPanel }))
+  () => __vitePreload(() => import("./chunks/mcp-policy-request-panel-BmfFo4xS.js"), true ? [] : void 0).then((m) => ({ default: m.McpPolicyRequestPanel }))
 );
 function InboxWatchBanner(props) {
   const { snapshot } = props;
@@ -38287,7 +38675,8 @@ function ApprovalCenterLayout(props) {
     updateError,
     onUpdateGuard,
     onReinstallGuard,
-    onSetUpdateChannel
+    onSetUpdateChannel,
+    onSetUpdateMode
   } = useGuardUpdate({ onReconnected: props.onGuardReconnected });
   const [dismissedUpdateVersion, setDismissedUpdateVersion] = reactExports.useState(
     () => readDismissedDesktopUpdateVersion()
@@ -38316,6 +38705,7 @@ function ApprovalCenterLayout(props) {
         onUpdateGuard,
         onReinstallGuard,
         onSetUpdateChannel,
+        onSetUpdateMode,
         approvalGate: props.approvalGate ?? null,
         cloudUserProfile: props.runtime.kind === "ready" ? props.runtime.snapshot.cloud_user_profile : null,
         workspaceId: props.runtime.kind === "ready" ? props.runtime.snapshot.cloud_pairing_state.workspace_id ?? null : null,
@@ -38811,34 +39201,34 @@ function RuntimeGate(props) {
   );
 }
 const HOME_QUEUE_PREVIEW_LIMIT = 50;
-const HomeWorkspace = lazyWorkspace("home-dashboard", () => __vitePreload(() => import("./chunks/home-dashboard-OxpCh2cB.js"), true ? __vite__mapDeps([0,1,2,3,4,5,6]) : void 0).then((m) => ({ default: m.HomeWorkspace })));
-const FleetWorkspace = lazyWorkspace("fleet-workspace", () => __vitePreload(() => import("./chunks/fleet-workspace-BVvg6Lpo.js"), true ? __vite__mapDeps([7,8,9,6,10]) : void 0).then((m) => ({ default: m.FleetWorkspace })));
-const SettingsWorkspace = lazyWorkspace("settings-workspace", () => __vitePreload(() => import("./chunks/settings-workspace-C_CNq8AH.js"), true ? __vite__mapDeps([11,10,6,12,9,3]) : void 0).then((m) => ({ default: m.SettingsWorkspace })));
+const HomeWorkspace = lazyWorkspace("home-dashboard", () => __vitePreload(() => import("./chunks/home-dashboard-BTu-Dd20.js"), true ? __vite__mapDeps([0,1,2,3,4,5,6]) : void 0).then((m) => ({ default: m.HomeWorkspace })));
+const FleetWorkspace = lazyWorkspace("fleet-workspace", () => __vitePreload(() => import("./chunks/fleet-workspace-CyNbRJJG.js"), true ? __vite__mapDeps([7,8,9,10,6,11]) : void 0).then((m) => ({ default: m.FleetWorkspace })));
+const SettingsWorkspace = lazyWorkspace("settings-workspace", () => __vitePreload(() => import("./chunks/settings-workspace-CnxO1Xjx.js"), true ? __vite__mapDeps([12,11,6,13,9,10,3]) : void 0).then((m) => ({ default: m.SettingsWorkspace })));
 const ExtensionsWorkspace = lazyWorkspace(
   "extensions-workspace",
-  () => __vitePreload(() => import("./chunks/extensions-workspace-DeE0MG3h.js"), true ? __vite__mapDeps([13,12]) : void 0).then((module) => ({ default: module.ExtensionsWorkspace }))
+  () => __vitePreload(() => import("./chunks/extensions-workspace-BJW9li9o.js"), true ? __vite__mapDeps([14,13]) : void 0).then((module) => ({ default: module.ExtensionsWorkspace }))
 );
-const AppDetailWorkspace = lazyWorkspace("app-detail-workspace", () => __vitePreload(() => import("./chunks/app-detail-workspace-DqHWwK_5.js"), true ? __vite__mapDeps([14,8]) : void 0).then((m) => ({ default: m.AppDetailWorkspace })));
+const AppDetailWorkspace = lazyWorkspace("app-detail-workspace", () => __vitePreload(() => import("./chunks/app-detail-workspace-BcDpRAjB.js"), true ? __vite__mapDeps([15,16,8,9]) : void 0).then((m) => ({ default: m.AppDetailWorkspace })));
 const HelpModal = lazyWorkspace("help-modal", () => __vitePreload(() => import("./chunks/help-modal-DUQGf9sy.js"), true ? [] : void 0).then((m) => ({ default: m.HelpModal })));
 const SupplyChainHubWorkspace = lazyWorkspace(
   "supply-chain-hub-workspace",
-  () => __vitePreload(() => import("./chunks/supply-chain-hub-workspace-BSkPbVjN.js").then((n) => n.d), true ? [] : void 0).then((m) => ({ default: m.SupplyChainHubWorkspace }))
+  () => __vitePreload(() => import("./chunks/supply-chain-hub-workspace-BJZR421D.js").then((n) => n.d), true ? __vite__mapDeps([17,16]) : void 0).then((m) => ({ default: m.SupplyChainHubWorkspace }))
 );
 const PolicyWorkspacePage = lazyWorkspace(
   "policy-workspace-page",
-  () => __vitePreload(() => import("./chunks/policy-workspace-page-ChvzniW9.js"), true ? __vite__mapDeps([15,9]) : void 0).then((m) => ({ default: m.PolicyWorkspacePage }))
+  () => __vitePreload(() => import("./chunks/policy-workspace-page-DuL9PTDi.js"), true ? __vite__mapDeps([18,10]) : void 0).then((m) => ({ default: m.PolicyWorkspacePage }))
 );
 const AboutWorkspace = lazyWorkspace(
   "about-workspace",
-  () => __vitePreload(() => import("./chunks/about-workspace-DSZDVR66.js"), true ? __vite__mapDeps([16,4,5,17]) : void 0).then((m) => ({ default: m.AboutWorkspace }))
+  () => __vitePreload(() => import("./chunks/about-workspace-BX-eCaXK.js"), true ? __vite__mapDeps([19,4,5,20]) : void 0).then((m) => ({ default: m.AboutWorkspace }))
 );
 const ReleasesWorkspace = lazyWorkspace(
   "releases-workspace",
-  () => __vitePreload(() => import("./chunks/releases-workspace-O-K0NSan.js"), true ? [] : void 0).then((m) => ({ default: m.ReleasesWorkspace }))
+  () => __vitePreload(() => import("./chunks/releases-workspace-CFzn_e3I.js"), true ? [] : void 0).then((m) => ({ default: m.ReleasesWorkspace }))
 );
 const ProtectionRepairPage = lazyWorkspace(
   "protection-repair-page",
-  () => __vitePreload(() => import("./chunks/protection-repair-page-B9sLrlwj.js"), true ? [] : void 0).then((m) => ({ default: m.ProtectionRepairPage }))
+  () => __vitePreload(() => import("./chunks/protection-repair-page-mKlPCxKS.js"), true ? [] : void 0).then((m) => ({ default: m.ProtectionRepairPage }))
 );
 function LazyFallback() {
   return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex min-h-[200px] items-center justify-center", children: /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "guard-skeleton h-8 w-48" }) });
@@ -39766,6 +40156,7 @@ if (container === null) {
   throw new Error("Missing guard-dashboard-root");
 }
 installStaleBuildGuard();
+handOffRequestPageToDesktop();
 clientExports.createRoot(container).render(
   /* @__PURE__ */ jsxRuntimeExports.jsx(reactExports.StrictMode, { children: /* @__PURE__ */ jsxRuntimeExports.jsx(App, {}) })
 );
@@ -39799,7 +40190,7 @@ export {
   buildHomeRuntimeErrorCopy as Z,
   RuntimeErrorState as _,
   contextStatusCopy as a,
-  TabBar as a$,
+  getDefaultExportFromCjs as a$,
   WatchProtectionBanner as a0,
   EvidenceInsightsShareModal as a1,
   OperatorHealthCard as a2,
@@ -39813,30 +40204,30 @@ export {
   activeFailedHarnesses as aA,
   resetRepairOutcomeTracker as aB,
   HiMiniWrenchScrewdriver as aC,
-  fetchSettings as aD,
-  harnessPostureRows as aE,
-  selectHarnessPosture as aF,
-  harnessPosturePatch as aG,
-  harnessRowTone as aH,
-  PROTECTION_POSTURE_COPY as aI,
-  harnessPostureOptions as aJ,
-  globalPosture as aK,
-  harnessRowStatus as aL,
-  HiMiniEye as aM,
-  HiMiniXCircle as aN,
-  GuardHero as aO,
-  ProofStrip as aP,
-  HiMiniClipboardDocumentCheck as aQ,
-  HiMiniClipboard as aR,
-  fetchResolvedApprovalGate as aS,
-  ApprovalProofModal as aT,
-  POSTURE_OUTCOME_COLUMNS as aU,
-  getDefaultExportFromCjs as aV,
-  React as aW,
-  HiMiniSquares2X2 as aX,
-  HiMiniBellAlert as aY,
-  HiMiniAdjustmentsHorizontal as aZ,
-  HiMiniCircleStack as a_,
+  harnessRowTone as aD,
+  appModesNote as aE,
+  harnessRowStatus as aF,
+  HiMiniEye as aG,
+  HiMiniXCircle as aH,
+  GuardHero as aI,
+  ProofStrip as aJ,
+  HiMiniClipboardDocumentCheck as aK,
+  HiMiniClipboard as aL,
+  fetchResolvedApprovalGate as aM,
+  ApprovalProofModal as aN,
+  PROTECTION_POSTURE_COPY as aO,
+  POSTURE_OUTCOME_COLUMNS as aP,
+  harnessPostureRows as aQ,
+  overrideRows as aR,
+  harnessPostureSummary as aS,
+  joinNames as aT,
+  sortHarnessRows as aU,
+  globalPosture as aV,
+  selectHarnessPosture as aW,
+  restartHarnessWatch as aX,
+  harnessWatchPrompt as aY,
+  harnessPostureOptions as aZ,
+  canRestartHarnessWatch as a_,
   EmptyState as aa,
   resolveCloudIntelCopy as ab,
   HiMiniCloud as ac,
@@ -39864,244 +40255,244 @@ export {
   openPackageFirewallAuthorizeFallback as ay,
   waitForCloudConnection as az,
   formatRelativeTime as b,
-  resolveProtectionLevelCopy as b$,
-  SelectMenu as b0,
-  fetchCloudReviewSettings as b1,
-  ApprovalProofFieldInputs as b2,
-  isApprovalProofSubmitDisabled as b3,
-  buildApprovalProofCredentials as b4,
-  changeCloudReviewSettings as b5,
-  fetchWithGuardAuth as b6,
-  isRecord$5 as b7,
-  HiMiniArrowTopRightOnSquare as b8,
-  shellHref as b9,
-  HiMiniCpuChip as bA,
-  HiMiniAcademicCap as bB,
-  HiMiniArrowLeft as bC,
-  isCigarProducerVersion as bD,
-  isCigarCoreLabel as bE,
-  subscribeDashboardLocation as bF,
-  HiMiniChatBubbleLeftRight as bG,
-  HiMiniArrowUpCircle as bH,
-  parseContextAssistanceStatus as bI,
-  isCigarBuildIdentity as bJ,
-  fetchContextInstallations as bK,
-  HiMiniCloudArrowDown as bL,
-  turnOnJob as bM,
-  shouldResumeTurnOn as bN,
-  turnOnRequestedAt as bO,
-  forgetTurnOn as bP,
-  rememberTurnOn as bQ,
-  forgetTurnOnClick as bR,
-  rememberTurnOnJob as bS,
-  commitDashboardLocation as bT,
-  HiMiniArrowDownTray as bU,
-  downloadBlob as bV,
-  savedEvidenceCopy as bW,
-  guardAwareHref as bX,
-  fetchContextData as bY,
-  forgetContextHistory as bZ,
-  forgetSavedEvidence as b_,
-  HiMiniPauseCircle as ba,
-  listContextAgentSessions as bb,
-  HiMiniLink as bc,
-  revokeContextAgentSession as bd,
-  grantContextWorkspace as be,
-  authorizeContextAgentSession as bf,
-  ContextAssistanceApiError as bg,
-  ask as bh,
-  parseContextScope as bi,
-  validContextBrokerRevision as bj,
-  isGuardDemoMode as bk,
-  HiMiniArrowUturnLeft as bl,
-  HiMiniCodeBracketSquare as bm,
-  HiMiniFolder as bn,
-  HiMiniComputerDesktop as bo,
-  HiMiniHome as bp,
-  HiMiniFolderPlus as bq,
-  HiMiniClock as br,
-  listContextWorkspaces as bs,
-  HiMiniFolderOpen as bt,
-  manageContextWorkspace as bu,
-  compileWorkspaceContext as bv,
-  HiMiniChatBubbleLeftEllipsis as bw,
-  HiMiniDocumentMagnifyingGlass as bx,
-  HiMiniPower as by,
-  HiMiniEyeSlash as bz,
+  downloadBlob as b$,
+  React as b0,
+  HiMiniSquares2X2 as b1,
+  HiMiniBellAlert as b2,
+  HiMiniAdjustmentsHorizontal as b3,
+  HiMiniCircleStack as b4,
+  TabBar as b5,
+  SelectMenu as b6,
+  fetchCloudReviewSettings as b7,
+  ApprovalProofFieldInputs as b8,
+  isApprovalProofSubmitDisabled as b9,
+  manageContextWorkspace as bA,
+  compileWorkspaceContext as bB,
+  HiMiniChatBubbleLeftEllipsis as bC,
+  HiMiniDocumentMagnifyingGlass as bD,
+  HiMiniPower as bE,
+  HiMiniEyeSlash as bF,
+  HiMiniCpuChip as bG,
+  HiMiniAcademicCap as bH,
+  HiMiniArrowLeft as bI,
+  isCigarProducerVersion as bJ,
+  isCigarCoreLabel as bK,
+  subscribeDashboardLocation as bL,
+  HiMiniChatBubbleLeftRight as bM,
+  HiMiniArrowUpCircle as bN,
+  parseContextAssistanceStatus as bO,
+  isCigarBuildIdentity as bP,
+  fetchContextInstallations as bQ,
+  HiMiniCloudArrowDown as bR,
+  turnOnJob as bS,
+  shouldResumeTurnOn as bT,
+  turnOnRequestedAt as bU,
+  forgetTurnOn as bV,
+  rememberTurnOn as bW,
+  forgetTurnOnClick as bX,
+  rememberTurnOnJob as bY,
+  commitDashboardLocation as bZ,
+  HiMiniArrowDownTray as b_,
+  buildApprovalProofCredentials as ba,
+  changeCloudReviewSettings as bb,
+  fetchWithGuardAuth as bc,
+  isRecord$5 as bd,
+  HiMiniArrowTopRightOnSquare as be,
+  shellHref as bf,
+  HiMiniPauseCircle as bg,
+  listContextAgentSessions as bh,
+  HiMiniLink as bi,
+  revokeContextAgentSession as bj,
+  grantContextWorkspace as bk,
+  authorizeContextAgentSession as bl,
+  ContextAssistanceApiError as bm,
+  ask as bn,
+  parseContextScope as bo,
+  validContextBrokerRevision as bp,
+  isGuardDemoMode as bq,
+  HiMiniArrowUturnLeft as br,
+  HiMiniCodeBracketSquare as bs,
+  HiMiniFolder as bt,
+  HiMiniComputerDesktop as bu,
+  HiMiniHome as bv,
+  HiMiniFolderPlus as bw,
+  HiMiniClock as bx,
+  listContextWorkspaces as by,
+  HiMiniFolderOpen as bz,
   controlContextAssistance as c,
-  fetchLocalCliApi as c$,
-  fetchRuntimeSnapshot as c0,
-  clearHarnessWatchOverrides as c1,
-  withHarnessPosturePatch as c2,
-  clearPolicy as c3,
-  clearReviewQueue as c4,
-  revokeApprovalGateCooldown as c5,
-  disableApprovalGateTotp as c6,
-  importSettings as c7,
-  resetSettings as c8,
-  enrollApprovalGateTotp as c9,
-  ExtensionControlProtocolError as cA,
-  normalizeExtensionCatalogItem as cB,
-  guardApiCacheScope as cC,
-  fetchExtensionCatalogV2Api as cD,
-  localPermissionDraftState as cE,
-  setLocalPermissionDraftState as cF,
-  extensionPolicyAuthorityUnchanged as cG,
-  newExtensionPolicyDraftIdentity as cH,
-  extensionPolicyDraftIsDirty as cI,
-  setLocalPermissionDraftStates as cJ,
-  buildExtensionPolicyDraftMutation as cK,
-  fetchEffectiveExtensionControls as cL,
-  previewExtensionMutation as cM,
-  isCurrentExtensionPolicyDraft as cN,
-  applyExtensionMutation as cO,
-  fetchExtensionControlHistory as cP,
-  managedPermissionState as cQ,
-  controlProvenance as cR,
-  treatmentLabel as cS,
-  useResolvedApprovalGate as cT,
-  groupPermissionsByFamily as cU,
-  HiMiniInformationCircle as cV,
-  LocalCliApiError as cW,
-  hasSuggestedRules as cX,
-  approvalProofRecentlySatisfied as cY,
-  StyledSelect as cZ,
-  bulkCommandState as c_,
-  verifyApprovalGateTotp as ca,
-  clearEvidence as cb,
-  exportDiagnostics as cc,
-  repairApprovalCenter as cd,
-  exportSettings as ce,
-  setupDesktopNotifications as cf,
-  settingsWatchBannerModel as cg,
-  WorkspacePageHeader as ch,
-  navigateFromAnchor as ci,
-  humanizeList as cj,
-  isProtectionPosture as ck,
-  deriveProtectionPosture as cl,
-  normalizeHarnessPostures as cm,
-  approvalGateCooldownLabel as cn,
-  overrideRows as co,
-  harnessPostureSummary as cp,
-  joinNames as cq,
-  sortHarnessRows as cr,
-  restartHarnessWatch as cs,
-  harnessWatchPrompt as ct,
-  canRestartHarnessWatch as cu,
-  HiMiniKey as cv,
-  fetchExtensionCatalog as cw,
-  ExtensionControlApiError as cx,
-  normalizeExtensionCatalogSummary as cy,
-  normalizeExtensionPermission as cz,
+  ExtensionBrandMark as c$,
+  savedEvidenceCopy as c0,
+  guardAwareHref as c1,
+  fetchContextData as c2,
+  forgetContextHistory as c3,
+  forgetSavedEvidence as c4,
+  resolveProtectionLevelCopy as c5,
+  fetchSettings as c6,
+  fetchRuntimeSnapshot as c7,
+  clearHarnessWatchOverrides as c8,
+  withHarnessPosturePatch as c9,
+  normalizeExtensionCatalogItem as cA,
+  guardApiCacheScope as cB,
+  fetchExtensionCatalogV2Api as cC,
+  localPermissionDraftState as cD,
+  setLocalPermissionDraftState as cE,
+  extensionPolicyAuthorityUnchanged as cF,
+  newExtensionPolicyDraftIdentity as cG,
+  extensionPolicyDraftIsDirty as cH,
+  setLocalPermissionDraftStates as cI,
+  buildExtensionPolicyDraftMutation as cJ,
+  fetchEffectiveExtensionControls as cK,
+  previewExtensionMutation as cL,
+  isCurrentExtensionPolicyDraft as cM,
+  applyExtensionMutation as cN,
+  fetchExtensionControlHistory as cO,
+  managedPermissionState as cP,
+  controlProvenance as cQ,
+  treatmentLabel as cR,
+  useResolvedApprovalGate as cS,
+  groupPermissionsByFamily as cT,
+  HiMiniInformationCircle as cU,
+  LocalCliApiError as cV,
+  hasSuggestedRules as cW,
+  approvalProofRecentlySatisfied as cX,
+  StyledSelect as cY,
+  bulkCommandState as cZ,
+  fetchLocalCliApi as c_,
+  clearPolicy as ca,
+  clearReviewQueue as cb,
+  revokeApprovalGateCooldown as cc,
+  disableApprovalGateTotp as cd,
+  importSettings as ce,
+  resetSettings as cf,
+  enrollApprovalGateTotp as cg,
+  verifyApprovalGateTotp as ch,
+  clearEvidence as ci,
+  exportDiagnostics as cj,
+  repairApprovalCenter as ck,
+  exportSettings as cl,
+  setupDesktopNotifications as cm,
+  settingsWatchBannerModel as cn,
+  WorkspacePageHeader as co,
+  navigateFromAnchor as cp,
+  humanizeList as cq,
+  isProtectionPosture as cr,
+  deriveProtectionPosture as cs,
+  normalizeHarnessPostures as ct,
+  approvalGateCooldownLabel as cu,
+  fetchExtensionCatalog as cv,
+  ExtensionControlApiError as cw,
+  normalizeExtensionCatalogSummary as cx,
+  normalizeExtensionPermission as cy,
+  ExtensionControlProtocolError as cz,
   formatNumber as d,
-  canonicalExtensionId as d$,
-  ExtensionBrandMark as d0,
-  fetchMcpProviderActions as d1,
-  connectorSetupReady as d2,
-  shortIdentity as d3,
-  customExtensionDisplayName as d4,
-  previewLocalCliMutation as d5,
-  applyLocalCliMutation as d6,
-  LOCAL_CLI_CAPABILITIES as d7,
-  loadLocalCliCommands as d8,
-  DiscoveryFailure as d9,
-  startGuardCloudConnect as dA,
-  extensionEffectiveState as dB,
-  permissionEffectiveState as dC,
-  fetchExtensionControlApi as dD,
-  permissionForRule as dE,
-  refreshEffectiveExtensionControls as dF,
-  fetchExtensionDiscoveryApi as dG,
-  startCancelableDiscoveryJob as dH,
-  waitForMcpDiscoveryJob as dI,
-  isLocalCliId as dJ,
-  localCliHref as dK,
-  fetchPluginUpdatesApi as dL,
-  filterCodexHostApps as dM,
-  connectorWorkspaceItems as dN,
-  customExtensionNeedsReview as dO,
-  profileSetupCommand as dP,
-  customExtensionBadge as dQ,
-  extensionDisplayName as dR,
-  catalogRowSecondLine as dS,
-  extensionStateLabel as dT,
-  HiMiniGlobeAlt as dU,
-  HiMiniFunnel as dV,
-  discoveryFailureMessage as dW,
-  refreshCodexHostInventory as dX,
-  CODEX_HOST_FALLBACK as dY,
-  CONFIGURED_CONNECTIONS_FALLBACK as dZ,
-  loadCurrentDashboardBuild as d_,
-  readJson as da,
-  enrollablePackageScriptCommands as db,
-  seenSuggestionMeta as dc,
-  HiMiniPlus as dd,
-  looksLikeProjectRelocatePaste as de,
-  packageScriptFilterNeedle as df,
-  initialAddCommand as dg,
-  suggestedPackageScriptExtensions as dh,
-  filterExtensionSuggestions as di,
-  suggestedHarnessExtensions as dj,
-  suggestedSeenExtensions as dk,
-  keepsPackageScriptCatalog as dl,
-  prefillSuggestedStates as dm,
-  recognizeLocalCli as dn,
-  preferredPackageScriptExtension as dp,
-  looksLikePackageScriptPaste as dq,
-  enrollmentCommandStates as dr,
-  isBulkApproveGateReady as ds,
-  fetchLocalCliList as dt,
-  normalizeLocalCliList as du,
-  unreviewedToolChangeCount as dv,
-  connectorSetupMatch as dw,
-  refreshMcpInventory as dx,
-  connectorGroupOutcome as dy,
-  allowedEarlierVersion as dz,
+  extensionDetailHref as d$,
+  fetchMcpProviderActions as d0,
+  connectorSetupReady as d1,
+  shortIdentity as d2,
+  customExtensionDisplayName as d3,
+  previewLocalCliMutation as d4,
+  applyLocalCliMutation as d5,
+  LOCAL_CLI_CAPABILITIES as d6,
+  loadLocalCliCommands as d7,
+  DiscoveryFailure as d8,
+  readJson as d9,
+  extensionEffectiveState as dA,
+  permissionEffectiveState as dB,
+  fetchExtensionControlApi as dC,
+  permissionForRule as dD,
+  refreshEffectiveExtensionControls as dE,
+  fetchExtensionDiscoveryApi as dF,
+  startCancelableDiscoveryJob as dG,
+  waitForMcpDiscoveryJob as dH,
+  isLocalCliId as dI,
+  localCliHref as dJ,
+  fetchPluginUpdatesApi as dK,
+  filterCodexHostApps as dL,
+  connectorWorkspaceItems as dM,
+  customExtensionNeedsReview as dN,
+  profileSetupCommand as dO,
+  customExtensionBadge as dP,
+  extensionDisplayName as dQ,
+  catalogRowSecondLine as dR,
+  extensionStateLabel as dS,
+  HiMiniGlobeAlt as dT,
+  HiMiniFunnel as dU,
+  discoveryFailureMessage as dV,
+  refreshCodexHostInventory as dW,
+  CODEX_HOST_FALLBACK as dX,
+  CONFIGURED_CONNECTIONS_FALLBACK as dY,
+  loadCurrentDashboardBuild as dZ,
+  canonicalExtensionId as d_,
+  enrollablePackageScriptCommands as da,
+  seenSuggestionMeta as db,
+  HiMiniPlus as dc,
+  looksLikeProjectRelocatePaste as dd,
+  packageScriptFilterNeedle as de,
+  initialAddCommand as df,
+  suggestedPackageScriptExtensions as dg,
+  filterExtensionSuggestions as dh,
+  suggestedHarnessExtensions as di,
+  suggestedSeenExtensions as dj,
+  keepsPackageScriptCatalog as dk,
+  prefillSuggestedStates as dl,
+  recognizeLocalCli as dm,
+  preferredPackageScriptExtension as dn,
+  looksLikePackageScriptPaste as dp,
+  enrollmentCommandStates as dq,
+  isBulkApproveGateReady as dr,
+  fetchLocalCliList as ds,
+  normalizeLocalCliList as dt,
+  unreviewedToolChangeCount as du,
+  connectorSetupMatch as dv,
+  refreshMcpInventory as dw,
+  connectorGroupOutcome as dx,
+  allowedEarlierVersion as dy,
+  startGuardCloudConnect as dz,
   HiMiniChevronUp as e,
-  HiMiniCloudArrowUp as e$,
-  extensionDetailHref as e0,
-  DEFAULT_EXTENSION_DETAIL_URL_STATE as e1,
-  addCustomExtensionPrefillHref as e2,
-  acknowledgeDegradedExtensionControlAuthority as e3,
-  recoverExtensionControlAuthority as e4,
-  connectorSetupLinkFromSearch as e5,
-  readExtensionDetailUrlState as e6,
-  parseProtectionRoute as e7,
-  addCustomExtensionHref as e8,
-  GuardModalLayer as e9,
-  IconActionButton as eA,
-  HiMiniBeaker as eB,
-  HiMiniBugAnt as eC,
-  ActivationSummary as eD,
-  ActionResultPanel as eE,
-  fetchSupplyChainBundle as eF,
-  closeOnEscape as eG,
-  ConnectFlowCard as eH,
-  ApprovalProofInline as eI,
-  SUPPLY_CHAIN_SYNC_TIMEOUT_MS as eJ,
-  fetchPackageFirewallStatus as eK,
-  runPackageAudit as eL,
-  resolveSupplyChainAuditFailure as eM,
-  runPackageSync as eN,
-  GuardOperationTimeoutError as eO,
-  startPackageFirewallConnect as eP,
-  PACKAGE_FIREWALL_CONNECT_POPUP_BLOCKED_MESSAGE as eQ,
-  repairSupplyChainProtection as eR,
-  runPackageFirewallAction as eS,
-  parseInterceptProofSnapshot as eT,
-  activatePackageFirewallRuntime as eU,
-  EntitlementNotice as eV,
-  chooseSupplyChainAuditFolder as eW,
-  fetchReceipts as eX,
-  lazyWorkspace as eY,
-  __vitePreload as eZ,
-  scopeLabel as e_,
-  runHarnessAction as ea,
-  GuardHarnessActionError as eb,
-  HiMiniRocketLaunch as ec,
-  HiMiniTrash as ed,
-  fetchGuardApi as ee,
-  formatHarnessCommand as ef,
+  parseInterceptProofSnapshot as e$,
+  DEFAULT_EXTENSION_DETAIL_URL_STATE as e0,
+  addCustomExtensionPrefillHref as e1,
+  acknowledgeDegradedExtensionControlAuthority as e2,
+  recoverExtensionControlAuthority as e3,
+  connectorSetupLinkFromSearch as e4,
+  readExtensionDetailUrlState as e5,
+  parseProtectionRoute as e6,
+  addCustomExtensionHref as e7,
+  GuardModalLayer as e8,
+  runHarnessAction as e9,
+  cigarSupported as eA,
+  guardOffPrompt as eB,
+  cigarUnavailableReason as eC,
+  HiMiniCheckBadge as eD,
+  HiMiniKey as eE,
+  isSupplyChainAuditIncomplete as eF,
+  isSupplyChainAuditEvidence as eG,
+  readString$1 as eH,
+  IconActionButton as eI,
+  HiMiniBeaker as eJ,
+  HiMiniBugAnt as eK,
+  ActivationSummary as eL,
+  ActionResultPanel as eM,
+  fetchSupplyChainBundle as eN,
+  closeOnEscape as eO,
+  ConnectFlowCard as eP,
+  ApprovalProofInline as eQ,
+  SUPPLY_CHAIN_SYNC_TIMEOUT_MS as eR,
+  fetchPackageFirewallStatus as eS,
+  runPackageAudit as eT,
+  resolveSupplyChainAuditFailure as eU,
+  runPackageSync as eV,
+  GuardOperationTimeoutError as eW,
+  startPackageFirewallConnect as eX,
+  PACKAGE_FIREWALL_CONNECT_POPUP_BLOCKED_MESSAGE as eY,
+  repairSupplyChainProtection as eZ,
+  runPackageFirewallAction as e_,
+  GuardHarnessActionError as ea,
+  HiMiniRocketLaunch as eb,
+  HiMiniTrash as ec,
+  fetchGuardApi as ed,
+  formatHarnessCommand as ee,
+  appModes as ef,
   fetchApprovalPage as eg,
   fetchPolicy as eh,
   appSetupTarget as ei,
@@ -40118,39 +40509,47 @@ export {
   policyIdentityKey as et,
   clearLabelForScope as eu,
   HiMiniChartBar as ev,
-  HiMiniCheckBadge as ew,
-  isSupplyChainAuditIncomplete as ex,
-  isSupplyChainAuditEvidence as ey,
-  readString$1 as ez,
+  appModesUpdate as ew,
+  appModesStatusMessage as ex,
+  needsConfirm as ey,
+  cigarReady as ez,
   fetchContextAssistance as f,
-  HiMiniCodeBracket as f0,
-  HiMiniUsers as f1,
-  HiMiniIdentification as f2,
-  policyActionLabel as f3,
-  createCloudExceptionRequest as f4,
-  HiMiniPuzzlePiece as f5,
-  fetchCloudExceptions as f6,
-  fetchCloudExceptionRequests as f7,
-  PaginationControls as f8,
-  PolicyStatField as f9,
-  HiMiniInbox as fa,
-  HiMiniQueueList as fb,
-  Surface as fc,
-  HiMiniEllipsisHorizontal as fd,
-  HiMiniMinus as fe,
-  HiMiniWrench as ff,
-  HiMiniArrowLongRight as fg,
-  fetchReleaseFeedApi as fh,
-  fetchMcpPolicyRequest as fi,
-  resolveMcpPolicyRequest as fj,
-  HiMiniDocumentPlus as fk,
-  HiMiniChevronLeft as fl,
-  HiMiniArrowDown as fm,
-  HiMiniArrowUp as fn,
-  runAuditRemediation as fo,
-  isBlockedGuardAction as fp,
-  isSupplyChainScannerEvidence as fq,
-  HiMiniSignal as fr,
+  activatePackageFirewallRuntime as f0,
+  EntitlementNotice as f1,
+  chooseSupplyChainAuditFolder as f2,
+  fetchReceipts as f3,
+  lazyWorkspace as f4,
+  __vitePreload as f5,
+  scopeLabel as f6,
+  HiMiniCloudArrowUp as f7,
+  HiMiniCodeBracket as f8,
+  HiMiniUsers as f9,
+  HiMiniIdentification as fa,
+  policyActionLabel as fb,
+  createCloudExceptionRequest as fc,
+  HiMiniPuzzlePiece as fd,
+  fetchCloudExceptions as fe,
+  fetchCloudExceptionRequests as ff,
+  PaginationControls as fg,
+  PolicyStatField as fh,
+  HiMiniInbox as fi,
+  HiMiniQueueList as fj,
+  Surface as fk,
+  HiMiniEllipsisHorizontal as fl,
+  HiMiniMinus as fm,
+  HiMiniWrench as fn,
+  HiMiniArrowLongRight as fo,
+  fetchReleaseFeedApi as fp,
+  fetchMcpPolicyRequest as fq,
+  resolveMcpPolicyRequest as fr,
+  HiMiniDocumentPlus as fs,
+  HiMiniChevronLeft as ft,
+  HiMiniArrowDown as fu,
+  HiMiniArrowUp as fv,
+  runAuditRemediation as fw,
+  isBlockedGuardAction as fx,
+  isSupplyChainScannerEvidence as fy,
+  HiMiniSignal as fz,
   HiMiniChevronDown as g,
   harnessDisplayName as h,
   HiMiniArrowPath as i,

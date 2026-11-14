@@ -7,10 +7,12 @@ from pathlib import Path
 
 import pytest
 
+from codex_plugin_scanner.guard.adapters import get_adapter
+from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from tests.pi_managed_extension_client import enable_managed_extension
 
 
-def test_enable_managed_extension_prunes_stale_hol_guard_extensions(tmp_path: Path) -> None:
+def test_install_prunes_stale_hol_guard_extensions(tmp_path: Path) -> None:
     settings_path = tmp_path / ".pi" / "agent" / "settings.json"
     current_extension = tmp_path / ".pi" / "agent" / "extensions" / "hol-guard.ts"
     stale_global_extension = tmp_path / ".pi" / "old" / "extensions" / "hol-guard.ts"
@@ -24,16 +26,19 @@ def test_enable_managed_extension_prunes_stale_hol_guard_extensions(tmp_path: Pa
                     str(stale_global_extension),
                     str(custom_extension),
                     str(stale_project_extension),
+                    "npm:hol-guard.ts",
                 ],
             }
         ),
         encoding="utf-8",
     )
+    context = HarnessContext(home_dir=tmp_path, workspace_dir=None, guard_home=tmp_path / "guard-home")
 
-    enable_managed_extension(settings_path=settings_path, extension_path=current_extension)
+    prepared = get_adapter("pi").prepare_install(context)
 
-    extensions = json.loads(settings_path.read_text(encoding="utf-8"))["extensions"]
-    assert extensions == [str(custom_extension), str(current_extension)]
+    planned = next(change for change in prepared.files if change.path == settings_path.resolve())
+    extensions = json.loads(planned.after or b"{}")["extensions"]
+    assert extensions == [str(custom_extension), "npm:hol-guard.ts", str(current_extension)]
 
 
 def test_enable_managed_extension_rejects_symlink_and_foreign_name(tmp_path: Path) -> None:

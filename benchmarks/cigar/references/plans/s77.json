@@ -1,0 +1,105 @@
+{
+ "repo": "jinja",
+ "seed": 77,
+ "steps": [
+  {
+   "kind": "bug2",
+   "prompt": "The last commit broke several tests in different places. Find every root cause in the library code and fix them all without changing the tests.",
+   "setup": [
+    {
+     "failing": [
+      "tests/test_api.py::TestUndefined::test_strict_undefined",
+      "tests/test_lexnparse.py::TestSyntax::test_short_conditional_expression"
+     ],
+     "line": 712,
+     "new": "        if self.expr2 is not None:\n",
+     "orig": "        if self.expr2 is None:\n",
+     "path": "src/jinja2/nodes.py",
+     "qual": "CondExpr.as_const"
+    },
+    {
+     "failing": [
+      "tests/test_filters.py::TestFilter::test_filter_undefined_in_nested_if"
+     ],
+     "line": 267,
+     "new": "        else_symbols = inner_visit(node.else_ and ())\n",
+     "orig": "        else_symbols = inner_visit(node.else_ or ())\n",
+     "path": "src/jinja2/idtracking.py",
+     "qual": "FrameSymbolVisitor.visit_If"
+    }
+   ]
+  },
+  {
+   "kind": "bug",
+   "prompt": "Something in `test_integer` broke recently and its tests fail now. Track it down and fix it. Leave the tests alone.",
+   "setup": [
+    {
+     "failing": [
+      "tests/test_tests.py::TestTestsCase::test_types[(10",
+      "tests/test_tests.py::TestTestsCase::test_types[42",
+      "tests/test_tests.py::TestTestsCase::test_types[false"
+     ],
+     "line": 127,
+     "new": "    return isinstance(value, int) and value is not True and value is False\n",
+     "orig": "    return isinstance(value, int) and value is not True and value is not False\n",
+     "path": "src/jinja2/tests.py",
+     "qual": "test_integer"
+    }
+   ]
+  },
+  {
+   "kind": "bug",
+   "prompt": "A teammate just pushed a commit and now some tests fail. Find the root cause in the library code and fix it without changing the tests.",
+   "setup": [
+    {
+     "failing": [
+      "tests/test_async.py::TestAsyncForLoop::test_call_in_loop",
+      "tests/test_core_tags.py::TestForLoop::test_call_in_loop",
+      "tests/test_core_tags.py::TestMacros::test_complex_call",
+      "tests/test_core_tags.py::TestMacros::test_simple_call",
+      "tests/test_regression.py::TestBug::test_call_with_args",
+      "tests/test_regression.py::TestBug::test_caller_scoping",
+      "tests/test_regression.py::TestBug::test_double_caller",
+      "tests/test_regression.py::TestBug::test_loop_call_loop"
+     ],
+     "line": 1335,
+     "new": "        self.visit_Call(node.call, frame, forward_caller=False)\n",
+     "orig": "        self.visit_Call(node.call, frame, forward_caller=True)\n",
+     "path": "src/jinja2/compiler.py",
+     "qual": "CodeGenerator.visit_CallBlock"
+    }
+   ]
+  },
+  {
+   "kind": "bug",
+   "prompt": "Something in `Parser.parse_filter_block` broke recently and its tests fail now. Track it down and fix it. Leave the tests alone.",
+   "setup": [
+    {
+     "failing": [
+      "tests/test_filters.py::TestFilter::test_block",
+      "tests/test_filters.py::TestFilter::test_filtertag"
+     ],
+     "line": 440,
+     "new": "        node.body = self.parse_statements((\"name:endfilter\",), drop_needle=False)\n",
+     "orig": "        node.body = self.parse_statements((\"name:endfilter\",), drop_needle=True)\n",
+     "path": "src/jinja2/parser.py",
+     "qual": "Parser.parse_filter_block"
+    }
+   ]
+  },
+  {
+   "kind": "question",
+   "prompt": "Question, no code changes: which function does this? \"Find all filter and test names used in the template and assign them to variables in the compiled namespace.\" Reply with its file path and function name.",
+   "question": {
+    "name": "pull_dependencies",
+    "path": "src/jinja2/compiler.py",
+    "qual": "CodeGenerator.pull_dependencies",
+    "sentence": "Find all filter and test names used in the template and assign them to variables in the compiled namespace."
+   }
+  },
+  {
+   "kind": "review",
+   "prompt": "Review every change made in this session. Remove leftovers or duplication, match the style of the surrounding code, and make sure the full test suite passes."
+  }
+ ]
+}

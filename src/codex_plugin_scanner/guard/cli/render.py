@@ -17,7 +17,11 @@ from ..redaction import redact_text
 from ..value_coercion import coerce_int as _coerce_int
 from .doctor_readiness import doctor_runtime_readiness
 from .protect_inline_approval import human_protect_guidance
-from .protect_output import _protect_harness_message_for_render, _restore_ephemeral_signed_approval_output
+from .protect_output import (
+    _protect_harness_message_for_render,
+    _restore_ephemeral_signed_approval_output,
+    protect_desktop_approval_url,
+)
 from .render_approval_gate_nudge import print_approval_gate_nudge
 from .render_connectors import print_connector_setup_line, render_mcp_list
 from .render_doctor_readiness import build_doctor_harness_table, readiness_text
@@ -2535,6 +2539,10 @@ def _render_protect(console: Console, payload: dict[str, object]) -> None:
             )
         )
         if isinstance(signed_approval_url, str) and signed_approval_url:
+            desktop_url = protect_desktop_approval_url(payload)
+            if desktop_url is not None:
+                console.print(Text(f"Open in HOL Guard Desktop: {desktop_url}"), soft_wrap=True)
+                console.print(Text("Or in a browser:"), soft_wrap=True)
             console.print(Text(signed_approval_url), soft_wrap=True)
     supply_chain = payload.get("supply_chain")
     if isinstance(supply_chain, dict):

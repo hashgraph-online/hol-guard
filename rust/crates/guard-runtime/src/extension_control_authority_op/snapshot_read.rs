@@ -242,10 +242,24 @@ impl Ctx<'_> {
             }
             other => return Ok(other),
         };
+        // The head's own pack activation names the catalog it belongs on. A
+        // runtime on another catalog, such as an older install still running
+        // beside an upgraded one, is served the rebinding in memory and never
+        // moves the head off it. A head already moved off it is moved back.
+        let activation_catalog = if mode.allow_migration {
+            self.bound_activation_catalog()?
+        } else {
+            None
+        };
+        let leaves_activation = activation_catalog.as_deref() == Some(stored_catalog_digest);
+        let returns_to_activation = activation_catalog.as_deref() == Some(catalog_digest);
         // Two runtimes with different catalogs sharing a home would otherwise
         // commit a revision on every read, migrating the authority back and
-        // forth faster than a dashboard draft can be applied.
+        // forth faster than a dashboard draft can be applied. The move back
+        // to the activation's catalog is exempt: the installed upgrade plans
+        // from that catalog and cannot run until the head is on it.
         let oscillates = mode.allow_migration
+            && !returns_to_activation
             && self.migration_oscillates(revision, catalog_digest, stored_catalog_digest)?;
         // The source read serves the committed view while a prepare that
         // decides nothing still holds the next revision. Migrating now would
@@ -259,7 +273,7 @@ impl Ctx<'_> {
         };
         let (layers, retired_targets) =
             self.rebound_catalog_layers(&previous, catalog_digest, current_manifest)?;
-        if !mode.allow_migration || oscillates || next_occupied {
+        if !mode.allow_migration || oscillates || next_occupied || leaves_activation {
             return Ok(Read::View(View {
                 catalog_digest: catalog_digest.to_owned(),
                 layers,

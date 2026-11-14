@@ -186,5 +186,5 @@ fn at(chars: &[char], index: usize, pat: &str) -> bool {
 // Re-exported shell-structure surface used by consumers (:11-31).
 pub use shell_structure::{
     extract_command_substitution_spans, extract_expanded_heredoc_substitution_spans,
-    extract_heredocs, mask_heredoc_bodies, ShellHeredoc,
+    extract_heredocs, mask_closed_heredoc_bodies, mask_heredoc_bodies, ShellHeredoc,
 };

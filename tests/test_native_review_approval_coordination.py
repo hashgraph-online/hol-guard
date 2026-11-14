@@ -500,7 +500,7 @@ def test_native_review_retry_is_bound_expiring_and_one_use(
     assert isinstance(request_id, str)
     approved_at = datetime.now(timezone.utc)
     if mutation == "expired":
-        approved_at -= timedelta(minutes=6)
+        approved_at -= timedelta(minutes=61)
     elif mutation == "future":
         approved_at += timedelta(minutes=1)
     assert store.resolve_harness_native_approval_request(

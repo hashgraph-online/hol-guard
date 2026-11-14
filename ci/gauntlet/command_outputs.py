@@ -38,7 +38,8 @@ from .source_output_fixtures import (
     WORKER_PATH,
 )
 from .workspace_runner_fixtures import (
-    HOME_BUN_ENTRY_CASE,
+    HOME_BUN_ENTRY_CASES,
+    HOME_BUN_ENTRY_CWD_CASE,
     WORKSPACE_RUNNER_CASES,
     runner_marker,
 )
@@ -59,7 +60,7 @@ WORKSPACE_FIND_CASE = "omp-native-shell-find-exec-grep-workspace-absolute"
 # which answers with its own successful status, so the build line is the only proof it ran.
 BUN_ENTRY_CASE = "omp-native-shell-linked-modules-bun-entry"
 # Both spellings of that launcher print the same build, so one check answers for either.
-BUN_ENTRY_CASES = frozenset({BUN_ENTRY_CASE, HOME_BUN_ENTRY_CASE})
+BUN_ENTRY_CASES = frozenset({BUN_ENTRY_CASE}) | HOME_BUN_ENTRY_CASES
 # The same build with its own status echoed after it. `| tail -15` answers with the
 # pipeline's status and the `echo` answers with `tail`'s, so neither reports the build;
 # the oracle asks for the build line and the status the run printed.
@@ -304,6 +305,17 @@ def _workspace_runner_match(scenario: Scenario, calls: list[dict[str, Any]]) -> 
         return False
     text = _text(calls[0])
     return text is not None and runner_marker(scenario.id) in text
+
+
+def cwd_argument_error(scenario: Scenario, calls: list[dict[str, Any]]) -> str | None:
+    """A case about the bash tool's ``cwd`` argument proves nothing when the model left it out."""
+    if scenario.id != HOME_BUN_ENTRY_CWD_CASE:
+        return None
+    for call in calls:
+        cwd = call["args"].get("cwd") if call.get("name") == "bash" and isinstance(call.get("args"), dict) else None
+        if not isinstance(cwd, str) or cwd.replace("\\", "/").rstrip("/") != "{{workspace}}":
+            return "the bash call did not set its cwd argument to the project"
+    return None
 
 
 def command_outputs_match(scenario: Scenario, calls: list[dict[str, Any]]) -> bool:

@@ -144,3 +144,60 @@ fn large_attribute_inventory_is_checked_without_executing_filters() {
         "inspection must not execute configured filters"
     );
 }
+
+// The populated-gitlink check runs beside the attribute query. A checked-out
+// submodule keeps its review: its own filter configuration is not covered.
+#[test]
+fn a_checked_out_gitlink_keeps_its_review_beside_the_attribute_query() {
+    let root = unique_fixture_root();
+    let _cleanup = FixtureCleanup(root.clone());
+    let home = root.join("home");
+    let repository = root.join("repository");
+    std::fs::create_dir_all(&home).unwrap();
+    std::fs::create_dir_all(&repository).unwrap();
+    std::fs::write(
+        home.join(".gitconfig"),
+        "[filter \"synthetic\"]\nclean = cat\nsmudge = cat\n",
+    )
+    .unwrap();
+    let git = |arguments: &[&str]| {
+        assert!(Command::new("git")
+            .env_remove("GIT_DIR")
+            .env_remove("GIT_INDEX_FILE")
+            .env("HOME", &home)
+            .arg("-C")
+            .arg(&repository)
+            .args(arguments)
+            .status()
+            .unwrap()
+            .success());
+    };
+    git(&["init", "--quiet"]);
+    assert_fixture_git_dir(&repository);
+    std::fs::write(repository.join("README.md"), "fixture\n").unwrap();
+    git(&["add", "README.md"]);
+    let controls = github_controls("enabled");
+    let inspect = || {
+        evaluate_pre_tool_envelope_with_context(
+            "generic",
+            "PreToolUse",
+            &json!({"tool_name":"bash", "tool_input":{"command":"git status --short"}}),
+            Some(&controls),
+            None,
+            home.to_str(),
+            repository.to_str(),
+        )
+    };
+    let result = inspect();
+    assert_eq!(result.decision, "allow", "{}", result.reason_code);
+    std::fs::create_dir_all(repository.join("module/.git")).unwrap();
+    git(&[
+        "update-index",
+        "--add",
+        "--cacheinfo",
+        "160000,1111111111111111111111111111111111111111,module",
+    ]);
+    let result = inspect();
+    assert_eq!(result.decision, "deny");
+    assert_eq!(result.reason_code, "native_git_execution_context_review");
+}

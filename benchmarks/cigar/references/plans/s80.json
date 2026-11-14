@@ -1,0 +1,83 @@
+{
+ "repo": "jinja",
+ "seed": 80,
+ "steps": [
+  {
+   "kind": "stub",
+   "prompt": "Tests fail because do_format is not implemented (src/jinja2/filters.py). Write the implementation; the docstring and tests describe the expected behavior.",
+   "stub": {
+    "body": "    if args and kwargs:\n        raise FilterArgumentError(\n            \"can't handle positional and keyword arguments at the same time\"\n        )\n\n    return soft_str(value) % (kwargs or args)\n",
+    "body_start": 1025,
+    "end": 1030,
+    "failing": [
+     "tests/test_ext.py::TestInternationalization::test_trans_stringformatting",
+     "tests/test_filters.py::TestFilter::test_format"
+    ],
+    "indent": 4,
+    "path": "src/jinja2/filters.py",
+    "qual": "do_format"
+   }
+  },
+  {
+   "kind": "rename",
+   "prompt": "Rename the internal helper `_make_unop` to `_make_unop_impl` everywhere in the project, including tests. Behavior must not change.",
+   "rename": {
+    "count": 4,
+    "files": [
+     "src/jinja2/compiler.py"
+    ],
+    "new": "_make_unop_impl",
+    "old": "_make_unop",
+    "path": "src/jinja2/compiler.py"
+   }
+  },
+  {
+   "kind": "bug",
+   "prompt": "Something in `DictLoader.get_source` broke recently and its tests fail now. Track it down and fix it. Leave the tests alone.",
+   "setup": [
+    {
+     "failing": [
+      "tests/test_loader.py::TestLoaders::test_dict_loader_cache_invalidates",
+      "tests/test_loader.py::TestLoaders::test_limited_size_cache",
+      "tests/test_regression.py::TestBug::test_cached_extends[extends]",
+      "tests/test_regression.py::TestBug::test_cached_extends[include]"
+     ],
+     "line": 424,
+     "new": "            return source, None, lambda: source != self.mapping.get(template)\n",
+     "orig": "            return source, None, lambda: source == self.mapping.get(template)\n",
+     "path": "src/jinja2/loaders.py",
+     "qual": "DictLoader.get_source"
+    }
+   ]
+  },
+  {
+   "kind": "question",
+   "prompt": "Question, no code changes: which function does this? \"Replace all newlines with the configured sequence in strings and template data.\" Reply with its file path and function name.",
+   "question": {
+    "name": "_normalize_newlines",
+    "path": "src/jinja2/lexer.py",
+    "qual": "Lexer._normalize_newlines",
+    "sentence": "Replace all newlines with the configured sequence in strings and template data."
+   }
+  },
+  {
+   "kind": "stub",
+   "prompt": "`LRUCache.setdefault` in src/jinja2/utils.py was stubbed out during a refactor and now raises NotImplementedError. Implement it again so it does what its docstring says and the existing tests pass.",
+   "stub": {
+    "body": "        try:\n            return self[key]\n        except KeyError:\n            self[key] = default\n            return default\n",
+    "body_start": 474,
+    "end": 478,
+    "failing": [
+     "tests/test_utils.py::TestLRUCache::test_setdefault"
+    ],
+    "indent": 8,
+    "path": "src/jinja2/utils.py",
+    "qual": "LRUCache.setdefault"
+   }
+  },
+  {
+   "kind": "review",
+   "prompt": "Review every change made in this session. Remove leftovers or duplication, match the style of the surrounding code, and make sure the full test suite passes."
+  }
+ ]
+}

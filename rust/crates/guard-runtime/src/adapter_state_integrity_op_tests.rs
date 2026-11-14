@@ -35,7 +35,22 @@ fn request(action: &str, payload: Value) -> AdapterStateIntegrityRequestV1 {
         field: None,
         integrity_key_b64: Some(key_b64(KEY)),
         integrity_key_id: Some(KEY_ID.to_owned()),
+        key_home: None,
+        create_key: None,
     }
+}
+
+/// A request that names the Guard home holding the key instead of sending it.
+fn home_request(
+    action: &str,
+    payload: Value,
+    home: &std::path::Path,
+) -> AdapterStateIntegrityRequestV1 {
+    let mut request = request(action, payload);
+    request.integrity_key_b64 = None;
+    request.integrity_key_id = None;
+    request.key_home = Some(home.to_str().expect("utf-8 home").to_owned());
+    request
 }
 
 fn answer(request: &AdapterStateIntegrityRequestV1) -> AdapterStateIntegrityResultV1 {
@@ -267,4 +282,85 @@ fn the_request_digest_excludes_the_key() {
     let mut different = request(ADAPTER_STATE_ACTION_VERIFY, manifest());
     different.harness = "hermes".to_owned();
     assert_ne!(first.request_sha256, answer(&different).request_sha256);
+}
+
+#[test]
+fn a_named_home_signs_with_the_key_it_creates() {
+    let home = tempfile::tempdir().expect("home");
+    let stamp = answer(&home_request(
+        ADAPTER_STATE_ACTION_AUTHENTICATE,
+        manifest(),
+        home.path(),
+    ));
+    assert_eq!(stamp.status, "ok", "{}", stamp.code);
+    let stamped = stamp.payload.expect("payload");
+    let key = crate::adapter_state_key::load(home.path()).expect("created key");
+    assert_eq!(stamped["state_authentication"]["key_id"], json!(key.id));
+
+    let verified = answer(&home_request(
+        ADAPTER_STATE_ACTION_VERIFY,
+        stamped.clone(),
+        home.path(),
+    ));
+    assert_eq!(verified.payload, Some(json!({"authenticated": true})));
+
+    let mut field = home_request(ADAPTER_STATE_ACTION_FIELD, stamped.clone(), home.path());
+    field.field = Some("managed_config_path".to_owned());
+    assert_eq!(
+        answer(&field).payload.expect("payload")["value"],
+        json!("/home/dev/.config/copilot/config.json")
+    );
+
+    let other = tempfile::tempdir().expect("other home");
+    crate::adapter_state_key::load_or_create(other.path()).expect("other key");
+    let elsewhere = answer(&home_request(
+        ADAPTER_STATE_ACTION_VERIFY,
+        stamped,
+        other.path(),
+    ));
+    assert_eq!(elsewhere.payload, Some(json!({"authenticated": false})));
+}
+
+#[test]
+fn a_home_without_a_key_verifies_nothing_and_creates_nothing() {
+    let home = tempfile::tempdir().expect("home");
+    let stamped = authenticated(manifest());
+
+    let verified = answer(&home_request(
+        ADAPTER_STATE_ACTION_VERIFY,
+        stamped,
+        home.path(),
+    ));
+    assert_eq!(verified.payload, Some(json!({"authenticated": false})));
+
+    let mut no_create = home_request(ADAPTER_STATE_ACTION_AUTHENTICATE, manifest(), home.path());
+    no_create.create_key = Some(false);
+    assert_eq!(
+        answer(&no_create).code,
+        "native_adapter_state_integrity_key_unavailable"
+    );
+    assert!(!home.path().join("managed").exists());
+}
+
+#[test]
+fn a_relative_home_is_refused() {
+    let mut relative = home_request(
+        ADAPTER_STATE_ACTION_VERIFY,
+        manifest(),
+        std::path::Path::new("/"),
+    );
+    relative.key_home = Some("guard-home".to_owned());
+    assert_eq!(
+        answer(&relative).code,
+        "native_adapter_state_integrity_invalid"
+    );
+}
+
+/// An older caller sends neither new field, and its digest must not change.
+#[test]
+fn unset_home_fields_stay_off_the_wire() {
+    let wire =
+        serde_json::to_value(request(ADAPTER_STATE_ACTION_VERIFY, manifest())).expect("wire");
+    assert!(wire.get("key_home").is_none());
+    assert!(wire.get("create_key").is_none());
 }

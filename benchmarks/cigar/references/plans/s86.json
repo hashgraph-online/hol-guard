@@ -1,0 +1,85 @@
+{
+ "repo": "boltons",
+ "seed": 86,
+ "steps": [
+  {
+   "kind": "rename",
+   "prompt": "Rename the internal helper `_make_quote_map` to `_make_quote_map_impl` everywhere in the project, including tests. Behavior must not change.",
+   "rename": {
+    "count": 5,
+    "files": [
+     "boltons/urlutils.py"
+    ],
+    "new": "_make_quote_map_impl",
+    "old": "_make_quote_map",
+    "path": "boltons/urlutils.py"
+   }
+  },
+  {
+   "kind": "question",
+   "prompt": "Question, no code changes: which function does this? \"Same as :func:`frange`, but generator-based instead of returning a list.\" Reply with its file path and function name.",
+   "question": {
+    "name": "xfrange",
+    "path": "boltons/iterutils.py",
+    "qual": "xfrange",
+    "sentence": "Same as :func:`frange`, but generator-based instead of returning a list."
+   }
+  },
+  {
+   "kind": "bug2",
+   "prompt": "The last commit broke several tests in different places. Find every root cause in the library code and fix them all without changing the tests.",
+   "setup": [
+    {
+     "failing": [
+      "tests/test_funcutils_fb.py::test_get_arg_names",
+      "tests/test_funcutils_fb_py3.py::test_get_arg_names"
+     ],
+     "line": 903,
+     "new": "        arg_names = tuple(self.args) - tuple(getattr(self, 'kwonlyargs', ()))\n",
+     "orig": "        arg_names = tuple(self.args) + tuple(getattr(self, 'kwonlyargs', ()))\n",
+     "path": "boltons/funcutils.py",
+     "qual": "FunctionBuilder.get_arg_names"
+    },
+    {
+     "failing": [
+      "tests/test_timeutils.py::test_daterange_infinite"
+     ],
+     "line": 370,
+     "new": "        finished = lambda now, stop: True\n",
+     "orig": "        finished = lambda now, stop: False\n",
+     "path": "boltons/timeutils.py",
+     "qual": "daterange"
+    }
+   ]
+  },
+  {
+   "doc": {
+    "module": "boltons.excutils",
+    "path": "boltons/excutils.py",
+    "qual": "main"
+   },
+   "kind": "doc",
+   "prompt": "Add a short usage example to the docstring of `main` in boltons/excutils.py, written as a doctest (`>>>` lines with their expected output). Make sure the example actually passes."
+  },
+  {
+   "kind": "bug",
+   "prompt": "`tests/test_fileutils.py::test_fileperms` started failing after the last commit. Fix the bug in the library code; don't edit the tests.",
+   "setup": [
+    {
+     "failing": [
+      "tests/test_fileutils.py::test_fileperms"
+     ],
+     "line": 129,
+     "new": "            if cur != value:\n",
+     "orig": "            if cur == value:\n",
+     "path": "boltons/fileutils.py",
+     "qual": "FilePerms._FilePermProperty.__set__"
+    }
+   ]
+  },
+  {
+   "kind": "review",
+   "prompt": "Review every change made in this session. Remove leftovers or duplication, match the style of the surrounding code, and make sure the full test suite passes."
+  }
+ ]
+}

@@ -60,12 +60,7 @@ pub(super) fn evaluate(operation: &str, input: &Value) -> Option<Value> {
     environment.retain(|key, _| {
         !key.starts_with("GIT_") && !matches!(key.as_str(), "PAGER" | "XDG_CONFIG_HOME")
     });
-    for (key, value) in [
-        ("GIT_CONFIG_NOSYSTEM", "1"),
-        ("GIT_OPTIONAL_LOCKS", "0"),
-        ("GIT_TERMINAL_PROMPT", "0"),
-        ("GIT_NO_LAZY_FETCH", "1"),
-    ] {
+    for (key, value) in super::inline_git::GIT_SETTINGS {
         environment.insert(key.to_owned(), value.to_owned());
     }
     Some(json!({ "value": environment }))
@@ -176,7 +171,7 @@ fn metadata_pointer(path: &Path) -> Option<String> {
 /// Resolve only Git's linked metadata, never grant its parent checkout. A
 /// plain `.git` directory inside the workspace is already readable; a linked
 /// worktree's pointer has to name a worktree of an owned, unshared repository.
-fn repository_read_roots(workspace: &Path, cwd: &Path) -> Option<Vec<PathBuf>> {
+pub(super) fn repository_read_roots(workspace: &Path, cwd: &Path) -> Option<Vec<PathBuf>> {
     let mut directory = cwd.to_path_buf();
     while !directory.join(".git").exists() {
         if directory == workspace {

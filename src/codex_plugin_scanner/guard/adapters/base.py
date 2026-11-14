@@ -41,15 +41,19 @@ class PreparedHarnessInstall:
     files: tuple[TransitionFile, ...]
     manifest: dict[str, object]
 
-    def publish(self, guard_home: Path) -> dict[str, object]:
-        """Publish an ordinary install under ownership; pending transitions use their signed plan."""
+    def publish(self, guard_home: Path, *, removals: bool = False) -> dict[str, object]:
+        """Publish an ordinary install under ownership; pending transitions use their signed plan.
+
+        ``removals`` admits planned deletions, for a plan that retires files an
+        older install left behind. Rollback still restores them.
+        """
         from ..codex_install_transaction import require_codex_install_owner
         from ..runtime_transition import RuntimeTransition, TransitionError, assert_transition_mutation_allowed
 
         require_codex_install_owner(guard_home)
         assert_transition_mutation_allowed(guard_home)
         if any(
-            change.kind != "binding" or (change.after is None and change.before != change.after)
+            change.kind != "binding" or (not removals and change.after is None and change.before != change.after)
             for change in self.files
         ):
             raise TransitionError("adapter_install_plan_invalid")
@@ -485,6 +489,8 @@ class HarnessAdapter:
                 "timed_out": runtime_probe.get("timed_out") is True,
                 "failed": runtime_probe.get("ok") is False,
                 "reported_no_artifacts": runtime_probe.get("reported_artifacts") == 0,
+                "managed_install_present": runtime_probe.get("managed_install_present") is True,
+                "runtime_hook_registered": runtime_probe.get("runtime_hook_registered") is True,
             },
             detection=_detection_request(detection),
         )

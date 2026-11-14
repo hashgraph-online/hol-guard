@@ -1,0 +1,90 @@
+{
+ "repo": "moreit",
+ "seed": 83,
+ "steps": [
+  {
+   "kind": "question",
+   "prompt": "Question, no code changes: which function does this? \"Yield all arguments passed to the function in the same order in which they were passed.\" Reply with its file path and function name.",
+   "question": {
+    "name": "value_chain",
+    "path": "more_itertools/more.py",
+    "qual": "value_chain",
+    "sentence": "Yield all arguments passed to the function in the same order in which they were passed."
+   }
+  },
+  {
+   "kind": "stub",
+   "prompt": "`roundrobin` in more_itertools/recipes.py was stubbed out during a refactor and now raises NotImplementedError. Implement it again so it does what its docstring says and the existing tests pass.",
+   "stub": {
+    "body": "    iterators = map(iter, iterables)\n    for num_active in range(len(iterables), 0, -1):\n        iterators = cycle(islice(iterators, num_active))\n        yield from map(next, iterators)\n",
+    "body_start": 428,
+    "end": 431,
+    "failing": [
+     "tests/test_recipes.py::RoundrobinTests::test_even_groups",
+     "tests/test_recipes.py::RoundrobinTests::test_uneven_groups"
+    ],
+    "indent": 4,
+    "path": "more_itertools/recipes.py",
+    "qual": "roundrobin"
+   }
+  },
+  {
+   "kind": "bug",
+   "prompt": "A teammate just pushed a commit and now some tests fail. Find the root cause in the library code and fix it without changing the tests.",
+   "setup": [
+    {
+     "failing": [
+      "tests/test_more.py::IsSortedTests::test_basic"
+     ],
+     "line": 3828,
+     "new": "    it = iterable if (key is not None) else map(key, iterable)\n",
+     "orig": "    it = iterable if (key is None) else map(key, iterable)\n",
+     "path": "more_itertools/more.py",
+     "qual": "is_sorted"
+    }
+   ]
+  },
+  {
+   "kind": "bug",
+   "prompt": "A teammate just pushed a commit and now some tests fail. Find the root cause in the library code and fix it without changing the tests.",
+   "setup": [
+    {
+     "failing": [
+      "tests/test_more.py::CallbackIterTests::test_abort",
+      "tests/test_more.py::CallbackIterTests::test_basic",
+      "tests/test_more.py::CallbackIterTests::test_exception",
+      "tests/test_more.py::CallbackIterTests::test_no_result"
+     ],
+     "line": 3917,
+     "new": "        if self._future is not None:\n",
+     "orig": "        if self._future is None:\n",
+     "path": "more_itertools/more.py",
+     "qual": "callback_iter.done"
+    }
+   ]
+  },
+  {
+   "kind": "stub",
+   "prompt": "`bucket._get_values` in more_itertools/more.py was stubbed out during a refactor and now raises NotImplementedError. Implement it again so it does what its docstring says and the existing tests pass.",
+   "stub": {
+    "body": "        while True:\n            # If we've cached some items that match the target value, emit\n            # the first one and evict it from the cache.\n            if self._cache[value]:\n                yield self._cache[value].popleft()\n            # Otherwise we need to advance the parent iterator to search for\n            # a matching item, caching the rest.\n            else:\n                while True:\n                    try:\n                        item = next(self._it)\n                    except StopIteration:\n                        return\n                    item_value = self._key(item)\n                    if item_value == value:\n                        yield item\n                        break\n                    elif self._validator(item_value):\n                        self._cache[item_value].append(item)\n",
+    "body_start": 1049,
+    "end": 1067,
+    "failing": [
+     "tests/test_more.py::BucketTests::test_basic",
+     "tests/test_more.py::BucketTests::test_in",
+     "tests/test_more.py::BucketTests::test_list",
+     "tests/test_more.py::BucketTests::test_list_validator",
+     "tests/test_more.py::BucketTests::test_validator"
+    ],
+    "indent": 8,
+    "path": "more_itertools/more.py",
+    "qual": "bucket._get_values"
+   }
+  },
+  {
+   "kind": "review",
+   "prompt": "Review every change made in this session. Remove leftovers or duplication, match the style of the surrounding code, and make sure the full test suite passes."
+  }
+ ]
+}

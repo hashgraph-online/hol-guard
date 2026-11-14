@@ -51,7 +51,11 @@ fn blocks_use_the_same_identity_window_scope_and_latest_decision_rules() {
         }
         insert_rows(&Connection::open(&db).unwrap(), "approval_requests", &rows);
         let first = &scenario["calls"][0];
-        let expected = scenario["native_may_deny"] != true && first["result"] == true;
+        // A Block once answers retries for five minutes, not the hour an
+        // Allow once covers, so the one-hour edge does not block.
+        let expected = scenario["native_may_deny"] != true
+            && first["result"] == true
+            && name != "exactly_one_hour";
         for _ in 0..2 {
             let reply = call(&home, &first["args"], "matching_native_review_block");
             assert_eq!(reply["status"], "ok", "{name}: {reply}");
@@ -171,6 +175,86 @@ fn a_masked_stored_target_still_answers_the_raw_retry() {
     let reply = consume(&home, &args);
     assert_eq!(reply["status"], "ok", "{reply}");
     assert_eq!(reply["payload"], true);
+    std::fs::remove_dir_all(home).unwrap();
+}
+
+/// An answer often arrives after the agent stopped waiting. It still covers
+/// the user's "try again" for an hour: the next identical try runs once, a
+/// second try or a changed command asks again, and after the hour it asks.
+#[test]
+fn a_late_answer_covers_one_identical_retry_within_the_hour() {
+    let vectors: Value = serde_json::from_str(VECTORS).unwrap();
+    let scenario = vectors["scenarios"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|scenario| scenario["name"] == "once_allow_then_replay")
+        .unwrap();
+    let base = scenario["calls"][0]["args"].clone();
+    let at = |now: &str| {
+        let mut args = base.clone();
+        args["now"] = Value::from(now);
+        args
+    };
+    let fresh = |label: &str| {
+        let home = temp_home(label);
+        seed(&home.join("guard.db"), &vectors);
+        insert_rows(
+            &Connection::open(home.join("guard.db")).unwrap(),
+            "approval_requests",
+            &scenario["rows"],
+        );
+        home
+    };
+
+    let home = fresh("late-answer");
+    let mut changed = at("2026-03-01T12:40:00+00:00");
+    changed["launch_target"] = Value::from(format!(
+        "{} --force",
+        base["launch_target"].as_str().unwrap()
+    ));
+    assert_eq!(
+        consume(&home, &changed)["payload"],
+        false,
+        "a changed command asks"
+    );
+    assert_eq!(
+        consume(&home, &at("2026-03-01T12:40:00+00:00"))["payload"],
+        true,
+        "the next identical try runs"
+    );
+    assert_eq!(
+        consume(&home, &at("2026-03-01T12:41:00+00:00"))["payload"],
+        false,
+        "a second try asks"
+    );
+    std::fs::remove_dir_all(home).unwrap();
+
+    let home = fresh("late-answer-expired");
+    assert_eq!(
+        consume(&home, &at("2026-03-01T13:01:00+00:00"))["payload"],
+        false,
+        "after the hour it asks"
+    );
+    std::fs::remove_dir_all(home).unwrap();
+}
+
+/// A refusal only stops a retry loop: after five minutes a new try is a new
+/// question, even though an Allow once would still cover it.
+#[test]
+fn a_block_once_answers_retries_for_five_minutes_only() {
+    let (home, base) = settle_home("block-five-minutes", true);
+    for (now, blocked) in [
+        ("2026-03-01T12:04:00+00:00", true),
+        ("2026-03-01T12:05:00+00:00", true),
+        ("2026-03-01T12:06:00+00:00", false),
+    ] {
+        let mut args = base.clone();
+        args["now"] = Value::from(now);
+        let reply = call(&home, &args, "matching_native_review_block");
+        assert_eq!(reply["status"], "ok", "{now}: {reply}");
+        assert_eq!(reply["payload"], blocked, "{now}");
+    }
     std::fs::remove_dir_all(home).unwrap();
 }
 

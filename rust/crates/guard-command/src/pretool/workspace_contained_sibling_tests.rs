@@ -76,6 +76,7 @@ fn home_result(
         Some(&controls),
         None,
         crate::pretool::PathContext {
+            literal_words: &[],
             home_dir: home.to_str(),
             cwd: cwd.to_str(),
             shell_home_matches: true,
@@ -84,9 +85,11 @@ fn home_result(
             cargo_config_inert: false,
             npm_config_inert: false,
             pip_config_inert: false,
+            python_environment_inert: false,
             ripgrep_config_absent: false,
             gem_config_absent: false,
             http_config_absent: false,
+            openssl_config_absent: false,
             psql_environment: Default::default(),
             creates_nothing: false,
         },
@@ -192,6 +195,7 @@ fn the_home_projection_answers_for_a_sibling_root() {
     let (home, main, tree) = fixture();
     worktree_packages(&main, &tree);
     let context = crate::pretool::PathContext {
+        literal_words: &[],
         home_dir: home.to_str(),
         cwd: main.to_str(),
         shell_home_matches: true,
@@ -200,9 +204,11 @@ fn the_home_projection_answers_for_a_sibling_root() {
         cargo_config_inert: false,
         npm_config_inert: false,
         pip_config_inert: false,
+        python_environment_inert: false,
         ripgrep_config_absent: false,
         gem_config_absent: false,
         http_config_absent: false,
+        openssl_config_absent: false,
         psql_environment: Default::default(),
         creates_nothing: false,
     };

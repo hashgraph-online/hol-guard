@@ -7,7 +7,6 @@ import json
 import os
 import stat
 from pathlib import Path
-from types import SimpleNamespace
 from typing import cast
 
 import pytest
@@ -100,258 +99,106 @@ def test_authentication_rejects_malformed_metadata_and_paths(
     assert authenticated_adapter_path(guard_home, harness="copilot", payload=signed_absolute, field="missing") is None
 
 
-@pytest.mark.skipif(os.name != "posix", reason="POSIX descriptor-backed key handling")
-def test_posix_key_creation_reuses_racing_key(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    guard_home = tmp_path / "guard-home"
-    first_key_id, _ = integrity._load_or_create_key(guard_home)
-    real_open = integrity.os.open
-    raced = False
-
-    def raise_file_exists(
-        path: str | os.PathLike[str], flags: int, mode: int = 0o777, *, dir_fd: int | None = None
-    ) -> int:
-        nonlocal raced
-        if dir_fd is not None and path == integrity._KEY_FILENAME and not raced:
-            raced = True
-            raise FileExistsError(path)
-        if dir_fd is None:
-            return real_open(path, flags, mode)
-        return real_open(path, flags, mode, dir_fd=dir_fd)
-
-    monkeypatch.setattr(integrity.os, "open", raise_file_exists)
-    second_key_id, _ = integrity._load_or_create_key(guard_home)
-
-    assert raced
-    assert first_key_id == second_key_id
-
-
-@pytest.mark.skipif(os.name != "posix", reason="POSIX descriptor-backed key handling")
-def test_posix_key_write_failure_removes_partial_key(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    guard_home = tmp_path / "guard-home"
-
-    def fail_fsync(_descriptor: int) -> None:
-        raise OSError("simulated key fsync failure")
-
-    monkeypatch.setattr(integrity.os, "fsync", fail_fsync)
-    with pytest.raises(OSError, match="fsync"):
-        integrity._load_or_create_key(guard_home)
-
-    assert not _key_path(guard_home).exists()
-
-
-@pytest.mark.skipif(os.name != "posix", reason="POSIX descriptor-backed key handling")
-def test_posix_key_directory_guards_and_permissions(tmp_path: Path) -> None:
-    regular = tmp_path / "not-a-directory"
-    regular.write_text("not a directory", encoding="utf-8")
-    with pytest.raises(NotADirectoryError):
-        integrity._private_key_directory_descriptor(regular, create=False)
-
-    real_open = integrity.os.open
-    regular_descriptor = real_open(regular, os.O_RDONLY)
-
-    def return_regular_descriptor(
-        path: str | os.PathLike[str], flags: int, mode: int = 0o777, *args: object, **kwargs: object
-    ) -> int:
-        if Path(path) == regular:
-            return regular_descriptor
-        del args, kwargs
-        return real_open(path, flags, mode)
-
-    monkeypatch = pytest.MonkeyPatch()
-    monkeypatch.setattr(integrity.os, "open", return_regular_descriptor)
-    try:
-        with pytest.raises(ValueError, match="not a directory"):
-            integrity._private_key_directory_descriptor(regular, create=False)
-    finally:
-        monkeypatch.undo()
-
-    managed = tmp_path / "managed"
-    managed.mkdir()
-    managed.chmod(0o755)
-    with pytest.raises(ValueError, match="permissions"):
-        integrity._private_key_directory_descriptor(managed, create=False)
-
-
-@pytest.mark.skipif(os.name != "posix", reason="POSIX descriptor-backed key handling")
-@pytest.mark.parametrize(
-    ("raw", "message"),
-    [
-        (b"not utf-8: \xff", "invalid format"),
-        (b"[]", "invalid format"),
-    ],
-)
-def test_posix_key_loader_rejects_malformed_bytes(tmp_path: Path, raw: bytes, message: str) -> None:
-    guard_home = tmp_path / "guard-home"
-    managed = guard_home / "managed"
-    managed.mkdir(parents=True, mode=0o700)
-    key_path = managed / integrity._KEY_FILENAME
-    key_path.write_bytes(raw)
-    key_path.chmod(0o600)
-
-    assert not adapter_state_is_authenticated(
-        guard_home,
-        harness="copilot",
-        payload={
-            "state_authentication": {
-                "algorithm": "hmac-sha256",
-                "key_id": "id",
-                "mac": "0" * 64,
-                "schema_version": 1,
-            }
-        },
-    )
-
-
-@pytest.mark.skipif(os.name != "posix", reason="POSIX descriptor-backed key handling")
-def test_posix_key_loader_rejects_nonregular_and_public_key(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    guard_home = tmp_path / "guard-home"
-    managed = guard_home / "managed"
-    managed.mkdir(parents=True, mode=0o700)
-    key_path = managed / integrity._KEY_FILENAME
-    key_path.write_text("{}", encoding="utf-8")
-    parent_descriptor = os.open(managed, os.O_RDONLY | os.O_DIRECTORY)
-    try:
-
-        def report_directory(_fd: int) -> object:
-            return SimpleNamespace(st_mode=stat.S_IFDIR)
-
-        monkeypatch.setattr(integrity.os, "fstat", report_directory)
-        with pytest.raises(ValueError, match="regular file"):
-            integrity._load_key_from_descriptor(parent_descriptor)
-    finally:
-        os.close(parent_descriptor)
-    monkeypatch.undo()
-
-    key_path.write_text(json.dumps(_key_payload()), encoding="utf-8")
-    key_path.chmod(0o644)
-    assert not adapter_state_is_authenticated(
-        guard_home,
-        harness="copilot",
-        payload={
-            "state_authentication": {
-                "algorithm": "hmac-sha256",
-                "key_id": "id",
-                "mac": "0" * 64,
-                "schema_version": 1,
-            }
-        },
-    )
-
-
-@pytest.mark.parametrize(
-    ("payload", "message"),
-    [
-        ({}, "invalid metadata"),
-        ({"schema_version": 1, "key_id": "id"}, "invalid key material"),
-        ({"schema_version": 1, "key_id": "id", "key": 7}, "invalid key material"),
-        ({"schema_version": 1, "key_id": "id", "key": "é"}, "invalid key material"),
-        ({"schema_version": 1, "key_id": "id", "key": "%%%"}, "invalid key length"),
-        (
-            {"schema_version": 1, "key_id": "id", "key": base64.urlsafe_b64encode(b"short").decode()},
-            "invalid key length",
-        ),
-    ],
-)
-def test_key_parser_rejects_malformed_key_material(payload: dict[str, object], message: str) -> None:
-    with pytest.raises(ValueError, match=message):
-        integrity._parse_key(payload)
-
-
-@pytest.mark.parametrize("platform_name", ["darwin", "nt"])
-def test_non_posix_key_creation_and_existing_key_loading(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-    platform_name: str,
-) -> None:
-    monkeypatch.setattr(integrity.os, "name", platform_name)
-    guard_home = tmp_path / f"guard-{platform_name}"
-    first_key_id, _ = integrity._load_or_create_key(guard_home)
-    second_key_id, _ = integrity._load_or_create_key(guard_home)
-
-    assert first_key_id == second_key_id
-    assert _key_path(guard_home).is_file()
-    if platform_name == "darwin":
-        assert stat.S_IMODE(_key_path(guard_home).parent.stat().st_mode) == 0o700
-
-
-def test_non_posix_key_creation_race_and_write_failure_cleanup(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.setattr(integrity.os, "name", "darwin")
-    guard_home = tmp_path / "guard-home"
+def _write_key(guard_home: Path) -> None:
     key_path = _key_path(guard_home)
-    real_open = integrity.os.open
-    raced = False
-
-    def create_then_report_exists(path: str | os.PathLike[str], flags: int, mode: int = 0o777) -> int:
-        nonlocal raced
-        if Path(path) == key_path and not raced:
-            raced = True
-            key_path.parent.mkdir(parents=True, exist_ok=True)
-            key_path.write_text(json.dumps(_key_payload()), encoding="utf-8")
-            key_path.chmod(0o600)
-            raise FileExistsError(path)
-        return real_open(path, flags, mode)
-
-    monkeypatch.setattr(integrity.os, "open", create_then_report_exists)
-    key_id, _ = integrity._load_or_create_key(guard_home)
-    assert raced
-    assert key_id == "race-key"
-
-    failing_home = tmp_path / "failing-home"
-
-    def fail_fsync(_descriptor: int) -> None:
-        raise OSError("simulated key fsync failure")
-
-    monkeypatch.setattr(integrity.os, "fsync", fail_fsync)
-    with pytest.raises(OSError, match="fsync"):
-        integrity._load_or_create_key(failing_home)
-    assert not _key_path(failing_home).exists()
+    key_path.parent.mkdir(parents=True, exist_ok=True)
+    key_path.write_text(json.dumps(_key_payload()), encoding="utf-8")
+    if os.name == "posix":
+        key_path.parent.chmod(0o700)
+        key_path.chmod(0o600)
 
 
-def test_non_posix_key_loader_rejects_directory_permissions_and_bad_json(
+def _record_requests(monkeypatch: pytest.MonkeyPatch) -> list[dict[str, object]]:
+    requests: list[dict[str, object]] = []
+
+    def record(**kwargs: object) -> dict[str, object]:
+        requests.append(kwargs)
+        return {"authenticated": True, "value": "/tmp/target.txt"}
+
+    monkeypatch.setattr(integrity, "native_adapter_state_integrity", record)
+    return requests
+
+
+def test_the_runtime_is_named_the_key_home_and_sent_no_key(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(integrity.os, "name", "darwin")
     guard_home = tmp_path / "guard-home"
-    managed = guard_home / "managed"
-    managed.mkdir(parents=True)
-    key_path = managed / integrity._KEY_FILENAME
-    key_path.mkdir()
-    assert not integrity.adapter_state_is_authenticated(
-        guard_home,
-        harness="copilot",
-        payload={"state_authentication": {}},
-    )
+    requests = _record_requests(monkeypatch)
 
-    key_path.rmdir()
-    key_path.write_text(json.dumps(_key_payload()), encoding="utf-8")
-    key_path.chmod(0o644)
-    assert not integrity.adapter_state_is_authenticated(
-        guard_home,
-        harness="copilot",
-        payload={"state_authentication": {}},
-    )
+    authenticate_adapter_state(guard_home, harness="copilot", payload={"scope": "global"})
+    _write_key(guard_home)
+    assert adapter_state_is_authenticated(guard_home, harness="copilot", payload=_stamped_payload())
 
-    key_path.chmod(0o600)
-    key_path.write_text("not json", encoding="utf-8")
-    assert not integrity.adapter_state_is_authenticated(
-        guard_home,
-        harness="copilot",
-        payload={"state_authentication": {}},
-    )
+    assert [request["key_home"] for request in requests] == [guard_home, guard_home]
+    assert requests[0]["create_key"] is True
+    assert all("integrity_key_b64" not in request for request in requests)
 
-    key_path.write_text("[]", encoding="utf-8")
-    assert not integrity.adapter_state_is_authenticated(
-        guard_home,
-        harness="copilot",
-        payload={"state_authentication": {}},
-    )
+
+def test_a_missing_key_is_refused_before_the_runtime_when_it_may_not_be_created(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    guard_home = tmp_path / "guard-home"
+    requests = _record_requests(monkeypatch)
+
+    with pytest.raises(FileNotFoundError):
+        authenticate_adapter_state(guard_home, harness="copilot", payload={}, create_key=False)
+    assert not adapter_state_is_authenticated(guard_home, harness="copilot", payload=_stamped_payload())
+    assert requests == []
+
+
+def _reply_with(monkeypatch: pytest.MonkeyPatch, tmp_path: Path, *, code: str, bound: bool) -> None:
+    monkeypatch.setattr(native_integrity, "_resolve_digest_home", lambda guard_home=None: tmp_path)
+    monkeypatch.setattr(native_integrity, "ensure_resident_prerequisite", lambda _home: True)
+
+    def reply(**kwargs: object) -> dict[str, object]:
+        request = cast(dict[str, object], kwargs["request"])
+        digest = "sha256:" + native_integrity._canonical_request_sha256(request)
+        return {
+            "request_id": request["request_id"],
+            "request_sha256": digest if bound else "sha256:" + "0" * 64,
+            "status": "error",
+            "code": code,
+        }
+
+    monkeypatch.setattr(native_integrity, "_resident_request", reply)
+
+
+def test_an_unusable_key_is_a_value_error_only_when_the_resident_says_so(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    guard_home = tmp_path / "guard-home"
+
+    _reply_with(monkeypatch, tmp_path, code="native_adapter_state_integrity_key_unavailable", bound=True)
+    with pytest.raises(ValueError, match="unusable"):
+        authenticate_adapter_state(guard_home, harness="copilot", payload={})
+
+    _reply_with(monkeypatch, tmp_path, code="native_adapter_state_integrity_key_unavailable", bound=False)
+    with pytest.raises(AdapterStateIntegrityUnavailableError):
+        authenticate_adapter_state(guard_home, harness="copilot", payload={})
+
+    _reply_with(monkeypatch, tmp_path, code="native_adapter_state_integrity_invalid", bound=True)
+    with pytest.raises(AdapterStateIntegrityUnavailableError):
+        authenticate_adapter_state(guard_home, harness="copilot", payload={})
+
+
+@pytest.mark.skipif(os.name != "posix", reason="POSIX key file permissions")
+def test_the_runtime_creates_an_owner_only_key(
+    tmp_path: Path,
+    native_adapter_state_integrity_runtime: Path,
+) -> None:
+    del native_adapter_state_integrity_runtime
+    guard_home = tmp_path / "guard-home"
+
+    stamped = authenticate_adapter_state(guard_home, harness="copilot", payload={"scope": "global"})
+
+    assert stat.S_IMODE(_key_path(guard_home).stat().st_mode) == 0o600
+    assert stat.S_IMODE(_key_path(guard_home).parent.stat().st_mode) == 0o700
+    assert adapter_state_is_authenticated(guard_home, harness="copilot", payload=stamped)
+    _key_path(guard_home).chmod(0o644)
+    assert not adapter_state_is_authenticated(guard_home, harness="copilot", payload=stamped)
 
 
 def _stamped_payload() -> dict[str, object]:
@@ -400,7 +247,7 @@ def test_a_silent_runtime_is_not_read_as_an_unauthenticated_manifest(
     """
 
     guard_home = tmp_path / "guard-home"
-    integrity._load_or_create_key(guard_home)
+    _write_key(guard_home)
 
     def unavailable(**_kwargs: object) -> dict[str, object]:
         raise AdapterStateIntegrityUnavailableError
@@ -426,8 +273,9 @@ def test_a_lifecycle_change_is_refused_before_its_first_write(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Hermes asks for the resident before it rewrites ``config.yaml``."""
+    """Hermes asks the resident for its whole plan before it rewrites ``config.yaml``."""
 
+    from codex_plugin_scanner.guard import native_runner_authority
     from codex_plugin_scanner.guard.adapters.base import HarnessContext
     from codex_plugin_scanner.guard.adapters.hermes import HermesHarnessAdapter
 
@@ -442,9 +290,13 @@ def test_a_lifecycle_change_is_refused_before_its_first_write(
     context = HarnessContext(home_dir=home_dir, workspace_dir=workspace_dir, guard_home=guard_home)
 
     _provision_verifier_key(guard_home)
-    _silence_the_resident(monkeypatch)
 
-    with pytest.raises(AdapterStateIntegrityUnavailableError):
+    def unavailable(*_args: object, **_kwargs: object) -> dict[str, object]:
+        raise native_runner_authority.NativeRunnerAuthorityError("native_runner_authority_unavailable")
+
+    monkeypatch.setattr(native_runner_authority, "native_runner_authority", unavailable)
+
+    with pytest.raises(ValueError, match="native_runner_authority_unavailable"):
         HermesHarnessAdapter().install(context)
 
     assert config_yaml.read_text(encoding="utf-8") == "mcp_servers: {}\n"

@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from codex_plugin_scanner.guard.adapters import get_adapter
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
-from codex_plugin_scanner.guard.adapters.grok import GrokHarnessAdapter
 from codex_plugin_scanner.guard.shims import PreparedGuardShim
 
 
@@ -24,16 +24,16 @@ class TestGrokManagedCompat:
         managed.parent.mkdir(parents=True, exist_ok=True)
         managed.write_text("[compat.claude]\nskills = true\nhooks = true\n", encoding="utf-8")
         monkeypatch.setattr(
-            "codex_plugin_scanner.guard.adapters.grok.prepare_guard_shim",
+            "codex_plugin_scanner.guard.shims.prepare_guard_shim",
             lambda *args, **kwargs: PreparedGuardShim(
                 (), {"shim_path": str(ctx.guard_home / "bin" / "guard-grok"), "notes": []}
             ),
         )
         monkeypatch.setattr(
-            "codex_plugin_scanner.guard.adapters.grok.remove_guard_shim",
+            "codex_plugin_scanner.guard.shims.remove_guard_shim",
             lambda *args, **kwargs: {"shim_path": str(ctx.guard_home / "bin" / "guard-grok"), "notes": []},
         )
-        adapter = GrokHarnessAdapter()
+        adapter = get_adapter("grok")
         adapter.install(ctx)
         installed = managed.read_text(encoding="utf-8")
         assert installed.count("[compat.claude]") == 1

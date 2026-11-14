@@ -5,6 +5,8 @@ from __future__ import annotations
 import hashlib
 import importlib
 import json
+import threading
+import time
 from pathlib import Path
 
 import pytest
@@ -51,6 +53,115 @@ def test_batched_metadata_uses_one_download_and_checks_each_selected_member(
     assert fetch(first, len(one)) == one
     assert len(reads) == 3
     assert fetch(second, len(two)) == two and len(reads) == 3
+
+
+def test_concurrent_misses_in_one_container_download_it_once(plan_type, monkeypatch, tmp_path):
+    # Active-security fetches a round's misses side by side. Two members of one
+    # container must not each download the whole container on a cold cache.
+    plan = plan_type(tmp_path / "assets", "1" * 40)
+    one, two = b'{"one":1}', b'{"two":2}'
+    first, second = plan.asset(one, "object"), plan.asset(two, "object")
+    assert first["asset"] == second["asset"]
+    plan.finish()
+    reads = []
+
+    def download(url, maximum):
+        reads.append(url)
+        time.sleep(0.3)
+        return (plan.directory / first["tag"] / first["asset"]).read_bytes()
+
+    monkeypatch.setattr(transport, "download", download)
+    fetch = transport.cached_fetcher(tmp_path / "cache")
+    results = {}
+    threads = [
+        threading.Thread(target=lambda key=key, ref=ref, size=size: results.update({key: fetch(ref, size)}))
+        for key, ref, size in (("one", first, len(one)), ("two", second, len(two)))
+    ]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+    assert results == {"one": one, "two": two}
+    assert len(reads) == 1
+    assert transport._CONTAINERS == {}
+
+
+def test_callers_waiting_on_a_failed_container_download_do_not_repeat_it(plan_type, monkeypatch, tmp_path):
+    # During an outage, members of one container waiting on its download must
+    # report the failure, not each download again. A later fetch still retries.
+    plan = plan_type(tmp_path / "assets", "1" * 40)
+    one, two = b'{"one":1}', b'{"two":2}'
+    first, second = plan.asset(one, "object"), plan.asset(two, "object")
+    plan.finish()
+    reads = []
+
+    def failing(url, maximum):
+        reads.append(url)
+        time.sleep(0.3)
+        raise OSError("release transport unavailable")
+
+    monkeypatch.setattr(transport, "download", failing)
+    fetch = transport.cached_fetcher(tmp_path / "cache")
+    errors = {}
+
+    def run(key, ref, size):
+        try:
+            fetch(ref, size)
+        except OSError as error:
+            errors[key] = str(error)
+
+    threads = [
+        threading.Thread(target=run, args=(key, ref, size))
+        for key, ref, size in (("one", first, len(one)), ("two", second, len(two)))
+    ]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+    assert errors == {"one": "release transport unavailable", "two": "release transport unavailable"}
+    assert len(reads) == 1
+    assert transport._CONTAINERS == {}
+
+    monkeypatch.setattr(
+        transport, "download", lambda url, maximum: (plan.directory / first["tag"] / first["asset"]).read_bytes()
+    )
+    assert fetch(first, len(one)) == one
+
+
+def test_uncached_fetches_of_one_container_are_not_serialized(plan_type, monkeypatch, tmp_path):
+    # An uncached fetch writes nothing the next caller could reuse, so holding
+    # the container lock would only make concurrent misses wait on each other.
+    plan = plan_type(tmp_path / "assets", "1" * 40)
+    one, two = b'{"one":1}', b'{"two":2}'
+    first, second = plan.asset(one, "object"), plan.asset(two, "object")
+    plan.finish()
+    in_flight = [0, 0]
+    counter = threading.Lock()
+
+    def download(url, maximum):
+        with counter:
+            in_flight[0] += 1
+            in_flight[1] = max(in_flight[1], in_flight[0])
+        time.sleep(0.3)
+        with counter:
+            in_flight[0] -= 1
+        return (plan.directory / first["tag"] / first["asset"]).read_bytes()
+
+    monkeypatch.setattr(transport, "download", download)
+    results = {}
+    threads = [
+        threading.Thread(
+            target=lambda key=key, ref=ref, size=size: results.update({key: transport.fetch_object(ref, size)})
+        )
+        for key, ref, size in (("one", first, len(one)), ("two", second, len(two)))
+    ]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+    assert results == {"one": one, "two": two}
+    assert in_flight[1] == 2
+    assert transport._CONTAINERS == {}
 
 
 def test_containers_split_without_changing_member_or_byte_bounds(plan_type, build_containers, tmp_path):

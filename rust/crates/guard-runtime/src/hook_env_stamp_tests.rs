@@ -164,6 +164,37 @@ fn only_a_heap_or_diagnostics_node_options_is_marked() {
 }
 
 #[test]
+fn cursor_terminal_pager_is_marked_like_the_default() {
+    let marked = |name: &str, value: &str| {
+        let environment = environment_of(&[("PATH", "/bin"), (name, value)]);
+        match collect_hook_execution_environment(&environment) {
+            PyVal::Dict(entries) => entries.iter().any(|entry| {
+                entry
+                    == &(
+                        format!("{}_disabled", name.to_ascii_lowercase()),
+                        PyVal::Bool(true),
+                    )
+            }),
+            _ => panic!("stamp must be an object"),
+        }
+    };
+    for name in ["PAGER", "GIT_PAGER"] {
+        assert!(marked(name, r#"sh -c "head -n 10000 | cat""#), "{name}");
+        assert!(marked(name, "less -R"), "{name}");
+        for value in [
+            r#"sh -c "head -n 10000 | cat; touch x""#,
+            r#"sh -c "head -n 10000 | tee x""#,
+            "sh -c 'head -n 10000 | cat'",
+            r#"sh -c "head -n 10000 | cat" x"#,
+            r#"bash -c "head -n 10000 | cat""#,
+            "delta",
+        ] {
+            assert!(!marked(name, value), "{name}={value:?}");
+        }
+    }
+}
+
+#[test]
 fn first_duplicate_environment_name_wins() {
     let duplicated = environment_of(&[("PATH", "/first"), ("PATH", "/second"), ("HOME", "/h")]);
     let single = environment_of(&[("PATH", "/first"), ("HOME", "/h")]);
@@ -269,5 +300,27 @@ fn only_a_default_cargo_home_is_marked() {
     assert!(marked("/Users/dev", "/Users/dev/.cargo/"));
     for cargo_home in ["/opt/cargo", ".cargo", "", "/Users/dev/.cargo/vendor"] {
         assert!(!marked("/Users/dev", cargo_home), "{cargo_home:?}");
+    }
+}
+
+#[test]
+fn only_quote_path_git_config_entries_are_marked() {
+    let marked = |key: &str| {
+        let environment = environment_of(&[
+            ("PATH", "/bin"),
+            ("GIT_CONFIG_COUNT", "1"),
+            ("GIT_CONFIG_KEY_0", key),
+            ("GIT_CONFIG_VALUE_0", "false"),
+        ]);
+        match collect_hook_execution_environment(&environment) {
+            PyVal::Dict(entries) => entries.iter().any(|entry| {
+                entry == &("git_config_environment_inert".to_owned(), PyVal::Bool(true))
+            }),
+            _ => panic!("stamp must be an object"),
+        }
+    };
+    assert!(marked("core.quotePath"));
+    for key in ["core.pager", "core.fsmonitor", "include.path", ""] {
+        assert!(!marked(key), "{key:?}");
     }
 }

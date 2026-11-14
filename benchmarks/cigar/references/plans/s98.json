@@ -1,0 +1,99 @@
+{
+ "repo": "jinja",
+ "seed": 98,
+ "steps": [
+  {
+   "kind": "rename",
+   "prompt": "Rename the internal helper `_environment_config_check` to `_environment_config_check_impl` everywhere in the project, including tests. Behavior must not change.",
+   "rename": {
+    "count": 3,
+    "files": [
+     "src/jinja2/environment.py"
+    ],
+    "new": "_environment_config_check_impl",
+    "old": "_environment_config_check",
+    "path": "src/jinja2/environment.py"
+   }
+  },
+  {
+   "kind": "question",
+   "prompt": "Question, no code changes: which function does this? \"Return true if the variable is a number.\" Reply with its file path and function name.",
+   "question": {
+    "name": "test_number",
+    "path": "src/jinja2/tests.py",
+    "qual": "test_number",
+    "sentence": "Return true if the variable is a number."
+   }
+  },
+  {
+   "kind": "bug",
+   "prompt": "Something in `Parser.parse_filter_block` broke recently and its tests fail now. Track it down and fix it. Leave the tests alone.",
+   "setup": [
+    {
+     "failing": [
+      "tests/test_filters.py::TestFilter::test_block",
+      "tests/test_filters.py::TestFilter::test_filtertag"
+     ],
+     "line": 440,
+     "new": "        node.body = self.parse_statements((\"name:endfilter\",), drop_needle=False)\n",
+     "orig": "        node.body = self.parse_statements((\"name:endfilter\",), drop_needle=True)\n",
+     "path": "src/jinja2/parser.py",
+     "qual": "Parser.parse_filter_block"
+    }
+   ]
+  },
+  {
+   "kind": "bug2",
+   "prompt": "The last commit broke several tests in different places. Find every root cause in the library code and fix them all without changing the tests.",
+   "setup": [
+    {
+     "failing": [
+      "tests/test_core_tags.py::TestForLoop::test_context_vars",
+      "tests/test_runtime.py::test_loop_idx0"
+     ],
+     "line": 470,
+     "new": "        return self.length + self.index\n",
+     "orig": "        return self.length - self.index\n",
+     "path": "src/jinja2/runtime.py",
+     "qual": "LoopContext.revindex0"
+    },
+    {
+     "failing": [
+      "tests/test_async.py::TestAsyncForLoop::test_call_in_loop",
+      "tests/test_core_tags.py::TestForLoop::test_call_in_loop",
+      "tests/test_core_tags.py::TestMacros::test_complex_call",
+      "tests/test_core_tags.py::TestMacros::test_simple_call",
+      "tests/test_regression.py::TestBug::test_call_with_args",
+      "tests/test_regression.py::TestBug::test_caller_scoping",
+      "tests/test_regression.py::TestBug::test_double_caller",
+      "tests/test_regression.py::TestBug::test_loop_call_loop"
+     ],
+     "line": 1335,
+     "new": "        self.visit_Call(node.call, frame, forward_caller=False)\n",
+     "orig": "        self.visit_Call(node.call, frame, forward_caller=True)\n",
+     "path": "src/jinja2/compiler.py",
+     "qual": "CodeGenerator.visit_CallBlock"
+    }
+   ]
+  },
+  {
+   "kind": "stub",
+   "prompt": "Tests fail because LRUCache.setdefault is not implemented (src/jinja2/utils.py). Write the implementation; the docstring and tests describe the expected behavior.",
+   "stub": {
+    "body": "        try:\n            return self[key]\n        except KeyError:\n            self[key] = default\n            return default\n",
+    "body_start": 474,
+    "end": 478,
+    "failing": [
+     "tests/test_utils.py::TestLRUCache::test_setdefault"
+    ],
+    "indent": 8,
+    "path": "src/jinja2/utils.py",
+    "qual": "LRUCache.setdefault"
+   }
+  },
+  {
+   "kind": "review",
+   "prompt": "Review every change made in this session. Remove leftovers or duplication, match the style of the surrounding code, and make sure the full test suite passes."
+  }
+ ]
+}

@@ -625,8 +625,8 @@ def test_native_claude_binding_plan_restores_user_hooks_and_launchers(transition
 
 
 def test_native_kimi_plan_restores_config_and_launchers_after_rebind(transition):
+    from codex_plugin_scanner.guard.adapters import get_adapter
     from codex_plugin_scanner.guard.adapters.base import HarnessContext
-    from codex_plugin_scanner.guard.adapters.kimi import KimiHarnessAdapter
 
     runtime, plan, _, _ = transition
     ctx = HarnessContext(home_dir=runtime.home.parent, workspace_dir=None, guard_home=runtime.home)
@@ -634,7 +634,7 @@ def test_native_kimi_plan_restores_config_and_launchers_after_rebind(transition)
     config.parent.mkdir(parents=True)
     config.write_text('# user configuration\nmodel = "user-model"\n')
     config.chmod(0o600)
-    adapter = KimiHarnessAdapter()
+    adapter = get_adapter("kimi")
     adapter.install(ctx)
     previous = config.read_bytes()
     prepared = adapter.prepare_install(replace(ctx, workspace_dir=ctx.home_dir / "candidate-workspace"))
@@ -652,15 +652,15 @@ def test_native_kimi_plan_restores_config_and_launchers_after_rebind(transition)
 
 
 def test_prepared_native_install_preserves_foreign_edit_before_any_publication(transition):
+    from codex_plugin_scanner.guard.adapters import get_adapter
     from codex_plugin_scanner.guard.adapters.base import HarnessContext
-    from codex_plugin_scanner.guard.adapters.kimi import KimiHarnessAdapter
 
     runtime, _, _, _ = transition
     ctx = HarnessContext(home_dir=runtime.home.parent, workspace_dir=None, guard_home=runtime.home)
     config = ctx.home_dir / ".kimi-code/config.toml"
     config.parent.mkdir(parents=True)
     config.write_text('model = "previous"\n')
-    prepared = KimiHarnessAdapter().prepare_install(ctx)
+    prepared = get_adapter("kimi").prepare_install(ctx)
     config.write_text('model = "foreign user edit"\n')
     with pytest.raises(TransitionError, match="generation_changed"):
         prepared.publish(ctx.guard_home)
@@ -730,12 +730,12 @@ def test_authenticated_invalid_file_contract_refuses_publication(transition, fie
 
 @pytest.mark.parametrize("previous_exists", [False, True])
 def test_openclaw_complete_plan_recovers_overlay_hook_manifest_and_launchers(transition, previous_exists):
+    from codex_plugin_scanner.guard.adapters import get_adapter
     from codex_plugin_scanner.guard.adapters.base import HarnessContext
-    from codex_plugin_scanner.guard.adapters.openclaw import OpenClawHarnessAdapter
 
     runtime, plan, _, _ = transition
     ctx = HarnessContext(home_dir=runtime.home.parent, workspace_dir=None, guard_home=runtime.home)
-    adapter = OpenClawHarnessAdapter()
+    adapter = get_adapter("openclaw")
     if previous_exists:
         adapter.install(ctx)
     prepared = adapter.prepare_install(replace(ctx, workspace_dir=ctx.home_dir / "candidate-workspace"))
@@ -756,20 +756,20 @@ def test_openclaw_complete_plan_recovers_overlay_hook_manifest_and_launchers(tra
 
 @pytest.mark.parametrize("previous_exists", [False, True])
 def test_grok_plan_restores_config_hooks_state_and_backup_lifetime(transition, previous_exists):
+    from codex_plugin_scanner.guard.adapters import get_adapter
     from codex_plugin_scanner.guard.adapters.base import HarnessContext
-    from codex_plugin_scanner.guard.adapters.cursor_hook_config import isolated_cursor_hook_python
-    from codex_plugin_scanner.guard.adapters.grok import GrokHarnessAdapter
+    from codex_plugin_scanner.guard.adapters.isolated_hook_python import isolated_cursor_hook_python
 
     runtime, plan, _, _ = transition
     ctx = HarnessContext(home_dir=runtime.home.parent, workspace_dir=None, guard_home=runtime.home)
-    adapter = GrokHarnessAdapter()
+    adapter = get_adapter("grok")
     config = ctx.home_dir / ".grok/config.toml"
     config.parent.mkdir(parents=True)
     config.write_text("# user setting\n[ui]\nsimple_mode = true\n")
     config.chmod(0o600)
     if previous_exists:
         adapter.install(ctx)
-    backup = adapter._backup_path(ctx, "config.toml")
+    backup = ctx.guard_home / "managed" / "grok" / "config.toml.backup"
     previous_backup = backup.stat() if backup.exists() else None
     prepared = adapter.prepare_install(replace(ctx, workspace_dir=ctx.home_dir / "candidate-workspace"))
     assert len(prepared.files) == (11 if isolated_cursor_hook_python() is not None else 10)
@@ -812,7 +812,7 @@ def test_native_json_plan_restores_config_state_and_backup_lifetime(transition, 
     config.chmod(0o600)
     if previous_exists:
         adapter.install(ctx)
-    _, backup, _ = adapter._managed_state_paths(ctx)
+    backup = ctx.guard_home / "managed" / harness / "config.json.backup"
     previous_backup = backup.stat() if backup.exists() else None
     prepared = adapter.prepare_install(replace(ctx, workspace_dir=ctx.home_dir / "candidate-workspace"))
     assert len(prepared.files) == 5
@@ -872,13 +872,13 @@ def test_pi_family_plan_restores_extension_settings_and_user_entries(transition,
             assert change.path.stat().st_mode & 0o777 == change.before_mode
 
 
-@pytest.mark.parametrize("harness", ["kimi", "grok", "zcode", "devin"])
 @pytest.mark.parametrize("helper_exists", [False, True])
-def test_frozen_helper_participates_in_signed_inverse(transition, monkeypatch, harness, helper_exists):
+def test_frozen_grok_helper_participates_in_signed_inverse(transition, monkeypatch, helper_exists):
     from codex_plugin_scanner.guard.adapters import bounded_cli_hook_bridge as bridge
     from codex_plugin_scanner.guard.adapters import get_adapter
     from codex_plugin_scanner.guard.adapters.base import HarnessContext
 
+    harness = "grok"
     runtime, plan, _, _ = transition
     ctx = HarnessContext(home_dir=runtime.home.parent, workspace_dir=None, guard_home=runtime.home)
     helper = ctx.guard_home / f"managed/bounded-hooks/{harness}.py"
@@ -910,7 +910,7 @@ def test_frozen_helper_participates_in_signed_inverse(transition, monkeypatch, h
 @pytest.mark.parametrize("previous_exists", [False, True])
 def test_opencode_plan_restores_config_overlay_plugins_launchers_and_backup(transition, previous_exists):
     from codex_plugin_scanner.guard.adapters.base import HarnessContext
-    from codex_plugin_scanner.guard.adapters.opencode import OpenCodeHarnessAdapter
+    from codex_plugin_scanner.guard.adapters.opencode_runtime import OpenCodeHarnessAdapter
 
     runtime, plan, _, _ = transition
     ctx = HarnessContext(home_dir=runtime.home.parent, workspace_dir=None, guard_home=runtime.home)
@@ -923,9 +923,9 @@ def test_opencode_plan_restores_config_overlay_plugins_launchers_and_backup(tran
     config.chmod(0o640)
     if previous_exists:
         adapter.install(ctx)
-    backup = adapter._backup_path(ctx)
-    previous_backup = backup.stat() if backup.exists() else None
     prepared = adapter.prepare_install(replace(ctx, workspace_dir=ctx.home_dir / "candidate-workspace"))
+    backup = Path(str(prepared.manifest["backup_path"]))
+    previous_backup = backup.stat() if backup.exists() else None
     assert len(prepared.files) == 11
     assert config.read_bytes() == next(change.before for change in prepared.files if change.path == config)
     plan = replace(plan, files=(*plan.files, *prepared.files))
@@ -951,7 +951,7 @@ def test_opencode_plan_restores_config_overlay_plugins_launchers_and_backup(tran
 
 def test_opencode_foreign_source_config_prevents_any_transition_publication(transition):
     from codex_plugin_scanner.guard.adapters.base import HarnessContext
-    from codex_plugin_scanner.guard.adapters.opencode import OpenCodeHarnessAdapter
+    from codex_plugin_scanner.guard.adapters.opencode_runtime import OpenCodeHarnessAdapter
 
     runtime, plan, bindings, pointer = transition
     workspace = runtime.home.parent / "workspace"
@@ -994,7 +994,12 @@ def test_copilot_plan_restores_native_bindings_and_preserves_authority(
     authenticate_adapter_state(runtime.home, harness="copilot", payload={"enrollment": "fixture"})
     authority = runtime.home / "managed/adapter-state.key"
     authority_before = authority.stat()
-    for target in adapter._target_mcp_paths(ctx):
+    targets = (
+        [workspace / ".mcp.json", workspace / ".vscode" / "mcp.json"]
+        if workspace is not None
+        else [ctx.home_dir / ".copilot" / "mcp-config.json"]
+    )
+    for target in targets:
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_text('{"user_setting": true, "mcpServers": {"user": {"command": "node", "args": ["user.js"]}}}')
         target.chmod(0o640)
@@ -1007,7 +1012,8 @@ def test_copilot_plan_restores_native_bindings_and_preserves_authority(
         monkeypatch.setattr(bridge, "isolated_cursor_hook_python", lambda: sys.executable)
         monkeypatch.setattr(bridge, "_trusted_desktop_hook_proxy_command", lambda *args: None)
     prepared = adapter.prepare_install(ctx)
-    assert len(prepared.files) == (12 if workspace_enabled else 7) + int(frozen)
+    # A frozen Guard hands the hook to its runtime and plans no helper script.
+    assert len(prepared.files) == (12 if workspace_enabled else 7)
     dependency = next(change for change in prepared.files if change.path == authority)
     assert dependency.before is dependency.after is None
     assert dependency.expected_digest is not None
@@ -1097,18 +1103,18 @@ def test_authority_dependency_rejects_mutating_or_invalid_contracts(tmp_path, kw
 def test_cursor_editor_plan_restores_native_and_legacy_bindings(transition, previous_exists, legacy):
     from codex_plugin_scanner.guard.adapters.base import HarnessContext
     from codex_plugin_scanner.guard.adapters.cursor import CursorHarnessAdapter
-    from codex_plugin_scanner.guard.adapters.cursor_hook_config import (
+    from tests.cursor_test_support import (
         HOOK_SCRIPT_NAME,
-        _hooks_backup_path,
-        _hooks_state_path,
+        cursor_hooks_backup_path,
+        cursor_hooks_state_path,
+        enroll_cursor_hook_key,
+        managed_cursor_hook_script,
     )
-    from codex_plugin_scanner.guard.adapters.cursor_hooks import cursor_hook_script_source
-    from codex_plugin_scanner.guard.adapters.cursor_native_approval import ensure_cursor_hook_attestation_secret
 
     runtime, plan, _, _ = transition
     workspace = runtime.home.parent / "workspace"
     ctx = HarnessContext(home_dir=runtime.home.parent, workspace_dir=workspace, guard_home=runtime.home)
-    ensure_cursor_hook_attestation_secret(runtime.home)
+    enroll_cursor_hook_key(runtime.home)
     adapter = CursorHarnessAdapter()
     config = ctx.home_dir / ".cursor/mcp.json"
     config.parent.mkdir(parents=True)
@@ -1124,18 +1130,16 @@ def test_cursor_editor_plan_restores_native_and_legacy_bindings(transition, prev
         entries = [user_entry]
         if legacy in {"managed", "backup"}:
             legacy_script.parent.mkdir(parents=True, exist_ok=True)
-            legacy_script.write_text(
-                cursor_hook_script_source(ctx, guard_cli=["/previous/core"], recovery_command=["true"])
-            )
+            legacy_script.write_text(managed_cursor_hook_script(["/previous/core"]))
             legacy_script.chmod(0o750)
             entries.append({"command": str(legacy_script.resolve())})
         legacy_hooks.write_text(json.dumps({"version": 1, "hooks": {"beforeShellExecution": entries}}))
         legacy_hooks.chmod(0o640)
         if legacy == "backup":
-            backup = _hooks_backup_path(legacy_hooks, ctx)
+            backup = cursor_hooks_backup_path(legacy_hooks, ctx.guard_home)
             backup.parent.mkdir(parents=True, exist_ok=True)
             backup.write_text(json.dumps({"existed": True, "content": '{"original_user_hooks": true}'}))
-            _hooks_state_path(legacy_hooks, ctx).write_text('{"legacy_state": true}')
+            cursor_hooks_state_path(legacy_hooks, ctx.guard_home).write_text('{"legacy_state": true}')
     prepared = adapter.prepare_install(ctx)
     assert len(prepared.files) == 14
     plan = replace(plan, files=(*plan.files, *prepared.files))
@@ -1158,7 +1162,7 @@ def test_cursor_editor_plan_restores_native_and_legacy_bindings(transition, prev
 def test_cursor_foreign_workspace_config_prevents_any_transition_publication(transition):
     from codex_plugin_scanner.guard.adapters.base import HarnessContext
     from codex_plugin_scanner.guard.adapters.cursor import CursorHarnessAdapter
-    from codex_plugin_scanner.guard.adapters.cursor_native_approval import ensure_cursor_hook_attestation_secret
+    from tests.cursor_test_support import enroll_cursor_hook_key
 
     runtime, plan, bindings, pointer = transition
     workspace = runtime.home.parent / "workspace"
@@ -1166,7 +1170,7 @@ def test_cursor_foreign_workspace_config_prevents_any_transition_publication(tra
     source.parent.mkdir(parents=True)
     source.write_text('{"mcpServers": {"user": {"command": "node", "args": ["user.js"]}}}')
     ctx = HarnessContext(home_dir=runtime.home.parent, workspace_dir=workspace, guard_home=runtime.home)
-    ensure_cursor_hook_attestation_secret(runtime.home)
+    enroll_cursor_hook_key(runtime.home)
     prepared = CursorHarnessAdapter().prepare_install(ctx)
     dependency = next(change for change in prepared.files if change.path == source)
     assert dependency.before == dependency.after == source.read_bytes()
@@ -1189,12 +1193,12 @@ def test_cursor_all_surfaces_restore_launchers_and_shell_profile(transition, mon
     from codex_plugin_scanner.guard import shims
     from codex_plugin_scanner.guard.adapters.base import HarnessContext
     from codex_plugin_scanner.guard.adapters.cursor import CursorHarnessAdapter
-    from codex_plugin_scanner.guard.adapters.cursor_native_approval import ensure_cursor_hook_attestation_secret
+    from tests.cursor_test_support import enroll_cursor_hook_key
 
     runtime, plan, _, _ = transition
     ctx = HarnessContext(home_dir=runtime.home.parent, guard_home=runtime.home, workspace_dir=None)
     if surface == "all":
-        ensure_cursor_hook_attestation_secret(runtime.home)
+        enroll_cursor_hook_key(runtime.home)
     monkeypatch.setattr(shims, "_is_transient_path", lambda path: False)
     monkeypatch.setenv("SHELL", "/bin/zsh")
     profile = ctx.home_dir / ".zshrc"

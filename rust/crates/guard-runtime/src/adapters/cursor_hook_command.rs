@@ -212,6 +212,10 @@ impl Syntax {
         }
     }
 
+    pub(crate) fn windows(&self) -> bool {
+        self.windows
+    }
+
     pub(crate) fn short_tokens(&self) -> &BTreeSet<String> {
         &self.short_tokens
     }

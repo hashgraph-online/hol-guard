@@ -311,7 +311,7 @@ def review_raw_hook_native(
     sink_command: tuple[str, ...] | None = None
     if containment_sink and tool_call and cwd is not None:
         # Without a workspace there is no snapshot to write, and the receipt stands.
-        from .adapters.zcode_contained_tests import contained_sink_command_prefix
+        from .contained_sink_command import contained_sink_command_prefix
 
         sink_command = contained_sink_command_prefix()
     encoded = _encode_hook_envelope(

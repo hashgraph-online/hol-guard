@@ -8,11 +8,12 @@ from datetime import datetime, timedelta, timezone
 from ..approvals import wait_for_approval_requests
 from ..store import GuardStore
 from . import hook_approval_wait
-from .grok_config import (
-    GROK_APPROVAL_WAIT_MAX_SECONDS,
-    GROK_HOOK_INTERNAL_TIMEOUT_SECONDS,
-    GROK_PRETOOL_HOOK_TIMEOUT_SECONDS,
-)
+
+# Grok kills a hook at the registered timeout; the bridge exits before it and
+# the approval wait leaves time for the verdict to reach Grok.
+GROK_PRETOOL_HOOK_TIMEOUT_SECONDS = 90
+GROK_HOOK_INTERNAL_TIMEOUT_SECONDS = 85
+GROK_APPROVAL_WAIT_MAX_SECONDS = 80
 
 
 def wait_for_grok_live_approval(

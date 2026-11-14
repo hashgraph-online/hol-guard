@@ -14,12 +14,18 @@ fn bundle(dir: &Path) {
     fs::write(dir.join("assets/guard-dashboard.js"), "app()").unwrap();
     fs::write(dir.join("assets/chunks/a.css"), "a{}").unwrap();
     fs::write(dir.join("favicon.svg"), "<svg/>").unwrap();
+    fs::create_dir_all(dir.join("brand")).unwrap();
+    fs::write(dir.join("brand/Logo.png"), "png").unwrap();
 }
 
 fn get(dir: Option<&Path>, path: &str) -> String {
+    get_in(dir, path, Path::new("/nonexistent/guard-home"))
+}
+
+fn get_in(dir: Option<&Path>, path: &str, guard_home: &Path) -> String {
     let head = format!("GET {path} HTTP/1.1\r\nHost: x\r\n\r\n");
     let request = parse_request(head.as_bytes()).unwrap();
-    let response = respond(&request, dir, b"k", Some("b1")).unwrap();
+    let response = respond(&request, dir, b"k", Some("b1"), guard_home).unwrap();
     String::from_utf8(response).unwrap()
 }
 
@@ -59,6 +65,47 @@ fn serves_the_stamped_shell_with_its_policy() {
 }
 
 #[test]
+fn without_desktop_the_shell_carries_no_desktop_marker() {
+    let dir = tempfile::tempdir().unwrap();
+    bundle(dir.path());
+    let answer = get(
+        Some(dir.path()),
+        "/requests/0123456789abcdef0123456789abcdef",
+    );
+    assert!(!answer.contains("guard-desktop-requests"), "{answer}");
+}
+
+#[cfg(unix)]
+#[test]
+fn a_desktop_that_opens_requests_marks_the_shell() {
+    use crate::claude_hook_bridge_fixture::{write_private, GuardHome};
+
+    let dir = tempfile::tempdir().unwrap();
+    bundle(dir.path());
+    let home = GuardHome::new("dashboard-desktop-marker");
+    let marker = serde_json::json!({
+        "version": 1,
+        "scheme": "hol-guard-desktop",
+        "routes": ["requests"],
+        "app_path": home.home.to_string_lossy(),
+    });
+    write_private(
+        &home.home.join("desktop-deep-link.json"),
+        &marker.to_string(),
+    );
+    let answer = get_in(
+        Some(dir.path()),
+        "/requests/0123456789abcdef0123456789abcdef",
+        &home.home,
+    );
+    assert!(
+        answer.contains("<meta name=\"guard-desktop-requests\" content=\"1\" /></head>"),
+        "{answer}"
+    );
+    assert!(answer.contains("<meta name=\"guard-dashboard-build\" content=\""));
+}
+
+#[test]
 fn a_missing_bundle_is_a_503() {
     let dir = tempfile::tempdir().unwrap();
     let answer = get(Some(dir.path()), "/");
@@ -90,6 +137,40 @@ fn the_pinned_bundle_outlives_an_upgrade_on_disk() {
 }
 
 #[test]
+fn every_public_file_outlives_the_directory_it_was_pinned_from() {
+    let dir = tempfile::tempdir().unwrap();
+    let root = dir.path().join("static");
+    bundle(&root);
+    assert!(super::build_id(&root).is_some());
+    fs::remove_dir_all(&root).unwrap();
+    assert!(get(Some(&root), "/brand/Logo.png").ends_with("\r\n\r\npng"));
+    assert!(get(Some(&root), "/favicon.svg").ends_with("<svg/>"));
+    assert!(get(Some(&root), "/assets/guard-dashboard.js").ends_with("app()"));
+    assert!(get(Some(&root), "/").starts_with("HTTP/1.0 200 OK\r\n"));
+}
+
+#[test]
+fn a_bundle_found_missing_is_looked_for_again() {
+    let dir = tempfile::tempdir().unwrap();
+    assert!(get(Some(dir.path()), "/").starts_with("HTTP/1.0 503 "));
+    bundle(dir.path());
+    assert!(get(Some(dir.path()), "/").starts_with("HTTP/1.0 200 OK\r\n"));
+    assert!(get(Some(dir.path()), "/brand/Logo.png").ends_with("png"));
+}
+
+#[cfg(unix)]
+#[test]
+fn a_brand_link_out_of_the_directory_is_not_served() {
+    let dir = tempfile::tempdir().unwrap();
+    let root = dir.path().join("static");
+    bundle(&root);
+    fs::write(dir.path().join("outside.png"), "no").unwrap();
+    std::os::unix::fs::symlink(dir.path().join("outside.png"), root.join("brand/out.png")).unwrap();
+    assert!(get(Some(&root), "/brand/out.png").starts_with("HTTP/1.0 404 "));
+    assert!(get(Some(&root), "/brand/Logo.png").ends_with("png"));
+}
+
+#[test]
 fn a_short_link_redirects_to_its_request_page() {
     let dir = tempfile::tempdir().unwrap();
     bundle(dir.path());
@@ -111,11 +192,21 @@ fn a_short_link_redirects_to_its_request_page() {
     let signed = get(Some(dir.path()), path);
     let location = format!("Location: /requests/{id}#guard-{}=gld1.", "token");
     assert!(signed.contains(&location), "{signed}");
+    // An agent that drops one character of the id while relaying the link
+    // still hands the user a way into the same request.
+    let slipped = path.replacen(&id[..9], &id[..8], 1);
+    assert_ne!(slipped, path);
+    let repaired = get(Some(dir.path()), &slipped);
+    assert!(
+        repaired.starts_with("HTTP/1.0 303 See Other\r\n"),
+        "{repaired}"
+    );
+    assert!(repaired.contains(&location), "{repaired}");
 }
 
 #[test]
 fn no_static_directory_leaves_the_route_unanswered() {
     let head = b"GET / HTTP/1.1\r\n\r\n";
     let request = parse_request(head).unwrap();
-    assert!(respond(&request, None, b"k", None).is_none());
+    assert!(respond(&request, None, b"k", None, Path::new("/nonexistent")).is_none());
 }

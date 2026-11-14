@@ -12,6 +12,7 @@ from __future__ import annotations
 import threading
 import time
 from collections.abc import Mapping
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qs
@@ -166,7 +167,7 @@ def hook_integrity_key(store: GuardStore, args: Mapping[str, Any]) -> dict[str, 
 def hook_sink_command(store: GuardStore, args: Mapping[str, Any]) -> dict[str, object]:
     """The argv prefix of the contained sink, for the daemon's Cursor sink admission."""
 
-    from ..adapters.zcode_contained_tests import contained_sink_command_prefix
+    from ..contained_sink_command import contained_sink_command_prefix
 
     return {"sink_command": list(contained_sink_command_prefix())}
 
@@ -208,8 +209,78 @@ def hook_claude_question_save(store: GuardStore, args: Mapping[str, Any]) -> dic
     return {"valid": True, "saved": bool(saved)}
 
 
+_LIVE_DECISION_REVIEW_SECONDS = 1.45
+
+
+def codex_live_decision(store: GuardStore, args: Mapping[str, Any]) -> dict[str, object]:
+    """``POST /v1/requests/<id>/live-decision``: the waiting Codex hook's decision.
+
+    The Codex hook bridge holds the original hook open while the request is
+    reviewed, then posts the exact hook input here. An allow is honoured only
+    when the request still holds its one-shot authority and a fresh review of
+    that input, through the resident's hook worker, authorizes it; the store
+    then records the terminal decision the bridge answers the harness with.
+    """
+
+    from ..codex_live_decision import complete_codex_live_decision, resolve_codex_live_allow_authority
+    from ..codex_live_decision_revalidation import revalidate_codex_live_allow
+    from ..library_calls import LibraryCallError
+
+    request_id = args.get("request_id")
+    payload = args.get("payload")
+    if not isinstance(request_id, str) or not request_id or not isinstance(payload, dict):
+        raise LibraryCallError("invalid_arguments")
+    now = datetime.now(timezone.utc).isoformat()
+    request = store.get_approval_request(request_id)
+    previous = store.get_request_resume(request_id)
+    authority_resolved = False
+    if isinstance(request, Mapping) and request.get("resolution_action") == "allow":
+        authority_resolved = (
+            resolve_codex_live_allow_authority(store, request=request, request_id=request_id, now=now) is not None
+        )
+    server = _server(store, args)
+
+    def review(
+        hook_payload: dict[str, object],
+        workspace: Path | None,
+        claimed_hash: str | None,
+        claimed_request_id: str | None,
+    ) -> Mapping[str, object] | None:
+        return server.hook_worker.review_http_payload(
+            payload=dict(hook_payload),
+            params={},
+            default_harness="codex",
+            home_dir=server.home_dir,
+            guard_home=store.guard_home,
+            workspace=workspace,
+            deadline=time.monotonic() + _LIVE_DECISION_REVIEW_SECONDS,
+            claim_saved_approval=False,
+            claimed_saved_allow_hash=claimed_hash,
+            claimed_approval_request_id=claimed_request_id,
+        )
+
+    fresh_allow_authorized = revalidate_codex_live_allow(
+        request,
+        payload,
+        home_dir=server.home_dir,
+        guard_home=store.guard_home,
+        reviewer=review,
+        previous=previous,
+        request_id=request_id,
+        authority_resolved=authority_resolved,
+    )
+    result = complete_codex_live_decision(
+        store,
+        request_id=request_id,
+        now=datetime.now(timezone.utc).isoformat(),
+        fresh_allow_authorized=fresh_allow_authorized,
+    )
+    return {"status": 200 if result.get("completed") is True else 409, "body": dict(result), "no_store": False}
+
+
 HOOK_CALLS = {
     "hook.claude_question_save": hook_claude_question_save,
+    "hook.codex_live_decision": codex_live_decision,
     "hook.integrity_key": hook_integrity_key,
     "hook.sink_command": hook_sink_command,
     "hook.prepare": hook_prepare,

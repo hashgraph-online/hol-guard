@@ -205,3 +205,194 @@ fn a_review_rule_on_an_exact_command_is_refused_rather_than_left_unenforced() {
         "unsupported_exact_command_review"
     );
 }
+
+fn pattern_rule(id: &str, effect: &str, value: &str) -> Value {
+    let mut rule = rule(
+        id,
+        json!({"commands": {"combinator": "all", "conditions": [
+            {"field": "command", "operator": "glob", "value": value, "caseSensitive": true}
+        ]}}),
+    );
+    rule["effect"] = json!(effect);
+    rule
+}
+
+fn patterns(input: &Value) -> Value {
+    crate::policy_document::evaluate(
+        "command_patterns_bundle",
+        input,
+        Instant::now() + Duration::from_secs(30),
+    )
+    .unwrap()
+}
+
+#[test]
+fn a_pattern_allow_compiles_to_no_row_and_is_read_from_the_bundle() {
+    let input = request(json!([
+        pattern_rule("pr-view", "allow", "gh pr view * --repo owner/name"),
+        rule("every-device", json!({})),
+    ]));
+    assert_eq!(
+        compiled(input["bundle"]["payload"]["spec"]["rules"].clone()),
+        ["every-device"]
+    );
+    let found = patterns(&input)["ok"].clone();
+    assert_eq!(found.as_array().map(Vec::len), Some(1), "{found}");
+    assert_eq!(found[0]["rule_id"], "pr-view");
+    assert_eq!(found[0]["harnesses"], Value::Null);
+    assert_eq!(
+        found[0]["expression"]["conditions"][0]["value"],
+        "gh pr view * --repo owner/name"
+    );
+}
+
+#[test]
+fn a_pattern_may_only_allow() {
+    for effect in ["block", "review"] {
+        let refused = refusal(&request(json!([pattern_rule("p", effect, "gh pr view *")])));
+        assert!(
+            refused
+                .to_string()
+                .contains("command_expression_requires_guard_3_1_runtime"),
+            "{effect}: {refused}"
+        );
+    }
+}
+
+#[test]
+fn an_unsafe_pattern_refuses_the_bundle() {
+    for value in ["git *", "bash -c *", "sudo git push *"] {
+        let refused = refusal(&request(json!([pattern_rule("p", "allow", value)])));
+        assert!(
+            refused.to_string().contains("command_pattern_allow"),
+            "{value}: {refused}"
+        );
+    }
+}
+
+#[test]
+fn a_pattern_scoped_to_another_device_or_evaluated_allows_nothing() {
+    let mut scoped = pattern_rule("p", "allow", "gh pr view *");
+    scoped["match"]["devices"] = json!(["device-9"]);
+    assert_eq!(patterns(&request(json!([scoped])))["ok"], json!([]));
+    let mut input = request(json!([pattern_rule("p", "allow", "gh pr view *")]));
+    input["bundle"]["payload"]["spec"]["defaults"]["mode"] = json!("observe");
+    assert_eq!(patterns(&input)["ok"], json!([]));
+}
+
+#[test]
+fn a_pattern_narrowed_by_a_selector_the_hook_cannot_apply_refuses_the_bundle() {
+    for (key, value) in [
+        ("repositories", json!(["owner/private"])),
+        ("domains", json!(["example.test"])),
+        ("actors", json!(["someone"])),
+        ("artifacts", json!(["skill:x"])),
+    ] {
+        let mut narrowed = pattern_rule("p", "allow", "gh pr view * --repo owner/name");
+        narrowed["match"][key] = value;
+        let refused = refusal(&request(json!([narrowed])));
+        assert!(
+            refused.to_string().contains("unsupported_policy_match"),
+            "{key}: {refused}"
+        );
+    }
+    let mut scoped = pattern_rule("p", "allow", "gh pr view * --repo owner/name");
+    scoped["match"]["harnesses"] = json!(["codex"]);
+    scoped["match"]["workspaces"] = json!(["/work/repo"]);
+    scoped["match"]["repositories"] = json!([]);
+    scoped["match"]["x-note"] = json!("kept");
+    let found = patterns(&request(json!([scoped])))["ok"].clone();
+    assert_eq!(found[0]["harnesses"], json!(["codex"]), "{found}");
+}
+
+fn group_rule(id: &str, effect: &str, matcher: Value) -> Value {
+    let mut group = rule(id, matcher);
+    group["effect"] = json!(effect);
+    group
+}
+
+#[test]
+fn a_risk_group_rule_reaches_the_device_as_one_row_per_group() {
+    let output = run(&request(json!([group_rule(
+        "ask-before-deletes",
+        "review",
+        json!({"riskGroups": ["deletes", "secrets"], "harnesses": ["codex"]}),
+    )])));
+    let rows = output["ok"]
+        .as_array()
+        .unwrap_or_else(|| panic!("{output}"));
+    let ids: Vec<&str> = rows
+        .iter()
+        .map(|row| row["decision"]["artifact_id"].as_str().unwrap())
+        .collect();
+    assert_eq!(ids, ["risk-group:deletes", "risk-group:secrets"]);
+    for row in rows {
+        assert_eq!(row["decision"]["action"], "review");
+        assert_eq!(row["decision"]["scope"], "harness");
+        assert_eq!(row["decision"]["harness"], "codex");
+    }
+}
+
+#[test]
+fn a_risk_group_rule_limited_to_a_folder_is_saved_for_that_folder() {
+    let output = run(&request(json!([group_rule(
+        "block-deletes-here",
+        "block",
+        json!({"riskGroups": ["deletes"], "workspaces": ["/work/app"]}),
+    )])));
+    assert_eq!(
+        output["ok"][0]["decision"]["scope"], "workspace",
+        "{output}"
+    );
+    assert_eq!(output["ok"][0]["decision"]["workspace"], "/work/app");
+    assert_eq!(output["ok"][0]["decision"]["action"], "block");
+}
+
+#[test]
+fn a_risk_group_rule_never_allows() {
+    assert_eq!(
+        refusal(&request(json!([group_rule(
+            "allow-deletes",
+            "allow",
+            json!({"riskGroups": ["deletes"]}),
+        )])))["code"],
+        "unsupported_risk_group_effect"
+    );
+}
+
+#[test]
+fn a_risk_group_rule_names_only_groups_the_hook_reads() {
+    for group in ["other", "money", "Deletes", ""] {
+        assert_eq!(
+            refusal(&request(json!([group_rule(
+                "unknown-group",
+                "review",
+                json!({"riskGroups": [group]}),
+            )])))["code"],
+            if group.is_empty() {
+                "invalid_policy_match_selector"
+            } else {
+                "unsupported_risk_group"
+            },
+            "{group}"
+        );
+    }
+}
+
+#[test]
+fn a_risk_group_rule_cannot_be_narrowed_by_what_the_hook_would_drop() {
+    for extra in [
+        json!({"commands": ["rm -rf build"]}),
+        json!({"artifacts": ["skill:x"]}),
+        json!({"tools": ["shell"]}),
+        json!({"publishers": ["acme"]}),
+    ] {
+        let mut matcher = extra.clone();
+        matcher["riskGroups"] = json!(["deletes"]);
+        assert_eq!(
+            refusal(&request(json!([group_rule("narrowed", "review", matcher)])))["code"],
+            "unsupported_policy_match",
+            "{extra}"
+        );
+    }
+}

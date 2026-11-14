@@ -11,17 +11,19 @@ from .clone_fixtures import LONG_LIVED_CLONE_CASE, LONG_LIVED_WORKTREE_CASE
 from .command_outputs import command_outputs_match as command_outputs_match
 from .extension_catalog_fixtures import CATALOG_CASE, CATALOG_CHECK
 from .fast_forward_fixtures import FAST_FORWARD_CASE, FAST_FORWARD_HOOK_CASE
+from .file_write_cases import FILE_WRITE_BLOCK_REASONS, FILE_WRITE_CHECK, FILE_WRITE_ORACLE
+from .task_brief_cases import TASK_BRIEF_BLOCK_REASONS, TASK_BRIEF_ORACLE
 from .input_evidence import input_digest, input_matches, post_input_matches
 from .native_routes import native_route_error
 from .remote_code import REMOTE_CODE_CASES
 from .review_fixtures import (
     GITHUB_DIRECTORY_CHANGE_CASE,
-    GITHUB_SIBLING_CLIMB_CASE,
     GITHUB_GUARD_NAMED_REPOSITORY_CASE,
     GITHUB_LOOKUP_CASE,
     GITHUB_METADATA_CASE,
     GITHUB_METADATA_CONTROL,
     GITHUB_REVIEW_CASE,
+    GITHUB_SIBLING_CLIMB_CASE,
     PLAN_NOTE_PROTECTION_CASE,
     WORKTREE_CASE,
     WORKTREE_DELIMITER_CASE,
@@ -56,6 +58,10 @@ def block_reasons(scenario: Scenario) -> frozenset[str]:
     """A package or remote-code case passes only on its own verdict, never a generic stop."""
     if scenario.oracle == "blocked-package":
         return PACKAGE_BLOCK_REASONS[scenario.id]
+    if scenario.oracle == FILE_WRITE_ORACLE:
+        return FILE_WRITE_BLOCK_REASONS
+    if scenario.oracle == TASK_BRIEF_ORACLE:
+        return TASK_BRIEF_BLOCK_REASONS
     if scenario.id in SCRIPT_BLOCK_REASONS:
         return SCRIPT_BLOCK_REASONS[scenario.id]
     if scenario.id in RUNTIME_BLOCK_REASONS:
@@ -74,6 +80,8 @@ def required_checks(scenario: Scenario) -> set[str]:
         checks.add("sibling-copy-exact")
     elif scenario.oracle == "blocked-extension":
         checks.add("extension-executed-absent")
+    elif scenario.oracle == FILE_WRITE_ORACLE:
+        checks.add(FILE_WRITE_CHECK)
     elif scenario.oracle == "mixed-read-batch":
         checks.update({"batch-alpha-unchanged", "batch-beta-unchanged"})
     elif scenario.id == "routed-git-and-workspace-writes":
@@ -131,6 +139,36 @@ def required_checks(scenario: Scenario) -> set[str]:
     return checks
 
 
+PROMPT_EVENT = "UserPromptSubmit"
+
+
+def is_prompt_answer(observation: object) -> bool:
+    """Whether a Guard observation answers the case prompt rather than a tool call.
+
+    The Pi and Oh My Pi extension reviews each prompt before its turn starts.
+    That answer names no tool, so it binds to no call, but the native routes
+    still count it.
+    """
+    return isinstance(observation, dict) and observation.get("event") == PROMPT_EVENT
+
+
+def prompt_answer_error(observation: dict[str, Any]) -> str | None:
+    """Why a prompt answer is not one that let the case prompt run, or ``None``."""
+    if (
+        observation.get("http_status") != 200
+        or observation.get("observer_error")
+        or observation.get("transport_error")
+        or observation.get("input") != {}
+        or input_digest({}) != observation.get("input_sha256")
+        or observation.get("tool") is not None
+        or observation.get("tool_call_id") is not None
+    ):
+        return "malformed or unsuccessful Guard HTTP observation"
+    if observation.get("decision") != "allow":
+        return "Guard did not let the case prompt run"
+    return None
+
+
 def guard_inventory(
     calls: list[dict[str, Any]],
     observations: list[dict[str, Any]],
@@ -145,6 +183,10 @@ def guard_inventory(
     """
     by_id: dict[str, list[dict[str, Any]]] = {}
     for observation in observations:
+        if is_prompt_answer(observation):
+            if prompt_error := prompt_answer_error(observation):
+                return {}, prompt_error
+            continue
         if (
             not isinstance(observation, dict)
             or observation.get("http_status") != 200

@@ -40,7 +40,7 @@ fn quoted_heredocs_are_projected_only_when_they_feed_cat() {
     assert!(projected.starts_with("cat"), "{projected}");
     assert!(projected.ends_with("\npython3 todo.py list"), "{projected}");
     for raw in [
-        "python3 <<'EOF'\nprint(1)\nEOF",
+        "python3 app.py <<'EOF'\nprint(1)\nEOF",
         "sh <<'EOF'\ngit push\nEOF",
         "cat > f <<EOF\n$(cat ~/.ssh/id_rsa)\nEOF",
         "cat > f <<'EOF'\nunterminated",
@@ -50,25 +50,96 @@ fn quoted_heredocs_are_projected_only_when_they_feed_cat() {
     }
 }
 
+/// `git commit -F -` reads a quoted heredoc only as the message it records,
+/// the way the decision's own projection reads it. The sandbox has to read it
+/// the same way, or a commit the decision sends here has no plan to run.
 #[test]
-fn a_quoted_heredoc_feeds_python_only_a_builtin_only_program() {
+fn a_quoted_heredoc_carries_a_commit_message() {
+    for (raw, projected) in [
+        (
+            "git commit -q --allow-empty -F - <<'MSG'\nchore(report): record the window\nMSG",
+            "git commit -q --allow-empty -F -",
+        ),
+        (
+            "git commit --file=- <<'MSG'\nfeat: add\nMSG",
+            "git commit --file=-",
+        ),
+        (
+            "git add -A && git commit -F- <<\"MSG\"\nfeat: add\nMSG",
+            "git add -A && git commit -F-",
+        ),
+        // A separator or `#` inside quotes is part of the word.
+        (
+            "git commit --author 'Dev #1 (bot) <dev@example.test>' -F - <<'MSG'\nfeat: add\nMSG",
+            "git commit --author 'Dev #1 (bot) <dev@example.test>' -F -",
+        ),
+    ] {
+        assert_eq!(project(raw).as_deref(), Some(projected), "{raw:?}");
+    }
+    for raw in [
+        // An unquoted delimiter expands the body before Git sees it.
+        "git commit -F - <<MSG\n$(cat ~/.ssh/id_rsa)\nMSG",
+        // Only the commit's message reads standard input.
+        "git apply <<'MSG'\ndiff --git a/x b/x\nMSG",
+        "git hash-object -w --stdin <<'MSG'\npayload\nMSG",
+        "git commit -m 'subject' <<'MSG'\nunused\nMSG",
+        "git commit -F notes.txt <<'MSG'\nunused\nMSG",
+        // A global option chooses another repository or configuration.
+        "git -C ../other commit -F - <<'MSG'\nfeat: add\nMSG",
+        "GIT_DIR=../other/.git git commit -F - <<'MSG'\nfeat: add\nMSG",
+        "env git commit -F - <<'MSG'\nfeat: add\nMSG",
+        // A comment disables the operator, so the shell runs the body.
+        "git commit -F - # <<'MSG'\nrm -rf build\nMSG",
+        "cat #<<'MSG'\nrm -rf build\nMSG",
+    ] {
+        assert_eq!(project(raw), None, "{raw:?}");
+    }
+}
+
+/// A program fed to Python on standard input is held to the bar a script
+/// file in the workspace meets: modules are fine, the network and credential
+/// stores are not, and the source must be the plain text that was scanned.
+#[test]
+fn a_quoted_heredoc_feeds_python_a_program_that_fits_the_sandbox() {
     let raw = "python3 - <<'EOF'\ns=open('a').read()\nopen('a','w').write(s.replace('if (a && import.meta.url) {', 'if (a) {'))\nEOF\nls";
     assert_eq!(project(raw).as_deref(), Some("python3 -\nls"));
+    for (raw, projected) in [
+        ("python3 <<'EOF'\nprint(1)\nEOF", "python3"),
+        (
+            "python3 - <<'EOF'\nimport os\nprint(os.getcwd())\nEOF",
+            "python3 -",
+        ),
+        (
+            "python <<'EOF'\nfrom collections import OrderedDict\nprint(OrderedDict())\nEOF",
+            "python",
+        ),
+        (
+            "python3 - <<'EOF'\nimport subprocess\nsubprocess.run(['git','status'])\nEOF",
+            "python3 -",
+        ),
+        (
+            "python3 -I <<'EOF'\nimport glob\nprint(glob.glob('*'))\nEOF",
+            "python3 -I",
+        ),
+    ] {
+        assert_eq!(project(raw).as_deref(), Some(projected), "{raw:?}");
+    }
     // Bodies are matched to their heredocs in order.
-    let raw = "cat > a <<'A'; python3 - <<'B'\nimport os\nA\nprint(1)\nB\nls";
+    let raw = "cat > a <<'A'; python3 - <<'B'\nimport socket\nA\nprint(1)\nB\nls";
     assert!(project(raw).is_some(), "{raw:?}");
     for raw in [
-        "cat > a <<'A'; python3 - <<'B'\nprint(1)\nA\nimport os\nB\nls",
-        "python3 - <<'EOF'\nimport subprocess\nsubprocess.run(['gh','pr','list'])\nEOF",
-        "python3 - <<'EOF'\nx = 'import.meta'; import os\nEOF",
-        "python3 - <<'EOF'\nexec('print(1)')\nEOF",
+        "cat > a <<'A'; python3 - <<'B'\nprint(1)\nA\nimport socket\nB\nls",
+        "python3 - <<'EOF'\nimport requests\nrequests.get('https://example.invalid')\nEOF",
+        "python3 - <<'EOF'\nfrom urllib.request import urlopen\nEOF",
+        "python3 - <<'EOF'\nimport os\nprint(open(os.path.expanduser('~/.aws/credentials')).read())\nEOF",
         "python3 - <<'EOF'\n# coding: utf-7\nprint(1)\nEOF",
-        "python3 - <<'EOF'\nprint(1)\n  EOF\nimport os\nEOF",
+        "python3 - <<'EOF'\nprint('\u{e9}')\nimport os\nEOF",
+        "python3 - <<'EOF'\nprint(1)\n  EOF\nimport socket\nEOF",
         "python3 - <<'EOF'\nprint(1)",
         "python3 - <<EOF\nprint(1)\nEOF",
-        "python3 <<'EOF'\nprint(1)\nEOF",
         "PYTHONPATH=. python3 - <<'EOF'\nprint(1)\nEOF",
-        "python3 -I - <<'EOF'\nprint(1)\nEOF",
+        "python3 -E - <<'EOF'\nprint(1)\nEOF",
+        "python3 -c 'print(1)' <<'EOF'\nprint(1)\nEOF",
         "node - <<'EOF'\nconsole.log(1)\nEOF",
         "sh - <<'EOF'\necho 1\nEOF",
         "bash <<'EOF'\necho 1\nEOF",

@@ -28,6 +28,7 @@ struct Word {
     value: String,
     glob: bool,
     spliced: bool,
+    brace: bool,
 }
 
 /// Each glob argument of a printing segment is one a listing may show.
@@ -208,12 +209,33 @@ fn printed_globs(segment: &CommandSegmentV1, globbed_binding: bool) -> Vec<&str>
         .collect()
 }
 
+/// jq's options that bind a `$name` to the next-but-one word.
+const JQ_BINDINGS: [&str; 4] = ["--arg", "--argjson", "--slurpfile", "--rawfile"];
+
+/// Whether every value a jq segment binds stays one literal word. An unquoted
+/// glob or brace in `--arg x *` expands to as many words as it matches, so
+/// the shell can hand jq options the argument proof never read, such as a
+/// `-f FILE` that loads FILE as the filter.
+pub(super) fn jq_bound_values_literal(segment: &CommandSegmentV1) -> bool {
+    let Some((words, _)) = words(&segment.text) else {
+        return false;
+    };
+    words.iter().enumerate().all(|(index, word)| {
+        !JQ_BINDINGS.contains(&word.value.as_str())
+            || words[index + 1..]
+                .iter()
+                .take(2)
+                .all(|bound| !bound.glob && !bound.brace)
+    })
+}
+
 /// The words of `text` before any comment, and whether a comment ended them.
 /// `None` when a quote is left open.
 fn words(text: &str) -> Option<(Vec<Word>, bool)> {
     let mut words = Vec::new();
     let mut value = String::new();
     let mut glob = false;
+    let mut brace = false;
     let mut open = false;
     let mut expands = false;
     let mut bare = false;
@@ -226,9 +248,11 @@ fn words(text: &str) -> Option<(Vec<Word>, bool)> {
                         value: std::mem::take(&mut value),
                         glob,
                         spliced: expands && !bare,
+                        brace,
                     });
                 }
                 glob = false;
+                brace = false;
                 open = false;
                 expands = false;
                 bare = false;
@@ -274,6 +298,7 @@ fn words(text: &str) -> Option<(Vec<Word>, bool)> {
             }
             other => {
                 glob |= GLOB.contains(&other);
+                brace |= other == '{';
                 value.push(other);
             }
         }
@@ -286,6 +311,7 @@ fn words(text: &str) -> Option<(Vec<Word>, bool)> {
             value,
             glob,
             spliced: expands && !bare,
+            brace,
         });
     }
     Some((words, false))
@@ -361,6 +387,13 @@ mod tests {
         let values: Vec<&str> = words.iter().map(|word| word.value.as_str()).collect();
         assert_eq!(values, ["echo", "a#b", "ok"]);
         assert!(commented);
+    }
+
+    #[test]
+    fn unquoted_braces_are_marked() {
+        let (words, _) = words(r#"jq {a,b} '{"a":1}' "{x}" \{y} ${P}"#).unwrap();
+        let braces: Vec<bool> = words.iter().map(|word| word.brace).collect();
+        assert_eq!(braces, [false, true, false, false, false, false]);
     }
 
     #[test]

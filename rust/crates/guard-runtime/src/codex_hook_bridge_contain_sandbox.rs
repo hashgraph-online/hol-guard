@@ -8,10 +8,22 @@
 //! confines it at least as tightly as the profile Guard requires runs in
 //! Codex's sandbox instead: a read-only turn for any profile, a
 //! workspace-write turn with no extra writable roots that also keeps `/tmp`
-//! and `$TMPDIR` read-only only for the workspace profile, and never with
+//! and `$TMPDIR` read-only for the workspace profile, and never with
 //! network. Codex lets a workspace-write call write both temporary
 //! directories unless its config excludes them; Guard's workspace profile
 //! does not.
+//!
+//! A workspace-write turn with no network and no extra writable roots runs
+//! every contained profile, temporary directories shared or not. Codex's
+//! default sandbox lets the agent write the workspace and both temporary
+//! directories with any shell command, so a contained call that can write
+//! the same places reaches nothing the turn could not already reach, while
+//! the sandbox still keeps it off the network and out of the home directory
+//! and the folders beside the workspace. That holds for a project's pytest,
+//! for `python -m unittest` and inline Python or Node, and for the workspace
+//! profile alike; denying them left the agent a refusal it could not get
+//! past without asking Codex for more access. Only the native Bash owner,
+//! which is not a sandbox profile, keeps Guard's answer.
 //!
 //! The turn's sandbox is not proof that this one call runs in it: Codex
 //! starts a call outside it when the user approves an escalation, when an
@@ -35,7 +47,9 @@ use std::io::{Read, Seek, SeekFrom};
 use std::path::Path;
 
 use super::{first, resolved_workspace, routed_response, shell_join, text, Contained};
-use crate::codex_sandbox_check::{CHECK_COMMAND, REFUSED, WORKSPACE_PROFILE};
+use crate::codex_sandbox_check::{
+    CHECK_COMMAND, PYTEST_PROFILE, REFUSED, SHARED_TMP_CHECK, WORKSPACE_PROFILE,
+};
 use crate::pyjson::{PyVal, SurrogateMapped};
 
 const REASON: &str = "native_contained_by_codex_sandbox";
@@ -54,6 +68,9 @@ pub(super) enum Turn {
     /// Codex's workspace-write sandbox with no extra writable roots, the
     /// shared temporary directories excluded, and no network.
     WorkspaceWrite,
+    /// Codex's default workspace-write sandbox: no extra writable roots and
+    /// no network, but `/tmp` and `$TMPDIR` writable.
+    SharedTmp,
     /// A Codex sandbox that is wider than the workspace: it reaches the
     /// network or writes outside the workspace, `/tmp` and `$TMPDIR`
     /// included.
@@ -61,16 +78,41 @@ pub(super) enum Turn {
 }
 
 impl Turn {
-    /// Whether this sandbox limits a call at least as tightly as the
-    /// contained `profile` Guard requires.
-    pub(super) fn confines(&self, profile: Option<&str>) -> bool {
-        match self {
-            Self::ReadOnly => true,
-            Self::WorkspaceWrite => profile == Some(WORKSPACE_PROFILE),
-            Self::Unknown | Self::Wider => false,
+    /// The profile `codex-sandbox-check` must confirm before a call that
+    /// Guard requires to run under `profile` runs in this sandbox, or `None`
+    /// when this sandbox does not hold that profile.
+    pub(super) fn check_profile<'a>(&self, profile: Option<&'a str>) -> Option<&'a str> {
+        match (self, profile?) {
+            (Self::ReadOnly, profile) => Some(profile),
+            (Self::WorkspaceWrite, profile) if contained_profile(profile) => {
+                Some(WORKSPACE_PROFILE)
+            }
+            (Self::SharedTmp, profile) if contained_profile(profile) => Some(SHARED_TMP_CHECK),
+            _ => None,
         }
     }
 }
+
+/// Whether `profile` names one of Guard's contained sandbox profiles, the
+/// ones a workspace-write turn's own sandbox holds at least as tightly.
+fn contained_profile(profile: &str) -> bool {
+    profile == WORKSPACE_PROFILE
+        || profile == PYTEST_PROFILE
+        || CONTAINED_PROFILES.contains(&profile)
+}
+
+/// Guard's other contained profiles: each keeps the workspace read-only or
+/// writes only its build output there, and none reaches the network.
+const CONTAINED_PROFILES: &[&str] = &[
+    "git-readonly-v1",
+    "node-build-output-v1",
+    "node-eval-readonly-v1",
+    "node-test-readonly-v1",
+    "node-tool-readonly-v1",
+    "package-test-readonly-v1",
+    "python-eval-readonly-v1",
+    "vitest-readonly-v1",
+];
 
 /// The sandbox of the turn this hook call belongs to. Only macOS is known
 /// to refuse a nested sandbox; elsewhere Guard's rewrite stands.
@@ -161,7 +203,7 @@ fn turn_policy(line: &str, turn_id: &str) -> Option<Turn> {
     match policy.get("type").and_then(serde_json::Value::as_str) {
         Some("read-only" | "workspace-write") if networked || extra_roots => Some(Turn::Wider),
         Some("read-only") => Some(Turn::ReadOnly),
-        Some("workspace-write") if shared_tmp => Some(Turn::Wider),
+        Some("workspace-write") if shared_tmp => Some(Turn::SharedTmp),
         Some("workspace-write") => Some(Turn::WorkspaceWrite),
         _ => Some(Turn::Unknown),
     }

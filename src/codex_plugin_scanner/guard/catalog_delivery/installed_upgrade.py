@@ -36,7 +36,15 @@ def migrate_active(store, installed):
                 # The native resume plan authenticates the already-admitted
                 # transition and its pack binding; no new approval is issued.
                 store._resume_transition(connection, anchor.revision, key=key)
-        store._read_extension_control_authority_locked(previous.metadata.catalog_digest)
+        # The upgrade below plans from the activation's catalog. A runtime on
+        # another catalog, such as an older install still running, may have
+        # moved the authority head off it; reading with the activation's
+        # registry lets the resident move the head back first. Without it the
+        # migration source never matches and every startup fails.
+        store._read_extension_control_authority_locked(
+            previous.metadata.catalog_digest,
+            migration_registry=GeneratedCommandCatalog.from_prepared_packs(previous),
+        )
     previous = activation_store.read(store)
     if previous is None:
         raise ValueError("installed command pack activation missing after recovery")

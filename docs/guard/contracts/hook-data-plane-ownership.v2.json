@@ -272,7 +272,6 @@
    "id": "harness_launchers",
    "class": "python_transport",
    "paths": [
-    "src/codex_plugin_scanner/guard/adapters/*argv*.py",
     "src/codex_plugin_scanner/guard/adapters/*bridge*.py",
     "src/codex_plugin_scanner/guard/adapters/*resume*.py",
     "src/codex_plugin_scanner/guard/adapters/*script_template*.py",
@@ -290,21 +289,12 @@
    "paths": [
     "src/codex_plugin_scanner/guard/adapters/*_hooks.py",
     "src/codex_plugin_scanner/guard/adapters/_modules/*/*_hooks.py",
-    "src/codex_plugin_scanner/guard/adapters/*hook_config.py",
     "src/codex_plugin_scanner/guard/adapters/*hook_payload*.py",
-    "src/codex_plugin_scanner/guard/adapters/claude_hook_config.py",
     "src/codex_plugin_scanner/guard/adapters/codex.py",
     "src/codex_plugin_scanner/guard/adapters/contracts.py",
     "src/codex_plugin_scanner/guard/adapters/copilot.py",
-    "src/codex_plugin_scanner/guard/adapters/devin.py",
-    "src/codex_plugin_scanner/guard/adapters/grok.py",
     "src/codex_plugin_scanner/guard/adapters/hermes.py",
-    "src/codex_plugin_scanner/guard/adapters/hook_payloads.py",
-    "src/codex_plugin_scanner/guard/adapters/kimi.py",
-    "src/codex_plugin_scanner/guard/adapters/openclaw_support.py",
-    "src/codex_plugin_scanner/guard/adapters/opencode_pretool.py",
-    "src/codex_plugin_scanner/guard/adapters/pi_extension_source.py",
-    "src/codex_plugin_scanner/guard/adapters/zcode.py"
+    "src/codex_plugin_scanner/guard/adapters/hook_payloads.py"
    ],
    "current": "transport-only harness envelope forwarding; Rust owns event, tool, action, and payload normalization",
    "target": "Rust raw-envelope normalization"

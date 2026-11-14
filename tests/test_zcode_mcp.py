@@ -12,12 +12,11 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from codex_plugin_scanner.guard.adapters import get_adapter
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
-from codex_plugin_scanner.guard.adapters.zcode import ZCodeHarnessAdapter
-from codex_plugin_scanner.guard.adapters.zcode_config import ZCODE_PRETOOL_MATCHERS
 from codex_plugin_scanner.guard.runtime.actions import normalize_harness_payload
 from codex_plugin_scanner.guard.shims import PreparedGuardShim
-from tests.test_zcode_adapter import is_guard_managed_hook_command
+from tests.test_zcode_adapter import ZCODE_PRETOOL_MATCHERS, is_guard_managed_hook_command
 
 
 def _ctx(tmp_path: Path) -> HarnessContext:
@@ -42,12 +41,12 @@ class TestZCodeMcpToolCoverage:
     def test_install_installs_mcp_pretooluse_hook(self, tmp_path: Path, monkeypatch) -> None:
         ctx = _ctx(tmp_path)
         monkeypatch.setattr(
-            "codex_plugin_scanner.guard.adapters.zcode.prepare_guard_shim",
+            "codex_plugin_scanner.guard.shims.prepare_guard_shim",
             lambda *args, **kwargs: PreparedGuardShim(
                 (), {"shim_path": str(ctx.guard_home / "bin" / "guard-zcode"), "notes": []}
             ),
         )
-        ZCodeHarnessAdapter().install(ctx)
+        get_adapter("zcode").install(ctx)
         payload = json.loads((ctx.home_dir / ".zcode" / "cli" / "config.json").read_text(encoding="utf-8"))
         pretool_entries = payload["hooks"]["events"]["PreToolUse"]
         matchers = {

@@ -212,6 +212,9 @@ mod environment;
 mod executables;
 mod framework_grants;
 mod git_plan;
+mod inline_git;
+#[cfg(test)]
+mod inline_git_tests;
 mod launch_roots;
 mod launch_shebang;
 mod mapping;
@@ -240,6 +243,8 @@ pub fn evaluate_with_deadline(
     mapping::evaluate(operation, input, deadline).unwrap_or_else(|| evaluate(operation, input))
 }
 pub use authority::evaluate;
+/// A sink asks the resident about a plan's argv as the caller spelled it.
+pub use contained::planned_route_argv;
 /// The runtime proves the Git executable, so it hands its own trust check in.
 pub use git_plan::{prepare_git, GitBinaryTrust};
 pub(crate) use launch_roots::launches_outside_exec_roots;

@@ -523,6 +523,22 @@
         "publishers": {
           "$ref": "#/$defs/stringSet"
         },
+        "riskGroups": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 6,
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "deletes",
+              "bulk_changes",
+              "sending_and_sharing",
+              "secrets",
+              "code_and_deploys",
+              "packages_and_scripts"
+            ]
+          }
+        },
         "repositories": {
           "$ref": "#/$defs/stringSet"
         },

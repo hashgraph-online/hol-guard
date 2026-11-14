@@ -8,8 +8,8 @@ from types import SimpleNamespace
 
 import pytest
 
+from codex_plugin_scanner.guard.adapters import get_adapter
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
-from codex_plugin_scanner.guard.adapters.gemini import GeminiHarnessAdapter
 from codex_plugin_scanner.guard.aibom_content_upload import (
     primary_content_sources_from_artifacts,
     upload_primary_content_sources,
@@ -157,8 +157,8 @@ def test_unchanged_incomplete_skill_has_stable_snapshot_identity(tmp_path: Path)
         pytest.skip(f"symlink creation unavailable: {exc}")
     context = HarnessContext(home_dir=home_dir, workspace_dir=None, guard_home=tmp_path / "guard")
 
-    first_detection = GeminiHarnessAdapter().detect(context)
-    second_detection = GeminiHarnessAdapter().detect(context)
+    first_detection = get_adapter("gemini").detect(context)
+    second_detection = get_adapter("gemini").detect(context)
     first = inventory_snapshot_from_detection(
         first_detection,
         generated_at="2026-07-19T00:00:00Z",
@@ -188,7 +188,7 @@ def test_symlinked_primary_is_nonreusable_and_not_uploadable(tmp_path: Path) -> 
         pytest.skip(f"symlink creation unavailable: {exc}")
     context = HarnessContext(home_dir=home_dir, workspace_dir=None, guard_home=tmp_path / "guard")
 
-    detection = GeminiHarnessAdapter().detect(context)
+    detection = get_adapter("gemini").detect(context)
     snapshot = inventory_snapshot_from_detection(
         detection,
         generated_at="2026-07-19T00:00:00Z",

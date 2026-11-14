@@ -59,6 +59,7 @@ from tests.benign_fp_gate_developer_checkout import head_commit, write_developer
 from tests.benign_fp_gate_feature_app import build_feature_app, feature_app_path
 from tests.benign_fp_gate_git import _git, _session_worktree, _signed_checkout, _stopped_rebase
 from tests.benign_fp_gate_hooked_clone import hooked_cwds, write_hooked_clone
+from tests.benign_fp_gate_linked_sources import build_linked_sources, linked_sources_path
 from tests.benign_fp_gate_long_lived_clone import write_long_lived_clones
 from tests.benign_fp_gate_paths import materialise
 from tests.benign_fp_gate_projects import (
@@ -186,6 +187,7 @@ class BenignFixture:
             "feature_app": feature_app_path(self.home),
             "pnpm_monorepo": self.home / "Code" / "acme-platform",
             "linked_worktree": self.linked_worktree,
+            "linked_sources": linked_sources_path(self.home),
         }[name]
 
 
@@ -211,7 +213,12 @@ def build_fixture(root: Path) -> BenignFixture:
     for directory in (home, guard_home):
         directory.mkdir(parents=True)
     _write(home / ".gitconfig", LFS_GITCONFIG)
-    _write(home / ".rustup" / "settings.toml", 'version = "12"\ndefault_toolchain = "stable"\n')
+    # `rustup override set nightly` in some other checkout leaves an official
+    # channel in the override table. It must not cost the version banners.
+    _write(
+        home / ".rustup" / "settings.toml",
+        'version = "12"\ndefault_toolchain = "stable"\n\n[overrides]\n"/opt/other-checkout" = "nightly"\n',
+    )
     _write(home / ".agent" / "skills" / "x" / "SKILL.md", "---\nname: x\n---\nSynthetic home skill body.\n")
     _write(home / ".agent" / "artifacts" / "report.md", "# Report\nInert build report text.\n")
     _write(home / ".agents" / "skills" / "x" / "SKILL.md", "---\nname: x\n---\nSynthetic home skill body.\n")
@@ -575,6 +582,7 @@ def build_fixture(root: Path) -> BenignFixture:
             _write(repository / relative, text)
         _git(repository, "add", "-A", home=home)
         _git(repository, "commit", "--quiet", "-m", f"{name} base", home=home)
+    build_linked_sources(home, _git)
     # A non-repository parent under /tmp whose repository has a linked worktree beside the parent.
     tmp_org = Path(tempfile.mkdtemp(prefix="org.", dir=_system_tmp())).resolve() / "org"
     (tmp_org / "app").mkdir(parents=True)

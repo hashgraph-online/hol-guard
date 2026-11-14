@@ -12,8 +12,6 @@ fn payload(value: Value) -> Map<String, Value> {
 #[test]
 fn routes_name_their_library_calls() {
     for (path, name) in [
-        ("/v1/policy/clear", "route.policy_clear"),
-        ("/v1/policy/decisions", "route.policy_upsert"),
         ("/v1/policy/resolve", "route.policy_resolve"),
         ("/v1/policy/claim", "route.policy_claim"),
         ("/v1/requests/bulk-allow-once", "route.bulk_allow_once"),
@@ -32,7 +30,11 @@ fn routes_name_their_library_calls() {
     ] {
         assert_eq!(route(path), Some((name, Map::new())), "{path}");
     }
-    let (name, args) = resident_route("/v1/local-clis/preview").unwrap_or_else(|| unreachable!());
+    // The edge answers policy writes itself.
+    assert_eq!(route("/v1/policy/clear"), None);
+    assert_eq!(route("/v1/policy/decisions"), None);
+    let (name, args) =
+        resident_route("/v1/local-clis/preview", None).unwrap_or_else(|| unreachable!());
     assert_eq!(name, "route.local_cli_post");
     assert_eq!(args["op"], "preview");
     for (path, op) in [
@@ -41,10 +43,18 @@ fn routes_name_their_library_calls() {
         ("/v1/local-clis/skills", "skills"),
         ("/v1/local-clis/apply", "apply"),
     ] {
-        let (_, args) = resident_route(path).unwrap_or_else(|| unreachable!());
+        let (_, args) = resident_route(path, None).unwrap_or_else(|| unreachable!());
         assert_eq!(args["op"], op, "{path}");
     }
-    assert_eq!(resident_route("/v1/extension-controls/preview"), None);
+    assert_eq!(resident_route("/v1/extension-controls/preview", None), None);
+    // The Codex hook bridge records its waiting hook's decision here; the
+    // resident's hook worker re-reviews it, so no route may drop it.
+    let (name, args) = resident_route("/v1/requests/r-3/live-decision", Some("/home/u"))
+        .unwrap_or_else(|| unreachable!());
+    assert_eq!(name, "hook.codex_live_decision");
+    assert_eq!(args["request_id"], "r-3");
+    assert_eq!(args["home_dir"], "/home/u");
+    assert_eq!(route("/v1/requests/r-3/live-decision"), None);
     let (name, args) = route("/v1/requests/r-1/resume").unwrap_or_else(|| unreachable!());
     assert_eq!(name, "route.request_resume_retry");
     assert_eq!(args["request_id"], "r-1");

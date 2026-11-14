@@ -98,3 +98,105 @@ fn a_bad_startup_stops_before_answering() {
         );
     }
 }
+
+/// Assembled from pieces so no file in this repository holds a whole token of
+/// a shape a credential scanner recognises.
+fn canary_token() -> String {
+    format!("{}{}{}", "ghp_", "7Qk2TzVx9Lm", "R4Hb8Nd3PwYs6")
+}
+
+fn canary_key() -> String {
+    format!("{}{}{}", "AKIA", "QYLPT3K7", "R4FXM2WD")
+}
+
+fn base64(bytes: &[u8]) -> String {
+    use base64ct::{Base64, Encoding};
+    Base64::encode_string(bytes)
+}
+
+#[test]
+fn inspect_reports_canary_secrets_without_echoing_them() {
+    let token = canary_token();
+    let key = canary_key();
+    let encoded = base64(format!("AWS_ACCESS_KEY_ID={key}").as_bytes());
+    let nested = serde_json::json!({"auth": {"token": token}}).to_string();
+    let requests = [
+        serde_json::json!({"arguments": {"body": format!("use {token}")}, "result": null}),
+        serde_json::json!({"arguments": null, "result": {"file": format!("data: {encoded}")}}),
+        serde_json::json!({"arguments": {"payload": nested}, "result": null}),
+    ];
+    let mut input = Vec::new();
+    for (index, body) in requests.iter().enumerate() {
+        let mut request = body.clone();
+        request["schema"] = "guard.cloud-action-inspection.v1".into();
+        request["request_id"] = format!("inspect-{index}").into();
+        input.extend(request.to_string().into_bytes());
+        input.push(b'\n');
+    }
+    input.extend(b"not json\n");
+
+    let output = invoke(&["inspect"], input);
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    for canary in [token.as_str(), key.as_str(), encoded.as_str()] {
+        assert!(!stdout.contains(canary), "inspect echoed a canary");
+    }
+    let lines: Vec<Value> = stdout
+        .lines()
+        .map(|line| serde_json::from_str(line).unwrap())
+        .collect();
+    assert_eq!(lines.len(), 4, "{lines:?}");
+    assert_eq!(
+        lines[0]["fact_findings"],
+        serde_json::json!(["secret_in_arguments"])
+    );
+    assert_eq!(
+        lines[1]["fact_findings"],
+        serde_json::json!(["secret_in_result"])
+    );
+    assert_eq!(
+        lines[2]["fact_findings"],
+        serde_json::json!(["secret_in_arguments"])
+    );
+    assert_eq!(lines[3]["error"]["code"], "malformed");
+    assert_eq!(lines[3]["complete"], false);
+}
+
+#[test]
+fn inspect_takes_no_flags() {
+    let output = invoke(&["inspect", "--binding-set", "x"], Vec::new());
+    assert_eq!(output.status.code(), Some(2));
+    assert!(output.stdout.is_empty());
+}
+
+#[test]
+fn the_runtime_serves_the_pack_tools() {
+    let pack: Value = serde_json::from_str(include_str!(
+        "../../../../contributions/cloud-actions/slack.json"
+    ))
+    .unwrap();
+    let mut input = Vec::new();
+    for request in [
+        serde_json::json!({"op": "validate", "pack": pack}),
+        serde_json::json!({"op": "render", "pack": pack, "actionId": "slack.chat.post_message",
+            "arguments": {"channel": "C0123456789", "text": "<!channel>"}}),
+    ] {
+        input.extend(request.to_string().into_bytes());
+        input.push(b'\n');
+    }
+    let output = invoke(&["pack"], input);
+    assert!(output.status.success(), "{output:?}");
+    let lines: Vec<Value> = String::from_utf8(output.stdout)
+        .unwrap()
+        .lines()
+        .map(|line| serde_json::from_str(line).unwrap())
+        .collect();
+    assert_eq!(lines.len(), 2);
+    assert_eq!(lines[0]["ok"], true);
+    assert_eq!(lines[1]["error"]["code"], "forbidden_content");
+    assert!(!invoke(&["pack", "extra"], Vec::new()).status.success());
+}

@@ -352,3 +352,7 @@ pub(crate) fn run(config_text: &str) -> Result<(), String> {
 #[cfg(all(test, unix))]
 #[path = "claude_hook_bridge_tests.rs"]
 mod tests;
+
+#[cfg(all(test, unix))]
+#[path = "claude_hook_bridge_unmanaged_tests.rs"]
+mod unmanaged_tests;

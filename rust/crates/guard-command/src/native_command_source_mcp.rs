@@ -275,7 +275,9 @@ impl McpInventory {
                 let package = launch["package"]
                     .as_str()
                     .ok_or("command_source_mcp_projection_invalid")?;
-                if !self.packages.insert(package.trim().to_lowercase()) {
+                let (name, _) = crate::mcp_decision::split_package_token(package.trim());
+                let name = name.ok_or("command_source_mcp_launcher_invalid")?;
+                if !self.packages.insert(name.to_lowercase()) {
                     return Err("command_source_mcp_package_duplicate");
                 }
             }
@@ -335,6 +337,20 @@ mod tests {
         ];
         for (command, expected) in cases {
             assert_eq!(package_launch_example(command, "pkg"), expected);
+        }
+    }
+
+    #[test]
+    fn package_inventory_rejects_versioned_name_collisions() {
+        for other in ["rei-skills", "rei-skills@6.3.0"] {
+            let program = serde_json::json!({"extensions":[
+                {"mcp":{"mcp_launch":{"kind":"package-launcher","package":"rei-skills@6.2.0"}}},
+                {"mcp":{"mcp_launch":{"kind":"package-launcher","package":other}}}
+            ]});
+            assert_eq!(
+                validate_inventory(&program),
+                Err("command_source_mcp_package_duplicate")
+            );
         }
     }
 

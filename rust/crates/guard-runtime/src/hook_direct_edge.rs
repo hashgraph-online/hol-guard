@@ -53,6 +53,21 @@ pub(super) fn pre_tool_answer(edge: &[u8], contained: bool) -> Result<Value, Hoo
     Ok(parsed)
 }
 
+/// Why the daemon, rather than the resident, should settle a review the edge
+/// gave this `PreToolUse` when the resident's short budget may be all that
+/// caused it: a Git read whose configuration could not be settled, which may
+/// also mean a configured helper, or an extension check that ran out of time.
+pub(super) fn budget_bound_review(edge: &[u8]) -> Option<HookDirectDefer> {
+    let parsed = reviewed_edge(edge, PRE_TOOL_USE).ok()?;
+    match parsed.pointer("/result/reason_code")?.as_str()? {
+        "native_git_execution_context_review" | "native_git_helper_context_review" => {
+            Some(HookDirectDefer::GitContextReview)
+        }
+        "native_command_extension_evaluation_timed_out" => Some(HookDirectDefer::ExtensionTimedOut),
+        _ => None,
+    }
+}
+
 /// Whether the edge classified this `PreToolUse` as one that runs a shell
 /// command, the only kind an exact-command rule applies to. An edge the
 /// resident cannot read counts as one, so the daemon decides it.

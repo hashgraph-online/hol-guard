@@ -118,6 +118,11 @@ pub(super) fn filter(
     ] {
         result.insert(key.to_owned(), value);
     }
+    if super::inline_git::runs_git(allowed) {
+        for (key, value) in super::inline_git::GIT_SETTINGS {
+            result.insert(key.to_owned(), value.to_owned());
+        }
+    }
     // A workspace run (no allowed executables) reaches `pnpm` and `yarn`
     // through Corepack, which reads the package manager it runs from a cache
     // below the real HOME. The plan grants that cache read-only; Corepack must
