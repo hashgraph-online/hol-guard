@@ -190,7 +190,7 @@ def run_approval_command(
             )
             approval_gate_grant = require_fresh_approval_decision(
                 store.guard_home,
-                action="allow" if str(args.approval_action) == "allow" else "block",
+                action=str(args.approval_action),
                 scope=requested_scope,
                 approval_gate_input=fresh_input,
                 subject=f"approval-request:{args.request_id}",
