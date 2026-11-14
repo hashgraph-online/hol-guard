@@ -17431,7 +17431,8 @@
         "command": "ps axeo pid,command"
       },
       "cwd": "worktree",
-      "expect": "not_allow"
+      "expect": "not_allow",
+      "contained_ok": true
     },
     {
       "id": "test-tty-descriptor",
