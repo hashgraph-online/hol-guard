@@ -151,7 +151,7 @@ The same lookup runs for every other app whose prompt hook can hand text to the 
 | --- | --- |
 | Devin, Muse, Z Code | `hookSpecificOutput.additionalContext`, as for Claude Code |
 | Kimi | `hookSpecificOutput.message`, the field Kimi reads; Guard copies the context there |
-| Cline | `contextModification`, which Cline adds to the prompt as hook context |
+| Cline | `contextModification`, which Cline adds to the prompt as hook context. Only Cline's native hooks send Guard the prompt; when Guard is set up through the Cline plugin, CIGAR stays off for Cline and the dashboard says why. |
 
 The dashboard's CIGAR switch is offered only for these apps. It stays off for apps whose prompt hook cannot pass text to the model: Copilot CLI drops the prompt hook's output, Grok discards it, Cursor's prompt hook can only allow or block, Hermes, OpenCode, OpenClaw and Paseo have no prompt hook, and Gemini and Antigravity run through a launcher with no hooks.
 

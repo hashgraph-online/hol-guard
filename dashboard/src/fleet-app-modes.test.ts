@@ -57,6 +57,14 @@ assert(!cigarAvailable(settings(), "cursor"), "an app without a prompt context h
 for (const app of ["devin", "muse", "zcode", "kimi", "cline"]) {
   assert(cigarAvailable(settings(), app), `${app}'s prompt hook carries CIGAR's context`);
 }
+const clinePlugin = settings({ cigar_apps: ["claude-code", "codex", "kimi"] });
+assert(!cigarAvailable(clinePlugin, "cline"), "Cline set up through its plugin sends Guard no prompts");
+assert(cigarAvailable(clinePlugin, "kimi"), "the core's list keeps the other apps");
+assert(!appModes(clinePlugin, "cline").cigar, "Cline through its plugin never shows CIGAR on");
+assert(
+  cigarUnavailableReason(clinePlugin, "cline", "Cline")?.includes("native hooks") === true,
+  "Cline through its plugin says to use its native hooks",
+);
 for (const app of ["copilot", "grok", "cursor", "hermes"]) {
   assert(!cigarAvailable(settings(), app), `${app} drops or has no prompt hook context`);
 }

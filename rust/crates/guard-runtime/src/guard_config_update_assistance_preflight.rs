@@ -91,6 +91,7 @@ pub(super) fn write(request: &UpdateRequest, value: &PyVal) -> Result<Value, Fai
         request.managed.as_ref(),
         request.cloud_sync_entitled,
         &now_iso(),
+        &crate::cigar_apps::cigar_apps(home),
     )?;
     fence(stored.as_deref(), &mut computed.text, false)?;
     let mut lease = None;

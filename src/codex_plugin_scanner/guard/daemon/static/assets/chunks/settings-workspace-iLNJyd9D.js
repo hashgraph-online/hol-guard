@@ -8995,6 +8995,7 @@ function buildSettingsUpdatePayload(draft, saved) {
   delete payload.context_assistance_diagnostic;
   delete payload.context_assistance_requested;
   delete payload.context_assistance_effective_ready;
+  delete payload.cigar_apps;
   if (draft.context_assistance_requested === void 0 || settingsValueEquals(draft.context_assistance, previous.context_assistance)) {
     delete payload.context_assistance;
   }

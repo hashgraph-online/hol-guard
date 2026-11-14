@@ -35,9 +35,17 @@ export function cigarSupported(harness: string): boolean {
   return CIGAR_APPS.has(harness);
 }
 
+/**
+ * True when this app's Guard setup on this machine sends Guard its prompts.
+ * Cline does that only through its native hooks, not through the Cline plugin.
+ */
+export function cigarReachesApp(settings: GuardSettings, harness: string): boolean {
+  return cigarSupported(harness) && (settings.cigar_apps?.includes(harness) ?? true);
+}
+
 /** True when CIGAR runs for this app or can be switched on for it right now. */
 export function cigarAvailable(settings: GuardSettings, harness: string): boolean {
-  return cigarReady(settings) && cigarSupported(harness);
+  return cigarReady(settings) && cigarReachesApp(settings, harness);
 }
 
 export function appModes(settings: GuardSettings, harness: string): AppModes {
@@ -99,6 +107,9 @@ export function needsConfirm(current: AppModes, next: AppModes, locked = false):
 export function cigarUnavailableReason(settings: GuardSettings, harness: string, displayName: string): string | undefined {
   if (cigarAvailable(settings, harness)) {
     return cigarLocked(settings) ? "Your organization manages CIGAR for each app." : undefined;
+  }
+  if (cigarSupported(harness) && !cigarReachesApp(settings, harness)) {
+    return `Guard is set up in ${displayName} through its plugin, which doesn't send Guard your prompts. Set up ${displayName} with its native hooks to use CIGAR.`;
   }
   if (cigarSupported(harness)) return "CIGAR is off on this machine. Set it up on the CIGAR page.";
   return `${displayName} doesn't let Guard add context to its prompts yet.`;

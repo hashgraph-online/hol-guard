@@ -1051,6 +1051,8 @@ export type GuardSettings = {
   context_assistance_diagnostic?: string | null;
   /** Read-only: whether CIGAR adds context after validation and managed policy. Absent on older cores. */
   context_assistance_effective_ready?: boolean;
+  /** Apps whose prompts can take CIGAR's context in this Guard home. */
+  cigar_apps?: string[];
   update_channel?: "stable" | "alpha";
   approval_gate?: GuardApprovalGatePublicConfig;
   managed_locked_settings?: string[];
