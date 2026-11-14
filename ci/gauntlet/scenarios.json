@@ -15,7 +15,7 @@
       "expectation": "allow",
       "oracle": "watch-command",
       "commands": [
-        "python -I -S -c 'print(\"ordinary-watch-fixture\")'"
+        "python -I -S -c 'import os; print(\"ordinary-watch-fixture\", os.path.isdir(\".\"))'"
       ],
       "prompt": "Run the one exact bash command below once in this disposable fixture. Wait for its result and stop. Do not substitute tools or request approval."
     },

@@ -119,6 +119,10 @@ def test_a_contained_omp_receipt_needs_the_same_marker(monkeypatch: pytest.Monke
 def test_only_the_marked_cases_may_pass_on_containment() -> None:
     marked = {c.base_id for c in expand() if c.expect == "block" and c.contained_ok}
     assert marked == {
+        # The command the Watch case runs: an isolated interpreter running
+        # inline code, which Guard stops when enforcing. A contained run
+        # prints one line inside the workspace, which is all the case does.
+        "gauntlet-watch-fixture-command-is-still-stopped",
         # An awk program whose output pipe the read screen must refuse: the pipe
         # runs a network client, and a contained run has no network, so nothing
         # leaves. A read misclassification would be a quiet allow and still fail.
