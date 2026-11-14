@@ -128,7 +128,10 @@ def test_preparation_composes_real_codex_and_claude_adapters_without_writes(prep
     assert codex.after["manifest"]["managed_hook_integrity"] == "authenticated"
 
 
-def test_ordinary_install_restores_files_written_before_a_later_write_fails(tmp_path: Path, monkeypatch):
+@pytest.mark.parametrize("failure", [TransitionError("publication_failed"), KeyboardInterrupt()])
+def test_ordinary_install_restores_files_written_before_a_later_write_fails(
+    tmp_path: Path, monkeypatch, failure: BaseException
+):
     from codex_plugin_scanner.guard.adapters.base import PreparedHarnessInstall
     from codex_plugin_scanner.guard.runtime_transition import RuntimeTransition, TransitionFile
 
@@ -156,11 +159,11 @@ def test_ordinary_install_restores_files_written_before_a_later_write_fails(tmp_
 
     def write(change, generation):
         if generation == "after" and str(change["path"]).endswith("second.txt"):
-            raise TransitionError("publication_failed")
+            raise failure
         original(change, generation)
 
     monkeypatch.setattr(RuntimeTransition, "_write_file", staticmethod(write))
-    with pytest.raises(TransitionError, match="publication_failed"):
+    with pytest.raises(type(failure)):
         install.publish(tmp_path)
     assert first.read_bytes() == b"old-first"
     assert second.read_bytes() == b"old-second"

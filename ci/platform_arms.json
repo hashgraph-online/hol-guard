@@ -763,6 +763,14 @@
    "body": "53abbd254e3b"
   },
   {
+   "verdict": "windows-equivalent",
+   "note": "Windows has no execute bit: `CreateProcess` starts any regular file it finds under the extensions `candidates` already adds, so the first regular file on PATH is the one the platform would run. The Unix arm only adds the execute-bit check `shutil.which` makes there.",
+   "file": "rust/crates/guard-runtime/src/adapters/command_probe.rs",
+   "item": "fn runnable -- non-Unix block",
+   "cfg": "not(unix)",
+   "body": "cf7cb46931cb"
+  },
+  {
    "verdict": "windows-unsupported",
    "note": "The Desktop hook proxy is a signed macOS app-bundle launch; off macOS no path is trusted, so `command` answers no proxy and the Core bridge is kept. The caller only asks on darwin and the kind's own `macos` gate refuses elsewhere.",
    "file": "rust/crates/guard-runtime/src/adapters/desktop_hook_proxy.rs",

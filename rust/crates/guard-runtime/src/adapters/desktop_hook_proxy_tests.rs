@@ -161,6 +161,7 @@ fn stored(fixture: &Fixture, team: &str) -> serde_json::Map<String, Value> {
         fixture.bundle,
         "{\"harness\":\"grok\"}",
         fixture.core,
+        "1",
     ]);
     json!({ "op": "verify", "args": args })
         .as_object()
@@ -184,8 +185,12 @@ fn a_stored_launch_is_trusted_only_over_its_verified_paths_and_team() {
     let unverified = json!({ "config": null, "core": null });
     let mut altered = stored(&fixture, "TEAMID");
     altered["args"][2] = json!("echo hol-guard hook");
-    let mut ten = stored(&fixture, "TEAMID");
-    ten["args"].as_array_mut().unwrap().push(json!("0"));
+    let mut nine = stored(&fixture, "TEAMID");
+    nine["args"].as_array_mut().unwrap().pop();
+    let mut eleven = stored(&fixture, "TEAMID");
+    eleven["args"].as_array_mut().unwrap().push(json!("0"));
+    let mut required = stored(&fixture, "TEAMID");
+    required["args"][9] = json!("yes");
     let mut other_bundle = stored(&fixture, "TEAMID");
     other_bundle["args"][6] = json!(fixture.bundle.join("Contents"));
     for (request, core_team, macos) in [
@@ -193,11 +198,37 @@ fn a_stored_launch_is_trusted_only_over_its_verified_paths_and_team() {
         (stored(&fixture, "OTHER"), "OTHER", true),
         (stored(&fixture, "TEAMID"), "TEAMID", false),
         (altered, "TEAMID", true),
-        (ten, "TEAMID", true),
+        (nine, "TEAMID", true),
+        (eleven, "TEAMID", true),
+        (required, "TEAMID", true),
         (other_bundle, "TEAMID", true),
     ] {
         let answer = verify(&request, macos, &mut signed(&fixture, core_team)).unwrap();
         assert_eq!(answer, unverified, "{request:?}");
+    }
+}
+
+#[test]
+fn the_launch_command_writes_is_the_launch_verify_trusts() {
+    let fixture = fixture();
+    for require in [true, false] {
+        let answer = command(
+            &request(&fixture, json!("1"), require),
+            true,
+            &mut signed(&fixture, "TEAMID"),
+        )
+        .unwrap();
+        let stored = json!({ "op": "verify", "args": answer["argv"] });
+        let verified = verify(
+            stored.as_object().unwrap(),
+            true,
+            &mut signed(&fixture, "TEAMID"),
+        )
+        .unwrap();
+        assert_eq!(
+            verified,
+            json!({ "config": "{\"harness\":\"grok\"}", "core": path(&fixture.core) })
+        );
     }
 }
 

@@ -435,6 +435,23 @@ pub(super) fn binding(event: &str, group: PyVal, handler: PyVal) -> PyVal {
     ])
 }
 
+/// A legacy binding narrowed to its own handler: the group it removes as a
+/// whole is that group holding only this handler, so a user handler sharing
+/// the group stays.
+fn handler_only(binding: &PyVal) -> Option<PyVal> {
+    let entries = binding.as_dict()?;
+    let (Some(PyVal::Str(event)), Some(PyVal::Dict(group)), Some(handler)) = (
+        get(entries, "event"),
+        get(entries, "group"),
+        get(entries, "handler"),
+    ) else {
+        return None;
+    };
+    let mut group = group.clone();
+    set(&mut group, "hooks", PyVal::List(vec![handler.clone()]));
+    Some(self::binding(event, PyVal::Dict(group), handler.clone()))
+}
+
 /// `_recorded_handler_commands`.
 fn recorded_commands(bindings: &[PyVal]) -> BTreeSet<String> {
     bindings
@@ -455,16 +472,21 @@ fn strip(hooks: &mut Entries, fields: &Map<String, Value>, syntax: &mut Syntax) 
     let legacy = Legacy::parse(fields)?;
     let home = Home::parse(fields)?;
     let mut changed = remove(hooks, &owned);
-    let found = legacy.bindings(hooks, syntax);
-    changed |= remove(hooks, &found);
-    if flag(fields, "unlaunchable")? {
-        changed |= unlaunchable(hooks, &legacy.statuses, syntax);
-    }
     let recorded = if flag(fields, "hold_recorded")? {
         recorded_commands(&owned)
     } else {
         BTreeSet::new()
     };
+    let found: Vec<PyVal> = legacy
+        .bindings(hooks, syntax)
+        .iter()
+        .filter(|binding| recorded_commands(std::slice::from_ref(*binding)).is_disjoint(&recorded))
+        .filter_map(handler_only)
+        .collect();
+    changed |= remove(hooks, &found);
+    if flag(fields, "unlaunchable")? {
+        changed |= unlaunchable(hooks, &legacy.statuses, syntax);
+    }
     let found = home::self_bindings(hooks, &home, &recorded, syntax);
     changed |= remove(hooks, &found);
     Ok(changed)

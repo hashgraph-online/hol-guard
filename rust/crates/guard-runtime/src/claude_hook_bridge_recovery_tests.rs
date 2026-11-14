@@ -23,6 +23,8 @@ fn an_interpreter_recovers_the_guard_home_and_home_the_hook_names() {
     assert_eq!(command.len(), 4);
 }
 
+// `/g` and `/h` are absolute only on POSIX; Windows would add a drive.
+#[cfg(unix)]
 #[test]
 fn a_frozen_guard_recovers_through_its_private_argument() {
     let command = launcher_recovery(

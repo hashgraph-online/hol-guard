@@ -77,7 +77,8 @@ class PreparedHarnessInstall:
                 if on_write is not None:
                     on_write(change)
             RuntimeTransition._compare(changes, "after")
-        except Exception as error:
+        except BaseException as error:
+            # An interrupt restores the completed writes too.
             if not rollback:
                 raise
             restore_error: Exception | None = None

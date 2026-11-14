@@ -28,7 +28,7 @@ def _context(tmp_path: Path, *, workspace: bool = True) -> HarnessContext:
 
 def _redirect(command: tuple[str, ...], target: Path, option: str) -> tuple[str, ...]:
     """Change paired configuration values while keeping the command internally consistent."""
-    offset = 7 if len(command) == 9 else len(command) - 1
+    offset = 7 if len(command) == 10 else len(command) - 1
     config = json.loads(command[offset])
     args = config["cli_args"]
     args[args.index(option) + 1] = str(target)
@@ -90,6 +90,7 @@ def _generated(context: HarnessContext, mode: str, monkeypatch: pytest.MonkeyPat
         str(bundle),
         json.dumps(config),
         str(core),
+        "1",
     )
 
 

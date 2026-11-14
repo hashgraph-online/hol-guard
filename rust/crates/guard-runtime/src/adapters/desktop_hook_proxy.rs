@@ -169,7 +169,9 @@ fn argv(launch: &Launch, config: &str, require: bool) -> Vec<String> {
 }
 
 /// A stored launch is trusted only as `/bin/sh -c SCRIPT NAME proxy team
-/// bundle config core`, over the exact verified paths and team.
+/// bundle config core required`, the ten elements [`argv`] writes, over the
+/// exact verified paths and team. `SCRIPT` reads `required` as `$6` under
+/// `set -u`, so a launch without it cannot run.
 fn verify(map: &Map<String, Value>, macos: bool, runner: &mut impl Runner) -> KindResult {
     if map.len() != 2 {
         return Err(ERR_INVALID);
@@ -182,10 +184,14 @@ fn verify(map: &Map<String, Value>, macos: bool, runner: &mut impl Runner) -> Ki
         .map(|arg| arg.as_str().ok_or(ERR_INVALID))
         .collect::<Result<Vec<_>, _>>()?;
     let unverified = json!({ "config": null, "core": null });
-    let [shell, flag, script, name, proxy, team, bundle, config, core] = args.as_slice() else {
+    let [shell, flag, script, name, proxy, team, bundle, config, core, required] = args.as_slice()
+    else {
         return Ok(unverified);
     };
-    if !macos || [*shell, *flag, *script, *name] != [SHELL, "-c", SCRIPT, NAME] {
+    if !macos
+        || [*shell, *flag, *script, *name] != [SHELL, "-c", SCRIPT, NAME]
+        || !matches!(*required, "0" | "1")
+    {
         return Ok(unverified);
     }
     let expected = Launch {

@@ -113,6 +113,30 @@ fn relative_and_empty_path_entries_are_read_from_the_probe_cwd() {
     }
 }
 
+#[cfg(unix)]
+#[test]
+fn a_non_executable_path_match_does_not_hide_the_installed_cli() {
+    use std::os::unix::fs::PermissionsExt;
+    let home = tempfile::tempdir().unwrap();
+    let (first, second) = (home.path().join("first"), home.path().join("second"));
+    for (directory, mode) in [(&first, 0o644), (&second, 0o755)] {
+        std::fs::create_dir_all(directory).unwrap();
+        let script = directory.join("probe-cli");
+        std::fs::write(&script, "#!/bin/sh\necho installed\n").unwrap();
+        std::fs::set_permissions(&script, std::fs::Permissions::from_mode(mode)).unwrap();
+    }
+    let search = std::env::join_paths([&first, &second]).unwrap();
+    let answer = probe(
+        json!(["probe-cli"]),
+        json!({"PATH": search.to_str().unwrap()}),
+        5,
+    );
+    assert_eq!(
+        (&answer["ok"], &answer["stdout"]),
+        (&json!(true), &json!("installed"))
+    );
+}
+
 #[test]
 fn a_malformed_probe_request_is_refused() {
     let cwd = std::env::temp_dir();

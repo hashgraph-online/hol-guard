@@ -182,6 +182,7 @@ fn probe_target<'a>(
 #[path = "codex_hook_bridge_desktop_probe.rs"]
 mod probe;
 
-#[cfg(test)]
+// The fixtures are POSIX paths, as in `codex_hook_bridge_tests`.
+#[cfg(all(test, unix))]
 #[path = "codex_hook_bridge_desktop_tests.rs"]
 mod tests;

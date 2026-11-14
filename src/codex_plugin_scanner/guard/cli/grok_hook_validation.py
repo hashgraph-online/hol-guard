@@ -110,7 +110,7 @@ def is_grok_hook_command(command: str, context: HarnessContext | None = None) ->
         args = _native_client(_arguments(command), trusted=True, guard_home=guard_home)
         if args is None:
             return False
-        if len(args) == 9:
+        if len(args) == 10:
             return _desktop_proxy(args, context)
         if len(args) in {3, 4} and args[1] == "-I":
             return _isolated_stdlib_client(args, context)
@@ -170,7 +170,7 @@ def is_missing_grok_hook_command(command: str, replacement: str) -> bool:
             serialized = args[4]
         elif len(args) == 3 and args[1] == "__guard-bounded-hook":
             serialized = args[2]
-        elif len(args) == 9 and _desktop_proxy(args, None):
+        elif len(args) == 10 and _desktop_proxy(args, None):
             serialized = args[7]
         else:
             return None

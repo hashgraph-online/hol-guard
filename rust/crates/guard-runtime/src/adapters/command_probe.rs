@@ -82,8 +82,24 @@ fn located(program: &str, cwd: &Path, env: &BTreeMap<String, String>) -> Option<
     std::env::split_paths(env.get("PATH")?).find_map(|directory| {
         candidates(&cwd.join(directory).join(program))
             .into_iter()
-            .find(|file| file.is_file())
+            .find(|file| runnable(file))
     })
+}
+
+/// A `PATH` match the platform would start: on Unix a file someone may
+/// execute, so a non-executable file earlier on `PATH` does not hide the
+/// installed program, as `shutil.which` skips it too.
+fn runnable(file: &Path) -> bool {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::metadata(file)
+            .is_ok_and(|meta| meta.is_file() && meta.permissions().mode() & 0o111 != 0)
+    }
+    #[cfg(not(unix))]
+    {
+        file.is_file()
+    }
 }
 
 /// The file itself, and on Windows the extensions `CreateProcess` tries.

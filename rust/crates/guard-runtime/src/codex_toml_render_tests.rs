@@ -43,6 +43,19 @@ fn the_plain_renderer_writes_what_python_wrote() {
     assert_eq!(plain(r#"{"a": {"b": {}}}"#), "[a]\n\n[a.b]\n");
 }
 
+#[test]
+fn a_character_beyond_the_bmp_renders_as_toml_that_parses_back() {
+    for payload in [
+        "{\"emoji\": \"a\u{1F600}b\", \"del\": \"x\u{7f}y\"}",
+        "{\"t\": {\"k\u{1F600} y\": \"v\"}}",
+    ] {
+        let text = plain(payload);
+        assert!(!text.contains("\\ud83d"), "{text}");
+        assert!(means(&text, payload), "{text}");
+    }
+    assert_eq!(plain("{\"e\": \"\u{1F600}\"}"), "e = \"\\U0001f600\"\n");
+}
+
 const HAND_WRITTEN: &str = "\
 # Which model Codex talks to. Keep this at the top.
 model = \"fixture\"

@@ -1,7 +1,7 @@
 //! The plain Codex `config.toml` renderer `codex_config._emit_table` wrote:
 //! byte for byte what Guard writes when no original file can be kept.
 
-use super::super::pyjson::{float_repr, PyVal};
+use super::super::pyjson::float_repr;
 use super::HookVal;
 
 /// The plain renderer: scalars first, then each nested table under its own
@@ -59,10 +59,26 @@ fn format_key(key: &str) -> String {
     }
 }
 
-/// `json.dumps(text)`, ASCII-escaped.
+/// `json.dumps(text)`, ASCII-escaped, except where that is not TOML: a
+/// character beyond the BMP is one `\UXXXXXXXX` escape, not a surrogate
+/// pair TOML rejects, and DEL is escaped since a basic string cannot hold it.
 fn json_string(text: &str) -> String {
-    let mut out = String::new();
-    crate::hook_env_stamp::dumps(&PyVal::Str(text.to_owned()), true, false, &mut out);
+    let mut out = String::from('"');
+    for ch in text.chars() {
+        match ch {
+            '"' => out.push_str("\\\""),
+            '\\' => out.push_str("\\\\"),
+            '\n' => out.push_str("\\n"),
+            '\r' => out.push_str("\\r"),
+            '\t' => out.push_str("\\t"),
+            '\u{8}' => out.push_str("\\b"),
+            '\u{c}' => out.push_str("\\f"),
+            ' '..='~' => out.push(ch),
+            '\0'..='\u{ffff}' => out.push_str(&format!("\\u{:04x}", u32::from(ch))),
+            _ => out.push_str(&format!("\\U{:08x}", u32::from(ch))),
+        }
+    }
+    out.push('"');
     out
 }
 

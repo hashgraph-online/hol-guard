@@ -313,6 +313,51 @@ fn self_bindings_claim_stale_generations_and_hold_recorded_commands() {
     );
 }
 
+#[cfg(unix)]
+#[test]
+fn a_legacy_strip_keeps_a_user_handler_and_a_recorded_command_in_its_group() {
+    let install = install();
+    let argv = ["/py", "-I", "/pkg/bridge.py", "{\"a\":1}"];
+    let command = "/py -I /pkg/bridge.py '{\"a\":1}'";
+    let ours = handler(command);
+    let theirs = handler("user hook");
+    let hooks = json!({"PreToolUse": [{"matcher": "Bash", "hooks": [theirs, ours]}]});
+    let strip = |owned: Value, hold: bool| {
+        owners(
+            &install,
+            "strip",
+            json!({
+                "hooks": hooks.to_string(),
+                "owned": owned.to_string(),
+                "expected": json!([{"event": "PreToolUse", "group": {"matcher": "Bash"}}]).to_string(),
+                "argv": argv,
+                "legacy_argv": ["/old", "x"],
+                "statuses": [STATUS],
+                "unlaunchable": false,
+                "hold_recorded": hold,
+            }),
+        )
+    };
+    let stripped = strip(json!([]), false);
+    assert_eq!(stripped["changed"], json!(true));
+    assert_eq!(
+        decoded(&stripped, "hooks"),
+        json!({"PreToolUse": [{"matcher": "Bash", "hooks": [theirs]}]})
+    );
+    // An owned binding recording this command, whose handler was since
+    // edited, holds the handler back from legacy adoption.
+    let edited =
+        json!({"type": "command", "command": command, "statusMessage": STATUS, "timeout": 9});
+    let owned = json!([{"event": "PreToolUse", "group": {"matcher": "Bash"}, "handler": edited}]);
+    let held = strip(owned.clone(), true);
+    assert_eq!(held["changed"], json!(false));
+    assert_eq!(decoded(&held, "hooks"), hooks);
+    assert_eq!(
+        decoded(&strip(owned, false), "hooks"),
+        json!({"PreToolUse": [{"matcher": "Bash", "hooks": [theirs]}]})
+    );
+}
+
 #[test]
 fn malformed_requests_are_refused() {
     let base = json!({"op": "remove", "windows": false, "long_paths": {}, "hooks": "{}", "bindings": "[]"});

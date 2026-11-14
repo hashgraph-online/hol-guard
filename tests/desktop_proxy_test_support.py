@@ -35,7 +35,13 @@ def sign_every_path(monkeypatch: pytest.MonkeyPatch, team: str | None = "TEAMID"
         requests.append(request)
         if request["op"] == "verify":
             args = request["args"]
-            if team is None or len(args) != 9 or list(args[:4]) != ["/bin/sh", "-c", script, name] or args[5] != team:
+            if (
+                team is None
+                or len(args) != 10
+                or list(args[:4]) != ["/bin/sh", "-c", script, name]
+                or args[5] != team
+                or args[9] not in {"0", "1"}
+            ):
                 return {"config": None, "core": None}
             return {"config": args[7], "core": args[8]}
         if team is None or request["desktop"] != "1" or not request["proxy"]:

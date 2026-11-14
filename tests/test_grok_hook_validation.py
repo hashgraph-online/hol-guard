@@ -118,10 +118,13 @@ def test_desktop_grok_proxy_requires_all_signatures(tmp_path: Path, monkeypatch:
         str(bundle),
         json.dumps(config),
         str(core),
+        "1",
     )
     monkeypatch.setattr(sys, "platform", "darwin")
     sign_every_path(monkeypatch, "TEAM123")
     assert is_grok_hook_command(_shell_command(command)) is True
+    # The launch script reads the require flag as $6, so a launch without it never runs.
+    assert is_grok_hook_command(_shell_command(command[:-1])) is False
     sign_every_path(monkeypatch, None)
     assert is_grok_hook_command(_shell_command(command)) is False
     altered = (*command[:2], "echo hol-guard hook", *command[3:])
