@@ -102,6 +102,9 @@ _ALLOWING_POLICY_ACTIONS = {"allow", "warn"}
 # and `command test`) report the floor and enforce nothing, so a reapproval or
 # containment floor is an answer to show, not a missing one.
 _COMMAND_REVIEW_ACTIONS = {"allow", "review", "require-reapproval", "sandbox-required", "block"}
+# A reapproval or containment floor is a hold; a reply that pairs one with an
+# allow decision is malformed.
+REVIEW_TIER_ACTIONS = frozenset({"require-reapproval", "sandbox-required"})
 
 
 def _valid_generic_result_fields(payload: dict[str, Any]) -> bool:
@@ -191,6 +194,8 @@ def _decode_pre_tool(payload: object, *, command: str) -> dict[str, Any] | None:
     ):
         return record_native_hook_result("native_fail_safe", None)
     if explicitly_benign != (decision == "allow" and action == "allow"):
+        return record_native_hook_result("native_fail_safe", None)
+    if action in REVIEW_TIER_ACTIONS and decision != "deny":
         return record_native_hook_result("native_fail_safe", None)
     return payload
 

@@ -103,6 +103,10 @@ pub(crate) fn evaluate_resident_bytes_with_cancellation(
             answer
         }
         ResidentRequestV1::Operation(request) => match *request {
+            ResidentOperationV1::Swarm(request) => {
+                let store = policy_store.ok_or_else(|| "native_swarm_resident_required".to_owned())?;
+                crate::swarm_op::evaluate(&request, store)
+            }
             ResidentOperationV1::ContextAssistance(request) => {
                 let policy_store = policy_store.ok_or_else(|| "native_context_assistance_resident_required".to_owned())?;
                 crate::context_assistance_op::evaluate(&request, policy_store)
@@ -862,6 +866,7 @@ pub(crate) fn evaluate_resident_bytes_with_cancellation(
 fn operation_guard_home(operation: &ResidentOperationV1) -> Option<&str> {
     match operation {
         ResidentOperationV1::ContextAssistance(request) => Some(&request.query.guard_home),
+        ResidentOperationV1::Swarm(request) => Some(&request.query.guard_home),
         ResidentOperationV1::ContextAgent(request) => Some(&request.query.guard_home),
         ResidentOperationV1::CloudCatalog(request) => {
             if request["action"] == "begin" || request["action"] == "reuse" {

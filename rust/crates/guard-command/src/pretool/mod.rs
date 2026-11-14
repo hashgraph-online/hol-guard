@@ -196,6 +196,7 @@ mod npmrc_keys;
 mod path_lookup_program;
 mod path_word_reads;
 mod pip_reads;
+mod piped_group;
 mod pnpm_reads;
 mod postgres_reads;
 mod printf_words;
@@ -1047,6 +1048,16 @@ fn evaluate_rewritten(
     // through the same proofs and replaces the construct's decision: an allow
     // there admits the construct, a block is never softened, and a review
     // carries the rewritten model so later layers judge modeled commands.
+    if let Some(allowed) = piped_group::decision(
+        request,
+        home_dir,
+        cwd,
+        deadline,
+        execution_environment,
+        round,
+    ) {
+        return Ok(allowed);
+    }
     let Some(rewritten) = rewritten_command_list(&request.command) else {
         return Ok(ungrouped_decision(
             request,
