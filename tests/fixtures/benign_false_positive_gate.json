@@ -8925,6 +8925,604 @@
       "expect": "allow"
     },
     {
+      "id": "routine-git-status-porcelain",
+      "fix_area": "git",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git status --porcelain"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "routine-git-status-porcelain-v2-branch",
+      "fix_area": "git",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git status --porcelain=v2 --branch"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "routine-git-status-short-branch-combined",
+      "fix_area": "git",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git status -sb"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "routine-git-status-pathspec",
+      "fix_area": "git",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git status --short -- src"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "routine-git-status-count",
+      "fix_area": "git",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git status --porcelain | wc -l"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "routine-git-status-tracked-only",
+      "fix_area": "git",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git status --untracked-files=no"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "routine-git-diff-names-against-parent",
+      "fix_area": "git",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git diff --name-only HEAD~1"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "routine-git-diff-whitespace-check",
+      "fix_area": "git",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git diff --check"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "routine-git-diff-head-one-file",
+      "fix_area": "git",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git diff HEAD -- src/one.ts"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "routine-git-diff-word-diff",
+      "fix_area": "git",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git diff --word-diff src/one.ts"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "routine-git-diff-stat-range",
+      "fix_area": "git",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git diff --stat HEAD~1..HEAD"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "routine-git-log-file-history",
+      "fix_area": "git",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git log --oneline -n 20 -- src/one.ts"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "routine-git-log-file-patches",
+      "fix_area": "git",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git log -p -3 -- src/one.ts"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "routine-git-log-oneline-recent",
+      "fix_area": "git",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git log --oneline -5"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "routine-npm-test",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "npm test"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "routine-npm-run-lint",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "npm run lint"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "routine-npm-run-build-forwarded-flag",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "npm run build -- --mode production"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "routine-pnpm-run-build",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "pnpm run build"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "routine-yarn-run-lint",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "yarn run lint"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "routine-cargo-test",
+      "fix_area": "package",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "cargo test"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "routine-cargo-build",
+      "fix_area": "package",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "cargo build"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "routine-go-test-all",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "go test ./..."
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "routine-go-vet-all",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "go vet ./..."
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "routine-go-build-all",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "go build ./..."
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "routine-make-test",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "make test"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "routine-make-lint",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "make lint"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "routine-python-module-pytest",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "python -m pytest -q"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "routine-guard-status",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "hol-guard status"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "routine-guard-status-json",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "hol-guard status --json"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "routine-guard-doctor",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "hol-guard doctor"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "routine-guard-doctor-json",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "hol-guard doctor --json"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "routine-guard-version",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "hol-guard --version"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "neg-routine-git-status-writes-profile",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git status --porcelain > ${HOME}/.bashrc"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-routine-git-log-output-file",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git log -p -3 --output=/tmp/history.patch -- src/one.ts"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-routine-npm-test-foreign-prefix",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "npm test --prefix ${PRIVATE_TMP}"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-routine-guard-doctor-foreign-home",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "hol-guard doctor --home /tmp/evil"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
       "id": "pytest-isolated-interpreter-flag",
       "fix_area": "shell",
       "harnesses": [
