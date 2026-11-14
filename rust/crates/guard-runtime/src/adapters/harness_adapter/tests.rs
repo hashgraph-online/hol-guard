@@ -29,6 +29,8 @@ mod hermes_family;
 mod opencode_family;
 #[path = "tests_pi.rs"]
 mod pi_family;
+#[path = "tests_shims.rs"]
+mod shim_family;
 
 struct Home {
     _dir: TempDir,
@@ -193,17 +195,15 @@ fn apply_uninstall_runs_the_plan_it_prepares_and_journals_managed_writes() {
     }
     let plan = home.ask("devin", "prepare_uninstall", json!({}));
     let state = plan["deletes"][0].as_str().unwrap().to_owned();
-    let stale = home.ask(
-        "devin",
-        "apply_uninstall",
-        json!({"shim": shim(), "expected": {"writes": [], "deletes": []}}),
-    );
-    assert!(stale["runtime_error"].is_string(), "{stale}");
-    assert!(Path::new(&state).exists());
-    let applied = home.ask(
-        "devin",
-        "apply_uninstall",
-        json!({"shim": shim(), "expected": plan}),
+    let launcher = home.guard().join("bin/guard-devin");
+    fs::create_dir_all(launcher.parent().unwrap()).unwrap();
+    fs::write(&launcher, "#!/bin/sh\n").unwrap();
+    let applied = home.ask("devin", "apply_uninstall", json!({}));
+    assert!(!launcher.exists());
+    let manifest: Value = serde_json::from_str(applied["manifest"].as_str().unwrap()).unwrap();
+    assert_eq!(
+        manifest["removed_paths"][0],
+        json!(launcher.to_string_lossy())
     );
     assert!(applied["manifest"].is_string(), "{applied}");
     assert_eq!(

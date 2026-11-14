@@ -519,19 +519,19 @@ def test_interrupted_file_publication_rolls_back_rows_then_recovers(transition, 
     before, after = install_row("codex", "previous"), install_row("codex", "candidate")
     store, plan = with_install_store(runtime, plan, [TransitionInstall("codex", before, after)])
     begin(runtime, plan)
-    real_write = module.atomic_write_bytes
+    real_write = module.RuntimeTransition._write_file
 
-    def interrupted_write(path, data, **kwargs):
-        real_write(path, data, **kwargs)
-        if path == bindings:
+    def interrupted_write(change, generation):
+        real_write(change, generation)
+        if Path(str(change["path"])) == bindings:
             raise OSError("interrupted after durable file publication")
 
-    monkeypatch.setattr(module, "atomic_write_bytes", interrupted_write)
+    monkeypatch.setattr(module.RuntimeTransition, "_write_file", staticmethod(interrupted_write))
     with pytest.raises(OSError, match="interrupted"):
         runtime.publish(plan.operation_id, "AuthorizedForExactTransition")
     assert bindings.read_bytes() == b"candidate hooks"
     assert store.get_managed_install("codex") == before
-    monkeypatch.setattr(module, "atomic_write_bytes", real_write)
+    monkeypatch.setattr(module.RuntimeTransition, "_write_file", staticmethod(real_write))
     runtime.restore_files(plan.operation_id, first_cause="publication interrupted")
     assert bindings.read_bytes() == b"previous hooks"
     assert pointer.read_bytes() == b"previous pointer"
@@ -2018,15 +2018,15 @@ def test_interrupted_publication_has_a_durable_inverse(transition, monkeypatch):
 
     runtime, plan, bindings, pointer = transition
     begin(runtime, plan)
-    original_write = module.atomic_write_bytes
+    original_write = module.RuntimeTransition._write_file
 
-    def interrupted_write(path, payload, **kwargs):
-        original_write(path, payload, **kwargs)
-        if path == bindings.resolve():
+    def interrupted_write(change, generation):
+        original_write(change, generation)
+        if Path(str(change["path"])).resolve() == bindings.resolve():
             raise OSError("injected publication interruption")
 
     with monkeypatch.context() as patch:
-        patch.setattr(module, "atomic_write_bytes", interrupted_write)
+        patch.setattr(module.RuntimeTransition, "_write_file", staticmethod(interrupted_write))
         with pytest.raises(OSError, match="interruption"):
             runtime.publish(plan.operation_id, "AuthorizedForExactTransition")
     reopened = RuntimeTransition(plan.guard_home, runtime.authority)
@@ -2216,12 +2216,12 @@ before = {"harness": "codex", "active": True, "workspace": None,
 after = {**before, "manifest": {"generation": "candidate"}}
 store.set_managed_install("codex", True, None, before["manifest"], before["updated_at"])
 plan = replace(plan, managed_installs=(module.TransitionInstall("codex", before, after),))
-original_write = module.atomic_write_bytes
-def crash_after_write(path, payload, **kwargs):
-    original_write(path, payload, **kwargs)
-    if path == root / phase:
+original_write = module.RuntimeTransition._write_file
+def crash_after_write(change, generation):
+    original_write(change, generation)
+    if Path(str(change["path"])) == root / phase:
         os._exit(17)
-module.atomic_write_bytes = crash_after_write
+module.RuntimeTransition._write_file = staticmethod(crash_after_write)
 with codex_install_transaction(home, root / "bindings", actor="crash-fixture"):
     runtime = module.RuntimeTransition(home, FixtureAuthority(), install_store=store)
     runtime.begin(plan, authority_home=home, grant=None)

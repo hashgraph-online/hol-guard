@@ -63,3 +63,47 @@ def interrupt_publication_at(
         raise error
 
     monkeypatch.setattr(native_transition_files, "publish_files", interrupted)
+
+
+# A subprocess preamble that publishes a harness plan one file at a time
+# through ``RuntimeTransition._write_file``, so a crash script can stop the
+# process between two files. Restores run newest first, as the resident's do.
+STEPWISE_PUBLICATION = r"""
+def _stepwise_publication():
+    from codex_plugin_scanner.guard import native_transition_files
+    from codex_plugin_scanner.guard.runtime_transition import RuntimeTransition, TransitionError
+
+    def publish(files, *, removals, rollback, on_write):
+        if any(
+            change.kind != "binding" or (not removals and change.after is None and change.before != change.after)
+            for change in files
+        ):
+            raise TransitionError("adapter_install_plan_invalid")
+        plan = {"files": [change.payload() for change in files]}
+        RuntimeTransition._compare(plan, "before")
+        written = []
+        try:
+            for change in files:
+                payload = change.payload()
+                RuntimeTransition._compare({"files": [payload]}, "before")
+                RuntimeTransition._write_file(payload, "after")
+                written.append(payload)
+                if on_write is not None:
+                    on_write(change)
+            RuntimeTransition._compare(plan, "after")
+        except BaseException as error:
+            if not rollback:
+                raise
+            restore_error = None
+            for payload in reversed(written):
+                try:
+                    RuntimeTransition._compare({"files": [payload]}, "after")
+                    RuntimeTransition._write_file(payload, "before")
+                except Exception as failure:
+                    restore_error = failure
+            if restore_error is not None:
+                raise restore_error from error
+            raise
+
+    native_transition_files.publish_files = publish
+"""

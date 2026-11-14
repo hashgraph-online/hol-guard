@@ -66,6 +66,8 @@ mod desktop_core;
 mod files;
 mod grok;
 mod grok_install;
+mod guard_shim;
+mod guard_shim_text;
 mod hermes;
 mod hermes_config;
 mod hermes_hooks;
@@ -86,6 +88,7 @@ mod pi;
 mod pi_extension;
 mod proof;
 mod settings_hooks;
+mod shim_remove;
 mod simple;
 mod uninstall_apply;
 mod which;
@@ -256,6 +259,12 @@ pub(crate) fn dispatch(args: &Value) -> KindResult {
     let ctx = Ctx::parse(fields.get("context"))?;
     if op == "proof_verify" || op == "proof_bind" {
         return answer(proof::dispatch(op, &ctx, fields));
+    }
+    if op == "prepare_guard_shim" {
+        return answer(guard_shim::prepare(&ctx, fields));
+    }
+    if op == "prepare_guard_shim_removal" {
+        return answer(shim_remove::prepare(&ctx, fields));
     }
     let harness = fields
         .get("harness")

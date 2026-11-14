@@ -1,22 +1,22 @@
-//! `apply_uninstall`: the file work of an uninstall plan, done where the plan
-//! is made.
+//! `apply_uninstall`: a harness uninstall, done where its plan is made.
 //!
-//! Python asks for `prepare_uninstall` first so a refusal leaves the launcher
-//! in place, removes the launcher, then sends the plan back as `expected`.
-//! The plan is prepared again here and must match, so the paths written are
-//! the ones this runtime chose, never ones the caller supplied. Each write,
-//! copy and delete then runs in plan order, and `finish_uninstall` renders
-//! the manifest. A managed write hands back the mutation record the caller's
-//! install transaction appends; those records come back under `events` with
-//! the answer or the failure, so a plan stopped partway still journals what
-//! it changed.
+//! The plan is prepared first, so a refusal leaves the launcher in place.
+//! Then the launcher shims are removed, each write, copy and delete of the
+//! plan runs in order, and `finish_uninstall` renders the manifest. A
+//! managed write hands back the mutation record the caller's install
+//! transaction appends; those records come back under `events` with the
+//! answer or the failure, so a plan stopped partway still journals what it
+//! changed. A shim-only adapter removes its launchers and answers.
 
 use std::fs;
 use std::path::Path;
 
 use serde_json::{json, Map, Value};
 
-use super::{answer, route, Ctx, Failure, Spec, Step};
+use super::describe::Install;
+use super::files::{adapter_result, manifest_answer, render};
+use super::{answer, route, shim_remove, Ctx, Failure, Spec, Step};
+use crate::pyjson::PyVal;
 use crate::runner_authority_op::KindResult;
 use crate::transition_files::{managed_write, write_no_follow, Fault};
 
@@ -108,19 +108,32 @@ fn remove(path: &Path) -> Step<()> {
     }
 }
 
+/// A shim-only adapter's uninstall: its launchers, and the manifest naming them.
+fn shim_only(spec: &Spec, ctx: &Ctx) -> Step<Value> {
+    let (shim, shim_path) = shim_remove::remove(spec, ctx)?;
+    manifest_answer(adapter_result(
+        spec.harness,
+        false,
+        &shim_path,
+        &shim,
+        Vec::new(),
+    ))
+}
+
 pub(super) fn apply(spec: &Spec, ctx: &Ctx, fields: &Map<String, Value>) -> KindResult {
+    if spec.install == Install::Shim {
+        return answer(shim_only(spec, ctx));
+    }
+    // The plan comes first, so a refusal leaves the launcher in place.
     let plan = match route(spec, "prepare_uninstall", ctx, fields) {
         Ok(plan) => plan,
         Err(failure) => return answer(Err(failure)),
     };
-    if fields.get("expected") != Some(&plan) {
-        return answer(Err(Failure::Runtime(
-            "The uninstall plan changed before it could be applied.".to_owned(),
-        )));
-    }
     let mut events = Vec::new();
-    let step = execute(ctx, &plan, &mut events).and_then(|removed| {
+    let step = shim_remove::remove(spec, ctx).and_then(|(shim, _)| {
+        let removed = execute(ctx, &plan, &mut events)?;
         let mut finish = fields.clone();
+        finish.insert("shim".into(), json!(render(&PyVal::Dict(shim))?));
         finish.insert(
             "finish".into(),
             plan.get("finish").cloned().unwrap_or(Value::Null),

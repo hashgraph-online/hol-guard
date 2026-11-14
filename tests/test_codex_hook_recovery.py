@@ -22,8 +22,11 @@ from codex_plugin_scanner.guard.codex_hook_integrity import (
 from codex_plugin_scanner.guard.codex_hook_recovery import recover_hook_publication
 from codex_plugin_scanner.guard.codex_install_transaction import codex_install_transaction
 from codex_plugin_scanner.guard.local_authority_integrity import sign_local_authority_payload
+from tests.transition_fault_support import STEPWISE_PUBLICATION
 
-CRASHING_INSTALLER = r"""
+CRASHING_INSTALLER = (
+    STEPWISE_PUBLICATION
+    + r"""
 import os, sys
 from pathlib import Path
 from codex_plugin_scanner.guard.adapters import codex
@@ -38,6 +41,7 @@ if phase == "commit_cleanup":
     raise RuntimeError("commit cleanup was not reached")
 if phase == "manifest":
     from codex_plugin_scanner.guard.runtime_transition import RuntimeTransition
+    _stepwise_publication()
     original_write = RuntimeTransition._write_file
     def crash_after_manifest(change, generation):
         original_write(change, generation)
@@ -57,8 +61,11 @@ else:
 codex.CodexHarnessAdapter().install(context)
 raise RuntimeError("crash boundary was not reached")
 """
+)
 
-UNRECORDED_CONFIG_INSTALLER = r"""
+UNRECORDED_CONFIG_INSTALLER = (
+    STEPWISE_PUBLICATION
+    + r"""
 import os, sys
 from pathlib import Path
 from codex_plugin_scanner.guard.adapters import codex
@@ -68,6 +75,7 @@ context = HarnessContext(home_dir=home, guard_home=home / '.hol-guard', workspac
 # Drop the installed hooks so this install must publish a new config inode.
 (home / '.codex/config.toml').write_text('[features]\nhooks = true\n', encoding='utf-8')
 from codex_plugin_scanner.guard.runtime_transition import RuntimeTransition
+_stepwise_publication()
 original = RuntimeTransition._write_file
 def publish_without_record(change, generation):
     original(change, generation)
@@ -77,6 +85,7 @@ RuntimeTransition._write_file = staticmethod(publish_without_record)
 codex.CodexHarnessAdapter().install(context)
 raise RuntimeError('unrecorded publication boundary was not reached')
 """
+)
 
 
 @pytest.fixture
@@ -148,7 +157,9 @@ def test_live_conflict_preserves_every_participant_after_process_exit(installed,
     context, config, _manifest = installed
     foreign = config.parent / "foreign.toml"
     foreign.write_bytes(b"# competing config\n")
-    script = r"""
+    script = (
+        STEPWISE_PUBLICATION
+        + r"""
 import hashlib, json, os, sys
 from pathlib import Path
 from codex_plugin_scanner.guard import codex_hook_recovery as recovery
@@ -157,6 +168,7 @@ from codex_plugin_scanner.guard.adapters.base import HarnessContext
 home, substitution = Path(sys.argv[1]), sys.argv[2]
 config = home / '.codex/config.toml'
 from codex_plugin_scanner.guard.runtime_transition import RuntimeTransition
+_stepwise_publication()
 original_write = RuntimeTransition._write_file
 def competing_write(*args):
     if args[1] != 'after' or Path(str(args[0]['path'])) != config:
@@ -194,6 +206,7 @@ context = HarnessContext(home_dir=home, guard_home=home / '.hol-guard', workspac
 codex.CodexHarnessAdapter().install(context)
 raise RuntimeError('conflict record boundary was not reached')
 """
+    )
     result = subprocess.run(
         [sys.executable, "-c", script, str(context.home_dir), substitution],
         env={**os.environ, "HOME": str(context.home_dir), "USERPROFILE": str(context.home_dir)},

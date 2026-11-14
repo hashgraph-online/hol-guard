@@ -107,6 +107,7 @@ def test_invocation_record_cannot_be_attached_to_authority_dependency(tmp_path):
 
 def test_expired_invocation_check_does_not_read_link_metadata(tmp_path, monkeypatch):
     _target, _invocation_path, change = _invocation(tmp_path)
+    payload = change.payload()
 
     def forbidden_lstat(*args, **kwargs):
         raise AssertionError("expired invocation check touched filesystem")
@@ -115,7 +116,7 @@ def test_expired_invocation_check_does_not_read_link_metadata(tmp_path, monkeypa
     try:
         monkeypatch.setattr(module.Path, "lstat", forbidden_lstat)
         with pytest.raises(module.TransitionError, match="forward_authorization_expired"):
-            module.RuntimeTransition._compare({"files": [change.payload()]}, "before")
+            module.RuntimeTransition._compare({"files": [payload]}, "before")
     finally:
         module._ACTIVE_TRANSITION.reset(token)
 

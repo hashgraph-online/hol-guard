@@ -116,8 +116,11 @@ pub(crate) fn write_no_follow(path: &Path, payload: &[u8], _mode: u32) -> std::i
     };
     let mut locked = Vec::new();
     for directory in ancestry(parent) {
+        // A drive root answers access denied rather than "already exists",
+        // so an existing directory is accepted whatever the error says; the
+        // lock below still refuses a reparse point.
         if let Err(error) = fs::create_dir(&directory) {
-            if error.kind() != std::io::ErrorKind::AlreadyExists {
+            if error.kind() != std::io::ErrorKind::AlreadyExists && !directory.is_dir() {
                 return Err(error);
             }
         }

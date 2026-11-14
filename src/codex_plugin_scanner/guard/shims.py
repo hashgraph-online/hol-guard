@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 import sys
 from dataclasses import dataclass
@@ -11,7 +12,6 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from .runtime_transition import TransitionFile
 
-from .durable_harness_launcher import build_harness_shim, build_windows_script
 from .launcher import merge_guard_launcher_env
 from .native_shim_admin import (
     SUPPORTED_PACKAGE_SHIM_MANAGERS,
@@ -58,33 +58,6 @@ _TRANSIENT_PATH_FRAGMENTS = (
     "/temp/",
     "pytest-of-",
 )
-_TRUSTED_CLI_LAUNCHER = (
-    "import importlib.util, os, sys; "
-    "trusted_root = os.path.realpath(sys.argv.pop(1)); "
-    "module_name = sys.argv.pop(1); "
-    "package_name = module_name.split('.', 1)[0]; "
-    "package_root = os.path.join(trusted_root, package_name); "
-    "module_path = os.path.join(package_root, *module_name.split('.')[1:]) + '.py'; "
-    "cwd = os.path.realpath(os.getcwd()); "
-    "normalize = lambda entry: cwd if entry in ('', '.', os.curdir) else os.path.realpath(entry); "
-    "blocked_entries = {cwd, trusted_root}; "
-    "sys.path = [trusted_root, *[entry for entry in sys.path if normalize(entry) not in blocked_entries]]; "
-    "package_spec = importlib.util.spec_from_file_location("
-    "package_name, "
-    "os.path.join(package_root, '__init__.py'), "
-    "submodule_search_locations=[package_root],"
-    "); "
-    "package_module = importlib.util.module_from_spec(package_spec); "
-    "sys.modules[package_name] = package_module; "
-    "package_spec.loader.exec_module(package_module); "
-    "module_spec = importlib.util.spec_from_file_location(module_name, module_path); "
-    "module = importlib.util.module_from_spec(module_spec); "
-    "module.__package__ = package_name; "
-    "sys.modules[module_name] = module; "
-    "module_spec.loader.exec_module(module); "
-    "sys.argv[0] = module_path; "
-    "raise SystemExit(module.main(sys.argv[1:]))"
-)
 
 
 @dataclass(frozen=True)
@@ -101,45 +74,24 @@ def prepare_guard_shim(
     display_name: str | None = None,
 ) -> PreparedGuardShim:
     """Render and snapshot both launchers without creating or changing files."""
-    from .codex_hook_recovery import _snapshot
-    from .runtime_transition import TransitionFile
+    from .adapters.native_harness import ask, planned_files
 
-    shim_dir = context.guard_home / "bin"
-    shim_name = launcher_name or harness
-    harness_label = display_name or harness
-    posix_path = shim_dir / f"guard-{shim_name}"
-    windows_path = shim_dir / f"guard-{shim_name}.cmd"
-    workspace_args = []
-    if context.workspace_dir is not None:
-        workspace_args = ["--workspace", str(context.workspace_dir)]
-    posix_source = _build_python_shim(harness, context, workspace_args)
-    files = []
-    for path, text, executable in (
-        (posix_path, posix_source, True),
-        (windows_path, _build_windows_script(posix_path, source=posix_source), False),
-    ):
-        before = _snapshot(path)
-        before_mode = path.stat().st_mode & 0o777 if before is not None else 0o644
-        change = TransitionFile(
-            path.resolve(strict=False),
-            before,
-            text.replace("\n", os.linesep).encode("utf-8"),
-            before_mode=before_mode,
-            after_mode=before_mode | 0o755 if executable else before_mode,
-        )
-        change.payload()  # Reject unsafe modes/targets before any publication.
-        files.append(change)
-    manifest: dict[str, object] = {
-        "shim_path": str(posix_path),
-        "shim_dir": str(shim_dir),
-        "shim_command": posix_path.name,
-        "windows_shim_path": str(windows_path),
-        "notes": [
-            f"Launch {harness_label} through {posix_path.name} so Guard checks changes before the harness starts.",
-            f"Add {shim_dir} to PATH to use the wrapper command from any shell.",
-        ],
-    }
-    return PreparedGuardShim(tuple(files), manifest)
+    answer = ask(
+        "prepare_guard_shim",
+        context,  # type: ignore[arg-type]
+        harness=harness,
+        launcher_name=launcher_name,
+        display_name=display_name,
+        interpreter={
+            "executable": sys.executable,
+            "frozen": bool(getattr(sys, "frozen", False)),
+            "package_interpreter": package_shim_interpreter(),
+            "python_flags": _trusted_python_flags(),
+            "import_root": str(_trusted_import_root()),
+            "launcher_env": [list(item) for item in merge_guard_launcher_env().items()],
+        },
+    )
+    return PreparedGuardShim(tuple(planned_files(answer)), json.loads(str(answer["manifest"])))
 
 
 def install_guard_shim(
@@ -217,62 +169,17 @@ def prepare_guard_shim_removal(
     display_name: str | None = None,
 ) -> PreparedGuardShim:
     """Snapshot every launcher an uninstall deletes, without changing files."""
-    from .codex_hook_recovery import _snapshot
-    from .runtime_transition import TransitionFile
+    from .adapters.native_harness import ask, planned_files
 
-    shim_dir = context.guard_home / "bin"
-    shim_name = launcher_name or harness
-    harness_label = display_name or harness
-    files: list[TransitionFile] = []
-    removed_paths: list[str] = []
-    for name in (shim_name, *legacy_launcher_names):
-        for suffix in ("", ".cmd"):
-            path = shim_dir / f"guard-{name}{suffix}"
-            before = _snapshot(path)
-            if before is None:
-                continue
-            mode = path.stat().st_mode & 0o777
-            target = path.parent.resolve(strict=False) / path.name
-            files.append(TransitionFile(target, before, None, before_mode=mode, after_mode=mode, no_follow=True))
-            removed_paths.append(str(path))
-    posix_path = shim_dir / f"guard-{shim_name}"
-    manifest: dict[str, object] = {
-        "shim_path": str(posix_path),
-        "shim_dir": str(shim_dir),
-        "removed_paths": removed_paths,
-        "shim_command": posix_path.name,
-        "notes": [f"Removed the Guard launcher shim for {harness_label}."],
-    }
-    return PreparedGuardShim(tuple(files), manifest)
-
-
-def _build_python_shim(harness: str, context: HarnessContextLike, workspace_args: list[str]) -> str:
-    return build_harness_shim(
-        sys.executable,
-        harness,
-        context,
-        workspace_args,
-        trusted_python_flags=_trusted_python_flags(),
-        trusted_launcher=_TRUSTED_CLI_LAUNCHER,
-        trusted_import_root=_trusted_import_root(),
-        launcher_env=merge_guard_launcher_env(),
-        home_override_args=_home_override_args(context),
-        is_transient_path=_is_transient_path,
+    answer = ask(
+        "prepare_guard_shim_removal",
+        context,  # type: ignore[arg-type]
+        harness=harness,
+        launcher_name=launcher_name,
+        display_name=display_name,
+        legacy_launcher_names=list(legacy_launcher_names),
     )
-
-
-def _build_windows_script(posix_path: Path, *, source: str | None = None) -> str:
-    return build_windows_script(package_shim_interpreter(), posix_path, source=source)
-
-
-def _home_override_args(context: HarnessContextLike) -> list[str]:
-    if not context.home_dir:
-        return []
-    if not bool(getattr(context, "home_override_explicit", False)) and (
-        context.home_dir.resolve() == Path.home().resolve()
-    ):
-        return []
-    return ["--home", str(context.home_dir)]
+    return PreparedGuardShim(tuple(planned_files(answer)), json.loads(str(answer["manifest"])))
 
 
 def prepare_guard_shim_shell_profile(context: HarnessContext) -> PreparedGuardShim:

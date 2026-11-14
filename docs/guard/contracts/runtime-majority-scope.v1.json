@@ -81,10 +81,6 @@
         "surface": "guard_run_and_launch"
       },
       {
-        "module": "codex_plugin_scanner.guard.durable_harness_launcher",
-        "surface": "guard_run_and_launch"
-      },
-      {
         "module": "codex_plugin_scanner.guard.cli.commands_dispatch_proxy",
         "surface": "guard_run_and_launch"
       },

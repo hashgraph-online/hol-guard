@@ -1,14 +1,27 @@
 """Preparation inspects the existing native selection without repairing it."""
 
+import os
 import time
 
 import pytest
 
 from codex_plugin_scanner.guard import codex_hook_repair_native as inspection
+from codex_plugin_scanner.guard import native_runtime
 from codex_plugin_scanner.guard.codex_hook_file_integrity import CodexHookIntegrityError
 from codex_plugin_scanner.guard.runtime_transition import TransitionError
 
 from .test_codex_publication_preparation import _tree
+
+
+class _BundledView:
+    """``native_runtime`` as the inspection reads it, with every candidate bundled."""
+
+    def __getattr__(self, name: str) -> object:
+        return getattr(native_runtime, name)
+
+    @staticmethod
+    def _is_bundled_candidate(_path: object) -> bool:
+        return True
 
 
 def test_actual_native_inspection_is_read_only(native_hook_force, tmp_path):
@@ -74,7 +87,11 @@ def test_probe_receives_original_short_parent_and_detects_changed_binary(native_
     def changed_after_probe(*args, **kwargs):
         deadlines.append(kwargs["deadline_monotonic"])
         result = real_probe(*args, **kwargs)
-        comparison.write_bytes(b"foreign native fixture generation")
+        # The resident may be running this binary, so publish a new inode
+        # rather than writing into the busy one.
+        replacement = tmp_path / "native-replacement"
+        replacement.write_bytes(b"foreign native fixture generation")
+        os.replace(replacement, comparison)
         return result
 
     monkeypatch.setattr(inspection, "run_isolated_hook_process", changed_after_probe)
@@ -89,7 +106,9 @@ def test_bundled_manifest_admission_precedes_native_probe(native_hook_force, tmp
     comparison.write_bytes(native_hook_force.read_bytes())
     comparison.chmod(0o700)
     monkeypatch.setenv("HOL_GUARD_NATIVE_BINARY", str(comparison))
-    monkeypatch.setattr(inspection.native, "_is_bundled_candidate", lambda _path: True)
+    # Only the inspection sees the copy as bundled; the resident it asks to
+    # compare files keeps the ordinary admission.
+    monkeypatch.setattr(inspection, "native", _BundledView())
     launched = []
     monkeypatch.setattr(inspection, "run_isolated_hook_process", lambda *args, **kwargs: launched.append(args))
     with pytest.raises(TransitionError, match="native_manifest_missing"):

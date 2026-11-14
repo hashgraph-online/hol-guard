@@ -102,11 +102,11 @@ def wire_context(context: HarnessContext) -> dict[str, object]:
         "home": str(context.home_dir),
         "workspace": None if context.workspace_dir is None else str(context.workspace_dir),
         "guard_home": str(context.guard_home),
-        "home_override_explicit": context.home_override_explicit,
+        "home_override_explicit": bool(getattr(context, "home_override_explicit", False)),
         "cwd": cwd,
         "user_home": str(Path.home()),
         "env": _environment(),
-        "executable_overrides": dict(context.executable_overrides),
+        "executable_overrides": dict(getattr(context, "executable_overrides", {}) or {}),
     }
 
 
@@ -324,19 +324,12 @@ class NativeHarnessAdapter(HarnessAdapter):
 
     def uninstall(self, context: HarnessContext) -> dict[str, object]:
         from .. import native_transition_files
-        from ..shims import remove_guard_shim
+        from ..runtime_transition import assert_transition_mutation_allowed
 
-        if self._spec.get("install") == "shim":
-            shim = remove_guard_shim(self.harness, context)
-            return {"harness": self.harness, "active": False, "config_path": shim["shim_path"], **shim}
-        # Ask for the plan first, so a refusal leaves the launcher in place.
-        plan = self._ask("prepare_uninstall", context)
-        shim = remove_guard_shim(
-            self.harness, context, legacy_launcher_names=self.legacy_launcher_names, **self._shim_names()
-        )
-        # The runtime prepares the plan again, refuses it if it changed, and
-        # applies it; the managed writes it made come back for the journal.
-        answer = self._ask("apply_uninstall", context, shim=json.dumps(shim), expected=plan)
+        assert_transition_mutation_allowed(context.guard_home)
+        # The runtime prepares the plan, removes the launchers and applies the
+        # plan; the managed writes it made come back for the journal.
+        answer = self._ask("apply_uninstall", context)
         native_transition_files._replay(answer.pop("events", None), None, None)
         raise_failure(answer)
         return json.loads(_text(answer, "manifest"))
