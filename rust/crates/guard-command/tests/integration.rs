@@ -249,6 +249,7 @@ pub mod pretool_parent_relative_writes;
 pub mod pretool_path_lookup_program;
 pub mod pretool_pi_tools;
 pub mod pretool_pip_reads;
+pub mod pretool_piped_group_filters;
 pub mod pretool_plan_note_writes;
 pub mod pretool_private_temp_cd;
 pub mod pretool_private_temporary_scratch_reads;
