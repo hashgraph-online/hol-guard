@@ -22,7 +22,7 @@ fn write_executable(path: &Path, content: &[u8]) {
 #[test]
 fn a_regular_executable_answers_its_stat_and_digest() {
     let home = tempfile::tempdir().unwrap();
-    let python = fs::canonicalize(home.path()).unwrap().join("python");
+    let python = super::resolve(home.path()).unwrap().join("python");
     write_executable(&python, b"interpreter");
     let identity = &ask(&python)["identity"];
     assert_eq!(identity["invocation_type"], "file");

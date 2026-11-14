@@ -13,7 +13,8 @@ fn touch(path: &Path) {
 /// A site directory holding the package and `cryptography`, canonical.
 fn site() -> (tempfile::TempDir, PathBuf) {
     let home = tempfile::tempdir().unwrap();
-    let root = fs::canonicalize(home.path()).unwrap();
+    // Spelled the way the resolver answers, without Windows' verbatim prefix.
+    let root = super::resolve(home.path()).unwrap();
     touch(&root.join("site/codex_plugin_scanner/__init__.py"));
     touch(&root.join("site/cryptography/__init__.py"));
     (home, root)
@@ -38,6 +39,16 @@ fn expect(value: &Value) -> Result<Value, &'static str> {
 }
 
 const ENTRY: &str = "codex_plugin_scanner.cli:main";
+
+/// `path` as the path of a `file:` URL: `/C:/dir` on Windows, `/dir` elsewhere.
+fn url_path(path: &Path) -> String {
+    let text = path.to_string_lossy().replace('\\', "/");
+    if text.starts_with('/') {
+        text
+    } else {
+        format!("/{text}")
+    }
+}
 
 #[test]
 fn an_installed_wheel_imports_from_its_one_site_directory() {
@@ -150,13 +161,10 @@ fn an_editable_checkout_imports_its_src_directory() {
     assert_eq!(answer["hol_distribution_root"], Value::Null);
 
     let url = |url: String| json!(json!({"url": url, "dir_info": {"editable": true}}).to_string());
-    let encoded = format!(
-        "file://{}",
-        checkout.to_string_lossy().replace(' ', "%2520")
-    );
+    let encoded = format!("file://{}", url_path(&checkout).replace(' ', "%2520"));
     for direct_url in [
-        url(format!("file://{}", checkout.to_string_lossy())),
-        url(format!("file://localhost{}", checkout.to_string_lossy())),
+        url(format!("file://{}", url_path(&checkout))),
+        url(format!("file://localhost{}", url_path(&checkout))),
         url(encoded),
     ] {
         let request = facts(
@@ -169,7 +177,7 @@ fn an_editable_checkout_imports_its_src_directory() {
         assert_eq!(answer["import_roots"], json!([src, site]), "{request}");
         assert_eq!(answer["hol_distribution_root"], json!(site));
     }
-    let plain = checkout.to_string_lossy().into_owned();
+    let plain = url_path(&checkout);
     for direct_url in [
         Value::Null,
         json!("not json"),
@@ -181,7 +189,7 @@ fn an_editable_checkout_imports_its_src_directory() {
         url(format!("file://{plain}#top")),
         url(format!("file://{plain};x")),
         url(format!("https://{plain}")),
-        url(format!("file://{}", root.join("absent").to_string_lossy())),
+        url(format!("file://{}", url_path(&root.join("absent")))),
     ] {
         let request = facts(
             &package,
@@ -199,20 +207,21 @@ fn an_editable_checkout_imports_its_src_directory() {
 
 #[test]
 fn malformed_facts_are_refused() {
-    let package = Path::new("/p/codex_plugin_scanner/__init__.py");
-    let good = facts(package, Value::Null, json!("/p"), Value::Null);
+    let root = std::env::temp_dir().join("p");
+    let package = &root.join("codex_plugin_scanner").join("__init__.py");
+    let good = facts(package, Value::Null, json!(root), Value::Null);
     let mut extra = good.clone();
     extra["more"] = json!(1);
     for value in [
-        facts(Path::new("relative"), Value::Null, json!("/p"), Value::Null),
-        facts(package, json!("relative"), json!("/p"), Value::Null),
+        facts(Path::new("relative"), Value::Null, json!(root), Value::Null),
+        facts(package, json!("relative"), json!(root), Value::Null),
         facts(package, Value::Null, json!(1), Value::Null),
-        facts(package, Value::Null, json!("/p"), json!({"root": "/p"})),
+        facts(package, Value::Null, json!(root), json!({"root": root})),
         facts(
             package,
             Value::Null,
-            json!("/p"),
-            hol(Path::new("/p"), "1.0", json!(1), Value::Null),
+            json!(root),
+            hol(&root, "1.0", json!(1), Value::Null),
         ),
         extra,
         json!([]),

@@ -78,7 +78,15 @@ def _reconcile(context: HarnessContext, transport: str, *, frozen: bool) -> dict
     probe = installed["probe"]
     fields = {"canary": probe["canary"]} if "canary" in probe else {"verdict": probe["result"]}
     manifest = json.dumps(installed["manifest"])
-    return ask("confirm_transport", context, harness=_HARNESS, transport=transport, manifest=manifest, **fields)
+    return ask(
+        "confirm_transport",
+        context,
+        harness=_HARNESS,
+        timeout_seconds=_PROBE_TIMEOUT_SECONDS,
+        transport=transport,
+        manifest=manifest,
+        **fields,
+    )
 
 
 def proxy_entry(context: HarnessContext, server: ManagedMcpServer) -> dict[str, object]:

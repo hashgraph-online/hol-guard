@@ -94,10 +94,15 @@ def _grok_recording_only() -> bool:
     if not home_value:
         return False
     from ..config import load_guard_config
+    from ..config_file_io import ConfigFileTrustError
     from ..protection_posture import protection_is_off
     from ..store import GuardStore
 
-    config = load_guard_config(GuardStore(Path(home_value)).guard_home)
+    try:
+        config = load_guard_config(GuardStore(Path(home_value)).guard_home)
+    except ConfigFileTrustError:
+        # A config Guard cannot read keeps protection on.
+        return False
     return protection_is_off(posture=config.protection_posture, mode=config.mode)
 
 

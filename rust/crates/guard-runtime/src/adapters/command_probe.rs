@@ -14,7 +14,7 @@
 //! wrote and adds `timed_out`.
 
 use std::collections::BTreeMap;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use serde_json::{json, Map, Value};
 
@@ -47,11 +47,14 @@ pub(crate) fn dispatch(args: &Value) -> KindResult {
         .and_then(Value::as_u64)
         .filter(|seconds| (1..=MAX_TIMEOUT_SECONDS).contains(seconds))
         .ok_or(ERR_INVALID)?;
-    if !startable(&command[0], cwd, &env) {
+    let Some(program) = located(&command[0], cwd, &env) else {
         return Ok(record(&command, None));
-    }
+    };
+    // Start the file the lookup found, so the platform cannot pick another.
+    let mut argv = command.clone();
+    argv[0] = program.to_string_lossy().into_owned();
     let result = run_isolated_hook_process(
-        &command,
+        &argv,
         "",
         cwd,
         &env,
@@ -65,29 +68,26 @@ pub(crate) fn dispatch(args: &Value) -> KindResult {
     Ok(record(&command, Some(&result)))
 }
 
-/// Whether `program` names a file to start: a path (relative to `cwd`), or
-/// a bare name found on the caller's `PATH` as the platform would look it up.
-/// The child starts in `cwd`, so a relative `PATH` entry is read from there
-/// and an empty one names `cwd` itself.
-fn startable(program: &str, cwd: &Path, env: &BTreeMap<String, String>) -> bool {
+/// The file `program` names: a path (relative to `cwd`), or a bare name
+/// found on the caller's `PATH` as the platform would look it up. The child
+/// starts in `cwd`, so a relative `PATH` entry is read from there and an
+/// empty one names `cwd` itself.
+fn located(program: &str, cwd: &Path, env: &BTreeMap<String, String>) -> Option<PathBuf> {
     let path = Path::new(program);
     if path.components().count() > 1 || path.is_absolute() {
         return candidates(&cwd.join(path))
-            .iter()
-            .any(|file| file.is_file());
+            .into_iter()
+            .find(|file| file.is_file());
     }
-    let Some(search) = env.get("PATH") else {
-        return false;
-    };
-    std::env::split_paths(search).any(|directory| {
+    std::env::split_paths(env.get("PATH")?).find_map(|directory| {
         candidates(&cwd.join(directory).join(program))
-            .iter()
-            .any(|file| file.is_file())
+            .into_iter()
+            .find(|file| file.is_file())
     })
 }
 
 /// The file itself, and on Windows the extensions `CreateProcess` tries.
-fn candidates(path: &Path) -> Vec<std::path::PathBuf> {
+fn candidates(path: &Path) -> Vec<PathBuf> {
     let mut files = vec![path.to_path_buf()];
     if cfg!(windows) && path.extension().is_none() {
         files.extend(["exe", "com", "cmd", "bat"].map(|extension| path.with_extension(extension)));
