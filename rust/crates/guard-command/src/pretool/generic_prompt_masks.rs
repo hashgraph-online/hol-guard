@@ -101,6 +101,14 @@ pub(super) fn mask_credential_categories(value: &str) -> String {
 pub(super) fn mask_liveness_probes(value: &str) -> String {
     static PROBE: OnceLock<Regex> = OnceLock::new();
     static OTHER_KILL: OnceLock<Regex> = OnceLock::new();
+    static MULTI_SIGNAL: OnceLock<Regex> = OnceLock::new();
+    let multi_signal = MULTI_SIGNAL.get_or_init(|| {
+        Regex::new(r"(?i)\bkill\b[^;&|]*(?:-[sn]\s+|--signal(?:=|\s+))\S+[^;&|]*(?:-[sn]\s+|--signal(?:=|\s+))\S+")
+            .expect("bounded multiple signal options")
+    });
+    if multi_signal.is_match(value) {
+        return value.to_owned();
+    }
     let masked = PROBE
         .get_or_init(|| {
             Regex::new(r"(?i)\bkill\s+(?:-0|-[sn]\s+0|--signal(?:=|\s+)0)\b")

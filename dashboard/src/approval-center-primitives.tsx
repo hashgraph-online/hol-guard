@@ -46,6 +46,7 @@ export type AppView =
   | "evidence"
   | "settings"
   | "cigar"
+  | "swarm"
   | "extensions"
   | "app-detail"
   | "supply-chain"
@@ -170,6 +171,7 @@ const sidebarLinks = [
   { href: "/inbox", label: "Inbox", view: "inbox", icon: HiMiniInbox },
   { href: "/protect", label: "Protect", view: "fleet", icon: HiMiniShieldCheck },
   { href: "/cigar", label: "CIGAR", view: "cigar", icon: HiMiniCircleStack },
+  { href: "/swarm", label: "Swarm", view: "swarm", icon: HiMiniSquares2X2 },
   { href: "/extensions", label: "Extensions", view: "extensions", icon: HiMiniPuzzlePiece },
   { href: "/supply-chain", label: "Supply chain", view: "supply-chain", icon: HiMiniSquares2X2 },
   { href: "/policy", label: "Policy", view: "policy", icon: HiMiniClipboardDocumentList },
