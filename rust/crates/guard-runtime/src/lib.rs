@@ -221,6 +221,7 @@ mod codex_request_resume_store;
 mod codex_sandbox_check;
 mod codex_sources;
 mod codex_thread_continue_op;
+mod codex_toml_render;
 mod codex_value;
 #[cfg(all(test, unix))]
 mod codex_vectors_tests;

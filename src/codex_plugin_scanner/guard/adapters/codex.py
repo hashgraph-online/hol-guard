@@ -12,16 +12,13 @@ from __future__ import annotations
 import base64
 import hashlib
 import json
-import math
 import os
 import sys
 from collections.abc import Mapping, Sequence
 from copy import deepcopy
 from dataclasses import dataclass
-from datetime import date, datetime, time
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
-from uuid import uuid4
 
 from ...version import __version__
 from ..aibom_detection import (
@@ -29,7 +26,7 @@ from ..aibom_detection import (
     extend_detection_with_workspace_aibom,
     native_adapter_detection_with_warnings,
 )
-from ..codex_config import dump_toml, read_config_bytes, read_toml_payload
+from ..codex_config import _Wire, dump_toml, read_config_bytes, read_toml_payload
 from ..codex_hook_command_line import render_hook_command
 from ..codex_hook_compatibility import NATIVE_CODEX_HOOK_FEATURE, python_bridge_argv
 from ..codex_hook_file_integrity import validate_regular_file
@@ -144,9 +141,6 @@ _LEGACY_MANAGED_HOOK_STATUS_MESSAGES = {
 _MANAGED_HOOK_TIMEOUT_GRACE_SECONDS = 5
 _CODEX_GUARD_TOOL_MATCHER = "Bash|Read|Write|Edit|MultiEdit|^apply_patch$|mcp__.*"
 _AUTHORITATIVE_HOOK_UNAVAILABLE_REASON = "codex_authoritative_hook_unavailable"
-# The range ``native_codex_hook_identity`` sends as a JSON integer.
-_EXACT_INT_MIN = -(2**63)
-_EXACT_INT_MAX = 2**64 - 1
 
 
 def _codex(op: str, context: HarnessContext, **fields: Any) -> dict[str, Any]:
@@ -164,98 +158,6 @@ def _reply_text(answer: Mapping[str, object], key: str) -> str:
     if not isinstance(value, str):
         raise ValueError("Harness adapter answer is malformed")
     return value
-
-
-def _strings_in(value: object, found: set[str]) -> None:
-    if isinstance(value, str):
-        found.add(value)
-    elif isinstance(value, Mapping):
-        for key, item in value.items():
-            _strings_in(key, found)
-            _strings_in(item, found)
-    elif isinstance(value, Sequence) and not isinstance(value, bytes | bytearray):
-        for item in value:
-            _strings_in(item, found)
-
-
-class _Wire:
-    """Order-preserving JSON for payloads read from TOML.
-
-    A scalar JSON cannot carry becomes a token naming its meaning, the form
-    ``native_codex_hook_identity`` sends. Equal meanings share a token, so the
-    runtime compares tokens as it would the values. ``decode`` maps each token
-    back to the value it stood for. The prefix is drawn at random and checked
-    against every string the payloads hold.
-    """
-
-    def __init__(self, *payloads: object) -> None:
-        present: set[str] = set()
-        for payload in payloads:
-            _strings_in(payload, present)
-        prefix = uuid4().hex
-        while any(text.startswith(prefix) for text in present):
-            prefix = uuid4().hex
-        self._prefix = prefix
-        self._issued: dict[str, str] = {}
-        self._originals: dict[str, object] = {}
-        self.meanings: dict[str, object] = {}
-
-    def text(self, value: object) -> str:
-        return json.dumps(self._value(value), separators=(",", ":"))
-
-    def decode(self, text: str) -> Any:
-        return self._restore(json.loads(text))
-
-    def _token(self, original: object, meaning: dict[str, str]) -> str:
-        key = json.dumps(meaning, sort_keys=True)
-        token = self._issued.get(key)
-        if token is None:
-            token = f"{self._prefix}-{len(self.meanings)}"
-            self._issued[key] = token
-            self._originals[token] = original
-            self.meanings[token] = meaning
-        return token
-
-    def _string(self, value: str) -> str:
-        if value.startswith(self._prefix):
-            raise ValueError("A Codex payload string collides with Guard's wire tokens.")
-        return value
-
-    def _value(self, value: object) -> object:
-        # bool is an int and datetime a date, so each is settled first.
-        if value is None or isinstance(value, bool):
-            return value
-        if isinstance(value, str):
-            return self._string(value)
-        if isinstance(value, int):
-            if _EXACT_INT_MIN <= value <= _EXACT_INT_MAX:
-                return value
-            return self._token(value, {"__int__": str(value)})
-        if isinstance(value, float):
-            if math.isfinite(value):
-                return value
-            return self._token(value, {"type": "float", "value": repr(value)})
-        if isinstance(value, Mapping):
-            wired: dict[str, object] = {}
-            for key, item in value.items():
-                if not isinstance(key, str):
-                    raise ValueError("Codex payload keys must be strings.")
-                wired[self._string(key)] = self._value(item)
-            return wired
-        if isinstance(value, Sequence) and not isinstance(value, bytes | bytearray):
-            return [self._value(item) for item in value]
-        if isinstance(value, datetime | date | time):
-            return self._token(value, {"type": type(value).__name__, "value": value.isoformat()})
-        return self._token(value, {"type": type(value).__name__, "value": repr(value)})
-
-    def _restore(self, value: object) -> object:
-        if isinstance(value, str):
-            return self._originals.get(value, value)
-        if isinstance(value, list):
-            return [self._restore(item) for item in value]
-        if isinstance(value, dict):
-            return {key: self._restore(item) for key, item in value.items()}
-        return value
 
 
 def _hook_workspace_dir(context: HarnessContext) -> Path | None:
