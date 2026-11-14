@@ -424,6 +424,10 @@ pub(crate) fn check_payload() -> Value {
     check_payload_at(None).unwrap_or(Value::Null)
 }
 
+#[path = "harness_claim_promotion.rs"]
+mod promotion;
+pub(crate) use promotion::promotion_payload;
+
 #[cfg(test)]
 #[path = "harness_protection_contract_tests.rs"]
 mod tests;
