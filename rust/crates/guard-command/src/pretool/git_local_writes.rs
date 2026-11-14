@@ -222,8 +222,9 @@ fn proven(
         .flat_map(|observation| observation.matcher_evidence.iter())
         .map(|evidence| evidence.segment_index)
         .collect();
-    let route = route::route(model, context)?;
-    let model = route.model(model);
+    let identified = route::without_identity(model);
+    let route = route::route(identified.as_ref().unwrap_or(model), context)?;
+    let model = route.model(identified.as_ref().unwrap_or(model));
     let shell = context;
     let context = super::PathContext {
         cwd: route.cwd().or(context.cwd),

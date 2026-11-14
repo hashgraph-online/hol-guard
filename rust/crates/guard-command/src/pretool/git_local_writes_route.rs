@@ -15,6 +15,12 @@
 //! A `;` or `||` after a verified `cd` chain runs what follows whether or not
 //! the `cd` succeeded, so the steps after it may run in either directory.
 //! Those steps must be reads proven in both.
+//!
+//! A Git step may also name the commit author with leading
+//! `-c user.name=<v>` and `-c user.email=<v>` pairs. Those two settings only
+//! label the commit and cannot start a program, so the proofs see the step
+//! without them. Every other `-c` setting keeps the step as written, and so
+//! its review.
 
 use super::super::directory_targets;
 use super::super::worktree_add::{separator_between, verified_worktree_cwd_context};
@@ -191,4 +197,45 @@ fn chdir_route(
         cwd: entered?,
         model: Box::new(rewritten),
     })
+}
+
+/// The identity settings a leading `-c` pair may carry without changing
+/// what the Git step runs.
+const IDENTITY_KEYS: [&str; 2] = ["user.name", "user.email"];
+
+/// `model` without the leading `-c user.name=<v>` and `-c user.email=<v>`
+/// pairs of its Git steps, or `None` when no step has one. A leading
+/// `-C <dir>` pair stays where it is; the scan stops at the first other word.
+pub(super) fn without_identity(model: &CanonicalCommandV1) -> Option<CanonicalCommandV1> {
+    let mut rewritten = model.clone();
+    let mut removed = false;
+    for segment in &mut rewritten.segments {
+        if segment.executable.as_deref() != Some("git") {
+            continue;
+        }
+        let Some(offset) = segment.tokens.len().checked_sub(segment.arguments.len()) else {
+            continue;
+        };
+        let mut index = 0;
+        while let [flag, value, ..] = &segment.arguments[index..] {
+            let identity = flag == "-c"
+                && value.split_once('=').is_some_and(|(key, _)| {
+                    IDENTITY_KEYS
+                        .iter()
+                        .any(|identity| key.eq_ignore_ascii_case(identity))
+                });
+            let aligned = segment.tokens.get(offset + index) == Some(flag)
+                && segment.tokens.get(offset + index + 1) == Some(value);
+            if identity && aligned {
+                segment.arguments.drain(index..index + 2);
+                segment.tokens.drain(offset + index..offset + index + 2);
+                removed = true;
+            } else if flag == "-C" {
+                index += 2;
+            } else {
+                break;
+            }
+        }
+    }
+    removed.then_some(rewritten)
 }
