@@ -325,11 +325,16 @@ pub(in crate::pretool) fn skip_bodies(
 /// Such a program is only taken when it is the whole command
 /// (`script_content::fed::python_alone`).
 fn python_program_fits(body: &[&str]) -> bool {
+    let source = body.join("\n");
+    // Python treats a bare CR as a physical line break. The heredoc parser
+    // splits on LF, so accepting CR would let its encoding-header check and
+    // the interpreter disagree about the first two source lines. Fail closed.
     body.iter().all(|row| row.is_ascii())
+        && !source.contains('\r')
         && !body.iter().take(2).any(|row| coding_comment(row))
         && crate::pretool::script_content::fed::source_clean(
             crate::pretool::script_content::Language::Python,
-            &body.join("\n"),
+            &source,
         )
 }
 
