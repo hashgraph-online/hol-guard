@@ -11,7 +11,7 @@ from typing import Any
 
 import pytest
 
-from codex_plugin_scanner.guard.adapters import desktop_hook_proxy
+from codex_plugin_scanner.guard import native_runner_authority as authority
 from codex_plugin_scanner.guard.native_runner_authority import native_runner_authority
 
 
@@ -29,8 +29,9 @@ def sign_every_path(monkeypatch: pytest.MonkeyPatch, team: str | None = "TEAMID"
     script, name = launch_script()
     requests: list[dict[str, Any]] = []
 
-    def answer(kind: str, request: dict[str, Any], **_kwargs: object) -> dict[str, object]:
-        assert kind == "desktop_hook_proxy"
+    def answer(kind: str, request: dict[str, Any], **kwargs: Any) -> dict[str, object]:
+        if kind != "desktop_hook_proxy":
+            return native_runner_authority(kind, request, **kwargs)
         requests.append(request)
         if request["op"] == "verify":
             args = request["args"]
@@ -46,5 +47,5 @@ def sign_every_path(monkeypatch: pytest.MonkeyPatch, team: str | None = "TEAMID"
             "argv": ["/bin/sh", "-c", script, name, str(proxy), team, str(bundle), request["config"], str(core), flag]
         }
 
-    monkeypatch.setattr(desktop_hook_proxy, "native_runner_authority", answer)
+    monkeypatch.setattr(authority, "native_runner_authority", answer)
     return requests

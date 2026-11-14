@@ -13,14 +13,16 @@ import os
 import sys
 from collections.abc import Sequence
 
-from ..native_runner_authority import NativeRunnerAuthorityError, native_runner_authority
-
 _DESKTOP_PROXY_ENV = "HOL_GUARD_DESKTOP_HOOK_PROXY"
 # Three `codesign` verifications of up to 5s each, one of them a whole bundle.
 _TIMEOUT_SECONDS = 45.0
 
 
 def _ask(request: dict[str, object]) -> dict[str, object] | None:
+    # Imported here: the bounded hook bridge imports this module on every call
+    # and must stay off the native runtime client until it asks.
+    from ..native_runner_authority import NativeRunnerAuthorityError, native_runner_authority
+
     try:
         return native_runner_authority("desktop_hook_proxy", request, timeout_seconds=_TIMEOUT_SECONDS)
     except (NativeRunnerAuthorityError, OSError):
