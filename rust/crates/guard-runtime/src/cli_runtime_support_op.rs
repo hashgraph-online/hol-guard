@@ -180,6 +180,9 @@ pub(crate) fn dispatch(args: &Value) -> Result<Value, &'static str> {
 
 pub(super) fn evaluate(operation: &str, params: &Value) -> Result<Value, &'static str> {
     let result = match operation {
+        "native_readiness" => {
+            crate::native_readiness::readiness_payload(text(params, "reason_code")?)
+        }
         "resolve_tool" => crate::cli_copilot_resolution::resolve_tool(params)?,
         "server_identity" => crate::cli_copilot_resolution::server_identity(params)?,
         "workspace_root" => crate::cli_copilot_resolution::workspace_root(params)?,

@@ -50,7 +50,7 @@ Run it locally without an account. Use the CLI and local dashboard to manage pro
 
 ## Install HOL Guard
 
-Requires Python 3.10 or newer, [pipx](https://pipx.pypa.io/stable/installation/), and a matching native runtime. Check the [platform support and Windows ARM64 setup notes](docs/guard/get-started.md#platform-support) before installing.
+Requires Python 3.10 or newer, [pipx](https://pipx.pypa.io/stable/how-to/install-pipx.html), and a matching native runtime. Check the [platform support and Windows ARM64 setup notes](docs/guard/get-started.md#platform-support) before installing.
 
 ```bash
 pipx install hol-guard
@@ -58,6 +58,8 @@ hol-guard init
 ```
 
 The first-run wizard discovers supported agents and walks you through protection setup. It asks before each setup change, including opening the dashboard, installing agent integrations, and connecting optional cloud services.
+
+**Python recommendation:** Use Python 3.11 or newer for the `pipx` installation shown above, in line with [pipx's current installation guide](https://pipx.pypa.io/stable/how-to/install-pipx.html). HOL Guard itself supports Python 3.10+, so this is a setup recommendation, not a change to the package's minimum supported Python version.
 
 Check your installation:
 

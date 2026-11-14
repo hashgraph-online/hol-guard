@@ -40,6 +40,7 @@ import { openRecoveryView } from "./service-recovery";
 import { RuntimeGate } from "./runtime-error-state";
 
 const HOME_QUEUE_PREVIEW_LIMIT = 50;
+const SwarmWorkspace = lazyWorkspace("swarm-workspace", () => import("./swarm/swarm-workspace").then((m) => ({ default: m.SwarmWorkspace })));
 const HomeWorkspace = lazyWorkspace("home-dashboard", () => import("./home-dashboard").then((m) => ({ default: m.HomeWorkspace })));
 const FleetWorkspace = lazyWorkspace("fleet-workspace", () => import("./fleet-workspace").then((m) => ({ default: m.FleetWorkspace })));
 const SettingsWorkspace = lazyWorkspace("settings-workspace", () => import("./settings-workspace").then((m) => ({ default: m.SettingsWorkspace })));
@@ -152,6 +153,7 @@ export const PROTECT_ROUTE = "/protect";
 export const TODAY_EVIDENCE_ROUTE = "/evidence?time=today";
 
 export function viewTitle(view: AppView): string {
+  if (view === "swarm") return "Swarm";
   if (view === "home") return "Home";
   if (view === "inbox") return "Inbox";
   if (view === "fleet") return "Protect";
@@ -183,6 +185,7 @@ export function parseAppDetail(pathname: string): string | null {
 }
 
 export function resolveView(pathname: string): AppView {
+  if (pathname === "/swarm") return "swarm";
   if (pathname === "/cigar") return "cigar";
   if (parseAppDetail(pathname) !== null) {
     return "app-detail";
@@ -369,8 +372,8 @@ export function App() {
     let pollId: number | undefined;
     let refreshInFlight = false;
     let clearedQueue = false;
-    const needsFullQueue = view === "inbox" && requestId === null;
-    const needsQueuePage = view === "inbox" || requestId !== null;
+    const needsFullQueue = (view === "inbox" || view === "swarm") && requestId === null;
+    const needsQueuePage = view === "inbox" || view === "swarm" || requestId !== null;
     const needsHomePreview = view === "home" && requestId === null;
     const needsRuntimeReceipts =
       view === "home" ||
@@ -381,6 +384,9 @@ export function App() {
       view === "feed-health";
     const loadApprovalQueue = () => {
       if (refreshInFlight || cancelled || resolutionInFlight.current) {
+        return;
+      }
+      if (needsFullQueue && view === "swarm" && document.hidden) {
         return;
       }
       refreshInFlight = true;
@@ -1057,6 +1063,7 @@ export function App() {
       codexResume={codexResume}
       approvalGate={approvalGate}
       onRetryResume={handleRetryResume}
+      swarmContent={<Suspense fallback={<LazyFallback />}><SwarmWorkspace onNavigate={navigate} onOpenRequest={handleOpenRequest} reviews={requests.kind === "ready" ? requests.items : null} /></Suspense>}
       homeContent={
         <Suspense fallback={<LazyFallback />}>
           <HomeWorkspace

@@ -45,6 +45,81 @@ fn startup_wait_honors_remaining_caller_budget() {
     );
 }
 
+/// Concurrent cold callers share the start already in flight. While one
+/// caller holds the home-wide startup lock, every other caller waits within
+/// its own budget for that resident and never starts one of its own.
+#[cfg(unix)]
+#[test]
+fn concurrent_callers_share_the_start_in_flight() {
+    let root = std::env::temp_dir().join(format!(
+        "hol-guard-startup-single-flight-{}-{}",
+        std::process::id(),
+        crate::unique_nanos::unique_nanos()
+    ));
+    fs::create_dir(&root).unwrap();
+    fs::set_permissions(&root, fs::Permissions::from_mode(0o700)).unwrap();
+    let lock = crate::resident_state::acquire_startup_lock(&root)
+        .unwrap()
+        .unwrap();
+    let caller_budget = Duration::from_millis(1_500);
+    let scheduling_allowance = Duration::from_millis(750);
+    let started = Instant::now();
+    let results: Vec<Result<Vec<u8>, String>> = std::thread::scope(|scope| {
+        let callers: Vec<_> = (0..8)
+            .map(|_| scope.spawn(|| client_request(&root, b"{}", caller_budget)))
+            .collect();
+        callers
+            .into_iter()
+            .map(|caller| caller.join().expect("caller thread"))
+            .collect()
+    });
+    let elapsed = started.elapsed();
+    drop(lock);
+    let spawn_marks: Vec<String> = walk_names(&root)
+        .into_iter()
+        .filter(|name| name == "restart-budget.lock" || name == "lifecycle-journal.json")
+        .collect();
+    fs::remove_dir_all(&root).unwrap();
+
+    for result in &results {
+        assert!(
+            matches!(
+                result.as_ref().map_err(String::as_str),
+                Err("native_resident_start_in_progress" | "native_client_deadline_exceeded")
+            ),
+            "a waiter must not answer or start: {result:?}"
+        );
+    }
+    assert!(
+        spawn_marks.is_empty(),
+        "a waiter reached the spawn step: {spawn_marks:?}"
+    );
+    assert!(
+        elapsed < caller_budget + scheduling_allowance,
+        "waiters outlived their budget: {elapsed:?}"
+    );
+}
+
+#[cfg(unix)]
+fn walk_names(root: &std::path::Path) -> Vec<String> {
+    // An unreadable directory fails the test: skipping it could hide a
+    // start attempt's marks.
+    let mut names = Vec::new();
+    let mut pending = vec![root.to_path_buf()];
+    while let Some(directory) = pending.pop() {
+        let entries = fs::read_dir(&directory)
+            .unwrap_or_else(|error| panic!("read {}: {error}", directory.display()));
+        for entry in entries {
+            let entry = entry.expect("directory entry");
+            if entry.file_type().expect("entry type").is_dir() {
+                pending.push(entry.path());
+            }
+            names.push(entry.file_name().to_string_lossy().into_owned());
+        }
+    }
+    names
+}
+
 #[test]
 fn zero_client_timeout_rejects_before_state_mutation() {
     let root = std::env::temp_dir().join(format!(

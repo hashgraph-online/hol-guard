@@ -126,6 +126,13 @@ function requestWith(envelope: Partial<GuardActionEnvelope>): GuardApprovalReque
 {
   const input = mcpToolInput({ arguments: "{\"query\":\"open invoices\"}" });
   assert(JSON.stringify(input) === "{\"query\":\"open invoices\"}", "a JSON string input is parsed");
+  const ownArguments = mcpToolInput({ tool_input: { input: "text", name: "recipient" } });
+  assert(
+    JSON.stringify(ownArguments) === "{\"input\":\"text\",\"name\":\"recipient\"}",
+    `a tool's own input/name arguments are not taken for a hook wrapper, got ${JSON.stringify(ownArguments)}`,
+  );
+  const singleArgument = mcpToolInput({ tool_input: { arguments: "--verbose" } });
+  assert(JSON.stringify(singleArgument) === "{\"arguments\":\"--verbose\"}", "a lone arguments field stays a field");
   const view = resolveMcpToolCallView(requestWith({
     raw_payload_redacted: {
       tool_input: {

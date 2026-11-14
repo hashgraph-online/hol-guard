@@ -10,12 +10,12 @@ from pathlib import Path
 
 from ..approval_gate import (
     ApprovalGateError,
-    require_fresh_approval_decision,
     require_high_risk,
     revoke_cooldown,
     unlock_cooldown,
 )
 from ..approval_gate import public_config as approval_gate_public_config
+from ..approval_gate_fresh import require_fresh_approval_decision
 from ..approval_hook_copy import authenticated_approval_review_url
 from ..approval_resolution import TERMINAL_POLICY_ACTION_NOT_RESOLVABLE
 from ..approval_scope_support import IneligibleApprovalScopeError, StaleApprovalScopeContractError

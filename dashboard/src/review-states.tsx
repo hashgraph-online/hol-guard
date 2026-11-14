@@ -207,7 +207,12 @@ export function PrimaryActionCard({ item }: { item: GuardApprovalRequest }) {
   const watchOnlyObservation = isWatchOnlyObservation(item);
   const actionDescription = watchOnlyObservation ? "observed action" : "stopped action";
   const mcpView = resolveMcpToolCallView(item);
-  const actionLabel = watchOnlyObservation ? "Would have stopped" : mcpView !== null ? "Tool call" : action.label;
+  let actionLabel = action.label;
+  if (watchOnlyObservation) {
+    actionLabel = "Would have stopped";
+  } else if (mcpView !== null) {
+    actionLabel = "Tool call";
+  }
 
   return (
     <div className="mt-5 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">

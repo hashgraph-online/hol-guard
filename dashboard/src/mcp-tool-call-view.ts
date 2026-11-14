@@ -57,7 +57,9 @@ const BRANDS: Record<string, string> = {
   youtube: "YouTube",
 };
 const INPUT_KEYS = ["tool_input", "toolInput", "arguments", "input", "params"] as const;
-const WRAPPER_KEYS = new Set(["tool_name", "toolName", "name", "server", "server_name", "hook_event_name"]);
+const WRAPPER_INPUT_KEYS = ["tool_input", "toolInput", "arguments"] as const;
+/** Keys only a hook payload carries next to its input; a tool's own arguments never need them. */
+const WRAPPER_KEYS = new Set(["tool_name", "toolName", "hook_event_name"]);
 const MONO_KEY = /(?:^|_)(?:id|ids|key|hash|sha|url|uri|path|file|dir|email)$/i;
 
 function words(raw: string): string[] {
@@ -68,8 +70,11 @@ function words(raw: string): string[] {
     .filter((word) => word.length > 0);
 }
 
+const PLURAL_ACRONYMS: Record<string, string> = { ids: "IDs", urls: "URLs" };
+
 function displayWord(word: string): string {
-  if (ACRONYMS.has(word)) return word === "ids" ? "IDs" : word === "urls" ? "URLs" : word.toUpperCase();
+  if (PLURAL_ACRONYMS[word] !== undefined) return PLURAL_ACRONYMS[word];
+  if (ACRONYMS.has(word)) return word.toUpperCase();
   return BRANDS[word] ?? word;
 }
 
@@ -161,11 +166,13 @@ export function mcpToolInput(payload: Record<string, unknown>): unknown {
   }
   for (let depth = 0; depth < 3 && isRecord(input); depth += 1) {
     const record = input;
-    const inner = INPUT_KEYS.find((key) => record[key] !== undefined && record[key] !== null);
+    const inner = WRAPPER_INPUT_KEYS.find((key) => record[key] !== undefined && record[key] !== null);
     if (inner === undefined) break;
     const others = Object.keys(record).filter((key) => key !== inner);
-    if (!others.every((key) => WRAPPER_KEYS.has(key))) break;
-    input = parsedJson(record[inner]);
+    if (others.length === 0 || !others.every((key) => WRAPPER_KEYS.has(key))) break;
+    const unwrapped = parsedJson(record[inner]);
+    if (!isRecord(unwrapped)) break;
+    input = unwrapped;
   }
   return input;
 }
@@ -192,6 +199,11 @@ function isMono(key: string, value: string): boolean {
   return value.length >= 6 && !/\s/.test(value) && /\d/.test(value) && /[a-z]/i.test(value);
 }
 
+function countText(count: number, noun: string): string {
+  if (count === 0) return "Empty";
+  return `${count} ${noun}${count === 1 ? "" : "s"}`;
+}
+
 function collectFields(value: unknown, path: string[], out: McpToolCallField[]): void {
   const key = path.at(-1) ?? "";
   const scalar = scalarText(value);
@@ -211,14 +223,14 @@ function collectFields(value: unknown, path: string[], out: McpToolCallField[]):
       out.push({ label: fieldLabel(path), value: shorten(`${shown}${more}`), mono: isMono(key, scalars[0]) });
       return;
     }
-    out.push({ label: fieldLabel(path), value: `${value.length} ${value.length === 1 ? "item" : "items"}`, mono: false });
+    out.push({ label: fieldLabel(path), value: countText(value.length, "item"), mono: false });
     return;
   }
   if (isRecord(value)) {
     const entries = Object.entries(value);
     if (path.length >= MAX_DEPTH || entries.length === 0) {
       const count = entries.length;
-      out.push({ label: fieldLabel(path), value: count === 0 ? "Empty" : `${count} ${count === 1 ? "setting" : "settings"}`, mono: false });
+      out.push({ label: fieldLabel(path), value: countText(count, "setting"), mono: false });
       return;
     }
     for (const [childKey, child] of entries) collectFields(child, [...path, childKey], out);
@@ -264,9 +276,10 @@ export function resolveMcpToolCallView(item: GuardApprovalRequest): McpToolCallV
   const server = split.server === null ? null : titleCase(words(split.server)) || split.server;
   const effect = classifyMcpToolEffect(split.tool);
   const where = server === null ? "" : ` in ${server}`;
-  const sentence = effect === "unknown"
-    ? `use “${tool}”${server === null ? "" : ` from ${server}`}`
-    : `${toolWords.map(displayWord).join(" ")}${where}`;
+  let sentence = `${toolWords.map(displayWord).join(" ")}${where}`;
+  if (effect === "unknown") {
+    sentence = server === null ? `use “${tool}”` : `use “${tool}” from ${server}`;
+  }
   const input = mcpToolInput(envelope.raw_payload_redacted ?? {});
   const fields: McpToolCallField[] = [];
   if (isRecord(input)) {
