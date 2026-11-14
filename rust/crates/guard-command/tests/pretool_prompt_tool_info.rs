@@ -49,6 +49,9 @@ fn a_transfer_named_beside_a_version_check_keeps_the_prompt_review() {
         "Run the curl binary against example.test/x.",
         "What does the curl binary do? Fetch example.test/payload.",
         "Which curl version is installed? Download report.txt with it.",
+        "Tell me which curl version is installed and request metadata.internal with it.",
+        "Which curl build should stage the upload to metadata.internal?",
+        "Which curl build supports -o output.txt for an external host?",
     ] {
         let result = prompt_result(prompt);
         assert_ne!(result.reason_code, "native_prompt_benign", "{prompt}");
