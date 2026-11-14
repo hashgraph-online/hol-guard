@@ -124,6 +124,19 @@ fn a_depth_of_one_takes_the_listing_proof() {
         decision(&home, &portal, "du -h -d 2 ../../app-portal-fix"),
         "allow"
     );
+    // GNU and BSD du apply the last depth option. A shallow first option
+    // must not suppress the recursive screen for a deeper final option.
+    for command in [
+        "du -h -d1 -d2 ../../app-portal-fix",
+        "du -ah --max-depth=1 --max-depth=2 ../../app-portal-fix",
+        "du -h --max-depth 1 -d 2 ../../app-portal-fix",
+    ] {
+        assert_ne!(decision(&home, &portal, command), "allow", "{command}");
+    }
+    assert_eq!(
+        decision(&home, &portal, "du -h -d2 -d1 ../../app-portal-fix"),
+        "allow"
+    );
 }
 
 #[test]
