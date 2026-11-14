@@ -325,10 +325,21 @@ pub(in crate::pretool) fn skip_bodies(
 /// Such a program is only taken when it is the whole command
 /// (`script_content::fed::python_alone`).
 fn python_program_fits(body: &[&str]) -> bool {
-    body.iter()
-        .all(|row| row.is_ascii() && !row.to_ascii_lowercase().contains("coding"))
+    body.iter().all(|row| row.is_ascii())
+        && !body.iter().take(2).any(|row| coding_comment(row))
         && crate::pretool::script_content::fed::source_clean(
             crate::pretool::script_content::Language::Python,
             &body.join("\n"),
         )
+}
+
+/// Whether a row may be a source-encoding declaration. Python reads one only
+/// from a comment on the first or second line (PEP 263), so the caller asks
+/// just those two; anywhere else `coding` is ordinary text, as in
+/// `open(path, encoding="utf-8")`. Any comment naming `coding` there counts,
+/// looser than Python's own pattern.
+fn coding_comment(row: &str) -> bool {
+    row.trim_start_matches([' ', '\t', '\x0c'])
+        .strip_prefix('#')
+        .is_some_and(|comment| comment.to_ascii_lowercase().contains("coding"))
 }

@@ -72,6 +72,9 @@ fn a_probe_that_imports_modules_runs_in_the_workspace_sandbox() {
         "python3 <<'EOF' | tee out.txt\nimport pkg\nprint(pkg.X)\nEOF",
         "python3 -I << 'EOF'\nimport glob\nimport re\nprint(sorted(glob.glob('pkg/*.py')))\nEOF",
         "python3 -I - <<'EOF'\nimport json\nprint(json.dumps([]))\nEOF",
+        // `coding` past the second line is not an encoding declaration.
+        "python3 <<'EOF'\nimport json\nprint(open('pyproject.toml', encoding='utf-8').read())\nEOF",
+        "python3 <<'EOF'\nimport json\nimport sys\n# decoding note\nsys.stdout.reconfigure(encoding='utf-8')\nEOF",
     ] {
         let (action, reason) = outcome(&root, command);
         assert_eq!((action.as_str(), reason.as_str()), CONTAINED, "{command}");
@@ -86,6 +89,7 @@ fn a_probe_that_would_not_fit_the_sandbox_keeps_its_review() {
         "python3 - <<'EOF'\nimport urllib.request\nprint(urllib.request.urlopen('https://example.invalid'))\nEOF",
         "python3 <<'EOF'\nimport os\nprint(open(os.path.expanduser('~/.aws/credentials')).read())\nEOF",
         "python3 <<'EOF'\n# -*- coding: utf-7 -*-\nimport json\nEOF",
+        "python3 <<'EOF'\n#!/usr/bin/env python3\n  # vim: set fileencoding=utf-7 :\nimport json\nEOF",
         "python3 -c 'import os' <<'EOF'\nimport pkg\nEOF",
         "python3 -i <<'EOF'\nimport pkg\nEOF",
         "python3 -I -c 'import os' <<'EOF'\nimport json\nEOF",
