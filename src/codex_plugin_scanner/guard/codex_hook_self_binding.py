@@ -30,7 +30,7 @@ stamped as owned.
 from __future__ import annotations
 
 import os
-from collections.abc import Collection, Mapping
+from collections.abc import Callable, Collection, Mapping
 from pathlib import Path
 from typing import Any
 
@@ -67,21 +67,30 @@ def ask_hook_owners(op: str, *, windows: bool | None = None, **fields: object) -
     needs expanded; this host resolves them and asks again.
     """
 
-    request: dict[str, object] = {
-        "op": op,
-        "windows": hook_commands_use_windows_syntax(windows),
-        "long_paths": {},
-        **fields,
-    }
+    request: dict[str, object] = {"op": op, **short_path_fields(windows), **fields}
+    return settle_short_paths(
+        lambda: native_runner_authority(_KIND, request, timeout_seconds=_TIMEOUT_SECONDS), request, _KIND
+    )
+
+
+def short_path_fields(windows: bool | None = None) -> dict[str, object]:
+    """The command syntax a native owner check splits with, before any name is expanded."""
+
+    return {"windows": hook_commands_use_windows_syntax(windows), "long_paths": {}}
+
+
+def settle_short_paths(ask: Callable[[], Mapping[str, Any]], request: dict[str, object], kind: str) -> dict[str, Any]:
+    """Ask once, and again with each 8.3 short name the answer needs expanded."""
+
     for _ in range(2):
-        answer = native_runner_authority(_KIND, request, timeout_seconds=_TIMEOUT_SECONDS)
+        answer = dict(ask())
         reply = answer.get("reply")
         if not isinstance(reply, Mapping):
             return answer
         expand = reply.get("expand")
         names = [str(name) for name in expand] if isinstance(expand, list) else []
         request["long_paths"] = {name: _command_line._long_path(name) or "" for name in names}
-    raise RuntimeError("codex_hook_owners did not settle its short paths")
+    raise RuntimeError(f"{kind} did not settle its short paths")
 
 
 def answer_text(answer: Mapping[str, object], key: str) -> str:
@@ -172,4 +181,6 @@ __all__ = [
     "install_fields",
     "install_package_root",
     "self_bound_hook_bindings",
+    "settle_short_paths",
+    "short_path_fields",
 ]

@@ -22,9 +22,10 @@ from typing import TYPE_CHECKING, Any
 
 from ...version import __version__
 from ..aibom_detection import (
+    detection_from_payload,
     extend_codex_runtime_inventory,
     extend_detection_with_workspace_aibom,
-    native_adapter_detection_with_warnings,
+    native_adapter_detection_payload,
 )
 from ..codex_config import _Wire, dump_toml, read_config_bytes, read_toml_payload
 from ..codex_hook_command_line import render_hook_command
@@ -77,7 +78,14 @@ from ..codex_hook_registration import (
     remove_manifest_bound_hook_events as _remove_manifest_bound_hook_events,
 )
 from ..codex_hook_rollback import require_unchanged_config_for_rollback, rollback_file_identity
-from ..codex_hook_self_binding import answer_text, ask_hook_owners, install_fields, self_bound_hook_bindings
+from ..codex_hook_self_binding import (
+    answer_text,
+    ask_hook_owners,
+    install_fields,
+    self_bound_hook_bindings,
+    settle_short_paths,
+    short_path_fields,
+)
 from ..codex_hook_sources import parse_json_object, parse_toml_object
 from ..codex_hook_sources import (
     require_hook_inventory_sources_unchanged as _require_hook_inventory_sources_unchanged,
@@ -99,12 +107,7 @@ from ..native_path_anchor import anchor_to_process_directory
 from ..shims import install_guard_shim, prepare_guard_shim, remove_guard_shim
 from ..stable_guard_cli import resolve_frozen_guard_cli
 from .base import HarnessContext, PreparedHarnessInstall
-from .codex_detect_sources import (
-    json_payload_from_bytes,
-    path_restorations,
-    read_source_bytes,
-    toml_payload_from_bytes,
-)
+from .codex_detect_sources import path_restorations, read_source_bytes
 from .codex_remote_control import (
     codex_remote_launch_environment,
     guarded_codex_launch_command,
@@ -437,15 +440,6 @@ def _current_install_self_bindings(
         guard_home=_runtime_guard_home(context),
         recorded_commands=_recorded_handler_commands(authenticated_bindings),
     )
-
-
-def _legacy_wire_bindings(
-    context: HarnessContext, payload: dict[str, object], registration: _HookRegistration
-) -> list[dict[str, object]]:
-    hooks = payload.get("hooks")
-    if not isinstance(hooks, dict):
-        return []
-    return _wire_bindings(_current_install_legacy_bindings(context, hooks, registration))
 
 
 def _strip_owned_hooks(
@@ -1028,38 +1022,27 @@ class CodexHarnessAdapter(NativeHarnessAdapter):
             # One read per file feeds both the legacy-ownership bindings and the
             # native inventory, so a file changing in between cannot split them.
             captured = {path: read_source_bytes(path) for pair in pairs for path in pair}
-            config_payloads = {config: toml_payload_from_bytes(captured[config]) for config, _hooks in pairs}
-            hooks_payloads = {hooks: json_payload_from_bytes(captured[hooks]) for _config, hooks in pairs}
         else:
             captured = {path: config_contents[path] for pair in pairs for path in pair}
-            config_payloads = {
-                config: parse_toml_object(captured[config], path=config, label="Codex config file")
-                for config, _hooks in pairs
-            }
-            hooks_payloads = {
-                hooks: parse_json_object(captured[hooks], path=hooks, label="Codex hooks file")
-                for _config, hooks in pairs
-            }
+            # An install refuses a captured generation it cannot parse strictly.
+            for config, hooks in pairs:
+                parse_toml_object(captured[config], path=config, label="Codex config file")
+                parse_json_object(captured[hooks], path=hooks, label="Codex hooks file")
         authenticated_manifest = load_hook_manifest_baseline(_hook_manifest_spec(context))
         hook_config_path = self._hook_config_path(context)
-        registration = _hook_registration(context)
-        sources: list[dict[str, object]] = []
-        for config_path, hooks_path in pairs:
-            sources.append(
+        request: dict[str, object] = {
+            "harness": self.harness,
+            "authenticated_bindings": _wire_bindings(_manifest_bindings(authenticated_manifest)),
+            "sources": [
                 {
                     "config_path": anchor_to_process_directory(config_path),
                     "hooks_path": anchor_to_process_directory(hooks_path),
                     "config_scope": self._scope_for(context, config_path),
                     "hooks_scope": self._scope_for(context, hooks_path),
                     "authenticated": config_path == hook_config_path,
-                    "config_legacy": _legacy_wire_bindings(context, config_payloads[config_path], registration),
-                    "hooks_legacy": _legacy_wire_bindings(context, hooks_payloads[hooks_path], registration),
                 }
-            )
-        request: dict[str, object] = {
-            "harness": self.harness,
-            "authenticated_bindings": _wire_bindings(_manifest_bindings(authenticated_manifest)),
-            "sources": sources,
+                for config_path, hooks_path in pairs
+            ],
             "contents": {
                 anchor_to_process_directory(path): None if data is None else data.hex()
                 for path, data in captured.items()
@@ -1068,7 +1051,13 @@ class CodexHarnessAdapter(NativeHarnessAdapter):
                 list(item) for item in path_restorations(tuple(path for pair in pairs for path in pair)).items()
             ],
         }
-        artifacts, found_paths, warnings = native_adapter_detection_with_warnings("codex_detect", request)
+        legacy: dict[str, object] = {**_legacy_fields(context), **short_path_fields()}
+        payload = settle_short_paths(
+            lambda: native_adapter_detection_payload("codex_detect", {**request, "legacy": legacy}),
+            legacy,
+            "codex_detect",
+        )
+        artifacts, found_paths, warnings = detection_from_payload(payload)
         command_available = _command_available(context)
         detection = HarnessDetection(
             harness=self.harness,

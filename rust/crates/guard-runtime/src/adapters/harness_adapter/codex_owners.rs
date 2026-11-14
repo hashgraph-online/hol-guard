@@ -114,7 +114,7 @@ fn run(op: &str, fields: &Map<String, Value>, syntax: &mut Syntax) -> Step<Value
     Ok(json!({ "bindings": compact(&PyVal::List(bindings), false) }))
 }
 
-fn long_paths(fields: &Map<String, Value>) -> Step<BTreeMap<String, String>> {
+pub(super) fn long_paths(fields: &Map<String, Value>) -> Step<BTreeMap<String, String>> {
     let entries = fields
         .get("long_paths")
         .and_then(Value::as_object)
@@ -327,14 +327,14 @@ pub(super) fn remove(hooks: &mut Entries, bindings: &[PyVal]) -> bool {
 }
 
 /// What `exact_legacy_hook_bindings` matches a pre-manifest handler against.
-struct Legacy {
+pub(super) struct Legacy {
     expected: Vec<PyVal>,
     argvs: Vec<Vec<String>>,
     statuses: BTreeSet<String>,
 }
 
 impl Legacy {
-    fn parse(fields: &Map<String, Value>) -> Step<Self> {
+    pub(super) fn parse(fields: &Map<String, Value>) -> Step<Self> {
         Ok(Self {
             expected: list(fields, "expected")?,
             argvs: vec![strings(fields, "argv")?, strings(fields, "legacy_argv")?],
@@ -345,7 +345,7 @@ impl Legacy {
     /// `exact_legacy_hook_bindings`: per event, the first group with the
     /// expected matcher holding a handler that runs an accepted argv under a
     /// legacy status message.
-    fn bindings(&self, hooks: &Entries, syntax: &mut Syntax) -> Vec<PyVal> {
+    pub(super) fn bindings(&self, hooks: &Entries, syntax: &mut Syntax) -> Vec<PyVal> {
         let mut accepted = self.argvs.clone();
         if syntax.windows() {
             // Earlier Windows installs passed the config as plain JSON.

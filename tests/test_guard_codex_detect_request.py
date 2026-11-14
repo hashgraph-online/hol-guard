@@ -27,9 +27,9 @@ def test_detect_sends_scoped_sources_and_inline_captures(tmp_path: Path, monkeyp
 
     def fake_native(kind: str, request: dict[str, object]):
         sent.append((kind, request))
-        return (), ("/seen",), ("warned",)
+        return {"artifacts": [], "found_paths": ["/seen"], "warnings": ["warned"]}
 
-    monkeypatch.setattr(codex, "native_adapter_detection_with_warnings", fake_native)
+    monkeypatch.setattr(codex, "native_adapter_detection_payload", fake_native)
     monkeypatch.setattr(codex, "load_hook_manifest_baseline", lambda _spec: None)
     monkeypatch.setattr(codex, "_hook_manifest_spec", lambda _context: None)
     monkeypatch.setattr(codex, "extend_detection_with_workspace_aibom", lambda detection, **_kwargs: detection)
@@ -59,6 +59,10 @@ def test_detect_sends_scoped_sources_and_inline_captures(tmp_path: Path, monkeyp
     ]
     assert sources[0]["config_path"] == str(home / ".codex" / "config.toml")
     assert sources[1]["hooks_path"] == str(work / ".codex" / "hooks.json")
+    assert all("config_legacy" not in entry and "hooks_legacy" not in entry for entry in sources)
+    legacy = cast("dict[str, object]", request["legacy"])
+    assert set(legacy) == {"expected", "argv", "legacy_argv", "statuses", "windows", "long_paths"}
+    assert legacy["long_paths"] == {}
 
     pairs = codex.CodexHarnessAdapter._config_hook_pairs(context)
     captured = {path: None for pair in pairs for path in pair}
@@ -70,12 +74,12 @@ def test_detect_sends_scoped_sources_and_inline_captures(tmp_path: Path, monkeyp
     assert inline[str(work / ".codex" / "hooks.json")] is None
 
 
-def _stub_detection(monkeypatch, sent: list[dict[str, object]], result) -> None:
+def _stub_detection(monkeypatch, sent: list[dict[str, object]]) -> None:
     def fake_native(_kind: str, request: dict[str, object]):
         sent.append(request)
-        return result
+        return {"artifacts": [], "found_paths": [], "warnings": []}
 
-    monkeypatch.setattr(codex, "native_adapter_detection_with_warnings", fake_native)
+    monkeypatch.setattr(codex, "native_adapter_detection_payload", fake_native)
     monkeypatch.setattr(codex, "load_hook_manifest_baseline", lambda _spec: None)
     monkeypatch.setattr(codex, "_hook_manifest_spec", lambda _context: None)
     monkeypatch.setattr(codex, "extend_detection_with_workspace_aibom", lambda detection, **_kwargs: detection)
@@ -84,7 +88,7 @@ def _stub_detection(monkeypatch, sent: list[dict[str, object]], result) -> None:
 
 def test_detect_reads_each_source_once_and_sends_those_bytes(tmp_path: Path, monkeypatch) -> None:
     sent: list[dict[str, object]] = []
-    _stub_detection(monkeypatch, sent, ((), (), ()))
+    _stub_detection(monkeypatch, sent)
     home = tmp_path / "home"
     (home / ".codex").mkdir(parents=True)
     config = home / ".codex" / "config.toml"
@@ -109,7 +113,7 @@ def test_detect_asks_for_results_spelled_the_way_the_context_did(tmp_path: Path,
     sent: list[dict[str, object]] = []
     monkeypatch.chdir(tmp_path)
     anchored = str(tmp_path / "rel" / ".codex" / "config.toml")
-    _stub_detection(monkeypatch, sent, ((), (), ()))
+    _stub_detection(monkeypatch, sent)
     context = HarnessContext(home_dir=Path("rel"), workspace_dir=Path("work"), guard_home=tmp_path / "guard")
 
     codex.CodexHarnessAdapter().detect(context)
@@ -118,3 +122,29 @@ def test_detect_asks_for_results_spelled_the_way_the_context_did(tmp_path: Path,
     sources = cast("list[dict[str, str]]", sent[0]["sources"])
     assert sources[0]["config_path"] == anchored
     assert [anchored, relative] in cast("list[list[str]]", sent[0]["restore"])
+
+
+def test_detect_expands_the_short_names_the_native_answer_asks_for(tmp_path: Path, monkeypatch) -> None:
+    sent: list[dict[str, object]] = []
+    answers = [
+        {"reply": {"expand": [r"C:\PROGRA~1\py.exe"]}},
+        {"artifacts": [], "found_paths": [], "warnings": []},
+    ]
+
+    def fake_native(_kind: str, request: dict[str, object]):
+        sent.append(dict(cast("dict[str, object]", request["legacy"])))
+        return answers.pop(0)
+
+    _stub_detection(monkeypatch, [])
+    monkeypatch.setattr(codex, "native_adapter_detection_payload", fake_native)
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.codex_hook_command_line._long_path", lambda _name: r"C:\Program Files\py.exe"
+    )
+    context = HarnessContext(home_dir=tmp_path / "home", workspace_dir=None, guard_home=tmp_path / "guard")
+
+    codex.CodexHarnessAdapter().detect(context)
+
+    assert [entry["long_paths"] for entry in sent] == [
+        {},
+        {r"C:\PROGRA~1\py.exe": r"C:\Program Files\py.exe"},
+    ]

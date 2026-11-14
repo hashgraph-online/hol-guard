@@ -39,6 +39,7 @@ mod cline_plugin;
 mod cline_run;
 mod cloud_identity;
 mod codex;
+mod codex_detect_legacy;
 mod codex_files;
 mod codex_merge;
 mod codex_owner_home;
@@ -95,6 +96,7 @@ mod tests;
 #[path = "codex_owners_tests.rs"]
 mod codex_owners_tests;
 
+pub(crate) use codex_detect_legacy::DetectLegacy;
 pub(crate) use describe::Spec;
 
 /// The paths a harness adapter works from, as Python's `HarnessContext` and

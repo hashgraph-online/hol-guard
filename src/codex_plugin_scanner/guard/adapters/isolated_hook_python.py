@@ -9,14 +9,16 @@ from __future__ import annotations
 import functools
 import os
 
-from ..native_runner_authority import NativeRunnerAuthorityError, native_runner_authority
-
 # The probe itself may take 1.5 seconds.
 _TIMEOUT_SECONDS = 5.0
 
 
 @functools.lru_cache(maxsize=1)
 def _discover_isolated_cursor_hook_python() -> str | None:
+    # Hook bridges import this module, and must stay off the native runtime
+    # until an install actually asks.
+    from ..native_runner_authority import NativeRunnerAuthorityError, native_runner_authority
+
     request = {"system_root": os.environ.get("SYSTEMROOT")}
     try:
         answer = native_runner_authority("isolated_hook_python", request, timeout_seconds=_TIMEOUT_SECONDS)
