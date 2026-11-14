@@ -622,7 +622,6 @@
           "src/codex_plugin_scanner/guard/adapters/codex_remote_control.py",
           "src/codex_plugin_scanner/guard/adapters/grok_approval_resume.py",
           "src/codex_plugin_scanner/guard/adapters/guard_cli_attestation.py",
-          "src/codex_plugin_scanner/guard/adapters/hermes_file_inspection.py",
           "src/codex_plugin_scanner/guard/adapters/managed_mcp_upstream.py",
           "src/codex_plugin_scanner/guard/adapters/mcp_relay_native.py",
           "src/codex_plugin_scanner/guard/adapters/mcp_servers.py",
@@ -630,7 +629,7 @@
           "src/codex_plugin_scanner/guard/contained_sink_command.py",
           "src/codex_plugin_scanner/guard/windows_paths.py"
         ],
-        "reason": "Reviewed: adapters: harness registry targets (codex, the Grok approval resume, mcp_servers and the MCP proxy launcher selection, cursor native approval, hermes file inspection, attestation and path helpers). guard/contained_sink_command.py builds the contained test sink command hook routes hand to the native runtime. Loaded through the dynamic adapter registry and reached from approvals.py, cursor_hooks, hook workers and launch_command for run/protect. Install/diagnostics methods share the classes with the launch and approval paths, so the files stay whole in scope. guard/windows_paths.py is the trusted Windows profile lookup codex_lifecycle_lock uses to place its lock."
+        "reason": "Reviewed: adapters: harness registry targets (codex, the Grok approval resume, mcp_servers and the MCP proxy launcher selection, cursor native approval, attestation and path helpers). guard/contained_sink_command.py builds the contained test sink command hook routes hand to the native runtime. Loaded through the dynamic adapter registry and reached from approvals.py, cursor_hooks, hook workers and launch_command for run/protect. Install/diagnostics methods share the classes with the launch and approval paths, so the files stay whole in scope. guard/windows_paths.py is the trusted Windows profile lookup codex_lifecycle_lock uses to place its lock."
       },
       {
         "path": [
@@ -722,12 +721,9 @@
         "path": [
           "src/codex_plugin_scanner/guard/adapters/adapter_state_integrity.py",
           "src/codex_plugin_scanner/guard/adapters/cline_runtime.py",
-          "src/codex_plugin_scanner/guard/adapters/cloud_identity.py",
           "src/codex_plugin_scanner/guard/adapters/copilot.py",
           "src/codex_plugin_scanner/guard/adapters/cursor.py",
           "src/codex_plugin_scanner/guard/adapters/hermes.py",
-          "src/codex_plugin_scanner/guard/adapters/hermes_install_plan.py",
-          "src/codex_plugin_scanner/guard/adapters/hermes_state_paths.py",
           "src/codex_plugin_scanner/guard/adapters/native_extension.py",
           "src/codex_plugin_scanner/guard/adapters/native_harness.py",
           "src/codex_plugin_scanner/guard/adapters/opencode_runtime.py",
@@ -1317,46 +1313,16 @@
         "evidence": "install, prepare_install and uninstall have no caller in any in-scope module; they are invoked by the excluded install, uninstall and repair dispatchers. The report validates that no retained symbol or in-scope module references the excluded names."
       },
       {
-        "id": "adapter-hermes-runtime-hooks-setup",
-        "category": "install_config",
-        "path": "src/codex_plugin_scanner/guard/adapters/hermes_runtime_hooks.py",
-        "symbols": [
-          "_MALFORMED_ALLOWLIST",
-          "_MISSING_HOOK_COMMAND",
-          "_UNSAFE_ALLOWLIST",
-          "hermes_hook_command_string",
-          "_pretool_plan",
-          "_allowlist_plan",
-          "guard_pretool_hook_entry",
-          "merge_guard_pretool_hook",
-          "remove_guard_pretool_hooks",
-          "merge_guard_hook_allowlist",
-          "remove_guard_hook_allowlist",
-          "sync_guard_runtime_hooks",
-          "unsync_guard_runtime_hooks",
-          "_allowlist_destination",
-          "_atomic_write_allowlist"
-        ],
-        "entry_points": [],
-        "reason": "Hermes config.yaml hook registration and allowlist writing used only by install and uninstall. The read-only registration probe and doctor label stay in scope.",
-        "evidence": "The only callers are the excluded Hermes adapter module (adapters/hermes.py, harness setup and doctor). hermes_native_decision and hermes_bridge_response, which the hook bridges import, stay in scope. The report validates that no retained symbol or in-scope module references the excluded names."
-      },
-      {
         "id": "adapter-hermes-setup",
         "category": "install_config",
         "path": "src/codex_plugin_scanner/guard/adapters/hermes.py",
         "symbols": [
           "HermesHarnessAdapter.install",
-          "HermesHarnessAdapter.uninstall",
-          "_write_guard_to_hermes_config_yaml",
-          "_remove_guard_from_hermes_config_yaml",
-          "_install_state",
-          "_write_managed_server_names",
-          "_write_previous_guard_section"
+          "HermesHarnessAdapter.prepare_install"
         ],
         "entry_points": [],
-        "reason": "Hermes adapter install and uninstall and the config writers used only by them.",
-        "evidence": "install, prepare_install and uninstall have no caller in any in-scope module; they are invoked by the excluded install, uninstall and repair dispatchers. The report validates that no retained symbol or in-scope module references the excluded names."
+        "reason": "Hermes adapter install; the native harness_adapter kind plans the config, overlay, pretool and manifest changes, and Python publishes them.",
+        "evidence": "install and prepare_install have no caller in any in-scope module; they are invoked by the excluded install, uninstall and repair dispatchers. The report validates that no retained symbol or in-scope module references the excluded names."
       },
       {
         "id": "store2-connect-cli-helpers",

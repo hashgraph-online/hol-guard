@@ -10,10 +10,7 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.guard.adapters import bounded_cli_hook_bridge as bridge
-from codex_plugin_scanner.guard.adapters import (
-    cline_runtime,
-    hermes_runtime_hooks,
-)
+from codex_plugin_scanner.guard.adapters import cline_runtime
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.adapters.bounded_cli_hook_native import (
     NATIVE_BOUNDED_HOOK_COMMAND,
@@ -141,7 +138,7 @@ def test_native_copilot_devin_and_hermes_commands_stay_managed(tmp_path: Path, m
     assert NATIVE_BOUNDED_HOOK_COMMAND in devin_command
     assert '"harness":"devin"' in devin_command
     # The Hermes install recognizes its own native command by the inline bridge bootstrap.
-    hermes_tokens = shlex.split(hermes_runtime_hooks.hermes_hook_command_string(_command(tmp_path, "hermes")))
+    hermes_tokens = shlex.split(shlex.join(_command(tmp_path, "hermes")))
     assert "bounded_cli_hook_bridge" in hermes_tokens[hermes_tokens.index("-c") + 1]
 
 

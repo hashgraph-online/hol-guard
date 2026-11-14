@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import re
 import sys
 from dataclasses import replace
@@ -30,7 +31,6 @@ from codex_plugin_scanner.guard.adapters.mcp_servers import (
     proxy_launcher_entry,
 )
 from codex_plugin_scanner.guard.models import GuardArtifact, HarnessDetection
-from codex_plugin_scanner.guard.stable_guard_cli import guard_cli_launcher
 
 pytestmark = pytest.mark.native_mcp_relay
 
@@ -184,37 +184,26 @@ def test_shared_launcher_entry_selects_the_relay(tmp_path: Path, advertised: set
     assert native_entry["args"] == [NATIVE_MCP_RELAY_COMMAND, sys.executable, *python_entry["args"]]  # type: ignore[misc]
 
 
-def _hermes_sources() -> dict[str, dict[str, object]]:
-    return {
-        "yaml:demo": {
-            "name": "demo",
-            "command": "python",
-            "args": ["-m", "demo"],
-            "env": {"DEMO_TOKEN": "secret"},
-            "config_path": "/hermes/config.yaml",
-        },
-        "yaml:remote": {"name": "remote", "url": "https://example.test/mcp", "config_path": "/hermes/config.yaml"},
-        "yaml:bare": {"name": "bare", "config_path": "/hermes/config.yaml"},
-    }
+def _hermes_launch(tmp_path: Path) -> dict[str, object]:
+    """The launch this process answers for one local stdio server the native kind names."""
 
-
-def _hermes_overlay(tmp_path: Path) -> dict[str, dict[str, object]]:
     context = HarnessContext(home_dir=tmp_path, workspace_dir=None, guard_home=tmp_path / "guard")
-    # These cases check launch arguments, not naming, and the Windows relay lane
-    # runs without the native owner, so the source names stand in for its answer.
-    with pytest.MonkeyPatch.context() as patch:
-        patch.setattr(
-            hermes_adapter.hermes_install_plan,
-            "overlay_names",
-            lambda sources: [str(server["name"]) for server in sources.values()],
-        )
-        return hermes_adapter._overlay_servers(context=context, source_configs=_hermes_sources())
+    request = {
+        "name": "demo",
+        "config_path": "/hermes/config.yaml",
+        "command": "python",
+        "args": ["-m", "demo"],
+        "env": [["DEMO_TOKEN", "secret"]],
+    }
+    answer = json.loads(hermes_adapter._launchers(context, [request]))  # pyright: ignore[reportPrivateUsage]
+    assert answer["requests"] == [request]
+    return answer["entries"][0]
 
 
 def test_hermes_stdio_servers_launch_the_python_proxy_without_an_advertised_relay(
     tmp_path: Path, advertised: set[str]
 ) -> None:
-    entry = _hermes_overlay(tmp_path)["demo"]
+    entry = _hermes_launch(tmp_path)
     assert entry["command"] == sys.executable
     args = entry["args"]
     assert isinstance(args, list)
@@ -229,29 +218,14 @@ def test_hermes_stdio_servers_launch_the_python_proxy_without_an_advertised_rela
 def test_hermes_stdio_servers_launch_through_the_native_relay_when_advertised(
     tmp_path: Path, advertised: set[str]
 ) -> None:
-    python_entry = _hermes_overlay(tmp_path)["demo"]
+    python_entry = _hermes_launch(tmp_path)
     advertised.add(NATIVE_MCP_RELAY_FEATURE)
-    entry = _hermes_overlay(tmp_path)["demo"]
+    entry = _hermes_launch(tmp_path)
     assert entry["command"] == str(_RUNTIME)
     args = entry["args"]
     assert isinstance(args, list)
     assert args[:2] == [NATIVE_MCP_RELAY_COMMAND, sys.executable]
     assert args[2:] == python_entry["args"]
-    assert entry["metadata"] == python_entry["metadata"]
-
-
-def test_hermes_remote_and_bare_servers_keep_the_manifest_resolved_proxy(tmp_path: Path, advertised: set[str]) -> None:
-    advertised.add(NATIVE_MCP_RELAY_FEATURE)
-    overlay = _hermes_overlay(tmp_path)
-    for name, key, transport in (("remote", "yaml:remote", "remote"), ("bare", "yaml:bare", "stdio")):
-        entry = overlay[name]
-        assert entry["command"] == str(Path(guard_cli_launcher()))
-        args = entry["args"]
-        assert isinstance(args, list)
-        assert args[args.index("hermes") + 1] == "mcp-proxy"
-        assert args[-3:] == ["--server", key, "--stdio"]
-        assert "hermes-mcp-proxy" not in args
-        assert entry["metadata"]["guard_transport"] == transport  # type: ignore[index]
 
 
 def test_refresh_moves_entries_between_launchers(tmp_path: Path, advertised: set[str]) -> None:

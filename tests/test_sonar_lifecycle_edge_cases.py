@@ -10,6 +10,7 @@ from collections.abc import Mapping
 from pathlib import Path
 
 import pytest
+import yaml
 
 from codex_plugin_scanner.guard.adapters.adapter_state_integrity import (
     adapter_state_is_authenticated,
@@ -17,7 +18,14 @@ from codex_plugin_scanner.guard.adapters.adapter_state_integrity import (
 )
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.adapters.copilot import CopilotHarnessAdapter
-from codex_plugin_scanner.guard.adapters.hermes_state_paths import hermes_cleanup_values
+from codex_plugin_scanner.guard.adapters.hermes import HermesHarnessAdapter
+
+
+def _servers_left_after_uninstall(context: HarnessContext, config_path: Path) -> list[str]:
+    """The servers a Hermes uninstall without a manifest leaves in ``config.yaml``."""
+
+    HermesHarnessAdapter().uninstall(context)
+    return list(yaml.safe_load(config_path.read_text(encoding="utf-8"))["mcp_servers"])
 
 
 def _write_json(path: Path, payload: Mapping[str, object]) -> None:
@@ -123,9 +131,7 @@ def test_hermes_legacy_cleanup_accepts_resolved_guard_home_marker(tmp_path: Path
         encoding="utf-8",
     )
 
-    managed, _previous_guard = hermes_cleanup_values(context, {}, config_path)
-
-    assert managed == ["guard-managed"]
+    assert _servers_left_after_uninstall(context, config_path) == []
 
 
 def test_hermes_legacy_cleanup_ignores_non_string_guard_home_marker(tmp_path: Path) -> None:
@@ -140,9 +146,7 @@ def test_hermes_legacy_cleanup_ignores_non_string_guard_home_marker(tmp_path: Pa
         encoding="utf-8",
     )
 
-    managed, _previous_guard = hermes_cleanup_values(context, {}, config_path)
-
-    assert managed == []
+    assert _servers_left_after_uninstall(context, config_path) == ["malformed"]
 
 
 def test_hermes_legacy_cleanup_recognizes_the_relay_style_proxy_launch(tmp_path: Path) -> None:
@@ -168,6 +172,4 @@ def test_hermes_legacy_cleanup_recognizes_the_relay_style_proxy_launch(tmp_path:
         encoding="utf-8",
     )
 
-    managed, _previous_guard = hermes_cleanup_values(context, {}, config_path)
-
-    assert managed == ["guard-python", "guard-native"]
+    assert _servers_left_after_uninstall(context, config_path) == ["foreign", "unrelated"]

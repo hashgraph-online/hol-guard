@@ -7,7 +7,7 @@ import sqlite3
 from collections.abc import Callable
 from pathlib import Path
 
-from ..adapters import copilot, hermes
+from ..adapters import copilot
 from ..adapters.base import HarnessContext
 from ..adapters.bounded_cli_hook_bridge import _render_bounded_hook_script, bounded_hook_script_path
 from ..store import GuardStore
@@ -40,7 +40,7 @@ _BOUNDED_HOOK_TIMEOUTS: tuple[tuple[str, str, float | Callable[[HarnessContext],
     ("kimi", "Kimi", _native_hook_timeout("kimi")),
     ("copilot", "Copilot", copilot._GUARD_HOOK_INTERNAL_TIMEOUT_SECONDS),
     ("openclaw", "OpenClaw", _native_hook_timeout("openclaw")),
-    ("hermes", "Hermes", hermes._GUARD_PRETOOL_INTERNAL_TIMEOUT_SECONDS),
+    ("hermes", "Hermes", _native_hook_timeout("hermes")),
     ("muse", "Muse", _native_hook_timeout("muse")),
 )
 

@@ -14,9 +14,6 @@ from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.adapters.copilot import (
     _hook_fields as copilot_hook_fields,  # pyright: ignore[reportPrivateUsage]
 )
-from codex_plugin_scanner.guard.adapters.hermes import (
-    _pretool_payload as hermes_pretool_payload,  # pyright: ignore[reportPrivateUsage]
-)
 from codex_plugin_scanner.guard.adapters.native_harness import NativeHarnessAdapter
 
 CommandFactory = Callable[[HarnessContext], tuple[str, ...]]
@@ -49,11 +46,22 @@ def _native_command(harness: str) -> CommandFactory:
     return command
 
 
-def openclaw_pretool_payload(*, context: HarnessContext) -> dict[str, object]:
-    prepared = get_adapter("openclaw").prepare_install(context)
+def _planned_pretool_payload(harness: str, context: HarnessContext) -> dict[str, object]:
+    adapter = get_adapter(harness)
+    assert isinstance(adapter, NativeHarnessAdapter)
+    # Hermes refuses a bare plan; its install publishes the native plan directly.
+    prepared = NativeHarnessAdapter.prepare_install(adapter, context)
     pretool = next(change for change in prepared.files if change.path.name == "pretool-hook.json")
     assert pretool.after is not None
     return cast(dict[str, object], json.loads(pretool.after))
+
+
+def openclaw_pretool_payload(*, context: HarnessContext) -> dict[str, object]:
+    return _planned_pretool_payload("openclaw", context)
+
+
+def hermes_pretool_payload(*, context: HarnessContext) -> dict[str, object]:
+    return _planned_pretool_payload("hermes", context)
 
 
 @pytest.mark.parametrize(

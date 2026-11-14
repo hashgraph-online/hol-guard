@@ -314,6 +314,11 @@ impl Object {
         self.entries = doc.0;
     }
 
+    /// Whether a lone surrogate escape was mapped on the way in.
+    pub(crate) fn mapped(&self) -> bool {
+        self.mapped
+    }
+
     /// `json.dumps(payload, indent=2)`.
     pub(crate) fn render(&self) -> Step<String> {
         let value = PyVal::Dict(self.entries.clone());
