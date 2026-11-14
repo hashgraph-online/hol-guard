@@ -1,5 +1,6 @@
 use super::*;
 use crate::context_assistance_engine::PickedExcerpt;
+use crate::context_assistance_prompt_files::walk;
 use serde_json::json;
 
 fn excerpt(path: &str, text: &str) -> PickedExcerpt {

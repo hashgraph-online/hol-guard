@@ -61,3 +61,23 @@ def test_the_plumbing_case_chain_runs_under_the_host_git(tmp_path: Path) -> None
         )
     checks = filesystem_checks(fixture, str(case["oracle"]), GIT_ALLOW_PLUMBING_CASE)
     assert checks["git-allow-plumbing-reads-ran"] is True
+
+
+def test_the_echo_case_worktree_add_leaves_the_protected_config_alone(tmp_path: Path) -> None:
+    """Real Git runs this chain's worktree add, and must not record branch tracking."""
+    (case,) = [case for case in scenarios() if case["id"] == GIT_ALLOW_ECHO_WORKTREE_CASE]
+    (command,) = case["commands"]
+    worktree_add = command.split(" && ", 1)[0]
+    assert worktree_add.startswith("git worktree add -b ")
+    fixture = create_fixture(tmp_path / "fx", scenario_id=GIT_ALLOW_ECHO_WORKTREE_CASE)
+    environment = {
+        "PATH": os.environ.get("PATH", ""),
+        "HOME": str(fixture.home),
+        "GIT_CONFIG_NOSYSTEM": "1",
+    }
+    subprocess.run(
+        shlex.split(worktree_add), cwd=fixture.workspace, env=environment, check=True, capture_output=True, timeout=30
+    )
+    checks = filesystem_checks(fixture, str(case["oracle"]), GIT_ALLOW_ECHO_WORKTREE_CASE)
+    assert checks["protected:.git/config"] is True
+    assert checks["git-allow-echo-worktree-at-origin"] is True

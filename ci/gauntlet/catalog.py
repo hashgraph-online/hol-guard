@@ -34,7 +34,10 @@ MAX_SCENARIOS = 384
 # runner and the installed lane never meet an oracle they cannot judge.
 CONNECTOR_CATALOG = Path(__file__).with_name("connector_setup.json")
 CONNECTOR_SETUP_ORACLES = frozenset({"connector-setup", "connector-setup-ask"})
-WATCH_COMMAND = "python -I -S -c 'print(\"ordinary-watch-fixture\")'"
+# Watch needs a harmless command that Guard would still stop when enforcing. A
+# program that only computes and prints is proven read-only, so this one touches
+# the filesystem with a stat; the benign gate pins that verdict.
+WATCH_COMMAND = 'python -I -S -c \'import os; print("ordinary-watch-fixture", os.path.isdir("."))\''
 WATCH_OUTPUT = "ordinary-watch-fixture"
 _WINDOWS_DRIVE_PATH = re.compile(r"[A-Za-z]:\\.+")
 WATCH_PROMPT = (

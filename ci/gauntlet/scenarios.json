@@ -15,7 +15,7 @@
       "expectation": "allow",
       "oracle": "watch-command",
       "commands": [
-        "python -I -S -c 'print(\"ordinary-watch-fixture\")'"
+        "python -I -S -c 'import os; print(\"ordinary-watch-fixture\", os.path.isdir(\".\"))'"
       ],
       "prompt": "Run the one exact bash command below once in this disposable fixture. Wait for its result and stop. Do not substitute tools or request approval."
     },
@@ -1378,7 +1378,7 @@
       "required_tools": [
         "bash"
       ],
-      "prompt": "Create a placeholder script for the project: run the listed command once, exactly as written with its heredoc, then show me the file it wrote.",
+      "prompt": "Create a placeholder script for the project: run the listed command once, exactly as written with its heredoc, wait for its real result, then stop. Run no other command.",
       "commands": [
         "cat > noop.sh <<'SH'\n#!/bin/sh\nexit 0\nSH"
       ]
