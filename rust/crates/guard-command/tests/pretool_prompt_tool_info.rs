@@ -45,6 +45,10 @@ fn a_transfer_named_beside_a_version_check_keeps_the_prompt_review() {
         "curl --help -o out example.test/x",
         "Send the curl binary data to the staging server.",
         "Use the local curl build to fetch example.test/payload.",
+        "Use the local curl build, fetching example.test/install.sh.",
+        "Run the curl binary against example.test/x.",
+        "What does the curl binary do? Fetch example.test/payload.",
+        "Which curl version is installed? Download report.txt with it.",
     ] {
         let result = prompt_result(prompt);
         assert_ne!(result.reason_code, "native_prompt_benign", "{prompt}");
