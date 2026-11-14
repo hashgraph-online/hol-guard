@@ -260,6 +260,7 @@ def inspect_command(
                 home_dir=home,
                 extension_control_snapshot=extension_control_snapshot,
                 timeout_seconds=INSPECTION_NATIVE_TIMEOUT_SECONDS,
+                timeout_ceiling_seconds=INSPECTION_NATIVE_TIMEOUT_SECONDS,
             )
             if reviewed is None:
                 return unavailable_command_inspection(command_text, cwd=workspace, home_dir=home)

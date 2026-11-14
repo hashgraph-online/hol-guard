@@ -78,6 +78,8 @@ def test_named_native_block_is_reported_as_the_block(monkeypatch: pytest.MonkeyP
     text = plain_text_command_inspection(result)
     assert "Minimum action: BLOCK" in text
     assert "NOT EVALUATED" not in text
+    assert "No sensitive action matched" not in text
+    assert "native decision native_remote_code_execution" in text
 
 
 @pytest.mark.parametrize(
@@ -110,5 +112,44 @@ def test_inspection_waits_longer_than_a_hook_for_the_native_answer(
 
     timeout = result["_review_kwargs"]["timeout_seconds"]
     assert timeout == command_inspection.INSPECTION_NATIVE_TIMEOUT_SECONDS
+    # The pre-tool layer caps a deadline at its ceiling, so inspection raises both.
+    assert result["_review_kwargs"]["timeout_ceiling_seconds"] == timeout
     # Longer than the 0.5 s hook default, shorter than the CLI's 5 s daemon request.
     assert 0.5 < timeout < 5.0
+
+
+@pytest.mark.parametrize(
+    ("kwargs", "expected_budget_ms"),
+    [
+        ({"timeout_seconds": 3.0}, 1_000),
+        ({"timeout_seconds": 3.0, "timeout_ceiling_seconds": 3.0}, 3_000),
+        ({"timeout_seconds": 0.5, "timeout_ceiling_seconds": 3.0}, 500),
+    ],
+)
+def test_pre_tool_deadline_keeps_the_hook_ceiling_unless_raised(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, kwargs: dict[str, float], expected_budget_ms: int
+) -> None:
+    import json
+
+    from codex_plugin_scanner.guard import native_pretool
+
+    status = SimpleNamespace(
+        available=True,
+        compatible=True,
+        identity=SimpleNamespace(path=tmp_path / "runtime", sha256="0" * 64),
+        capabilities=SimpleNamespace(features=frozenset({native_pretool._PRETOOL_AUTHORITY_FEATURE})),
+    )
+    budgets: list[int] = []
+
+    def request(**call: object) -> None:
+        budgets.append(json.loads(call["payload"])["deadline_budget_ms"])
+        return None
+
+    monkeypatch.setattr(native_pretool, "native_runtime_status", lambda: status)
+    monkeypatch.setattr(native_pretool, "native_resident_client_request", request)
+    result = native_pretool.review_pre_tool_native(
+        "git status", guard_home=tmp_path, cwd=tmp_path, home_dir=tmp_path, record_health=False, **kwargs
+    )
+
+    assert result is None
+    assert budgets == [expected_budget_ms]

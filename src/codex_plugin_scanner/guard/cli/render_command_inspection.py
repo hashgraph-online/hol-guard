@@ -52,7 +52,7 @@ def render_command_inspection(console: Console, payload: dict[str, object]) -> N
     summary = Table.grid(padding=(0, 1))
     summary.add_row("Result", Text(_command_inspection_result_label(payload), style=f"bold {border_style}"))
     action_class = classification.get("action_class")
-    summary.add_row("Action class", Text(str(action_class or _command_inspection_unmatched_label(status))))
+    summary.add_row("Action class", Text(str(action_class or _command_inspection_unmatched_label(payload))))
     if _shows_minimum_action(payload):
         summary.add_row(
             "Minimum action",
@@ -115,9 +115,16 @@ def _command_inspection_result_label(payload: PayloadDict) -> str:
     return f"NOT EVALUATED ({reason_code})"
 
 
-def _command_inspection_unmatched_label(status: str) -> str:
+def _command_inspection_unmatched_label(payload: PayloadDict) -> str:
+    status = str(payload.get("status") or "invalid")
     if status == "native_unavailable":
         return "Unknown: the native runtime did not answer, so nothing was classified"
+    native = _coerce_object_dict(payload.get("native_decision"))
+    reason_code = native.get("reason_code")
+    if isinstance(reason_code, str) and reason_code:
+        # The native runtime decided without an extension rule; name its
+        # decision rather than saying nothing matched.
+        return f"None; native decision {reason_code}"
     return "No sensitive action matched"
 
 
@@ -131,8 +138,7 @@ def plain_text_command_inspection(payload: PayloadDict) -> str:
     classification = _coerce_object_dict(payload.get("classification"))
     extensions = _coerce_dict_list(payload.get("extensions"))
     rules = _coerce_dict_list(payload.get("rules"))
-    status = str(payload.get("status") or "invalid")
-    action_class = classification.get("action_class") or _command_inspection_unmatched_label(status)
+    action_class = classification.get("action_class") or _command_inspection_unmatched_label(payload)
     lines = [
         f"HOL Guard command inspection: {_command_inspection_result_label(payload)}",
         f"Command: {payload.get('command') or ''}",
