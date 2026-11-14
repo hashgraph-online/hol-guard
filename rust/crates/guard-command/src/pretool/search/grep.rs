@@ -366,6 +366,8 @@ fn scan_into(
             scan.targets.push(argument.clone());
             let proven = recursive
                 || proven_glob(argument, context)
+                // Without `-r` grep opens each match once, as `cat` would.
+                || crate::pretool::safe_reads::glob_file_matches(argument, context).is_some()
                 || sibling::named_path(argument, context, absent.plain)
                 || (absent.plain && absent_target(argument, context));
             if !proven && unsafe_search_value(SearchValueRole::Path, argument, context) {
