@@ -126,7 +126,7 @@ fn first_path_match(executable: &str, search_path: &str) -> Option<String> {
             | "shift" | "shopt" | "source" | "suspend" | "test" | "then"
             | "time" | "times" | "trap" | "true" | "type" | "typeset"
             | "ulimit" | "umask" | "unalias" | "unset" | "until" | "wait"
-            | "while"
+            | "while" | "which" | "whence" | "where" | "print"
     ) {
         return None;
     }
