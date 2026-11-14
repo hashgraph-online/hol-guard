@@ -210,6 +210,7 @@ def review_pre_tool_native(
     timeout_seconds: float = 0.5,
     record_health: bool = True,
     extension_evidence: bool = False,
+    timeout_ceiling_seconds: float = 1.0,
 ) -> dict[str, Any] | None:
     """Return the Rust PreToolUse decision, or None when native cannot decide.
 
@@ -234,6 +235,10 @@ def review_pre_tool_native(
     ``command_extensions`` evidence with the decision. A caller that resolves
     the review against those controls needs it, and fails closed on a reply
     that carries none.
+
+    ``timeout_ceiling_seconds`` bounds ``timeout_seconds``. A hook keeps the
+    one-second default; a diagnostic caller that enforces nothing, such as
+    command inspection, may raise it to wait for a warming runtime.
     """
     status = native_runtime_status()
     if (
@@ -245,7 +250,7 @@ def review_pre_tool_native(
         or timeout_seconds <= 0
     ):
         return record_native_hook_result("native_fail_safe", None)
-    timeout_seconds = min(timeout_seconds, 1.0)
+    timeout_seconds = min(timeout_seconds, max(0.0, min(timeout_ceiling_seconds, 9.0)))
     deadline_started = time.monotonic()
     deadline_monotonic = deadline_started + timeout_seconds
     deadline_budget_ms = max(1, min(9_000, int(timeout_seconds * 1_000)))
