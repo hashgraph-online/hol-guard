@@ -1,8 +1,6 @@
 from __future__ import annotations
 
-import io
 import json
-from contextlib import redirect_stdout
 from pathlib import Path
 from typing import cast
 
@@ -13,6 +11,7 @@ from codex_plugin_scanner.guard.codex_hook_launch_runtime import isolated_hook_e
 
 from .bounded_cli_hook_test_support import config as _config
 from .bounded_cli_hook_test_support import json_object as _json_object
+from .bounded_cli_hook_test_support import run_hook as _run_hook
 from .desktop_proxy_test_support import launch_script, sign_every_path
 
 
@@ -289,6 +288,7 @@ def _frozen_config(tmp_path: Path, variant: str) -> dict[str, object]:
 @pytest.mark.parametrize("variant", ["grok", "noncanonical-home", "hermes", "openclaw", "forged-mode", "forged-args"])
 def test_a_frozen_config_without_a_daemon_answer_fails_closed(
     monkeypatch: pytest.MonkeyPatch,
+    capfd: pytest.CaptureFixture[str],
     tmp_path: Path,
     native_hook_force: Path,
     variant: str,
@@ -300,11 +300,7 @@ def test_a_frozen_config_without_a_daemon_answer_fails_closed(
     # The runtime never runs a config's argv, so a forged one changes nothing.
     monkeypatch.setattr(bounded_cli_hook_bridge.sys, "frozen", frozen, raising=False)
     monkeypatch.setattr(bounded_cli_hook_bridge.sys, "executable", str(tmp_path / "missing" / "hol-guard"))
-    output = io.StringIO()
-    with redirect_stdout(output):
-        returncode = bounded_cli_hook_bridge.run_bounded_cli_hook(
-            config, input_text=json.dumps({"hook_event_name": "PreToolUse"})
-        )
+    returncode = _run_hook(monkeypatch, config, json.dumps({"hook_event_name": "PreToolUse"}))
 
     expected = ("block", 2) if variant == "hermes" else ("deny", 0)
-    assert (_json_object(output.getvalue())["decision"], returncode) == expected
+    assert (_json_object(capfd.readouterr().out)["decision"], returncode) == expected

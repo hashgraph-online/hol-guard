@@ -29,42 +29,25 @@ fn config_with(hooks: &Value) -> String {
     json!({"features": {"hooks": true}, "hooks": hooks}).to_string()
 }
 
-#[test]
-fn argv_asks_for_the_launch_then_wraps_the_bridge() {
-    let home = Home::new();
-    let fields = json!({
+fn argv_fields(home: &Home, frozen: bool) -> Value {
+    json!({
         "home_is_current": false,
         "runtime_guard_home": home.guard(),
         "workspace_explicit": false,
-    });
-    let reply = ask(&home, "argv", fields.clone());
-    let launch = reply["reply"]["launch"].as_array().unwrap();
-    assert_eq!(
-        launch[..4],
-        [
-            json!("guard"),
-            json!("hook"),
-            json!("--harness"),
-            json!("codex")
-        ]
-    );
-    assert!(launch.contains(&json!("--home")));
+        "python": "/py",
+        "frozen": frozen,
+        "package_root": "/opt/guard/site",
+        "bridge": "/g/bridge.py",
+        "native_bridge": "/g/hol-guard-runtime",
+        "manifest_path": "/g/manifest.json",
+        "long_timeout": 85,
+    })
+}
 
-    let mut settled = fields;
-    for (key, value) in [
-        ("python", json!("/py")),
-        ("bridge", json!("/g/bridge.py")),
-        ("native_bridge", json!("/g/hol-guard-runtime")),
-        ("manifest_path", json!("/g/manifest.json")),
-        ("long_timeout", json!(85)),
-        (
-            "launch",
-            json!({"fallback": ["/py", "-I", "fb"], "start": ["/py", "start"]}),
-        ),
-    ] {
-        settled[key] = value;
-    }
-    let answer = ask(&home, "argv", settled);
+#[test]
+fn argv_wraps_the_bridge_and_derives_its_launch_commands() {
+    let home = Home::new();
+    let answer = ask(&home, "argv", argv_fields(&home, false));
     let argv = answer["argv"].as_array().unwrap();
     assert_eq!(
         argv[..5],
@@ -79,7 +62,58 @@ fn argv_asks_for_the_launch_then_wraps_the_bridge() {
     let config: Value = serde_json::from_str(argv[5].as_str().unwrap()).unwrap();
     assert_eq!(config["hook_timeouts"]["PreToolUse"], 85);
     assert_eq!(config["hook_timeouts"]["PermissionRequest"], 30);
-    assert_eq!(config["fallback_command"], json!(["/py", "-I", "fb"]));
+    let fallback = answer["fallback"].as_array().unwrap();
+    assert_eq!(config["fallback_command"], answer["fallback"]);
+    assert_eq!(fallback[..3], [json!("/py"), json!("-I"), json!("-c")]);
+    assert!(fallback[3]
+        .as_str()
+        .unwrap()
+        .contains("from codex_plugin_scanner.cli import main"));
+    assert_eq!(
+        fallback[4..8],
+        [
+            json!("guard"),
+            json!("hook"),
+            json!("--harness"),
+            json!("codex")
+        ]
+    );
+    assert!(fallback.contains(&json!("--home")));
+    let start = answer["start"].as_array().unwrap();
+    assert_eq!(config["start_command"], answer["start"]);
+    assert!(start[3]
+        .as_str()
+        .unwrap()
+        .contains("schedule_guard_daemon_recovery"));
+}
+
+#[test]
+fn a_frozen_guard_is_its_own_interpreter_for_every_launch() {
+    let home = Home::new();
+    let answer = ask(&home, "argv", argv_fields(&home, true));
+    let argv = answer["argv"].as_array().unwrap();
+    assert_eq!(
+        argv[2..4],
+        [json!("/py"), json!("--_hol-guard-codex-bridge")]
+    );
+    assert_eq!(argv.len(), 5);
+    let fallback = answer["fallback"].as_array().unwrap();
+    assert_eq!(
+        fallback[..4],
+        [
+            json!("/py"),
+            json!("hook"),
+            json!("--harness"),
+            json!("codex")
+        ]
+    );
+    let start = answer["start"].as_array().unwrap();
+    assert_eq!(
+        start[..2],
+        [json!("/py"), json!("--_hol-guard-codex-daemon-recover")]
+    );
+    let payload: Value = serde_json::from_str(start[2].as_str().unwrap()).unwrap();
+    assert!(payload["guard_home"].is_string() && payload["home_dir"].is_string());
 }
 
 #[test]

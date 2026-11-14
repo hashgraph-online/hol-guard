@@ -18,8 +18,7 @@ fn facts(bridge: Option<&str>, frozen: bool) -> String {
         "package_root": "/src",
         "daemon_url": "http://127.0.0.1:4781",
         "query_extras": [["harness", "claude-code"]],
-        "recovery_home": ["/g/bin/hol-guard", "daemon", "start"],
-        "recovery_context": ["/g/bin/hol-guard", "daemon", "start", "--home"],
+        "recovery_launcher": frozen.then_some("/g/bin/hol-guard-core"),
     })
     .to_string()
 }
@@ -52,13 +51,33 @@ fn settings(home: &Home) -> std::path::PathBuf {
 }
 
 fn installed(home: &Home, bridge: Option<&str>) -> Value {
+    installed_as(home, bridge, false)
+}
+
+fn installed_as(home: &Home, bridge: Option<&str>, frozen: bool) -> Value {
     let answer = run(
         home,
         "prepare_install",
         json!({"shim": shim()}),
-        &facts(bridge, false),
+        &facts(bridge, frozen),
     );
     serde_json::from_str(&after(&answer["files"][0])).unwrap()
+}
+
+fn pre_tool_config(payload: &Value) -> Value {
+    let args = &payload["hooks"]["PreToolUse"][0]["hooks"][0]["args"];
+    serde_json::from_str(args[2].as_str().unwrap()).unwrap()
+}
+
+#[test]
+fn a_frozen_bridge_recovers_its_daemon_through_the_frozen_launcher() {
+    let home = Home::new();
+    let payload = installed_as(&home, Some("/rt/hol-guard-runtime"), true);
+    let recovery = pre_tool_config(&payload)["recovery_command"].clone();
+    assert_eq!(recovery[0], "/g/bin/hol-guard-core");
+    assert_eq!(recovery[1], "--_hol-guard-codex-daemon-recover");
+    let binding: Value = serde_json::from_str(recovery[2].as_str().unwrap()).unwrap();
+    assert!(binding["guard_home"].is_string() && binding["home_dir"].is_string());
 }
 
 #[test]
@@ -98,7 +117,12 @@ fn install_writes_session_start_and_every_runtime_group() {
     )
     .unwrap();
     assert_eq!(config["fallback_daemon_url"], "http://127.0.0.1:4781");
-    assert_eq!(config["recovery_command"][1], "daemon");
+    let recovery = config["recovery_command"].as_array().unwrap();
+    assert_eq!(recovery[..3], ["/usr/bin/python3", "-I", "-c"]);
+    assert!(recovery[3]
+        .as_str()
+        .unwrap()
+        .contains("schedule_guard_daemon_recovery"));
     assert!(config["query"]
         .as_str()
         .unwrap()

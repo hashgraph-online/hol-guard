@@ -90,7 +90,6 @@ pub fn isolated_hook_environment(source: &BTreeMap<String, String>) -> BTreeMap<
 
 /// `isolated_guard_cli_command` (`codex_hook_launch_runtime.py:171-184`):
 /// the exact isolated fallback contract pinned to one package root.
-#[allow(dead_code)]
 pub fn isolated_guard_cli_command(
     python_executable: &str,
     package_root: &Path,

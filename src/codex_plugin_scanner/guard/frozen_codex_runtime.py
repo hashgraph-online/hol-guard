@@ -70,61 +70,7 @@ def install_frozen_codex_runtime(*, force: bool = False) -> bool:
     if bool(getattr(codex, "_HOL_GUARD_FROZEN_CODEX_RUNTIME", False)):
         return True
 
-    source_local_command = codex._local_hook_command_parts_for_home_mode
-    source_hook_command = codex._hook_command_parts_for_home_mode
     source_packaged_paths = codex._hook_packaged_file_paths
-
-    def frozen_local_command(
-        context,
-        *,
-        home_is_current: bool,
-        python_executable: str,
-    ) -> tuple[str, ...]:
-        source_argv = source_local_command(
-            context,
-            home_is_current=home_is_current,
-            python_executable=python_executable,
-        )
-        if len(source_argv) < 6 or source_argv[1:3] != ("-I", "-c") or source_argv[4] != "guard":
-            raise RuntimeError("Guard's source Codex fallback contract is not canonical")
-        return (python_executable, *source_argv[5:])
-
-    def frozen_daemon_start_command(
-        guard_home: Path,
-        home_dir: Path,
-        *,
-        python_executable: str = sys.executable,
-    ) -> tuple[str, ...]:
-        return frozen_daemon_recovery_command(guard_home, home_dir, executable=python_executable)
-
-    def frozen_hook_command(
-        context,
-        *,
-        home_is_current: bool,
-        python_executable: str,
-    ) -> tuple[str, ...]:
-        # Reuse the established config builder after replacing only its child
-        # launch contracts. This keeps query, timeout, home, manifest, and
-        # workspace semantics identical to source installs, and keeps the
-        # native launcher the source builder selected: its durable copy under
-        # the Guard home answers each hook from the daemon and fails closed
-        # without one. It only reads the config this executable's argv carries.
-        source_command = list(
-            source_hook_command(
-                context,
-                home_is_current=home_is_current,
-                python_executable=python_executable,
-            )
-        )
-        source_argv = python_bridge_argv(source_command)
-        if len(source_argv) != 4 or not isinstance(source_argv[3], str):
-            raise RuntimeError("Guard's source Codex bridge contract is not canonical")
-        config_json = source_argv[3]
-        payload = _decode_private_payload(decode_bridge_config_argument(config_json), label="Codex bridge")
-        if not payload:
-            raise RuntimeError("Guard's Codex bridge config is empty")
-        native_prefix = tuple(str(part) for part in source_command[: len(source_command) - len(source_argv)])
-        return (*native_prefix, python_executable, _FROZEN_BRIDGE_ARG, config_json)
 
     def frozen_packaged_paths() -> tuple[tuple[str, Path], ...]:
         executable = Path(sys.executable).expanduser().resolve(strict=True)
@@ -139,10 +85,9 @@ def install_frozen_codex_runtime(*, force: bool = False) -> bool:
         # Retention of this generation belongs to the artifact lifecycle.
         return str(Path(sys.executable).expanduser().resolve(strict=True))
 
+    # With the flag set below, the native runtime derives the frozen fallback,
+    # daemon recovery and bridge commands from this interpreter.
     codex._guard_python_executable = frozen_interpreter
-    codex._local_hook_command_parts_for_home_mode = frozen_local_command
-    codex._daemon_start_command = frozen_daemon_start_command
-    codex._hook_command_parts_for_home_mode = frozen_hook_command
     codex._hook_packaged_file_paths = frozen_packaged_paths
     runtime_trust.validate_codex_hook_launch = _validate_frozen_codex_hook_launch
     codex.__dict__["_HOL_GUARD_FROZEN_CODEX_RUNTIME"] = True

@@ -39,7 +39,6 @@ from ..codex_hook_integrity import (
     hook_secret_path,
     remove_hook_secret_if_unused,
 )
-from ..codex_hook_launch_runtime import isolated_daemon_start_command, isolated_guard_cli_command
 from ..codex_hook_manifest import (
     CodexHookManifestSpec,
     build_authenticated_hook_manifest,
@@ -171,18 +170,6 @@ def _argv_fields(context: HarnessContext, *, home_is_current: bool) -> dict[str,
     }
 
 
-def _local_hook_command_parts_for_home_mode(
-    context: HarnessContext,
-    *,
-    home_is_current: bool,
-    python_executable: str,
-) -> tuple[str, ...]:
-    answer = _codex("argv", context, **_argv_fields(context, home_is_current=home_is_current))
-    guard_args = [str(part) for part in answer["reply"]["launch"]]
-    package_root = Path(__file__).resolve().parents[3]
-    return isolated_guard_cli_command(python_executable, package_root, guard_args)
-
-
 def _guard_python_executable() -> str:
     """Use a prune-safe frozen launcher, else the current interpreter identity."""
 
@@ -200,29 +187,6 @@ def _runtime_guard_home(context: HarnessContext) -> Path:
     return guard_home.resolve(strict=False)
 
 
-def _local_hook_command_parts(context: HarnessContext) -> tuple[str, ...]:
-    return _local_hook_command_parts_for_home_mode(
-        context,
-        home_is_current=_home_is_current(context),
-        python_executable=_guard_python_executable(),
-    )
-
-
-def _daemon_start_command(
-    guard_home: Path,
-    home_dir: Path,
-    *,
-    python_executable: str = sys.executable,
-) -> tuple[str, ...]:
-    package_root = Path(__file__).resolve().parents[3]
-    return isolated_daemon_start_command(
-        python_executable,
-        package_root,
-        guard_home.resolve(strict=False),
-        home_dir.resolve(strict=False),
-    )
-
-
 def _native_bridge_executable(guard_home: Path) -> Path | None:
     # HOL_GUARD_CODEX_HOOK_BRIDGE=python keeps the Python bridge argv. Contract
     # tests set it so a subprocess install and the parent verifier agree. The
@@ -232,34 +196,45 @@ def _native_bridge_executable(guard_home: Path) -> Path | None:
     return native_hook_bridge_executable(NATIVE_CODEX_HOOK_FEATURE, guard_home=guard_home)
 
 
+def _frozen_contract() -> bool:
+    return globals().get("_HOL_GUARD_FROZEN_CODEX_RUNTIME") is True
+
+
+def _launch(context: HarnessContext, *, home_is_current: bool, python_executable: str) -> dict[str, Any]:
+    """The bridge argv with the fallback and daemon start commands it launches through."""
+
+    fields = _argv_fields(context, home_is_current=home_is_current)
+    guard_home = Path(str(fields["runtime_guard_home"]))
+    # The native runtime answers each hook from the daemon without starting
+    # Python and fails closed without one. It only reads the config the
+    # Python bridge argv carries.
+    native_bridge = _native_bridge_executable(guard_home)
+    return _codex(
+        "argv",
+        context,
+        **fields,
+        python=python_executable,
+        frozen=_frozen_contract(),
+        package_root=str(Path(__file__).resolve().parents[3]),
+        bridge=str(Path(__file__).with_name("codex_daemon_hook_bridge.py").resolve()),
+        native_bridge=None if native_bridge is None else str(native_bridge),
+        manifest_path=str(hook_manifest_path(guard_home, CodexHarnessAdapter._hook_config_path(context))),
+        long_timeout=_post_tool_hook_timeout_seconds(context),
+    )
+
+
 def _hook_command_parts_for_home_mode(
     context: HarnessContext,
     *,
     home_is_current: bool,
     python_executable: str,
 ) -> tuple[str, ...]:
-    fields = _argv_fields(context, home_is_current=home_is_current)
-    guard_home = Path(str(fields["runtime_guard_home"]))
-    fallback = _local_hook_command_parts_for_home_mode(
-        context, home_is_current=home_is_current, python_executable=python_executable
-    )
-    start = _daemon_start_command(guard_home, context.home_dir, python_executable=python_executable)
-    # The native runtime answers each hook from the daemon without starting
-    # Python and fails closed without one. It only reads the config the
-    # Python bridge argv carries.
-    native_bridge = _native_bridge_executable(guard_home)
-    answer = _codex(
-        "argv",
-        context,
-        **fields,
-        python=python_executable,
-        bridge=str(Path(__file__).with_name("codex_daemon_hook_bridge.py").resolve()),
-        native_bridge=None if native_bridge is None else str(native_bridge),
-        manifest_path=str(hook_manifest_path(guard_home, CodexHarnessAdapter._hook_config_path(context))),
-        long_timeout=_post_tool_hook_timeout_seconds(context),
-        launch={"fallback": list(fallback), "start": list(start)},
-    )
+    answer = _launch(context, home_is_current=home_is_current, python_executable=python_executable)
     return tuple(str(part) for part in answer["argv"])
+
+
+def _current_launch(context: HarnessContext) -> dict[str, Any]:
+    return _launch(context, home_is_current=_home_is_current(context), python_executable=_guard_python_executable())
 
 
 def _hook_command_parts(context: HarnessContext) -> tuple[str, ...]:
@@ -339,6 +314,7 @@ def _hook_packaged_file_paths() -> tuple[tuple[str, Path], ...]:
 
 
 def _hook_manifest_spec(context: HarnessContext) -> CodexHookManifestSpec:
+    launch = _current_launch(context)
     return CodexHookManifestSpec(
         guard_home=context.guard_home,
         home_dir=context.home_dir,
@@ -348,12 +324,8 @@ def _hook_manifest_spec(context: HarnessContext) -> CodexHookManifestSpec:
         interpreter_path=Path(_guard_python_executable()),
         package_version=__version__,
         packaged_file_paths=_hook_packaged_file_paths(),
-        fallback_argv=_local_hook_command_parts(context),
-        daemon_start_argv=_daemon_start_command(
-            _runtime_guard_home(context),
-            context.home_dir,
-            python_executable=_guard_python_executable(),
-        ),
+        fallback_argv=tuple(str(part) for part in launch["fallback"]),
+        daemon_start_argv=tuple(str(part) for part in launch["start"]),
         event_bindings=tuple(_manifest_event_bindings(context)),
         workspace_rebinding_allowed=not context.workspace_override_explicit,
     )

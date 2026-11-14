@@ -5,9 +5,8 @@
 //! Python keeps the TOML reads and renders, the authenticated hook manifest,
 //! the ownership strips over existing hooks and every publication. A payload
 //! read from TOML crosses as order-preserving JSON whose exotic scalars are
-//! tokens (`codex_merge`). Two replies come back: `launch` asks for the
-//! isolated fallback and daemon start commands of a guard argv, and
-//! `relaunch` (in `codex_merge`) for the proxy launch of each Guard server.
+//! tokens (`codex_merge`). One reply comes back: `relaunch` (in
+//! `codex_merge`) asks for the proxy launch of each Guard server.
 
 use std::path::{Path, PathBuf};
 
@@ -19,8 +18,10 @@ use super::{
     codex_files, codex_merge, codex_servers, common, path_answer, path_text, Ctx, Failure, Spec,
     Step,
 };
+use crate::claude_hook_bridge_recovery::frozen_recovery_command;
 use crate::harness_diagnostics::setup_failures_besides_missing_command;
 use crate::hook_env_stamp::dumps;
+use crate::hook_process_spawn::{isolated_daemon_start_command, isolated_guard_cli_command};
 use crate::pyjson::{self, PyVal};
 use crate::runner_sync_url::urlencode;
 
@@ -30,6 +31,8 @@ const POST_TOOL_MATCHER: &str = "Bash|Read|mcp__.*";
 pub(super) const ENFORCEMENT_BOUNDARY: &str = "codex-native-hooks";
 const HOOK_UNAVAILABLE: &str = "codex_authoritative_hook_unavailable";
 const NATIVE_HOOK_COMMAND: &str = "codex-hook-bridge";
+/// `FROZEN_CODEX_BRIDGE_ARG` (`frozen_runtime_commands.py`).
+const FROZEN_BRIDGE_ARG: &str = "--_hol-guard-codex-bridge";
 
 /// `(event, matcher, status message, long timeout)` in registration order.
 const EVENTS: [(&str, Option<&str>, &str, bool); 4] = [
@@ -175,10 +178,12 @@ fn int(value: i64) -> PyVal {
     PyVal::Int(value.to_string())
 }
 
-/// `_hook_command_parts_for_home_mode`: the bridge argv every handler runs.
+/// `_hook_command_parts_for_home_mode`: the bridge argv every handler runs,
+/// with the isolated fallback and daemon start commands it launches through.
 ///
-/// The first ask replies `launch` with the guard argv; Python answers the
-/// isolated fallback and daemon start commands it launches through.
+/// A frozen Guard (`frozen`) is its own interpreter: the fallback drops the
+/// `-c` bootstrap, the start command is its private recovery argument and the
+/// bridge runs behind its private bridge argument.
 fn argv(ctx: &Ctx, fields: &Map<String, Value>) -> Step<Value> {
     let home_is_current = flag(fields, "home_is_current")?;
     let runtime_home = PathBuf::from(text(fields, "runtime_guard_home")?);
@@ -199,11 +204,21 @@ fn argv(ctx: &Ctx, fields: &Map<String, Value>) -> Step<Value> {
     if let Some(workspace) = workspace {
         guard_args.extend(["--workspace".to_owned(), path_text(workspace)]);
     }
-    let Some(launch) = fields.get("launch").and_then(Value::as_object) else {
-        return Err(Failure::Reply(json!({ "launch": guard_args })));
+    let python = text(fields, "python")?;
+    let frozen = flag(fields, "frozen")?;
+    let (fallback, start) = if frozen {
+        let mut fallback = vec![python.to_owned()];
+        fallback.extend(guard_args[1..].iter().cloned());
+        let start =
+            frozen_recovery_command(python, &runtime_home, &home).ok_or(Failure::Invalid)?;
+        (fallback, start)
+    } else {
+        let root = Path::new(text(fields, "package_root")?);
+        (
+            isolated_guard_cli_command(python, root, &guard_args),
+            isolated_daemon_start_command(python, root, &runtime_home, Some(&home)),
+        )
     };
-    let fallback = strings(launch.get("fallback"))?;
-    let start = strings(launch.get("start"))?;
     let mut query = vec![
         ("guard-home".to_owned(), path_text(&runtime_home)),
         ("home".to_owned(), path_text(&home)),
@@ -239,13 +254,16 @@ fn argv(ctx: &Ctx, fields: &Map<String, Value>) -> Step<Value> {
     } else {
         config
     };
-    let python = text(fields, "python")?;
-    let mut argv = vec![
-        python.to_owned(),
-        "-I".to_owned(),
-        text(fields, "bridge")?.to_owned(),
-        argument,
-    ];
+    let mut argv = if frozen {
+        vec![python.to_owned(), FROZEN_BRIDGE_ARG.to_owned(), argument]
+    } else {
+        vec![
+            python.to_owned(),
+            "-I".to_owned(),
+            text(fields, "bridge")?.to_owned(),
+            argument,
+        ]
+    };
     if let Some(native) = fields.get("native_bridge").and_then(Value::as_str) {
         argv.splice(0..0, [native.to_owned(), NATIVE_HOOK_COMMAND.to_owned()]);
     }

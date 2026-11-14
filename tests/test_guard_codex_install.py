@@ -190,7 +190,7 @@ def test_guard_codex_hook_command_uses_lightweight_authenticated_daemon_bridge(t
 def test_guard_codex_native_hook_state_requires_authenticated_manifest(tmp_path: Path) -> None:
     home_dir = tmp_path / "home"
     context = HarnessContext(home_dir=home_dir, workspace_dir=None, guard_home=home_dir / ".hol-guard")
-    direct_argv = list(codex_adapter._local_hook_command_parts(context))
+    direct_argv = list(codex_adapter._current_launch(context)["fallback"])
     bridge_config = json.dumps({"fallback_command": direct_argv}, separators=(",", ":"))
     forged_commands = [
         codex_adapter._hook_command(context),
