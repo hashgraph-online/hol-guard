@@ -112,30 +112,67 @@ pub(super) fn unused(
     // without a trailing slash and can make status inspect another repository,
     // whose filter configuration this proof does not cover.
     let mut covered = Vec::with_capacity(paths.len());
+    let mut candidates = Vec::new();
     for path in paths
         .split(|byte| *byte == 0)
         .filter(|path| !path.is_empty())
     {
-        if Instant::now() >= deadline {
-            return None;
-        }
         if path.ends_with(b"/") {
             continue;
         }
-        let candidate = root.join(std::str::from_utf8(path).ok()?);
-        if candidate.is_dir() && candidate.join(".git").exists() {
-            return Some(false);
-        }
+        candidates.push(root.join(std::str::from_utf8(path).ok()?));
         covered.extend_from_slice(path);
         covered.push(0);
     }
-    let paths = covered;
-    if paths.is_empty() {
+    if covered.is_empty() {
         return Some(true);
     }
-    // Attribute output repeats each path plus two fields. Batch by the
-    // expected response size while retaining the per-query output cap.
-    const BATCH_BYTES: usize = 512 * 1024;
+    // The attribute query and the populated-gitlink check read the same
+    // listing and answer on their own, so the file checks run while Git
+    // reports attributes. Together they used to take more than a hook's
+    // whole budget in a checkout of a few tens of thousands of files.
+    std::thread::scope(|scope| {
+        let attributes = scope
+            .spawn(|| filters_unset_in(&query, &covered, &root, deadline, ATTRIBUTE_BATCH_BYTES));
+        let nested = populated_gitlink(&candidates, deadline);
+        let attributes = attributes.join().ok()?;
+        match nested? {
+            true => Some(false),
+            false => attributes,
+        }
+    })
+}
+
+/// Whether any listed path is a directory holding its own `.git`, which a
+/// tracked gitlink checked out in place looks like. `None` past the deadline.
+fn populated_gitlink(candidates: &[std::path::PathBuf], deadline: Instant) -> Option<bool> {
+    for candidate in candidates {
+        if Instant::now() >= deadline {
+            return None;
+        }
+        if candidate.is_dir() && candidate.join(".git").exists() {
+            return Some(true);
+        }
+    }
+    Some(false)
+}
+
+// Attribute output repeats each path plus two fields, about twenty bytes more
+// than the path. One query covers a checkout of a few hundred thousand files;
+// half the output cap leaves room for longer values.
+const ATTRIBUTE_BATCH_BYTES: usize = (super::super::git_probe::LISTING_LIMIT / 2) as usize;
+
+/// A git invocation with optional standard input and working directory.
+type GitQuery<'a> = dyn Fn(&[&str], Option<Vec<u8>>, Option<&Path>) -> Option<Vec<u8>> + Sync + 'a;
+
+/// Whether no path in the NUL-separated `paths` has a filter attribute.
+fn filters_unset_in(
+    query: &GitQuery<'_>,
+    paths: &[u8],
+    root: &Path,
+    deadline: Instant,
+    batch_bytes: usize,
+) -> Option<bool> {
     let mut offset = 0;
     let mut batches = 0;
     while offset < paths.len() {
@@ -149,10 +186,10 @@ pub(super) fn unused(
                 break;
             }
             let cost = path.len().checked_add(20)?;
-            if cost > BATCH_BYTES {
+            if cost > batch_bytes {
                 return None;
             }
-            if expected_bytes + cost > BATCH_BYTES {
+            if expected_bytes + cost > batch_bytes {
                 break;
             }
             expected_bytes += cost;
@@ -165,7 +202,7 @@ pub(super) fn unused(
         let attributes = query(
             &["check-attr", "-z", "--stdin", "filter"],
             Some(batch.to_vec()),
-            Some(&root),
+            Some(root),
         )?;
         if !filters_unset(&attributes, batch)? {
             return Some(false);
@@ -257,3 +294,7 @@ fn bounded_output(
     }
     status?.success().then_some(output)
 }
+
+#[cfg(test)]
+#[path = "git_config_filters_tests.rs"]
+mod tests;
