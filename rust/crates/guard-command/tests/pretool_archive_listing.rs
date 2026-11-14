@@ -27,6 +27,8 @@ fn home() -> PathBuf {
     write(project.join("README.md"), "# Fixture\n");
     write(project.join("dist/app.zip"), "PK\u{5}\u{6}");
     write(project.join("dist/tool.whl"), "PK\u{5}\u{6}");
+    write(home.join(".ssh/id_rsa"), "synthetic key\n");
+    std::os::unix::fs::symlink(home.join(".ssh/id_rsa"), project.join("report.zip")).unwrap();
     std::fs::canonicalize(home).unwrap()
 }
 
@@ -65,6 +67,8 @@ fn listing_an_archive_or_reading_attributes_proceeds() {
         "unzip -v dist/tool.whl",
         "unzip -z dist/app.zip",
         "unzip -l dist/app.zip README.md",
+        "unzip -l missing",
+        "unzip -l dist/*.whl",
         "unzip -l dist/app.zip | head -20",
         "unzip -l dist/app.zip | grep -i readme",
         "unzip -Z -1 dist/app.zip",
@@ -96,6 +100,13 @@ fn extracting_or_changing_attributes_keeps_its_review() {
         "unzip -p dist/app.zip README.md",
         // A wildcard member could expand to a file named like an option.
         "unzip -l dist/app.zip *",
+        "zipinfo dist/app.zip {README.md,-M}",
+        // A wildcard archive name outside a directory could expand to `-M.zip`.
+        "zipinfo *.zip",
+        "unzip -l {dist/app.zip,-M}",
+        // `unzip` retries a missing name with `.zip` appended, and here that
+        // name links to a private key.
+        "unzip -l report",
         // No archive at all.
         "unzip -l",
         "zipinfo -M dist/app.zip",
@@ -108,6 +119,9 @@ fn extracting_or_changing_attributes_keeps_its_review() {
         "xattr -r -d com.apple.quarantine dist",
         "xattr -lr dist",
         "xattr -p com.apple.quarantine",
+        "xattr -p * README.md",
+        "xattr {README.md,-w,flag,1}",
+        "xattr *",
         "tar -tzf dist/app.zip",
     ] {
         assert!(

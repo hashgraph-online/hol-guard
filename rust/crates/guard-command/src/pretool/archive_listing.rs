@@ -24,6 +24,9 @@ use super::safe_reads;
 
 const MAX_OPERANDS: usize = 16;
 
+/// The characters with which the shell turns one word into several.
+const EXPANDING: [char; 5] = ['*', '?', '[', '{', '}'];
+
 /// The `unzip` options a listing may carry. `-l`, `-v` and `-z` choose a mode
 /// that only prints; `-q` quiets it.
 const UNZIP_LISTING_FLAGS: &[u8] = b"lvzq";
@@ -87,18 +90,26 @@ pub(super) fn safe_xattr_arguments(arguments: &[String], context: super::PathCon
             }
         }
     }
-    // `-p` takes the attribute name as the first word that is not an option.
+    // Every word, the attribute name included, stays one literal word: a
+    // wildcard or brace could expand into further files or into `-w`.
+    operands.iter().all(|operand| !operand.contains(EXPANDING))
+        && printing_name_removed(&mut operands, printing)
+        && !operands.is_empty()
+        && operands.len() <= MAX_OPERANDS
+        && operands.iter().all(|operand| {
+            *operand != "-" && safe_reads::command_read_target(operand, context, true)
+        })
+}
+
+/// `-p` takes the attribute name as the first word that is not an option.
+fn printing_name_removed(operands: &mut Vec<&str>, printing: bool) -> bool {
     if printing {
         if operands.is_empty() {
             return false;
         }
         operands.remove(0);
     }
-    !operands.is_empty()
-        && operands.len() <= MAX_OPERANDS
-        && operands.iter().all(|operand| {
-            *operand != "-" && safe_reads::command_read_target(operand, context, true)
-        })
+    true
 }
 
 /// The leading option words, each a cluster of `flags`, and the words after
@@ -125,15 +136,39 @@ fn split_options<'a>(
 
 /// One archive the read proof admits, then at most a few member names. A
 /// member name is a pattern `unzip` matches inside the archive and opens
-/// nothing on disk; shell wildcards in one are refused so that the shell
-/// cannot turn a file name in the working directory into an option.
+/// nothing on disk; shell wildcards and braces in one are refused so that
+/// the shell cannot turn a file name in the working directory, or a brace
+/// alternative, into an option.
+///
+/// When the archive name opens nothing, Info-ZIP retries it with `.zip` and
+/// then `.ZIP` appended, so each of those names has to pass the read proof
+/// too. A wildcard in the archive name is kept only below a directory
+/// (`dist/*.whl`), where every name it expands to starts with that
+/// directory and none can read as an option.
 fn archive_operands(operands: &[String], context: super::PathContext<'_>) -> bool {
     let Some((archive, members)) = operands.split_first() else {
         return false;
     };
+    let wildcard_below_directory = archive
+        .find(['*', '?', '['])
+        .is_none_or(|at| archive[..at].contains('/'));
     members.len() < MAX_OPERANDS
         && members
             .iter()
-            .all(|member| !member.is_empty() && !member.contains(['*', '?', '[']))
-        && safe_reads::command_read_target(archive, context, false)
+            .all(|member| !member.is_empty() && !member.contains(EXPANDING))
+        && !archive.contains(['{', '}'])
+        && wildcard_below_directory
+        && suffixes(archive).iter().all(|suffix| {
+            safe_reads::command_read_target(&format!("{archive}{suffix}"), context, false)
+        })
+}
+
+/// The names Info-ZIP may open for `archive`. A wildcard the shell expands
+/// only names files that exist, so the retry never happens for it.
+fn suffixes(archive: &str) -> &'static [&'static str] {
+    if archive.contains(['*', '?', '[']) {
+        &[""]
+    } else {
+        &["", ".zip", ".ZIP"]
+    }
 }
