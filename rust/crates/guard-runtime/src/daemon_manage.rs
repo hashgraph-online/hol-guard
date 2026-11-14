@@ -28,6 +28,9 @@ mod ensure;
 mod host;
 #[path = "daemon_manage_live_probe.rs"]
 mod live_probe;
+#[cfg(all(test, unix))]
+#[path = "daemon_manage_orphan_tests.rs"]
+mod orphan_tests;
 #[path = "daemon_manage_peer.rs"]
 mod peer;
 #[path = "daemon_manage_records.rs"]

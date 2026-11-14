@@ -131,10 +131,12 @@ pub(super) fn ensure(
     let home = context.home().to_path_buf();
     let initial_pending = records::load_pending(&home);
     let initial_progress = load_progress(&home);
-    // Recorded start progress is settled under the start lock, where an
-    // expired launch is retired instead of blocking every later start.
+    // Recorded start progress and an abandoned launch receipt are settled
+    // under the start lock, where an expired launch, or a daemon holding the
+    // receipt open, is retired instead of blocking every later start.
     if initial_progress.is_none()
         && records::is_generation_bound(initial_pending.as_ref())
+        && !retire::pending_is_abandoned(initial_pending.as_ref())
         && !records::pending_is_resolved(&home)
         && !retire::resolve_abandoned(caller, initial_pending.as_ref())
     {
@@ -272,6 +274,17 @@ fn locked(context: &Context<'_>) -> Result<String, Failure> {
     let pending_path = records::pending_path(&home);
     let pending = records::load_pending(&home);
     if pending_path.is_file() || pending.is_some() {
+        if !progress_live
+            && retire::pending_is_abandoned(pending.as_ref())
+            && !records::pending_is_resolved(&home)
+            && !retire::resolve_abandoned(caller, pending.as_ref())
+        {
+            // The launch died without handing off, but a daemon of this home
+            // it never started (one whose state was lost) keeps its receipt
+            // open. Retire that daemon so the receipt resolves; otherwise
+            // every later start, rollbacks included, refuses here.
+            retire::retire_all(caller, None, deadline);
+        }
         if records::is_generation_bound(pending.as_ref())
             && !records::pending_is_resolved(&home)
             && !retire::resolve_abandoned(caller, pending.as_ref())
@@ -289,6 +302,7 @@ fn locked(context: &Context<'_>) -> Result<String, Failure> {
     if request.background_maintenance {
         retire::reap_orphaned_workers(caller, deadline);
     }
+    retire_unadopted(context);
     for port in candidate_ports(context) {
         if deadline.passed() {
             break;
@@ -301,6 +315,17 @@ fn locked(context: &Context<'_>) -> Result<String, Failure> {
         "Guard approval center did not start. Expected state file at {}.",
         state_path.display()
     )))
+}
+
+/// A daemon of this home still running here was neither live under its
+/// state nor adoptable: its state was lost, or it runs another runtime. It
+/// still holds its port, so a launch on that port would exit without handing
+/// off. Retire it first; a launch then reports anything that remains.
+fn retire_unadopted(context: &Context<'_>) {
+    let caller = context.caller;
+    if host::daemon_inventory(caller).is_some_and(|inventory| !inventory.is_empty()) {
+        retire::retire_all(caller, None, context.deadline);
+    }
 }
 
 fn clear_state(home: &Path) -> Result<(), Failure> {
