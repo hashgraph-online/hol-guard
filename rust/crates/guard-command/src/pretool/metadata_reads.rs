@@ -44,7 +44,8 @@ pub(super) fn safe_du_arguments(arguments: &[String], context: super::PathContex
     let mut depth: Option<u32> = None;
     let mut limit = |value: &str| match value.parse::<u32>() {
         Ok(level) => {
-            depth = Some(depth.map_or(level, |current| current.min(level)));
+            // `du` applies the last -d/--max-depth option, not the minimum.
+            depth = Some(level);
             true
         }
         Err(_) => false,
