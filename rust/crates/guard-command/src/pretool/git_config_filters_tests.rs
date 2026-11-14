@@ -140,3 +140,46 @@ fn a_checked_out_gitlink_keeps_status_unproven_when_no_path_has_a_filter() {
     assert_eq!(inspect(), Some(false));
     std::fs::remove_dir_all(&root).unwrap();
 }
+
+#[test]
+fn only_a_cached_index_comparison_leaves_the_working_tree_alone() {
+    let words = |values: &[&str]| {
+        values
+            .iter()
+            .map(|value| value.to_string())
+            .collect::<Vec<_>>()
+    };
+    for operation in ["diff", "diff-index"] {
+        assert!(!super::reads_working_tree(operation, &words(&["--cached"])));
+        assert!(!super::reads_working_tree(
+            operation,
+            &words(&["--staged", "--stat"])
+        ));
+        assert!(super::reads_working_tree(operation, &words(&["--stat"])));
+        assert!(!super::reads_working_tree(
+            operation,
+            &words(&["--stat", "-p", "--cached"])
+        ));
+        assert!(!super::reads_working_tree(
+            operation,
+            &words(&["-S", "needle", "--cached"])
+        ));
+        // An option that takes the next word turns `--cached` into its value.
+        for consumer in ["-S", "-G", "-O", "-pS", "--output", "--diff-filter", "-U"] {
+            assert!(
+                super::reads_working_tree(operation, &words(&[consumer, "--cached"])),
+                "{consumer} --cached"
+            );
+        }
+        // After `--` the word is a path, not the option.
+        assert!(super::reads_working_tree(
+            operation,
+            &words(&["--", "--cached"])
+        ));
+    }
+    // `--no-index` compares two files on disk whatever else is spelled.
+    assert!(super::reads_working_tree(
+        "diff",
+        &words(&["--no-index", "--cached"])
+    ));
+}

@@ -299,6 +299,96 @@ fn bounded_output(
     status?.success().then_some(output)
 }
 
+/// Whether an index comparison also reads the files on disk.
+///
+/// `git diff-index HEAD` compares the index against the working tree, so Git
+/// runs a configured clean filter over every file it has to re-examine.
+/// `--cached` (or `--staged`) compares the index against the named tree alone
+/// and never opens a working-tree file, so that spelling consumes no filter.
+/// `git diff` takes the same spellings, and its `--no-index` form compares
+/// two paths on disk. `diff-files` always compares the index against the
+/// working tree and has no such spelling, so it is screened without asking
+/// here. `diff-tree` compares two trees and reaches neither the index nor the
+/// working tree.
+///
+/// An option such as `-S` or `--output` takes the next word as its value, so
+/// in `git diff -S --cached` the `--cached` is the search text and the diff
+/// still reads the working tree. The spelling counts only where the word
+/// before it cannot be such an option: nothing, a word that is not an option,
+/// or one of the options below that never take a separate value.
+pub(super) fn reads_working_tree(operation: &str, rest: &[String]) -> bool {
+    let options: Vec<&str> = rest
+        .iter()
+        .map(String::as_str)
+        .take_while(|argument| *argument != "--")
+        .collect();
+    let index_only = options.iter().enumerate().any(|(position, argument)| {
+        matches!(*argument, "--cached" | "--staged")
+            && position
+                .checked_sub(1)
+                .is_none_or(|previous| takes_no_separate_value(options[previous]))
+    });
+    (operation == "diff" && options.contains(&"--no-index")) || !index_only
+}
+
+/// Whether a `diff` word leaves the following word alone. Long options with
+/// an optional value only ever take it after `=`.
+fn takes_no_separate_value(word: &str) -> bool {
+    if let Some(long) = word.strip_prefix("--") {
+        return long.contains('=')
+            || matches!(
+                long,
+                "cached"
+                    | "staged"
+                    | "merge-base"
+                    | "stat"
+                    | "numstat"
+                    | "shortstat"
+                    | "name-only"
+                    | "name-status"
+                    | "summary"
+                    | "compact-summary"
+                    | "raw"
+                    | "patch"
+                    | "no-patch"
+                    | "minimal"
+                    | "patience"
+                    | "histogram"
+                    | "check"
+                    | "exit-code"
+                    | "quiet"
+                    | "color"
+                    | "no-color"
+                    | "word-diff"
+                    | "no-renames"
+                    | "find-renames"
+                    | "find-copies"
+                    | "text"
+                    | "binary"
+                    | "full-index"
+                    | "no-prefix"
+                    | "relative"
+                    | "no-relative"
+                    | "ignore-all-space"
+                    | "ignore-space-change"
+                    | "ignore-space-at-eol"
+                    | "ignore-blank-lines"
+                    | "ignore-cr-at-eol"
+                    | "no-ext-diff"
+                    | "no-textconv"
+                    | "irreversible-delete"
+                    | "function-context"
+            );
+    }
+    let Some(short) = word.strip_prefix('-') else {
+        return true;
+    };
+    // `-M`, `-C` and `-B` read a value only when it is attached (`-M50%`).
+    !short.is_empty()
+        && (short.starts_with(['M', 'C', 'B'])
+            || short.bytes().all(|flag| b"puszRabwWD".contains(&flag)))
+}
+
 #[path = "git_config_filter_sources.rs"]
 mod sources;
 

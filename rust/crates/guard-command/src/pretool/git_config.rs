@@ -659,8 +659,9 @@ fn probe(
         .then(|| super::git_hash_object::read_operands(&remaining[1..]))
         .flatten()
         .filter(|_| !super::git_hash_object::filters_disabled(&remaining[1..]));
-    let filtered = matches!(operation, "status" | "diff" | "diff-files")
-        || (operation == "diff-index" && compares_working_tree(&remaining[1..]))
+    let filtered = matches!(operation, "status" | "diff-files")
+        || (matches!(operation, "diff" | "diff-index")
+            && filters::reads_working_tree(operation, &remaining[1..]))
         || super::git_history_reads::cleans_working_tree(operation, &remaining[1..])
         || hashed.is_some();
     let has_filters = filtered
@@ -806,22 +807,6 @@ const PATHSPEC_MAGIC: [&str; 4] = [
     "--noglob-pathspecs",
     "--icase-pathspecs",
 ];
-
-/// Whether the index comparison also reads the files on disk.
-///
-/// `git diff-index HEAD` compares the index against the working tree, so Git
-/// runs a configured clean filter over every file it has to re-examine.
-/// `--cached` compares the index against the named tree alone and never opens
-/// a working-tree file, so that spelling consumes no filter. `diff-files`
-/// always compares the index against the working tree and has no such
-/// spelling, so it is screened without asking here. `diff-tree` compares two
-/// trees and reaches neither the index nor the working tree.
-fn compares_working_tree(rest: &[String]) -> bool {
-    !rest
-        .iter()
-        .take_while(|argument| argument.as_str() != "--")
-        .any(|argument| matches!(argument.as_str(), "--cached" | "--staged"))
-}
 
 /// The probe runs Git without a shell, so a `-C ~/repo` target the shell
 /// would expand must be expanded here or the probe inspects nothing.

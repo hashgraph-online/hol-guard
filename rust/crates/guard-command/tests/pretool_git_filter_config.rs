@@ -350,3 +350,96 @@ fn a_blob_to_untracked_diff_keeps_the_full_filter_proof() {
         "Guard inspection must not execute filters"
     );
 }
+
+#[test]
+fn a_cached_diff_runs_no_clean_filter() {
+    let temp = if cfg!(windows) {
+        canonical_spelling(std::env::temp_dir())
+    } else {
+        std::env::temp_dir()
+    };
+    let root = temp.join(format!("guard cached diff filters {}", std::process::id()));
+    let _cleanup = FixtureCleanup(root.clone());
+    let home = root.join("home");
+    let repository = root.join("repository");
+    std::fs::create_dir_all(&home).unwrap();
+    std::fs::create_dir_all(&repository).unwrap();
+    std::fs::write(repository.join("ordinary.txt"), "ordinary fixture\n").unwrap();
+    let marker = root.join("filter-executed");
+    let marker_path = marker.to_string_lossy().replace('\\', "/");
+    let marker_command = format!("touch '{}'", marker_path.replace('\'', "'\\''"));
+    let config_command = serde_json::to_string(&marker_command).unwrap();
+    std::fs::write(
+        home.join(".gitconfig"),
+        format!(
+            "[filter \"synthetic\"]\n\tclean = {config_command}\n\tsmudge = {config_command}\n"
+        ),
+    )
+    .unwrap();
+    let git = |arguments: &[&str]| {
+        std::process::Command::new("git")
+            .env("HOME", &home)
+            .env_remove("XDG_CONFIG_HOME")
+            .arg("-C")
+            .arg(&repository)
+            .args(arguments)
+            .output()
+            .unwrap()
+    };
+    assert!(git(&["init", "--quiet"]).status.success());
+    // Staged before the attribute exists, so staging runs no filter.
+    assert!(git(&["add", "ordinary.txt"]).status.success());
+    std::fs::write(
+        repository.join(".gitattributes"),
+        "ordinary.txt filter=synthetic\n",
+    )
+    .unwrap();
+    let controls = github_controls("enabled");
+    let judge = |harness: &str, command: &str| {
+        evaluate_pre_tool_envelope_with_context(
+            harness,
+            "PreToolUse",
+            &json!({"tool_name":"bash", "tool_input":{"command":command}}),
+            Some(&controls),
+            None,
+            home.to_str(),
+            repository.to_str(),
+        )
+    };
+    for harness in ["omp", "zcode"] {
+        // The index against a commit: no working-tree file is opened.
+        for command in [
+            "git diff --cached",
+            "git diff --staged --stat",
+            "git diff --cached --check",
+            "git diff --cached --name-only -- ordinary.txt",
+        ] {
+            let result = judge(harness, command);
+            assert_eq!(
+                result.decision, "allow",
+                "{harness}: {command}: {}",
+                result.reason_code
+            );
+        }
+        // These read the working tree, which the attached filter cleans.
+        for command in [
+            "git diff --no-ext-diff --no-textconv",
+            "git diff --no-ext-diff --no-textconv --stat",
+            "git diff --no-ext-diff --no-textconv -- --cached",
+        ] {
+            let result = judge(harness, command);
+            assert_eq!(result.decision, "deny", "{harness}: {command}");
+            assert_eq!(
+                result.reason_code, "native_git_execution_context_review",
+                "{harness}: {command}"
+            );
+        }
+    }
+    // Git itself agrees: a cached diff leaves the filter alone.
+    assert!(git(&["diff", "--cached", "--check"]).status.success());
+    assert!(git(&["diff", "--staged", "--stat"]).status.success());
+    assert!(
+        !marker.exists(),
+        "a cached diff must never execute the clean filter"
+    );
+}
