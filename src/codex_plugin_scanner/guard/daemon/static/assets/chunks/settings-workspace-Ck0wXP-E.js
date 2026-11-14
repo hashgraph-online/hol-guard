@@ -4442,6 +4442,9 @@ function SwarmContextPanel({ target, ready, loaded, scope, filesAllowed, allowFi
     const files = scope.sources.length === 1 ? "file" : "files";
     lead = `This project already has ${scope.sources.length} approved ${files}. Use “Show what your AI would get” below to preview its context.`;
   }
+  let connection = "This app needs a CIGAR MCP connection. After adding the project, open App setup and pair its request under “Connect another app” below. Finding its process does not connect it.";
+  if (automatic) connection = "With Guard connected in App setup, new prompts in this app receive project context. A running turn keeps its existing context; send your next instruction after setup.";
+  else if (target.harness === "aider") connection = "Aider is visible here for activity only. Guard does not connect Aider to CIGAR, so this project grant will not inject context into its prompts.";
   reactExports.useEffect(() => {
     panel.current?.focus({ preventScroll: true });
     panel.current?.scrollIntoView({ block: "start" });
@@ -4454,7 +4457,7 @@ function SwarmContextPanel({ target, ready, loaded, scope, filesAllowed, allowFi
     ] }),
     /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "break-all font-mono text-sm text-brand-dark/75", children: target.workspace ?? "This agent did not report its project. Choose its folder below." }),
     /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: versionLead, children: lead }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm leading-6 text-brand-dark/70", children: automatic ? "With Guard connected in App setup, new prompts in this app receive project context. A running turn keeps its existing context; send your next instruction after setup." : target.harness === "aider" ? "Aider is visible here for activity only. Guard does not connect Aider to CIGAR, so this project grant will not inject context into its prompts." : "This app needs a CIGAR MCP connection. After adding the project, open App setup and pair its request under “Connect another app” below. Finding its process does not connect it." }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm leading-6 text-brand-dark/70", children: connection }),
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap gap-2", children: [
       ready && !filesAllowed && allowFiles ? /* @__PURE__ */ jsxRuntimeExports.jsx(CigarAllowFilesButton, { allow: allowFiles, className: versionButton }) : null,
       /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", className: versionButton, onClick: () => {
@@ -5374,7 +5377,7 @@ function ContextWorkspacesPanel({ ready, waking = false, generation, dirty, docu
       setScopes((values) => [...values, scope]);
       granted = true;
       const activeTarget = targetRef.current;
-      if (activeTarget && startedTarget?.id === activeTarget.id) {
+      if (activeTarget && !activeTarget.workspace && startedTarget?.id === activeTarget.id) {
         setSwarmContextTarget({ ...activeTarget, workspace: scope.workspace });
       }
     });

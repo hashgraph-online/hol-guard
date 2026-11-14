@@ -196,3 +196,28 @@ fn resident_drain_stops_swarm_even_when_another_request_retains_the_store() {
     let denied = send(json!({"action":"launch", "launch":late}));
     assert_eq!(denied["code"], "swarm_unavailable");
 }
+
+/// The dashboard sends `model: null` and `text: null`. Python checks the
+/// reply's digest against a digest of what it sent, so the decoded request
+/// must hash the same. `tests/test_native_swarm.py` pins the same digests.
+#[test]
+fn reply_digest_matches_the_request_as_the_dashboard_sent_it() {
+    let launch = json!({"action":"launch", "launch":{"request_id":"launch-1", "epoch":"epoch-1",
+        "harness":"codex", "workspace":"/tmp", "task":"Review the tests", "model":null}});
+    let stop = json!({"action":"direct", "request":{"request_id":"stop-1", "epoch":"epoch-1",
+        "run_id":"run-1", "expected_revision":3, "action":"stop", "text":null}});
+    let pinned = [(launch, PINNED_LAUNCH_DIGEST), (stop, PINNED_STOP_DIGEST)];
+    for (input, pinned) in pinned {
+        let raw = json!({"schema":"guard-swarm-request.v1", "request_id":"swarm-1",
+            "query":{"guard_home":"/tmp/guard", "cli_path":"/usr/bin", "input":input}});
+        let decoded: Request = serde_json::from_value(raw.clone()).unwrap();
+        let sent = request_digest_with_limit(&raw, 32_768).unwrap();
+        assert_eq!(request_digest_with_limit(&decoded, 32_768).unwrap(), sent);
+        assert_eq!(sent, pinned);
+    }
+}
+
+const PINNED_LAUNCH_DIGEST: &str =
+    "sha256:e2f5ebd4b8eadd7f92c5df32b6502fe34a854c96dd704d4b6e0708603f72fa6e";
+const PINNED_STOP_DIGEST: &str =
+    "sha256:e4f082fc952347382792c109a421bc80432923b9930d0a98fd7ebf93e55b76a8";

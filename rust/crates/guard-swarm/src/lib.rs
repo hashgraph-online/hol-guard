@@ -9,6 +9,7 @@ mod history;
 mod lifecycle_tests;
 mod model;
 mod process;
+mod run;
 mod service;
 mod worker;
 

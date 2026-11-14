@@ -105,3 +105,49 @@ def test_real_reply_validation_preserves_native_errors_and_accepts_swarm_shape(m
         with pytest.raises(api.SwarmError) as error:
             api.execute("snapshot", {}, guard_home=tmp_path)
         assert error.value.code == ("swarm_unavailable" if code == "unbound" else code)
+
+
+@pytest.mark.parametrize(
+    ("swarm_input", "pinned"),
+    [
+        (
+            {
+                "action": "launch",
+                "launch": {
+                    "request_id": "launch-1",
+                    "epoch": "epoch-1",
+                    "harness": "codex",
+                    "workspace": "/tmp",
+                    "task": "Review the tests",
+                    "model": None,
+                },
+            },
+            "e2f5ebd4b8eadd7f92c5df32b6502fe34a854c96dd704d4b6e0708603f72fa6e",
+        ),
+        (
+            {
+                "action": "direct",
+                "request": {
+                    "request_id": "stop-1",
+                    "epoch": "epoch-1",
+                    "run_id": "run-1",
+                    "expected_revision": 3,
+                    "action": "stop",
+                    "text": None,
+                },
+            },
+            "e4f082fc952347382792c109a421bc80432923b9930d0a98fd7ebf93e55b76a8",
+        ),
+    ],
+)
+def test_null_fields_hash_as_the_resident_hashes_them(swarm_input, pinned):
+    # The resident pins the same digests in swarm_op_tests.rs; both sides must
+    # keep `model: null` and `text: null` or every reply reads as unavailable.
+    from codex_plugin_scanner.guard.native_context import _canonical_request_sha256
+
+    request = {
+        "schema": "guard-swarm-request.v1",
+        "request_id": "swarm-1",
+        "query": {"guard_home": "/tmp/guard", "cli_path": "/usr/bin", "input": swarm_input},
+    }
+    assert _canonical_request_sha256(request) == pinned

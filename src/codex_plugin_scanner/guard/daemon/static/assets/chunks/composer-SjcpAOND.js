@@ -1,5 +1,5 @@
 import { r as reactExports, j as jsxRuntimeExports, ec as GuardModalLayer, ak as HiMiniXMark, b as HiMiniCommandLine, I as HiMiniArrowRight, c as HiMiniFolder } from "../guard-dashboard.js";
-import { i as isLive, p as projectsFor, l as launchAgent, R as RejectedAction } from "./swarm-workspace-Df1RuLaJ.js";
+import { i as isLive, p as projectsFor, l as launchAgent, R as RejectedAction } from "./swarm-workspace-CcNVkqUm.js";
 import "./swarm-handoff-BIqKreGh.js";
 const pendingLaunches = /* @__PURE__ */ new Map();
 function AgentComposer({ snapshot, stale, initialProject, onClose, onLaunched, onNavigate }) {

@@ -57,7 +57,7 @@ fn action(request: &Launch, agent: &Agent, id: &str, kind: &str, text: Option<&s
         run_id: agent.id.clone(),
         expected_revision: agent.revision,
         action: kind.into(),
-        text: text.map(str::to_owned),
+        text: text.map(|text| Some(text.to_owned())),
     }
 }
 

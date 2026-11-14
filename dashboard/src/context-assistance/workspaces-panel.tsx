@@ -105,7 +105,9 @@ export function ContextWorkspacesPanel({ ready, waking = false, generation, dirt
       if (signal.aborted) return;
       setScopes((values) => [...values, scope]); granted = true;
       const activeTarget = targetRef.current;
-      if (activeTarget && startedTarget?.id === activeTarget.id) {
+      // An agent that reported its own folder keeps it: Swarm shows that
+      // folder, so pointing the panel elsewhere would disagree with Swarm.
+      if (activeTarget && !activeTarget.workspace && startedTarget?.id === activeTarget.id) {
         setSwarmContextTarget({ ...activeTarget, workspace: scope.workspace });
       }
     });

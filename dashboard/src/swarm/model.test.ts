@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { parseAgent, parseSnapshot } from "./api";
-import { contextFor, filterAgents, projectsFor } from "./model";
+import { contextFor, filterAgents, projectsFor, withAcceptedAgents } from "./model";
 import type { Agent, SwarmSnapshot } from "./types";
 import type { ContextWorkspaceScope } from "../context-assistance/workspaces-api";
 
@@ -46,4 +46,21 @@ test("context matches exact projects and app grants or every-app picks without c
   assert.match(contextFor(agent, true, [picked]).detail, /new prompts/);
   assert.doesNotMatch(contextFor(agent, true, [picked]).detail, /needs pairing/);
   assert.match(contextFor({ ...agent, harness: "gemini" }, true, [picked]).detail, /needs pairing/);
+});
+
+test("an older poll does not undo an agent the service already accepted", () => {
+  const poll: SwarmSnapshot = { schema: "guard-swarm-snapshot.v1", epoch: "e1", observed_at_ms: 5000,
+    discovery: { state: "ready", limited: false, detail: "" }, agents: [{ ...agent, revision: 4 }], adapters: [] };
+  const accepted = new Map<string, Agent>([[agent.id, { ...agent, revision: 5, state: "stopping" }]]);
+  const shown = withAcceptedAgents(poll, accepted);
+  assert.equal(shown.agents[0].revision, 5);
+  assert.equal(accepted.size, 1);
+  const caughtUp = withAcceptedAgents({ ...poll, agents: [{ ...agent, revision: 6 }] }, accepted);
+  assert.equal(caughtUp.agents[0].revision, 6);
+  assert.equal(accepted.size, 0);
+  const launched = { ...agent, id: "run-2", updated_at_ms: 6000 };
+  accepted.set(launched.id, launched);
+  assert.deepEqual(withAcceptedAgents(poll, accepted).agents.map((a) => a.id), [agent.id, "run-2"]);
+  assert.equal(withAcceptedAgents({ ...poll, observed_at_ms: 7000 }, accepted).agents.length, 1);
+  assert.equal(accepted.size, 0);
 });

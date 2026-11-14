@@ -161,7 +161,10 @@ pub(crate) fn decode(harness: &str, line: &[u8]) -> Option<Update> {
                 value["usage"]["output_tokens"].as_u64().unwrap_or(0),
             ));
         } else if matches!(kind, "error" | "turn.failed") {
-            update.failed = true;
+            // `codex exec --json` also reports a stream retry as a top-level
+            // `error`, then finishes the turn. Only `turn.failed` ends it; a
+            // turn that never completes is already treated as failed.
+            update.failed = kind == "turn.failed";
             event(
                 &mut update,
                 "error",
@@ -367,5 +370,15 @@ mod tests {
             decoder.decode("claude-code", result).unwrap().context_calls,
             0
         );
+    }
+
+    #[test]
+    fn codex_stream_retries_are_shown_but_do_not_fail_the_turn() {
+        let retry = br#"{"type":"error","message":"Reconnecting... 1/5"}"#;
+        let update = decode("codex", retry).unwrap();
+        assert!(!update.failed);
+        assert_eq!(update.events.len(), 1);
+        let failed = br#"{"type":"turn.failed","error":{"message":"usage limit"}}"#;
+        assert!(decode("codex", failed).unwrap().failed);
     }
 }

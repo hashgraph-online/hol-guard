@@ -1,6 +1,6 @@
 use crate::{
     discover, installed_adapters, now_ms, Action, Agent, AgentOrigin, AgentState, Controls, Event,
-    Launch, Snapshot, MAX_EVENTS, MAX_RUNS, SCHEMA,
+    Launch, Snapshot, MAX_RUNS, SCHEMA,
 };
 use sha2::{Digest, Sha256};
 use std::collections::{BTreeMap, VecDeque};
@@ -9,51 +9,7 @@ use std::sync::{Arc, Mutex};
 use std::thread::JoinHandle;
 use std::time::{Duration, Instant};
 
-pub(crate) struct Run {
-    pub agent: Agent,
-    pub executable: PathBuf,
-    pub cli_path: std::ffi::OsString,
-    pub session: Option<String>,
-    pub pending: VecDeque<String>,
-    pub events: VecDeque<Event>,
-    pub sequence: u64,
-    pub active: bool,
-    pub cancel: u8,
-}
-
-impl Run {
-    pub fn event(&mut self, kind: &str, text: impl Into<String>) {
-        // Keep Unicode output within the resident's response byte budget.
-        let text = crate::model::clipped(&text.into(), 4096);
-        if matches!(
-            kind,
-            "message" | "command" | "files" | "tool" | "context" | "permission" | "error"
-        ) {
-            self.agent.activity = Some(text.chars().take(180).collect());
-        }
-        self.sequence += 1;
-        self.agent.updated_at_ms = now_ms();
-        self.events.push_back(Event {
-            sequence: self.sequence,
-            at_ms: self.agent.updated_at_ms,
-            kind: kind.into(),
-            text,
-        });
-        while self.events.len() > MAX_EVENTS {
-            self.events.pop_front();
-        }
-    }
-    pub fn controls(&mut self) {
-        let stopped = matches!(self.agent.state, AgentState::Stopped | AgentState::Stopping);
-        self.agent.controls = Controls {
-            message: !stopped && self.pending.len() < 4 && (self.active || self.session.is_some()),
-            steer: false,
-            interrupt: self.active && !stopped,
-            stop: !stopped,
-        };
-        self.agent.queued = self.pending.len();
-    }
-}
+pub(crate) use crate::run::Run;
 
 #[derive(Default)]
 pub(crate) struct Registry {
@@ -151,6 +107,9 @@ impl Service {
             .as_ref()
             .is_none_or(|(at, _)| at.elapsed() >= Duration::from_secs(1))
         {
+            // Copy PATH so a slow PATH folder cannot hold up stop and
+            // interrupt, which take this lock before they run.
+            let cli_path = self.cli_path().map_err(|_| "swarm_unavailable")?;
             let observed_at_ms = now_ms();
             let (agents, discovery) = discover(observed_at_ms);
             *inventory = Some((
@@ -161,12 +120,7 @@ impl Service {
                     observed_at_ms,
                     discovery,
                     agents,
-                    adapters: installed_adapters(
-                        self.cli_path
-                            .lock()
-                            .map_err(|_| "swarm_unavailable")?
-                            .as_os_str(),
-                    ),
+                    adapters: installed_adapters(&cli_path),
                 },
             ));
         }
@@ -192,24 +146,34 @@ impl Service {
         request.validate()?;
         self.check_epoch(&request.epoch)?;
         let fingerprint = digest(&request)?;
-        let mut registry = self.registry.lock().map_err(|_| "swarm_unavailable")?;
-        if let Some(agent) = replay(&registry, &request.request_id, &fingerprint, false)? {
+        let admit = |registry: &Registry| -> Result<Option<Agent>, &'static str> {
+            if let Some(agent) = replay(registry, &request.request_id, &fingerprint, false)? {
+                return Ok(Some(agent));
+            }
+            if registry.runs.values().filter(|r| r.active).count() >= MAX_RUNS {
+                return Err("swarm_run_limit");
+            }
+            Ok(None)
+        };
+        if let Some(agent) = admit(&*self.registry.lock().map_err(|_| "swarm_unavailable")?)? {
             return Ok(agent);
         }
-        if registry.runs.values().filter(|r| r.active).count() >= MAX_RUNS {
-            return Err("swarm_run_limit");
-        }
-        let cli_path = self
-            .cli_path
-            .lock()
-            .map_err(|_| "swarm_unavailable")?
-            .clone();
+        // Disk lookups run without the registry lock: a slow PATH folder or
+        // network workspace must not hold up stop, interrupt or shutdown
+        // for runs already going.
+        let cli_path = self.cli_path().map_err(|_| "swarm_unavailable")?;
         let executable = self
             .executable(&request.harness, &cli_path)
             .ok_or("swarm_cli_missing")?;
         let workspace = canonical_workspace(PathBuf::from(&request.workspace))?;
         if !workspace.is_dir() {
             return Err("swarm_workspace_invalid");
+        }
+        let mut registry = self.registry.lock().map_err(|_| "swarm_unavailable")?;
+        // Check again: the same request, a shutdown or other launches may
+        // have landed while the lock was free.
+        if let Some(agent) = admit(&registry)? {
+            return Ok(agent);
         }
         if registry.runs.len() >= 64 {
             let old = registry
@@ -239,7 +203,7 @@ impl Service {
             state: AgentState::Starting,
             workspace: Some(workspace.to_string_lossy().into()),
             task: Some(crate::model::clipped(&request.task, 2048)),
-            model: request.model,
+            model: request.model.flatten(),
             pid: None,
             started_at_ms: now,
             updated_at_ms: now,
@@ -300,7 +264,7 @@ impl Service {
                     return Err("swarm_run_limit");
                 }
                 run.pending
-                    .push_back(request.text.ok_or("swarm_action_invalid")?);
+                    .push_back(request.text.flatten().ok_or("swarm_action_invalid")?);
                 run.event(
                     "instruction",
                     if run.active {
@@ -374,6 +338,13 @@ impl Service {
         }
         events.drain(..skip);
         Ok(events)
+    }
+
+    fn cli_path(&self) -> Result<std::ffi::OsString, ()> {
+        self.cli_path
+            .lock()
+            .map(|path| path.clone())
+            .map_err(|_| ())
     }
 
     fn check_epoch(&self, epoch: &str) -> Result<(), &'static str> {
@@ -493,25 +464,5 @@ fn replay(
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn control_actions_can_replay_when_receipts_are_full() {
-        let registry = Registry {
-            receipts: (0..2048)
-                .map(|index| (format!("request-{index}"), ("digest".into(), "run".into())))
-                .collect(),
-            ..Default::default()
-        };
-
-        assert!(matches!(
-            replay(&registry, "new-message", "digest", false),
-            Err("swarm_request_limit")
-        ));
-        assert!(matches!(
-            replay(&registry, "new-stop", "digest", true),
-            Ok(None)
-        ));
-    }
-}
+#[path = "service_tests.rs"]
+mod tests;

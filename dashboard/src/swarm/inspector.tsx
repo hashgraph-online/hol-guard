@@ -10,12 +10,20 @@ import type { Agent, AgentAction } from "./types";
 
 type PendingAction = { agent: Agent; epoch: string; action: AgentAction; text: string | null; id: string };
 const pendingActions = new Map<string, PendingAction>();
+// Inspectors open now; one closed and reopened mid-request must still learn
+// how that request ended.
+const settledListeners = new Set<(key: string, request: PendingAction, accepted: boolean) => void>();
 
-type Props = { agent: Agent; epoch: string; stale: boolean; onClose: () => void; onRefresh: () => void; onNavigate: (path: string) => void;
+function settle(key: string, request: PendingAction, accepted: boolean) {
+  pendingActions.delete(key);
+  settledListeners.forEach((listener) => listener(key, request, accepted));
+}
+
+type Props = { agent: Agent; epoch: string; stale: boolean; onClose: () => void; onRefresh: () => void; onAccepted: (agent: Agent) => void; onNavigate: (path: string) => void;
   reviews: GuardApprovalRequest[]; onOpenRequest: (id: string) => void;
   context: { enabled: boolean | null; scopes: ContextWorkspaceScope[] | null } };
 
-export function AgentInspector({ agent, epoch, stale, onClose, onRefresh, onNavigate, context, reviews, onOpenRequest }: Props) {
+export function AgentInspector({ agent, epoch, stale, onClose, onRefresh, onAccepted, onNavigate, context, reviews, onOpenRequest }: Props) {
   const [draft, setDraft] = useState(() => pendingActions.get(`${epoch}:${agent.id}:message`)?.text ?? "");
   const [busy, setBusy] = useState(false);
   const [confirmStop, setConfirmStop] = useState(false);
@@ -29,7 +37,18 @@ export function AgentInspector({ agent, epoch, stale, onClose, onRefresh, onNavi
   const pendingMessage = pendingFor("message");
   const pendingInterrupt = pendingFor("interrupt");
   const pendingStop = pendingFor("stop");
+  const [, setSettled] = useState(0);
   useEffect(() => { alive.current = true; return () => { alive.current = false; }; }, []);
+  useEffect(() => {
+    const listener = (key: string, request: PendingAction, accepted: boolean) => {
+      if (!key.startsWith(`${pendingKey}:`)) return;
+      // An accepted instruction must not stay in the box to be sent twice.
+      if (accepted && request.action === "message") setDraft((current) => (current === request.text ? "" : current));
+      setSettled((count) => count + 1);
+    };
+    settledListeners.add(listener);
+    return () => { settledListeners.delete(listener); };
+  }, [pendingKey]);
   useEffect(() => {
     if (window.matchMedia("(max-width: 1050px)").matches) panel.current?.scrollIntoView({ block: "start", behavior: "instant" });
   }, []);
@@ -43,8 +62,9 @@ export function AgentInspector({ agent, epoch, stale, onClose, onRefresh, onNavi
     const request = existing ?? { agent, epoch, action, text: action === "message" ? draft : null, id: crypto.randomUUID() };
     pendingActions.set(`${pendingKey}:${action}`, request);
     try {
-      await directAgent(request.agent, request.epoch, request.action, request.text, request.id);
-      pendingActions.delete(`${pendingKey}:${action}`);
+      const updated = await directAgent(request.agent, request.epoch, request.action, request.text, request.id);
+      settle(`${pendingKey}:${action}`, request, true);
+      onAccepted(updated);
       if (!alive.current) return;
       if (action === "message") setDraft("");
       let message = "Instruction accepted by the agent service.";
@@ -53,11 +73,14 @@ export function AgentInspector({ agent, epoch, stale, onClose, onRefresh, onNavi
       setNotice(message);
       setConfirmStop(false); onRefresh();
     } catch (e) {
-      if (e instanceof RejectedAction) pendingActions.delete(`${pendingKey}:${action}`);
+      if (e instanceof RejectedAction) settle(`${pendingKey}:${action}`, request, false);
       if (alive.current) { setError(e instanceof Error ? e.message : "The action could not be confirmed."); onRefresh(); }
     }
     finally { if (alive.current) setBusy(false); }
   }
+  let sendLabel = "Send instruction";
+  if (busy) sendLabel = "Sending…";
+  else if (pendingMessage) sendLabel = "Check instruction";
   return <aside ref={panel} className="swarm-inspector" aria-label="Agent details">
     <div className="swarm-inspector-heading"><span>AGENT DETAILS</span><button className="swarm-icon-button" type="button" onClick={onClose} aria-label="Close agent details"><HiMiniXMark /></button></div>
     <div className="swarm-inspector-identity"><span className="swarm-agent-icon"><HiMiniCommandLine aria-hidden="true" /></span><div><h2>{agent.label}</h2><span className={`swarm-status swarm-status--${agent.state}`}><i aria-hidden="true" />{stateLabel[agent.state]}</span></div></div>
@@ -95,7 +118,7 @@ export function AgentInspector({ agent, epoch, stale, onClose, onRefresh, onNavi
       <label htmlFor="swarm-direction">Next instruction</label>
       <textarea id="swarm-direction" value={draft} onChange={(e) => setDraft(e.target.value)} maxLength={16384} rows={3} placeholder="What should it focus on?" disabled={stale || busy || pendingMessage !== null} />
       <p className="swarm-field-help">{agent.state === "running" || agent.state === "starting" ? "Queued after the current turn. Interrupt first to change focus now." : "Continues this agent’s conversation in the same project."}{agent.queued ? ` ${agent.queued} queued.` : ""}</p>
-      <button className="swarm-button swarm-button--primary" disabled={!draft.trim() || stale || busy || pendingMessage !== null} type="submit"><HiMiniArrowUp aria-hidden="true" />{busy ? "Sending…" : pendingMessage ? "Check instruction" : "Send instruction"}</button>
+      <button className="swarm-button swarm-button--primary" disabled={!draft.trim() || stale || busy || pendingMessage !== null} type="submit"><HiMiniArrowUp aria-hidden="true" />{sendLabel}</button>
     </form> : agent.origin === "observed" ? <p className="swarm-handoff">Continue in your {agent.label} window to send instructions. Swarm has observation access to this process.</p> : null}
     {error ? <p className="swarm-error" role="alert">{error}</p> : null}
     {notice ? <p className="swarm-muted" role="status">{notice}</p> : null}

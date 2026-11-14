@@ -79,6 +79,8 @@ def handler_post(store: GuardStore, args: Mapping[str, Any]) -> dict[str, object
     """Runs the handler the daemon dispatches ``POST path`` to."""
 
     from ..adapters.base import HarnessContext
+    from ..daemon.swarm_http import WRITE_PATHS as SWARM_WRITE_PATHS
+    from ..daemon.swarm_http import respond as respond_swarm
     from ..harness_version_api import WRITE_PATHS as HARNESS_VERSION_WRITE_PATHS
     from ..harness_version_api import handle_harness_version_write
     from ..library_calls import LibraryCallError
@@ -90,36 +92,8 @@ def handler_post(store: GuardStore, args: Mapping[str, Any]) -> dict[str, object
     path, payload = _arguments(args)
     recorder = _Recorder(store)
     parts = _path_parts(path)
-    if path in {"/v1/swarm/launch", "/v1/swarm/action", "/v1/swarm/events"}:
-        from ..native_swarm import SwarmError, execute
-
-        action = {
-            "/v1/swarm/launch": "launch",
-            "/v1/swarm/action": "direct",
-            "/v1/swarm/events": "events",
-        }[path]
-        try:
-            result = execute(action, payload, guard_home=store.guard_home)
-        except SwarmError as error:
-            status = 503
-            if error.code in {"swarm_stale", "swarm_request_conflict", "swarm_expired"}:
-                status = 409
-            elif error.code in {
-                "swarm_cli_missing",
-                "swarm_workspace_invalid",
-                "swarm_run_limit",
-                "swarm_request_limit",
-                "swarm_unknown_run",
-                "swarm_action_unavailable",
-                "swarm_launch_invalid",
-                "swarm_action_invalid",
-            }:
-                status = 400
-            recorder._write_json({"error": error.code}, status=status, extra_headers=_NO_STORE)
-        except (OSError, ValueError, RuntimeError):
-            recorder._write_json({"error": "swarm_unavailable"}, status=503)
-        else:
-            recorder._write_json(result, extra_headers=_NO_STORE)
+    if path in SWARM_WRITE_PATHS:
+        respond_swarm(recorder, SWARM_WRITE_PATHS[path], payload)
     elif path in CONTEXT_ASSISTANCE_WRITE_PATHS:
         respond_context_assistance(recorder, CONTEXT_ASSISTANCE_WRITE_PATHS[path], payload)
     elif path in HARNESS_VERSION_WRITE_PATHS:
@@ -135,6 +109,7 @@ def handler_post(store: GuardStore, args: Mapping[str, Any]) -> dict[str, object
 def handler_get(store: GuardStore, args: Mapping[str, Any]) -> dict[str, object]:
     """Runs the handler the daemon dispatches ``GET path?query`` to."""
 
+    from ..daemon.swarm_http import respond as respond_swarm
     from ..library_calls import LibraryCallError
     from .context_assistance_http import READ_PATHS as CONTEXT_ASSISTANCE_READ_PATHS
     from .context_assistance_http import respond as respond_context_assistance
@@ -146,14 +121,7 @@ def handler_get(store: GuardStore, args: Mapping[str, Any]) -> dict[str, object]
         raise LibraryCallError("invalid_arguments")
     recorder = _Recorder(store)
     if path == "/v1/swarm":
-        from ..native_swarm import SwarmError, execute
-
-        try:
-            recorder._write_json(execute("snapshot", {}, guard_home=store.guard_home), extra_headers=_NO_STORE)
-        except SwarmError as error:
-            recorder._write_json({"error": error.code}, status=503, extra_headers=_NO_STORE)
-        except (OSError, ValueError, RuntimeError):
-            recorder._write_json({"error": "swarm_unavailable"}, status=503)
+        respond_swarm(recorder)
     elif path in CONTEXT_ASSISTANCE_READ_PATHS:
         respond_context_assistance(recorder, CONTEXT_ASSISTANCE_READ_PATHS[path])
     elif path == "/v1/policy/cloud-exception-requests":

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { fetchContextAssistance } from "../context-assistance/api";
 import { listContextWorkspaces, type ContextWorkspaceScope } from "../context-assistance/workspaces-api";
 import { readSwarm } from "./api";
+import { withAcceptedAgents } from "./model";
 import type { Agent, SwarmSnapshot } from "./types";
 
 export function useSwarm() {
@@ -12,7 +13,14 @@ export function useSwarm() {
   const [context, setContext] = useState<{ enabled: boolean | null; scopes: ContextWorkspaceScope[] | null }>({ enabled: null, scopes: null });
   const generation = useRef(0);
   const refreshNow = useCallback(() => setRefresh((n) => n + 1), []);
-  const acceptAgent = useCallback((agent: Agent) => setSnapshot((old) => old ? { ...old, agents: [...old.agents.filter((a) => a.id !== agent.id), agent] } : old), []);
+  // Agents the service returned from an action, newer than a poll still in flight.
+  const accepted = useRef({ epoch: "", agents: new Map<string, Agent>() });
+  const acceptAgent = useCallback((agent: Agent) => setSnapshot((old) => {
+    if (!old) return old;
+    if (accepted.current.epoch !== old.epoch) accepted.current = { epoch: old.epoch, agents: new Map() };
+    accepted.current.agents.set(agent.id, agent);
+    return { ...old, agents: [...old.agents.filter((a) => a.id !== agent.id), agent] };
+  }), []);
 
   useEffect(() => {
     const current = ++generation.current;
@@ -26,7 +34,11 @@ export function useSwarm() {
       try {
         const next = await readSwarm(abort.signal);
         if (generation.current === current && !abort.signal.aborted) {
-          setSnapshot((old) => old && old.epoch === next.epoch && old.observed_at_ms > next.observed_at_ms ? old : next);
+          setSnapshot((old) => {
+            if (old && old.epoch === next.epoch && old.observed_at_ms > next.observed_at_ms) return old;
+            if (accepted.current.epoch !== next.epoch) accepted.current = { epoch: next.epoch, agents: new Map() };
+            return withAcceptedAgents(next, accepted.current.agents);
+          });
           setError(null);
         }
       } catch (e) {

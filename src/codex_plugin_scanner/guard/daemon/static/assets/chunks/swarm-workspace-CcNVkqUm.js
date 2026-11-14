@@ -1,4 +1,4 @@
-const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/chunks/agent-map-CRG3a26L.js","assets/guard-dashboard.js","assets/index.css","assets/chunks/swarm-handoff-BIqKreGh.js","assets/chunks/composer-DTnYHnPm.js","assets/chunks/inspector-DzPHDD3L.js"])))=>i.map(i=>d[i]);
+const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/chunks/agent-map-Dr2cWEbq.js","assets/guard-dashboard.js","assets/index.css","assets/chunks/swarm-handoff-BIqKreGh.js","assets/chunks/composer-SjcpAOND.js","assets/chunks/inspector-DcqBjUoQ.js"])))=>i.map(i=>d[i]);
 import { f as fetchWithGuardAuth, r as reactExports, a as fetchContextAssistance, l as listContextWorkspaces, j as jsxRuntimeExports, H as HiMiniPlus, b as HiMiniCommandLine, c as HiMiniFolder, d as HiMiniCircleStack, e as HiMiniSquares2X2, g as HiMiniComputerDesktop, h as HiMiniMagnifyingGlass, i as HiMiniListBullet, k as HiMiniArrowPath, m as loadWorkspaceModule, n as browserSessionStorage, _ as __vitePreload } from "../guard-dashboard.js";
 import { w as workspaceForSwarmAgent, u as usesPromptContext } from "./swarm-handoff-BIqKreGh.js";
 const UNKNOWN_PROJECT = "@unknown";
@@ -49,6 +49,27 @@ function relativeTime(at, now = Date.now()) {
   if (seconds < 60) return `${seconds}s ago`;
   if (seconds < 3600) return `${Math.floor(seconds / 60)}m ago`;
   return `${Math.floor(seconds / 3600)}h ago`;
+}
+function withAcceptedAgents(next, accepted) {
+  let kept = false;
+  const agents = next.agents.map((agent) => {
+    const newer = accepted.get(agent.id);
+    if (!newer) return agent;
+    if (newer.revision > agent.revision) {
+      kept = true;
+      return newer;
+    }
+    accepted.delete(agent.id);
+    return agent;
+  });
+  for (const [id, newer] of accepted) {
+    if (next.agents.some((agent) => agent.id === id)) continue;
+    if (next.observed_at_ms < newer.updated_at_ms) {
+      kept = true;
+      agents.push(newer);
+    } else accepted.delete(id);
+  }
+  return kept ? { ...next, agents } : next;
 }
 const AGENT_STATES = ["starting", "running", "observed", "awaiting_input", "needs_attention", "completed", "failed", "stopping", "stopped", "interrupted"];
 const object = (v) => v !== null && typeof v === "object" && !Array.isArray(v);
@@ -127,7 +148,13 @@ function useSwarm() {
   const [context, setContext] = reactExports.useState({ enabled: null, scopes: null });
   const generation = reactExports.useRef(0);
   const refreshNow = reactExports.useCallback(() => setRefresh((n) => n + 1), []);
-  const acceptAgent = reactExports.useCallback((agent) => setSnapshot((old) => old ? { ...old, agents: [...old.agents.filter((a) => a.id !== agent.id), agent] } : old), []);
+  const accepted = reactExports.useRef({ epoch: "", agents: /* @__PURE__ */ new Map() });
+  const acceptAgent = reactExports.useCallback((agent) => setSnapshot((old) => {
+    if (!old) return old;
+    if (accepted.current.epoch !== old.epoch) accepted.current = { epoch: old.epoch, agents: /* @__PURE__ */ new Map() };
+    accepted.current.agents.set(agent.id, agent);
+    return { ...old, agents: [...old.agents.filter((a) => a.id !== agent.id), agent] };
+  }), []);
   reactExports.useEffect(() => {
     const current = ++generation.current;
     const abort = new AbortController();
@@ -143,7 +170,11 @@ function useSwarm() {
       try {
         const next = await readSwarm(abort.signal);
         if (generation.current === current && !abort.signal.aborted) {
-          setSnapshot((old) => old && old.epoch === next.epoch && old.observed_at_ms > next.observed_at_ms ? old : next);
+          setSnapshot((old) => {
+            if (old && old.epoch === next.epoch && old.observed_at_ms > next.observed_at_ms) return old;
+            if (accepted.current.epoch !== next.epoch) accepted.current = { epoch: next.epoch, agents: /* @__PURE__ */ new Map() };
+            return withAcceptedAgents(next, accepted.current.agents);
+          });
           setError(null);
         }
       } catch (e) {
@@ -196,9 +227,9 @@ function useSwarm() {
   return { snapshot, loading, error, stale: error !== null, context, refresh: refreshNow, acceptAgent };
 }
 const load = (id, loader) => loadWorkspaceModule(loader, { moduleId: id, storage: browserSessionStorage() });
-const AgentMap = reactExports.lazy(() => load("swarm-agent-map", () => __vitePreload(() => import("./agent-map-CRG3a26L.js"), true ? __vite__mapDeps([0,1,2,3]) : void 0)).then((module) => ({ default: module.AgentMap })));
-const AgentComposer = reactExports.lazy(() => load("swarm-composer", () => __vitePreload(() => import("./composer-DTnYHnPm.js"), true ? __vite__mapDeps([4,1,2,3]) : void 0)).then((module) => ({ default: module.AgentComposer })));
-const AgentInspector = reactExports.lazy(() => load("swarm-inspector", () => __vitePreload(() => import("./inspector-DzPHDD3L.js"), true ? __vite__mapDeps([5,1,2,3]) : void 0)).then((module) => ({ default: module.AgentInspector })));
+const AgentMap = reactExports.lazy(() => load("swarm-agent-map", () => __vitePreload(() => import("./agent-map-Dr2cWEbq.js"), true ? __vite__mapDeps([0,1,2,3]) : void 0)).then((module) => ({ default: module.AgentMap })));
+const AgentComposer = reactExports.lazy(() => load("swarm-composer", () => __vitePreload(() => import("./composer-SjcpAOND.js"), true ? __vite__mapDeps([4,1,2,3]) : void 0)).then((module) => ({ default: module.AgentComposer })));
+const AgentInspector = reactExports.lazy(() => load("swarm-inspector", () => __vitePreload(() => import("./inspector-DcqBjUoQ.js"), true ? __vite__mapDeps([5,1,2,3]) : void 0)).then((module) => ({ default: module.AgentInspector })));
 function SwarmWorkspace({ onNavigate, reviews = null, onOpenRequest }) {
   const { snapshot, loading, error, stale, context, refresh, acceptAgent } = useSwarm();
   const [selected, setSelected] = reactExports.useState(() => new URLSearchParams(window.location.search).get("agent"));
@@ -244,6 +275,29 @@ function SwarmWorkspace({ onNavigate, reviews = null, onOpenRequest }) {
     setSelected(null);
     (button ?? stageRef.current?.querySelector('input[aria-label="Search agents and projects"]'))?.focus();
   }
+  let emptyAction = /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", className: "swarm-button", onClick: refresh, children: "Reconnect" });
+  if (snapshot && agents.length) emptyAction = /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", className: "swarm-button", onClick: () => {
+    setSearch("");
+    setProject(null);
+    setAttention(false);
+  }, children: "Clear filters" });
+  else if (snapshot) emptyAction = /* @__PURE__ */ jsxRuntimeExports.jsxs("button", { type: "button", className: "swarm-button swarm-button--primary", disabled: stale, onClick: () => setComposing(true), children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniPlus, {}),
+    "Start your first agent"
+  ] });
+  let stage = /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "swarm-empty", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "swarm-empty-icon", children: /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniCommandLine, { "aria-hidden": "true" }) }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "swarm-eyebrow", children: "ROOM FOR YOUR NEXT IDEA" }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { children: emptyHeading }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: emptyCopy }),
+    emptyAction
+  ] });
+  if (loading && !snapshot) stage = /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "swarm-empty", role: "status", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "swarm-empty-icon", children: /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniArrowPath, { "aria-hidden": "true" }) }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { children: "Finding your agents" }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: "Checking recognized CLIs on this computer…" })
+  ] });
+  else if (visible.length) stage = /* @__PURE__ */ jsxRuntimeExports.jsx(AgentMap, { agents: visible, selected, onSelect: setSelected, context, mode });
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "swarm-workspace", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsxs("header", { className: "swarm-header", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
@@ -353,24 +407,7 @@ function SwarmWorkspace({ onNavigate, reviews = null, onOpenRequest }) {
           "Showing agents that need attention",
           /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: () => setAttention(false), children: "Show all" })
         ] }) : null,
-        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { ref: stageRef, children: /* @__PURE__ */ jsxRuntimeExports.jsx(reactExports.Suspense, { fallback: /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "swarm-empty", role: "status", children: /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: "Loading Swarm…" }) }), children: loading && !snapshot ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "swarm-empty", role: "status", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "swarm-empty-icon", children: /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniArrowPath, { "aria-hidden": "true" }) }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { children: "Finding your agents" }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: "Checking recognized CLIs on this computer…" })
-        ] }) : visible.length ? /* @__PURE__ */ jsxRuntimeExports.jsx(AgentMap, { agents: visible, selected, onSelect: setSelected, context, mode }) : /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "swarm-empty", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "swarm-empty-icon", children: /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniCommandLine, { "aria-hidden": "true" }) }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "swarm-eyebrow", children: "ROOM FOR YOUR NEXT IDEA" }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { children: emptyHeading }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: emptyCopy }),
-          snapshot ? agents.length ? /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", className: "swarm-button", onClick: () => {
-            setSearch("");
-            setProject(null);
-            setAttention(false);
-          }, children: "Clear filters" }) : /* @__PURE__ */ jsxRuntimeExports.jsxs("button", { type: "button", className: "swarm-button swarm-button--primary", disabled: stale, onClick: () => setComposing(true), children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniPlus, {}),
-            "Start your first agent"
-          ] }) : /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", className: "swarm-button", onClick: refresh, children: "Reconnect" })
-        ] }) }) }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { ref: stageRef, children: /* @__PURE__ */ jsxRuntimeExports.jsx(reactExports.Suspense, { fallback: /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "swarm-empty", role: "status", children: /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: "Loading Swarm…" }) }), children: stage }) }),
         snapshot ? /* @__PURE__ */ jsxRuntimeExports.jsxs("footer", { className: "swarm-coverage", children: [
           /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { children: [
             /* @__PURE__ */ jsxRuntimeExports.jsx("i", { "aria-hidden": "true" }),
@@ -383,7 +420,7 @@ function SwarmWorkspace({ onNavigate, reviews = null, onOpenRequest }) {
           ] })
         ] }) : null
       ] }),
-      chosen && snapshot ? /* @__PURE__ */ jsxRuntimeExports.jsx(reactExports.Suspense, { fallback: /* @__PURE__ */ jsxRuntimeExports.jsx("aside", { className: "swarm-inspector", "aria-label": "Agent details", children: /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: "Loading agent details…" }) }), children: /* @__PURE__ */ jsxRuntimeExports.jsx(AgentInspector, { agent: chosen, epoch: snapshot.epoch, stale, onClose: closeDetails, onRefresh: refresh, onNavigate, context, reviews: chosenReviews, onOpenRequest }, `${snapshot.epoch}:${chosen.id}`) }) : null
+      chosen && snapshot ? /* @__PURE__ */ jsxRuntimeExports.jsx(reactExports.Suspense, { fallback: /* @__PURE__ */ jsxRuntimeExports.jsx("aside", { className: "swarm-inspector", "aria-label": "Agent details", children: /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: "Loading agent details…" }) }), children: /* @__PURE__ */ jsxRuntimeExports.jsx(AgentInspector, { agent: chosen, epoch: snapshot.epoch, stale, onClose: closeDetails, onRefresh: refresh, onAccepted: acceptAgent, onNavigate, context, reviews: chosenReviews, onOpenRequest }, `${snapshot.epoch}:${chosen.id}`) }) : null
     ] }),
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "swarm-bottom-note", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: "Managed agents accept instructions here. Observed agents stay in their own apps." }),

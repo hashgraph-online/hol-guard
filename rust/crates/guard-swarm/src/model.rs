@@ -109,8 +109,23 @@ pub struct Launch {
     pub harness: String,
     pub workspace: String,
     pub task: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub model: Option<String>,
+    /// Left out, `null`, or a model name. See [`sent`].
+    #[serde(
+        default,
+        deserialize_with = "sent",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub model: Option<Option<String>>,
+}
+
+/// Reads a field the sender may leave out, send as `null`, or set. The reply
+/// carries a digest of the decoded request, and the sender checks it against
+/// a digest of what it sent, so a `null` must stay `null` and a missing field
+/// must stay missing.
+fn sent<'de, D: serde::Deserializer<'de>>(
+    deserializer: D,
+) -> Result<Option<Option<String>>, D::Error> {
+    Option::<String>::deserialize(deserializer).map(Some)
 }
 
 impl Launch {
@@ -122,13 +137,17 @@ impl Launch {
             || !std::path::Path::new(&self.workspace).is_absolute()
             || !valid_text(&self.task, MAX_TEXT_BYTES)
             || self.workspace.contains('\0')
-            || self.model.as_ref().is_some_and(|m| {
-                !valid_text(m, 128)
-                    || m.starts_with('-')
-                    || !m
-                        .bytes()
-                        .all(|b| b.is_ascii_alphanumeric() || b"._:/-".contains(&b))
-            })
+            || self
+                .model
+                .as_ref()
+                .and_then(Option::as_ref)
+                .is_some_and(|m| {
+                    !valid_text(m, 128)
+                        || m.starts_with('-')
+                        || !m
+                            .bytes()
+                            .all(|b| b.is_ascii_alphanumeric() || b"._:/-".contains(&b))
+                })
         {
             return Err("swarm_launch_invalid");
         }
@@ -144,8 +163,13 @@ pub struct Action {
     pub run_id: String,
     pub expected_revision: u64,
     pub action: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub text: Option<String>,
+    /// Left out, `null`, or the instruction. See [`sent`].
+    #[serde(
+        default,
+        deserialize_with = "sent",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub text: Option<Option<String>>,
 }
 
 impl Action {
@@ -158,9 +182,10 @@ impl Action {
                 !self
                     .text
                     .as_ref()
+                    .and_then(Option::as_ref)
                     .is_some_and(|t| valid_text(t, MAX_TEXT_BYTES))
             } else {
-                self.text.is_some()
+                self.text.as_ref().is_some_and(Option::is_some)
             }
         {
             return Err("swarm_action_invalid");
@@ -210,7 +235,7 @@ mod tests {
         request.harness = "/bin/sh".into();
         assert!(request.validate().is_err());
         request.harness = "codex".into();
-        request.model = Some("--dangerously-skip-permissions".into());
+        request.model = Some(Some("--dangerously-skip-permissions".into()));
         assert!(request.validate().is_err());
         request.model = None;
         request.workspace = "../project".into();
@@ -227,5 +252,39 @@ mod tests {
             "model":null, "executable":"/bin/sh"
         }))
         .is_err());
+    }
+
+    #[test]
+    fn null_and_missing_fields_round_trip_as_sent() {
+        for sent in [
+            serde_json::json!({"request_id":"a", "epoch":"e", "harness":"codex",
+                "workspace":"/tmp", "task":"hello", "model":null}),
+            serde_json::json!({"request_id":"a", "epoch":"e", "harness":"codex",
+                "workspace":"/tmp", "task":"hello"}),
+            serde_json::json!({"request_id":"a", "epoch":"e", "harness":"codex",
+                "workspace":"/tmp", "task":"hello", "model":"gpt-5"}),
+        ] {
+            let launch: Launch = serde_json::from_value(sent.clone()).unwrap();
+            assert!(launch.validate().is_ok(), "{sent}");
+            assert_eq!(serde_json::to_value(&launch).unwrap(), sent);
+        }
+        for sent in [
+            serde_json::json!({"request_id":"a", "epoch":"e", "run_id":"r",
+                "expected_revision":2, "action":"stop", "text":null}),
+            serde_json::json!({"request_id":"a", "epoch":"e", "run_id":"r",
+                "expected_revision":2, "action":"stop"}),
+            serde_json::json!({"request_id":"a", "epoch":"e", "run_id":"r",
+                "expected_revision":2, "action":"message", "text":"go on"}),
+        ] {
+            let action: Action = serde_json::from_value(sent.clone()).unwrap();
+            assert!(action.validate().is_ok(), "{sent}");
+            assert_eq!(serde_json::to_value(&action).unwrap(), sent);
+        }
+        let stop_with_text: Action = serde_json::from_value(serde_json::json!({
+            "request_id":"a", "epoch":"e", "run_id":"r", "expected_revision":2,
+            "action":"stop", "text":"x"
+        }))
+        .unwrap();
+        assert!(stop_with_text.validate().is_err());
     }
 }

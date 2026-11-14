@@ -1,6 +1,6 @@
 import { r as reactExports, j as jsxRuntimeExports, ak as HiMiniXMark, b as HiMiniCommandLine, d as HiMiniCircleStack, fx as HiMiniArrowUp } from "../guard-dashboard.js";
 import { s as setSwarmContextTarget } from "./swarm-handoff-BIqKreGh.js";
-import { r as relativeTime, a as readEvents, c as contextFor, s as stateLabel, d as directAgent, R as RejectedAction } from "./swarm-workspace-Df1RuLaJ.js";
+import { r as relativeTime, a as readEvents, c as contextFor, s as stateLabel, d as directAgent, R as RejectedAction } from "./swarm-workspace-CcNVkqUm.js";
 function Activity({ agent, stale }) {
   const [events, setEvents] = reactExports.useState([]);
   const [error, setError] = reactExports.useState(false);
@@ -52,7 +52,12 @@ function Activity({ agent, stale }) {
   ] });
 }
 const pendingActions = /* @__PURE__ */ new Map();
-function AgentInspector({ agent, epoch, stale, onClose, onRefresh, onNavigate, context, reviews, onOpenRequest }) {
+const settledListeners = /* @__PURE__ */ new Set();
+function settle(key, request, accepted) {
+  pendingActions.delete(key);
+  settledListeners.forEach((listener) => listener(key, request, accepted));
+}
+function AgentInspector({ agent, epoch, stale, onClose, onRefresh, onAccepted, onNavigate, context, reviews, onOpenRequest }) {
   const [draft, setDraft] = reactExports.useState(() => pendingActions.get(`${epoch}:${agent.id}:message`)?.text ?? "");
   const [busy, setBusy] = reactExports.useState(false);
   const [confirmStop, setConfirmStop] = reactExports.useState(false);
@@ -66,12 +71,24 @@ function AgentInspector({ agent, epoch, stale, onClose, onRefresh, onNavigate, c
   const pendingMessage = pendingFor("message");
   const pendingInterrupt = pendingFor("interrupt");
   const pendingStop = pendingFor("stop");
+  const [, setSettled] = reactExports.useState(0);
   reactExports.useEffect(() => {
     alive.current = true;
     return () => {
       alive.current = false;
     };
   }, []);
+  reactExports.useEffect(() => {
+    const listener = (key, request, accepted) => {
+      if (!key.startsWith(`${pendingKey}:`)) return;
+      if (accepted && request.action === "message") setDraft((current) => current === request.text ? "" : current);
+      setSettled((count) => count + 1);
+    };
+    settledListeners.add(listener);
+    return () => {
+      settledListeners.delete(listener);
+    };
+  }, [pendingKey]);
   reactExports.useEffect(() => {
     if (window.matchMedia("(max-width: 1050px)").matches) panel.current?.scrollIntoView({ block: "start", behavior: "instant" });
   }, []);
@@ -92,8 +109,9 @@ function AgentInspector({ agent, epoch, stale, onClose, onRefresh, onNavigate, c
     const request = existing ?? { agent, epoch, action, text: action === "message" ? draft : null, id: crypto.randomUUID() };
     pendingActions.set(`${pendingKey}:${action}`, request);
     try {
-      await directAgent(request.agent, request.epoch, request.action, request.text, request.id);
-      pendingActions.delete(`${pendingKey}:${action}`);
+      const updated = await directAgent(request.agent, request.epoch, request.action, request.text, request.id);
+      settle(`${pendingKey}:${action}`, request, true);
+      onAccepted(updated);
       if (!alive.current) return;
       if (action === "message") setDraft("");
       let message = "Instruction accepted by the agent service.";
@@ -103,7 +121,7 @@ function AgentInspector({ agent, epoch, stale, onClose, onRefresh, onNavigate, c
       setConfirmStop(false);
       onRefresh();
     } catch (e) {
-      if (e instanceof RejectedAction) pendingActions.delete(`${pendingKey}:${action}`);
+      if (e instanceof RejectedAction) settle(`${pendingKey}:${action}`, request, false);
       if (alive.current) {
         setError(e instanceof Error ? e.message : "The action could not be confirmed.");
         onRefresh();
@@ -112,6 +130,9 @@ function AgentInspector({ agent, epoch, stale, onClose, onRefresh, onNavigate, c
       if (alive.current) setBusy(false);
     }
   }
+  let sendLabel = "Send instruction";
+  if (busy) sendLabel = "Sending…";
+  else if (pendingMessage) sendLabel = "Check instruction";
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("aside", { ref: panel, className: "swarm-inspector", "aria-label": "Agent details", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "swarm-inspector-heading", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: "AGENT DETAILS" }),
@@ -228,7 +249,7 @@ function AgentInspector({ agent, epoch, stale, onClose, onRefresh, onNavigate, c
       ] }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("button", { className: "swarm-button swarm-button--primary", disabled: !draft.trim() || stale || busy || pendingMessage !== null, type: "submit", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniArrowUp, { "aria-hidden": "true" }),
-        busy ? "Sending…" : pendingMessage ? "Check instruction" : "Send instruction"
+        sendLabel
       ] })
     ] }) : agent.origin === "observed" ? /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "swarm-handoff", children: [
       "Continue in your ",

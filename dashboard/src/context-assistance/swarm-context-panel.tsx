@@ -18,17 +18,16 @@ export function SwarmContextPanel({ target, ready, loaded, scope, filesAllowed, 
     const files = scope.sources.length === 1 ? "file" : "files";
     lead = `This project already has ${scope.sources.length} approved ${files}. Use “Show what your AI would get” below to preview its context.`;
   }
+  let connection = "This app needs a CIGAR MCP connection. After adding the project, open App setup and pair its request under “Connect another app” below. Finding its process does not connect it.";
+  if (automatic) connection = "With Guard connected in App setup, new prompts in this app receive project context. A running turn keeps its existing context; send your next instruction after setup.";
+  else if (target.harness === "aider") connection = "Aider is visible here for activity only. Guard does not connect Aider to CIGAR, so this project grant will not inject context into its prompts.";
   useEffect(() => { panel.current?.focus({ preventScroll: true }); panel.current?.scrollIntoView({ block: "start" }); }, [target.id]);
   return <section ref={panel} tabIndex={-1} aria-label="Context for Swarm agent" className="space-y-3 rounded-2xl border border-brand-blue/25 bg-brand-blue/[0.04] p-5">
     <p className="text-xs font-semibold uppercase tracking-wider text-brand-blue">From Swarm</p>
     <h3 className={versionHeading}>Context for {target.label}</h3>
     <p className="break-all font-mono text-sm text-brand-dark/75">{target.workspace ?? "This agent did not report its project. Choose its folder below."}</p>
     <p className={versionLead}>{lead}</p>
-    <p className="text-sm leading-6 text-brand-dark/70">{automatic
-      ? "With Guard connected in App setup, new prompts in this app receive project context. A running turn keeps its existing context; send your next instruction after setup."
-      : target.harness === "aider"
-        ? "Aider is visible here for activity only. Guard does not connect Aider to CIGAR, so this project grant will not inject context into its prompts."
-        : "This app needs a CIGAR MCP connection. After adding the project, open App setup and pair its request under “Connect another app” below. Finding its process does not connect it."}</p>
+    <p className="text-sm leading-6 text-brand-dark/70">{connection}</p>
     <div className="flex flex-wrap gap-2">
       {ready && !filesAllowed && allowFiles ? <CigarAllowFilesButton allow={allowFiles} className={versionButton} /> : null}
       <button type="button" className={versionButton} onClick={() => {

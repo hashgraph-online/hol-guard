@@ -1,6 +1,6 @@
 import type { ContextWorkspaceScope } from "../context-assistance/workspaces-api";
 import { usesPromptContext, workspaceForSwarmAgent } from "../context-assistance/swarm-handoff";
-import type { Agent, AgentState } from "./types";
+import type { Agent, AgentState, SwarmSnapshot } from "./types";
 
 export const UNKNOWN_PROJECT = "@unknown";
 export type Project = { id: string; name: string; path: string | null; agents: Agent[] };
@@ -43,4 +43,25 @@ export function relativeTime(at: number, now = Date.now()) {
   if (seconds < 60) return `${seconds}s ago`;
   if (seconds < 3600) return `${Math.floor(seconds / 60)}m ago`;
   return `${Math.floor(seconds / 3600)}h ago`;
+}
+
+/** Keeps an agent the service already accepted, at a newer revision or newly
+ * launched, when an older poll lands after it. Entries a poll has caught up
+ * with are dropped. */
+export function withAcceptedAgents(next: SwarmSnapshot, accepted: Map<string, Agent>): SwarmSnapshot {
+  let kept = false;
+  const agents = next.agents.map((agent) => {
+    const newer = accepted.get(agent.id);
+    if (!newer) return agent;
+    if (newer.revision > agent.revision) { kept = true; return newer; }
+    accepted.delete(agent.id);
+    return agent;
+  });
+  for (const [id, newer] of accepted) {
+    if (next.agents.some((agent) => agent.id === id)) continue;
+    // A poll taken before the launch was accepted has not seen it yet.
+    if (next.observed_at_ms < newer.updated_at_ms) { kept = true; agents.push(newer); }
+    else accepted.delete(id);
+  }
+  return kept ? { ...next, agents } : next;
 }
