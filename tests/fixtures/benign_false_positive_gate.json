@@ -17289,6 +17289,81 @@
       "expect": "not_allow"
     },
     {
+      "id": "grok-grep-edge-clone-name-glob-skips-env-backup",
+      "fix_area": "search",
+      "harnesses": [
+        "grok"
+      ],
+      "tool": "grep",
+      "tool_input": {
+        "pattern": "EDGE_PREVIOUS_SETTING",
+        "path": "${HOME}/edge-clone",
+        "glob": "*.md"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "grok-grep-edge-clone-name-glob-regex-skips-env-backup",
+      "fix_area": "search",
+      "harnesses": [
+        "grok"
+      ],
+      "tool": "grep",
+      "tool_input": {
+        "pattern": "edge.*setting",
+        "path": "${HOME}/edge-clone",
+        "glob": "*.ts"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "neg-grok-grep-edge-clone-name-glob-selects-env-backup",
+      "fix_area": "negative",
+      "harnesses": [
+        "grok"
+      ],
+      "tool": "grep",
+      "tool_input": {
+        "pattern": "EDGE_PREVIOUS_SETTING",
+        "path": "${HOME}/edge-clone",
+        "glob": "*.bak"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-grok-grep-edge-clone-dotfile-glob-selects-env-backup",
+      "fix_area": "negative",
+      "harnesses": [
+        "grok"
+      ],
+      "tool": "grep",
+      "tool_input": {
+        "pattern": "edge.*setting",
+        "path": "${HOME}/edge-clone",
+        "glob": ".env*"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-grok-grep-edge-clone-path-glob-screens-every-file",
+      "fix_area": "negative",
+      "harnesses": [
+        "grok"
+      ],
+      "tool": "grep",
+      "tool_input": {
+        "pattern": "edge.*setting",
+        "path": "${HOME}/edge-clone",
+        "glob": "workers/**"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
       "id": "gauntlet-grep-rln-checkout-from-parent-directory",
       "fix_area": "shell",
       "harnesses": [
