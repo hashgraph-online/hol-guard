@@ -45353,6 +45353,40 @@
       "expect": "allow"
     },
     {
+      "id": "rg-anywhere-path-glob-docs-tree",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "rg --files -g '**/docs/**' -g '!output'"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "rg-anywhere-path-glob-after-git-status",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git status --short --branch && rg --files -g '**/src/**'"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
       "id": "rg-recursive-glob-markdown",
       "fix_area": "shell",
       "harnesses": [

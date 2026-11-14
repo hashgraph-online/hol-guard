@@ -3361,8 +3361,8 @@
       "oracle": "commands",
       "commands": [
         "rg --files -g 'README.md' -g 'src/**' -g '*settings*'",
-        "rg --files -g 'docs/**' -g '!output'",
-        "git status --short --branch && rg --files -g 'src/**'"
+        "rg --files -g '**/docs/**' -g '!output'",
+        "git status --short --branch && rg --files -g '**/src/**'"
       ],
       "prompt": "Run each exact bash command below separately once in order, observing each result before continuing. No additional calls."
     },
