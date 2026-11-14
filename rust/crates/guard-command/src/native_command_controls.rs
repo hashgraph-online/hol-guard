@@ -681,6 +681,7 @@ mod full_allow;
 mod precedence;
 #[path = "native_command_unmodeled.rs"]
 mod unmodeled;
+pub(crate) use floor::explain_expired_proof;
 use floor::{add_authority_repair_hint, evaluation_error_reason, rank, rule_floor, strengthen};
 pub(crate) use precedence::settle_with_explicit_allow;
 pub(crate) use unmodeled::{

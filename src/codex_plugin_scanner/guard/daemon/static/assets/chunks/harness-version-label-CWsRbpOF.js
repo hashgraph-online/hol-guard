@@ -1,5 +1,58 @@
 import { eh as fetchGuardApi, r as reactExports, J as isConnectableAppHarness, by as isGuardDemoMode, j as jsxRuntimeExports, cb as fetchSettings, a$ as harnessPostureRows, eA as appModesUpdate, a3 as updateSettings, eB as appModesStatusMessage, ej as appModes, eC as needsConfirm, aO as harnessRowTone, eD as cigarReady, eE as cigarSupported, c6 as guardAwareHref, t as harnessDisplayName, aZ as PROTECTION_POSTURE_COPY, eF as guardOffPrompt, eG as cigarUnavailableReason, b4 as globalPosture, eH as HiMiniCheckBadge, ar as HiMiniExclamationTriangle, au as HiMiniMinusCircle, ao as HiMiniQuestionMarkCircle } from "../guard-dashboard.js";
 import { S as SettingsSaveProofModal } from "./settings-save-proof-modal-D5T3JAnf.js";
+const PROTECTION_STATE_COPY = {
+  configured: { label: "Configured, not proven", tone: "warning" },
+  transport_ready: { label: "Hook answers, block not proven", tone: "warning" },
+  live_block_proven: { label: "Live block proven", tone: "success" },
+  live_allow_proven: { label: "Live allow proven, block not proven", tone: "warning" },
+  observe_only: { label: "Observe only", tone: "neutral" },
+  partial: { label: "Partly proven", tone: "warning" },
+  unsupported: { label: "Not supported", tone: "danger" },
+  stale: { label: "Evidence out of date", tone: "danger" }
+};
+const UNKNOWN_PROTECTION_LABEL = "Protection unknown";
+const EVENT_REASON_COPY = {
+  no_enforceable_boundary: "This app offers no event Guard can stop here.",
+  runs_after_execution: "Runs after the action, so it can record but not stop it.",
+  no_live_evidence: "No live run has proven a block on this event yet.",
+  version_not_in_evidence: "This exact app version has no live evidence.",
+  observation_stale: "The last version check is out of date.",
+  no_evidence_for_this_build: "No live evidence for this Guard release on this platform."
+};
+function isState(value) {
+  return typeof value === "string" && Object.prototype.hasOwnProperty.call(PROTECTION_STATE_COPY, value);
+}
+function optionalText(value) {
+  return typeof value === "string" && value.length > 0 ? value : null;
+}
+function normalizeProtectionState(value) {
+  return isState(value) ? value : null;
+}
+function normalizeEventStates(value) {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((item) => {
+    if (typeof item !== "object" || item === null) return [];
+    const entry = item;
+    const event = optionalText(entry.event);
+    if (!event || !isState(entry.state)) return [];
+    return [{
+      event,
+      transport: optionalText(entry.transport),
+      mode: optionalText(entry.mode),
+      state: entry.state,
+      reason: optionalText(entry.reason)
+    }];
+  });
+}
+function protectionStateLabel(state) {
+  return state ? PROTECTION_STATE_COPY[state].label : UNKNOWN_PROTECTION_LABEL;
+}
+function protectionStateTone(state) {
+  return state ? PROTECTION_STATE_COPY[state].tone : "warning";
+}
+function eventReasonCopy(reason) {
+  return reason ? EVENT_REASON_COPY[reason] ?? null : null;
+}
 const STATES = /* @__PURE__ */ new Set(["tested", "untested", "version_unknown", "coverage_unavailable"]);
 const SCHEMA = "hol-guard-harness-version-compatibility.v1";
 function record(value) {
@@ -67,7 +120,9 @@ function unknownCompatibility(harness, reason) {
     evidence: [],
     limitations: [],
     remediation: [],
-    acknowledgement: { eligible: false, acknowledged: false, key: null }
+    acknowledgement: { eligible: false, acknowledged: false, key: null },
+    protectionState: null,
+    eventStates: []
   };
 }
 function normalizeVersionCompatibility(harness, raw) {
@@ -109,7 +164,9 @@ function normalizeVersionCompatibility(harness, raw) {
       eligible: ackEligible,
       acknowledged: ackEligible && ack?.acknowledged === true,
       key: ackEligible ? ackKey : null
-    }
+    },
+    protectionState: normalizeProtectionState(payload.protection_state),
+    eventStates: normalizeEventStates(payload.event_states)
   };
 }
 function versionCheckUnsupported(compatibility) {
@@ -601,7 +658,10 @@ export {
   acknowledgeUntestedVersion as g,
   clearVersionAcknowledgement as h,
   inactiveInstallNeedsRepair as i,
-  isHarnessDetected as j,
+  protectionStateTone as j,
+  eventReasonCopy as k,
+  isHarnessDetected as l,
+  protectionStateLabel as p,
   resolveDetectedAppStatus as r,
   setupStatusFor as s,
   useFleetAppPosture as u,

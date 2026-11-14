@@ -275,6 +275,73 @@ pub(in crate::pretool) fn home_hidden_walk_clears_stores(
     true
 }
 
+/// How many entries a link-name walk reads before its proof gives up.
+const MAX_LINK_WALK_ENTRIES: usize = 4_096;
+
+/// How deep a walk with no `-maxdepth` is followed before it keeps the
+/// review: `find` itself has no limit, so a tree that goes deeper than this
+/// is one whose every link name was not read.
+const MAX_UNBOUNDED_LINK_DEPTH: usize = 32;
+
+/// Whether every link a `-type l` walk of `value` would print, down to
+/// `max_depth`, has a name `ordinary_name` accepts outside every credential
+/// store. With no `max_depth` the walk has to reach the bottom of the tree.
+///
+/// `find -type l` prints link names and never follows them, so what it can
+/// disclose is the names themselves. Rather than reason about a glob, the
+/// tree is walked here the way `find` walks it: links are not entered, every
+/// directory down to the bound is opened, and each link found must have an
+/// ordinary name and a path that clears the store screen. A directory that
+/// cannot be opened, or a tree past [`MAX_LINK_WALK_ENTRIES`], keeps the
+/// review.
+pub(in crate::pretool) fn home_hidden_link_names(
+    value: &str,
+    home_dir: Option<&str>,
+    cwd: Option<&str>,
+    max_depth: Option<usize>,
+    ordinary_name: impl Fn(&str) -> bool,
+) -> bool {
+    let Some((canonical, relative)) = resolved_home_entry(value, home_dir, cwd) else {
+        return false;
+    };
+    let mut pending = vec![(canonical, relative, 0_usize)];
+    let mut inspected = 0_usize;
+    while let Some((directory, relative, depth)) = pending.pop() {
+        match max_depth {
+            Some(limit) if depth >= limit => continue,
+            // An unbounded `find` keeps descending; stopping here would
+            // leave the links below unread and still answer for them.
+            None if depth >= MAX_UNBOUNDED_LINK_DEPTH => return false,
+            _ => {}
+        }
+        let Ok(entries) = std::fs::read_dir(&directory) else {
+            return false;
+        };
+        for entry in entries {
+            inspected += 1;
+            if inspected > MAX_LINK_WALK_ENTRIES {
+                return false;
+            }
+            let Ok(entry) = entry else {
+                return false;
+            };
+            let Ok(kind) = entry.file_type() else {
+                return false;
+            };
+            let name = entry.file_name();
+            let path = relative.join(&name);
+            if kind.is_symlink() {
+                if !name.to_str().is_some_and(&ordinary_name) || !clears_store_screen(&path) {
+                    return false;
+                }
+            } else if kind.is_dir() {
+                pending.push((entry.path(), path, depth + 1));
+            }
+        }
+    }
+    true
+}
+
 /// Whether `value` names an existing file below a hidden entry of the home
 /// directory that returns no credential.
 ///

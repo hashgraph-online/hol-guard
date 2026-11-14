@@ -6201,8 +6201,16 @@
     }
   }
 
+  .ring-emerald-200 {
+    --tw-ring-color: var(--color-emerald-200);
+  }
+
   .ring-orange-200 {
     --tw-ring-color: var(--color-orange-200);
+  }
+
+  .ring-rose-200 {
+    --tw-ring-color: var(--color-rose-200);
   }
 
   .ring-slate-100 {

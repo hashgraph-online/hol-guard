@@ -158,6 +158,14 @@ def inspect_command(
                     "detail": "Validated the request-bound native command model.",
                 },
                 {
+                    # The resident's own floor, before host policy. Inspection
+                    # composes only extension coverage, so a containment or
+                    # reapproval floor a hook would apply shows here.
+                    "step": "native-pre-tool-floor",
+                    "result": str(reviewed.payload.get("minimum_action") or "unknown"),
+                    "detail": "The native runtime's pre-tool floor; Guard hooks apply it before final policy.",
+                },
+                {
                     "step": "benign-classification",
                     "result": "matched" if benign else "not-matched",
                     "detail": "Used the native command decision's explicit benign classification.",

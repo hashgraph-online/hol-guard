@@ -11,6 +11,8 @@ protection. See
 [Local Guard vs Guard Cloud](./local-vs-cloud.md) for the full subscription
 boundary.
 
+For the `pipx` installation path, **Python 3.11 or newer is recommended**, consistent with [pipx's installation guide](https://pipx.pypa.io/stable/how-to/install-pipx.html). HOL Guard itself supports Python 3.10+ (see [`pyproject.toml`](../../pyproject.toml)); this recommendation does not change the package's minimum supported Python version.
+
 For security reviews, sales conversations, and GRC packets, see the
 [Enterprise packet](./enterprise-packet.md).
 
@@ -461,7 +463,7 @@ After the active factor succeeds, Guard issues an internal 30-second grant bound
 - macOS/Linux: `~/.hol-guard/bin/guard-<harness>`
 - Windows: `~/.hol-guard/bin/guard-<harness>.cmd`
 
-Claude Code also gets Guard hook entries in `.claude/settings.local.json` when you install from a workspace.
+Claude Code also gets Guard hook entries in `~/.claude/settings.json`, even when you install from a workspace. See [Claude Code settings](./claude-code-settings.md) for the entries Guard owns and how removal restores the file.
 
 Copilot CLI gets a Guard-owned repo hook file at `.github/hooks/hol-guard-copilot.json` when you install from a workspace. Guard only reads `~/.copilot/config.json` and `~/.copilot/mcp-config.json`; it does not auto-write user-level Copilot config.
 

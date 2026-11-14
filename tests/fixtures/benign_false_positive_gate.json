@@ -8740,6 +8740,48 @@
       "expect": "allow"
     },
     {
+      "id": "home-cache-find-tool-links",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "/usr/bin/find ${HOME}/.cache/hol-guard-test -mindepth 2 -maxdepth 2 -type l -print 2>/dev/null | /usr/bin/head -100"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "neg-home-ssh-find-links",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "find ${HOME}/.ssh -maxdepth 2 -type l"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-home-cache-find-links-or-files",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "find ${HOME}/.cache/hol-guard-test -maxdepth 2 -type l -o -type f"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
       "id": "home-toolchain-ls-home-braces",
       "fix_area": "shell",
       "harnesses": [
