@@ -12,8 +12,8 @@ from pathlib import Path
 
 from codex_plugin_scanner.guard.adapters import get_adapter
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
-from codex_plugin_scanner.guard.adapters.grok_hooks import grok_hook_process_exit
 from codex_plugin_scanner.guard.adapters.native_harness import NativeHarnessAdapter
+from codex_plugin_scanner.guard.cli.native_hook_exit_code import native_hook_verdict_exit_code
 from codex_plugin_scanner.guard.runtime.actions import normalize_harness_payload
 
 from .grok_test_support import _ctx, _fixture
@@ -140,9 +140,9 @@ class TestGrokHookResponses:
         monkeypatch.delenv("HOL_GUARD_HOME", raising=False)
         monkeypatch.setattr(sys, "argv", ["hol-guard"])
         for action in ("quarantine-required", "", "ask", None, 7):
-            assert grok_hook_process_exit(action) == 2, action
-        assert grok_hook_process_exit("allow") == 0
-        assert grok_hook_process_exit("warn") == 0
+            assert native_hook_verdict_exit_code("grok", action) == 2, action
+        assert native_hook_verdict_exit_code("grok", "allow") == 0
+        assert native_hook_verdict_exit_code("grok", "warn") == 0
 
     def test_prompt_hook_preserves_native_policy_block(self, tmp_path: Path, native_hook_force: Path) -> None:
         import json as _json
