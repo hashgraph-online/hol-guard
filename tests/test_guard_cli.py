@@ -823,18 +823,6 @@ class TestGuardCli:
         # These update tests simulate package-index installs; a source checkout has no bundled runtime.
         monkeypatch.setattr(guard_update_commands_module, "bundled_native_runtime_missing", lambda: False)
 
-    def test_claude_guard_hook_command_detection_handles_legacy_and_pinned_commands(self):
-        legacy_command = "/opt/python/bin/python3 -m codex_plugin_scanner.cli guard hook --guard-home /tmp/guard"
-        pinned_command = (
-            "/opt/python/bin/python3 -c "
-            "\"import sys;sys.path.insert(0, '/tmp/src');from codex_plugin_scanner.cli import main;"
-            "raise SystemExit(main(['guard', 'hook']))\""
-        )
-
-        assert claude_adapter_module._is_guard_hook_command(legacy_command) is True
-        assert claude_adapter_module._is_guard_hook_command(pinned_command) is True
-        assert claude_adapter_module._is_guard_hook_command("python something-else.py") is False
-
     def test_guard_prompt_renders_untrusted_metadata_as_literal_text(self):
         console = Console(record=True, width=120)
         artifact = guard_prompt_module.PromptArtifact(

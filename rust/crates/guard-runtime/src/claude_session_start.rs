@@ -1,7 +1,7 @@
 //! Native Claude Code SessionStart hook (`claude-session-start-v1`).
 //!
-//! The Python SessionStart hook (`run_session_start_from_argv` in
-//! `adapters/claude_hook_argv.py`) starts the Guard daemon when it is down,
+//! The Python SessionStart hook (`_run_session_start_from_argv` in
+//! `adapters/claude_code.py`) starts the Guard daemon when it is down,
 //! rewrites the managed hook entries in `~/.claude/settings.json` inside the
 //! owned installation transaction, and prints the SessionStart context. On
 //! most session starts the daemon is already live and the entries are

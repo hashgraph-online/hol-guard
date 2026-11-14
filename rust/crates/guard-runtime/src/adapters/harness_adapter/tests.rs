@@ -11,6 +11,8 @@ use tempfile::TempDir;
 
 use super::dispatch;
 
+#[path = "tests_claude.rs"]
+mod claude_family;
 #[path = "tests_cline.rs"]
 mod cline_family;
 #[path = "tests_copilot.rs"]
@@ -105,7 +107,8 @@ fn describe_lists_every_adapter_this_kind_owns() {
             "opencode",
             "cline",
             "copilot",
-            "cursor"
+            "cursor",
+            "claude-code"
         ]
     );
 }

@@ -123,7 +123,7 @@
           "known_blind_spots": [
             "Background sessions without an active terminal may not surface hook events."
           ],
-          "source_reference": "src/codex_plugin_scanner/guard/adapters/claude_hook_config.py:_sync_runtime_hook_groups"
+          "source_reference": "rust/crates/guard-runtime/src/adapters/harness_adapter/claude_settings.rs:sync"
         },
         {
           "event": "PermissionRequest",
@@ -139,7 +139,7 @@
           "known_blind_spots": [
             "Guard adds pending review context and defers to Claude's own permission dialog; the native PreToolUse verdict remains the decision boundary."
           ],
-          "source_reference": "src/codex_plugin_scanner/guard/adapters/claude_hook_config.py:_sync_runtime_hook_groups"
+          "source_reference": "rust/crates/guard-runtime/src/adapters/harness_adapter/claude_settings.rs:sync"
         },
         {
           "event": "PostToolUse",
@@ -153,7 +153,7 @@
           "known_blind_spots": [
             "Native PostToolUse is not a general model-visible result replacement boundary."
           ],
-          "source_reference": "src/codex_plugin_scanner/guard/adapters/claude_hook_config.py:_sync_runtime_hook_groups"
+          "source_reference": "rust/crates/guard-runtime/src/adapters/harness_adapter/claude_settings.rs:sync"
         },
         {
           "event": "UserPromptSubmit",

@@ -97,7 +97,7 @@ pub(crate) const ENV_PREFIXES: [&str; 14] = [
     "OMP_PROFILE",
 ];
 
-pub(crate) const SPECS: [Spec; 15] = [
+pub(crate) const SPECS: [Spec; 16] = [
     Spec {
         harness: "devin",
         aliases: &["devin", "devin-cli", "cognition-devin"],
@@ -375,6 +375,23 @@ pub(crate) const SPECS: [Spec; 15] = [
         install: Install::Plan,
         dynamic: false,
     },
+    Spec {
+        harness: "claude-code",
+        aliases: &["claude"],
+        executable: "claude",
+        launcher_name: "claude",
+        display_name: Some("claude"),
+        tier: "native-or-center",
+        summary: "Guard uses Claude hooks first and falls back to the local approval center \
+                  when the shell cannot prompt.",
+        fallback: "Claude is the best current harness for deferred Guard approvals.",
+        channel: "hook",
+        auto_open: false,
+        workspace_aibom: true,
+        hook: Hook::None,
+        install: Install::Plan,
+        dynamic: false,
+    },
 ];
 
 pub(crate) fn spec(harness: &str) -> Option<&'static Spec> {
@@ -418,7 +435,7 @@ impl Spec {
             "trusted_launcher": self.harness == "grok",
             "retired_hooks": self.harness == "grok",
             // Paseo and the Pi family add to the generic doctor report.
-            "diagnostics": matches!(self.harness, "paseo" | "pi" | "omp"),
+            "diagnostics": matches!(self.harness, "paseo" | "pi" | "omp" | "claude-code"),
             // The Pi family renders an extension that runs this Guard process.
             "extension": matches!(self.harness, "pi" | "omp"),
             "delegates": if self.install == Install::Delegated {
