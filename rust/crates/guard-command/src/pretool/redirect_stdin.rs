@@ -303,6 +303,11 @@ pub(in crate::pretool) fn skip_bodies(
                 Some((body, _)) => body.split('\n').collect(),
                 None => Vec::new(),
             };
+            // Apply physical-line safety even to builtins-only programs:
+            // the fast path otherwise skips python_program_fits entirely.
+            if !python_has_no_bare_cr(&body.join("\n")) {
+                return None;
+            }
             if !crate::native_command_controls::python_is_builtin_only(&body) {
                 *wide = true;
                 if !python_program_fits(&body) {
@@ -329,18 +334,22 @@ fn python_program_fits(body: &[&str]) -> bool {
     // Python treats a bare CR as a physical line break. The heredoc parser
     // splits on LF; reject only CR that is not part of CRLF, so the encoding
     // header check and interpreter agree without holding ordinary CRLF input.
-    let bytes = source.as_bytes();
-    let no_bare_cr = bytes
-        .iter()
-        .enumerate()
-        .all(|(i, byte)| *byte != b'\r' || bytes.get(i + 1) == Some(&b'\n'));
     body.iter().all(|row| row.is_ascii())
-        && no_bare_cr
+        && python_has_no_bare_cr(&source)
         && !body.iter().take(2).any(|row| coding_comment(row))
         && crate::pretool::script_content::fed::source_clean(
             crate::pretool::script_content::Language::Python,
             &source,
         )
+}
+
+/// A bare CR changes Python's physical source-line boundaries; CRLF is fine.
+fn python_has_no_bare_cr(source: &str) -> bool {
+    let bytes = source.as_bytes();
+    bytes
+        .iter()
+        .enumerate()
+        .all(|(i, byte)| *byte != b'\r' || bytes.get(i + 1) == Some(&b'\n'))
 }
 
 /// Whether a row may be a source-encoding declaration. Python reads one only
