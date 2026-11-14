@@ -215,7 +215,7 @@ fn transfer_outlives_negation(value: &str, transfer_context: &Regex) -> bool {
             .expect("bounded negated list head")
     });
     let list_close =
-        LIST_CLOSE.get_or_init(|| Regex::new(r"(?i)\b(?:or|nor)\b").expect("bounded list close"));
+        LIST_CLOSE.get_or_init(|| Regex::new(r"(?i),\s*(?:or|nor)\b").expect("bounded comma-led list close"));
     let clause_end =
         CLAUSE_END.get_or_init(|| Regex::new(r"[.!?;](?:\s|$)|\n").expect("bounded clause end"));
     transfer_context.find_iter(value).any(|found| {
