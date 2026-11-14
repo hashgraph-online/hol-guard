@@ -18,6 +18,7 @@ fn a_pattern_wildcarded_on_both_sides_is_judged_by_its_matches() {
     std::fs::create_dir_all(root.join("work/repo")).unwrap();
     std::fs::create_dir_all(root.join("work/guard-pr7519")).unwrap();
     std::fs::create_dir_all(root.join("work/.factory")).unwrap();
+    std::fs::create_dir_all(root.join("work/.x\u{e9}config")).unwrap();
     let root = std::fs::canonicalize(root).unwrap();
     std::fs::write(root.join("work/repo/README.md"), "readme\n").unwrap();
     std::fs::write(root.join("work/guard-pr7519/README.md"), "readme\n").unwrap();
@@ -34,6 +35,10 @@ fn a_pattern_wildcarded_on_both_sides_is_judged_by_its_matches() {
             // A pattern that does reach the hidden directory keeps its review.
             (format!("ls {work}/*factory*"), false),
             (format!("ls {work}/*f*"), false),
+            // A UTF-8 shell's `?` takes the two-byte `é` in `.xéconfig`.
+            (format!("ls {work}/*x?config*"), false),
+            // zsh `EXTENDED_GLOB` reads `#` as an operator, not a letter.
+            (format!("ls {work}/*fact#ory*"), false),
         ] {
             let answer = evaluate_pre_tool_envelope_with_context(
                 harness,

@@ -230,6 +230,38 @@ pub(in crate::pretool) fn wildcard_matches(pattern: &[u8], name: &[u8]) -> bool 
     previous[name.len()]
 }
 
+/// True when `*` and `?` could match `name` under any locale and case
+/// option: a superset of [`wildcard_matches`] for names that are not ASCII.
+///
+/// A UTF-8 shell's `?` takes a whole character and a C-locale one a single
+/// byte, so `?` is read as `*` here. Case folding outside ASCII can map a
+/// letter onto an ASCII one (the Kelvin sign onto `k`), so a non-ASCII
+/// character on either side matches any single character.
+pub(in crate::pretool) fn wildcard_may_match(pattern: &str, name: &str) -> bool {
+    let name: Vec<char> = name.chars().collect();
+    let mut previous = vec![false; name.len() + 1];
+    previous[0] = true;
+    for token in pattern.chars() {
+        let mut current = vec![false; name.len() + 1];
+        if token == '*' || token == '?' {
+            current[0] = previous[0];
+            for index in 1..=name.len() {
+                current[index] = previous[index] || current[index - 1];
+            }
+        } else {
+            for index in 1..=name.len() {
+                let other = name[index - 1];
+                current[index] = previous[index - 1]
+                    && (!token.is_ascii()
+                        || !other.is_ascii()
+                        || token.eq_ignore_ascii_case(&other));
+            }
+        }
+        previous = current;
+    }
+    previous[name.len()]
+}
+
 #[cfg(test)]
 #[path = "read_globs_tests.rs"]
 mod tests;

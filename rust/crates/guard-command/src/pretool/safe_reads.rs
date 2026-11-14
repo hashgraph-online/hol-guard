@@ -29,7 +29,7 @@ pub(super) use jq_arguments::{
 };
 pub(crate) use jq_filter::rendering_format as jq_rendering_format;
 pub(crate) use jq_filter::variables_bound as jq_variables_bound;
-pub(super) use read_globs::{glob_file_matches, wildcard_matches};
+pub(super) use read_globs::{glob_file_matches, wildcard_matches, wildcard_may_match};
 pub(super) use sed_reads::{safe_sed_arguments, safe_sed_stdin_arguments};
 
 pub(super) fn safe_file_predicate_arguments(
