@@ -97,10 +97,12 @@ pub(super) fn answer(
     let config = config(proxy, package_root, target);
     let command = signed_argv(proxy, &config, true, Some("1"), Some(proxy))?;
     // The launch must name the proxy the app gave, as both proxy and Core,
-    // and require it.
+    // and require it. It names the canonical path, as `signed_argv` verified.
+    let named = std::fs::canonicalize(proxy).ok()?;
+    let named = named.to_str()?;
     if command.len() != 10
-        || command[PROXY_INDEX] != proxy
-        || command[CORE_INDEX] != proxy
+        || command[PROXY_INDEX] != named
+        || command[CORE_INDEX] != named
         || command[9] != "1"
     {
         return None;

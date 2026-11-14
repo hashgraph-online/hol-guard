@@ -95,8 +95,19 @@ fn plain(argument: &str, names: &ShortNames) -> Option<String> {
     }
 }
 
+/// A single-quoted PowerShell literal. PowerShell closes such a string on
+/// any of its single-quote characters, typographic ones included, so each is
+/// doubled.
 fn powershell_literal(argument: &str) -> String {
-    format!("'{}'", argument.replace('\'', "''"))
+    let mut literal = String::from('\'');
+    for ch in argument.chars() {
+        if matches!(ch, '\'' | '\u{2018}' | '\u{2019}' | '\u{201a}' | '\u{201b}') {
+            literal.push(ch);
+        }
+        literal.push(ch);
+    }
+    literal.push('\'');
+    literal
 }
 
 /// The command line for `argv`, once every path it needs is in `names`

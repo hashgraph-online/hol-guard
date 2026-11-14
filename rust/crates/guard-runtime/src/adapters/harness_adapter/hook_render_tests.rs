@@ -94,6 +94,22 @@ fn a_short_name_that_does_not_map_back_falls_back_to_the_call_operator() {
 }
 
 #[test]
+fn a_typographic_apostrophe_is_doubled_like_an_ascii_one() {
+    let command = argv(&["C:\\Users\\O\u{2019}Neil\\py.exe", "\u{2018}x\u{201b}"]);
+    let known = names(&[
+        ("C:\\Users\\O\u{2019}Neil\\py.exe", None, None),
+        ("\u{2018}x\u{201b}", None, None),
+    ]);
+    assert_eq!(
+        render(&command, true, &known).ok(),
+        Some(
+            "& 'C:\\Users\\O\u{2019}\u{2019}Neil\\py.exe' '\u{2018}\u{2018}x\u{201b}\u{201b}'"
+                .to_owned()
+        )
+    );
+}
+
+#[test]
 fn a_leading_dash_always_uses_the_call_operator() {
     let command = argv(&["-x", "a b"]);
     assert!(unnamed([&command[..]], true, &ShortNames::new()).is_empty());
