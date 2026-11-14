@@ -101,6 +101,9 @@ _ALLOWING_POLICY_ACTIONS = {"allow", "warn"}
 # The actions a command-string review may answer: its callers have no
 # containment or reapproval route.
 _LEGACY_REVIEW_ACTIONS = {"allow", "review", "block"}
+# Review-tier actions the Rust authority can name. A diagnostic projection
+# reads each as ``review`` and keeps the exact action as ``native_minimum_action``.
+_NATIVE_REVIEW_TIER_ACTIONS = {"require-reapproval", "sandbox-required"}
 
 
 def _valid_generic_result_fields(payload: dict[str, Any]) -> bool:
@@ -171,6 +174,9 @@ def _decode_pre_tool(payload: object, *, command: str) -> dict[str, Any] | None:
         return None
     decision = payload.get("decision")
     action = payload.get("minimum_action") or payload.get("policy_action")
+    native_action = action
+    if action in _NATIVE_REVIEW_TIER_ACTIONS and decision == "deny":
+        action = "review"
     reason_code = payload.get("reason_code")
     reason = payload.get("reason")
     explicitly_benign = payload.get("explicitly_benign")
@@ -191,6 +197,8 @@ def _decode_pre_tool(payload: object, *, command: str) -> dict[str, Any] | None:
         return record_native_hook_result("native_fail_safe", None)
     if explicitly_benign != (decision == "allow" and action == "allow"):
         return record_native_hook_result("native_fail_safe", None)
+    if native_action != action:
+        return {**payload, "minimum_action": action, "native_minimum_action": native_action}
     return payload
 
 

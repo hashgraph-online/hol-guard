@@ -608,11 +608,17 @@ def _render_command_inspection(console: Console, payload: dict[str, object]) -> 
     extensions = _coerce_dict_list(payload.get("extensions"))
     rules = _coerce_dict_list(payload.get("rules"))
     risk_classes = _coerce_string_list(payload.get("risk_classes"))
-    border_style = "yellow" if status == "review" else "cyan"
+    unavailable = status == "native_unavailable"
+    border_style = "red" if unavailable else "yellow" if status == "review" else "cyan"
     summary = Table.grid(padding=(0, 1))
-    summary.add_row("Result", Text(status.upper(), style=f"bold {border_style}"))
+    summary.add_row("Result", Text(_command_inspection_result_label(payload), style=f"bold {border_style}"))
     action_class = classification.get("action_class")
-    summary.add_row("Action class", Text(str(action_class or "No sensitive action matched")))
+    summary.add_row("Action class", Text(str(action_class or _command_inspection_unmatched_label(status))))
+    if unavailable:
+        summary.add_row(
+            "Minimum action",
+            Text(str(payload.get("minimum_action") or "review").upper(), style=f"bold {border_style}"),
+        )
     if extensions:
         summary.add_row("Extension", Text(str(extensions[0].get("extension_id") or "unknown"), style="cyan"))
     if rules:
@@ -628,6 +634,9 @@ def _render_command_inspection(console: Console, payload: dict[str, object]) -> 
     recovery = classification.get("recovery")
     if isinstance(recovery, str) and recovery:
         console.print(Panel(Text(recovery), title="Next step", border_style=border_style))
+    recovery_commands = _command_inspection_recovery_commands(payload)
+    if recovery_commands:
+        console.print(Panel("\n".join(recovery_commands), title="Recovery commands", border_style=border_style))
     if extensions:
         alternatives = _coerce_string_list(extensions[0].get("safer_alternatives"))
         if alternatives:
@@ -713,20 +722,53 @@ def _render_command_setup(console: Console, payload: dict[str, object]) -> None:
     console.print("[dim]Detection is read-only. No Guard settings were changed.[/dim]")
 
 
+def _command_inspection_readiness(payload: PayloadDict) -> dict[str, object]:
+    return _coerce_object_dict(payload.get("readiness"))
+
+
+def _command_inspection_result_label(payload: PayloadDict) -> str:
+    status = str(payload.get("status") or "invalid")
+    if status != "native_unavailable":
+        return status.upper()
+    reason_code = str(_command_inspection_readiness(payload).get("reason_code") or "native_review_unavailable")
+    # An inspection with no native answer is not a classification. Say so in the
+    # result line itself so it cannot be read as a quiet "no match".
+    return f"NOT EVALUATED ({reason_code})"
+
+
+def _command_inspection_unmatched_label(status: str) -> str:
+    if status == "native_unavailable":
+        return "Unknown: the native runtime did not answer, so nothing was classified"
+    return "No sensitive action matched"
+
+
+def _command_inspection_recovery_commands(payload: PayloadDict) -> list[str]:
+    if str(payload.get("status") or "") != "native_unavailable":
+        return []
+    return _coerce_string_list(_command_inspection_readiness(payload).get("recovery_commands"))
+
+
 def _plain_text_command_inspection(payload: PayloadDict) -> str:
     classification = _coerce_object_dict(payload.get("classification"))
     extensions = _coerce_dict_list(payload.get("extensions"))
     rules = _coerce_dict_list(payload.get("rules"))
+    status = str(payload.get("status") or "invalid")
+    action_class = classification.get("action_class") or _command_inspection_unmatched_label(status)
     lines = [
-        f"HOL Guard command inspection: {str(payload.get('status') or 'invalid').upper()}",
+        f"HOL Guard command inspection: {_command_inspection_result_label(payload)}",
         f"Command: {payload.get('command') or ''}",
-        f"Action class: {classification.get('action_class') or 'No sensitive action matched'}",
+        f"Action class: {action_class}",
         f"Reason: {classification.get('reason') or ''}",
         "Policy: Not evaluated; this inspection creates no approvals or receipts.",
     ]
+    if status == "native_unavailable":
+        lines.insert(3, f"Minimum action: {str(payload.get('minimum_action') or 'review').upper()}")
     recovery = classification.get("recovery")
     if isinstance(recovery, str) and recovery:
         lines.append(f"Recovery: {recovery}")
+    recovery_commands = _command_inspection_recovery_commands(payload)
+    if recovery_commands:
+        lines.append(f"Recovery commands: {'; '.join(recovery_commands)}")
     if extensions:
         lines.insert(3, f"Extension: {extensions[0].get('extension_id') or 'unknown'}")
     if rules:
