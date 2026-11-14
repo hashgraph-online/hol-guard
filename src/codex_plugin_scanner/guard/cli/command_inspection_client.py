@@ -11,6 +11,7 @@ from __future__ import annotations
 import time
 from collections.abc import Callable
 from pathlib import Path
+from typing import Protocol
 
 from ..native_daemon_client import GuardDaemonRequestError
 from ..runtime.command_inspection import inspection_readiness, unavailable_command_inspection
@@ -21,7 +22,9 @@ from ..runtime.command_inspection import inspection_readiness, unavailable_comma
 WARMUP_BUDGET_SECONDS = 5.0
 WARMUP_POLL_SECONDS = 0.5
 
-Inspect = Callable[[dict[str, object]], dict[str, object]]
+
+class InspectionClient(Protocol):
+    def inspect_command(self, payload: dict[str, object]) -> dict[str, object]: ...
 
 
 def _still_warming(payload: dict[str, object]) -> bool:
@@ -44,20 +47,20 @@ def inspect_through_daemon(
     guard_home: Path,
     workspace: Path,
     home: Path,
-    client_for: Callable[[Path], object],
+    client_for: Callable[[Path], InspectionClient],
     ensure_daemon: Callable[..., object],
     clock: Callable[[], float] = time.monotonic,
     sleep: Callable[[float], None] = time.sleep,
 ) -> dict[str, object]:
     """Return the daemon's inspection, or a typed unavailable result."""
 
-    request = {"command": command_text, "cwd": str(workspace), "home_dir": str(home)}
+    request: dict[str, object] = {"command": command_text, "cwd": str(workspace), "home_dir": str(home)}
 
     def unavailable(code: str) -> dict[str, object]:
         return unavailable_command_inspection(command_text, cwd=workspace, home_dir=home, reason_code=code)
 
     try:
-        payload = client_for(guard_home).inspect_command(request)  # type: ignore[attr-defined]
+        payload = client_for(guard_home).inspect_command(request)
     except GuardDaemonRequestError:
         try:
             ensure_daemon(guard_home, home_dir=home)
@@ -66,14 +69,14 @@ def inspect_through_daemon(
         except (RuntimeError, OSError):
             return unavailable("daemon_start_failed")
         try:
-            payload = client_for(guard_home).inspect_command(request)  # type: ignore[attr-defined]
+            payload = client_for(guard_home).inspect_command(request)
         except GuardDaemonRequestError:
             return unavailable("daemon_request_failed")
     deadline = clock() + WARMUP_BUDGET_SECONDS
     while _still_warming(payload) and clock() + WARMUP_POLL_SECONDS < deadline:
         sleep(WARMUP_POLL_SECONDS)
         try:
-            payload = client_for(guard_home).inspect_command(request)  # type: ignore[attr-defined]
+            payload = client_for(guard_home).inspect_command(request)
         except GuardDaemonRequestError:
             return unavailable("daemon_request_failed")
     return _with_readiness(payload, "native_review_unavailable")
