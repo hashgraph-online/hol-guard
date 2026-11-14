@@ -69,6 +69,7 @@ mod hermes_config;
 mod hermes_hooks;
 mod hermes_install;
 mod hermes_uninstall;
+mod isolated_python;
 mod kimi;
 mod openclaw;
 mod opencode;
@@ -230,6 +231,12 @@ fn answer(step: Step<Value>) -> KindResult {
 /// The `codex_hook_owners` kind: which Codex hook handlers this install owns.
 pub(crate) fn codex_owners(args: &Value) -> KindResult {
     answer(codex_owners::dispatch(args_object(args)?))
+}
+
+/// The `isolated_hook_python` kind: the system interpreter a stdlib hook
+/// client runs under.
+pub(crate) fn isolated_python(args: &Value) -> KindResult {
+    answer(isolated_python::dispatch(args_object(args)?))
 }
 
 pub(crate) fn dispatch(args: &Value) -> KindResult {

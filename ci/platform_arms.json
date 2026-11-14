@@ -843,6 +843,14 @@
    "body": "dc474b94f640"
   },
   {
+   "verdict": "windows-unsupported",
+   "note": "Python names no isolated interpreter off macOS and Linux, so a Windows hook client never runs under one; the caller keeps the Guard launcher it already has.",
+   "file": "rust/crates/guard-runtime/src/adapters/harness_adapter/isolated_python.rs",
+   "item": "fn usable(_path: &Path, _system_root: Option<&str>) -> bool",
+   "cfg": "not(unix)",
+   "body": "50e90393da09"
+  },
+  {
    "verdict": "posix-primitive",
    "note": "Windows has no POSIX owner or permission bits. The Python launcher refresh skipped its owner check there (`os.name != \"nt\"`) and kept `S_IMODE(st_mode)`, which on Windows reflects only the read-only attribute; this arm answers the same: owned, with 0o444 or 0o666 from that attribute.",
    "file": "rust/crates/guard-runtime/src/adapters/harness_adapter/opencode_checks.rs",
