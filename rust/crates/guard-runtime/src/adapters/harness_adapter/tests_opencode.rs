@@ -232,6 +232,7 @@ fn refresh_skips_an_invalid_config_with_a_warning() {
     assert_eq!(applied, json!({"refreshed": 0}));
 }
 
+#[cfg(unix)]
 #[test]
 fn detect_finds_the_cli_in_its_installer_directory_under_a_terminal_path() {
     use std::os::unix::fs::PermissionsExt;
