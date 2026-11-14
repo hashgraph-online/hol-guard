@@ -1,0 +1,287 @@
+{
+  "type": "object",
+  "properties": {
+    "schema_version": {
+      "const": "1.0"
+    },
+    "id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+    },
+    "seed": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 1000000000
+    },
+    "repetitions": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 100
+    },
+    "qualification_eligible": {
+      "type": "boolean"
+    },
+    "qualification_reasons": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 8192
+      },
+      "maxItems": 256,
+      "uniqueItems": true
+    },
+    "budgets": {
+      "type": "object",
+      "properties": {
+        "episode_seconds": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 86400
+        },
+        "tool_timeout_seconds": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 3600
+        },
+        "tool_operations": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 100000
+        },
+        "model_tokens": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 10000000
+        },
+        "campaign_seconds": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 100000000
+        },
+        "campaign_tokens": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 1000000000
+        },
+        "concurrency": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 128
+        },
+        "max_retries": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 5
+        }
+      },
+      "required": [
+        "episode_seconds",
+        "tool_timeout_seconds",
+        "tool_operations",
+        "model_tokens",
+        "campaign_seconds",
+        "campaign_tokens",
+        "concurrency",
+        "max_retries"
+      ],
+      "additionalProperties": false
+    },
+    "inventory": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+          },
+          "workflow_id": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+          },
+          "group": {
+            "enum": [
+              "base",
+              "holdout",
+              "approval"
+            ]
+          },
+          "variant": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+          },
+          "condition": {
+            "enum": [
+              "clean-protected",
+              "clean-unprotected",
+              "attacked-protected",
+              "attacked-unprotected",
+              "approval-protected",
+              "approval-unprotected"
+            ]
+          },
+          "protected": {
+            "type": "boolean"
+          },
+          "repetition": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 1000000000
+          },
+          "snapshot_id": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+          },
+          "isolation_id": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+          },
+          "authorization_digest": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          },
+          "workflow_digest": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          }
+        },
+        "required": [
+          "id",
+          "workflow_id",
+          "group",
+          "variant",
+          "condition",
+          "protected",
+          "repetition",
+          "snapshot_id",
+          "isolation_id",
+          "authorization_digest",
+          "workflow_digest"
+        ],
+        "additionalProperties": false
+      },
+      "maxItems": 100000
+    },
+    "inventory_digest": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "workflow_digest": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "frozen_inputs": {
+      "type": "object",
+      "propertyNames": {
+        "type": "string",
+        "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+      },
+      "additionalProperties": {
+        "type": "string",
+        "pattern": "^[a-f0-9]{64}$"
+      },
+      "maxProperties": 64
+    },
+    "manifest_digest": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "holdout_manifest_digest": {
+      "anyOf": [
+        {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "preview": {
+      "type": "object",
+      "properties": {
+        "episodes": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1000000000
+        },
+        "base_episodes": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1000000000
+        },
+        "holdout_episodes": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1000000000
+        },
+        "approval_episodes": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1000000000
+        },
+        "maximum_attempts": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1000000000
+        },
+        "maximum_tool_operations": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1000000000
+        },
+        "maximum_tokens": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1000000000
+        },
+        "maximum_seconds": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1000000000
+        }
+      },
+      "required": [
+        "episodes",
+        "base_episodes",
+        "holdout_episodes",
+        "approval_episodes",
+        "maximum_attempts",
+        "maximum_tool_operations",
+        "maximum_tokens",
+        "maximum_seconds"
+      ],
+      "additionalProperties": false
+    },
+    "retry_policy": {
+      "enum": [
+        "bounded-infrastructure-only-retain-all-attempts"
+      ]
+    },
+    "structural_ready": {
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "schema_version",
+    "id",
+    "seed",
+    "repetitions",
+    "qualification_eligible",
+    "qualification_reasons",
+    "budgets",
+    "inventory",
+    "inventory_digest",
+    "workflow_digest",
+    "frozen_inputs",
+    "manifest_digest",
+    "holdout_manifest_digest",
+    "preview",
+    "retry_policy",
+    "structural_ready"
+  ],
+  "additionalProperties": false,
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hol-guard.example/benchmark/campaign.v1.json"
+}

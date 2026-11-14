@@ -1,0 +1,40 @@
+name: Gauntlet Rust contracts
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "ci/gauntlet-rs/**"
+      - "docs/gauntlet-rust-migration.md"
+      - ".github/workflows/gauntlet-rust-contracts.yml"
+  push:
+    branches: [main]
+    paths:
+      - "ci/gauntlet-rs/**"
+      - "docs/gauntlet-rust-migration.md"
+      - ".github/workflows/gauntlet-rust-contracts.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: gauntlet-rust-contracts-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  contracts:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          persist-credentials: false
+      - name: Install pinned Rust toolchain
+        run: rustup toolchain install 1.88.0 --profile minimal --component rustfmt --component clippy
+      - name: Format
+        run: cargo +1.88.0 fmt --manifest-path ci/gauntlet-rs/Cargo.toml --all --check
+      - name: Test
+        run: cargo +1.88.0 test --manifest-path ci/gauntlet-rs/Cargo.toml --locked
+      - name: Clippy
+        run: cargo +1.88.0 clippy --manifest-path ci/gauntlet-rs/Cargo.toml --all-targets --locked -- -D warnings

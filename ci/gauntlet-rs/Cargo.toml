@@ -1,0 +1,3 @@
+[workspace]
+members = ["crates/gauntlet-contracts", "crates/gauntlet-evidence"]
+resolver = "2"
