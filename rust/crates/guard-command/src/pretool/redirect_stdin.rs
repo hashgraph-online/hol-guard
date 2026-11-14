@@ -305,7 +305,7 @@ pub(in crate::pretool) fn skip_bodies(
             };
             // Apply physical-line safety even to builtins-only programs:
             // the fast path otherwise skips python_program_fits entirely.
-            if !python_has_no_bare_cr(&body.join("\n")) {
+            if !python_has_no_bare_cr(&format!("{}\n", body.join("\n"))) {
                 return None;
             }
             if !crate::native_command_controls::python_is_builtin_only(&body) {
@@ -330,7 +330,9 @@ pub(in crate::pretool) fn skip_bodies(
 /// Such a program is only taken when it is the whole command
 /// (`script_content::fed::python_alone`).
 fn python_program_fits(body: &[&str]) -> bool {
-    let source = body.join("\n");
+    // skip_bodies strips the LF before the closing heredoc delimiter.
+    // Restore it so final CRLF and Python physical lines are represented exactly.
+    let source = format!("{}\n", body.join("\n"));
     // Python treats a bare CR as a physical line break. The heredoc parser
     // splits on LF; reject only CR that is not part of CRLF, so the encoding
     // header check and interpreter agree without holding ordinary CRLF input.
