@@ -255,3 +255,88 @@ fn an_ls_files_modified_listing_answers_for_a_used_clean_filter() {
         "a listing must never execute configured filters"
     );
 }
+
+#[cfg(unix)]
+#[test]
+fn a_blob_to_untracked_diff_keeps_the_full_filter_proof() {
+    // A blob-vs-untracked-file diff can run a clean filter selected by an
+    // untracked .gitattributes, even though no tracked file uses the filter.
+    let root = std::env::temp_dir().join(format!(
+        "guard-blob-untracked-diff-{}",
+        std::process::id()
+    ));
+    let _cleanup = FixtureCleanup(root.clone());
+    let home = root.join("home");
+    let repository = root.join("repository");
+    std::fs::create_dir_all(&home).unwrap();
+    std::fs::create_dir_all(repository.join("scratch")).unwrap();
+    let marker = root.join("filter-executed");
+    let marker_path = marker.to_string_lossy().replace('\\', "/");
+    let marker_command = format!("touch '{}'", marker_path.replace('\'', "'\\''"));
+    let config_command = serde_json::to_string(&marker_command).unwrap();
+    std::fs::write(
+        home.join(".gitconfig"),
+        format!("[filter \"synthetic\"]\n\tclean = {config_command}\n"),
+    )
+    .unwrap();
+    std::fs::write(repository.join("README.md"), "source fixture\n").unwrap();
+    std::fs::write(repository.join("scratch/file.bin"), "synthetic bytes\n").unwrap();
+    std::fs::write(
+        repository.join("scratch/.gitattributes"),
+        "*.bin filter=synthetic\n",
+    )
+    .unwrap();
+    let git = |args: &[&str]| {
+        std::process::Command::new("git")
+            .env("HOME", &home)
+            .env("USERPROFILE", &home)
+            .arg("-C")
+            .arg(&repository)
+            .args(args)
+            .status()
+            .unwrap()
+            .success()
+    };
+    assert!(git(&["init", "--quiet"]));
+    assert!(git(&["add", "README.md"]));
+    assert!(git(&[
+        "-c",
+        "user.name=Guard Fixture",
+        "-c",
+        "user.email=fixture@example.invalid",
+        "commit",
+        "--quiet",
+        "-m",
+        "fixture",
+    ]));
+    let controls = github_controls("enabled");
+    for harness in ["omp", "zcode"] {
+        let command = "git diff HEAD:README.md -- scratch/file.bin";
+        let result = evaluate_pre_tool_envelope_with_context(
+            harness,
+            "PreToolUse",
+            &json!({"tool_name":"bash", "tool_input":{"command":command}}),
+            Some(&controls),
+            None,
+            home.to_str(),
+            repository.to_str(),
+        );
+        assert_eq!(
+            result.decision, "deny",
+            "{harness}: {command}: {}",
+            result.reason_code
+        );
+        assert_eq!(result.reason_code, "native_git_execution_context_review");
+        let safe = evaluate_pre_tool_envelope_with_context(
+            harness,
+            "PreToolUse",
+            &json!({"tool_name":"bash", "tool_input":{"command":"git diff --no-ext-diff --no-textconv"}}),
+            Some(&controls),
+            None,
+            home.to_str(),
+            repository.to_str(),
+        );
+        assert_eq!(safe.decision, "allow", "{harness}: {}", safe.reason_code);
+    }
+    assert!(!marker.exists(), "Guard inspection must not execute filters");
+}
