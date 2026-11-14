@@ -113,7 +113,8 @@ fn describe_lists_every_adapter_this_kind_owns() {
             "copilot",
             "cursor",
             "claude-code",
-            "hermes"
+            "hermes",
+            "codex"
         ]
     );
 }

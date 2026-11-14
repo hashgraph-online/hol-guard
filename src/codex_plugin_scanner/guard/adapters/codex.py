@@ -583,6 +583,22 @@ def _migrate_hooks_json_into_config(
     return answer.get("changed") is True
 
 
+def _hook_tables(payload: Mapping[str, object]) -> dict[str, object]:
+    """The part of a config the hook comparisons read: its hooks and their feature flag.
+
+    The rest of a config can be arbitrarily large and would push the request
+    past the native size cap without changing the answer.
+    """
+
+    tables: dict[str, object] = {}
+    if "hooks" in payload:
+        tables["hooks"] = payload["hooks"]
+    features = payload.get("features")
+    if isinstance(features, Mapping) and "hooks" in features:
+        tables["features"] = {"hooks": features["hooks"]}
+    return tables
+
+
 def _require_hook_semantics_readback(
     expected: Mapping[str, object],
     actual: Mapping[str, object],
@@ -591,14 +607,13 @@ def _require_hook_semantics_readback(
     source_path: Path,
     context: HarnessContext,
 ) -> None:
+    expected, actual = _hook_tables(expected), _hook_tables(actual)
     wire = _Wire(expected, actual)
-    expected_text = wire.text(expected)
-    actual_text = wire.text(actual)
     _codex(
         "readback",
         context,
-        expected=expected_text,
-        actual=actual_text,
+        expected=wire.text(expected),
+        actual=wire.text(actual),
         tokens=wire.meanings,
         scope=source_scope,
         source_path=str(source_path),
@@ -616,6 +631,7 @@ def _require_migrated_hooks(
 ) -> None:
     """Every hook a migration carried over is still in ``actual``."""
 
+    expected, actual = _hook_tables(expected), _hook_tables(actual)
     wire = _Wire(expected, actual)
     fields: dict[str, object] = {"expected": wire.text(expected), "actual": wire.text(actual)}
     if hooks_path is not None and config_path is not None:

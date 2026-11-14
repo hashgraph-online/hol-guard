@@ -389,3 +389,24 @@ def test_partial_unlink_failure_restores_every_legacy_source_and_keeps_toml_back
         original_workspace_config,
     }
     print("H4 pass stage=legacy_json_removal config_restored=true manifest_absent=true key_absent=true")
+
+
+def test_hook_comparisons_ignore_settings_too_large_to_send(tmp_path: Path) -> None:
+    context = HarnessContext(home_dir=tmp_path / "home", workspace_dir=None, guard_home=tmp_path / "guard")
+    unrelated = {"notes": "x" * (5 * 1024 * 1024), "features": {"hooks": True, "other": "y" * 1024}}
+    expected = {**unrelated, "hooks": {"PreToolUse": [_group()]}}
+    actual = {"hooks": {"PreToolUse": [_group()]}, **unrelated}
+    source = tmp_path / "config.toml"
+
+    codex_adapter._require_hook_semantics_readback(
+        expected, actual, source_scope="global", source_path=source, context=context
+    )
+    codex_adapter._require_migrated_hooks(context, expected, actual, source_scope="global")
+
+    changed = {**unrelated, "hooks": {"PreToolUse": [_group("python3 other.py")]}}
+    with pytest.raises(Exception, match="codex_hook_migration_readback_mismatch"):
+        codex_adapter._require_hook_semantics_readback(
+            expected, changed, source_scope="global", source_path=source, context=context
+        )
+    with pytest.raises(Exception, match="codex_hook_migration_readback_mismatch"):
+        codex_adapter._require_migrated_hooks(context, expected, changed, source_scope="global")
