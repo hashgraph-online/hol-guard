@@ -118,3 +118,78 @@ fn files_only_the_glob_reaches_still_hold_it() {
         assert_eq!(decision(&home, &project, command), "allow", "{command}");
     }
 }
+
+/// A committed file only a Git excludes source outside the checkout hides
+/// is one plain `rg` skips, so the glob is what reaches it.
+#[test]
+fn a_committed_file_hidden_by_global_excludes_still_holds_a_glob_search() {
+    let command = "rg -n render_vectors testdata -g '*.json'";
+    let (home, project) = project();
+    assert_eq!(decision(&home, &project, command), "allow");
+    // The default global excludes file.
+    write(home.join(".config/git/ignore"), "secrets_vectors.json\n");
+    let seen = decision(&home, &project, command);
+    assert!(!seen.contains("allow"), "default file: {seen}");
+    // A file `core.excludesFile` names, and one linked from a dotfile tree.
+    std::fs::remove_file(home.join(".config/git/ignore")).unwrap();
+    write(
+        home.join(".gitconfig"),
+        "[core]\n\texcludesfile = ~/.excludes\n",
+    );
+    write(
+        home.join("dotfiles/excludes"),
+        "testdata/\n*_vectors.json\n",
+    );
+    std::os::unix::fs::symlink(home.join("dotfiles/excludes"), home.join(".excludes")).unwrap();
+    let seen = decision(&home, &project, command);
+    assert!(!seen.contains("allow"), "excludesfile: {seen}");
+    // A slash rule is matched below every directory, as Guard cannot tell
+    // which one `rg` places it under.
+    write(
+        home.join("dotfiles/excludes"),
+        "**/testdata/secrets_vectors.json\n",
+    );
+    let seen = decision(&home, &project, command);
+    assert!(!seen.contains("allow"), "slash rule: {seen}");
+    write(
+        home.join("dotfiles/excludes"),
+        "**/.claude/settings.local.json\nbuild/out\n",
+    );
+    assert_eq!(decision(&home, &project, command), "allow");
+    // A name rule that misses the file leaves it searched by plain `rg`.
+    write(home.join("dotfiles/excludes"), "*.log\n");
+    assert_eq!(decision(&home, &project, command), "allow");
+}
+
+#[test]
+fn a_linked_worktree_exclude_still_holds_a_glob_search() {
+    let command = "rg -n render_vectors testdata -g '*.json'";
+    let (home, project) = project();
+    git(
+        &project,
+        &[
+            "-c",
+            "user.name=t",
+            "-c",
+            "user.email=t@example.invalid",
+            "-c",
+            "core.hooksPath=/dev/null",
+            "commit",
+            "--quiet",
+            "--no-verify",
+            "--no-gpg-sign",
+            "-m",
+            "fixture",
+        ],
+    );
+    let linked = home.join("linked");
+    git(
+        &project,
+        &["worktree", "add", "--quiet", linked.to_str().unwrap()],
+    );
+    assert_eq!(decision(&home, &linked, command), "allow");
+    // `info/exclude` lives in the main repository's Git directory.
+    write(project.join(".git/info/exclude"), "secrets_vectors.json\n");
+    let seen = decision(&home, &linked, command);
+    assert!(!seen.contains("allow"), "linked worktree: {seen}");
+}

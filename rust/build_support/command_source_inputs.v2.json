@@ -640,6 +640,7 @@
       "src/pretool/search_scope_glob.rs",
       "src/pretool/search_scope_grep_include.rs",
       "src/pretool/search_scope_ignore.rs",
+      "src/pretool/search_scope_plain_skips.rs",
       "src/pretool/search_scope_tracked.rs",
       "src/pretool/search_scope_walk.rs",
       "src/pretool/secret_aliases.rs",

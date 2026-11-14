@@ -13,6 +13,7 @@ use super::search_scope_ignore::{
     holds_custom_ignore_file, is_ignored, link_ignored, load_custom_rules, load_ignore_file,
     slash_path, IgnoreRule, IgnoreTiers, ScopeUnproven,
 };
+use super::search_scope_plain_skips::PlainSkips;
 use super::search_scope_tracked::{Tracked, TrackedFiles};
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
@@ -318,6 +319,8 @@ fn walk_scope_inner(
         }
         ancestor_custom_rules(root, &mut tiers)?;
     }
+    let mut skips = (ignores == Ignores::RipgrepGlob)
+        .then(|| PlainSkips::load(root, repository.as_deref(), home));
     if ignores == Ignores::Gitignore
         && root
             .ancestors()
@@ -354,6 +357,7 @@ fn walk_scope_inner(
             if directory.depth > 0 && std::fs::symlink_metadata(directory.path.join(".git")).is_ok()
             {
                 tiers.git.clear();
+                PlainSkips::enter(&mut skips, &directory.path);
                 // The host walks a nested checkout too, so it stays in the
                 // proof; each one brings its own entry budget, a few at most.
                 nested_repositories += 1;
@@ -457,7 +461,8 @@ fn walk_scope_inner(
             let beyond = ignores == Ignores::RipgrepGlob
                 && (directory.beyond
                     || name.starts_with('.')
-                    || (selected && is_ignored(&tiers, &rendered, is_directory)?));
+                    || (selected && is_ignored(&tiers, &rendered, is_directory)?)
+                    || PlainSkips::hit(&skips, &rendered, is_directory));
             if is_directory {
                 pending.push(PendingDirectory {
                     path,
