@@ -5,12 +5,10 @@ from __future__ import annotations
 import importlib
 import json
 import sys
-from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
 from .codex_hook_inventory import (
-    CODEX_HOOK_INVENTORY_SOURCE_CHANGED,
     CODEX_HOOK_INVENTORY_SOURCE_DUPLICATE,
     CODEX_HOOK_INVENTORY_SOURCE_MALFORMED,
     CODEX_HOOK_INVENTORY_SOURCE_UNREADABLE,
@@ -125,22 +123,3 @@ def parse_toml_object(data: bytes | None, *, path: Path, label: str) -> dict[str
             f"{CODEX_HOOK_INVENTORY_SOURCE_MALFORMED}: Guard refused to overwrite non-object {label} at {path}."
         )
     return payload
-
-
-def require_hook_inventory_sources_unchanged(
-    *,
-    config_payloads: Mapping[Path, dict[str, object]],
-    hook_payloads: Mapping[Path, dict[str, object]],
-) -> None:
-    for path, expected in config_payloads.items():
-        if strict_toml_object(path, label="Codex config file") != expected:
-            raise RuntimeError(
-                f"{CODEX_HOOK_INVENTORY_SOURCE_CHANGED}: Codex config changed after pre-activation inventory at "
-                f"{path}. Retry install after configuration writes have stopped."
-            )
-    for path, expected in hook_payloads.items():
-        if strict_json_object(path, label="Codex hooks file") != expected:
-            raise RuntimeError(
-                f"{CODEX_HOOK_INVENTORY_SOURCE_CHANGED}: Codex hooks changed after pre-activation inventory at "
-                f"{path}. Retry install after configuration writes have stopped."
-            )

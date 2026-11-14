@@ -40,11 +40,20 @@ class PreparedHarnessInstall:
     files: tuple[TransitionFile, ...]
     manifest: dict[str, object]
 
-    def publish(self, guard_home: Path, *, removals: bool = False) -> dict[str, object]:
+    def publish(
+        self,
+        guard_home: Path,
+        *,
+        removals: bool = False,
+        rollback: bool = True,
+        on_write: Callable[[TransitionFile], None] | None = None,
+    ) -> dict[str, object]:
         """Publish an ordinary install under ownership; pending transitions use their signed plan.
 
         ``removals`` admits planned deletions, for a plan that retires files an
-        older install left behind. Rollback still restores them.
+        older install left behind. Rollback still restores them. A caller that
+        journals the plan itself passes ``rollback=False`` and recovers from its
+        own record; ``on_write`` sees each file just after it is written.
         """
         from ..codex_install_transaction import require_codex_install_owner
         from ..runtime_transition import RuntimeTransition, TransitionError, assert_transition_mutation_allowed
@@ -65,8 +74,12 @@ class PreparedHarnessInstall:
                 RuntimeTransition._compare({"files": [payload]}, "before")
                 RuntimeTransition._write_file(payload, "after")
                 written.append(payload)
+                if on_write is not None:
+                    on_write(change)
             RuntimeTransition._compare(changes, "after")
         except Exception as error:
+            if not rollback:
+                raise
             restore_error: Exception | None = None
             for payload in reversed(written):
                 try:

@@ -34,6 +34,7 @@ from codex_plugin_scanner.guard.codex_hook_integrity import (
     write_hook_manifest,
 )
 from codex_plugin_scanner.guard.config import MAX_APPROVAL_WAIT_TIMEOUT_SECONDS
+from codex_plugin_scanner.guard.runtime_transition import RuntimeTransition
 
 
 def _write_text(path: Path, text: str) -> None:
@@ -610,17 +611,17 @@ def test_guard_codex_authenticated_hook_transaction_rolls_back_after_partial_con
     manifest_path = Path(str(state["manifest_path"]))
     original_config = config_path.read_bytes()
     original_manifest = manifest_path.read_bytes()
-    original_atomic_write = codex_adapter.atomic_write_text
+    original_write = RuntimeTransition._write_file
     failed_once = False
 
-    def fail_first_config_write(path: Path, text: str, *, mode: int = 0o600, on_publish=None) -> None:
+    def fail_first_config_write(change: dict[str, object], generation: str) -> None:
         nonlocal failed_once
-        if path == config_path and not failed_once:
+        if generation == "after" and Path(str(change["path"])) == config_path and not failed_once:
             failed_once = True
             raise OSError("injected config write failure")
-        original_atomic_write(path, text, mode=mode, on_publish=on_publish)
+        original_write(change, generation)
 
-    monkeypatch.setattr(codex_adapter, "atomic_write_text", fail_first_config_write)
+    monkeypatch.setattr(RuntimeTransition, "_write_file", staticmethod(fail_first_config_write))
 
     try:
         adapter.install(context)
@@ -650,17 +651,17 @@ def test_guard_codex_first_install_failure_rolls_back_new_hook_secret(
     config_path = CodexHarnessAdapter._hook_config_path(context)
     manifest_path = codex_adapter.hook_manifest_path(context.guard_home, config_path)
     secret_path = hook_secret_path(context.guard_home)
-    original_atomic_write = codex_adapter.atomic_write_text
+    original_write = RuntimeTransition._write_file
     failed_once = False
 
-    def fail_first_config_write(path: Path, text: str, *, mode: int = 0o600, on_publish=None) -> None:
+    def fail_first_config_write(change: dict[str, object], generation: str) -> None:
         nonlocal failed_once
-        if path == config_path and not failed_once:
+        if generation == "after" and Path(str(change["path"])) == config_path and not failed_once:
             failed_once = True
             raise OSError("injected first-install config failure")
-        original_atomic_write(path, text, mode=mode, on_publish=on_publish)
+        original_write(change, generation)
 
-    monkeypatch.setattr(codex_adapter, "atomic_write_text", fail_first_config_write)
+    monkeypatch.setattr(RuntimeTransition, "_write_file", staticmethod(fail_first_config_write))
 
     with pytest.raises(OSError, match="injected first-install config failure"):
         adapter.install(context)

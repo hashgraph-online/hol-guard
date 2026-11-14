@@ -20,6 +20,7 @@ from codex_plugin_scanner.guard.consumer.service import (
     diff_artifact,
 )
 from codex_plugin_scanner.guard.models import GuardArtifact, HarnessDetection
+from codex_plugin_scanner.guard.runtime_transition import RuntimeTransition
 
 
 def _write(path: Path, text: str) -> None:
@@ -357,17 +358,17 @@ def test_partial_unlink_failure_restores_every_legacy_source_and_keeps_toml_back
     _write(workspace_config, original_workspace_config)
     _write(home_hooks, original_home_hooks)
     _write(workspace_hooks, original_workspace_hooks)
-    original_unlink = Path.unlink
+    original_write = RuntimeTransition._write_file
     failed = False
 
-    def _unlink(path: Path, missing_ok: bool = False) -> None:
+    def _write_file(change: dict[str, object], generation: str) -> None:
         nonlocal failed
-        if path == workspace_hooks and not failed:
+        if generation == "after" and Path(str(change["path"])) == workspace_hooks and not failed:
             failed = True
             raise OSError("injected legacy unlink failure")
-        original_unlink(path, missing_ok=missing_ok)
+        original_write(change, generation)
 
-    monkeypatch.setattr(Path, "unlink", _unlink)
+    monkeypatch.setattr(RuntimeTransition, "_write_file", staticmethod(_write_file))
 
     with pytest.raises(OSError, match="injected legacy unlink failure"):
         codex_adapter.CodexHarnessAdapter().install(

@@ -14,9 +14,9 @@ import hashlib
 import json
 import os
 import sys
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from copy import deepcopy
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -39,9 +39,6 @@ from ..codex_hook_integrity import (
     hook_secret_path,
     remove_hook_manifest,
     remove_hook_secret_if_unused,
-    restore_private_file,
-    snapshot_regular_file,
-    write_hook_manifest,
 )
 from ..codex_hook_launch_runtime import isolated_daemon_start_command, isolated_guard_cli_command
 from ..codex_hook_manifest import (
@@ -81,9 +78,6 @@ from ..codex_hook_self_binding import (
     short_path_fields,
 )
 from ..codex_hook_sources import parse_json_object, parse_toml_object
-from ..codex_hook_sources import (
-    require_hook_inventory_sources_unchanged as _require_hook_inventory_sources_unchanged,
-)
 from ..codex_hook_sources import strict_json_object as _strict_json_object
 from ..codex_hook_sources import strict_toml_object as _strict_toml_object
 from ..codex_hook_trust import (
@@ -98,7 +92,7 @@ from ..launcher import merge_guard_launcher_env
 from ..models import HarnessDetection
 from ..native_codex_hook_identity import wire_codex_hook_bindings as _wire_bindings
 from ..native_path_anchor import anchor_to_process_directory
-from ..shims import install_guard_shim, prepare_guard_shim, remove_guard_shim
+from ..shims import prepare_guard_shim, remove_guard_shim
 from ..stable_guard_cli import resolve_frozen_guard_cli
 from .base import HarnessContext, PreparedHarnessInstall
 from .codex_detect_sources import path_restorations, read_source_bytes
@@ -119,6 +113,7 @@ from .native_harness import NativeHarnessAdapter, ask, planned_files
 from .native_hook_bridge import native_hook_bridge_executable
 
 if TYPE_CHECKING:
+    from ..codex_hook_manifest import PreparedCodexHookPublication
     from ..runtime_transition import TransitionFile
 
 __all__ = ("_command_available", "atomic_write_text", "build_authenticated_hook_manifest", "sys")
@@ -536,24 +531,46 @@ def _prepare_hook_migration_backup(
     return _one_planned_file(_codex("migration_backup", context, config=str(config_path), before=_b64(before_config)))
 
 
-def _write_hook_migration_backup(context: HarnessContext, *, config_path: Path) -> Path:
-    from ..codex_hook_recovery import _snapshot
-    from ..runtime_transition import RuntimeTransition
-
-    prepared = _prepare_hook_migration_backup(context, config_path=config_path, before_config=_snapshot(config_path))
-    RuntimeTransition._compare({"files": [prepared.payload()]}, "before")
-    if prepared.before != prepared.after:
-        assert prepared.after is not None
-        atomic_write_text(prepared.path, prepared.after.decode("utf-8"), mode=0o600)
-    return prepared.path
-
-
 @dataclass(frozen=True, slots=True)
 class PreparedCodexHookMigration:
     """Captured JSON migration segment; publication requires the complete install."""
 
     config_payload: dict[str, object]
     files: tuple[TransitionFile, ...]
+
+
+def _withdraw_publication(context: HarnessContext, publication: PreparedCodexHookPublication) -> None:
+    """Publish a committed hook generation's inverse, as long as nobody changed it since."""
+
+    inverse = tuple(
+        replace(
+            change,
+            before=change.after,
+            after=change.before,
+            before_mode=change.after_mode,
+            after_mode=change.before_mode,
+        )
+        for change in publication.files
+    )
+    try:
+        PreparedHarnessInstall(inverse, {}).publish(context.guard_home, removals=True)
+        remove_hook_secret_if_unused(context.guard_home)
+    except BaseException as error:
+        raise RuntimeError(
+            "codex_hook_migration_rollback_failed: Guard could not fully restore Codex hook sources after "
+            "legacy JSON removal failed. Run `hol-guard install codex` to repair the installation."
+        ) from error
+
+
+@dataclass(frozen=True, slots=True)
+class _CodexInstallPlan:
+    """A prepared install, with what publishing it as an ordinary install needs."""
+
+    prepared: PreparedHarnessInstall
+    publication: PreparedCodexHookPublication
+    backups: frozenset[Path]
+    shim_manifest: Mapping[str, object]
+    fields: dict[str, object]
 
 
 def prepare_codex_hook_migration(
@@ -564,6 +581,7 @@ def prepare_codex_hook_migration(
     owned_bindings: Sequence[Mapping[str, object]] = (),
     expected_config_payload: Mapping[str, object] | None = None,
     expected_hooks_payload: Mapping[str, object] | None = None,
+    require_owners: bool = False,
 ) -> PreparedCodexHookMigration:
     from ..codex_hook_recovery import _snapshot
     from ..runtime_transition import RuntimeTransition, TransitionFile
@@ -584,7 +602,7 @@ def prepare_codex_hook_migration(
         (config, config_path, "toml", owned_bindings),
         (hooks, hooks_path, "json", ()),
     ):
-        _preactivation_owners(
+        owners = _preactivation_owners(
             payload,
             source_path=path,
             source_scope=scope,
@@ -593,6 +611,8 @@ def prepare_codex_hook_migration(
             context=context,
             authenticated_bindings=bindings,
         )
+        if require_owners:
+            _require_preactivation_owners(owners, path)
     changed = _migrate_hooks_json_into_config(
         config, hooks, context=context, source_scope=scope, owned_bindings=owned_bindings
     )
@@ -1043,7 +1063,11 @@ class CodexHarnessAdapter(NativeHarnessAdapter):
 
     def prepare_install(self, context: HarnessContext) -> PreparedHarnessInstall:
         """Prepare the enrolled native installation, including retirements, without publication."""
-        from ..codex_hook_manifest import prepare_authenticated_hook_publication
+        return self._prepare_plan(context, enroll=False).prepared
+
+    def _prepare_plan(self, context: HarnessContext, *, enroll: bool) -> _CodexInstallPlan:
+        """The whole install as one plan. ``enroll`` may create the hook key and
+        checks every active handler's owner, as an ordinary install does."""
         from ..codex_hook_recovery import _snapshot
         from ..runtime_transition import RuntimeTransition, TransitionError, TransitionFile, merge_transition_dependency
 
@@ -1060,6 +1084,7 @@ class CodexHarnessAdapter(NativeHarnessAdapter):
                 config_path=config,
                 hooks_path=hooks,
                 owned_bindings=bindings if config == spec.config_path else (),
+                require_owners=enroll,
             )
             for config, hooks in pairs
         }
@@ -1097,6 +1122,8 @@ class CodexHarnessAdapter(NativeHarnessAdapter):
             spec,
             rendered_config=dump_toml(payload, original=contents[spec.config_path]),
             previous_manifest=previous_manifest,
+            create_key=enroll,
+            _manifest_builder=build_authenticated_hook_manifest if enroll else None,
         )
         if publication.config_change.before != contents[spec.config_path]:
             raise TransitionError("adapter_preparation_generation_conflict")
@@ -1167,6 +1194,7 @@ class CodexHarnessAdapter(NativeHarnessAdapter):
             previous = unique_files.get(change.path)
             unique_files[change.path] = change if previous is None else merge_transition_dependency(previous, change)
         files = list(unique_files.values())
+        fields = {"backup_path": str(backup.path), **_server_fields(detection, managed_servers, migrated_proxies)}
         prepared = PreparedHarnessInstall(
             tuple(files),
             _install_manifest(
@@ -1175,14 +1203,17 @@ class CodexHarnessAdapter(NativeHarnessAdapter):
                 shim.manifest,
                 manifest_path=str(publication.manifest_change.path),
                 integrity="authenticated",
-                backup_path=str(backup.path),
-                **_server_fields(detection, managed_servers, migrated_proxies),
+                **fields,
             ),
         )
         if len({change.path for change in files}) != len(files):
             raise TransitionError("adapter_preparation_generation_conflict")
         RuntimeTransition._compare({"files": [change.payload() for change in files]}, "before")
-        return prepared
+        # The backups an install writes before its authenticated generation.
+        backups = frozenset(
+            {backup.path, *(change.path for migration in migrations.values() for change in migration.files[2:])}
+        )
+        return _CodexInstallPlan(prepared, publication, backups, shim.manifest, fields)
 
     def install(self, context: HarnessContext) -> dict[str, object]:
         from ..runtime_transition import assert_transition_mutation_allowed
@@ -1193,150 +1224,52 @@ class CodexHarnessAdapter(NativeHarnessAdapter):
             return self._install_owned(context)
 
     def _install_owned(self, context: HarnessContext) -> dict[str, object]:
+        """Publish the prepared plan: the authenticated generation and its
+        backups under the hook publication journal, then, once committed, the
+        retirements and launchers it planned beside them."""
         from ..runtime_transition import assert_transition_mutation_allowed
 
         assert_transition_mutation_allowed(context.guard_home)
-        detection = self.detect(context)
-        managed_servers = managed_stdio_servers(detection)
-        skipped_servers = skipped_stdio_server_names(detection)
-        target_config_path = self._target_config_path(context)
-        hook_config_path = self._hook_config_path(context)
-        previous_manifest = load_hook_manifest_baseline(_hook_manifest_spec(context))
-        owned_bindings = _manifest_bindings(previous_manifest)
-        hook_payloads = self._load_hook_payloads(context)
-        config_payloads = {
-            config_path: _strict_toml_object(config_path, label="Codex config file")
-            for config_path, _hooks_path in self._config_hook_pairs(context)
-        }
-        config_snapshots = {
-            config_path: snapshot_regular_file(config_path)
-            for config_path, _hooks_path in self._config_hook_pairs(context)
-        }
-        manifest_path = hook_manifest_path(context.guard_home, hook_config_path)
-        manifest_snapshot = snapshot_regular_file(manifest_path)
-        inventory_hook_payloads = deepcopy(hook_payloads)
-        inventory_config_payloads = deepcopy(config_payloads)
-        original_text = target_config_path.read_text(encoding="utf-8") if target_config_path.is_file() else None
-        payload = config_payloads[target_config_path]
-        hook_payload = payload if hook_config_path == target_config_path else config_payloads[hook_config_path]
-        for config_path, hooks_path in self._config_hook_pairs(context):
-            json_hook_payload = hook_payloads.get(hooks_path, {})
-            if config_path == target_config_path:
-                hook_config_payload = payload
-            elif config_path == hook_config_path:
-                hook_config_payload = hook_payload
-            else:
-                hook_config_payload = config_payloads[config_path]
-            hooks_feature_enabled = _payload_has_hooks_feature_enabled(hook_config_payload)
-            source_scope = self._scope_for(context, config_path)
-            config_owners = _preactivation_owners(
-                hook_config_payload,
-                source_path=config_path,
-                source_scope=source_scope,
-                source_format="toml",
-                source_hooks_enabled=hooks_feature_enabled,
-                context=context,
-                authenticated_bindings=owned_bindings if config_path == hook_config_path else (),
-            )
-            json_owners = _preactivation_owners(
-                json_hook_payload,
-                source_path=hooks_path,
-                source_scope=source_scope,
-                source_format="json",
-                source_hooks_enabled=hooks_feature_enabled,
-                context=context,
-            )
-            _require_preactivation_owners(config_owners, config_path)
-            _require_preactivation_owners(json_owners, hooks_path)
-        _require_hook_inventory_sources_unchanged(
-            config_payloads=inventory_config_payloads,
-            hook_payloads=inventory_hook_payloads,
-        )
-        target_hooks_path = self._hooks_path(context)
-        target_hook_payload = hook_payloads.get(target_hooks_path, {})
-        target_hooks_migrated = _migrate_hooks_json_into_config(
-            hook_payload,
-            target_hook_payload,
-            context=context,
-            source_scope=self._scope_for(context, hook_config_path),
-            owned_bindings=owned_bindings,
-        )
-        if target_hooks_migrated:
-            _write_hook_migration_backup(context, config_path=hook_config_path)
-        backup_path = self._backup_path(context)
-        backup_change = prepare_codex_main_backup(
-            context,
-            original=original_text.encode("utf-8") if original_text is not None else None,
-            migrated_payload=payload if target_hooks_migrated else None,
-        )
-        _publish_codex_alternate_cleanup(backup_change)
-        features = hook_payload.get("features")
-        if not isinstance(features, dict):
-            features = {}
-        features.pop("codex_hooks", None)
-        features["hooks"] = True
-        hook_payload["features"] = features
-        self._install_config_hooks(hook_payload, context, config_path=hook_config_path, owned_bindings=owned_bindings)
-        workspace_payload = (
-            read_toml_payload(context.workspace_dir / ".codex" / "config.toml")
-            if context.workspace_dir is not None
-            else {}
-        )
-        payload, migrated_proxy_servers = render_codex_managed_mcp(
-            context,
-            payload,
-            managed_servers=managed_servers,
-            workspace_payload=workspace_payload,
-        )
-        skipped_servers = tuple(name for name in skipped_servers if name not in migrated_proxy_servers)
-        hook_state = self._write_authenticated_hook_config(
-            context,
-            config_path=target_config_path,
-            payload=payload,
-            previous_manifest=previous_manifest,
-        )
-        if hook_config_path != target_config_path:
+        spec = _hook_manifest_spec(context)
+        if self._hook_config_path(context) != self._target_config_path(context):
             raise RuntimeError("Codex hook authentication currently requires one canonical global config target.")
-        self._migrate_alternate_hook_configs(
+        # A source that is not a readable regular file refuses before the journal opens.
+        for config_path, hooks_path in self._config_hook_pairs(context):
+            _strict_toml_object(config_path, label="Codex config file")
+            _strict_json_object(hooks_path, label="Codex hooks file")
+        plans: list[_CodexInstallPlan] = []
+
+        def plan() -> tuple[PreparedCodexHookPublication, tuple[TransitionFile, ...]]:
+            planned = self._prepare_plan(context, enroll=True)
+            plans.append(planned)
+            backups = tuple(change for change in planned.prepared.files if change.path in planned.backups)
+            return planned.publication, backups
+
+        hook_state = self._write_authenticated_hook_config_owned(
             context,
-            payloads=hook_payloads,
-            config_payloads=config_payloads,
-            skip_config_path=hook_config_path,
-            owned_bindings=(),
+            config_path=spec.config_path,
+            payload=None,
+            previous_manifest=load_hook_manifest_baseline(spec),
+            plan=plan,
         )
-        self._remove_managed_hooks_from_alternate_configs(context, skip_config_path=hook_config_path)
-        self._remove_managed_mcp_servers_from_alternate_configs(
-            context,
-            managed_servers=managed_servers,
-            skip_config_path=target_config_path,
-        )
-        self._verify_json_hook_migrations(
-            context,
-            payloads=hook_payloads,
-            owned_bindings=owned_bindings,
-        )
-        hooks_path = self._remove_json_hook_files(
-            context,
-            payloads=hook_payloads,
-            config_snapshots=config_snapshots,
-            manifest_path=manifest_path,
-            manifest_snapshot=manifest_snapshot,
-        )
-        self._uninstall_shell_guard(context)
+        planned = plans[0]
+        published = {change.path for change in planned.publication.files} | planned.backups
+        remaining = tuple(change for change in planned.prepared.files if change.path not in published)
+        try:
+            PreparedHarnessInstall(remaining, planned.prepared.manifest).publish(context.guard_home, removals=True)
+        except BaseException:
+            # The retirements restored themselves; withdraw the committed
+            # generation too, so legacy hooks never run beside their migration.
+            _withdraw_publication(context, planned.publication)
+            raise
         _require_codex_authoritative_shell_hook(context)
-        shim_manifest = install_guard_shim(self.harness, context)
         return _install_manifest(
             context,
             "install",
-            shim_manifest,
-            hooks_path=str(hooks_path),
+            planned.shim_manifest,
             manifest_path=str(hook_state["manifest_path"]),
             integrity=str(hook_state["integrity_status"]),
-            backup_path=str(backup_path),
-            managed=[server.name for server in managed_servers],
-            migrated=list(migrated_proxy_servers),
-            skipped=list(skipped_servers),
-            source_config_paths=list(detection.config_paths),
+            **planned.fields,
         )
 
     def uninstall(self, context: HarnessContext) -> dict[str, object]:
@@ -1436,63 +1369,6 @@ class CodexHarnessAdapter(NativeHarnessAdapter):
             server=server,
         )
 
-    def _load_hook_payloads(self, context: HarnessContext) -> dict[Path, dict[str, object]]:
-        return {
-            hooks_path: _strict_json_object(hooks_path, label="Codex hooks file")
-            for hooks_path in self._all_hook_paths(context)
-        }
-
-    def _migrate_alternate_hook_configs(
-        self,
-        context: HarnessContext,
-        *,
-        payloads: dict[Path, dict[str, object]],
-        config_payloads: dict[Path, dict[str, object]],
-        skip_config_path: Path,
-        owned_bindings: Sequence[Mapping[str, object]] = (),
-    ) -> None:
-        for config_path, hooks_path in self._config_hook_pairs(context):
-            if config_path == skip_config_path:
-                continue
-            hooks_payload = payloads.get(hooks_path, {})
-            if not hooks_payload:
-                continue
-            prepared = prepare_codex_hook_migration(
-                context,
-                config_path=config_path,
-                hooks_path=hooks_path,
-                owned_bindings=owned_bindings,
-                expected_config_payload=config_payloads[config_path],
-                expected_hooks_payload=hooks_payload,
-            )
-            config_change = prepared.files[0]
-            if config_change.before == config_change.after:
-                continue
-            config_payload = prepared.config_payload
-            config_payloads[config_path] = config_payload
-            _write_hook_migration_backup(context, config_path=config_path)
-            from ..runtime_transition import RuntimeTransition
-
-            RuntimeTransition._compare({"files": [change.payload() for change in prepared.files[:2]]}, "before")
-            original_text = config_change.before.decode("utf-8") if config_change.before is not None else None
-            try:
-                assert config_change.after is not None
-                atomic_write_text(config_path, config_change.after.decode("utf-8"), mode=0o600)
-                written_payload = _strict_toml_object(config_path, label="rendered Codex config file")
-                _require_hook_semantics_readback(
-                    config_payload,
-                    written_payload,
-                    source_scope=self._scope_for(context, config_path),
-                    source_path=config_path,
-                    context=context,
-                )
-            except BaseException:
-                if original_text is None:
-                    config_path.unlink(missing_ok=True)
-                else:
-                    atomic_write_text(config_path, original_text, mode=0o600)
-                raise
-
     def _remove_managed_hooks_from_alternate_configs(
         self,
         context: HarnessContext,
@@ -1528,72 +1404,6 @@ class CodexHarnessAdapter(NativeHarnessAdapter):
                     managed_server_names=tuple(managed_names_by_path.get(config_path, set())),
                 )
             )
-
-    def _verify_json_hook_migrations(
-        self,
-        context: HarnessContext,
-        *,
-        payloads: Mapping[Path, Mapping[str, object]],
-        owned_bindings: Sequence[Mapping[str, object]],
-    ) -> None:
-        hook_config_path = self._hook_config_path(context)
-        for config_path, hooks_path in self._config_hook_pairs(context):
-            hooks_payload = payloads.get(hooks_path)
-            if not hooks_payload:
-                continue
-            source_scope = self._scope_for(context, config_path)
-            expected_payload = _unmanaged_migration_payload(
-                hooks_payload,
-                context=context,
-                owned_bindings=owned_bindings if config_path == hook_config_path else (),
-            )
-            written_payload = _strict_toml_object(config_path, label="migrated Codex config file")
-            _require_migrated_hooks(
-                context,
-                expected_payload,
-                written_payload,
-                source_scope=source_scope,
-                hooks_path=hooks_path,
-                config_path=config_path,
-            )
-
-    def _remove_json_hook_files(
-        self,
-        context: HarnessContext,
-        *,
-        payloads: dict[Path, dict[str, object]],
-        config_snapshots: Mapping[Path, bytes | None],
-        manifest_path: Path,
-        manifest_snapshot: bytes | None,
-    ) -> Path:
-        target_hooks_path = self._hooks_path(context)
-        snapshots = {
-            hooks_path: snapshot_regular_file(hooks_path)
-            for hooks_path in self._all_hook_paths(context)
-            if hooks_path in payloads and hooks_path.is_file()
-        }
-        try:
-            for hooks_path in snapshots:
-                hooks_path.unlink()
-        except BaseException as removal_error:
-            rollback_errors: list[BaseException] = []
-            for path, snapshot in (*config_snapshots.items(), (manifest_path, manifest_snapshot), *snapshots.items()):
-                try:
-                    restore_private_file(path, snapshot)
-                except BaseException as rollback_error:
-                    rollback_errors.append(rollback_error)
-            if manifest_snapshot is None:
-                try:
-                    remove_hook_secret_if_unused(context.guard_home)
-                except BaseException as rollback_error:
-                    rollback_errors.append(rollback_error)
-            if rollback_errors:
-                raise RuntimeError(
-                    "codex_hook_migration_rollback_failed: Guard could not fully restore Codex hook sources after "
-                    "legacy JSON removal failed. Run `hol-guard install codex` to repair the installation."
-                ) from removal_error
-            raise
-        return target_hooks_path
 
     @staticmethod
     def _install_config_hooks(
@@ -1645,15 +1455,19 @@ class CodexHarnessAdapter(NativeHarnessAdapter):
         context: HarnessContext,
         *,
         config_path: Path,
-        payload: dict[str, object],
+        payload: dict[str, object] | None,
         previous_manifest: dict[str, object] | None,
+        plan: Callable[[], tuple[PreparedCodexHookPublication, tuple[TransitionFile, ...]]] | None = None,
     ) -> dict[str, object]:
         """Commit manifest first, then config, rolling both back on any failure.
 
         During the short manifest-first window an old config fails closed against
         the new manifest.  Codex never observes a newly registered hook before
-        its complete authenticated identity has been durably committed.
+        its complete authenticated identity has been durably committed. ``plan``
+        prepares the generation in place of rendering ``payload``, with the
+        files written ahead of it.
         """
+        from ..runtime_transition import TransitionError
 
         if hook_publication_pending(context.guard_home):
             raise RuntimeError("Codex hook publication must be recovered before preparing another generation.")
@@ -1684,7 +1498,7 @@ class CodexHarnessAdapter(NativeHarnessAdapter):
             ) from error
         if second_snapshot_identity != original_config_identity:
             raise RuntimeError("codex_hook_config_invalid: Codex configuration changed during its snapshot.")
-        rendered_config = dump_toml(payload, original=original_config)
+        rendered_config = b""
         written_config_identity: tuple[int, int, int, int, int] | None = None
 
         def remember_written_config(identity: tuple[int, int, int, int, int]) -> None:
@@ -1695,39 +1509,55 @@ class CodexHarnessAdapter(NativeHarnessAdapter):
             record_owned_hook_config_publication(context.guard_home, config_path, identity)
 
         try:
-            rendered_config = dump_toml(payload, original=original_config)
             spec = _hook_manifest_spec(context)
             if config_path.resolve(strict=False) != spec.config_path.resolve(strict=False):
                 raise RuntimeError("Codex authenticated publication requires its canonical config target.")
-            publication = prepare_authenticated_hook_publication(
-                spec,
-                rendered_config=rendered_config,
-                previous_manifest=previous_manifest,
-                create_key=True,
-                _manifest_builder=build_authenticated_hook_manifest,
-            )
-            manifest = publication.manifest
+            if plan is not None:
+                publication, ahead = plan()
+            else:
+                assert payload is not None
+                publication, ahead = (
+                    prepare_authenticated_hook_publication(
+                        spec,
+                        rendered_config=dump_toml(payload, original=original_config),
+                        previous_manifest=previous_manifest,
+                        create_key=True,
+                        _manifest_builder=build_authenticated_hook_manifest,
+                    ),
+                    (),
+                )
+            config_change = publication.config_change
+            if config_change.before != original_config or config_change.after is None:
+                raise TransitionError("adapter_preparation_generation_conflict")
+            rendered_config = config_change.after
             prepare_hook_publication(
                 context.guard_home,
                 config_path,
-                before_config=publication.config_change.before,
+                before_config=config_change.before,
                 before_manifest=publication.manifest_change.before,
-                after_config=rendered_config.encode("utf-8"),
-                after_manifest=canonical_manifest_bytes(manifest) + b"\n",
+                after_config=rendered_config,
+                after_manifest=canonical_manifest_bytes(publication.manifest) + b"\n",
                 key_created=not original_secret_present,
                 before_receipt=publication.receipt_change.before,
                 after_receipt=publication.receipt_change.after,
             )
             prepared = True
-            write_hook_manifest(context.guard_home, config_path, manifest)
-            assert publication.receipt_change.after is not None
-            atomic_write_bytes(
-                publication.receipt_change.path, publication.receipt_change.after, mode=0o600, private=True
+
+            def remember(change: TransitionFile) -> None:
+                if change is config_change:
+                    identity = rollback_file_identity(config_path)
+                    if identity is None:
+                        raise RuntimeError("codex_hook_config_invalid: Codex configuration vanished after publication.")
+                    remember_written_config(identity)
+
+            # The journal restores the authenticated files; backups stay, as
+            # they always have.
+            PreparedHarnessInstall((*ahead, *publication.files), {}).publish(
+                context.guard_home, rollback=False, on_write=remember
             )
-            atomic_write_text(config_path, rendered_config, mode=0o600, on_publish=remember_written_config)
             written_payload = _strict_toml_object(config_path, label="rendered Codex config file")
             _require_hook_semantics_readback(
-                payload,
+                parse_toml_object(rendered_config, path=config_path, label="rendered Codex config file"),
                 written_payload,
                 source_scope=CodexHarnessAdapter._scope_for(context, config_path),
                 source_path=config_path,
@@ -1750,7 +1580,7 @@ class CodexHarnessAdapter(NativeHarnessAdapter):
                     require_unchanged_config_for_rollback(
                         config_path,
                         original_config,
-                        rendered_config.encode("utf-8"),
+                        rendered_config,
                         original_identity=original_config_identity,
                         written_identity=written_config_identity,
                     )
