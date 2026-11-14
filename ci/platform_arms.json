@@ -2388,6 +2388,102 @@
   },
   {
    "verdict": "windows-equivalent",
+   "note": "Python's os.access(path, X_OK) on Windows only checks that the path exists, so existence is the same answer.",
+   "file": "rust/crates/guard-runtime/src/transition_files/artifact.rs",
+   "item": "fn executable(path: &Path) -> bool",
+   "cfg": "not(unix)",
+   "body": "2d392d8ec24d"
+  },
+  {
+   "verdict": "windows-equivalent",
+   "note": "validate_regular_file passes posix=False on Windows, where owner and mode rules do not apply; the shared permission_rules take the same flag.",
+   "file": "rust/crates/guard-runtime/src/transition_files/artifact.rs",
+   "item": "fn trusted_artifact -- cfg! expression",
+   "cfg": "unix",
+   "body": "c184fc153c27"
+  },
+  {
+   "verdict": "windows-equivalent",
+   "note": "Python passes no current uid on Windows (os.getuid is absent); the permission rules skip owner checks for it.",
+   "file": "rust/crates/guard-runtime/src/transition_files/artifact.rs",
+   "item": "fn current_uid() -> Option<u32>",
+   "cfg": "not(unix)",
+   "body": "43e9f362db32"
+  },
+  {
+   "verdict": "windows-equivalent",
+   "note": "_artifact_digest skips the owner and mode comparison when os.name == 'nt'; Windows reports neither as POSIX bits. Size, file identity and digest are still bound.",
+   "file": "rust/crates/guard-runtime/src/transition_files/artifact.rs",
+   "item": "fn artifact_digest -- non-Unix block",
+   "cfg": "not(unix)",
+   "body": "c501184ab441"
+  },
+  {
+   "verdict": "windows-equivalent",
+   "note": "Mode bits are compared only under cfg!(unix), as Python compares st_mode only when os.name != 'nt'; this value is never read on Windows.",
+   "file": "rust/crates/guard-runtime/src/transition_files/inspect.rs",
+   "item": "fn permission_bits(_metadata: &fs::Metadata) -> u32",
+   "cfg": "not(unix)",
+   "body": "e8b8c5a4a6d9"
+  },
+  {
+   "verdict": "windows-equivalent",
+   "note": "_validate_digest_dependency accepts a null owner and skips the root-or-euid check on Windows, which has no POSIX uid.",
+   "file": "rust/crates/guard-runtime/src/transition_files/inspect.rs",
+   "item": "fn owner_acceptable -- cfg! expression",
+   "cfg": "unix",
+   "body": "e1590b756d67"
+  },
+  {
+   "verdict": "windows-equivalent",
+   "note": "Only read under cfg!(unix) in owner_acceptable; Windows has no effective uid, as in Python.",
+   "file": "rust/crates/guard-runtime/src/transition_files/inspect.rs",
+   "item": "fn effective_uid() -> i64",
+   "cfg": "not(unix)",
+   "body": "74730b24af8b"
+  },
+  {
+   "verdict": "windows-equivalent",
+   "note": "RuntimeTransition._compare checks the file mode only when os.name != 'nt'.",
+   "file": "rust/crates/guard-runtime/src/transition_files/mod.rs",
+   "item": "fn compare -- cfg! expression",
+   "cfg": "unix",
+   "body": "9aac4e3d51c0"
+  },
+  {
+   "verdict": "windows-equivalent",
+   "note": "The digest dependency's mode is checked only when os.name != 'nt', as in RuntimeTransition._compare.",
+   "file": "rust/crates/guard-runtime/src/transition_files/mod.rs",
+   "item": "fn compare_dependency -- cfg! expression",
+   "cfg": "unix",
+   "body": "4b461ec79b9f"
+  },
+  {
+   "verdict": "windows-equivalent",
+   "note": "durable_io.fsync_directory is a no-op on Windows, which cannot open a directory for fsync; the rename itself is durable there.",
+   "file": "rust/crates/guard-runtime/src/transition_files/output.rs",
+   "item": "fn sync_directory(_path: &Path) -> std::io::Result<()>",
+   "cfg": "not(unix)",
+   "body": "8577f3b2fb0f"
+  },
+  {
+   "verdict": "windows-equivalent",
+   "note": "os.chmod on Windows only toggles the read-only attribute from the owner write bit, which this arm reproduces.",
+   "file": "rust/crates/guard-runtime/src/transition_files/output.rs",
+   "item": "fn set_mode(path: &Path, mode: u32) -> std::io::Result<()>",
+   "cfg": "not(unix)",
+   "body": "26581df47aa1"
+  },
+  {
+   "verdict": "other-platform",
+   "note": "Test fixture helper: modes are not compared on Windows, so the fixture leaves them alone.",
+   "file": "rust/crates/guard-runtime/src/transition_files/tests.rs",
+   "item": "fn set_mode(_path: &Path, _mode: u32)",
+   "cfg": "not(unix)",
+   "body": "b4b73a423dff"
+  },
+  {
+   "verdict": "windows-equivalent",
    "note": "The Python lookup it replaces returned nothing on Windows (`os.name == \"nt\"`) too: Windows resolves commands through PATH and PATHEXT alone, so availability checks keep their PATH answer. The Windows arm answers `null` for every request.",
    "file": "rust/crates/guard-runtime/src/user_command_lookup.rs",
    "item": "mod lookup",

@@ -74,7 +74,8 @@ pub use file_identity::{
 };
 pub use job_guard::{attach_suspended_process, ChildJobGuard, ResourceLimits};
 pub use private_files::{
-    create_private_file, delete_private_file_handle, open_private_directory, open_private_file,
+    create_private_file, delete_private_file_handle, mark_handle_for_delete,
+    open_private_directory, open_private_file, rename_into_directory,
 };
 pub use process_command_line::{process_ids, ProcessQuery};
 pub use process_identity::{

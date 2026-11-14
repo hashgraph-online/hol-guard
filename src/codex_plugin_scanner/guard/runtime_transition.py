@@ -23,8 +23,7 @@ from pathlib import Path
 from typing import Protocol, cast
 
 from .approval_gate import ApprovalGateGrant, public_config, validate_grant
-from .codex_hook_file_integrity import CodexHookIntegrityError, validate_regular_file
-from .codex_hook_integrity import atomic_write_bytes, canonical_manifest_bytes, restore_private_file
+from .codex_hook_integrity import atomic_write_bytes, canonical_manifest_bytes
 from .codex_hook_recovery import _decode, _encode, _snapshot
 from .codex_install_transaction import require_codex_install_owner
 from .durable_io import fsync_directory
@@ -178,46 +177,6 @@ def _validate_digest_dependency(change: Mapping[str, object]) -> None:
             raise TransitionError("invocation_dependency_invalid")
 
 
-def _invocation_generation(target: Path, identity: Mapping[str, object]) -> tuple[int, ...]:
-    """Verify the authenticated invocation, preserving symlink semantics such as venv selection."""
-    _check_inverse_deadline()
-    active = _ACTIVE_TRANSITION.get()
-    if active is not None and time.monotonic() >= active[2]:
-        raise TransitionError("forward_authorization_expired")
-    path = Path(str(identity["path"]))
-    try:
-        before = path.lstat()
-        link = os.readlink(path) if stat.S_ISLNK(before.st_mode) else None
-        if not stat.S_ISLNK(before.st_mode) and not stat.S_ISREG(before.st_mode):
-            raise TransitionError("invocation_dependency_invalid")
-        if link != identity["link_target"] or path.resolve(strict=True) != target or not os.access(path, os.X_OK):
-            raise TransitionError("invocation_generation_changed")
-        if os.name != "nt" and (before.st_mode & 0o777 != identity["mode"] or before.st_uid != identity["owner_uid"]):
-            raise TransitionError("invocation_generation_changed")
-        after = path.lstat()
-
-        def fingerprint(metadata: os.stat_result) -> tuple[int, ...]:
-            return (
-                metadata.st_dev,
-                metadata.st_ino,
-                metadata.st_mode,
-                metadata.st_uid,
-                metadata.st_mtime_ns,
-                metadata.st_ctime_ns,
-            )
-
-        if fingerprint(before) != fingerprint(after):
-            raise TransitionError("invocation_generation_changed")
-        if active is not None and time.monotonic() >= active[2]:
-            raise TransitionError("forward_authorization_expired")
-        _check_inverse_deadline()
-        return fingerprint(after)
-    except (OSError, RuntimeError) as exc:
-        if isinstance(exc, TransitionError):
-            raise
-        raise TransitionError("invocation_dependency_unavailable") from exc
-
-
 def _unsafe_file_mode(mode: int, artifact_identity: object) -> bool:
     artifact_role = isinstance(artifact_identity, dict) and isinstance(artifact_identity.get("role"), str)
     return bool(mode & ~0o777 or (os.name != "nt" and (mode & 0o002 or (mode & 0o020 and not artifact_role))))
@@ -246,67 +205,6 @@ def descriptor_fingerprint(metadata: os.stat_result) -> tuple[int, ...]:
         metadata.st_uid,
         metadata.st_gid,
     )
-
-
-def _artifact_digest(target: Path, identity: Mapping[str, object], mode: int) -> str:
-    """Hash the signed size through one owned descriptor with bounded working memory."""
-    active = _ACTIVE_TRANSITION.get()
-
-    def check_deadline() -> None:
-        _check_inverse_deadline()
-        if active is not None and time.monotonic() >= active[2]:
-            raise TransitionError("forward_authorization_expired")
-
-    check_deadline()
-    try:
-        trusted = validate_regular_file(target, role=str(identity.get("role", "artifact")), executable_required=False)
-    except CodexHookIntegrityError as exc:
-        raise TransitionError("artifact_permissions_invalid") from exc
-    check_deadline()
-    try:
-        descriptor = os.open(target, ARTIFACT_READ_FLAGS | getattr(os, "O_NONBLOCK", 0))
-    except OSError as exc:
-        raise TransitionError("artifact_dependency_unavailable") from exc
-    try:
-        opened = os.fstat(descriptor)
-        if descriptor_fingerprint(trusted) != descriptor_fingerprint(opened):
-            raise TransitionError("generation_changed")
-        if not stat.S_ISREG(opened.st_mode) or getattr(opened, "st_file_attributes", 0) & getattr(
-            stat, "FILE_ATTRIBUTE_REPARSE_POINT", 0x400
-        ):
-            raise TransitionError("artifact_dependency_invalid")
-        if opened.st_size != identity["size"]:
-            raise TransitionError("generation_changed")
-        if os.name != "nt":
-            if opened.st_uid != identity["owner_uid"]:
-                raise TransitionError("artifact_owner_changed")
-            if opened.st_mode & 0o777 != mode:
-                raise TransitionError("file_mode_changed")
-        digest = hashlib.sha256()
-        count = 0
-        while True:
-            check_deadline()
-            chunk = os.read(descriptor, 64 * 1024)
-            check_deadline()
-            if not chunk:
-                break
-            count += len(chunk)
-            if count > opened.st_size:
-                raise TransitionError("generation_changed")
-            digest.update(chunk)
-        final, current = os.fstat(descriptor), target.lstat()
-        if (
-            count != opened.st_size
-            or descriptor_fingerprint(opened) != descriptor_fingerprint(final)
-            or descriptor_fingerprint(final) != descriptor_fingerprint(current)
-        ):
-            raise TransitionError("generation_changed")
-        check_deadline()
-        return digest.hexdigest()
-    except OSError as exc:
-        raise TransitionError("artifact_dependency_unavailable") from exc
-    finally:
-        os.close(descriptor)
 
 
 def _record_files(payload: Mapping[str, object]) -> list[dict[str, object]]:
@@ -1114,70 +1012,18 @@ class RuntimeTransition:
 
     @staticmethod
     def _write_file(change: dict[str, object], generation: str) -> None:
-        _check_inverse_deadline()
-        if change["before"] == change["after"] and change["before_mode"] == change["after_mode"]:
-            # Retained backups are compared as dependencies, never replaced.
-            return
-        target = Path(str(change["path"]))
-        data = _decode(change[generation])
-        mode = change[f"{generation}_mode"]
-        if not isinstance(mode, int):
-            raise TransitionError("file_mode_invalid")
-        if change.get("no_follow"):
-            from ..safe_output import remove_file_no_follow, write_bytes_atomic_no_follow
+        from .native_transition_files import write_file
 
-            if data is None:
-                remove_file_no_follow(target)
-            else:
-                write_bytes_atomic_no_follow(target, data, mode=mode)
-        elif data is None:
-            restore_private_file(target, None)
-        else:
-            atomic_write_bytes(target, data, mode=mode, private=False)
-        _check_inverse_deadline()
+        write_file(change, generation)
 
     @staticmethod
     def _compare(payload: dict[str, object], generation: str, *, inverse: bool = False) -> None:
+        from .native_transition_files import compare_files
+
         changes = payload.get("files")
         if not isinstance(changes, list):
             raise TransitionError("files_invalid")
-        for change in changes:
-            _check_inverse_deadline()
-            if not isinstance(change, dict):
-                raise TransitionError("files_invalid")
-            target = Path(str(change["path"]))
-            if not target.is_absolute() or target.resolve(strict=False) != target:
-                raise TransitionError("file_target_changed")
-            if "expected_digest" in change:
-                _validate_digest_dependency(change)
-                if "artifact_identity" in change:
-                    identity = cast(dict[str, object], change["artifact_identity"])
-                    invocation = cast(dict[str, object] | None, change.get("invocation_identity"))
-                    invocation_before = _invocation_generation(target, invocation) if invocation is not None else None
-                    digest = _artifact_digest(target, identity, cast(int, change["before_mode"]))
-                    if digest != change["expected_digest"]:
-                        raise TransitionError("generation_changed")
-                    if invocation is not None and _invocation_generation(target, invocation) != invocation_before:
-                        raise TransitionError("invocation_generation_changed")
-                    continue
-                current = _snapshot(target)
-                if current is None or hashlib.sha256(current).hexdigest() != change["expected_digest"]:
-                    raise TransitionError("generation_changed")
-                if os.name != "nt" and target.stat().st_mode & 0o777 != change["before_mode"]:
-                    raise TransitionError("file_mode_changed")
-                continue
-            current = _snapshot(target)
-            expected = _decode(change[generation])
-            allowed = (expected, _decode(change["after"])) if inverse else (expected,)
-            if current not in allowed:
-                raise TransitionError("generation_changed")
-            if current is not None and os.name != "nt":
-                mode = target.stat().st_mode & 0o777
-                expected_modes = (
-                    (change[f"{generation}_mode"], change["after_mode"]) if inverse else (change[f"{generation}_mode"],)
-                )
-                if mode not in expected_modes:
-                    raise TransitionError("file_mode_changed")
+        compare_files(changes, generation, inverse=inverse)
 
     @contextmanager
     def _mutation_scope(self, operation_id: str):

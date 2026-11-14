@@ -248,6 +248,7 @@ pub(crate) fn dispatch(kind: &str, args: &Value) -> KindResult {
         "harness_mcp_discovery" => crate::harness_mcp_discovery::dispatch(args),
         "hook_python_identity" => crate::hook_python_identity::dispatch(args),
         "isolated_hook_python" => crate::harness_adapter::isolated_python(args),
+        "transition_files" => crate::transition_files::dispatch(args),
         "command_probe" => crate::command_probe::dispatch(args),
         "desktop_hook_proxy" => crate::desktop_hook_proxy::dispatch(args),
         "codex_toml_render" => crate::codex_toml_render::dispatch(args),

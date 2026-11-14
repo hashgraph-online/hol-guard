@@ -56,41 +56,12 @@ class PreparedHarnessInstall:
         own record; ``on_write`` sees each file just after it is written.
         """
         from ..codex_install_transaction import require_codex_install_owner
-        from ..runtime_transition import RuntimeTransition, TransitionError, assert_transition_mutation_allowed
+        from ..native_transition_files import publish_files
+        from ..runtime_transition import assert_transition_mutation_allowed
 
         require_codex_install_owner(guard_home)
         assert_transition_mutation_allowed(guard_home)
-        if any(
-            change.kind != "binding" or (not removals and change.after is None and change.before != change.after)
-            for change in self.files
-        ):
-            raise TransitionError("adapter_install_plan_invalid")
-        changes: dict[str, object] = {"files": [change.payload() for change in self.files]}
-        RuntimeTransition._compare(changes, "before")
-        written: list[dict[str, object]] = []
-        try:
-            for change in self.files:
-                payload = change.payload()
-                RuntimeTransition._compare({"files": [payload]}, "before")
-                RuntimeTransition._write_file(payload, "after")
-                written.append(payload)
-                if on_write is not None:
-                    on_write(change)
-            RuntimeTransition._compare(changes, "after")
-        except BaseException as error:
-            # An interrupt restores the completed writes too.
-            if not rollback:
-                raise
-            restore_error: Exception | None = None
-            for payload in reversed(written):
-                try:
-                    RuntimeTransition._compare({"files": [payload]}, "after")
-                    RuntimeTransition._write_file(payload, "before")
-                except Exception as failure:
-                    restore_error = failure
-            if restore_error is not None:
-                raise restore_error from error
-            raise
+        publish_files(self.files, removals=removals, rollback=rollback, on_write=on_write)
         return self.manifest
 
 

@@ -100,6 +100,26 @@ def require_codex_install_owner(guard_home: Path) -> CodexInstallOwner:
 
 def record_codex_mutation(operation: str, path: Path, before: bytes | None, after: bytes | None) -> None:
     """Record identities only; never write command/config/key contents."""
+    record_codex_mutation_identity(
+        operation,
+        path,
+        before_present=before is not None,
+        after_present=after is not None,
+        before_digest=None if before is None else hashlib.sha256(before).hexdigest(),
+        after_digest=None if after is None else hashlib.sha256(after).hexdigest(),
+    )
+
+
+def record_codex_mutation_identity(
+    operation: str,
+    path: Path,
+    *,
+    before_present: bool,
+    after_present: bool,
+    before_digest: str | None,
+    after_digest: str | None,
+) -> None:
+    """Append one mutation identity the native transition engine reported."""
     global _dropped_events
     owner = _OWNER.get()
     if owner is None or owner.pid != os.getpid() or owner.thread_id != threading.get_ident():
@@ -116,10 +136,10 @@ def record_codex_mutation(operation: str, path: Path, before: bytes | None, afte
         "time_ns": time.time_ns(),
         "operation": operation,
         "dropped_events": _dropped_events,
-        "before_present": before is not None,
-        "after_present": after is not None,
-        "before_digest": None if private_key or before is None else hashlib.sha256(before).hexdigest(),
-        "after_digest": None if private_key or after is None else hashlib.sha256(after).hexdigest(),
+        "before_present": before_present,
+        "after_present": after_present,
+        "before_digest": None if private_key or not before_present else before_digest,
+        "after_digest": None if private_key or not after_present else after_digest,
     }
     path = owner.guard_home / "managed" / "codex" / "authority-mutations.jsonl"
     try:
