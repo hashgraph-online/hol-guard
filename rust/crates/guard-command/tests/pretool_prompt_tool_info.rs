@@ -53,6 +53,10 @@ fn a_transfer_named_beside_a_version_check_keeps_the_prompt_review() {
         "Which curl build should stage the upload to metadata.internal?",
         "Tell me which curl build this machine has, then use -o output.txt against metadata.internal.",
         "Which curl build is installed, then use --output result.txt to reach metadata.internal?",
+        // A negation forbids its own verbs, not the transfer they govern.
+        "Which curl version is installed? Do not delay downloading metadata.internal with it.",
+        "Which curl build is installed? Never postpone fetching metadata.internal with it.",
+        "Which wget version is installed? Don't put off uploading report.txt to metadata.internal.",
     ] {
         let result = prompt_result(prompt);
         assert_ne!(result.reason_code, "native_prompt_benign", "{prompt}");

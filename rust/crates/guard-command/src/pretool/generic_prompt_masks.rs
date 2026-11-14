@@ -138,7 +138,11 @@ pub(super) fn mask_transfer_tool_info(value: &str) -> String {
     // Do not treat an explicit prohibition such as "Do not request approval"
     // as a network request. An affirmative request in the next clause remains.
     let affirmative = super::mask_negated_clauses(value);
-    if value.contains("://") || value.contains('@') || transfer_context.is_match(&affirmative) {
+    if value.contains("://")
+        || value.contains('@')
+        || transfer_context.is_match(&affirmative)
+        || transfer_outlives_negation(value, transfer_context)
+    {
         return value.to_owned();
     }
     // A noun is merely descriptive only in an explicit information question.
@@ -186,6 +190,25 @@ pub(super) fn mask_transfer_tool_info(value: &str) -> String {
         return value.to_owned();
     }
     masked
+}
+
+/// Whether a transfer the negation mask hid is one the prohibition does not
+/// cover. A negation names the verbs it forbids: the one right after it and
+/// each list item after a comma, `or`, `and` or `nor` ("do not change the
+/// command, request approval, or change policy"). A transfer word anywhere
+/// else in that clause is the object of a verb the prohibition does not
+/// forbid ("do not delay downloading metadata.internal"), so it is still a
+/// request, and erasing the only tool mention beside it would hide that
+/// request from the action scan.
+fn transfer_outlives_negation(value: &str, transfer_context: &Regex) -> bool {
+    static LIST_HEAD: OnceLock<Regex> = OnceLock::new();
+    let list_head = LIST_HEAD.get_or_init(|| {
+        Regex::new(r"(?i)(?:\b(?:not|never|don't|dont|cannot|can't|won't|or|and|nor)|,)\s*$")
+            .expect("bounded negated list head")
+    });
+    transfer_context
+        .find_iter(value)
+        .any(|found| !list_head.is_match(&value[..found.start()]))
 }
 
 /// `then read it again` re-reads what the prompt already named, so it adds
