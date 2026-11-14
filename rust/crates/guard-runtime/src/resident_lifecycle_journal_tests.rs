@@ -434,8 +434,14 @@ fn a_full_day_at_every_ceiling_still_reads_back() {
     }
 
     let size = fs::metadata(scope.join(JOURNAL_FILE)).unwrap().len();
-    assert!(size > 4096, "the old 4 KiB ceiling would have lost this day: {size}");
-    assert!(size <= super::super::private_file::PRIVATE_FILE_MAX_BYTES, "{size}");
+    assert!(
+        size > 4096,
+        "the old 4 KiB ceiling would have lost this day: {size}"
+    );
+    assert!(
+        size <= super::super::private_file::PRIVATE_FILE_MAX_BYTES,
+        "{size}"
+    );
     let health = health(&scope).unwrap().unwrap();
     assert_eq!(health.cold_starts_slower, u32::MAX);
     assert_eq!(health.starts, u32::MAX);

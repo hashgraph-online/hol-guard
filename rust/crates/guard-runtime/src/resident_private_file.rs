@@ -86,9 +86,14 @@ pub(super) fn existing_private_file(path: &Path, private_root: &Path) -> Result<
         // not use pathname metadata here: a same-name replacement between a
         // stat and the subsequent open must never be treated as our budget
         // file, and foreign-owner/reparse objects must fail closed.
-        crate::resident_state::open_private_read(path, PRIVATE_FILE_MAX_BYTES, "restart_budget", private_root)
-            .map(|file| file.is_some())
-            .map_err(|_| "native_resident_restart_budget_invalid".to_owned())
+        crate::resident_state::open_private_read(
+            path,
+            PRIVATE_FILE_MAX_BYTES,
+            "restart_budget",
+            private_root,
+        )
+        .map(|file| file.is_some())
+        .map_err(|_| "native_resident_restart_budget_invalid".to_owned())
     }
 
     #[cfg(not(windows))]
@@ -98,7 +103,10 @@ pub(super) fn existing_private_file(path: &Path, private_root: &Path) -> Result<
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(false),
             Err(_) => return Err("native_resident_restart_budget_stat_failed".to_owned()),
         };
-        if metadata.file_type().is_symlink() || !metadata.is_file() || metadata.len() > PRIVATE_FILE_MAX_BYTES {
+        if metadata.file_type().is_symlink()
+            || !metadata.is_file()
+            || metadata.len() > PRIVATE_FILE_MAX_BYTES
+        {
             return Err("native_resident_restart_budget_invalid".to_owned());
         }
         #[cfg(unix)]
@@ -177,8 +185,13 @@ pub(crate) fn read_private_bytes(
     let file = {
         #[cfg(windows)]
         {
-            crate::resident_state::open_private_read(path, PRIVATE_FILE_MAX_BYTES, label, private_root)?
-                .ok_or_else(|| "native_resident_restart_budget_read_failed".to_owned())?
+            crate::resident_state::open_private_read(
+                path,
+                PRIVATE_FILE_MAX_BYTES,
+                label,
+                private_root,
+            )?
+            .ok_or_else(|| "native_resident_restart_budget_read_failed".to_owned())?
         }
         #[cfg(not(windows))]
         {
@@ -198,7 +211,10 @@ pub(crate) fn read_private_bytes(
     let metadata = file
         .metadata()
         .map_err(|_| "native_resident_restart_budget_stat_failed".to_owned())?;
-    if metadata.file_type().is_symlink() || !metadata.is_file() || metadata.len() > PRIVATE_FILE_MAX_BYTES {
+    if metadata.file_type().is_symlink()
+        || !metadata.is_file()
+        || metadata.len() > PRIVATE_FILE_MAX_BYTES
+    {
         return Err("native_resident_restart_budget_invalid".to_owned());
     }
     #[cfg(unix)]
