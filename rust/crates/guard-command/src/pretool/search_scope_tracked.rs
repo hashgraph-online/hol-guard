@@ -126,6 +126,12 @@ impl TrackedFiles {
         !image_declares_secret(&text) && clean(&text, &rendered)
     }
 
+    /// Whether `path` is a regular file the nearest repository tracks outside
+    /// every credential store, whatever its size or content.
+    pub(super) fn committed(&mut self, path: &Path) -> bool {
+        self.tracked(path, u64::MAX).is_some()
+    }
+
     /// The length of `path` and its name in the repository index, when it is
     /// a regular file of at most `limit` bytes that the nearest repository
     /// tracks outside every credential store.

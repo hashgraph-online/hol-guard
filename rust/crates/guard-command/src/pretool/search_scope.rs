@@ -87,7 +87,8 @@ pub(super) fn grok_grep_directory_scope_proven(
 /// Shell `rg` with `-g` inclusions the name screen cannot clear, such as
 /// `*.md` or `README*`: true when below each directory root no sensitive
 /// file matches one of them. ripgrep searches such a file even when it is
-/// hidden or ignored, and the walk inspects every one. The other globs were
+/// hidden or ignored, and the walk inspects every one; a committed file plain
+/// `rg` reaches over the same root is not held again. The other globs were
 /// screened already and can only add safe files or remove some. A root that
 /// is a regular file was screened as a path, and ripgrep reads it whatever
 /// the globs say.
@@ -110,8 +111,15 @@ pub(super) fn rg_glob_scope_proven(
                 (!filter.is_path_shaped()
                     || working_directory_root(home_dir, cwd).as_deref() == Some(root.as_path()))
                     && !super::read_paths::inside_agent_state_tree(&root, home_dir)
-                    && walk_scope(&root, &filter, Ignores::Ripgrep, false, home_dir, &mut None)
-                        .is_ok()
+                    && walk_scope(
+                        &root,
+                        &filter,
+                        Ignores::RipgrepGlob,
+                        false,
+                        home_dir,
+                        &mut None,
+                    )
+                    .is_ok()
             }
             None => cwd.is_some_and(|cwd| {
                 std::fs::symlink_metadata(Path::new(cwd).join(target))
