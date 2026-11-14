@@ -132,7 +132,7 @@ pub(super) fn mask_transfer_tool_info(value: &str) -> String {
     // Never erase the only transfer-tool mention when another clause asks for
     // a network action. A scheme-less host is a valid curl/wget operand too.
     let transfer_context = TRANSFER_CONTEXT.get_or_init(|| {
-        Regex::new(r"(?i)\\b(?:fetch|download|upload|send|post|transfer|grab|pull|retrieve|request|stage)(?:s|ed|ing)?\\b|\\b[a-z0-9-]+(?:\\.[a-z0-9-]+)+/[^\\s]*")
+        Regex::new(r"(?i)\b(?:fetch|download|upload|send|post|transfer|grab|pull|retrieve|request|stage)(?:s|ed|ing)?\b|\b[a-z0-9-]+(?:\.[a-z0-9-]+)+/[^\s]*")
             .expect("bounded transfer-action context")
     });
     if value.contains("://") || value.contains('@') || transfer_context.is_match(value) {
@@ -141,7 +141,7 @@ pub(super) fn mask_transfer_tool_info(value: &str) -> String {
     // A noun is merely descriptive only in an explicit information question.
     // "Use the local curl build with -F ..." must keep its curl word.
     let info_question = INFO_QUESTION.get_or_init(|| {
-        Regex::new(r"(?i)\\b(?:which|what|how|whether)\\b")
+        Regex::new(r"(?i)\b(?:which|what|how|whether)\b")
             .expect("bounded tool-information question")
     });
     let info = INFO.get_or_init(|| {
@@ -164,7 +164,7 @@ pub(super) fn mask_transfer_tool_info(value: &str) -> String {
         };
         if captures.name("noun").is_some() {
             let clause_start = value[..mention.start()]
-                .rfind(['.', '?', '!', ';', '\\n'])
+                .rfind(['.', '?', '!', ';', '\n'])
                 .map_or(0, |offset| offset + 1);
             if !info_question.is_match(&value[clause_start..mention.end()])
                 || transfer_word.is_match(&value[mention.end()..])
