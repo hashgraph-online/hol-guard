@@ -37,78 +37,9 @@ struct Parser {
     calls: Vec<Call>,
 }
 
-const RESERVED: &[&str] = &[
-    "read",
-    "sh",
-    "tool",
-    "display",
-    "print",
-    "log",
-    "console",
-    "Promise",
-    "JSON",
-    "await",
-    "async",
-    "const",
-    "let",
-    "var",
-    "function",
-    "class",
-    "new",
-    "this",
-    "import",
-    "require",
-    "process",
-    "eval",
-    "Function",
-    "globalThis",
-    "window",
-    "global",
-    "fetch",
-    "return",
-    "if",
-    "else",
-    "for",
-    "while",
-    "do",
-    "try",
-    "catch",
-    "throw",
-    "delete",
-    "typeof",
-    "void",
-    "yield",
-    "with",
-    "in",
-    "instanceof",
-    "of",
-    "true",
-    "false",
-    "null",
-    "undefined",
-    "constructor",
-    "prototype",
-    "__proto__",
-];
-
-/// String and array methods that only compute a new value from their
-/// receiver and plain arguments.
-const PURE_METHODS: &[&str] = &[
-    "split",
-    "slice",
-    "substring",
-    "trim",
-    "trimStart",
-    "trimEnd",
-    "toLowerCase",
-    "toUpperCase",
-    "join",
-    "includes",
-    "startsWith",
-    "endsWith",
-    "indexOf",
-    "at",
-];
+#[path = "generic_omp_eval_parser_vocabulary.rs"]
+mod vocabulary;
+use vocabulary::{PURE_METHODS, RESERVED};
 
 impl Parser {
     fn peek(&self) -> Option<&Token> {
