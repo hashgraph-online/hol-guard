@@ -346,7 +346,7 @@ fn warnings_include_setup_failure(warnings: &[&str]) -> bool {
 /// Whether any warning remains once the one about the missing tool command is
 /// set aside. Adapters word their own faults, so anything the missing command
 /// does not already explain keeps the setup broken.
-fn setup_failures_besides_missing_command(warnings: &[&str]) -> bool {
+pub(crate) fn setup_failures_besides_missing_command(warnings: &[&str]) -> bool {
     warnings
         .iter()
         .any(|warning| !warning.to_lowercase().contains(MISSING_COMMAND_MARKER))
