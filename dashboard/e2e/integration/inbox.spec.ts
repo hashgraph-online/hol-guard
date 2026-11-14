@@ -84,7 +84,7 @@ test("each request detail shows the action Guard stopped", async ({ page, state 
 
   await page.goto(`/requests/${mcp.id}`);
   await expect(page.getByText("Tool from GitHub").first()).toBeVisible();
-  await expect(page.getByRole("main").getByText(/create.?issue/i).last()).toBeVisible();
+  await expect(page.getByRole("main").getByText("Create issue", { exact: true }).first()).toBeVisible();
   await expectNoErrorBoundary(page);
 });
 
