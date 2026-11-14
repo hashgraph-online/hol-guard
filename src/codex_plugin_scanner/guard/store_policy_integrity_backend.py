@@ -99,14 +99,20 @@ class MirroredPolicyIntegritySecretStore(FallbackSecretStore):
         return f"{self._FALLBACK_PREFERENCE_PREFIX}{secret_id}"
 
     def _fallback_is_preferred(self, secret_id: str) -> bool:
-        if secret_id in self._fallback_preferred_secret_ids:
-            return True
         try:
             preferred = self.fallback.get_secret(self._fallback_preference_ref(secret_id)) == "1"
         except Exception:
-            preferred = False
+            # A transient vault read failure must not make a previously
+            # successful fallback write unsafe; retain the fail-closed cache
+            # until the durable marker can be checked again.
+            return secret_id in self._fallback_preferred_secret_ids
         if preferred:
             self._fallback_preferred_secret_ids.add(secret_id)
+        else:
+            # The marker is authoritative.  Clear stale process-local state
+            # when another store has restored the primary keyring or removed
+            # the fallback preference.
+            self._fallback_preferred_secret_ids.discard(secret_id)
         return preferred
 
     def _policy_source(
