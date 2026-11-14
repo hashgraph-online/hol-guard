@@ -266,6 +266,7 @@ pub mod pretool_redirect_null_sink;
 pub mod pretool_redirect_pipeline_scratch;
 pub mod pretool_request_path_context;
 pub mod pretool_rg_files_name_only;
+pub mod pretool_rg_glob_committed;
 pub mod pretool_rg_inclusion_globs;
 pub mod pretool_rg_literal_route_search;
 pub mod pretool_rg_replace_reads;

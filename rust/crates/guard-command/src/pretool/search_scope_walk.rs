@@ -40,6 +40,10 @@ pub(super) enum Ignores {
     /// ripgrep: repository excludes, `.gitignore`, `.ignore` and `.rgignore`,
     /// and `.git` itself is skipped.
     Ripgrep,
+    /// ripgrep with `-g` inclusions, which also reach hidden and ignored
+    /// entries. A committed file that is neither is one plain `rg` searches
+    /// over the same root, so only the entries the globs add are screened.
+    RipgrepGlob,
     /// Only `.gitignore` files at or below the search root, inside a
     /// repository. Ancestor files, repository excludes and a global file rank
     /// below them and can only hide more, so leaving them out keeps the
@@ -144,6 +148,8 @@ struct PendingDirectory {
     relative: String,
     depth: usize,
     tiers: Rc<IgnoreTiers>,
+    /// Whether plain `rg` skips this directory as hidden or ignored.
+    beyond: bool,
 }
 
 /// Walks the modeled search scope. With `names`, the walk models a names-only
@@ -305,7 +311,8 @@ fn walk_scope_inner(
 ) -> Result<(), ScopeUnproven> {
     let repository = repository_root(root).filter(|_| ignores != Ignores::None);
     let mut tiers = IgnoreTiers::default();
-    if ignores == Ignores::Ripgrep {
+    let ripgrep = matches!(ignores, Ignores::Ripgrep | Ignores::RipgrepGlob);
+    if ripgrep {
         if let Some(repository) = &repository {
             tiers.git = ancestor_git_rules(root, repository)?;
         }
@@ -324,6 +331,7 @@ fn walk_scope_inner(
         relative: String::new(),
         depth: 0,
         tiers: Rc::new(tiers),
+        beyond: false,
     }];
     let mut inspected = 0_usize;
     let mut tracked = TrackedFiles::default();
@@ -359,7 +367,7 @@ fn walk_scope_inner(
         if ignores == Ignores::Gitignore && holds_custom_ignore_file(&directory.path) {
             return Err(ScopeUnproven);
         }
-        if ignores == Ignores::Ripgrep {
+        if ripgrep {
             load_custom_rules(&directory.path, &mut tiers)?;
         }
         let tiers = Rc::new(tiers);
@@ -384,7 +392,7 @@ fn walk_scope_inner(
                 // Ripgrep's walk passes over .git unless an inclusion selects
                 // it, a names walk all but a link; a content walk inspects it.
                 if !filter.selects_git(name, &relative)
-                    && (ignores == Ignores::Ripgrep || (names && !metadata.is_symlink()))
+                    && (ripgrep || (names && !metadata.is_symlink()))
                 {
                     continue;
                 }
@@ -435,27 +443,33 @@ fn walk_scope_inner(
                 }
                 return Err(ScopeUnproven);
             }
-            let searched = match filter.override_for(name, &relative, is_directory) {
+            let rendered = slash_path(&path).ok_or(ScopeUnproven)?;
+            let (searched, selected) = match filter.override_for(name, &relative, is_directory) {
                 Override::Skipped => continue,
-                Override::Searched => true,
+                Override::Searched => (true, true),
                 Override::Undecided => {
-                    let rendered = slash_path(&path).ok_or(ScopeUnproven)?;
                     if ignores != Ignores::None && is_ignored(&tiers, &rendered, is_directory)? {
                         continue;
                     }
-                    is_directory || filter.type_allows(name)
+                    (is_directory || filter.type_allows(name), false)
                 }
             };
+            let beyond = ignores == Ignores::RipgrepGlob
+                && (directory.beyond
+                    || name.starts_with('.')
+                    || (selected && is_ignored(&tiers, &rendered, is_directory)?));
             if is_directory {
                 pending.push(PendingDirectory {
                     path,
                     relative,
                     depth: directory.depth + 1,
                     tiers: Rc::clone(&tiers),
+                    beyond,
                 });
             } else if searched
                 && !names
                 && sensitive_scope_file(&path, home)
+                && !(ignores == Ignores::RipgrepGlob && !beyond && tracked.committed(&path))
                 && !match tracked.classify(&path) {
                     Tracked::Clean => true,
                     // A committed `Secret` manifest is held for the values it
