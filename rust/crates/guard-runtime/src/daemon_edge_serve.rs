@@ -27,6 +27,8 @@ use super::reads::{dashboard_build_id, NativeReads, HANDSHAKE_SCHEMA};
 use super::{serve, MAX_ACTIVE_CONNECTIONS, STALLED_WRITE_TIMEOUT};
 use crate::daemon_policy_authority::{canonical_discovery_payload, hmac_sha256_raw};
 
+#[path = "daemon_edge_resident_prewarm.rs"]
+mod resident_prewarm;
 #[path = "daemon_edge_workers.rs"]
 mod workers;
 
@@ -307,6 +309,9 @@ pub(crate) fn run(args: &[String]) -> i32 {
         );
     }
     warm_hook_worker(&reads, port, pid);
+    if config.workers {
+        resident_prewarm::prewarm_resident(&home);
+    }
     println!("{}", json!({"port": port, "pid": pid}));
     let _ = io::stdout().flush();
     super::lifecycle::record(&home, "ready", None, Some(&session_id), Some(port));
