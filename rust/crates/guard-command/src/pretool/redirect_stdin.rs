@@ -327,10 +327,15 @@ pub(in crate::pretool) fn skip_bodies(
 fn python_program_fits(body: &[&str]) -> bool {
     let source = body.join("\n");
     // Python treats a bare CR as a physical line break. The heredoc parser
-    // splits on LF, so accepting CR would let its encoding-header check and
-    // the interpreter disagree about the first two source lines. Fail closed.
+    // splits on LF; reject only CR that is not part of CRLF, so the encoding
+    // header check and interpreter agree without holding ordinary CRLF input.
+    let bytes = source.as_bytes();
+    let no_bare_cr = bytes
+        .iter()
+        .enumerate()
+        .all(|(i, byte)| *byte != b'\r' || bytes.get(i + 1) == Some(&b'\n'));
     body.iter().all(|row| row.is_ascii())
-        && !source.contains('\r')
+        && no_bare_cr
         && !body.iter().take(2).any(|row| coding_comment(row))
         && crate::pretool::script_content::fed::source_clean(
             crate::pretool::script_content::Language::Python,
