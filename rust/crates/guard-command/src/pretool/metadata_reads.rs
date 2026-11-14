@@ -192,9 +192,11 @@ pub(super) fn safe_diff_arguments(
         return false;
     }
     // A chain may diff a temporary copy it makes first, which is absent when
-    // the hook runs; reading it can only report a missing file.
+    // the hook runs; reading it can only report a missing file. The null
+    // device reads as empty, so `diff -u /dev/null FILE` prints FILE.
     [left, right].iter().all(|operand| {
-        safe_reads::bounded_read_target(operand, context.home_dir, context.cwd, false)
+        super::git_hook_files::is_null_device(operand)
+            || safe_reads::bounded_read_target(operand, context.home_dir, context.cwd, false)
             || super::chain_temporary::absent_temporary_read_target(
                 operand,
                 context.home_dir,
