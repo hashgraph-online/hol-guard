@@ -229,7 +229,7 @@ fn transfer_outlives_negation(value: &str, transfer_context: &Regex) -> bool {
             // A following imperative starts a separate instruction. An option
             // after `, use -o` is not an operand of `do not request approval`.
             let followup = FOLLOWUP_ACTION.get_or_init(|| {
-                Regex::new(r"(?i),\s*(?:use|run|execute|invoke|call|apply|set|write|save|copy|fetch|download|upload|send|post|transfer|stage|request)\b")
+                Regex::new(r"(?i)(?:,\s*(?:and\s+|then\s+|also\s+)?|\b(?:and|then|also)\s+)(?:use|run|execute|invoke|call|apply|set|write|save|copy|fetch|download|upload|send|post|transfer|stage|request)\b")
                     .expect("bounded transfer follow-up instruction")
             });
             return !verb.is_match(before) || followup.is_match(before);
