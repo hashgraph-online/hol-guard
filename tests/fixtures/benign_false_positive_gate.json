@@ -17334,7 +17334,7 @@
       "expect": "not_allow"
     },
     {
-      "id": "neg-grok-grep-edge-clone-name-glob-selects-dev-vars",
+      "id": "neg-grok-grep-edge-clone-dotfile-glob-selects-env-backup",
       "fix_area": "negative",
       "harnesses": [
         "grok"
@@ -17343,7 +17343,7 @@
       "tool_input": {
         "pattern": "edge.*setting",
         "path": "${HOME}/edge-clone",
-        "glob": "*.vars"
+        "glob": ".env*"
       },
       "cwd": "worktree",
       "expect": "not_allow"

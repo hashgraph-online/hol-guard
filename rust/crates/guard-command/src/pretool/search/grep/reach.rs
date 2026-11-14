@@ -16,9 +16,9 @@
 use super::{scan_arguments, tree, AbsentOperands, ReadContext};
 use crate::pretool::search_pattern_clearance::PatternClearance;
 
-/// Above the include proof's limit, so a tree that limit refuses is one this
-/// walk can still count past it and call too large.
-const MAX_ENTRIES: usize = 25_000;
+/// One past the include proof's limit, so a tree that limit refuses is one
+/// this walk can count past it and call too large, and no further.
+const MAX_ENTRIES: usize = INCLUDE_PROOF_ENTRIES + 1;
 
 /// The entries the include proof may inspect. Past this many, an include
 /// search is reviewed for its size whatever the globs select.
@@ -61,12 +61,21 @@ pub(in crate::pretool) fn sensitive_reach_reason(
         return None;
     }
     let clearance = scan.clearance();
+    // This walk only words a review already decided, so an expired clock
+    // costs the advice, never the decision: the search keeps the generic
+    // reason.
+    let deadline = crate::pretool::search_scope_budget::advice_walk_deadline();
     // The include proof counts the entries below each folder separately.
     let mut largest = 0_usize;
+    let mut expired = false;
     let shown = scan.targets.iter().find_map(|target| {
         let mut inspected = 0_usize;
-        let entry =
-            first_sensitive_entry(target, context, &scan, clearance.as_ref(), &mut inspected);
+        let walk = Walk {
+            scan: &scan,
+            clearance: clearance.as_ref(),
+            deadline,
+        };
+        let entry = first_sensitive_entry(target, context, &walk, &mut inspected, &mut expired);
         largest = largest.max(inspected);
         let entry = entry?;
         let folder = target.trim_end_matches('/');
@@ -81,7 +90,7 @@ pub(in crate::pretool) fn sensitive_reach_reason(
     let Some(shown) = shown else {
         // Only the include proof's limit is known to be below this walk's;
         // a plain recursive search past this walk's limit stays unexplained.
-        let too_large = !scan.included.is_empty() && largest > INCLUDE_PROOF_ENTRIES;
+        let too_large = !scan.included.is_empty() && !expired && largest > INCLUDE_PROOF_ENTRIES;
         return too_large.then(|| {
             "HOL Guard requires review because the search covers more files than Guard can check before it runs. Name the folders you need instead of the whole tree, for example `grep -rn PATTERN src app`.".to_owned()
         });
@@ -91,17 +100,30 @@ pub(in crate::pretool) fn sensitive_reach_reason(
     ))
 }
 
+/// What one advice walk reads by and when it must stop.
+struct Walk<'a> {
+    scan: &'a super::Scan,
+    clearance: Option<&'a PatternClearance>,
+    deadline: Option<std::time::Instant>,
+}
+
 /// The first entry below `value`, in name order, that the recursive screens
 /// refuse by name and the pattern clearance does not admit, relative to
 /// `value`. A walk that does not finish names nothing. Every entry it
-/// inspects is added to `inspected`.
+/// inspects is added to `inspected`, and a walk the clock stops sets
+/// `expired`.
 fn first_sensitive_entry(
     value: &str,
     context: ReadContext<'_>,
-    scan: &super::Scan,
-    clearance: Option<&PatternClearance>,
+    walk: &Walk<'_>,
     inspected: &mut usize,
+    expired: &mut bool,
 ) -> Option<String> {
+    let Walk {
+        scan,
+        clearance,
+        deadline,
+    } = *walk;
     if value.split(['/', '\\']).any(|part| part == "..")
         || !crate::pretool::safe_reads::bounded_read_target(
             value,
@@ -122,6 +144,10 @@ fn first_sensitive_entry(
         walked += 1;
         *inspected += 1;
         if walked > MAX_ENTRIES {
+            return None;
+        }
+        if walked % 256 == 0 && deadline.is_some_and(|at| std::time::Instant::now() >= at) {
+            *expired = true;
             return None;
         }
         let metadata = std::fs::symlink_metadata(&path).ok()?;
