@@ -1064,7 +1064,11 @@ fn evaluate_rewritten(
     ) {
         return Ok(allowed);
     }
-    let Some(rewritten) = rewritten_command_list_at(&request.command, home_dir) else {
+    // A loop word spelled `~/` names the home the shell expands, so it is
+    // written out only when that is shown to be the declared home.
+    let loop_home =
+        home_dir.filter(|_| PathContext::shell_home_matches_for(home_dir, execution_environment));
+    let Some(rewritten) = rewritten_command_list_at(&request.command, loop_home) else {
         return Ok(ungrouped_decision(
             request,
             decision,
