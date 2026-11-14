@@ -1,6 +1,6 @@
 //! How the Cline hook worker reads Guard's decision: which object in its
 //! stdout is the decision, whether it blocks, whether it explicitly allows,
-//! and the reason it gives.
+//! the reason it gives, and the one-line answer the worker writes.
 
 use guard_command::hook_adapter_value::{parse_python_json, OMap, OValue};
 
@@ -114,6 +114,18 @@ pub(super) fn explicitly_allows(decision: &OMap) -> bool {
 }
 
 /// The stripped reason the decision gives, or the default.
+/// Project context an allowed prompt's answer adds for the model, which
+/// Cline injects when it arrives as `contextModification`.
+pub(super) fn added_context(decision: &OMap) -> Option<&str> {
+    decision
+        .get("hookSpecificOutput")
+        .and_then(OValue::as_map)?
+        .get("additionalContext")
+        .and_then(OValue::as_str)
+        .map(py_strip)
+        .filter(|text| !text.is_empty())
+}
+
 pub(super) fn reason(decision: &OMap) -> &str {
     fn stripped(value: Option<&OValue>) -> Option<&str> {
         value
@@ -143,4 +155,24 @@ pub(super) fn reason(decision: &OMap) -> &str {
         .and_then(|nested| nested.get("message"))
         .and_then(OValue::as_str)
         .map_or(DEFAULT_REASON, py_strip)
+}
+
+/// `sys.stdout.write(json.dumps(value, separators=(",", ":")) + "\n")`.
+pub(super) fn emit(fields: &[(&str, OValue)]) -> String {
+    let mut map = OMap::new();
+    for (key, value) in fields {
+        map.insert(key, value.clone());
+    }
+    OValue::Map(map).compact_json() + "\n"
+}
+
+pub(super) fn failure(blocking: bool, message: &str) -> String {
+    emit(&[
+        ("cancel", OValue::Bool(blocking)),
+        (
+            "errorMessage",
+            OValue::str(if blocking { message } else { "" }),
+        ),
+        ("contextModification", OValue::str(message)),
+    ])
 }

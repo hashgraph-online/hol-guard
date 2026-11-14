@@ -28,6 +28,7 @@ fn replay(fixture: &Value, case: &Value) -> Result<Computed, Failure> {
         managed.as_ref(),
         case["cloud_sync_entitled"].as_bool().unwrap(),
         fixture["now"].as_str().unwrap(),
+        &crate::cigar_apps::CIGAR_APPS,
     )
 }
 
@@ -256,6 +257,7 @@ fn watch_stamp_repair_leaves_a_managed_watch_unstamped() {
         Some(&managed),
         false,
         "2026-11-04T00:00:00+00:00",
+        &crate::cigar_apps::CIGAR_APPS,
     ) else {
         panic!("the repair request must not be refused");
     };
@@ -428,4 +430,44 @@ fn per_app_cigar_choices_are_checked() {
         );
     }
     assert!(!home.join(HOME_CONFIG_FILENAME).exists());
+}
+
+/// Every app whose prompts take CIGAR's context keeps a lasting CIGAR-only
+/// Watch. Cline set up through its plugin never sends Guard a prompt, so its
+/// Watch gets the usual revert window instead.
+#[test]
+fn an_untimed_watch_lasts_for_every_app_that_takes_cigar_context() {
+    let home = cigar_home("untimed-every-app");
+    let config = home.join(HOME_CONFIG_FILENAME);
+    let response = run(
+        &home,
+        "settings",
+        r#"{"harness_postures": {"devin": "watch", "muse": "watch", "zcode": "watch", "kimi": "watch", "cline": "watch"}, "harness_watch_untimed": true}"#,
+    );
+    assert_eq!(response["ok"], json!(true), "{response}");
+    let saved = fs::read_to_string(&config).unwrap();
+    assert!(saved.contains("kimi = \"watch\""), "{saved}");
+    assert!(!saved.contains("harness_watch_entered_at"), "{saved}");
+
+    let plugin = cigar_home("untimed-cline-plugin");
+    let managed = plugin.join("managed").join("cline");
+    fs::create_dir_all(&managed).unwrap();
+    fs::write(
+        managed.join("adapter-state.json"),
+        r#"{"active_transport": "plugin"}"#,
+    )
+    .unwrap();
+    let response = run(
+        &plugin,
+        "settings",
+        r#"{"harness_postures": {"cline": "watch", "kimi": "watch"}, "harness_watch_untimed": true}"#,
+    );
+    assert_eq!(response["ok"], json!(true), "{response}");
+    let saved = fs::read_to_string(plugin.join(HOME_CONFIG_FILENAME)).unwrap();
+    let stamps = saved
+        .split("[harness_watch_entered_at]")
+        .nth(1)
+        .unwrap_or_default();
+    assert!(stamps.contains("cline = "), "{saved}");
+    assert!(!stamps.contains("kimi = "), "{saved}");
 }

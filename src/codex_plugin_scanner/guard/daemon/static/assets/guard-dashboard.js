@@ -1,4 +1,4 @@
-const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/chunks/home-dashboard-BTu-Dd20.js","assets/chunks/home-protection-module-CMu4ycX8.js","assets/chunks/supply-chain-protection-stats-C4S58svV.js","assets/chunks/workspace-model-hR3eI7UO.js","assets/chunks/brand-hero-COty1p6U.js","assets/chunks/about-content-Dr9zFg1V.js","assets/chunks/app-catalog-Ca_M7GbC.js","assets/chunks/fleet-workspace-CyNbRJJG.js","assets/chunks/harness-version-label-MLxWNcFW.js","assets/chunks/settings-save-proof-modal-_wjRK7LN.js","assets/chunks/connect-guard-cloud-button-BUnXYp-e.js","assets/chunks/guard-repair-control-BGQGnM8b.js","assets/chunks/settings-workspace-Dgt1mojz.js","assets/chunks/confirm-dialog-C_yrRR8f.js","assets/chunks/extensions-workspace-BJW9li9o.js","assets/chunks/app-detail-workspace-BcDpRAjB.js","assets/chunks/harness-action-errors-x2AyNCK-.js","assets/chunks/supply-chain-hub-workspace-BJZR421D.js","assets/chunks/policy-workspace-page-DuL9PTDi.js","assets/chunks/about-workspace-BX-eCaXK.js","assets/about-workspace.css"])))=>i.map(i=>d[i]);
+const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/chunks/home-dashboard-BTu-Dd20.js","assets/chunks/home-protection-module-CMu4ycX8.js","assets/chunks/supply-chain-protection-stats-C4S58svV.js","assets/chunks/workspace-model-hR3eI7UO.js","assets/chunks/brand-hero-COty1p6U.js","assets/chunks/about-content-Dr9zFg1V.js","assets/chunks/app-catalog-Ca_M7GbC.js","assets/chunks/fleet-workspace-CyNbRJJG.js","assets/chunks/harness-version-label-MLxWNcFW.js","assets/chunks/settings-save-proof-modal-_wjRK7LN.js","assets/chunks/connect-guard-cloud-button-BUnXYp-e.js","assets/chunks/guard-repair-control-BGQGnM8b.js","assets/chunks/settings-workspace-CnxO1Xjx.js","assets/chunks/confirm-dialog-C_yrRR8f.js","assets/chunks/extensions-workspace-BJW9li9o.js","assets/chunks/app-detail-workspace-BcDpRAjB.js","assets/chunks/harness-action-errors-x2AyNCK-.js","assets/chunks/supply-chain-hub-workspace-BJZR421D.js","assets/chunks/policy-workspace-page-DuL9PTDi.js","assets/chunks/about-workspace-BX-eCaXK.js","assets/about-workspace.css"])))=>i.map(i=>d[i]);
 (function polyfill() {
   const relList = document.createElement("link").relList;
   if (relList && relList.supports && relList.supports("modulepreload")) return;
@@ -16999,7 +16999,7 @@ function turnProtectionOnUpdate(snapshot) {
   if (Object.keys(cleared).length > 0) update.harness_postures = cleared;
   return update;
 }
-const CIGAR_APPS = /* @__PURE__ */ new Set(["claude-code", "codex", "pi", "omp"]);
+const CIGAR_APPS = /* @__PURE__ */ new Set(["claude-code", "codex", "pi", "omp", "devin", "muse", "zcode", "kimi", "cline"]);
 function cigarReady(settings) {
   const config2 = settings.context_assistance;
   const requested = config2?.enabled === true && config2.features.agent_context && config2.sources.workspace_documents;
@@ -17011,8 +17011,11 @@ function cigarLocked(settings) {
 function cigarSupported(harness) {
   return CIGAR_APPS.has(harness);
 }
+function cigarReachesApp(settings, harness) {
+  return cigarSupported(harness) && (settings.cigar_apps?.includes(harness) ?? true);
+}
 function cigarAvailable(settings, harness) {
-  return cigarReady(settings) && cigarSupported(harness);
+  return cigarReady(settings) && cigarReachesApp(settings, harness);
 }
 function appModes(settings, harness) {
   return {
@@ -17056,8 +17059,11 @@ function cigarUnavailableReason(settings, harness, displayName) {
   if (cigarAvailable(settings, harness)) {
     return cigarLocked(settings) ? "Your organization manages CIGAR for each app." : void 0;
   }
+  if (cigarSupported(harness) && !cigarReachesApp(settings, harness)) {
+    return `Guard is set up in ${displayName} through its plugin, which doesn't send Guard your prompts. Set up ${displayName} with its native hooks to use CIGAR.`;
+  }
   if (cigarSupported(harness)) return "CIGAR is off on this machine. Set it up on the CIGAR page.";
-  return `CIGAR can't add project context in ${displayName}.`;
+  return `${displayName} doesn't let Guard add context to its prompts yet.`;
 }
 function applyHarnessCigarPatch(current, patch) {
   const next = { ...current ?? {} };
@@ -39193,7 +39199,7 @@ function RuntimeGate(props) {
 const HOME_QUEUE_PREVIEW_LIMIT = 50;
 const HomeWorkspace = lazyWorkspace("home-dashboard", () => __vitePreload(() => import("./chunks/home-dashboard-BTu-Dd20.js"), true ? __vite__mapDeps([0,1,2,3,4,5,6]) : void 0).then((m) => ({ default: m.HomeWorkspace })));
 const FleetWorkspace = lazyWorkspace("fleet-workspace", () => __vitePreload(() => import("./chunks/fleet-workspace-CyNbRJJG.js"), true ? __vite__mapDeps([7,8,9,10,6,11]) : void 0).then((m) => ({ default: m.FleetWorkspace })));
-const SettingsWorkspace = lazyWorkspace("settings-workspace", () => __vitePreload(() => import("./chunks/settings-workspace-Dgt1mojz.js"), true ? __vite__mapDeps([12,11,6,13,9,10,3]) : void 0).then((m) => ({ default: m.SettingsWorkspace })));
+const SettingsWorkspace = lazyWorkspace("settings-workspace", () => __vitePreload(() => import("./chunks/settings-workspace-CnxO1Xjx.js"), true ? __vite__mapDeps([12,11,6,13,9,10,3]) : void 0).then((m) => ({ default: m.SettingsWorkspace })));
 const ExtensionsWorkspace = lazyWorkspace(
   "extensions-workspace",
   () => __vitePreload(() => import("./chunks/extensions-workspace-BJW9li9o.js"), true ? __vite__mapDeps([14,13]) : void 0).then((module) => ({ default: module.ExtensionsWorkspace }))

@@ -141,9 +141,19 @@ Guard's typed MCP registry supplies list, call and FastMCP registration. Pass th
 
 The status response can remain available through existing Guard status reporting. It should not require installing CIGAR to explain why CIGAR is unavailable.
 
-## Prompt context in Claude Code, Codex, Pi and Oh My Pi
+## Prompt context in coding agents
 
 This part is implemented. When CIGAR is on and verified, and both `features.agent_context` and `sources.workspace_documents` are on, Guard's `UserPromptSubmit` hook for Claude Code, Codex, Pi and Oh My Pi adds matching project code to an allowed prompt through `hookSpecificOutput.additionalContext`. The Pi and Oh My Pi extensions ask for it with `guard_prompt_context: true` and hand it to the model as a hidden message just before the turn starts; an older extension that does not ask gets no lookup. The one-click setup in the dashboard turns both on for a fresh install.
+
+The same lookup runs for every other app whose prompt hook can hand text to the model:
+
+| App | Where the context goes |
+| --- | --- |
+| Devin, Muse, Z Code | `hookSpecificOutput.additionalContext`, as for Claude Code |
+| Kimi | `hookSpecificOutput.message`, the field Kimi reads; Guard copies the context there |
+| Cline | `contextModification`, which Cline adds to the prompt as hook context. Only Cline's native hooks send Guard the prompt; when Guard is set up through the Cline plugin, CIGAR stays off for Cline and the dashboard says why. |
+
+The dashboard's CIGAR switch is offered only for these apps. It stays off for apps whose prompt hook cannot pass text to the model: Copilot CLI drops the prompt hook's output, Grok discards it, Cursor's prompt hook can only allow or block, Hermes, OpenCode, OpenClaw and Paseo have no prompt hook, and Gemini and Antigravity run through a launcher with no hooks.
 
 For each prompt the native runtime:
 

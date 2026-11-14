@@ -80,15 +80,14 @@ pub(crate) fn apply_harness_patch(
     }
 }
 
-/// Apps whose prompt hook can carry CIGAR's project context.
-const CIGAR_APPS: [&str; 4] = ["claude-code", "codex", "pi", "omp"];
-
 /// What one settings save asked of per-app Guard and CIGAR.
 pub(crate) struct WatchSettle<'a> {
     pub(crate) postures: &'a [(&'a str, Option<&'a str>)],
     pub(crate) untimed: bool,
     pub(crate) cigar: &'a [(&'a str, bool)],
     pub(crate) context_changed: bool,
+    /// Apps whose prompts can take CIGAR's context in this Guard home.
+    pub(crate) apps: &'a [&'a str],
 }
 
 /// An untimed Watch is only for an app that keeps CIGAR. When CIGAR cannot
@@ -130,7 +129,7 @@ pub(crate) fn settle_untimed_watch(
     for (harness, posture) in &stored {
         let named = save.context_changed || touched.contains(&harness.as_str());
         let keeps_cigar =
-            ready && CIGAR_APPS.contains(&harness.as_str()) && !cigar_off.contains_key(harness);
+            ready && save.apps.contains(&harness.as_str()) && !cigar_off.contains_key(harness);
         if named && posture == "watch" && !keeps_cigar && !stamps.contains_key(harness) {
             stamps.insert(harness.clone(), now.to_owned());
         }
