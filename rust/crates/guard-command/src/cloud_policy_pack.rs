@@ -13,7 +13,7 @@
 use crate::cloud_action_binding::{valid_label, ActionEffect};
 use crate::cloud_action_canonical::{canonical_bytes, domain_digest};
 use crate::cloud_action_classifier::Proposal;
-use crate::cloud_action_policy::{decide_policy, valid_match, PolicySubject};
+use crate::cloud_action_policy::{decide_policy, specificity, valid_match, PolicySubject};
 use crate::cloud_action_v2::{join_fact_rules, CloudFactRule};
 use crate::cloud_pack::PackError;
 use crate::effect_decision::GuardAction;
@@ -144,9 +144,21 @@ pub struct FactCall<'a> {
     pub provider: &'a str,
     pub action_id: &'a str,
     pub effect: ActionEffect,
+    /// The connection the call ran on; fixtures use `fixture`.
+    pub connection_id: &'a str,
+    /// The resource the call named, when it names one.
+    pub resource_id: Option<&'a str>,
     pub facts: &'a ActionFactsV2,
     pub session: Option<&'a SessionFlowV2>,
     pub windows: Option<&'a BTreeMap<String, u64>>,
+}
+
+/// A policy decision and the fact rules behind it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RuleDecision {
+    pub action: GuardAction,
+    pub matched: Vec<String>,
+    pub unknown: Vec<String>,
 }
 
 impl PolicyPack {
@@ -164,10 +176,16 @@ impl PolicyPack {
     /// pack's fact rules, exactly as the evaluator joins them. Capability,
     /// obligation and consent checks come after this and are not applied.
     pub fn decide(&self, call: &FactCall<'_>) -> GuardAction {
+        self.decide_with_rules(call).action
+    }
+
+    /// [`Self::decide`], with the ids of the rules that matched and of the
+    /// rules that would match if every unknown fact were known.
+    pub fn decide_with_rules(&self, call: &FactCall<'_>) -> RuleDecision {
         let subject = PolicySubject {
             action_id: call.action_id,
-            connection_id: "fixture",
-            resource_id: None,
+            connection_id: call.connection_id,
+            resource_id: call.resource_id,
         };
         let effect = std::cmp::max_by_key(
             call.effect,
@@ -194,7 +212,43 @@ impl PolicyPack {
             session: Some(call.session.unwrap_or(&clean)),
             windows,
         };
-        join_fact_rules(&self.typed, &subject, &facts, &policy).action
+        let join = join_fact_rules(&self.typed, &subject, &facts, &policy);
+        RuleDecision {
+            action: join.action,
+            matched: join.matched.into_iter().map(str::to_owned).collect(),
+            unknown: join.unknown.into_iter().map(str::to_owned).collect(),
+        }
+    }
+
+    /// Which scope labels a call must carry before it can be decided: whether
+    /// a rule that would otherwise cover the call is scoped to a connection
+    /// the call leaves unknown, and likewise for a resource. A rule for
+    /// another action, or one the call's known labels already rule out, needs
+    /// neither. `resource_id` is `None` when the resource is unknown and
+    /// `Some(None)` when the call names no resource.
+    pub fn missing_scopes(
+        &self,
+        action_id: &str,
+        connection_id: Option<&str>,
+        resource_id: Option<Option<&str>>,
+    ) -> (bool, bool) {
+        let mut missing = (false, false);
+        for rule in &self.typed {
+            let matcher = &rule.matcher;
+            let subject = PolicySubject {
+                action_id,
+                connection_id: connection_id
+                    .or(matcher.connection_id.as_deref())
+                    .unwrap_or(""),
+                resource_id: resource_id.unwrap_or(matcher.resource_id.as_deref()),
+            };
+            if specificity(matcher, &subject).is_none() {
+                continue;
+            }
+            missing.0 |= connection_id.is_none() && matcher.connection_id.is_some();
+            missing.1 |= resource_id.is_none() && matcher.resource_id.is_some();
+        }
+        missing
     }
 
     /// The decision for an action no admitted pack describes. A name that

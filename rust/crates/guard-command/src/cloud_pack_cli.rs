@@ -15,6 +15,7 @@
 //! | `project`  | pack, `actionId`, `response` text  | projection and labels      |
 //! | `explain`  | `actionId`, `arguments`, optional pack | facts and preset decisions |
 //! | `policy`   | `preset` name or `policyPack`      | fact rules and pack digest |
+//! | `simulate` | `preset` or `policyPack`, stored `calls` | decision and matched rules per call |
 //! | `classify` | `name`, optional `inputSchema`, optional `preset` or `policyPack` | class proposal and unclassified action |
 //!
 //! Results are `{"ok":true,...}` or `{"ok":false,"error":{"code":..}}`. A
@@ -31,6 +32,7 @@ use crate::cloud_pack_facts::extract;
 use crate::cloud_pack_fixtures::run;
 use crate::cloud_pack_request::{check_arguments, render, ArgumentError};
 use crate::cloud_pack_response::project;
+use crate::cloud_pack_simulate::simulate;
 use crate::cloud_policy_pack::{policy_pack_from_value, shipped, PolicyPack, Preset};
 use serde_json::{json, Map, Value};
 use std::io::{self, Write};
@@ -120,6 +122,13 @@ fn answer_op(op: &str, mut request: Map<String, Value>) -> Result<Value, Value> 
                 "factRules": pack.fact_rules(),
                 "unclassified": pack.unclassified,
             })
+        }
+        "simulate" => {
+            let pack = policy(&mut request)?;
+            let calls = request
+                .remove("calls")
+                .ok_or_else(|| refuse("request_invalid", Some("/calls")))?;
+            simulate(&pack, calls).map_err(|(code, pointer)| refuse(code, Some(&pointer)))?
         }
         "generate" => crate::cloud_pack_generate::generate(&mut request)
             .map_err(|(code, pointer)| refuse(code, Some(pointer)))?,

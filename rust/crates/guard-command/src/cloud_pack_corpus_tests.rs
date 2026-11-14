@@ -157,6 +157,8 @@ fn decide(packs: &[CloudActionPack], case: &Value) -> String {
         provider,
         action_id: &action.action_id,
         effect: action.safety.effect,
+        connection_id: "fixture",
+        resource_id: None,
         facts: &facts,
         session: flow.as_ref(),
         windows: Some(&windows),

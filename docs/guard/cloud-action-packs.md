@@ -158,7 +158,14 @@ Both read one JSON request per line on standard input and write one JSON result 
 | `policy` | `preset` name or `policyPack` | `preset`, `packDigest`, `factRules`, `unclassified` |
 | `classify` | `name`, optional `inputSchema`, optional `preset` or `policyPack` | `proposal`, and `action` when a preset is named |
 | `explain` | `actionId`, `arguments`, optional `pack` or `artifact` (defaults to the shipped packs) | `providerId`, `effect`, `facts`, `decisions` by preset |
+| `simulate` | `preset` or `policyPack`, and `calls`: up to 1000 stored calls, each `provider`, `actionId`, `facts`, optional `effect`, `connectionId`, `resourceId`, `sessionFlow` and `usageWindows` | `results`: per call `action`, `matchedRuleIds`, `unknownRuleIds` |
 | `generate` | `providerId`; `openapi` or `mcpTools`, or `from` and `document` text; optional `providerName`, `publisher`, `host`, `authMode` | draft `pack`, `proposals`, `notes` |
+
+`simulate` reads only the facts a host stored when it decided each call, never arguments or payloads. A call with
+no stored session flow reads as a clean session, and one with no stored usage reads every window at zero. When a
+rule that covers a call is scoped to a connection or resource the call does not carry, the request is refused with
+`scope_unknown`; a call that named no resource sends `resourceId: null`, so a resource-scoped rule cannot match it. A host
+adding a draft rule to a preset names it with the preset prefix (for example `balanced.workspace.r0`).
 
 A result is `{"ok": true, ...}` or `{"ok": false, "error": {"code": ..., "pointer" | "argument": ...}}`.
 
