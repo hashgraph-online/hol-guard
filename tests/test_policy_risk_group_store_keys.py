@@ -90,7 +90,28 @@ def test_cloud_group_rule_keeps_its_group_id(tmp_path: Path) -> None:
     assert unrelated["decision"] is None
 
 
-def test_unknown_group_is_refused_instead_of_stored_without_an_id(tmp_path: Path) -> None:
+def test_padded_group_id_is_stored_under_its_group(tmp_path: Path) -> None:
+    store = GuardStore(tmp_path / "guard")
+    replace_remote_policies(
+        store,
+        [
+            PolicyDecision(
+                harness="*",
+                scope="harness",
+                action="block",
+                artifact_id=" Risk-Group:Deletes ",
+                source="policy-bundle-canonical",
+            )
+        ],
+        NOW,
+        remote_write_authorized=True,
+    )
+
+    assert _stored(store) == [("risk-group:deletes", "harness", "block")]
+
+
+@pytest.mark.parametrize("artifact_id", ["risk-group:money", " risk-group:money"])
+def test_unknown_group_is_refused_instead_of_stored_without_an_id(tmp_path: Path, artifact_id: str) -> None:
     store = GuardStore(tmp_path / "guard")
     with pytest.raises(ValueError, match="unsupported_scoped_policy_risk_group"):
         replace_remote_policies(
@@ -100,7 +121,7 @@ def test_unknown_group_is_refused_instead_of_stored_without_an_id(tmp_path: Path
                     harness="*",
                     scope="harness",
                     action="block",
-                    artifact_id="risk-group:money",
+                    artifact_id=artifact_id,
                     source="policy-bundle-canonical",
                 )
             ],

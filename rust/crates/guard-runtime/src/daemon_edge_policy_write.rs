@@ -23,7 +23,7 @@ use super::{handler_field, NativeReads, ReadConfig, DROPPED};
 use crate::daemon_handler_policy::{
     policy_clear, policy_upsert, PolicyClearInput, PolicyUpsertInput,
 };
-use crate::policy_bundle_store_identities::scoped_artifact_key;
+use crate::policy_bundle_store_identities::{scoped_artifact_key, scoped_risk_group};
 use crate::policy_decision_lookup_op::{computed_workspace_policy_key, SCOPED_APPROVAL_FAMILIES};
 use crate::resident_state::is_lock_contention;
 
@@ -171,8 +171,8 @@ fn scoped_family_supported(scope: &str, artifact_id: Option<&str>) -> bool {
     if !matches!(scope, "harness" | "global") {
         return true;
     }
-    if let Some(group) = artifact_id.and_then(|id| id.strip_prefix("risk-group:")) {
-        return crate::command_risk_groups::is_risk_group(group);
+    if let Some(group) = scoped_risk_group(artifact_id) {
+        return crate::command_risk_groups::is_risk_group(&group);
     }
     let Some(family) = artifact_id
         .filter(|id| !id.trim().is_empty())

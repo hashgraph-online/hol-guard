@@ -28,11 +28,22 @@ fn a_harness_rule_for_a_risk_group_keeps_its_group_id() {
         Some("risk-group:deletes")
     ));
     assert!(!scoped_family_supported("global", Some("risk-group:money")));
+    assert!(scoped_family_supported(
+        "harness",
+        Some(" Risk-Group: Deletes ")
+    ));
+    assert!(!scoped_family_supported(
+        "harness",
+        Some(" risk-group:money")
+    ));
     let mut body = fields("harness");
     body["artifact_id"] = json!("risk-group:deletes");
     body["action"] = json!("block");
     let row = decision_row(&body).expect("row");
     assert_eq!(row["artifact_id"], json!("risk-group:deletes"));
+    body["artifact_id"] = json!(" risk-group:Deletes ");
+    let padded = decision_row(&body).expect("row");
+    assert_eq!(padded["artifact_id"], json!("risk-group:deletes"));
 }
 
 fn fields(scope: &str) -> Value {

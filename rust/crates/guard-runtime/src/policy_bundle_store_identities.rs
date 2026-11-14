@@ -334,12 +334,24 @@ fn decisions(
 /// kept, so the hook can find the row and it never reads as a rule for every
 /// action in the harness.
 pub(crate) fn scoped_artifact_key(artifact_id: Option<&str>) -> Option<String> {
-    match artifact_id.and_then(|id| id.strip_prefix("risk-group:")) {
-        Some(group) if crate::command_risk_groups::is_risk_group(group) => {
-            artifact_id.map(str::to_owned)
+    match scoped_risk_group(artifact_id) {
+        Some(group) if crate::command_risk_groups::is_risk_group(&group) => {
+            Some(format!("risk-group:{group}"))
         }
-        _ => artifact_family_key(artifact_id),
+        Some(_) => None,
+        None => artifact_family_key(artifact_id),
     }
+}
+
+/// The group a `risk-group:<group>` id names, trimmed and lowercased the way
+/// `scoped_policy_artifact_key` reads it; `None` when the id names no group.
+pub(crate) fn scoped_risk_group(artifact_id: Option<&str>) -> Option<String> {
+    let candidate = artifact_id?.trim();
+    let prefix = candidate.get(..11)?;
+    if !prefix.eq_ignore_ascii_case("risk-group:") {
+        return None;
+    }
+    Some(candidate[11..].trim().to_lowercase())
 }
 
 /// The 11-field identity of one materialized decision, keyed the way

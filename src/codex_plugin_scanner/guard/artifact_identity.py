@@ -54,9 +54,12 @@ def scoped_policy_artifact_key(
     the same reason rather than stored without one.
     """
 
-    if artifact_id is not None and artifact_id.startswith(RISK_GROUP_PREFIX):
-        if artifact_id.removeprefix(RISK_GROUP_PREFIX) in RISK_GROUPS:
-            return artifact_id
+    candidate = (artifact_id or "").strip()
+    prefix = candidate[: len(RISK_GROUP_PREFIX)]
+    if prefix.isascii() and prefix.lower() == RISK_GROUP_PREFIX:
+        group = candidate[len(RISK_GROUP_PREFIX) :].strip().lower()
+        if group in RISK_GROUPS:
+            return f"{RISK_GROUP_PREFIX}{group}"
         msg = "unsupported_scoped_policy_risk_group"
         raise ValueError(msg)
     return artifact_family_key(artifact_id, allowed_families=allowed_families)
