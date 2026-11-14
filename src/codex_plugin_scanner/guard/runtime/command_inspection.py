@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import shlex
 from collections.abc import Mapping
 from pathlib import Path
 
@@ -40,7 +41,18 @@ UNAVAILABLE_REASON_CODES = frozenset(
 UNAVAILABLE_RECOVERY_COMMANDS = ("hol-guard daemon status", "hol-guard daemon repair")
 
 
-def inspection_readiness(reason_code: str, *, failed: bool = False) -> dict[str, object]:
+def recovery_commands(guard_home: Path | None = None) -> list[str]:
+    """The recovery commands, naming ``guard_home`` when the caller knows it."""
+
+    if guard_home is None:
+        return list(UNAVAILABLE_RECOVERY_COMMANDS)
+    quoted = shlex.quote(str(guard_home))
+    return [f"{command} --guard-home {quoted}" for command in UNAVAILABLE_RECOVERY_COMMANDS]
+
+
+def inspection_readiness(
+    reason_code: str, *, failed: bool = False, guard_home: Path | None = None
+) -> dict[str, object]:
     """Describe why an inspection has no verdict, without command text."""
 
     code = reason_code if reason_code in UNAVAILABLE_REASON_CODES else "native_review_unavailable"
@@ -49,7 +61,7 @@ def inspection_readiness(reason_code: str, *, failed: bool = False) -> dict[str,
         "reason_code": code,
         "verdict": "not_evaluated",
         "safe_verdict": False,
-        "recovery_commands": list(UNAVAILABLE_RECOVERY_COMMANDS),
+        "recovery_commands": recovery_commands(guard_home),
     }
 
 

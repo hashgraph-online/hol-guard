@@ -14,7 +14,7 @@ from pathlib import Path
 from typing import Protocol
 
 from ..native_daemon_client import GuardDaemonRequestError
-from ..runtime.command_inspection import inspection_readiness, unavailable_command_inspection
+from ..runtime.command_inspection import inspection_readiness, recovery_commands, unavailable_command_inspection
 
 # A freshly started runtime may need a moment before its first native answer.
 # Inspection has no side effects, so an unavailable answer is asked again
@@ -24,7 +24,7 @@ WARMUP_POLL_SECONDS = 0.5
 
 
 class InspectionClient(Protocol):
-    def inspect_command(self, payload: dict[str, object]) -> dict[str, object]: ...
+    def inspect_command(self, payload: dict[str, object], *, timeout: float | None = None) -> dict[str, object]: ...
 
 
 def _still_warming(payload: dict[str, object]) -> bool:
@@ -35,9 +35,16 @@ def _still_warming(payload: dict[str, object]) -> bool:
     return not (isinstance(readiness, dict) and readiness.get("state") == "failed")
 
 
-def _with_readiness(payload: dict[str, object], reason_code: str) -> dict[str, object]:
-    if payload.get("status") == "native_unavailable" and not isinstance(payload.get("readiness"), dict):
-        payload["readiness"] = inspection_readiness(reason_code)
+def _with_readiness(payload: dict[str, object], reason_code: str, guard_home: Path) -> dict[str, object]:
+    if payload.get("status") != "native_unavailable":
+        return payload
+    readiness = payload.get("readiness")
+    if not isinstance(readiness, dict):
+        payload["readiness"] = inspection_readiness(reason_code, guard_home=guard_home)
+        return payload
+    # The daemon cannot know which home this CLI selected; name it so a copied
+    # recovery command repairs the installation that failed.
+    readiness["recovery_commands"] = recovery_commands(guard_home)
     return payload
 
 
@@ -57,7 +64,8 @@ def inspect_through_daemon(
     request: dict[str, object] = {"command": command_text, "cwd": str(workspace), "home_dir": str(home)}
 
     def unavailable(code: str) -> dict[str, object]:
-        return unavailable_command_inspection(command_text, cwd=workspace, home_dir=home, reason_code=code)
+        payload = unavailable_command_inspection(command_text, cwd=workspace, home_dir=home, reason_code=code)
+        return _with_readiness(payload, code, guard_home)
 
     try:
         payload = client_for(guard_home).inspect_command(request)
@@ -75,8 +83,13 @@ def inspect_through_daemon(
     deadline = clock() + WARMUP_BUDGET_SECONDS
     while _still_warming(payload) and clock() + WARMUP_POLL_SECONDS < deadline:
         sleep(WARMUP_POLL_SECONDS)
+        remaining = deadline - clock()
+        if remaining <= 0:
+            break
         try:
-            payload = client_for(guard_home).inspect_command(request)
+            # Each retry gets only what is left of the budget, so a slow
+            # answer cannot keep the CLI waiting past it.
+            payload = client_for(guard_home).inspect_command(request, timeout=remaining)
         except GuardDaemonRequestError:
             return unavailable("daemon_request_failed")
-    return _with_readiness(payload, "native_review_unavailable")
+    return _with_readiness(payload, "native_review_unavailable", guard_home)

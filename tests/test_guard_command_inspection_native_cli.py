@@ -16,7 +16,7 @@ def test_inspection_uses_daemon_without_initializing_store(monkeypatch, tmp_path
     requests = []
 
     class Client:
-        def inspect_command(self, payload):
+        def inspect_command(self, payload, timeout=None):
             requests.append(payload)
             return {"status": "matched", "minimum_action": "review"}
 
@@ -55,7 +55,7 @@ def test_unavailable_inspection_has_nonzero_exit(monkeypatch, tmp_path, transpor
     emitted = []
 
     class Client:
-        def inspect_command(self, payload):
+        def inspect_command(self, payload, timeout=None):
             if transport_failure:
                 raise GuardDaemonRequestError("not running")
             return {"status": "native_unavailable", "minimum_action": "review"}
@@ -100,7 +100,7 @@ def test_direct_and_cli_outage_reports_do_not_require_native_parser(monkeypatch,
     assert direct["classification"]["recovery"]
 
     class Client:
-        def inspect_command(self, payload):
+        def inspect_command(self, payload, timeout=None):
             raise GuardDaemonRequestError("not running")
 
     monkeypatch.setattr(controls, "_client", lambda _: Client())
@@ -128,10 +128,12 @@ def _inspect(answers, *, ensure=None, budget=5.0, monkeypatch=None):
     if monkeypatch is not None:
         monkeypatch.setattr(client_module, "WARMUP_BUDGET_SECONDS", budget)
     calls = []
+    timeouts = []
 
     class Client:
-        def inspect_command(self, payload):
+        def inspect_command(self, payload, timeout=None):
             calls.append(payload)
+            timeouts.append(timeout)
             answer = answers.pop(0) if answers else answers_tail
             if isinstance(answer, Exception):
                 raise answer
@@ -149,6 +151,7 @@ def _inspect(answers, *, ensure=None, budget=5.0, monkeypatch=None):
         clock=clock,
         sleep=clock.sleep,
     )
+    _inspect.timeouts = timeouts
     return payload, calls, clock
 
 
@@ -211,17 +214,17 @@ def test_request_failure_after_start_is_typed(monkeypatch):
 
 
 def test_unavailable_rendering_cannot_be_read_as_no_match():
-    from codex_plugin_scanner.guard.cli.render import _plain_text_command_inspection
+    from codex_plugin_scanner.guard.cli.render_command_inspection import plain_text_command_inspection
     from codex_plugin_scanner.guard.runtime.command_inspection import unavailable_command_inspection
 
     payload = unavailable_command_inspection("rm -rf build", reason_code="daemon_start_timeout")
-    text = _plain_text_command_inspection(payload)
+    text = plain_text_command_inspection(payload)
     assert "NOT EVALUATED (daemon_start_timeout)" in text
     assert "No sensitive action matched" not in text
     assert "Minimum action: REVIEW" in text
     assert "hol-guard daemon repair" in text
 
-    rendered = _plain_text_command_inspection(
+    rendered = plain_text_command_inspection(
         {"status": "no_match", "command": "ls", "classification": {"reason": "none"}, "minimum_action": "allow"}
     )
     assert "NO_MATCH" in rendered
@@ -265,3 +268,40 @@ def test_native_hold_ignores_allows_and_undecoded_replies(native):
     from codex_plugin_scanner.guard.runtime.command_inspection import _native_hold
 
     assert _native_hold(native) is None
+
+
+def test_each_retry_is_bounded_by_the_remaining_budget(monkeypatch):
+    cold = {"status": "native_unavailable", "minimum_action": "review"}
+    _payload, calls, _clock = _inspect([cold], monkeypatch=monkeypatch)
+    # The first ask uses the client's own timeout; every retry gets what is left.
+    retries = _inspect.timeouts[1:]
+    assert len(calls) > 1
+    assert all(timeout is not None and 0 < timeout <= 5.0 for timeout in retries)
+    assert retries == sorted(retries, reverse=True)
+
+
+def test_recovery_commands_name_the_guard_home(monkeypatch):
+    cold = {"status": "native_unavailable", "minimum_action": "review"}
+    payload, _calls, _clock = _inspect([cold], monkeypatch=monkeypatch)
+    commands = payload["readiness"]["recovery_commands"]
+    assert commands
+    assert all("--guard-home /guard-home" in command for command in commands)
+
+
+def test_recovery_commands_quote_a_guard_home_with_spaces():
+    from codex_plugin_scanner.guard.runtime.command_inspection import recovery_commands
+
+    commands = recovery_commands(Path("/tmp/guard home"))
+    assert all(command.endswith("--guard-home '/tmp/guard home'") for command in commands)
+    assert all("--guard-home" not in command for command in recovery_commands())
+
+
+@pytest.mark.parametrize("minimum_action", [["review"], {"tier": "review"}, 3])
+def test_unhashable_native_action_is_fail_safe(monkeypatch, minimum_action):
+    from codex_plugin_scanner.guard import native_pretool
+
+    decoded = native_pretool._decode_pre_tool(
+        {"decision": "deny", "minimum_action": minimum_action, "reason_code": "x", "reason": "y"},
+        command="ls",
+    )
+    assert decoded is None

@@ -23,6 +23,7 @@ from .protect_output import (
     protect_desktop_approval_url,
 )
 from .render_approval_gate_nudge import print_approval_gate_nudge
+from .render_command_inspection import plain_text_command_inspection, render_command_inspection
 from .render_connectors import print_connector_setup_line, render_mcp_list
 from .render_doctor_readiness import build_doctor_harness_table, readiness_text
 from .render_skill_scan import skill_scan_rows, skill_scan_title
@@ -602,60 +603,6 @@ def _render_init(console: Console, payload: dict[str, object]) -> None:
     console.print(_build_steps_panel(_coerce_dict_list(payload.get("next_steps"))))
 
 
-def _render_command_inspection(console: Console, payload: dict[str, object]) -> None:
-    status = str(payload.get("status") or "invalid")
-    classification = _coerce_object_dict(payload.get("classification"))
-    extensions = _coerce_dict_list(payload.get("extensions"))
-    rules = _coerce_dict_list(payload.get("rules"))
-    risk_classes = _coerce_string_list(payload.get("risk_classes"))
-    unavailable = status == "native_unavailable"
-    border_style = "red" if unavailable else "yellow" if status == "review" else "cyan"
-    summary = Table.grid(padding=(0, 1))
-    summary.add_row("Result", Text(_command_inspection_result_label(payload), style=f"bold {border_style}"))
-    action_class = classification.get("action_class")
-    summary.add_row("Action class", Text(str(action_class or _command_inspection_unmatched_label(status))))
-    if unavailable:
-        summary.add_row(
-            "Minimum action",
-            Text(str(payload.get("minimum_action") or "review").upper(), style=f"bold {border_style}"),
-        )
-    if extensions:
-        summary.add_row("Extension", Text(str(extensions[0].get("extension_id") or "unknown"), style="cyan"))
-    if rules:
-        summary.add_row("Rule", Text(str(rules[0].get("rule_id") or "unknown"), style="cyan"))
-    if risk_classes:
-        summary.add_row("Risk classes", Text(", ".join(risk_classes)))
-    summary.add_row("Policy", Text("Not evaluated; this inspection creates no approvals or receipts", style="dim"))
-    console.print(Panel(summary, title="HOL Guard command inspection", border_style=border_style))
-    console.print(Panel(Syntax(str(payload.get("command") or ""), "bash", word_wrap=True), title="Command"))
-    reason = classification.get("reason")
-    if isinstance(reason, str) and reason:
-        console.print(Panel(Text(reason), title="Why", border_style=border_style))
-    recovery = classification.get("recovery")
-    if isinstance(recovery, str) and recovery:
-        console.print(Panel(Text(recovery), title="Next step", border_style=border_style))
-    recovery_commands = _command_inspection_recovery_commands(payload)
-    if recovery_commands:
-        console.print(Panel("\n".join(recovery_commands), title="Recovery commands", border_style=border_style))
-    if extensions:
-        alternatives = _coerce_string_list(extensions[0].get("safer_alternatives"))
-        if alternatives:
-            console.print(Panel("\n".join(f"{_bullet()} {item}" for item in alternatives), title="Safer approaches"))
-    if str(payload.get("mode") or "") == "explain":
-        trace = _coerce_dict_list(payload.get("trace"))
-        trace_table = Table(title="Evaluation trace", box=box.SIMPLE_HEAD, show_lines=False)
-        trace_table.add_column("Step", style="bold")
-        trace_table.add_column("Result")
-        trace_table.add_column("Detail")
-        for item in trace:
-            trace_table.add_row(
-                str(item.get("step") or ""),
-                str(item.get("result") or ""),
-                str(item.get("detail") or ""),
-            )
-        console.print(trace_table)
-
-
 # A delivered extension's text is written by whoever contributed it, so it is
 # stripped of the C0 and DEL codes a terminal would act on and handed to Rich
 # as literal Text, which parses no markup.
@@ -720,60 +667,6 @@ def _render_command_setup(console: Console, payload: dict[str, object]) -> None:
         )
     console.print(table)
     console.print("[dim]Detection is read-only. No Guard settings were changed.[/dim]")
-
-
-def _command_inspection_readiness(payload: PayloadDict) -> dict[str, object]:
-    return _coerce_object_dict(payload.get("readiness"))
-
-
-def _command_inspection_result_label(payload: PayloadDict) -> str:
-    status = str(payload.get("status") or "invalid")
-    if status != "native_unavailable":
-        return status.upper()
-    reason_code = str(_command_inspection_readiness(payload).get("reason_code") or "native_review_unavailable")
-    # An inspection with no native answer is not a classification. Say so in the
-    # result line itself so it cannot be read as a quiet "no match".
-    return f"NOT EVALUATED ({reason_code})"
-
-
-def _command_inspection_unmatched_label(status: str) -> str:
-    if status == "native_unavailable":
-        return "Unknown: the native runtime did not answer, so nothing was classified"
-    return "No sensitive action matched"
-
-
-def _command_inspection_recovery_commands(payload: PayloadDict) -> list[str]:
-    if str(payload.get("status") or "") != "native_unavailable":
-        return []
-    return _coerce_string_list(_command_inspection_readiness(payload).get("recovery_commands"))
-
-
-def _plain_text_command_inspection(payload: PayloadDict) -> str:
-    classification = _coerce_object_dict(payload.get("classification"))
-    extensions = _coerce_dict_list(payload.get("extensions"))
-    rules = _coerce_dict_list(payload.get("rules"))
-    status = str(payload.get("status") or "invalid")
-    action_class = classification.get("action_class") or _command_inspection_unmatched_label(status)
-    lines = [
-        f"HOL Guard command inspection: {_command_inspection_result_label(payload)}",
-        f"Command: {payload.get('command') or ''}",
-        f"Action class: {action_class}",
-        f"Reason: {classification.get('reason') or ''}",
-        "Policy: Not evaluated; this inspection creates no approvals or receipts.",
-    ]
-    if status == "native_unavailable":
-        lines.insert(3, f"Minimum action: {str(payload.get('minimum_action') or 'review').upper()}")
-    recovery = classification.get("recovery")
-    if isinstance(recovery, str) and recovery:
-        lines.append(f"Recovery: {recovery}")
-    recovery_commands = _command_inspection_recovery_commands(payload)
-    if recovery_commands:
-        lines.append(f"Recovery commands: {'; '.join(recovery_commands)}")
-    if extensions:
-        lines.insert(3, f"Extension: {extensions[0].get('extension_id') or 'unknown'}")
-    if rules:
-        lines.insert(4, f"Rule: {rules[0].get('rule_id') or 'unknown'}")
-    return "\n".join(lines)
 
 
 def _plain_text_command_extensions(payload: PayloadDict) -> str:
@@ -3287,7 +3180,7 @@ def _clean_terminal_output(value: str) -> str:
 
 _PLAIN_TEXT_RENDERERS: dict[str, PlainTextRenderer] = {
     "command-extensions": _plain_text_command_extensions,
-    "command-inspection": _plain_text_command_inspection,
+    "command-inspection": plain_text_command_inspection,
     "command-setup": _plain_text_command_setup,
     "protect": _plain_text_protect,
 }
@@ -3295,7 +3188,7 @@ _PLAIN_TEXT_RENDERERS: dict[str, PlainTextRenderer] = {
 
 _RENDERERS: dict[str, Renderer] = {
     "command-extensions": _render_command_extensions,
-    "command-inspection": _render_command_inspection,
+    "command-inspection": render_command_inspection,
     "command-setup": _render_command_setup,
     "approvals": _render_approvals,
     "init": _render_init,

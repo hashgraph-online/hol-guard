@@ -175,7 +175,7 @@ def _decode_pre_tool(payload: object, *, command: str) -> dict[str, Any] | None:
     decision = payload.get("decision")
     action = payload.get("minimum_action") or payload.get("policy_action")
     native_action = action
-    if action in _NATIVE_REVIEW_TIER_ACTIONS and decision == "deny":
+    if isinstance(action, str) and action in _NATIVE_REVIEW_TIER_ACTIONS and decision == "deny":
         action = "review"
     reason_code = payload.get("reason_code")
     reason = payload.get("reason")
