@@ -55,9 +55,11 @@ def test_a_test_guard_home_is_never_prewarmed(tmp_path, monkeypatch):
         lambda guard_home, *, home_dir=None: scheduled.append(guard_home) or "",
     )
 
-    install_daemon_prewarm.prewarm_after_install(tmp_path / "guard-home", home_dir=tmp_path)
+    test_root = tmp_path / "pytest-of-synthetic" / "pytest-12"
+    test_root.mkdir(parents=True)
 
-    assert "pytest-of-" in str(tmp_path)
+    install_daemon_prewarm.prewarm_after_install(test_root / "guard-home", home_dir=test_root)
+
     assert scheduled == []
 
 
