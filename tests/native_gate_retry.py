@@ -17,6 +17,12 @@ be told from a command Guard cannot model. Which of the three a loaded runner
 produces is a matter of where the clock ran out, not of what the policy
 decided, so all three are retried. The ``_failed`` spelling is a real
 evaluation error and is never retried.
+
+A Git read whose configuration probe ran out of time is held under the same
+reason code as one whose checkout really runs a helper. The live hook sends
+that hold on to the daemon's longer budget instead of showing it, so the gate
+gives it the same single retry. A checkout that runs a helper is held on both
+attempts and the case is judged on that second hold.
 """
 
 from __future__ import annotations
@@ -34,6 +40,9 @@ REVIEW_DEADLINE_REASON = "native_review_deadline_exceeded"
 EXTENSION_TIMEOUT_REASON = "native_command_extension_evaluation_timed_out"
 # The hook reached its budget without a policy answer, however it was reported.
 BUDGET_MISS_REASONS = frozenset({UNAVAILABLE_REASON, REVIEW_DEADLINE_REASON, EXTENSION_TIMEOUT_REASON})
+# A Git read held because its configuration could not be settled, possibly in time.
+GIT_CONTEXT_REASONS = frozenset({"native_git_execution_context_review", "native_git_helper_context_review"})
+RETRIED_REASONS = BUDGET_MISS_REASONS | GIT_CONTEXT_REASONS
 
 
 class NativeUnavailableRetryWarning(UserWarning):
@@ -99,10 +108,12 @@ def review_with_unavailable_retry(
     on_retry: Callable[[], None] | None = None,
 ) -> dict[str, object]:
     result, detail = _timed(review)
-    if result.get("reason_code") not in BUDGET_MISS_REASONS:
+    reason = result.get("reason_code")
+    if reason not in RETRIED_REASONS:
         return result
+    missed = "a Git read held on its configuration" if reason in GIT_CONTEXT_REASONS else "native review unavailable"
     warnings.warn(
-        f"{case_id}: native review unavailable at the hook budget ({detail}); re-running once",
+        f"{case_id}: {missed} at the hook budget ({detail}); re-running once",
         NativeUnavailableRetryWarning,
         stacklevel=2,
     )
