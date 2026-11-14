@@ -37,7 +37,9 @@ fn plain_hashline_patches_report_each_file_once() {
     // Oh My Pi trims the whole header body before it cuts the tag, so a
     // space before the closing bracket still leaves a plain tagged header.
     assert_eq!(
-        hashline_targets("[ /home/u/other-project/notes.md#FB48 ]\nPUT 1.=1:\n+Verified settings change.\n"),
+        hashline_targets(
+            "[ /home/u/other-project/notes.md#FB48 ]\nPUT 1.=1:\n+Verified settings change.\n"
+        ),
         Some(vec![("/home/u/other-project/notes.md".to_owned(), true)])
     );
     assert_eq!(
