@@ -5,6 +5,7 @@
 
 use std::fs;
 use std::os::unix::fs::PermissionsExt;
+use std::os::unix::process::CommandExt;
 use std::path::Path;
 use std::process::{Child, Command};
 
@@ -18,13 +19,22 @@ const PREVIOUS_LAUNCH: &str = "previous Guard daemon launch";
 struct Running(Child);
 
 impl Running {
+    fn pid(&self) -> u32 {
+        self.0.id()
+    }
+
     fn exited(&mut self) -> bool {
         self.0.try_wait().unwrap().is_some()
     }
 }
 
 impl Drop for Running {
+    /// The stand-in leads its own process group; stop the shell and its
+    /// `sleep` together so neither outlives the test.
     fn drop(&mut self) {
+        let _ = Command::new("/bin/kill")
+            .args(["-KILL", "--", &format!("-{}", self.0.id())])
+            .status();
         let _ = self.0.kill();
         let _ = self.0.wait();
     }
@@ -59,6 +69,7 @@ fn orphaned_daemon(home: &Path) -> Running {
             .arg("--guard-home")
             .arg(home)
             .args(["--port", &free_port().to_string()])
+            .process_group(0)
             .spawn()
             .unwrap(),
     )
@@ -99,10 +110,16 @@ fn abandoned_receipt(home: &Path) {
     assert!(records::load_pending(home).is_some());
 }
 
-/// One start through a stand-in Core that records its launch and exits.
-fn ensure(home: &Path) -> Value {
+/// One start through a stand-in Core that records its launch and exits. The
+/// stand-in records nothing while `orphan` is still running, so a launch that
+/// races ahead of the orphan's retirement leaves no sentinel. The orphan is
+/// this test's child, so once stopped it lingers as a zombie until reaped.
+fn ensure(home: &Path, orphan: u32) -> Value {
     let core = home.join("replacement-core");
-    fs::write(&core, "#!/bin/sh\n: > launch-sentinel\n").unwrap();
+    let script = format!(
+        "#!/bin/sh\ncase \"$(/bin/ps -o stat= -p {orphan} 2>/dev/null)\" in\n  ''|Z*) : > launch-sentinel ;;\nesac\n"
+    );
+    fs::write(&core, script).unwrap();
     fs::set_permissions(&core, fs::Permissions::from_mode(0o700)).unwrap();
     let request = json!({
         "schema": "daemon-manage.v1",
@@ -125,7 +142,7 @@ fn an_abandoned_receipt_does_not_block_a_start_while_an_orphaned_daemon_runs() {
     let home = private_home();
     let mut orphan = orphaned_daemon(home.path());
     abandoned_receipt(home.path());
-    let answer = ensure(home.path());
+    let answer = ensure(home.path(), orphan.pid());
     let error = answer["error"].as_str().unwrap_or_default();
     assert!(!error.contains(PREVIOUS_LAUNCH), "{answer}");
     assert!(
@@ -134,7 +151,7 @@ fn an_abandoned_receipt_does_not_block_a_start_while_an_orphaned_daemon_runs() {
     );
     assert!(
         home.path().join("launch-sentinel").exists(),
-        "no replacement launched: {answer}"
+        "no replacement launched after the orphan stopped: {answer}"
     );
 }
 
@@ -142,14 +159,14 @@ fn an_abandoned_receipt_does_not_block_a_start_while_an_orphaned_daemon_runs() {
 fn a_start_retires_an_orphaned_daemon_before_it_launches() {
     let home = private_home();
     let mut orphan = orphaned_daemon(home.path());
-    let answer = ensure(home.path());
+    let answer = ensure(home.path(), orphan.pid());
     assert!(
         orphan.exited(),
         "the orphaned daemon kept running: {answer}"
     );
     assert!(
         home.path().join("launch-sentinel").exists(),
-        "no replacement launched: {answer}"
+        "no replacement launched after the orphan stopped: {answer}"
     );
 }
 
@@ -158,7 +175,7 @@ fn a_live_launch_receipt_still_protects_its_daemon() {
     let home = private_home();
     let mut orphan = orphaned_daemon(home.path());
     let nonce = "cd".repeat(32);
-    let pid = i64::from(orphan.0.id());
+    let pid = i64::from(orphan.pid());
     let mut pending = Map::new();
     pending.insert("state_kind".into(), "daemon_launch_pending".into());
     pending.insert(
@@ -182,7 +199,7 @@ fn a_live_launch_receipt_still_protects_its_daemon() {
     pending.insert("owner".into(), owner.into());
     pending.insert("runtime_fingerprint".into(), "new-runtime".into());
     write_signed_record(home.path(), "daemon-launch-pending.json", pending).unwrap();
-    let answer = ensure(home.path());
+    let answer = ensure(home.path(), orphan.pid());
     assert!(!orphan.exited(), "a live launch was retired: {answer}");
     assert!(!home.path().join("launch-sentinel").exists(), "{answer}");
 }

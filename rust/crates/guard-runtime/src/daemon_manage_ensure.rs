@@ -24,6 +24,7 @@ use crate::daemon_policy_authority::{
 };
 
 use super::host::{self, Caller};
+use super::orphans;
 use super::records::{self, int, text};
 use super::retire::{self, Deadline};
 use super::start_progress::{self, clear_progress, load_progress, progress_is_live};
@@ -274,16 +275,8 @@ fn locked(context: &Context<'_>) -> Result<String, Failure> {
     let pending_path = records::pending_path(&home);
     let pending = records::load_pending(&home);
     if pending_path.is_file() || pending.is_some() {
-        if !progress_live
-            && retire::pending_is_abandoned(pending.as_ref())
-            && !records::pending_is_resolved(&home)
-            && !retire::resolve_abandoned(caller, pending.as_ref())
-        {
-            // The launch died without handing off, but a daemon of this home
-            // it never started (one whose state was lost) keeps its receipt
-            // open. Retire that daemon so the receipt resolves; otherwise
-            // every later start, rollbacks included, refuses here.
-            retire::retire_all(caller, None, deadline);
+        if !progress_live {
+            orphans::release_abandoned_receipt(caller, &home, pending.as_ref(), deadline);
         }
         if records::is_generation_bound(pending.as_ref())
             && !records::pending_is_resolved(&home)
@@ -302,7 +295,7 @@ fn locked(context: &Context<'_>) -> Result<String, Failure> {
     if request.background_maintenance {
         retire::reap_orphaned_workers(caller, deadline);
     }
-    retire_unadopted(context);
+    orphans::retire_unadopted(caller, deadline);
     for port in candidate_ports(context) {
         if deadline.passed() {
             break;
@@ -315,17 +308,6 @@ fn locked(context: &Context<'_>) -> Result<String, Failure> {
         "Guard approval center did not start. Expected state file at {}.",
         state_path.display()
     )))
-}
-
-/// A daemon of this home still running here was neither live under its
-/// state nor adoptable: its state was lost, or it runs another runtime. It
-/// still holds its port, so a launch on that port would exit without handing
-/// off. Retire it first; a launch then reports anything that remains.
-fn retire_unadopted(context: &Context<'_>) {
-    let caller = context.caller;
-    if host::daemon_inventory(caller).is_some_and(|inventory| !inventory.is_empty()) {
-        retire::retire_all(caller, None, context.deadline);
-    }
 }
 
 fn clear_state(home: &Path) -> Result<(), Failure> {
