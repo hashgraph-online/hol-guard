@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import sys
 from pathlib import Path
 
@@ -88,6 +89,11 @@ def test_claude_frozen_hooks_use_the_stable_launcher(
     assert daemon[1] == session[1] == "__guard-claude-hook"
 
 
+def _hermes_launch_command(context: HarnessContext) -> object:
+    request = {"name": "fixture", "config_path": "", "command": "node", "args": [], "env": []}
+    return json.loads(hermes._launchers(context, [request]))["entries"][0]["command"]  # pyright: ignore[reportPrivateUsage]
+
+
 def test_frozen_mcp_proxies_use_the_stable_launcher(tmp_path: Path, versioned_core: tuple[Path, str]) -> None:
     executable, launcher = versioned_core
     context = _context(tmp_path)
@@ -100,7 +106,7 @@ def test_frozen_mcp_proxies_use_the_stable_launcher(tmp_path: Path, versioned_co
         cursor._relaunch(stale["args"])[0],  # pyright: ignore[reportPrivateUsage]
         mcp_proxy_launch(stable_guard_cli.guard_cli_launcher(), list(python_args))[0],
         cline_runtime.proxy_entry(context, server)["command"],
-        hermes._overlay_servers(context=context, source_configs={"fixture": {"command": "node"}})["fixture"]["command"],  # pyright: ignore[reportPrivateUsage]
+        _hermes_launch_command(context),
     ]
 
     assert commands == [launcher] * len(commands)

@@ -36,7 +36,7 @@ fn int(value: usize) -> PyVal {
 }
 
 /// `_json_payload(path)`: the object, or `{}` for anything else.
-fn json_payload(ctx: &Ctx, path: &Path) -> Map<String, Value> {
+pub(super) fn json_payload(ctx: &Ctx, path: &Path) -> Map<String, Value> {
     std::fs::read(ctx.absolute(path))
         .ok()
         .and_then(|bytes| serde_json::from_slice(&bytes).ok())
@@ -106,7 +106,7 @@ fn detect(spec: &Spec, ctx: &Ctx) -> Step<Value> {
     Ok(answer)
 }
 
-fn hook_argv(fields: &Map<String, Value>) -> Step<Vec<PyVal>> {
+pub(super) fn hook_argv(fields: &Map<String, Value>) -> Step<Vec<PyVal>> {
     let argv = fields
         .get("hook_argv")
         .and_then(Value::as_array)
@@ -119,7 +119,12 @@ fn hook_argv(fields: &Map<String, Value>) -> Step<Vec<PyVal>> {
         .collect()
 }
 
-fn install_state(ctx: &Ctx, manifest_empty: bool, overlay: &Path, pretool: &Path) -> Step<PyVal> {
+pub(super) fn install_state(
+    ctx: &Ctx,
+    manifest_empty: bool,
+    overlay: &Path,
+    pretool: &Path,
+) -> Step<PyVal> {
     let answer = crate::hermes_install_plan::dispatch(&json!({
         "op": "install_state",
         "manifest_empty": manifest_empty,

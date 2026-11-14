@@ -21,6 +21,8 @@ mod copilot_family;
 mod cursor_family;
 #[path = "tests_grok_zcode.rs"]
 mod grok_zcode;
+#[path = "tests_hermes.rs"]
+mod hermes_family;
 #[path = "tests_opencode.rs"]
 mod opencode_family;
 #[path = "tests_pi.rs"]
@@ -108,7 +110,8 @@ fn describe_lists_every_adapter_this_kind_owns() {
             "cline",
             "copilot",
             "cursor",
-            "claude-code"
+            "claude-code",
+            "hermes"
         ]
     );
 }

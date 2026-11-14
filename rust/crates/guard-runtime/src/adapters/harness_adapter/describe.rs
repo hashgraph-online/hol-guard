@@ -48,7 +48,7 @@ pub(crate) const PASEO_DELEGATES: [&str; 6] =
     ["claude-code", "codex", "copilot", "opencode", "pi", "omp"];
 
 /// Every variable a request's `env` may carry.
-pub(crate) const ENV_NAMES: [&str; 28] = [
+pub(crate) const ENV_NAMES: [&str; 30] = [
     "PATH",
     "PATHEXT",
     "NoDefaultCurrentDirectoryInExePath",
@@ -77,6 +77,8 @@ pub(crate) const ENV_NAMES: [&str; 28] = [
     "CLINE_MCP_SETTINGS_PATH",
     "HOL_GUARD_CURSOR_HOOK_BRIDGE",
     "HOL_GUARD_TEST_MODE",
+    "HERMES_HOME",
+    "HERMES_HOST_HOME",
 ];
 
 /// Prefixes of the variables that redirect Paseo's native runtimes.
@@ -97,7 +99,7 @@ pub(crate) const ENV_PREFIXES: [&str; 14] = [
     "OMP_PROFILE",
 ];
 
-pub(crate) const SPECS: [Spec; 16] = [
+pub(crate) const SPECS: [Spec; 17] = [
     Spec {
         harness: "devin",
         aliases: &["devin", "devin-cli", "cognition-devin"],
@@ -392,6 +394,23 @@ pub(crate) const SPECS: [Spec; 16] = [
         install: Install::Plan,
         dynamic: false,
     },
+    Spec {
+        harness: "hermes",
+        aliases: &[],
+        executable: "hermes",
+        launcher_name: "",
+        display_name: None,
+        tier: CENTER,
+        summary: "Guard can scan Hermes skills before execution and hand blocked artifacts to \
+                  the local approval center.",
+        fallback: "Configure Hermes to use Guard-launched sessions for skill execution.",
+        channel: "browser",
+        auto_open: true,
+        workspace_aibom: false,
+        hook: Hook::Argv,
+        install: Install::Plan,
+        dynamic: true,
+    },
 ];
 
 pub(crate) fn spec(harness: &str) -> Option<&'static Spec> {
@@ -435,7 +454,7 @@ impl Spec {
             "trusted_launcher": self.harness == "grok",
             "retired_hooks": self.harness == "grok",
             // Paseo and the Pi family add to the generic doctor report.
-            "diagnostics": matches!(self.harness, "paseo" | "pi" | "omp" | "claude-code"),
+            "diagnostics": matches!(self.harness, "paseo" | "pi" | "omp" | "claude-code" | "hermes"),
             // The Pi family renders an extension that runs this Guard process.
             "extension": matches!(self.harness, "pi" | "omp"),
             "delegates": if self.install == Install::Delegated {

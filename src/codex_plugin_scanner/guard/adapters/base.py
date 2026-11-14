@@ -489,6 +489,8 @@ class HarnessAdapter:
                 "timed_out": runtime_probe.get("timed_out") is True,
                 "failed": runtime_probe.get("ok") is False,
                 "reported_no_artifacts": runtime_probe.get("reported_artifacts") == 0,
+                "managed_install_present": runtime_probe.get("managed_install_present") is True,
+                "runtime_hook_registered": runtime_probe.get("runtime_hook_registered") is True,
             },
             detection=_detection_request(detection),
         )

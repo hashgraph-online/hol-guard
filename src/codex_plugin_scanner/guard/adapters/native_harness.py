@@ -1,5 +1,5 @@
 """Harness adapters the native runtime answers: Devin, Antigravity, Gemini, Kimi, OpenClaw, Paseo, Muse,
-Grok, ZCode, Pi, Oh My Pi, OpenCode, Cline, Copilot, Cursor and Claude Code.
+Grok, ZCode, Pi, Oh My Pi, OpenCode, Cline, Copilot, Cursor, Claude Code and Hermes.
 
 The ``harness_adapter`` runner-authority kind owns their paths, detection, command lookup, install and
 uninstall plans, manifests, launch environment, runtime probe fields, approval flow, Paseo's delegated
@@ -47,6 +47,7 @@ NATIVE_HARNESSES: tuple[tuple[str, tuple[str, ...], str], ...] = (
     ("copilot", (), ""),
     ("cursor", (), "cursor-agent"),
     ("claude-code", ("claude",), "claude"),
+    ("hermes", (), ""),
 )
 
 #: Ops that render a Pi-family extension, so they carry this process's facts.
@@ -185,7 +186,7 @@ class NativeHarnessAdapter(HarnessAdapter):
 
         # Discovery walks the workspace, so it keeps the longer AIBOM deadline.
         try:
-            answer = ask("detect", context, harness=self.harness, timeout_seconds=_AIBOM_DISCOVERY_TIMEOUT_SECONDS)
+            answer = self._ask("detect", context, timeout_seconds=_AIBOM_DISCOVERY_TIMEOUT_SECONDS)
         except NativeRunnerAuthorityError as error:
             raise NativeAibomError(str(error)) from error
         return detection_from(self.harness, context, answer)

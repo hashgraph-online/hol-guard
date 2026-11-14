@@ -10,8 +10,10 @@
 //!   "command_absence_proves_uninstalled", "runtime_probe", "detection"}`
 //!   answers `{"warnings": [...]}`, the warnings to append to the detection's
 //!   own, in order. `runtime_probe` is `null` when the adapter ran no probe,
-//!   else `{"timed_out", "failed", "reported_no_artifacts"}`: whether the probe
-//!   timed out, exited unsuccessfully, and listed no MCP servers.
+//!   else `{"timed_out", "failed", "reported_no_artifacts",
+//!   "managed_install_present", "runtime_hook_registered"}`: whether the probe
+//!   timed out, exited unsuccessfully and listed no MCP servers, and whether
+//!   a managed install exists with its runtime hook registered.
 //! - `{"op": "setup_status", "command_absence_proves_uninstalled",
 //!   "detection", "warnings"}` answers `{"setup_status": "active" | "broken" |
 //!   "partial" | "not_found"}`.
@@ -107,6 +109,8 @@ struct Probe {
     timed_out: bool,
     failed: bool,
     reported_no_artifacts: bool,
+    managed_install_present: bool,
+    runtime_hook_registered: bool,
 }
 
 impl Probe {
@@ -117,11 +121,22 @@ impl Probe {
             return Ok(None);
         }
         let fields = value.as_object().ok_or(ERR_INVALID)?;
-        expect_keys(fields, &["timed_out", "failed", "reported_no_artifacts"])?;
+        expect_keys(
+            fields,
+            &[
+                "timed_out",
+                "failed",
+                "reported_no_artifacts",
+                "managed_install_present",
+                "runtime_hook_registered",
+            ],
+        )?;
         Ok(Some(Self {
             timed_out: flag(fields, "timed_out")?,
             failed: flag(fields, "failed")?,
             reported_no_artifacts: flag(fields, "reported_no_artifacts")?,
+            managed_install_present: flag(fields, "managed_install_present")?,
+            runtime_hook_registered: flag(fields, "runtime_hook_registered")?,
         }))
     }
 }
@@ -288,6 +303,12 @@ fn added_warnings(
                     .to_owned(),
             );
         }
+        "hermes" if probe.managed_install_present && !probe.runtime_hook_registered => warnings
+            .push(
+            "Hermes runtime hook is not registered. Shell and tool calls are launch-review only. \
+             Run `hol-guard install hermes` to write a fail-closed hooks.pre_tool_call entry."
+                .to_owned(),
+        ),
         _ => {}
     }
     warnings
