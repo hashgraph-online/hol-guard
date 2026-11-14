@@ -419,6 +419,7 @@ pub(crate) fn check_payload_at(now: Option<&str>) -> Result<Value, &'static str>
 }
 
 /// The check result for the contract built into this runtime.
+#[cfg(test)]
 pub(crate) fn check_payload() -> Value {
     check_payload_at(None).unwrap_or(Value::Null)
 }
