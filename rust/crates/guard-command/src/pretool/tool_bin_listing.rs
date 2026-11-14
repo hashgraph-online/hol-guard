@@ -35,9 +35,13 @@ const TOOL_ROOTS: [&str; 7] = [
 /// The manager writes that tree when it installs a release, so it holds the
 /// runtime's own programs and the files it unpacked beside them, never the
 /// manager's settings or caches, which sit higher up and stay guarded.
-const VERSIONED_BIN_LAYOUTS: [(&[&str], &[&str]); 7] = [
+const VERSIONED_BIN_LAYOUTS: [(&[&str], &[&str]); 8] = [
     (&[".nvm", "versions", "node"], &[]),
     (&[".fnm", "node-versions"], &["installation"]),
+    (
+        &[".local", "share", "fnm", "node-versions"],
+        &["installation"],
+    ),
     (&[".volta", "tools", "image", "node"], &[]),
     (&[".pyenv", "versions"], &[]),
     (&[".rbenv", "versions"], &[]),

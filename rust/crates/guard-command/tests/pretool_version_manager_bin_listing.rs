@@ -71,6 +71,10 @@ fn a_version_managers_bin_lists_metadata_only() {
         home.join(".fnm/node-versions/v22.3.0/installation/bin/node"),
         "binary",
     );
+    write(
+        home.join(".local/share/fnm/node-versions/v22.3.0/installation/bin/node"),
+        "binary",
+    );
     write(home.join(".pyenv/versions/3.12.4/bin/python3.12"), "binary");
     write(home.join(".volta/bin/volta-shim"), "binary");
     write(home.join(".asdf/installs/ruby/3.3.0/bin/bundle"), "script");
@@ -91,6 +95,7 @@ fn a_version_managers_bin_lists_metadata_only() {
             "ls -la ~/.nvm/versions/node/v24.1.0/bin/node",
             "ls -l ~/.nvm/versions/node/v24.1.0/bin/node ~/.nvm/versions/node/v24.1.0/bin/npm",
             "ls -la ~/.fnm/node-versions/v22.3.0/installation/bin/node",
+            "ls -la ~/.local/share/fnm/node-versions/v22.3.0/installation/bin/node",
             "ls -la ~/.pyenv/versions/3.12.4/bin/python3.12",
             "ls -la ~/.volta/bin/volta-shim",
             "ls -la ~/.asdf/installs/ruby/3.3.0/bin/bundle",
