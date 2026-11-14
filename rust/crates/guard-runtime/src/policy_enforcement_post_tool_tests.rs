@@ -763,6 +763,7 @@ fn harness_watch_keeps_credential_output_from_the_model() {
         );
         assert_eq!(watched.decision, "deny", "{code}");
         assert_eq!(watched.reason_code, code);
+        assert!(watched.observe_mode, "{code}");
     }
 }
 
