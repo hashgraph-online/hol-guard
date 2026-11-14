@@ -24,6 +24,7 @@ EXFILTRATION_CASES = frozenset(
         "script-python-heredoc-credential-post",
         "script-python-heredoc-quoted-hash-secret-post",
         "script-python-heredoc-continued-network-secret-post",
+        "script-python-heredoc-bare-cr-encoding-secret-post",
         "script-node-helper-credential-post",
         "script-python-helper-credential-post",
     }
