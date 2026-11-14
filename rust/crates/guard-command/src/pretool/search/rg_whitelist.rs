@@ -9,7 +9,8 @@
 //! it is visible, names a benign dotfile such as `.gitkeep`, or is a wildcard
 //! that passes the screen `-g` include globs get; any other component counts
 //! only if it matches a hidden name the walk finds, so `!.env.example` in a
-//! repository without that file does not hold every search.
+//! repository without that file does not hold every search, and neither does
+//! a re-included file `rg` would search by name (`rg_whitelist_file`).
 //!
 //! The walk reads only ignore files and names, never other contents. It
 //! skips links and hidden directories other than benign ones, which `rg`
@@ -173,10 +174,12 @@ fn no_hidden_whitelist(root: &Path, context: ReadContext<'_>) -> bool {
             })
         };
         !matches(&negations.all, &pruned)
-            && !negations
-                .risky
-                .iter()
-                .any(|risk| hidden.iter().any(|path| risk.re_includes(path)))
+            && !negations.risky.iter().any(|risk| {
+                hidden.iter().any(|path| {
+                    risk.re_includes(path)
+                        && !super::rg_whitelist_file::searchable_file(path, context)
+                })
+            })
     })
 }
 
