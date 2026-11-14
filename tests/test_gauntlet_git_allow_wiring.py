@@ -21,6 +21,7 @@ from ci.gauntlet.git_allow_fixtures import (
     ECHO_WORKTREE,
     GIT_ALLOW_CASES,
     GIT_ALLOW_ECHO_WORKTREE_CASE,
+    GIT_ALLOW_PLUMBING_CASE,
     GIT_ORIGIN_SHAPE_CASES,
 )
 
@@ -42,6 +43,24 @@ def test_the_echo_case_checks_the_worktree_its_command_creates() -> None:
     (command,) = case["commands"]
     assert f"../{ECHO_WORKTREE} " in command
     assert f"cd ../{ECHO_WORKTREE} " in command
+
+
+def test_the_plumbing_case_chain_runs_under_the_host_git(tmp_path: Path) -> None:
+    """Git retires plumbing names over time; a step the host Git refuses never reaches the archive."""
+    (case,) = [case for case in scenarios() if case["id"] == GIT_ALLOW_PLUMBING_CASE]
+    (command,) = case["commands"]
+    fixture = create_fixture(tmp_path / "fx", scenario_id=GIT_ALLOW_PLUMBING_CASE)
+    environment = {
+        "PATH": os.environ.get("PATH", ""),
+        "HOME": str(fixture.home),
+        "GIT_CONFIG_NOSYSTEM": "1",
+    }
+    for step in command.split(" && "):
+        subprocess.run(
+            shlex.split(step), cwd=fixture.workspace, env=environment, check=True, capture_output=True, timeout=30
+        )
+    checks = filesystem_checks(fixture, str(case["oracle"]), GIT_ALLOW_PLUMBING_CASE)
+    assert checks["git-allow-plumbing-reads-ran"] is True
 
 
 def test_the_echo_case_worktree_add_leaves_the_protected_config_alone(tmp_path: Path) -> None:

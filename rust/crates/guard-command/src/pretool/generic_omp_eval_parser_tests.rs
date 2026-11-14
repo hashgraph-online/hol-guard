@@ -104,3 +104,39 @@ fn pure_string_methods_on_a_tool_result_only_show_it() {
         assert!(parse_program(code).is_none(), "{code}");
     }
 }
+
+/// The prelude's `sh(command)` is modelled only for one string literal: the
+/// command judged is then the command the bridge runs.
+#[test]
+fn literal_sh_is_parsed_as_one_shell_call() {
+    for code in [
+        "await sh('git status')",
+        "await sh(\"git status\");",
+        "await sh(`git status`)",
+        "await sh`git status`",
+        "console.log(await sh('git status'))",
+        "const out = await sh('git status'); display(out);",
+    ] {
+        let calls = parse_program(code).unwrap_or_else(|| panic!("{code}"));
+        assert_eq!(calls.len(), 1, "{code}");
+        assert_eq!(calls[0].tool, "bash", "{code}");
+        assert!(calls[0].shell_helper, "{code}");
+    }
+    for code in [
+        "await sh('git status', { cwd: 'sub' })",
+        "await sh('git status', {})",
+        "await sh(`git ${'status'}`)",
+        "await sh`git ${'status'}`",
+        "await sh`git status\\n`",
+        "await sh('git ' + 'status')",
+        "await sh()",
+        "await sh('   ')",
+        "const c = 'git status'; await sh(c)",
+        "const sh = 'x'; await sh('git status')",
+        "await sh.call(null, 'git status')",
+    ] {
+        assert!(parse_program(code).is_none(), "{code}");
+    }
+    let calls = parse_program("await tool.bash({command: 'git status'})").unwrap();
+    assert!(!calls[0].shell_helper);
+}

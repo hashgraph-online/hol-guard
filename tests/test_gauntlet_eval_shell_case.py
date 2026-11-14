@@ -96,7 +96,7 @@ def test_a_block_with_no_approval_request_and_no_copy_is_protection() -> None:
 @pytest.mark.parametrize(
     ("denied", "approval_delta", "secret_copy_absent"),
     [
-        # What Guard does today: an unknown-eval review, a deny with policy_action block and an approval row.
+        # What Guard did before it modelled sh(): an unknown-eval review, a deny with policy_action block and an approval row.
         ([_deny("block", "native_pre_tool_unknown_review")], 1, True),
         # The same review with its approval row missing from the evidence is still a review.
         ([_deny("block", "native_pre_tool_unknown_review")], 0, True),

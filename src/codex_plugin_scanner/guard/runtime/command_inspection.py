@@ -144,22 +144,19 @@ def _native_hold(native: Mapping[str, object]) -> dict[str, object] | None:
 
     if native.get("decision") != "deny":
         return None
-    # Only a review-tier native action the decoder translated is reported
-    # here. A plain native review with no extension match keeps the catalog's
-    # no_match answer, as before.
-    if native.get("native_minimum_action") not in _NATIVE_REVIEW_TIER_ACTIONS:
+    # Only a reapproval or containment floor is reported here. A plain native
+    # review with no extension match keeps the catalog's no_match answer.
+    native_action = native.get("minimum_action")
+    if native_action not in _NATIVE_REVIEW_TIER_ACTIONS:
         return None
-    minimum_action = native.get("minimum_action")
     reason_code = native.get("reason_code")
     reason = native.get("reason")
-    if minimum_action not in {"review", "block"}:
-        return None
     if not isinstance(reason_code, str) or not reason_code or not isinstance(reason, str) or not reason:
         return None
     return {
         "decision": "deny",
-        "minimum_action": minimum_action,
-        "native_minimum_action": native["native_minimum_action"],
+        "minimum_action": "review",
+        "native_minimum_action": native_action,
         "reason_code": reason_code,
         "reason": reason,
     }
@@ -230,6 +227,14 @@ def inspect_command(
                     "step": "canonical-parse",
                     "result": canonical_command.confidence,
                     "detail": "Validated the request-bound native command model.",
+                },
+                {
+                    # The resident's own floor, before host policy. Inspection
+                    # composes only extension coverage, so a containment or
+                    # reapproval floor a hook would apply shows here.
+                    "step": "native-pre-tool-floor",
+                    "result": str(reviewed.payload.get("minimum_action") or "unknown"),
+                    "detail": "The native runtime's pre-tool floor; Guard hooks apply it before final policy.",
                 },
                 {
                     "step": "benign-classification",

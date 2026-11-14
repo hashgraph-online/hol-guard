@@ -238,8 +238,7 @@ def test_native_hold_reports_review_tier_decisions():
     hold = _native_hold(
         {
             "decision": "deny",
-            "minimum_action": "review",
-            "native_minimum_action": "require-reapproval",
+            "minimum_action": "require-reapproval",
             "reason_code": "native_git_execution_context_review",
             "reason": "Synthetic git execution context needs review.",
         }
@@ -257,7 +256,7 @@ def test_native_hold_reports_review_tier_decisions():
     "native",
     [
         {"decision": "allow", "minimum_action": "allow", "reason_code": "native_benign", "reason": "ok"},
-        {"decision": "deny", "minimum_action": "require-reapproval", "reason_code": "x", "reason": "y"},
+        {"decision": "deny", "minimum_action": "require-reapproval", "reason_code": "", "reason": "y"},
         {"decision": "deny", "minimum_action": "review", "reason_code": "", "reason": "y"},
         {"decision": "deny", "minimum_action": "review", "reason": "y"},
         # A plain native review keeps the catalog's no_match answer.

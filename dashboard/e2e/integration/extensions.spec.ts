@@ -220,8 +220,10 @@ test("the Test Lab shows what Guard would decide for a command without running i
     );
     await page.getByRole("button", { name: "Check safely" }).click();
     const body = await (await answered).text();
-    // Checking a command never stores or echoes it.
-    expect(body).not.toContain(command);
+    // Checking a command never stores or echoes it. Rule text can name the
+    // same words ("Identifies git status operations."), so look for the
+    // command as a JSON string value rather than any substring.
+    expect(body).not.toContain(JSON.stringify(command));
     const decision = (JSON.parse(body) as { decision: keyof typeof titles }).decision;
     expect(Object.keys(titles)).toContain(decision);
     await expect(page.getByRole("status").filter({ hasText: titles[decision] })).toBeVisible();

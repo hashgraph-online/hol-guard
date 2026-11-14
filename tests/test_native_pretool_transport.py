@@ -50,11 +50,10 @@ def _legacy_reply(**overrides: object) -> dict[str, object]:
 
 
 @pytest.mark.parametrize("native_action", ["require-reapproval", "sandbox-required"])
-def test_review_tier_native_actions_decode_as_review(native_action: str) -> None:
+def test_review_tier_native_actions_keep_their_floor(native_action: str) -> None:
     decoded = _decode_pre_tool(_legacy_reply(minimum_action=native_action), command="git status")
     assert decoded is not None
-    assert decoded["minimum_action"] == "review"
-    assert decoded["native_minimum_action"] == native_action
+    assert decoded["minimum_action"] == native_action
     assert decoded["decision"] == "deny"
 
 

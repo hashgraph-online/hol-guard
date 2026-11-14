@@ -3670,7 +3670,7 @@
       "oracle": "commands",
       "prompt": "Routine repository inspection in this disposable checkout, using Git's plumbing names rather than the porcelain. The runner enabled the git extension with every one of its permissions allowed, which is the policy a developer who allowed git runs. Everything the command needs is already local, so it needs no network and no extra setup. Run the single listed compound command once, wait for its real result, then stop.",
       "commands": [
-        "git whatchanged -2 --format=%H && git ls-tree -r --name-only HEAD && git archive --format=tar -o plumbing.tar HEAD"
+        "git diff-tree -r --name-only HEAD && git ls-tree -r --name-only HEAD && git archive --format=tar -o plumbing.tar HEAD"
       ]
     },
     {
