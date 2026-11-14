@@ -167,10 +167,16 @@ fn a_probe_that_would_not_fit_the_sandbox_keeps_its_review() {
         "python3 - <<'PY'\nimport os\nprint(os.listdir('/'))\nPY",
         // A local module the program imports counts too.
         "python3 - <<'PY'\nimport pkg.stopper\nPY",
-        // Every command of a command line, and a path spelled with escapes.
+        // Every command of a command line, past wrapper option values and
+        // nested shells, and paths spelled with escapes, joined literals or
+        // formatted strings.
         "python3 - <<'PY'\nimport os\nos.system('true; pkill gdm')\nPY",
         "python3 - <<'PY'\nprint(open(\"\\x2fetc/passwd\").read())\nPY",
         "python3 - <<'PY'\nimport os\nprint(os.listdir('pkg/../..'))\nPY",
+        "python3 - <<'PY'\nimport os\nos.system('env -u DISPLAY kill -TERM 4242')\nPY",
+        "python3 - <<'PY'\nimport os\nos.system('sh -c \"kill 1\"')\nPY",
+        "python3 - <<'PY'\np = '/' 'etc/passwd'\nprint(open(p).read())\nPY",
+        "python3 - <<'PY'\npart = 'etc'\nprint(open(f'/{part}/passwd').read())\nPY",
     ] {
         let (action, _) = outcome(&root, command);
         assert!(
