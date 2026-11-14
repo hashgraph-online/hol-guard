@@ -54,6 +54,16 @@ fn a_list_piped_into_text_filters_is_decided_as_its_list() {
             ("{ echo a; echo b; } | sort -o out.txt", false),
             ("{ ls tests; ls .; } | xargs cat", false),
             ("{ echo a; echo b; } | sh", false),
+            // A loop behind `cd DIR &&` runs its filters in DIR, where the
+            // group would prove them in the caller's directory.
+            (
+                "cd ../.aws && for f in a; do echo $f; done | cat credentials",
+                false,
+            ),
+            (
+                &format!("cd {home}/.aws && for f in a; do echo $f; done | cat credentials"),
+                false,
+            ),
         ] {
             let result = evaluate_pre_tool_envelope_with_context(
                 harness,

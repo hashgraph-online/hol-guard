@@ -66,6 +66,12 @@ pub(super) fn unroll(command: &str) -> Option<String> {
     // one stream, which is the unrolled list in a brace group piped the same
     // way. `piped_group` decides that group.
     let piped = super::piped_group::filter_tail(tail);
+    // `cd DIR && for ...; done | FILTER` runs the filters in DIR, but the
+    // group would carry the `cd` inside it and the filters would be proved in
+    // the caller's directory, so that shape keeps its review.
+    if piped.is_some() && !prefix.is_empty() {
+        return None;
+    }
     let tail = match piped {
         Some(_) => String::new(),
         None => redirect_tail(tail)?,

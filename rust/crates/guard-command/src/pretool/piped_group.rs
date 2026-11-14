@@ -129,7 +129,7 @@ pub(super) fn decision(
     if filtered.minimum_action != "allow" {
         return None;
     }
-    let listed = super::evaluate_rewritten(
+    let mut listed = super::evaluate_rewritten(
         &half(body),
         home_dir,
         cwd,
@@ -138,7 +138,22 @@ pub(super) fn decision(
         round + 1,
     )
     .ok()?;
-    (listed.minimum_action == "allow").then_some(listed)
+    if listed.minimum_action != "allow" {
+        return None;
+    }
+    // Extension controls read the decision's model, so the filters ride
+    // along behind the list: a rule written for `sort` must still see it.
+    // The constant producer is the only segment dropped, and anything else
+    // in its place keeps the group's review.
+    let mut filter_segments = filtered.command_model.segments.into_iter();
+    if filter_segments
+        .next()
+        .is_none_or(|producer| producer.executable.as_deref() != Some("printf"))
+    {
+        return None;
+    }
+    listed.command_model.segments.extend(filter_segments);
+    Some(listed)
 }
 
 #[cfg(test)]

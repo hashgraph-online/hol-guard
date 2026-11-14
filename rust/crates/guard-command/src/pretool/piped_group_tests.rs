@@ -61,3 +61,26 @@ fn a_loop_tail_is_read_only_as_a_pipe_into_filters() {
         assert_eq!(filter_tail(tail), None, "{tail:?}");
     }
 }
+
+#[test]
+fn the_filters_stay_in_the_model_extension_controls_read() {
+    let root = env!("CARGO_MANIFEST_DIR");
+    let request = super::super::CommandModelRequestV1 {
+        command: "{ echo a; echo b; } | sort".to_owned(),
+        dialect: "posix".to_owned(),
+        transport: "shell_string".to_owned(),
+        extraction_provenance: "guard-shell".to_owned(),
+    };
+    let decision =
+        super::super::evaluate_pre_tool_with_context(&request, Some(root), Some(root)).unwrap();
+    assert_eq!(decision.minimum_action, "allow");
+    let executables: Vec<_> = decision
+        .command_model
+        .segments
+        .iter()
+        .filter_map(|segment| segment.executable.as_deref())
+        .collect();
+    assert!(executables.contains(&"sort"), "{executables:?}");
+    assert!(executables.contains(&"echo"), "{executables:?}");
+    assert!(!executables.contains(&"printf"), "{executables:?}");
+}
