@@ -293,6 +293,7 @@ export function ApprovalCenterLayout(props: LayoutProps) {
     onUpdateGuard,
     onReinstallGuard,
     onSetUpdateChannel,
+    onSetUpdateMode,
   } = useGuardUpdate({ onReconnected: props.onGuardReconnected });
 
   const [dismissedUpdateVersion, setDismissedUpdateVersion] = useState<string | null>(
@@ -322,6 +323,7 @@ export function ApprovalCenterLayout(props: LayoutProps) {
         onUpdateGuard={onUpdateGuard}
         onReinstallGuard={onReinstallGuard}
         onSetUpdateChannel={onSetUpdateChannel}
+        onSetUpdateMode={onSetUpdateMode}
         approvalGate={props.approvalGate ?? null}
         cloudUserProfile={
           props.runtime.kind === "ready"

@@ -1,4 +1,5 @@
 use super::*;
+use crate::context_assistance_prompt_files::walk;
 
 /// A test kept because it alone holds the prompt's quote repeats more of the
 /// prompt's words than the source the prompt names. Both show: only source

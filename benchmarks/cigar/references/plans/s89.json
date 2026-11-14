@@ -1,0 +1,85 @@
+{
+ "repo": "boltons",
+ "seed": 89,
+ "steps": [
+  {
+   "kind": "question",
+   "prompt": "Question, no code changes: which function does this? \"Append the given data to the end of the Table.\" Reply with its file path and function name.",
+   "question": {
+    "name": "extend",
+    "path": "boltons/tableutils.py",
+    "qual": "Table.extend",
+    "sentence": "Append the given data to the end of the Table."
+   }
+  },
+  {
+   "kind": "rename",
+   "prompt": "Rename the internal helper `_make_quote_map` to `_make_quote_map_impl` everywhere in the project, including tests. Behavior must not change.",
+   "rename": {
+    "count": 5,
+    "files": [
+     "boltons/urlutils.py"
+    ],
+    "new": "_make_quote_map_impl",
+    "old": "_make_quote_map",
+    "path": "boltons/urlutils.py"
+   }
+  },
+  {
+   "doc": {
+    "module": "boltons.iterutils",
+    "path": "boltons/iterutils.py",
+    "qual": "default_exit"
+   },
+   "kind": "doc",
+   "prompt": "Add a short usage example to the docstring of `default_exit` in boltons/iterutils.py, written as a doctest (`>>>` lines with their expected output). Make sure the example actually passes."
+  },
+  {
+   "kind": "bug2",
+   "prompt": "The last commit broke several tests in different places. Find every root cause in the library code and fix them all without changing the tests.",
+   "setup": [
+    {
+     "failing": [
+      "tests/test_cacheutils.py::test_threshold_counter"
+     ],
+     "line": 747,
+     "new": "        return self.total + self.get_common_count()\n",
+     "orig": "        return self.total - self.get_common_count()\n",
+     "path": "boltons/cacheutils.py",
+     "qual": "ThresholdCounter.get_uncommon_count"
+    },
+    {
+     "failing": [
+      "tests/test_funcutils_fb.py::test_get_arg_names",
+      "tests/test_funcutils_fb_py3.py::test_get_arg_names"
+     ],
+     "line": 903,
+     "new": "        arg_names = tuple(self.args) - tuple(getattr(self, 'kwonlyargs', ()))\n",
+     "orig": "        arg_names = tuple(self.args) + tuple(getattr(self, 'kwonlyargs', ()))\n",
+     "path": "boltons/funcutils.py",
+     "qual": "FunctionBuilder.get_arg_names"
+    }
+   ]
+  },
+  {
+   "kind": "bug",
+   "prompt": "`tests/test_timeutils.py::test_daterange_infinite` started failing after the last commit. Fix the bug in the library code; don't edit the tests.",
+   "setup": [
+    {
+     "failing": [
+      "tests/test_timeutils.py::test_daterange_infinite"
+     ],
+     "line": 370,
+     "new": "        finished = lambda now, stop: True\n",
+     "orig": "        finished = lambda now, stop: False\n",
+     "path": "boltons/timeutils.py",
+     "qual": "daterange"
+    }
+   ]
+  },
+  {
+   "kind": "review",
+   "prompt": "Review every change made in this session. Remove leftovers or duplication, match the style of the surrounding code, and make sure the full test suite passes."
+  }
+ ]
+}

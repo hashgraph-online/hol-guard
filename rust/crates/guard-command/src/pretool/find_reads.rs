@@ -248,6 +248,20 @@ fn names_a_chosen_word(pattern: &str) -> bool {
             .any(|run| run.chars().count() >= CHOSEN_WORD_LETTERS && !run.contains('.'))
 }
 
+/// Whether the arguments are roots followed by an expression that only
+/// matches, prunes and prints names: no action runs a program, writes a file
+/// or deletes. The roots themselves are not checked here.
+pub(super) fn prints_names_only(arguments: &[String]) -> bool {
+    let arguments = arguments
+        .strip_prefix(&["-P".to_owned()])
+        .unwrap_or(arguments);
+    let roots_end = arguments
+        .iter()
+        .position(|argument| argument.starts_with('-') || matches!(argument.as_str(), "!" | "("))
+        .unwrap_or(arguments.len());
+    roots_end > 0 && safe_expression(&arguments[roots_end..])
+}
+
 fn safe_expression(expression: &[String]) -> bool {
     let mut depth = 0_usize;
     let mut index = 0;
@@ -262,7 +276,20 @@ fn safe_expression(expression: &[String]) -> bool {
                 };
                 depth = next;
             }
-            "!" | "-not" | "-a" | "-and" | "-o" | "-or" | "-print" | "-print0" | "-prune" => {}
+            "!" | "-not" | "-a" | "-and" | "-o" | "-or" | "-print" | "-print0" | "-prune"
+            | "-empty" => {}
+            // Age and size tests compare each entry's own metadata with a
+            // number written in the command, so they only narrow which names
+            // are printed. `-newer FILE` is left out: it reads another path.
+            "-mtime" | "-mmin" | "-atime" | "-amin" | "-ctime" | "-cmin" | "-size" => {
+                let Some(value) = expression.get(index) else {
+                    return false;
+                };
+                if !metadata_test_value(value, token == "-size") {
+                    return false;
+                }
+                index += 1;
+            }
             "-name" | "-iname" | "-path" | "-ipath" | "-wholename" | "-iwholename" => {
                 let Some(pattern) = expression.get(index) else {
                     return false;
@@ -298,4 +325,15 @@ fn safe_expression(expression: &[String]) -> bool {
         }
     }
     depth == 0
+}
+
+/// A `find` age or size operand: an optional `+` or `-`, digits, and for
+/// `-size` one unit letter, as in `+1`, `-30` or `+10M`.
+fn metadata_test_value(value: &str, size: bool) -> bool {
+    let unsigned = value.strip_prefix(['+', '-']).unwrap_or(value);
+    let digits = match unsigned.strip_suffix(|unit: char| size && "bckwMGTP".contains(unit)) {
+        Some(digits) => digits,
+        None => unsigned,
+    };
+    !digits.is_empty() && digits.len() <= 12 && digits.bytes().all(|byte| byte.is_ascii_digit())
 }

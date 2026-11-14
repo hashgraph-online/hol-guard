@@ -1,0 +1,94 @@
+{
+ "repo": "boltons",
+ "seed": 70,
+ "steps": [
+  {
+   "kind": "bug2",
+   "prompt": "The last commit broke several tests in different places. Find every root cause in the library code and fix them all without changing the tests.",
+   "setup": [
+    {
+     "failing": [
+      "tests/test_setutils.py::test_complement_set"
+     ],
+     "line": 553,
+     "new": "    if type(wrapped) is not frozenset:\n",
+     "orig": "    if type(wrapped) is frozenset:\n",
+     "path": "boltons/setutils.py",
+     "qual": "complement"
+    },
+    {
+     "failing": [
+      "tests/test_timeutils.py::test_daterange_infinite"
+     ],
+     "line": 370,
+     "new": "        finished = lambda now, stop: True\n",
+     "orig": "        finished = lambda now, stop: False\n",
+     "path": "boltons/timeutils.py",
+     "qual": "daterange"
+    }
+   ]
+  },
+  {
+   "doc": {
+    "module": "boltons.iterutils",
+    "path": "boltons/iterutils.py",
+    "qual": "default_exit"
+   },
+   "kind": "doc",
+   "prompt": "Add a short usage example to the docstring of `default_exit` in boltons/iterutils.py, written as a doctest (`>>>` lines with their expected output). Make sure the example actually passes."
+  },
+  {
+   "kind": "stub",
+   "prompt": "`print_exception` in boltons/tbutils.py was stubbed out during a refactor and now raises NotImplementedError. Implement it again so it does what its docstring says and the existing tests pass.",
+   "stub": {
+    "body": "    if file is None:\n        file = sys.stderr\n    if tb:\n        tbi = TracebackInfo.from_traceback(tb, limit)\n        print(str(tbi), end='', file=file)\n\n    for line in format_exception_only(etype, value):\n        print(line, end='', file=file)\n",
+    "body_start": 647,
+    "end": 654,
+    "failing": [
+     "tests/test_tbutils.py::test_exception_info"
+    ],
+    "indent": 4,
+    "path": "boltons/tbutils.py",
+    "qual": "print_exception"
+   }
+  },
+  {
+   "kind": "stub",
+   "prompt": "Tests fail because OrderedMultiDict.todict is not implemented (boltons/dictutils.py). Write the implementation; the docstring and tests describe the expected behavior.",
+   "stub": {
+    "body": "        if multi:\n            return {k: self.getlist(k) for k in self}\n        return {k: self[k] for k in self}\n",
+    "body_start": 493,
+    "end": 495,
+    "failing": [
+     "tests/test_dictutils.py::test_todict",
+     "tests/test_dictutils.py::test_update",
+     "tests/test_dictutils.py::test_update_extend"
+    ],
+    "indent": 8,
+    "path": "boltons/dictutils.py",
+    "qual": "OrderedMultiDict.todict"
+   }
+  },
+  {
+   "kind": "bug",
+   "prompt": "`tests/test_cacheutils.py::test_cached_dec` started failing after the last commit. Fix the bug in the library code; don't edit the tests.",
+   "setup": [
+    {
+     "failing": [
+      "tests/test_cacheutils.py::test_cached_dec",
+      "tests/test_cacheutils.py::test_callable_cached_dec"
+     ],
+     "line": 433,
+     "new": "    elif len(key) != 1 and type(key[0]) in fasttypes:\n",
+     "orig": "    elif len(key) == 1 and type(key[0]) in fasttypes:\n",
+     "path": "boltons/cacheutils.py",
+     "qual": "make_cache_key"
+    }
+   ]
+  },
+  {
+   "kind": "review",
+   "prompt": "Review every change made in this session. Remove leftovers or duplication, match the style of the surrounding code, and make sure the full test suite passes."
+  }
+ ]
+}

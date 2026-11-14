@@ -11,7 +11,7 @@ pub(crate) mod contained_publish;
 #[path = "generic_cursor_compaction_writes.rs"]
 mod cursor_compaction_writes;
 #[path = "generic_cursor_project_reads.rs"]
-mod cursor_project_reads;
+pub(in crate::pretool) mod cursor_project_reads;
 #[path = "env_prefix_projection.rs"]
 mod env_prefix_projection;
 pub use env_prefix_projection::bindable_setting;
@@ -19,6 +19,8 @@ pub use env_prefix_projection::bindable_setting;
 mod cline_view;
 #[path = "generic_extract.rs"]
 mod extract;
+#[path = "generic_grok_tool_discovery.rs"]
+mod grok_tool_discovery;
 #[path = "inert_tool_settings.rs"]
 pub(crate) mod inert_tool_settings;
 #[path = "generic_omp.rs"]
@@ -212,13 +214,15 @@ pub fn bounded_task_metadata_output(payload: &serde_json::Value, harness: &str) 
     }
     agent_metadata::bounded_task_list(&input, Some(tool))
 }
+#[path = "generic_content_reviews.rs"]
+mod content_reviews;
 #[path = "generic_github.rs"]
 mod github;
 #[path = "generic_tools.rs"]
 mod tools;
 #[path = "generic_web_fetch.rs"]
 mod web_fetch;
-pub(in crate::pretool) use tools::executable_is_package_tool;
+pub(in crate::pretool) use tools::{executable_is_package_tool, installs_from_registry};
 pub(in crate::pretool) use web_fetch::plain_public_url;
 
 /// Evaluate the complete raw PreToolUse payload in native code. This stays
@@ -265,6 +269,7 @@ pub fn evaluate_pre_tool_envelope_with_context(
             cargo_config_inert: false,
             npm_config_inert: false,
             pip_config_inert: false,
+            python_environment_inert: false,
             shell_home_matches: false,
             ripgrep_config_absent: false,
             gem_config_absent: false,
@@ -286,6 +291,7 @@ pub fn evaluate_pre_tool_envelope_with_execution_context(
     context: super::PathContext<'_>,
     execution_environment: Option<&guard_contracts::GuardExecutionEnvironmentV1>,
 ) -> PreToolResultV1 {
+    let _cursor = super::cursor_session_outputs::scope(harness, context.cwd);
     let mut context =
         super::PathContext::for_session(context.home_dir, context.cwd, execution_environment);
     let (projected_payload, cline_payload);
@@ -835,6 +841,8 @@ fn evaluate_envelope(
         && !signals.package_present
         && signals.path_values.is_empty()
         && signals.url_values.is_empty();
+    let subagent_brief =
+        content_reviews::admitted_subagent_brief(payload, harness, event, &signals);
     let omp_context = omp::OmpContext {
         yield_report_verified: yield_payload.is_some(),
         harness,
@@ -951,6 +959,9 @@ fn evaluate_envelope(
         )
     } else if let Some(omp_result) = omp_result {
         omp_result
+    } else if let Some(discovery) = grok_tool_discovery::evaluate(harness, event, payload, &signals)
+    {
+        discovery
     } else if let Some(pure_result) = pure_eval::evaluate(harness, event, payload, &signals) {
         pure_result
     } else if let Some(cursor_read) =
@@ -966,6 +977,13 @@ fn evaluate_envelope(
             generic_action(harness, event, PreToolActionTypeV1::Harness,
                 if signals.tool_name.as_deref() == Some("TaskOutput") { PreToolOperationV1::Read } else { PreToolOperationV1::Set }, true, false),
             "allow", "native_agent_task_metadata", "The Rust authority verified bounded host task metadata with no new execution or filesystem effects.",
+        )
+    } else if subagent_brief {
+        generic_result(
+            generic_action(harness, event, PreToolActionTypeV1::Harness, PreToolOperationV1::Start, true, false),
+            "allow",
+            "native_agent_subagent_brief",
+            "The Rust authority found no instruction override, exfiltration, destructive or sensitive-data request in this subagent brief; every tool the subagent runs is checked on its own.",
         )
     } else {
         evaluate_signals(
@@ -1003,6 +1021,7 @@ fn evaluate_envelope(
             "This write adds a CI workflow step that uploads a local credential file to a network host. The workflow runs on the forge with the repository's secrets, where Guard cannot review it.",
         );
     }
+    result = content_reviews::review_written_content(result, payload);
     if harness == "omp"
         && signals.tool_name.as_deref() == Some("edit")
         && result.reason_code == "native_file_write_review"
@@ -1254,6 +1273,22 @@ fn evaluate_envelope(
         // that withholds it; it keeps its review.
         && command_model.is_none_or(|model| {
             !super::script_content::inline_uses_network(
+                model,
+                signals.command.as_deref(),
+                super::PathContext {
+                    home_dir,
+                    cwd,
+                    ..context
+                },
+            )
+        })
+        // The sandbox neither hides system files nor protects uncommitted
+        // work, so a program that names one or discards the other keeps its
+        // review. Last, so the reason only changes on a review this route
+        // would otherwise have contained.
+        && !command_model.is_some_and(|model| {
+            content_reviews::keeps_unsandboxed_program_review(
+                &mut result,
                 model,
                 signals.command.as_deref(),
                 super::PathContext {

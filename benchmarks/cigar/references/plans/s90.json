@@ -1,0 +1,81 @@
+{
+ "repo": "click",
+ "seed": 90,
+ "steps": [
+  {
+   "doc": {
+    "module": "click.termui",
+    "path": "src/click/termui.py",
+    "qual": "prompt"
+   },
+   "kind": "doc",
+   "prompt": "Add a short usage example to the docstring of `prompt` in src/click/termui.py, written as a doctest (`>>>` lines with their expected output). Make sure the example actually passes."
+  },
+  {
+   "kind": "bug",
+   "prompt": "`tests/test_arguments.py::test_defaults_for_nargs` started failing after the last commit. Fix the bug in the library code; don't edit the tests.",
+   "setup": [
+    {
+     "failing": [
+      "tests/test_arguments.py::test_defaults_for_nargs"
+     ],
+     "line": 2390,
+     "new": "        if rv is not None or self.nargs != 1:\n",
+     "orig": "        if rv is not None and self.nargs != 1:\n",
+     "path": "src/click/core.py",
+     "qual": "Parameter.value_from_envvar"
+    }
+   ]
+  },
+  {
+   "kind": "stub",
+   "prompt": "Tests fail because shell_complete is not implemented (src/click/shell_completion.py). Write the implementation; the docstring and tests describe the expected behavior.",
+   "stub": {
+    "body": "    shell, _, instruction = instruction.partition(\"_\")\n    comp_cls = get_completion_class(shell)\n\n    if comp_cls is None:\n        return 1\n\n    comp = comp_cls(cli, ctx_args, prog_name, complete_var)\n\n    if instruction == \"source\":\n        echo(comp.source())\n        return 0\n\n    if instruction == \"complete\":\n        echo(comp.complete())\n        return 0\n\n    return 1\n",
+    "body_start": 36,
+    "end": 52,
+    "failing": [
+     "tests/test_shell_completion.py::test_context_settings",
+     "tests/test_shell_completion.py::test_full_complete[bash-env0-plain,a\\nplain,b\\n]",
+     "tests/test_shell_completion.py::test_full_complete[bash-env1-plain,b\\n]",
+     "tests/test_shell_completion.py::test_full_complete[fish-env4-plain,a\\nplain,b\\tbee\\n]",
+     "tests/test_shell_completion.py::test_full_complete[fish-env5-plain,b\\tbee\\n]",
+     "tests/test_shell_completion.py::test_full_complete[zsh-env2-plain\\na\\n_\\nplain\\nb\\nbee\\n]",
+     "tests/test_shell_completion.py::test_full_complete[zsh-env3-plain\\nb\\nbee\\n]",
+     "tests/test_shell_completion.py::test_full_source[bash]",
+     "tests/test_shell_completion.py::test_full_source[fish]",
+     "tests/test_shell_completion.py::test_full_source[zsh]"
+    ],
+    "indent": 4,
+    "path": "src/click/shell_completion.py",
+    "qual": "shell_complete"
+   }
+  },
+  {
+   "doc": {
+    "module": "click.globals",
+    "path": "src/click/globals.py",
+    "qual": "push_context"
+   },
+   "kind": "doc",
+   "prompt": "Add a short usage example to the docstring of `push_context` in src/click/globals.py, written as a doctest (`>>>` lines with their expected output). Make sure the example actually passes."
+  },
+  {
+   "kind": "rename",
+   "prompt": "Rename the internal helper `_fetch` to `_fetch_impl` everywhere in the project, including tests. Behavior must not change.",
+   "rename": {
+    "count": 4,
+    "files": [
+     "src/click/parser.py"
+    ],
+    "new": "_fetch_impl",
+    "old": "_fetch",
+    "path": "src/click/parser.py"
+   }
+  },
+  {
+   "kind": "review",
+   "prompt": "Review every change made in this session. Remove leftovers or duplication, match the style of the surrounding code, and make sure the full test suite passes."
+  }
+ ]
+}

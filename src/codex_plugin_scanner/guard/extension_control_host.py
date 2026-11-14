@@ -21,11 +21,12 @@ from contextlib import suppress
 from pathlib import Path
 from typing import Any
 
+from .installed_authority_migration_turn import installed_authority_migration_turn
 from .native_policy_snapshot_constants import NativePolicySnapshotError
 from .runtime.command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY, CommandSafetyExtensionRegistry
 from .runtime.extension_control_authority import AuthorityHealth, ExtensionControlAuthorityView
 from .runtime.extension_control_runtime import ExtensionControlRuntime, ExtensionControlRuntimeSnapshot
-from .runtime_health.background_diagnostics import failure_detail, record_background_event
+from .runtime_health.background_diagnostics import failure_detail, record_background_event, record_background_notice
 from .store import GuardStore
 
 _LOGGER = logging.getLogger(__name__)
@@ -50,21 +51,42 @@ class _InstalledAuthorityMigrationError(Exception):
     """The installed release's command-pack authority is not migrated yet."""
 
 
-def migrate_installed_authority(store: GuardStore) -> bool:
+# The worker host waits out another process's migration: that process does the
+# same work, and once it lands this one finds it done in a moment.
+WORKER_MIGRATION_TURN_WAIT_SECONDS = 180.0
+_SLOW_MIGRATION_SECONDS = 5.0
+
+
+def migrate_installed_authority(store: GuardStore, *, wait_seconds: float = WORKER_MIGRATION_TURN_WAIT_SECONDS) -> bool:
     """Admit the installed release's command packs, recording why when it cannot.
 
     A runtime upgrade changes the command engine, and the resident refuses any
     policy snapshot whose packs an older engine compiled. Until this runs
     after an upgrade every hook fails closed, so the daemon's worker host runs
     it before its first policy publication and retries it until it lands.
+
+    Only one process migrates at a time. A caller that finds another process
+    migrating waits up to ``wait_seconds`` for its turn and otherwise returns
+    False without recording a failure, leaving the migration pending.
     """
 
+    started = time.monotonic()
     try:
-        store.migrate_installed_command_pack_authority()
+        with installed_authority_migration_turn(store.guard_home, wait_seconds=wait_seconds) as held:
+            if not held:
+                _LOGGER.info("Installed command-pack authority is being migrated by another Guard process")
+                return False
+            store.migrate_installed_command_pack_authority()
     except Exception as error:
-        record_background_event("installed_authority_migration_failed", failure_detail(error))
+        elapsed_ms = round((time.monotonic() - started) * 1000)
+        record_background_event(
+            "installed_authority_migration_failed", f"{failure_detail(error)} elapsed_ms={elapsed_ms}"
+        )
         _LOGGER.warning("Installed command-pack authority could not be migrated: %s", error, exc_info=True)
         return False
+    elapsed = time.monotonic() - started
+    if elapsed >= _SLOW_MIGRATION_SECONDS:
+        record_background_notice("installed_authority_migration_slow", f"elapsed_ms={round(elapsed * 1000)}")
     return True
 
 
@@ -99,7 +121,9 @@ class ExtensionControlHost:
         retries it before reading anything newer.
         """
 
-        if not migrate_installed_authority(self.store):
+        # An extension-control host never queues behind another process's
+        # migration: it starts on the fallback view and retries on refresh.
+        if not migrate_installed_authority(self.store, wait_seconds=0.0):
             self._installed_authority_pending = True
             raise _InstalledAuthorityMigrationError
         self._installed_authority_pending = False

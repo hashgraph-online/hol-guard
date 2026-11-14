@@ -124,6 +124,7 @@ fn tests_in_a_sibling_checkout_under_the_profile_are_contained_on_windows() {
                 cargo_config_inert: false,
                 npm_config_inert: false,
                 pip_config_inert: false,
+                python_environment_inert: false,
                 shell_home_matches: false,
                 ripgrep_config_absent: false,
                 gem_config_absent: false,

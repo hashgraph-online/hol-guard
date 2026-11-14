@@ -110,7 +110,8 @@ fn sibling_jq_reads_keep_reaching_forms_reviewed() {
         format!("jq -r 'keys' {sibling}/.env"),
         format!("jq -r '{{a: .x}}' {sibling}/.env"),
         format!("jq --rawfile a {sibling}/.env 'keys' {file}"),
-        format!("jq --slurpfile a {file} 'keys' {file}"),
+        format!("jq --slurpfile a {sibling}/.env '$a' {file}"),
+        format!("jq --arg a x '$b' {file}"),
         format!("jq -f {file} {file}"),
         format!("jq -r 'keys | @sh' {file} | sh"),
     ] {

@@ -42,7 +42,7 @@ counter counts as past its limit, and an unknown count, environment or sensitivi
 | R10 Money out | review | review | block |
 | R12 Secret in arguments | review | block | block |
 | R13 Untrusted read, then egress | warn | review | block |
-| R14 Injection signal, then destructive | review | re-approval | block |
+| R14 Injection signal, then destructive | review | re-approval, including a recoverable delete | block; re-approval for a recoverable delete |
 | R15 Repository and deploy changes | review | review; block branch delete and force push | block |
 | R16 Unclassified action | review | review; re-approval for a destructive name | block |
 

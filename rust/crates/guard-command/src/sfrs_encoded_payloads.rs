@@ -174,7 +174,7 @@ pub(crate) fn decode_base64_literal(literal: &str) -> Option<String> {
 
 /// `_decode_hex_literal`.
 pub(crate) fn decode_hex_literal(literal: &str) -> Option<String> {
-    if literal.len() % 2 != 0 || !literal.is_ascii() {
+    if !literal.len().is_multiple_of(2) || !literal.is_ascii() {
         return None;
     }
     let bytes = literal.as_bytes();
@@ -197,7 +197,7 @@ pub(crate) fn decoded_bytes_to_text(decoded: &[u8]) -> Option<String> {
             return Some(text.to_owned());
         }
     }
-    if decoded.len() % 2 == 0 {
+    if decoded.len().is_multiple_of(2) {
         let units: Vec<u16> = decoded
             .chunks_exact(2)
             .map(|pair| u16::from_le_bytes([pair[0], pair[1]]))

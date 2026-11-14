@@ -29,7 +29,10 @@ const MAX_REQUEST_BYTES: u64 = 64 * 1024;
 const CODESIGN: &str = "/usr/bin/codesign";
 const MAX_TIMEOUT_MS: u64 = 120_000;
 const SEAL_TIMEOUT: Duration = Duration::from_secs(30);
-const TREE_FILE_TIMEOUT: Duration = Duration::from_secs(5);
+/// The tree includes the bundle's launcher, whose `--verify` hashes every
+/// sealed resource and can take several seconds on a busy Mac. The ceiling
+/// only bounds a hung `codesign`.
+const TREE_FILE_TIMEOUT: Duration = SEAL_TIMEOUT;
 /// More entries than any onedir build ships; a larger tree is refused rather
 /// than walked without end.
 const MAX_TREE_ENTRIES: usize = 200_000;

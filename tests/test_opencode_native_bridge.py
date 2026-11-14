@@ -12,7 +12,7 @@ import pytest
 
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.adapters.bounded_cli_hook_native import NATIVE_BOUNDED_HOOK_FEATURE
-from codex_plugin_scanner.guard.adapters.opencode_pretool import pretool_plugin_source
+from tests.opencode_test_support import pretool_plugin_source
 
 pytestmark = pytest.mark.skipif(os.name != "posix", reason="the native bounded bridge is POSIX-only")
 

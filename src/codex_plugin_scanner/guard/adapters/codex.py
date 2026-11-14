@@ -1,17 +1,27 @@
-"""Codex harness adapter."""
+"""Codex harness adapter.
+
+The native runtime owns the hook groups and bridge argv Guard registers, the
+hook-group identities a migration compares, the MCP and hook rewrites of a
+config, the hook state launch and doctor read, and the files an install plans
+besides the config. Python keeps the TOML reads and renders, the authenticated
+hook manifest, the ownership strips over existing hooks and every publication.
+"""
 
 from __future__ import annotations
 
+import base64
 import hashlib
 import json
+import math
 import os
 import sys
 from collections.abc import Mapping, Sequence
 from copy import deepcopy
 from dataclasses import dataclass
+from datetime import date, datetime, time
 from pathlib import Path
-from typing import TYPE_CHECKING
-from urllib.parse import urlencode
+from typing import TYPE_CHECKING, Any
+from uuid import uuid4
 
 from ...version import __version__
 from ..aibom_detection import (
@@ -20,15 +30,9 @@ from ..aibom_detection import (
     native_adapter_detection_with_warnings,
 )
 from ..codex_config import dump_toml, read_config_bytes, read_toml_payload
-from ..codex_hook_command_line import encode_hook_config_argument, render_hook_command
-from ..codex_hook_compatibility import NATIVE_CODEX_HOOK_COMMAND, NATIVE_CODEX_HOOK_FEATURE, python_bridge_argv
+from ..codex_hook_command_line import render_hook_command
+from ..codex_hook_compatibility import NATIVE_CODEX_HOOK_FEATURE, python_bridge_argv
 from ..codex_hook_file_integrity import validate_regular_file
-from ..codex_hook_identity import (
-    CodexHookGroupQuestion,
-    CodexHookIdentityUnavailableError,
-    canonical_codex_hook_group_conflict_keys,
-    canonical_codex_hook_group_identities,
-)
 from ..codex_hook_integrity import (
     atomic_write_bytes,
     atomic_write_text,
@@ -100,13 +104,7 @@ from ..native_codex_hook_identity import wire_codex_hook_bindings as _wire_bindi
 from ..native_path_anchor import anchor_to_process_directory
 from ..shims import install_guard_shim, prepare_guard_shim, remove_guard_shim
 from ..stable_guard_cli import resolve_frozen_guard_cli
-from .base import (
-    HarnessAdapter,
-    HarnessContext,
-    PreparedHarnessInstall,
-    _command_available,
-    setup_failures_besides_missing_command,
-)
+from .base import HarnessContext, PreparedHarnessInstall, _command_available
 from .codex_detect_sources import (
     json_payload_from_bytes,
     path_restorations,
@@ -114,8 +112,6 @@ from .codex_detect_sources import (
     restore_paths,
     toml_payload_from_bytes,
 )
-from .codex_install_plan import guard_proxy_server_names as _guard_proxy_server_names
-from .codex_install_plan import remove_managed_shell_guard_blocks as _remove_managed_shell_guard_blocks
 from .codex_remote_control import (
     codex_remote_launch_environment,
     guarded_codex_launch_command,
@@ -129,33 +125,133 @@ from .mcp_servers import (
     proxy_launcher_entry,
     skipped_stdio_server_names,
 )
+from .native_harness import NativeHarnessAdapter, ask, planned_files
 from .native_hook_bridge import native_hook_bridge_executable
 from .workspace_overrides import should_skip_workspace_override
 
 if TYPE_CHECKING:
     from ..runtime_transition import TransitionFile
 
+__all__ = ("_command_available", "atomic_write_text", "build_authenticated_hook_manifest", "sys")
+
 _read_toml = read_toml_payload
 
-
-_MANAGED_HOOK_STATUS_MESSAGE = "HOL Guard checking tool action"
-_MANAGED_PROMPT_HOOK_STATUS_MESSAGE = "HOL Guard checking prompt"
-_MANAGED_PERMISSION_HOOK_STATUS_MESSAGE = "HOL Guard checking Codex approval request"
-_MANAGED_POST_TOOL_HOOK_STATUS_MESSAGE = "HOL Guard checking tool result"
 _LEGACY_MANAGED_HOOK_STATUS_MESSAGES = {
     "HOL Guard checking Bash command",
-    _MANAGED_HOOK_STATUS_MESSAGE,
-    _MANAGED_PROMPT_HOOK_STATUS_MESSAGE,
-    _MANAGED_PERMISSION_HOOK_STATUS_MESSAGE,
-    _MANAGED_POST_TOOL_HOOK_STATUS_MESSAGE,
+    "HOL Guard checking tool action",
+    "HOL Guard checking prompt",
+    "HOL Guard checking Codex approval request",
+    "HOL Guard checking tool result",
 }
-_MANAGED_HOOK_TIMEOUT_SECONDS = 30
 _MANAGED_HOOK_TIMEOUT_GRACE_SECONDS = 5
 _CODEX_GUARD_TOOL_MATCHER = "Bash|Read|Write|Edit|MultiEdit|^apply_patch$|mcp__.*"
-_CODEX_GUARD_PERMISSION_MATCHER = "Bash|Read|Write|Edit|MultiEdit|^apply_patch$|mcp__.*"
-_CODEX_GUARD_POST_TOOL_MATCHER = "Bash|Read|mcp__.*"
-_AUTHORITATIVE_ENFORCEMENT_BOUNDARY = "codex-native-hooks"
 _AUTHORITATIVE_HOOK_UNAVAILABLE_REASON = "codex_authoritative_hook_unavailable"
+# The range ``native_codex_hook_identity`` sends as a JSON integer.
+_EXACT_INT_MIN = -(2**63)
+_EXACT_INT_MAX = 2**64 - 1
+
+
+def _codex(op: str, context: HarnessContext, **fields: Any) -> dict[str, Any]:
+    return ask(op, context, harness="codex", **fields)
+
+
+def _reply_text(answer: Mapping[str, object], key: str) -> str:
+    value = answer.get(key)
+    if not isinstance(value, str):
+        raise ValueError("Harness adapter answer is malformed")
+    return value
+
+
+def _strings_in(value: object, found: set[str]) -> None:
+    if isinstance(value, str):
+        found.add(value)
+    elif isinstance(value, Mapping):
+        for key, item in value.items():
+            _strings_in(key, found)
+            _strings_in(item, found)
+    elif isinstance(value, Sequence) and not isinstance(value, bytes | bytearray):
+        for item in value:
+            _strings_in(item, found)
+
+
+class _Wire:
+    """Order-preserving JSON for payloads read from TOML.
+
+    A scalar JSON cannot carry becomes a token naming its meaning, the form
+    ``native_codex_hook_identity`` sends. Equal meanings share a token, so the
+    runtime compares tokens as it would the values. ``decode`` maps each token
+    back to the value it stood for. The prefix is drawn at random and checked
+    against every string the payloads hold.
+    """
+
+    def __init__(self, *payloads: object) -> None:
+        present: set[str] = set()
+        for payload in payloads:
+            _strings_in(payload, present)
+        prefix = uuid4().hex
+        while any(text.startswith(prefix) for text in present):
+            prefix = uuid4().hex
+        self._prefix = prefix
+        self._issued: dict[str, str] = {}
+        self._originals: dict[str, object] = {}
+        self.meanings: dict[str, object] = {}
+
+    def text(self, value: object) -> str:
+        return json.dumps(self._value(value), separators=(",", ":"))
+
+    def decode(self, text: str) -> Any:
+        return self._restore(json.loads(text))
+
+    def _token(self, original: object, meaning: dict[str, str]) -> str:
+        key = json.dumps(meaning, sort_keys=True)
+        token = self._issued.get(key)
+        if token is None:
+            token = f"{self._prefix}-{len(self.meanings)}"
+            self._issued[key] = token
+            self._originals[token] = original
+            self.meanings[token] = meaning
+        return token
+
+    def _string(self, value: str) -> str:
+        if value.startswith(self._prefix):
+            raise ValueError("A Codex payload string collides with Guard's wire tokens.")
+        return value
+
+    def _value(self, value: object) -> object:
+        # bool is an int and datetime a date, so each is settled first.
+        if value is None or isinstance(value, bool):
+            return value
+        if isinstance(value, str):
+            return self._string(value)
+        if isinstance(value, int):
+            if _EXACT_INT_MIN <= value <= _EXACT_INT_MAX:
+                return value
+            return self._token(value, {"__int__": str(value)})
+        if isinstance(value, float):
+            if math.isfinite(value):
+                return value
+            return self._token(value, {"type": "float", "value": repr(value)})
+        if isinstance(value, Mapping):
+            wired: dict[str, object] = {}
+            for key, item in value.items():
+                if not isinstance(key, str):
+                    raise ValueError("Codex payload keys must be strings.")
+                wired[self._string(key)] = self._value(item)
+            return wired
+        if isinstance(value, Sequence) and not isinstance(value, bytes | bytearray):
+            return [self._value(item) for item in value]
+        if isinstance(value, datetime | date | time):
+            return self._token(value, {"type": type(value).__name__, "value": value.isoformat()})
+        return self._token(value, {"type": type(value).__name__, "value": repr(value)})
+
+    def _restore(self, value: object) -> object:
+        if isinstance(value, str):
+            return self._originals.get(value, value)
+        if isinstance(value, list):
+            return [self._restore(item) for item in value]
+        if isinstance(value, dict):
+            return {key: self._restore(item) for key, item in value.items()}
+        return value
 
 
 def _hook_workspace_dir(context: HarnessContext) -> Path | None:
@@ -172,26 +268,23 @@ def _json_object(path: Path) -> dict[str, object]:
     return payload if isinstance(payload, dict) else {}
 
 
+def _argv_fields(context: HarnessContext, *, home_is_current: bool) -> dict[str, object]:
+    guard_home = resolve_guard_home() if home_is_current else context.guard_home
+    return {
+        "home_is_current": home_is_current,
+        "runtime_guard_home": str(guard_home.resolve(strict=False)),
+        "workspace_explicit": context.workspace_override_explicit,
+    }
+
+
 def _local_hook_command_parts_for_home_mode(
     context: HarnessContext,
     *,
     home_is_current: bool,
     python_executable: str,
 ) -> tuple[str, ...]:
-    runtime_guard_home = (resolve_guard_home() if home_is_current else context.guard_home).resolve(strict=False)
-    guard_args = [
-        "guard",
-        "hook",
-        "--harness",
-        "codex",
-    ]
-    if not home_is_current:
-        guard_args.extend(["--home", str(context.home_dir)])
-        if runtime_guard_home != context.home_dir.resolve():
-            guard_args.extend(["--guard-home", str(runtime_guard_home)])
-    hook_workspace = _hook_workspace_dir(context)
-    if hook_workspace is not None:
-        guard_args.extend(["--workspace", str(hook_workspace)])
+    answer = _codex("argv", context, **_argv_fields(context, home_is_current=home_is_current))
+    guard_args = [str(part) for part in answer["reply"]["launch"]]
     package_root = Path(__file__).resolve().parents[3]
     return isolated_guard_cli_command(python_executable, package_root, guard_args)
 
@@ -251,49 +344,28 @@ def _hook_command_parts_for_home_mode(
     home_is_current: bool,
     python_executable: str,
 ) -> tuple[str, ...]:
-    guard_home = (resolve_guard_home() if home_is_current else context.guard_home).resolve(strict=False)
-    # Bind the daemon fast path to the install context explicitly. Omitting
-    # ``home`` for the common current-user install silently forced every
-    # PostToolUse event through the legacy CLI path.
-    query = {"guard-home": str(guard_home), "home": str(context.home_dir.resolve(strict=False))}
-    hook_workspace = _hook_workspace_dir(context)
-    if hook_workspace is not None:
-        query["workspace"] = str(hook_workspace)
-    long_timeout = _post_tool_hook_timeout_seconds(context)
-    config = {
-        "state_path": str(guard_home / "daemon-state.json"),
-        "manifest_path": str(
-            hook_manifest_path(
-                guard_home,
-                CodexHarnessAdapter._hook_config_path(context),
-            )
-        ),
-        "fallback_command": list(
-            _local_hook_command_parts_for_home_mode(
-                context,
-                home_is_current=home_is_current,
-                python_executable=python_executable,
-            )
-        ),
-        "start_command": list(_daemon_start_command(guard_home, context.home_dir, python_executable=python_executable)),
-        "query": urlencode(query),
-        "hook_timeouts": {
-            "PreToolUse": long_timeout,
-            "PermissionRequest": _MANAGED_HOOK_TIMEOUT_SECONDS,
-            "UserPromptSubmit": _MANAGED_HOOK_TIMEOUT_SECONDS,
-            "PostToolUse": long_timeout,
-        },
-    }
-    bridge_path = Path(__file__).with_name("codex_daemon_hook_bridge.py").resolve()
-    config_argument = encode_hook_config_argument(json.dumps(config, separators=(",", ":")))
-    python_argv = (python_executable, "-I", str(bridge_path), config_argument)
+    fields = _argv_fields(context, home_is_current=home_is_current)
+    guard_home = Path(str(fields["runtime_guard_home"]))
+    fallback = _local_hook_command_parts_for_home_mode(
+        context, home_is_current=home_is_current, python_executable=python_executable
+    )
+    start = _daemon_start_command(guard_home, context.home_dir, python_executable=python_executable)
     # The native runtime answers each hook from the daemon without starting
-    # Python and fails closed without one. It only reads the config this
+    # Python and fails closed without one. It only reads the config the
     # Python bridge argv carries.
     native_bridge = _native_bridge_executable(guard_home)
-    if native_bridge is None:
-        return python_argv
-    return (str(native_bridge), NATIVE_CODEX_HOOK_COMMAND, *python_argv)
+    answer = _codex(
+        "argv",
+        context,
+        **fields,
+        python=python_executable,
+        bridge=str(Path(__file__).with_name("codex_daemon_hook_bridge.py").resolve()),
+        native_bridge=None if native_bridge is None else str(native_bridge),
+        manifest_path=str(hook_manifest_path(guard_home, CodexHarnessAdapter._hook_config_path(context))),
+        long_timeout=_post_tool_hook_timeout_seconds(context),
+        launch={"fallback": list(fallback), "start": list(start)},
+    )
+    return tuple(str(part) for part in answer["argv"])
 
 
 def _hook_command_parts(context: HarnessContext) -> tuple[str, ...]:
@@ -306,49 +378,6 @@ def _hook_command_parts(context: HarnessContext) -> tuple[str, ...]:
 
 def _hook_command(context: HarnessContext) -> str:
     return render_hook_command(_hook_command_parts(context))
-
-
-def _managed_hook_entry(
-    context: HarnessContext,
-    status_message: str,
-    *,
-    timeout_seconds: int = _MANAGED_HOOK_TIMEOUT_SECONDS,
-) -> dict[str, object]:
-    environment = merge_guard_launcher_env(pin_package=True)
-    environment.update(codex_remote_launch_environment(context.home_dir))
-    return {
-        "type": "command",
-        "command": _hook_command(context),
-        "timeout": timeout_seconds,
-        "statusMessage": status_message,
-        "env": environment,
-    }
-
-
-def _pre_tool_hook_group(context: HarnessContext) -> dict[str, object]:
-    return {
-        "matcher": _CODEX_GUARD_TOOL_MATCHER,
-        "hooks": [
-            _managed_hook_entry(
-                context,
-                _MANAGED_HOOK_STATUS_MESSAGE,
-                timeout_seconds=_post_tool_hook_timeout_seconds(context),
-            )
-        ],
-    }
-
-
-def _prompt_hook_group(context: HarnessContext) -> dict[str, object]:
-    return {
-        "hooks": [_managed_hook_entry(context, _MANAGED_PROMPT_HOOK_STATUS_MESSAGE)],
-    }
-
-
-def _permission_request_hook_group(context: HarnessContext) -> dict[str, object]:
-    return {
-        "matcher": _CODEX_GUARD_PERMISSION_MATCHER,
-        "hooks": [_managed_hook_entry(context, _MANAGED_PERMISSION_HOOK_STATUS_MESSAGE)],
-    }
 
 
 def _post_tool_hook_timeout_seconds(context: HarnessContext) -> int:
@@ -366,47 +395,36 @@ def _post_tool_hook_timeout_seconds(context: HarnessContext) -> int:
     )
 
 
-def _post_tool_hook_group(context: HarnessContext) -> dict[str, object]:
-    return {
-        "matcher": _CODEX_GUARD_POST_TOOL_MATCHER,
-        "hooks": [
-            _managed_hook_entry(
-                context,
-                _MANAGED_POST_TOOL_HOOK_STATUS_MESSAGE,
-                timeout_seconds=_post_tool_hook_timeout_seconds(context),
-            )
-        ],
-    }
+@dataclass(frozen=True, slots=True)
+class _HookRegistration:
+    """The argv, groups and manifest bindings of the hooks Guard registers."""
+
+    argv: tuple[str, ...]
+    groups: str
+    bindings: str
+
+
+def _hook_registration(context: HarnessContext) -> _HookRegistration:
+    argv = _hook_command_parts(context)
+    environment = merge_guard_launcher_env(pin_package=True)
+    environment.update(codex_remote_launch_environment(context.home_dir))
+    answer = _codex(
+        "groups",
+        context,
+        argv=list(argv),
+        command=render_hook_command(argv),
+        env=json.dumps(environment),
+        long_timeout=_post_tool_hook_timeout_seconds(context),
+    )
+    return _HookRegistration(argv, _reply_text(answer, "groups"), _reply_text(answer, "bindings"))
 
 
 def _managed_hook_groups(context: HarnessContext) -> dict[str, dict[str, object]]:
-    return {
-        "PreToolUse": _pre_tool_hook_group(context),
-        "PermissionRequest": _permission_request_hook_group(context),
-        "UserPromptSubmit": _prompt_hook_group(context),
-        "PostToolUse": _post_tool_hook_group(context),
-    }
+    return json.loads(_hook_registration(context).groups)
 
 
 def _manifest_event_bindings(context: HarnessContext) -> list[dict[str, object]]:
-    argv = list(_hook_command_parts(context))
-    bindings: list[dict[str, object]] = []
-    for event_name, group in _managed_hook_groups(context).items():
-        handlers = group.get("hooks")
-        if not isinstance(handlers, list) or len(handlers) != 1 or not isinstance(handlers[0], dict):
-            raise RuntimeError(f"Guard's {event_name} hook definition is not canonical.")
-        bindings.append(
-            {
-                "argv": argv,
-                "event": event_name,
-                "group": deepcopy(group),
-                "group_matcher": group.get("matcher"),
-                "handler": deepcopy(handlers[0]),
-                "handler_id": f"codex:{event_name}:guard-handler-v1",
-                "handler_index": 0,
-            }
-        )
-    return bindings
+    return json.loads(_hook_registration(context).bindings)
 
 
 def _hook_packaged_file_paths() -> tuple[tuple[str, Path], ...]:
@@ -447,16 +465,21 @@ def _hook_manifest_spec(context: HarnessContext) -> CodexHookManifestSpec:
     )
 
 
-def _current_install_legacy_bindings(context: HarnessContext, hooks: dict[str, object]) -> list[dict[str, object]]:
+def _current_install_legacy_bindings(
+    context: HarnessContext,
+    hooks: dict[str, object],
+    registration: _HookRegistration | None = None,
+) -> list[dict[str, object]]:
     """Select exact current bridge entries for explicit legacy re-adoption only."""
 
-    current_argv = list(_hook_command_parts(context))
+    registration = registration or _hook_registration(context)
+    current_argv = list(registration.argv)
     # python_bridge_argv keeps the object sequence it was given. This argv is
     # a string command, so only those strings identify the legacy registration.
     legacy_tail = [part for part in python_bridge_argv(current_argv)[1:] if isinstance(part, str)]
     return exact_legacy_hook_bindings(
         hooks,
-        expected_bindings=_manifest_event_bindings(context),
+        expected_bindings=json.loads(registration.bindings),
         current_argv=current_argv,
         legacy_argv=[sys.executable, *legacy_tail],
         legacy_status_messages=_LEGACY_MANAGED_HOOK_STATUS_MESSAGES,
@@ -506,102 +529,36 @@ def _current_install_self_bindings(
     )
 
 
-def _legacy_wire_bindings(context: HarnessContext, payload: dict[str, object]) -> list[dict[str, object]]:
+def _legacy_wire_bindings(
+    context: HarnessContext, payload: dict[str, object], registration: _HookRegistration
+) -> list[dict[str, object]]:
     hooks = payload.get("hooks")
     if not isinstance(hooks, dict):
         return []
-    return _wire_bindings(_current_install_legacy_bindings(context, hooks))
+    return _wire_bindings(_current_install_legacy_bindings(context, hooks, registration))
 
 
-_CODEX_HOOK_MIGRATION_CONFLICT = "codex_hook_migration_conflict"
-_CODEX_HOOK_MIGRATION_READBACK_MISMATCH = "codex_hook_migration_readback_mismatch"
+def _strip_owned_hooks(
+    context: HarnessContext,
+    hooks: dict[str, object],
+    owned_bindings: Sequence[Mapping[str, object]],
+) -> dict[str, object]:
+    """The JSON hooks left to migrate once every Guard-owned handler is gone."""
 
-
-def _unidentified_migration(error: CodexHookIdentityUnavailableError) -> RuntimeError:
-    """The failure a migration reports when it has no identity to compare.
-
-    The error carries its own code, so a definition the resident will not read
-    stays distinguishable from a resident that could not answer at all.
-    """
-
-    return RuntimeError(
-        f"{error.code}: Guard's native runtime did not identify the Codex hooks this migration compares. "
-        "Repair whichever the code names, the Guard installation or the hook definition, before retrying "
-        "migration."
+    cleaned, _ = _remove_manifest_bound_hook_events(hooks, owned_bindings)
+    legacy_bindings = _current_install_legacy_bindings(context, cleaned)
+    cleaned, _ = _remove_manifest_bound_hook_events(cleaned, legacy_bindings)
+    # A legacy registration whose launcher no longer exists is a leftover
+    # from an install that is gone, not a handler to adopt: folding it into
+    # the active config would leave the harness invoking a missing program.
+    cleaned, _ = _remove_unlaunchable_guard_hook_events(
+        cleaned, legacy_status_messages=_LEGACY_MANAGED_HOOK_STATUS_MESSAGES
     )
-
-
-def _group_identities(questions: Sequence[CodexHookGroupQuestion]) -> tuple[str, ...]:
-    """Ask the resident for each group's identity, failing the caller closed.
-
-    The resident owns hook identity, so a migration that cannot reach it has no
-    way to tell an incoming group from one already written. It stops with the
-    reason code rather than merging on a locally guessed identity.
-    """
-
-    try:
-        return canonical_codex_hook_group_identities(questions)
-    except CodexHookIdentityUnavailableError as error:
-        raise _unidentified_migration(error) from error
-
-
-def _group_conflict_keys(questions: Sequence[CodexHookGroupQuestion]) -> tuple[tuple[str, ...], ...]:
-    """Ask the resident for each group's conflict keys, failing the caller closed."""
-
-    try:
-        return canonical_codex_hook_group_conflict_keys(questions)
-    except CodexHookIdentityUnavailableError as error:
-        raise _unidentified_migration(error) from error
-
-
-def _append_unique_hook_groups(
-    existing_groups: object,
-    incoming_groups: object,
-    *,
-    event_name: str,
-    source_scope: str,
-    source_hooks_enabled: bool,
-) -> list[object]:
-    merged = list(existing_groups) if isinstance(existing_groups, list) else []
-    if not isinstance(incoming_groups, list):
-        return merged
-    # Both sides are known before the first comparison, so the resident is
-    # asked about every group once rather than once per comparison.
-    settled = [group for group in merged if isinstance(group, Mapping)]
-    questions = [
-        _hook_group_question(
-            group,
-            event_name=event_name,
-            source_scope=source_scope,
-            source_hooks_enabled=source_hooks_enabled,
-        )
-        for group in (*settled, *(group for group in incoming_groups if isinstance(group, Mapping)))
-    ]
-    group_identities = _group_identities(questions)
-    group_conflicts = _group_conflict_keys(questions)
-    identities = set(group_identities[: len(settled)])
-    conflict_keys = {key for keys in group_conflicts[: len(settled)] for key in keys}
-    position = len(settled)
-    for group in incoming_groups:
-        if not isinstance(group, Mapping):
-            if group not in merged:
-                merged.append(group)
-            continue
-        identity = group_identities[position]
-        incoming_conflicts = set(group_conflicts[position])
-        position += 1
-        if identity in identities:
-            continue
-        if incoming_conflicts & conflict_keys:
-            raise RuntimeError(
-                f"{_CODEX_HOOK_MIGRATION_CONFLICT}: Codex hook sources define the same {event_name!r} "
-                "matcher and command with different execution-affecting fields. Reconcile the definitions before "
-                "retrying migration."
-            )
-        merged.append(deepcopy(group))
-        identities.add(identity)
-        conflict_keys.update(incoming_conflicts)
-    return merged
+    # The manifest authenticates the config entries, not hooks.json, so no
+    # recorded command holds a JSON handler back, matching its inventory.
+    self_bindings = _current_install_self_bindings(context, cleaned)
+    cleaned, _ = _remove_manifest_bound_hook_events(cleaned, self_bindings)
+    return cleaned
 
 
 def _migrate_hooks_json_into_config(
@@ -615,89 +572,31 @@ def _migrate_hooks_json_into_config(
     json_hooks = hooks_payload.get("hooks")
     if not isinstance(json_hooks, dict):
         return False
-    config_hooks = config_payload.get("hooks")
-    if not isinstance(config_hooks, dict):
-        config_hooks = {}
-    cleaned_json_hooks, _ = _remove_manifest_bound_hook_events(json_hooks, owned_bindings)
-    legacy_bindings = _current_install_legacy_bindings(context, cleaned_json_hooks)
-    cleaned_json_hooks, _ = _remove_manifest_bound_hook_events(cleaned_json_hooks, legacy_bindings)
-    # A legacy registration whose launcher no longer exists is a leftover
-    # from an install that is gone, not a handler to adopt: folding it into
-    # the active config would leave the harness invoking a missing program.
-    cleaned_json_hooks, _ = _remove_unlaunchable_guard_hook_events(
-        cleaned_json_hooks, legacy_status_messages=_LEGACY_MANAGED_HOOK_STATUS_MESSAGES
-    )
-    # The manifest authenticates the config entries, not hooks.json, so no
-    # recorded command holds a JSON handler back, matching its inventory.
-    self_bindings = _current_install_self_bindings(context, cleaned_json_hooks)
-    cleaned_json_hooks, _ = _remove_manifest_bound_hook_events(cleaned_json_hooks, self_bindings)
-    source_hooks_enabled = _payload_has_hooks_feature_enabled(config_payload)
-    changed = False
-    for event_name, groups in cleaned_json_hooks.items():
-        if not isinstance(event_name, str):
-            continue
-        merged_groups = _append_unique_hook_groups(
-            config_hooks.get(event_name),
-            groups,
-            event_name=event_name,
-            source_scope=source_scope,
-            source_hooks_enabled=source_hooks_enabled,
-        )
-        if merged_groups != config_hooks.get(event_name):
-            changed = True
-        config_hooks[event_name] = merged_groups
-    if config_hooks:
-        config_payload["hooks"] = config_hooks
-    return changed
+    cleaned = _strip_owned_hooks(context, json_hooks, owned_bindings)
+    wire = _Wire(config_payload, cleaned)
+    config_text = wire.text(config_payload)
+    hooks_text = wire.text(cleaned)
+    answer = _codex("migrate", context, config=config_text, hooks=hooks_text, tokens=wire.meanings, scope=source_scope)
+    migrated = wire.decode(_reply_text(answer, "config"))
+    config_payload.clear()
+    config_payload.update(migrated)
+    return answer.get("changed") is True
 
 
-def _canonical_hook_semantics(
-    payload: Mapping[str, object],
-    *,
-    source_scope: str,
-) -> dict[str, tuple[str, ...]]:
-    hooks = payload.get("hooks")
-    if not isinstance(hooks, Mapping):
-        return {}
-    source_hooks_enabled = _payload_has_hooks_feature_enabled(payload)
-    counts: list[tuple[str, int]] = []
-    questions: list[CodexHookGroupQuestion] = []
-    for event_name, groups in hooks.items():
-        if not isinstance(event_name, str) or not isinstance(groups, list):
-            continue
-        mappings = [group for group in groups if isinstance(group, Mapping)]
-        counts.append((event_name, len(mappings)))
-        questions.extend(
-            _hook_group_question(
-                group,
-                event_name=event_name,
-                source_scope=source_scope,
-                source_hooks_enabled=source_hooks_enabled,
-            )
-            for group in mappings
-        )
-    identities = _group_identities(questions)
-    semantics: dict[str, tuple[str, ...]] = {}
-    start = 0
-    for event_name, count in counts:
-        semantics[event_name] = identities[start : start + count]
-        start += count
-    return semantics
+def _hook_tables(payload: Mapping[str, object]) -> dict[str, object]:
+    """The part of a config the hook comparisons read: its hooks and their feature flag.
 
+    The rest of a config can be arbitrarily large and would push the request
+    past the native size cap without changing the answer.
+    """
 
-def _hook_group_question(
-    group: Mapping[str, object],
-    *,
-    event_name: str,
-    source_scope: str,
-    source_hooks_enabled: bool,
-) -> CodexHookGroupQuestion:
-    return CodexHookGroupQuestion(
-        source_scope=source_scope,
-        source_hooks_enabled=source_hooks_enabled,
-        event_name=event_name,
-        group=group,
-    )
+    tables: dict[str, object] = {}
+    if "hooks" in payload:
+        tables["hooks"] = payload["hooks"]
+    features = payload.get("features")
+    if isinstance(features, Mapping) and "hooks" in features:
+        tables["features"] = {"hooks": features["hooks"]}
+    return tables
 
 
 def _require_hook_semantics_readback(
@@ -706,43 +605,38 @@ def _require_hook_semantics_readback(
     *,
     source_scope: str,
     source_path: Path,
+    context: HarnessContext,
 ) -> None:
-    if _canonical_hook_semantics(expected, source_scope=source_scope) != _canonical_hook_semantics(
-        actual,
-        source_scope=source_scope,
-    ):
-        raise RuntimeError(
-            f"{_CODEX_HOOK_MIGRATION_READBACK_MISMATCH}: Rendered Codex hooks at {source_path} did not preserve "
-            "their canonical event, matcher, handler, environment, timeout, status, and command semantics. The "
-            "legacy source was retained; repair the config and retry migration."
-        )
+    expected, actual = _hook_tables(expected), _hook_tables(actual)
+    wire = _Wire(expected, actual)
+    _codex(
+        "readback",
+        context,
+        expected=wire.text(expected),
+        actual=wire.text(actual),
+        tokens=wire.meanings,
+        scope=source_scope,
+        source_path=str(source_path),
+    )
 
 
-def _migration_group_identities(
-    payload: Mapping[str, object],
+def _require_migrated_hooks(
+    context: HarnessContext,
+    expected: Mapping[str, object],
+    actual: Mapping[str, object],
     *,
     source_scope: str,
-    source_hooks_enabled: bool,
-) -> set[str]:
-    hooks = payload.get("hooks")
-    if not isinstance(hooks, Mapping):
-        return set()
-    return set(
-        _group_identities(
-            [
-                _hook_group_question(
-                    group,
-                    event_name=event_name,
-                    source_scope=source_scope,
-                    source_hooks_enabled=source_hooks_enabled,
-                )
-                for event_name, groups in hooks.items()
-                if isinstance(event_name, str) and isinstance(groups, list)
-                for group in groups
-                if isinstance(group, Mapping)
-            ]
-        )
-    )
+    hooks_path: Path | None = None,
+    config_path: Path | None = None,
+) -> None:
+    """Every hook a migration carried over is still in ``actual``."""
+
+    expected, actual = _hook_tables(expected), _hook_tables(actual)
+    wire = _Wire(expected, actual)
+    fields: dict[str, object] = {"expected": wire.text(expected), "actual": wire.text(actual)}
+    if hooks_path is not None and config_path is not None:
+        fields.update(hooks_path=str(hooks_path), config_path=str(config_path))
+    _codex("subset", context, **fields, tokens=wire.meanings, scope=source_scope)
 
 
 def _unmanaged_migration_payload(
@@ -754,18 +648,18 @@ def _unmanaged_migration_payload(
     hooks = hooks_payload.get("hooks")
     if not isinstance(hooks, dict):
         return {}
-    cleaned_hooks, _ = _remove_manifest_bound_hook_events(hooks, owned_bindings)
-    legacy_bindings = _current_install_legacy_bindings(context, cleaned_hooks)
-    cleaned_hooks, _ = _remove_manifest_bound_hook_events(cleaned_hooks, legacy_bindings)
     # The migration prunes unlaunchable legacy launchers instead of adopting
-    # them, so the identities verification expects must be pruned by the same
-    # rule; otherwise verification rejects the migration it just produced.
-    cleaned_hooks, _ = _remove_unlaunchable_guard_hook_events(
-        cleaned_hooks, legacy_status_messages=_LEGACY_MANAGED_HOOK_STATUS_MESSAGES
-    )
-    self_bindings = _current_install_self_bindings(context, cleaned_hooks)
-    cleaned_hooks, _ = _remove_manifest_bound_hook_events(cleaned_hooks, self_bindings)
+    # them, so the identities verification expects are pruned by the same rule.
+    cleaned_hooks = _strip_owned_hooks(context, hooks, owned_bindings)
     return {"hooks": cleaned_hooks} if cleaned_hooks else {}
+
+
+def _one_planned_file(answer: dict[str, Any]) -> TransitionFile:
+    return planned_files({"files": [answer["file"]]})[0]
+
+
+def _b64(data: bytes | None) -> str | None:
+    return None if data is None else base64.b64encode(data).decode("ascii")
 
 
 def _prepare_hook_migration_backup(
@@ -774,27 +668,7 @@ def _prepare_hook_migration_backup(
     config_path: Path,
     before_config: bytes | None,
 ) -> TransitionFile:
-    from ..codex_hook_recovery import _snapshot
-    from ..runtime_transition import TransitionFile
-
-    resolved_path = str(config_path.resolve())
-    digest = hashlib.sha256(resolved_path.encode("utf-8")).hexdigest()[:16]
-    backup_path = context.guard_home / "managed" / "codex" / "migration-backups" / f"{digest}.json"
-    before_backup = _snapshot(backup_path)
-    mode = backup_path.stat().st_mode & 0o777 if before_backup is not None else 0o600
-    if before_backup is not None:
-        return TransitionFile(
-            backup_path, before_backup, before_backup, before_mode=mode, after_mode=mode, no_follow=True
-        )
-    content = before_config.decode("utf-8") if before_config is not None else ""
-    backup_payload = {
-        "schema": "codex-hook-migration-backup-v1",
-        "config_path": resolved_path,
-        "existed": before_config is not None,
-        "content": content,
-    }
-    after = (json.dumps(backup_payload, sort_keys=True, indent=2) + "\n").encode("utf-8")
-    return TransitionFile(backup_path, None, after, before_mode=mode, after_mode=0o600, no_follow=True)
+    return _one_planned_file(_codex("migration_backup", context, config=str(config_path), before=_b64(before_config)))
 
 
 def _write_hook_migration_backup(context: HarnessContext, *, config_path: Path) -> Path:
@@ -885,22 +759,14 @@ def prepare_codex_main_backup(
     migrated_payload: dict[str, object] | None = None,
 ) -> TransitionFile:
     """Retain an existing backup, or capture the ordinary install's backup content."""
-    from ..codex_hook_recovery import _snapshot
-    from ..runtime_transition import RuntimeTransition, TransitionFile
+    from ..runtime_transition import RuntimeTransition
 
-    path = CodexHarnessAdapter._backup_path(context)
-    before = _snapshot(path)
-    mode = path.stat().st_mode & 0o777 if before is not None else 0o600
-    after = (
-        before
-        if before is not None
-        else (
-            dump_toml(migrated_payload, original=original).encode("utf-8")
-            if migrated_payload is not None
-            else original or b""
-        )
+    content: dict[str, object] = (
+        {"migrated": dump_toml(migrated_payload, original=original)}
+        if migrated_payload is not None
+        else {"original": _b64(original)}
     )
-    change = TransitionFile(path, before, after, before_mode=mode, after_mode=mode, no_follow=True)
+    change = _one_planned_file(_codex("main_backup", context, **content))
     RuntimeTransition._compare({"files": [change.payload()]}, "before")
     return change
 
@@ -913,27 +779,69 @@ def render_codex_managed_mcp(
     workspace_payload: dict[str, object],
 ) -> tuple[dict[str, object], tuple[str, ...]]:
     """Render proxy refresh and workspace precedence from captured payloads."""
-    rendered = deepcopy(payload)
-    mcp_servers = rendered.get("mcp_servers")
-    if not isinstance(mcp_servers, dict):
-        mcp_servers = {}
     adapter = CodexHarnessAdapter()
-    migrated = adapter._refresh_managed_proxy_interpreters(mcp_servers)
     workspace_servers = workspace_payload.get("mcp_servers")
     workspace_names = (
         {name for name, value in workspace_servers.items() if isinstance(name, str) and isinstance(value, dict)}
         if isinstance(workspace_servers, dict)
         else set()
     )
-    for server in managed_servers:
-        if adapter._should_skip_workspace_override(
-            context=context, server=server, existing_workspace_server_names=workspace_names
-        ):
-            mcp_servers.pop(server.name, None)
-        else:
-            mcp_servers[server.name] = adapter._proxy_server_entry(context, server)
-    rendered["mcp_servers"] = mcp_servers
-    return rendered, migrated
+    entries = [
+        (
+            server.name,
+            None
+            if adapter._should_skip_workspace_override(
+                context=context, server=server, existing_workspace_server_names=workspace_names
+            )
+            else adapter._proxy_server_entry(context, server),
+        )
+        for server in managed_servers
+    ]
+    wire = _Wire(payload, *(entry for _name, entry in entries if entry is not None))
+    fields: dict[str, object] = {
+        "payload": wire.text(payload),
+        "servers": [{"name": name, "entry": None if entry is None else wire.text(entry)} for name, entry in entries],
+    }
+    answer = _codex("managed_mcp", context, **fields)
+    if set(answer) == {"reply"}:
+        # Each Guard proxy is relaunched the way this process would write it.
+        python = _guard_python_executable()
+        relaunch: dict[str, object] = {}
+        for name, args in answer["reply"]["relaunch"].items():
+            _, python_args = python_proxy_launch(None, tuple(str(arg) for arg in args))
+            launcher, launch_args = mcp_proxy_launch(python, python_args)
+            relaunch[str(name)] = [launcher, list(launch_args)]
+        answer = _codex("managed_mcp", context, **fields, relaunch=relaunch)
+    rendered = wire.decode(_reply_text(answer, "rendered"))
+    return rendered, tuple(str(name) for name in answer["migrated"])
+
+
+def _alternate_cleanup(
+    context: HarnessContext,
+    payload: dict[str, object],
+    *,
+    remove_hooks: bool,
+    managed_server_names: Sequence[str],
+) -> tuple[dict[str, object], bool, bool]:
+    """The cleaned payload, and whether it or its hook tables changed."""
+    legacy: tuple[dict[str, object], bool] | None = None
+    hooks = payload.get("hooks")
+    if remove_hooks and isinstance(hooks, dict):
+        bindings = _current_install_legacy_bindings(context, hooks)
+        cleaned, removed = _remove_manifest_bound_hook_events(hooks, bindings)
+        legacy = (cleaned, bool(removed))
+    wire = _Wire(payload, *(() if legacy is None else (legacy[0],)))
+    answer = _codex(
+        "alternate_cleanup",
+        context,
+        payload=wire.text(payload),
+        remove_hooks=remove_hooks,
+        legacy=None if legacy is None else {"removed": legacy[1], "cleaned": wire.text(legacy[0])},
+        managed_server_names=list(managed_server_names),
+        tokens=wire.meanings,
+    )
+    rendered = wire.decode(_reply_text(answer, "rendered"))
+    return rendered, answer.get("changed") is True, answer.get("hooks_changed") is True
 
 
 def render_codex_alternate_cleanup(
@@ -944,43 +852,9 @@ def render_codex_alternate_cleanup(
     managed_server_names: Sequence[str] = (),
 ) -> dict[str, object]:
     """Render scoped alternate cleanup without publishing or changing its input."""
-    rendered = deepcopy(payload)
-    hooks = rendered.get("hooks")
-    if remove_hooks:
-        if isinstance(hooks, dict):
-            bindings = _current_install_legacy_bindings(context, hooks)
-            cleaned, removed = _remove_manifest_bound_hook_events(hooks, bindings)
-            if removed:
-                if cleaned:
-                    rendered["hooks"] = cleaned
-                else:
-                    rendered.pop("hooks", None)
-        if not _hooks_have_registered_entries(rendered.get("hooks")):
-            features = rendered.get("features")
-            if isinstance(features, dict):
-                for name in ("codex_hooks", "hooks"):
-                    features.pop(name, None)
-                if not features:
-                    rendered.pop("features", None)
-    servers = rendered.get("mcp_servers")
-    if isinstance(servers, dict):
-        removed_server = False
-        candidates: dict[str, object] = {}
-        for name in managed_server_names:
-            server = servers.get(name)
-            if not isinstance(server, dict):
-                continue
-            # Malformed entries cannot be identified as an original managed server.
-            if not isinstance(server.get("args", []), list):
-                continue
-            candidates[name] = {**server, "args": server.get("args", [])}
-        proxies = _guard_proxy_server_names(candidates)
-        for name in candidates:
-            if name not in proxies:
-                servers.pop(name)
-                removed_server = True
-        if removed_server and not servers:
-            rendered.pop("mcp_servers", None)
+    rendered, _changed, _hooks_changed = _alternate_cleanup(
+        context, payload, remove_hooks=remove_hooks, managed_server_names=managed_server_names
+    )
     return rendered
 
 
@@ -999,12 +873,8 @@ def prepare_codex_alternate_cleanup(
     before = _snapshot(config_path)
     payload = parse_toml_object(before, path=config_path, label="Codex config file")
     mode = config_path.stat().st_mode & 0o777 if before is not None else 0o600
-    rendered = render_codex_alternate_cleanup(
+    rendered, changed, hooks_changed = _alternate_cleanup(
         context, payload, remove_hooks=remove_hooks, managed_server_names=managed_server_names
-    )
-    changed = rendered != payload
-    hooks_changed = remove_hooks and any(
-        (name in rendered, rendered.get(name)) != (name in payload, payload.get(name)) for name in ("hooks", "features")
     )
     change = TransitionFile(
         config_path,
@@ -1077,55 +947,13 @@ def _payload_has_hooks_feature_enabled(config_payload: Mapping[str, object]) -> 
     return features.get("hooks") is not False
 
 
-def _prepare_codex_shell_cleanup_file(path: Path, *, remove_entire_file: bool = False) -> TransitionFile:
-    from ..codex_hook_recovery import _snapshot
-    from ..runtime_transition import TransitionFile
-
-    path = path.parent.resolve(strict=False) / path.name
-    before = _snapshot(path)
-    mode = path.stat().st_mode & 0o777 if before is not None else 0o600
-    after = before
-    if before is not None:
-        if remove_entire_file:
-            after = None
-        else:
-            cleaned = _remove_managed_shell_guard_blocks(before)
-            if cleaned != before:
-                after = cleaned or None
-    return TransitionFile(path, before, after, before_mode=mode, after_mode=mode, no_follow=True)
-
-
 def prepare_codex_shell_cleanup(context: HarnessContext) -> tuple[TransitionFile, ...]:
     """Capture all legacy shell removals without reading through symlinks or publishing."""
     from ..runtime_transition import RuntimeTransition
 
-    root = context.guard_home / "managed" / "codex"
-    files = tuple(
-        _prepare_codex_shell_cleanup_file(root / name, remove_entire_file=True)
-        for name in (
-            "codex-zshenv-guard.zsh",
-            "codex-bashenv-guard.bash",
-            "codex-fish-guard.fish",
-        )
-    ) + tuple(
-        _prepare_codex_shell_cleanup_file(path)
-        for path in (
-            context.home_dir / ".zshenv",
-            context.home_dir / ".bashrc",
-            context.home_dir / ".bash_profile",
-            context.home_dir / ".bash_login",
-            context.home_dir / ".profile",
-            context.home_dir / ".config" / "fish" / "conf.d" / "hol-guard-codex.fish",
-        )
-    )
+    files = tuple(planned_files(_codex("shell_cleanup", context)))
     RuntimeTransition._compare({"files": [change.payload() for change in files]}, "before")
     return files
-
-
-def _hooks_have_registered_entries(hooks: object) -> bool:
-    if not isinstance(hooks, dict):
-        return False
-    return any(isinstance(groups, list) and bool(groups) for groups in hooks.values())
 
 
 def _verify_live_hook_manifest(
@@ -1151,45 +979,21 @@ def codex_native_hook_state(context: HarnessContext) -> dict[str, object]:
     hooks = toml_hooks if isinstance(toml_hooks, dict) else json_hooks
     integrity = _verify_live_hook_manifest(context, config_path=config_path, hooks=hooks)
     event_matches = overlay_live_owned_event_matches(integrity, hooks)
-    pre_tool_hook_installed = event_matches.get("PreToolUse") is True
-    permission_hook_installed = event_matches.get("PermissionRequest") is True
-    prompt_hook_installed = event_matches.get("UserPromptSubmit") is True
-    post_tool_hook_installed = event_matches.get("PostToolUse") is True
-    managed_hook_installed = all(
-        (pre_tool_hook_installed, permission_hook_installed, prompt_hook_installed, post_tool_hook_installed)
+    read = {"features": features, "toml_hooks": toml_hooks, "json_hooks": json_hooks}
+    wire = _Wire(read, integrity)
+    read_text = wire.text(read)
+    integrity_text = wire.text(integrity)
+    answer = _codex(
+        "hook_state",
+        context,
+        read=read_text,
+        integrity=integrity_text,
+        event_matches={str(event): matched is True for event, matched in event_matches.items()},
+        trust_stale=codex_hook_trust_stale(config_payload, config_path),
+        config_path=str(config_path),
+        hooks_path=str(hooks_path),
     )
-    authoritative_shell_hook_installed = pre_tool_hook_installed and permission_hook_installed
-    integrity_valid = integrity.get("integrity_status") == "valid"
-    features_is_table = isinstance(features, dict)
-    hooks_feature_enabled = not features_is_table or features.get("hooks") is not False
-    legacy_codex_hooks_enabled = features_is_table and features.get("codex_hooks") is True
-    return {
-        "config_path": str(config_path),
-        "config_present": config_path.is_file(),
-        "hooks_path": str(hooks_path),
-        "hooks_present": hooks_path.is_file(),
-        "toml_hooks_present": _hooks_have_registered_entries(toml_hooks),
-        "json_hooks_present": _hooks_have_registered_entries(json_hooks),
-        "hooks_enabled": hooks_feature_enabled,
-        "codex_hooks_enabled": hooks_feature_enabled,
-        "legacy_codex_hooks_enabled": legacy_codex_hooks_enabled,
-        "managed_pre_tool_hook_installed": pre_tool_hook_installed,
-        "managed_permission_request_hook_installed": permission_hook_installed,
-        "managed_prompt_hook_installed": prompt_hook_installed,
-        "managed_post_tool_hook_installed": post_tool_hook_installed,
-        "managed_hook_installed": managed_hook_installed,
-        "shell_enforcement_boundary": _AUTHORITATIVE_ENFORCEMENT_BOUNDARY,
-        "shell_hook_installed": authoritative_shell_hook_installed,
-        "shell_protection_active": hooks_feature_enabled and authoritative_shell_hook_installed and integrity_valid,
-        "shell_reason_code": (
-            None
-            if hooks_feature_enabled and authoritative_shell_hook_installed and integrity_valid
-            else _AUTHORITATIVE_HOOK_UNAVAILABLE_REASON
-        ),
-        "protection_active": hooks_feature_enabled and managed_hook_installed and integrity_valid,
-        "hook_trust_stale": codex_hook_trust_stale(config_payload, config_path),
-        **{key: value for key, value in integrity.items() if key != "event_matches"},
-    }
+    return wire.decode(_reply_text(answer, "state"))
 
 
 def _require_codex_authoritative_shell_hook(context: HarnessContext) -> None:
@@ -1203,24 +1007,39 @@ def _require_codex_authoritative_shell_hook(context: HarnessContext) -> None:
     )
 
 
-class CodexHarnessAdapter(HarnessAdapter):
+def _install_manifest(
+    context: HarnessContext, kind: str, shim_manifest: Mapping[str, object], **fields: object
+) -> dict[str, object]:
+    fields.setdefault("hooks_path", str(CodexHarnessAdapter._hooks_path(context)))
+    answer = _codex(
+        "manifest",
+        context,
+        kind=kind,
+        shim=json.dumps(shim_manifest),
+        config_path=str(CodexHarnessAdapter._target_config_path(context)),
+        hook_config_path=str(CodexHarnessAdapter._hook_config_path(context)),
+        workspace_explicit=context.workspace_override_explicit,
+        **fields,
+    )
+    return json.loads(_reply_text(answer, "manifest"))
+
+
+def _server_fields(
+    detection: HarnessDetection, managed_servers: Sequence[ManagedMcpServer], migrated: Sequence[str]
+) -> dict[str, object]:
+    return {
+        "managed": [server.name for server in managed_servers],
+        "migrated": list(migrated),
+        "skipped": list(skipped_stdio_server_names(detection)),
+        "source_config_paths": list(detection.config_paths),
+    }
+
+
+class CodexHarnessAdapter(NativeHarnessAdapter):
     """Discover Codex MCP servers and wrapper surfaces."""
 
-    harness = "codex"
-    executable = "codex"
-    approval_tier = "native-or-center"
-    approval_summary = (
-        "Guard uses native Codex PreToolUse hooks as the authoritative complete-command boundary, "
-        "PermissionRequest hooks for Codex approval prompts, prompt hooks for sensitive file-read requests, "
-        "keeps same-chat approvals for managed MCP tool calls, and falls back to the local approval center when "
-        "Codex cannot answer."
-    )
-    fallback_hint = (
-        "If Codex cannot render or return the inline approval request, or the native PreToolUse hook blocks a "
-        "sensitive complete command, Guard will queue it in the local approval center."
-    )
-    approval_prompt_channel = "native"
-    approval_auto_open_browser = False
+    def __init__(self) -> None:
+        super().__init__("codex", (), "")
 
     def launch_command(self, context: HarnessContext, passthrough_args: list[str]) -> list[str]:
         _require_codex_authoritative_shell_hook(context)
@@ -1270,9 +1089,6 @@ class CodexHarnessAdapter(HarnessAdapter):
             return "project"
         return "global"
 
-    def policy_path(self, context: HarnessContext) -> Path:
-        return context.home_dir / ".codex" / "config.toml"
-
     @staticmethod
     def _hooks_path(context: HarnessContext) -> Path:
         return context.home_dir / ".codex" / "hooks.json"
@@ -1318,6 +1134,7 @@ class CodexHarnessAdapter(HarnessAdapter):
             }
         authenticated_manifest = load_hook_manifest_baseline(_hook_manifest_spec(context))
         hook_config_path = self._hook_config_path(context)
+        registration = _hook_registration(context)
         sources: list[dict[str, object]] = []
         for config_path, hooks_path in pairs:
             sources.append(
@@ -1327,8 +1144,8 @@ class CodexHarnessAdapter(HarnessAdapter):
                     "config_scope": self._scope_for(context, config_path),
                     "hooks_scope": self._scope_for(context, hooks_path),
                     "authenticated": config_path == hook_config_path,
-                    "config_legacy": _legacy_wire_bindings(context, config_payloads[config_path]),
-                    "hooks_legacy": _legacy_wire_bindings(context, hooks_payloads[hooks_path]),
+                    "config_legacy": _legacy_wire_bindings(context, config_payloads[config_path], registration),
+                    "hooks_legacy": _legacy_wire_bindings(context, hooks_payloads[hooks_path], registration),
                 }
             )
         request: dict[str, object] = {
@@ -1426,26 +1243,21 @@ class CodexHarnessAdapter(HarnessAdapter):
         files.append(backup)
         for config, hooks in pairs:
             migration = migrations[config]
-            candidate = (
-                payload
-                if config == spec.config_path
-                else render_codex_alternate_cleanup(
+            candidate = payload
+            if config != spec.config_path:
+                before_change = migration.files[0]
+                migrated = before_change.before != before_change.after
+                # The cleanup is rendered onto the migrated payload, so a change
+                # either step made shows up against the file as it was read.
+                candidate, cleanup_changed, hooks_changed = _alternate_cleanup(
                     context,
                     migration.config_payload,
+                    remove_hooks=True,
                     managed_server_names=tuple(
                         server.name for server in managed_servers if Path(server.config_path) == config
                     ),
                 )
-            )
-            if config != spec.config_path:
-                before_change = migration.files[0]
-                original_payload = parse_toml_object(contents[config], path=config, label="Codex config file")
-                changed = candidate != original_payload
-                hooks_changed = any(
-                    (name in candidate, candidate.get(name)) != (name in original_payload, original_payload.get(name))
-                    for name in ("hooks", "features")
-                )
-                migrated = before_change.before != before_change.after
+                changed = migrated or cleanup_changed
                 mode = 0o600 if migrated or hooks_changed else before_change.before_mode
                 files.append(
                     TransitionFile(
@@ -1471,14 +1283,7 @@ class CodexHarnessAdapter(HarnessAdapter):
                 context=context,
                 owned_bindings=bindings if config == spec.config_path else (),
             )
-            scope = self._scope_for(context, config)
-            enabled = _payload_has_hooks_feature_enabled(candidate)
-            expected = _migration_group_identities(expected_payload, source_scope=scope, source_hooks_enabled=enabled)
-            actual = _migration_group_identities(candidate, source_scope=scope, source_hooks_enabled=enabled)
-            if not expected.issubset(actual):
-                raise RuntimeError(
-                    f"{_CODEX_HOOK_MIGRATION_READBACK_MISMATCH}: planned Codex migration lost user hooks."
-                )
+            _require_migrated_hooks(context, expected_payload, candidate, source_scope=self._scope_for(context, config))
             files.extend(migration.files[1:])
         files.extend(prepare_codex_shell_cleanup(context))
         shim = prepare_guard_shim(self.harness, context)
@@ -1503,29 +1308,15 @@ class CodexHarnessAdapter(HarnessAdapter):
         files = list(unique_files.values())
         prepared = PreparedHarnessInstall(
             tuple(files),
-            {
-                "harness": self.harness,
-                "active": True,
-                "config_path": str(spec.config_path),
-                **shim.manifest,
-                "mode": "codex-mcp-proxy",
-                "managed_config_path": str(spec.config_path),
-                "managed_hook_config_path": str(spec.config_path),
-                "managed_hook_manifest_path": str(publication.manifest_change.path),
-                "managed_hook_integrity": "authenticated",
-                "hook_workspace_explicit": context.workspace_override_explicit,
-                "managed_hooks_path": str(self._hooks_path(context)),
-                "enforcement_boundary": _AUTHORITATIVE_ENFORCEMENT_BOUNDARY,
-                "legacy_shell_guard_cleanup": "complete",
-                "backup_path": str(backup.path),
-                "managed_servers": [server.name for server in managed_servers],
-                "migrated_proxy_servers": list(migrated_proxies),
-                "runtime_restart_required": bool(migrated_proxies),
-                "skipped_servers": [
-                    name for name in skipped_stdio_server_names(detection) if name not in migrated_proxies
-                ],
-                "source_config_paths": list(detection.config_paths),
-            },
+            _install_manifest(
+                context,
+                "prepare",
+                shim.manifest,
+                manifest_path=str(publication.manifest_change.path),
+                integrity="authenticated",
+                backup_path=str(backup.path),
+                **_server_fields(detection, managed_servers, migrated_proxies),
+            ),
         )
         if len({change.path for change in files}) != len(files):
             raise TransitionError("adapter_preparation_generation_conflict")
@@ -1674,27 +1465,19 @@ class CodexHarnessAdapter(HarnessAdapter):
         self._uninstall_shell_guard(context)
         _require_codex_authoritative_shell_hook(context)
         shim_manifest = install_guard_shim(self.harness, context)
-        return {
-            "harness": self.harness,
-            "active": True,
-            "config_path": str(target_config_path),
-            **shim_manifest,
-            "mode": "codex-mcp-proxy",
-            "managed_config_path": str(target_config_path),
-            "managed_hook_config_path": str(hook_config_path),
-            "managed_hook_manifest_path": str(hook_state["manifest_path"]),
-            "managed_hook_integrity": str(hook_state["integrity_status"]),
-            "hook_workspace_explicit": context.workspace_override_explicit,
-            "managed_hooks_path": str(hooks_path),
-            "enforcement_boundary": _AUTHORITATIVE_ENFORCEMENT_BOUNDARY,
-            "legacy_shell_guard_cleanup": "complete",
-            "backup_path": str(backup_path),
-            "managed_servers": [server.name for server in managed_servers],
-            "migrated_proxy_servers": list(migrated_proxy_servers),
-            "runtime_restart_required": bool(migrated_proxy_servers),
-            "skipped_servers": list(skipped_servers),
-            "source_config_paths": list(detection.config_paths),
-        }
+        return _install_manifest(
+            context,
+            "install",
+            shim_manifest,
+            hooks_path=str(hooks_path),
+            manifest_path=str(hook_state["manifest_path"]),
+            integrity=str(hook_state["integrity_status"]),
+            backup_path=str(backup_path),
+            managed=[server.name for server in managed_servers],
+            migrated=list(migrated_proxy_servers),
+            skipped=list(skipped_servers),
+            source_config_paths=list(detection.config_paths),
+        )
 
     def uninstall(self, context: HarnessContext) -> dict[str, object]:
         from ..runtime_transition import assert_transition_mutation_allowed
@@ -1747,17 +1530,9 @@ class CodexHarnessAdapter(HarnessAdapter):
         remove_hook_secret_if_unused(context.guard_home)
         self._uninstall_shell_guard(context)
         shim_manifest = remove_guard_shim(self.harness, context)
-        return {
-            "harness": self.harness,
-            "active": False,
-            "config_path": str(target_config_path),
-            **shim_manifest,
-            "mode": "codex-mcp-proxy",
-            "managed_config_path": str(target_config_path),
-            "managed_hook_config_path": str(hook_config_path),
-            "managed_hooks_path": str(hooks_path),
-            "backup_path": str(backup_path),
-        }
+        return _install_manifest(
+            context, "uninstall", shim_manifest, hooks_path=str(hooks_path), backup_path=str(backup_path)
+        )
 
     def diagnostics(self, context: HarnessContext) -> dict[str, object]:
         payload = super().diagnostics(context)
@@ -1767,15 +1542,14 @@ class CodexHarnessAdapter(HarnessAdapter):
         warnings = finalize_codex_doctor_warnings([str(item) for item in items if isinstance(item, str)], hook_state)
         payload["warnings"] = warnings
         base_status = payload.get("setup_status")
-        setup_status = finalize_codex_doctor_setup_status(base_status, hook_state, warnings)
-        leftover_only = not setup_failures_besides_missing_command(warnings)
-        if setup_status == "not_found" and not leftover_only:
-            # Hook warnings are added after the base status, so recheck before calling it leftover config.
-            setup_status = "broken"
-        elif setup_status == "broken" and base_status == "not_found" and leftover_only:
-            # A managed hook that Codex is no longer there to run is part of the same
-            # leftover configuration, not a second fault to report as a broken setup.
-            setup_status = "not_found"
+        answer = _codex(
+            "doctor_status",
+            context,
+            warnings=warnings,
+            status=finalize_codex_doctor_setup_status(base_status, hook_state, warnings),
+            base_status=base_status,
+        )
+        setup_status = answer["status"]
         payload["setup_status"] = setup_status
         apply_codex_hook_trust_doctor(payload, hook_state)
         payload["native_hook_state"] = hook_state
@@ -1801,25 +1575,6 @@ class CodexHarnessAdapter(HarnessAdapter):
             context=context,
             server=server,
         )
-
-    @staticmethod
-    def _refresh_managed_proxy_interpreters(mcp_servers: dict[str, object]) -> tuple[str, ...]:
-        current_interpreter = _guard_python_executable()
-        migrated: list[str] = []
-        proxies = _guard_proxy_server_names(mcp_servers)
-        for name, server_config in mcp_servers.items():
-            if name not in proxies or not isinstance(server_config, dict):
-                continue
-            command = server_config.get("command")
-            args = tuple(value for value in server_config["args"] if isinstance(value, str))
-            _, python_args = python_proxy_launch(None, args)
-            launcher, launch_args = mcp_proxy_launch(current_interpreter, python_args)
-            if command == launcher and list(args) == launch_args:
-                continue
-            server_config["command"] = launcher
-            server_config["args"] = launch_args
-            migrated.append(name)
-        return tuple(sorted(migrated))
 
     _should_skip_workspace_override = staticmethod(should_skip_workspace_override)
 
@@ -1871,6 +1626,7 @@ class CodexHarnessAdapter(HarnessAdapter):
                     written_payload,
                     source_scope=self._scope_for(context, config_path),
                     source_path=config_path,
+                    context=context,
                 )
             except BaseException:
                 if original_text is None:
@@ -1934,25 +1690,14 @@ class CodexHarnessAdapter(HarnessAdapter):
                 owned_bindings=owned_bindings if config_path == hook_config_path else (),
             )
             written_payload = _strict_toml_object(config_path, label="migrated Codex config file")
-            source_hooks_enabled = _payload_has_hooks_feature_enabled(written_payload)
-            expected = _migration_group_identities(
+            _require_migrated_hooks(
+                context,
                 expected_payload,
-                source_scope=source_scope,
-                source_hooks_enabled=source_hooks_enabled,
-            )
-            if not expected:
-                continue
-            actual = _migration_group_identities(
                 written_payload,
                 source_scope=source_scope,
-                source_hooks_enabled=source_hooks_enabled,
+                hooks_path=hooks_path,
+                config_path=config_path,
             )
-            if not expected.issubset(actual):
-                raise RuntimeError(
-                    f"{_CODEX_HOOK_MIGRATION_READBACK_MISMATCH}: {config_path} does not contain every canonical "
-                    f"hook migrated from {hooks_path}. The legacy JSON source was retained; repair the config and "
-                    "retry migration."
-                )
 
     def _remove_json_hook_files(
         self,
@@ -2132,6 +1877,7 @@ class CodexHarnessAdapter(HarnessAdapter):
                 written_payload,
                 source_scope=CodexHarnessAdapter._scope_for(context, config_path),
                 source_path=config_path,
+                context=context,
             )
             state = codex_native_hook_state(context)
             if not bool(state.get("protection_active")):

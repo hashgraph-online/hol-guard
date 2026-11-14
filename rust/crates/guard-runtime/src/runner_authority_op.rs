@@ -130,6 +130,7 @@ pub(crate) fn dispatch(kind: &str, args: &Value) -> KindResult {
         "catalog_provenance" => crate::catalog_provenance::dispatch(args),
         "evaluation_contract" => crate::evaluation_contract::dispatch(args),
         "connector_regroup" => crate::connector_regroup::dispatch(args),
+        "harness_adapter" => crate::harness_adapter::dispatch(args),
         "hermes_install_plan" => crate::hermes_install_plan::dispatch(args),
         "harness_shim_refresh" => crate::harness_shim_refresh::dispatch(args),
         "cloud_actions_access" => crate::cloud_actions_access::dispatch(args),

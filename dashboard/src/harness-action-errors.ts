@@ -143,3 +143,22 @@ export function resolveApprovalGateSyncFailure(
     message: readHarnessActionUserMessage(error, "Sync failed."),
   };
 }
+
+// What the setup panel shows when a connect, test, repair or disconnect fails.
+// Guard's own explanation wins over its reason code: a refusal such as
+// codex_hook_owner_conflict carries the one edit that clears it.
+export function setupActionErrorMessage(error: GuardHarnessActionError): string {
+  if (error.payload?.error === "confirmation_required") {
+    return "Disconnect requires confirmation so accidental clicks cannot remove local protection.";
+  }
+  if (error.payload?.error === "approval_gate_totp_required") {
+    return "Enter a fresh authenticator code to disconnect this app.";
+  }
+  if (
+    error.payload?.error === "approval_gate_required"
+    || error.payload?.error === "approval_gate_password_required"
+  ) {
+    return "Enter your approval password to disconnect this app.";
+  }
+  return error.payload?.message ?? error.payload?.error ?? error.message;
+}

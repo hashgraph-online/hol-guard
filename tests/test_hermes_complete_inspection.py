@@ -8,20 +8,17 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.adapters import hermes_file_inspection as inspection_module
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.adapters.hermes import HermesHarnessAdapter
-from codex_plugin_scanner.guard.adapters.hermes_file_inspection import (
-    HERMES_CONFIG_MAX_BYTES,
-    HERMES_CONFIG_MAX_DEPTH,
-    HERMES_CONFIG_MAX_NODES,
-    HERMES_PREVIEW_BYTES,
-    inspect_hermes_config,
-    inspect_hermes_text_file,
-)
 from codex_plugin_scanner.guard.consumer import artifact_hash
 from codex_plugin_scanner.guard.models import GuardArtifact, HarnessDetection
 from tests.artifact_risk_support import artifact_risk_signals_typed
+
+# The native inspection limits.
+HERMES_PREVIEW_BYTES = 64 * 1024
+HERMES_CONFIG_MAX_BYTES = 2 * 1024 * 1024
+HERMES_CONFIG_MAX_DEPTH = 32
+HERMES_CONFIG_MAX_NODES = 20_000
 
 
 def _context(tmp_path: Path) -> HarnessContext:
@@ -43,6 +40,15 @@ def _skill(tmp_path: Path) -> Path:
         tmp_path / ".hermes" / "skills" / "dev" / "complete" / "SKILL.md",
         "---\nname: complete\n---\n# Complete\n",
     )
+
+
+def _config_reason(tmp_path: Path, name: str, content: str) -> object:
+    """The reason detection gives for a Hermes config, or ``None`` when it parsed completely."""
+
+    _write(tmp_path / ".hermes" / name, content)
+    detection = HermesHarnessAdapter().detect(_context(tmp_path))
+    issues = [item for item in detection.artifacts if item.artifact_type == "configuration"]
+    return issues[0].metadata["config_reason"] if issues else None
 
 
 def _artifact(detection: HarnessDetection, artifact_type: str) -> GuardArtifact:
@@ -131,96 +137,51 @@ def test_oversized_config_is_hashed_but_never_partially_parsed(tmp_path: Path) -
     assert any("no partial configuration" in warning for warning in detection.warnings)
 
 
-def test_config_parse_buffer_enforces_exact_byte_limit(tmp_path: Path) -> None:
-    at_limit = _write(
-        tmp_path / "at-limit.json",
-        (" " * (HERMES_CONFIG_MAX_BYTES - 2)) + "{}",
-    )
-    over_limit = _write(
-        tmp_path / "over-limit.json",
-        (" " * (HERMES_CONFIG_MAX_BYTES - 2)) + "{} ",
-    )
-
-    accepted = inspect_hermes_config(at_limit, syntax="json")
-    rejected = inspect_hermes_config(over_limit, syntax="json")
-
-    assert accepted.complete is True
-    assert accepted.file.size_bytes == HERMES_CONFIG_MAX_BYTES
-    assert accepted.payload == {}
-    assert rejected.complete is False
-    assert rejected.file.size_bytes == HERMES_CONFIG_MAX_BYTES + 1
-    assert rejected.file.content is None
-    assert rejected.reason == "file_too_large"
+@pytest.mark.parametrize(("padding", "reason"), ((0, None), (1, "file_too_large")))
+def test_config_parse_buffer_enforces_exact_byte_limit(tmp_path: Path, padding: int, reason: object) -> None:
+    content = (" " * (HERMES_CONFIG_MAX_BYTES - 2)) + "{}" + (" " * padding)
+    assert _config_reason(tmp_path, "mcp_servers.json", content) == reason
 
 
 @pytest.mark.parametrize(
     ("name", "content", "reason"),
     [
         (
-            "duplicate.yaml",
+            "config.yaml",
             "mcp_servers:\n  same: {command: python}\n  same: {command: bash}\n",
             "config_duplicate_key",
         ),
         (
-            "alias.yaml",
+            "config.yaml",
             "defaults: &defaults {command: python}\nmcp_servers: {same: *defaults}\n",
             "config_alias_limit_exceeded",
         ),
         (
-            "duplicate.json",
+            "mcp_servers.json",
             '{"same":{"command":"python"},"same":{"command":"bash"}}',
             "config_duplicate_key",
         ),
     ],
 )
-def test_duplicate_keys_and_yaml_aliases_fail_closed(
-    tmp_path: Path,
-    name: str,
-    content: str,
-    reason: str,
-) -> None:
-    path = _write(tmp_path / name, content)
-    syntax = "json" if path.suffix == ".json" else "yaml"
-
-    inspection = inspect_hermes_config(path, syntax=syntax)  # type: ignore[arg-type]
-
-    assert inspection.complete is False
-    assert inspection.reason == reason
-    assert inspection.payload is None
+def test_duplicate_keys_and_yaml_aliases_fail_closed(tmp_path: Path, name: str, content: str, reason: str) -> None:
+    assert _config_reason(tmp_path, name, content) == reason
 
 
 def test_excessive_json_depth_fails_closed(tmp_path: Path) -> None:
     value = "null"
     for _ in range(HERMES_CONFIG_MAX_DEPTH + 2):
         value = '{"nested":' + value + "}"
-    path = _write(tmp_path / "deep.json", value)
-
-    inspection = inspect_hermes_config(path, syntax="json")
-
-    assert inspection.complete is False
-    assert inspection.reason == "config_depth_limit_exceeded"
+    assert _config_reason(tmp_path, "mcp_servers.json", value) == "config_depth_limit_exceeded"
 
 
 def test_excessive_json_node_count_fails_closed(tmp_path: Path) -> None:
-    path = _write(
-        tmp_path / "many-nodes.json",
-        json.dumps({"items": [None] * HERMES_CONFIG_MAX_NODES}),
-    )
-
-    inspection = inspect_hermes_config(path, syntax="json")
-
-    assert inspection.complete is False
-    assert inspection.reason == "config_node_limit_exceeded"
+    content = json.dumps({"items": [None] * HERMES_CONFIG_MAX_NODES})
+    assert _config_reason(tmp_path, "mcp_servers.json", content) == "config_node_limit_exceeded"
 
 
 @pytest.mark.parametrize("constant", ("NaN", "Infinity", "-Infinity"))
 def test_nonfinite_json_numbers_fail_closed(tmp_path: Path, constant: str) -> None:
-    path = _write(tmp_path / "nonfinite.json", f'{{"value":{constant}}}')
-
-    inspection = inspect_hermes_config(path, syntax="json")
-
-    assert inspection.complete is False
-    assert inspection.reason == "config_value_invalid"
+    assert _config_reason(tmp_path, "mcp_servers.json", f'{{"value":{constant}}}') == "config_value_invalid"
 
 
 @pytest.mark.parametrize(
@@ -282,42 +243,3 @@ def test_skill_symlink_escape_marks_directory_identity_incomplete(tmp_path: Path
     assert identity["reason"] == "symlink_escape"
     assert subfile.metadata["inspection_reason"] == "file_symlink_unsupported"
     assert detection.warnings
-
-
-@pytest.mark.parametrize(
-    "answer",
-    (
-        None,
-        {"file": {"preview": "", "complete": True}},
-        {
-            "file": {
-                "preview": "",
-                "content": None,
-                "content_hash": None,
-                "size_bytes": 0,
-                "readable": True,
-                "complete": True,
-                "analysis_truncated": False,
-                "reason": "file_missing",
-            },
-            "payload": {},
-            "complete": True,
-            "reason": None,
-        },
-    ),
-)
-def test_unavailable_or_malformed_runtime_answers_are_unreadable(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, answer: object
-) -> None:
-    path = _write(tmp_path / "config.yaml", "mcp_servers: {}\n")
-
-    def runtime_answer(*_args: object, **_kwargs: object) -> object:
-        return answer
-
-    monkeypatch.setattr(inspection_module, "runtime_answer", runtime_answer)
-
-    text = inspect_hermes_text_file(path)
-    config = inspect_hermes_config(path, syntax="yaml")
-
-    assert (text.complete, text.readable, text.reason) == (False, False, "file_unreadable")
-    assert (config.complete, config.payload, config.reason) == (False, None, "file_unreadable")

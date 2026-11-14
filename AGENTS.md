@@ -29,6 +29,14 @@ After the extension ships in a release, follow
 to turn it on and run its destructive and safe cases through the agent. Use only disposable
 targets for the destructive case and never point it at real data or shared infrastructure.
 
+## Cloud action pack contributions
+
+Packs in `contributions/cloud-actions/` follow
+[Contribute a cloud action pack](docs/guard/extensions/cloud-action-pack-contributing.md). Draft with
+`hol-guard extensions generate --cloud`, check with `hol-guard extensions validate --cloud` and
+`hol-guard command explain --cloud`, and fill in the **Cloud action pack** pull-request template. Leave
+`provider.publisher.verified` as `false`, and use synthetic identifiers in every fixture.
+
 ## Repository review guidance
 
 ### File-size review policy

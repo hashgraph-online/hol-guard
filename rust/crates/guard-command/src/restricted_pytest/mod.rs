@@ -212,6 +212,9 @@ mod environment;
 mod executables;
 mod framework_grants;
 mod git_plan;
+mod inline_git;
+#[cfg(test)]
+mod inline_git_tests;
 mod launch_roots;
 mod launch_shebang;
 mod mapping;

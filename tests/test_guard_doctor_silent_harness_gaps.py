@@ -1,12 +1,13 @@
 from __future__ import annotations
 
+import os
 from pathlib import Path
+from unittest import mock
 
 import pytest
 
 from codex_plugin_scanner.guard.adapters import get_adapter
-from codex_plugin_scanner.guard.adapters.base import HarnessContext
-from codex_plugin_scanner.guard.adapters.omp_code_mode import omp_code_mode_warnings
+from codex_plugin_scanner.guard.adapters.base import HarnessAdapter, HarnessContext
 from codex_plugin_scanner.guard.codex_hook_trust import (
     CODEX_HOOK_TRUST_WARNING,
     apply_codex_hook_trust_doctor,
@@ -126,6 +127,23 @@ OMP_CODE_MODE_WARNING = (
     "Oh My Pi Codex code mode sends every tool call through eval, which Guard reviews. "
     "Set providers.openai-codex.codeMode to off in {path} so Guard can allow ordinary reads and edits."
 )
+_AGENT_ENV = ("PI_CODING_AGENT_DIR", "PI_CONFIG_DIR")
+
+
+def omp_code_mode_warnings(home: Path, workspace: Path | None = None, *, environ: dict[str, str]) -> list[str]:
+    """The code-mode warnings the Oh My Pi diagnostics add under ``environ``."""
+    context = HarnessContext(home_dir=home, workspace_dir=workspace, guard_home=home.parent / "guard-home")
+    cleared = {name: "" for name in _AGENT_ENV}
+    with (
+        mock.patch.dict(os.environ, {**cleared, **environ}),
+        mock.patch.object(HarnessAdapter, "diagnostics", lambda _self, _context: {"warnings": []}),
+    ):
+        for name in _AGENT_ENV:
+            if name not in environ:
+                del os.environ[name]
+        return list(get_adapter("omp").diagnostics(context)["warnings"])
+
+
 _AUTO = "providers:\n  openai-codex:\n    codeMode: auto\n"
 _OFF = "providers:\n  openai-codex:\n    codeMode: off\n"
 

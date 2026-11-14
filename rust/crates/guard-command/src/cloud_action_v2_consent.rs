@@ -7,9 +7,16 @@
 //!
 //! Consent only answers a review. Resource and bounded scopes do not answer a
 //! re-approval unless the facts say the change can be undone; permanent or
-//! unknown reversibility needs exact consent.
+//! unknown reversibility needs exact consent. They also never answer a call in
+//! a session that saw an injection signal, or an outbound call in a session
+//! that read untrusted or sensitive content (or keeps no journal), so text an
+//! agent read cannot ride a standing permission out of the account.
+//!
+//! A review offers bounded Always allow choices built from the call's own
+//! known facts, with the selector and its digest, so the host stores exactly
+//! what the evaluator will match.
 
-use guard_contracts::{ActionFactsV2, FactSelectorV2, FactSubjectV2, Match3, ReversibilityV2};
+use guard_contracts::{ActionClassV2, FactSelectorV2, FactSubjectV2, Match3, ReversibilityV2};
 use serde::Deserialize;
 use serde_json::{json, Value};
 
@@ -118,13 +125,48 @@ impl AppliedConsent<'_> {
     }
 }
 
+/// Record or recipient counts a bounded offer rounds up to.
+const BOUND_TIERS: [u64; 9] = [1, 5, 10, 25, 50, 100, 250, 500, 1000];
+
+/// The smallest tier that covers `count`, if any does.
+fn covering_tier(count: u64) -> Option<u64> {
+    BOUND_TIERS.iter().copied().find(|tier| *tier >= count)
+}
+
 /// Whether a scope wider than the exact call may answer this decision.
-fn broad_scope_allowed(action: GuardAction, facts: &ActionFactsV2) -> bool {
-    action != GuardAction::RequireReapproval
+fn broad_scope_allowed(action: GuardAction, subject: &FactSubjectV2<'_>) -> bool {
+    let facts = subject.facts;
+    let undoable = action != GuardAction::RequireReapproval
         || matches!(
             facts.reversibility.known(),
             Some(ReversibilityV2::Reversible | ReversibilityV2::Recoverable)
-        )
+        );
+    undoable && !tainted(subject)
+}
+
+/// Whether the call can carry data or value out of the account. An update or
+/// execute counts unless its audience is known to be internal.
+fn outbound(subject: &FactSubjectV2<'_>) -> bool {
+    let facts = subject.facts;
+    facts.class.is_egress()
+        || (matches!(facts.class, ActionClassV2::Update | ActionClassV2::Execute)
+            && facts.audience.external.known() != Some(&false))
+}
+
+/// A call known to reach outside never gets a bounded offer, so no bounded
+/// consent answers it either, whatever its selector left open.
+fn reaches_outside(subject: &FactSubjectV2<'_>) -> bool {
+    subject.facts.audience.external.known() == Some(&true)
+}
+
+fn tainted(subject: &FactSubjectV2<'_>) -> bool {
+    match subject.session {
+        Some(session) if session.injection_signal_seen => true,
+        Some(session) => {
+            outbound(subject) && (session.untrusted_content_seen || session.sensitive_data_seen)
+        }
+        None => outbound(subject),
+    }
 }
 
 /// The strongest consent that covers this call: `always` before `once`, then
@@ -133,7 +175,7 @@ pub(crate) fn find_consent<'a>(
     saved: &'a [SavedConsentV2],
     context: &ConsentContext<'_>,
 ) -> Option<AppliedConsent<'a>> {
-    let broad = broad_scope_allowed(context.action, context.subject.facts);
+    let broad = broad_scope_allowed(context.action, context.subject);
     saved
         .iter()
         .filter_map(|consent| {
@@ -156,6 +198,7 @@ pub(crate) fn find_consent<'a>(
                     selector,
                     ..
                 } => (broad
+                    && !reaches_outside(context.subject)
                     && action_id == context.action_id
                     && connection_id == context.connection_id
                     && selector.matches(context.subject) == Match3::Yes)
@@ -172,19 +215,113 @@ pub(crate) fn find_consent<'a>(
 }
 
 /// The choices a review offers. Allow once and Always allow are always both
-/// present for the exact call; a resource scope is added when it could apply.
+/// present for the exact call; a resource scope is added when it could apply,
+/// and bounded Always allow choices when the facts can bound the call.
 pub(crate) fn consent_options(
     has_resource: bool,
     action: GuardAction,
-    facts: &ActionFactsV2,
+    subject: &FactSubjectV2<'_>,
 ) -> Vec<Value> {
     let mut options = vec![
         json!({"kind": "once", "scope": "exact"}),
         json!({"kind": "always", "scope": "exact"}),
     ];
-    if has_resource && broad_scope_allowed(action, facts) {
-        options.push(json!({"kind": "once", "scope": "resource"}));
-        options.push(json!({"kind": "always", "scope": "resource"}));
+    if broad_scope_allowed(action, subject) {
+        if has_resource {
+            options.push(json!({"kind": "once", "scope": "resource"}));
+            options.push(json!({"kind": "always", "scope": "resource"}));
+        }
+        options.extend(bounded_offers(subject));
     }
     options
+}
+
+/// Up to two bounded Always allow choices: the smallest tier that covers this
+/// call and the next wider one. Each pins the provider, class, object and
+/// reversibility. An outbound call also pins its recipient domains, its record
+/// tier and, when known, a byte cap. A payment, a call known to reach outside,
+/// an outbound call not known to stay inside, and a call whose bounding facts
+/// are unknown or larger than the widest tier get none.
+fn bounded_offers(subject: &FactSubjectV2<'_>) -> Vec<Value> {
+    let facts = subject.facts;
+    // No selector bounds an amount, so a payment never gets a standing choice.
+    if matches!(facts.class, ActionClassV2::Pay) {
+        return Vec::new();
+    }
+    // A call known to reach outside gets none, and an outbound call must be
+    // known to stay inside: the selector then pins `external: false`.
+    if reaches_outside(subject) {
+        return Vec::new();
+    }
+    let internal = match facts.audience.external.known() {
+        Some(true) => return Vec::new(),
+        Some(false) => true,
+        None if outbound(subject) => return Vec::new(),
+        None => false,
+    };
+    let (Some(object), Some(reversibility)) = (facts.object.known(), facts.reversibility.known())
+    else {
+        return Vec::new();
+    };
+    let mut base = FactSelectorV2 {
+        providers: Some(vec![subject.provider.to_owned()]),
+        classes: Some(vec![facts.class]),
+        objects: Some(vec![*object]),
+        reversibility: Some(vec![*reversibility]),
+        external: internal.then_some(false),
+        ..FactSelectorV2::default()
+    };
+    let count = if facts.class.is_egress() {
+        let Some(domains) = facts.audience.recipient_domains.known() else {
+            return Vec::new();
+        };
+        if domains.is_empty() {
+            return Vec::new();
+        }
+        base.recipient_domains = Some(domains.clone());
+        // An outbound consent also caps what it carries: the records at the
+        // tier that covers this call, and the bytes when they are known. A
+        // call that does not say how many records it carries gets none.
+        let Some(&records) = facts.record_count.known() else {
+            return Vec::new();
+        };
+        let Some(tier) = covering_tier(records) else {
+            return Vec::new();
+        };
+        base.max_record_count = Some(tier);
+        if let Some(&bytes) = facts.byte_count.known() {
+            let Some(cap) = bytes.checked_next_power_of_two() else {
+                return Vec::new();
+            };
+            base.max_byte_count = Some(cap);
+        }
+        facts.recipient_count.known()
+    } else {
+        facts.record_count.known()
+    };
+    let Some(&count) = count else {
+        return Vec::new();
+    };
+    BOUND_TIERS
+        .iter()
+        .copied()
+        .skip_while(|tier| *tier < count)
+        .take(2)
+        .filter_map(|tier| {
+            let mut selector = base.clone();
+            if facts.class.is_egress() {
+                selector.max_recipient_count = Some(tier);
+            } else {
+                selector.max_record_count = Some(tier);
+            }
+            selector.validate().ok()?;
+            let digest = consent_selector_digest(&selector)?;
+            Some(json!({
+                "kind": "always",
+                "scope": "bounded",
+                "selector": selector,
+                "selector_sha256": digest,
+            }))
+        })
+        .collect()
 }

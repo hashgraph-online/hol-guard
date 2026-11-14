@@ -98,15 +98,21 @@ def test_install_migrates_legacy_shell_controls_without_changing_user_bytes(tmp_
     )
 
 
-def test_legacy_shell_cleanup_preserves_crlf_non_utf8_and_unmatched_markers() -> None:
+def test_legacy_shell_cleanup_preserves_crlf_non_utf8_and_unmatched_markers(tmp_path) -> None:
     begin = install_plan.SHELL_GUARD_BEGIN.encode("ascii")
     end = install_plan.SHELL_GUARD_END.encode("ascii")
-    original = b"\xffKEEP\r\n\r\n" + begin + b"\r\nlegacy\r\n" + end + b"\r\nAFTER\xfe\r\n"
-
-    assert codex_adapter._remove_managed_shell_guard_blocks(original) == b"\xffKEEP\r\nAFTER\xfe\r\n"
-    assert codex_adapter._remove_managed_shell_guard_blocks(b"KEEP\n" + begin + b"\nunterminated\n") == (
-        b"KEEP\n" + begin + b"\nunterminated\n"
+    context = HarnessContext(home_dir=tmp_path / "home", workspace_dir=None, guard_home=tmp_path / "guard-home")
+    context.home_dir.mkdir()
+    unterminated = b"KEEP\n" + begin + b"\nunterminated\n"
+    (context.home_dir / ".zshenv").write_bytes(
+        b"\xffKEEP\r\n\r\n" + begin + b"\r\nlegacy\r\n" + end + b"\r\nAFTER\xfe\r\n"
     )
+    (context.home_dir / ".bashrc").write_bytes(unterminated)
+
+    planned = {change.path.name: change.after for change in codex_adapter.prepare_codex_shell_cleanup(context)}
+
+    assert planned[".zshenv"] == b"\xffKEEP\r\nAFTER\xfe\r\n"
+    assert planned[".bashrc"] == unterminated
 
 
 def test_codex_launch_fails_closed_without_authoritative_native_hooks(tmp_path):

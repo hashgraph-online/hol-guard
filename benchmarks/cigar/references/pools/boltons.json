@@ -1,0 +1,411 @@
+{
+ "deselect": [
+  "tests/test_socketutils.py::test_socketutils_netstring",
+  "tests/test_socketutils.py::test_socketutils_netstring_timeout"
+ ],
+ "mutations": [
+  {
+   "path": "boltons/fileutils.py",
+   "qual": "FilePerms._FilePermProperty.__set__",
+   "line": 129,
+   "orig": "            if cur == value:\n",
+   "new": "            if cur != value:\n",
+   "failing": [
+    "tests/test_fileutils.py::test_fileperms"
+   ]
+  },
+  {
+   "path": "boltons/timeutils.py",
+   "qual": "daterange",
+   "line": 370,
+   "orig": "        finished = lambda now, stop: False\n",
+   "new": "        finished = lambda now, stop: True\n",
+   "failing": [
+    "tests/test_timeutils.py::test_daterange_infinite"
+   ]
+  },
+  {
+   "path": "boltons/statsutils.py",
+   "qual": "_StatsProperty.__get__",
+   "line": 145,
+   "orig": "        if obj is None:\n",
+   "new": "        if obj is not None:\n",
+   "failing": [
+    "tests/test_statsutils.py::test_stats_basic",
+    "tests/test_statsutils_histogram.py::test_norm_regression"
+   ]
+  },
+  {
+   "path": "boltons/cacheutils.py",
+   "qual": "make_cache_key",
+   "line": 433,
+   "orig": "    elif len(key) == 1 and type(key[0]) in fasttypes:\n",
+   "new": "    elif len(key) != 1 and type(key[0]) in fasttypes:\n",
+   "failing": [
+    "tests/test_cacheutils.py::test_cached_dec",
+    "tests/test_cacheutils.py::test_callable_cached_dec"
+   ]
+  },
+  {
+   "path": "boltons/setutils.py",
+   "qual": "complement",
+   "line": 553,
+   "orig": "    if type(wrapped) is frozenset:\n",
+   "new": "    if type(wrapped) is not frozenset:\n",
+   "failing": [
+    "tests/test_setutils.py::test_complement_set"
+   ]
+  },
+  {
+   "path": "boltons/iterutils.py",
+   "qual": "rstrip_iter",
+   "line": 254,
+   "orig": "                    broken = True\n",
+   "new": "                    broken = False\n",
+   "failing": [
+    "tests/test_iterutils.py::test_rstrip",
+    "tests/test_iterutils.py::test_strip"
+   ]
+  },
+  {
+   "path": "boltons/cacheutils.py",
+   "qual": "ThresholdCounter.get_uncommon_count",
+   "line": 747,
+   "orig": "        return self.total - self.get_common_count()\n",
+   "new": "        return self.total + self.get_common_count()\n",
+   "failing": [
+    "tests/test_cacheutils.py::test_threshold_counter"
+   ]
+  },
+  {
+   "path": "boltons/funcutils.py",
+   "qual": "FunctionBuilder.get_arg_names",
+   "line": 903,
+   "orig": "        arg_names = tuple(self.args) + tuple(getattr(self, 'kwonlyargs', ()))\n",
+   "new": "        arg_names = tuple(self.args) - tuple(getattr(self, 'kwonlyargs', ()))\n",
+   "failing": [
+    "tests/test_funcutils_fb.py::test_get_arg_names",
+    "tests/test_funcutils_fb_py3.py::test_get_arg_names"
+   ]
+  },
+  {
+   "path": "boltons/strutils.py",
+   "qual": "gunzip_bytes",
+   "line": 631,
+   "orig": "    return zlib.decompress(bytestring, 16 + zlib.MAX_WBITS)\n",
+   "new": "    return zlib.decompress(bytestring, 16 - zlib.MAX_WBITS)\n",
+   "failing": [
+    "tests/test_strutils.py::test_roundzip"
+   ]
+  },
+  {
+   "path": "boltons/funcutils.py",
+   "qual": "FunctionBuilder.from_func",
+   "line": 837,
+   "orig": "            kwargs['is_async'] = True\n",
+   "new": "            kwargs['is_async'] = False\n",
+   "failing": [
+    "tests/test_funcutils_fb_py3.py::test_wraps_async"
+   ]
+  },
+  {
+   "path": "boltons/setutils.py",
+   "qual": "_ComplementSet.__contains__",
+   "line": 616,
+   "orig": "            return not item in self._excluded\n",
+   "new": "            return not item not in self._excluded\n",
+   "failing": [
+    "tests/test_setutils.py::test_complement_set"
+   ]
+  }
+ ],
+ "stubs": [
+  {
+   "path": "boltons/cacheutils.py",
+   "qual": "cached",
+   "body_start": 568,
+   "end": 570,
+   "body": "    def cached_func_decorator(func):\n        return CachedFunction(func, cache, scoped=scoped, typed=typed, key=key)\n    return cached_func_decorator\n",
+   "indent": 4,
+   "failing": [
+    "tests/test_cacheutils.py::test_cached_dec",
+    "tests/test_cacheutils.py::test_callable_cached_dec",
+    "tests/test_cacheutils.py::test_unscoped_cached_dec"
+   ]
+  },
+  {
+   "path": "boltons/urlutils.py",
+   "qual": "unquote_to_bytes",
+   "body_start": 308,
+   "end": 328,
+   "body": "    if not string:\n        # Is it a string-like object?\n        string.split\n        return b''\n    if isinstance(string, str):\n        string = string.encode('utf-8')\n    bits = string.split(b'%')\n    if len(bits) == 1:\n        return string\n    # import pdb;pdb.set_trace()\n    res = [bits[0]]\n    append = res.append\n\n    for item in bits[1:]:\n        try:\n            append(_HEX_CHAR_MAP[item[:2]])\n            append(item[2:])\n        except KeyError:\n            append(b'%')\n            append(item)\n    return b''.join(res)\n",
+   "indent": 4,
+   "failing": [
+    "tests/test_urlutils.py::test_find_all_links",
+    "tests/test_urlutils.py::test_normalize_with_case",
+    "tests/test_urlutils.py::test_query_params[http://(%2525)/(%2525)?(%2525)&(%2525)=(%2525)#(%2525)]",
+    "tests/test_urlutils.py::test_query_params[http://(%C3%A9)/(%C3%A9)?(%C3%A9)&(%C3%A9)=(%C3%A9)#(%C3%A9)]",
+    "tests/test_urlutils.py::test_query_params[http://example.com:8080/search?q=123&business=Nothing%20Special]",
+    "tests/test_urlutils.py::test_query_params[http://localhost/asd?a=asd%20sdf/345]",
+    "tests/test_urlutils.py::test_query_params[http://localhost/foo%20bar/]",
+    "tests/test_urlutils.py::test_query_params[http://localhost/foo%2Fbar/]",
+    "tests/test_urlutils.py::test_query_params[magnet:?xt=urn:btih:1a42b9e04e122b97a5254e3df77ab3c4b7da725f&dn=Puppy%20Linux%20precise-5.7.1.iso&tr=udp://tracker.openbittorrent.com:80&tr=udp://tracker.publicbt.com:80&tr=udp://tracker.istole.it:6969&tr=udp://tracker.ccc.de:80&tr=udp://open.demonii.com:1337]",
+    "tests/test_urlutils.py::test_query_params[mailto:me@example.com?to=me@example.com&body=hi%20http://wikipedia.org]",
+    "tests/test_urlutils.py::test_roundtrip[http://(%2525)/(%2525)?(%2525)&(%2525)=(%2525)#(%2525)]",
+    "tests/test_urlutils.py::test_roundtrip[http://(%C3%A9)/(%C3%A9)?(%C3%A9)&(%C3%A9)=(%C3%A9)#(%C3%A9)]",
+    "tests/test_urlutils.py::test_roundtrip[http://example.com:8080/search?q=123&business=Nothing%20Special]",
+    "tests/test_urlutils.py::test_roundtrip[http://localhost/asd?a=asd%20sdf/345]",
+    "tests/test_urlutils.py::test_roundtrip[http://localhost/foo%20bar/]",
+    "tests/test_urlutils.py::test_roundtrip[http://localhost/foo%2Fbar/]",
+    "tests/test_urlutils.py::test_roundtrip[magnet:?xt=urn:btih:1a42b9e04e122b97a5254e3df77ab3c4b7da725f&dn=Puppy%20Linux%20precise-5.7.1.iso&tr=udp://tracker.openbittorrent.com:80&tr=udp://tracker.publicbt.com:80&tr=udp://tracker.istole.it:6969&tr=udp://tracker.ccc.de:80&tr=udp://open.demonii.com:1337]",
+    "tests/test_urlutils.py::test_roundtrip[mailto:me@example.com?to=me@example.com&body=hi%20http://wikipedia.org]"
+   ]
+  },
+  {
+   "path": "boltons/tbutils.py",
+   "qual": "Callpoint.tb_frame_str",
+   "body_start": 160,
+   "end": 165,
+   "body": "        ret = '  File \"{}\", line {}, in {}\\n'.format(self.module_path,\n                                                 self.lineno,\n                                                 self.func_name)\n        if self.line:\n            ret += f'    {str(self.line).strip()}\\n'\n        return ret\n",
+   "indent": 8,
+   "failing": [
+    "tests/test_tbutils.py::test_contextual",
+    "tests/test_tbutils.py::test_exception_info"
+   ]
+  },
+  {
+   "path": "boltons/setutils.py",
+   "qual": "IndexedSet.remove",
+   "body_start": 242,
+   "end": 248,
+   "body": "        try:\n            didx = self.item_index_map.pop(item)\n        except KeyError:\n            raise KeyError(item)\n        self.item_list[didx] = _MISSING\n        self._add_dead(didx)\n        self._cull()\n",
+   "indent": 8,
+   "failing": [
+    "tests/test_setutils.py::test_indexed_set_mutate"
+   ]
+  },
+  {
+   "path": "boltons/dictutils.py",
+   "qual": "ManyToMany.update",
+   "body_start": 947,
+   "end": 965,
+   "body": "        if type(iterable) is type(self):\n            other = iterable\n            for k in other.data:\n                if k not in self.data:\n                    self.data[k] = other.data[k]\n                else:\n                    self.data[k].update(other.data[k])\n            for k in other.inv.data:\n                if k not in self.inv.data:\n                    self.inv.data[k] = other.inv.data[k]\n                else:\n                    self.inv.data[k].update(other.inv.data[k])\n        elif callable(getattr(iterable, 'keys', None)):\n            for k in iterable.keys():\n                self.add(k, iterable[k])\n        else:\n            for key, val in iterable:\n                self.add(key, val)\n        return\n",
+   "indent": 8,
+   "failing": [
+    "tests/test_dictutils.py::test_many_to_many"
+   ]
+  },
+  {
+   "path": "boltons/dictutils.py",
+   "qual": "OrderedMultiDict.todict",
+   "body_start": 493,
+   "end": 495,
+   "body": "        if multi:\n            return {k: self.getlist(k) for k in self}\n        return {k: self[k] for k in self}\n",
+   "indent": 8,
+   "failing": [
+    "tests/test_dictutils.py::test_todict",
+    "tests/test_dictutils.py::test_update",
+    "tests/test_dictutils.py::test_update_extend"
+   ]
+  },
+  {
+   "path": "boltons/urlutils.py",
+   "qual": "URL.normalize",
+   "body_start": 642,
+   "end": 647,
+   "body": "        self.path_parts = resolve_path_parts(self.path_parts)\n\n        if with_case:\n            self.scheme = self.scheme.lower()\n            self.host = self.host.lower()\n        return\n",
+   "indent": 8,
+   "failing": [
+    "tests/test_urlutils.py::test_chained_navigate[https://host/a/b-https://host-paths2]",
+    "tests/test_urlutils.py::test_chained_navigate[https://host/a/b-https://host/a/-paths4]",
+    "tests/test_urlutils.py::test_chained_navigate[https://host/b-https://host-paths0]",
+    "tests/test_urlutils.py::test_chained_navigate[https://host/b-https://host-paths1]",
+    "tests/test_urlutils.py::test_chained_navigate[https://host/b-https://host-paths3]",
+    "tests/test_urlutils.py::test_chained_navigate[https://host/b-https://host/a-paths5]",
+    "tests/test_urlutils.py::test_navigate",
+    "tests/test_urlutils.py::test_normalize_with_case",
+    "tests/test_urlutils.py::test_rel_navigate",
+    "tests/test_urlutils.py::test_self_normalize"
+   ]
+  },
+  {
+   "path": "boltons/tbutils.py",
+   "qual": "print_exception",
+   "body_start": 647,
+   "end": 654,
+   "body": "    if file is None:\n        file = sys.stderr\n    if tb:\n        tbi = TracebackInfo.from_traceback(tb, limit)\n        print(str(tbi), end='', file=file)\n\n    for line in format_exception_only(etype, value):\n        print(line, end='', file=file)\n",
+   "indent": 4,
+   "failing": [
+    "tests/test_tbutils.py::test_exception_info"
+   ]
+  }
+ ],
+ "renames": [
+  {
+   "old": "_match_case",
+   "new": "_match_case_impl",
+   "count": 3,
+   "files": [
+    "boltons/strutils.py"
+   ],
+   "path": "boltons/strutils.py"
+  },
+  {
+   "old": "_make_quote_map",
+   "new": "_make_quote_map_impl",
+   "count": 5,
+   "files": [
+    "boltons/urlutils.py"
+   ],
+   "path": "boltons/urlutils.py"
+  },
+  {
+   "old": "_get_link_and_move_to_front_of_ll",
+   "new": "_get_link_and_move_to_front_of_ll_impl",
+   "count": 3,
+   "files": [
+    "boltons/cacheutils.py"
+   ],
+   "path": "boltons/cacheutils.py"
+  },
+  {
+   "old": "_get_trace_str",
+   "new": "_get_trace_str_impl",
+   "count": 3,
+   "files": [
+    "boltons/excutils.py"
+   ],
+   "path": "boltons/excutils.py"
+  },
+  {
+   "old": "_get_real_index",
+   "new": "_get_real_index_impl",
+   "count": 5,
+   "files": [
+    "boltons/setutils.py"
+   ],
+   "path": "boltons/setutils.py"
+  },
+  {
+   "old": "_balance_list",
+   "new": "_balance_list_impl",
+   "count": 9,
+   "files": [
+    "boltons/listutils.py",
+    "tests/test_listutils.py"
+   ],
+   "path": "boltons/listutils.py"
+  },
+  {
+   "old": "_populate_context_lines",
+   "new": "_populate_context_lines_impl",
+   "count": 3,
+   "files": [
+    "boltons/tbutils.py"
+   ],
+   "path": "boltons/tbutils.py"
+  },
+  {
+   "old": "_get_flattened_ll",
+   "new": "_get_flattened_ll_impl",
+   "count": 4,
+   "files": [
+    "boltons/cacheutils.py",
+    "tests/test_cacheutils.py"
+   ],
+   "path": "boltons/cacheutils.py"
+  }
+ ],
+ "docs": [
+  {
+   "path": "boltons/debugutils.py",
+   "module": "boltons.debugutils",
+   "qual": "pdb_on_exception"
+  },
+  {
+   "path": "boltons/tableutils.py",
+   "module": "boltons.tableutils",
+   "qual": "to_text"
+  },
+  {
+   "path": "boltons/iterutils.py",
+   "module": "boltons.iterutils",
+   "qual": "default_exit"
+  },
+  {
+   "path": "boltons/iterutils.py",
+   "module": "boltons.iterutils",
+   "qual": "windowed"
+  },
+  {
+   "path": "boltons/formatutils.py",
+   "module": "boltons.formatutils",
+   "qual": "infer_positional_format_args"
+  },
+  {
+   "path": "boltons/tableutils.py",
+   "module": "boltons.tableutils",
+   "qual": "escape_html"
+  },
+  {
+   "path": "boltons/excutils.py",
+   "module": "boltons.excutils",
+   "qual": "main"
+  },
+  {
+   "path": "boltons/urlutils.py",
+   "module": "boltons.urlutils",
+   "qual": "quote_path_part"
+  }
+ ],
+ "questions": [
+  {
+   "sentence": "Creates a directory and any parent directories that may need to be created along the way, without raising errors for any existing directories.",
+   "path": "boltons/fileutils.py",
+   "qual": "mkdir_p",
+   "name": "mkdir_p"
+  },
+  {
+   "sentence": "Limit a value to a given range.",
+   "path": "boltons/mathutils.py",
+   "qual": "clamp",
+   "name": "clamp"
+  },
+  {
+   "sentence": "Semi-intelligently converts an English plural *word* to its singular form, preserving case pattern.",
+   "path": "boltons/strutils.py",
+   "qual": "singularize",
+   "name": "singularize"
+  },
+  {
+   "sentence": "Roll the buffer over to a TempFile",
+   "path": "boltons/ioutils.py",
+   "qual": "SpooledStringIO.rollover",
+   "name": "rollover"
+  },
+  {
+   "sentence": "Same as :func:`frange`, but generator-based instead of returning a list.",
+   "path": "boltons/iterutils.py",
+   "qual": "xfrange",
+   "name": "xfrange"
+  },
+  {
+   "sentence": "Append the given data to the end of the Table.",
+   "path": "boltons/tableutils.py",
+   "qual": "Table.extend",
+   "name": "extend"
+  },
+  {
+   "sentence": "Render the Callpoint as it would appear in a standard printed Python traceback.",
+   "path": "boltons/tbutils.py",
+   "qual": "Callpoint.tb_frame_str",
+   "name": "tb_frame_str"
+  },
+  {
+   "sentence": "Indicates how much data is in the tails of the distribution.",
+   "path": "boltons/statsutils.py",
+   "qual": "Stats._calc_kurtosis",
+   "name": "_calc_kurtosis"
+  }
+ ]
+}

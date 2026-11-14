@@ -144,6 +144,7 @@ fn write_locked(
         request.managed.as_ref(),
         request.cloud_sync_entitled,
         &now_iso(),
+        &crate::cigar_apps::cigar_apps(home),
     )?;
     // This locked path is reserved for explicit Stop, which must persist an
     // ordering change even if the on-disk enabled preference was already off.
@@ -254,6 +255,7 @@ pub(crate) fn compute(
     managed: Option<&ManagedInput>,
     cloud_sync_entitled: bool,
     now: &str,
+    cigar_apps: &[&str],
 ) -> Result<Computed, Failure> {
     let channel_value = match kind {
         "channel" => Some(channel(value)?),
@@ -311,6 +313,7 @@ pub(crate) fn compute(
                 managed,
                 cloud_sync_entitled,
                 now,
+                cigar_apps,
             )
             .map_err(Failure::Invalid)?;
             Ok(Computed {

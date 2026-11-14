@@ -39,6 +39,8 @@ fn probe(timed_out: bool, failed: bool, reported_no_artifacts: bool) -> Value {
         "timed_out": timed_out,
         "failed": failed,
         "reported_no_artifacts": reported_no_artifacts,
+        "managed_install_present": false,
+        "runtime_hook_registered": false,
     })
 }
 
@@ -349,4 +351,23 @@ fn malformed_requests_are_refused() {
     ] {
         assert_eq!(dispatch(&request), Err(ERR_INVALID), "{request}");
     }
+}
+
+#[test]
+fn a_hermes_install_without_its_hook_reviews_launches_only() {
+    let warned = |registered: bool| {
+        let mut summary = probe(false, false, false);
+        summary["managed_install_present"] = json!(true);
+        summary["runtime_hook_registered"] = json!(registered);
+        probe_warnings("hermes", detection(&[], true, &[]), true, summary)
+    };
+    assert_eq!(
+        warned(false),
+        [
+            "Hermes runtime hook is not registered. Shell and tool calls are launch-review only. \
+          Run `hol-guard install hermes` to write a fail-closed hooks.pre_tool_call entry."
+        ]
+    );
+    assert!(warned(true).is_empty());
+    assert!(probe_warnings("hermes", detection(&[], true, &[]), true, Value::Null).is_empty());
 }

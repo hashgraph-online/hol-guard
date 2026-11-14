@@ -15,7 +15,8 @@
     "mode": "oauth2",
     "scopes": [
       "insert_content",
-      "read_content"
+      "read_content",
+      "update_content"
     ]
   },
   "actions": [
@@ -700,7 +701,7 @@
         }
       },
       "response": {
-        "maxBytes": 8192,
+        "maxBytes": 65536,
         "fields": [
           {
             "name": "results",
@@ -815,6 +816,2090 @@
           "arguments": {
             "page_id": "0f3c9a1e2b4d4c6e8f0a1b2c3d4e5f60",
             "paragraphs": []
+          },
+          "expect": {
+            "error": "invalid_argument"
+          }
+        }
+      ]
+    },
+    {
+      "actionId": "notion.pages.create",
+      "title": "Create a page",
+      "executor": {
+        "kind": "declarative-http",
+        "request": {
+          "method": "POST",
+          "host": "api.notion.com",
+          "path": "/v1/pages",
+          "body": {
+            "object": [
+              {
+                "name": "parent",
+                "value": {
+                  "object": [
+                    {
+                      "name": "page_id",
+                      "value": {
+                        "arg": "parent_id"
+                      }
+                    }
+                  ]
+                }
+              },
+              {
+                "name": "properties",
+                "value": {
+                  "object": [
+                    {
+                      "name": "title",
+                      "value": {
+                        "object": [
+                          {
+                            "name": "title",
+                            "value": {
+                              "array": [
+                                {
+                                  "object": [
+                                    {
+                                      "name": "type",
+                                      "value": {
+                                        "const": "text"
+                                      }
+                                    },
+                                    {
+                                      "name": "text",
+                                      "value": {
+                                        "object": [
+                                          {
+                                            "name": "content",
+                                            "value": {
+                                              "arg": "title"
+                                            }
+                                          }
+                                        ]
+                                      }
+                                    }
+                                  ]
+                                }
+                              ]
+                            }
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                }
+              }
+            ]
+          },
+          "maxPages": 1,
+          "headers": [
+            {
+              "name": "accept",
+              "value": "application/json"
+            },
+            {
+              "name": "notion-version",
+              "value": "2022-06-28"
+            }
+          ]
+        }
+      },
+      "arguments": {
+        "parent_id": {
+          "type": "string",
+          "required": true,
+          "maxLength": 36,
+          "pattern": "^(?i:[0-9a-f]{8}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{12})$"
+        },
+        "title": {
+          "type": "string",
+          "required": true,
+          "maxLength": 2000,
+          "pattern": "^[^\\x00-\\x1f\\x7f]+$"
+        }
+      },
+      "facts": {
+        "class": "update",
+        "object": {
+          "const": "record"
+        },
+        "scope": {
+          "const": "single"
+        },
+        "reversibility": {
+          "const": "reversible"
+        },
+        "recordCount": {
+          "const": 1
+        }
+      },
+      "response": {
+        "maxBytes": 16384,
+        "fields": [
+          {
+            "name": "id",
+            "value": {
+              "from": "id"
+            }
+          },
+          {
+            "name": "archived",
+            "value": {
+              "from": "archived"
+            }
+          },
+          {
+            "name": "url",
+            "value": {
+              "from": "url"
+            }
+          }
+        ]
+      },
+      "safety": {
+        "effect": "write",
+        "requiredCapabilities": [
+          "bounded-output",
+          "egress-pinned",
+          "resource-allowlist"
+        ],
+        "idempotency": "none",
+        "scopes": [
+          "insert_content"
+        ],
+        "maxItems": 1,
+        "minIntervalMs": 1000,
+        "timeoutMs": 15000,
+        "resource": {
+          "kind": "page",
+          "argument": "parent_id"
+        }
+      },
+      "fixtures": [
+        {
+          "name": "creates one page",
+          "kind": "safe",
+          "arguments": {
+            "parent_id": "0f8fad5b-d9cb-469f-a165-70867728950e",
+            "title": "Meeting notes"
+          },
+          "expect": {
+            "facts": {
+              "class": "update"
+            },
+            "request": {
+              "body": "{\"parent\":{\"page_id\":\"0f8fad5b-d9cb-469f-a165-70867728950e\"},\"properties\":{\"title\":{\"title\":[{\"type\":\"text\",\"text\":{\"content\":\"Meeting notes\"}}]}}}",
+              "headers": [
+                [
+                  "accept",
+                  "application/json"
+                ],
+                [
+                  "notion-version",
+                  "2022-06-28"
+                ],
+                [
+                  "content-type",
+                  "application/json; charset=utf-8"
+                ]
+              ],
+              "maxPages": 1,
+              "method": "POST",
+              "url": "https://api.notion.com/v1/pages"
+            },
+            "decisions": {
+              "relaxed": "allow",
+              "balanced": "allow",
+              "strict": "review"
+            }
+          }
+        },
+        {
+          "name": "refuses a parent that is not an id",
+          "kind": "risky",
+          "arguments": {
+            "parent_id": "workspace",
+            "title": "x"
+          },
+          "expect": {
+            "error": "invalid_argument"
+          }
+        }
+      ]
+    },
+    {
+      "actionId": "notion.pages.set_select",
+      "title": "Set a select property on a page",
+      "executor": {
+        "kind": "declarative-http",
+        "request": {
+          "method": "PATCH",
+          "host": "api.notion.com",
+          "path": "/v1/pages/{page_id}",
+          "body": {
+            "object": [
+              {
+                "name": "properties",
+                "value": {
+                  "keyed": {
+                    "key": "property",
+                    "value": {
+                      "object": [
+                        {
+                          "name": "select",
+                          "value": {
+                            "object": [
+                              {
+                                "name": "name",
+                                "value": {
+                                  "arg": "option"
+                                }
+                              }
+                            ]
+                          }
+                        }
+                      ]
+                    }
+                  }
+                }
+              }
+            ]
+          },
+          "maxPages": 1,
+          "headers": [
+            {
+              "name": "accept",
+              "value": "application/json"
+            },
+            {
+              "name": "notion-version",
+              "value": "2022-06-28"
+            }
+          ]
+        }
+      },
+      "arguments": {
+        "page_id": {
+          "type": "string",
+          "required": true,
+          "maxLength": 36,
+          "pattern": "^(?i:[0-9a-f]{8}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{12})$"
+        },
+        "property": {
+          "type": "string",
+          "required": true,
+          "maxLength": 100,
+          "pattern": "^[^\\x00-\\x1f\\x7f]+$"
+        },
+        "option": {
+          "type": "string",
+          "required": true,
+          "maxLength": 100,
+          "pattern": "^[^,\\x00-\\x1f\\x7f]+$"
+        }
+      },
+      "facts": {
+        "class": "update",
+        "object": {
+          "const": "record"
+        },
+        "scope": {
+          "const": "single"
+        },
+        "reversibility": {
+          "const": "reversible"
+        },
+        "recordCount": {
+          "const": 1
+        }
+      },
+      "response": {
+        "maxBytes": 16384,
+        "fields": [
+          {
+            "name": "id",
+            "value": {
+              "from": "id"
+            }
+          },
+          {
+            "name": "archived",
+            "value": {
+              "from": "archived"
+            }
+          },
+          {
+            "name": "url",
+            "value": {
+              "from": "url"
+            }
+          }
+        ]
+      },
+      "safety": {
+        "effect": "write",
+        "requiredCapabilities": [
+          "bounded-output",
+          "egress-pinned",
+          "resource-allowlist"
+        ],
+        "idempotency": "none",
+        "scopes": [
+          "update_content"
+        ],
+        "maxItems": 1,
+        "minIntervalMs": 1000,
+        "timeoutMs": 15000,
+        "resource": {
+          "kind": "page",
+          "argument": "page_id"
+        }
+      },
+      "fixtures": [
+        {
+          "name": "sets one select value",
+          "kind": "safe",
+          "arguments": {
+            "page_id": "0f8fad5b-d9cb-469f-a165-70867728950e",
+            "property": "Status",
+            "option": "Done"
+          },
+          "expect": {
+            "facts": {
+              "class": "update"
+            },
+            "request": {
+              "body": "{\"properties\":{\"Status\":{\"select\":{\"name\":\"Done\"}}}}",
+              "headers": [
+                [
+                  "accept",
+                  "application/json"
+                ],
+                [
+                  "notion-version",
+                  "2022-06-28"
+                ],
+                [
+                  "content-type",
+                  "application/json; charset=utf-8"
+                ]
+              ],
+              "maxPages": 1,
+              "method": "PATCH",
+              "url": "https://api.notion.com/v1/pages/0f8fad5b-d9cb-469f-a165-70867728950e"
+            },
+            "decisions": {
+              "relaxed": "allow",
+              "balanced": "allow",
+              "strict": "review"
+            }
+          }
+        },
+        {
+          "name": "refuses a bad select value",
+          "kind": "risky",
+          "arguments": {
+            "page_id": "0f8fad5b-d9cb-469f-a165-70867728950e",
+            "property": "Status",
+            "option": "Done,Blocked"
+          },
+          "expect": {
+            "error": "invalid_argument"
+          }
+        }
+      ]
+    },
+    {
+      "actionId": "notion.pages.set_checkbox",
+      "title": "Set a checkbox property on a page",
+      "executor": {
+        "kind": "declarative-http",
+        "request": {
+          "method": "PATCH",
+          "host": "api.notion.com",
+          "path": "/v1/pages/{page_id}",
+          "body": {
+            "object": [
+              {
+                "name": "properties",
+                "value": {
+                  "keyed": {
+                    "key": "property",
+                    "value": {
+                      "object": [
+                        {
+                          "name": "checkbox",
+                          "value": {
+                            "arg": "checked"
+                          }
+                        }
+                      ]
+                    }
+                  }
+                }
+              }
+            ]
+          },
+          "maxPages": 1,
+          "headers": [
+            {
+              "name": "accept",
+              "value": "application/json"
+            },
+            {
+              "name": "notion-version",
+              "value": "2022-06-28"
+            }
+          ]
+        }
+      },
+      "arguments": {
+        "page_id": {
+          "type": "string",
+          "required": true,
+          "maxLength": 36,
+          "pattern": "^(?i:[0-9a-f]{8}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{12})$"
+        },
+        "property": {
+          "type": "string",
+          "required": true,
+          "maxLength": 100,
+          "pattern": "^[^\\x00-\\x1f\\x7f]+$"
+        },
+        "checked": {
+          "type": "boolean",
+          "required": true
+        }
+      },
+      "facts": {
+        "class": "update",
+        "object": {
+          "const": "record"
+        },
+        "scope": {
+          "const": "single"
+        },
+        "reversibility": {
+          "const": "reversible"
+        },
+        "recordCount": {
+          "const": 1
+        }
+      },
+      "response": {
+        "maxBytes": 16384,
+        "fields": [
+          {
+            "name": "id",
+            "value": {
+              "from": "id"
+            }
+          },
+          {
+            "name": "archived",
+            "value": {
+              "from": "archived"
+            }
+          },
+          {
+            "name": "url",
+            "value": {
+              "from": "url"
+            }
+          }
+        ]
+      },
+      "safety": {
+        "effect": "write",
+        "requiredCapabilities": [
+          "bounded-output",
+          "egress-pinned",
+          "resource-allowlist"
+        ],
+        "idempotency": "none",
+        "scopes": [
+          "update_content"
+        ],
+        "maxItems": 1,
+        "minIntervalMs": 1000,
+        "timeoutMs": 15000,
+        "resource": {
+          "kind": "page",
+          "argument": "page_id"
+        }
+      },
+      "fixtures": [
+        {
+          "name": "sets one checkbox value",
+          "kind": "safe",
+          "arguments": {
+            "page_id": "0f8fad5b-d9cb-469f-a165-70867728950e",
+            "property": "Status",
+            "checked": true
+          },
+          "expect": {
+            "facts": {
+              "class": "update"
+            },
+            "request": {
+              "body": "{\"properties\":{\"Status\":{\"checkbox\":true}}}",
+              "headers": [
+                [
+                  "accept",
+                  "application/json"
+                ],
+                [
+                  "notion-version",
+                  "2022-06-28"
+                ],
+                [
+                  "content-type",
+                  "application/json; charset=utf-8"
+                ]
+              ],
+              "maxPages": 1,
+              "method": "PATCH",
+              "url": "https://api.notion.com/v1/pages/0f8fad5b-d9cb-469f-a165-70867728950e"
+            },
+            "decisions": {
+              "relaxed": "allow",
+              "balanced": "allow",
+              "strict": "review"
+            }
+          }
+        },
+        {
+          "name": "refuses a bad checkbox value",
+          "kind": "risky",
+          "arguments": {
+            "page_id": "0f8fad5b-d9cb-469f-a165-70867728950e",
+            "property": "Status",
+            "checked": "yes"
+          },
+          "expect": {
+            "error": "invalid_argument"
+          }
+        }
+      ]
+    },
+    {
+      "actionId": "notion.pages.set_number",
+      "title": "Set a number property on a page",
+      "executor": {
+        "kind": "declarative-http",
+        "request": {
+          "method": "PATCH",
+          "host": "api.notion.com",
+          "path": "/v1/pages/{page_id}",
+          "body": {
+            "object": [
+              {
+                "name": "properties",
+                "value": {
+                  "keyed": {
+                    "key": "property",
+                    "value": {
+                      "object": [
+                        {
+                          "name": "number",
+                          "value": {
+                            "arg": "number"
+                          }
+                        }
+                      ]
+                    }
+                  }
+                }
+              }
+            ]
+          },
+          "maxPages": 1,
+          "headers": [
+            {
+              "name": "accept",
+              "value": "application/json"
+            },
+            {
+              "name": "notion-version",
+              "value": "2022-06-28"
+            }
+          ]
+        }
+      },
+      "arguments": {
+        "page_id": {
+          "type": "string",
+          "required": true,
+          "maxLength": 36,
+          "pattern": "^(?i:[0-9a-f]{8}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{12})$"
+        },
+        "property": {
+          "type": "string",
+          "required": true,
+          "maxLength": 100,
+          "pattern": "^[^\\x00-\\x1f\\x7f]+$"
+        },
+        "number": {
+          "type": "integer",
+          "required": true,
+          "minimum": -1000000000,
+          "maximum": 1000000000
+        }
+      },
+      "facts": {
+        "class": "update",
+        "object": {
+          "const": "record"
+        },
+        "scope": {
+          "const": "single"
+        },
+        "reversibility": {
+          "const": "reversible"
+        },
+        "recordCount": {
+          "const": 1
+        }
+      },
+      "response": {
+        "maxBytes": 16384,
+        "fields": [
+          {
+            "name": "id",
+            "value": {
+              "from": "id"
+            }
+          },
+          {
+            "name": "archived",
+            "value": {
+              "from": "archived"
+            }
+          },
+          {
+            "name": "url",
+            "value": {
+              "from": "url"
+            }
+          }
+        ]
+      },
+      "safety": {
+        "effect": "write",
+        "requiredCapabilities": [
+          "bounded-output",
+          "egress-pinned",
+          "resource-allowlist"
+        ],
+        "idempotency": "none",
+        "scopes": [
+          "update_content"
+        ],
+        "maxItems": 1,
+        "minIntervalMs": 1000,
+        "timeoutMs": 15000,
+        "resource": {
+          "kind": "page",
+          "argument": "page_id"
+        }
+      },
+      "fixtures": [
+        {
+          "name": "sets one number value",
+          "kind": "safe",
+          "arguments": {
+            "page_id": "0f8fad5b-d9cb-469f-a165-70867728950e",
+            "property": "Status",
+            "number": 3
+          },
+          "expect": {
+            "facts": {
+              "class": "update"
+            },
+            "request": {
+              "body": "{\"properties\":{\"Status\":{\"number\":3}}}",
+              "headers": [
+                [
+                  "accept",
+                  "application/json"
+                ],
+                [
+                  "notion-version",
+                  "2022-06-28"
+                ],
+                [
+                  "content-type",
+                  "application/json; charset=utf-8"
+                ]
+              ],
+              "maxPages": 1,
+              "method": "PATCH",
+              "url": "https://api.notion.com/v1/pages/0f8fad5b-d9cb-469f-a165-70867728950e"
+            },
+            "decisions": {
+              "relaxed": "allow",
+              "balanced": "allow",
+              "strict": "review"
+            }
+          }
+        },
+        {
+          "name": "refuses a bad number value",
+          "kind": "risky",
+          "arguments": {
+            "page_id": "0f8fad5b-d9cb-469f-a165-70867728950e",
+            "property": "Status",
+            "number": 10000000000
+          },
+          "expect": {
+            "error": "invalid_argument"
+          }
+        }
+      ]
+    },
+    {
+      "actionId": "notion.pages.set_text",
+      "title": "Set a text property on a page",
+      "executor": {
+        "kind": "declarative-http",
+        "request": {
+          "method": "PATCH",
+          "host": "api.notion.com",
+          "path": "/v1/pages/{page_id}",
+          "body": {
+            "object": [
+              {
+                "name": "properties",
+                "value": {
+                  "keyed": {
+                    "key": "property",
+                    "value": {
+                      "object": [
+                        {
+                          "name": "rich_text",
+                          "value": {
+                            "array": [
+                              {
+                                "object": [
+                                  {
+                                    "name": "type",
+                                    "value": {
+                                      "const": "text"
+                                    }
+                                  },
+                                  {
+                                    "name": "text",
+                                    "value": {
+                                      "object": [
+                                        {
+                                          "name": "content",
+                                          "value": {
+                                            "arg": "text"
+                                          }
+                                        }
+                                      ]
+                                    }
+                                  }
+                                ]
+                              }
+                            ]
+                          }
+                        }
+                      ]
+                    }
+                  }
+                }
+              }
+            ]
+          },
+          "maxPages": 1,
+          "headers": [
+            {
+              "name": "accept",
+              "value": "application/json"
+            },
+            {
+              "name": "notion-version",
+              "value": "2022-06-28"
+            }
+          ]
+        }
+      },
+      "arguments": {
+        "page_id": {
+          "type": "string",
+          "required": true,
+          "maxLength": 36,
+          "pattern": "^(?i:[0-9a-f]{8}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{12})$"
+        },
+        "property": {
+          "type": "string",
+          "required": true,
+          "maxLength": 100,
+          "pattern": "^[^\\x00-\\x1f\\x7f]+$"
+        },
+        "text": {
+          "type": "string",
+          "required": true,
+          "maxLength": 2000,
+          "pattern": "^[^\\x00-\\x1f\\x7f]+$"
+        }
+      },
+      "facts": {
+        "class": "update",
+        "object": {
+          "const": "record"
+        },
+        "scope": {
+          "const": "single"
+        },
+        "reversibility": {
+          "const": "reversible"
+        },
+        "recordCount": {
+          "const": 1
+        }
+      },
+      "response": {
+        "maxBytes": 65536,
+        "fields": [
+          {
+            "name": "id",
+            "value": {
+              "from": "id"
+            }
+          },
+          {
+            "name": "archived",
+            "value": {
+              "from": "archived"
+            }
+          },
+          {
+            "name": "url",
+            "value": {
+              "from": "url"
+            }
+          }
+        ]
+      },
+      "safety": {
+        "effect": "write",
+        "requiredCapabilities": [
+          "bounded-output",
+          "egress-pinned",
+          "resource-allowlist"
+        ],
+        "idempotency": "none",
+        "scopes": [
+          "update_content"
+        ],
+        "maxItems": 1,
+        "minIntervalMs": 1000,
+        "timeoutMs": 15000,
+        "resource": {
+          "kind": "page",
+          "argument": "page_id"
+        }
+      },
+      "fixtures": [
+        {
+          "name": "sets one text value",
+          "kind": "safe",
+          "arguments": {
+            "page_id": "0f8fad5b-d9cb-469f-a165-70867728950e",
+            "property": "Status",
+            "text": "Waiting on design"
+          },
+          "expect": {
+            "facts": {
+              "class": "update"
+            },
+            "request": {
+              "body": "{\"properties\":{\"Status\":{\"rich_text\":[{\"type\":\"text\",\"text\":{\"content\":\"Waiting on design\"}}]}}}",
+              "headers": [
+                [
+                  "accept",
+                  "application/json"
+                ],
+                [
+                  "notion-version",
+                  "2022-06-28"
+                ],
+                [
+                  "content-type",
+                  "application/json; charset=utf-8"
+                ]
+              ],
+              "maxPages": 1,
+              "method": "PATCH",
+              "url": "https://api.notion.com/v1/pages/0f8fad5b-d9cb-469f-a165-70867728950e"
+            },
+            "decisions": {
+              "relaxed": "allow",
+              "balanced": "allow",
+              "strict": "review"
+            }
+          }
+        },
+        {
+          "name": "refuses a bad text value",
+          "kind": "risky",
+          "arguments": {
+            "page_id": "0f8fad5b-d9cb-469f-a165-70867728950e",
+            "property": "Status",
+            "text": "a\u0000b"
+          },
+          "expect": {
+            "error": "invalid_argument"
+          }
+        }
+      ]
+    },
+    {
+      "actionId": "notion.pages.archive",
+      "title": "Move a page to trash",
+      "executor": {
+        "kind": "declarative-http",
+        "request": {
+          "method": "PATCH",
+          "host": "api.notion.com",
+          "path": "/v1/pages/{page_id}",
+          "body": {
+            "object": [
+              {
+                "name": "archived",
+                "value": {
+                  "const": true
+                }
+              }
+            ]
+          },
+          "maxPages": 1,
+          "headers": [
+            {
+              "name": "accept",
+              "value": "application/json"
+            },
+            {
+              "name": "notion-version",
+              "value": "2022-06-28"
+            }
+          ]
+        }
+      },
+      "arguments": {
+        "page_id": {
+          "type": "string",
+          "required": true,
+          "maxLength": 36,
+          "pattern": "^(?i:[0-9a-f]{8}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{12})$"
+        }
+      },
+      "facts": {
+        "class": "delete",
+        "object": {
+          "const": "record"
+        },
+        "reversibility": {
+          "const": "recoverable"
+        }
+      },
+      "response": {
+        "maxBytes": 16384,
+        "fields": [
+          {
+            "name": "id",
+            "value": {
+              "from": "id"
+            }
+          },
+          {
+            "name": "archived",
+            "value": {
+              "from": "archived"
+            }
+          },
+          {
+            "name": "url",
+            "value": {
+              "from": "url"
+            }
+          }
+        ]
+      },
+      "safety": {
+        "effect": "destructive",
+        "requiredCapabilities": [
+          "bounded-output",
+          "egress-pinned",
+          "resource-allowlist"
+        ],
+        "idempotency": "none",
+        "scopes": [
+          "update_content"
+        ],
+        "maxItems": 1,
+        "minIntervalMs": 1000,
+        "timeoutMs": 15000,
+        "resource": {
+          "kind": "page",
+          "argument": "page_id"
+        }
+      },
+      "fixtures": [
+        {
+          "name": "trashes one page",
+          "kind": "safe",
+          "arguments": {
+            "page_id": "0f8fad5b-d9cb-469f-a165-70867728950e"
+          },
+          "expect": {
+            "facts": {
+              "class": "delete",
+              "reversibility": {
+                "state": "known",
+                "value": "recoverable"
+              }
+            },
+            "request": {
+              "body": "{\"archived\":true}",
+              "headers": [
+                [
+                  "accept",
+                  "application/json"
+                ],
+                [
+                  "notion-version",
+                  "2022-06-28"
+                ],
+                [
+                  "content-type",
+                  "application/json; charset=utf-8"
+                ]
+              ],
+              "maxPages": 1,
+              "method": "PATCH",
+              "url": "https://api.notion.com/v1/pages/0f8fad5b-d9cb-469f-a165-70867728950e"
+            },
+            "decisions": {
+              "relaxed": "allow",
+              "balanced": "require-reapproval",
+              "strict": "review"
+            }
+          }
+        },
+        {
+          "name": "refuses a page id with a path",
+          "kind": "risky",
+          "arguments": {
+            "page_id": "0f8fad5b-d9cb-469f-a165-70867728950e/x"
+          },
+          "expect": {
+            "error": "invalid_argument"
+          }
+        }
+      ]
+    },
+    {
+      "actionId": "notion.pages.restore",
+      "title": "Restore a page from trash",
+      "executor": {
+        "kind": "declarative-http",
+        "request": {
+          "method": "PATCH",
+          "host": "api.notion.com",
+          "path": "/v1/pages/{page_id}",
+          "body": {
+            "object": [
+              {
+                "name": "archived",
+                "value": {
+                  "const": false
+                }
+              }
+            ]
+          },
+          "maxPages": 1,
+          "headers": [
+            {
+              "name": "accept",
+              "value": "application/json"
+            },
+            {
+              "name": "notion-version",
+              "value": "2022-06-28"
+            }
+          ]
+        }
+      },
+      "arguments": {
+        "page_id": {
+          "type": "string",
+          "required": true,
+          "maxLength": 36,
+          "pattern": "^(?i:[0-9a-f]{8}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{12})$"
+        }
+      },
+      "facts": {
+        "class": "update",
+        "object": {
+          "const": "record"
+        },
+        "scope": {
+          "const": "single"
+        },
+        "reversibility": {
+          "const": "reversible"
+        },
+        "recordCount": {
+          "const": 1
+        }
+      },
+      "response": {
+        "maxBytes": 16384,
+        "fields": [
+          {
+            "name": "id",
+            "value": {
+              "from": "id"
+            }
+          },
+          {
+            "name": "archived",
+            "value": {
+              "from": "archived"
+            }
+          },
+          {
+            "name": "url",
+            "value": {
+              "from": "url"
+            }
+          }
+        ]
+      },
+      "safety": {
+        "effect": "write",
+        "requiredCapabilities": [
+          "bounded-output",
+          "egress-pinned",
+          "resource-allowlist"
+        ],
+        "idempotency": "none",
+        "scopes": [
+          "update_content"
+        ],
+        "maxItems": 1,
+        "minIntervalMs": 1000,
+        "timeoutMs": 15000,
+        "resource": {
+          "kind": "page",
+          "argument": "page_id"
+        }
+      },
+      "fixtures": [
+        {
+          "name": "restores one page",
+          "kind": "safe",
+          "arguments": {
+            "page_id": "0f8fad5b-d9cb-469f-a165-70867728950e"
+          },
+          "expect": {
+            "facts": {
+              "class": "update"
+            },
+            "request": {
+              "body": "{\"archived\":false}",
+              "headers": [
+                [
+                  "accept",
+                  "application/json"
+                ],
+                [
+                  "notion-version",
+                  "2022-06-28"
+                ],
+                [
+                  "content-type",
+                  "application/json; charset=utf-8"
+                ]
+              ],
+              "maxPages": 1,
+              "method": "PATCH",
+              "url": "https://api.notion.com/v1/pages/0f8fad5b-d9cb-469f-a165-70867728950e"
+            },
+            "decisions": {
+              "relaxed": "allow",
+              "balanced": "allow",
+              "strict": "review"
+            }
+          }
+        },
+        {
+          "name": "refuses an unknown argument",
+          "kind": "risky",
+          "arguments": {
+            "page_id": "0f8fad5b-d9cb-469f-a165-70867728950e",
+            "all": true
+          },
+          "expect": {
+            "error": "unknown_argument"
+          }
+        }
+      ]
+    },
+    {
+      "actionId": "notion.blocks.delete",
+      "title": "Move a block to trash",
+      "executor": {
+        "kind": "declarative-http",
+        "request": {
+          "method": "DELETE",
+          "host": "api.notion.com",
+          "path": "/v1/blocks/{block_id}",
+          "maxPages": 1,
+          "headers": [
+            {
+              "name": "accept",
+              "value": "application/json"
+            },
+            {
+              "name": "notion-version",
+              "value": "2022-06-28"
+            }
+          ]
+        }
+      },
+      "arguments": {
+        "block_id": {
+          "type": "string",
+          "required": true,
+          "maxLength": 36,
+          "pattern": "^(?i:[0-9a-f]{8}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{12})$"
+        }
+      },
+      "facts": {
+        "class": "delete",
+        "object": {
+          "const": "record"
+        },
+        "reversibility": {
+          "const": "recoverable"
+        }
+      },
+      "response": {
+        "maxBytes": 16384,
+        "fields": [
+          {
+            "name": "id",
+            "value": {
+              "from": "id"
+            }
+          },
+          {
+            "name": "archived",
+            "value": {
+              "from": "archived"
+            }
+          },
+          {
+            "name": "url",
+            "value": {
+              "from": "url"
+            }
+          }
+        ]
+      },
+      "safety": {
+        "effect": "destructive",
+        "requiredCapabilities": [
+          "bounded-output",
+          "egress-pinned",
+          "resource-allowlist"
+        ],
+        "idempotency": "none",
+        "scopes": [
+          "update_content"
+        ],
+        "maxItems": 1,
+        "minIntervalMs": 1000,
+        "timeoutMs": 15000,
+        "resource": {
+          "kind": "block",
+          "argument": "block_id"
+        }
+      },
+      "fixtures": [
+        {
+          "name": "trashes one block",
+          "kind": "safe",
+          "arguments": {
+            "block_id": "0f8fad5b-d9cb-469f-a165-70867728950e"
+          },
+          "expect": {
+            "facts": {
+              "class": "delete",
+              "reversibility": {
+                "state": "known",
+                "value": "recoverable"
+              }
+            },
+            "request": {
+              "body": null,
+              "headers": [
+                [
+                  "accept",
+                  "application/json"
+                ],
+                [
+                  "notion-version",
+                  "2022-06-28"
+                ]
+              ],
+              "maxPages": 1,
+              "method": "DELETE",
+              "url": "https://api.notion.com/v1/blocks/0f8fad5b-d9cb-469f-a165-70867728950e"
+            },
+            "decisions": {
+              "relaxed": "allow",
+              "balanced": "require-reapproval",
+              "strict": "review"
+            }
+          }
+        },
+        {
+          "name": "refuses a missing block id",
+          "kind": "risky",
+          "arguments": {},
+          "expect": {
+            "error": "missing_argument"
+          }
+        }
+      ]
+    },
+    {
+      "actionId": "notion.databases.query",
+      "title": "Find rows in a database",
+      "executor": {
+        "kind": "declarative-http",
+        "request": {
+          "method": "POST",
+          "host": "api.notion.com",
+          "path": "/v1/databases/{database_id}/query",
+          "body": {
+            "object": [
+              {
+                "name": "page_size",
+                "value": {
+                  "arg": "page_size"
+                }
+              },
+              {
+                "name": "start_cursor",
+                "value": {
+                  "arg": "start_cursor"
+                }
+              }
+            ]
+          },
+          "maxPages": 1,
+          "headers": [
+            {
+              "name": "accept",
+              "value": "application/json"
+            },
+            {
+              "name": "notion-version",
+              "value": "2022-06-28"
+            }
+          ]
+        }
+      },
+      "arguments": {
+        "database_id": {
+          "type": "string",
+          "required": true,
+          "maxLength": 36,
+          "pattern": "^(?i:[0-9a-f]{8}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{12})$"
+        },
+        "page_size": {
+          "type": "integer",
+          "required": false,
+          "minimum": 1,
+          "maximum": 100
+        },
+        "start_cursor": {
+          "type": "string",
+          "required": false,
+          "maxLength": 36,
+          "pattern": "^(?i:[0-9a-f]{8}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{12})$"
+        }
+      },
+      "facts": {
+        "class": "read",
+        "object": {
+          "const": "table"
+        },
+        "scope": {
+          "const": "query_selected"
+        },
+        "recordCount": {
+          "argument": {
+            "name": "page_size",
+            "max": 100,
+            "default": 100
+          }
+        }
+      },
+      "response": {
+        "maxBytes": 524288,
+        "fields": [
+          {
+            "name": "results",
+            "value": {
+              "list": {
+                "from": "results",
+                "maxItems": 100,
+                "fields": [
+                  {
+                    "name": "id",
+                    "value": {
+                      "from": "id"
+                    }
+                  },
+                  {
+                    "name": "url",
+                    "value": {
+                      "from": "url"
+                    }
+                  }
+                ]
+              }
+            }
+          },
+          {
+            "name": "next_cursor",
+            "value": {
+              "from": "next_cursor"
+            }
+          },
+          {
+            "name": "has_more",
+            "value": {
+              "from": "has_more"
+            }
+          }
+        ]
+      },
+      "safety": {
+        "effect": "read",
+        "requiredCapabilities": [
+          "bounded-output",
+          "egress-pinned",
+          "resource-allowlist"
+        ],
+        "idempotency": "safe-read",
+        "scopes": [
+          "read_content"
+        ],
+        "maxItems": 100,
+        "minIntervalMs": 400,
+        "timeoutMs": 10000,
+        "resource": {
+          "kind": "database",
+          "argument": "database_id"
+        }
+      },
+      "fixtures": [
+        {
+          "name": "reads one page of rows",
+          "kind": "safe",
+          "arguments": {
+            "database_id": "7c9e6679-7425-40de-944b-e07fc1f90ae7",
+            "page_size": 25
+          },
+          "expect": {
+            "facts": {
+              "class": "read",
+              "record_count": {
+                "state": "known",
+                "value": 25
+              }
+            },
+            "request": {
+              "body": "{\"page_size\":25}",
+              "headers": [
+                [
+                  "accept",
+                  "application/json"
+                ],
+                [
+                  "notion-version",
+                  "2022-06-28"
+                ],
+                [
+                  "content-type",
+                  "application/json; charset=utf-8"
+                ]
+              ],
+              "maxPages": 1,
+              "method": "POST",
+              "url": "https://api.notion.com/v1/databases/7c9e6679-7425-40de-944b-e07fc1f90ae7/query"
+            },
+            "decisions": {
+              "relaxed": "allow",
+              "balanced": "allow",
+              "strict": "allow"
+            }
+          }
+        },
+        {
+          "name": "refuses a page over 100",
+          "kind": "risky",
+          "arguments": {
+            "database_id": "7c9e6679-7425-40de-944b-e07fc1f90ae7",
+            "page_size": 500
+          },
+          "expect": {
+            "error": "invalid_argument"
+          }
+        }
+      ]
+    },
+    {
+      "actionId": "notion.databases.create",
+      "title": "Create a database",
+      "executor": {
+        "kind": "declarative-http",
+        "request": {
+          "method": "POST",
+          "host": "api.notion.com",
+          "path": "/v1/databases",
+          "body": {
+            "object": [
+              {
+                "name": "parent",
+                "value": {
+                  "object": [
+                    {
+                      "name": "type",
+                      "value": {
+                        "const": "page_id"
+                      }
+                    },
+                    {
+                      "name": "page_id",
+                      "value": {
+                        "arg": "parent_id"
+                      }
+                    }
+                  ]
+                }
+              },
+              {
+                "name": "title",
+                "value": {
+                  "array": [
+                    {
+                      "object": [
+                        {
+                          "name": "type",
+                          "value": {
+                            "const": "text"
+                          }
+                        },
+                        {
+                          "name": "text",
+                          "value": {
+                            "object": [
+                              {
+                                "name": "content",
+                                "value": {
+                                  "arg": "title"
+                                }
+                              }
+                            ]
+                          }
+                        }
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "name": "properties",
+                "value": {
+                  "object": [
+                    {
+                      "name": "Name",
+                      "value": {
+                        "object": [
+                          {
+                            "name": "title",
+                            "value": {
+                              "const": {}
+                            }
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                }
+              }
+            ]
+          },
+          "maxPages": 1,
+          "headers": [
+            {
+              "name": "accept",
+              "value": "application/json"
+            },
+            {
+              "name": "notion-version",
+              "value": "2022-06-28"
+            }
+          ]
+        }
+      },
+      "arguments": {
+        "parent_id": {
+          "type": "string",
+          "required": true,
+          "maxLength": 36,
+          "pattern": "^(?i:[0-9a-f]{8}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{12})$"
+        },
+        "title": {
+          "type": "string",
+          "required": true,
+          "maxLength": 2000,
+          "pattern": "^[^\\x00-\\x1f\\x7f]+$"
+        }
+      },
+      "facts": {
+        "class": "update",
+        "object": {
+          "const": "table"
+        },
+        "scope": {
+          "const": "single"
+        },
+        "reversibility": {
+          "const": "reversible"
+        },
+        "recordCount": {
+          "const": 1
+        }
+      },
+      "response": {
+        "maxBytes": 65536,
+        "fields": [
+          {
+            "name": "id",
+            "value": {
+              "from": "id"
+            }
+          },
+          {
+            "name": "archived",
+            "value": {
+              "from": "archived"
+            }
+          }
+        ]
+      },
+      "safety": {
+        "effect": "write",
+        "requiredCapabilities": [
+          "bounded-output",
+          "egress-pinned",
+          "resource-allowlist"
+        ],
+        "idempotency": "none",
+        "scopes": [
+          "insert_content"
+        ],
+        "maxItems": 1,
+        "minIntervalMs": 1000,
+        "timeoutMs": 15000,
+        "resource": {
+          "kind": "page",
+          "argument": "parent_id"
+        }
+      },
+      "fixtures": [
+        {
+          "name": "creates one database",
+          "kind": "safe",
+          "arguments": {
+            "parent_id": "0f8fad5b-d9cb-469f-a165-70867728950e",
+            "title": "Tasks"
+          },
+          "expect": {
+            "facts": {
+              "class": "update"
+            },
+            "request": {
+              "body": "{\"parent\":{\"type\":\"page_id\",\"page_id\":\"0f8fad5b-d9cb-469f-a165-70867728950e\"},\"title\":[{\"type\":\"text\",\"text\":{\"content\":\"Tasks\"}}],\"properties\":{\"Name\":{\"title\":{}}}}",
+              "headers": [
+                [
+                  "accept",
+                  "application/json"
+                ],
+                [
+                  "notion-version",
+                  "2022-06-28"
+                ],
+                [
+                  "content-type",
+                  "application/json; charset=utf-8"
+                ]
+              ],
+              "maxPages": 1,
+              "method": "POST",
+              "url": "https://api.notion.com/v1/databases"
+            },
+            "decisions": {
+              "relaxed": "allow",
+              "balanced": "allow",
+              "strict": "review"
+            }
+          }
+        },
+        {
+          "name": "refuses a title with a control character",
+          "kind": "risky",
+          "arguments": {
+            "parent_id": "0f8fad5b-d9cb-469f-a165-70867728950e",
+            "title": "a\u0007b"
+          },
+          "expect": {
+            "error": "invalid_argument"
+          }
+        }
+      ]
+    },
+    {
+      "actionId": "notion.databases.remove_property",
+      "title": "Remove a database column and its values",
+      "executor": {
+        "kind": "declarative-http",
+        "request": {
+          "method": "PATCH",
+          "host": "api.notion.com",
+          "path": "/v1/databases/{database_id}",
+          "body": {
+            "object": [
+              {
+                "name": "properties",
+                "value": {
+                  "keyed": {
+                    "key": "property",
+                    "value": {
+                      "const": null
+                    }
+                  }
+                }
+              }
+            ]
+          },
+          "maxPages": 1,
+          "headers": [
+            {
+              "name": "accept",
+              "value": "application/json"
+            },
+            {
+              "name": "notion-version",
+              "value": "2022-06-28"
+            }
+          ]
+        }
+      },
+      "arguments": {
+        "database_id": {
+          "type": "string",
+          "required": true,
+          "maxLength": 36,
+          "pattern": "^(?i:[0-9a-f]{8}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{12})$"
+        },
+        "property": {
+          "type": "string",
+          "required": true,
+          "maxLength": 100,
+          "pattern": "^[^\\x00-\\x1f\\x7f]+$"
+        }
+      },
+      "facts": {
+        "class": "delete",
+        "object": {
+          "const": "table"
+        },
+        "scope": {
+          "const": "all"
+        },
+        "reversibility": {
+          "const": "permanent"
+        }
+      },
+      "response": {
+        "maxBytes": 65536,
+        "fields": [
+          {
+            "name": "id",
+            "value": {
+              "from": "id"
+            }
+          },
+          {
+            "name": "archived",
+            "value": {
+              "from": "archived"
+            }
+          }
+        ]
+      },
+      "safety": {
+        "effect": "destructive",
+        "requiredCapabilities": [
+          "bounded-output",
+          "egress-pinned",
+          "resource-allowlist"
+        ],
+        "idempotency": "none",
+        "scopes": [
+          "update_content"
+        ],
+        "maxItems": 1,
+        "minIntervalMs": 2000,
+        "timeoutMs": 15000,
+        "resource": {
+          "kind": "database",
+          "argument": "database_id"
+        }
+      },
+      "fixtures": [
+        {
+          "name": "removes one column",
+          "kind": "safe",
+          "arguments": {
+            "database_id": "7c9e6679-7425-40de-944b-e07fc1f90ae7",
+            "property": "Estimate"
+          },
+          "expect": {
+            "facts": {
+              "class": "delete",
+              "reversibility": {
+                "state": "known",
+                "value": "permanent"
+              },
+              "scope": {
+                "state": "known",
+                "value": "all"
+              }
+            },
+            "request": {
+              "body": "{\"properties\":{\"Estimate\":null}}",
+              "headers": [
+                [
+                  "accept",
+                  "application/json"
+                ],
+                [
+                  "notion-version",
+                  "2022-06-28"
+                ],
+                [
+                  "content-type",
+                  "application/json; charset=utf-8"
+                ]
+              ],
+              "maxPages": 1,
+              "method": "PATCH",
+              "url": "https://api.notion.com/v1/databases/7c9e6679-7425-40de-944b-e07fc1f90ae7"
+            },
+            "decisions": {
+              "relaxed": "require-reapproval",
+              "balanced": "block",
+              "strict": "block"
+            }
+          }
+        },
+        {
+          "name": "refuses a missing column name",
+          "kind": "risky",
+          "arguments": {
+            "database_id": "7c9e6679-7425-40de-944b-e07fc1f90ae7"
+          },
+          "expect": {
+            "error": "missing_argument"
+          }
+        }
+      ]
+    },
+    {
+      "actionId": "notion.databases.change_property_type",
+      "title": "Change a database column's type",
+      "executor": {
+        "kind": "declarative-http",
+        "request": {
+          "method": "PATCH",
+          "host": "api.notion.com",
+          "path": "/v1/databases/{database_id}",
+          "body": {
+            "object": [
+              {
+                "name": "properties",
+                "value": {
+                  "keyed": {
+                    "key": "property",
+                    "value": {
+                      "keyed": {
+                        "key": "type",
+                        "value": {
+                          "const": {}
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            ]
+          },
+          "maxPages": 1,
+          "headers": [
+            {
+              "name": "accept",
+              "value": "application/json"
+            },
+            {
+              "name": "notion-version",
+              "value": "2022-06-28"
+            }
+          ]
+        }
+      },
+      "arguments": {
+        "database_id": {
+          "type": "string",
+          "required": true,
+          "maxLength": 36,
+          "pattern": "^(?i:[0-9a-f]{8}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{12})$"
+        },
+        "property": {
+          "type": "string",
+          "required": true,
+          "maxLength": 100,
+          "pattern": "^[^\\x00-\\x1f\\x7f]+$"
+        },
+        "type": {
+          "type": "string",
+          "required": true,
+          "maxLength": 16,
+          "pattern": "^(?:rich_text|number|select|multi_select|date|checkbox|url|email|phone_number)$"
+        }
+      },
+      "facts": {
+        "class": "update",
+        "object": {
+          "const": "table"
+        },
+        "scope": {
+          "const": "all"
+        },
+        "reversibility": {
+          "const": "permanent"
+        }
+      },
+      "response": {
+        "maxBytes": 65536,
+        "fields": [
+          {
+            "name": "id",
+            "value": {
+              "from": "id"
+            }
+          },
+          {
+            "name": "archived",
+            "value": {
+              "from": "archived"
+            }
+          }
+        ]
+      },
+      "safety": {
+        "effect": "destructive",
+        "requiredCapabilities": [
+          "bounded-output",
+          "egress-pinned",
+          "resource-allowlist"
+        ],
+        "idempotency": "none",
+        "scopes": [
+          "update_content"
+        ],
+        "maxItems": 1,
+        "minIntervalMs": 2000,
+        "timeoutMs": 15000,
+        "resource": {
+          "kind": "database",
+          "argument": "database_id"
+        }
+      },
+      "fixtures": [
+        {
+          "name": "retypes one column for every row",
+          "kind": "safe",
+          "arguments": {
+            "database_id": "7c9e6679-7425-40de-944b-e07fc1f90ae7",
+            "property": "Estimate",
+            "type": "number"
+          },
+          "expect": {
+            "facts": {
+              "class": "update",
+              "scope": {
+                "state": "known",
+                "value": "all"
+              }
+            },
+            "request": {
+              "body": "{\"properties\":{\"Estimate\":{\"number\":{}}}}",
+              "headers": [
+                [
+                  "accept",
+                  "application/json"
+                ],
+                [
+                  "notion-version",
+                  "2022-06-28"
+                ],
+                [
+                  "content-type",
+                  "application/json; charset=utf-8"
+                ]
+              ],
+              "maxPages": 1,
+              "method": "PATCH",
+              "url": "https://api.notion.com/v1/databases/7c9e6679-7425-40de-944b-e07fc1f90ae7"
+            },
+            "decisions": {
+              "relaxed": "allow",
+              "balanced": "review",
+              "strict": "require-reapproval"
+            }
+          }
+        },
+        {
+          "name": "refuses a formula type",
+          "kind": "risky",
+          "arguments": {
+            "database_id": "7c9e6679-7425-40de-944b-e07fc1f90ae7",
+            "property": "Estimate",
+            "type": "formula"
           },
           "expect": {
             "error": "invalid_argument"

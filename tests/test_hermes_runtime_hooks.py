@@ -13,15 +13,10 @@ import pytest
 import yaml as pyyaml
 
 from codex_plugin_scanner.cli import main
-from codex_plugin_scanner.guard.adapters import hermes_runtime_hooks
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.adapters.bounded_cli_hook_bridge import _event_name
 from codex_plugin_scanner.guard.adapters.hermes import HermesHarnessAdapter
-from codex_plugin_scanner.guard.adapters.hermes_runtime_hooks import (
-    apply_hermes_doctor_protection_label,
-    guard_pretool_hook_registered,
-    hermes_bridge_response,
-)
+from codex_plugin_scanner.guard.cli import commands_hook_native_authority
 from codex_plugin_scanner.guard.runtime.actions import normalize_harness_payload
 from tests.native_command_test_support import inspect_command_native_test as inspect_command
 
@@ -130,13 +125,16 @@ def test_runtime_probe_is_not_ready_without_registered_hook(tmp_path: Path) -> N
     assert any("launch-review only" in warning for warning in warnings)
 
 
-def test_doctor_protection_label_is_launch_review_only_without_hook() -> None:
-    payload: dict[str, object] = {
-        "protection_label": "Protected",
-        "runtime_probe": {"managed_install_present": True, "runtime_hook_registered": False},
-    }
-    apply_hermes_doctor_protection_label(payload)
-    assert payload["runtime_protection_label"] == "launch-review only"
+def test_doctor_protection_label_is_launch_review_only_without_hook(tmp_path: Path) -> None:
+    _config(tmp_path)
+    adapter = HermesHarnessAdapter()
+    context = _ctx(tmp_path)
+    adapter.install(context)
+    config_path = tmp_path / ".hermes" / "config.yaml"
+    payload = pyyaml.safe_load(config_path.read_text(encoding="utf-8"))
+    payload["hooks"]["pre_tool_call"] = []
+    config_path.write_text(pyyaml.safe_dump(payload, sort_keys=False), encoding="utf-8")
+    assert adapter.diagnostics(context)["runtime_protection_label"] == "launch-review only"
 
 
 def test_pretool_call_payload_classifies_recursive_delete(tmp_path: Path) -> None:
@@ -180,11 +178,13 @@ def test_event_name_maps_pre_tool_call() -> None:
 
 
 def test_hermes_bridge_fails_closed_without_resident(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(hermes_runtime_hooks, "native_hermes_bridge", lambda *_args, **_kwargs: None)
-    stdout, stderr, code = hermes_bridge_response(
+    monkeypatch.setattr(commands_hook_native_authority, "native_hermes_bridge", lambda *_args, **_kwargs: None)
+    stdout, stderr, code = commands_hook_native_authority._bridge_hook_output(
+        "hermes",
         {"policy_action": "allow", "reason": "ok"},
         event_name="PreToolUse",
         guard_home=tmp_path / "guard-home",
+        deadline=None,
     )
     assert json.loads(stdout) == {"decision": "block", "reason": "HOL Guard blocked this action."}
     assert stderr == ""
@@ -198,7 +198,8 @@ def test_hermes_bridge_render_stops_at_the_hook_deadline(tmp_path: Path, monkeyp
         raise AssertionError("an expired hook budget must not reach the resident")
 
     monkeypatch.setattr(native_hook_render, "_resident_request", forbidden)
-    stdout, _stderr, code = hermes_bridge_response(
+    stdout, _stderr, code = commands_hook_native_authority._bridge_hook_output(
+        "hermes",
         {"policy_action": "allow", "reason": "ok"},
         event_name="PreToolUse",
         guard_home=tmp_path / "guard-home",
@@ -206,60 +207,6 @@ def test_hermes_bridge_render_stops_at_the_hook_deadline(tmp_path: Path, monkeyp
     )
     assert json.loads(stdout) == {"decision": "block", "reason": "HOL Guard blocked this action."}
     assert code == 2
-
-
-def test_guard_pretool_hook_registered_requires_fail_closed() -> None:
-    command = "python -c bounded_cli_hook_bridge"
-    assert (
-        guard_pretool_hook_registered(
-            {
-                "hooks": {
-                    "pre_tool_call": [
-                        {
-                            "id": "hol-guard-pretool",
-                            "matcher": ".*",
-                            "command": command,
-                            "fail_closed": False,
-                        }
-                    ]
-                }
-            }
-        )
-        is False
-    )
-    assert (
-        guard_pretool_hook_registered(
-            {
-                "hooks": {
-                    "pre_tool_call": [
-                        {
-                            "id": "hol-guard-pretool",
-                            "matcher": ".*",
-                            "command": command,
-                            "fail_closed": True,
-                        }
-                    ]
-                }
-            }
-        )
-        is True
-    )
-    assert (
-        guard_pretool_hook_registered(
-            {
-                "hooks": {
-                    "pre_tool_call": [
-                        {
-                            "command": command,
-                            "matcher": ".*",
-                            "fail_closed": True,
-                        }
-                    ]
-                }
-            }
-        )
-        is False
-    )
 
 
 @pytest.mark.usefixtures("native_hook_force")
@@ -410,32 +357,6 @@ def test_user_hook_with_marker_substring_is_preserved(tmp_path: Path) -> None:
     ]
 
 
-def test_registered_requires_allowlist_and_matcher(tmp_path: Path) -> None:
-    command = "python hol-guard-hook"
-    allowlist_path = tmp_path / "shell-hooks-allowlist.json"
-    allowlist_path.write_text(
-        json.dumps({"approvals": [{"event": "pre_tool_call", "command": command}]}) + "\n",
-        encoding="utf-8",
-    )
-    config = {
-        "hooks": {
-            "pre_tool_call": [
-                {
-                    "id": "hol-guard-pretool",
-                    "matcher": "write_file",
-                    "command": command,
-                    "fail_closed": True,
-                }
-            ]
-        }
-    }
-    assert guard_pretool_hook_registered(config, allowlist_path=allowlist_path) is False
-    config["hooks"]["pre_tool_call"][0]["matcher"] = ".*"
-    assert guard_pretool_hook_registered(config, allowlist_path=allowlist_path) is True
-    allowlist_path.write_text('{"approvals": []}\n', encoding="utf-8")
-    assert guard_pretool_hook_registered(config, allowlist_path=allowlist_path) is False
-
-
 def test_protection_display_name_skips_blank_runtime_label() -> None:
     from codex_plugin_scanner.guard.cli.render import _protection_display_name
 
@@ -446,25 +367,3 @@ def test_protection_display_name_skips_blank_runtime_label() -> None:
         )
         == "Protected"
     )
-
-
-def test_hermes_merge_preserves_unrelated_bounded_hooks_text(tmp_path: Path) -> None:
-    from codex_plugin_scanner.guard.adapters.hermes_runtime_hooks import merge_guard_pretool_hook
-
-    config: dict[str, object] = {
-        "hooks": {
-            "pre_tool_call": [
-                {
-                    "matcher": "write_file",
-                    "command": "echo mention managed/bounded-hooks in docs",
-                    "fail_closed": False,
-                }
-            ]
-        }
-    }
-    expected = (tmp_path / "python3", "-I", str(tmp_path / "managed" / "bounded-hooks" / "hermes.py"))
-    changed, removed = merge_guard_pretool_hook(config, command=expected, timeout_seconds=5)
-    assert changed is True
-    assert removed == []
-    commands = [entry.get("command") for entry in config["hooks"]["pre_tool_call"] if isinstance(entry, dict)]
-    assert any(isinstance(command, str) and "echo mention" in command for command in commands)

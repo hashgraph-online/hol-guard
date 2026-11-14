@@ -278,6 +278,7 @@ fn an_allowed_chain_inspects_the_worktree_it_creates() {
         format!(
             "{ADD} && git -C ../app-review status && git -C ../app-review push -u origin review"
         ),
+        format!("{ADD} && cd ../app-review && git status --porcelain | head -3 && echo CLEAN"),
     ] {
         let result = evaluate(&home, &repository, "omp", &command, &controls);
         if result.minimum_action != "allow" {

@@ -1,0 +1,79 @@
+{
+ "repo": "moreit",
+ "seed": 92,
+ "steps": [
+  {
+   "kind": "rename",
+   "prompt": "Rename the internal helper `_batched` to `_batched_impl` everywhere in the project, including tests. Behavior must not change.",
+   "rename": {
+    "count": 3,
+    "files": [
+     "more_itertools/recipes.py"
+    ],
+    "new": "_batched_impl",
+    "old": "_batched",
+    "path": "more_itertools/recipes.py"
+   }
+  },
+  {
+   "kind": "rename",
+   "prompt": "Rename the internal helper `_zip_equal_generator` to `_zip_equal_generator_impl` everywhere in the project, including tests. Behavior must not change.",
+   "rename": {
+    "count": 3,
+    "files": [
+     "tests/test_more.py",
+     "more_itertools/recipes.py"
+    ],
+    "new": "_zip_equal_generator_impl",
+    "old": "_zip_equal_generator",
+    "path": "more_itertools/recipes.py"
+   }
+  },
+  {
+   "kind": "rename",
+   "prompt": "Rename the internal helper `_get_by_index` to `_get_by_index_impl` everywhere in the project, including tests. Behavior must not change.",
+   "rename": {
+    "count": 8,
+    "files": [
+     "more_itertools/more.py"
+    ],
+    "new": "_get_by_index_impl",
+    "old": "_get_by_index",
+    "path": "more_itertools/more.py"
+   }
+  },
+  {
+   "kind": "rename",
+   "prompt": "Rename the internal helper `_complex_sumprod` to `_complex_sumprod_impl` everywhere in the project, including tests. Behavior must not change.",
+   "rename": {
+    "count": 3,
+    "files": [
+     "more_itertools/more.py"
+    ],
+    "new": "_complex_sumprod_impl",
+    "old": "_complex_sumprod",
+    "path": "more_itertools/more.py"
+   }
+  },
+  {
+   "kind": "bug",
+   "prompt": "Something in `callback_iter.__exit__` broke recently and its tests fail now. Track it down and fix it. Leave the tests alone.",
+   "setup": [
+    {
+     "failing": [
+      "tests/test_more.py::CallbackIterTests::test_abort"
+     ],
+     "line": 3906,
+     "new": "        self._aborted = False\n",
+     "orig": "        self._aborted = True\n",
+     "path": "more_itertools/more.py",
+     "qual": "callback_iter.__exit__"
+    }
+   ]
+  },
+  {
+   "kind": "review",
+   "prompt": "Review every change made in this session. Remove leftovers or duplication, match the style of the surrounding code, and make sure the full test suite passes."
+  }
+ ]
+}

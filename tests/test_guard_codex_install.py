@@ -762,7 +762,7 @@ def test_guard_install_codex_rewrites_workspace_config_with_proxy_entries(tmp_pa
     assert 'API_BASE = "https://hol.org"' in config_text
     assert 'FEATURE_FLAG = "1"' in config_text
     assert hooks_payload["PreToolUse"][0]["matcher"] == codex_adapter._CODEX_GUARD_TOOL_MATCHER
-    assert hooks_payload["PermissionRequest"][0]["matcher"] == codex_adapter._CODEX_GUARD_PERMISSION_MATCHER
+    assert hooks_payload["PermissionRequest"][0]["matcher"] == "Bash|Read|Write|Edit|MultiEdit|^apply_patch$|mcp__.*"
     assert "UserPromptSubmit" in hooks_payload
     assert "matcher" not in hooks_payload["UserPromptSubmit"][0]
     prompt_handler = hooks_payload["UserPromptSubmit"][0]["hooks"][0]
@@ -1718,7 +1718,7 @@ def test_guard_install_codex_workspace_refuses_to_rebind_global_managed_hook(tmp
     assert len(home_config["hooks"]["PermissionRequest"]) == 1
     assert len(home_config["hooks"]["UserPromptSubmit"]) == 1
     assert len(home_config["hooks"]["PostToolUse"]) == 1
-    assert home_config["hooks"]["PostToolUse"][0]["matcher"] == codex_adapter._CODEX_GUARD_POST_TOOL_MATCHER
+    assert home_config["hooks"]["PostToolUse"][0]["matcher"] == "Bash|Read|mcp__.*"
     managed_group = home_config["hooks"]["PreToolUse"][0]
     assert managed_group["matcher"] == codex_adapter._CODEX_GUARD_TOOL_MATCHER
     assert "codex_plugin_scanner.cli" in managed_group["hooks"][0]["command"]

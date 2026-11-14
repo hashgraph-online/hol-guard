@@ -110,6 +110,31 @@ impl Home {
         pack: Option<&str>,
         activates: bool,
     ) -> String {
+        let idempotency = format!("idem-{revision}");
+        self.commit_keyed(
+            revision,
+            catalog_digest,
+            layers,
+            phase,
+            pack,
+            activates,
+            &idempotency,
+        )
+    }
+
+    /// `commit_bound` with the idempotency reference the writer recorded, so
+    /// a test can commit what reads as a catalog migration.
+    #[allow(clippy::too_many_arguments)]
+    pub(super) fn commit_keyed(
+        &self,
+        revision: i64,
+        catalog_digest: &str,
+        layers: &[ExtensionControlLayer],
+        phase: &str,
+        pack: Option<&str>,
+        activates: bool,
+        idempotency: &str,
+    ) -> String {
         let layers_json = layers_to_json(layers).unwrap();
         let previous_digest = if revision == 1 {
             catalog('0')
@@ -136,7 +161,7 @@ impl Home {
             authenticated_record(&snapshot, &KEY, SNAPSHOT_PURPOSE).unwrap();
         let hashes = [
             private_hash(&format!("actor-{revision}"), &KEY, "actor"),
-            private_hash(&format!("idem-{revision}"), &KEY, "idempotency"),
+            private_hash(idempotency, &KEY, "idempotency"),
             private_hash(&format!("nonce-{revision}"), &KEY, "nonce"),
         ];
         let mut transition = object(json!({

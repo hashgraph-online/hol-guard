@@ -31,6 +31,7 @@ from .approval_retry_relay import (
     RELAY_ORACLE,
     SIGNED_LINK_REDACTIONS,
     queued_request_ids,
+    record_daemon_origin,
     relay_evidence,
     write_relay_config,
 )
@@ -260,6 +261,8 @@ def run_harness_case(
                 identity=identity,
                 register_workspace_policy=not realistic,
             )
+            if scenario.oracle == RELAY_ORACLE:
+                record_daemon_origin(daemon)
             if scenario.oracle == "blocked-extension":
                 case["extension_control"] = configure_extension_permission_denial(
                     daemon, guard_home, extension_adapter(scenario.commands[0])
@@ -367,6 +370,7 @@ def run_harness_case(
                     guard_home=guard_home,
                     request_ids=queued_request_ids(worker.store, approval_ids_before),
                     marker_written=(fixture.workspace / RELAY_MARKER).exists(),
+                    daemon_url=f"http://127.0.0.1:{daemon.port}",
                 )
                 replacements.update(SIGNED_LINK_REDACTIONS)
             case["transcript"] = redact_value(transcript, replacements)
@@ -392,7 +396,7 @@ def run_harness_case(
         except Exception as exc:
             case["credential_write_back_error"] = type(exc).__name__
         finally:
-            case["filesystem"] = filesystem_checks(fixture, scenario.oracle, scenario.id)
+            case["filesystem"] = filesystem_checks(fixture, scenario.oracle, scenario.id, scenario.path)
             collect_approval_marker(fixture.workspace, scenario.id, case)
             collect_approval_persistent(fixture.workspace, scenario.id, case)
             if connector is not None:

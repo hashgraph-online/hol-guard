@@ -1,0 +1,93 @@
+{
+ "repo": "toolz",
+ "seed": 69,
+ "steps": [
+  {
+   "kind": "bug",
+   "prompt": "`toolz/tests/test_signatures.py::test_is_partial` started failing after the last commit. Fix the bug in the library code; don't edit the tests.",
+   "setup": [
+    {
+     "failing": [
+      "toolz/tests/test_signatures.py::test_is_partial",
+      "toolz/tests/test_signatures.py::test_is_valid"
+     ],
+     "line": 80,
+     "new": "    if len(results) != 1:    # Return completed result\n",
+     "orig": "    if len(results) == 1:    # Return completed result\n",
+     "path": "toolz/sandbox/parallel.py",
+     "qual": "fold"
+    }
+   ]
+  },
+  {
+   "kind": "bug",
+   "prompt": "Something in `thread_last.<locals>.evalform_back` broke recently and its tests fail now. Track it down and fix it. Leave the tests alone.",
+   "setup": [
+    {
+     "failing": [
+      "toolz/tests/test_functoolz.py::test_thread_last",
+      "toolz/tests/test_itertoolz.py::test_isdistinct",
+      "toolz/tests/test_signatures.py::test_is_partial",
+      "toolz/tests/test_signatures.py::test_is_valid"
+     ],
+     "line": 114,
+     "new": "            args = args - (val,)\n",
+     "orig": "            args = args + (val,)\n",
+     "path": "toolz/functoolz.py",
+     "qual": "thread_last.<locals>.evalform_back"
+    }
+   ]
+  },
+  {
+   "kind": "question",
+   "prompt": "Question, no code changes: which function does this? \"Does a function have only n positional arguments?\" Reply with its file path and function name.",
+   "question": {
+    "name": "is_arity",
+    "path": "toolz/functoolz.py",
+    "qual": "is_arity",
+    "sentence": "Does a function have only n positional arguments?"
+   }
+  },
+  {
+   "kind": "bug",
+   "prompt": "`toolz/tests/test_itertoolz.py::test_isdistinct` started failing after the last commit. Fix the bug in the library code; don't edit the tests.",
+   "setup": [
+    {
+     "failing": [
+      "toolz/tests/test_itertoolz.py::test_isdistinct",
+      "toolz/tests/test_signatures.py::test_is_partial",
+      "toolz/tests/test_signatures.py::test_is_valid",
+      "toolz/tests/test_utils.py::test_raises"
+     ],
+     "line": 4,
+     "new": "        return True\n",
+     "orig": "        return False\n",
+     "path": "toolz/utils.py",
+     "qual": "raises"
+    }
+   ]
+  },
+  {
+   "kind": "bug",
+   "prompt": "`toolz/tests/test_itertoolz.py::test_partition_all` started failing after the last commit. Fix the bug in the library code; don't edit the tests.",
+   "setup": [
+    {
+     "failing": [
+      "toolz/tests/test_itertoolz.py::test_partition_all",
+      "toolz/tests/test_signatures.py::test_is_partial",
+      "toolz/tests/test_signatures.py::test_is_valid"
+     ],
+     "line": 731,
+     "new": "    if prev[-1] is not no_pad:\n",
+     "orig": "    if prev[-1] is no_pad:\n",
+     "path": "toolz/itertoolz.py",
+     "qual": "partition_all"
+    }
+   ]
+  },
+  {
+   "kind": "review",
+   "prompt": "Review every change made in this session. Remove leftovers or duplication, match the style of the surrounding code, and make sure the full test suite passes."
+  }
+ ]
+}

@@ -36,6 +36,7 @@ fn decide(tool: &str, input: serde_json::Value, home: &Path, cwd: &Path) -> Stri
                 cargo_config_inert: false,
                 npm_config_inert: false,
                 pip_config_inert: false,
+                python_environment_inert: false,
                 shell_home_matches: false,
                 ripgrep_config_absent: false,
                 gem_config_absent: false,

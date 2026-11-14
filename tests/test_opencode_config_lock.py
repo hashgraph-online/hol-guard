@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.adapters._modules.opencode.opencode_config_lock import opencode_config_lock
+from codex_plugin_scanner.guard.adapters.opencode_runtime import opencode_config_lock
 
 
 def test_lock_excludes_other_processes_and_releases_after_error(tmp_path: Path) -> None:
@@ -19,7 +19,7 @@ def test_lock_excludes_other_processes_and_releases_after_error(tmp_path: Path) 
             textwrap.dedent("""
                 from pathlib import Path
                 import sys
-                from codex_plugin_scanner.guard.adapters._modules.opencode.opencode_config_lock import opencode_config_lock
+                from codex_plugin_scanner.guard.adapters.opencode_runtime import opencode_config_lock
                 with opencode_config_lock(Path(sys.argv[1])):
                     print('locked', flush=True)
                     sys.stdin.readline()
@@ -60,12 +60,11 @@ def test_lock_rejects_symlink_without_touching_target(tmp_path: Path) -> None:
 
 
 def test_install_cleanup_and_refresh_read_under_same_lock(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    from codex_plugin_scanner.guard.adapters import opencode
-    from codex_plugin_scanner.guard.adapters._modules.opencode import opencode_proxy_refresh
+    from codex_plugin_scanner.guard.adapters import opencode_runtime
     from tests.test_opencode_pretool import _ctx
 
     context = _ctx(tmp_path)
-    adapter = opencode.OpenCodeHarnessAdapter()
+    adapter = opencode_runtime.OpenCodeHarnessAdapter()
 
     class ReachedReadError(Exception):
         pass
@@ -75,10 +74,9 @@ def test_install_cleanup_and_refresh_read_under_same_lock(tmp_path: Path, monkey
             pytest.fail("config reader ran without the shared lock")
         raise ReachedReadError
 
-    monkeypatch.setattr(opencode, "load_opencode_install_snapshot", checked_read)
-    monkeypatch.setattr(adapter, "_state_entry", checked_read)
-    monkeypatch.setattr(opencode_proxy_refresh, "config_paths", checked_read)
-    for operation in (adapter.install, adapter.uninstall, opencode_proxy_refresh.refresh_opencode_proxy_launchers):
+    monkeypatch.setattr(adapter, "_ask", checked_read)
+    monkeypatch.setattr(opencode_runtime, "ask", checked_read)
+    for operation in (adapter.install, adapter.uninstall, opencode_runtime.refresh_opencode_proxy_launchers):
         with pytest.raises(ReachedReadError):
             operation(context)
 

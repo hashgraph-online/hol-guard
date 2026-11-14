@@ -54,6 +54,13 @@ pub(in crate::pretool) fn clean_environment(
         {
             return false;
         }
+        // Entries the hook judged to change only how Git quotes paths, as the
+        // `core.quotePath` entry editors export in every terminal.
+        if execution_environment.is_some_and(|context| context.git_config_environment_inert)
+            && guard_contracts::git_config_count_entry(name)
+        {
+            return false;
+        }
         let key = name.to_ascii_uppercase();
         key.starts_with("GIT_TRACE")
             || key.starts_with("DYLD_")

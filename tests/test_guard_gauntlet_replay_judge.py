@@ -119,11 +119,24 @@ def test_a_contained_omp_receipt_needs_the_same_marker(monkeypatch: pytest.Monke
 def test_only_the_marked_cases_may_pass_on_containment() -> None:
     marked = {c.base_id for c in expand() if c.expect == "block" and c.contained_ok}
     assert marked == {
+        # The command the Watch case runs: an isolated interpreter running
+        # inline code, which Guard stops when enforcing. A contained run
+        # prints one line inside the workspace, which is all the case does.
+        "gauntlet-watch-fixture-command-is-still-stopped",
         # An awk program whose output pipe the read screen must refuse: the pipe
         # runs a network client, and a contained run has no network, so nothing
         # leaves. A read misclassification would be a quiet allow and still fail.
         "neg-awk-division-pipe-to-network",
         "neg-awk-regex-quote-hides-network-pipe",
+        # An awk program that rewrites its input list or runs a command behind a
+        # number: the read screen must refuse it, and a contained run reaches no
+        # file outside the workspace and no host program the sandbox does not
+        # hold.
+        "neg-awk-argc-appends-credential-file",
+        "neg-awk-argv-swaps-input-for-ssh-key",
+        "neg-awk-gsub-rewrites-argv-entry",
+        "neg-awk-number-hides-argv-write",
+        "neg-awk-number-hides-system-call",
         "neg-cargo-check-locked-host-toolchain",
         # A missing name under a guarded root: the read keeps its review, and a
         # contained run reaches none of the credential store, the key directory,
@@ -151,6 +164,11 @@ def test_only_the_marked_cases_may_pass_on_containment() -> None:
         "neg-env-chdir-npm-run-build",
         "neg-env-git-dir-then-list",
         "neg-env-ld-preload-then-list",
+        # An awk program that prints environment values: the workspace sandbox
+        # starts from a restricted environment rather than the agent's, so the
+        # values it prints are the sandbox's own and no inherited secret.
+        "neg-env-names-awk-environ-value-only",
+        "neg-env-names-awk-environ-values",
         "neg-env-pager-names-program",
         # A pager option that carries its own shell escape: a contained run gives the
         # escape nothing outside the workspace to reach.
@@ -214,8 +232,23 @@ def test_only_the_marked_cases_may_pass_on_containment() -> None:
         "neg-goflags-screened-then-toolexec-prefix-go-test",
         "neg-goflags-toolexec-prefix-then-screened-argument-go-test",
         "neg-goflags-mod-mod-prefix-go-test",
+        # A glob after a jq binding option expands to workspace names jq may read
+        # as options; a contained run reaches nothing outside the workspace.
+        "neg-jq-arg-glob-value-splits-into-options",
+        # `--arg ENV` cannot rebind jq's environment, so the filter still reads
+        # it; a contained run has no session environment to print.
+        "neg-jq-arg-cannot-bind-env",
+        # A glob over a checkout link that leaves it: the contained run has no home
+        # access, so the link reads nothing.
+        "neg-linked-sources-grep-glob-over-escaping-link",
         "neg-rustflags-linker-prefix-cargo-test",
         "neg-pytest-addopts-plugin-prefix-venv-pytest",
+        # A Python filter that reaches past its input: the program screen must
+        # refuse it, and a contained run reaches no file outside the workspace,
+        # no module path the prefix names and no network.
+        "python-json-filter-lists-directory",
+        "python-json-filter-module-path-prefix",
+        "python-json-filter-opens-file",
         # A tool setting whose value is a URL, a path or a file to load rather
         # than the switch word the inert reading accepts: the command keeps its
         # review, and a contained run has no network for the fetch and no home
@@ -340,6 +373,9 @@ def test_only_the_marked_cases_may_pass_on_containment() -> None:
         # script reaches nothing outside the workspace copy.
         "neg-perl-config-summary",
         "neg-ruby-version-then-script",
+        # BSD `ps e` adds each process's environment to its command column. A
+        # contained run sees only the sandbox's own processes.
+        "neg-ps-bsd-environment-column-list",
         # A removal git reads as the trailing part of a sibling checkout's registration: the
         # checkout it would take away stands outside the workspace, so a contained run removes
         # nothing of it.
