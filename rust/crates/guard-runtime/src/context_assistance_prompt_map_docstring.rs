@@ -15,10 +15,13 @@ use std::path::Path;
 const WORDS: [&str; 4] = ["docstring", "docstrings", "doctest", "doctests"];
 const EXAMPLES: [&str; 4] = ["doctest", "doctests", "example", "examples"];
 /// Words of a prompt that reads a docstring for what code should do.
-const BEHAVIOR: [&str; 7] = [
+const BEHAVIOR: [&str; 10] = [
     "implement",
     "implemented",
+    "say",
     "says",
+    "explain",
+    "explains",
     "describe",
     "describes",
     "bug",
@@ -41,10 +44,29 @@ relative imports fail.";
 /// it for what the code should do ("implement it so it does what its
 /// docstring says" asks for the code). An example alone is not one: "fix
 /// example.py" or "the examples folder" name no docstring.
+#[cfg(test)]
 pub(super) fn asks_for_docstring(prompt: &str) -> bool {
+    asks(prompt).any
+}
+
+/// What a prompt asks of docstrings.
+#[derive(Clone, Copy, Default)]
+pub(crate) struct Asks {
+    /// To write a docstring or doctest.
+    pub(crate) any: bool,
+    /// For an example: the prompt names one or shows a `>>>` line.
+    pub(crate) examples: bool,
+}
+
+/// What `prompt` asks of docstrings.
+pub(super) fn asks(prompt: &str) -> Asks {
     let words: Vec<String> = prompt_words(prompt).collect();
     let has = |list: &[&str]| words.iter().any(|word| list.contains(&word.as_str()));
-    prompt.contains(">>>") || (has(&WORDS) && (has(&EXAMPLES) || !has(&BEHAVIOR)))
+    let examples = prompt.contains(">>>") || has(&EXAMPLES);
+    Asks {
+        any: prompt.contains(">>>") || (has(&WORDS) && (has(&EXAMPLES) || !has(&BEHAVIOR))),
+        examples,
+    }
 }
 
 /// The notes given beside a function shown earlier: each is said in full
@@ -76,13 +98,17 @@ pub(super) fn shown(
     asked: &Asked,
     said: Said,
 ) -> Option<(Span, String, String)> {
-    let python = asked.docstring && file.path.ends_with(".py") && !file.container(at);
+    let python = asked.docstring.any && file.path.ends_with(".py") && !file.container(at);
     let head = python.then(|| head(file, at)).flatten();
+    // How to write a backslash and run a doctest matter only to an example:
+    // one the docstring holds or the prompt asks for. Named for a docstring
+    // with none, the command finds no test and the agent tries others.
+    let examples = python && (asked.docstring.examples || holds_example(file, at));
     let mut note = String::new();
-    if !said.raw && head.is_some_and(|(_, raw)| raw == Some(false)) {
+    if examples && !said.raw && head.is_some_and(|(_, raw)| raw == Some(false)) {
         note.push_str(NOT_RAW);
     }
-    match python.then(|| command(file, at, &asked.root)).flatten() {
+    match examples.then(|| command(file, at, &asked.root)).flatten() {
         Some(command) if said.run => {
             note.push_str(&DOCTEST_AGAIN.replace("{command}", &command));
         }
@@ -92,7 +118,7 @@ pub(super) fn shown(
                 note.push_str(OUTSIDE);
             }
         }
-        None if python && !said.run && plain(file.path) && relative(file) => {
+        None if examples && !said.run && plain(file.path) && relative(file) => {
             note.push_str(&DOCTESTS.replace("{path}", file.path));
         }
         None => {}
@@ -243,6 +269,16 @@ fn command(file: &File, at: usize, root: &Path) -> Option<String> {
             file.path,
             module.join(".")
         )
+    })
+}
+
+/// Whether the definition at `at` holds a doctest example.
+fn holds_example(file: &File, at: usize) -> bool {
+    let section = &file.sections[at];
+    (file.lines.get(section.start.saturating_sub(1)..section.end)).is_some_and(|lines| {
+        lines
+            .iter()
+            .any(|line| line.trim_start().starts_with(">>>"))
     })
 }
 

@@ -1,4 +1,4 @@
-use super::docstring::asks_for_docstring;
+use super::docstring::{asks_for_docstring, Asks};
 use super::tests::{files, later, looking_for};
 use super::*;
 use std::path::Path;
@@ -30,7 +30,10 @@ fn mapped_in(path: &str, text: &str, docstring: bool) -> String {
 /// The map of `text` at `path` in a project at `root`.
 fn mapped_at(root: &Path, path: &str, text: &str, docstring: bool) -> String {
     let asked = Asked {
-        docstring,
+        docstring: Asks {
+            any: docstring,
+            examples: docstring,
+        },
         root: root.to_path_buf(),
         ..Asked::default()
     };
@@ -70,6 +73,48 @@ fn prompts_about_docstrings_or_doctests_are_told_apart_from_docs() {
     ));
 }
 
+/// A stub's docstring says what to build, so a prompt pointing at it asks
+/// for code, and a docstring with no example has no doctest to run: named
+/// one, agents ran the command, read "not found" and tried others.
+#[test]
+fn a_docstring_without_an_example_gets_no_doctest_command() {
+    assert!(!asks_for_docstring(
+        "someone left rr_cache as a NotImplementedError stub in src/cachetools/func.py. \
+fill it in please, the tests and docstring say what it should do"
+    ));
+    assert!(!asks_for_docstring(
+        "make remap do what its docstring explains"
+    ));
+    let plain = "def remap(root):\n    \"\"\"Remap it.\"\"\"\n    raise NotImplementedError\n";
+    let shown_with = |asks: Asks, text: &str| {
+        let asked = Asked {
+            docstring: asks,
+            ..Asked::default()
+        };
+        let list = files(&[("src/iterutils.py", text)]);
+        let terms = looking_for(&[("remap", true, 1)]);
+        map(&list, &terms, &asked, later()).unwrap().text
+    };
+    let docstring = Asks {
+        any: true,
+        examples: false,
+    };
+    let shown = shown_with(docstring, plain);
+    assert!(!shown.contains("--doctest-modules"), "{shown}");
+    assert!(!shown.contains("not a raw string"), "{shown}");
+    let example =
+        "def remap(root):\n    \"\"\"Remap it.\n\n    >>> remap(1)\n    1\n    \"\"\"\n    \
+raise NotImplementedError\n";
+    let shown = shown_with(docstring, example);
+    assert!(shown.contains(RUN), "{shown}");
+    assert!(shown.contains("not a raw string"), "{shown}");
+    let wanted = Asks {
+        any: true,
+        examples: true,
+    };
+    assert!(shown_with(wanted, plain).contains(RUN));
+}
+
 /// The doctest and backslash notes are said in full once, for the first
 /// function shown: a function shown beside it gets the command for its own
 /// doctest only.
@@ -78,7 +123,10 @@ fn the_doctest_note_is_given_once() {
     let text = "def remap(root):\n    \"\"\"Remap it.\"\"\"\n    return root\n\n\n\
 def walk(root):\n    \"\"\"Walk it.\"\"\"\n    return root\n";
     let asked = Asked {
-        docstring: true,
+        docstring: Asks {
+            any: true,
+            examples: true,
+        },
         ..Asked::default()
     };
     let list = files(&[("src/iterutils.py", text)]);
