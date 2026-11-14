@@ -161,9 +161,17 @@ def test_session_start_argv_preserves_exact_paths(
         ("guard\x00home", "home"),
     ],
 )
-def test_session_start_rejects_malformed_argv(argv: tuple[str, ...]) -> None:
+def test_session_start_rejects_malformed_argv(
+    argv: tuple[str, ...], tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    work = tmp_path / "work"
+    work.mkdir()
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))
+    monkeypatch.chdir(work)
     with pytest.raises(SystemExit, match="claude_session_start_argv_invalid"):
         claude_code._run_session_start_from_argv(argv)
+    # A refused vector never names the Guard home, so nothing lands beside the hook.
+    assert list(work.iterdir()) == []
 
 
 def test_shell_command_round_trips_hostile_posix_arguments_without_running_marker(tmp_path: Path) -> None:

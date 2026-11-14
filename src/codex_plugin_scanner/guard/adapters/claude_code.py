@@ -116,8 +116,10 @@ def _run_session_start_from_argv(argv: Sequence[str]) -> int:
 
     home = Path.home()
     # Every native request here, the description included, answers for the
-    # hook's Guard home rather than the default one.
-    claimed = Path(argv[0]) if argv and argv[0] and "\x00" not in argv[0] else home / ".hol-guard"
+    # hook's Guard home rather than the default one. A vector the runtime would
+    # refuse binds the default home, so nothing is provisioned under it.
+    well_formed = 2 <= len(argv) <= 3 and all(part and "\x00" not in part for part in argv)
+    claimed = Path(argv[0]) if well_formed and Path(argv[0]).is_absolute() else home / ".hol-guard"
     context = HarnessContext(home_dir=home, guard_home=claimed, workspace_dir=None)
     with bound_context_digest_home(claimed):
         try:
