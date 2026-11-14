@@ -3,7 +3,8 @@ use super::*;
 use std::path::PathBuf;
 
 const DAY: u64 = 86_400;
-const NOW: u64 = 1_800_000_000;
+/// 2026-11-14T09:00:00Z; the fixture records are dated an hour later.
+const NOW: u64 = 1_794_646_800;
 
 fn added<'a>(app: &'a str, id: &'a str, transcript: Option<&'a str>, files: &[&str]) -> Added<'a> {
     Added {
@@ -13,6 +14,21 @@ fn added<'a>(app: &'a str, id: &'a str, transcript: Option<&'a str>, files: &[&s
         chars: 4_000,
         files: files.iter().map(|file| (*file).to_owned()).collect(),
     }
+}
+
+fn shown(files: &[String], at: u64) -> Vec<Shown> {
+    files
+        .iter()
+        .map(|path| Shown {
+            path: path.clone(),
+            at,
+            last: at,
+        })
+        .collect()
+}
+
+fn paths(files: &[Shown]) -> Vec<&str> {
+    files.iter().map(|file| file.path.as_str()).collect()
 }
 
 fn no_env(_: &str) -> Option<String> {
@@ -49,7 +65,7 @@ fn write_lines(path: &Path, lines: &[String]) -> String {
 fn codex_record(home: &Path) -> String {
     let usage = |input: u64, output: u64| {
         format!(
-            r#"{{"timestamp":"2026-11-14T10:00:00Z","type":"token_usage_record","payload":{{"usage":{{"input_tokens":{input},"cached_input_tokens":{},"output_tokens":{output}}}}}}}"#,
+            r#"{{"timestamp":"2026-11-14T10:00:00Z","type":"token_usage_record","payload":{{"usage":{{"input_tokens":{input},"cached_input_tokens":{},"cache_write_input_tokens":100,"output_tokens":{output}}}}}}}"#,
             input / 2
         )
     };
@@ -117,10 +133,11 @@ fn record_merges_one_session_and_keeps_files_once() {
         .find(|item| item.app == "codex")
         .unwrap();
     assert_eq!(
-        (codex.prompts, codex.chars, codex.first, codex.last),
+        (codex.prompts(), codex.chars(), codex.first, codex.last),
         (2, 8_000, NOW, NOW + 60)
     );
-    assert_eq!(codex.files, ["a.rs", "b.rs", "c.rs"]);
+    assert_eq!(paths(&codex.files), ["a.rs", "b.rs", "c.rs"]);
+    assert_eq!((codex.files[1].at, codex.files[1].last), (NOW, NOW + 60));
     // A later prompt without a record path keeps the one already known.
     assert_eq!(codex.transcript.as_deref(), Some("/x.jsonl"));
 }
@@ -152,7 +169,7 @@ fn hook_payloads_are_noted_except_for_apps_that_may_drop_context() {
     let journal = load(&homes.guard);
     assert_eq!(journal.sessions[0].transcript.as_deref(), Some("/r.jsonl"));
     // The once-per-session hint has no file; it is not a file shown.
-    assert_eq!(journal.sessions[0].files, ["a.rs"]);
+    assert_eq!(paths(&journal.sessions[0].files), ["a.rs"]);
 }
 
 #[test]
@@ -202,9 +219,9 @@ fn codex_record_gives_tokens_and_files_opened_anyway() {
         "src/billing/tax.rs".to_owned(),
         "invoice_test".to_owned(),
     ];
-    let usage = read::usage(&path, &roots, &files).unwrap();
+    let usage = read::usage(&path, &roots, 0, &shown(&files, 0)).unwrap();
     assert_eq!(usage.requests, 2);
-    // Codex input already includes cached reads.
+    // Codex input already includes cached reads and cache writes.
     assert_eq!(usage.tokens, 10_000 + 500 + 20_000 + 1_500);
     // `invoice_test` is only part of a longer name, so it was not opened.
     assert_eq!(usage.opened, ["src/billing/invoice.rs"]);
@@ -220,7 +237,7 @@ fn claude_record_counts_each_reply_once_with_cache_reads() {
         "src/app/routes.ts".to_owned(),
         "src/app/db.ts".to_owned(),
     ];
-    let usage = read::usage(&path, &roots, &files).unwrap();
+    let usage = read::usage(&path, &roots, 0, &shown(&files, 0)).unwrap();
     assert_eq!(usage.requests, 2);
     assert_eq!(usage.tokens, 2 * 10_000);
     // Text that mentions a file is not a tool opening it.
@@ -333,7 +350,14 @@ fn report_counts_only_recent_sessions_that_were_shown_code() {
         (total.sessions, total.prompts, total.measured_sessions),
         (3, 4, 2)
     );
-    assert_eq!((total.files_shown, total.files_opened_anyway), (4, 1));
+    assert_eq!(
+        (
+            total.files_shown,
+            total.files_checked,
+            total.files_opened_anyway
+        ),
+        (4, 3, 1)
+    );
     assert_eq!(total.context_tokens, 4 * 1_000);
     assert_eq!(total.used_tokens, 32_000 + 20_000);
     assert_eq!(
@@ -356,8 +380,8 @@ fn a_growing_record_is_read_again() {
     let homes = homes();
     let path = codex_record(&homes.home);
     let roots = record_roots(&homes.home, no_env);
-    let files = ["src/billing/tax.rs".to_owned()];
-    assert!(read::usage(&path, &roots, &files)
+    let files = shown(&["src/billing/tax.rs".to_owned()], 0);
+    assert!(read::usage(&path, &roots, 0, &files)
         .unwrap()
         .opened
         .is_empty());
@@ -365,5 +389,52 @@ fn a_growing_record_is_read_again() {
     body.push_str(r#"{"type":"response_item","payload":{"type":"function_call","arguments":"{\"cmd\":\"cat src/billing/tax.rs\"}"}}"#);
     body.push('\n');
     std::fs::write(&path, body).unwrap();
-    assert_eq!(read::usage(&path, &roots, &files).unwrap().opened, files);
+    assert_eq!(
+        read::usage(&path, &roots, 0, &files).unwrap().opened,
+        ["src/billing/tax.rs"]
+    );
+}
+
+#[test]
+fn records_the_usage_meter_found_are_read_without_the_apps_settings() {
+    // Guard's background service can start without the user's CODEX_HOME;
+    // the usage meter, which ran with it, already found the record.
+    let homes = homes();
+    let custom = homes.home.join("custom-codex/sessions");
+    std::fs::create_dir_all(&custom).unwrap();
+    let codex = codex_record(&homes.home);
+    let moved = custom.join("rollout-a.jsonl");
+    std::fs::rename(&codex, &moved).unwrap();
+    let moved_text = moved.to_string_lossy().into_owned();
+    let unlisted = custom.join("rollout-other.jsonl");
+    std::fs::copy(&moved, &unlisted).unwrap();
+    let meter = serde_json::json!({"version": 1, "files": {
+        format!("codex:{moved_text}"): {"size": 1},
+        "codex:relative.jsonl": {},
+        "garbage": {},
+    }});
+    let note = |id: &str, path: &str, at: u64| {
+        record_at(
+            &homes.guard,
+            added("codex", id, Some(path), &["src/billing/invoice.rs"]),
+            at,
+        );
+    };
+    let at = NOW;
+    note("listed", &moved_text, at);
+    note("unlisted", &unlisted.to_string_lossy(), at);
+    let before = report_at(&homes.guard, &homes.home, no_env, at);
+    assert_eq!(before.total.measured_sessions, 0);
+    std::fs::write(
+        homes.guard.join("context-usage-meter.json"),
+        meter.to_string(),
+    )
+    .unwrap();
+    let after = report_at(&homes.guard, &homes.home, no_env, at);
+    assert_eq!(
+        (after.total.sessions, after.total.measured_sessions),
+        (2, 1)
+    );
+    assert_eq!(after.total.used_tokens, 32_000);
+    assert_eq!(after.total.files_opened_anyway, 1);
 }

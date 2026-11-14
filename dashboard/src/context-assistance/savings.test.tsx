@@ -4,7 +4,7 @@ import { CigarSavingsPanel } from "./savings-panel";
 import { parseSavings, parseUsageMeter } from "./usage-api";
 
 const totals = (over: Record<string, number> = {}) => ({
-  sessions: 3, prompts: 12, context_tokens: 9_400, files_shown: 22, files_opened_anyway: 4,
+  sessions: 3, prompts: 12, context_tokens: 9_400, files_shown: 22, files_checked: 22, files_opened_anyway: 4,
   measured_sessions: 3, used_tokens: 1_200_000, estimated_saved_tokens: 1_400_000, ...over,
 });
 const wire = (total = totals(), apps = [{ app: "codex", rate_percent: 52, ...total }]) =>
@@ -35,27 +35,29 @@ assert.match(full, /about ¾ of a word/);
 assert.match(full, /Codex 52%/);
 assert.doesNotMatch(full, /Guard could not read the rest/);
 
-// Some sessions unreadable: the estimate says what it covers.
-const partial = renderToStaticMarkup(<CigarSavingsPanel savings={parseSavings(wire(totals({ measured_sessions: 1 })))} />);
+// Some sessions unreadable: the estimate says what it covers, and only read sessions count reopened files.
+const partial = renderToStaticMarkup(<CigarSavingsPanel savings={parseSavings(wire(totals({ measured_sessions: 1, files_checked: 5, files_opened_anyway: 1 })))} />);
 assert.match(partial, /The estimate covers 1 of 3 sessions\. Guard could not read the rest\./);
+assert.match(partial, /4 of 5 files shown, the AI didn&#x27;t need to open again/);
 
 // No session readable: measured facts only, no invented number, no bar.
-const blind = renderToStaticMarkup(<CigarSavingsPanel savings={parseSavings(wire(totals({ measured_sessions: 0, used_tokens: 0, estimated_saved_tokens: 0 })))} />);
+const blind = renderToStaticMarkup(<CigarSavingsPanel savings={parseSavings(wire(totals({ measured_sessions: 0, files_checked: 0, files_opened_anyway: 0, used_tokens: 0, estimated_saved_tokens: 0 })))} />);
 assert.match(blind, /CIGAR helped 3 sessions this week/);
 assert.match(blind, /can&#x27;t estimate the tokens saved/);
 assert.doesNotMatch(blind, /saved about|role="img"|<table/);
 assert.match(blind, /cut tokens by about half\./, "with no app measured the method still reads as a sentence");
 assert.match(blind, /12 prompts got project code/);
+assert.doesNotMatch(blind, /didn&#x27;t need to open again/, "unread sessions never claim files went unopened");
 
 // Nothing helped yet, or no estimate at all.
-const empty = renderToStaticMarkup(<CigarSavingsPanel savings={parseSavings(wire(totals({ sessions: 0, prompts: 0, context_tokens: 0, files_shown: 0, files_opened_anyway: 0, measured_sessions: 0, used_tokens: 0, estimated_saved_tokens: 0 }), []))} />);
+const empty = renderToStaticMarkup(<CigarSavingsPanel savings={parseSavings(wire(totals({ sessions: 0, prompts: 0, context_tokens: 0, files_shown: 0, files_checked: 0, files_opened_anyway: 0, measured_sessions: 0, used_tokens: 0, estimated_saved_tokens: 0 }), []))} />);
 assert.match(empty, /No savings to show yet/);
 assert.doesNotMatch(empty, /\b0 tokens|saved about/);
 assert.equal(renderToStaticMarkup(<CigarSavingsPanel savings={null} />), "");
 
 // One session, one prompt, one file: singular words.
-const one = renderToStaticMarkup(<CigarSavingsPanel savings={parseSavings(wire(totals({ sessions: 1, prompts: 1, files_shown: 1, files_opened_anyway: 1, measured_sessions: 0, used_tokens: 0, estimated_saved_tokens: 0 })))} />);
-assert.match(one, /CIGAR helped 1 session this week/);
+const one = renderToStaticMarkup(<CigarSavingsPanel savings={parseSavings(wire(totals({ sessions: 1, prompts: 1, files_shown: 1, files_checked: 1, files_opened_anyway: 1, measured_sessions: 1, used_tokens: 900, estimated_saved_tokens: 970 })))} />);
+assert.match(one, /CIGAR saved about <strong>970<\/strong> tokens this week/);
 assert.match(one, /1 prompt got project code/);
 assert.match(one, /0 of 1 file shown/);
 console.log("CIGAR savings estimate panel passed.");

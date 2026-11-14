@@ -326,6 +326,7 @@ def _report(sessions: int, measured: int, saved: int) -> dict:
         "prompts": 3,
         "context_tokens": 2400,
         "files_shown": 5,
+        "files_checked": 4,
         "files_opened_anyway": 1,
         "measured_sessions": measured,
         "used_tokens": 48_000,
@@ -351,7 +352,7 @@ def test_the_cli_labels_the_savings_estimate_and_says_why_it_has_none(
     assert run() == 0
     text = capsys.readouterr().out
     assert "CIGAR saved about 52,000 tokens in the last 7 days. This is an estimate." in text
-    assert "the agent opened 1 of them anyway" in text
+    assert "Of 4 files it showed, the agent opened 1 again anyway." in text
     assert "(Codex 52%)" in text
     assert run() == 0
     assert "could not read those sessions' records" in capsys.readouterr().out

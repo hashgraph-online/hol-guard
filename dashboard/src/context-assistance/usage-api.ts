@@ -18,6 +18,8 @@ export type SavingsTotals = {
   prompts: number;
   context_tokens: number;
   files_shown: number;
+  /** Files shown in sessions Guard could read; only these say what the AI reopened. */
+  files_checked: number;
   files_opened_anyway: number;
   measured_sessions: number;
   used_tokens: number;
@@ -52,7 +54,7 @@ function tool(v: unknown): v is UsageTool {
     && v.recent.every((s) => object(s) && typeof s.last_active === "string" && text(s.model) && text(s.folder) && totals(s.totals));
 }
 
-const SAVINGS_FIELDS = ["sessions", "prompts", "context_tokens", "files_shown", "files_opened_anyway", "measured_sessions", "used_tokens", "estimated_saved_tokens"] as const;
+const SAVINGS_FIELDS = ["sessions", "prompts", "context_tokens", "files_shown", "files_checked", "files_opened_anyway", "measured_sessions", "used_tokens", "estimated_saved_tokens"] as const;
 
 function savingsTotals(v: unknown): v is SavingsTotals {
   return object(v) && SAVINGS_FIELDS.every((field) => count(v[field]));

@@ -5878,11 +5878,12 @@ function CigarSavingsPanel({ savings }) {
   }
   const used = total.used_tokens;
   const saved = total.estimated_saved_tokens;
-  const skipped = Math.max(0, total.files_shown - total.files_opened_anyway);
+  const checked = total.files_checked;
+  const skipped = Math.max(0, checked - total.files_opened_anyway);
   const facts = [
     plural(total.prompts, "prompt", "prompts") + " got project code from CIGAR",
     "About " + count$3(total.context_tokens) + " tokens of code handed over",
-    total.files_shown ? exact$1.format(skipped) + " of " + plural(total.files_shown, "file", "files") + " shown, the AI didn't need to open again" : null
+    checked ? exact$1.format(skipped) + " of " + plural(checked, "file", "files") + " shown, the AI didn't need to open again" : null
   ].filter((fact) => fact !== null);
   const measured = total.measured_sessions > 0 && used > 0;
   const share = measured ? Math.max(4, Math.round(used / (used + saved) * 100)) : 100;
@@ -5947,7 +5948,7 @@ function totals(v) {
 function tool(v) {
   return object$6(v) && typeof v.harness === "string" && count$2(v.sessions) && totals(v.totals) && Array.isArray(v.recent) && v.recent.every((s) => object$6(s) && typeof s.last_active === "string" && text(s.model) && text(s.folder) && totals(s.totals));
 }
-const SAVINGS_FIELDS = ["sessions", "prompts", "context_tokens", "files_shown", "files_opened_anyway", "measured_sessions", "used_tokens", "estimated_saved_tokens"];
+const SAVINGS_FIELDS = ["sessions", "prompts", "context_tokens", "files_shown", "files_checked", "files_opened_anyway", "measured_sessions", "used_tokens", "estimated_saved_tokens"];
 function savingsTotals(v) {
   return object$6(v) && SAVINGS_FIELDS.every((field) => count$2(v[field]));
 }

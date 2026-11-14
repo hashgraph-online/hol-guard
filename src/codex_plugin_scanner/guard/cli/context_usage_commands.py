@@ -114,7 +114,8 @@ def render_savings(report: dict[str, Any] | None, output: TextIO) -> None:
         say(f"CIGAR saved about {saved:,} tokens in the last {days} days. This is an estimate.")
     prompts = "prompt" if total["prompts"] == 1 else "prompts"
     say(f"  It handed {total['prompts']:,} {prompts} about {total['context_tokens']:,} tokens of code.")
-    shown, opened = total["files_shown"], total["files_opened_anyway"]
-    say(f"  It showed {shown:,} files; the agent opened {opened:,} of them anyway.")
+    checked, opened = total.get("files_checked", 0), total["files_opened_anyway"]
+    if checked:
+        say(f"  Of {checked:,} files it showed, the agent opened {opened:,} again anyway.")
     rates = ", ".join(f"{NAMES.get(app['app'], app['app'])} {app['rate_percent']}%" for app in report["apps"])
     say(f"  How: the tokens those sessions used, and the share CIGAR saved on Guard's benchmark ({rates}).")

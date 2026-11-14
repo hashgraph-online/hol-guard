@@ -1,14 +1,16 @@
 //! Turns the helped-session record into this week's savings estimate.
 //!
-//! Measured: how many sessions and prompts CIGAR helped, how much context it
-//! handed over, which files it showed, which of those the agent opened anyway,
-//! and the tokens each helped session used. Estimated: the tokens the same
+//! Measured, for the days in the window only: how many sessions and prompts
+//! CIGAR helped, how much context it handed over, which files it showed,
+//! which of those the agent opened anyway after seeing them, and the tokens
+//! each helped session used. Estimated: the tokens the same
 //! work would have used without CIGAR, from the share CIGAR saved on Guard's
 //! own benchmark for that app. Saved = used x rate / (1 - rate).
 use super::read;
-use super::{load, now, record_roots, Helped, DAY_SECS, KEEP_DAYS};
+use super::Shown;
+use super::{load, now, record_roots, window_start, Helped, DAY_SECS, KEEP_DAYS};
 use serde::Serialize;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 pub(crate) const SCHEMA: &str = "guard-cigar-savings.v1";
 /// Share of tokens CIGAR saved on Guard's benchmark, rounded down. Apps not
@@ -23,6 +25,9 @@ pub(crate) struct Totals {
     pub(crate) prompts: u64,
     pub(crate) context_tokens: u64,
     pub(crate) files_shown: u64,
+    /// Files shown in sessions whose record Guard could read; only these
+    /// can say whether the agent opened them anyway.
+    pub(crate) files_checked: u64,
     pub(crate) files_opened_anyway: u64,
     /// Helped sessions whose own record Guard could read.
     pub(crate) measured_sessions: u64,
@@ -66,6 +71,7 @@ impl Totals {
         self.prompts += other.prompts;
         self.context_tokens += other.context_tokens;
         self.files_shown += other.files_shown;
+        self.files_checked += other.files_checked;
         self.files_opened_anyway += other.files_opened_anyway;
         self.measured_sessions += other.measured_sessions;
         self.used_tokens += other.used_tokens;
@@ -73,21 +79,33 @@ impl Totals {
     }
 }
 
-fn session(helped: &Helped, roots: &[std::path::PathBuf], rate_percent: u32) -> Totals {
+fn session(helped: &Helped, roots: &[PathBuf], start: u64, rate_percent: u32) -> Totals {
+    let first_day = start / DAY_SECS;
+    let days = helped.days.iter().filter(|day| day.day >= first_day);
+    let files: Vec<Shown> = helped
+        .files
+        .iter()
+        .filter(|file| file.last.max(file.at) >= start)
+        .cloned()
+        .collect();
     let mut totals = Totals {
         sessions: 1,
-        prompts: helped.prompts,
-        context_tokens: helped.chars / CHARS_PER_TOKEN,
-        files_shown: helped.files.len() as u64,
+        prompts: days.clone().map(|day| day.prompts).sum(),
+        context_tokens: days.map(|day| day.chars).sum::<u64>() / CHARS_PER_TOKEN,
+        files_shown: files.len() as u64,
         ..Totals::default()
     };
+    // Tokens count from the first help in the window, not from the start of
+    // a session resumed from an earlier week.
+    let since = start.max(helped.first);
     let usage = helped
         .transcript
         .as_deref()
-        .and_then(|path| read::usage(path, roots, &helped.files))
+        .and_then(|path| read::usage(path, roots, since, &files))
         .filter(|usage| usage.requests > 0);
     if let Some(usage) = usage {
         totals.measured_sessions = 1;
+        totals.files_checked = totals.files_shown;
         totals.files_opened_anyway = usage.opened.len() as u64;
         totals.used_tokens = usage.tokens;
         totals.estimated_saved_tokens = saved(usage.tokens, rate_percent);
@@ -110,17 +128,21 @@ pub(crate) fn report_at(
     env: impl Fn(&str) -> Option<String>,
     at: u64,
 ) -> Report {
-    let roots = record_roots(home, env);
-    let cutoff = at.saturating_sub(KEEP_DAYS * DAY_SECS);
+    let mut roots = record_roots(home, env);
+    roots.extend(read::metered(guard_home));
+    let start = window_start(at);
     let mut apps: Vec<App> = Vec::new();
     // Only sessions where CIGAR showed real code count as helped.
     let helped = load(guard_home).sessions;
-    for item in helped
-        .iter()
-        .filter(|item| item.last >= cutoff && !item.files.is_empty())
-    {
+    for item in helped.iter().filter(|item| {
+        item.last >= start
+            && item
+                .files
+                .iter()
+                .any(|file| file.last.max(file.at) >= start)
+    }) {
         let rate_percent = rate(&item.app);
-        let totals = session(item, &roots, rate_percent);
+        let totals = session(item, &roots, start, rate_percent);
         match apps.iter_mut().find(|app| app.app == item.app) {
             Some(app) => app.totals.add(&totals),
             None => apps.push(App {

@@ -3,15 +3,22 @@
 //!
 //! Only records the app keeps in its usual place are read: the path must be
 //! absolute, end in `.jsonl`, hold no `..`, and still sit under one of the
-//! roots after links are followed. Results are cached by path, size and
-//! change time, so a page refresh reads nothing new.
+//! roots after links are followed. Only lines dated on or after `since`
+//! count, and a tool call counts as opening a file only when it came after
+//! CIGAR showed that file. Each record is read once: a later read starts
+//! where the last one stopped, unless the file was replaced or the question
+//! changed. A line longer than `MAX_LINE_BYTES` is skipped without being held.
+use super::Shown;
 use serde_json::Value;
 use std::collections::HashMap;
-use std::io::{BufRead, BufReader};
+use std::io::{BufRead, BufReader, Read, Seek, SeekFrom};
 use std::path::{Component, Path, PathBuf};
 use std::sync::Mutex;
-use std::time::SystemTime;
 
+#[path = "context_assistance_savings_time.rs"]
+mod time;
+
+const METER_FILE: &str = "context-usage-meter.json";
 const MAX_LINE_BYTES: usize = 4 << 20;
 const MAX_CACHE: usize = 512;
 const RECENT_IDS: usize = 1_024;
@@ -22,15 +29,64 @@ pub(crate) struct Usage {
     /// Every token the app sent or got back, cached reads included.
     pub(crate) tokens: u64,
     pub(crate) requests: u64,
-    /// Shown files a tool call named afterwards.
+    /// Shown files a tool call named after they were shown.
     pub(crate) opened: Vec<String>,
 }
 
-type Key = (PathBuf, u64, SystemTime, usize);
+/// How far one record was read, and what it said up to there.
+struct Progress {
+    identity: Option<u128>,
+    offset: u64,
+    since: u64,
+    files: Vec<Shown>,
+    usage: Usage,
+    opened: Vec<bool>,
+    ids: Vec<String>,
+}
 
-fn cache() -> &'static Mutex<HashMap<Key, Usage>> {
-    static CACHE: std::sync::OnceLock<Mutex<HashMap<Key, Usage>>> = std::sync::OnceLock::new();
-    CACHE.get_or_init(|| Mutex::new(HashMap::new()))
+type Cache = Mutex<HashMap<PathBuf, Progress>>;
+
+fn cache() -> &'static Cache {
+    static CACHE: std::sync::OnceLock<Cache> = std::sync::OnceLock::new();
+    CACHE.get_or_init(Default::default)
+}
+
+/// Tells a replaced file from one that only grew.
+fn identity(meta: &std::fs::Metadata) -> Option<u128> {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::MetadataExt;
+        Some((u128::from(meta.dev()) << 64) | u128::from(meta.ino()))
+    }
+    #[cfg(not(unix))]
+    {
+        let born = meta.created().ok()?;
+        born.duration_since(std::time::UNIX_EPOCH)
+            .ok()
+            .map(|elapsed| elapsed.as_nanos())
+    }
+}
+
+/// Records Guard's usage meter already found. The meter runs where the
+/// user's own settings (such as `CODEX_HOME`) are known; Guard's background
+/// service may start without them. Each listed record counts as its own root.
+pub(crate) fn metered(guard_home: &Path) -> Vec<PathBuf> {
+    let Ok(bytes) = std::fs::read(guard_home.join(METER_FILE)) else {
+        return Vec::new();
+    };
+    let Ok(meter) = serde_json::from_slice::<Value>(&bytes) else {
+        return Vec::new();
+    };
+    let Some(files) = meter.get("files").and_then(Value::as_object) else {
+        return Vec::new();
+    };
+    files
+        .keys()
+        .filter_map(|key| key.split_once(':').map(|(_, path)| path))
+        .filter(|path| Path::new(path).is_absolute())
+        .take(MAX_CACHE)
+        .map(PathBuf::from)
+        .collect()
 }
 
 /// The record's real path when it is one Guard may read.
@@ -53,55 +109,117 @@ pub(crate) fn allowed(path: &str, roots: &[PathBuf]) -> Option<PathBuf> {
 }
 
 /// Reads one record, or `None` when it is gone or not allowed.
-pub(crate) fn usage(path: &str, roots: &[PathBuf], files: &[String]) -> Option<Usage> {
+pub(crate) fn usage(path: &str, roots: &[PathBuf], since: u64, files: &[Shown]) -> Option<Usage> {
     let real = allowed(path, roots)?;
     let meta = std::fs::metadata(&real).ok()?;
-    let key = (real.clone(), meta.len(), meta.modified().ok()?, files.len());
-    if let Some(hit) = cache().lock().ok().and_then(|held| held.get(&key).cloned()) {
-        return Some(hit);
-    }
-    let read = scan(&real, files).ok()?;
-    if let Ok(mut held) = cache().lock() {
+    let mut held = cache().lock().ok()?;
+    let reusable = held.get(&real).is_some_and(|known| {
+        known.identity == identity(&meta)
+            && known.offset <= meta.len()
+            && known.since == since
+            && known.files == files
+    });
+    if !reusable {
         if held.len() >= MAX_CACHE {
             held.clear();
         }
-        held.insert(key, read.clone());
+        let fresh = Progress {
+            identity: identity(&meta),
+            offset: 0,
+            since,
+            files: files.to_vec(),
+            usage: Usage::default(),
+            opened: vec![false; files.len()],
+            ids: Vec::new(),
+        };
+        held.insert(real.clone(), fresh);
     }
-    Some(read)
+    let progress = held.get_mut(&real)?;
+    if scan(&real, progress).is_err() {
+        held.remove(&real);
+        return None;
+    }
+    let mut usage = progress.usage.clone();
+    usage.opened = progress
+        .files
+        .iter()
+        .zip(&progress.opened)
+        .filter(|(_, hit)| **hit)
+        .map(|(file, _)| file.path.clone())
+        .collect();
+    Some(usage)
 }
 
-fn scan(path: &Path, files: &[String]) -> std::io::Result<Usage> {
-    let mut reader = BufReader::new(std::fs::File::open(path)?);
-    let mut usage = Usage::default();
-    let mut opened = vec![false; files.len()];
-    let mut ids: Vec<String> = Vec::new();
-    let mut line = Vec::new();
+/// Reads the next line into `line`. Returns the bytes it passed over and
+/// whether `line` holds one whole line worth reading; `None` at the end.
+/// Passing over nothing means the rest is a line still being written.
+fn next_line(
+    reader: &mut impl BufRead,
+    line: &mut Vec<u8>,
+) -> std::io::Result<Option<(u64, bool)>> {
+    line.clear();
+    let limit = MAX_LINE_BYTES as u64 + 1;
+    let read = reader.by_ref().take(limit).read_until(b'\n', line)?;
+    if read == 0 {
+        return Ok(None);
+    }
+    if line.last() == Some(&b'\n') {
+        return Ok(Some((read as u64, true)));
+    }
+    if line.len() <= MAX_LINE_BYTES {
+        return Ok(Some((0, false)));
+    }
+    let mut passed = read as u64;
+    line.clear();
+    line.shrink_to(MAX_LINE_BYTES);
     loop {
-        line.clear();
-        if reader.read_until(b'\n', &mut line)? == 0 {
+        let buffer = reader.fill_buf()?;
+        if buffer.is_empty() {
+            return Ok(Some((0, false)));
+        }
+        let (used, done) = match buffer.iter().position(|byte| *byte == b'\n') {
+            Some(end) => (end + 1, true),
+            None => (buffer.len(), false),
+        };
+        reader.consume(used);
+        passed += used as u64;
+        if done {
+            return Ok(Some((passed, false)));
+        }
+    }
+}
+
+fn scan(path: &Path, progress: &mut Progress) -> std::io::Result<()> {
+    let mut file = std::fs::File::open(path)?;
+    file.seek(SeekFrom::Start(progress.offset))?;
+    let mut reader = BufReader::new(file);
+    let mut line = Vec::new();
+    while let Some((passed, whole)) = next_line(&mut reader, &mut line)? {
+        if passed == 0 {
             break;
         }
-        // A last line with no newline is still being written.
-        if line.last() != Some(&b'\n') || line.len() > MAX_LINE_BYTES {
-            continue;
-        }
-        let Ok(record) = serde_json::from_slice::<Value>(&line) else {
+        progress.offset += passed;
+        let parsed = whole.then(|| serde_json::from_slice::<Value>(&line).ok());
+        let Some(record) = parsed.flatten() else {
             continue;
         };
-        line_usage(&record, &mut usage, &mut ids);
+        // An undated line counts: leaving it out could only flatter CIGAR.
+        let when = record
+            .get("timestamp")
+            .and_then(Value::as_str)
+            .and_then(time::parse);
+        if when.is_some_and(|when| when < progress.since) {
+            continue;
+        }
+        line_usage(&record, &mut progress.usage, &mut progress.ids);
         for text in calls(&record) {
-            for (index, file) in files.iter().enumerate() {
-                opened[index] = opened[index] || names(&text, file);
+            for (index, file) in progress.files.iter().enumerate() {
+                let after = when.is_none_or(|when| when >= file.at);
+                progress.opened[index] |= after && names(&text, &file.path);
             }
         }
     }
-    usage.opened = files
-        .iter()
-        .zip(opened)
-        .filter(|(_, hit)| *hit)
-        .map(|(file, _)| file.clone())
-        .collect();
-    Ok(usage)
+    Ok(())
 }
 
 fn count(value: Option<&Value>) -> u64 {
@@ -112,10 +230,8 @@ fn line_usage(record: &Value, usage: &mut Usage, ids: &mut Vec<String>) {
     let kind = record.get("type").and_then(Value::as_str);
     if kind == Some("token_usage_record") {
         let used = &record["payload"]["usage"];
-        // OpenAI counts cached input inside `input_tokens`.
-        usage.tokens += count(used.get("input_tokens"))
-            + count(used.get("cache_write_input_tokens"))
-            + count(used.get("output_tokens"));
+        // OpenAI counts cached reads and cache writes inside `input_tokens`.
+        usage.tokens += count(used.get("input_tokens")) + count(used.get("output_tokens"));
         usage.requests += 1;
         return;
     }

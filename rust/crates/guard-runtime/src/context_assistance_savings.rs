@@ -19,7 +19,7 @@ mod read;
 pub(crate) mod report;
 
 pub(crate) const FILE_NAME: &str = "context-savings.json";
-const SCHEMA: &str = "guard-cigar-savings-journal.v1";
+const SCHEMA: &str = "guard-cigar-savings-journal.v2";
 const MAX_SESSIONS: usize = 256;
 const MAX_FILES: usize = 64;
 const MAX_PATH_BYTES: usize = 1_024;
@@ -37,12 +37,48 @@ pub(crate) struct Helped {
     pub(crate) transcript: Option<String>,
     pub(crate) first: u64,
     pub(crate) last: u64,
-    pub(crate) prompts: u64,
-    /// Characters of context CIGAR added over the session.
-    pub(crate) chars: u64,
+    /// Prompts helped and characters added, by day, for the last
+    /// `KEEP_DAYS` days only.
+    #[serde(default)]
+    pub(crate) days: Vec<Day>,
     /// Project files the context showed, relative to the project.
     #[serde(default)]
-    pub(crate) files: Vec<String>,
+    pub(crate) files: Vec<Shown>,
+}
+
+/// What CIGAR added to one session on one day (days since 1970, UTC).
+#[derive(Clone, Debug, Default, Deserialize, Serialize, PartialEq, Eq)]
+pub(crate) struct Day {
+    pub(crate) day: u64,
+    pub(crate) prompts: u64,
+    pub(crate) chars: u64,
+}
+
+/// A file the context showed: when it was first shown, so only later opens
+/// count, and when it was last shown, so the window keeps it.
+#[derive(Clone, Debug, Default, Deserialize, Serialize, PartialEq, Eq)]
+pub(crate) struct Shown {
+    pub(crate) path: String,
+    pub(crate) at: u64,
+    #[serde(default)]
+    pub(crate) last: u64,
+}
+
+#[cfg(test)]
+impl Helped {
+    pub(crate) fn prompts(&self) -> u64 {
+        self.days.iter().map(|day| day.prompts).sum()
+    }
+
+    pub(crate) fn chars(&self) -> u64 {
+        self.days.iter().map(|day| day.chars).sum()
+    }
+}
+
+/// Start of the reporting window: midnight UTC, `KEEP_DAYS - 1` days before
+/// the day of `at`. It stays put all day, so cached reads stay valid.
+pub(crate) fn window_start(at: u64) -> u64 {
+    (at / DAY_SECS).saturating_sub(KEEP_DAYS - 1) * DAY_SECS
 }
 
 #[derive(Debug, Default, Deserialize, Serialize)]
@@ -118,8 +154,8 @@ pub(crate) fn record_at(guard_home: &Path, added: Added<'_>, at: u64) {
     }
     let Ok(_held) = lock().lock() else { return };
     let mut journal = load(guard_home);
-    let cutoff = at.saturating_sub(KEEP_DAYS * DAY_SECS);
-    journal.sessions.retain(|session| session.last >= cutoff);
+    let start = window_start(at);
+    journal.sessions.retain(|session| session.last >= start);
     let index = journal
         .sessions
         .iter()
@@ -136,12 +172,32 @@ pub(crate) fn record_at(guard_home: &Path, added: Added<'_>, at: u64) {
         session.transcript = Some(path.to_owned());
     }
     session.last = at;
-    session.prompts += 1;
-    session.chars += added.chars as u64;
+    let today = at / DAY_SECS;
+    session.days.retain(|day| day.day * DAY_SECS >= start);
+    match session.days.iter_mut().find(|day| day.day == today) {
+        Some(day) => {
+            day.prompts += 1;
+            day.chars += added.chars as u64;
+        }
+        None => session.days.push(Day {
+            day: today,
+            prompts: 1,
+            chars: added.chars as u64,
+        }),
+    }
     for file in added.files {
-        let fits = !file.is_empty() && file.len() <= MAX_PATH_BYTES;
-        if fits && session.files.len() < MAX_FILES && !session.files.contains(&file) {
-            session.files.push(file);
+        if file.is_empty() || file.len() > MAX_PATH_BYTES {
+            continue;
+        }
+        let room = session.files.len() < MAX_FILES;
+        match session.files.iter_mut().find(|shown| shown.path == file) {
+            Some(shown) => shown.last = at,
+            None if room => session.files.push(Shown {
+                path: file,
+                at,
+                last: at,
+            }),
+            None => {}
         }
     }
     journal.sessions.push(session);
@@ -180,3 +236,6 @@ pub(crate) fn record_roots(home: &Path, env: impl Fn(&str) -> Option<String>) ->
 #[cfg(test)]
 #[path = "context_assistance_savings_tests.rs"]
 mod tests;
+#[cfg(test)]
+#[path = "context_assistance_savings_window_tests.rs"]
+mod window_tests;

@@ -52,11 +52,13 @@ export function CigarSavingsPanel({ savings }: { savings: Savings | null | undef
   }
   const used = total.used_tokens;
   const saved = total.estimated_saved_tokens;
-  const skipped = Math.max(0, total.files_shown - total.files_opened_anyway);
+  // Only sessions Guard could read say which files the AI opened again.
+  const checked = total.files_checked;
+  const skipped = Math.max(0, checked - total.files_opened_anyway);
   const facts = [
     plural(total.prompts, "prompt", "prompts") + " got project code from CIGAR",
     "About " + count(total.context_tokens) + " tokens of code handed over",
-    total.files_shown ? exact.format(skipped) + " of " + plural(total.files_shown, "file", "files") + " shown, the AI didn't need to open again" : null,
+    checked ? exact.format(skipped) + " of " + plural(checked, "file", "files") + " shown, the AI didn't need to open again" : null,
   ].filter((fact): fact is string => fact !== null);
   const measured = total.measured_sessions > 0 && used > 0;
   const share = measured ? Math.max(4, Math.round((used / (used + saved)) * 100)) : 100;
