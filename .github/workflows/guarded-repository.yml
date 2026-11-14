@@ -72,7 +72,7 @@ jobs:
 
       - name: Scan, attest, and register
         id: guard
-        uses: hashgraph-online/hol-guard/guarded-repository@09c6f67cb59c9453981b2ae3f5675155eb003874
+        uses: hashgraph-online/hol-guard/guarded-repository@3a28326dad8c9eebfdc4eb61066db8c4f479f469
         with:
           profile: ${{ inputs.profile }}
           min_score: ${{ inputs.min_score }}
