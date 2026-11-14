@@ -175,6 +175,7 @@ pub mod pretool_git_worktree_siblings;
 pub mod pretool_github_conversation;
 pub mod pretool_github_metadata;
 pub mod pretool_github_reads;
+pub mod pretool_glob_file_predicates;
 pub mod pretool_glob_word_listings;
 pub mod pretool_grep_escaped_alternatives;
 pub mod pretool_grep_late_exclusions;
