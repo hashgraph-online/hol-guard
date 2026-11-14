@@ -62,7 +62,14 @@ pub(super) fn unroll(command: &str) -> Option<String> {
     let rest = rest.trim_start_matches([' ', '\t', '\n', ';']);
     let rest = keyword(rest, "do")?;
     let (items, _, tail) = body_items(rest, name, &["done"])?;
-    let tail = redirect_tail(tail)?;
+    // A pipe into text filters after `done` reads the whole loop's output as
+    // one stream, which is the unrolled list in a brace group piped the same
+    // way. `piped_group` decides that group.
+    let piped = super::piped_group::filter_tail(tail);
+    let tail = match piped {
+        Some(_) => String::new(),
+        None => redirect_tail(tail)?,
+    };
     if items.is_empty() || items.iter().any(|(text, _)| rebinds(text, name)) {
         return None;
     }
@@ -110,7 +117,10 @@ pub(super) fn unroll(command: &str) -> Option<String> {
         }
     }
     let trimmed = out.trim_end_matches([' ', ';']);
-    Some(trimmed.to_owned())
+    Some(match piped {
+        Some(filters) => format!("{{ {trimmed}; }} | {filters}"),
+        None => trimmed.to_owned(),
+    })
 }
 
 /// An optional leading `cd DIR && ` with a literal directory. It is kept once
