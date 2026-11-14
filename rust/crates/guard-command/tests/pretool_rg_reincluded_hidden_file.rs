@@ -94,6 +94,10 @@ fn a_reincluded_fixture_file_rg_searches_by_name_proceeds() {
     }
 }
 
+/// A `.gitignore`, the extra files it needs, and whether the fixture is
+/// replaced with a link to the root `.env`.
+type Case = (&'static str, &'static [(&'static str, &'static str)], bool);
+
 #[test]
 fn a_reincluded_secret_directory_or_link_keeps_review() {
     let link = |repository: &Path| {
@@ -101,7 +105,7 @@ fn a_reincluded_secret_directory_or_link_keeps_review() {
         std::fs::remove_file(kit.join(".mcp.json")).unwrap();
         std::os::unix::fs::symlink(repository.join(".env"), kit.join(".mcp.json")).unwrap();
     };
-    let cases: [(&str, &[(&str, &str)], bool); 4] = [
+    let cases: [Case; 4] = [
         ("!.env\n", &[], false),
         (
             "!tests/fixtures/kit/.envrc\n",
@@ -128,4 +132,19 @@ fn a_reincluded_secret_directory_or_link_keeps_review() {
             assert_ne!(seen, "allow", "{gitignore:?}: {command}");
         }
     }
+}
+
+#[test]
+fn a_search_after_cd_is_answered_for_its_own_directory() {
+    let (home, repository) = repository("node_modules/\n!tests/fixtures/kit/.mcp.json\n", &[]);
+    let tests = repository.join("tests");
+    let first = format!("rg -l download {}", tests.display());
+    let moved = format!("cd src && rg -l download {}", tests.display());
+    assert_eq!(action(&home, &repository, &first), "allow", "{first}");
+    let alone = action(&home, &repository, &moved);
+    assert_ne!(alone, "allow", "{moved}");
+    // The first search must not answer for the second, which runs from `src`
+    // where the fixture is not below the working directory.
+    let chained = format!("{first}; {moved}");
+    assert_eq!(action(&home, &repository, &chained), alone, "{chained}");
 }

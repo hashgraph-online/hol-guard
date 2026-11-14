@@ -153,9 +153,10 @@ fn no_hidden_whitelist(root: &Path, context: ReadContext<'_>) -> bool {
     if !root.is_dir() {
         return true;
     }
-    // The memo key's marker keeps this walk apart from the recursive-read
-    // walks that share the same per-evaluation memo.
-    super::walk_memo::memoized(&root, &[".rg-whitelist"], &[], false, false, false, || {
+    // The marker keeps this walk apart from the recursive-read walks sharing
+    // the per-evaluation memo, and names the working directory it screened.
+    let marker = super::rg_whitelist_file::memo_marker(context);
+    super::walk_memo::memoized(&root, &[marker.as_str()], &[], false, false, false, || {
         let mut negations = Negations::default();
         let Some((repository, rules)) = outer_sources_safe(&root, context, &mut negations) else {
             return false;

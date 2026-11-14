@@ -28,3 +28,14 @@ pub(super) fn searchable_file(path: &Path, context: ReadContext<'_>) -> bool {
                     && !unsafe_search_value(SearchValueRole::Path, relative, context)
             })
 }
+
+/// The walk-memo marker for a whitelist answer. [`searchable_file`] screens
+/// a re-included file by its path below the working directory, so the answer
+/// depends on that directory and a segment after `cd` must not reuse it.
+pub(super) fn memo_marker(context: ReadContext<'_>) -> String {
+    let cwd = context.cwd.and_then(|cwd| std::fs::canonicalize(cwd).ok());
+    format!(
+        ".rg-whitelist:{}",
+        cwd.as_deref().unwrap_or(Path::new("")).display()
+    )
+}
