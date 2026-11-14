@@ -367,4 +367,15 @@ fn a_rename_leaves_a_link_label_alone() {
         text.contains("perl -pi -e") && !text.contains("README.rst "),
         "{text}"
     );
+    // Renaming `cache`, the label's `_cache` is a longer word, not the name.
+    let source = "def cache(size):\n    return {}\n";
+    let readme = readme.replace("org/cache", "org/algorithms");
+    let files = [("src/func.py", source), ("README.rst", readme.as_str())];
+    let (home, _project, root) = project(ON, &files);
+    let prompt = "Rename `cache` to `cache_store` in func.py.";
+    let text = prompt_map(home.path(), &root, prompt).unwrap();
+    let listed = text.split("Every line naming").nth(1).unwrap_or_default();
+    let listed = listed.split("\n\n").next().unwrap_or_default();
+    assert!(listed.contains("README.rst:4:"), "{text}");
+    assert!(!listed.contains("README.rst:6:"), "{text}");
 }

@@ -132,10 +132,11 @@ fn naming(file: &File, term: &str, exact: Option<&str>, until: Instant) -> Optio
             continue;
         }
         found.held = true;
-        // `.. _cache algorithm:` is a link label, not the name `_cache`.
+        // `.. _cache algorithm:` is a link label, not the name `_cache`; for
+        // `cache` its `_` joins, as the walk's count reads it.
         let unlabeled;
         let line = match line.trim_start().strip_prefix(".. _") {
-            Some(rest) if exact.is_some() => {
+            Some(rest) if exact.is_some_and(|exact| exact.starts_with('_')) => {
                 unlabeled = format!(".. {rest}");
                 unlabeled.as_str()
             }
