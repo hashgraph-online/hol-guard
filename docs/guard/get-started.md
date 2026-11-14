@@ -11,6 +11,8 @@ protection. See
 [Local Guard vs Guard Cloud](./local-vs-cloud.md) for the full subscription
 boundary.
 
+For the `pipx` installation path, **Python 3.11 or newer is recommended**, consistent with [pipx's installation guide](https://pipx.pypa.io/stable/how-to/install-pipx.html). HOL Guard itself supports Python 3.10+ (see [`pyproject.toml`](../../pyproject.toml)); this recommendation does not change the package's minimum supported Python version.
+
 For security reviews, sales conversations, and GRC packets, see the
 [Enterprise packet](./enterprise-packet.md).
 
