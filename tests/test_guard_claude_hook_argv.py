@@ -7,6 +7,7 @@ import shlex
 import subprocess
 import sys
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -124,12 +125,22 @@ def test_session_start_argv_preserves_exact_paths(
     def fake_refresh(*, home_dir: Path, workspace_dir: Path | None, guard_home: Path) -> None:
         captured["refresh"] = (home_dir, workspace_dir, guard_home)
 
+    real_ask = claude_code.ask
+
+    def recording_ask(op: str, context: HarnessContext, **kwargs: Any) -> dict[str, Any]:
+        from codex_plugin_scanner.guard.native_context import _BOUND_GUARD_HOME
+
+        captured["native_guard_home"] = _BOUND_GUARD_HOME.get()
+        return real_ask(op, context, **kwargs)
+
     monkeypatch.setattr(claude_code, "_daemon_module", lambda: FakeDaemonModule())
     monkeypatch.setattr(ClaudeCodeHarnessAdapter, "refresh_installed_hook_urls", fake_refresh)
+    monkeypatch.setattr(claude_code, "ask", recording_ask)
 
     result = claude_code._run_session_start_from_argv((guard_home, home_dir, workspace_dir))
 
     assert result == 0
+    assert captured["native_guard_home"] == Path(guard_home)
     assert captured["daemon_guard_home"] == Path(guard_home)
     assert captured["refresh"] == (Path(home_dir), Path(workspace_dir), Path(guard_home))
     assert json.loads(capsys.readouterr().out) == {

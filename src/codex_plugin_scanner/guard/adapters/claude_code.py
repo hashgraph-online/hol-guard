@@ -112,20 +112,26 @@ def _argv(which: str, context: HarnessContext) -> tuple[str, ...]:
 
 def _run_session_start_from_argv(argv: Sequence[str]) -> int:
     """Start the daemon and refresh the managed hooks from the hook's path vector."""
+    from ..native_context import bound_context_digest_home
+
     home = Path.home()
-    context = HarnessContext(home_dir=home, guard_home=home / ".hol-guard", workspace_dir=None)
-    try:
-        paths = ask("session_start", context, harness=_HARNESS, argv=list(argv))
-    except ValueError as error:
-        raise SystemExit(str(error)) from error
-    guard_home = Path(paths["guard_home"])
-    workspace = paths.get("workspace")
-    _daemon_module().ensure_guard_daemon(guard_home)
-    ClaudeCodeHarnessAdapter.refresh_installed_hook_urls(
-        home_dir=Path(paths["home"]),
-        workspace_dir=None if workspace is None else Path(workspace),
-        guard_home=guard_home,
-    )
+    # Every native request here, the description included, answers for the
+    # hook's Guard home rather than the default one.
+    claimed = Path(argv[0]) if argv and argv[0] and "\x00" not in argv[0] else home / ".hol-guard"
+    context = HarnessContext(home_dir=home, guard_home=claimed, workspace_dir=None)
+    with bound_context_digest_home(claimed):
+        try:
+            paths = ask("session_start", context, harness=_HARNESS, argv=list(argv))
+        except ValueError as error:
+            raise SystemExit(str(error)) from error
+        guard_home = Path(paths["guard_home"])
+        workspace = paths.get("workspace")
+        _daemon_module().ensure_guard_daemon(guard_home)
+        ClaudeCodeHarnessAdapter.refresh_installed_hook_urls(
+            home_dir=Path(paths["home"]),
+            workspace_dir=None if workspace is None else Path(workspace),
+            guard_home=guard_home,
+        )
     output = {"hookSpecificOutput": {"hookEventName": "SessionStart", "additionalContext": paths["context"]}}
     print(json.dumps(output, separators=(",", ":")))
     return 0
