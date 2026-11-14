@@ -15,6 +15,7 @@ use regex::Regex;
 
 mod argv;
 mod destructive_git;
+pub(in crate::pretool) mod fed;
 mod launch;
 mod loopback;
 mod loopback_bases;
@@ -67,9 +68,10 @@ pub(in crate::pretool) enum Language {
 /// Network clients a script imports or calls.
 static PYTHON_NETWORK: LazyLock<Regex> = LazyLock::new(|| {
     let clients = "socket|ssl|http|urllib|urllib3|requests|httpx|aiohttp|websocket|websockets|smtplib|ftplib|poplib|imaplib|telnetlib|xmlrpc|paramiko|asyncssh|pycurl|httplib2|boto3|botocore|googleapiclient|google\\.cloud|google\\.analytics|google\\.auth\\.transport|openai|anthropic|grpc|kubernetes|psycopg|psycopg2|pymysql|MySQLdb|redis|pymongo|slack_sdk|github|gql|stripe";
-    // `from client import x`, or `client` anywhere in an `import a, b` list.
+    // `from client import x`, or `client` anywhere in an `import a, b` list,
+    // at the start of a line or after the colon of `if x: import client`.
     Regex::new(&format!(
-        r"(?m)^[ \t]*(?:from[ \t]+(?:{clients})\b|import[ \t]+(?:[\w.]+(?:[ \t]+as[ \t]+\w+)?[ \t]*,[ \t]*)*(?:{clients})\b)"
+        r"(?m)(?:^|:)[ \t]*(?:from[ \t]+(?:{clients})\b|import[ \t]+(?:[\w.]+(?:[ \t]+as[ \t]+\w+)?[ \t]*,[ \t]*)*(?:{clients})\b)"
     ))
     .unwrap()
 });
@@ -771,29 +773,7 @@ pub(in crate::pretool) fn standalone_clean(language: Language, path: &Path) -> b
     let [source] = sources.as_slice() else {
         return false;
     };
-    let code = code_lines(language, source);
-    let network = match language {
-        Language::Python => python_network(&code),
-        Language::Node => NODE_NETWORK.is_match(&code),
-    };
-    !network && !CREDENTIAL_STORE.is_match(&code)
-}
-
-/// Whether a program this command launches uses the network.
-pub(super) fn uses_network(model: &CanonicalCommandV1, context: PathContext<'_>) -> bool {
-    assess(model, context).iter().any(|found| found.network)
-}
-
-/// Whether a program the POSIX shell text `command` launches uses the
-/// network, for a caller that judges a projection of the text.
-pub(super) fn text_uses_network(command: &str, context: PathContext<'_>) -> bool {
-    crate::parse_command(&crate::CommandModelRequestV1 {
-        command: command.to_owned(),
-        dialect: "posix".to_owned(),
-        transport: "shell_string".to_owned(),
-        extraction_provenance: "guard-shell".to_owned(),
-    })
-    .is_ok_and(|model| uses_network(&model, context))
+    fed::source_clean(language, source)
 }
 
 /// Whether inline source or a program fed on standard input uses the
@@ -1158,19 +1138,31 @@ fn python_imports(source: &str, root: &Path, directory: &Path) -> Vec<PathBuf> {
         .collect()
 }
 
-/// The source without its comments, so a path named in a note is not read
-/// as one the script opens. Only whole-line comments, block comments that
-/// open a line and comments after whitespace are dropped; a comment marker
-/// inside a string can drop the rest of that line, which only lowers what
-/// the scan finds.
+/// The source without ordinary comments, so a path in a note is not
+/// mistaken for one the script opens. Python comment markers inside quoted
+/// strings are not comments: truncating there would hide later statements.
+/// When the simple quote scan cannot establish the boundary (triple-quoted
+/// strings, f-string fields or line continuations), retain the full Python
+/// line and split semicolons conservatively, erring toward review.
 fn code_lines(language: Language, source: &str) -> String {
     let marker = match language {
         Language::Python => "#",
         Language::Node => "//",
     };
-    let mut code = String::with_capacity(source.len());
+    // Python treats bare CR, LF and CRLF as physical line boundaries.
+    // Preserve those boundaries before stripping comments to avoid hiding code.
+    let normalized: std::borrow::Cow<'_, str> = if source.contains('\r') {
+        std::borrow::Cow::Owned(source.replace("\r\n", "\n").replace('\r', "\n"))
+    } else {
+        std::borrow::Cow::Borrowed(source)
+    };
+    let opaque_python = language == Language::Python
+        && (normalized.contains("\"\"\"")
+            || normalized.contains("'''")
+            || normalized.contains("\\\n"));
+    let mut code = String::with_capacity(normalized.len());
     let mut in_block = false;
-    for line in source.lines() {
+    for line in normalized.lines() {
         let trimmed = line.trim_start();
         if language == Language::Node && (in_block || trimmed.starts_with("/*")) {
             in_block = !trimmed.contains("*/");
@@ -1178,21 +1170,64 @@ fn code_lines(language: Language, source: &str) -> String {
                 continue;
             }
         }
-        if trimmed.starts_with(marker) {
+        if language == Language::Node && trimmed.starts_with(marker) {
             continue;
         }
-        let end = line
-            .match_indices(marker)
-            .find(|(at, _)| line[..*at].ends_with([' ', '\t']))
-            .map_or(line.len(), |(at, _)| at);
-        // `python -c 'import os; import socket'` puts statements on one line.
+        let end = match language {
+            Language::Python if opaque_python => line.len(),
+            Language::Python => python_comment_end(line),
+            Language::Node => line
+                .match_indices(marker)
+                .find(|(at, _)| line[..*at].ends_with([' ', '\t']))
+                .map_or(line.len(), |(at, _)| at),
+        };
+        // Python inline commands can put statements on one line.
         match language {
+            // Continued strings, triple quotes and f-strings make quote state
+            // across physical lines uncertain. Split every semicolon in this
+            // case, even if it looks quoted, rather than hide a later import.
+            Language::Python if opaque_python => {
+                code.push_str(&line[..end].replace(';', "\n"));
+            }
             Language::Python => code.push_str(&split_statements(&line[..end])),
             Language::Node => code.push_str(&line[..end]),
         }
         code.push('\n');
     }
+    if language == Language::Python && normalized.contains("\\\n") {
+        // Explicit backslash-newline joins Python tokens, including an import
+        // keyword and its module name. Inspect the joined form *in addition*
+        // to physical lines: a backslash in a Python comment does not join
+        // the next line, which may itself contain an executable import.
+        // Keep comments and split all semicolons in the extra scan so no
+        // apparent quote boundary can hide a sensitive operation.
+        let joined = normalized.replace("\\\n", "");
+        code.push('\n');
+        code.push_str(&joined.replace(';', "\n"));
+    }
     code
+}
+
+/// Find a Python comment boundary only when it is outside an ordinary
+/// single- or double-quoted string. Ambiguous syntax is not stripped:
+/// keeping more source can cause review, but cannot hide a later operation.
+fn python_comment_end(line: &str) -> usize {
+    if line.contains("\"\"\"") || line.contains("'''") || line.contains('{') {
+        return line.len();
+    }
+    let (mut quote, mut escaped) = (None, false);
+    for (offset, character) in line.char_indices() {
+        match quote {
+            Some(_) if escaped => escaped = false,
+            Some(_) if character == '\\' => escaped = true,
+            Some(open) if character == open => quote = None,
+            Some(_) => {}
+            None if matches!(character, '\'' | '"') => quote = Some(character),
+            None if character == '#' => return offset,
+            None => {}
+        }
+    }
+    line.len()
 }
 
 /// A Python line with each `;` outside a string literal starting a new line.
@@ -1236,3 +1271,38 @@ fn extension(path: &Path) -> String {
 #[cfg(test)]
 #[path = "script_content/jobs_tests.rs"]
 mod jobs_tests;
+
+#[cfg(test)]
+mod normalization_tests {
+    use super::{code_lines, python_network, Language};
+
+    #[test]
+    fn python_bare_carriage_return_does_not_hide_network_imports() {
+        let code = code_lines(Language::Python, "print(1) #\rimport socket\n");
+        assert!(python_network(&code));
+        let code = code_lines(Language::Python, "marker = \" #\"; import socket\r");
+        assert!(python_network(&code));
+    }
+
+    #[test]
+    fn python_continued_string_does_not_hide_an_inline_network_import() {
+        // Python joins the physical lines before parsing this statement.
+        // A quote in the comment must not pair with the continued string.
+        let source = concat!("marker = \"a\\\n", "b\"; import socket # \"\n");
+        let code = code_lines(Language::Python, source);
+        assert!(python_network(&code), "normalized source: {code:?}");
+    }
+
+    #[test]
+    fn python_explicit_continuation_cannot_hide_imports_or_following_line() {
+        for source in [
+            concat!("import \\", "\n socket\n"),
+            concat!("import so\\", "\ncket\n"),
+            concat!("from \\", "\n socket import create_connection\n"),
+            concat!("print(1) #\\", "\nimport socket\n"),
+        ] {
+            let code = code_lines(Language::Python, source);
+            assert!(python_network(&code), "normalized source: {code:?}");
+        }
+    }
+}

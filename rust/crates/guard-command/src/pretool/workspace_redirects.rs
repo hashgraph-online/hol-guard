@@ -33,9 +33,9 @@ enum Quote {
 
 /// The command with every literal-path redirect, descriptor copy and quoted
 /// `cat` heredoc removed. A quoted heredoc may also carry the message of a
-/// `git commit -F -`, or feed `python3 -` a program
-/// that reads only builtins, which cannot start a program or load a module;
-/// the projection keeps `python3 -`, so every control still sees it. `None`
+/// `git commit -F -`, or feed `python3` or `python3 -` a program that meets
+/// the bar a script file in the workspace meets (`redirect_stdin`); the
+/// projection keeps the interpreter, so every control still sees it. `None`
 /// when nothing was removed or any redirect has another form: process
 /// substitution, a computed or home-relative target, a descriptor above 2, a
 /// herestring, or a heredoc fed to anything else.
@@ -63,6 +63,8 @@ fn project_scan(raw: &str) -> Option<(String, Vec<usize>, bool)> {
     let mut heredocs: Vec<(String, bool)> = Vec::new();
     // Whether each pending heredoc feeds Python its program.
     let mut programs: Vec<bool> = Vec::new();
+    // Whether a program fed to Python needs the script-file bar.
+    let mut wide = false;
     let (mut quote, mut escaped, mut removed) = (Quote::None, false, false);
     let mut names_files = false;
     let mut index = 0usize;
@@ -105,7 +107,7 @@ fn project_scan(raw: &str) -> Option<(String, Vec<usize>, bool)> {
             '\\' => escaped = true,
             '\n' if !heredocs.is_empty() => {
                 out.push('\n');
-                index = skip_bodies(&chars, index + 1, &mut heredocs, &mut programs)?;
+                index = skip_bodies(&chars, index + 1, &mut heredocs, &mut programs, &mut wide)?;
                 continue;
             }
             '<' if chars.get(index + 1) == Some(&'<') => {
@@ -115,6 +117,7 @@ fn project_scan(raw: &str) -> Option<(String, Vec<usize>, bool)> {
                 // checked once it is read.
                 let segment = heredoc_segment(&out)?.trim();
                 let program = python_stdin(segment);
+                wide |= program && !segment.ends_with(" -");
                 if segment != "cat" && !program && !heredoc_records_commit_message(segment) {
                     return None;
                 }
@@ -149,6 +152,9 @@ fn project_scan(raw: &str) -> Option<(String, Vec<usize>, bool)> {
     // projection unmodelled, which cost a redirect beside it the workspace
     // route the same command keeps without the redirect.
     let projected = crate::pretool::script_content::foreground_job(projected).unwrap_or(projected);
+    if wide && !crate::pretool::script_content::fed::python_alone(projected) {
+        return None;
+    }
     let map = map[lead..lead + projected.len()].to_vec();
     Some((projected.to_owned(), map, names_files))
 }
@@ -235,9 +241,10 @@ pub(super) fn contained(
     // `.tool-versions`, or a chain beside local Git writes, runs here.
     let stripped = project(command)?;
     // Removing an input redirect drops the program it feeds, so a program
-    // that needs the network, or opens a system file the sandbox still lets
+    // that needs the network or a credential store, itself or through a
+    // local module it imports, or opens a system file the sandbox still lets
     // it read, keeps the review of the text as sent.
-    if crate::pretool::script_content::text_uses_network(command, context)
+    if crate::pretool::script_content::fed::text_needs_withheld(command, context)
         || crate::pretool::script_content::text_names_system_file(command, context)
         || crate::pretool::script_content::text_spells_destructive_git(command, context)
         || crate::pretool::literal_secrets::holds_literal_secret(command)

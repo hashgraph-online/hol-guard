@@ -597,6 +597,7 @@
       "src/pretool/script_content/argv.rs",
       "src/pretool/script_content/destructive_git.rs",
       "src/pretool/script_content/destructive_git_source.rs",
+      "src/pretool/script_content/fed.rs",
       "src/pretool/script_content/launch.rs",
       "src/pretool/script_content/loopback.rs",
       "src/pretool/script_content/loopback_bases.rs",
