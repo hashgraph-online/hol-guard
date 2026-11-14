@@ -180,7 +180,9 @@ pub(crate) fn dispatch(args: &Value) -> Result<Value, &'static str> {
 
 pub(super) fn evaluate(operation: &str, params: &Value) -> Result<Value, &'static str> {
     let result = match operation {
-        "harness_protection_contract" => crate::harness_protection_contract::check_payload(),
+        "harness_protection_contract" => crate::harness_protection_contract::check_payload_at(
+            params.get("now").and_then(Value::as_str),
+        )?,
         "native_readiness" => {
             crate::native_readiness::readiness_payload(text(params, "reason_code")?)
         }

@@ -8,8 +8,9 @@
 //! and expires. A claim that says no more than that must carry none of
 //! those fields, so a row can never be read two ways.
 //!
-//! This checks the contract's shape only. It never decides a tool call and
-//! nothing here feeds policy, approval, or admission.
+//! This checks the contract's shape and projects its claims for display. It
+//! never decides a tool call and nothing here feeds policy, approval, or
+//! admission. A claim whose evidence has expired is shown as `stale`.
 
 use std::sync::OnceLock;
 
@@ -74,6 +75,10 @@ struct Event {
     failure_behavior: Option<String>,
     #[serde(default)]
     claim: Option<Claim>,
+    #[serde(default)]
+    declared_actions: Vec<String>,
+    #[serde(default)]
+    known_blind_spots: Vec<String>,
 }
 
 #[derive(Deserialize)]
@@ -120,17 +125,36 @@ fn exact_version(value: &str) -> bool {
             .any(|part| part == "x" || part == "X")
 }
 
-/// `YYYY-MM-DDTHH:MM:SSZ`. One fixed form keeps text order equal to time order.
+/// `YYYY-MM-DDTHH:MM:SSZ` naming a real calendar time. One fixed form keeps
+/// text order equal to time order.
 fn utc_timestamp(value: &str) -> bool {
     let bytes = value.as_bytes();
-    bytes.len() == 20
+    let shaped = bytes.len() == 20
         && bytes.iter().enumerate().all(|(index, byte)| match index {
             4 | 7 => *byte == b'-',
             10 => *byte == b'T',
             13 | 16 => *byte == b':',
             19 => *byte == b'Z',
             _ => byte.is_ascii_digit(),
-        })
+        });
+    if !shaped {
+        return false;
+    }
+    let number = |range: std::ops::Range<usize>| value[range].parse::<u32>().unwrap_or(u32::MAX);
+    let (year, month, day) = (number(0..4), number(5..7), number(8..10));
+    let leap = (year % 4 == 0 && year % 100 != 0) || year % 400 == 0;
+    let days = match month {
+        1 | 3 | 5 | 7 | 8 | 10 | 12 => 31,
+        4 | 6 | 9 | 11 => 30,
+        2 if leap => 29,
+        2 => 28,
+        _ => 0,
+    };
+    year > 0
+        && (1..=days).contains(&day)
+        && number(11..13) < 24
+        && number(14..16) < 60
+        && number(17..19) < 60
 }
 
 /// `os-arch`, lower case, such as `macos-arm64` or `windows-x86_64`.
@@ -144,15 +168,25 @@ fn platform(value: &str) -> bool {
     })
 }
 
-/// A run or artifact name, never a local path or a URL with a query.
+/// Where a reviewer can find the run: a bare run or artifact name such as
+/// `gauntlet-run-1234`, or a path under this repository on GitHub with no query.
+/// Never a local path, a `file:` URL, or another host.
+const REPOSITORY_URL: &str = "https://github.com/hashgraph-online/hol-guard/";
+
 fn redacted_reference(value: &str) -> bool {
-    !value.is_empty()
-        && value.len() <= 200
-        && !value.starts_with(['/', '~', '\\', '.'])
-        && !value.contains(":\\")
-        && !value.contains(['?', '#', ' ', '@'])
-        && !value.contains("/Users/")
-        && !value.contains("/home/")
+    let name = |part: &str| {
+        !part.is_empty()
+            && part != "."
+            && part != ".."
+            && part
+                .chars()
+                .all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '_' | '-'))
+    };
+    value.len() <= 200
+        && match value.strip_prefix(REPOSITORY_URL) {
+            Some(path) => path.split('/').all(name),
+            None => name(value) && !value.starts_with('.'),
+        }
 }
 
 fn check_evidence(claim: &Claim, problems: &mut Vec<String>) {
@@ -250,6 +284,21 @@ fn check_event(event: &Event) -> Vec<String> {
     if event.mode == "observe" && failure != Some("observe_only") {
         problems.push("an observe row must fail as observe_only".to_owned());
     }
+    let stops = event
+        .declared_actions
+        .iter()
+        .any(|action| matches!(action.as_str(), "block" | "approval" | "rewrite"));
+    match failure {
+        Some("observe_only" | "unsupported") if stops => problems.push(
+            "a row that cannot enforce must not declare block, approval, or rewrite".to_owned(),
+        ),
+        Some("fail_closed" | "fail_open")
+            if !event.declared_actions.iter().any(|a| a == "block") =>
+        {
+            problems.push("an enforcing row must declare block".to_owned());
+        }
+        _ => {}
+    }
     for (behavior, state) in [
         ("unsupported", "unsupported"),
         ("observe_only", "observe_only"),
@@ -274,8 +323,15 @@ fn check_document(text: &str) -> (usize, Vec<String>) {
     }
     let mut rows = 0;
     for contract in &document.contracts {
+        let mut seen = std::collections::BTreeSet::new();
         for event in &contract.capability_events {
             rows += 1;
+            if !seen.insert((&event.event, &event.transport, &event.surface)) {
+                problems.push(format!(
+                    "{} {} ({}): declared twice for one surface",
+                    contract.harness, event.event, event.transport
+                ));
+            }
             problems.extend(check_event(event).into_iter().map(|problem| {
                 format!(
                     "{} {} ({}): {problem}",
@@ -292,16 +348,79 @@ fn bundled() -> &'static (usize, Vec<String>) {
     CHECKED.get_or_init(|| check_document(CONTRACT))
 }
 
-/// The check result for the contract built into this runtime.
-pub(crate) fn check_payload() -> Value {
+/// The state to show for a claim at `now`: an evidence claim whose
+/// `expires_at` is not after `now` is `stale`, whatever it said before.
+fn effective_state<'a>(claim: &'a Claim, now: Option<&str>) -> &'a str {
+    let expired = EVIDENCE_STATES.contains(&claim.state.as_str())
+        && matches!(
+            (claim.expires_at.as_deref(), now),
+            (Some(expires), Some(now)) if utc_timestamp(expires) && expires <= now
+        );
+    if expired {
+        "stale"
+    } else {
+        &claim.state
+    }
+}
+
+/// One display row per capability, in contract order. These are the
+/// semantic fields every generated projection of the contract must carry.
+fn claims(text: &str, now: Option<&str>) -> Vec<Value> {
+    let Ok(document) = serde_json::from_str::<Document>(text) else {
+        return Vec::new();
+    };
+    let mut rows = Vec::new();
+    for contract in &document.contracts {
+        for event in &contract.capability_events {
+            let Some(claim) = &event.claim else { continue };
+            rows.push(json!({
+                "harness": contract.harness,
+                "event": event.event,
+                "transport": event.transport,
+                "mode": event.mode,
+                "surface": event.surface,
+                "failure_behavior": event.failure_behavior,
+                "state": claim.state,
+                "effective_state": effective_state(claim, now),
+                "expires_at": claim.expires_at,
+                "limitations": claim.limitations,
+                "known_blind_spots": event.known_blind_spots,
+            }));
+        }
+    }
+    rows
+}
+
+/// The check result and claim rows for the contract built into this runtime.
+/// With `now`, evidence that has expired by then is listed and shown `stale`.
+pub(crate) fn check_payload_at(now: Option<&str>) -> Result<Value, &'static str> {
+    if now.is_some_and(|now| !utc_timestamp(now)) {
+        return Err("harness_protection_contract_time_invalid");
+    }
     let (rows, problems) = bundled();
-    json!({
+    let claims = claims(CONTRACT, now);
+    let expired: Vec<String> = claims
+        .iter()
+        .filter(|row| row["effective_state"] == "stale" && row["state"] != "stale")
+        .map(|row| {
+            format!("{} {} ({})", row["harness"], row["event"], row["transport"]).replace('"', "")
+        })
+        .collect();
+    Ok(json!({
         "schema": PAYLOAD_SCHEMA,
         "contract_schema": SCHEMA,
         "valid": problems.is_empty(),
         "rows": rows,
         "problems": problems,
-    })
+        "as_of": now,
+        "expired": expired,
+        "claims": claims,
+    }))
+}
+
+/// The check result for the contract built into this runtime.
+pub(crate) fn check_payload() -> Value {
+    check_payload_at(None).unwrap_or(Value::Null)
 }
 
 #[cfg(test)]

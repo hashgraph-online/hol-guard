@@ -1,8 +1,8 @@
 use serde_json::{json, Value};
 
 use super::{
-    check_document, check_payload, CLAIM_STATES, CONTRACT, EVIDENCE_STATES, FAILURE_BEHAVIORS,
-    SURFACES,
+    check_document, check_payload, check_payload_at, claims, CLAIM_STATES, CONTRACT,
+    EVIDENCE_STATES, FAILURE_BEHAVIORS, SURFACES,
 };
 
 fn document(row: Value) -> String {
@@ -21,6 +21,7 @@ fn blocking(claim: Value) -> Value {
         "surface": "foreground",
         "failure_behavior": "fail_closed",
         "claim": claim,
+        "declared_actions": ["observe", "block", "approval"],
     })
 }
 
@@ -184,6 +185,12 @@ fn an_evidence_reference_is_never_a_local_path_or_a_signed_url() {
         "C:\\runs\\1",
         "https://example.test/a?token=1",
         "runs/home/x",
+        "C:/Users/alice/run.json",
+        "file:///tmp/run.json",
+        "runs/private.json",
+        "https://example.test/hashgraph-online/hol-guard/actions/runs/1",
+        "https://github.com/hashgraph-online/hol-guard/../x",
+        "..",
     ] {
         let mut claim = proven();
         claim["evidence_reference"] = json!(reference);
@@ -195,6 +202,45 @@ fn an_evidence_reference_is_never_a_local_path_or_a_signed_url() {
             "{reference:?} was accepted: {found:?}"
         );
     }
+}
+
+#[test]
+fn an_evidence_reference_names_a_run_or_a_page_in_this_repository() {
+    for reference in [
+        "gauntlet-run-1234",
+        "hol-guard-v3.4.0-alpha.93_macos",
+        "https://github.com/hashgraph-online/hol-guard/actions/runs/43642386292",
+    ] {
+        let mut claim = proven();
+        claim["evidence_reference"] = json!(reference);
+        assert_eq!(
+            problems(blocking(claim)),
+            Vec::<String>::new(),
+            "{reference:?}"
+        );
+    }
+}
+
+#[test]
+fn an_impossible_calendar_time_is_rejected() {
+    for value in [
+        "2026-13-01T12:00:00Z",
+        "2026-02-30T12:00:00Z",
+        "2025-02-29T12:00:00Z",
+        "2026-04-31T12:00:00Z",
+        "2026-11-00T12:00:00Z",
+        "2026-11-14T24:00:00Z",
+        "2026-11-14T12:60:00Z",
+        "2026-11-14T12:00:60Z",
+        "0000-01-01T00:00:00Z",
+    ] {
+        let mut claim = proven();
+        claim["observed_at"] = json!(value);
+        rejects(blocking(claim), "is not YYYY-MM-DDTHH:MM:SSZ");
+    }
+    let mut claim = proven();
+    claim["observed_at"] = json!("2024-02-29T23:59:59Z");
+    assert_eq!(problems(blocking(claim)), Vec::<String>::new());
 }
 
 #[test]
@@ -229,6 +275,7 @@ fn an_unknown_claim_field_is_rejected() {
 fn failure_behavior_and_state_cannot_disagree() {
     let mut observe = blocking(json!({"state": "observe_only"}));
     observe["mode"] = json!("observe");
+    observe["declared_actions"] = json!(["observe"]);
     rejects(
         observe.clone(),
         "observe_only and claim state observe_only must go together",
@@ -240,6 +287,7 @@ fn failure_behavior_and_state_cannot_disagree() {
 
     let mut declared = blocking(json!({"state": "configured"}));
     declared["transport"] = json!("adapter_declared");
+    declared["declared_actions"] = json!(["observe"]);
     rejects(
         declared.clone(),
         "no enforceable transport must fail as unsupported",
@@ -274,4 +322,95 @@ fn the_cli_support_operation_returns_the_check() {
         "hol-guard.harness-protection-contract-check.v1"
     );
     assert_eq!(answer["result"]["valid"], true);
+}
+
+#[test]
+fn a_row_cannot_contradict_what_it_declares() {
+    let mut observe = blocking(json!({"state": "observe_only"}));
+    observe["mode"] = json!("observe");
+    observe["failure_behavior"] = json!("observe_only");
+    rejects(observe, "must not declare block, approval, or rewrite");
+    let mut enforcing = blocking(json!({"state": "configured"}));
+    enforcing["declared_actions"] = json!(["observe"]);
+    rejects(enforcing, "an enforcing row must declare block");
+}
+
+#[test]
+fn an_event_is_declared_once_per_surface_and_transport() {
+    let row = blocking(json!({"state": "configured"}));
+    let text = json!({
+        "schema": "hol-guard.harness-protection-contracts.v1",
+        "contracts": [{"harness": "codex", "capability_events": [row.clone(), row]}],
+    })
+    .to_string();
+    let problems = check_document(&text).1;
+    assert!(
+        problems
+            .iter()
+            .any(|problem| problem.contains("declared twice")),
+        "{problems:?}"
+    );
+}
+
+#[test]
+fn expired_evidence_is_shown_stale_and_listed() {
+    let text = document(blocking(proven()));
+    let before = claims(&text, Some("2026-12-14T11:59:59Z"));
+    assert_eq!(before[0]["effective_state"], "live_block_proven");
+    let at = claims(&text, Some("2026-12-14T12:00:00Z"));
+    assert_eq!(at[0]["effective_state"], "stale");
+    assert_eq!(at[0]["state"], "live_block_proven");
+    let timeless = claims(&text, None);
+    assert_eq!(timeless[0]["effective_state"], "live_block_proven");
+    let configured = claims(
+        &document(blocking(json!({"state": "configured"}))),
+        Some("2099-01-01T00:00:00Z"),
+    );
+    assert_eq!(configured[0]["effective_state"], "configured");
+}
+
+#[test]
+fn the_check_takes_only_a_fixed_utc_time() {
+    assert_eq!(
+        check_payload_at(Some("2026-11-14")),
+        Err("harness_protection_contract_time_invalid")
+    );
+    let payload = check_payload_at(Some("2026-11-14T12:00:00Z")).expect("valid time");
+    assert_eq!(payload["as_of"], "2026-11-14T12:00:00Z");
+    assert_eq!(payload["expired"], json!([]));
+    assert_eq!(
+        payload["claims"].as_array().map(Vec::len),
+        payload["rows"]
+            .as_u64()
+            .and_then(|rows| usize::try_from(rows).ok())
+    );
+}
+
+/// The generated file the hosted pages consume carries the same claim on
+/// every semantic field as the runtime projection, row for row.
+#[test]
+fn the_generated_claims_file_matches_the_runtime_projection() {
+    let generated: Value = serde_json::from_str(include_str!(
+        "../../../../docs/guard/generated/harness-claims.v1.json"
+    ))
+    .expect("generated claims parse");
+    let published = generated["claims"].as_array().expect("claims");
+    let runtime = claims(CONTRACT, None);
+    assert_eq!(published.len(), runtime.len());
+    for (published, runtime) in published.iter().zip(&runtime) {
+        for field in [
+            "harness",
+            "event",
+            "transport",
+            "mode",
+            "surface",
+            "failure_behavior",
+            "state",
+            "expires_at",
+            "limitations",
+            "known_blind_spots",
+        ] {
+            assert_eq!(published[field], runtime[field], "{field} of {runtime}");
+        }
+    }
 }

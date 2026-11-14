@@ -658,6 +658,9 @@ jobs:
             --setup-action-ref "$SETUP_UV_ACTION_REF"
       - name: Install dependencies
         run: uv sync --frozen --extra dev --extra publish --extra cisco
+      - name: Require current harness protection claims
+        # An expired evidence claim fails the release instead of shipping a lapsed claim.
+        run: uv run --no-project python scripts/generate_harness_claims.py --check --as-of "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
       - name: Check out trusted release scripts
         if: github.event_name == 'workflow_dispatch' && inputs.pull_request != ''
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
