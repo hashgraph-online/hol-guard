@@ -51,6 +51,30 @@ pub(crate) fn benign_command_segments(
     model: &CanonicalCommandV1,
     context: super::PathContext<'_>,
 ) -> Vec<usize> {
+    segment_proofs(model, context, false)
+}
+
+/// The segments that would pass as a command of their own, judged as if no
+/// other step ran before them.
+///
+/// [`benign_command_segments`] also asks that every earlier step be proven
+/// safe, since an earlier step could change the file a later read opens. A
+/// user who explicitly allowed every other step of a compound has answered
+/// that question: each step passes alone, so the compound passes. Only the
+/// explicit-Allow coverage reads this, after the user's permissions have
+/// covered every step that is not proven here.
+pub(crate) fn segments_safe_alone(
+    model: &CanonicalCommandV1,
+    context: super::PathContext<'_>,
+) -> Vec<usize> {
+    segment_proofs(model, context, true)
+}
+
+fn segment_proofs(
+    model: &CanonicalCommandV1,
+    context: super::PathContext<'_>,
+    alone: bool,
+) -> Vec<usize> {
     let cwd = verified_cwd_compound_context(model, context);
     if model.confidence != "exact"
         || model.path_overridden
@@ -238,14 +262,14 @@ pub(crate) fn benign_command_segments(
             };
             // Earlier extension-approved segments may rewrite the tree (checkout/pull);
             // a pre-execution path proof only holds while every predecessor is benign.
+            // Judged alone, `ls` with no target lists the working directory,
+            // which is proven only when that directory is verified.
+            let path_context_verified =
+                || safe_reads::verified_path_context(proof_context.home_dir, proof_context.cwd);
             let covered = benign
-                && ls_has_explicit_target
-                && (!requires_path_context
-                    || safe_reads::verified_path_context(
-                        proof_context.home_dir,
-                        proof_context.cwd,
-                    ))
-                && (path_free || all_previous_benign);
+                && (ls_has_explicit_target || (alone && path_context_verified()))
+                && (!requires_path_context || path_context_verified())
+                && (alone || path_free || all_previous_benign);
             all_previous_benign = all_previous_benign && benign;
             covered.then_some(index)
         })

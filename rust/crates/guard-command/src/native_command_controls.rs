@@ -548,6 +548,11 @@ impl CompiledNativeCommandControls {
         // models. It runs last so it never hides a rule the user left off and
         // never changes what the proofs above read.
         covered.extend(self.fully_allowed_extension_segments(command, &benign, context));
+        // A step that passes as a command of its own passes inside a compound
+        // whose other steps the user allowed: each step is judged alone, and
+        // the compound passes when every step does. The check below that a
+        // Git step's output stays clear of `.git` still applies to it.
+        covered.extend(crate::pretool::segments_safe_alone(command, context));
         // A Git step that points its own output over `.git` or out of the
         // workspace writes whichever route covered it: a `git log` rule the
         // user enabled reads the verb, not the `--output=.git/config` that
@@ -723,3 +728,7 @@ mod powershell_regressions;
 #[cfg(test)]
 #[path = "native_command_read_permission_tests.rs"]
 mod read_permission_regressions;
+
+#[cfg(all(test, unix))]
+#[path = "native_command_contributed_allow_tests.rs"]
+mod contributed_allow_regressions;
