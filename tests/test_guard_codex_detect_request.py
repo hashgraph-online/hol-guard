@@ -4,10 +4,11 @@ from __future__ import annotations
 
 import datetime
 from pathlib import Path
+from typing import cast
 
 from codex_plugin_scanner.guard.adapters import codex
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
-from codex_plugin_scanner.guard.models import GuardArtifact, HarnessDetection
+from codex_plugin_scanner.guard.models import HarnessDetection
 
 
 def test_wire_bindings_drop_values_json_cannot_carry() -> None:
@@ -104,29 +105,16 @@ def test_detect_reads_each_source_once_and_sends_those_bytes(tmp_path: Path, mon
     assert sent[0]["contents"][str(config)] == b'[mcp_servers.a]\ncommand = "x"\n'.hex()
 
 
-def test_detect_spells_results_the_way_the_context_did(tmp_path: Path, monkeypatch) -> None:
+def test_detect_asks_for_results_spelled_the_way_the_context_did(tmp_path: Path, monkeypatch) -> None:
     sent: list[dict[str, object]] = []
     monkeypatch.chdir(tmp_path)
     anchored = str(tmp_path / "rel" / ".codex" / "config.toml")
-    artifact = GuardArtifact(
-        artifact_id="codex:global:mcp:a",
-        name="a",
-        harness="codex",
-        artifact_type="mcp_server",
-        source_scope="global",
-        config_path=anchored,
-        command="x",
-        metadata={"paths": [anchored], "nested": {"config": anchored}, "other": "keep"},
-    )
-    _stub_detection(monkeypatch, sent, ((artifact,), (anchored,), (f"bad {anchored}",)))
+    _stub_detection(monkeypatch, sent, ((), (), ()))
     context = HarnessContext(home_dir=Path("rel"), workspace_dir=Path("work"), guard_home=tmp_path / "guard")
 
-    detection = codex.CodexHarnessAdapter().detect(context)
+    codex.CodexHarnessAdapter().detect(context)
 
     relative = str(Path("rel") / ".codex" / "config.toml")
-    assert sent[0]["sources"][0]["config_path"] == anchored
-    assert detection.config_paths == (relative,)
-    assert detection.warnings == (f"bad {relative}",)
-    restored = detection.artifacts[0]
-    assert restored.config_path == relative
-    assert restored.metadata == {"paths": [relative], "nested": {"config": relative}, "other": "keep"}
+    sources = cast("list[dict[str, str]]", sent[0]["sources"])
+    assert sources[0]["config_path"] == anchored
+    assert [anchored, relative] in cast("list[list[str]]", sent[0]["restore"])

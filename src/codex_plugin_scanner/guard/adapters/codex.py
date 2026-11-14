@@ -109,7 +109,6 @@ from .codex_detect_sources import (
     json_payload_from_bytes,
     path_restorations,
     read_source_bytes,
-    restore_paths,
     toml_payload_from_bytes,
 )
 from .codex_remote_control import (
@@ -1143,11 +1142,11 @@ class CodexHarnessAdapter(NativeHarnessAdapter):
                 anchor_to_process_directory(path): None if data is None else data.hex()
                 for path, data in captured.items()
             },
+            "restore": [
+                list(item) for item in path_restorations(tuple(path for pair in pairs for path in pair)).items()
+            ],
         }
         artifacts, found_paths, warnings = native_adapter_detection_with_warnings("codex_detect", request)
-        artifacts, found_paths, warnings = restore_paths(
-            path_restorations(tuple(path for pair in pairs for path in pair)), artifacts, found_paths, warnings
-        )
         detection = HarnessDetection(
             harness=self.harness,
             installed=bool(found_paths) or _command_available(self.executable, context.home_dir),
@@ -1562,7 +1561,6 @@ class CodexHarnessAdapter(NativeHarnessAdapter):
             context=context,
             server=server,
         )
-
 
     def _load_hook_payloads(self, context: HarnessContext) -> dict[Path, dict[str, object]]:
         return {

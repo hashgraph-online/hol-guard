@@ -26,6 +26,11 @@ use super::runner_authority_detector::args_object;
 use super::runner_authority_op::{KindResult, ERR_INVALID};
 use super::zcode_artifacts::{pair_value, Fields, Scope};
 
+#[path = "codex_detect_restore.rs"]
+mod restore;
+
+use restore::{restorations, restore_paths};
+
 const HARNESS: &str = "codex";
 
 struct SourcePair<'a> {
@@ -424,6 +429,10 @@ pub(crate) fn detect(args: &Value) -> KindResult {
         return Err(ERR_VALUE);
     }
     artifacts.extend(hook_artifacts(&records)?);
+    let restore = restorations(args)?;
+    if !restore.is_empty() {
+        restore_paths(&restore, &mut artifacts, &mut found, &mut warnings);
+    }
     Ok(json!({
         "artifacts": artifacts,
         "found_paths": found,
