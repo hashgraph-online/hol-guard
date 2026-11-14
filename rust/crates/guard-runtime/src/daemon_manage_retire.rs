@@ -178,7 +178,7 @@ pub(super) fn identity_for_retirement(pid: i64) -> Option<(String, String)> {
 }
 
 /// `_guard_daemon_pending_launch_is_abandoned`.
-fn pending_is_abandoned(pending: Option<&Map<String, Value>>) -> bool {
+pub(super) fn pending_is_abandoned(pending: Option<&Map<String, Value>>) -> bool {
     let Some(pending) = pending.filter(|p| records::is_generation_bound(Some(p))) else {
         return false;
     };
