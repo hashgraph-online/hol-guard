@@ -983,15 +983,22 @@ def test_copilot_plan_restores_native_bindings_and_preserves_authority(
     native_adapter_state_integrity_runtime,
 ):
     del native_adapter_state_integrity_runtime
-    from codex_plugin_scanner.guard.adapters.adapter_state_integrity import authenticate_adapter_state
     from codex_plugin_scanner.guard.adapters.base import HarnessContext
     from codex_plugin_scanner.guard.adapters.copilot import CopilotHarnessAdapter
+    from codex_plugin_scanner.guard.native_adapter_state_integrity import native_adapter_state_integrity
 
     runtime, plan, _, _ = transition
     workspace = runtime.home.parent / "workspace" if workspace_enabled else None
     ctx = HarnessContext(home_dir=runtime.home.parent, workspace_dir=workspace, guard_home=runtime.home)
     adapter = CopilotHarnessAdapter()
-    authenticate_adapter_state(runtime.home, harness="copilot", payload={"enrollment": "fixture"})
+    native_adapter_state_integrity(
+        action="authenticate",
+        harness="copilot",
+        payload={"enrollment": "fixture"},
+        key_home=runtime.home,
+        create_key=True,
+        guard_home=runtime.home,
+    )
     authority = runtime.home / "managed/adapter-state.key"
     authority_before = authority.stat()
     targets = (
@@ -1046,13 +1053,20 @@ def test_changed_copilot_authority_prevents_any_transition_mutation(
     native_adapter_state_integrity_runtime,
 ):
     del native_adapter_state_integrity_runtime
-    from codex_plugin_scanner.guard.adapters.adapter_state_integrity import authenticate_adapter_state
     from codex_plugin_scanner.guard.adapters.base import HarnessContext
     from codex_plugin_scanner.guard.adapters.copilot import CopilotHarnessAdapter
+    from codex_plugin_scanner.guard.native_adapter_state_integrity import native_adapter_state_integrity
 
     runtime, plan, bindings, pointer = transition
     ctx = HarnessContext(home_dir=runtime.home.parent, workspace_dir=None, guard_home=runtime.home)
-    authenticate_adapter_state(runtime.home, harness="copilot", payload={"enrollment": "fixture"})
+    native_adapter_state_integrity(
+        action="authenticate",
+        harness="copilot",
+        payload={"enrollment": "fixture"},
+        key_home=runtime.home,
+        create_key=True,
+        guard_home=runtime.home,
+    )
     prepared = CopilotHarnessAdapter().prepare_install(ctx)
     plan = replace(plan, files=(*plan.files, *prepared.files))
     if after_publication:

@@ -620,7 +620,6 @@
           "src/codex_plugin_scanner/guard/adapters/codex_detect_sources.py",
           "src/codex_plugin_scanner/guard/adapters/codex_lifecycle_lock.py",
           "src/codex_plugin_scanner/guard/adapters/codex_remote_control.py",
-          "src/codex_plugin_scanner/guard/adapters/grok_approval_resume.py",
           "src/codex_plugin_scanner/guard/adapters/guard_cli_attestation.py",
           "src/codex_plugin_scanner/guard/adapters/managed_mcp_upstream.py",
           "src/codex_plugin_scanner/guard/adapters/mcp_relay_native.py",
@@ -719,7 +718,6 @@
       },
       {
         "path": [
-          "src/codex_plugin_scanner/guard/adapters/adapter_state_integrity.py",
           "src/codex_plugin_scanner/guard/adapters/cline_runtime.py",
           "src/codex_plugin_scanner/guard/adapters/copilot.py",
           "src/codex_plugin_scanner/guard/adapters/cursor.py",
@@ -727,7 +725,6 @@
           "src/codex_plugin_scanner/guard/adapters/native_extension.py",
           "src/codex_plugin_scanner/guard/adapters/native_harness.py",
           "src/codex_plugin_scanner/guard/adapters/opencode_runtime.py",
-          "src/codex_plugin_scanner/guard/adapters/state_files.py",
           "src/codex_plugin_scanner/json_comment_stripping.py"
         ],
         "reason": "Reviewed: adapter implementations behind the harness registry. Adapters normalize harness payloads into hook requests, so they sit on the hook path, and hook-path authority is never excluded. Install and setup methods that have a function_exclusions entry are excluded as install_config, not hook path; install helpers without an entry (for example in the Cline support modules) stay counted, which understates the Rust share."
