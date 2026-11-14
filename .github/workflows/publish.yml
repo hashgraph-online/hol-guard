@@ -1078,7 +1078,7 @@ jobs:
           rustup toolchain install 1.89.0 --profile minimal
           rustup default 1.89.0
       - name: Cache release source compiler dependencies
-        uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6
+        uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0
         with:
           prefix-key: release-native-v1
           workspaces: rust
