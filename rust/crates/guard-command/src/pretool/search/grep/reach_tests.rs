@@ -171,8 +171,8 @@ fn a_file_no_include_selects_is_never_the_one_named() {
     // Without an include grep opens the skill file, which sorts first.
     let reason = reason_for("grep -rn needle .", &home, &repo);
     assert!(reason.contains("`.agents/skills/dev/SKILL.md`"), "{reason}");
-    // `*.ts` never opens it. The walk then runs out before it proves the
-    // tree, so the reason says so and points at naming folders.
+    // `*.ts` never opens it. The tree holds more entries than the include
+    // proof inspects, so the reason says so and points at naming folders.
     for command in [
         "grep -rn needle --include=*.ts .",
         "grep -rn \"needle\" --include=\"*.ts\" --include=\"*.tsx\" . | grep -v node_modules",

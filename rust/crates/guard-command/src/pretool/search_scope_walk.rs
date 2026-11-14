@@ -31,7 +31,7 @@ const MAX_NAME_SCOPE_ENTRIES: usize = 100_000;
 /// count, and a larger tree leaves the reading unproven instead of spending
 /// the evaluation on it. Withholding it only returns the answer the readings
 /// above already reached.
-const MAX_INCLUDE_SCOPE_ENTRIES: usize = 2_000;
+pub(in crate::pretool) const MAX_INCLUDE_SCOPE_ENTRIES: usize = 2_000;
 /// Which ignore files a walk honors, matching the host that searches.
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub(super) enum Ignores {

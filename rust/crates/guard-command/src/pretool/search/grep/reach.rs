@@ -8,14 +8,19 @@
 //! selects is never named either: grep does not open it. No content is
 //! returned.
 //!
-//! A tree too large to walk names nothing. Naming whatever hidden file the
-//! walk met first sent agents after an `--exclude-dir` that could not shorten
-//! the walk, so the reason says the tree is too large instead.
+//! An include search over more entries than the include proof may inspect
+//! names nothing it did not select. Naming whatever hidden file the walk met
+//! first sent agents after an `--exclude-dir` that could not shorten the
+//! proof, so the reason says the tree is too large instead.
 
 use super::{scan_arguments, tree, AbsentOperands, ReadContext};
 use crate::pretool::search_pattern_clearance::PatternClearance;
 
-const MAX_ENTRIES: usize = if cfg!(test) { 1_000 } else { 10_000 };
+const MAX_ENTRIES: usize = 10_000;
+
+/// The entries the include proof may inspect. Past this many, an include
+/// search is reviewed for its size whatever the globs select.
+const INCLUDE_PROOF_ENTRIES: usize = crate::pretool::search_scope_walk::MAX_INCLUDE_SCOPE_ENTRIES;
 
 /// A review reason for a command that is one recursive `grep` plus filters of
 /// its output, when a sensitive-named entry under one of its roots is what
@@ -54,10 +59,10 @@ pub(in crate::pretool) fn sensitive_reach_reason(
         return None;
     }
     let clearance = scan.clearance();
-    let mut too_large = false;
+    let mut inspected = 0_usize;
     let shown = scan.targets.iter().find_map(|target| {
         let entry =
-            first_sensitive_entry(target, context, &scan, clearance.as_ref(), &mut too_large)?;
+            first_sensitive_entry(target, context, &scan, clearance.as_ref(), &mut inspected)?;
         let folder = target.trim_end_matches('/');
         let shown = if matches!(folder, "" | ".") {
             entry
@@ -68,6 +73,9 @@ pub(in crate::pretool) fn sensitive_reach_reason(
             .then_some(shown)
     });
     let Some(shown) = shown else {
+        // Only the include proof's limit is known to be below this walk's;
+        // a plain recursive search past this walk's limit stays unexplained.
+        let too_large = !scan.included.is_empty() && inspected > INCLUDE_PROOF_ENTRIES;
         return too_large.then(|| {
             "HOL Guard requires review because the search covers more files than Guard can check before it runs. Name the folders you need instead of the whole tree, for example `grep -rn PATTERN src app`.".to_owned()
         });
@@ -79,14 +87,14 @@ pub(in crate::pretool) fn sensitive_reach_reason(
 
 /// The first entry below `value`, in name order, that the recursive screens
 /// refuse by name and the pattern clearance does not admit, relative to
-/// `value`. A walk that does not finish names nothing, and one that runs past
-/// its entry limit sets `too_large`.
+/// `value`. A walk that does not finish names nothing. Every entry it
+/// inspects is added to `inspected`.
 fn first_sensitive_entry(
     value: &str,
     context: ReadContext<'_>,
     scan: &super::Scan,
     clearance: Option<&PatternClearance>,
-    too_large: &mut bool,
+    inspected: &mut usize,
 ) -> Option<String> {
     if value.split(['/', '\\']).any(|part| part == "..")
         || !crate::pretool::safe_reads::bounded_read_target(
@@ -102,12 +110,12 @@ fn first_sensitive_entry(
     // The flag marks an entry below a directory that only the clearance
     // admitted, whose files must each clear on their own content.
     let mut pending = vec![(root.clone(), false)];
-    let mut inspected = 0_usize;
+    let mut walked = 0_usize;
     while let Some((path, admitted_below)) = pending.pop() {
         let mut below = admitted_below;
-        inspected += 1;
-        if inspected > MAX_ENTRIES {
-            *too_large = true;
+        walked += 1;
+        *inspected += 1;
+        if walked > MAX_ENTRIES {
             return None;
         }
         let metadata = std::fs::symlink_metadata(&path).ok()?;
