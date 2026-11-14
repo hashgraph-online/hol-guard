@@ -35132,6 +35132,74 @@
       "expect": "allow"
     },
     {
+      "id": "session-for-loop-glob-file-test-guard-search",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "for f in src/*.ts; do [ -f \"$f\" ] || continue; rg -l download \"$f\"; done"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "shell-file-test-glob-operand",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "test -e src/*.ts"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "neg-for-loop-glob-file-test-guard-removes",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "for f in ${HOME}/notes/*.md; do [ -f \"$f\" ] || continue; rm \"$f\"; done"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-for-loop-glob-file-test-guard-aws",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "for f in ~/.aws/*; do [ -f \"$f\" ] || continue; echo \"$f\"; done"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
       "id": "neg-for-loop-glob-outside-workspace",
       "fix_area": "negative",
       "harnesses": [
@@ -35903,6 +35971,74 @@
       },
       "cwd": "worktree",
       "expect": "allow"
+    },
+    {
+      "id": "session-ls-d-two-sided-glob-beside-hidden-files",
+      "fix_area": "read",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "ls -d ${HOME}/acme-plain/*probe* 2>/dev/null; true"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "shell-ls-two-sided-glob-one-match",
+      "fix_area": "read",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "ls ${HOME}/acme-plain/*probe*"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "neg-ls-two-sided-glob-reaches-hidden-config",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "ls ${HOME}/*config*"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-ls-two-sided-glob-reaches-npmrc",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "ls -d ${HOME}/acme-plain/*npmrc*"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
     },
     {
       "id": "observed-rg-filtered-pipeline",

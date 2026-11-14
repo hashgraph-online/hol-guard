@@ -14,6 +14,7 @@ pub(crate) const ACTION_FEATURE: &str = "context-assistance-native-decisions-v1"
 pub(crate) const HISTORY_FEATURE: &str = "context-assistance-history-v1";
 pub(crate) const VERSIONS_FEATURE: &str = "context-assistance-versions-v1";
 pub(crate) const FOLDERS_FEATURE: &str = "context-assistance-folders-v1";
+pub(crate) const SAVINGS_FEATURE: &str = "context-assistance-savings-v1";
 
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
@@ -35,6 +36,8 @@ pub(crate) enum Kind {
     WorkspaceAccess,
     WorkspaceGrant,
     Folders,
+    /// This week's savings estimate; reads records, changes nothing.
+    Savings,
     /// A Claude Code session started: start a resting worker for the
     /// session's first prompt. Does nothing unless project context is on.
     Warm,
@@ -52,6 +55,7 @@ impl Kind {
             Self::WorkspaceAccess => "workspace_access",
             Self::WorkspaceGrant => "workspace_grant",
             Self::Folders => "folders",
+            Self::Savings => "savings",
             Self::Warm => "warm",
         }
     }
@@ -87,6 +91,16 @@ pub(crate) fn evaluate(request: &Request, store: &PolicySnapshotStore) -> Result
             let result = folders::browse(&request.query.input)?;
             return Ok(json!({"kind":"folders", "state":service.status()?,
                 "data":{"schema":"guard-cigar-workspace-result.v1", "data_role":true, "result":result}}));
+        }
+        if matches!(request.query.kind, Kind::Savings) {
+            let user_home = crate::claude_hook_bridge::home_directory()
+                .ok_or("native_context_assistance_home_unavailable")?;
+            let report =
+                crate::context_assistance_savings::report::report(home, &user_home, |name| {
+                    std::env::var(name).ok()
+                });
+            return Ok(json!({"kind":"savings", "state":service.status()?,
+                "data":{"schema":"guard-cigar-workspace-result.v1", "data_role":true, "result":report}}));
         }
         if matches!(request.query.kind, Kind::Stop) {
             service.stop()?;
@@ -163,7 +177,8 @@ pub(crate) fn evaluate(request: &Request, store: &PolicySnapshotStore) -> Result
             | Kind::Workspace
             | Kind::WorkspaceAccess
             | Kind::WorkspaceGrant
-            | Kind::Folders => {}
+            | Kind::Folders
+            | Kind::Savings => {}
         }
         let mut state = service.status()?;
         if matches!(request.query.kind, Kind::Installations) {

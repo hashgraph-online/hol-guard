@@ -151,7 +151,18 @@ def test_convert():\n    assert convert(2) == 2\n",
     let mut response = serde_json::json!({ "hookSpecificOutput": {} });
     let at = (guard_home.path(), root.as_path(), "codex", Some(&session));
     let wait = Duration::from_secs(5);
-    used::add_tests(&mut response, at, changed.clone(), &[], wait, || true);
+    let mut shown = Vec::new();
+    used::add_tests(
+        &mut response,
+        at,
+        changed.clone(),
+        &[],
+        wait,
+        || true,
+        &mut shown,
+    );
+    // The tests shown count toward the savings record like any other file.
+    assert_eq!(shown, ["tests/test_core.py"]);
     let text = response["hookSpecificOutput"]["additionalContext"]
         .as_str()
         .unwrap_or_default();
@@ -165,7 +176,7 @@ def test_convert():\n    assert convert(2) == 2\n",
     );
     // Project context turned off meanwhile sends nothing.
     let mut off = serde_json::json!({ "hookSpecificOutput": {} });
-    used::add_tests(&mut off, at, changed, &[], wait, || false);
+    used::add_tests(&mut off, at, changed, &[], wait, || false, &mut Vec::new());
     assert_eq!(off, serde_json::json!({ "hookSpecificOutput": {} }));
 }
 

@@ -266,6 +266,7 @@ mod stdin_filters;
 mod symlink_writes;
 mod tool_inventory_reads;
 mod tree_reads;
+mod tree_writers;
 pub(crate) mod version_probes;
 pub(crate) mod wget_reads;
 #[cfg(test)]
@@ -319,7 +320,9 @@ pub(crate) use script_content::{
     sole_program_sources, sourced_program_sources, sourcing_bounded_sources,
 };
 pub use search_scope_tracked::proven_project_document;
-pub(crate) use segment_proof::{benign_command_segments, leading_cd_segment, without_stderr_merge};
+pub(crate) use segment_proof::{
+    benign_command_segments, leading_cd_segment, segments_safe_alone, without_stderr_merge,
+};
 pub(crate) use worktree_add::entered_checkouts;
 pub(crate) use worktree_add::new_checkout_route;
 pub(crate) use worktree_add::verified_leading_cd;
