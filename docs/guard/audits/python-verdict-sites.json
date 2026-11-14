@@ -324,6 +324,16 @@
       "note": "The evaluation used when the resident cannot be reached."
     },
     {
+      "file": "src/codex_plugin_scanner/guard/native_pretool.py",
+      "func": "_decode_pre_tool",
+      "root": "direct-cli",
+      "reading": "renders-native",
+      "actions": [
+        "review"
+      ],
+      "note": "Maps the resident's own review-tier actions (require-reapproval, sandbox-required) on a deny to review and keeps the original as native_minimum_action. It never maps to allow: an allow paired with a review-tier action, or any unknown action, still decodes to nothing. Only the command test and explain diagnostics and the dashboard Test Lab read this decoder."
+    },
+    {
       "file": "src/codex_plugin_scanner/guard/native_supply_chain_eval.py",
       "func": "_review_settlement",
       "root": "hook",

@@ -838,6 +838,12 @@
           "src/codex_plugin_scanner/guard/cli/command_extension_listing.py"
         ],
         "reason": "Reviewed and retained in runtime scope: the CLI reaches it lazily when `command extensions` runs, so the import graph counts it as lazy. It is transport and presentation only -- it asks the daemon for the delivered catalog over the same route `command controls` uses, falls back to the packaged catalog when nothing answers, and renders what comes back. The native read model still owns the catalog, so nothing here re-derives an extension."
+      },
+      {
+        "path": [
+          "src/codex_plugin_scanner/guard/cli/command_inspection_client.py"
+        ],
+        "reason": "Reviewed and retained in runtime scope: `command test` and `command explain` reach it lazily from cli/commands_dispatch_local. It is transport only -- it starts or waits for the daemon within a fixed warm-up budget and returns the daemon's inspection, or a typed unavailable answer when the daemon cannot answer. The native runtime still owns the classification; nothing here derives a verdict, and an outage is never reported as no_match."
       }
     ],
     "tests": {
