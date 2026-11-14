@@ -223,21 +223,34 @@ def _unsafe_file_mode(mode: int, artifact_identity: object) -> bool:
     return bool(mode & ~0o777 or (os.name != "nt" and (mode & 0o002 or (mode & 0o020 and not artifact_role))))
 
 
+#: Read flags for hashing an artifact: without O_BINARY Windows opens a text
+#: descriptor that stops at the first Ctrl-Z byte and folds CRLF.
+ARTIFACT_READ_FLAGS = os.O_RDONLY | getattr(os, "O_BINARY", 0) | getattr(os, "O_NOFOLLOW", 0)
+
+
+def descriptor_fingerprint(metadata: os.stat_result) -> tuple[int, ...]:
+    """The file identity a path's `lstat` and its open descriptor's `fstat` agree on.
+
+    On Windows they disagree on two fields: `lstat` reports creation time as
+    st_ctime where `fstat` reports change time, and only `lstat` adds execute
+    bits for an executable extension.
+    """
+    windows = os.name == "nt"
+    return (
+        metadata.st_dev,
+        metadata.st_ino,
+        metadata.st_size,
+        metadata.st_mtime_ns,
+        0 if windows else metadata.st_ctime_ns,
+        metadata.st_mode & ~0o111 if windows else metadata.st_mode,
+        metadata.st_uid,
+        metadata.st_gid,
+    )
+
+
 def _artifact_digest(target: Path, identity: Mapping[str, object], mode: int) -> str:
     """Hash the signed size through one owned descriptor with bounded working memory."""
     active = _ACTIVE_TRANSITION.get()
-
-    def fingerprint(metadata: os.stat_result) -> tuple[int, ...]:
-        return (
-            metadata.st_dev,
-            metadata.st_ino,
-            metadata.st_size,
-            metadata.st_mtime_ns,
-            metadata.st_ctime_ns,
-            metadata.st_mode,
-            metadata.st_uid,
-            metadata.st_gid,
-        )
 
     def check_deadline() -> None:
         _check_inverse_deadline()
@@ -251,12 +264,12 @@ def _artifact_digest(target: Path, identity: Mapping[str, object], mode: int) ->
         raise TransitionError("artifact_permissions_invalid") from exc
     check_deadline()
     try:
-        descriptor = os.open(target, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_NONBLOCK", 0))
+        descriptor = os.open(target, ARTIFACT_READ_FLAGS | getattr(os, "O_NONBLOCK", 0))
     except OSError as exc:
         raise TransitionError("artifact_dependency_unavailable") from exc
     try:
         opened = os.fstat(descriptor)
-        if fingerprint(trusted) != fingerprint(opened):
+        if descriptor_fingerprint(trusted) != descriptor_fingerprint(opened):
             raise TransitionError("generation_changed")
         if not stat.S_ISREG(opened.st_mode) or getattr(opened, "st_file_attributes", 0) & getattr(
             stat, "FILE_ATTRIBUTE_REPARSE_POINT", 0x400
@@ -284,8 +297,8 @@ def _artifact_digest(target: Path, identity: Mapping[str, object], mode: int) ->
         final, current = os.fstat(descriptor), target.lstat()
         if (
             count != opened.st_size
-            or fingerprint(opened) != fingerprint(final)
-            or fingerprint(final) != fingerprint(current)
+            or descriptor_fingerprint(opened) != descriptor_fingerprint(final)
+            or descriptor_fingerprint(final) != descriptor_fingerprint(current)
         ):
             raise TransitionError("generation_changed")
         check_deadline()
