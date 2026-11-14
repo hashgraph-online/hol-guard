@@ -57,6 +57,7 @@ pub mod cloud_action_serve;
 mod cloud_action_tests;
 pub mod cloud_action_v2;
 pub mod cloud_action_v2_consent;
+pub mod cloud_action_v2_unclassified;
 pub mod cloud_catalog;
 pub mod cloud_pack;
 pub mod cloud_pack_artifact;

@@ -151,6 +151,8 @@ pub struct FactCall<'a> {
     pub facts: &'a ActionFactsV2,
     pub session: Option<&'a SessionFlowV2>,
     pub windows: Option<&'a BTreeMap<String, u64>>,
+    /// `Some(destructive_name)` when no admitted pack describes the action.
+    pub unclassified: Option<bool>,
 }
 
 /// A policy decision and the fact rules behind it.
@@ -212,7 +214,14 @@ impl PolicyPack {
             session: Some(call.session.unwrap_or(&clean)),
             windows,
         };
-        let join = join_fact_rules(&self.typed, &subject, &facts, &policy);
+        let unclassified = call.unclassified.map(|destructive| {
+            if destructive {
+                self.unclassified.destructive_name_action
+            } else {
+                self.unclassified.action
+            }
+        });
+        let join = join_fact_rules(&self.typed, &subject, &facts, &policy, unclassified);
         RuleDecision {
             action: join.action,
             matched: join.matched.into_iter().map(str::to_owned).collect(),
@@ -348,7 +357,7 @@ fn validate_windows(windows: &[WireWindow]) -> Result<BTreeSet<&str>, PackError>
 
 /// An action no pack describes is never allowed, and a destructive-looking
 /// name is never treated more leniently than any other.
-fn validate_unclassified(unclassified: &Unclassified) -> Result<(), PackError> {
+pub(crate) fn validate_unclassified(unclassified: &Unclassified) -> Result<(), PackError> {
     let base = unclassified.action.severity();
     if base < GuardAction::Review.severity()
         || unclassified.destructive_name_action.severity() < base

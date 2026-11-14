@@ -105,6 +105,7 @@ pub fn explain(
         facts: &facts,
         session: None,
         windows: None,
+        unclassified: None,
     };
     let decisions: Map<String, Value> = Preset::ALL
         .into_iter()
