@@ -162,6 +162,12 @@ def add_git_allow_shape(workspace: Path, environment: dict[str, str], scenario_i
         # what used to make the checkout its own floor.
         (workspace / RELATIVE_HOOKS_DIR).mkdir(parents=True, exist_ok=True)
         _git(workspace, environment, "config", "core.hooksPath", RELATIVE_HOOKS_DIR)
+    if scenario_id == GIT_ALLOW_ECHO_WORKTREE_CASE:
+        # The pipe in this chain keeps Oh My Pi from rewriting the worktree add,
+        # so real Git runs it. Branching from origin/main would then record
+        # tracking for the new branch in .git/config, which the lane guards as a
+        # protected file. The chain never asked for tracking; turn it off.
+        _git(workspace, environment, "config", "branch.autoSetupMerge", "false")
     add_fast_forward_origin(workspace, workspace, environment)
     if scenario_id == GIT_ALLOW_ROUTED_REFRESH_CASE:
         # The checkout the chain routes into. It shares this repository, so the

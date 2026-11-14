@@ -11,8 +11,12 @@ false positive the product does not have.
 from __future__ import annotations
 
 import json
+import os
+import shlex
+import subprocess
 from pathlib import Path
 
+from ci.gauntlet.fixtures import create_fixture, filesystem_checks
 from ci.gauntlet.git_allow_fixtures import (
     ECHO_WORKTREE,
     GIT_ALLOW_CASES,
@@ -38,3 +42,23 @@ def test_the_echo_case_checks_the_worktree_its_command_creates() -> None:
     (command,) = case["commands"]
     assert f"../{ECHO_WORKTREE} " in command
     assert f"cd ../{ECHO_WORKTREE} " in command
+
+
+def test_the_echo_case_worktree_add_leaves_the_protected_config_alone(tmp_path: Path) -> None:
+    """Real Git runs this chain's worktree add, and must not record branch tracking."""
+    (case,) = [case for case in scenarios() if case["id"] == GIT_ALLOW_ECHO_WORKTREE_CASE]
+    (command,) = case["commands"]
+    worktree_add = command.split(" && ", 1)[0]
+    assert worktree_add.startswith("git worktree add -b ")
+    fixture = create_fixture(tmp_path / "fx", scenario_id=GIT_ALLOW_ECHO_WORKTREE_CASE)
+    environment = {
+        "PATH": os.environ.get("PATH", ""),
+        "HOME": str(fixture.home),
+        "GIT_CONFIG_NOSYSTEM": "1",
+    }
+    subprocess.run(
+        shlex.split(worktree_add), cwd=fixture.workspace, env=environment, check=True, capture_output=True, timeout=30
+    )
+    checks = filesystem_checks(fixture, str(case["oracle"]), GIT_ALLOW_ECHO_WORKTREE_CASE)
+    assert checks["protected:.git/config"] is True
+    assert checks["git-allow-echo-worktree-at-origin"] is True
