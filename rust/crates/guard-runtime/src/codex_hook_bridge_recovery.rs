@@ -20,7 +20,9 @@ use crate::codex_hook_response::codex_hook_response;
 use crate::hook_env_stamp::dumps;
 use crate::pyjson::PyVal;
 
-const SHELL_TOOLS: [&str; 2] = ["Bash", "bash"];
+/// Codex names its shell tool `exec_command` and carries the text in `cmd`;
+/// other harnesses name it `Bash` and carry it in `command`.
+const SHELL_TOOLS: [&str; 4] = ["Bash", "bash", "exec_command", "functions.exec_command"];
 const GUARD_PROGRAM: &str = "hol-guard";
 
 /// The argument lists, after `hol-guard`, that read Guard's own state or
@@ -40,7 +42,7 @@ const RECOVERY_ARGUMENTS: [&[&str]; 9] = [
 
 /// Reason codes that say the daemon never reached a verdict, rather than
 /// deciding against the call.
-const NO_VERDICT_REASON_CODES: [&str; 20] = [
+const NO_VERDICT_REASON_CODES: [&str; 22] = [
     "native_policy_not_ready",
     "native_policy_update_in_progress",
     "native_hook_event_unavailable",
@@ -61,13 +63,16 @@ const NO_VERDICT_REASON_CODES: [&str; 20] = [
     "daemon_hook_process_guard_home_mismatch",
     "daemon_worker_exception",
     "native_approval_authority_busy",
+    // Taking the authority lock failed; the authority itself was not judged.
+    "native_approval_authority_lock_failed",
+    "native_approval_authority_directory_lock_failed",
 ];
 
 /// Whether `code` says the daemon could not decide, as opposed to refusing.
+/// Integrity and provenance findings (a mismatch, a rollback, an invalid or
+/// missing authority) are verdicts, so they are not listed.
 pub(super) fn is_no_verdict(code: &str) -> bool {
     NO_VERDICT_REASON_CODES.contains(&code)
-        || (code.starts_with("native_approval_authority_")
-            && code != "native_approval_authority_revoked")
 }
 
 /// The characters a recovery command may hold. Nothing here lets a shell
@@ -94,17 +99,12 @@ pub(super) fn is_recovery_command(command: &str) -> bool {
 }
 
 /// Whether the hook is a shell call that runs only a recovery command inside
-/// Codex's own sandbox policy.
+/// Codex's own sandbox policy. The event is checked by the caller against the
+/// bridge's normalized event name.
 pub(super) fn is_recovery_call(data: &str) -> bool {
     let Ok(payload) = serde_json::from_str::<Value>(data) else {
         return false;
     };
-    let event = ["hook_event_name", "hookEventName"]
-        .iter()
-        .find_map(|key| payload.get(*key).and_then(Value::as_str));
-    if event != Some(PRE_TOOL_USE) {
-        return false;
-    }
     let tool = ["tool_name", "toolName"]
         .iter()
         .find_map(|key| payload.get(*key).and_then(Value::as_str));
@@ -127,10 +127,14 @@ pub(super) fn is_recovery_call(data: &str) -> bool {
     if escalated {
         return false;
     }
-    input
-        .get("command")
-        .and_then(Value::as_str)
-        .is_some_and(is_recovery_command)
+    // Exactly one spelling of the command: a call that carries both keys
+    // could show the reviewer one text and run the other.
+    let text = match (input.get("command"), input.get("cmd")) {
+        (Some(command), None) => command,
+        (None, Some(cmd)) => cmd,
+        _ => return false,
+    };
+    text.as_str().is_some_and(is_recovery_command)
 }
 
 /// The answer that lets a recovery command run, saying why Guard did not

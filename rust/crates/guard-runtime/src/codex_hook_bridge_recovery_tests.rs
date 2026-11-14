@@ -107,26 +107,78 @@ fn only_a_plain_shell_call_is_a_recovery_call() {
     assert!(!is_recovery_call(&tool_input(
         json!({"command": "hol-guard doctor", "with_escalated_permissions": true})
     )));
+    // A call that carries two spellings could show one text and run the other.
     assert!(!is_recovery_call(&tool_input(
-        json!({"cmd": "hol-guard doctor"})
+        json!({"command": "hol-guard doctor", "cmd": "rm -rf ~"})
+    )));
+    assert!(!is_recovery_call(&tool_input(
+        json!({"cmd": "hol-guard doctor; rm -rf ~"})
     )));
     assert!(!is_recovery_call(&tool_input(json!([
         "hol-guard",
         "doctor"
     ]))));
     for payload in [
-        json!({"hook_event_name": "PostToolUse", "tool_name": "Bash",
-               "tool_input": {"command": "hol-guard doctor"}}),
         json!({"hook_event_name": "PreToolUse", "tool_name": "apply_patch",
                "tool_input": {"command": "hol-guard doctor"}}),
         json!({"hook_event_name": "PreToolUse", "tool_name": "mcp__browser__navigate",
                "tool_input": {"command": "hol-guard doctor"}}),
         json!({"hook_event_name": "PreToolUse", "tool_name": "Bash"}),
-        json!({"tool_name": "Bash", "tool_input": {"command": "hol-guard doctor"}}),
     ] {
         assert!(!is_recovery_call(&payload.to_string()), "{payload}");
     }
     assert!(!is_recovery_call("not json"));
+}
+
+#[test]
+fn codex_exec_command_calls_are_recovery_calls() {
+    for tool in ["exec_command", "functions.exec_command"] {
+        let payload = |input: Value| {
+            json!({"hook_event_name": "PreToolUse", "tool_name": tool, "tool_input": input})
+                .to_string()
+        };
+        assert!(is_recovery_call(&payload(
+            json!({"cmd": "hol-guard daemon repair"})
+        )));
+        assert!(is_recovery_call(&payload(
+            json!({"cmd": "hol-guard doctor --json", "workdir": "/tmp", "yield_time_ms": 1000})
+        )));
+        assert!(!is_recovery_call(&payload(
+            json!({"cmd": "rm -rf ~/projects"})
+        )));
+        assert!(!is_recovery_call(&payload(
+            json!({"cmd": "hol-guard doctor && id"})
+        )));
+        assert!(!is_recovery_call(&payload(
+            json!({"cmd": "hol-guard doctor", "sandbox_permissions": "require_escalated"})
+        )));
+    }
+}
+
+#[test]
+fn a_down_daemon_lets_a_codex_exec_command_repair_run_under_any_event_spelling() {
+    for event in ["PreToolUse", "pretool", "hook_name"] {
+        let key = if event == "hook_name" {
+            "hook_name"
+        } else {
+            "hook_event_name"
+        };
+        let value = if event == "hook_name" {
+            "PreToolUse"
+        } else {
+            event
+        };
+        let payload = json!({key: value, "tool_name": "exec_command",
+                             "tool_input": {"cmd": "hol-guard daemon repair"}});
+        let (_home, bridge) = down_home("codex-recovery-exec");
+        let (route, _) = route_hook(&bridge, &payload.to_string(), Instant::now());
+        assert!(allowed(&route), "{event}: {route:?}");
+    }
+    let payload = json!({"hook_event_name": "PostToolUse", "tool_name": "exec_command",
+                         "tool_input": {"cmd": "hol-guard daemon repair"}});
+    let (_home, bridge) = down_home("codex-recovery-post");
+    let (route, _) = route_hook(&bridge, &payload.to_string(), Instant::now());
+    assert!(!allowed(&route), "{route:?}");
 }
 
 #[test]
@@ -192,6 +244,7 @@ fn an_escalated_recovery_command_is_still_blocked() {
 fn a_daemon_that_cannot_finish_a_review_does_not_stop_its_own_repair() {
     for code in [
         "native_approval_authority_busy",
+        "native_approval_authority_lock_failed",
         "native_hook_worker_unavailable",
         "native_command_extension_evaluation_failed",
     ] {
@@ -233,6 +286,12 @@ fn a_policy_verdict_on_a_recovery_command_is_kept() {
     for code in [
         "native_command_permission_disabled",
         "native_approval_authority_revoked",
+        "native_approval_authority_provenance_mismatch",
+        "native_approval_authority_key_id_mismatch",
+        "native_approval_authority_generation_rollback",
+        "native_approval_authority_root_invalid",
+        "native_approval_authority_missing",
+        "native_approval_authority_lock_not_private",
     ] {
         let answer = json!({
             "hookSpecificOutput": {"permissionDecision": "deny",

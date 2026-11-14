@@ -8,6 +8,9 @@ hanging with it.
 from __future__ import annotations
 
 import json
+import os
+import subprocess
+import sys
 import threading
 import time
 from pathlib import Path
@@ -181,3 +184,52 @@ def test_repair_without_a_timeout_still_waits_for_the_lock(tmp_path: Path, monke
     holder.join(5)
 
     assert result["runtime_status"] == "restarted"
+
+
+_HOLDER = """
+import sys
+from pathlib import Path
+from codex_plugin_scanner.guard import native_daemon_manage as manager
+
+with manager.guard_daemon_start_lock(Path(sys.argv[1])):
+    print("held", flush=True)
+    sys.stdin.readline()
+"""
+
+
+def test_repair_is_bounded_when_a_separate_process_holds_the_start_lock(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    guard_home = tmp_path / "guard-home"
+    home_dir = tmp_path / "home"
+    home_dir.mkdir()
+    events: list[str] = []
+    _stub_repair_steps(monkeypatch, events)
+    files = _protected_state(guard_home)
+    source_root = Path(manager.__file__).resolve().parents[2]
+    env = {**os.environ, "PYTHONPATH": str(source_root)}
+    holder = subprocess.Popen(
+        [sys.executable, "-c", _HOLDER, str(guard_home)],
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        env=env,
+        text=True,
+    )
+    try:
+        assert holder.stdout is not None
+        assert holder.stdout.readline().strip() == "held"
+        started = time.monotonic()
+        with pytest.raises(runtime_repair.DaemonRepairBusyError):
+            runtime_repair.repair_guard_daemon_runtime(guard_home, home_dir=home_dir, lock_timeout_seconds=0.5)
+        assert time.monotonic() - started < 5.0
+        assert events == []
+        assert {name: (guard_home / name).read_bytes() for name in files} == files
+    finally:
+        assert holder.stdin is not None
+        holder.stdin.write("\n")
+        holder.stdin.flush()
+        holder.wait(10)
+
+    result = runtime_repair.repair_guard_daemon_runtime(guard_home, home_dir=home_dir, lock_timeout_seconds=5.0)
+    assert result["runtime_status"] == "restarted"
+    assert events == ["retire", "ensure"]
