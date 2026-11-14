@@ -4805,6 +4805,111 @@
       "expect": "not_allow"
     },
     {
+      "id": "python-json-filter-reshapes-piped-manifest",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "cat dashboard/package.json | python3 -c 'import json,sys; d=json.load(sys.stdin); print(d.get(\"name\"), sorted(d))'"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "python-json-filter-multiline-loop",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "cat dashboard/package.json | python3 -c \"\nimport json,sys\nfor k, v in json.load(sys.stdin).items():\n    print(k, v)\""
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "python-json-filter-standalone-dumps",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "python3 -c 'import json; print(json.dumps({\"ok\": True}, indent=2))'"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "python-json-filter-lists-directory",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "cat dashboard/package.json | python3 -c 'import os; print(os.listdir(\".\"))'"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow",
+      "contained_ok": true
+    },
+    {
+      "id": "python-json-filter-opens-file",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "cat dashboard/package.json | python3 -c 'print(open(\"dashboard/package.json\").read())'"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow",
+      "contained_ok": true
+    },
+    {
+      "id": "python-json-filter-module-path-prefix",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "cat dashboard/package.json | PYTHONPATH=. python3 -c 'import json,sys; print(json.load(sys.stdin))'"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow",
+      "contained_ok": true
+    },
+    {
       "id": "cat-credential-lookalike-name",
       "fix_area": "shell",
       "harnesses": [
