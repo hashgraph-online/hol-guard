@@ -57,3 +57,27 @@ fn only_the_first_absolute_match_is_renamed_and_nothing_else_moves() {
     assert!(bare_name_model(&model("ls -d ."), Some(&stamped)).is_none());
     assert!(bare_name_model(&model(&command), None).is_none());
 }
+
+#[cfg(unix)]
+#[test]
+fn shell_builtins_do_not_borrow_trust_from_path_executables() {
+    use std::os::unix::fs::PermissionsExt;
+    let root = std::env::temp_dir().join(format!(
+        "guard-path-builtin-{}",
+        std::process::id()
+    ));
+    std::fs::create_dir_all(&root).unwrap();
+    for name in ["pwd", "echo", "test", "true", "false"] {
+        let file = root.join(name);
+        std::fs::write(&file, "#!/bin/sh\nexit 0\n").unwrap();
+        let mut permissions = std::fs::metadata(&file).unwrap().permissions();
+        permissions.set_mode(0o755);
+        std::fs::set_permissions(&file, permissions).unwrap();
+        assert_eq!(
+            first_path_match(file.to_str().unwrap(), root.to_str().unwrap()),
+            None,
+            "{name} is a shell builtin, not a PATH lookup"
+        );
+    }
+    std::fs::remove_dir_all(&root).unwrap();
+}
