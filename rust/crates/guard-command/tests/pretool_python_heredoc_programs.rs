@@ -29,6 +29,11 @@ fn checkout(label: &str) -> (PathBuf, FixtureCleanup) {
     std::fs::write(project.join("pkg/__init__.py"), "X = 1\n").unwrap();
     std::fs::write(project.join("pkg/remote.py"), "import requests\n").unwrap();
     std::fs::write(
+        project.join("pkg/stopper.py"),
+        "import os as proc\nproc.kill(4242, 15)\n",
+    )
+    .unwrap();
+    std::fs::write(
         project.join("keys.py"),
         "print(open('/home/user/.aws/credentials').read())\n",
     )
@@ -88,6 +93,9 @@ fn a_probe_that_imports_modules_runs_in_the_workspace_sandbox() {
         // Starting a program is bounded by the same sandbox.
         "python3 - <<'EOF'\nimport subprocess\nsubprocess.run(['git', 'status'])\nEOF",
         "python3 <<'EOF'\nimport signal\nsignal.signal(signal.SIGINT, signal.SIG_DFL)\nprint(1)\nEOF",
+        // Text that only mentions an import is not one.
+        "python3 <<'EOF'\nimport json\nprint(\"import psutil\")\nEOF",
+        "python3 <<'EOF'\nimport subprocess\nsubprocess.run(['git', 'config', '--get', 'user.name'])\nEOF",
     ] {
         let (action, reason) = outcome(&root, command);
         assert_eq!((action.as_str(), reason.as_str()), CONTAINED, "{command}");
@@ -147,6 +155,14 @@ fn a_probe_that_would_not_fit_the_sandbox_keeps_its_review() {
         "python3 - <<'PYEOF'\nimport os\nbase = \"/usr\"\nprint(open(os.path.join(base, \"../etc/passwd\")).read())\nPYEOF",
         "python3 - <<'PYEOF'\nimport os\nprint(os.listdir('..'))\nPYEOF",
         "python3 - <<'PY'\nfrom pathlib import Path\nPath('.git/config').write_text('[core]\\n\\thooksPath = /dev/null\\n')\nPY",
+        // The same reach through a command line, an alias or the root.
+        "python3 - <<'PY'\nimport os\nos.system('git config core.hooksPath /dev/null')\nPY",
+        "python3 - <<'PY'\nimport subprocess\nsubprocess.run(['kill', '-9', '1'])\nPY",
+        "python3 - <<'PY'\nimport os\nos.system('cat /etc/passwd /tmp/out')\nPY",
+        "python3 - <<'PY'\nimport os as proc\nproc.kill(4242, 15)\nPY",
+        "python3 - <<'PY'\nimport os\nprint(os.listdir('/'))\nPY",
+        // A local module the program imports counts too.
+        "python3 - <<'PY'\nimport pkg.stopper\nPY",
     ] {
         let (action, _) = outcome(&root, command);
         assert!(
