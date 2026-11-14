@@ -812,6 +812,9 @@ def _run_guard_install_command(
         from ..adapters.harness_mcp_discovery import observe_configured_mcp_servers
 
         observe_configured_mcp_servers(store, context=context, seen_at=_now())
+        from .install_daemon_prewarm import prewarm_after_install
+
+        prewarm_after_install(context.guard_home, home_dir=context.home_dir)
     _emit("install", payload, getattr(args, "json", False))
     return 0
 
