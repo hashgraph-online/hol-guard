@@ -100,7 +100,7 @@ pub(super) fn safe_du_arguments(arguments: &[String], context: super::PathContex
     let walks_tree = if summarize && !all {
         false
     } else {
-        depth.map_or(true, |level| level > 1)
+        depth.is_none_or(|level| level > 1)
     };
     operands.len() <= MAX_OPERANDS
         && operands.iter().all(|operand| {
