@@ -7,6 +7,7 @@ import type { ContextAssistanceStatus } from "./types";
 import type { CigarTutorialId } from "./tutorial-content";
 import type { useCigarTutorial } from "./tutorial-progress";
 import { CigarTutorials, CigarWalkthrough } from "./tutorials";
+import { useSwarmContextTarget } from "./swarm-handoff";
 
 export type CigarSectionsProps = {
   tab: CigarTab;
@@ -32,6 +33,7 @@ function Intro({ title, children }: { title: string; children: ReactNode }) {
 /** Home explains CIGAR; every other tab is one place to change something. */
 export function CigarSections(props: CigarSectionsProps) {
   const { tab, status, lesson } = props;
+  const swarmTarget = useSwarmContextTarget();
   const id = useId();
 
   function moveTab(event: KeyboardEvent<HTMLButtonElement>, index: number) {
@@ -77,8 +79,8 @@ export function CigarSections(props: CigarSectionsProps) {
               ? <><strong>Waking up CIGAR</strong><p>Your projects come back in a moment.</p></>
               : <><strong>Turn on CIGAR first</strong><p>Projects open up as soon as CIGAR is on. Use the button at the top of this page.</p></>}
           </div> : null}
-          {/* While CIGAR is off the one note above says what to do; the empty panels would only repeat it. */}
-          {status?.effective_enabled || cigarWaking(status) ? props.access : null}
+          {/* Retain a Swarm handoff through setup or recovery, including its return action. */}
+          {status?.effective_enabled || cigarWaking(status) || swarmTarget ? props.access : null}
         </div> : null}
         {tab === "data" ? <div>
           <Intro title="Privacy">By default, CIGAR keeps its notes in memory only, so they disappear when you turn it off. Here you can see what it keeps, take back access, or delete saved notes.</Intro>

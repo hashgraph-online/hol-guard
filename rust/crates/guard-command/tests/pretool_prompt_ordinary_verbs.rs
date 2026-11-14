@@ -126,6 +126,8 @@ fn a_signal_zero_liveness_check_stays_benign() {
         "kill -n 0 4821",
         "kill --signal 0 4821",
         "Check the dev server is up with kill -0 $(cat server.pid).",
+        // Two probes on two lines are two commands, not one with two signals.
+        "kill -s 0 4821\nkill -n 0 4821",
     ] {
         assert_allowed(text);
     }
@@ -133,6 +135,7 @@ fn a_signal_zero_liveness_check_stays_benign() {
         "kill -0 4821 && kill 4821",
         "kill -0 4821; kill -9 4821",
         "kill -s 9 4821",
+        "kill -s 0 -s 9 4821",
         "kill -05 4821",
         "kill -0 4821 then pkill node",
         // A later kill with no PID or option is recognised by the probe.
