@@ -88,6 +88,29 @@ impl PatternClearance {
         })
     }
 
+    /// The expression this clearance matches with: two clearances that share
+    /// it clear the same files, so a walk can be remembered under it.
+    pub(in crate::pretool) fn expression(&self) -> &str {
+        self.matcher.as_str()
+    }
+
+    /// The bytes and files this clearance has read so far. A walk that starts
+    /// from other counts can stop at another file, so a remembered walk is
+    /// keyed by them.
+    pub(in crate::pretool) fn charged(&self) -> (u64, u64) {
+        (
+            self.spent.get(),
+            u64::try_from(self.files.get()).unwrap_or(u64::MAX),
+        )
+    }
+
+    /// Leave the counters where a remembered walk left them, so the walks
+    /// after it get no more than they would have had.
+    pub(in crate::pretool) fn recharge(&self, spent: u64, files: u64) {
+        self.spent.set(spent);
+        self.files.set(usize::try_from(files).unwrap_or(usize::MAX));
+    }
+
     /// Whether `path` is a regular file whose bytes the pattern cannot match.
     pub(in crate::pretool) fn clears(&self, path: &Path) -> bool {
         clearable_name(path, false) && self.clears_bytes(path)

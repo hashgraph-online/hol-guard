@@ -197,16 +197,13 @@ fn safe_walk_target(
     let Some(root) = expanded_operand(value, context) else {
         return false;
     };
-    // A clearance depends on the pattern, so its walk is never memoized.
     match (clearance, skip_hidden) {
-        (Some(clearance), _) => walk_uncached(
+        (Some(clearance), _) => super::walk_memo::cleared(
             root,
             excluded_files,
             excluded_directories,
-            git_metadata,
-            follow_links,
-            Some(clearance),
-            skip_hidden,
+            (git_metadata, follow_links, skip_hidden),
+            clearance,
         ),
         (None, true) => walk_skipping_hidden(
             root,
@@ -378,6 +375,10 @@ pub(super) fn walk_uncached(
     clearance: Option<&PatternClearance>,
     skip_hidden: bool,
 ) -> bool {
+    #[cfg(test)]
+    if clearance.is_some() {
+        super::walk_memo::count_walk("cleared", &root);
+    }
     // The third field marks an entry below a directory that only the clearance
     // admitted: its files have ordinary names, so nothing but their content
     // says the pattern cannot match them. The fourth carries the kind the

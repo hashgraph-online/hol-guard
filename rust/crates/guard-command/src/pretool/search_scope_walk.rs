@@ -200,8 +200,17 @@ pub(super) fn include_scope_proven(
         globs.join("\u{0}"),
         home.map(str::to_owned),
     );
-    charged_include_walk(key, |deadline| {
-        walk_include_scope(root, filter, home, deadline).is_ok()
+    // The budget's own answers last one evaluation entry. A proof stands for
+    // the whole submission: the envelope passes and floors that re-read the
+    // command outside that entry ask the same tree, and walking it again for
+    // each of them is what ran the hook's decision budget out.
+    let proof = format!("include-walk\0{:?}\0{}\0{:?}", key.0, key.1, key.2);
+    super::search::memoized_proof(proof, || {
+        charged_include_walk(key, |deadline| {
+            #[cfg(test)]
+            super::search::count_walk("include-walk", root);
+            walk_include_scope(root, filter, home, deadline).is_ok()
+        })
     })
 }
 
