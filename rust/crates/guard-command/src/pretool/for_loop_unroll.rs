@@ -41,7 +41,23 @@ const SHELL_SPECIAL_NAMES: &[&str] = &[
 /// The unrolled command text for a top-level `for NAME in WORD...; do BODY; done`
 /// over literal words and glob patterns, or `None` when the command is
 /// anything else.
+#[cfg(test)]
 pub(super) fn unroll(command: &str) -> Option<String> {
+    unroll_at(command, None)
+}
+
+/// [`unroll`], also reading a word spelled from the home directory.
+///
+/// The shell expands an unquoted `~/` at the start of a loop word before the
+/// loop runs, so `for d in ~/work/a` hands the body the absolute path. The
+/// unrolled text writes that path out, as the loop spelled with it is
+/// written, so a quoted reference in the body still names the home path and
+/// not a literal `./~`. Only a home made of plain path characters is written
+/// out; any other keeps the review.
+pub(super) fn unroll_at(command: &str, home_dir: Option<&str>) -> Option<String> {
+    let home = home_dir
+        .map(|home| home.trim_end_matches('/'))
+        .filter(|home| home.starts_with('/') && home.len() > 1 && safe_value(home));
     if command
         .chars()
         .any(|c| c.is_control() && !matches!(c, '\n' | '\t'))
@@ -55,7 +71,7 @@ pub(super) fn unroll(command: &str) -> Option<String> {
         return None;
     }
     let rest = keyword(rest, "in")?;
-    let (words, rest) = header_words(rest)?;
+    let (words, rest) = header_words(rest, home)?;
     if words.is_empty() || words.len() > MAX_WORDS {
         return None;
     }
@@ -276,7 +292,7 @@ fn names_a_file_type(value: &str) -> bool {
 /// literal rule: writing it back out unquoted would otherwise hand the body a
 /// pattern the loop never expanded. Its text may hold the separators the
 /// quotes protect, which [`spaced_value`] admits.
-fn header_words(text: &str) -> Option<(Vec<String>, &str)> {
+fn header_words<'a>(text: &'a str, home: Option<&str>) -> Option<(Vec<String>, &'a str)> {
     let mut words: Vec<(String, bool)> = Vec::new();
     let mut current = String::new();
     let mut in_word = false;
@@ -329,6 +345,11 @@ fn header_words(text: &str) -> Option<(Vec<String>, &str)> {
                         other => current.push(other),
                     }
                 }
+            }
+            // An unquoted `~/` opening a word is the home directory.
+            '~' if !in_word && chars.peek().is_some_and(|(_, next)| *next == '/') => {
+                current.push_str(home?);
+                in_word = true;
             }
             '$' | '`' | '\\' | '(' | ')' | '{' | '}' | '~' | '&' | '|' | '<' | '>' | '#' | '!' => {
                 return None
