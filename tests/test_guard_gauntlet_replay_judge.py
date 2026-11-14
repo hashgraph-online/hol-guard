@@ -180,9 +180,6 @@ def test_only_the_marked_cases_may_pass_on_containment() -> None:
         # A `find` that is not limited to regular files hands a link to `grep`, which opens its
         # target; the contained run reaches nothing outside the workspace.
         "neg-find-exec-grep-l-edge-clone-without-type-f",
-        # A loop whose body removes the files it tested: the delete keeps its review, and a
-        # contained run removes only workspace files.
-        "neg-for-loop-glob-file-test-guard-removes",
         # A signing program named outside the workspace: a contained run cannot reach that
         # path, so the amend runs no program the sandbox does not hold.
         "neg-git-amend-signed-program-override",

@@ -139,9 +139,12 @@ pub(super) fn listable_glob(value: &str, context: super::PathContext<'_>) -> boo
 /// arrives: the literal spelling when nothing matches, or a match. So the
 /// literal spelling must name nothing, which keeps a file called
 /// `tests/[ab].py` from standing in for the pattern, and every match must clear
-/// the read proof `cat` needs, or the pattern must match nothing.
+/// the read proof `cat` needs, or the pattern must match nothing. A quoted
+/// `~` stays literal and names `./~`, so a home spelling also needs the
+/// working directory to hold no `~` entry.
 pub(super) fn tested_glob_operand(value: &str, context: super::PathContext<'_>) -> bool {
     value.contains(['*', '?', '['])
+        && (!value.starts_with('~') || no_literal_home_entry(context))
         && expanded_path(value, context)
             .is_some_and(|path| std::fs::symlink_metadata(path).is_err_and(|error| absent(&error)))
         && (safe_reads::glob_file_matches(value, context).is_some()
@@ -242,6 +245,13 @@ fn absent(error: &std::io::Error) -> bool {
 /// A `~` is expanded here from the declared `home_dir`, which is the home the
 /// shell reports; where a caller needs the two to be one directory it screens
 /// `shell_home_matches` itself before admitting the operand.
+/// True when the working directory holds no entry named `~`.
+fn no_literal_home_entry(context: super::PathContext<'_>) -> bool {
+    expanded_path("./~", context)
+        .filter(|path| path.is_absolute())
+        .is_some_and(|path| std::fs::symlink_metadata(path).is_err_and(|error| absent(&error)))
+}
+
 fn expanded_path(value: &str, context: super::PathContext<'_>) -> Option<std::path::PathBuf> {
     if value.starts_with('~') {
         super::read_paths::expand_home_read_path(value, context.home_dir)

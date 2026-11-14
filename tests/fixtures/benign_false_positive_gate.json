@@ -35135,11 +35135,10 @@
       ],
       "tool": "shell",
       "tool_input": {
-        "command": "for f in src/*.ts; do [ -f \"$f\" ] || continue; rm \"$f\"; done"
+        "command": "for f in ${HOME}/notes/*.md; do [ -f \"$f\" ] || continue; rm \"$f\"; done"
       },
       "cwd": "worktree",
-      "expect": "not_allow",
-      "contained_ok": true
+      "expect": "not_allow"
     },
     {
       "id": "neg-for-loop-glob-file-test-guard-aws",

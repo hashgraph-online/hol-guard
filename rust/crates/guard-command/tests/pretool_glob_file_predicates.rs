@@ -85,3 +85,45 @@ fn a_file_test_over_a_workspace_pattern_reads_only_metadata() {
         }
     }
 }
+
+#[test]
+fn a_quoted_home_pattern_needs_no_literal_tilde_entry() {
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../target/glob-file-predicate-fixtures")
+        .join(format!("tilde-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&root);
+    for directory in ["notes", "plain", "planted/~/notes", ".aws"] {
+        std::fs::create_dir_all(root.join(directory)).unwrap();
+    }
+    let root = std::fs::canonicalize(&root).unwrap();
+    std::fs::write(root.join("notes/a.py"), "print('a')\n").unwrap();
+    std::fs::write(root.join(".aws/credentials"), "[default]\n").unwrap();
+    // A quoted `~` stays literal, so the test reads `./~/notes/*.py`.
+    std::os::unix::fs::symlink(
+        root.join(".aws/credentials"),
+        root.join("planted/~/notes/*.py"),
+    )
+    .unwrap();
+    let home = root.to_str().unwrap();
+    for (cwd, allowed) in [("plain", true), ("planted", false)] {
+        let cwd = root.join(cwd);
+        let result = evaluate_pre_tool_envelope_with_context(
+            "codex",
+            "PreToolUse",
+            &json!({"tool_name":"bash", "tool_input":{"command":"test -s '~/notes/*.py'"}}),
+            None,
+            None,
+            Some(home),
+            cwd.to_str(),
+        );
+        assert_eq!(
+            result.minimum_action == "allow",
+            allowed,
+            "{}: {} / {}",
+            cwd.display(),
+            result.minimum_action,
+            result.reason_code
+        );
+    }
+    let _ = std::fs::remove_dir_all(&root);
+}
