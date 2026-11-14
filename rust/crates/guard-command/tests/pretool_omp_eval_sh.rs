@@ -58,6 +58,10 @@ fn a_literal_sh_secret_copy_is_blocked_with_nothing_to_approve() {
         "await sh(\"cp .env output/copied.env\");",
         "await sh(`cp .env output/copied.env`)",
         "await sh`cp .env output/copied.env`",
+        // Physical CR and CRLF become shell linefeeds in JS template literals.
+        "await sh(`echo harmless #\rcp .env output/copied.env`)",
+        "await sh`echo harmless #\rcp .env output/copied.env`",
+        "await sh(`echo harmless #\r\ncp .env output/copied.env`)",
         "  await sh('cp .env output/copied.env') ;\n",
         "console.log(await sh('cp .env output/copied.env'))",
         // Wherever it sits in the program.
@@ -148,8 +152,6 @@ fn sh_calls_the_grammar_cannot_pin_down_stay_reviewed() {
         "await sh`git ${'status'}`",
         "await sh`git status\\n`",
         "await sh(`git ${'status'}`)",
-        // A template CR becomes a shell LF at runtime, which may add a command.
-        "await sh(`echo harmless #\rcp .env output/copied.env`)",
         "await sh()",
         "await sh('')",
         // A local `sh` binding is not the prelude's helper.
