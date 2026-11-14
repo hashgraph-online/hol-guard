@@ -17,6 +17,7 @@ use source_lines::code_lines;
 mod argv;
 mod destructive_git;
 pub(in crate::pretool) mod fed;
+pub(in crate::pretool) mod host_reach;
 mod launch;
 mod loopback;
 mod loopback_bases;

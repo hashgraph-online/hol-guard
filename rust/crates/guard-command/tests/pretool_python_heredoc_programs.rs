@@ -79,6 +79,15 @@ fn a_probe_that_imports_modules_runs_in_the_workspace_sandbox() {
         // `coding` past the second line is not an encoding declaration.
         "python3 <<'EOF'\nimport json\nprint(open('pyproject.toml', encoding='utf-8').read())\nEOF",
         "python3 <<'EOF'\nimport json\nimport sys\n# decoding note\nsys.stdout.reconfigure(encoding='utf-8')\nEOF",
+        // Separators, method calls named like builtins and the shared
+        // temporary directory stay inside what the sandbox allows.
+        "python3 <<'EOF'\nimport json\nprint('/'.join(['a', 'b']), 'a/b'.split('/'))\nEOF",
+        "python3 <<'EOF'\nimport re\nprint(re.compile(r'a+').findall('aa'))\nEOF",
+        "python3 <<'EOF'\nimport json\nopen('/tmp/probe.json', 'w').write(json.dumps({}))\nEOF",
+        "python3 <<'EOF'\nimport json\nprint(open('.gitignore').read())\nEOF",
+        // Starting a program is bounded by the same sandbox.
+        "python3 - <<'EOF'\nimport subprocess\nsubprocess.run(['git', 'status'])\nEOF",
+        "python3 <<'EOF'\nimport signal\nsignal.signal(signal.SIGINT, signal.SIG_DFL)\nprint(1)\nEOF",
     ] {
         let (action, reason) = outcome(&root, command);
         assert_eq!((action.as_str(), reason.as_str()), CONTAINED, "{command}");
@@ -126,6 +135,18 @@ fn a_probe_that_would_not_fit_the_sandbox_keeps_its_review() {
         "python3 <<'EOF'\nfrom \\\n socket import create_connection\nEOF",
         "python3 <<'EOF'\nprint(1) #\\\nimport socket\nEOF",
         "python3 <<'EOF'\nmarker = \" #\"; print(open('/home/user/.aws/credentials').read())\nEOF",
+        // The sandbox still exposes the rest of the host: other processes,
+        // the clipboard and screen, system directories and the checkout's
+        // own Git configuration.
+        "python3 - <<'PYEOF'\nimport psutil\nfor proc in psutil.process_iter():\n    proc.kill()\nPYEOF",
+        "python3 - <<'PYEOF'\nimport pyperclip\nprint(pyperclip.paste())\nPYEOF",
+        "python3 - <<'PYEOF'\nfrom PIL import ImageGrab\nImageGrab.grab().save('shot.png')\nPYEOF",
+        "python3 - <<'PYEOF'\nimport os\nos.system('ls -a /app/')\nPYEOF",
+        "python3 - <<'PYEOF'\nimport json\nprint(eval(\"__import__('os').getcwd()\"))\nPYEOF",
+        "python3 - <<'PYEOF'\nimport glob\nprint(glob.glob('/app/*'))\nPYEOF",
+        "python3 - <<'PYEOF'\nimport os\nbase = \"/usr\"\nprint(open(os.path.join(base, \"../etc/passwd\")).read())\nPYEOF",
+        "python3 - <<'PYEOF'\nimport os\nprint(os.listdir('..'))\nPYEOF",
+        "python3 - <<'PY'\nfrom pathlib import Path\nPath('.git/config').write_text('[core]\\n\\thooksPath = /dev/null\\n')\nPY",
     ] {
         let (action, _) = outcome(&root, command);
         assert!(
