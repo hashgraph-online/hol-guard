@@ -247,6 +247,13 @@ fn sign(ctx: &Ctx, manifest: Doc) -> Step<Doc> {
 }
 
 pub(super) fn prepare(spec: &Spec, ctx: &Ctx, fields: &Map<String, Value>) -> Step<Value> {
+    let home = hermes::hermes_home(ctx);
+    let config = home.join("config.yaml");
+    files::within_root(ctx, &home, &config, "Hermes config")?;
+    // Read the baseline before anything parses config.yaml (the sources the
+    // overlay is built from, the document `rewrite` edits), so an edit that
+    // lands in between is one the publish-time comparison refuses.
+    let config_baseline = baseline(ctx, &hermes::authorized(ctx, &config));
     let sources = sources(ctx)?;
     let shim = files::shim_manifest(fields)?;
     let argv = hook_argv(fields)?;
@@ -270,12 +277,6 @@ pub(super) fn prepare(spec: &Spec, ctx: &Ctx, fields: &Map<String, Value>) -> St
         )
         .set("fail_open", PyVal::Bool(false));
 
-    let home = hermes::hermes_home(ctx);
-    let config = home.join("config.yaml");
-    files::within_root(ctx, &home, &config, "Hermes config")?;
-    // Read the baseline before the document `rewrite` edits, so an edit that
-    // lands in between is one the publish-time comparison refuses.
-    let config_baseline = baseline(ctx, &hermes::authorized(ctx, &config));
     let rewrite = rewrite(ctx, fields, &config, &overlay, &argv)?;
 
     let mut changes = vec![
