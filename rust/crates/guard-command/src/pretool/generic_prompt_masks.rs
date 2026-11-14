@@ -132,7 +132,7 @@ pub(super) fn mask_transfer_tool_info(value: &str) -> String {
     // Never erase the only transfer-tool mention when another clause asks for
     // a network action. A scheme-less host is a valid curl/wget operand too.
     let transfer_context = TRANSFER_CONTEXT.get_or_init(|| {
-        Regex::new(r"(?i)\b(?:fetch|download|upload|send|post|transfer|grab|pull|retrieve|request|stage)(?:s|ed|ing)?\b|\b[a-z0-9-]+(?:\.[a-z0-9-]+)+/[^\s]*")
+        Regex::new(r"(?i)\b(?:fetch|download|upload|send|post|transfer|grab|pull|retrieve)(?:s|ed|ing)?\b|\b[a-z0-9-]+(?:\.[a-z0-9-]+)+/[^\s]*")
             .expect("bounded transfer-action context")
     });
     if value.contains("://") || value.contains('@') || transfer_context.is_match(value) {
