@@ -55,7 +55,34 @@ const GIT_OBJECT_READERS: &[&str] = &[
     "show-ref",
 ];
 
-/// Plain peers beside Git object reads or a `base64` decode. This is the
+/// GitHub CLI reads that only print what they fetch: `gh pr view 7 --json
+/// files > /tmp/pr7.json; jq -c . /tmp/pr7.json`. None writes a file, changes
+/// directory, renames a file or creates a link, so one may fill or sit beside
+/// a temporary file the way a Git object read does. A command that checks
+/// out, clones or downloads stays out, and each `gh` segment still needs its
+/// own proof.
+const GH_READERS: &[(&str, &[&str])] = &[
+    ("issue", &["list", "view"]),
+    ("pr", &["checks", "diff", "list", "view"]),
+    ("release", &["list", "view"]),
+    ("repo", &["view"]),
+    ("run", &["list", "view"]),
+];
+
+/// `gh api ...` or one of [`GH_READERS`]. `gh` takes no global option before
+/// its command, so the first two words name it.
+fn gh_read(segment: &crate::CommandSegmentV1) -> bool {
+    match segment.arguments.as_slice() {
+        [command, ..] if command == "api" => true,
+        [command, subcommand, ..] => GH_READERS
+            .iter()
+            .any(|(name, reads)| command == name && reads.contains(&subcommand.as_str())),
+        _ => false,
+    }
+}
+
+/// Plain peers beside Git object reads, GitHub CLI reads or a `base64`
+/// decode. This is the
 /// guard for a temporary file a chain writes or reads; [`peers_only`] stays
 /// the guard for copies and workspace writes, so `cat a | base64 -d > run.sh`
 /// keeps its review. `base64` is held to `base64_reads.rs`, which never admits
@@ -73,6 +100,11 @@ pub(super) fn temporary_peers(model: &CanonicalCommandV1) -> bool {
                             .iter()
                             .any(|argument| argument.starts_with("--output")))
             }))
+        || (plain_chain(model, &["gh"])
+            && model
+                .segments
+                .iter()
+                .all(|segment| segment.executable.as_deref() != Some("gh") || gh_read(segment)))
 }
 
 /// Like [`peers_only`], but `extra` names may also appear in the chain.
