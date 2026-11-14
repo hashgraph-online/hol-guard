@@ -2,8 +2,8 @@
   "schemaVersion": "guard.mcp-server-contribution.v1",
   "id": "mcp.dchub",
   "version": "1.0.0",
-  "name": "DC Hub MCP",
-  "description": "DC Hub is the live data layer for data-center site selection. Its Data Center Power Index (DCPI) is a daily score of where data centers can get grid power, across 300+ markets. Read tools keep Guard's usual handling. Tools that create or recover a key, save to an account, send email or webhooks, accept terms, request an introduction or file a report are gated on review. Off until you turn it on.",
+  "name": "DC Hub",
+  "description": "DC Hub is the orchestration layer for data center and energy intelligence: power, land, fiber and capacity, plus the Data Center Power Index (DCPI). Read tools keep Guard's usual handling. execute_plan, which runs several DC Hub tools in one call, is gated on review, as are tools that create or recover a key, save to an account, send email or webhooks, accept terms, request an introduction or file a report. Off until you turn it on.",
   "trustClass": "external",
   "activation": "opt-in",
   "publisher": {
