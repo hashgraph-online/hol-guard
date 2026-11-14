@@ -321,15 +321,22 @@ pub(crate) fn new_checkout_route(
 
 /// The `cd` segments that enter exactly the checkout an earlier
 /// `git worktree add` of the same command creates, when every command after
-/// them is `git` or `gh`.
+/// them is `git` or `gh`, or an action the user's own permission covers.
 ///
 /// Entering the new checkout is what `git -C <path>` does for one step, so an
 /// extension Allow that covers the add and each Git or GitHub step after it
 /// covers the `cd` as well; those steps keep their own rules and floors.
 /// Their repository is the same one either way, because a linked worktree
-/// shares it. Any other command after the `cd` would have its paths judged
-/// against the shell's directory instead of the checkout, so it leaves the
-/// `cd` uncovered and the command keeps its review.
+/// shares it.
+///
+/// `permitted` names the other steps whose own permission the user enabled:
+/// an extension action such as a model runner's `rm`. The user's consent to
+/// that action does not depend on the directory it runs in, so it may follow
+/// the `cd` too, as long as it is no program that can rewrite the checkout
+/// (see [`super::super::tree_writers`]). Any other command after the `cd`
+/// (a path read, a write, a build) would have its paths judged against the
+/// shell's directory instead of the checkout, so it leaves the `cd` uncovered
+/// and the command keeps its review.
 ///
 /// The bounded `head`, `tail` or `wc` stages of the steps after the `cd` are
 /// named too. They read only what the stage before them prints and name no
@@ -340,8 +347,9 @@ pub(crate) fn entered_checkouts(
     model: &CanonicalCommandV1,
     context: super::super::PathContext<'_>,
     execution_environment: Option<&guard_contracts::GuardExecutionEnvironmentV1>,
+    permitted: &dyn Fn(usize) -> bool,
 ) -> Vec<usize> {
-    let Some((_, cd)) = entered_checkout(model, context, execution_environment) else {
+    let Some((_, cd)) = entered_checkout(model, context, execution_environment, permitted) else {
         return Vec::new();
     };
     // A `git` or `gh` stage keeps its own permission; only the stages that
@@ -365,13 +373,22 @@ pub(crate) fn entered_checkouts(
 /// configuration, every include and any filter the checked-out tree could
 /// select, so the new checkout reads the same configuration as the
 /// repository it shares, and a read helper-free here is helper-free there.
+///
+/// This floor reads no extension controls, so any step after the `cd` that
+/// cannot rewrite the checkout is let through here. That only places the
+/// probe: the floor still weighs every step before each read, and one it
+/// cannot prove leaves the read to an Allow that must cover that step, which
+/// [`entered_checkouts`] then answers with the user's permissions in hand.
 pub(in super::super) fn reads_in_entered_checkout(
     model: &CanonicalCommandV1,
     context: super::super::PathContext<'_>,
     deadline: Option<Instant>,
     execution_environment: Option<&guard_contracts::GuardExecutionEnvironmentV1>,
 ) -> bool {
-    let Some((add, _)) = entered_checkout(model, context, execution_environment) else {
+    let rewrites_nothing =
+        |index: usize| !super::super::tree_writers::may_rewrite_tree(&model.segments[index]);
+    let Some((add, _)) = entered_checkout(model, context, execution_environment, &rewrites_nothing)
+    else {
         return false;
     };
     // Anything before the add may move the start point, so the proof then
@@ -394,6 +411,7 @@ fn entered_checkout(
     model: &CanonicalCommandV1,
     context: super::super::PathContext<'_>,
     execution_environment: Option<&guard_contracts::GuardExecutionEnvironmentV1>,
+    permitted: &dyn Fn(usize) -> bool,
 ) -> Option<(usize, usize)> {
     if model.confidence != "exact" || model.path_overridden || !model.wrapper_chain.is_empty() {
         return None;
@@ -433,13 +451,32 @@ fn entered_checkout(
             .is_some_and(|separator| matches!(separator, "&&" | ";"));
         // A later pipeline stage reads only what the step before it prints:
         // a bounded `head`, `tail` or `wc` with no path of its own.
-        let rest_is_git = model.segments[after + 1..].iter().all(|later| {
-            super::chain_route::resolved_outside(later, &destination)
-                && (is(later, &["git", "gh"])
-                    || super::chain_route::inert_step(later)
-                    || (later.pipeline_index > 0
-                        && super::chain_route::stdin_stage(later, context, execution_environment)))
-        });
+        // A permitted action runs by bare name as a step of its own, never
+        // as a stage reading another step's output, and never as a program
+        // that can rewrite the checkout the later Git reads run in.
+        let permitted_action = |index: usize, later: &CommandSegmentV1| {
+            later.pipeline_index == 0
+                && later.executable.as_deref().is_some_and(|value| {
+                    !value.contains('/') && !matches!(value, "cd" | "pushd" | "popd")
+                })
+                && !super::super::tree_writers::may_rewrite_tree(later)
+                && permitted(index)
+        };
+        let rest_is_git = model.segments[after + 1..]
+            .iter()
+            .enumerate()
+            .all(|(offset, later)| {
+                super::chain_route::resolved_outside(later, &destination)
+                    && (is(later, &["git", "gh"])
+                        || super::chain_route::inert_step(later)
+                        || permitted_action(after + 1 + offset, later)
+                        || (later.pipeline_index > 0
+                            && super::chain_route::stdin_stage(
+                                later,
+                                context,
+                                execution_environment,
+                            )))
+            });
         // If the add fails, the `cd` fails too and a `git` or `gh` step after
         // `;` runs in the original checkout, judged by its own permission with
         // its reads probed there. No proof here follows `||`.
