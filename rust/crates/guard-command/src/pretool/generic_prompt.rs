@@ -6,7 +6,7 @@ use std::sync::OnceLock;
 mod masks;
 use masks::{
     mask_credential_categories, mask_format_options, mask_liveness_probes, mask_rereads,
-    mask_url_paths,
+    mask_transfer_tool_info, mask_url_paths,
 };
 
 const BYPASS_PATTERNS: [&str; 10] = [
@@ -463,17 +463,17 @@ pub(super) fn benign_prompt_text(text: &str) -> bool {
     if referential.is_match(&remainder) && (mentions_secret || risky_action.is_match(&normalized)) {
         return false;
     }
-    // Naming a credential is not a request for its value; locations, env
-    // dumps and value requests still keep the prompt off the benign path.
-    // Words inside an unconditional prohibition ("never X or Y") are not
-    // requested actions; the strong intent detectors run on the raw prompt.
-    // The liveness and reread masks only answer the action scan: a reread
-    // still points back at a credential named earlier, so the secret check
-    // reads the text with the reread intact.
+    // A named credential is not a request for its value; locations, env dumps
+    // and value requests are. Words in an unconditional prohibition ("never X
+    // or Y") are not requested actions. The liveness, reread and tool-info
+    // masks only answer the action scan; the secret check keeps a reread
+    // intact, since it still points back at a credential named earlier, and
+    // a reread after a sensitive antecedent stays visible to the action scan.
+    let probes = mask_liveness_probes(&mask_transfer_tool_info(&remainder));
     let action_text = if sensitive_antecedent {
-        mask_liveness_probes(&remainder)
+        probes
     } else {
-        mask_rereads(&mask_liveness_probes(&remainder))
+        mask_rereads(&probes)
     };
     !prompt_requests_secret(&remainder)
         && !risky_action.is_match(&mask_transfer_encoding(&mask_format_options(

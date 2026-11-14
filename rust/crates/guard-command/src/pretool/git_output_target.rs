@@ -52,6 +52,15 @@ pub(super) fn points_output_at_a_protected_file(arguments: &[String]) -> bool {
     })
 }
 
+/// Whether any of a diff-showing verb's words is an `--output` option, in
+/// any spelling Git resolves to it, wherever the file it names lands.
+pub(super) fn names_an_output_file(arguments: &[String]) -> bool {
+    arguments
+        .iter()
+        .take_while(|argument| argument.as_str() != "--")
+        .any(|argument| output_option_value(argument, false).is_some())
+}
+
 /// Long options that name where one verb writes, beside the `--output` every
 /// diff-showing verb takes.
 ///

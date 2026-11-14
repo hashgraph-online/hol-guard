@@ -15121,6 +15121,74 @@
       "expect": "not_allow"
     },
     {
+      "id": "session-du-home-cache-tool-summary",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "du -sh ${HOME}/.cache/pip 2>&1"
+      },
+      "cwd": "org",
+      "expect": "allow"
+    },
+    {
+      "id": "session-du-home-cache-and-sibling-modules",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "du -sh ${HOME}/.cache/hol-guard-test; du -sh ${ORG_WT}/scripts"
+      },
+      "cwd": "org",
+      "expect": "allow"
+    },
+    {
+      "id": "neg-du-home-gh-config",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "du -sh ${HOME}/.config/gh"
+      },
+      "cwd": "org",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-du-home-aws",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "du -sh ${HOME}/.aws"
+      },
+      "cwd": "org",
+      "expect": "not_allow"
+    },
+    {
       "id": "session-du-sibling-worktree-modules",
       "fix_area": "shell",
       "harnesses": [
@@ -45362,6 +45430,40 @@
       "tool": "shell",
       "tool_input": {
         "command": "git status --short --branch && rg --files -g 'src/**'"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "rg-anywhere-path-glob-docs-tree",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "rg --files -g '**/docs/**' -g '!output'"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "rg-anywhere-path-glob-after-git-status",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git status --short --branch && rg --files -g '**/src/**'"
       },
       "cwd": "worktree",
       "expect": "allow"
