@@ -295,6 +295,23 @@ fn bounded_output(
     status?.success().then_some(output)
 }
 
+/// Whether an index comparison also reads the files on disk.
+///
+/// `git diff-index HEAD` compares the index against the working tree, so Git
+/// runs a configured clean filter over every file it has to re-examine.
+/// `--cached` (or `--staged`) compares the index against the named tree alone
+/// and never opens a working-tree file, so that spelling consumes no filter.
+/// `git diff` takes the same spellings, and its `--no-index` form compares
+/// two paths on disk. `diff-files` always compares the index against the
+/// working tree and has no such spelling, so it is screened without asking
+/// here. `diff-tree` compares two trees and reaches neither the index nor the
+/// working tree.
+pub(super) fn reads_working_tree(operation: &str, rest: &[String]) -> bool {
+    let options = || rest.iter().take_while(|argument| argument.as_str() != "--");
+    (operation == "diff" && options().any(|argument| argument == "--no-index"))
+        || !options().any(|argument| matches!(argument.as_str(), "--cached" | "--staged"))
+}
+
 #[cfg(test)]
 #[path = "git_config_filters_tests.rs"]
 mod tests;
