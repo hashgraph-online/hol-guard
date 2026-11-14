@@ -1115,6 +1115,14 @@
    "body": "8ebb1bb3d55c"
   },
   {
+   "verdict": "windows-equivalent",
+   "note": "Windows tells a replaced session record from a grown one by its creation time instead of device and inode; a shrunk file still restarts through the offset check.",
+   "file": "rust/crates/guard-runtime/src/context_assistance_savings_read.rs",
+   "item": "fn identity -- non-Unix block",
+   "cfg": "not(unix)",
+   "body": "fd06609cdbef"
+  },
+  {
    "verdict": "windows-unsupported",
    "note": "Non-memory persistence requests are rejected off Unix; memory mode remains available.",
    "file": "rust/crates/guard-runtime/src/context_assistance_service.rs",
