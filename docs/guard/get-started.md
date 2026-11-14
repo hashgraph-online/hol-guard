@@ -461,7 +461,7 @@ After the active factor succeeds, Guard issues an internal 30-second grant bound
 - macOS/Linux: `~/.hol-guard/bin/guard-<harness>`
 - Windows: `~/.hol-guard/bin/guard-<harness>.cmd`
 
-Claude Code also gets Guard hook entries in `.claude/settings.local.json` when you install from a workspace.
+Claude Code also gets Guard hook entries in `~/.claude/settings.json`, even when you install from a workspace. See [Claude Code settings](./claude-code-settings.md) for the entries Guard owns and how removal restores the file.
 
 Copilot CLI gets a Guard-owned repo hook file at `.github/hooks/hol-guard-copilot.json` when you install from a workspace. Guard only reads `~/.copilot/config.json` and `~/.copilot/mcp-config.json`; it does not auto-write user-level Copilot config.
 
