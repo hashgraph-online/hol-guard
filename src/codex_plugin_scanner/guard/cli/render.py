@@ -15,6 +15,7 @@ from ..harness_posture import harness_posture_line
 from ..protection_coverage import PROTECTION_NOT_IN_EFFECT_DETAIL, protection_is_in_effect
 from ..redaction import redact_text
 from ..value_coercion import coerce_int as _coerce_int
+from .claude_settings_target import render_settings_target
 from .doctor_readiness import doctor_runtime_readiness
 from .protect_inline_approval import human_protect_guidance
 from .protect_output import (
@@ -1560,7 +1561,7 @@ def _render_managed_install(console: Console, payload: dict[str, object]) -> Non
     if bool(payload.get("self_uninstall")):
         render_self_uninstall(console, payload)
     for plan in _coerce_dict_list(payload.get("setup_plans")) or [payload]:
-        _render_settings_target(console, plan.get("settings_target"))
+        render_settings_target(console, plan.get("settings_target"))
     managed_install = payload.get("managed_install")
     if isinstance(managed_install, dict):
         _render_single_managed_install(console, managed_install)
@@ -1602,52 +1603,12 @@ def _render_managed_install(console: Console, payload: dict[str, object]) -> Non
         )
 
 
-def _render_settings_target(console: Console, target: object) -> None:
-    if not isinstance(target, dict):
-        return
-    if target.get("unavailable"):
-        console.print(
-            Panel(
-                f"Guard could not read where Claude Code hooks would go: {target.get('reason')}",
-                title="Claude Code settings",
-                border_style="red",
-            )
-        )
-        return
-    lines = [f"Writes: {target.get('settings_path')} ({target.get('scope')} settings)"]
-    workspace_note = target.get("workspace_note")
-    if isinstance(workspace_note, str) and workspace_note:
-        lines.append(workspace_note)
-    precedence = target.get("precedence")
-    if isinstance(precedence, list):
-        lines.append("Claude Code reads, highest precedence first:")
-        for layer in precedence:
-            if isinstance(layer, dict):
-                marker = "  * " if layer.get("guard_writes") else "  - "
-                lines.append(f"{marker}{layer.get('scope')}: {layer.get('path')}")
-    for key in ("hooks_merge", "background"):
-        value = target.get(key)
-        if isinstance(value, str) and value:
-            lines.append(value)
-    rollback = target.get("rollback")
-    if isinstance(rollback, dict):
-        command = rollback.get("command")
-        if isinstance(command, list):
-            lines.append(f"Undo: {' '.join(str(part) for part in command)}. {rollback.get('effect', '')}".rstrip())
-    overrides = target.get("hook_overrides")
-    border = "cyan"
-    if isinstance(overrides, list) and overrides:
-        border = "red"
-        lines.extend(f"Warning: {item.get('message')}" for item in overrides if isinstance(item, dict))
-    console.print(Panel("\n".join(lines), title="Claude Code settings", border_style=border))
-
-
 def _render_apps(console: Console, payload: dict[str, object]) -> None:
     if payload.get("managed_install") or payload.get("managed_installs"):
         _render_managed_install(console, payload)
     else:
         _render_fallback(console, payload)
-    _render_settings_target(console, payload.get("settings_target"))
+    render_settings_target(console, payload.get("settings_target"))
     dry_run_effect = payload.get("dry_run_effect")
     if isinstance(dry_run_effect, str) and dry_run_effect:
         console.print(Panel(dry_run_effect, title="Dry run", border_style="yellow"))

@@ -24,7 +24,7 @@ claude-code --dry-run`) prints a **Claude Code settings** panel with:
 - with `--workspace`, a line saying the project's `.claude` directory is not written;
 - every settings file Claude Code reads, highest precedence first, with Guard's file marked;
 - that headless `claude -p` on this machine reads the same file, and remote or cloud sessions do not;
-- the undo command, `hol-guard uninstall claude-code`, and what it removes;
+- the undo command, `hol-guard uninstall claude-code`, and what it removes. When the install used `--home` or `--guard-home`, the printed command carries the same options, so it undoes this install and not another one;
 - a warning for each setting that would stop Claude Code running Guard's hooks (see
   [Settings that turn Guard's hooks off](#settings-that-turn-guards-hooks-off)).
 

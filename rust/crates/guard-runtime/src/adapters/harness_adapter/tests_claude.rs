@@ -262,7 +262,13 @@ fn install_target_names_the_user_file_and_never_a_project_file() {
     );
     assert_eq!(
         answer["rollback"]["command"],
-        json!(["hol-guard", "uninstall", "claude-code"])
+        json!([
+            "hol-guard",
+            "uninstall",
+            "claude-code",
+            "--guard-home",
+            home.guard()
+        ])
     );
     assert_eq!(answer["hook_overrides"], json!([]));
     assert!(!workspace.exists());
@@ -304,6 +310,39 @@ fn install_target_reports_a_claude_config_dir_elsewhere() {
     assert_eq!(same["hook_overrides"], json!([]));
 }
 
+#[cfg(unix)]
+#[test]
+fn install_target_follows_a_linked_claude_config_dir() {
+    let home = Home::new();
+    let claude = home.home().join(".claude");
+    std::fs::create_dir_all(&claude).unwrap();
+    let link = home.root.join("linked-claude");
+    std::os::unix::fs::symlink(&claude, &link).unwrap();
+    let answer = target(&home, None, json!({"PATH": "", "CLAUDE_CONFIG_DIR": link}));
+    assert_eq!(answer["hook_overrides"], json!([]));
+}
+
+#[test]
+fn install_target_undo_names_the_home_the_install_used() {
+    let home = Home::new();
+    let mut context = home.context(json!({"PATH": ""}));
+    context["user_home"] = json!(home.root.join("someone-else"));
+    context["guard_home"] = json!(home.root.join("someone-else").join(".hol-guard"));
+    let answer =
+        dispatch(&json!({"harness": "claude-code", "op": "install_target", "context": context}))
+            .unwrap();
+    assert_eq!(
+        answer["rollback"]["command"],
+        json!([
+            "hol-guard",
+            "uninstall",
+            "claude-code",
+            "--home",
+            home.home()
+        ])
+    );
+}
+
 #[test]
 fn install_notes_name_the_settings_file_and_the_rollback() {
     let home = Home::new();
@@ -316,5 +355,5 @@ fn install_notes_name_the_settings_file_and_the_rollback() {
     let manifest: Value = serde_json::from_str(answer["manifest"].as_str().unwrap()).unwrap();
     let notes = manifest["notes"].to_string();
     assert!(notes.contains(&format!("user settings at {}", settings(&home).display())));
-    assert!(notes.contains("hol-guard uninstall claude-code"));
+    assert!(notes.contains("hol-guard uninstall claude-code --guard-home"));
 }

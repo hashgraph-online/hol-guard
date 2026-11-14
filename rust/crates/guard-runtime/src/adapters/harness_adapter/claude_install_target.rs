@@ -89,8 +89,8 @@ fn config_dir_override(ctx: &Ctx, settings: &Path) -> Option<String> {
     if value.is_empty() {
         return None;
     }
-    let dir = ctx.absolute(Path::new(value));
-    let written = ctx.absolute(settings.parent()?);
+    let dir = ctx.resolved(Path::new(value));
+    let written = ctx.resolved(settings.parent()?);
     if dir == written {
         return None;
     }
@@ -139,6 +139,26 @@ fn overrides(ctx: &Ctx, layers: &[Layer], settings: &Path) -> Vec<Value> {
     found
 }
 
+/// The uninstall command for this install. It names the same home and Guard
+/// home the install used, so the undo edits the file reported here and never
+/// a different installation.
+fn rollback_command(ctx: &Ctx) -> Vec<String> {
+    let mut command = vec![
+        "hol-guard".to_owned(),
+        "uninstall".to_owned(),
+        "claude-code".to_owned(),
+    ];
+    if !ctx.default_home() {
+        command.push("--home".to_owned());
+        command.push(path_text(&ctx.home));
+    }
+    if ctx.resolved(&ctx.guard_home) != ctx.resolved(&ctx.user_home.join(".hol-guard")) {
+        command.push("--guard-home".to_owned());
+        command.push(path_text(&ctx.guard_home));
+    }
+    command
+}
+
 /// The install target answer: the one file Guard writes, the precedence it
 /// sits in, the overrides that would silence it, and the rollback.
 pub(super) fn target(ctx: &Ctx, settings: &Path) -> Value {
@@ -173,7 +193,7 @@ pub(super) fn target(ctx: &Ctx, settings: &Path) -> Value {
         "background": "Headless `claude -p` runs on this machine read the same user settings. \
             Remote and cloud Claude Code sessions do not, and Guard does not cover them.",
         "rollback": {
-            "command": ["hol-guard", "uninstall", "claude-code"],
+            "command": rollback_command(ctx),
             "path": path_text(settings),
             "effect": "Removes only Guard's hook entries from this file and leaves every other \
                 setting. It makes no backup; `hol-guard hooks remove --all` backs the file up \
@@ -186,14 +206,25 @@ pub(super) fn target(ctx: &Ctx, settings: &Path) -> Value {
 /// line per override that would silence the hooks.
 pub(super) fn notes(target: &Value) -> Vec<String> {
     let text = |key: &str| target.get(key).and_then(Value::as_str).unwrap_or_default();
+    let undo = target
+        .pointer("/rollback/command")
+        .and_then(Value::as_array)
+        .map(|words| {
+            words
+                .iter()
+                .filter_map(Value::as_str)
+                .map(shell_word)
+                .collect::<Vec<_>>()
+                .join(" ")
+        })
+        .unwrap_or_else(|| "hol-guard uninstall claude-code".to_owned());
     let mut notes = vec![
         format!(
             "Guard writes its hook entries to user settings at {}.",
             text("settings_path")
         ),
         format!(
-            "To undo, run `hol-guard uninstall claude-code`; it removes only Guard's entries \
-             from {}.",
+            "To undo, run `{undo}`; it removes only Guard's entries from {}.",
             text("settings_path")
         ),
     ];
@@ -206,4 +237,18 @@ pub(super) fn notes(target: &Value) -> Vec<String> {
         );
     }
     notes
+}
+
+/// Quote a word for a POSIX shell when it holds anything beyond plain path
+/// characters, so a copied undo command keeps paths with spaces intact.
+fn shell_word(word: &str) -> String {
+    let plain = !word.is_empty()
+        && word
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || "-_./:@%+=,".contains(c));
+    if plain {
+        word.to_owned()
+    } else {
+        format!("'{}'", word.replace('\'', "'\\''"))
+    }
 }

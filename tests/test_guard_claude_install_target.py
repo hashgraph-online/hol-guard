@@ -74,3 +74,18 @@ def test_install_dry_run_shows_the_panel_for_each_planned_harness():
     render._render_managed_install(console, {"dry_run": True, "setup_plans": [{"settings_target": target}, {}]})
 
     assert buffer.getvalue().count("Writes: /synthetic/.claude/settings.json (user settings)") == 1
+
+
+def test_paths_render_literally_and_the_undo_is_shell_quoted():
+    target = {
+        "scope": "user",
+        "settings_path": "/synthetic/[red]home/.claude/settings.json",
+        "rollback": {"command": ["hol-guard", "uninstall", "claude-code", "--home", "/synthetic/my home[/b]"]},
+        "hook_overrides": [{"message": "/synthetic/[/red] sets disableAllHooks."}],
+    }
+
+    text = _text({"settings_target": target})
+
+    assert "Writes: /synthetic/[red]home/.claude/settings.json" in text
+    assert "Undo: hol-guard uninstall claude-code --home '/synthetic/my home[/b]'." in text
+    assert "Warning: /synthetic/[/red] sets disableAllHooks." in text
