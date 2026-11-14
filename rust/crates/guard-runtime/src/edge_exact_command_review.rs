@@ -14,6 +14,12 @@
 //! [`crate::edge_exact_command_spelling`]). A block that matched only its own
 //! text let `  npm publish`, `CI=1 npm publish` or `(npm publish)` run after
 //! an approval. A block found under any spelling denies the call outright.
+//!
+//! A Guard Cloud rule may also name a command risk group ("ask before any
+//! permanent delete"). It is saved under `risk-group:<group>` and applies to
+//! every command whose steps fall in that group
+//! ([`crate::command_risk_groups`]), the same groups Guard Cloud shows on the
+//! request. Such a rule only asks or blocks; it never allows a command.
 
 use std::collections::HashMap;
 use std::path::Path;
@@ -34,6 +40,10 @@ const UNREADABLE_REVIEW: &str = "exact_command_rules_unreadable";
 const UNREAD_LINE_REVIEW: &str = "exact_command_line_unreadable";
 const POLICY_BLOCK: &str = "policy_exact_command_block";
 const SAVED_BLOCK: &str = "saved_exact_command_block";
+const GROUP_REVIEW: &str = "policy_risk_group_review";
+const GROUP_BLOCK: &str = "policy_risk_group_block";
+/// The id prefix a command risk-group rule is saved under.
+const GROUP_PREFIX: &str = "risk-group:";
 /// Sources a Guard Cloud policy writes its decisions under.
 const CLOUD_SOURCES: &[&str] = &[
     "cloud-sync",
@@ -51,6 +61,7 @@ pub(crate) fn is_review_finding(reason_code: &str) -> bool {
         SAVED_REVIEW,
         UNREADABLE_REVIEW,
         UNREAD_LINE_REVIEW,
+        GROUP_REVIEW,
     ]
     .contains(&reason_code)
 }
@@ -179,13 +190,13 @@ pub(crate) fn apply_with_sources(
     };
     match matching_rules(&connection, &result.action.harness, call, now_micros) {
         Ok(Rules {
-            block: Some(source),
+            block: Some(hit),
             ..
-        }) => block(result, block_reason(&source)),
+        }) => block(result, block_reason(&hit)),
         Ok(Rules {
-            review: Some(source),
+            review: Some(hit),
             ..
-        }) if reviewable => raise(result, rule_reason(&source)),
+        }) if reviewable => raise(result, rule_reason(&hit)),
         Ok(Rules {
             incomplete: true, ..
         }) if reviewable => raise(
@@ -249,11 +260,18 @@ fn is_shell_action(action_type: &PreToolActionTypeV1) -> bool {
 /// The store exists but a read of it failed.
 struct Unreadable;
 
-/// The sources of the first live block and review rules.
+/// The rule that named a command: its source and, for a risk-group rule, the
+/// group the command falls in.
+struct Hit {
+    source: String,
+    group: Option<&'static str>,
+}
+
+/// The first live block and review rules.
 #[derive(Default)]
 struct Rules {
-    block: Option<String>,
-    review: Option<String>,
+    block: Option<Hit>,
+    review: Option<Hit>,
     /// Part of the line could not be read, so a rule may name a step that
     /// was not looked up.
     incomplete: bool,
@@ -313,15 +331,50 @@ fn matching_rules(
                     block: true,
                     source,
                 }) => {
-                    rules.block = Some(source.clone());
+                    rules.block = Some(Hit {
+                        source: source.clone(),
+                        group: None,
+                    });
                     return Ok(rules);
                 }
                 Some(LiveRule { source, .. }) if rules.review.is_none() => {
-                    rules.review = Some(source.clone());
+                    rules.review = Some(Hit {
+                        source: source.clone(),
+                        group: None,
+                    });
                 }
                 _ => {}
             }
         }
+    }
+    // A risk-group rule names every command in its group, read from the
+    // command as written and from each other way it is spelled.
+    let mut group_review = None;
+    for text in &texts {
+        for group in crate::command_risk_groups::command_risk_groups(text) {
+            match live.get(format!("{GROUP_PREFIX}{group}").as_str()) {
+                Some(LiveRule {
+                    block: true,
+                    source,
+                }) => {
+                    rules.block = Some(Hit {
+                        source: source.clone(),
+                        group: Some(group),
+                    });
+                    return Ok(rules);
+                }
+                Some(LiveRule { source, .. }) if group_review.is_none() => {
+                    group_review = Some(Hit {
+                        source: source.clone(),
+                        group: Some(group),
+                    });
+                }
+                _ => {}
+            }
+        }
+    }
+    if rules.review.is_none() {
+        rules.review = group_review;
     }
     Ok(rules)
 }
@@ -355,8 +408,10 @@ fn live_rules(
         .prepare_cached(
             "select artifact_id, action, coalesce(source, ''), expires_at from policy_decisions \
              where harness in (?1, '*') and action in ('block', 'review') \
-             and artifact_id like 'memory:exact-%' \
-             and (scope = 'artifact' or (scope = 'workspace' and workspace in (?2, ?3)))",
+             and ((artifact_id like 'memory:exact-%' and scope = 'artifact') \
+               or (artifact_id like 'risk-group:%' and scope in ('harness', 'global')) \
+               or ((artifact_id like 'memory:exact-%' or artifact_id like 'risk-group:%') \
+                 and scope = 'workspace' and workspace in (?2, ?3)))",
         )
         .map_err(|_| Unreadable)?;
     let mut rows = statement
@@ -402,8 +457,11 @@ pub(crate) fn expired(expires_at: Option<&str>, now_micros: Option<i64>) -> bool
     guard_contracts::utc_timestamp_micros(&normalized).is_some_and(|at| at <= now)
 }
 
-fn rule_reason(source: &str) -> (&'static str, &'static str) {
-    if CLOUD_SOURCES.contains(&source) {
+fn rule_reason(hit: &Hit) -> (&'static str, &'static str) {
+    if let Some(group) = hit.group {
+        return (GROUP_REVIEW, group_review_reason(group));
+    }
+    if CLOUD_SOURCES.contains(&hit.source.as_str()) {
         (
             POLICY_REVIEW,
             "Your Guard Cloud policy asks a person to approve this exact command before it runs.",
@@ -416,8 +474,11 @@ fn rule_reason(source: &str) -> (&'static str, &'static str) {
     }
 }
 
-fn block_reason(source: &str) -> (&'static str, &'static str) {
-    if CLOUD_SOURCES.contains(&source) {
+fn block_reason(hit: &Hit) -> (&'static str, &'static str) {
+    if let Some(group) = hit.group {
+        return (GROUP_BLOCK, group_block_reason(group));
+    }
+    if CLOUD_SOURCES.contains(&hit.source.as_str()) {
         (
             POLICY_BLOCK,
             "Your Guard Cloud policy blocks this command, however it is spelled.",
@@ -427,6 +488,34 @@ fn block_reason(source: &str) -> (&'static str, &'static str) {
             SAVED_BLOCK,
             "You chose to always block this command in HOL Guard, however it is spelled.",
         )
+    }
+}
+
+/// Why a risk-group rule holds a command, in the group's own words.
+fn group_review_reason(group: &str) -> &'static str {
+    match group {
+        "deletes" => "Your Guard policy asks a person before commands that delete files or data.",
+        "bulk_changes" => "Your Guard policy asks a person before commands that change many things at once.",
+        "sending_and_sharing" => "Your Guard policy asks a person before commands that send or share data.",
+        "secrets" => "Your Guard policy asks a person before commands that read or move secrets.",
+        "code_and_deploys" => "Your Guard policy asks a person before commands that push code or deploy.",
+        "packages_and_scripts" => "Your Guard policy asks a person before commands that install packages or run downloaded scripts.",
+        _ => "Your Guard policy asks a person before commands like this one.",
+    }
+}
+
+/// Why a risk-group rule stops a command, in the group's own words.
+fn group_block_reason(group: &str) -> &'static str {
+    match group {
+        "deletes" => "Your Guard policy blocks commands that delete files or data.",
+        "bulk_changes" => "Your Guard policy blocks commands that change many things at once.",
+        "sending_and_sharing" => "Your Guard policy blocks commands that send or share data.",
+        "secrets" => "Your Guard policy blocks commands that read or move secrets.",
+        "code_and_deploys" => "Your Guard policy blocks commands that push code or deploy.",
+        "packages_and_scripts" => {
+            "Your Guard policy blocks commands that install packages or run downloaded scripts."
+        }
+        _ => "Your Guard policy blocks commands like this one.",
     }
 }
 
@@ -468,3 +557,7 @@ mod tests;
 #[cfg(test)]
 #[path = "edge_exact_command_block_tests.rs"]
 mod block_tests;
+
+#[cfg(test)]
+#[path = "edge_risk_group_rule_tests.rs"]
+mod risk_group_tests;
