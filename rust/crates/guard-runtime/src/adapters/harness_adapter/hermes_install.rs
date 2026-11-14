@@ -2,7 +2,7 @@
 //! entries in `config.yaml` and its allowlist, the records uninstall restores
 //! from, and the authenticated manifest, as one plan.
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use serde_json::{json, Map, Value};
 
@@ -149,19 +149,41 @@ fn json_change(ctx: &Ctx, path: &Path, payload: &PyVal) -> Step<Change> {
 }
 
 fn text_change(ctx: &Ctx, path: &Path, after: String) -> Step<Change> {
+    Ok(baseline(ctx, path)?.with(after))
+}
+
+/// A file's bytes and mode before a change, read once so the publish-time
+/// comparison refuses an edit that lands after the change was computed.
+struct Baseline {
+    path: PathBuf,
+    before: Option<Vec<u8>>,
+    before_mode: u32,
+}
+
+impl Baseline {
+    fn with(self, after: String) -> Change {
+        Change {
+            path: self.path,
+            before: self.before,
+            after: Some(after.into_bytes()),
+            before_mode: self.before_mode,
+            after_mode: 0o600,
+            no_follow: true,
+        }
+    }
+}
+
+fn baseline(ctx: &Ctx, path: &Path) -> Step<Baseline> {
     let target = files::output_path(ctx, path)?;
     let before = files::snapshot(ctx, &target)?;
     let before_mode = match before {
         Some(_) => files::mode(ctx, &target).ok_or(Failure::Invalid)?,
         None => 0o600,
     };
-    Ok(Change {
+    Ok(Baseline {
         path: ctx.resolved(&target),
         before,
-        after: Some(after.into_bytes()),
         before_mode,
-        after_mode: 0o600,
-        no_follow: true,
     })
 }
 
@@ -251,6 +273,9 @@ pub(super) fn prepare(spec: &Spec, ctx: &Ctx, fields: &Map<String, Value>) -> St
     let home = hermes::hermes_home(ctx);
     let config = home.join("config.yaml");
     files::within_root(ctx, &home, &config, "Hermes config")?;
+    // Read the baseline before the document `rewrite` edits, so an edit that
+    // lands in between is one the publish-time comparison refuses.
+    let config_baseline = baseline(ctx, &hermes::authorized(ctx, &config));
     let rewrite = rewrite(ctx, fields, &config, &overlay, &argv)?;
 
     let mut changes = vec![
@@ -261,11 +286,7 @@ pub(super) fn prepare(spec: &Spec, ctx: &Ctx, fields: &Map<String, Value>) -> St
         None => (Vec::new(), None),
         Some(rewrite) => {
             changes.push(rewrite.allowlist);
-            changes.push(text_change(
-                ctx,
-                &hermes::authorized(ctx, &config),
-                rewrite.text,
-            )?);
+            changes.push(config_baseline?.with(rewrite.text));
             let mut record = Doc::default();
             record.set("servers", strings(&rewrite.managed));
             changes.push(json_change(
