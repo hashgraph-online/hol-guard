@@ -18,10 +18,29 @@ fn write(path: PathBuf, text: &str) {
     std::fs::write(path, text).unwrap();
 }
 
+/// Owns the disposable fixture tree and cleans it up on normal return or
+/// assertion unwind. Holding the owner for each test keeps paths alive.
+struct HomeFixture {
+    home: PathBuf,
+    root: PathBuf,
+}
+impl std::ops::Deref for HomeFixture {
+    type Target = Path;
+
+    fn deref(&self) -> &Self::Target {
+        &self.home
+    }
+}
+impl Drop for HomeFixture {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_dir_all(&self.root);
+    }
+}
+
 /// A home with tool caches, credential stores and a link from a cache into
 /// `~/.ssh`. The root stays below the target directory: `$TMPDIR` on macOS
 /// resolves under `/private/var`, which the sensitive-root screen rejects.
-fn home() -> PathBuf {
+fn home() -> HomeFixture {
     let root = Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../target/pretool-du-hidden-home")
         .join(format!(
@@ -38,7 +57,10 @@ fn home() -> PathBuf {
     write(home.join(".config/gh/hosts.yml"), "not-a-real-token\n");
     write(home.join(".aws/credentials"), "not-a-real-key\n");
     std::os::unix::fs::symlink(home.join(".ssh"), home.join(".cache/keys")).unwrap();
-    std::fs::canonicalize(home).unwrap()
+    HomeFixture {
+        home: std::fs::canonicalize(home).unwrap(),
+        root,
+    }
 }
 
 /// The decision both harnesses reach, or "mixed" when they differ.
