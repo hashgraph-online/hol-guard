@@ -46,6 +46,7 @@ pub(crate) fn validate_facts(
         }
         Some(_) => return Err("cloud_pack_extractor_kind_invalid"),
     }
+    crate::cloud_pack_money::validate(facts.money.as_ref(), args)?;
     match &facts.sensitivity {
         None => {}
         Some(Extractor::Const(value)) => typed::<Vec<SensitivityV2>>(value)?,
@@ -151,9 +152,18 @@ fn count_fact(
         Some(Extractor::Const(value)) => typed::<u64>(value),
         Some(Extractor::Count { arguments }) => {
             if !distinct(arguments)
-                || !arguments
-                    .iter()
-                    .all(|name| matches!(args.get(name), Some(ArgumentSpec::Array { .. })))
+                || !arguments.iter().all(|name| {
+                    matches!(
+                        args.get(name),
+                        Some(
+                            ArgumentSpec::Array { .. }
+                                | ArgumentSpec::Json {
+                                    max_items: Some(_),
+                                    ..
+                                }
+                        )
+                    )
+                })
             {
                 return Err("cloud_pack_extractor_argument_invalid");
             }

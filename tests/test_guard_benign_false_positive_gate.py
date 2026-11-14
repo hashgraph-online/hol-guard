@@ -74,6 +74,8 @@ _FIXED_TOOLS = {
     "ask_user_question": "AskUserQuestion",
     # A web fetch reaches Guard as its own tool; only the URL decides it.
     "web_fetch": "WebFetch",
+    # Claude Code starts a subagent with a written brief; the brief is prompt text.
+    "agent": "Agent",
     # Grok's keyword search over its configured integration (MCP) tools.
     "search_tool": "search_tool",
 }
@@ -122,6 +124,10 @@ class GateCase:
     # run only inside the workspace sandbox. Kept so the assertion can say so,
     # rather than accepting any quiet allow.
     requires_sandbox: bool = False
+    # A negative control whose harm lands inside the workspace, such as a
+    # switched-off git hook, which the workspace sandbox can still write. A
+    # contained run does not stop it, so only a review or block counts.
+    sandbox_does_not_protect: bool = False
 
 
 def _expand() -> list[GateCase]:
@@ -148,6 +154,7 @@ def _expand() -> list[GateCase]:
                     source_ref=bool(entry.get("source_ref", False)),
                     environment=tuple(sorted(entry.get("environment", {}).items())),
                     requires_sandbox=bool(entry.get("requires_sandbox", False)),
+                    sandbox_does_not_protect=bool(entry.get("sandbox_does_not_protect", False)),
                 )
             )
     return expanded
@@ -434,6 +441,8 @@ def test_benign_agent_work_is_allowed_and_negative_controls_are_not(
         assert _decision(result) != "allow" or approvals > 0 or _contained(result), (
             f"negative control was allowed: {description}"
         )
+        if case.sandbox_does_not_protect:
+            assert not _contained(result), f"negative control was only contained: {description}"
         assert _reason(result) not in BUDGET_MISS_REASONS, f"native review unavailable: {description}"
         return
     if case.expect == "setup":

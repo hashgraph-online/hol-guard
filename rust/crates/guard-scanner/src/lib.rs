@@ -15,6 +15,7 @@ mod field_copy;
 mod guard_link;
 mod masked_value;
 mod match_spans;
+mod payment_key;
 mod prose_answer_value;
 mod reference_value;
 mod self_named_value;
@@ -22,6 +23,7 @@ mod url_credential;
 mod wiped_read;
 
 pub use match_spans::scan_match_spans;
+pub use payment_key::holds_live_payment_key;
 
 use guard_rules::{CONTEXT_CHARS, MAX_MATCHES, MAX_SCAN_BYTES};
 use regex::{Regex, RegexBuilder};
@@ -103,6 +105,17 @@ const PATTERNS: &[PatternDef] = &[
         sensitivity: "high",
         reason: "Guard found an Anthropic API key pattern.",
         pattern: r"\bsk-ant-api03-[A-Za-z0-9_-]{20,}\b",
+        case_insensitive: false,
+        multi_line: false,
+    },
+    PatternDef {
+        classifier: "stripe-secret-key",
+        family: "Stripe secret key",
+        sensitivity: "high",
+        reason: "Guard found a Stripe live secret key pattern.",
+        // Live keys only: `sk_test_` and `rk_test_` keys fill Stripe's own
+        // documentation and move no money.
+        pattern: r"\b(?:sk|rk)_live_[A-Za-z0-9]{20,}\b",
         case_insensitive: false,
         multi_line: false,
     },
@@ -349,6 +362,11 @@ fn counted_matches<'t>(
     let mut line_end = 0;
     let mut last_value = None;
     compiled()[index].find_iter(text).filter(move |matched| {
+        // A stand-in such as `sk_live_xxxxxxxx...` is a placeholder; a
+        // Stripe key body mixes digits with both letter cases.
+        if classifier == "stripe-secret-key" && !payment_key::mixed_key_body(matched.as_str()) {
+            return false;
+        }
         if matched.end() > line_end {
             let rest = &text[matched.end()..];
             line_end = matched.end() + rest.find(['\r', '\n']).unwrap_or(rest.len());
@@ -537,6 +555,42 @@ mod tests {
     fn github_like_token() -> String {
         let prefix = ["gh", "p_"].concat();
         format!("{prefix}{}", "a".repeat(30))
+    }
+
+    #[test]
+    fn detects_a_stripe_live_key_but_not_a_test_key_or_stand_in() {
+        let live = ["sk_", "live_", "dx6YHRDb2BC8G4NQr2TyUskf"].concat();
+        let result = scan_text(
+            &format!("Leaked config dump:\n{live}"),
+            false,
+            false,
+            MAX_SCAN_BYTES,
+            None,
+        );
+        assert!(result
+            .matches
+            .iter()
+            .any(|matched| matched.classifier == "stripe-secret-key"));
+        for clean in [
+            ["sk_", "test_", "dx6YHRDb2BC8G4NQr2TyUskf"].concat(),
+            ["sk_", "live_", "xxxxxxxxxxxxxxxxxxxxxxxx"].concat(),
+            ["sk_", "live_", "..."].concat(),
+        ] {
+            let result = scan_text(
+                &format!("Set STRIPE_KEY to {clean}"),
+                false,
+                false,
+                MAX_SCAN_BYTES,
+                None,
+            );
+            assert!(
+                !result
+                    .matches
+                    .iter()
+                    .any(|matched| matched.classifier == "stripe-secret-key"),
+                "{clean}"
+            );
+        }
     }
 
     #[test]

@@ -396,7 +396,7 @@ def run_harness_case(
         except Exception as exc:
             case["credential_write_back_error"] = type(exc).__name__
         finally:
-            case["filesystem"] = filesystem_checks(fixture, scenario.oracle, scenario.id)
+            case["filesystem"] = filesystem_checks(fixture, scenario.oracle, scenario.id, scenario.path)
             collect_approval_marker(fixture.workspace, scenario.id, case)
             collect_approval_persistent(fixture.workspace, scenario.id, case)
             if connector is not None:

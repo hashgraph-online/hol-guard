@@ -239,6 +239,12 @@ def test_only_the_marked_cases_may_pass_on_containment() -> None:
         "neg-linked-sources-grep-glob-over-escaping-link",
         "neg-rustflags-linker-prefix-cargo-test",
         "neg-pytest-addopts-plugin-prefix-venv-pytest",
+        # A Python filter that reaches past its input: the program screen must
+        # refuse it, and a contained run reaches no file outside the workspace,
+        # no module path the prefix names and no network.
+        "python-json-filter-lists-directory",
+        "python-json-filter-module-path-prefix",
+        "python-json-filter-opens-file",
         # A tool setting whose value is a URL, a path or a file to load rather
         # than the switch word the inert reading accepts: the command keeps its
         # review, and a contained run has no network for the fetch and no home

@@ -11,17 +11,19 @@ from .clone_fixtures import LONG_LIVED_CLONE_CASE, LONG_LIVED_WORKTREE_CASE
 from .command_outputs import command_outputs_match as command_outputs_match
 from .extension_catalog_fixtures import CATALOG_CASE, CATALOG_CHECK
 from .fast_forward_fixtures import FAST_FORWARD_CASE, FAST_FORWARD_HOOK_CASE
+from .file_write_cases import FILE_WRITE_BLOCK_REASONS, FILE_WRITE_CHECK, FILE_WRITE_ORACLE
+from .task_brief_cases import TASK_BRIEF_BLOCK_REASONS, TASK_BRIEF_ORACLE
 from .input_evidence import input_digest, input_matches, post_input_matches
 from .native_routes import native_route_error
 from .remote_code import REMOTE_CODE_CASES
 from .review_fixtures import (
     GITHUB_DIRECTORY_CHANGE_CASE,
-    GITHUB_SIBLING_CLIMB_CASE,
     GITHUB_GUARD_NAMED_REPOSITORY_CASE,
     GITHUB_LOOKUP_CASE,
     GITHUB_METADATA_CASE,
     GITHUB_METADATA_CONTROL,
     GITHUB_REVIEW_CASE,
+    GITHUB_SIBLING_CLIMB_CASE,
     PLAN_NOTE_PROTECTION_CASE,
     WORKTREE_CASE,
     WORKTREE_DELIMITER_CASE,
@@ -56,6 +58,10 @@ def block_reasons(scenario: Scenario) -> frozenset[str]:
     """A package or remote-code case passes only on its own verdict, never a generic stop."""
     if scenario.oracle == "blocked-package":
         return PACKAGE_BLOCK_REASONS[scenario.id]
+    if scenario.oracle == FILE_WRITE_ORACLE:
+        return FILE_WRITE_BLOCK_REASONS
+    if scenario.oracle == TASK_BRIEF_ORACLE:
+        return TASK_BRIEF_BLOCK_REASONS
     if scenario.id in SCRIPT_BLOCK_REASONS:
         return SCRIPT_BLOCK_REASONS[scenario.id]
     if scenario.id in RUNTIME_BLOCK_REASONS:
@@ -74,6 +80,8 @@ def required_checks(scenario: Scenario) -> set[str]:
         checks.add("sibling-copy-exact")
     elif scenario.oracle == "blocked-extension":
         checks.add("extension-executed-absent")
+    elif scenario.oracle == FILE_WRITE_ORACLE:
+        checks.add(FILE_WRITE_CHECK)
     elif scenario.oracle == "mixed-read-batch":
         checks.update({"batch-alpha-unchanged", "batch-beta-unchanged"})
     elif scenario.id == "routed-git-and-workspace-writes":

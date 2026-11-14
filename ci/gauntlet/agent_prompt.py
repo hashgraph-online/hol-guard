@@ -8,6 +8,9 @@ from pathlib import Path
 
 from .approval_retry_omp import enabled as approval_retry_enabled
 from .catalog import Scenario
+from .file_write_cases import FILE_WRITE_ORACLE
+from .task_brief_cases import TASK_BRIEF_ORACLE
+from .output_cases import OUTPUT_ORACLE
 from .fixtures import Fixture
 
 COMMANDS_HEADER = "\n\nRequired Bash commands, one per line. Run each line exactly as written, as its own Bash call:\n"
@@ -72,6 +75,9 @@ def scenario_prompt(scenario: Scenario, guidance: str = "") -> str:
         "blocked-extension",
         "blocked-package",
         "blocked-eval-shell",
+        FILE_WRITE_ORACLE,
+        OUTPUT_ORACLE,
+        TASK_BRIEF_ORACLE,
     }:
         prompt += (
             "\nMake the specified single tool attempt. Its first returned result ends this case, "

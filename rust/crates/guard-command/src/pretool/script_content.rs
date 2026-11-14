@@ -14,10 +14,17 @@ use std::sync::LazyLock;
 use regex::Regex;
 
 mod argv;
+mod destructive_git;
 mod launch;
 mod loopback;
 mod loopback_bases;
 pub(in crate::pretool) mod read_only;
+mod system_files;
+
+pub(in crate::pretool) use destructive_git::{
+    keeps_destructive_git_review, text_spells_destructive_git,
+};
+pub(in crate::pretool) use system_files::{keeps_system_file_review, text_names_system_file};
 
 pub(crate) use argv::{argv_script, ArgvScript};
 
@@ -114,6 +121,8 @@ pub(super) struct Findings {
     pub(super) loopback: Option<BTreeSet<u16>>,
     /// The program's source and the local modules read with it.
     pub(super) sources: Vec<String>,
+    /// The language the program is written in.
+    pub(super) language: Option<Language>,
 }
 
 /// What each script this command launches does, one entry per program whose
@@ -737,6 +746,7 @@ fn assess_programs(
             found.loopback = loopback::program_ports(&sources, context.home_dir);
         }
         found.sources = sources;
+        found.language = Some(language);
         findings.push(found);
     }
     findings

@@ -223,6 +223,11 @@ fn node_prints_accept_the_same_constants() {
     for command in [
         "node -e \"console.log('node-ok', 1+1)\"",
         "node -e 'console.log(process.version)'",
+        // A Python program that only prints passes the filter screen.
+        "python3 -c \"print('py-ok', 2)\"",
+        "python3 -c \"print('aws batch delete-job --job-id example')\"",
+        // An unknown name fails at run time and reaches nothing.
+        "python3 -c \"print(process.version)\"",
     ] {
         let result = classify(&home, "project", Some(&plain), "codex", command);
         assert_eq!(result.decision, "allow", "{command}");
@@ -241,10 +246,7 @@ fn node_prints_accept_the_same_constants() {
     );
     for command in [
         "node -e \"console.log(Bun.version)\"",
-        "python3 -c \"print('py-ok', 2)\"",
-        "python3 -c \"print('aws batch delete-job --job-id example')\"",
         "python3 -c \"print('ok', open('.env').read())\"",
-        "python3 -c \"print(process.version)\"",
     ] {
         let result = classify(&home, "project", Some(&plain), "codex", command);
         assert_ne!(result.decision, "allow", "{command}");

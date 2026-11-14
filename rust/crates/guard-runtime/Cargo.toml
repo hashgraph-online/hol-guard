@@ -31,6 +31,7 @@ guard-scanner = { path = "../guard-scanner" }
 guard-runtime-windows-process = { path = "../guard-runtime-windows-process" }
 caseless.workspace = true
 regex.workspace = true
+fancy-regex.workspace = true
 getrandom.workspace = true
 hex.workspace = true
 fs2.workspace = true

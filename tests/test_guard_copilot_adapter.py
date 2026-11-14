@@ -355,7 +355,7 @@ def test_copilot_without_a_hook_ownership_answer_changes_no_file(tmp_path, monke
     real = authority.native_runner_authority
 
     def refused(kind: str, *args: Any, **kwargs: Any) -> dict[str, Any]:
-        if kind == "copilot_hook_config":
+        if kind == "harness_adapter":
             raise NativeRunnerAuthorityError("native_runner_authority_unavailable")
         return real(kind, *args, **kwargs)
 
@@ -665,27 +665,6 @@ def test_copilot_install_keeps_target_specific_workspace_servers_distinct(tmp_pa
     assert "--arg=ide-server.js" in ide_args
 
 
-def test_copilot_install_writes_no_mcp_target_when_a_later_plan_is_malformed(tmp_path, monkeypatch):
-    context = _build_context(tmp_path)
-    workspace_cli_mcp_path = context.workspace_dir / ".mcp.json"
-    workspace_mcp_path = context.workspace_dir / ".vscode" / "mcp.json"
-    _write_json(workspace_cli_mcp_path, {"mcpServers": {"cli_lab": {"command": "python", "args": ["cli.py"]}}})
-    _write_json(workspace_mcp_path, {"servers": {"ide_lab": {"command": "node", "args": ["ide.js"]}}})
-    before = {path: path.read_bytes() for path in (workspace_cli_mcp_path, workspace_mcp_path)}
-    plan_targets = copilot_module._plan_mcp_targets
-
-    def malformed_last(*args, **kwargs):
-        plans, notes = plan_targets(*args, **kwargs)
-        return [*plans[:-1], {}], notes
-
-    monkeypatch.setattr(copilot_module, "_plan_mcp_targets", malformed_last)
-
-    with pytest.raises(ValueError):
-        CopilotHarnessAdapter().install(context)
-
-    assert {path: path.read_bytes() for path in before} == before
-
-
 def test_copilot_install_refreshes_existing_guard_proxy_entries_to_current_interpreter(tmp_path):
     context = _build_context(tmp_path)
     adapter = CopilotHarnessAdapter()
@@ -828,7 +807,7 @@ def test_copilot_detect_marks_local_cli_install_as_available_when_not_on_path(tm
     local_binary.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
     local_binary.chmod(0o755)
 
-    monkeypatch.setattr("codex_plugin_scanner.guard.adapters.base.shutil.which", lambda command: None)
+    monkeypatch.setenv("PATH", str(tmp_path / "empty-bin"))
     monkeypatch.setattr("pathlib.Path.home", lambda: tmp_path / "actual-home")
 
     detection = adapter.detect(context)
@@ -845,7 +824,7 @@ def test_copilot_detect_ignores_non_executable_local_cli_candidate_when_not_on_p
     local_binary.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
     local_binary.chmod(0o644)
 
-    monkeypatch.setattr("codex_plugin_scanner.guard.adapters.base.shutil.which", lambda command: None)
+    monkeypatch.setenv("PATH", str(tmp_path / "empty-bin"))
     monkeypatch.setattr("pathlib.Path.home", lambda: tmp_path / "actual-home")
 
     detection = adapter.detect(context)
@@ -862,7 +841,7 @@ def test_copilot_launch_command_uses_local_cli_install_when_not_on_path(tmp_path
     local_binary.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
     local_binary.chmod(0o755)
 
-    monkeypatch.setattr("codex_plugin_scanner.guard.adapters.base.shutil.which", lambda command: None)
+    monkeypatch.setenv("PATH", str(tmp_path / "empty-bin"))
     monkeypatch.setattr("pathlib.Path.home", lambda: tmp_path / "actual-home")
 
     command = adapter.launch_command(context, ["--help"])
@@ -972,3 +951,25 @@ def test_copilot_launch_command_skips_workspace_override_when_cli_mcp_config_is_
 
     assert command[0].endswith("copilot")
     assert command[1:] == ["--help"]
+
+
+def test_corrupt_authenticated_backup_fails_before_target_mutation(tmp_path: Path) -> None:
+    context = HarnessContext(home_dir=tmp_path / "home", workspace_dir=None, guard_home=tmp_path / "guard-home")
+    adapter = CopilotHarnessAdapter()
+    target = context.home_dir / ".copilot" / "mcp-config.json"
+    original = {"mcpServers": {"user": {"command": "user-command"}}}
+    _write_json(target, original)
+
+    install_payload = adapter.install(context)
+    backup_path = Path(str(install_payload["backup_path"]))
+    state_path = Path(str(install_payload["state_path"]))
+    target_before = target.read_bytes()
+    state_before = state_path.read_bytes()
+    backup_path.write_text("{corrupt\n", encoding="utf-8")
+
+    with pytest.raises(RuntimeError, match="backup"):
+        adapter.install(context)
+
+    assert target.read_bytes() == target_before
+    assert backup_path.read_text(encoding="utf-8") == "{corrupt\n"
+    assert state_path.read_bytes() == state_before

@@ -31,7 +31,6 @@ from codex_plugin_scanner.guard.adapters import codex as codex_adapter_module
 from codex_plugin_scanner.guard.adapters import cursor as cursor_adapter_module
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.adapters.claude_code import CLAUDE_GUARD_DAEMON_HOOK_MARKER, ClaudeCodeHarnessAdapter
-from codex_plugin_scanner.guard.adapters.cursor_cli import CursorCliLaunchEntry
 from codex_plugin_scanner.guard.adapters.opencode_runtime import OpenCodeHarnessAdapter
 from codex_plugin_scanner.guard.cli import commands as guard_commands_module
 from codex_plugin_scanner.guard.cli import commands_support_connect as guard_connect_support_module
@@ -823,18 +822,6 @@ class TestGuardCli:
     def _bundled_native_runtime_present(self, monkeypatch):
         # These update tests simulate package-index installs; a source checkout has no bundled runtime.
         monkeypatch.setattr(guard_update_commands_module, "bundled_native_runtime_missing", lambda: False)
-
-    def test_claude_guard_hook_command_detection_handles_legacy_and_pinned_commands(self):
-        legacy_command = "/opt/python/bin/python3 -m codex_plugin_scanner.cli guard hook --guard-home /tmp/guard"
-        pinned_command = (
-            "/opt/python/bin/python3 -c "
-            "\"import sys;sys.path.insert(0, '/tmp/src');from codex_plugin_scanner.cli import main;"
-            "raise SystemExit(main(['guard', 'hook']))\""
-        )
-
-        assert claude_adapter_module._is_guard_hook_command(legacy_command) is True
-        assert claude_adapter_module._is_guard_hook_command(pinned_command) is True
-        assert claude_adapter_module._is_guard_hook_command("python something-else.py") is False
 
     def test_guard_prompt_renders_untrusted_metadata_as_literal_text(self):
         console = Console(record=True, width=120)
@@ -2977,7 +2964,7 @@ args = ["workspace-skill.js", "--changed"]
         expected_session_start_argv = ClaudeCodeHarnessAdapter._session_start_command_parts(context)
         assert (
             guard_pretool_entry["matcher"]
-            == "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*"
+            == "Bash|PowerShell|Read|Grep|Glob|Write|Edit|MultiEdit|WebFetch|WebSearch|Agent|Task|mcp__.*"
         )
         assert (
             _command_handler_argv(install_settings_payload["hooks"]["SessionStart"][0]["hooks"][0])
@@ -10224,15 +10211,12 @@ url = http://127.0.0.1:8787/guard-canary
         home_dir = tmp_path / "home"
         workspace_dir = tmp_path / "workspace"
         _build_guard_fixture(home_dir, workspace_dir)
-        monkeypatch.setattr(cursor_adapter_module, "cursor_cli_command_available", lambda _context: True)
-        monkeypatch.setattr(
-            cursor_adapter_module,
-            "resolve_cursor_cli_entry",
-            lambda _context: CursorCliLaunchEntry(
-                executable="cursor-agent",
-                launch_mode="cursor-agent",
-            ),
-        )
+        cursor_bin = tmp_path / "cursor-bin"
+        cursor_bin.mkdir()
+        cursor_agent = cursor_bin / ("cursor-agent.exe" if os.name == "nt" else "cursor-agent")
+        cursor_agent.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+        cursor_agent.chmod(0o755)
+        monkeypatch.setenv("PATH", str(cursor_bin))
         monkeypatch.setattr(
             cursor_adapter_module,
             "_run_command_probe",

@@ -12,7 +12,7 @@ import pytest
 from codex_plugin_scanner.guard.adapters import get_adapter
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.adapters.copilot import (
-    _hook_command_parts as copilot_hook_command_parts,  # pyright: ignore[reportPrivateUsage]
+    _hook_fields as copilot_hook_fields,  # pyright: ignore[reportPrivateUsage]
 )
 from codex_plugin_scanner.guard.adapters.hermes import (
     _pretool_payload as hermes_pretool_payload,  # pyright: ignore[reportPrivateUsage]
@@ -37,7 +37,7 @@ def _context(tmp_path: Path) -> HarnessContext:
 
 
 def _copilot_command(context: HarnessContext) -> tuple[str, ...]:
-    return copilot_hook_command_parts(context, include_workspace=True)
+    return tuple(cast(list[str], copilot_hook_fields(context, [])["workspace_argv"]))
 
 
 def _native_command(harness: str) -> CommandFactory:

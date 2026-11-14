@@ -5,6 +5,9 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
+
+from codex_plugin_scanner.guard.adapters import cursor
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.adapters.cursor import CursorHarnessAdapter
 
@@ -27,19 +30,19 @@ def _write_mcp_json(path: Path, servers: dict[str, object]) -> None:
 
 class TestCursorAdapterIdentity:
     def test_harness_identifier_is_cursor(self) -> None:
-        assert CursorHarnessAdapter.harness == "cursor"
+        assert CursorHarnessAdapter().harness == "cursor"
 
     def test_executable_is_cursor_agent(self) -> None:
-        assert CursorHarnessAdapter.executable == "cursor-agent"
+        assert CursorHarnessAdapter().executable == "cursor-agent"
 
     def test_approval_tier_is_native_harness(self) -> None:
-        assert CursorHarnessAdapter.approval_tier == "native-harness"
+        assert CursorHarnessAdapter().approval_flow()["tier"] == "native-harness"
 
     def test_approval_prompt_channel_is_native(self) -> None:
-        assert CursorHarnessAdapter.approval_prompt_channel == "native"
+        assert CursorHarnessAdapter().approval_flow()["prompt_channel"] == "native"
 
     def test_auto_open_browser_is_disabled(self) -> None:
-        assert CursorHarnessAdapter.approval_auto_open_browser is False
+        assert CursorHarnessAdapter().approval_flow()["auto_open_browser"] is False
 
 
 class TestCursorPolicyPath:
@@ -301,3 +304,15 @@ class TestCursorAdapterContract:
         assert len(result.artifacts) == 1
         art = result.artifacts[0]
         assert art.artifact_type == "mcp_server"
+
+
+def test_frozen_hook_refuses_its_script_when_the_runtime_cannot_answer(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def unavailable(*_args: object, **_kwargs: object) -> dict[str, object]:
+        raise RuntimeError("resident unavailable")
+
+    script = tmp_path / "hol-guard-cursor-hook.py"
+    script.write_text("raise SystemExit(0)\n", encoding="utf-8")
+    monkeypatch.setattr(cursor, "ask", unavailable)
+    assert cursor.run_frozen_cursor_hook([str(script)]) == 3
