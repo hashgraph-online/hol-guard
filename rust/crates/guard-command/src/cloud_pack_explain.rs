@@ -76,6 +76,8 @@ pub fn explain(
         provider: &pack.provider.id,
         action_id: &action.action_id,
         effect: action.safety.effect,
+        connection_id: "fixture",
+        resource_id: None,
         facts: &facts,
         session: None,
         windows: None,

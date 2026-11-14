@@ -169,6 +169,8 @@ fn check_decisions(
         provider,
         action_id: &action.action_id,
         effect: action.safety.effect,
+        connection_id: "fixture",
+        resource_id: None,
         facts,
         session: None,
         windows: None,

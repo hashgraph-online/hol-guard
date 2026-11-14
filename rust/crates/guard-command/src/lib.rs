@@ -95,6 +95,9 @@ pub mod cloud_pack_response;
 mod cloud_pack_review_tests;
 #[cfg(test)]
 mod cloud_pack_shape_tests;
+pub mod cloud_pack_simulate;
+#[cfg(test)]
+mod cloud_pack_simulate_tests;
 #[cfg(test)]
 mod cloud_pack_tests;
 pub mod cloud_pack_validate;
