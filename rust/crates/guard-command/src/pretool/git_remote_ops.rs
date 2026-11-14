@@ -417,10 +417,47 @@ pub(super) fn work_tree_outside_configuration(
         false,
     );
     super::git_probe::memoized(key, || {
-        let probe = Probe::new(executable, &[], context, deadline, execution_environment)?;
+        // The probe runs where the read runs. Without the read's own `-C`
+        // routes it answers for the session's checkout, whose top level is
+        // never a linked worktree the read is routed into, so every such read
+        // stayed under review.
+        let routes = leading_routes(&later.arguments);
+        let probe = Probe::new(
+            executable,
+            &routes,
+            context,
+            deadline,
+            execution_environment,
+        )?;
         Some(work_tree_settles(&probe, &route))
     })
     .unwrap_or(false)
+}
+
+/// The leading `-C <dir>` pairs of a Git segment, in order, as the segment
+/// spells them, so a probe folds them against the same working directory Git
+/// does. Options that only shape output are dropped; [`read_route`] has
+/// already refused any leading option that moves the repository.
+fn leading_routes(arguments: &[String]) -> Vec<String> {
+    let mut routes = Vec::new();
+    let mut words = arguments.iter();
+    while let Some(argument) = words.next() {
+        match argument.as_str() {
+            "-C" => match words.next() {
+                Some(directory) => {
+                    routes.push(argument.clone());
+                    routes.push(directory.clone());
+                }
+                None => break,
+            },
+            "-c" => {
+                words.next();
+            }
+            _ if argument.starts_with('-') => {}
+            _ => break,
+        }
+    }
+    routes
 }
 
 /// The directory a Git step runs in: its working directory folded through the
