@@ -8,6 +8,7 @@ import pytest
 from codex_plugin_scanner.guard import codex_hook_repair_native as inspection
 from codex_plugin_scanner.guard import native_runtime
 from codex_plugin_scanner.guard.codex_hook_file_integrity import CodexHookIntegrityError
+from codex_plugin_scanner.guard.native_runner_authority import native_runner_authority
 from codex_plugin_scanner.guard.runtime_transition import TransitionError
 
 from .test_codex_publication_preparation import _tree
@@ -80,8 +81,10 @@ def test_probe_receives_original_short_parent_and_detects_changed_binary(native_
     comparison.write_bytes(native_hook_force.read_bytes())
     comparison.chmod(0o700)
     monkeypatch.setenv("HOL_GUARD_NATIVE_BINARY", str(comparison))
+    # Start the copy's resident first, so the short parent covers only the inspection.
+    native_runner_authority("transition_files", {"op": "lease_check", "lease": "warm"})
     real_probe = inspection.run_isolated_hook_process
-    parent = time.monotonic() + 3.0
+    parent = time.monotonic() + 0.8
     deadlines = []
 
     def changed_after_probe(*args, **kwargs):

@@ -748,11 +748,11 @@
   },
   {
    "verdict": "windows-unsupported",
-   "note": "Codex's app-server control socket is a Unix socket and `_start_direct_app_server` returns before asking on Windows, so no tracked app-server exists to reclaim there; answering `busy` keeps any launch on the ordinary argv.",
+   "note": "Codex's app-server control socket is a Unix socket and `prepare` answers plain on Windows before reclaiming, so no tracked app-server exists to reclaim there; answering `busy` keeps any launch on the ordinary argv.",
    "file": "rust/crates/guard-runtime/src/adapters/codex_remote_launch.rs",
-   "item": "fn reclaim_state(_socket: &str, _seconds: f64) -> &'static str",
+   "item": "pub(super) fn reclaim_state(_socket: &str, _seconds: f64) -> &'static str",
    "cfg": "not(unix)",
-   "body": "a04ac213d091"
+   "body": "d9d14b264fbd"
   },
   {
    "verdict": "windows-unsupported",
@@ -761,6 +761,14 @@
    "item": "fn ready(_socket: &Path) -> bool",
    "cfg": "not(unix)",
    "body": "53abbd254e3b"
+  },
+  {
+   "verdict": "windows-unsupported",
+   "note": "`prepare` never asks for a direct app-server on Windows (`direct` answers plain first), so no pid reaches this arm; refusing keeps the launch on the ordinary argv.",
+   "file": "rust/crates/guard-runtime/src/adapters/codex_remote_prepare.rs",
+   "item": "fn record_pid(_socket: &Path, _pid: u64) -> std::io::Result<()>",
+   "cfg": "not(unix)",
+   "body": "1d53b41d2715"
   },
   {
    "verdict": "windows-equivalent",

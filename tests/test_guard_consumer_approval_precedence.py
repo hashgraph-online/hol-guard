@@ -612,7 +612,7 @@ def test_codex_postclaim_setup_uses_authorized_canonical_prefix_after_symlink_sw
         "get_adapter",
         lambda _harness: SwapAtAuthorizedSetupAdapter(),
     )
-    monkeypatch.setattr(codex_remote_control, "_start_direct_app_server", lambda **_kwargs: False)
+    monkeypatch.setattr(codex_remote_control, "_prepare_remote", lambda *_args, **_kwargs: False)
 
     result = wrapper_run.guard_run(
         "codex",
@@ -667,7 +667,7 @@ def test_no_saved_codex_setup_uses_previewed_canonical_prefix_after_symlink_swap
         "get_adapter",
         lambda _harness: SwapAtAuthorizedSetupAdapter(),
     )
-    monkeypatch.setattr(codex_remote_control, "_start_direct_app_server", lambda **_kwargs: False)
+    monkeypatch.setattr(codex_remote_control, "_prepare_remote", lambda *_args, **_kwargs: False)
 
     result = wrapper_run.guard_run(
         "codex",
