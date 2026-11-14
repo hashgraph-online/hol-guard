@@ -60,4 +60,27 @@ mod tests {
         assert!(!holds("@lru_cache") && !holds("x-_cache") && !holds("_cache_size"));
         assert!(!super::holds_word("anything", ""));
     }
+
+    /// The count reads each file as written, as the rename list does, so
+    /// `_CACHE` is not `_cache`, and a name the prompt repeats counts once.
+    #[test]
+    fn the_walk_counts_files_holding_a_name_as_written() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = super::super::plain(std::fs::canonicalize(dir.path()).unwrap());
+        let files = [
+            ("store.py", "self._cache = {}\n"),
+            ("consts.py", "_CACHE = 1\n"),
+            ("util.py", "from functools import lru_cache\n"),
+        ];
+        for (name, text) in files {
+            std::fs::write(root.join(name), text).unwrap();
+        }
+        let (terms, name) = (["cache".to_owned()], "_cache".to_owned());
+        let budget = std::time::Duration::from_secs(5);
+        let exact = [name.clone(), name.clone()];
+        let walk = super::super::walk_exact(&root, &terms, &[], &[], &exact, budget);
+        assert!(walk.complete);
+        assert_eq!(walk.exact, [(name, 1)]);
+        assert_eq!(walk.spelled, [3]);
+    }
 }

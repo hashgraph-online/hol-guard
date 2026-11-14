@@ -202,8 +202,12 @@ pub(crate) fn walk_exact(
     let mut seen = Vec::new();
     let mut complete = true;
     let mut spelled_in = vec![0_usize; terms.len()];
-    let mut held: Vec<(String, usize)> = exact.iter().map(|word| (word.clone(), 0)).collect();
-    let lowered: Vec<String> = exact.iter().map(|word| word.to_lowercase()).collect();
+    let mut held: Vec<(String, usize)> = Vec::new();
+    for word in exact.iter().filter(|word| !word.is_empty()) {
+        if !held.iter().any(|(known, _)| known == word) {
+            held.push((word.clone(), 0));
+        }
+    }
     while let Some((dir, prefix, depth, rules)) = stack.pop() {
         let Ok(entries) = fs::read_dir(&dir) else {
             complete = false;
@@ -269,11 +273,15 @@ pub(crate) fn walk_exact(
                 scanned += size;
                 text = guard_secure_fs::read_bounded(&entry.path(), MAX_FILE_BYTES as usize)
                     .ok()
-                    .and_then(|read| String::from_utf8(read.bytes).ok())
-                    .map(|text| text.to_lowercase());
+                    .and_then(|read| String::from_utf8(read.bytes).ok());
                 complete &= text.is_some();
             }
+            // Read as written, as the rename list reads each file it lists.
             let text = text.unwrap_or_default();
+            for (word, count) in &mut held {
+                *count += usize::from(holds_word(&text, word));
+            }
+            let text = text.to_lowercase();
             let hits: Vec<u8> = terms
                 .iter()
                 .map(|term| text.matches(term.as_str()).take(8).count() as u8)
@@ -282,11 +290,8 @@ pub(crate) fn walk_exact(
             let whole: Vec<bool> = (terms.iter().zip(&hits))
                 .map(|(term, &n)| code && n > 0 && whole_word(&text, term))
                 .collect();
-            for (count, held) in spelled_in.iter_mut().zip(spelled(&text, terms, &hits)) {
-                *count += usize::from(held);
-            }
-            for ((_, count), word) in held.iter_mut().zip(&lowered) {
-                *count += usize::from(holds_word(&text, word));
+            for (count, holds) in spelled_in.iter_mut().zip(spelled(&text, terms, &hits)) {
+                *count += usize::from(holds);
             }
             let quoted = quoted(&text, phrases);
             let named = named_as(&relative, named);
