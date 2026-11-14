@@ -111,7 +111,7 @@ The machine-readable copy is [`generated/harness-claims.v1.json`](generated/harn
 | Event | Surface | Transport | Mode | If Guard fails | Claim | Expires |
 | --- | --- | --- | --- | --- | --- | --- |
 | `PreToolUse` | foreground | `native_hook` | `blocking` | Stops the action | `configured` | n/a |
-| `UserPromptSubmit` | foreground | `native_hook` | `blocking` | Stops the action | `configured` | n/a |
+| `UserPromptSubmit` | foreground | `native_hook` | `blocking` | Lets the action continue | `configured` | n/a |
 | `PostToolUse` | foreground | `native_hook` | `observe` | Records only | `observe_only` | n/a |
 
 ## pi
@@ -210,7 +210,7 @@ Rows that do not stop the action when Guard fails, and the blind spots each row 
 | kimi | `shell` | foreground | No enforcement | Tool output post-processing and inline edits applied without a tool call are not visible to Guard. Hooks run in parallel, so separate requests may be reviewed concurrently. |
 | kimi | `prompt` | foreground | No enforcement | Tool output post-processing and inline edits applied without a tool call are not visible to Guard. Hooks run in parallel, so separate requests may be reviewed concurrently. |
 | grok | `PreToolUse` | foreground | Stops the action | Post-tool events do not prevent an action that already executed. |
-| grok | `UserPromptSubmit` | foreground | Stops the action | Auto-wake and subagent prompts are passive; Grok fails open if the hook process crashes or times out. |
+| grok | `UserPromptSubmit` | foreground | Lets the action continue | Auto-wake and subagent prompts are passive; Grok fails open if the hook process crashes or times out. |
 | grok | `PostToolUse` | foreground | Records only | Post-tool observation does not block or replace model-visible output. |
 | pi | `UserPromptSubmit` | foreground | Stops the action | Package installation and update flows happen outside the runtime extension bridge. |
 | pi | `PreToolUse` | foreground | Stops the action | A present extension file alone does not prove Pi loaded it or suppressed a live tool call. |

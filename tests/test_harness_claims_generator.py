@@ -94,5 +94,13 @@ def test_expired_evidence_fails_the_release_check() -> None:
     assert generator.expired(_contract({"state": "configured"}), "2099-01-01T00:00:00Z") == []
 
 
+def test_a_proof_claim_without_an_expiry_fails_the_release_check() -> None:
+    generator = _generator()
+    for claim in ({"state": "live_block_proven"}, {"state": "partial", "expires_at": "next month"}):
+        assert generator.expired(_contract(claim), "2026-11-14T00:00:00Z") == [
+            f"codex PreToolUse (native_hook) claims {claim['state']} without a valid expires_at"
+        ]
+
+
 def test_a_malformed_release_time_is_refused() -> None:
     assert _generator().main(["--check", "--as-of", "2026-11-14"]) == 2

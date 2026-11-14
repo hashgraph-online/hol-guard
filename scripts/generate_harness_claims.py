@@ -183,12 +183,23 @@ def render_markdown(contract: dict[str, object]) -> str:
 
 
 def expired(contract: dict[str, object], as_of: str) -> list[str]:
-    """Evidence claims whose expiry is not after ``as_of``. The fixed timestamp form orders as text."""
-    return [
-        f"{row['harness']} {row['event']} ({row['transport']}) expired {row['expires_at']}"
-        for row in claim_rows(contract)
-        if row["state"] in EVIDENCE_STATES and isinstance(row["expires_at"], str) and row["expires_at"] <= as_of
-    ]
+    """Evidence claims that cannot be published at ``as_of``.
+
+    A claim backed by evidence fails when it carries no well-formed expiry or
+    when its expiry is not after ``as_of``. The fixed timestamp form orders as
+    text, so a missing or malformed expiry never reads as current.
+    """
+    failures: list[str] = []
+    for row in claim_rows(contract):
+        if row["state"] not in EVIDENCE_STATES:
+            continue
+        label = f"{row['harness']} {row['event']} ({row['transport']})"
+        expires_at = row["expires_at"]
+        if not isinstance(expires_at, str) or not TIMESTAMP.match(expires_at):
+            failures.append(f"{label} claims {row['state']} without a valid expires_at")
+        elif expires_at <= as_of:
+            failures.append(f"{label} expired {expires_at}")
+    return failures
 
 
 def outputs(contract: dict[str, object]) -> dict[Path, str]:

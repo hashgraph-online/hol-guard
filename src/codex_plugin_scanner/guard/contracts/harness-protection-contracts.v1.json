@@ -1094,7 +1094,7 @@
           "transport": "native_hook",
           "mode": "blocking",
           "surface": "foreground",
-          "failure_behavior": "fail_closed",
+          "failure_behavior": "fail_open",
           "claim": {
             "state": "configured"
           },
