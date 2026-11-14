@@ -27,17 +27,16 @@ from ..aibom_detection import (
     extend_detection_with_workspace_aibom,
     native_adapter_detection_payload,
 )
-from ..codex_config import _Wire, dump_toml, read_config_bytes, read_toml_payload
+from ..codex_config import _Wire, dump_toml, read_toml_payload
 from ..codex_hook_command_line import render_hook_command
 from ..codex_hook_compatibility import NATIVE_CODEX_HOOK_FEATURE, python_bridge_argv
 from ..codex_hook_file_integrity import validate_regular_file
 from ..codex_hook_integrity import (
-    atomic_write_bytes,
     atomic_write_text,
     canonical_manifest_bytes,
+    hook_authority_receipt_path,
     hook_manifest_path,
     hook_secret_path,
-    remove_hook_manifest,
     remove_hook_secret_if_unused,
 )
 from ..codex_hook_launch_runtime import isolated_daemon_start_command, isolated_guard_cli_command
@@ -92,7 +91,7 @@ from ..launcher import merge_guard_launcher_env
 from ..models import HarnessDetection
 from ..native_codex_hook_identity import wire_codex_hook_bindings as _wire_bindings
 from ..native_path_anchor import anchor_to_process_directory
-from ..shims import prepare_guard_shim, remove_guard_shim
+from ..shims import prepare_guard_shim, prepare_guard_shim_removal
 from ..stable_guard_cli import resolve_frozen_guard_cli
 from .base import HarnessContext, PreparedHarnessInstall
 from .codex_detect_sources import path_restorations, read_source_bytes
@@ -759,19 +758,6 @@ def prepare_codex_alternate_cleanup(
     return change
 
 
-def _publish_codex_alternate_cleanup(change: TransitionFile) -> None:
-    from ..runtime_transition import RuntimeTransition
-
-    if change.before == change.after:
-        return
-    RuntimeTransition._compare({"files": [change.payload()]}, "before")
-    if change.after is None:
-        change.path.unlink()
-    else:
-        atomic_write_bytes(change.path, change.after, mode=change.after_mode, private=False)
-    RuntimeTransition._compare({"files": [change.payload()]}, "after")
-
-
 def _preactivation_owners(
     payload: Mapping[str, object],
     *,
@@ -890,6 +876,10 @@ def _require_codex_authoritative_shell_hook(context: HarnessContext) -> None:
         "PreToolUse and PermissionRequest hooks are missing or disabled. Run `hol-guard install codex` "
         "or `hol-guard update` to repair the native-hook enforcement boundary."
     )
+
+
+def _located(path: Path) -> Path:
+    return path.parent.resolve(strict=False) / path.name
 
 
 def _install_manifest(
@@ -1281,51 +1271,95 @@ class CodexHarnessAdapter(NativeHarnessAdapter):
             return self._uninstall_owned(context)
 
     def _uninstall_owned(self, context: HarnessContext) -> dict[str, object]:
-        from ..runtime_transition import assert_transition_mutation_allowed
+        from ..codex_install_transaction import record_codex_mutation
 
-        assert_transition_mutation_allowed(context.guard_home)
-        target_config_path = self._target_config_path(context)
-        hook_config_path = self._hook_config_path(context)
-        authenticated_manifest = load_hook_manifest_baseline(_hook_manifest_spec(context))
-        owned_bindings = _manifest_bindings(authenticated_manifest)
-        backup_path = self._backup_path(context)
-        if backup_path.is_file():
-            original_text = backup_path.read_text(encoding="utf-8")
-            if original_text:
-                atomic_write_text(target_config_path, original_text, mode=0o600)
-            elif target_config_path.is_file():
-                target_config_path.unlink()
-            backup_path.unlink()
-        elif target_config_path.is_file() and owned_bindings:
-            target_payload = read_toml_payload(target_config_path)
-            target_original = read_config_bytes(target_config_path)
-            target_hooks = target_payload.get("hooks")
-            if isinstance(target_hooks, dict):
-                cleaned_hooks, managed_removed = _remove_manifest_bound_hook_events(target_hooks, owned_bindings)
-                if managed_removed:
-                    if cleaned_hooks:
-                        target_payload["hooks"] = cleaned_hooks
-                    else:
-                        target_payload.pop("hooks", None)
-                    atomic_write_text(
-                        target_config_path,
-                        dump_toml(target_payload, original=target_original),
-                        mode=0o600,
-                    )
-        hooks_path = self._remove_hooks(context)
-        self._remove_managed_hooks_from_alternate_configs(context, skip_config_path=target_config_path)
-        self._remove_managed_mcp_servers_from_alternate_configs(
-            context,
-            managed_servers=(),
-            skip_config_path=target_config_path,
-        )
-        remove_hook_manifest(context.guard_home, hook_config_path)
+        prepared = self._prepare_uninstall(context)
+        config_path = self._hook_config_path(context)
+        operations = {
+            _located(hook_authority_receipt_path(context.guard_home, config_path)): "remove_authority_receipt",
+            _located(hook_manifest_path(context.guard_home, config_path)): "remove_manifest",
+        }
+
+        def audit(change: TransitionFile) -> None:
+            operation = operations.get(change.path)
+            if operation is not None:
+                record_codex_mutation(operation, change.path, change.before, None)
+
+        prepared.publish(context.guard_home, removals=True, on_write=audit)
         remove_hook_secret_if_unused(context.guard_home)
-        self._uninstall_shell_guard(context)
-        shim_manifest = remove_guard_shim(self.harness, context)
         return _install_manifest(
-            context, "uninstall", shim_manifest, hooks_path=str(hooks_path), backup_path=str(backup_path)
+            context,
+            "uninstall",
+            prepared.manifest,
+            hooks_path=str(self._hooks_path(context)),
+            backup_path=str(self._backup_path(context)),
         )
+
+    def _prepare_uninstall(self, context: HarnessContext) -> PreparedHarnessInstall:
+        """Every file uninstall restores or deletes, captured before any of them changes.
+
+        The main config returns to its backup, or loses only the hooks the
+        authenticated manifest binds. Alternate configs lose this install's
+        bridge, the receipt and manifest go, and so do shell guards and the
+        launcher. JSON hook files created after install stay byte-for-byte.
+        """
+        from ..codex_hook_recovery import _snapshot
+        from ..runtime_transition import TransitionFile
+
+        def mode_of(path: Path, data: bytes | None) -> int:
+            return path.stat().st_mode & 0o777 if data is not None else 0o600
+
+        owned = _manifest_bindings(load_hook_manifest_baseline(_hook_manifest_spec(context)))
+        target = _located(self._target_config_path(context))
+        current = _snapshot(target)
+        backup_path = _located(self._backup_path(context))
+        backup = _snapshot(backup_path)
+        files: list[TransitionFile] = []
+        if backup is not None:
+            files.append(
+                TransitionFile(target, current, backup or None, before_mode=mode_of(target, current), no_follow=True)
+            )
+            files.append(
+                TransitionFile(
+                    backup_path,
+                    backup,
+                    None,
+                    before_mode=mode_of(backup_path, backup),
+                    after_mode=0o600,
+                    no_follow=True,
+                )
+            )
+        elif current is not None:
+            payload = parse_toml_object(current, path=target, label="Codex config file")
+            hooks = payload.get("hooks")
+            if owned and isinstance(hooks, dict):
+                cleaned, removed = _remove_manifest_bound_hook_events(hooks, owned)
+                if removed:
+                    if cleaned:
+                        payload["hooks"] = cleaned
+                    else:
+                        payload.pop("hooks", None)
+                    rendered = dump_toml(payload, original=current).encode("utf-8")
+                    files.append(
+                        TransitionFile(target, current, rendered, before_mode=mode_of(target, current), no_follow=True)
+                    )
+        files.extend(
+            prepare_codex_alternate_cleanup(context, config_path=config_path)
+            for config_path, _hooks_path in self._config_hook_pairs(context)
+            if _located(config_path) != target and config_path.is_file()
+        )
+        hook_config_path = self._hook_config_path(context)
+        for path in (
+            _located(hook_authority_receipt_path(context.guard_home, hook_config_path)),
+            _located(hook_manifest_path(context.guard_home, hook_config_path)),
+        ):
+            data = _snapshot(path)
+            if data is not None:
+                mode = mode_of(path, data)
+                files.append(TransitionFile(path, data, None, before_mode=mode, after_mode=mode, no_follow=True))
+        files.extend(prepare_codex_shell_cleanup(context))
+        shim = prepare_guard_shim_removal(self.harness, context)
+        return PreparedHarnessInstall((*files, *shim.files), shim.manifest)
 
     def diagnostics(self, context: HarnessContext) -> dict[str, object]:
         payload = super().diagnostics(context)
@@ -1368,42 +1402,6 @@ class CodexHarnessAdapter(NativeHarnessAdapter):
             context=context,
             server=server,
         )
-
-    def _remove_managed_hooks_from_alternate_configs(
-        self,
-        context: HarnessContext,
-        *,
-        skip_config_path: Path,
-    ) -> None:
-        # No authenticated manifest is issued for alternate Codex configs.
-        # Only an exact current bridge can be re-adopted during explicit repair;
-        # basename, status-message, and path-suffix matches remain untouched.
-        for config_path, _hooks_path in self._config_hook_pairs(context):
-            if config_path == skip_config_path or not config_path.is_file():
-                continue
-            _publish_codex_alternate_cleanup(prepare_codex_alternate_cleanup(context, config_path=config_path))
-
-    def _remove_managed_mcp_servers_from_alternate_configs(
-        self,
-        context: HarnessContext,
-        *,
-        managed_servers: tuple[ManagedMcpServer, ...],
-        skip_config_path: Path,
-    ) -> None:
-        managed_names_by_path: dict[Path, set[str]] = {}
-        for server in managed_servers:
-            managed_names_by_path.setdefault(Path(server.config_path), set()).add(server.name)
-        for config_path, _hooks_path in self._config_hook_pairs(context):
-            if config_path == skip_config_path or not config_path.is_file():
-                continue
-            _publish_codex_alternate_cleanup(
-                prepare_codex_alternate_cleanup(
-                    context,
-                    config_path=config_path,
-                    remove_hooks=False,
-                    managed_server_names=tuple(managed_names_by_path.get(config_path, set())),
-                )
-            )
 
     @staticmethod
     def _install_config_hooks(
@@ -1610,15 +1608,3 @@ class CodexHarnessAdapter(NativeHarnessAdapter):
                     add_note(f"rollback error: {rollback_error!r}")
                 raise failure from transaction_error
             raise
-
-    @staticmethod
-    def _uninstall_shell_guard(context: HarnessContext) -> None:
-        for change in prepare_codex_shell_cleanup(context):
-            _publish_codex_alternate_cleanup(change)
-
-    def _remove_hooks(self, context: HarnessContext, *, payloads: dict[Path, dict[str, object]] | None = None) -> Path:
-        target_hooks_path = self._hooks_path(context)
-        # JSON hook files created after install are foreign to the authenticated
-        # TOML registration and must be preserved byte-for-byte on uninstall.
-        del payloads
-        return target_hooks_path
