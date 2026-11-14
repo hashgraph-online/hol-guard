@@ -171,8 +171,8 @@ def test_frozen_bounded_hook_runs_the_durable_native_bridge(
     )
     config = json.loads(command[4])
     assert config["frozen_launcher"] is True
-    # The runtime recovers the daemon through the frozen Guard, never a Python interpreter.
-    assert config["start_command"][:2] == ["/app/hol-guard", "--_hol-guard-codex-daemon-recover"]
+    # The runtime derives the frozen Guard's recovery from the launcher itself.
+    assert "start_command" not in config
 
 
 def test_frozen_bounded_hook_prefers_isolated_stdlib_client(

@@ -231,17 +231,6 @@ def test_frozen_dry_run_does_not_promise_package_removal(monkeypatch: pytest.Mon
     assert "desktop core" in str(payload["message"])
 
 
-def test_frozen_claude_bridge_recovers_through_the_frozen_core(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-    from codex_plugin_scanner.guard import frozen_runtime_commands
-    from codex_plugin_scanner.guard.adapters import claude_daemon_hook_bridge
-
-    monkeypatch.setattr(frozen_runtime_commands, "is_frozen_guard_runtime", lambda: True)
-    monkeypatch.setattr(frozen_runtime_commands, "resolve_frozen_guard_cli", lambda: "/opt/guard/hol-guard")
-    command = claude_daemon_hook_bridge._recovery_command(tmp_path / "guard-home" / "state.json", "home=/h")
-    assert command[:2] == ("/opt/guard/hol-guard", frozen_runtime_commands.FROZEN_DAEMON_RECOVER_ARG)
-    assert "-c" not in command
-
-
 def test_failed_harness_removal_reports_name_and_prior_removals(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:

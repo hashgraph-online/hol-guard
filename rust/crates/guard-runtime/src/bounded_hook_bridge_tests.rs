@@ -164,6 +164,7 @@ fn configs_are_accepted_only_for_the_native_harnesses() {
                 "/opt/guard",
                 "/var/guard",
                 &["guard", "hook", "--harness", "copilot"],
+                false,
             ),
         })
     );
@@ -192,22 +193,41 @@ fn configs_are_accepted_only_for_the_native_harnesses() {
 
 #[test]
 fn a_config_without_a_start_command_gets_the_one_install_writes() {
-    // Recorded from `daemon_start_command` in `bounded_cli_hook_native.py`.
-    let expected = r#"import os,sys;sys.path.insert(0, "/nonexistent-guard/pkg'q");from pathlib import Path;from codex_plugin_scanner.guard.daemon import schedule_guard_daemon_recovery;failure_kind=os.environ.get('HOL_GUARD_HOOK_FAILURE_KIND','transport-failure');failure_kind=failure_kind if failure_kind in {'overload','transport-failure','authenticated-control-plane-failure'} else 'transport-failure';schedule_guard_daemon_recovery(Path('/nonexistent-guard/home'),home_dir=Path('/nonexistent-guard/user'),failure_kind=failure_kind)"#;
+    let cli_args = [
+        "guard",
+        "hook",
+        "--home",
+        "/nonexistent-guard/user",
+        "--harness",
+        "copilot",
+    ];
     let command = daemon_start_command(
         "/usr/bin/python3",
         "/nonexistent-guard/pkg'q",
         "/nonexistent-guard/home",
-        &[
-            "guard",
-            "hook",
-            "--home",
-            "/nonexistent-guard/user",
-            "--harness",
-            "copilot",
-        ],
+        &cli_args,
+        false,
     );
-    assert_eq!(command, argv(&["/usr/bin/python3", "-I", "-c", expected]));
+    assert_eq!(command[..3], argv(&["/usr/bin/python3", "-I", "-c"]));
+    assert!(command[3].contains(r#"sys.path.insert(0, "/nonexistent-guard/pkg'q")"#));
+    assert!(command[3].contains("native_daemon_manage import schedule_guard_daemon_recovery"));
+    assert!(command[3]
+        .contains("Path('/nonexistent-guard/home'),home_dir=Path('/nonexistent-guard/user')"));
+    let frozen = daemon_start_command(
+        "/opt/hol-guard",
+        "/opt/guard",
+        "/nonexistent-guard/home",
+        &cli_args,
+        true,
+    );
+    assert_eq!(
+        frozen,
+        argv(&[
+            "/opt/hol-guard",
+            "--_hol-guard-codex-daemon-recover",
+            r#"{"guard_home":"/nonexistent-guard/home","home_dir":"/nonexistent-guard/user"}"#,
+        ])
+    );
 }
 
 #[test]

@@ -110,9 +110,8 @@ pub fn isolated_guard_cli_command(
     cmd
 }
 
-/// `isolated_daemon_start_command` (`codex_hook_launch_runtime.py:187-213`).
+/// `isolated_daemon_start_command` (`codex_hook_launch_runtime.py`).
 /// `home_dir` is the authenticated canonical home; `None` = `Path.home()`.
-#[allow(dead_code)]
 pub fn isolated_daemon_start_command(
     python_executable: &str,
     package_root: &Path,
@@ -124,7 +123,7 @@ pub fn isolated_daemon_start_command(
         .unwrap_or_else(home_fallback);
     let bootstrap = format!(
         "import os,sys;sys.path.insert(0, {});from pathlib import Path;\
-from codex_plugin_scanner.guard.daemon import schedule_guard_daemon_recovery;\
+from codex_plugin_scanner.guard.native_daemon_manage import schedule_guard_daemon_recovery;\
 failure_kind=os.environ.get('HOL_GUARD_HOOK_FAILURE_KIND','transport-failure');\
 failure_kind=failure_kind if failure_kind in \
 {{'overload','transport-failure','authenticated-control-plane-failure'}} \
@@ -156,11 +155,8 @@ fn canonical_or_self(p: &Path) -> PathBuf {
 }
 
 /// Python `repr()` of a path string — `Path('…')` needs a quoted literal.
-#[allow(dead_code)]
 fn py_repr(p: &Path) -> String {
-    let s = p.as_os_str().to_string_lossy();
-    let escaped = s.replace('\\', "\\\\").replace('\'', "\\'");
-    format!("'{escaped}'")
+    crate::guard_store_json::py_repr_str(&p.as_os_str().to_string_lossy())
 }
 
 /// `private_hook_runtime_cwd` (`codex_hook_launch_runtime.py:227-247`):

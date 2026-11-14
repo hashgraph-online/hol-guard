@@ -14,9 +14,10 @@ fails closed.
 
 A frozen macOS Desktop keeps one lane of its own. A transition probe there
 must be answered by the signed bundle executable, not by a runtime copy
-published beside the Guard home, so this module still builds that strict
-signed-proxy command and runs it. Python decides nothing on that lane either;
-it only chooses which signed binary reviews the hook.
+published beside the Guard home. The runtime reads the hook and hands a probe
+back with the paths it names, and this module builds that strict signed-proxy
+command and runs it. Python decides nothing on that lane either; it only
+starts the signed binary the runtime named the hook for.
 """
 
 from __future__ import annotations
@@ -28,10 +29,9 @@ import sys
 import time
 from collections.abc import Mapping, Sequence
 from pathlib import Path
-from urllib.parse import parse_qs
+from typing import Any
 
 if __package__:
-    from ..approval_wait_limits import MAX_APPROVAL_WAIT_TIMEOUT_SECONDS
     from ..codex_hook_bridge_runtime import BridgeConfig, trusted_hook_launch
     from ..codex_hook_bridge_runtime import bounded_hook_input as _hook_input
     from ..codex_hook_bridge_runtime import bridge_config_from_argv as _parse_bridge_config
@@ -41,21 +41,14 @@ if __package__:
         isolated_hook_environment,
         run_isolated_hook_process,
     )
-    from ..hook_execution_environment import stamp_hook_input_text
     from ..hook_review.hook_availability_policy import hook_event_is_permission_request
     from ..hook_review.hook_request_parsing import runtime_hook_event_name
-    from ..live_process_identity import (
-        CODEX_BROWSER_WAIT_PROCESS_KEY,
-        CODEX_BROWSER_WAIT_TIMEOUT_SECONDS_KEY,
-        current_process_identity,
-    )
     from .native_hook_bridge import native_hook_bridge_executable
 else:  # pragma: no cover - exercised by subprocess integration tests
     _package_root = str(Path(__file__).resolve().parents[3])
     if _package_root not in sys.path:
         sys.path.insert(0, _package_root)
     from codex_plugin_scanner.guard.adapters.native_hook_bridge import native_hook_bridge_executable
-    from codex_plugin_scanner.guard.approval_wait_limits import MAX_APPROVAL_WAIT_TIMEOUT_SECONDS
     from codex_plugin_scanner.guard.codex_hook_bridge_runtime import (
         BridgeConfig,
         trusted_hook_launch,
@@ -75,16 +68,10 @@ else:  # pragma: no cover - exercised by subprocess integration tests
         isolated_hook_environment,
         run_isolated_hook_process,
     )
-    from codex_plugin_scanner.guard.hook_execution_environment import stamp_hook_input_text
     from codex_plugin_scanner.guard.hook_review.hook_availability_policy import (
         hook_event_is_permission_request,
     )
     from codex_plugin_scanner.guard.hook_review.hook_request_parsing import runtime_hook_event_name
-    from codex_plugin_scanner.guard.live_process_identity import (
-        CODEX_BROWSER_WAIT_PROCESS_KEY,
-        CODEX_BROWSER_WAIT_TIMEOUT_SECONDS_KEY,
-        current_process_identity,
-    )
 
 _HOOK_TIMEOUT_GRACE_SECONDS = 2
 _MAX_HOOK_INPUT_BYTES = 1_000_000
@@ -96,7 +83,10 @@ _BRIDGE_FAILURE_SCHEMA = "hol-guard.codex-bridge-failure.v1"
 _NATIVE_RUNTIME_MISSING_CODE = "codex_hook_native_runtime_missing"
 _LAUNCH_UNAUTHENTICATED_CODE = "codex_hook_launch_unauthenticated"
 _RUNTIME_LAUNCH_FAILED_CODE = "codex_hook_native_runtime_launch_failed"
-_RUNTIME_DEADLINE_CODE = "codex_hook_native_runtime_deadline_exceeded"
+_DESKTOP_LANE_FLAG = "--guard-desktop-lane"
+_FAILURE_FLAG = "--guard-registration-failure="
+_PROBE_HANDOFF_SCHEMA = "hol-guard.codex-desktop-probe.v1"
+_PROBE_HANDOFF_EXIT = 75
 
 
 def main(
@@ -169,101 +159,68 @@ def _desktop_main(
     manifest_path: str | Path | None,
     config_json: str | None,
 ) -> int:
-    """Review this hook inside the signed bundle, or hand the body to the runtime.
+    """Review this hook in the runtime, or in the signed bundle when it is a probe.
 
-    The probe lane is the one case where Python has to read the hook body
-    before it knows where the review belongs, so a body read here is passed on
-    rather than inherited.
+    The runtime reads the hook body and decides whether it is a transition
+    probe. A probe comes back as a handoff, because only the signed bundle
+    executable may answer it; anything else the runtime reviews itself.
     """
 
-    hook_input = _bound_hook_input(hook_timeouts)
-    if hook_input is None:
-        sys.stdout.write(json.dumps(_fail_closed("PreToolUse"), separators=(",", ":")))
-        return 0
-    event_name, data, timeout_seconds, input_ready_at, raw_data = hook_input
+    native = _native_bridge_executable(state.parent)
+    if native is None:
+        return _deny_before_the_runtime_runs(_NATIVE_RUNTIME_MISSING_CODE)
+    # The runtime cannot be told the body is not a probe before it reads it,
+    # so a registration that failed is passed on rather than denied here.
+    unauthenticated = _registration_failure(
+        state_path=state,
+        fallback_command=fallback_command,
+        start_command=start_command,
+        hook_timeouts=hook_timeouts,
+        manifest_path=manifest_path,
+        config_json=config_json,
+    )
+    lane = (_DESKTOP_LANE_FLAG,) if unauthenticated is None else (_DESKTOP_LANE_FLAG, _FAILURE_FLAG + unauthenticated)
+    sys.stdout.flush()
     try:
-        probe_command = _desktop_transition_probe_command(
-            data=data,
-            state_path=state,
-            query=query,
-            hook_timeouts=hook_timeouts,
-        )
-    except (OSError, RuntimeError, ValueError):
-        sys.stdout.write(json.dumps(_fail_closed(event_name), separators=(",", ":")))
-        return 1
-    if probe_command is None:
-        native = _native_bridge_executable(state.parent)
-        if native is None:
-            return _desktop_denial(event_name, _NATIVE_RUNTIME_MISSING_CODE)
-        unauthenticated = _registration_failure(
-            state_path=state,
-            fallback_command=fallback_command,
-            start_command=start_command,
-            hook_timeouts=hook_timeouts,
-            manifest_path=manifest_path,
-            config_json=config_json,
-        )
-        if unauthenticated is not None:
-            return _desktop_denial(event_name, unauthenticated)
-        sys.stdout.flush()
-        # Desktop dispatch spends part of this hook's budget before the runtime
-        # starts, so the runtime reviews inside what is left of it rather than
-        # starting a second one. It derives its own deadline, and the browser
-        # approval wait hanging off it, from the configured timeout for this
-        # event, so the remainder has to reach it as that timeout.
-        remaining = int(input_ready_at + timeout_seconds - time.monotonic())
-        if remaining < 1:
-            return _desktop_denial(event_name, _RUNTIME_DEADLINE_CODE)
-        try:
-            child_timeouts, child_config = _budget_for_the_runtime(
-                event_name=event_name,
-                remaining_seconds=remaining,
+        completed = subprocess.run(
+            _native_argv(
+                native,
+                state_path=state,
+                fallback_command=fallback_command,
+                start_command=start_command,
+                query=query,
                 hook_timeouts=hook_timeouts,
+                manifest_path=manifest_path,
                 config_json=config_json,
-            )
-        except ValueError:
-            # A registration this hook cannot read is not one it can shorten.
-            return _desktop_denial(event_name, _LAUNCH_UNAUTHENTICATED_CODE)
-        try:
-            completed = subprocess.run(
-                _native_argv(
-                    native,
-                    state_path=state,
-                    fallback_command=fallback_command,
-                    start_command=start_command,
-                    query=query,
-                    hook_timeouts=child_timeouts,
-                    manifest_path=manifest_path,
-                    config_json=child_config,
-                ),
-                input=raw_data.encode("utf-8", "surrogateescape"),
-                capture_output=True,
-                # The runtime answers on its own deadline; this only stops a
-                # child that ignored the deadline it was given. It takes back
-                # part of the grace Python held so the denial below is written
-                # while Codex is still reading this hook, not as it gives up.
-                timeout=remaining + _HOOK_TIMEOUT_GRACE_SECONDS / 2,
-                check=False,
-            )
-        except OSError:
-            # Nothing reviewed this call, and silence here would let it run.
-            return _desktop_denial(event_name, _RUNTIME_LAUNCH_FAILED_CODE)
-        except subprocess.TimeoutExpired:
-            return _desktop_denial(event_name, _RUNTIME_DEADLINE_CODE)
-        sys.stdout.write(completed.stdout.decode("utf-8", "surrogateescape"))
-        sys.stderr.write(completed.stderr.decode("utf-8", "surrogateescape"))
+                lane=lane,
+            ),
+            stdout=subprocess.PIPE,
+            check=False,
+        )
+    except OSError:
+        # Nothing reviewed this call, and silence here would let it run.
+        return _deny_before_the_runtime_runs(_RUNTIME_LAUNCH_FAILED_CODE)
+    output = completed.stdout.decode("utf-8", "surrogateescape")
+    if completed.returncode != _PROBE_HANDOFF_EXIT:
+        sys.stdout.write(output)
         return completed.returncode
+    try:
+        handoff = _probe_handoff(output)
+        probe_command = _desktop_transition_probe_command(handoff)
+    except (OSError, RuntimeError, ValueError):
+        sys.stdout.write(json.dumps(_fail_closed("PreToolUse"), separators=(",", ":")))
+        return 1
     try:
         probe_result = run_isolated_hook_process(
             probe_command,
-            input_text=data,
+            input_text=handoff["data"],
             cwd=Path.home(),
             environment=isolated_hook_environment(),
             output_limit=_TRANSITION_PROBE_OUTPUT_LIMIT,
-            deadline_monotonic=input_ready_at + timeout_seconds,
+            deadline_monotonic=time.monotonic() + handoff["remaining_seconds"],
         )
     except OSError:
-        sys.stdout.write(json.dumps(_fail_closed(event_name), separators=(",", ":")))
+        sys.stdout.write(json.dumps(_fail_closed("PreToolUse"), separators=(",", ":")))
         return 1
     if (
         probe_result.returncode != 0
@@ -271,11 +228,25 @@ def _desktop_main(
         or probe_result.containment_failed
         or probe_result.output_limit_exceeded
     ):
-        sys.stdout.write(json.dumps(_fail_closed(event_name), separators=(",", ":")))
+        sys.stdout.write(json.dumps(_fail_closed("PreToolUse"), separators=(",", ":")))
         return 1
     sys.stdout.write(probe_result.stdout)
     sys.stderr.write(probe_result.stderr)
     return 0
+
+
+def _probe_handoff(output: str) -> dict[str, Any]:
+    """The probe handoff the runtime wrote; anything else is refused."""
+
+    payload = _json_object(output) or {}
+    if (
+        payload.get("schema") != _PROBE_HANDOFF_SCHEMA
+        or not all(isinstance(payload.get(key), str) for key in ("data", "guard_home", "home", "workspace"))
+        or type(payload.get("timeout_seconds")) is not int
+        or type(payload.get("remaining_seconds")) not in (int, float)
+    ):
+        raise ValueError("codex_hook_probe_handoff_invalid")
+    return payload
 
 
 def _desktop_probe_lane(environment: Mapping[str, str] | None = None) -> bool:
@@ -295,10 +266,12 @@ def _native_argv(
     hook_timeouts: Mapping[str, int],
     manifest_path: str | Path | None,
     config_json: str | None,
+    lane: Sequence[str] = (),
 ) -> tuple[str, ...]:
     return (
         str(native),
         _native_bridge_command(),
+        *lane,
         config_json
         if config_json is not None
         else _native_bridge_config(
@@ -348,55 +321,16 @@ def _native_bridge_config(
 
 
 def _desktop_transition_probe_command(
-    *,
-    data: str,
-    state_path: str | Path,
-    query: str,
-    hook_timeouts: Mapping[str, int],
+    handoff: Mapping[str, Any],
     environment: Mapping[str, str] | None = None,
-) -> tuple[str, ...] | None:
-    """Build the strict signed-proxy path for an authenticated Desktop probe."""
+) -> tuple[str, ...]:
+    """Build the strict signed-proxy path for the probe the runtime handed back."""
 
     source = os.environ if environment is None else environment
-    if not _desktop_probe_lane(source):
-        return None
-
-    payload = _json_object(data)
-    if payload is None or payload.get("hook_event_name") != "PreToolUse":
-        return None
-    from codex_plugin_scanner.guard.runtime_transition_hook_probe import (
-        PROBE_FIELD,
-        transition_hook_probe,
-    )
-
-    if PROBE_FIELD not in payload or transition_hook_probe(payload) is None:
-        return None
-
-    guard_home = Path(state_path)
-    if guard_home.name == "daemon-state.json":
-        guard_home = guard_home.parent
-    if not guard_home.is_absolute():
-        raise RuntimeError("Desktop transition probe has no absolute Guard home")
-
     proxy = desktop_hook_proxy_context(source).get("HOL_GUARD_DESKTOP_HOOK_PROXY")
-    timeout_seconds = hook_timeouts.get("PreToolUse")
-    if proxy is None or type(timeout_seconds) is not int or timeout_seconds <= 0:
-        raise RuntimeError("Desktop transition probe has no signed proxy or valid deadline")
-
-    query_values = parse_qs(query, keep_blank_values=True)
-    home_values = query_values.get("home", [])
-    home = Path(home_values[0]) if len(home_values) == 1 else None
-    workspace_value = payload.get("cwd")
-    workspace = Path(workspace_value) if isinstance(workspace_value, str) else None
-    if (
-        home is None
-        or not home.is_absolute()
-        or workspace is None
-        or not workspace.is_absolute()
-        or "\x00" in str(home)
-        or "\x00" in str(workspace)
-    ):
-        raise RuntimeError("Desktop transition probe has an invalid home or workspace")
+    if proxy is None:
+        raise RuntimeError("Desktop transition probe has no signed proxy")
+    guard_home = Path(handoff["guard_home"])
 
     from codex_plugin_scanner.guard.adapters.bounded_cli_hook_bridge import bounded_cli_hook_command
 
@@ -414,58 +348,17 @@ def _desktop_transition_probe_command(
             "--harness",
             "codex",
             "--home",
-            str(home.resolve(strict=False)),
+            str(Path(handoff["home"]).resolve(strict=False)),
             "--workspace",
-            str(workspace.resolve(strict=False)),
+            str(Path(handoff["workspace"]).resolve(strict=False)),
         ],
         harness="codex",
-        timeout_seconds=float(timeout_seconds),
+        timeout_seconds=float(handoff["timeout_seconds"]),
         require_desktop_proxy=True,
     )
     if len(command) != 10 or command[4] != proxy or command[8] != proxy or command[9] != "1":
         raise RuntimeError("Desktop transition probe did not resolve to its strict signed proxy")
     return command
-
-
-def _bound_hook_input(hook_timeouts: Mapping[str, int]) -> tuple[str, str, float, float, str] | None:
-    """The probe lane's hook body, stamped the way the runtime stamps its own, and as it arrived."""
-
-    raw_data = _hook_input(_MAX_HOOK_INPUT_BYTES)
-    if raw_data is None:
-        return None
-    input_ready_at = time.monotonic()
-    event_name = _event_name(raw_data)
-    timeout_seconds = _request_timeout(event_name, hook_timeouts)
-    data = (
-        _with_browser_wait_process(raw_data, wait_timeout_seconds=max(1.0, timeout_seconds - 1.0))
-        if event_name == "PreToolUse"
-        else raw_data
-    )
-    # Native Git-helper checks need the environment Codex will run the command
-    # in; without it every Git read is treated as unverifiable.
-    return event_name, stamp_hook_input_text(data), timeout_seconds, input_ready_at, raw_data
-
-
-def _with_browser_wait_process(data: str, *, wait_timeout_seconds: float) -> str:
-    payload = _json_object(data)
-    if payload is None:
-        return data
-    process_identity = current_process_identity()
-    if process_identity is None:
-        payload.pop(CODEX_BROWSER_WAIT_PROCESS_KEY, None)
-        payload.pop(CODEX_BROWSER_WAIT_TIMEOUT_SECONDS_KEY, None)
-    else:
-        payload[CODEX_BROWSER_WAIT_PROCESS_KEY] = process_identity
-        payload[CODEX_BROWSER_WAIT_TIMEOUT_SECONDS_KEY] = min(
-            MAX_APPROVAL_WAIT_TIMEOUT_SECONDS,
-            max(1, int(wait_timeout_seconds)),
-        )
-    return json.dumps(payload, ensure_ascii=True, separators=(",", ":"))
-
-
-def _request_timeout(event_name: str, hook_timeouts: Mapping[str, int]) -> float:
-    timeout = hook_timeouts.get(event_name, min(hook_timeouts.values(), default=10))
-    return float(max(1, timeout - _HOOK_TIMEOUT_GRACE_SECONDS))
 
 
 def _registration_failure(
@@ -527,43 +420,6 @@ def _deny_before_the_runtime_runs(reason_code: str) -> int:
 
     data = _hook_input(_MAX_HOOK_INPUT_BYTES)
     event_name = "PreToolUse" if data is None else _event_name(data)
-    sys.stdout.write(json.dumps(_fail_closed(event_name), separators=(",", ":")))
-    _write_failure_cause(reason_code)
-    return 0
-
-
-def _budget_for_the_runtime(
-    *,
-    event_name: str,
-    remaining_seconds: int,
-    hook_timeouts: Mapping[str, int],
-    config_json: str | None,
-) -> tuple[Mapping[str, int], str | None]:
-    """This hook's registration with one event's timeout cut to what is left.
-
-    The runtime subtracts the same grace Python did, so the remainder goes back
-    on as a configured timeout rather than as a deadline of its own.
-    """
-
-    configured = remaining_seconds + _HOOK_TIMEOUT_GRACE_SECONDS
-    timeouts = {str(event): int(timeout) for event, timeout in hook_timeouts.items()}
-    timeouts[event_name] = configured
-    if config_json is None:
-        return timeouts, None
-    config = json.loads(config_json)
-    if not isinstance(config, dict):
-        raise ValueError("codex_hook_bridge_config_not_an_object")
-    registered = config.get("hook_timeouts")
-    config["hook_timeouts"] = {
-        **({str(event): int(timeout) for event, timeout in registered.items()} if isinstance(registered, dict) else {}),
-        event_name: configured,
-    }
-    return timeouts, json.dumps(config, ensure_ascii=False, separators=(",", ":"))
-
-
-def _desktop_denial(event_name: str, reason_code: str) -> int:
-    """Fail a Desktop hook closed once its body has already been read."""
-
     sys.stdout.write(json.dumps(_fail_closed(event_name), separators=(",", ":")))
     _write_failure_cause(reason_code)
     return 0

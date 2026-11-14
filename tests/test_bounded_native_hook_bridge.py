@@ -76,10 +76,9 @@ def test_hook_uses_the_native_bridge_when_the_runtime_offers_it(
     assert "bounded_cli_hook_bridge" in argv[5]
     config = json.loads(argv[6])
     assert config["harness"] == harness
-    # The native bridge restarts an unreachable daemon with this, never Python.
-    start = config["start_command"]
-    assert start[:3] == [sys.executable, "-I", "-c"]
-    assert "schedule_guard_daemon_recovery" in start[3]
+    # The native bridge derives the daemon-start command from the launcher.
+    assert "start_command" not in config
+    assert config["python_executable"] == sys.executable
     assert bounded_python_argv(list(argv)) == list(argv[2:])
 
 

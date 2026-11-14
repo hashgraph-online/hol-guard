@@ -129,6 +129,7 @@ mod claude_hook_bridge_auth_windows;
 mod claude_hook_bridge_fixture;
 mod claude_hook_bridge_http;
 mod claude_hook_bridge_http_text;
+mod claude_hook_bridge_recovery;
 mod claude_hook_bridge_render;
 mod claude_hook_bridge_transport;
 mod claude_hook_bridge_url;

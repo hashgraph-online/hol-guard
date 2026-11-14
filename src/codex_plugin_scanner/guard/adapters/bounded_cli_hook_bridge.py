@@ -31,8 +31,6 @@ from .bounded_cli_hook_native import (
     NATIVE_BOUNDED_HOOK_FEATURE,
     NATIVE_MUSE_HOOK_FEATURE,
     bounded_python_argv,
-    daemon_start_command,
-    frozen_daemon_start_command,
     native_bridge_executable,
 )
 from .bounded_cli_hook_script_template import BOUNDED_HOOK_SCRIPT_TEMPLATE
@@ -160,11 +158,9 @@ def bounded_cli_hook_command(  # NOSONAR(S8495) an argv whose length depends on 
         "timeout_seconds": timeout_seconds,
         "frozen_launcher": frozen_launcher,
     }
+    # The native bridge derives the daemon-start command from this launcher
+    # when the daemon is unreachable.
     grok = harness.strip().lower() == "grok"
-    if frozen_launcher and not grok:
-        config["start_command"] = frozen_daemon_start_command(python_executable, guard_home, cli_args)
-    elif not grok:
-        config["start_command"] = daemon_start_command(python_executable, package_root, guard_home, cli_args)
     bootstrap = _bridge_bootstrap(str(package_root.resolve()))
     config_json = json.dumps(config, ensure_ascii=True, separators=(",", ":"))
     if frozen_launcher:
