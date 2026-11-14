@@ -140,11 +140,15 @@ pub(super) fn apply(spec: &Spec, ctx: &Ctx, fields: &Map<String, Value>) -> Kind
             route(spec, "finish_uninstall", ctx, &finish)
         })
     };
-    // Every answer carries `events`, empty when nothing was written, so the
-    // caller journals one shape.
+    // Every answer but a question carries `events`, empty when nothing was
+    // written, so the caller journals one shape. A question stays the
+    // answer's only key: the adapter answers it and asks again from the start.
+    let asks = matches!(step, Err(Failure::Reply(_)));
     let mut out = answer(step)?;
-    out.as_object_mut()
-        .ok_or(crate::runner_authority_op::ERR_INVALID)?
-        .insert("events".into(), Value::Array(events));
+    if !asks {
+        out.as_object_mut()
+            .ok_or(crate::runner_authority_op::ERR_INVALID)?
+            .insert("events".into(), Value::Array(events));
+    }
     Ok(out)
 }

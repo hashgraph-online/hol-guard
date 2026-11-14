@@ -20,6 +20,7 @@
 mod inspect;
 mod journal;
 mod lease;
+mod lock_files;
 mod output;
 #[cfg(test)]
 mod tests;

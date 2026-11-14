@@ -2445,7 +2445,7 @@
   {
    "verdict": "windows-permissive",
    "note": "The refusal reason reads UNKNOWN instead of an errno name. Diagnostic text only; the lock is still refused, as on Unix.",
-   "file": "rust/crates/guard-runtime/src/transition_files/lease.rs",
+   "file": "rust/crates/guard-runtime/src/transition_files/lock_files.rs",
    "item": "fn errno_name -- non-Unix block",
    "cfg": "not(unix)",
    "body": "69b31ea82930"
@@ -2453,7 +2453,7 @@
   {
    "verdict": "windows-permissive",
    "note": "No stable file-index API, so the opened lock file and the file at the path compare as equal. Python compared st_ino, which Windows fills. A lock file swapped mid-operation is not detected on Windows; the reparse-point check still refuses links.",
-   "file": "rust/crates/guard-runtime/src/transition_files/lease.rs",
+   "file": "rust/crates/guard-runtime/src/transition_files/lock_files.rs",
    "item": "fn identity -- non-Unix block",
    "cfg": "not(unix)",
    "body": "9bebd5124958"
@@ -2461,7 +2461,7 @@
   {
    "verdict": "windows-permissive",
    "note": "Hard-link count is not read off Unix, so a hard-linked lock file is not refused on Windows. The reparse-point check still refuses symlinks and junctions.",
-   "file": "rust/crates/guard-runtime/src/transition_files/lease.rs",
+   "file": "rust/crates/guard-runtime/src/transition_files/lock_files.rs",
    "item": "fn link_count -- non-Unix block",
    "cfg": "not(unix)",
    "body": "1c6bd77b8ee3"
@@ -2469,7 +2469,7 @@
   {
    "verdict": "windows-equivalent",
    "note": "Python skipped the owner and mode check when os.name == 'nt'; the lock directory inherits the account profile's ACL.",
-   "file": "rust/crates/guard-runtime/src/transition_files/lease.rs",
+   "file": "rust/crates/guard-runtime/src/transition_files/lock_files.rs",
    "item": "fn owned_privately -- non-Unix block",
    "cfg": "not(unix)",
    "body": "4639073d86d9"
@@ -2477,7 +2477,7 @@
   {
    "verdict": "windows-equivalent",
    "note": "Python skipped the private-directory mode check when os.name == 'nt'; the directory lives in the account profile and inherits its ACL.",
-   "file": "rust/crates/guard-runtime/src/transition_files/lease.rs",
+   "file": "rust/crates/guard-runtime/src/transition_files/lock_files.rs",
    "item": "fn lifecycle_lock_in -- non-Unix block",
    "cfg": "not(unix)",
    "body": "4a3fc9ddff75"

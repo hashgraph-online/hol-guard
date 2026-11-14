@@ -360,7 +360,7 @@ except TimeoutError:
         victim = tmp_path / "victim"
         victim.write_bytes(b"preserve")
         (directory / "installation.lock").symlink_to(victim)
-        with pytest.raises(OSError), codex_install_transaction(unsafe_home, config, actor="unsafe"):
+        with pytest.raises(CodexHookIntegrityError), codex_install_transaction(unsafe_home, config, actor="unsafe"):
             pytest.fail("symlink was accepted")
         assert victim.read_bytes() == b"preserve"
 

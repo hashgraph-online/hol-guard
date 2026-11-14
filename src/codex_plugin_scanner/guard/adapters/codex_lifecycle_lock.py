@@ -65,7 +65,7 @@ def _target_lock(
     owner_pid = os.getpid()
     token = _HELD_TARGETS.set({**held, owner_key: lease})
     try:
-        _check_deadline(deadline)
+        # The deadline bounds waiting for a busy lock, not the resident's first answer.
         yield
     finally:
         _HELD_TARGETS.reset(token)

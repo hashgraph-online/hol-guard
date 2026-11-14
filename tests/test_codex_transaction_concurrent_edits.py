@@ -8,7 +8,6 @@ import pytest
 
 from codex_plugin_scanner.guard import codex_hook_rollback as rollback
 from codex_plugin_scanner.guard.adapters import codex as adapter_module
-from codex_plugin_scanner.guard.adapters import codex_lifecycle_lock as locks
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.adapters.codex import CodexHarnessAdapter
 from codex_plugin_scanner.guard.codex_hook_file_integrity import CodexHookIntegrityError
@@ -33,9 +32,6 @@ def _interrupt_config_write(
 def test_config_edit_during_failed_write_survives_rollback(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, existing_installation: bool
 ) -> None:
-    profile = tmp_path / "account-profile"
-    profile.mkdir(mode=0o700)
-    monkeypatch.setattr(locks, "_account_home", lambda: profile)
     context = HarnessContext(
         home_dir=tmp_path / "home",
         workspace_dir=None,
@@ -75,9 +71,6 @@ def test_config_edit_during_failed_write_survives_rollback(
 def test_deleted_config_after_publish_preserves_pending_manifest_and_secret(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    profile = tmp_path / "account-profile"
-    profile.mkdir(mode=0o700)
-    monkeypatch.setattr(locks, "_account_home", lambda: profile)
     context = HarnessContext(
         home_dir=tmp_path / "home",
         workspace_dir=None,
@@ -123,9 +116,6 @@ def test_deleted_config_after_publish_preserves_pending_manifest_and_secret(
 def test_failed_write_preserves_substituted_config_targets(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, substitution: str
 ) -> None:
-    profile = tmp_path / "account-profile"
-    profile.mkdir(mode=0o700)
-    monkeypatch.setattr(locks, "_account_home", lambda: profile)
     context = HarnessContext(home_dir=tmp_path / "home", workspace_dir=None, guard_home=tmp_path / "guard-home")
     adapter = CodexHarnessAdapter()
     adapter.install(context)
@@ -187,9 +177,6 @@ def test_failed_descriptor_wrapping_releases_the_open_file(tmp_path: Path, monke
 def test_matching_replacement_is_not_owned_by_the_failed_transaction(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, existing_installation: bool
 ) -> None:
-    profile = tmp_path / "account-profile"
-    profile.mkdir(mode=0o700)
-    monkeypatch.setattr(locks, "_account_home", lambda: profile)
     context = HarnessContext(home_dir=tmp_path / "home", workspace_dir=None, guard_home=tmp_path / "guard-home")
     adapter = CodexHarnessAdapter()
     if existing_installation:
@@ -216,9 +203,6 @@ def test_matching_replacement_is_not_owned_by_the_failed_transaction(
 def test_matching_replacement_after_completed_write_is_preserved(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, existing_installation: bool
 ) -> None:
-    profile = tmp_path / "account-profile"
-    profile.mkdir(mode=0o700)
-    monkeypatch.setattr(locks, "_account_home", lambda: profile)
     context = HarnessContext(home_dir=tmp_path / "home", workspace_dir=None, guard_home=tmp_path / "guard-home")
     adapter = CodexHarnessAdapter()
     if existing_installation:
@@ -250,9 +234,6 @@ def test_matching_replacement_after_completed_write_is_preserved(
 def test_invalid_utf8_snapshot_is_rejected_before_manifest_or_secret_writes(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    profile = tmp_path / "account-profile"
-    profile.mkdir(mode=0o700)
-    monkeypatch.setattr(locks, "_account_home", lambda: profile)
     context = HarnessContext(home_dir=tmp_path / "home", workspace_dir=None, guard_home=tmp_path / "guard-home")
     adapter = CodexHarnessAdapter()
     adapter.install(context)
@@ -288,9 +269,6 @@ def test_matching_bytes_and_inode_with_changed_timestamp_are_not_original_state(
 def test_substituted_target_during_snapshot_is_reported_as_invalid_not_conflict(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    profile = tmp_path / "account-profile"
-    profile.mkdir(mode=0o700)
-    monkeypatch.setattr(locks, "_account_home", lambda: profile)
     context = HarnessContext(home_dir=tmp_path / "home", workspace_dir=None, guard_home=tmp_path / "guard-home")
     adapter = CodexHarnessAdapter()
     adapter.install(context)

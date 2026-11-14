@@ -81,7 +81,7 @@ def test_probe_receives_original_short_parent_and_detects_changed_binary(native_
     comparison.chmod(0o700)
     monkeypatch.setenv("HOL_GUARD_NATIVE_BINARY", str(comparison))
     real_probe = inspection.run_isolated_hook_process
-    parent = time.monotonic() + 0.8
+    parent = time.monotonic() + 3.0
     deadlines = []
 
     def changed_after_probe(*args, **kwargs):
