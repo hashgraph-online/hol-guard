@@ -318,7 +318,9 @@ impl Parser {
                 _ => return None,
             }
         };
-        if self.calls.len() >= MAX_CALLS || command.trim().is_empty() {
+        // JavaScript normalizes a literal CR in a template to LF at runtime.
+        // Reviewing the unnormalized shell text could miss a new command.
+        if self.calls.len() >= MAX_CALLS || command.trim().is_empty() || command.contains('\r') {
             return None;
         }
         self.calls.push(Call {
