@@ -250,7 +250,7 @@ fn exact_shell_command_id(command: &str) -> String {
     )
 }
 
-fn has_selector(matcher: &Value, key: &str) -> bool {
+pub(super) fn has_selector(matcher: &Value, key: &str) -> bool {
     !matcher[key].is_null() && matcher[key] != json!([])
 }
 
@@ -287,10 +287,9 @@ fn scope(
     publisher: &Value,
     harness: &Value,
 ) -> String {
-    if artifact
-        .as_str()
-        .is_some_and(|artifact| artifact.starts_with("family:"))
-    {
+    if artifact.as_str().is_some_and(|artifact| {
+        artifact.starts_with("family:") || artifact.starts_with("risk-group:")
+    }) {
         return if workspace.is_null() {
             "harness"
         } else {
@@ -392,6 +391,7 @@ fn compile_range(
         "commands",
         "harnesses",
         "publishers",
+        "riskGroups",
         "tools",
         "workspaces",
     ]);
@@ -436,6 +436,7 @@ fn compile_range(
             return Err(error("unsupported_policy_match", id));
         }
         let matcher = &rule["match"];
+        let group_artifacts = super::risk_groups::selectors(matcher, &rule["effect"], id)?;
         let command_artifacts = command_artifact_selectors(matcher, id)?;
         let exact_command = command_artifacts.is_some();
         // The hook applies only a block saved under an exact command, so a
@@ -443,9 +444,10 @@ fn compile_range(
         if exact_command && rule["effect"] == "review" {
             return Err(error("unsupported_exact_command_review", id));
         }
-        let artifacts = match command_artifacts {
-            Some(artifacts) => artifacts,
-            None => artifact_selectors(matcher, id)?,
+        let artifacts = match (command_artifacts, group_artifacts) {
+            (Some(artifacts), None) | (None, Some(artifacts)) => artifacts,
+            (Some(_), Some(_)) => return Err(error("unsupported_policy_match", id)),
+            (None, None) => artifact_selectors(matcher, id)?,
         };
         let harnesses = selectors(matcher, "harnesses", id)?;
         let publishers = selectors(matcher, "publishers", id)?;
