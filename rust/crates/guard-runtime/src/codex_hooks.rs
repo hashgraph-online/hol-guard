@@ -84,7 +84,7 @@ pub(crate) struct Issue {
 }
 
 impl Issue {
-    fn warning(&self, source_path: &str) -> String {
+    pub(crate) fn warning(&self, source_path: &str) -> String {
         let mut coordinate = match &self.event_name {
             None => source_path.to_owned(),
             Some(event) => event.clone(),

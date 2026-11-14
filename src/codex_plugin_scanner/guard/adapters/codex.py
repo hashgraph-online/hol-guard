@@ -43,11 +43,6 @@ from ..codex_hook_integrity import (
     snapshot_regular_file,
     write_hook_manifest,
 )
-from ..codex_hook_inventory import (
-    CODEX_HOOK_INVENTORY_UNMANAGED_EXECUTABLE,
-    CodexHookInventory,
-    enumerate_codex_hooks,
-)
 from ..codex_hook_launch_runtime import isolated_daemon_start_command, isolated_guard_cli_command
 from ..codex_hook_manifest import (
     CodexHookManifestSpec,
@@ -59,7 +54,6 @@ from ..codex_hook_manifest import (
 from ..codex_hook_manifest import (
     manifest_bindings as _manifest_bindings,
 )
-from ..codex_hook_owner_preflight import require_codex_inventory_owners
 from ..codex_hook_recovery import (
     commit_hook_publication,
     hook_publication_pending,
@@ -73,6 +67,7 @@ from ..codex_hook_registration import (
     install_managed_codex_hook_groups,
     legacy_binding_fields,
     overlay_live_owned_event_matches,
+    require_codex_hook_owner,
 )
 from ..codex_hook_registration import (
     remove_manifest_bound_hook_events as _remove_manifest_bound_hook_events,
@@ -82,7 +77,6 @@ from ..codex_hook_self_binding import (
     answer_text,
     ask_hook_owners,
     install_fields,
-    self_bound_hook_bindings,
     settle_short_paths,
     short_path_fields,
 )
@@ -399,49 +393,6 @@ def _current_install_legacy_bindings(
     return wire.decode(answer_text(answer, "bindings"))
 
 
-def _recorded_handler_commands(bindings: Sequence[Mapping[str, object]]) -> list[str]:
-    """The handler commands the authenticated manifest says Guard wrote here."""
-
-    commands: list[str] = []
-    for binding in bindings:
-        handler = binding.get("handler")
-        if not isinstance(handler, Mapping):
-            continue
-        command = handler.get("command")
-        if isinstance(command, str):
-            commands.append(command)
-    return commands
-
-
-def _current_install_self_bindings(
-    context: HarnessContext,
-    hooks: Mapping[str, object],
-    *,
-    authenticated_bindings: Sequence[Mapping[str, object]] = (),
-) -> list[dict[str, object]]:
-    """Select the handlers an earlier generation of this same install left behind.
-
-    A Guard handler counts as ours only when it names this Guard home and runs
-    a program inside a root this install controls - the native bridge under
-    the Guard home, or the bridge script inside this install's package. A
-    reinstall replaces those rather than refusing to touch an owner it cannot
-    identify. A Guard-shaped handler launched from anywhere else keeps its
-    conflict, because its spelling proves nothing about who wrote it.
-
-    The one handler containment does not get to decide is one still running a
-    command the authenticated manifest records, which therefore differs from
-    its recorded entry somewhere other than the command. That is an edit made
-    to Guard's own registration from outside Guard, and it is reported rather
-    than silently rewritten.
-    """
-
-    return self_bound_hook_bindings(
-        hooks,
-        guard_home=_runtime_guard_home(context),
-        recorded_commands=_recorded_handler_commands(authenticated_bindings),
-    )
-
-
 def _strip_owned_hooks(
     context: HarnessContext,
     hooks: dict[str, object],
@@ -633,16 +584,14 @@ def prepare_codex_hook_migration(
         (config, config_path, "toml", owned_bindings),
         (hooks, hooks_path, "json", ()),
     ):
-        _require_complete_preactivation_inventory(
-            _codex_hook_inventory(
-                payload,
-                source_path=path,
-                source_scope=scope,
-                source_format=source_format,
-                source_hooks_enabled=enabled,
-                context=context,
-                authenticated_bindings=bindings,
-            )
+        _preactivation_owners(
+            payload,
+            source_path=path,
+            source_scope=scope,
+            source_format=source_format,
+            source_hooks_enabled=enabled,
+            context=context,
+            authenticated_bindings=bindings,
         )
     changed = _migrate_hooks_json_into_config(
         config, hooks, context=context, source_scope=scope, owned_bindings=owned_bindings
@@ -803,8 +752,8 @@ def _publish_codex_alternate_cleanup(change: TransitionFile) -> None:
     RuntimeTransition._compare({"files": [change.payload()]}, "after")
 
 
-def _codex_hook_inventory(
-    payload: dict[str, object],
+def _preactivation_owners(
+    payload: Mapping[str, object],
     *,
     source_path: Path,
     source_scope: str,
@@ -812,33 +761,47 @@ def _codex_hook_inventory(
     source_hooks_enabled: bool,
     context: HarnessContext,
     authenticated_bindings: Sequence[Mapping[str, object]] = (),
-) -> CodexHookInventory:
-    raw_hooks = payload.get("hooks")
-    hooks: dict[str, object] = raw_hooks if isinstance(raw_hooks, dict) else {}
-    legacy_bindings = _current_install_legacy_bindings(context, hooks)
-    return enumerate_codex_hooks(
-        payload,
-        source_path=source_path,
-        source_scope=source_scope,
-        source_format="json" if source_format == "json" else "toml",
-        source_hooks_enabled=source_hooks_enabled,
-        authenticated_bindings=authenticated_bindings,
-        legacy_bindings=legacy_bindings,
-        self_bindings=_current_install_self_bindings(context, hooks, authenticated_bindings=authenticated_bindings),
+) -> list[dict[str, str]]:
+    """Every active handler with a command in one source, once nothing refuses it.
+
+    The native ``preactivation`` op walks the source with this install's
+    legacy and self bindings and refuses as a complete preactivation inventory
+    must: the first issue, then unmanaged executable hooks a disabled source
+    would switch on.
+    """
+
+    hooks = payload.get("hooks")
+    owned = list(authenticated_bindings)
+    wire = _Wire(hooks, owned)
+    answer = ask_hook_owners(
+        "preactivation",
+        hooks=wire.text(hooks),
+        owned=wire.text(owned),
+        tokens=wire.meanings,
+        source_path=str(source_path),
+        scope=source_scope,
+        format="json" if source_format == "json" else "toml",
+        hooks_enabled=source_hooks_enabled,
+        **_legacy_fields(context),
+        **install_fields(_runtime_guard_home(context), None),
     )
+    if "runtime_error" in answer:
+        raise RuntimeError(str(answer["runtime_error"]))
+    owners = answer.get("owners")
+    if not isinstance(owners, list):
+        raise RuntimeError("codex_hook_owners answered without owners")
+    return [{key: str(owner[key]) for key in ("command", "ownership", "coordinate")} for owner in owners]
 
 
-def _require_complete_preactivation_inventory(inventory: CodexHookInventory) -> None:
-    if inventory.issues:
-        issue = inventory.issues[0]
-        raise RuntimeError(f"{issue.reason_code}: {issue.coordinate} in {issue.source_path}. {issue.message}")
-    unmanaged = inventory.unmanaged_active_executables
-    if inventory.records and not inventory.records[0].source_hooks_enabled and unmanaged:
-        coordinates = ", ".join(record.coordinate for record in unmanaged)
-        raise RuntimeError(
-            f"{CODEX_HOOK_INVENTORY_UNMANAGED_EXECUTABLE}: Guard refused to enable existing Codex hook entries "
-            f"without explicit approval; unmanaged executable hooks are present at {coordinates} in "
-            f"{inventory.source_path}. Review or remove those hooks before running install."
+def _require_preactivation_owners(owners: Sequence[Mapping[str, str]], source_path: Path) -> None:
+    """Active commands need a verified owner before install enables the feature."""
+
+    for owner in owners:
+        require_codex_hook_owner(
+            owner["command"],
+            ownership=owner["ownership"],
+            coordinate=owner["coordinate"],
+            source_path=str(source_path),
         )
 
 
@@ -1266,7 +1229,7 @@ class CodexHarnessAdapter(NativeHarnessAdapter):
                 hook_config_payload = config_payloads[config_path]
             hooks_feature_enabled = _payload_has_hooks_feature_enabled(hook_config_payload)
             source_scope = self._scope_for(context, config_path)
-            config_inventory = _codex_hook_inventory(
+            config_owners = _preactivation_owners(
                 hook_config_payload,
                 source_path=config_path,
                 source_scope=source_scope,
@@ -1275,7 +1238,7 @@ class CodexHarnessAdapter(NativeHarnessAdapter):
                 context=context,
                 authenticated_bindings=owned_bindings if config_path == hook_config_path else (),
             )
-            json_inventory = _codex_hook_inventory(
+            json_owners = _preactivation_owners(
                 json_hook_payload,
                 source_path=hooks_path,
                 source_scope=source_scope,
@@ -1283,9 +1246,8 @@ class CodexHarnessAdapter(NativeHarnessAdapter):
                 source_hooks_enabled=hooks_feature_enabled,
                 context=context,
             )
-            _require_complete_preactivation_inventory(config_inventory)
-            _require_complete_preactivation_inventory(json_inventory)
-            require_codex_inventory_owners((config_inventory, json_inventory))
+            _require_preactivation_owners(config_owners, config_path)
+            _require_preactivation_owners(json_owners, hooks_path)
         _require_hook_inventory_sources_unchanged(
             config_payloads=inventory_config_payloads,
             hook_payloads=inventory_hook_payloads,

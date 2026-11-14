@@ -10,7 +10,9 @@
 //! pre-manifest registrations of the current package, `unlaunchable` drops
 //! legacy Guard handlers whose program is gone, and `strip` runs the whole
 //! cleanup an install applies before it writes its own groups. The handlers
-//! an earlier generation of the same install left are in `codex_owner_home`.
+//! an earlier generation of the same install left are in `codex_owner_home`,
+//! and the inventory check an install runs first, `preactivation`, is in
+//! `codex_preactivation`.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
@@ -22,6 +24,7 @@ use serde_json::{json, Map, Value};
 use super::codex::{compact, dict, flag, text};
 use super::codex_merge::{get, pop, py_eq, set, Entries};
 use super::codex_owner_home::{self as home, Cwd, Home};
+use super::codex_preactivation;
 use super::{Failure, Step};
 use crate::cursor_hook_command::{py_space, Syntax};
 use crate::pyjson::{self, PyVal};
@@ -45,6 +48,12 @@ fn op_fields(op: &str) -> Option<Vec<&'static str>> {
         "self" => vec!["hooks", "cwd", "guard_home", "package_root", "recorded"],
         "guard_home" => vec!["command", "cwd"],
         "binds" => vec!["command", "cwd", "guard_home", "package_root"],
+        "preactivation" => [
+            &codex_preactivation::FIELDS[..],
+            &["cwd", "guard_home", "package_root"],
+            &LEGACY,
+        ]
+        .concat(),
         "strip" => [
             &["hooks", "owned", "cwd", "guard_home", "package_root"][..],
             &LEGACY,
@@ -68,14 +77,16 @@ pub(super) fn dispatch(fields: &Map<String, Value>) -> Step<Value> {
     let long_paths = long_paths(fields)?;
     let known: BTreeSet<String> = long_paths.keys().cloned().collect();
     let mut syntax = Syntax::new(flag(fields, "windows")?, long_paths);
-    let answer = run(op, fields, &mut syntax)?;
+    // A refusal over a name not yet expanded may be wrong, so the names
+    // come first.
+    let answer = run(op, fields, &mut syntax);
     let missing: Vec<&String> = syntax
         .short_tokens()
         .iter()
         .filter(|token| !known.contains(*token))
         .collect();
     if missing.is_empty() {
-        Ok(answer)
+        answer
     } else {
         Err(Failure::Reply(json!({ "expand": missing })))
     }
@@ -92,6 +103,7 @@ fn run(op: &str, fields: &Map<String, Value>, syntax: &mut Syntax) -> Step<Value
             let binds = home::binds(text(fields, "command")?, &Home::parse(fields)?, syntax);
             return Ok(json!({ "binds": binds }));
         }
+        "preactivation" => return codex_preactivation::answer(fields, syntax),
         _ => {}
     }
     let mut hooks = dict(fields, "hooks")?;

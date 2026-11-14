@@ -44,6 +44,7 @@ mod codex_files;
 mod codex_merge;
 mod codex_owner_home;
 mod codex_owners;
+mod codex_preactivation;
 mod codex_servers;
 mod copilot;
 mod copilot_install;
