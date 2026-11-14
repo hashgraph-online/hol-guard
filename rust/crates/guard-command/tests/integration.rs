@@ -87,6 +87,7 @@ pub mod pretool_digest_reads;
 pub mod pretool_docker_builder_listings;
 pub mod pretool_docker_start;
 pub mod pretool_doctl_reads;
+pub mod pretool_du_hidden_home;
 pub mod pretool_du_sibling_reads;
 pub mod pretool_empty_read_request;
 pub mod pretool_env_prefix_controls;

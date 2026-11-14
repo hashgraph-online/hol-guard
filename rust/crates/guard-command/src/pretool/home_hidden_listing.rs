@@ -46,6 +46,60 @@ pub(in crate::pretool) fn home_hidden_directory(
         && super::super::resolved_location_allowed(&canonical, home_dir, cwd, false)
 }
 
+/// How many entries a size summary may stat before its proof gives up. A
+/// tool cache worth summarizing in a hook budget holds far fewer; a larger
+/// tree keeps its review rather than stall the decision.
+const MAX_SUMMARY_ENTRIES: usize = 4_096;
+
+/// Whether a size summary of `value` (`du -sh ~/.cache/pip`) prints nothing
+/// but the names [`home_hidden_directory`] already lets a listing print.
+///
+/// `du -s` and `du -d 1` still walk the whole tree to add it up. A walk that
+/// succeeds prints no name below the operand's own entries, but a directory it
+/// cannot read or enter makes it print that directory's full path as an error,
+/// and that path can name a nested hidden or private entry no listing shows.
+/// So every directory below the operand is opened here the way `du` opens it,
+/// through its own `.` entry, which needs both read and search permission, and
+/// every entry is looked up without following links. Any failure, or a tree
+/// larger than [`MAX_SUMMARY_ENTRIES`], keeps the review.
+pub(in crate::pretool) fn home_hidden_size_summary(
+    value: &str,
+    home_dir: Option<&str>,
+    cwd: Option<&str>,
+) -> bool {
+    if !home_hidden_directory(value, home_dir, cwd) {
+        return false;
+    }
+    let Some((canonical, _)) = resolved_home_entry(value, home_dir, cwd) else {
+        return false;
+    };
+    let mut pending = vec![canonical];
+    let mut inspected = 0_usize;
+    while let Some(directory) = pending.pop() {
+        let Ok(entries) = std::fs::read_dir(directory.join(".")) else {
+            return false;
+        };
+        for entry in entries {
+            inspected += 1;
+            if inspected > MAX_SUMMARY_ENTRIES {
+                return false;
+            }
+            let Ok(entry) = entry else {
+                return false;
+            };
+            // `symlink_metadata` never follows a link, as `du` without `-L`
+            // does not; a link is counted by its own size and not entered.
+            let Ok(meta) = std::fs::symlink_metadata(entry.path()) else {
+                return false;
+            };
+            if meta.file_type().is_dir() {
+                pending.push(entry.path());
+            }
+        }
+    }
+    true
+}
+
 /// The canonical path of `value` and its path relative to the home directory,
 /// for a spelling that names an entry of the home directory and nothing else.
 ///
