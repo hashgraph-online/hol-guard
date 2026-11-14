@@ -67,10 +67,47 @@ def test_negated_and_fenced_claims_are_not_claims():
 
 
 def test_the_package_description_must_carry_its_own_limit():
-    unbounded = 'name = "x"\ndescription = "Open-source antivirus for AI agents."\n'
-    bounded = 'description = "Open-source antivirus for AI agents. It does not cover actions outside its hooks."\n'
+    unbounded = '[project]\nname = "x"\ndescription = "Open-source antivirus for AI agents."\n'
+    single_quoted = "[project]\ndescription = 'Open-source antivirus for AI agents.'  # tagline\n"
+    bounded = (
+        '[project]\ndescription = "Open-source antivirus for AI agents. It does not cover actions outside its hooks."\n'
+    )
 
     findings = public_claims.check_package_description("pyproject.toml", unbounded)
 
-    assert [(finding.line, finding.claim) for finding in findings] == [(2, "antivirus")]
+    assert [(finding.line, finding.claim) for finding in findings] == [(3, "antivirus")]
+    assert [f.claim for f in public_claims.check_package_description("pyproject.toml", single_quoted)] == ["antivirus"]
     assert public_claims.check_package_description("pyproject.toml", bounded) == []
+
+
+def test_catalog_pages_and_nested_guides_are_public():
+    pages = {page.relative_to(REPO_ROOT).as_posix() for page in public_claims.public_markdown(REPO_ROOT)}
+
+    assert "docs/guard/catalog-discovery-preparation.md" in pages
+    assert "docs/guard/extensions/README.md" in pages
+    assert public_claims.WORKING_DOCUMENT.search("release-log")
+    assert not public_claims.WORKING_DOCUMENT.search("catalog-discovery-preparation")
+
+
+def test_a_heading_claim_cannot_borrow_a_limit_from_a_sibling_section():
+    sibling = (
+        "## Antivirus for agents\n\nIt reviews actions.\n\n## Other topic\n\nIt does not cover background sessions.\n"
+    )
+    child = "## Antivirus for agents\n\n### Limits\n\nIt does not cover background sessions.\n"
+
+    assert [f.claim for f in public_claims.check_markdown("synthetic.md", sibling)] == ["Antivirus"]
+    assert public_claims.check_markdown("synthetic.md", child) == []
+
+
+def test_html_comments_neither_claim_nor_bound():
+    hidden_limit = "Guard gives complete protection.\n<!-- limitations -->\n"
+    hidden_claim = "<!-- antivirus -->\n\nGuard reviews actions.\n"
+
+    assert [f.claim for f in public_claims.check_markdown("synthetic.md", hidden_limit)] == ["complete protection"]
+    assert public_claims.check_markdown("synthetic.md", hidden_claim) == []
+
+
+def test_an_unrelated_negation_does_not_hide_a_claim():
+    text = "Guard needs no account and provides complete protection.\n"
+
+    assert [f.claim for f in public_claims.check_markdown("synthetic.md", text)] == ["complete protection"]

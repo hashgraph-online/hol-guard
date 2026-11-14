@@ -46,17 +46,17 @@ LIMIT = re.compile(
     r"|\bobserve[- ]only\b",
     re.IGNORECASE,
 )
-NEGATED_CLAIM = re.compile(
-    r"\b(?:not|no|never|without|nor)\b[^.]{0,60}$",
-    re.IGNORECASE,
-)
+# A negation counts only when it governs the claim: "does not claim universal
+# protection", "never disable antivirus". "needs no account and provides
+# complete protection" is still a claim.
+NEGATED_CLAIM = re.compile(r"\b(?:not|never|no|nor)\s+(?:\w+\s+){0,2}$", re.IGNORECASE)
 FOLLOWING_PROSE_BLOCKS = 2
 
 # Public pages that describe what Guard protects. Planning notes, research,
 # execution logs and ADRs are working documents, not product claims.
 PUBLIC_PAGES = ("README.md",)
 PUBLIC_DOC_DIRECTORY = Path("docs/guard")
-WORKING_DOCUMENT = re.compile(r"(?:prd|todo|research|plan|log|handoff|ledger)(?:[-_.]|$)", re.IGNORECASE)
+WORKING_DOCUMENT = re.compile(r"(?:^|[-_.])(?:prd|todo|research|plan|log|handoff|ledger)(?:[-_.]|$)", re.IGNORECASE)
 
 
 @dataclass(frozen=True)
@@ -76,10 +76,11 @@ class Finding:
 class Block:
     line: int
     text: str
-    heading: bool
+    heading: int
     prose: bool
 
 
+_HTML_COMMENT = re.compile(r"<!--.*?-->", re.DOTALL)
 _BADGE_OR_IMAGE = re.compile(r"^\s*(?:\[!\[[^\]]*\]\([^)]*\)\]\([^)]*\)|!\[[^\]]*\]\([^)]*\))\s*$")
 
 
@@ -92,7 +93,18 @@ def _is_prose(lines: list[str]) -> bool:
     return False
 
 
+def _without_comments(text: str) -> str:
+    """Blank HTML comments, keeping their newlines so line numbers hold. Readers never see them."""
+    return _HTML_COMMENT.sub(lambda match: "\n" * match.group(0).count("\n"), text)
+
+
+def _heading_level(line: str) -> int:
+    stripped = line.lstrip()
+    return len(stripped) - len(stripped.lstrip("#"))
+
+
 def _blocks(text: str) -> list[Block]:
+    text = _without_comments(text)
     blocks: list[Block] = []
     current: list[str] = []
     start = 0
@@ -101,8 +113,8 @@ def _blocks(text: str) -> list[Block]:
     def flush() -> None:
         if current:
             joined = "\n".join(current)
-            heading = current[0].lstrip().startswith("#")
-            blocks.append(Block(start, joined, heading, heading or _is_prose(current)))
+            heading = _heading_level(current[0])
+            blocks.append(Block(start, joined, heading, bool(heading) or _is_prose(current)))
             current.clear()
 
     for number, line in enumerate(text.splitlines(), start=1):
@@ -145,9 +157,12 @@ def check_markdown(path: str, text: str) -> list[Finding]:
         claims = _claims(block.text)
         if not claims:
             continue
+        # A paragraph's section ends at the next heading. A heading's section
+        # runs through its subheadings and ends at a heading of its own level
+        # or higher.
         window = [block]
         for following in blocks[index + 1 :]:
-            if following.heading and not block.heading:
+            if following.heading and (not block.heading or following.heading <= block.heading):
                 break
             if following.heading:
                 continue
@@ -161,25 +176,34 @@ def check_markdown(path: str, text: str) -> list[Finding]:
     return findings
 
 
-_DESCRIPTION = re.compile(r'^description\s*=\s*"((?:[^"\\]|\\.)*)"\s*$')
+def _toml_loads(text: str) -> dict[str, object]:
+    try:
+        import tomllib
+    except ModuleNotFoundError:  # Python 3.10
+        import tomli as tomllib
+    return tomllib.loads(text)
+
+
+def _description_line(text: str) -> int:
+    for number, row in enumerate(text.splitlines(), start=1):
+        if re.match(r"\s*description\s*=", row):
+            return number
+    return 1
 
 
 def check_package_description(path: str, text: str) -> list[Finding]:
-    for number, row in enumerate(text.splitlines(), start=1):
-        match = _DESCRIPTION.match(row)
-        if not match:
-            continue
-        description = match.group(1)
-        if LIMIT.search(description):
-            return []
-        return [Finding(path, number, claim) for _, claim in _claims(description)]
-    return []
+    project = _toml_loads(text).get("project")
+    description = project.get("description") if isinstance(project, dict) else None
+    if not isinstance(description, str) or LIMIT.search(description):
+        return []
+    line = _description_line(text)
+    return [Finding(path, line, claim) for _, claim in _claims(description)]
 
 
 def public_markdown(root: Path) -> list[Path]:
     pages = [root / page for page in PUBLIC_PAGES if (root / page).is_file()]
     pages.extend(
-        page for page in sorted((root / PUBLIC_DOC_DIRECTORY).glob("*.md")) if not WORKING_DOCUMENT.search(page.stem)
+        page for page in sorted((root / PUBLIC_DOC_DIRECTORY).rglob("*.md")) if not WORKING_DOCUMENT.search(page.stem)
     )
     return pages
 
