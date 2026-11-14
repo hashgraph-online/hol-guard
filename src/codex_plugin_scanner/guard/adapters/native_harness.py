@@ -13,7 +13,6 @@ from __future__ import annotations
 import base64
 import json
 import os
-import shutil
 import sys
 from collections.abc import Mapping
 from dataclasses import replace
@@ -53,7 +52,14 @@ NATIVE_HARNESSES: tuple[tuple[str, tuple[str, ...], str], ...] = (
 
 #: Ops that render a Pi-family extension, so they carry this process's facts.
 _EXTENSION_OPS = frozenset(
-    {"prepare_install", "prepare_uninstall", "extension_source", "extension_current", "legacy_omp_verified"}
+    {
+        "prepare_install",
+        "prepare_uninstall",
+        "apply_uninstall",
+        "extension_source",
+        "extension_current",
+        "legacy_omp_verified",
+    }
 )
 
 
@@ -120,19 +126,24 @@ def ask(
         request["harness"] = harness
     answer = native_runner_authority(_KIND, request, timeout_seconds=timeout_seconds)
     if len(answer) == 1:
-        if "refusal" in answer:
-            raise ValueError(str(answer["refusal"]))
-        if "os_error" in answer:
-            raise OSError(str(answer["os_error"]))
-        if "not_found" in answer:
-            raise FileNotFoundError(str(answer["not_found"]))
-        if "runtime_error" in answer:
-            raise RuntimeError(str(answer["runtime_error"]))
-        if "integrity" in answer:
-            from ..codex_hook_recovery import _error
-
-            raise _error(str(answer["integrity"]))
+        raise_failure(answer)
     return answer
+
+
+def raise_failure(answer: dict[str, Any]) -> None:
+    """Raise the error a one-key failure answer names; return for any other answer."""
+    if "refusal" in answer:
+        raise ValueError(str(answer["refusal"]))
+    if "os_error" in answer:
+        raise OSError(str(answer["os_error"]))
+    if "not_found" in answer:
+        raise FileNotFoundError(str(answer["not_found"]))
+    if "runtime_error" in answer:
+        raise RuntimeError(str(answer["runtime_error"]))
+    if "integrity" in answer:
+        from ..codex_hook_recovery import _error
+
+        raise _error(str(answer["integrity"]))
 
 
 def _text(answer: dict[str, Any], key: str) -> str:
@@ -312,8 +323,7 @@ class NativeHarnessAdapter(HarnessAdapter):
         return self.prepare_install(context).publish(context.guard_home)
 
     def uninstall(self, context: HarnessContext) -> dict[str, object]:
-        from ...safe_output import write_text_atomic_no_follow
-        from ..codex_hook_integrity import atomic_write_text
+        from .. import native_transition_files
         from ..shims import remove_guard_shim
 
         if self._spec.get("install") == "shim":
@@ -324,26 +334,11 @@ class NativeHarnessAdapter(HarnessAdapter):
         shim = remove_guard_shim(
             self.harness, context, legacy_launcher_names=self.legacy_launcher_names, **self._shim_names()
         )
-        for write in plan["writes"]:
-            target = Path(write["path"])
-            if write.get("parents"):
-                target.parent.mkdir(parents=True, exist_ok=True)
-            if write.get("raw"):
-                target.write_bytes(write["text"].encode("utf-8"))
-            elif write.get("no_follow"):
-                write_text_atomic_no_follow(target, write["text"])
-            elif write.get("mode") is None:
-                target.write_text(write["text"], encoding="utf-8")
-            else:
-                atomic_write_text(target, write["text"], mode=write["mode"])
-        for copy in plan.get("copies", ()):
-            shutil.copy2(copy["from"], copy["to"])
-            Path(copy["from"]).unlink(missing_ok=True)
-        removed: list[str] = []
-        for value in plan["deletes"]:
-            Path(value).unlink(missing_ok=True)
-            removed.append(value)
-        answer = self._ask("finish_uninstall", context, shim=json.dumps(shim), finish=plan["finish"], removed=removed)
+        # The runtime prepares the plan again, refuses it if it changed, and
+        # applies it; the managed writes it made come back for the journal.
+        answer = self._ask("apply_uninstall", context, shim=json.dumps(shim), expected=plan)
+        native_transition_files._replay(answer.pop("events", None), None, None)
+        raise_failure(answer)
         return json.loads(_text(answer, "manifest"))
 
     def diagnostics(self, context: HarnessContext) -> dict[str, object]:

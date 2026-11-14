@@ -58,15 +58,17 @@ def _exception(fault: object) -> BaseException:
 
     if not isinstance(fault, Mapping):
         return TransitionError(_INVALID)
-    if isinstance(fault.get("transition"), str):
-        return TransitionError(fault["transition"])
-    if isinstance(fault.get("integrity"), str) and isinstance(fault.get("message"), str):
-        return CodexHookIntegrityError(fault["integrity"], fault["message"])
-    if isinstance(fault.get("os"), str):
+    transition, integrity = fault.get("transition"), fault.get("integrity")
+    message, os_message = fault.get("message"), fault.get("os")
+    if isinstance(transition, str):
+        return TransitionError(transition)
+    if isinstance(integrity, str) and isinstance(message, str):
+        return CodexHookIntegrityError(integrity, message)
+    if isinstance(os_message, str):
         number = fault.get("errno")
         if isinstance(number, int) and not isinstance(number, bool):
-            return OSError(number, fault["os"])
-        return OSError(fault["os"])
+            return OSError(number, os_message)
+        return OSError(os_message)
     return TransitionError(_INVALID)
 
 
@@ -142,7 +144,7 @@ def _ask(
 def compare_files(files: list[object], generation: str, *, inverse: bool = False) -> None:
     """``RuntimeTransition._compare``: every file still holds ``generation``."""
 
-    request = {"op": "compare", "files": files, "generation": generation, "inverse": inverse}
+    request: dict[str, object] = {"op": "compare", "files": files, "generation": generation, "inverse": inverse}
     _ask(request, plan=files)
 
 
@@ -162,7 +164,7 @@ def publish_files(
     """``PreparedHarnessInstall.publish``: the whole plan, restored on failure."""
 
     payloads = [change.payload() for change in files]
-    request = {"op": "publish", "files": payloads, "removals": removals, "rollback": rollback}
+    request: dict[str, object] = {"op": "publish", "files": payloads, "removals": removals, "rollback": rollback}
     _ask(request, plan=payloads, files=files, on_write=on_write)
 
 

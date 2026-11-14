@@ -110,10 +110,8 @@ fn set_mode(path: &Path, mode: u32) -> std::io::Result<()> {
 }
 
 /// `atomic_write_bytes(path, payload, mode=mode, private=False)`.
-pub(super) fn managed_write(path: &Path, payload: &[u8], mode: u32) -> Step<Value> {
-    let parent = path
-        .parent()
-        .ok_or_else(|| Fault::Transition("files_invalid"))?;
+pub(crate) fn managed_write(path: &Path, payload: &[u8], mode: u32) -> Step<Value> {
+    let parent = path.parent().ok_or(Fault::Transition("files_invalid"))?;
     fs::create_dir_all(parent)?;
     match fs::symlink_metadata(path) {
         Ok(meta) if meta.file_type().is_symlink() || !meta.is_file() => {
@@ -170,9 +168,9 @@ pub(super) fn restore_absent(path: &Path) -> Step<Value> {
 }
 
 #[cfg(unix)]
-pub(super) use posix::{remove_no_follow, write_no_follow};
+pub(crate) use posix::{remove_no_follow, write_no_follow};
 #[cfg(windows)]
-pub(super) use windows::{remove_no_follow, write_no_follow};
+pub(crate) use windows::{remove_no_follow, write_no_follow};
 
 #[cfg(unix)]
 #[path = "output_posix.rs"]

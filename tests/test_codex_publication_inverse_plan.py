@@ -9,7 +9,7 @@ from dataclasses import replace
 import pytest
 
 from codex_plugin_scanner.guard import codex_hook_file_integrity as integrity
-from codex_plugin_scanner.guard import runtime_transition
+from codex_plugin_scanner.guard import native_runner_authority
 from codex_plugin_scanner.guard.adapters.codex import _hook_manifest_spec
 from codex_plugin_scanner.guard.codex_hook_file_integrity import CodexHookIntegrityError
 from codex_plugin_scanner.guard.codex_hook_integrity import hook_secret_path
@@ -194,16 +194,23 @@ def test_inverse_plan_forwards_original_deadline_to_artifact_comparison(installe
     before = participant_digests(context, config, manifest)
     with codex_install_transaction(context.guard_home, config, actor="review-artifact-deadline"):
         plan = prepare_authenticated_hook_publication_inverse(_hook_manifest_spec(context))
-        clock = [0.0]
-        monkeypatch.setattr(integrity.time, "monotonic", lambda: clock[0])
+        monkeypatch.setattr(integrity.time, "monotonic", lambda: 0.0)
+        forwarded: list[object] = []
+        ask = native_runner_authority.native_runner_authority
 
-        def expires_during_digest(*_args, **_kwargs):
-            clock[0] = 2.0
-            runtime_transition._check_inverse_deadline()
-            raise AssertionError("Original deadline was not forwarded to artifact hashing")
+        def expires_in_the_resident(kind: str, request: dict[str, object], **kwargs: object) -> dict[str, object]:
+            if kind != "transition_files":
+                return ask(kind, request, **kwargs)
+            budget = request["budget"]
+            assert isinstance(budget, dict)
+            forwarded.append(min(value for value in budget.values() if isinstance(value, int)))
+            # The resident sees the original deadline already spent.
+            spent = {name: None if value is None else 0 for name, value in budget.items()}
+            return ask(kind, {**request, "budget": spent}, **kwargs)
 
-        monkeypatch.setattr(runtime_transition, "_artifact_digest", expires_during_digest)
+        monkeypatch.setattr(native_runner_authority, "native_runner_authority", expires_in_the_resident)
         with pytest.raises(TransitionError) as failure, integrity.hook_validation_deadline(1.0):
             plan.compare_before()
         assert failure.value.reason == "deadline_exceeded"
+        assert forwarded and forwarded[0] == 1000
     assert participant_digests(context, config, manifest) == before

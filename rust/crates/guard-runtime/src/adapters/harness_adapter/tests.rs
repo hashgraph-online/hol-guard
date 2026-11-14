@@ -176,6 +176,45 @@ fn devin_install_backs_up_the_config_and_records_state() {
 }
 
 #[test]
+fn apply_uninstall_runs_the_plan_it_prepares_and_journals_managed_writes() {
+    let home = Home::new();
+    let config = home.home().join(".config/devin/config.json");
+    fs::create_dir_all(config.parent().unwrap()).unwrap();
+    fs::write(&config, "{}\n").unwrap();
+    let install = home.ask(
+        "devin",
+        "prepare_install",
+        json!({"shim": shim(), "hook_argv": ["/py", "hook"]}),
+    );
+    for file in install["files"].as_array().unwrap() {
+        let path = Path::new(file["path"].as_str().unwrap());
+        fs::create_dir_all(path.parent().unwrap()).unwrap();
+        fs::write(path, after(file)).unwrap();
+    }
+    let plan = home.ask("devin", "prepare_uninstall", json!({}));
+    let state = plan["deletes"][0].as_str().unwrap().to_owned();
+    let stale = home.ask(
+        "devin",
+        "apply_uninstall",
+        json!({"shim": shim(), "expected": {"writes": [], "deletes": []}}),
+    );
+    assert!(stale["runtime_error"].is_string(), "{stale}");
+    assert!(Path::new(&state).exists());
+    let applied = home.ask(
+        "devin",
+        "apply_uninstall",
+        json!({"shim": shim(), "expected": plan}),
+    );
+    assert!(applied["manifest"].is_string(), "{applied}");
+    assert_eq!(
+        applied["events"][0]["mutation"]["operation"],
+        json!("publish")
+    );
+    assert!(!Path::new(&state).exists());
+    assert!(!fs::read_to_string(&config).unwrap().contains("/py hook"));
+}
+
+#[test]
 fn muse_hook_outlasts_the_approval_wait() {
     let home = Home::new();
     let answer = home.ask("muse", "hook_spec", json!({}));

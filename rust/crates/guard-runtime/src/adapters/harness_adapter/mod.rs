@@ -87,6 +87,7 @@ mod pi_extension;
 mod proof;
 mod settings_hooks;
 mod simple;
+mod uninstall_apply;
 mod which;
 mod zcode;
 
@@ -261,6 +262,9 @@ pub(crate) fn dispatch(args: &Value) -> KindResult {
         .and_then(Value::as_str)
         .ok_or(ERR_INVALID)?;
     let spec = describe::spec(harness).ok_or(ERR_INVALID)?;
+    if op == "apply_uninstall" {
+        return uninstall_apply::apply(spec, &ctx, fields);
+    }
     answer(if op == "default_launch" {
         default_launch(spec, &ctx, fields)
     } else {

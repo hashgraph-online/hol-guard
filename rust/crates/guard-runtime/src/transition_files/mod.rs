@@ -29,6 +29,8 @@ use serde_json::{json, Map, Value};
 
 use crate::runner_authority_op::{KindResult, ERR_INVALID};
 
+pub(crate) use output::{managed_write, write_no_follow};
+
 /// The plan sizes `_record_files` accepts, with room for an install that
 /// publishes beside them.
 const MAX_FILES: usize = 256;

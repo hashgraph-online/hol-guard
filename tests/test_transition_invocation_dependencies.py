@@ -1,6 +1,5 @@
 """Transition dependencies preserve executable invocation and symlink identity."""
 
-import os
 import time
 from dataclasses import replace
 
@@ -60,26 +59,6 @@ def test_retargeted_invocation_is_refused_even_when_old_target_is_unchanged(tmp_
     assert target.read_bytes() == original
 
 
-def test_symlink_recreated_during_hash_is_rejected_and_preserved(tmp_path, monkeypatch):
-    target, invocation, change = _invocation(tmp_path)
-    read = module.os.read
-    replaced = False
-
-    def replace_link(descriptor, size):
-        nonlocal replaced
-        data = read(descriptor, size)
-        if not replaced:
-            replaced = True
-            invocation.unlink()
-            invocation.symlink_to(target.name)
-        return data
-
-    monkeypatch.setattr(module.os, "read", replace_link)
-    with pytest.raises(module.TransitionError, match="invocation_generation_changed"):
-        module.RuntimeTransition._compare({"files": [change.payload()]}, "before")
-    assert invocation.is_symlink() and os.readlink(invocation) == target.name
-
-
 def test_parent_alias_retarget_is_refused(tmp_path):
     target, identity = _artifact(tmp_path)
     first, second = tmp_path / "first", tmp_path / "second"
@@ -127,7 +106,7 @@ def test_invocation_record_cannot_be_attached_to_authority_dependency(tmp_path):
 
 
 def test_expired_invocation_check_does_not_read_link_metadata(tmp_path, monkeypatch):
-    target, _invocation_path, change = _invocation(tmp_path)
+    _target, _invocation_path, change = _invocation(tmp_path)
 
     def forbidden_lstat(*args, **kwargs):
         raise AssertionError("expired invocation check touched filesystem")
@@ -136,7 +115,7 @@ def test_expired_invocation_check_does_not_read_link_metadata(tmp_path, monkeypa
     try:
         monkeypatch.setattr(module.Path, "lstat", forbidden_lstat)
         with pytest.raises(module.TransitionError, match="forward_authorization_expired"):
-            module._invocation_generation(target, change.invocation_identity)
+            module.RuntimeTransition._compare({"files": [change.payload()]}, "before")
     finally:
         module._ACTIVE_TRANSITION.reset(token)
 

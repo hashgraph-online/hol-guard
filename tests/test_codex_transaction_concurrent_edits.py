@@ -13,8 +13,8 @@ from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.adapters.codex import CodexHarnessAdapter
 from codex_plugin_scanner.guard.codex_hook_file_integrity import CodexHookIntegrityError
 from codex_plugin_scanner.guard.codex_hook_integrity import hook_manifest_path, hook_secret_path
-from codex_plugin_scanner.guard.codex_hook_recovery import _decode
-from codex_plugin_scanner.guard.runtime_transition import RuntimeTransition
+from codex_plugin_scanner.guard.runtime_transition import TransitionFile
+from tests.transition_fault_support import interrupt_publication_at
 
 
 def _interrupt_config_write(
@@ -22,20 +22,11 @@ def _interrupt_config_write(
 ) -> None:
     """Run ``interfere`` in place of the install's first config write, which then fails."""
 
-    original = RuntimeTransition._write_file
-    pending = True
+    def interrupted(change: TransitionFile) -> None:
+        assert change.after is not None
+        interfere(change.after)
 
-    def interrupted(change: dict[str, object], generation: str) -> None:
-        nonlocal pending
-        if pending and generation == "after" and Path(str(change["path"])) == config_path:
-            pending = False
-            rendered = _decode(change["after"])
-            assert rendered is not None
-            interfere(rendered)
-            raise OSError("injected configuration write failure")
-        original(change, generation)
-
-    monkeypatch.setattr(RuntimeTransition, "_write_file", staticmethod(interrupted))
+    interrupt_publication_at(monkeypatch, config_path, OSError("injected configuration write failure"), interrupted)
 
 
 @pytest.mark.parametrize("existing_installation", [False, True])
