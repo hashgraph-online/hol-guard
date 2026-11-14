@@ -333,7 +333,7 @@ fn decisions(
 /// `scoped_policy_artifact_key` stores it: a known `risk-group:<group>` id is
 /// kept, so the hook can find the row and it never reads as a rule for every
 /// action in the harness.
-fn scoped_artifact_key(artifact_id: Option<&str>) -> Option<String> {
+pub(crate) fn scoped_artifact_key(artifact_id: Option<&str>) -> Option<String> {
     match artifact_id.and_then(|id| id.strip_prefix("risk-group:")) {
         Some(group) if crate::command_risk_groups::is_risk_group(group) => {
             artifact_id.map(str::to_owned)
