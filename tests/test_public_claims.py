@@ -164,3 +164,9 @@ def test_a_list_item_ends_the_sentence_a_negation_sits_in():
     text = "Guard does not\n- complete protection\n"
 
     assert [f.claim for f in public_claims.check_markdown("synthetic.md", text)] == ["complete protection"]
+
+
+def test_a_negation_wrapped_inside_a_blockquote_still_governs_the_claim():
+    text = "> Guard does not\n> provide complete protection.\n"
+
+    assert public_claims.check_markdown("synthetic.md", text) == []

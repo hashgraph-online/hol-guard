@@ -57,9 +57,10 @@ NEGATED_CLAIM = re.compile(
 )
 # "no blind spots" and "without limitations" deny a limit; they do not state one.
 # A sentence ends at terminal punctuation or where a list item, table row,
-# heading or quote starts on a new line. A plain line wrap inside a sentence
+# or heading starts on a new line. A plain line wrap inside a sentence
 # does not end it, so a negation wrapped onto the previous line still counts.
-SENTENCE_BOUNDARY = re.compile(r"[.!?]|\n\s*(?:[-*+|#>]|\d+[.)])\s")
+SENTENCE_BOUNDARY = re.compile(r"[.!?]|\n\s*(?:[-*+|#]|\d+[.)])\s")
+QUOTE_CONTINUATION = re.compile(r"\n\s*>\s?")
 NEGATED_LIMIT = re.compile(r"\b(?:no|without|zero|free\s+of)\s+(?:\w+\s+)?$", re.IGNORECASE)
 FOLLOWING_PROSE_BLOCKS = 2
 
@@ -168,7 +169,10 @@ def _claims(text: str) -> list[tuple[int, str]]:
     for match in CLAIM.finditer(text):
         boundaries = list(SENTENCE_BOUNDARY.finditer(text, 0, match.start()))
         sentence_start = boundaries[-1].end() if boundaries else 0
-        if NEGATED_CLAIM.search(text[sentence_start : match.start()]):
+        # A blockquote repeats its marker on every wrapped line; it continues
+        # the sentence, so drop it before looking for a governing negation.
+        prefix = QUOTE_CONTINUATION.sub("\n", text[sentence_start : match.start()])
+        if NEGATED_CLAIM.search(prefix):
             continue
         found.append((text.count("\n", 0, match.start()), match.group(0)))
     return found
