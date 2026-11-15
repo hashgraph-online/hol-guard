@@ -45,16 +45,20 @@ def _snapshot(config_path: Path) -> bytes:
         ) from exc
 
 
+def _json_bytes(hooks_json_path: Path) -> bytes | None:
+    return read_config_bytes(hooks_json_path) if hooks_json_path.is_file() else None
+
+
 def _user_json_hooks(
     context: HarnessContext,
     hooks_json_path: Path,
+    data: bytes | None,
     owned_bindings: Sequence[Mapping[str, object]],
 ) -> dict[str, object] | None:
     """The hooks left in ``hooks.json``, which uninstall keeps, without any Guard handler."""
 
     from .codex import _strip_owned_hooks
 
-    data = read_config_bytes(hooks_json_path) if hooks_json_path.is_file() else None
     try:
         payload = parse_json_object(data, path=hooks_json_path, label="Codex hooks file")
     except RuntimeError:
@@ -89,7 +93,8 @@ def restore_without_guard(
     if isinstance(hooks, dict):
         cleaned = _strip_owned_hooks(context, hooks, owned_bindings)
         follow_hook_state(hooks, cleaned, config_path)
-    json_hooks = _user_json_hooks(context, hooks_json_path, owned_bindings)
+    json_bytes = _json_bytes(hooks_json_path)
+    json_hooks = _user_json_hooks(context, hooks_json_path, json_bytes, owned_bindings)
     wire = _Wire(current, *(part for part in (backup, cleaned, json_hooks) if part is not None))
     answer = _codex(
         "uninstall_restore",
@@ -100,11 +105,11 @@ def restore_without_guard(
         json_hooks=None if json_hooks is None else wire.text(json_hooks),
         tokens=wire.meanings,
     )
-    # The answer describes the snapshot. An edit made meanwhile is not
-    # overwritten with it; the user runs uninstall again.
-    if read_config_bytes(config_path) != current_bytes:
+    # The answer describes the snapshot of both files. An edit made meanwhile
+    # is not overwritten with it; the user runs uninstall again.
+    if read_config_bytes(config_path) != current_bytes or _json_bytes(hooks_json_path) != json_bytes:
         raise RuntimeError(
-            f"codex_uninstall_config_changed: the Codex config at {config_path} changed while Guard was "
+            f"codex_uninstall_config_changed: the Codex config at {config_path} or its hooks file changed while Guard was "
             "uninstalling, so Guard left it and the install backup in place. Run `hol-guard uninstall codex` again."
         )
     if answer.get("delete") is True:
