@@ -141,3 +141,22 @@ def test_an_answer_after_the_window_is_still_reported(tmp_path):
     )
     payload, code = run_approval_wait_command(argparse.Namespace(request_id="req-1", timeout=0), store=store)
     assert (payload["resolution_action"], code) == ("allow", 0)
+
+
+def _raise_store_error():
+    import sqlite3
+
+    raise sqlite3.OperationalError("locked")
+
+
+@pytest.mark.parametrize(
+    "binding, row",
+    [
+        (_raise_store_error, {"status": "pending", "created_at": "2026-10-22T11:00:00Z"}),
+        (lambda: {"oauth_subject_hash": "subject"}, {"status": "pending", "created_at": "not-a-time"}),
+    ],
+)
+def test_an_unreadable_deadline_keeps_the_plain_timeout(binding, row):
+    store = SimpleNamespace(get_approval_request=lambda _id: dict(row), get_review_event_oauth_binding=binding)
+    payload, code = run_approval_wait_command(argparse.Namespace(request_id="req-1", timeout=0), store=store)
+    assert (payload["error"], payload["status"], code) == ("approval_wait_timeout", "pending", 2)
