@@ -297,7 +297,7 @@ fn a_host_that_fails_open_is_disclosed_and_never_claims_live_block_proof() {
                 )
                 .to_lowercase();
                 assert!(
-                    disclosure.contains("fail") || disclosure.contains("continue"),
+                    discloses_fail_open(&disclosure),
                     "{harness} {name} fails open without saying so"
                 );
                 assert_ne!(
@@ -314,4 +314,24 @@ fn a_host_that_fails_open_is_disclosed_and_never_claims_live_block_proof() {
         }
     }
     assert!(fail_open >= 1, "the contract lost its fail-open rows");
+}
+
+/// Whether public text tells the user the host lets the action continue when
+/// the hook fails. A sentence that only mentions failures does not count.
+fn discloses_fail_open(text: &str) -> bool {
+    let text = text.to_lowercase();
+    ["fails open", "fail open", "fail-open", "continue"]
+        .iter()
+        .any(|phrase| text.contains(phrase))
+}
+
+#[test]
+fn fail_open_disclosure_must_say_the_host_continues() {
+    assert!(!discloses_fail_open("Hook failures block the action."));
+    assert!(discloses_fail_open(
+        "Auto-wake and subagent prompts are passive; Grok fails open if the hook process crashes or times out."
+    ));
+    assert!(discloses_fail_open(
+        "Prompt hook failures return a bounded response that lets the prompt continue."
+    ));
 }
