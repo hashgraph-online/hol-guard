@@ -488,6 +488,7 @@ fn sensitive_reason(family: &str) -> &'static str {
         "SSH client config" => "Guard treats SSH config as sensitive because it may reveal or shape host credentials.",
         "GnuPG key material" => "Guard treats GnuPG key material as sensitive because it can unlock encrypted assets.",
         "Terraform variable secrets" => "Guard treats Terraform variable files as sensitive because they often contain secrets.",
+        "Wrangler local secrets file" => "Guard treats .dev.vars as sensitive because Wrangler keeps a worker's local secrets there.",
         _ => "Guard treats wallet and private-key files as sensitive because they can authorize account control.",
     }
 }
