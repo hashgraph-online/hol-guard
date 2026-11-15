@@ -1036,7 +1036,7 @@ fn rewritten_command_list(command: &str) -> Option<String> {
 fn rewritten_command_list_at(command: &str, home_dir: Option<&str>) -> Option<String> {
     for_loop_unroll::unroll_at(command, home_dir)
         .or_else(|| control_flow_flatten::flatten(command))
-        .or_else(|| control_flow_chain::spliced(command))
+        .or_else(|| control_flow_chain::spliced(command, home_dir))
         .or_else(|| list_wrapper::unwrapped(command))
 }
 

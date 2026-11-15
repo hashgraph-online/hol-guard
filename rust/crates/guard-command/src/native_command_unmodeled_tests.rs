@@ -112,9 +112,9 @@ fn unmodeled_commands_with_literal_redirects_are_reviewable() {
 fn quoted_regex_alternation_does_not_synthesize_a_program() {
     let controls = controls(github("enabled", None), false);
     let command = "diff -u a/README.md b/README.md | grep -E \"^@@|^[+-]\" | grep -vE \"^(\\+\\+\\+|---)\" | sed -n '190,260p'; echo \"=== other files ===\"; for f in a b; do echo \"--- $f\"; diff a/$f b/$f | head -8; done";
+    // Every step only reads, and the loop is written out where it stands.
     let (action, reason) = decision(&controls, command);
-    assert_eq!(action, "review", "{reason}");
-    assert_ne!(reason, "native_command_extension_evaluation_failed");
+    assert_eq!(action, "allow", "{reason}");
     // A quoted expansion in command position still synthesizes a program.
     assert_eq!(
         decision(&controls, "for f in a b; do \"$f|x\" y; done").1,
