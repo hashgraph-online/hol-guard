@@ -103,3 +103,27 @@ fn every_oh_my_pi_note_asks_to_skip_the_todo_list_on_a_small_fix() {
     }
     assert!(SKIP_THE_LIST.contains("skip the todo list"));
 }
+
+/// Claude Code shows the model only a preview of hook context over 10,000
+/// characters, so a longer note is cut to fit, with no code block left open,
+/// and still ends with the hint. Other harnesses keep the whole note.
+#[test]
+fn a_long_claude_code_note_is_cut_to_fit() {
+    let block = "src/a.py:1-3\n```\ndef f():\n    return 1\n```\n";
+    let long = block.repeat(400);
+    for harness in ["claude-code", "codex"] {
+        let mut response = json!({"hookSpecificOutput": {"additionalContext": ""}});
+        add_context(&mut response, &long);
+        end_note(&mut response, harness, 0, None);
+        let text = response["hookSpecificOutput"]["additionalContext"]
+            .as_str()
+            .unwrap();
+        if harness == "codex" {
+            assert!(text.len() > long.len());
+            continue;
+        }
+        assert!(text.chars().count() < 10_000, "{}", text.len());
+        assert_eq!(text.matches("```").count() % 2, 0);
+        assert!(text.contains(CUT) && text.ends_with(BATCHING));
+    }
+}

@@ -52,15 +52,52 @@ pub(super) fn end_note(
         _ => return,
     };
     let hint = seen::hint();
-    if context_len(response) <= before
-        || session.is_some_and(|session| seen::earlier(session).contains(&hint))
-    {
+    let add = context_len(response) > before
+        && !session.is_some_and(|session| seen::earlier(session).contains(&hint));
+    if harness == "claude-code" {
+        fit(response, if add { ending.len() + 2 } else { 0 });
+    }
+    if !add {
         return;
     }
     add_context(response, ending);
     if let Some(session) = session {
         seen::remember(session, &[hint]);
     }
+}
+
+/// Claude Code saves hook context longer than 10,000 characters to a file
+/// and shows the model only its first 2,000, so the map after a change note
+/// is lost. A longer note is cut at a line that leaves no code block open.
+const CLAUDE_MAX_CHARS: usize = 9_500;
+const CUT: &str = "(The rest of this note was cut to fit.)";
+
+fn fit(response: &mut Value, reserve: usize) {
+    let Some(text) = response.pointer_mut("/hookSpecificOutput/additionalContext") else {
+        return;
+    };
+    let max = CLAUDE_MAX_CHARS.saturating_sub(reserve);
+    if let Some(kept) = text.as_str().and_then(|text| cut(text, max)) {
+        *text = Value::String(kept);
+    }
+}
+
+/// `text` cut to at most `max` characters, or `None` when it fits.
+fn cut(text: &str, max: usize) -> Option<String> {
+    if text.chars().count() <= max {
+        return None;
+    }
+    let room = max.saturating_sub(CUT.len() + 1);
+    let end = text
+        .char_indices()
+        .nth(room)
+        .map_or(text.len(), |(at, _)| at);
+    let mut kept = &text[..text[..end].rfind('\n').unwrap_or(0)];
+    if kept.matches("```").count() % 2 == 1 {
+        let open = kept.rfind("```").unwrap_or(0);
+        kept = &kept[..kept[..open].rfind('\n').unwrap_or(0)];
+    }
+    Some(format!("{kept}\n{CUT}"))
 }
 
 /// The session a prompt belongs to, found the way `attach` finds it.
