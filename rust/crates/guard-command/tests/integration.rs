@@ -101,6 +101,7 @@ pub mod pretool_extension_allow_unmodelled_git;
 pub mod pretool_extension_allow_worktree_entry;
 pub mod pretool_fd_bracket_route_root;
 pub mod pretool_fd_hidden_home_root;
+pub mod pretool_fd_hidden_walk;
 pub mod pretool_fd_sibling_root;
 pub mod pretool_feature_directory_reads;
 pub mod pretool_fetch_then_read;
