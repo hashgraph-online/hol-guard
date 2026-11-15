@@ -143,7 +143,9 @@ pub fn mask_closed_heredoc_bodies(command: &str, heredocs: &[ShellHeredoc]) -> S
 /// A comment that is the whole statement, with only blanks since the start,
 /// a `;` or a newline, takes its newline too: left in place, the blank line
 /// read as an empty step. A comment after a word keeps its newline, which
-/// still ends that word's command.
+/// still ends that word's command. After a word, only a `#` followed by a
+/// blank opens a comment here: `delete #3 --hard` names an item to a tool's
+/// author, and keeping that text can only show more than the shell runs.
 pub fn mask_shell_comments(command: &str) -> String {
     if !command.contains('#')
         || command.contains('`')
@@ -184,7 +186,9 @@ pub fn mask_shell_comments(command: &str) -> String {
                 index += 2;
                 continue;
             }
-            '#' if word_start => {
+            '#' if word_start
+                && (statement_start || chars.get(index + 1).is_none_or(|c| c.is_whitespace())) =>
+            {
                 while chars.get(index).is_some_and(|value| *value != '\n') {
                     chars[index] = ' ';
                     index += 1;

@@ -402,9 +402,9 @@ fn word_start_comments_are_blanked_in_place() {
         ("ls # a\nrm y", "ls    \nrm y"),
         ("ls;#x\npwd", "ls;   pwd"),
         ("ls \\\n# x\nrm y", "ls \\\n   \nrm y"),
-        ("ls|#x\nwc", "ls|  \nwc"),
+        ("ls|# x\nwc", "ls|   \nwc"),
         ("ls\t# x", "ls\t   "),
-        ("ls \\\n#x; rm y", "ls \\\n        "),
+        ("ls #\npwd", "ls  \npwd"),
     ] {
         let masked = mask_shell_comments(command);
         assert_eq!(masked, expected, "{command:?}");
@@ -420,6 +420,8 @@ fn a_hash_that_opens_no_comment_is_kept() {
         "echo 'x'#y; rm y",
         "echo \\#y; rm y",
         "echo a\\\n#x; rm y",
+        "ls \\\n#x; rm y",
+        "agi-memory delete #3 --hard",
         "echo 'a # b'; rm y",
         "echo \"a # b\"; rm y",
         "echo $'a\\'b # x'; rm y",

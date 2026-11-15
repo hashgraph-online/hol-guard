@@ -72,6 +72,7 @@ fn visit(text: &str, depth: usize, out: &mut Spellings, seen: &mut HashSet<Strin
         out.complete = false;
         return;
     }
+    let commented = guard_command::rich_command_model_api::mask_shell_comments(text) != text;
     let parsed = parse_command(&CommandModelRequestV1 {
         command: text.to_owned(),
         dialect: "posix".into(),
@@ -79,7 +80,7 @@ fn visit(text: &str, depth: usize, out: &mut Spellings, seen: &mut HashSet<Strin
         extraction_provenance: "guard-shell".into(),
     });
     match parsed {
-        Ok(model) if model.confidence == "exact" && !model.segments.is_empty() => {
+        Ok(model) if model.confidence == "exact" && !model.segments.is_empty() && !commented => {
             for segment in &model.segments {
                 for spelling in segment_spellings(segment) {
                     out.push(seen, spelling);
@@ -100,8 +101,9 @@ fn visit(text: &str, depth: usize, out: &mut Spellings, seen: &mut HashSet<Strin
         }
         _ => {
             // The parser does not model groups such as `(npm publish)` or
-            // heredocs. Each step outside quotes and heredoc bodies is read on
-            // its own instead.
+            // heredocs, and blanks a `#` comment that a shell with comments
+            // off reads as text. Each step outside quotes and heredoc bodies
+            // is read on its own instead.
             let words = guard_command::rich_command_model_api::shell_tokens_without_redirects(
                 text.trim(),
                 0,
@@ -122,12 +124,10 @@ fn visit(text: &str, depth: usize, out: &mut Spellings, seen: &mut HashSet<Strin
                 }
             }
             // Bash reads `((` as arithmetic only when it parses as one, and
-            // runs `((npm publish); true)` as nested groups. A `#` starts a
-            // comment, except inside `${…}` and similar words. Every reading
-            // is listed; an extra text can only add a match. A shell can mix
-            // the two comment readings on one line, so a quote either one
-            // leaves open may hide a step: the line is read through only
-            // when both close their quotes.
+            // runs `((npm publish); true)` as nested groups. Every reading,
+            // with `#` comments and without, is listed; an extra text only
+            // adds a match. A shell can mix the two readings on one line, so
+            // the line is read through only when both close their quotes.
             let (mut found, closed) = steps(text, true, true);
             let (plain, plain_closed) = steps(text, true, false);
             out.complete &= closed && plain_closed;
