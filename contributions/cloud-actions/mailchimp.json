@@ -390,6 +390,7 @@
       },
       "response": {
         "maxBytes": 131072,
+        "emptyOk": true,
         "fields": [
           {
             "name": "error_title",
