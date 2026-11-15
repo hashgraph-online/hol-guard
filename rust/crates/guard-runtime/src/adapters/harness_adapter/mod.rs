@@ -42,6 +42,7 @@ mod codex;
 mod codex_files;
 mod codex_merge;
 mod codex_servers;
+mod codex_uninstall;
 mod copilot;
 mod copilot_install;
 mod copilot_mcp;
