@@ -39,6 +39,7 @@ function normalizeEventStates(value) {
     return [{
       event,
       tools,
+      surface: optionalText(entry.surface),
       transport: optionalText(entry.transport),
       mode: optionalText(entry.mode),
       state: entry.state,
@@ -47,7 +48,8 @@ function normalizeEventStates(value) {
   });
 }
 function eventProtectionName(item) {
-  return item.tools.length > 0 ? `${item.event} [${item.tools.join(", ")}]` : item.event;
+  const name = item.tools.length > 0 ? `${item.event} [${item.tools.join(", ")}]` : item.event;
+  return item.surface ? `${name} · ${item.surface}` : name;
 }
 function protectionStateLabel(state) {
   return state ? PROTECTION_STATE_COPY[state].label : UNKNOWN_PROTECTION_LABEL;
