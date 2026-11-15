@@ -21,13 +21,24 @@ pub(super) fn uninstall(ask: &Ask) -> Step<Doc> {
     let state = cursor::digest_path(ctx, &hooks, "hooks-", "state");
     within_root(ctx, &ctx.guard_home, &backup, "Cursor hook backup")?;
     within_root(ctx, &ctx.guard_home, &state, "Cursor hook state")?;
-    let mut restored = restore(ctx, &backup, &hooks, "The Cursor hooks backup")?;
-    if restored {
+    // Strip Guard's own entries first: the file may hold hooks the user added
+    // after install, which a restore of the pre-install backup would discard.
+    // The backup is the fallback only when the hooks file is missing or
+    // unreadable. A readable file without Guard's entries (removed by hand, or
+    // cleaned by an earlier uninstall that could not delete the backup) is
+    // already the user's file and is left as it is.
+    let outcome = if ctx.absolute(&hooks).is_file() {
+        remove_managed(ask, &hooks, &script, &backup)?
+    } else {
+        Removal::Unreadable
+    };
+    let restored = match outcome {
+        Removal::Removed => true,
+        Removal::AlreadyClean => false,
+        Removal::Unreadable => restore(ctx, &backup, &hooks, "The Cursor hooks backup")?,
+    };
+    if restored || outcome == Removal::AlreadyClean {
         unlink_file(ctx, &backup)?;
-        unlink_file(ctx, &state)?;
-    }
-    if !restored && ctx.absolute(&hooks).is_file() && remove_managed(ask, &hooks, &script)? {
-        restored = true;
         unlink_file(ctx, &state)?;
     }
     if ctx.absolute(&script).is_file() {
@@ -50,22 +61,40 @@ pub(super) fn uninstall(ask: &Ask) -> Step<Doc> {
     Ok(result)
 }
 
-/// `_remove_managed_hook_entries`: whether Guard's entries were removed.
-fn remove_managed(ask: &Ask, hooks: &Path, script: &Path) -> Step<bool> {
+/// What uninstall found in the hooks file.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Removal {
+    /// Guard's entries were removed, or the backup was restored in their place.
+    Removed,
+    /// The file is readable and holds none of Guard's entries.
+    AlreadyClean,
+    /// The file could not be read or parsed.
+    Unreadable,
+}
+
+/// `_remove_managed_hook_entries`. When nothing but Guard's hooks remain,
+/// the pre-install backup (if any) is the user's file and is restored in
+/// place of deleting it.
+fn remove_managed(ask: &Ask, hooks: &Path, script: &Path, backup: &Path) -> Step<Removal> {
     let ctx = ask.ctx;
     let Ok(text) = std::fs::read_to_string(ctx.absolute(hooks)) else {
-        return Ok(false);
+        return Ok(Removal::Unreadable);
     };
     let Ok(payload) = pyjson::parse(&text) else {
-        return Ok(false);
+        return Ok(Removal::Unreadable);
     };
     let (cleaned, removed) = without_managed(ask, &payload, &path_text(&ctx.resolved(script)))?;
     if !removed {
-        return Ok(false);
+        return Ok(Removal::AlreadyClean);
     }
     match cleaned {
+        None if ctx.absolute(backup).is_file() => {
+            if !restore(ctx, backup, hooks, "The Cursor hooks backup")? {
+                unlink(ctx, hooks)?;
+            }
+        }
         None => unlink(ctx, hooks)?,
         Some(cleaned) => write_authorized(ctx, hooks, &rendered(&cleaned)?)?,
     }
-    Ok(true)
+    Ok(Removal::Removed)
 }

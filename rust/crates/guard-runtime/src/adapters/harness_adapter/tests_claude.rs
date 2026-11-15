@@ -7,6 +7,9 @@ use serde_json::{json, Map, Value};
 
 use super::{after, dispatch, shim, Home};
 
+#[path = "tests_claude_round_trip.rs"]
+mod round_trip;
+
 fn facts(bridge: Option<&str>, frozen: bool) -> String {
     json!({
         "bridge": bridge,
