@@ -67,6 +67,47 @@ fn a_digit_run_given_to_a_token_secret_or_key_name_is_a_secret() {
 }
 
 #[test]
+fn credential_names_containing_metadata_substrings_remain_secrets() {
+    // Synthetic values: metadata must be a full name segment, not the "count"
+    // in account, "min" in admin, "port" in support, or "time" in runtime.
+    let fake = joined(&["8372", "91046"]);
+    for name in [
+        "account_token",
+        "service_account_key",
+        "admin_secret",
+        "support_key",
+        "passport_token",
+        "runtime_secret",
+        "accountToken",
+        "adminSecret",
+        "supportKey",
+        "runtimeSecret",
+    ] {
+        let text = format!("{name} = '{fake}'\n");
+        assert!(holds_bare_secret(&text), "{text}");
+    }
+}
+
+#[test]
+fn whole_metadata_segments_still_exempt_counters_and_expirations() {
+    let fake = joined(&["8372", "91046"]);
+    for name in [
+        "max_tokens",
+        "token_ttl",
+        "token_expires_at",
+        "token_created_at",
+        "secret_rotation_time",
+        "maxTokens",
+        "secretRotationTime",
+        "tokenExpiresAt",
+        "portKey",
+    ] {
+        let text = format!("{name} = '{fake}'\n");
+        assert!(!holds_bare_secret(&text), "{text}");
+    }
+}
+
+#[test]
 fn counting_runs_and_round_numbers_are_not_secrets() {
     for text in [
         "max_tokens = \"100000000\"\n",
