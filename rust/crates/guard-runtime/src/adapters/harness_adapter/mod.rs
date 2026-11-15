@@ -54,6 +54,7 @@ mod codex_python_imports;
 mod codex_python_values;
 mod codex_servers;
 mod codex_uninstall;
+mod codex_uninstall_config;
 mod copilot;
 mod copilot_install;
 mod copilot_mcp;

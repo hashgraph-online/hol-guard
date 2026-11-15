@@ -117,7 +117,7 @@ fn install_groups(base: &Map<String, Value>, hooks: &str, managed: &PyVal) -> St
 
 /// `remap_hook_state`: each state entry follows its handler. Without an
 /// answer the table is left as it was.
-fn remap(
+pub(super) fn remap(
     ctx: &Ctx,
     base: &Map<String, Value>,
     before: &[(String, PyVal)],

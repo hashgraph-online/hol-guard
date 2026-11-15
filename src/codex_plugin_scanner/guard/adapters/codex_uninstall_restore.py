@@ -1,120 +1,49 @@
-"""Codex uninstall: undo the install's changes to the config and keep the user's later ones.
+"""Codex uninstall: the main config the uninstall writes.
 
-The native ``uninstall_restore`` harness-adapter op decides what to put back.
-This module reads the two payloads, strips Guard's hooks with the adapter's
-existing helper, carries each remaining hook's saved state to its new
-position, and returns the bytes the uninstall transition publishes.
+The native ``uninstall_config`` harness-adapter op reads both payloads,
+strips Guard's hooks, carries each remaining hook's saved state to its new
+position, puts back what the install changed and renders the result. This
+module only sends it the captured bytes.
 """
 
 from __future__ import annotations
 
+import base64
 from collections.abc import Mapping, Sequence
 from pathlib import Path
 
-from ..codex_config import dump_toml
-from ..codex_hook_sources import parse_json_object, parse_toml_object
-from ..codex_hook_trust import remap_hook_state
 from .base import HarnessContext
-
-
-def follow_hook_state(before: Mapping[str, object], cleaned: dict[str, object], config_path: Path) -> None:
-    """Move ``[hooks.state]`` with the hooks that stay once Guard's groups are gone.
-
-    Codex keys hook state by position, so removing Guard's groups moves every
-    later hook up. Without this, a hook the user trusted would keep its trusted
-    hash at its old key and Codex would skip it. State left only for removed
-    handlers is dropped, and an emptied table goes with it.
-    """
-
-    remap_hook_state(before, cleaned, config_path)
-    if cleaned.get("state") == {}:
-        cleaned.pop("state")
-
-
-def _json_bytes(hooks_json_path: Path) -> bytes | None:
-    """The hooks file's bytes, None when it is absent, or a stop when it exists and cannot be read."""
-
-    if not hooks_json_path.exists():
-        return None
-    try:
-        return hooks_json_path.read_bytes()
-    except OSError as exc:
-        raise RuntimeError(
-            f"codex_uninstall_config_unreadable: Guard could not read the Codex hooks file at {hooks_json_path}, "
-            "so it left the config and the install backup in place. Repair the file's permissions and run "
-            "`hol-guard uninstall codex` again."
-        ) from exc
-
-
-def _user_json_hooks(
-    context: HarnessContext,
-    hooks_json_path: Path,
-    data: bytes | None,
-    owned_bindings: Sequence[Mapping[str, object]],
-) -> dict[str, object] | None:
-    """The hooks left in ``hooks.json``, which uninstall keeps, without any Guard handler."""
-
-    from .codex import _strip_owned_hooks
-
-    try:
-        payload = parse_json_object(data, path=hooks_json_path, label="Codex hooks file")
-    except RuntimeError:
-        # Codex cannot run hooks from a file it cannot parse, and uninstall
-        # leaves the file as it is, so it holds no hook that needs the feature.
-        return None
-    hooks = payload.get("hooks")
-    return _strip_owned_hooks(context, hooks, owned_bindings) if isinstance(hooks, dict) else None
 
 
 def render_without_guard(
     context: HarnessContext,
     config_path: Path,
     current_bytes: bytes,
-    original_text: str,
+    original: bytes | None,
     owned_bindings: Sequence[Mapping[str, object]],
     *,
     hooks_json_path: Path,
-) -> bytes | None:
-    """The config without what the install added, keeping every later edit; None deletes it."""
+) -> tuple[bool, bytes | None]:
+    """Whether the config goes, and its new bytes; None bytes keep the current ones."""
 
-    from .codex import _codex, _reply_text, _strip_owned_hooks, _Wire
+    import json
 
-    current = parse_toml_object(current_bytes, path=config_path, label="Codex config file")
-    backup = (
-        parse_toml_object(original_text.encode("utf-8"), path=config_path, label="Codex config backup")
-        if original_text
-        else None
-    )
-    hooks = current.get("hooks")
-    cleaned: dict[str, object] | None = None
-    if isinstance(hooks, dict):
-        cleaned = _strip_owned_hooks(context, hooks, owned_bindings)
-        follow_hook_state(hooks, cleaned, config_path)
-    json_bytes = _json_bytes(hooks_json_path)
-    json_hooks = _user_json_hooks(context, hooks_json_path, json_bytes, owned_bindings)
-    wire = _Wire(current, *(part for part in (backup, cleaned, json_hooks) if part is not None))
-    answer = _codex(
-        "uninstall_restore",
-        context,
-        payload=wire.text(current),
-        backup=None if backup is None else wire.text(backup),
-        hooks=None if cleaned is None else wire.text(cleaned),
-        json_hooks=None if json_hooks is None else wire.text(json_hooks),
-        tokens=wire.meanings,
-    )
-    # The answer describes this snapshot of the hooks file. The publish checks
-    # the config itself; an edit made meanwhile is not overwritten.
-    if _json_bytes(hooks_json_path) != json_bytes:
-        raise RuntimeError(
-            f"codex_uninstall_config_changed: the Codex config at {config_path} or its hooks file changed while "
-            "Guard was uninstalling, so Guard left them and the install backup in place. Run "
-            "`hol-guard uninstall codex` again."
-        )
-    if answer.get("delete") is True:
-        return None
-    if answer.get("changed") is not True:
-        return current_bytes
-    rendered = wire.decode(_reply_text(answer, "rendered"))
-    # Nothing changed since install: put back the user's exact bytes.
-    text = original_text if rendered == backup else dump_toml(rendered, original=current_bytes)
-    return text.encode("utf-8")
+    from ..codex_hook_self_binding import install_fields, settle_short_paths, short_path_fields
+    from .codex import _codex, _legacy_fields, _runtime_guard_home
+
+    def encoded(data: bytes | None) -> str | None:
+        return None if data is None else base64.b64encode(data).decode("ascii")
+
+    request: dict[str, object] = {
+        "config": str(config_path),
+        "hooks_json": str(hooks_json_path),
+        "current": encoded(current_bytes),
+        "original": encoded(original),
+        "owned": json.dumps(list(owned_bindings), separators=(",", ":")),
+        **_legacy_fields(context),
+        **install_fields(_runtime_guard_home(context), None),
+        **short_path_fields(),
+    }
+    answer = settle_short_paths(lambda: _codex("uninstall_config", context, **request), request, "uninstall_config")
+    text = answer.get("text")
+    return answer.get("delete") is True, text.encode("utf-8") if isinstance(text, str) else None

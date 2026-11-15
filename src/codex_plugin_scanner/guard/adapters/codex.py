@@ -60,9 +60,6 @@ from ..codex_hook_registration import (
     legacy_binding_fields,
     overlay_live_owned_event_matches,
 )
-from ..codex_hook_registration import (
-    remove_manifest_bound_hook_events as _remove_manifest_bound_hook_events,
-)
 from ..codex_hook_rollback import require_unchanged_config_for_rollback, rollback_file_identity
 from ..codex_hook_self_binding import (
     answer_text,
@@ -94,7 +91,7 @@ from .codex_remote_control import (
     guarded_codex_launch_command_candidates,
     guarded_codex_launch_command_from_prefix,
 )
-from .codex_uninstall_restore import follow_hook_state, render_without_guard
+from .codex_uninstall_restore import render_without_guard
 from .mcp_relay_native import mcp_proxy_launch, python_proxy_launch
 from .mcp_servers import (
     ManagedMcpServer,
@@ -331,18 +328,6 @@ def _legacy_fields(context: HarnessContext, registration: _HookRegistration | No
         legacy_argv=[sys.executable, *legacy_tail],
         legacy_status_messages=_LEGACY_MANAGED_HOOK_STATUS_MESSAGES,
     )
-
-
-def _current_install_legacy_bindings(
-    context: HarnessContext,
-    hooks: dict[str, object],
-    registration: _HookRegistration | None = None,
-) -> list[dict[str, object]]:
-    """Select exact current bridge entries for explicit legacy re-adoption only."""
-
-    wire = _Wire(hooks)
-    answer = ask_hook_owners("legacy", hooks=wire.text(hooks), **_legacy_fields(context, registration))
-    return wire.decode(answer_text(answer, "bindings"))
 
 
 def _strip_owned_hooks(
@@ -593,22 +578,16 @@ def _alternate_cleanup(
     managed_server_names: Sequence[str],
 ) -> tuple[dict[str, object], bool, bool]:
     """The cleaned payload, and whether it or its hook tables changed."""
-    legacy: tuple[dict[str, object], bool] | None = None
-    hooks = payload.get("hooks")
-    if remove_hooks and isinstance(hooks, dict):
-        bindings = _current_install_legacy_bindings(context, hooks)
-        cleaned, removed = _remove_manifest_bound_hook_events(hooks, bindings)
-        legacy = (cleaned, bool(removed))
-    wire = _Wire(payload, *(() if legacy is None else (legacy[0],)))
-    answer = _codex(
-        "alternate_cleanup",
-        context,
-        payload=wire.text(payload),
-        remove_hooks=remove_hooks,
-        legacy=None if legacy is None else {"removed": legacy[1], "cleaned": wire.text(legacy[0])},
-        managed_server_names=list(managed_server_names),
-        tokens=wire.meanings,
-    )
+    wire = _Wire(payload)
+    request: dict[str, object] = {
+        "payload": wire.text(payload),
+        "remove_hooks": remove_hooks,
+        "managed_server_names": list(managed_server_names),
+        "tokens": wire.meanings,
+        **_legacy_fields(context),
+        **short_path_fields(),
+    }
+    answer = settle_short_paths(lambda: _codex("alternate_cleanup", context, **request), request, "alternate_cleanup")
     rendered = wire.decode(_reply_text(answer, "rendered"))
     return rendered, answer.get("changed") is True, answer.get("hooks_changed") is True
 
@@ -1158,14 +1137,10 @@ class CodexHarnessAdapter(NativeHarnessAdapter):
         if backup is not None:
             after = backup or None
             if current is not None:
-                after = render_without_guard(
-                    context,
-                    target,
-                    current,
-                    backup.decode("utf-8"),
-                    owned,
-                    hooks_json_path=self._hooks_path(context),
+                delete, text = render_without_guard(
+                    context, target, current, backup, owned, hooks_json_path=self._hooks_path(context)
                 )
+                after = None if delete else (current if text is None else text)
             files.append(TransitionFile(target, current, after, before_mode=mode_of(target, current), no_follow=True))
             files.append(
                 TransitionFile(
@@ -1178,20 +1153,13 @@ class CodexHarnessAdapter(NativeHarnessAdapter):
                 )
             )
         elif current is not None:
-            payload = parse_toml_object(current, path=target, label="Codex config file")
-            hooks = payload.get("hooks")
-            if owned and isinstance(hooks, dict):
-                cleaned, removed = _remove_manifest_bound_hook_events(hooks, owned)
-                if removed:
-                    follow_hook_state(hooks, cleaned, target)
-                    if cleaned:
-                        payload["hooks"] = cleaned
-                    else:
-                        payload.pop("hooks", None)
-                    rendered = dump_toml(payload, original=current).encode("utf-8")
-                    files.append(
-                        TransitionFile(target, current, rendered, before_mode=mode_of(target, current), no_follow=True)
-                    )
+            _delete, rendered = render_without_guard(
+                context, target, current, None, owned, hooks_json_path=self._hooks_path(context)
+            )
+            if rendered is not None:
+                files.append(
+                    TransitionFile(target, current, rendered, before_mode=mode_of(target, current), no_follow=True)
+                )
         files.extend(
             prepare_codex_alternate_cleanup(context, config_path=config_path)
             for config_path, _hooks_path in self._config_hook_pairs(context)

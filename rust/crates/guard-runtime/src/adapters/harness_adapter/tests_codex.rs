@@ -13,6 +13,8 @@ mod config_hooks;
 mod migration;
 #[path = "tests_codex_uninstall.rs"]
 mod uninstall;
+#[path = "tests_codex_uninstall_config.rs"]
+mod uninstall_config;
 
 const SHELL_BEGIN: &str = "# >>> HOL Guard Codex shell guard >>>";
 const SHELL_END: &str = "# <<< HOL Guard Codex shell guard <<<";
@@ -274,9 +276,15 @@ fn readback_and_subset_refuse_a_lost_group() {
 #[test]
 fn alternate_cleanup_drops_guard_entries_and_the_idle_hook_feature() {
     let home = Home::new();
+    let status = "HOL Guard checking Bash command";
+    let current = json!({
+        "type": "command",
+        "command": "/py -I /pkg/bridge.py '{\"a\":1}'",
+        "statusMessage": status,
+    });
     let payload = json!({
         "features": {"hooks": true},
-        "hooks": {"PreToolUse": [group("guard", 5)]},
+        "hooks": {"PreToolUse": [{"matcher": "Bash", "hooks": [current]}]},
         "mcp_servers": {
             "managed": {"command": "npx", "args": ["server"]},
             "user": {"command": "npx", "args": ["mine"]},
@@ -289,8 +297,13 @@ fn alternate_cleanup_drops_guard_entries_and_the_idle_hook_feature() {
         json!({
             "payload": payload,
             "remove_hooks": true,
-            "legacy": {"removed": true, "cleaned": "{}"},
             "managed_server_names": ["managed"],
+            "expected": json!([{"event": "PreToolUse", "group": {"matcher": "Bash"}}]).to_string(),
+            "argv": ["/py", "-I", "/pkg/bridge.py", "{\"a\":1}"],
+            "legacy_argv": ["/old", "x"],
+            "statuses": [status],
+            "windows": false,
+            "long_paths": {},
         }),
     );
     assert_eq!(answer["changed"], true);

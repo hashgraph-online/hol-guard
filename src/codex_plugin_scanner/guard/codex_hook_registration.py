@@ -38,17 +38,6 @@ def remove_unlaunchable_guard_hook_events(
     return wire.decode(answer_text(answer, "hooks")), answer.get("changed") is True
 
 
-def remove_manifest_bound_hook_events(
-    hooks: dict[str, object],
-    bindings: Sequence[Mapping[str, object]],
-) -> tuple[dict[str, object], bool]:
-    """Remove only handlers whose exact identity is authenticated by a manifest."""
-
-    wire = _Wire(hooks, list(bindings))
-    answer = ask_hook_owners("remove", hooks=wire.text(hooks), bindings=wire.text(list(bindings)))
-    return wire.decode(answer_text(answer, "hooks")), answer.get("changed") is True
-
-
 def legacy_binding_fields(
     *,
     expected_bindings: Sequence[Mapping[str, object]],
@@ -238,6 +227,5 @@ __all__ = [
     "live_owned_codex_event_matches",
     "missing_guard_hook_program",
     "overlay_live_owned_event_matches",
-    "remove_manifest_bound_hook_events",
     "require_codex_hook_owner",
 ]

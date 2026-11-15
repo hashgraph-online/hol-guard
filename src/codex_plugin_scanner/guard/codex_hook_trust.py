@@ -7,8 +7,8 @@ identity. Guard's frozen runtime binds hook commands to a versioned executable, 
 install or update invalidates trust until the user trusts the hooks again in Codex.
 
 The runtime's ``codex-hook-trust`` command hashes handlers and answers which state keys
-are stale, which to record and where each one moves. It names keys, never entries, so
-this module edits its own table and nothing it holds is round-tripped through JSON.
+are stale. Install records trust and moves state in the native adapter; this module
+only reads the answer doctor needs.
 """
 
 from __future__ import annotations
@@ -41,29 +41,6 @@ def codex_command_hook_hash(event_name: str, matcher: object, handler: Mapping[s
     return digest if isinstance(digest, str) else None
 
 
-def remap_hook_state(before: Mapping[str, object], hooks: dict[str, object], config_path: Path) -> None:
-    """Follow each hook's state to the coordinate its handler now occupies.
-
-    Codex keys ``[hooks.state]`` by position, so removing Guard's own groups and
-    appending their replacements moves every later hook up, and another hook's
-    ``enabled = false`` would switch the new Guard hook off unseen. A handler that
-    moved carries its state, one that is gone leaves it behind, and a Guard handler
-    replaced by exactly one Guard handler on the same event hands over only a
-    switched-off choice. Without the runtime the table is left as it was.
-    """
-
-    state = hooks.get("state")
-    if not isinstance(state, dict) or not state:
-        return
-    answer = _ask(_table_request("remap", hooks, config_path, before=before))
-    moved = answer.get("state") if answer is not None else None
-    if not isinstance(moved, list):
-        return
-    hooks["state"] = {
-        str(key): state[source] if isinstance(source, str) else {"enabled": False} for key, source in moved
-    }
-
-
 def stale_guard_hook_coordinates(payload: Mapping[str, object], config_path: Path) -> list[str]:
     """Return state keys of Guard-managed hooks whose stored trust is missing or stale.
 
@@ -78,39 +55,6 @@ def stale_guard_hook_coordinates(payload: Mapping[str, object], config_path: Pat
     if not isinstance(stale, list):
         raise RuntimeError("codex_hook_trust_unavailable")
     return [str(key) for key in stale]
-
-
-def record_guard_hook_trust(payload: dict[str, object], config_path: Path) -> list[str]:
-    """Trust the Guard hooks this install just wrote, and return the keys recorded.
-
-    Codex runs a user-layer hook only when ``[hooks.state]`` records a trusted hash
-    for it. Guard writes those hook entries into the user's own config as an
-    explicit, user-invoked install, so recording trust claims no authority the
-    install did not already exercise. Only Guard's own live handlers are touched,
-    only with the hash of the entry being written, and a handler the user switched
-    off in ``/hooks`` keeps that choice. Raises ``RuntimeError`` when the runtime
-    cannot answer, so an install never writes hooks Codex would skip.
-    """
-
-    hooks = payload.get("hooks")
-    if not isinstance(hooks, dict):
-        return []
-    state = hooks.get("state")
-    state_map: dict[str, object] = state if isinstance(state, dict) else {}
-    answer = _ask(_table_request("record", hooks, config_path))
-    recorded = answer.get("recorded") if answer is not None else None
-    if not isinstance(recorded, list):
-        raise RuntimeError("codex_hook_trust_unavailable")
-    keys: list[str] = []
-    for key, source, digest in recorded:
-        existing = state_map.get(source) if isinstance(source, str) else None
-        entry: dict[str, object] = {**existing} if isinstance(existing, Mapping) else {}
-        entry["trusted_hash"] = digest
-        state_map[str(key)] = entry
-        keys.append(str(key))
-    if keys or isinstance(state, dict):
-        hooks["state"] = state_map
-    return keys
 
 
 def codex_hook_trust_stale(payload: object, config_path: Path) -> bool:
@@ -134,9 +78,7 @@ def apply_codex_hook_trust_doctor(payload: dict[str, object], hook_state: Mappin
         payload["setup_status"] = "partial"
 
 
-def _table_request(
-    op: str, hooks: Mapping[str, object], config_path: Path, *, before: Mapping[str, object] | None = None
-) -> dict[str, object]:
+def _table_request(op: str, hooks: Mapping[str, object], config_path: Path) -> dict[str, object]:
     state = hooks.get("state")
     request: dict[str, object] = {
         "op": op,
@@ -144,10 +86,8 @@ def _table_request(
         "state": [[str(key), _jsonable(entry)] for key, entry in state.items()] if isinstance(state, Mapping) else [],
         # Codex keys hook state by the canonical config path.
         "prefixes": list(dict.fromkeys((str(_resolved(config_path)), str(config_path)))),
-        "guard_commands": sorted(_guard_commands(hooks) | _guard_commands(before or {})),
+        "guard_commands": sorted(_guard_commands(hooks)),
     }
-    if before is not None:
-        request["before_events"] = _events(before)
     return request
 
 

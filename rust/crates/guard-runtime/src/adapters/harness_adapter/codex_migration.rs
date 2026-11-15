@@ -56,7 +56,7 @@ pub(super) fn migration(ctx: &Ctx, fields: &Map<String, Value>) -> Step<Value> {
 
     let (before_config, config_mode) = existing(ctx, &config_path)?;
     let (before_hooks, hooks_mode) = existing(ctx, &hooks_path)?;
-    let config_entries = read_toml(before_config.as_deref(), &config_path)?;
+    let config_entries = read_toml(before_config.as_deref(), &config_path, "Codex config file")?;
     let hooks = read_json(before_hooks.as_deref(), &hooks_path)?;
     let mut avoid = Vec::new();
     strings(&PyVal::Dict(hooks.clone()), &mut avoid);
@@ -157,14 +157,18 @@ fn encoded(bytes: Option<&[u8]>) -> Option<String> {
 }
 
 /// `parse_toml_object` over the captured bytes.
-fn read_toml(data: Option<&[u8]>, path: &Path) -> Step<Vec<(String, codex_toml_read::TomlVal)>> {
+pub(super) fn read_toml(
+    data: Option<&[u8]>,
+    path: &Path,
+    label: &str,
+) -> Step<Vec<(String, codex_toml_read::TomlVal)>> {
     let Some(data) = data else {
         return Ok(Vec::new());
     };
     let refused = |reason: &str| {
         Failure::Runtime(format!(
-            "{reason}: Guard could not parse Codex config file at {}. Repair the TOML before \
-             retrying install.",
+            "{reason}: Guard could not parse {label} at {}. Repair the TOML before retrying \
+             install.",
             path_text(path)
         ))
     };
@@ -204,7 +208,7 @@ fn read_json(data: Option<&[u8]>, path: &Path) -> Step<Vec<(String, PyVal)>> {
     }
 }
 
-fn strings(value: &PyVal, out: &mut Vec<String>) {
+pub(super) fn strings(value: &PyVal, out: &mut Vec<String>) {
     match value {
         PyVal::Str(text) => out.push(text.clone()),
         PyVal::List(items) => items.iter().for_each(|item| strings(item, out)),
@@ -368,7 +372,11 @@ fn migrate(
 }
 
 /// `dump_toml(config, original=before)`.
-fn render(config: &str, tokens: &Map<String, Value>, original: Option<&[u8]>) -> Step<String> {
+pub(super) fn render(
+    config: &str,
+    tokens: &Map<String, Value>,
+    original: Option<&[u8]>,
+) -> Step<String> {
     let original = original.map(|bytes| String::from_utf8_lossy(bytes).into_owned());
     let answer = crate::codex_toml_render::dispatch(&json!({
         "payload": config,
