@@ -467,6 +467,14 @@
    "body": "262b56d8df28"
   },
   {
+   "verdict": "windows-unsupported",
+   "note": "The nested mkdir carve-out walks Unix temporary roots and owner/mode bits, so off Unix `mkdir -p` with a missing parent keeps the existing single-level screen and its review.",
+   "file": "rust/crates/guard-command/src/pretool/temporary_directories.rs",
+   "item": "pub(super) fn nested_temporary_directory(_value: &str, _context: PathContext<'_>) -> bool",
+   "cfg": "not(unix)",
+   "body": "d9a8c9194e1f"
+  },
+  {
    "file": "rust/crates/guard-command/src/pretool/trusted_location.rs",
    "item": "fn home_loader_directory(_directory: &Path, _home: &Path, _cwd: &Path) -> bool",
    "verdict": "windows-unsupported",
