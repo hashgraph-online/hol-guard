@@ -264,3 +264,36 @@ fn a_line_left_to_the_code_beside_a_stub_is_listed_when_that_code_does_not_fit()
         "{mapped}"
     );
 }
+
+/// A unittest class that inherits its tests from a mixin names the code they
+/// run only in its own body, so that class is the test for a stub it names,
+/// listed by the name a runner selects it with.
+#[test]
+fn a_test_class_inheriting_its_tests_is_listed_for_the_name_its_body_uses() {
+    let func = "def lru_cache(maxsize=128):\n    return 1\n\n\n\
+def mru_cache(maxsize=128):\n    raise NotImplementedError\n";
+    let tests = [
+        "import unittest\n\n",
+        "class DecoratorTestMixin:",
+        "    def test_decorator(self):",
+        "        self.assertEqual(self.DECORATOR(2), 1)\n\n",
+        "class LRUDecoratorTest(unittest.TestCase, DecoratorTestMixin):",
+        "    DECORATOR = staticmethod(func.lru_cache)\n\n",
+        "class MRUDecoratorTest(unittest.TestCase, DecoratorTestMixin):",
+        "    DECORATOR = staticmethod(func.mru_cache)\n",
+    ]
+    .join("\n");
+    let tests = tests.as_str();
+    let mapped = map(
+        &files(&[("src/func.py", func), ("tests/test_func.py", tests)]),
+        &looking_for(&[("mrucache", true, 1)]),
+        &Asked::default(),
+        later(),
+    )
+    .unwrap()
+    .text;
+    assert!(
+        mapped.contains("Tests:\ntests/test_func.py: 1 related tests, last MRUDecoratorTest 13-14"),
+        "{mapped}"
+    );
+}
