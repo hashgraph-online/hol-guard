@@ -302,3 +302,22 @@ fn cursor_uninstall_restores_a_file_that_had_no_hooks_of_its_own() {
     run(&home, "uninstall", bridge()).unwrap();
     assert_eq!(fs::read_to_string(&hooks).unwrap(), original);
 }
+
+#[test]
+fn cursor_uninstall_keeps_a_file_whose_guard_hooks_are_already_gone() {
+    let home = Home::new();
+    let hooks = home.home().join(".cursor").join("hooks.json");
+    write(&hooks, "{\n  \"version\": 1,\n  \"hooks\": {}\n}\n");
+    let answer = run(&home, "install", bridge()).unwrap();
+    for change in answer["files"].as_array().unwrap() {
+        if change["after"].is_string() {
+            write(Path::new(change["path"].as_str().unwrap()), &after(change));
+        }
+    }
+    // The user removed Guard's entries by hand and added a hook of their own.
+    let edited =
+        "{\n  \"version\": 1,\n  \"hooks\": {\"stop\": [{\"command\": \"./later.sh\"}]}\n}\n";
+    write(&hooks, edited);
+    run(&home, "uninstall", bridge()).unwrap();
+    assert_eq!(fs::read_to_string(&hooks).unwrap(), edited);
+}
