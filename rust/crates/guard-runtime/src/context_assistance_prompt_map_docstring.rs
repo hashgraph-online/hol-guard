@@ -5,6 +5,9 @@
 //! to write a backslash twice. The map names the command that runs just that
 //! function's doctest: shown none, agents guessed a pytest node id, then ran
 //! the whole module, its tests, and read the file again after the edit.
+//! An agent wrote the expected output from memory, saw the run fail, then
+//! called the function again or read the file to find the value; the failed
+//! run already printed it under `Got:`, so the note says to copy that.
 //! `python -m doctest` loads a file outside its package, so a module with
 //! relative imports fails there.
 use super::super::seen::Span;
@@ -30,7 +33,8 @@ const NOT_RAW: &str = "\nIts docstring is not a raw string: write a backslash in
 twice (`\\\\n` shows as `\\n`).";
 const DOCTESTS: &str = "\nRun its doctests with `python -m pytest --doctest-modules {path}`: \
 `python -m doctest` loads the file outside its package, so its relative imports fail.";
-const DOCTEST: &str = "\nRun just its doctest with `{command}`. That run is the check an added \
+const DOCTEST: &str = "\nRun just its doctest with `{command}`. If it fails, write the value it \
+prints under `Got:` into the example as it is. That run is the check an added \
 example needs, and the edit's own reply confirms the edit, so the file need not be read again.";
 const DOCTEST_AGAIN: &str = "\nRun just its doctest with `{command}`.";
 const OUTSIDE: &str = " `python -m doctest` would load the file outside its package, where its \
