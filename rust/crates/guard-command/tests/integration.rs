@@ -119,6 +119,7 @@ pub mod pretool_find_hidden_home_match;
 pub mod pretool_find_project_skill_root;
 pub mod pretool_for_loop_conditionals;
 pub mod pretool_for_loop_home_words;
+pub mod pretool_for_loop_long_body;
 pub mod pretool_for_loop_quoted_builtin;
 pub mod pretool_forged_worktree;
 pub mod pretool_generic;

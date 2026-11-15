@@ -18,7 +18,7 @@ use body::{
 const MAX_WORDS: usize = 32;
 const MAX_WORD_BYTES: usize = 256;
 const MAX_BODY_BYTES: usize = 2048;
-const MAX_UNROLLED_BYTES: usize = 8192;
+const MAX_UNROLLED_BYTES: usize = crate::MAX_COMMAND_BYTES;
 
 const CONTROL_WORDS: &[&str] = &[
     "!", "[[", "case", "coproc", "do", "done", "elif", "else", "esac", "fi", "for", "function",
