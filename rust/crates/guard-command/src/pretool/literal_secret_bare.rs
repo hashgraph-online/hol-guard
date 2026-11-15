@@ -52,7 +52,7 @@ const RANDOM_TOKEN: i32 = -770;
 const RANDOM_SHORT_VALUE: i32 = -750;
 
 fn count(value: &str, test: fn(&u8) -> bool) -> usize {
-    value.bytes().filter(|byte| test(byte)).count()
+    value.bytes().filter(test).count()
 }
 
 fn vowel_share(value: &str) -> f64 {
