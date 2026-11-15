@@ -19154,6 +19154,23 @@
       "expect": "not_allow"
     },
     {
+      "id": "gh-pr-list-jq-at-sign-in-interpolated-string",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "gh pr list --repo example/app --state open --json number,author,headRefName --jq '.[] | select(.author.login != \"bot\") | \"\\(.number) \\(.author.login)@\\(.headRefName)\"'"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
       "id": "gh-pr-list-jq-top-level-comma",
       "fix_area": "gh-api",
       "harnesses": [
@@ -42437,6 +42454,23 @@
       },
       "cwd": "worktree",
       "expect": "allow"
+    },
+    {
+      "id": "neg-gh-pr-list-jq-shell-format-in-interpolation",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "gh pr list --repo example/app --state open --json number,title --jq '.[] | \"\\(.number)@\\(.title | @sh)\"'"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
     },
     {
       "id": "neg-ls-shared-temporary-root-glob",
