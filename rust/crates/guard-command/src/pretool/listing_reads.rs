@@ -293,6 +293,8 @@ fn leaf_glob_operand(value: &str, context: super::PathContext<'_>) -> bool {
         // zsh `EXTENDED_GLOB` reads `#`, `^` and `~` as operators, so
         // `*fact#ory*` can match `.factory`; the glob path refuses them too.
         || pattern.contains(['#', '^', '~'])
+        // With globstar enabled, `**` can name nested entries this leaf-only proof does not inspect.
+        || pattern.contains("**")
         // A trailing wildcard can always spell a credential name, so the
         // pattern only screens its fixed path; every match is screened below.
         || super::sensitive_path_argument(value)
