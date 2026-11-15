@@ -183,14 +183,22 @@ const HARNESS_CONTRACTS: &str = include_str!(
     "../../../../src/codex_plugin_scanner/guard/contracts/harness-protection-contracts.v1.json"
 );
 
-/// Whether a reply refuses the action in any harness's envelope shape.
-fn refuses(body: &Value) -> bool {
+/// Whether a reply carries the denial field this harness itself reads for
+/// this event family. `policy_action` is Guard's own field and no host acts
+/// on it, so it never counts, and another harness's shape never counts.
+fn natively_refuses(harness: &str, family: &str, body: &Value) -> bool {
     let output = &body["hookSpecificOutput"];
-    body["policy_action"] == "block"
-        || matches!(body["decision"].as_str(), Some("deny" | "block"))
-        || body["behavior"] == "deny"
-        || output["permissionDecision"] == "deny"
-        || output["decision"]["behavior"] == "deny"
+    match (family, harness) {
+        ("pre_tool" | "permission", "grok" | "omp" | "pi" | "openclaw") => {
+            body["decision"] == "deny"
+        }
+        ("pre_tool" | "permission", "hermes") => body["decision"] == "block",
+        ("pre_tool", _) => output["permissionDecision"] == "deny",
+        ("permission" | "prompt", "copilot") => body["behavior"] == "deny",
+        ("permission", _) => output["decision"]["behavior"] == "deny",
+        ("prompt", _) => body["decision"] == "block",
+        _ => false,
+    }
 }
 
 /// Whether a reply lets the action through in any harness's envelope shape.
@@ -205,7 +213,8 @@ fn permits(body: &Value) -> bool {
 }
 
 /// Every blocking or approval event the contract declares for a harness that
-/// reaches Guard through a hook, extension or plugin.
+/// reaches Guard through a hook, extension or plugin, plus every screening
+/// event declared to fail closed.
 fn enforced_events() -> Vec<(String, String)> {
     let contract: Value = serde_json::from_str(HARNESS_CONTRACTS).unwrap();
     let mut events = Vec::new();
@@ -213,7 +222,8 @@ fn enforced_events() -> Vec<(String, String)> {
         let harness = row["harness"].as_str().unwrap();
         for event in row["capability_events"].as_array().into_iter().flatten() {
             let mode = event["mode"].as_str().unwrap_or_default();
-            if matches!(mode, "blocking" | "approval") {
+            let fails_closed = event["failure_behavior"] == "fail_closed";
+            if matches!(mode, "blocking" | "approval") || (mode == "screening" && fails_closed) {
                 events.push((
                     harness.to_owned(),
                     event["event"].as_str().unwrap().to_owned(),
@@ -237,11 +247,16 @@ fn no_adapter_turns_a_missing_native_decision_into_an_allow() {
             "{expected} declares no enforced event"
         );
     }
+    let envelopes: Value = serde_json::from_str(ENVELOPES).unwrap();
     for (harness, event) in &events {
+        let family = event_kind(&envelopes, event);
         for code in NO_DECISION_CODES {
             let body = fail_safe(harness, event, WORKER_UNAVAILABLE_REASON, code);
             let context = format!("{harness} {event} {code}: {body}");
-            assert!(refuses(&body), "no refusal for {context}");
+            assert!(
+                natively_refuses(harness, &family, &body),
+                "no native refusal for {context}"
+            );
             assert!(!permits(&body), "an allow for {context}");
         }
     }
