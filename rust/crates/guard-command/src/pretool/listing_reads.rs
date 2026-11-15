@@ -290,10 +290,10 @@ fn leaf_glob_operand(value: &str, context: super::PathContext<'_>) -> bool {
         || value.contains(['$', '`', '|', ';', '&', '<', '>', '\n', '\r', '\0'])
         || (value.contains('\\') && !cfg!(windows))
         || value.contains(['{', '}', '(', ')', '!'])
-        // zsh `EXTENDED_GLOB` reads `#`, `^` and `~` as operators, so
-        // `*fact#ory*` can match `.factory`; the glob path refuses them too.
+        // zsh `EXTENDED_GLOB` reads `#`, `^` and `~` as operators (`*fact#ory*`
+        // can match `.factory`), and a globstar `**` names nested entries this
+        // leaf screen never reads. The glob path refuses them too.
         || pattern.contains(['#', '^', '~'])
-        // With globstar enabled, `**` can name nested entries this leaf-only proof does not inspect.
         || pattern.contains("**")
         // A trailing wildcard can always spell a credential name, so the
         // pattern only screens its fixed path; every match is screened below.
@@ -332,16 +332,14 @@ fn leaf_glob_operand(value: &str, context: super::PathContext<'_>) -> bool {
     let Some(base) = expanded_path(directory, context) else {
         return false;
     };
-    // The shell expands the pattern after this screen, and anyone can add a
-    // matching link to a world-writable directory (`/tmp`) in between, so a
-    // pattern directly below one keeps its review whatever it matches now.
+    // The shell expands after this screen, and anyone may plant a matching link
+    // in a world-writable directory (`/tmp`) meanwhile, so a pattern below one stays reviewed.
     if super::listing_temporary::writable_by_anyone(&base) {
         return false;
     }
-    // The listing names the matches, not the directory holding them, so a
-    // temporary directory only the owner can add entries to answers for a
-    // pattern below it (`ls /tmp/tmp.ab12/pg*`) although listing it whole
-    // may stay reviewed. Every match is screened on its own below.
+    // The listing names the matches, not their directory, so an owner-only
+    // temporary directory answers for a pattern below it (`ls /tmp/tmp.ab12/pg*`)
+    // although listing it whole may stay reviewed. Each match is screened below.
     if !safe_reads::safe_listing_arguments(&[directory.to_owned()], context)
         && !super::listing_temporary::temporary_glob_directory(&base, context)
     {
