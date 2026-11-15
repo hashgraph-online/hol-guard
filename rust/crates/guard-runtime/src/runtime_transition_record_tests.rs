@@ -242,3 +242,120 @@ fn an_unknown_request_is_refused() {
             .expect("json");
     assert_eq!(answer["error"], "invalid");
 }
+
+fn phased(home: &Home, phase: &str) -> Value {
+    let mut payload = record(home);
+    payload["phase"] = json!(phase);
+    payload["owner"] = json!({"pid": 7, "start": "s"});
+    payload["first_cause"] = Value::Null;
+    payload["recovery_causes"] = json!([]);
+    payload["deadline_monotonic"] = json!(100.0);
+    payload["forward_expires_monotonic"] = json!(50.0);
+    ask(home, "write", json!({"payload": payload.clone()}));
+    payload
+}
+
+fn step(home: &Home, op: &str, step: &str, extra: Value) -> Value {
+    let mut fields = json!({
+        "operation_id": OPERATION,
+        "step": step,
+        "owner": {"pid": 7, "start": "s"},
+        "now": 10.0,
+    });
+    for (key, value) in extra.as_object().expect("extra") {
+        fields[key] = value.clone();
+    }
+    ask(home, op, fields)
+}
+
+#[test]
+fn advance_names_its_comparisons_and_moves_one_phase() {
+    let home = home();
+    phased(&home, "AuthorizedForExactTransition");
+    let expected = json!({"expected_phase": "AuthorizedForExactTransition"});
+    let plan = step(&home, "step_check", "advance", expected.clone());
+    assert_eq!(plan["grant"], true);
+    assert_eq!(plan["installs"], "after");
+    assert_eq!(plan["compare"][0]["generation"], "after");
+    assert_eq!(
+        plan["compare"][0]["files"].as_array().map(Vec::len),
+        Some(1)
+    );
+    assert_eq!(plan["compare"][1]["files"], json!([]));
+    let answer = step(&home, "step_commit", "advance", expected.clone());
+    assert_eq!(answer, json!({"phase": "HooksPrepared"}));
+    let again = step(&home, "step_commit", "advance", expected);
+    assert_eq!(again["error"], "phase_changed");
+}
+
+#[test]
+fn advance_refuses_another_owner_and_a_passed_deadline() {
+    let home = home();
+    phased(&home, "HooksPrepared");
+    let expected = json!({"expected_phase": "HooksPrepared", "owner": {"pid": 8}});
+    let answer = step(&home, "step_check", "advance", expected);
+    assert_eq!(answer["error"], "forward_owner_changed");
+    let late = json!({"expected_phase": "HooksPrepared", "now": 60.0});
+    let answer = step(&home, "step_check", "advance", late);
+    assert_eq!(answer["error"], "forward_authorization_expired");
+    let later = json!({"expected_phase": "HooksPrepared", "now": 200.0});
+    assert_eq!(
+        step(&home, "step_check", "advance", later)["error"],
+        "deadline_exceeded"
+    );
+}
+
+#[test]
+fn a_switch_needs_a_matching_functional_observation() {
+    let home = home();
+    phased(&home, "Switching");
+    let expected = json!({"expected_phase": "Switching"});
+    let answer = step(&home, "step_check", "advance", expected);
+    assert_eq!(answer["error"], "functional_proof_missing");
+}
+
+#[test]
+fn recovery_keeps_the_first_cause_and_the_last_eight_causes() {
+    let home = home();
+    phased(&home, "Switching");
+    let first = json!({"first_cause": "x".repeat(600)});
+    let answer = step(&home, "step_commit", "prepare_recovery", first);
+    assert_eq!(answer["phase"], "RestoringPrevious");
+    for index in 0..10 {
+        let cause = json!({"cause": {"code": format!("c{index}"), "errno": null}});
+        step(&home, "step_commit", "restore_failed", cause);
+    }
+    let payload = ask(&home, "read", json!({"operation_id": OPERATION}))["payload"].clone();
+    assert_eq!(payload["phase"], "RecoveryRequired");
+    assert_eq!(payload["first_cause"].as_str().map(str::len), Some(512));
+    assert_eq!(payload["recovery_owner"], json!({"pid": 7, "start": "s"}));
+    let causes = payload["recovery_causes"].as_array().expect("causes");
+    assert_eq!(causes.len(), 8);
+    assert_eq!(causes[7]["code"], "c9");
+    let stranger = json!({"owner": {"pid": 9}, "cause": {"code": "e", "errno": 5}});
+    let answer = step(&home, "step_commit", "recovery_failure", stranger);
+    assert_eq!(answer["error"], "recovery_owner_changed");
+}
+
+#[test]
+fn a_daemon_step_outside_the_plan_is_refused() {
+    let home = home();
+    let mut payload = phased(&home, "HooksPrepared");
+    payload["authorized_subject"] = json!("subject");
+    ask(&home, "write", json!({"payload": payload}));
+    let other = json!({"subject": "other", "side": "predecessor", "action": "stop"});
+    assert_eq!(
+        step(&home, "step_check", "daemon_step", other)["error"],
+        "plan_context_mismatch"
+    );
+    let planned = json!({"subject": "subject", "side": "predecessor", "action": "stop"});
+    assert_eq!(
+        step(&home, "step_check", "daemon_step", planned)["grant"],
+        true
+    );
+    let unplanned = json!({"subject": "subject", "side": "candidate", "action": "stop"});
+    assert_eq!(
+        step(&home, "step_check", "daemon_step", unplanned)["error"],
+        "daemon_step_not_authorized"
+    );
+}

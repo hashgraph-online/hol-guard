@@ -247,7 +247,15 @@ def test_inverse_budget_expires_inside_artifact_hash_without_grant(transition, m
         monkeypatch.setattr(module.time, "monotonic", lambda: deadline + 1)
         return chunk
 
-    monkeypatch.setattr(module.os, "read", expire_after_read)
+    prepare_recovery = runtime.prepare_recovery
+
+    def prepare_then_expire(operation_id, *, first_cause):
+        # Recovery ownership is recorded first; the budget then runs out
+        # while the inverse hashes the artifact.
+        prepare_recovery(operation_id, first_cause=first_cause)
+        monkeypatch.setattr(module.os, "read", expire_after_read)
+
+    monkeypatch.setattr(runtime, "prepare_recovery", prepare_then_expire)
     with module.inverse_recovery_budget(deadline), pytest.raises(TransitionError, match="deadline_exceeded"):
         runtime.restore_files(plan.operation_id, first_cause="interrupted")
     assert runtime.status(plan.operation_id).phase == "RecoveryRequired"

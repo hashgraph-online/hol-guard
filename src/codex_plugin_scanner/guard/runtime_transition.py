@@ -19,7 +19,7 @@ from contextvars import ContextVar
 from dataclasses import dataclass, replace
 from datetime import datetime
 from pathlib import Path
-from typing import Protocol, cast
+from typing import Any, Protocol, cast
 
 from .approval_gate import ApprovalGateGrant, public_config, validate_grant
 from .codex_hook_integrity import canonical_manifest_bytes
@@ -39,12 +39,6 @@ _ACTIVE_TRANSITION: ContextVar[tuple[Path, str, float] | None] = ContextVar(
     "runtime_transition_operation", default=None
 )
 _INVERSE_DEADLINE: ContextVar[float | None] = ContextVar("runtime_transition_inverse_deadline", default=None)
-_FORWARD = {
-    "AuthorizedForExactTransition": "HooksPrepared",
-    "HooksPrepared": "Switching",
-    "Switching": "CandidateFunctional",
-    "CandidateFunctional": "Committed",
-}
 
 
 class TransitionError(RuntimeError):
@@ -72,6 +66,16 @@ def inverse_recovery_budget(deadline: float):
             yield
     finally:
         _INVERSE_DEADLINE.reset(token)
+
+
+def _cause(error: BaseException) -> dict[str, object]:
+    """The `{code, errno}` cause a recovery record keeps for `error`."""
+
+    errno = getattr(error, "errno", None)
+    return {
+        "code": error.reason if isinstance(error, TransitionError) else type(error).__name__,
+        "errno": errno if isinstance(errno, int) and not isinstance(errno, bool) else None,
+    }
 
 
 @dataclass(frozen=True)
@@ -614,9 +618,11 @@ class RuntimeTransition:
         except TransitionError:
             return None
 
-    def _native(self, op: str, key: tuple[bytes, str] | None, **fields: object) -> dict[str, object]:
+    def _native(
+        self, op: str, key: tuple[bytes, str] | None, *, deadline: float | None = None, **fields: object
+    ) -> dict[str, object]:
         try:
-            return record_request(op, self.home, key, **fields)
+            return record_request(op, self.home, key, deadline=deadline, **fields)
         except TransitionRecordRefusedError as error:
             raise TransitionError(error.reason, error.detail) from error
 
@@ -850,6 +856,45 @@ class RuntimeTransition:
                 subject=str(payload["authorized_subject"]),
             )
 
+    def _step(self, op: str, operation_id: str, step: str, **fields: object) -> dict[str, object]:
+        """Ask the runtime to check or commit one phase step of the journal."""
+
+        require_codex_install_owner(self.home)
+        owner = current_process_identity()
+        request: dict[str, Any] = {
+            "operation_id": operation_id,
+            "step": step,
+            "owner": owner,
+            "now": time.monotonic(),
+            **fields,
+        }
+        try:
+            return record_request(op, self.home, self._key(), **request)
+        except TransitionRecordRefusedError as error:
+            raise TransitionError(error.reason, error.detail) from error
+
+    def _checked(self, operation_id: str, step: str, **fields: object) -> dict[str, object]:
+        """Run the grant, install and file comparisons the runtime names."""
+
+        answer = self._step("step_check", operation_id, step, **fields)
+        payload = answer.get("payload")
+        compares = answer.get("compare")
+        if not isinstance(payload, dict) or not isinstance(compares, list):
+            raise TransitionError("record_invalid")
+        if answer.get("grant") is True:
+            self._validate_forward_grant(payload)
+        installs = answer.get("installs")
+        if isinstance(installs, str):
+            self._compare_installs(payload, installs)
+        for item in compares:
+            if not isinstance(item, dict) or not isinstance(item.get("generation"), str):
+                raise TransitionError("record_invalid")
+            self._compare({"files": item.get("files")}, str(item["generation"]))
+        return answer
+
+    def _commit(self, operation_id: str, step: str, **fields: object) -> str:
+        return str(self._step("step_commit", operation_id, step, **fields).get("phase"))
+
     def _compare_installs(self, payload: dict[str, object], generation: str) -> None:
         changes = _record_installs(payload)
         if not changes:
@@ -903,74 +948,30 @@ class RuntimeTransition:
 
     @contextmanager
     def _mutation_scope(self, operation_id: str):
-        payload = self._read(operation_id)
-        if payload["phase"] not in {"AuthorizedForExactTransition", "HooksPrepared"}:
-            raise TransitionError("phase_changed")
-        if payload["owner"] != current_process_identity():
-            raise TransitionError("forward_owner_changed")
-        if time.monotonic() >= _record_number(payload, "forward_expires_monotonic"):
-            raise TransitionError("forward_authorization_expired")
-        self._validate_forward_grant(payload)
-        token = _ACTIVE_TRANSITION.set((self.home, operation_id, _record_number(payload, "forward_expires_monotonic")))
+        answer = self._checked(operation_id, "mutation_scope")
+        expires, deadline = answer.get("forward_expires"), answer.get("sqlite_deadline")
+        if not isinstance(expires, float | int) or not isinstance(deadline, float | int):
+            raise TransitionError("deadline_invalid")
+        token = _ACTIVE_TRANSITION.set((self.home, operation_id, float(expires)))
         try:
-            with sqlite_operation_deadline(
-                min(
-                    _record_number(payload, "deadline_monotonic"),
-                    _record_number(payload, "forward_expires_monotonic"),
-                )
-            ):
+            with sqlite_operation_deadline(float(deadline)):
                 yield
         finally:
             _ACTIVE_TRANSITION.reset(token)
 
+    def _observation(self, proof: object) -> dict[str, object] | None:
+        if proof is None:
+            return None
+        from .runtime_transition_admission import verified_admission_payload
+
+        return verified_admission_payload(proof)
+
     def advance(self, operation_id: str, expected_phase: str, *, functional_proof: object = None) -> str:
-        payload = self._read(operation_id)
-        if payload["phase"] != expected_phase or expected_phase not in _FORWARD:
-            raise TransitionError("phase_changed")
-        if payload["owner"] != current_process_identity():
-            raise TransitionError("forward_owner_changed")
-        if time.monotonic() >= _record_number(payload, "deadline_monotonic"):
-            raise TransitionError("deadline_exceeded")
-        if expected_phase in {"AuthorizedForExactTransition", "HooksPrepared"} and time.monotonic() >= _record_number(
-            payload, "forward_expires_monotonic"
-        ):
-            raise TransitionError("forward_authorization_expired")
-        if expected_phase in {"AuthorizedForExactTransition", "HooksPrepared"}:
-            self._validate_forward_grant(payload)
-        self._compare_installs(payload, "after")
-        if expected_phase == "AuthorizedForExactTransition":
-            self._compare(
-                {
-                    **payload,
-                    "files": [
-                        change
-                        for change in _record_objects(payload, "files", maximum=128)
-                        if change["kind"] == "binding"
-                    ],
-                },
-                "after",
-            )
-            self._compare(
-                {
-                    **payload,
-                    "files": [
-                        change
-                        for change in _record_objects(payload, "files", maximum=128)
-                        if change["kind"] == "selection"
-                    ],
-                },
-                "before",
-            )
-        elif expected_phase == "HooksPrepared":
-            self._compare(payload, "after")
-            payload["functional_started_monotonic"] = time.monotonic()
+        fields: dict[str, object] = {"expected_phase": expected_phase}
         if expected_phase in {"Switching", "CandidateFunctional"}:
-            observation = self._validate_functional_proof(payload, functional_proof, "candidate")
-            self._compare(payload, "after")
-            payload["functional_proof"] = observation
-        payload["phase"] = _FORWARD[expected_phase]
-        self._write(payload)
-        return str(payload["phase"])
+            fields["observation"] = self._observation(functional_proof)
+        self._checked(operation_id, "advance", **fields)
+        return self._commit(operation_id, "advance", **fields)
 
     def authorize_runtime_step(self, operation_id: str, expected_phase: str) -> None:
         """Validate the live exact grant before a coordinator lifecycle call.
@@ -978,98 +979,34 @@ class RuntimeTransition:
         This does not admit ordinary install/bootstrap writers or export a
         reusable capability to a child process.
         """
-        payload = self._read(operation_id)
-        if expected_phase not in {"HooksPrepared", "Switching"} or payload["phase"] != expected_phase:
-            raise TransitionError("phase_changed")
-        if payload["owner"] != current_process_identity():
-            raise TransitionError("forward_owner_changed")
-        if time.monotonic() >= _record_number(payload, "forward_expires_monotonic"):
-            raise TransitionError("forward_authorization_expired")
-        self._validate_forward_grant(payload)
+        self._checked(operation_id, "runtime_step", expected_phase=expected_phase)
 
     def authorize_daemon_step(self, operation_id: str, *, subject: str, side: str, action: str) -> None:
         """Admit only the planned lifecycle step, including its exact inverse."""
-        payload = self._read(operation_id)
-        if payload["authorized_subject"] != subject:
-            raise TransitionError("plan_context_mismatch")
-        forward = {
-            ("predecessor", "stop"): "HooksPrepared",
-            ("candidate", "start"): "Switching",
-            ("candidate", "observe"): "Switching",
-        }
-        if (side, action) in forward and payload["phase"] == forward[(side, action)]:
-            self.authorize_runtime_step(operation_id, forward[(side, action)])
-            return
-        if (
-            payload["phase"] != "RestoringPrevious"
-            or payload.get("recovery_owner") != current_process_identity()
-            or (side, action) not in {("candidate", "stop"), ("predecessor", "start"), ("predecessor", "observe")}
-        ):
-            raise TransitionError("daemon_step_not_authorized")
-        if action != "stop":
-            if payload.get("inverse_files_restored") is not True:
-                raise TransitionError("inverse_not_restored")
-            self._compare(payload, "before")
-            self._compare_installs(payload, "before")
-
-    def _validate_functional_proof(
-        self,
-        payload: Mapping[str, object],
-        proof: object,
-        side: str,
-    ) -> dict[str, object]:
-        from .runtime_transition_admission import verified_admission_payload
-
-        observation = verified_admission_payload(proof)
-        native = _native_runtime_bindings(payload).get(side)
-        observed = _record_number(observation, "observed_monotonic")
-        if (
-            native is None
-            or observation["runtime_identity"] != native
-            or observation["operation_id"] != payload["operation_id"]
-            or observation["generation"] != _artifact_identity(payload[side])["generation"]
-            or observation["guard_home"] != str(self.home)
-            or observed < _record_number(payload, "functional_started_monotonic")
-            or observed > time.monotonic()
-        ):
-            raise TransitionError("functional_proof_missing")
-        return observation
+        self._checked(operation_id, "daemon_step", subject=subject, side=side, action=action)
 
     def publish(self, operation_id: str, expected_phase: str) -> str:
-        payload = self._read(operation_id)
-        if payload["phase"] != expected_phase or expected_phase not in {
-            "AuthorizedForExactTransition",
-            "HooksPrepared",
-        }:
-            raise TransitionError("phase_changed")
-        kind = "binding" if expected_phase == "AuthorizedForExactTransition" else "selection"
-        selected = [change for change in _record_objects(payload, "files", maximum=128) if change["kind"] == kind]
+        answer = self._checked(operation_id, "publish", expected_phase=expected_phase)
+        payload, selected = answer["payload"], answer.get("selected")
+        expected = answer.get("installs_expected")
+        if not isinstance(payload, dict) or not isinstance(selected, list) or not isinstance(expected, str):
+            raise TransitionError("record_invalid")
 
         def publish_files():
-            self._compare({**payload, "files": selected}, "before")
+            self._compare({"files": selected}, "before")
             for change in selected:
                 _assert_publish_scope(self.home)
                 self._validate_forward_grant(payload)
                 self._write_file(change, "after")
-            self._compare({**payload, "files": selected}, "after")
+            self._compare({"files": selected}, "after")
 
         with self._mutation_scope(operation_id):
-            self._apply_installs(payload, "before" if kind == "binding" else "after", "after", publish_files)
+            self._apply_installs(payload, expected, "after", publish_files)
             return self.advance(operation_id, expected_phase)
 
     def prepare_recovery(self, operation_id: str, *, first_cause: str) -> None:
         """Persist inverse ownership before retiring a partially started runtime."""
-        payload = self._read(operation_id)
-        if payload["phase"] in {"Committed", "FailedWithVerifiedRollback"}:
-            raise TransitionError("terminal_transition")
-        payload["first_cause"] = payload.get("first_cause") or first_cause[:512]
-        payload["phase"] = "RestoringPrevious"
-        recovery_owner = current_process_identity()
-        if recovery_owner is None:
-            raise TransitionError("owner_identity_unavailable")
-        payload["recovery_owner"] = recovery_owner
-        payload["inverse_files_restored"] = False
-        self._write(payload)
+        self._commit(operation_id, "prepare_recovery", first_cause=first_cause)
 
     def restore_files(self, operation_id: str, *, first_cause: str) -> None:
         _check_inverse_deadline()
@@ -1087,55 +1024,20 @@ class RuntimeTransition:
             self._compare_installs(payload, "before")
             _check_inverse_deadline()
         except Exception as exc:
-            payload["phase"] = "RecoveryRequired"
-            payload["recovery_causes"] = [
-                *_record_objects(payload, "recovery_causes", maximum=8),
-                {
-                    "code": exc.reason if isinstance(exc, TransitionError) else type(exc).__name__,
-                    "errno": getattr(exc, "errno", None),
-                },
-            ][-8:]
-            self._write(payload)
+            self._commit(operation_id, "restore_failed", cause=_cause(exc))
             raise
         # File restoration alone never declares the previous daemon/protection
         # functional. The caller must supply a real protected-hook observation.
-        payload["functional_started_monotonic"] = time.monotonic()
-        payload["inverse_files_restored"] = True
-        self._write(payload)
+        self._commit(operation_id, "restored")
 
     def finish_rollback(self, operation_id: str, *, functional_proof: object) -> None:
-        payload = self._read(operation_id)
-        if payload["phase"] not in {"RestoringPrevious", "PreviousFunctional"}:
-            raise TransitionError("phase_changed")
-        if payload["recovery_owner"] != current_process_identity():
-            raise TransitionError("recovery_owner_changed")
-        observation = self._validate_functional_proof(payload, functional_proof, "predecessor")
-        self._compare(payload, "before")
-        self._compare_installs(payload, "before")
-        payload["phase"] = "PreviousFunctional"
-        payload["rollback_functional_proof"] = observation
-        self._write(payload)
-        payload["phase"] = "FailedWithVerifiedRollback"
-        self._write(payload)
+        observation = self._observation(functional_proof)
+        self._checked(operation_id, "finish_rollback", observation=observation)
+        self._commit(operation_id, "finish_rollback", observation=observation)
 
     def record_recovery_failure(self, operation_id: str, *, first_cause: str, error: Exception) -> None:
         """Persist failure of runtime retirement/start/admission after an inverse."""
-        payload = self._read(operation_id)
-        if payload["phase"] in {"Committed", "FailedWithVerifiedRollback"}:
-            raise TransitionError("terminal_transition")
-        identity = current_process_identity()
-        if identity is None or identity not in (payload.get("owner"), payload.get("recovery_owner")):
-            raise TransitionError("recovery_owner_changed")
-        payload["first_cause"] = payload.get("first_cause") or first_cause[:512]
-        payload["phase"] = "RecoveryRequired"
-        payload["recovery_causes"] = [
-            *_record_objects(payload, "recovery_causes", maximum=8),
-            {
-                "code": error.reason if isinstance(error, TransitionError) else type(error).__name__,
-                "errno": getattr(error, "errno", None),
-            },
-        ][-8:]
-        self._write(payload)
+        self._commit(operation_id, "recovery_failure", first_cause=first_cause, cause=_cause(error))
 
     def retire(self, operation_id: str) -> None:
         payload = self._read(operation_id)

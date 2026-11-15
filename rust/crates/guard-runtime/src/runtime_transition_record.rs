@@ -22,6 +22,9 @@ use zeroize::Zeroizing;
 #[path = "runtime_transition_record_shape.rs"]
 mod shape;
 
+#[path = "runtime_transition_phase.rs"]
+mod phase;
+
 use crate::codex_hook_authority_record::python_json::{parse_python_json, python_canonical_json};
 use shape::{validate_record, Refusal};
 
@@ -50,6 +53,16 @@ struct Request {
     artifact_generation: Option<String>,
     reason_code: Option<String>,
     deadline_seconds: Option<f64>,
+    step: Option<String>,
+    expected_phase: Option<String>,
+    owner: Option<Value>,
+    now: Option<f64>,
+    observation: Option<Value>,
+    first_cause: Option<String>,
+    cause: Option<Value>,
+    side: Option<String>,
+    action: Option<String>,
+    subject: Option<String>,
 }
 
 struct Key {
@@ -79,7 +92,14 @@ pub(crate) fn run_command(reader: impl Read) -> Result<Vec<u8>, String> {
 
 fn answer(request: &Request) -> Value {
     let outcome = match request.op.as_str() {
-        "write" => write_record(request).map(|()| json!({"ok": true})),
+        "write" => request
+            .payload
+            .as_ref()
+            .ok_or_else(|| no("invalid"))
+            .and_then(|payload| write_record(request, payload))
+            .map(|()| json!({"ok": true})),
+        "step_check" => phase::check(request),
+        "step_commit" => phase::commit(request),
         "read" => read_record(request).map(|payload| json!({"payload": payload})),
         "retire" => retire(request).map(|()| json!({"ok": true})),
         "refusal_write" => write_refusal(request).map(|()| json!({"ok": true})),
@@ -215,10 +235,9 @@ fn read_text(path: &Path, maximum: usize) -> Option<String> {
 }
 
 /// `RuntimeTransition._write`: sign the journal and replace it atomically.
-fn write_record(request: &Request) -> Result<(), Refusal> {
+fn write_record(request: &Request, payload: &Map<String, Value>) -> Result<(), Refusal> {
     let deadline = deadline(request)?;
     let key = key(request)?;
-    let payload = request.payload.as_ref().ok_or_else(|| no("invalid"))?;
     let operation = payload
         .get("operation_id")
         .and_then(Value::as_str)
