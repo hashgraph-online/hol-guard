@@ -12,6 +12,9 @@
 //!   bytes), proxies (`-x`/`-X`), Unix sockets (`-U`), source binding and any
 //!   option not listed below.
 //! - `ncat` and `socat`, whose option sets differ.
+//!
+//! DNS lookups with `dig`, `nslookup` and `host` are proven here too, in
+//! [`dns_lookups`].
 
 /// Single-letter flags that may be clustered with `-z` (`-zv`, `-vz`).
 const SHORT_FLAGS: &str = "zvn46";
@@ -20,22 +23,46 @@ const SHORT_VALUES: &str = "wG";
 
 const LOOPBACK_HOSTS: [&str; 3] = ["127.0.0.1", "localhost", "::1"];
 
-pub(super) fn safe_nc_segment(
+#[path = "dns_lookups.rs"]
+mod dns_lookups;
+
+/// Whether `program` is a probe this module proves: a loopback `nc -z`, or a
+/// `dig`, `nslookup` or `host` lookup of a fixed name ([`dns_lookups`]).
+pub(super) fn proves(program: &str) -> bool {
+    matches!(program, "nc" | "netcat" | "dig" | "nslookup" | "host")
+}
+
+/// The probe `program` runs, read from the start of its pipeline so that no
+/// standard input reaches it.
+pub(super) fn safe(
+    program: &str,
     model: &crate::CanonicalCommandV1,
     segment: &crate::CommandSegmentV1,
 ) -> bool {
+    match program {
+        "dig" | "nslookup" | "host" => {
+            model.dialect == "posix"
+                && segment.pipeline_index == 0
+                && dns_lookups::safe_lookup_arguments(program, &segment.arguments)
+        }
+        _ => safe_nc_segment(model, segment),
+    }
+}
+
+fn safe_nc_segment(model: &crate::CanonicalCommandV1, segment: &crate::CommandSegmentV1) -> bool {
     model.dialect == "posix" && segment.pipeline_index == 0 && safe_nc_arguments(&segment.arguments)
 }
 
-/// A whole `nc`/`netcat` segment, generic checks included, that the native
-/// proof accepts as a zero-I/O loopback probe. It reads no standard input and
-/// sends nothing, so the compatibility layer does not treat it as an upload.
+/// A whole probe segment, generic checks included, that the native proof
+/// accepts: a zero-I/O loopback `nc` probe or a lookup of a fixed name. Neither
+/// reads standard input or sends anything but the probe itself, so the
+/// compatibility layer does not treat it as an upload.
 pub(crate) fn proven_probe_segment(
     model: &crate::CanonicalCommandV1,
     segment: &crate::CommandSegmentV1,
     context: super::PathContext<'_>,
 ) -> bool {
-    matches!(segment.executable.as_deref(), Some("nc" | "netcat"))
+    segment.executable.as_deref().is_some_and(proves)
         && super::segment_proof::exact_safe_segment_with_context(model, segment, false, context)
 }
 

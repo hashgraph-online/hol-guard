@@ -598,7 +598,7 @@ pub(super) fn exact_safe_segment_with_context(
         "doctl" => super::doctl_reads::safe_doctl_arguments(&segment.arguments),
         "docker" => super::docker_reads::safe_docker_segment(model, segment),
         "helm" => super::helm_usage::safe_helm_segment(model, segment),
-        "nc" | "netcat" => super::port_probes::safe_nc_segment(model, segment),
+        name if super::port_probes::proves(name) => super::port_probes::safe(name, model, segment),
         "brew" => super::brew_reads::safe_brew_segment(model, segment),
         "gem" => super::gem_reads::safe_gem_segment(model, segment, context),
         "pg_ctl" => super::postgres_reads::safe_pg_ctl_arguments(&segment.arguments),
