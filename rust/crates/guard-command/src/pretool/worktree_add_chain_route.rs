@@ -390,3 +390,40 @@ fn created_outside(
     resolved.extend(missing.iter().rev());
     !resolved.starts_with(destination)
 }
+
+/// A step that a permission the user enabled may cover after the `cd` into
+/// the new checkout, because nothing about it depends on the directory it
+/// runs in. It runs by bare name as a step of its own, not as a stage that
+/// reads another step's output, with no environment prefix, wrapper or
+/// shell-state change, no redirect, and no operand that names a path: a
+/// relative path would be judged against the shell's directory but opened in
+/// the checkout. It is also no program that can rewrite the checkout the later
+/// Git reads run in (see `tree_writers`).
+pub(super) fn permitted_step_shape(later: &CommandSegmentV1) -> bool {
+    let quiet = ["2>&1", "2>/dev/null", ">/dev/null"]
+        .iter()
+        .fold(later.text.clone(), |text, quiet| text.replace(quiet, ""));
+    later.pipeline_index == 0
+        && later.executable.as_deref().is_some_and(|value| {
+            super::super::executable_basename(value) == value
+                && !value.contains(['/', '\\'])
+                && !matches!(value, "cd" | "pushd" | "popd")
+        })
+        && later.environment_names.is_empty()
+        && later.wrapper_chain.is_empty()
+        && !later.path_overridden
+        && !super::super::control_flow_flatten::command_word_changes_shell_state(&later.text)
+        && !quiet.contains(['>', '<'])
+        && later
+            .arguments
+            .iter()
+            .all(|argument| !names_a_path(argument))
+        && !super::super::tree_writers::may_rewrite_tree(later)
+}
+
+/// An operand, or an option's value, that could name a file: it has a path
+/// separator, starts at the home or a dot directory, or expands.
+fn names_a_path(argument: &str) -> bool {
+    argument.contains(['/', '\\', '$', '*', '?', '[', '`'])
+        || argument.split('=').any(|part| part.starts_with(['.', '~']))
+}

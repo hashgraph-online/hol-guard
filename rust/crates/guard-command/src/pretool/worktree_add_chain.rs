@@ -332,8 +332,8 @@ pub(crate) fn new_checkout_route(
 /// `permitted` names the other steps whose own permission the user enabled:
 /// an extension action such as a model runner's `rm`. The user's consent to
 /// that action does not depend on the directory it runs in, so it may follow
-/// the `cd` too, as long as it is no program that can rewrite the checkout
-/// (see [`super::super::tree_writers`]). Any other command after the `cd`
+/// the `cd` too, when its shape names nothing the `cd` could change (see
+/// `chain_route::permitted_step_shape`). Any other command after the `cd`
 /// (a path read, a write, a build) would have its paths judged against the
 /// shell's directory instead of the checkout, so it leaves the `cd` uncovered
 /// and the command keeps its review.
@@ -374,20 +374,20 @@ pub(crate) fn entered_checkouts(
 /// select, so the new checkout reads the same configuration as the
 /// repository it shares, and a read helper-free here is helper-free there.
 ///
-/// This floor reads no extension controls, so any step after the `cd` that
-/// cannot rewrite the checkout is let through here. That only places the
-/// probe: the floor still weighs every step before each read, and one it
-/// cannot prove leaves the read to an Allow that must cover that step, which
-/// [`entered_checkouts`] then answers with the user's permissions in hand.
+/// This floor reads no extension controls, so it lets through any step of
+/// the shape a permission may cover after the `cd`. That only places the
+/// probe. A step the floor cannot prove leaves the read unsettled, and only an
+/// Allow settles it; that Allow must cover the step, which
+/// [`entered_checkouts`] answers with the user's permissions in hand.
 pub(in super::super) fn reads_in_entered_checkout(
     model: &CanonicalCommandV1,
     context: super::super::PathContext<'_>,
     deadline: Option<Instant>,
     execution_environment: Option<&guard_contracts::GuardExecutionEnvironmentV1>,
 ) -> bool {
-    let rewrites_nothing =
-        |index: usize| !super::super::tree_writers::may_rewrite_tree(&model.segments[index]);
-    let Some((add, _)) = entered_checkout(model, context, execution_environment, &rewrites_nothing)
+    let left_to_the_allow = |_: usize| true;
+    let Some((add, _)) =
+        entered_checkout(model, context, execution_environment, &left_to_the_allow)
     else {
         return false;
     };
@@ -451,16 +451,10 @@ fn entered_checkout(
             .is_some_and(|separator| matches!(separator, "&&" | ";"));
         // A later pipeline stage reads only what the step before it prints:
         // a bounded `head`, `tail` or `wc` with no path of its own.
-        // A permitted action runs by bare name as a step of its own, never
-        // as a stage reading another step's output, and never as a program
-        // that can rewrite the checkout the later Git reads run in.
+        // A permitted action must also have a shape whose meaning the `cd`
+        // cannot change (see `chain_route::permitted_step_shape`).
         let permitted_action = |index: usize, later: &CommandSegmentV1| {
-            later.pipeline_index == 0
-                && later.executable.as_deref().is_some_and(|value| {
-                    !value.contains('/') && !matches!(value, "cd" | "pushd" | "popd")
-                })
-                && !super::super::tree_writers::may_rewrite_tree(later)
-                && permitted(index)
+            super::chain_route::permitted_step_shape(later) && permitted(index)
         };
         let rest_is_git = model.segments[after + 1..]
             .iter()

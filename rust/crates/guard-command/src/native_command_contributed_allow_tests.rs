@@ -324,3 +324,35 @@ fn a_new_worktree_entry_covers_only_allowed_actions() {
         "allow"
     );
 }
+
+/// A permitted action whose meaning the `cd` could change keeps the entry
+/// reviewed even though the same step passes on its own: a path operand is
+/// judged against the shell's directory but opened in the new checkout, and
+/// an environment prefix or redirect reaches past the action the permission
+/// names.
+#[test]
+fn a_permitted_action_the_entry_could_change_keeps_its_review() {
+    let (_fixture, home, repository) = repository();
+    let allowed = ollama_and_git();
+    for step in [
+        "ollama rm ../stale-model",
+        "ollama rm ./stale-model",
+        "ollama rm ~/stale-model",
+        "OLLAMA_HOST=127.0.0.1:9 ollama rm stale-model",
+        "ollama rm stale-model > removed.txt",
+    ] {
+        let alone = evaluate_in(&home, &repository, &allowed, step);
+        assert_eq!(
+            alone.minimum_action, "allow",
+            "{step}: {}",
+            alone.reason_code
+        );
+        let command = format!("{ADD} && cd ../ext-wt && {step} && git status --short");
+        let result = evaluate_in(&home, &repository, &allowed, &command);
+        assert_ne!(
+            result.minimum_action, "allow",
+            "{command}: {}",
+            result.reason_code
+        );
+    }
+}
