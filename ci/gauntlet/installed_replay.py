@@ -30,6 +30,10 @@ ALLOW_DECISIONS = {"allow", "allow_original", "approve", "quiet"}
 #: input as protection.
 NON_ANSWERS = {"timeout", "no-envelope", "unknown"}
 
+#: Guard actions that run the call without a word to the user when the envelope
+#: gives the harness no decision of its own.
+_QUIET_POLICY_ACTIONS = {"allow", "warn"}
+
 #: Decisions whose meaning is plain; any other envelope records its field names.
 _DENY_DECISIONS = {"deny", "block"}
 
@@ -132,12 +136,38 @@ def _decision_from(response: dict[str, Any]) -> tuple[str, str]:
             if isinstance(value, str):
                 reason = hook_output.get("permissionDecisionReason") or hook_output.get("reason") or ""
                 return value.strip().lower(), str(reason)[:200]
+    found: tuple[str, str] | None = None
     for key in ("permission", "policy_action", "decision", "action"):
         value = response.get(key)
         if isinstance(value, str):
             reason = response.get("reason") or response.get("reason_code") or ""
-            return value.strip().lower(), str(reason)[:200]
-    return "unknown", ""
+            found = value.strip().lower(), str(reason)[:200]
+            break
+    if found is None and response.get("continue") is False:
+        # Codex stops the turn on `continue: false`; that is a refusal, not silence.
+        return "deny", str(response.get("stopReason") or "")[:200]
+    if _no_opinion(response, hook_output, found):
+        return "allow", ""
+    return found if found is not None else ("unknown", "")
+
+
+def _no_opinion(response: dict[str, Any], hook_output: Any, found: tuple[str, str] | None) -> bool:
+    """A hook-event envelope that carries no decision, which the harness runs as an allow.
+
+    Codex and zcode read ``hookSpecificOutput`` for a verdict and run the call when it
+    names only the event: Codex for a tool call and a prompt, zcode for a prompt. Guard's
+    own ``policy_action`` may ride beside it, and only a non-blocking one keeps this an
+    allow. A stop (``continue: false``), a top-level ``decision`` and any blocking action
+    stay what they say.
+    """
+
+    if not isinstance(hook_output, dict) or not isinstance(hook_output.get("hookEventName"), str):
+        return False
+    if response.get("continue") is False or "decision" in response:
+        return False
+    if found is None:
+        return True
+    return found[0] in _QUIET_POLICY_ACTIONS
 
 
 def envelope_shape(response: dict[str, Any]) -> list[str]:

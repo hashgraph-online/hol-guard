@@ -284,24 +284,51 @@ def test_a_verdict_split_across_identical_runs_fails(tmp_path: Path) -> None:
     assert replay["deterministic"] is False
 
 
+def _verdict_of(stdout: str, returncode: int = 0) -> dict[str, object]:
+    return verdict(subprocess.CompletedProcess(args=["hook"], returncode=returncode, stdout=stdout, stderr=""))
+
+
 def test_an_unreadable_envelope_records_its_field_names_but_no_values() -> None:
-    completed = subprocess.CompletedProcess(
-        args=["hook"],
-        returncode=0,
-        stdout='{"continue": true, "hookSpecificOutput": {"hookEventName": "UserPromptSubmit"}, "n": "/private/x"}\n',
-        stderr="",
-    )
-    result = verdict(completed)
+    result = _verdict_of('{"continue": true, "hookSpecificOutput": {"n": "/private/x"}}\n')
     assert result["decision"] == "unknown"
-    assert result["envelope_shape"] == ["continue", "hookSpecificOutput", "n", "hookSpecificOutput.hookEventName"]
+    assert result["envelope_shape"] == ["continue", "hookSpecificOutput", "hookSpecificOutput.n"]
     assert "/private/x" not in json.dumps(result)
 
 
+@pytest.mark.parametrize(
+    "stdout",
+    [
+        # Codex's answer to an ordinary tool call and to an ordinary prompt.
+        '{"continue": true, "hookSpecificOutput": {"hookEventName": "PreToolUse"}}',
+        '{"hookSpecificOutput": {"hookEventName": "UserPromptSubmit"}}',
+        # zcode's answer to an ordinary prompt, with Guard's non-blocking action beside it.
+        '{"hookSpecificOutput": {"hookEventName": "UserPromptSubmit"}, "policy_action": "warn", "reason_code": "c"}',
+    ],
+)
+def test_an_envelope_naming_only_its_event_is_the_harness_allow(stdout: str) -> None:
+    result = _verdict_of(stdout + "\n")
+    assert result["decision"] == "allow"
+    assert "envelope_shape" not in result
+
+
+@pytest.mark.parametrize(
+    ("stdout", "decision"),
+    [
+        ('{"continue": false, "hookSpecificOutput": {"hookEventName": "UserPromptSubmit"}}', "deny"),
+        ('{"decision": "block", "hookSpecificOutput": {"hookEventName": "UserPromptSubmit"}}', "block"),
+        ('{"hookSpecificOutput": {"hookEventName": "UserPromptSubmit"}, "policy_action": "block"}', "block"),
+        (
+            '{"hookSpecificOutput": {"hookEventName": "PreToolUse"}, "policy_action": "require-reapproval"}',
+            "require-reapproval",
+        ),
+    ],
+)
+def test_an_event_only_envelope_with_any_blocking_signal_is_not_an_allow(stdout: str, decision: str) -> None:
+    assert _verdict_of(stdout + "\n")["decision"] == decision
+
+
 def test_a_warn_envelope_records_its_field_names() -> None:
-    completed = subprocess.CompletedProcess(
-        args=["hook"], returncode=0, stdout='{"policy_action": "warn", "reason_code": "c"}\n', stderr=""
-    )
-    result = verdict(completed)
+    result = _verdict_of('{"policy_action": "warn", "reason_code": "c"}\n')
     assert result["decision"] == "warn"
     assert result["envelope_shape"] == ["policy_action", "reason_code"]
 
