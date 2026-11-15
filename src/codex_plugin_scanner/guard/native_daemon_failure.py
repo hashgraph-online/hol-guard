@@ -14,7 +14,7 @@ def with_failure_code(error: Exception, code: object) -> Exception:
     """Attach a native failure code to ``error`` and return it."""
 
     if isinstance(code, str) and code:
-        error.guard_failure_code = code  # type: ignore[attr-defined]
+        error.guard_failure_code = code  # pyright: ignore[reportAttributeAccessIssue]
     return error
 
 
