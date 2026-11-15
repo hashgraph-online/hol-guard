@@ -132,3 +132,28 @@ fn the_home_tree_and_hidden_matches_keep_their_review() {
         assert_decision(&world.workspace, &world.home, &command, false);
     }
 }
+
+#[test]
+fn home_aliases_and_symlinked_key_targets_do_not_gain_a_leaf_glob_allowance() {
+    let world = world("aliases");
+    let alias = world.root.join("home-alias");
+    std::os::unix::fs::symlink(&world.home, &alias).unwrap();
+    let vault = world.root.join("fixture-vault");
+    std::fs::create_dir_all(&vault).unwrap();
+    std::fs::write(vault.join("server.pem"), "synthetic key-name fixture").unwrap();
+    std::os::unix::fs::symlink(
+        vault.join("server.pem"),
+        world.scratch.join("published-link"),
+    )
+    .unwrap();
+    let scratch = fixture::shell_word(&world.scratch);
+    let root = fixture::shell_word(&world.root);
+    let workspace = fixture::shell_word(&world.workspace);
+    for command in [
+        format!("ls -d {root}/home-alias/*"),
+        format!("ls -d {workspace}/../../*"),
+        format!("ls -d {scratch}/*"),
+    ] {
+        assert_decision(&world.workspace, &world.home, &command, false);
+    }
+}
