@@ -1,6 +1,6 @@
 //! The hint that ends a note Guard added to a prompt, on how to spend fewer
 //! turns on it.
-use super::seen::{self, Session};
+use super::seen::{self, Session, Span};
 use super::{add_context, context_len, project_root, session};
 use crate::policy_store::PolicySnapshotStore;
 use guard_contracts::GuardHookEnvelopeV2;
@@ -45,22 +45,111 @@ pub(super) fn end_note(
     before: usize,
     session: Option<&Session>,
 ) {
-    let ending = match harness {
-        "claude-code" => BATCHING,
-        "codex" => ACT_ON_IT,
-        "omp" => SKIP_THE_LIST,
-        _ => return,
+    let Some(ending) = ending_for(harness) else {
+        return;
     };
-    let hint = seen::hint();
-    if context_len(response) <= before
-        || session.is_some_and(|session| seen::earlier(session).contains(&hint))
-    {
+    if !adds_hint(response, before, session) {
         return;
     }
     add_context(response, ending);
     if let Some(session) = session {
-        seen::remember(session, &[hint]);
+        seen::remember(session, &[seen::hint()]);
     }
+}
+
+fn ending_for(harness: &str) -> Option<&'static str> {
+    match harness {
+        "claude-code" => Some(BATCHING),
+        "codex" => Some(ACT_ON_IT),
+        "omp" => Some(SKIP_THE_LIST),
+        _ => None,
+    }
+}
+
+/// Whether `end_note` adds the hint: Guard added to this prompt, and the
+/// session has not had it yet.
+fn adds_hint(response: &Value, before: usize, session: Option<&Session>) -> bool {
+    context_len(response) > before
+        && !session.is_some_and(|session| seen::earlier(session).contains(&seen::hint()))
+}
+
+/// Claude Code saves hook context longer than 10,000 characters to a file
+/// and shows the model only its first 2,000, so the map after a change note
+/// is lost. A longer note is cut at a line that leaves no code block open.
+const CLAUDE_MAX_CHARS: usize = 9_500;
+const CUT: &str = "(The rest of this note was cut to fit.)";
+
+/// Cuts a Claude Code note to fit, leaving room for the hint `end_note`
+/// adds. Excerpts are not labelled one way, so when a note is cut the
+/// session forgets everything this prompt showed (all not in `seen_before`)
+/// and a later prompt can show it again; files no longer named leave
+/// `shown`.
+pub(super) fn fit_note(
+    response: &mut Value,
+    harness: &str,
+    before: usize,
+    (session, seen_before): (Option<&Session>, &[Span]),
+    shown: &mut Vec<String>,
+) {
+    if harness != "claude-code" {
+        return;
+    }
+    let reserve = if adds_hint(response, before, session) {
+        BATCHING.len() + 2
+    } else {
+        0
+    };
+    let Some(text) = response.pointer_mut("/hookSpecificOutput/additionalContext") else {
+        return;
+    };
+    let max = CLAUDE_MAX_CHARS.saturating_sub(reserve);
+    let Some(kept) = text.as_str().and_then(|text| cut(text, max)) else {
+        return;
+    };
+    if let Some(session) = session {
+        seen::forget(session, |span| !seen_before.contains(span));
+    }
+    shown.retain(|path| kept.contains(path.as_str()));
+    *text = Value::String(kept);
+}
+
+/// `text` cut to at most `max` characters, or `None` when it fits. A code
+/// block still open at the cut goes whole, with the line naming it, and so
+/// does a label whose block starts right after the cut.
+fn cut(text: &str, max: usize) -> Option<String> {
+    if text.chars().count() <= max {
+        return None;
+    }
+    let room = max.saturating_sub(CUT.len() + 1);
+    let end = text
+        .char_indices()
+        .nth(room)
+        .map_or(text.len(), |(at, _)| at);
+    let mut at = text[..end].rfind('\n').unwrap_or(0);
+    if let Some(open) = open_fence(&text[..at]) {
+        at = text[..open].trim_end_matches('\n').rfind('\n').unwrap_or(0);
+    } else if text[at..].trim_start_matches('\n').starts_with("```") {
+        at = text[..at].rfind('\n').unwrap_or(0);
+    }
+    Some(format!("{}\n{CUT}", &text[..at]))
+}
+
+/// Where the code block still open at the end of `text` starts. A block
+/// closes only on a fence line at least as long as the one that opened it,
+/// so code holding a shorter fence stays inside.
+fn open_fence(text: &str) -> Option<usize> {
+    let mut open: Option<(usize, usize)> = None;
+    let mut at = 0;
+    for line in text.split_inclusive('\n') {
+        let ticks = line.trim_start().chars().take_while(|c| *c == '`').count();
+        match open {
+            None if ticks >= 3 => open = Some((at, ticks)),
+            Some((_, width)) if ticks >= width && line.trim().len() == ticks => open = None,
+            _ => {}
+        }
+        at += line.len();
+    }
+    open.map(|(start, _)| start)
 }
 
 /// The session a prompt belongs to, found the way `attach` finds it.

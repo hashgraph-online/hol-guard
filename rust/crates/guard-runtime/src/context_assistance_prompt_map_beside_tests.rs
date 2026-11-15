@@ -333,3 +333,85 @@ fn a_class_inside_a_test_is_not_listed_and_the_last_test_is_last_in_the_file() {
         "{mapped}"
     );
 }
+
+/// Claude Code reads a file before it edits it, so only the first named
+/// definition is shown whole there; the rest go by their lines.
+#[test]
+fn claude_code_gets_only_the_first_named_definition_whole() {
+    let plain = "def first_part(x):\n    return x + 1\n\n\ndef second_part(x):\n    return x * 2\n";
+    let list = files(&[("src/pkg/two.py", plain)]);
+    let terms = looking_for(&[("firstpart", true, 1), ("secondpart", true, 1)]);
+    let text = |asked: &Asked| map(&list, &terms, asked, later()).unwrap().text;
+    let shown = |text: &str, name: &str| text.contains(&format!("```\ndef {name}(x):"));
+    let all = text(&Asked::default());
+    assert!(
+        shown(&all, "first_part") && shown(&all, "second_part"),
+        "{all}"
+    );
+    let claude = Asked {
+        reads_first: true,
+        ..Asked::default()
+    };
+    let one = text(&claude);
+    assert!(
+        shown(&one, "first_part") != shown(&one, "second_part"),
+        "{one}"
+    );
+}
+
+/// A constructor stays whole in Claude Code: it holds the fields a method the
+/// agent writes uses.
+#[test]
+fn claude_code_still_gets_a_named_constructor_whole() {
+    let code = "class Box:\n    def __init__(self, size):\n        self.__size = size\n\n    \
+def fill(self, x):\n        return x\n\n    def empty(self):\n        raise NotImplementedError\n";
+    let list = files(&[("src/pkg/box.py", code)]);
+    let terms = looking_for(&[("fill", true, 1), ("init", true, 1)]);
+    let claude = Asked {
+        reads_first: true,
+        ..Asked::default()
+    };
+    let text = map(&list, &terms, &claude, later()).unwrap().text;
+    assert!(
+        text.contains("```\n    def __init__(self, size):"),
+        "{text}"
+    );
+}
+
+#[test]
+fn claude_code_does_not_show_a_long_constructor_whole() {
+    let doc = "        \"\"\"Long docstring line about the box.\"\"\"\n".repeat(20);
+    let code = format!(
+        "class Box:\n    def fill(self, x):\n        return x\n\n    \
+def __init__(self, size):\n{doc}        self.__size = size\n"
+    );
+    let list = files(&[("src/pkg/box.py", code.as_str())]);
+    let terms = looking_for(&[("fill", true, 1), ("init", true, 1)]);
+    let claude = Asked {
+        reads_first: true,
+        ..Asked::default()
+    };
+    let text = map(&list, &terms, &claude, later()).unwrap().text;
+    assert!(text.contains("```\n    def fill(self, x):"), "{text}");
+    assert!(
+        !text.contains("```\n    def __init__(self, size):"),
+        "{text}"
+    );
+}
+
+#[test]
+fn a_decorated_short_constructor_stays_whole_in_claude_code() {
+    let code = "class Box:\n    def fill(self, x):\n        return x\n\n    \
+@validate\n    def __init__(self, size):\n        self.__size = size\n";
+    let list = files(&[("src/pkg/box.py", code)]);
+    let terms = looking_for(&[("fill", true, 1), ("init", true, 1)]);
+    let claude = Asked {
+        reads_first: true,
+        ..Asked::default()
+    };
+    let text = map(&list, &terms, &claude, later()).unwrap().text;
+    assert!(
+        text.contains("    def __init__(self, size):\n        self.__size"),
+        "{text}"
+    );
+}
