@@ -44,7 +44,14 @@ pub(crate) fn mask_comment_lines(text: &str) -> Option<String> {
     let mut index = 0;
     while index < characters.len() {
         let character = characters[index];
-        if open.is_empty() && boundary && character == '#' && !line_start {
+        // A comment inside a subshell or backticks may contain quote and
+        // delimiter characters that Bash ignores. Never let those characters
+        // change the scanner state and hide later executable substitutions.
+        if boundary
+            && character == '#'
+            && matches!(open.last().copied(), None | Some('(') | Some('`'))
+            && (!open.is_empty() || !line_start)
+        {
             return None;
         }
         if open.is_empty() && line_start && character == '#' {
@@ -85,7 +92,7 @@ pub(crate) fn mask_comment_lines(text: &str) -> Option<String> {
         line_start &= matches!(character, ' ' | '\t');
         boundary = matches!(
             character,
-            ' ' | '\t' | ';' | '|' | '&' | '(' | ')' | '<' | '>'
+            ' ' | '\t' | '\n' | ';' | '|' | '&' | '(' | ')' | '<' | '>'
         );
         let next = characters.get(index).copied();
         match (open.last().copied(), character) {
