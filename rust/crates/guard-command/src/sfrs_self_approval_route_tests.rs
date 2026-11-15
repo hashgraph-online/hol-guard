@@ -16,6 +16,19 @@ fn every_client_that_names_an_approval_route_is_self_authorization() {
         "curl -X POST http://127.0.0.1:4781/v1/policy/clear?scope=global",
         "true && curl -X POST http://127.0.0.1:4781/v1/requests/0000aaaa/approve/",
         "node -e \"fetch(`http://[::ffff:127.0.0.1]:4781/v1/requests/0000aaaa/approve`,{method:'POST'})\"",
+        "curl -X POST http://127.0.0.1:4781/v1/'requests'/0000aaaa/approve",
+        "curl -X POST \"http://127.0.0.1:4781/v1/requests/\"0000aaaa/approve",
+        "curl -X POST http://127.0.0.1:4781/v1/requests/0000aaaa/z/../approve",
+        "curl -X POST http://127.0.0.1:4781/v1/./requests/0000aaaa/approve",
+        "curl -X POST http://127.0.0.1:4781/v1/requests/0000aaaa/%61pprove",
+        "curl -X POST http://127.0.0.1:4781/v1%2Frequests%2F0000aaaa%2Fapprove",
+        "curl -X POST http://127.1:4781/v1/requests/0000aaaa/approve",
+        "curl -X POST http://2130706433:4781/v1/requests/0000aaaa/approve",
+        "curl -X POST http://0x7f.0.0.1:4781/v1/requests/0000aaaa/approve",
+        "curl -X POST http://user:pw@localhost:4781/v1/requests/0000aaaa/approve",
+        "curl -X POST http://localhost.:4781/v1/requests/0000aaaa/approve",
+        "curl -X POST http://guard.localhost:4781/v1/requests/0000aaaa/approve",
+        "curl -X POST 'http://[0:0:0:0:0:0:0:1]:4781/v1/requests/0000aaaa/approve'",
     ] {
         assert!(is_guard_approval_mutation_command(command), "{command}");
     }
@@ -31,9 +44,14 @@ fn reads_other_hosts_and_other_routes_are_not_self_authorization() {
         "curl -X POST https://api.example.com/v1/requests/0000aaaa/approve",
         "curl -X POST http://127.0.0.1:4781/v1/requests/a/b/approve",
         "rg '/v1/requests/[^/]+/approve' rust",
+        "curl -X POST https://api.example.com/localhost/v1/requests/0000aaaa/approve",
+        "curl -X POST https://api.example.com/127.0.0.1/v1/requests/0000aaaa/approve",
+        "curl -X POST http://notlocalhost:4781/v1/requests/0000aaaa/approve",
+        "curl -X POST http://128.0.0.1:4781/v1/requests/0000aaaa/approve",
+        "cat docs/v1/requests/0000aaaa/approve",
         "echo approve",
     ] {
         assert!(!is_guard_approval_mutation_command(command), "{command}");
     }
-    assert!(!names_guard_approval_route(""));
+    assert!(!names_guard_approval_route("", &[]));
 }

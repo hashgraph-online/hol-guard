@@ -4,16 +4,16 @@
 // Consumed by the later classifier slices.
 #![allow(dead_code)]
 
-use std::sync::LazyLock;
-
-use regex::Regex;
-
 use crate::codex_output_py::{is_py_space, shlex_split, PyPath};
 use crate::sfrs_shlex::{split_with, COMMAND_LEXER};
 
+#[path = "sfrs_self_approval_route.rs"]
+mod route;
 #[cfg(test)]
 #[path = "sfrs_self_approval_route_tests.rs"]
 mod route_tests;
+
+pub(crate) use route::names_guard_approval_route;
 
 pub(crate) const SELF_APPROVAL_ACTION_CLASS: &str = "Guard approval self-authorization command";
 pub(crate) const SELF_APPROVAL_REASON: &str = "Guard blocks AI agents from approving or weakening Guard approval state from inside a protected shell. Review the original request in the local approval center or native harness prompt.";
@@ -45,53 +45,20 @@ const AGENT_ENV_MARKERS: [&str; 10] = [
     "CODEX_SANDBOX",
 ];
 
-/// A loopback URL, with or without a scheme. The path stops at shell and
-/// quoting punctuation so a URL inside `python -c "..."` or a JSON body is
-/// still found.
-static LOOPBACK_URL: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(
-        r#"(?i)(?:https?://)?(?:127(?:\.\d{1,3}){3}|localhost|0\.0\.0\.0|\[(?:0{0,4}:){2,7}0{0,3}1\]|\[::ffff:127(?:\.\d{1,3}){3}\])(?::\d{1,5})?(/[^\s'"`<>|;&()\\]*)"#,
-    )
-    .expect("loopback URL pattern")
-});
-
 /// `is_guard_approval_mutation_command`: the Guard CLI approval mutations,
 /// and any command that names a Guard approval-writing route on a loopback
 /// address, whatever client sends the request.
 pub(crate) fn is_guard_approval_mutation_command(command_text: &str) -> bool {
-    if names_guard_approval_route(command_text) {
+    let parts = split_shell_parts(command_text);
+    if names_guard_approval_route(command_text, &parts) {
         return true;
     }
-    let parts = split_shell_parts(command_text);
     if parts.is_empty() {
         return false;
     }
     shell_segments(&parts)
         .iter()
         .any(|segment| segment_is_guard_approval_mutation(segment, 0))
-}
-
-/// Whether the text names a loopback URL whose path is one of the local
-/// Guard routes that resolve requests or save decisions. Read routes such as
-/// `/v1/requests/{id}` and `/v1/policy/resolve` do not match.
-pub(crate) fn names_guard_approval_route(command_text: &str) -> bool {
-    LOOPBACK_URL
-        .captures_iter(command_text)
-        .filter_map(|captures| captures.get(1))
-        .any(|path| is_approval_write_path(path.as_str()))
-}
-
-fn is_approval_write_path(path: &str) -> bool {
-    let path = path.split(['?', '#']).next().unwrap_or_default();
-    let parts: Vec<&str> = path.split('/').filter(|part| !part.is_empty()).collect();
-    matches!(
-        parts.as_slice(),
-        ["v1", "requests", _, "approve" | "block"]
-            | ["approvals", _, "decision"]
-            | ["v1", "approvals", _, "decision"]
-            | ["v1", "requests", "bulk-allow-once" | "clear"]
-            | ["v1", "policy", "decisions" | "clear"]
-    )
 }
 
 /// `approval_resolution_invoked_from_agent`: a known harness marker is set.
