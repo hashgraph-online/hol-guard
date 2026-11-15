@@ -104,3 +104,7 @@ pub fn sensitive_path_family(path: &Path) -> Option<(&'static str, &'static str)
     }
     None
 }
+
+#[cfg(test)]
+#[path = "sensitive_path_family_tests.rs"]
+mod tests;
