@@ -377,3 +377,24 @@ def fill(self, x):\n        return x\n\n    def empty(self):\n        raise NotI
         "{text}"
     );
 }
+
+#[test]
+fn claude_code_does_not_show_a_long_constructor_whole() {
+    let doc = "        \"\"\"Long docstring line about the box.\"\"\"\n".repeat(20);
+    let code = format!(
+        "class Box:\n    def fill(self, x):\n        return x\n\n    \
+def __init__(self, size):\n{doc}        self.__size = size\n"
+    );
+    let list = files(&[("src/pkg/box.py", code.as_str())]);
+    let terms = looking_for(&[("fill", true, 1), ("init", true, 1)]);
+    let claude = Asked {
+        reads_first: true,
+        ..Asked::default()
+    };
+    let text = map(&list, &terms, &claude, later()).unwrap().text;
+    assert!(text.contains("```\n    def fill(self, x):"), "{text}");
+    assert!(
+        !text.contains("```\n    def __init__(self, size):"),
+        "{text}"
+    );
+}

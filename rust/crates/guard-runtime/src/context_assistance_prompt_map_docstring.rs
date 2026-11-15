@@ -306,13 +306,14 @@ fn relative(file: &File) -> bool {
 }
 
 /// Whether a named definition is shown whole after another was. Claude Code
-/// reads a file before editing it, so there only the first is, and a
-/// constructor, whose fields the other methods use.
+/// reads a file before editing it, so there only the first is, and a short
+/// constructor, whose fields the other methods use. A long one would push
+/// the rest of the note past the hook's size limit.
 pub(super) fn whole_here(asked: &Asked, shown_any: bool, code: &str) -> bool {
+    const SHORT_BUILD_CHARS: usize = 600;
     let head = code.lines().next().unwrap_or_default();
     let builds = ["__init__(", "__new__(", "constructor(", "fn new("];
-    !shown_any
-        || asked.lookup
-        || !asked.reads_first
-        || builds.iter().any(|name| head.contains(name))
+    let short_build =
+        code.len() <= SHORT_BUILD_CHARS && builds.iter().any(|name| head.contains(name));
+    !shown_any || asked.lookup || !asked.reads_first || short_build
 }
