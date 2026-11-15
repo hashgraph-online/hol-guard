@@ -112,6 +112,8 @@ fn rm_of_the_users_own_temporary_files_is_bounded() {
             format!("rm {loose}"),
             format!("rm -f {absent}"),
             format!("rm {scratch}/probe.patch {absent} 2>/dev/null"),
+            format!("mkdir -p {scratch}/next && rm -f {absent} 2>/dev/null; ls {scratch}/next"),
+            format!("rm -f {absent} >/dev/null && echo cleared"),
         ] {
             assert_eq!(
                 action(&fixture, harness, &command),
@@ -181,9 +183,12 @@ fn a_temporary_file_removal_settles_the_destructive_shell_rule() {
             cwd: Some(cwd),
             ..Default::default()
         };
-        program
-            .observe_with_context(&model, &active, None, context)
-            .unwrap()
+        // A form the matcher cannot model fails the whole command closed;
+        // report it as the rule it leaves standing.
+        let Ok(batch) = program.observe_with_context(&model, &active, None, context) else {
+            return vec!["unmodelled: destructive-shell stands".to_owned()];
+        };
+        batch
             .observations
             .into_iter()
             .filter(|observation| !observation.effective_segment_indexes.is_empty())
@@ -195,6 +200,12 @@ fn a_temporary_file_removal_settles_the_destructive_shell_rule() {
     for command in [
         format!("rm {scratch}/probe.txt"),
         format!("rm -f {scratch}/probe.txt {scratch}/probe.patch {absent}"),
+        format!("rm -f {absent} 2>/dev/null"),
+        format!("rm {absent} >/dev/null"),
+        // The proof is per step: each proven `rm` in a compound settles the
+        // rule for itself.
+        format!("mkdir -p {scratch}/next && rm {scratch}/probe.txt {absent} 2>/dev/null; ls {scratch}/next"),
+        format!("rm -f {absent} && rm -f {scratch}/probe.patch || true"),
     ] {
         let matched = rules(&command);
         assert!(
@@ -211,6 +222,14 @@ fn a_temporary_file_removal_settles_the_destructive_shell_rule() {
         format!("rm {scratch}/out"),
         format!("rm -rf {scratch}"),
         "rm /etc/hosts".to_owned(),
+        // A proven step settles nothing for the step beside it.
+        format!("rm -f {absent}; rm /etc/hosts"),
+        format!("rm -f {absent} && rm {scratch}/alias.txt"),
+        // Only a redirect that writes nothing may ride along.
+        format!("rm -f {absent} 2>{scratch}/err.log"),
+        format!("rm -f {absent} 2> /dev/null"),
+        // A removal behind a pipe is not a plain step.
+        format!("echo x | rm -f {absent}"),
     ] {
         let matched = rules(&command);
         assert!(

@@ -182,35 +182,61 @@ pub(super) fn safe_remove_arguments(arguments: &[String], context: super::PathCo
     operands > 0
 }
 
-/// An exact `rm [-f] [--] FILE...` whose every operand is the user's own
-/// scratch file in a temporary root, or a name that is not there.
+/// The segments of a command that are each an exact `rm [-f] [--] FILE...`
+/// whose every operand is the user's own scratch file in a temporary root, or
+/// a name that is not there.
 ///
-/// Removing it loses nothing the user keeps: the same screen already lets
-/// `cp` and `touch` write that path. So, like a removal Git can restore, it
-/// matches neither the recursive-delete rule nor the destructive-shell rule.
-/// A folder, a link, a hard-linked or foreign file, a recursive flag, any
-/// shell expansion and any path outside the temporary roots keep both.
-pub(crate) fn temporary_file_removal(
+/// Removing such a file loses nothing the user keeps: the same screen already
+/// lets `cp` and `touch` write that path. So, like a removal Git can restore,
+/// the segment matches neither the recursive-delete rule nor the
+/// destructive-shell rule. The proof is per segment, so the other steps of a
+/// compound keep every rule they match. A folder, a link, a hard-linked or
+/// foreign file, a recursive flag, any shell expansion and any path outside
+/// the temporary roots keep both rules.
+///
+/// The one redirect a segment may carry is a trailing `2>/dev/null` or
+/// `>/dev/null`, which hides the message for a name that was already gone and
+/// writes nothing.
+pub(crate) fn temporary_removal_segments(
     model: &crate::CanonicalCommandV1,
     context: super::PathContext<'_>,
-) -> bool {
-    model.dialect == "posix"
-        && model.confidence == "exact"
-        && !model.path_overridden
-        && model.wrapper_chain.is_empty()
-        && matches!(model.segments.as_slice(), [segment] if temporary_removal_segment(segment, context))
+) -> Vec<usize> {
+    if model.dialect != "posix"
+        || model.confidence != "exact"
+        || model.path_overridden
+        || !model.wrapper_chain.is_empty()
+    {
+        return Vec::new();
+    }
+    model
+        .segments
+        .iter()
+        .enumerate()
+        .filter(|(_, segment)| temporary_removal_segment(segment, context))
+        .map(|(index, _)| index)
+        .collect()
 }
 
 fn temporary_removal_segment(
     segment: &crate::CommandSegmentV1,
     context: super::PathContext<'_>,
 ) -> bool {
+    let text = ["2>/dev/null", ">/dev/null"]
+        .iter()
+        .find_map(|redirect| {
+            segment
+                .text
+                .strip_suffix(redirect)
+                .and_then(|rest| rest.strip_suffix(' '))
+        })
+        .unwrap_or(&segment.text);
     if segment.executable.as_deref() != Some("rm")
         || segment.path_overridden
         || segment.pipeline_index != 0
+        || !segment.execution_context.starts_with("top:")
         || !segment.wrapper_chain.is_empty()
         || !segment.environment_names.is_empty()
-        || segment.text.contains([
+        || text.contains([
             '>', '<', '$', '`', '|', '&', ';', '\n', '\r', '~', '*', '?', '[', '{',
         ])
     {

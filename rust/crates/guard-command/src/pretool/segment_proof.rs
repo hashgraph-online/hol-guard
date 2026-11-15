@@ -555,6 +555,8 @@ pub(super) fn exact_safe_segment_with_context(
                 || (matches!(basename, "mkdir" | "touch")
                     && super::chain_temporary::creation_chain(model))
                 || (basename == "mkdir" && super::chain_temporary::mkdir_chain(model))
+                || (matches!(basename, "mkdir" | "touch" | "rm")
+                    && super::chain_temporary::removal_chain(model, context))
                 || (basename == "ln" && super::symlink_writes::link_chain(model, context)))
                 && (basename != "ln" && basename != "rm"
                     || super::directory_targets::home_targets_unquoted(segment))

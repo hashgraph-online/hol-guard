@@ -11,7 +11,7 @@
 
 #[path = "chain_directory_copies.rs"]
 mod directory_copies;
-pub(super) use directory_copies::{creation_chain, mkdir_chain};
+pub(super) use directory_copies::{creation_chain, mkdir_chain, removal_chain};
 
 use crate::CanonicalCommandV1;
 use std::path::{Component, Path, PathBuf};
@@ -232,14 +232,15 @@ pub(super) fn absent_temporary_read_target(
 
 /// A read of an absent temporary file relies on the chain not creating a link
 /// at that path first, so it is only proven beside plain peers. `mkdir` makes
-/// directories and never links, so it may share such a chain too.
+/// directories and never links, and `rm` only removes names, so either may
+/// share such a chain too.
 pub(super) fn absent_reads_bounded(
     model: &CanonicalCommandV1,
     context: super::PathContext<'_>,
 ) -> bool {
     model.segments.len() == 1
         || temporary_peers(model)
-        || plain_chain(model, &["awk", "mkdir", "sed"])
+        || plain_chain(model, &["awk", "mkdir", "rm", "sed"])
         || fetch_then_read(model)
         || !model.segments.iter().any(|segment| {
             segment.arguments.iter().any(|argument| {

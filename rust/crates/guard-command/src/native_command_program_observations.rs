@@ -72,20 +72,30 @@ impl NativeCommandProgram {
         // delete rule nor the destructive-shell rule: it loses no work. The
         // proof reads an exact single `rm`, so it also settles the
         // destructive-shell rule's uncertain match.
-        //
-        // The user's own scratch file in a temporary root loses no work
-        // either, so a proven temporary-file removal settles both rules the
-        // same way.
         let recoverable = crate::pretool::recoverable_removal::exact_safe_command(
             command,
             context,
             deadline,
             environment,
-        ) || crate::pretool::temporary_file_removal(command, context);
+        );
         if recoverable {
             compatibility
                 .rule_matches
                 .retain(|matched| !RECOVERABLE_REMOVAL_RULES.contains(&matched.rule_id));
+        }
+        // The user's own scratch file in a temporary root loses no work
+        // either. That proof is per segment, so it settles both rules only
+        // for the `rm` steps it covers and every other step keeps its match.
+        let scratch = crate::pretool::temporary_removal_segments(command, context);
+        if !scratch.is_empty() {
+            compatibility.rule_matches.retain_mut(|matched| {
+                if RECOVERABLE_REMOVAL_RULES.contains(&matched.rule_id) {
+                    matched
+                        .segment_indexes
+                        .retain(|segment| !scratch.contains(segment));
+                }
+                !matched.segment_indexes.is_empty()
+            });
         }
         let candidates = dispatch
             .map(|index| index.candidates(command))
@@ -100,6 +110,20 @@ impl NativeCommandProgram {
         if recoverable {
             batch.observations.retain(|observation| {
                 !RECOVERABLE_REMOVAL_RULES.contains(&observation.rule_id.as_str())
+            });
+        }
+        if !scratch.is_empty() {
+            batch.observations.retain_mut(|observation| {
+                if !RECOVERABLE_REMOVAL_RULES.contains(&observation.rule_id.as_str()) {
+                    return true;
+                }
+                observation
+                    .effective_segment_indexes
+                    .retain(|segment| !scratch.contains(segment));
+                observation
+                    .matcher_evidence
+                    .retain(|evidence| !scratch.contains(&evidence.segment_index));
+                !observation.effective_segment_indexes.is_empty()
             });
         }
         for mut matched in compatibility.rule_matches {

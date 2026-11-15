@@ -13415,6 +13415,57 @@
       "expect": "not_allow"
     },
     {
+      "id": "rm-force-absent-temporary-file-in-cleanup-chain",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "mkdir -p ${PRIVATE_TMP}/next && rm -f /tmp/hg-gate-absent-scratch-output.log 2>/dev/null; ls ${PRIVATE_TMP}"
+      },
+      "cwd": "org_app",
+      "expect": "allow"
+    },
+    {
+      "id": "rm-force-absent-temporary-file-then-echo",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "rm -f /tmp/hg-gate-absent-scratch-output.log >/dev/null && echo cleared"
+      },
+      "cwd": "org_app",
+      "expect": "allow"
+    },
+    {
+      "id": "neg-rm-force-temporary-file-then-system-file",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "rm -f /tmp/hg-gate-absent-scratch-output.log; rm /etc/hosts"
+      },
+      "cwd": "org_app",
+      "expect": "not_allow"
+    },
+    {
       "id": "queue-mkdir-home-deliverables",
       "fix_area": "queue",
       "harnesses": [
