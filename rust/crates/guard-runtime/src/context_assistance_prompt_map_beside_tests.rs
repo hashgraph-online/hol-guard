@@ -333,3 +333,28 @@ fn a_class_inside_a_test_is_not_listed_and_the_last_test_is_last_in_the_file() {
         "{mapped}"
     );
 }
+
+/// Claude Code reads a file before it edits it, so only the first named
+/// definition is shown whole there; the rest go by their lines.
+#[test]
+fn claude_code_gets_only_the_first_named_definition_whole() {
+    let plain = "def first_part(x):\n    return x + 1\n\n\ndef second_part(x):\n    return x * 2\n";
+    let list = files(&[("src/pkg/two.py", plain)]);
+    let terms = looking_for(&[("firstpart", true, 1), ("secondpart", true, 1)]);
+    let text = |asked: &Asked| map(&list, &terms, asked, later()).unwrap().text;
+    let shown = |text: &str, name: &str| text.contains(&format!("```\ndef {name}(x):"));
+    let all = text(&Asked::default());
+    assert!(
+        shown(&all, "first_part") && shown(&all, "second_part"),
+        "{all}"
+    );
+    let claude = Asked {
+        reads_first: true,
+        ..Asked::default()
+    };
+    let one = text(&claude);
+    assert!(
+        shown(&one, "first_part") != shown(&one, "second_part"),
+        "{one}"
+    );
+}
