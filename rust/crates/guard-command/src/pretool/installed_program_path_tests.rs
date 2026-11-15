@@ -223,6 +223,26 @@ fn a_prefix_the_home_owner_installed_into_above_home_is_proven() {
     installed(
         &root,
         "opt/brew/bin",
+        "python3",
+        "opt/brew/Cellar/python/3.14/bin/python3.14",
+    );
+    assert!(
+        proven("opt/brew/bin/python3"),
+        "a link to the versioned file"
+    );
+    installed(
+        &root,
+        "opt/brew/bin",
+        "python",
+        "opt/brew/Cellar/python/3.14/bin/python3.14",
+    );
+    assert!(
+        !proven("opt/brew/bin/python"),
+        "a suffix that is not a version"
+    );
+    installed(
+        &root,
+        "opt/brew/bin",
         "gdu",
         "opt/brew/Cellar/gdu/1.0/bin/gh",
     );
