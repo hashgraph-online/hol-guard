@@ -1,11 +1,27 @@
 //! The hint that ends a note Guard added to a prompt, on how to spend fewer
 //! turns on it.
 use super::seen::{self, Session};
-use super::{add_context, context_len, project_root, session, ACT_ON_IT, BATCHING};
+use super::{add_context, context_len, project_root, session};
 use crate::policy_store::PolicySnapshotStore;
 use guard_contracts::GuardHookEnvelopeV2;
 use serde_json::Value;
 use std::path::Path;
+
+/// Claude Code models tend to send one tool call per turn, and every turn
+/// re-sends the whole conversation, so the reads and edits a note makes
+/// possible cost least when they go out together.
+const BATCHING: &str = "Each tool call re-sends this whole conversation. When you \
+already know several ranges to read or several edits to make, make those tool calls together in \
+one response, not one per turn.";
+/// Codex models tend to read again lines a note already shows, then patch and
+/// test in separate turns; each turn re-sends the whole conversation. The
+/// edit and the test go out as two tool calls from one exec script: a shell
+/// command that writes files and then runs tests is one Guard cannot match to
+/// the project's controls, so it is held and the turn is spent anyway.
+const ACT_ON_IT: &str = "The code and diffs in this note are what the files hold now: \
+work from them instead of reading those lines again. When you can, make the edit and run its check \
+in the same turn: one exec script can call apply_patch and then run the test command, as two tool \
+calls. Make edits with apply_patch, not with a shell or Python script that writes files.";
 
 /// Ends a note Guard added to this prompt with how to spend fewer turns on
 /// it, worded for the harness; a prompt Guard added nothing to gets nothing.
