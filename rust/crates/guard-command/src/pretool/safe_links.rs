@@ -182,6 +182,62 @@ pub(super) fn safe_remove_arguments(arguments: &[String], context: super::PathCo
     operands > 0
 }
 
+/// An exact `rm [-f] [--] FILE...` whose every operand is the user's own
+/// scratch file in a temporary root, or a name that is not there.
+///
+/// Removing it loses nothing the user keeps: the same screen already lets
+/// `cp` and `touch` write that path. So, like a removal Git can restore, it
+/// matches neither the recursive-delete rule nor the destructive-shell rule.
+/// A folder, a link, a hard-linked or foreign file, a recursive flag, any
+/// shell expansion and any path outside the temporary roots keep both.
+pub(crate) fn temporary_file_removal(
+    model: &crate::CanonicalCommandV1,
+    context: super::PathContext<'_>,
+) -> bool {
+    model.dialect == "posix"
+        && model.confidence == "exact"
+        && !model.path_overridden
+        && model.wrapper_chain.is_empty()
+        && matches!(model.segments.as_slice(), [segment] if temporary_removal_segment(segment, context))
+}
+
+fn temporary_removal_segment(
+    segment: &crate::CommandSegmentV1,
+    context: super::PathContext<'_>,
+) -> bool {
+    if segment.executable.as_deref() != Some("rm")
+        || segment.path_overridden
+        || segment.pipeline_index != 0
+        || !segment.wrapper_chain.is_empty()
+        || !segment.environment_names.is_empty()
+        || segment.text.contains([
+            '>', '<', '$', '`', '|', '&', ';', '\n', '\r', '~', '*', '?', '[', '{',
+        ])
+    {
+        return false;
+    }
+    let mut options = true;
+    let mut operands = 0;
+    for argument in &segment.arguments {
+        if options && argument == "--" {
+            options = false;
+            continue;
+        }
+        if options && (argument == "-f" || argument == "--force") {
+            continue;
+        }
+        if argument.starts_with('-') {
+            return false;
+        }
+        options = false;
+        operands += 1;
+        if operands > 16 || !removable_temporary_file(argument, context) {
+            return false;
+        }
+    }
+    operands > 0
+}
+
 fn removable_regular_file(value: &str, context: super::PathContext<'_>) -> bool {
     let expanded =
         expand_home_read_path(value, context.home_dir).unwrap_or_else(|| value.to_owned());

@@ -126,3 +126,72 @@ fn rm_of_a_temporary_path_the_user_does_not_solely_own_keeps_its_review() {
         }
     }
 }
+
+/// The shipped command extensions review every `rm` through the
+/// destructive-shell rule unless a proof settles it. A temporary-file removal
+/// settles it the way a removal Git can restore does; anything else keeps it.
+#[test]
+fn a_temporary_file_removal_settles_the_destructive_shell_rule() {
+    use guard_command::native_command_program::packaged_command_program;
+    use guard_command::{parse_command, CommandModelRequestV1};
+    let fixture = fixture("extension");
+    let program = packaged_command_program().unwrap();
+    let active = program
+        .extensions
+        .iter()
+        .map(|extension| extension.extension_id.clone())
+        .collect();
+    let home = fixture.home.to_str().unwrap();
+    let cwd = fixture.workspace.to_str().unwrap();
+    let rules = |command: &str| -> Vec<String> {
+        let model = parse_command(&CommandModelRequestV1 {
+            command: command.into(),
+            dialect: "posix".into(),
+            transport: "shell_string".into(),
+            extraction_provenance: "guard-shell".into(),
+        })
+        .unwrap();
+        let context = guard_command::pretool::PathContext {
+            home_dir: Some(home),
+            cwd: Some(cwd),
+            ..Default::default()
+        };
+        program
+            .observe_with_context(&model, &active, None, context)
+            .unwrap()
+            .observations
+            .into_iter()
+            .filter(|observation| !observation.effective_segment_indexes.is_empty())
+            .map(|observation| observation.rule_id)
+            .collect()
+    };
+    let scratch = fixture.scratch.display();
+    let absent = format!("/tmp/hg-rm-absent-extension-{}.txt", std::process::id());
+    for command in [
+        format!("rm {scratch}/probe.txt"),
+        format!("rm -f {scratch}/probe.txt {scratch}/probe.patch {absent}"),
+    ] {
+        let matched = rules(&command);
+        assert!(
+            !matched
+                .iter()
+                .any(|rule| rule.contains("destructive-shell")),
+            "{command}: {matched:?}"
+        );
+    }
+    for command in [
+        format!("rm {scratch}/shared/left.txt"),
+        format!("rm {scratch}/alias.txt"),
+        format!("rm {scratch}/out"),
+        format!("rm -rf {scratch}"),
+        "rm /etc/hosts".to_owned(),
+    ] {
+        let matched = rules(&command);
+        assert!(
+            matched
+                .iter()
+                .any(|rule| rule.contains("destructive-shell")),
+            "{command}: {matched:?}"
+        );
+    }
+}
