@@ -427,6 +427,14 @@
    "body": "ba557e2f2b75"
   },
   {
+   "verdict": "windows-permissive",
+   "note": "Windows has no owner or group-write bits to walk; the Windows temporary-copy screen in safe_writes.rs keeps deciding these copies on its own, so this arm adds no check there and changes nothing on Windows.",
+   "file": "rust/crates/guard-command/src/pretool/safe_copies.rs",
+   "item": "fn spelled_folders_private(_target: &Path, _context: PathContext<'_>) -> bool",
+   "cfg": "not(unix)",
+   "body": "23a9ecbc40a7"
+  },
+  {
    "verdict": "windows-unsupported",
    "note": "Off Unix the temporary-file removal proof is never offered: owner, link-count and folder-mode checks need Unix metadata, so every `rm` keeps its review on Windows exactly as before. The rm admission tests are #![cfg(unix)].",
    "file": "rust/crates/guard-command/src/pretool/safe_links.rs",

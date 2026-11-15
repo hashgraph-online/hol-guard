@@ -13771,6 +13771,125 @@
       "expect": "not_allow"
     },
     {
+      "id": "cp-clone-recursive-private-temporary-tree",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "cp -cR ${PRIVATE_TMP}/agent-script ${PRIVATE_TMP}/agent-script-clone"
+      },
+      "cwd": "org_app",
+      "expect": "allow"
+    },
+    {
+      "id": "cp-recursive-keep-private-temporary-tree",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "cp -Rp ${PRIVATE_TMP}/agent-script ${PRIVATE_TMP}/agent-script-kept"
+      },
+      "cwd": "org_app",
+      "expect": "allow"
+    },
+    {
+      "id": "cp-clone-private-temporary-file",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "cp -c ${PRIVATE_TMP}/notes.txt ${PRIVATE_TMP}/notes-clone.txt"
+      },
+      "cwd": "org_app",
+      "expect": "allow"
+    },
+    {
+      "id": "cp-keep-private-temporary-file",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "cp -p ${PRIVATE_TMP}/notes.txt ${PRIVATE_TMP}/notes-kept.txt"
+      },
+      "cwd": "org_app",
+      "expect": "allow"
+    },
+    {
+      "id": "neg-cp-recursive-follow-links-temporary-tree",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "cp -RL ${PRIVATE_TMP}/agent-script ${PRIVATE_TMP}/agent-script-followed"
+      },
+      "cwd": "org_app",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-cp-recursive-temporary-tree-into-itself",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "cp -cR ${PRIVATE_TMP}/agent-script ${PRIVATE_TMP}/agent-script/nested"
+      },
+      "cwd": "org_app",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-cp-recursive-new-tree-directly-in-shared-tmp",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "cp -cR ${PRIVATE_TMP}/agent-script /tmp/hg-gate-shared-tree-copy"
+      },
+      "cwd": "org_app",
+      "expect": "not_allow"
+    },
+    {
       "id": "neg-cp-tmp-into-git-hook",
       "fix_area": "negative",
       "harnesses": [
