@@ -226,3 +226,231 @@ fn refresh_leaves_settings_without_hooks_alone() {
     let answer = ask(&home, "refresh", &Map::new());
     assert_eq!(answer["text"], Value::Null);
 }
+
+fn target(home: &Home, workspace: Option<&std::path::Path>, env: Value) -> Value {
+    let mut context = home.context(env);
+    context["workspace"] = json!(workspace);
+    dispatch(&json!({"harness": "claude-code", "op": "install_target", "context": context}))
+        .unwrap()
+}
+
+#[test]
+fn install_target_names_the_user_file_and_never_a_project_file() {
+    let home = Home::new();
+    let workspace = home.root.join("project");
+    let answer = target(&home, Some(&workspace), json!({"PATH": ""}));
+    assert_eq!(answer["scope"], "user");
+    assert_eq!(answer["settings_path"], json!(settings(&home)));
+    assert!(answer["workspace_note"]
+        .as_str()
+        .unwrap()
+        .contains("does not install into"));
+    let scopes: Vec<_> = answer["precedence"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|layer| (layer["scope"].clone(), layer["guard_writes"].clone()))
+        .collect();
+    assert_eq!(
+        scopes,
+        vec![
+            (json!("managed"), json!(false)),
+            (json!("project_local"), json!(false)),
+            (json!("project"), json!(false)),
+            (json!("user"), json!(true)),
+        ]
+    );
+    assert_eq!(
+        answer["rollback"]["command"],
+        json!([
+            "hol-guard",
+            "uninstall",
+            "claude-code",
+            "--guard-home",
+            home.guard()
+        ])
+    );
+    assert_eq!(answer["hook_overrides"], json!([]));
+    assert!(!workspace.exists());
+}
+
+#[test]
+fn install_target_reports_hooks_turned_off_by_a_project_file() {
+    let home = Home::new();
+    let workspace = home.root.join("project");
+    fs::create_dir_all(workspace.join(".claude")).unwrap();
+    fs::write(
+        workspace.join(".claude/settings.local.json"),
+        r#"{"disableAllHooks": true}"#,
+    )
+    .unwrap();
+    fs::write(workspace.join(".claude/settings.json"), "not json").unwrap();
+    let answer = target(&home, Some(&workspace), json!({"PATH": ""}));
+    let overrides = answer["hook_overrides"].as_array().unwrap();
+    assert_eq!(overrides.len(), 1);
+    assert_eq!(overrides[0]["code"], "disable_all_hooks");
+    assert_eq!(overrides[0]["scope"], "project_local");
+}
+
+#[test]
+fn install_target_reports_a_claude_config_dir_elsewhere() {
+    let home = Home::new();
+    let elsewhere = home.root.join("other-claude");
+    let answer = target(
+        &home,
+        None,
+        json!({"PATH": "", "CLAUDE_CONFIG_DIR": elsewhere}),
+    );
+    assert_eq!(answer["hook_overrides"][0]["code"], "config_dir_elsewhere");
+    let same = target(
+        &home,
+        None,
+        json!({"PATH": "", "CLAUDE_CONFIG_DIR": home.home().join(".claude")}),
+    );
+    assert_eq!(same["hook_overrides"], json!([]));
+}
+
+#[cfg(unix)]
+#[test]
+fn install_target_follows_a_linked_claude_config_dir() {
+    let home = Home::new();
+    let claude = home.home().join(".claude");
+    std::fs::create_dir_all(&claude).unwrap();
+    let link = home.root.join("linked-claude");
+    std::os::unix::fs::symlink(&claude, &link).unwrap();
+    let answer = target(&home, None, json!({"PATH": "", "CLAUDE_CONFIG_DIR": link}));
+    assert_eq!(answer["hook_overrides"], json!([]));
+}
+
+#[test]
+fn install_target_undo_names_the_home_the_install_used() {
+    let home = Home::new();
+    let mut context = home.context(json!({"PATH": ""}));
+    context["user_home"] = json!(home.root.join("someone-else"));
+    context["guard_home"] = json!(home.root.join("someone-else").join(".hol-guard"));
+    let answer =
+        dispatch(&json!({"harness": "claude-code", "op": "install_target", "context": context}))
+            .unwrap();
+    assert_eq!(
+        answer["rollback"]["command"],
+        json!([
+            "hol-guard",
+            "uninstall",
+            "claude-code",
+            "--home",
+            home.home(),
+            "--guard-home",
+            home.root.join("someone-else").join(".hol-guard")
+        ])
+    );
+    // With --home, the CLI already takes that directory as the Guard home.
+    context["guard_home"] = json!(home.home());
+    let implied =
+        dispatch(&json!({"harness": "claude-code", "op": "install_target", "context": context}))
+            .unwrap();
+    assert_eq!(
+        implied["rollback"]["command"],
+        json!([
+            "hol-guard",
+            "uninstall",
+            "claude-code",
+            "--home",
+            home.home()
+        ])
+    );
+}
+
+#[test]
+fn a_copied_undo_quotes_paths_for_the_shell_that_runs_it() {
+    use super::super::claude_install_target::shell_word;
+    assert_eq!(shell_word("/tmp/plain", false), "/tmp/plain");
+    assert_eq!(shell_word("/tmp/Guard State", false), "'/tmp/Guard State'");
+    assert_eq!(shell_word("/tmp/it's", false), "'/tmp/it'\\''s'");
+    assert_eq!(shell_word(r"C:\Guard", true), r"C:\Guard");
+    assert_eq!(shell_word(r"C:\Guard State", true), r"'C:\Guard State'");
+    // PowerShell expands `$` and backticks inside double quotes, so a Windows
+    // path goes in single quotes, with a single quote doubled.
+    assert_eq!(shell_word(r"C:\Guard $cache", true), r"'C:\Guard $cache'");
+    assert_eq!(shell_word(r"C:\it's", true), r"'C:\it''s'");
+    assert_eq!(
+        shell_word("C:\\Users\\O\u{2019}Brien", true),
+        "'C:\\Users\\O\u{2019}\u{2019}Brien'"
+    );
+    assert_eq!(shell_word(r"C:\Guard&State", true), r"'C:\Guard&State'");
+    assert_eq!(shell_word(r"C:\Guard", false), r"'C:\Guard'");
+}
+
+#[test]
+fn install_target_uses_the_highest_precedence_disable_all_hooks() {
+    let home = Home::new();
+    let workspace = home.root.join("project");
+    fs::create_dir_all(workspace.join(".claude")).unwrap();
+    fs::create_dir_all(home.home().join(".claude")).unwrap();
+    fs::write(settings(&home), r#"{"disableAllHooks": true}"#).unwrap();
+    fs::write(
+        workspace.join(".claude/settings.json"),
+        r#"{"disableAllHooks": false}"#,
+    )
+    .unwrap();
+    let answer = target(&home, Some(&workspace), json!({"PATH": ""}));
+    assert_eq!(answer["hook_overrides"], json!([]));
+    let user_only = target(&home, None, json!({"PATH": ""}));
+    assert_eq!(user_only["hook_overrides"][0]["scope"], "user");
+}
+
+#[test]
+fn install_target_reads_a_fixture_managed_policy_only() {
+    let home = Home::new();
+    fs::write(
+        home.root.join("managed-settings.json"),
+        r#"{"allowManagedHooksOnly": true}"#,
+    )
+    .unwrap();
+    let answer = target(&home, None, json!({"PATH": ""}));
+    assert_eq!(answer["hook_overrides"][0]["code"], "managed_hooks_only");
+}
+
+#[cfg(unix)]
+#[test]
+fn install_target_does_not_read_a_device_or_an_oversized_settings_file() {
+    let home = Home::new();
+    let workspace = home.root.join("project");
+    fs::create_dir_all(workspace.join(".claude")).unwrap();
+    std::os::unix::fs::symlink("/dev/zero", workspace.join(".claude/settings.json")).unwrap();
+    let mut big = br#"{"disableAllHooks": true, "pad": ""#.to_vec();
+    big.resize(2 * 1024 * 1024, b' ');
+    big.extend_from_slice(br#""}"#);
+    fs::write(workspace.join(".claude/settings.local.json"), big).unwrap();
+    let answer = target(&home, Some(&workspace), json!({"PATH": ""}));
+    assert_eq!(answer["hook_overrides"], json!([]));
+}
+
+#[test]
+fn install_notes_name_the_settings_file_and_the_rollback() {
+    let home = Home::new();
+    let answer = run(
+        &home,
+        "prepare_install",
+        json!({"shim": shim()}),
+        &facts(None, false),
+    );
+    let manifest: Value = serde_json::from_str(answer["manifest"].as_str().unwrap()).unwrap();
+    // Compare decoded strings: JSON text would escape Windows backslashes.
+    let notes: Vec<&str> = manifest["notes"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter_map(Value::as_str)
+        .collect();
+    let written = format!("user settings at {}", settings(&home).display());
+    assert!(
+        notes.iter().any(|note| note.contains(&written)),
+        "{notes:?}"
+    );
+    assert!(
+        notes
+            .iter()
+            .any(|note| note.contains("hol-guard uninstall claude-code --guard-home")),
+        "{notes:?}"
+    );
+}

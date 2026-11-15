@@ -15,6 +15,7 @@ from ..harness_posture import harness_posture_line
 from ..protection_coverage import PROTECTION_NOT_IN_EFFECT_DETAIL, protection_is_in_effect
 from ..redaction import redact_text
 from ..value_coercion import coerce_int as _coerce_int
+from .claude_settings_target import render_settings_target
 from .doctor_readiness import doctor_runtime_readiness
 from .protect_inline_approval import human_protect_guidance
 from .protect_output import (
@@ -1559,6 +1560,8 @@ def _render_managed_install(console: Console, payload: dict[str, object]) -> Non
     sandbox_analysis = _coerce_dict_list(payload.get("sandbox_analysis"))
     if bool(payload.get("self_uninstall")):
         render_self_uninstall(console, payload)
+    for plan in _coerce_dict_list(payload.get("setup_plans")) or [payload]:
+        render_settings_target(console, plan.get("settings_target"))
     managed_install = payload.get("managed_install")
     if isinstance(managed_install, dict):
         _render_single_managed_install(console, managed_install)
@@ -1605,6 +1608,7 @@ def _render_apps(console: Console, payload: dict[str, object]) -> None:
         _render_managed_install(console, payload)
     else:
         _render_fallback(console, payload)
+    render_settings_target(console, payload.get("settings_target"))
     dry_run_effect = payload.get("dry_run_effect")
     if isinstance(dry_run_effect, str) and dry_run_effect:
         console.print(Panel(dry_run_effect, title="Dry run", border_style="yellow"))

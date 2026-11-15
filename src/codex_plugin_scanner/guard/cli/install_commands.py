@@ -21,6 +21,7 @@ from ..runtime.fleet_posture_common import DIAGNOSTICS_STATE_KEY, parse_timestam
 from ..runtime.skill_protection import detect_skill_content_risk
 from ..runtime_transition import assert_transition_mutation_allowed
 from ..store import GuardStore
+from .claude_settings_target import claude_settings_target
 from .cursor_actions import (
     cursor_install_surface,
     cursor_local_action_payload,
@@ -218,6 +219,8 @@ def build_harness_setup_plan(
             "No app config was changed and Guard Cloud was not connected. "
             f"Run hol-guard apps {action} {adapter.harness} without --dry-run to finish setup."
         )
+    if adapter.harness == "claude-code" and action in {"connect", "repair"}:
+        payload["settings_target"] = claude_settings_target(context)
     if action == "uninstall":
         confirmation_phrase = uninstall_confirmation_token(adapter.harness)
         payload["confirmation_phrase"] = confirmation_phrase

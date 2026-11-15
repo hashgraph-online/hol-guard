@@ -52,7 +52,12 @@ impl Home {
         self.root.join("guard")
     }
 
-    fn context(&self, env: Value) -> Value {
+    fn context(&self, mut env: Value) -> Value {
+        // Never read the host's real Claude Code managed policy.
+        if let Some(env) = env.as_object_mut() {
+            env.entry("HOL_GUARD_TEST_CLAUDE_MANAGED_SETTINGS")
+                .or_insert_with(|| json!(self.root.join("managed-settings.json")));
+        }
         json!({
             "home": self.home(),
             "workspace": null,
