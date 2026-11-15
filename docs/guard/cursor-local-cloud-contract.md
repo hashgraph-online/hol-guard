@@ -1,6 +1,6 @@
 # Cursor Local Cloud Contract
 
-Cursor support is split by surface so the dashboard does not imply protection the local harness cannot provide.
+Cursor support is split by surface so the dashboard does not imply protection the local harness cannot provide. Each surface has its own row in the [harness protection claims](harness-claims.md#cursor), so coverage on one surface never stands in for another. The CLI row claims only the launch check: actions inside a Cursor CLI agent session are not claimed until a live CLI session shows Guard answering them.
 
 ## Surfaces
 
@@ -8,6 +8,8 @@ Cursor support is split by surface so the dashboard does not imply protection th
 | ------- | ------------------- | ----------------- |
 | **Editor (IDE)** | MCP proxies in `.cursor/mcp.json` and native hooks in `.cursor/hooks.json` | Agent `beforeShellExecution`, `beforeMCPExecution`, `beforeReadFile`, and `preToolUse` for native file writes, edits, and deletes |
 | **CLI** | `guard-cursor-agent` and `guard-cursor` shims on `PATH` | Launches routed through `hol-guard run cursor` before the real Cursor CLI agent starts |
+| **Cloud agent** | Nothing; cloud agents run on Cursor's machines | Not covered: no Guard runtime answers project hooks there |
+| **Built-in terminal** | Nothing; Guard installs no terminal wrapper | Not covered: commands typed outside an agent session reach no hook |
 
 Run `hol-guard apps connect cursor --surface all` (or `hol-guard install cursor` for both surfaces) to enable editor hooks and CLI shims.
 
@@ -34,7 +36,7 @@ Cursor has no `beforeWriteFile` event, and it ignores the whole `hooks.json` whe
 
 Hooks call Guard's native runtime as `cursor-hook-bridge`, followed by the attested Guard Python interpreter and a managed client script (`.cursor/hooks/hol-guard-cursor-hook.py`), so a missing execute bit cannot freeze the IDE. The runtime reads the constants the client carries, answers the hook from the local daemon and maps Guard policy results to Cursor `permission` responses (`allow`, `deny`, `ask`). Guard writes the hook only when that runtime can answer, and `hol-guard doctor cursor` reports protection as missing when none can, so the client never runs on its own. A hook that reached it directly would let an `after*` observer continue and deny every other hook.
 
-Behind that runtime, when native review, daemon transport, or hook execution cannot complete, Guard keeps a schema-valid response on every path. PreToolUse continues so the session stays moving. Forged launchers, oversized input, unauthenticated hook payloads, and retained-byte limit failures still deny. Empty Cursor stdin with no baked event allows. A known shell event with unparseable input still denies unless Watch/observe is on.
+Behind that runtime, when native review, daemon transport, or hook execution cannot complete, Guard keeps a schema-valid response on every path: `beforeShellExecution`, `beforeMCPExecution`, `beforeReadFile`, and `preToolUse` answer `deny` with a message naming the failure, and the `after*` observers continue. Forged launchers, oversized input, unauthenticated hook payloads, and retained-byte limit failures also deny. Empty Cursor stdin with no baked event allows. A known shell event with unparseable input still denies unless Watch/observe is on.
 
 Restart Cursor after install so hook config reloads.
 
