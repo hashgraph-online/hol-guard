@@ -71,15 +71,11 @@ fn jq_filter_is_static(value: &str) -> bool {
 }
 
 /// Every `@` names a format the jq read grammar accepts and stands bare, so
-/// `@sh` and a `@text "..."` template stay in review. An `@` inside a plain
-/// string literal is text; once a string interpolates, every `@` is screened.
+/// `@sh` and a `@text "..."` template stay in review. An `@` in a string
+/// literal's text is text; the code inside a `\(...)` interpolation is
+/// screened like the rest of the filter.
 pub(super) fn jq_formats_are_bare(value: &str) -> bool {
-    let code = if value.contains("\\(") {
-        value.to_owned()
-    } else {
-        outside_strings(value)
-    };
-    code.split('@').skip(1).all(|tail| {
+    outside_strings(value).split('@').skip(1).all(|tail| {
         let end = tail
             .find(|c: char| !(c.is_ascii_alphanumeric() || c == '_'))
             .unwrap_or(tail.len());
@@ -88,21 +84,44 @@ pub(super) fn jq_formats_are_bare(value: &str) -> bool {
     })
 }
 
-/// The filter with each string literal's contents removed, quotes kept.
+/// The filter with each string literal's text removed. Quotes stay, and so
+/// does the code inside each `\(...)` interpolation, nested strings and all.
 fn outside_strings(value: &str) -> String {
     let mut code = String::with_capacity(value.len());
+    // One entry per open interpolation: the parenthesis depth in its code.
+    let mut interpolations: Vec<usize> = Vec::new();
     let mut in_string = false;
     let mut characters = value.chars();
     while let Some(character) = characters.next() {
-        if !in_string {
-            in_string = character == '"';
-            code.push(character);
-        } else if character == '\\' {
-            characters.next();
-        } else if character == '"' {
-            in_string = false;
-            code.push(character);
+        if in_string {
+            match character {
+                // An escape takes the next character; `\(` opens code.
+                '\\' => {
+                    if characters.next() == Some('(') {
+                        interpolations.push(0);
+                        in_string = false;
+                        code.push('(');
+                    }
+                }
+                '"' => {
+                    in_string = false;
+                    code.push('"');
+                }
+                _ => {}
+            }
+            continue;
         }
+        match (character, interpolations.last_mut()) {
+            ('"', _) => in_string = true,
+            ('(', Some(depth)) => *depth += 1,
+            (')', Some(0)) => {
+                interpolations.pop();
+                in_string = true;
+            }
+            (')', Some(depth)) => *depth -= 1,
+            _ => {}
+        }
+        code.push(character);
     }
     code
 }
