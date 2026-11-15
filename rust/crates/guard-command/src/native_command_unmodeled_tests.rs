@@ -703,6 +703,10 @@ fn a_case_label_and_an_empty_prefix_keep_their_approval() {
         // own arguments, so the pattern among them starts nothing and the
         // command reaches the review an ordinary print reaches.
         "echo case in /bin/b?sh -c id )",
+        // Nor does the `)` a comment holds end a label, so the glob naming the
+        // program of the step behind them is still there, and that step gets
+        // the review the same glob gets without the comment.
+        "echo case in; /usr/bin/pyth?n3 -c 'import os' # )",
     ] {
         let (action, reason) = decision(&controls, command);
         if reason == FAILED || action != "review" {
@@ -730,10 +734,6 @@ fn a_case_clause_that_can_start_a_program_keeps_the_failure() {
         "case $MODE in `echo a`) $CMD;; esac",
         // An assignment that carries a value is still data movement.
         "while IFS=: read -r name rest; do echo one; done < list.txt",
-        // `case` and `in` written as arguments open no construct, and the `)`
-        // a comment holds ends no label, so the glob naming the program of the
-        // command behind them is still there to be refused.
-        "echo case in; /usr/bin/pyth?n3 -c 'import os' # )",
     ] {
         let (action, reason) = decision(&controls, command);
         if reason != FAILED {

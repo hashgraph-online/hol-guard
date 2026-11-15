@@ -131,6 +131,110 @@ pub fn mask_closed_heredoc_bodies(command: &str, heredocs: &[ShellHeredoc]) -> S
     }
 }
 
+/// `command` with each comment blanked to spaces, so offsets still hold. An
+/// agent labels the steps of a script with comments (`# list open PRs` above
+/// `gh pr list`); read as steps, a note named the program `#`, and a `;` in it
+/// split off another step. A word-start `#` opens a comment to the end of the
+/// line in `bash`, `zsh` and `sh` alike, but not after an escaped newline that
+/// joins it to the word before. The text is left as it is when it holds `((`,
+/// `$(`, `${`, `$[` or a backtick: arithmetic reads `#` as an operator, and a
+/// nested command this scan does not follow could end a comment early.
+///
+/// A comment that is the whole statement, with only blanks since the start,
+/// a `;` or a newline, takes its newline too: left in place, the blank line
+/// read as an empty step. A comment after a word keeps its newline, which
+/// still ends that word's command. After a word, only a `#` followed by a
+/// blank opens a comment here: `delete #3 --hard` names an item to a tool's
+/// author, and keeping that text can only show more than the shell runs. A
+/// glued `#` whose line holds a quote or other shell syntax is a comment all
+/// the same: kept, its quote could swallow the commands on the lines below.
+pub fn mask_shell_comments(command: &str) -> String {
+    if !command.contains('#')
+        || command.contains('`')
+        || ["((", "$(", "${", "$["]
+            .iter()
+            .any(|nested| command.contains(nested))
+    {
+        return command.to_owned();
+    }
+    let mut chars: Vec<char> = command.chars().collect();
+    // The character that closes the open quote; `$'…'` takes escapes like `"…"`.
+    let mut closer: Option<(char, bool)> = None;
+    let mut word_start = true;
+    let mut statement_start = true;
+    let mut index = 0;
+    while index < chars.len() {
+        let ch = chars[index];
+        if let Some((close, escapes)) = closer {
+            if escapes && ch == '\\' {
+                index += 2;
+                continue;
+            }
+            if ch == close {
+                closer = None;
+            }
+            index += 1;
+            continue;
+        }
+        match ch {
+            '\\' if chars.get(index + 1) == Some(&'\n') => {
+                statement_start = false;
+                index += 2;
+                continue;
+            }
+            '\\' => {
+                word_start = false;
+                statement_start = false;
+                index += 2;
+                continue;
+            }
+            '#' if word_start
+                && (statement_start
+                    || chars.get(index + 1).is_none_or(|c| shell_blank(*c))
+                    || glued_comment_has_structure(&chars[index + 1..])) =>
+            {
+                while chars.get(index).is_some_and(|value| *value != '\n') {
+                    chars[index] = ' ';
+                    index += 1;
+                }
+                if statement_start && index < chars.len() {
+                    chars[index] = ' ';
+                    index += 1;
+                }
+                continue;
+            }
+            '\'' => closer = Some(('\'', false)),
+            '"' => closer = Some(('"', true)),
+            '$' if chars.get(index + 1) == Some(&'\'') => {
+                closer = Some(('\'', true));
+                index += 1;
+            }
+            _ => {}
+        }
+        word_start = shell_blank(ch) || matches!(ch, ';' | '&' | '|');
+        statement_start = matches!(ch, ';' | '\n') || statement_start && shell_blank(ch);
+        index += 1;
+    }
+    if closer.is_some() {
+        return command.to_owned();
+    }
+    chars.into_iter().collect()
+}
+
+/// Whether the rest of a line after a glued `#` holds a quote, an escape, an
+/// expansion, a redirection or a parenthesis.
+fn glued_comment_has_structure(rest: &[char]) -> bool {
+    rest.iter()
+        .take_while(|c| **c != '\n')
+        .any(|c| "'\"\\`$<>()".contains(*c))
+}
+
+/// A blank that ends a shell word. A carriage return or a Unicode space
+/// (`\u{a0}`) is part of the word in `bash`, so it opens no comment.
+fn shell_blank(ch: char) -> bool {
+    matches!(ch, ' ' | '\t' | '\n')
+}
+
 /// Heredocs declared on the current line of a `$(` body, whose bodies start
 /// after the line ends.
 #[derive(Default)]
