@@ -131,6 +131,88 @@ pub fn mask_closed_heredoc_bodies(command: &str, heredocs: &[ShellHeredoc]) -> S
     }
 }
 
+/// `command` with each comment blanked to spaces, so offsets still hold. An
+/// agent labels the steps of a script with comments (`# list open PRs` above
+/// `gh pr list`); read as steps, a note named the program `#`, and a `;` in it
+/// split off another step. A word-start `#` opens a comment to the end of the
+/// line in `bash`, `zsh` and `sh` alike, but not after an escaped newline that
+/// joins it to the word before. The text is left as it is when it holds `((`,
+/// `$(`, `${`, `$[` or a backtick: arithmetic reads `#` as an operator, and a
+/// nested command this scan does not follow could end a comment early.
+///
+/// A comment that is the whole statement, with only blanks since the start,
+/// a `;` or a newline, takes its newline too: left in place, the blank line
+/// read as an empty step. A comment after a word keeps its newline, which
+/// still ends that word's command.
+pub fn mask_shell_comments(command: &str) -> String {
+    if !command.contains('#')
+        || command.contains('`')
+        || ["((", "$(", "${", "$["]
+            .iter()
+            .any(|nested| command.contains(nested))
+    {
+        return command.to_owned();
+    }
+    let mut chars: Vec<char> = command.chars().collect();
+    // The character that closes the open quote; `$'…'` takes escapes like `"…"`.
+    let mut closer: Option<(char, bool)> = None;
+    let mut word_start = true;
+    let mut statement_start = true;
+    let mut index = 0;
+    while index < chars.len() {
+        let ch = chars[index];
+        if let Some((close, escapes)) = closer {
+            if escapes && ch == '\\' {
+                index += 2;
+                continue;
+            }
+            if ch == close {
+                closer = None;
+            }
+            index += 1;
+            continue;
+        }
+        match ch {
+            '\\' if chars.get(index + 1) == Some(&'\n') => {
+                statement_start = false;
+                index += 2;
+                continue;
+            }
+            '\\' => {
+                word_start = false;
+                statement_start = false;
+                index += 2;
+                continue;
+            }
+            '#' if word_start => {
+                while chars.get(index).is_some_and(|value| *value != '\n') {
+                    chars[index] = ' ';
+                    index += 1;
+                }
+                if statement_start && index < chars.len() {
+                    chars[index] = ' ';
+                    index += 1;
+                }
+                continue;
+            }
+            '\'' => closer = Some(('\'', false)),
+            '"' => closer = Some(('"', true)),
+            '$' if chars.get(index + 1) == Some(&'\'') => {
+                closer = Some(('\'', true));
+                index += 1;
+            }
+            _ => {}
+        }
+        word_start = ch.is_whitespace() || matches!(ch, ';' | '&' | '|');
+        statement_start = matches!(ch, ';' | '\n') || statement_start && ch.is_whitespace();
+        index += 1;
+    }
+    if closer.is_some() {
+        return command.to_owned();
+    }
+    chars.into_iter().collect()
+}
+
 /// Heredocs declared on the current line of a `$(` body, whose bodies start
 /// after the line ends.
 #[derive(Default)]
