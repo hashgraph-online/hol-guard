@@ -97,6 +97,7 @@ fn a_lookup_of_the_interpreter_may_precede_the_filter() {
     let version = "python3 -c 'import sys; print(sys.version)'";
     for command in [
         format!("which python3; {version}"),
+        format!("which python3 2>&1; {version}"),
         format!("which python3 2>/dev/null; {version}"),
         format!("which -a python3 jq; {version}"),
         format!("command -v python3 && {FILTER}"),
@@ -121,6 +122,7 @@ fn a_lookup_of_the_interpreter_may_precede_the_filter() {
         format!("which $PYTHON; {version}"),
         format!("echo PYTHONPATH; {version}"),
         format!("python3 --version > json.py; {FILTER}"),
+        format!("python3 --version 2>&1 > json.py; {FILTER}"),
         format!("python3 --version >json.py && {FILTER}"),
         format!("uv --version > json.py; {FILTER}"),
         format!("which python3 > json.py; {FILTER}"),
