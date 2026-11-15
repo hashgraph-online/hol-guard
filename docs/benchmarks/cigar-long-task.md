@@ -318,3 +318,40 @@ Same seeds and no-Guard run, Codex with every Guard hook on, on a native wheel b
 | do-no-harm | 3.3% | 1.1% |
 
 Four of the six remaining holds came from one session that gave `apply_patch` a path outside the repository.
+
+### Efficiency gates on `main` at f11eecf8f1 (2026-11-15)
+
+Every Guard hook plus CIGAR against no Guard, same 16 random seeds as above, on a native wheel built locally from `main` at f11eecf8f1 (reports 3.59.0). Codex and Oh My Pi run gpt-6-luna at medium effort, Claude Code runs claude-haiku-4-5. Codex and Oh My Pi pair against one no-Guard run; Claude Code pairs against two and its savings are printed low–high. "Retries" are later calls in the same step that repeat a held call: the same command, or the same tool on the same file (for Oh My Pi, whose patches name no file, the same patch). A rewritten command counts as a later call, not a retry. Oh My Pi commands that ran through Guard's runner leave no command text, so its retry count is a lower bound (4 later calls were not checked in this run).
+
+| harness | tokens saved | cost saved | passed (no Guard) | requests per step | holds per 100 calls | retries per hold | do-no-harm |
+|---|---|---|---|---|---|---|---|
+| Codex | 74.3% | 66.7% | 15 (14) | 2.34 | 0.8 | 0.00 | 0.0% |
+| Oh My Pi | 76.1% | 69.3% | 15 (13) | 3.75 | 1.0 | 0.00 | 2.2% |
+| Claude Code, run 1 | 68.9–70.6% | 60.6–62.1% | 15 (14, 14) | 4.91 | 0.0 | — | 7.6% |
+| Claude Code, run 2 | 70.2–71.8% | 61.7–63.1% | 15 (14, 14) | 4.83 | 0.9 | 0.00 | 8.2% |
+
+Cost saved by step kind:
+
+| harness | bug | two bugs | doc | question | rename | review | stub |
+|---|---|---|---|---|---|---|---|
+| Codex | 68.1% | 71.3% | 64.6% | 53.6% | 55.4% | 66.9% | 66.9% |
+| Oh My Pi | 72.1% | 74.7% | 56.7% | 56.2% | 57.8% | 72.4% | 67.8% |
+| Claude Code, run 1 | 58.9–60.1% | 51.8–64.2% | 28.6–29.2% | 44.7–46.2% | 84.6–85.3% | 70.3–71.6% | 40.5–43.7% |
+| Claude Code, run 2 | 70.3–71.2% | 51.8–64.2% | 25.7–26.3% | 50.7–52.0% | 84.3–85.1% | 70.5–71.8% | 21.0–25.3% |
+
+Gates:
+
+| gate | result |
+|---|---|
+| Cost saved at least 50% on Codex and Oh My Pi | Met: 66.7% and 69.3% |
+| Codex at most 2.7 requests per step | Met: 2.34 (3.58 on 3.60.0a96) |
+| Passes not below no Guard | Met on every run |
+| Retries per hold at most 1.0 | Met: no held call was repeated on any harness |
+| Holds per 100 calls halved | Codex met (4.2 on 3.60.0a96, now 0.8). Oh My Pi (0.3 to 1.0) and Claude Code (0.4 to 0–0.9) were already near zero; their few holds are single sessions (one Claude Code step that wrote a scratch script and ran `git show` while debugging) |
+| Do-no-harm at most 10% | Met: 0.0–8.2% |
+| No step kind under 35% cost saved | Codex and Oh My Pi met. Claude Code missed on doc (25.7–29.2%) and, in run 2, stub |
+| No language under 40%, long set at least the short set, full Guard within 5 points of CIGAR only | Not measured: every rig project is Python and no long or workflow set exists yet |
+
+Why Claude Code's doc steps stay under 35%: with Guard, 8 of 10 doc steps take Claude Code's minimum of read, edit and one test run (its Edit tool refuses a file the session has not read, so a note that shows the code cannot save the read). The no-Guard run often takes the same four requests, at the same fixed context per request (about 20k cached tokens of harness prompt and tool list), and the CIGAR note on a doc step is about 1.3k characters. There is no request left to remove. The run 2 stub figure comes from one session that spent 15 calls debugging `TLRUCache.popitem`; the other 11 stub steps took read, edit and one test run.
+
+Run-to-run spread on Claude Code is about ±3 points of tokens saved on the same build, so the two runs (70.4% at the midpoints, 68.9% at the low end of run 1) are one result.
