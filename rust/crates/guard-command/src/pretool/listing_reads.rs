@@ -270,9 +270,7 @@ fn expanded_path(value: &str, context: super::PathContext<'_>) -> Option<std::pa
 /// Upper bound on the entries a leaf glob's directory may hold.
 const MAX_LEAF_ENTRIES: usize = 4096;
 
-/// A leaf glob under an owner-controlled, listable non-home directory.
-/// Each match is screened, including hidden entries under permissive shell
-/// options; a directory match requires its own listing proof.
+/// Screen every leaf glob match below a listable, owner-controlled non-home directory.
 fn leaf_glob_operand(value: &str, context: super::PathContext<'_>) -> bool {
     // Windows spells the home path with `\`, so there it is a separator.
     let separator = |c: char| c == '/' || (c == '\\' && cfg!(windows));
@@ -321,19 +319,21 @@ fn leaf_glob_operand(value: &str, context: super::PathContext<'_>) -> bool {
     if pattern.starts_with(['.', '[']) && (candidate(".") || candidate("..")) {
         return false;
     }
-    let Some(base) = expanded_path(directory, context) else { return false; };
-    let Ok(canonical_base) = std::fs::canonicalize(&base) else { return false; };
+    let Some(base) = expanded_path(directory, context) else {
+        return false;
+    };
+    let Ok(canonical_base) = std::fs::canonicalize(&base) else {
+        return false;
+    };
     if context.home_dir.is_some_and(|h| {
         !std::fs::canonicalize(h).is_ok_and(|home| home != canonical_base)
     }) {
         return false;
     }
-    // The shell expands after this screen, and anyone may plant a matching link
-    // in a world-writable directory (`/tmp`) meanwhile, so a pattern below one stays reviewed.
+    // Shell expansion races are unsafe in world-writable directories.
     if super::listing_temporary::writable_by_anyone(&base) {
         return false;
     }
-    // In an owner-only temporary directory, screen each matching entry.
     if !safe_reads::safe_listing_arguments(&[directory.to_owned()], context)
         && !super::listing_temporary::temporary_glob_directory(&base, context)
     {
