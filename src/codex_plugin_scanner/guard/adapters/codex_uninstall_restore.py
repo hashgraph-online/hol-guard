@@ -109,8 +109,9 @@ def restore_without_guard(
     # is not overwritten with it; the user runs uninstall again.
     if read_config_bytes(config_path) != current_bytes or _json_bytes(hooks_json_path) != json_bytes:
         raise RuntimeError(
-            f"codex_uninstall_config_changed: the Codex config at {config_path} or its hooks file changed while Guard was "
-            "uninstalling, so Guard left it and the install backup in place. Run `hol-guard uninstall codex` again."
+            f"codex_uninstall_config_changed: the Codex config at {config_path} or its hooks file changed while "
+            "Guard was uninstalling, so Guard left them and the install backup in place. Run "
+            "`hol-guard uninstall codex` again."
         )
     if answer.get("delete") is True:
         config_path.unlink()
