@@ -153,10 +153,14 @@ fn spelled_folders_private(target: &Path, context: PathContext<'_>) -> bool {
     };
     // The user's own macOS temporary folder, as the environment spells it
     // and as it resolves, counts as a root only when it is already private.
-    let user_temporary = std::env::temp_dir();
+    // The spelling is checked too, without its trailing slash so the check
+    // reads the last name itself: a link there is no root of its own.
+    let user_temporary: PathBuf = std::env::temp_dir().components().collect();
     let user_roots = std::fs::canonicalize(&user_temporary)
         .ok()
-        .filter(|root| root.starts_with("/private/var/folders") && private(root))
+        .filter(|root| {
+            root.starts_with("/private/var/folders") && private(root) && private(&user_temporary)
+        })
         .map(|root| [user_temporary, root])
         .into_iter()
         .flatten();
