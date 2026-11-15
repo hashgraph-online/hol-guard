@@ -18611,6 +18611,51 @@
       "expect": "not_allow"
     },
     {
+      "id": "grok-grep-edge-clone-brace-glob-skips-env-backup",
+      "fix_area": "search",
+      "harnesses": [
+        "grok"
+      ],
+      "tool": "grep",
+      "tool_input": {
+        "pattern": "EDGE_PREVIOUS_SETTING",
+        "path": "${HOME}/edge-clone",
+        "glob": "*.{ts,md}"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "neg-grok-grep-edge-clone-brace-glob-selects-env-backup",
+      "fix_area": "negative",
+      "harnesses": [
+        "grok"
+      ],
+      "tool": "grep",
+      "tool_input": {
+        "pattern": "EDGE_PREVIOUS_SETTING",
+        "path": "${HOME}/edge-clone",
+        "glob": "*.{md,bak}"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-grok-grep-edge-clone-comma-list-glob-screens-every-file",
+      "fix_area": "negative",
+      "harnesses": [
+        "grok"
+      ],
+      "tool": "grep",
+      "tool_input": {
+        "pattern": "EDGE_PREVIOUS_SETTING",
+        "path": "${HOME}/edge-clone",
+        "glob": "*.md,*.ts"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
       "id": "neg-grok-grep-edge-clone-path-glob-screens-every-file",
       "fix_area": "negative",
       "harnesses": [
