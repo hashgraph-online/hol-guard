@@ -119,6 +119,64 @@ pub(in crate::pretool) fn new_temporary_tree_target(
         && target
             .to_str()
             .is_some_and(|text| bounded_temporary_copy_target(text, context))
+        && spelled_folders_private(target, context)
+}
+
+/// Every folder between the temporary root and the new tree, read as the
+/// command spells it rather than where it resolves, is a real folder the user
+/// owns and no one else may write to.
+///
+/// The screen above resolves the path, so it inspects wherever a link points
+/// now. A link another user owns in `/tmp`, or a shared folder above the
+/// private one, passes that screen and can be swapped for a planted tree
+/// after the check, and `cp` would then write through a link inside it.
+/// Reading each spelled folder without following it leaves nothing above the
+/// new tree that another user can replace. The system links in front of the
+/// root, `/tmp` and `/var` on macOS, are not walked.
+#[cfg(unix)]
+fn spelled_folders_private(target: &Path, context: PathContext<'_>) -> bool {
+    use std::os::unix::fs::MetadataExt;
+    let Some(owner) = context
+        .home_dir
+        .and_then(|home| std::fs::metadata(home).ok())
+        .map(|metadata| metadata.uid())
+    else {
+        return false;
+    };
+    let Some(parent) = target.parent() else {
+        return false;
+    };
+    let private = |folder: &Path| {
+        folder.symlink_metadata().is_ok_and(|metadata| {
+            metadata.is_dir() && metadata.uid() == owner && metadata.mode() & 0o022 == 0
+        })
+    };
+    // The user's own macOS temporary folder, as the environment spells it
+    // and as it resolves, counts as a root only when it is already private.
+    let user_temporary = std::env::temp_dir();
+    let user_roots = std::fs::canonicalize(&user_temporary)
+        .ok()
+        .filter(|root| root.starts_with("/private/var/folders") && private(root))
+        .map(|root| [user_temporary, root])
+        .into_iter()
+        .flatten();
+    ["/tmp", "/var/tmp", "/private/tmp", "/private/var/tmp"]
+        .into_iter()
+        .map(PathBuf::from)
+        .chain(user_roots)
+        .filter(|root| parent.starts_with(root))
+        .any(|root| {
+            parent
+                .ancestors()
+                .take_while(|folder| *folder != root)
+                .all(|folder| private(folder))
+        })
+}
+
+/// Windows keeps its own temporary-folder screen above.
+#[cfg(not(unix))]
+fn spelled_folders_private(_target: &Path, _context: PathContext<'_>) -> bool {
+    true
 }
 
 /// Whether the folder that would hold `target` is `/tmp` or `/var/tmp`
@@ -186,7 +244,8 @@ fn target_allowed(
             // spelled absolutely. A relative destination joined onto a /tmp
             // workspace must not sidestep the workspace boundary check above.
             || (absolute
-                && (bounded_temporary_copy_target(text, context)
+                && ((bounded_temporary_copy_target(text, context)
+                    && spelled_folders_private(target, context))
                     || created_scratch_child(target, text, created, context))))
 }
 

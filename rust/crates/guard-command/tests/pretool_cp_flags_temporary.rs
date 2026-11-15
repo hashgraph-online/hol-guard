@@ -63,6 +63,8 @@ fn fixture(name: &str) -> Fixture {
     )
     .unwrap();
     directory(&scratch.join("shared"), 0o777);
+    directory(&scratch.join("shared/inner"), 0o700);
+    std::os::unix::fs::symlink(scratch.join("out"), scratch.join("alias")).unwrap();
     fixture.home = std::fs::canonicalize(&home).unwrap();
     fixture.project = std::fs::canonicalize(&project).unwrap();
     fixture
@@ -120,6 +122,13 @@ fn copies_that_merge_escape_or_take_other_flags_keep_their_review() {
     for command in [
         // A folder anyone may write to.
         format!("cp -cR {s}/src {s}/shared/copy"),
+        // A private folder below one anyone may write to, who could swap the
+        // shared folder for a planted tree after the check.
+        format!("cp -R {s}/src {s}/shared/inner/copy"),
+        // A link that resolves to the private folder now but can be pointed
+        // elsewhere after the check.
+        format!("cp -R {s}/src {s}/alias/copy"),
+        format!("cp -c {s}/note.txt {s}/alias/note.txt"),
         // A new tree directly in the shared `/tmp`, where another user could
         // create the folder first.
         format!("cp -cR {s}/src /tmp/hg-cp-flags-new-{}", std::process::id()),

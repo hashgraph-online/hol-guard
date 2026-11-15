@@ -427,6 +427,14 @@
    "body": "ba557e2f2b75"
   },
   {
+   "verdict": "windows-permissive",
+   "note": "Windows has no owner or group-write bits to walk; the Windows temporary-copy screen in safe_writes.rs keeps deciding these copies on its own, so this arm adds no check there and changes nothing on Windows.",
+   "file": "rust/crates/guard-command/src/pretool/safe_copies.rs",
+   "item": "fn spelled_folders_private(_target: &Path, _context: PathContext<'_>) -> bool",
+   "cfg": "not(unix)",
+   "body": "23a9ecbc40a7"
+  },
+  {
    "file": "rust/crates/guard-command/src/pretool/safe_writes.rs",
    "item": "fn bounded_temporary_copy_target(_value: &str, _context: super::PathContext<'_>) -> bool",
    "verdict": "other-platform",
