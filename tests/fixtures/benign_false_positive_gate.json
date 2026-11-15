@@ -30959,7 +30959,7 @@
       ],
       "tool": "shell",
       "tool_input": {
-        "command": "dig +short example.com A"
+        "command": "dig -r +short example.com A"
       },
       "cwd": "worktree",
       "expect": "allow"
