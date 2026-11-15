@@ -23,6 +23,7 @@ from .codex_hook_file_integrity import (
     validate_regular_file,
 )
 from .codex_hook_integrity import (
+    _MANIFEST_MESSAGES,
     authenticate_hook_manifest_text,
     canonical_manifest_bytes,
     hook_authority_receipt_path,
@@ -217,26 +218,35 @@ def prepare_authenticated_hook_publication(
 
 
 def load_hook_manifest_baseline(spec: CodexHookManifestSpec) -> dict[str, object] | None:
-    """Load a prior authenticated baseline or prove this is a clean install.
+    """The runtime loads a prior authenticated baseline or proves a clean install."""
+    import os
 
-    No manifest and no secret is the only unauthenticated state that may create
-    a baseline. It covers both a first install and explicit migration of a
-    pre-manifest exact legacy hook. If either modern artifact exists, every
-    authenticity and ownership check must pass before current package bytes can
-    be signed again.
-    """
+    from .native_transition_files import publication
 
-    manifest_path = hook_manifest_path(spec.guard_home, spec.config_path)
-    secret_path = hook_secret_path(spec.guard_home)
-    manifest_exists = manifest_path.exists() or manifest_path.is_symlink()
-    secret_exists = secret_path.exists() or secret_path.is_symlink()
-    if not manifest_exists and not secret_exists:
-        return None
-    try:
-        manifest = load_authenticated_hook_manifest(spec.guard_home, spec.config_path)
-    except (CodexHookIntegrityError, OSError) as exc:
-        raise _untrusted_baseline_error() from exc
-    if not _manifest_has_owned_installation_context(manifest, spec):
+    def spelled(path: Path) -> str:
+        return os.path.abspath(path.expanduser())
+
+    check_hook_validation_deadline()
+    answer = publication(
+        "baseline",
+        spec.guard_home,
+        config=spelled(spec.config_path),
+        guard_home=spelled(spec.guard_home),
+        home_dir=spelled(spec.home_dir),
+        runtime_guard_home=spelled(spec.runtime_guard_home),
+        workspace_dir=spelled(spec.workspace_dir) if spec.workspace_dir is not None else None,
+        workspace_rebinding_allowed=spec.workspace_rebinding_allowed,
+    )
+    check_hook_validation_deadline()
+    if not isinstance(answer, dict) or set(answer) not in ({"manifest"}, {"untrusted"}):
+        raise _untrusted_baseline_error()
+    if "untrusted" in answer:
+        cause = answer["untrusted"]
+        if isinstance(cause, str):
+            raise _untrusted_baseline_error() from CodexHookIntegrityError(cause, _MANIFEST_MESSAGES.get(cause, cause))
+        raise _untrusted_baseline_error()
+    manifest = answer["manifest"]
+    if manifest is not None and not isinstance(manifest, dict):
         raise _untrusted_baseline_error()
     return manifest
 
@@ -469,32 +479,6 @@ def _expected_context(spec: CodexHookManifestSpec) -> dict[str, object]:
         "runtime_guard_home": canonical_path(spec.runtime_guard_home),
         "workspace_dir": canonical_path(spec.workspace_dir) if spec.workspace_dir is not None else None,
     }
-
-
-def _manifest_has_owned_installation_context(
-    manifest: Mapping[str, object],
-    spec: CodexHookManifestSpec,
-) -> bool:
-    config = manifest.get("config")
-    context = manifest.get("context")
-    expected_context = _expected_context(spec)
-    return (
-        manifest.get("harness") == "codex"
-        and isinstance(config, dict)
-        and config.get("scope") == "global"
-        and config.get("target") == canonical_path(spec.config_path)
-        and isinstance(context, dict)
-        and (
-            context == expected_context
-            or (
-                spec.workspace_rebinding_allowed
-                and context.keys() == expected_context.keys()
-                and context["guard_home"] == expected_context["guard_home"]
-                and context["home_dir"] == expected_context["home_dir"]
-                and context["runtime_guard_home"] == expected_context["runtime_guard_home"]
-            )
-        )
-    )
 
 
 def _untrusted_baseline_error() -> CodexHookIntegrityError:

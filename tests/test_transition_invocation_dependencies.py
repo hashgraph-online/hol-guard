@@ -94,7 +94,7 @@ def test_invocation_record_schema_is_strict(tmp_path, field, value):
     payload = change.payload()
     payload["invocation_identity"][field] = value
     with pytest.raises(module.TransitionError, match="invocation_dependency_invalid"):
-        module._record_files({"files": [payload]})
+        module.check_transition_files([payload])
 
 
 def test_invocation_record_cannot_be_attached_to_authority_dependency(tmp_path):
@@ -102,7 +102,7 @@ def test_invocation_record_cannot_be_attached_to_authority_dependency(tmp_path):
     authority = module.TransitionFile.identity_dependency(target).payload()
     authority["invocation_identity"] = artifact.payload()["invocation_identity"]
     with pytest.raises(module.TransitionError, match="invocation_dependency_invalid"):
-        module._record_files({"files": [authority]})
+        module.check_transition_files([authority])
 
 
 def test_expired_invocation_check_does_not_read_link_metadata(tmp_path, monkeypatch):

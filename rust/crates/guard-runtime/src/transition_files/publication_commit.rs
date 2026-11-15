@@ -8,6 +8,7 @@ use serde_json::{json, Map, Value};
 
 use super::inspect::{decode, recovery};
 use super::publication::{self, path_present, Call};
+use super::publication_baseline;
 use super::publication_files;
 use super::publication_io::{
     encode, require_unchanged_for_rollback, restore_private, rollback_identity,
@@ -257,6 +258,7 @@ fn answer(op: &str, call: &mut Call<'_>) -> Step<Value> {
         "publication_write" => publication_files::write(call),
         "publication_restore" => publication_files::restore(call),
         "publication_remove_manifest" => publication_files::remove_manifest(call),
+        "publication_baseline" => publication_baseline::load(call),
         "publication_receipt_load" => publication_receipt::load(call),
         "publication_receipt_build" => publication_receipt::build(call),
         "publication_remove" => remove_record(&call.home()?).map(|()| Value::Null),

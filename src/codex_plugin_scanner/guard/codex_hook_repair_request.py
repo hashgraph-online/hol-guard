@@ -37,7 +37,7 @@ from .runtime_transition import (
     RuntimeTransition,
     TransitionError,
     TransitionFile,
-    _record_files,
+    check_transition_files,
     inverse_recovery_budget,
 )
 
@@ -51,6 +51,13 @@ _REVIEW_TIMESTAMP_SLACK_SECONDS = 1e-6
 _INVERSE_SCHEMA = "hol-guard.codex-publication-inverse-request.v1"
 _INVERSE_PURPOSE = "codex-publication-inverse-request"
 RepairPlan = PreparedCodexHookRepair | PreparedCodexPublicationInverse
+
+
+def _checked_files(value: object) -> list[dict[str, object]]:
+    if not isinstance(value, list) or not 0 < len(value) <= 128 or not all(isinstance(item, dict) for item in value):
+        raise TransitionError("files_invalid")
+    check_transition_files(value)
+    return value
 
 
 def _inverse_from_payload(
@@ -142,7 +149,7 @@ def _plan_from_payload(value: object, *, home: Path, config: Path) -> PreparedCo
             artifact_identity=cast(dict[str, object] | None, item.get("artifact_identity")),
             invocation_identity=cast(dict[str, object] | None, item.get("invocation_identity")),
         )
-        for item in _record_files(value)
+        for item in _checked_files(value.get("files"))
     )
     changes = [item for item in files if item.path == hook_manifest_path(home, config)]
     if len(changes) != 1:

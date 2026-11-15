@@ -28,6 +28,9 @@ mod phase;
 #[path = "runtime_transition_begin.rs"]
 mod begin;
 
+#[path = "runtime_transition_plan.rs"]
+mod plan;
+
 use crate::codex_hook_authority_record::python_json::{parse_python_json, python_canonical_json};
 use shape::{validate_record, Refusal};
 
@@ -110,6 +113,8 @@ fn answer(request: &Request) -> Value {
         "step_commit" => phase::commit(request),
         "begin_check" => begin::check(request),
         "begin_commit" => begin::commit(request),
+        "plan_check" => plan::subject(request),
+        "files_check" => plan::files(request),
         "read" => read_record(request).map(|payload| json!({"payload": payload})),
         "retire" => retire(request).map(|()| json!({"ok": true})),
         "refusal_write" => write_refusal(request).map(|()| json!({"ok": true})),

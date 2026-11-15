@@ -24,6 +24,7 @@ mod lease;
 mod lock_files;
 mod output;
 mod publication;
+mod publication_baseline;
 mod publication_commit;
 mod publication_files;
 mod publication_io;

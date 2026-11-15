@@ -229,7 +229,7 @@ pub(crate) fn record_files(
         digest_dependency(change)?;
         for generation in ["before", "after"] {
             let Some(recorded) = mode(change.get(&format!("{generation}_mode"))) else {
-                return refuse("file_mode_invalid");
+                return Err(("file_mode_invalid".to_owned(), path.map(str::to_owned)));
             };
             if generation == "after"
                 && unsafe_mode(recorded, change.get("artifact_identity"))

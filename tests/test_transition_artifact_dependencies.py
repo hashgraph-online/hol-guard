@@ -88,11 +88,11 @@ def test_prior_artifact_record_without_role_preserves_strict_mode_validation(tmp
     path, identity = _artifact(tmp_path)
     payload = module.TransitionFile.artifact_dependency(identity).payload()
     payload["artifact_identity"].pop("role")
-    module._record_files({"files": [payload]})
+    module.check_transition_files([payload])
     module.RuntimeTransition._compare({"files": [payload]}, "before")
     payload["before_mode"] = payload["after_mode"] = 0o775
     with pytest.raises(module.TransitionError, match="file_mode_invalid"):
-        module._record_files({"files": [payload]})
+        module.check_transition_files([payload])
     assert path.stat().st_mode & 0o777 == 0o755
 
 
@@ -154,7 +154,7 @@ def test_artifact_record_schema_refuses_missing_digest_and_unknown_identity_fiel
     else:
         payload.update(changes)
     with pytest.raises(module.TransitionError, match="artifact_dependency_invalid"):
-        module._record_files({"files": [payload]})
+        module.check_transition_files([payload])
 
 
 def test_artifact_dependency_cannot_be_used_for_reserved_hook_key(
