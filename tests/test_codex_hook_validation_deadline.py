@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import hashlib
 import threading
 import time
 
@@ -29,31 +28,24 @@ def test_expired_validation_reads_no_authority_or_executable(monkeypatch):
         )
 
 
-def test_hashing_stops_after_the_chunk_that_exhausts_original_budget(tmp_path, monkeypatch):
-    path = tmp_path / "module.py"
-    path.write_bytes(b"fixture")
-    clock, reads = [5.0], []
+def test_a_runtime_answer_after_the_original_budget_is_refused(monkeypatch):
+    from codex_plugin_scanner.guard import native_runner_authority as authority
+
+    clock, asked = [5.0], []
     monkeypatch.setattr(files.time, "monotonic", lambda: clock[0])
 
-    class SlowFile:
-        def __enter__(self):
-            return self
+    def slow_runtime(kind, request, **kwargs):
+        asked.append(kwargs["deadline_monotonic"])
+        clock[0] = 11.0
+        return {"ok": True}
 
-        def __exit__(self, *args):
-            return False
-
-        def read(self, size):
-            reads.append(size)
-            clock[0] = 11.0
-            return b"fixture"
-
-    with monkeypatch.context() as patch:
-        patch.setattr(type(path), "open", lambda *args, **kwargs: SlowFile())
-        with pytest.raises(files.CodexHookIntegrityError, match="exhausted"), files.hook_validation_deadline(10):
-            files._sha256_file(path)
-    assert reads == [1024 * 1024]
+    monkeypatch.setattr(authority, "native_runner_authority", slow_runtime)
+    with pytest.raises(files.CodexHookIntegrityError, match="exhausted"), files.hook_validation_deadline(10):
+        files.verify_regular_file_identity({})
+    assert asked == [10]
     # A failed validator cannot leave a deadline attached to later operations.
-    assert files._sha256_file(path) == hashlib.sha256(b"fixture").hexdigest()
+    files.verify_regular_file_identity({})
+    assert asked == [10, None]
 
 
 def test_nested_and_legacy_validation_scopes_cannot_renew_original_budget(tmp_path, monkeypatch):
@@ -68,10 +60,10 @@ def test_nested_and_legacy_validation_scopes_cannot_renew_original_budget(tmp_pa
                 files.hook_validation_deadline(nested),
             ):
                 clock[0] = 11.0
-                files._sha256_file(path)
+                files.canonical_path(path)
             clock[0] = 5.0
     clock[0] = 11.0
-    assert files._sha256_file(path) == hashlib.sha256(b"fixture").hexdigest()
+    assert files.canonical_path(path) == str(path.resolve())
 
 
 def test_expiry_after_manifest_read_does_not_read_authority_key(tmp_path, monkeypatch):
@@ -104,7 +96,7 @@ def test_validation_deadline_does_not_leak_into_another_thread(tmp_path, monkeyp
 
     def other_validator():
         try:
-            results.append(files._sha256_file(path))
+            results.append(files.canonical_path(path))
         except Exception as error:
             results.append(error)
 
@@ -113,7 +105,7 @@ def test_validation_deadline_does_not_leak_into_another_thread(tmp_path, monkeyp
         thread.start()
         thread.join(timeout=1)
         assert not thread.is_alive()
-    assert results == [hashlib.sha256(b"fixture").hexdigest()]
+    assert results == [str(path.resolve())]
 
 
 @pytest.mark.parametrize("deadline", [float("nan"), float("inf"), True])

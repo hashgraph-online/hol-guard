@@ -74,13 +74,24 @@ pub(crate) fn private_to_owner(_metadata: &fs::Metadata) -> Result<(), Private> 
     Ok(())
 }
 
-fn ask_for(canonical_path: Option<&str>) -> IdentityAsk<'_> {
+fn ask_for<'a>(canonical_path: Option<&'a str>, installed: bool) -> IdentityAsk<'a> {
     IdentityAsk {
         posix: cfg!(unix),
         current_uid: current_uid(),
         canonical_path,
-        installed_python_package_file: true,
+        installed_python_package_file: installed,
     }
+}
+
+/// Whether `path` lies strictly inside one of the asking interpreter's
+/// package roots, both spelled canonically.
+pub(crate) fn under_package_root(path: &Path, package_roots: &[PathBuf]) -> bool {
+    let canonical_path = canonical(path);
+    package_roots.iter().any(|root| {
+        canonical_path
+            .strip_prefix(canonical(root))
+            .is_ok_and(|rest| rest.components().next().is_some())
+    })
 }
 
 #[cfg(unix)]
@@ -95,11 +106,23 @@ pub(crate) fn current_uid() -> Option<u32> {
 
 /// `verify_regular_file_identity`, reason codes included.
 pub(crate) fn verify_regular(identity: &Value) -> Result<(), String> {
-    let spelled = identity
-        .get("path")
-        .and_then(Value::as_str)
-        .map(|path| canonical(Path::new(path)).to_string_lossy().into_owned());
-    let answer = identity_answer(&ask_for(spelled.as_deref()), identity);
+    verify_regular_in(identity, None)
+}
+
+/// `verify_regular_file_identity` for an asker that names its package roots;
+/// `None` trusts every path as a package file.
+pub(crate) fn verify_regular_in(
+    identity: &Value,
+    package_roots: Option<&[PathBuf]>,
+) -> Result<(), String> {
+    let path = identity.get("path").and_then(Value::as_str).map(Path::new);
+    let spelled = path.map(|path| canonical(path).to_string_lossy().into_owned());
+    let installed = match (path, package_roots) {
+        (_, None) => true,
+        (Some(path), Some(roots)) => under_package_root(path, roots),
+        (None, Some(_)) => false,
+    };
+    let answer = identity_answer(&ask_for(spelled.as_deref(), installed), identity);
     let field = |name: &str| answer.get(name).and_then(Value::as_str).unwrap_or("");
     if field("outcome") == "verified" {
         return match answer.get("private_group_question") {
@@ -112,9 +135,8 @@ pub(crate) fn verify_regular(identity: &Value) -> Result<(), String> {
     Err(format!("codex_hook_{}_{}", field("role"), field("kind")))
 }
 
-/// `_owner_private_group`: the group-write bit is safe only when the group
-/// is the owner's own: their primary group, named after them, and listing
-/// no one else.
+/// `_owner_is_only_group_member`: the group-write bit is safe only when
+/// the group is provably private to the file's owner.
 #[cfg(unix)]
 pub(crate) fn private_group(question: &Value) -> bool {
     use nix::unistd::{Gid, Group, Uid, User};
@@ -133,9 +155,33 @@ pub(crate) fn private_group(question: &Value) -> bool {
     ) else {
         return false;
     };
-    user.gid.as_raw() == gid
-        && group.name == user.name
-        && group.mem.iter().all(|member| member == &user.name)
+    let accounts = local_accounts();
+    crate::codex_hook_private_group::group_private_to(
+        &crate::codex_hook_private_group::Owner {
+            name: &user.name,
+            gid: user.gid.as_raw(),
+        },
+        &crate::codex_hook_private_group::GroupEntry {
+            gid,
+            name: &group.name,
+            members: &group.mem,
+        },
+        accounts.as_deref(),
+    )
+}
+
+/// Every account's name and primary group, where the host lists them in one
+/// file. A listing that defers to another source (`+`/`-` compat lines) is
+/// not a full listing, and none is read off Linux.
+#[cfg(target_os = "linux")]
+fn local_accounts() -> Option<Vec<(String, u32)>> {
+    let text = fs::read_to_string("/etc/passwd").ok()?;
+    crate::codex_hook_private_group::parse_passwd(&text)
+}
+
+#[cfg(all(unix, not(target_os = "linux")))]
+fn local_accounts() -> Option<Vec<(String, u32)>> {
+    None
 }
 
 #[cfg(not(unix))]
@@ -146,6 +192,15 @@ pub(crate) fn private_group(_question: &Value) -> bool {
 /// `verify_executable_file_identity`: the recorded invocation path, link and
 /// mode, and the regular file it resolves to.
 pub(crate) fn verify_executable(identity: &Value) -> Result<(), String> {
+    verify_executable_in(identity, None)
+}
+
+/// `verify_executable_file_identity` for an asker that names its package
+/// roots; `None` trusts every path as a package file.
+pub(crate) fn verify_executable_in(
+    identity: &Value,
+    package_roots: Option<&[PathBuf]>,
+) -> Result<(), String> {
     let role = identity
         .get("role")
         .and_then(Value::as_str)
@@ -185,7 +240,7 @@ pub(crate) fn verify_executable(identity: &Value) -> Result<(), String> {
         return Err(reason("not_executable"));
     }
     let target = identity.get("target").unwrap_or(&Value::Null);
-    verify_regular(target)?;
+    verify_regular_in(target, package_roots)?;
     let resolved = canonical(invocation);
     if target.get("path").and_then(Value::as_str) != resolved.to_str() {
         return Err(reason("target_path_mismatch"));

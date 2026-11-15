@@ -13,10 +13,8 @@
 //! its own package roots, and how it splits each handler's command line. This
 //! op reads every file the answer turns on and renders the integrity state.
 //!
-//! Whether a POSIX group is private to a file's owner needs the account
-//! database. An answer that turns on one assumes it is and lists it under
-//! `private_group_questions`; the caller asks again with its answers, and an
-//! answer that says it is not refuses the file where Python refuses it.
+//! Whether a POSIX group is private to a file's owner is read from the
+//! account database here; `private_group_questions` stays empty on the wire.
 
 use std::fs;
 use std::path::Path;
@@ -87,7 +85,6 @@ pub(crate) fn evaluate_request(request: &CodexHookManifestVerifyRequestV1) -> Va
     let mut verifier = Verifier {
         request,
         matches: [false; 4],
-        questions: Vec::new(),
     };
     let outcome = match (&request.failure, &request.manifest, &request.expected) {
         (Some(failure), _, _) => Err(Failure {
@@ -101,12 +98,7 @@ pub(crate) fn evaluate_request(request: &CodexHookManifestVerifyRequestV1) -> Va
         Ok(valid) => valid,
         Err(failure) => verifier.failure_state(&failure),
     };
-    let questions: Vec<Value> = verifier
-        .questions
-        .iter()
-        .map(|(owner_uid, group_gid)| json!({ "owner_uid": owner_uid, "group_gid": group_gid }))
-        .collect();
-    json!({ "state": state, "private_group_questions": questions })
+    json!({ "state": state, "private_group_questions": [] })
 }
 
 struct Verifier<'a> {
@@ -114,8 +106,6 @@ struct Verifier<'a> {
     /// Which managed events hold their authenticated group, as far as the
     /// walk got; a failure reports the partial answer.
     matches: [bool; 4],
-    /// The private-group questions this answer assumed, unanswered so far.
-    questions: Vec<(u32, u32)>,
 }
 
 impl Verifier<'_> {
@@ -249,8 +239,8 @@ impl Verifier<'_> {
         self.request.canonical_paths.get(path).map(String::as_str)
     }
 
-    /// Settles one file answer: a private-group question the caller has
-    /// answered is applied, and one it has not is recorded and assumed.
+    /// Settles one file answer, settling its private-group question from the
+    /// account database.
     fn settle(&mut self, answer: Value) -> Result<(), Failure> {
         let role = answer.get("role").and_then(Value::as_str).unwrap_or("file");
         if let Some(question) = answer.get("private_group_question") {
@@ -262,18 +252,9 @@ impl Verifier<'_> {
             ) else {
                 return Err(file_failure(role, "permissions_unsafe"));
             };
-            let known = self
-                .request
-                .private_groups
-                .iter()
-                .find(|known| known.owner_uid == owner && known.group_gid == group);
-            match known {
-                Some(known) if !known.private => {
-                    return Err(file_failure(role, "permissions_unsafe"));
-                }
-                Some(_) => {}
-                None if self.questions.contains(&(owner, group)) => {}
-                None => self.questions.push((owner, group)),
+            let question = json!({ "owner_uid": owner, "group_gid": group });
+            if !crate::codex_hook_bridge_trust_files::private_group(&question) {
+                return Err(file_failure(role, "permissions_unsafe"));
             }
         }
         if answer.get("outcome").and_then(Value::as_str) == Some("verified") {

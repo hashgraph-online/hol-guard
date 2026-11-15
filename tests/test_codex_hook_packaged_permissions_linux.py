@@ -10,6 +10,7 @@ import pytest
 from codex_plugin_scanner.guard import codex_hook_file_integrity as integrity
 from codex_plugin_scanner.guard.codex_hook_file_integrity import CodexHookIntegrityError, validate_regular_file
 from codex_plugin_scanner.guard.codex_hook_manifest import CodexHookManifestSpec, build_authenticated_hook_manifest
+from tests.codex_hook_private_group_support import group_is_private_to_owner
 
 pytestmark = pytest.mark.skipif(os.name == "nt", reason="POSIX ownership and permission semantics are required")
 
@@ -32,6 +33,12 @@ def _packaged_file(
     return root, path
 
 
+def _assert_refused(path: Path) -> None:
+    with pytest.raises(CodexHookIntegrityError, match="writable by another user") as error:
+        validate_regular_file(path, role="bridge", executable_required=False)
+    assert error.value.reason == "codex_hook_bridge_permissions_unsafe"
+
+
 def _trust_package_root(monkeypatch: pytest.MonkeyPatch, root: Path) -> None:
     monkeypatch.setattr(integrity, "_python_package_roots", lambda: (root.resolve(strict=False),))
 
@@ -42,8 +49,10 @@ def test_packaged_bridge_accepts_private_group_write_in_site_packages(
 ) -> None:
     root, bridge = _packaged_file(tmp_path)
     _trust_package_root(monkeypatch, root)
-    monkeypatch.setattr(integrity, "_owner_is_only_group_member", lambda owner_uid, group_gid: True)
 
+    if not group_is_private_to_owner(bridge):
+        _assert_refused(bridge)
+        return
     metadata = validate_regular_file(bridge, role="bridge", executable_required=False)
 
     assert metadata.st_uid == os.getuid()
@@ -78,12 +87,14 @@ def test_packaged_bridge_accepts_files_under_imported_package_root(
 
     monkeypatch.setattr(site_module, "getsitepackages", lambda: [])
     monkeypatch.setattr(site_module, "getusersitepackages", lambda: "")
-    monkeypatch.setattr(integrity, "_owner_is_only_group_member", lambda owner_uid, group_gid: True)
 
+    assert integrity._is_installed_python_package_file(bridge) is True
+    if not group_is_private_to_owner(bridge):
+        _assert_refused(bridge)
+        return
     metadata = validate_regular_file(bridge, role="bridge", executable_required=False)
 
     assert metadata.st_uid == os.getuid()
-    assert integrity._is_installed_python_package_file(bridge) is True
 
 
 def test_packaged_bridge_accepts_private_group_write_in_dist_packages(
@@ -92,26 +103,14 @@ def test_packaged_bridge_accepts_private_group_write_in_dist_packages(
 ) -> None:
     root, bridge = _packaged_file(tmp_path, package_dir="dist-packages")
     _trust_package_root(monkeypatch, root)
-    monkeypatch.setattr(integrity, "_owner_is_only_group_member", lambda owner_uid, group_gid: True)
 
+    if not group_is_private_to_owner(bridge):
+        _assert_refused(bridge)
+        return
     metadata = validate_regular_file(bridge, role="bridge", executable_required=False)
 
     assert metadata.st_uid == os.getuid()
     assert stat.S_IMODE(metadata.st_mode) == 0o664
-
-
-def test_packaged_bridge_rejects_shared_group_write_in_site_packages(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    root, bridge = _packaged_file(tmp_path)
-    _trust_package_root(monkeypatch, root)
-    monkeypatch.setattr(integrity, "_owner_is_only_group_member", lambda owner_uid, group_gid: False)
-
-    with pytest.raises(CodexHookIntegrityError, match="writable by another user") as error:
-        validate_regular_file(bridge, role="bridge", executable_required=False)
-
-    assert error.value.reason == "codex_hook_bridge_permissions_unsafe"
 
 
 def test_named_site_packages_directory_is_not_enough_to_trust_group_write(
@@ -124,7 +123,6 @@ def test_named_site_packages_directory_is_not_enough_to_trust_group_write(
     bridge.parent.mkdir(parents=True)
     bridge.write_text("# lookalike fixture\n", encoding="utf-8")
     bridge.chmod(0o664)
-    monkeypatch.setattr(integrity, "_owner_is_only_group_member", lambda owner_uid, group_gid: True)
 
     with pytest.raises(CodexHookIntegrityError, match="writable by another user") as error:
         validate_regular_file(bridge, role="bridge", executable_required=False)
@@ -141,21 +139,11 @@ def test_non_package_bridge_still_rejects_group_write_even_for_private_group(
     bridge = tmp_path / "codex_daemon_hook_bridge.py"
     bridge.write_text("# unpackaged fixture\n", encoding="utf-8")
     bridge.chmod(0o664)
-    monkeypatch.setattr(integrity, "_owner_is_only_group_member", lambda owner_uid, group_gid: True)
 
     with pytest.raises(CodexHookIntegrityError, match="writable by another user") as error:
         validate_regular_file(bridge, role="bridge", executable_required=False)
 
     assert error.value.reason == "codex_hook_bridge_permissions_unsafe"
-
-
-def _owner_group_is_private() -> bool:
-    import grp
-    import pwd
-
-    user = pwd.getpwuid(os.getuid())
-    group = grp.getgrgid(user.pw_gid)
-    return group.gr_name == user.pw_name and all(member == user.pw_name for member in group.gr_mem)
 
 
 def test_manifest_build_accepts_private_group_pipx_style_packaged_files(
@@ -212,7 +200,7 @@ def test_manifest_build_accepts_private_group_pipx_style_packaged_files(
         event_bindings=(),
     )
 
-    if not _owner_group_is_private():
+    if not group_is_private_to_owner(packaged_files[0][1]):
         with pytest.raises(CodexHookIntegrityError) as error:
             build_authenticated_hook_manifest(spec)
         assert error.value.reason == "codex_hook_bridge_permissions_unsafe"

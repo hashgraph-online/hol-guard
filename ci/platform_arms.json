@@ -1160,7 +1160,7 @@
    "file": "rust/crates/guard-runtime/src/codex_hook_bridge_trust_files.rs",
    "item": "fn ask_for -- cfg! expression",
    "cfg": "unix",
-   "body": "82d5bfe07fb6"
+   "body": "4bab8dd28946"
   },
   {
    "verdict": "windows-equivalent",
@@ -1220,6 +1220,22 @@
   },
   {
    "verdict": "windows-equivalent",
+   "note": "Windows files carry no POSIX owner or group, so the ownership and group-write rules are skipped exactly as `validate_regular_file` skipped them off POSIX. The file is still opened once without following a reparse point and refused unless regular.",
+   "file": "rust/crates/guard-runtime/src/codex_hook_file_integrity_op.rs",
+   "item": "fn admit -- cfg! expression",
+   "cfg": "unix",
+   "body": "52a03a64b538"
+  },
+  {
+   "verdict": "windows-equivalent",
+   "note": "Off POSIX the execute bit has no meaning, so an executable-required file is checked the way Python's `os.access(path, X_OK)` checked it there.",
+   "file": "rust/crates/guard-runtime/src/codex_hook_file_integrity_op.rs",
+   "item": "fn admit -- cfg! expression #2",
+   "cfg": "unix",
+   "body": "6f65dc52f5ea"
+  },
+  {
+   "verdict": "windows-equivalent",
    "note": "No POSIX owner or mode on Windows; the directory must still be a real directory under the private Guard home, matching the Python key store off POSIX.",
    "file": "rust/crates/guard-runtime/src/codex_hook_key.rs",
    "item": "fn check_directory -- non-Unix block",
@@ -1249,14 +1265,6 @@
    "item": "fn sync_directory(_directory: &Path) -> io::Result<()>",
    "cfg": "not(unix)",
    "body": "e88822ef3716"
-  },
-  {
-   "verdict": "windows-equivalent",
-   "note": "Windows files carry no POSIX owner or group, so the ownership and group-write rules are skipped exactly as `validate_regular_file` skips them off POSIX. The file is still opened once without following a reparse point, refused unless regular, and its size and SHA-256 are recorded and signed.",
-   "file": "rust/crates/guard-runtime/src/codex_hook_manifest_build.rs",
-   "item": "fn describe_regular -- cfg! expression",
-   "cfg": "unix",
-   "body": "f8ebf852709a"
   },
   {
    "verdict": "windows-equivalent",
@@ -2608,7 +2616,7 @@
    "file": "rust/crates/guard-runtime/src/transition_files/artifact.rs",
    "item": "fn trusted_artifact -- cfg! expression",
    "cfg": "unix",
-   "body": "c184fc153c27"
+   "body": "179b8c1351ca"
   },
   {
    "verdict": "windows-equivalent",

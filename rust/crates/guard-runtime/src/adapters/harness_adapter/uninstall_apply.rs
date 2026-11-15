@@ -32,7 +32,7 @@ fn fault(fault: Fault) -> Failure {
             Failure::Integrity("codex_hook_transaction_target_not_regular")
         }
         Fault::Integrity(_, message) => Failure::Runtime(message),
-        Fault::Transition(_) | Fault::Refused(..) | Fault::PrivateGroup { .. } => Failure::Invalid,
+        Fault::Transition(_) | Fault::Refused(..) => Failure::Invalid,
     }
 }
 

@@ -13,9 +13,7 @@
 //! interleaved with the index of every file written so the caller's
 //! `on_write` sees the same sequence; `journal` appends those records to the
 //! owning transaction's journal. One fact stays with the asking interpreter:
-//! whether a POSIX group is private to its owner means
-//! enumerating the account database, so an answer that turns on it asks
-//! back with `reply.private_group` before anything is written.
+//! which directories are its own package roots (`package_roots`).
 
 mod digest_cache;
 mod inspect;
@@ -57,8 +55,6 @@ pub(crate) enum Fault {
     Refused(String, Option<String>),
     /// `OSError`, with its errno when the platform reported one.
     Os(std::io::Error),
-    /// The private-group fact this answer needs.
-    PrivateGroup { owner_uid: u32, group_gid: u32 },
 }
 
 impl From<std::io::Error> for Fault {
@@ -79,7 +75,6 @@ impl Fault {
             Self::Os(error) => json!({ "os": error.to_string(), "errno": error.raw_os_error() }),
             // Asked once a write has started, the question can no longer be
             // answered before the plan is published, so it refuses the file.
-            Self::PrivateGroup { .. } => json!({ "transition": "artifact_permissions_invalid" }),
         }
     }
 }
@@ -161,13 +156,12 @@ impl Budget {
 /// Everything one request carries besides the plan itself.
 pub(crate) struct Ask {
     pub(crate) budget: Budget,
-    pub(crate) package_files: Vec<PathBuf>,
-    pub(crate) private_groups: Vec<(u32, u32, bool)>,
+    pub(crate) package_roots: Vec<PathBuf>,
 }
 
 impl Ask {
     fn parse(args: &Map<String, Value>) -> Result<Self, &'static str> {
-        let package_files = match args.get("package_files") {
+        let package_roots = match args.get("package_roots") {
             None => Vec::new(),
             Some(Value::Array(items)) => items
                 .iter()
@@ -175,41 +169,11 @@ impl Ask {
                 .collect::<Result<_, _>>()?,
             Some(_) => return Err(ERR_INVALID),
         };
-        let private_groups = match args.get("private_groups") {
-            None => Vec::new(),
-            Some(Value::Array(items)) => items
-                .iter()
-                .map(private_group_answer)
-                .collect::<Result<_, &'static str>>()?,
-            Some(_) => return Err(ERR_INVALID),
-        };
         Ok(Self {
             budget: Budget::parse(args.get("budget"))?,
-            package_files,
-            private_groups,
+            package_roots,
         })
     }
-
-    pub(crate) fn private_group(&self, owner_uid: u32, group_gid: u32) -> Option<bool> {
-        self.private_groups
-            .iter()
-            .find(|(owner, group, _)| *owner == owner_uid && *group == group_gid)
-            .map(|(_, _, private)| *private)
-    }
-}
-
-fn private_group_answer(item: &Value) -> Result<(u32, u32, bool), &'static str> {
-    let number = |key: &str| {
-        item.get(key)
-            .and_then(Value::as_u64)
-            .and_then(|value| u32::try_from(value).ok())
-            .ok_or(ERR_INVALID)
-    };
-    let private = item
-        .get("private")
-        .and_then(Value::as_bool)
-        .ok_or(ERR_INVALID)?;
-    Ok((number("owner_uid")?, number("group_gid")?, private))
 }
 
 /// `runner_authority` kind `transition_files`.
@@ -276,12 +240,6 @@ fn checked<'a>(files: impl IntoIterator<Item = &'a Value>) -> Step<()> {
 fn settle(step: Step<Vec<Value>>) -> Value {
     match step {
         Ok(events) => json!({ "ok": true, "events": events }),
-        Err(Fault::PrivateGroup {
-            owner_uid,
-            group_gid,
-        }) => json!({ "reply": { "private_group": {
-            "owner_uid": owner_uid, "group_gid": group_gid,
-        } } }),
         Err(fault) => json!({ "error": fault.to_json(), "events": [] }),
     }
 }

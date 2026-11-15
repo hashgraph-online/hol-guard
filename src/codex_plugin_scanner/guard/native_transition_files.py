@@ -18,7 +18,6 @@ if TYPE_CHECKING:
     from .runtime_transition import TransitionFile
 
 _TIMEOUT_SECONDS = 60.0
-_MAX_ROUNDS = 8
 _INVALID = "native_transition_invalid"
 # Three of the resident reaper's 50 ms passes over the leases.
 _RELEASE_GRACE_SECONDS = 0.15
@@ -42,15 +41,10 @@ def _budget() -> dict[str, int | None]:
     }
 
 
-def _package_files(files: Sequence[object]) -> list[str]:
-    from .codex_hook_file_integrity import _is_installed_python_package_file
+def _package_roots() -> list[str]:
+    from .codex_hook_file_integrity import _python_package_roots
 
-    paths: list[str] = []
-    for change in files:
-        path = change.get("path") if isinstance(change, Mapping) and "artifact_identity" in change else None
-        if isinstance(path, str) and _is_installed_python_package_file(Path(path)):
-            paths.append(path)
-    return paths
+    return [str(root) for root in _python_package_roots()]
 
 
 def _exception(fault: object) -> BaseException:
@@ -104,41 +98,23 @@ def _replay(
 def _ask(
     request: dict[str, object],
     *,
-    plan: Sequence[object],
     files: Sequence[TransitionFile] | None = None,
     on_write: Callable[[TransitionFile], None] | None = None,
 ) -> Mapping[str, object]:
-    from .codex_hook_file_integrity import _owner_is_only_group_member
     from .native_runner_authority import native_runner_authority
     from .runtime_transition import TransitionError
 
-    answers: list[dict[str, object]] = []
-    request = {**request, "package_files": _package_files(plan)}
-    for _ in range(_MAX_ROUNDS):
-        request["budget"] = _budget()
-        request["private_groups"] = answers
-        answer = native_runner_authority("transition_files", request, timeout_seconds=_TIMEOUT_SECONDS)
-        reply = answer.get("reply")
-        if reply is not None:
-            question = reply.get("private_group") if isinstance(reply, dict) else None
-            owner_uid = question.get("owner_uid") if isinstance(question, dict) else None
-            group_gid = question.get("group_gid") if isinstance(question, dict) else None
-            asked = {(item["owner_uid"], item["group_gid"]) for item in answers}
-            if not isinstance(owner_uid, int) or not isinstance(group_gid, int) or (owner_uid, group_gid) in asked:
-                raise TransitionError("artifact_permissions_invalid")
-            private = _owner_is_only_group_member(owner_uid, group_gid) is True
-            answers.append({"owner_uid": owner_uid, "group_gid": group_gid, "private": private})
-            continue
-        _replay(answer.get("events"), files, on_write)
-        error, restore_error = answer.get("error"), answer.get("restore_error")
-        if restore_error is not None:
-            raise _exception(restore_error) from _exception(error)
-        if error is not None:
-            raise _exception(error)
-        if answer.get("ok") is not True:
-            raise TransitionError(_INVALID)
-        return answer
-    raise TransitionError("artifact_permissions_invalid")
+    request = {**request, "package_roots": _package_roots(), "budget": _budget()}
+    answer = native_runner_authority("transition_files", request, timeout_seconds=_TIMEOUT_SECONDS)
+    _replay(answer.get("events"), files, on_write)
+    error, restore_error = answer.get("error"), answer.get("restore_error")
+    if restore_error is not None:
+        raise _exception(restore_error) from _exception(error)
+    if error is not None:
+        raise _exception(error)
+    if answer.get("ok") is not True:
+        raise TransitionError(_INVALID)
+    return answer
 
 
 def publication(op: str, home: Path, **fields: object) -> object:
@@ -147,20 +123,20 @@ def publication(op: str, home: Path, **fields: object) -> object:
     import os
 
     request: dict[str, object] = {"op": f"publication_{op}", "home": os.path.abspath(home), **fields}
-    return _ask(request, plan=[]).get("value")
+    return _ask(request).get("value")
 
 
 def compare_files(files: list[object], generation: str, *, inverse: bool = False) -> None:
     """``RuntimeTransition._compare``: every file still holds ``generation``."""
 
     request: dict[str, object] = {"op": "compare", "files": files, "generation": generation, "inverse": inverse}
-    _ask(request, plan=files)
+    _ask(request)
 
 
 def write_file(change: dict[str, object], generation: str) -> None:
     """``RuntimeTransition._write_file``: publish one generation of one file."""
 
-    _ask({"op": "write", "change": change, "generation": generation}, plan=[change])
+    _ask({"op": "write", "change": change, "generation": generation})
 
 
 def publish_files(
@@ -174,7 +150,7 @@ def publish_files(
 
     payloads = [change.payload() for change in files]
     request: dict[str, object] = {"op": "publish", "files": payloads, "removals": removals, "rollback": rollback}
-    _ask(request, plan=payloads, files=files, on_write=on_write)
+    _ask(request, files=files, on_write=on_write)
 
 
 def append_journal(guard_home: Path, owner: dict[str, object], mutations: list[dict[str, object]]) -> int:

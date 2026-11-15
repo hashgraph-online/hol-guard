@@ -2,8 +2,8 @@
 
 The resident decides whether the authenticated Codex hook manifest still
 describes the live installation; this module ships what the caller
-authenticated plus the path, package-root, command-split and private-group
-spellings only this interpreter can produce. An unavailable resident reports
+authenticated plus the path, package-root and command-split spellings only
+this interpreter can produce. An unavailable resident reports
 the installation as unverified, never as valid.
 """
 
@@ -30,10 +30,6 @@ _RESULT_SCHEMA = "guard-codex-hook-manifest-verify-result.v1"
 _MAX_REQUEST_BYTES = 2 * 1024 * 1024
 # The resident stats and hashes a dozen packaged files and the interpreter.
 _TIMEOUT_SECONDS = 10.0
-# Each round answers every private-group question the previous one asked, so
-# a second round settles the walk; a third covers files that changed between
-# the two.
-_MAX_ROUNDS = 3
 # The resident's JSON parser refuses a value nested past 32 levels with the
 # frame at 0. A live hook group sits under the request object, ``hooks`` and
 # its event's list, so its deepest value may sit 29 levels down, counting the
@@ -69,28 +65,16 @@ def native_codex_hook_manifest_verify(
     if not ensure_resident_prerequisite(home):
         return _unavailable_state()
     wire = _request(hooks, manifest, expected, failure)
-    answers: list[dict[str, object]] = []
-    for _ in range(_MAX_ROUNDS):
-        wire["request_id"] = f"codex-hook-manifest-verify-{uuid4().hex}"
-        wire["private_groups"] = answers
-        payload = _ask(wire, home)
-        if payload is None:
-            return _unavailable_state()
-        questions = payload.get("private_group_questions")
-        state = payload.get("state")
-        if not isinstance(questions, list) or not isinstance(state, dict) or set(state) != set(_unavailable_state()):
-            return _unavailable_state()
-        if not questions:
-            return dict(state)
-        answered = {(item["owner_uid"], item["group_gid"]) for item in answers}
-        for question in questions:
-            owner_uid = question.get("owner_uid") if isinstance(question, dict) else None
-            group_gid = question.get("group_gid") if isinstance(question, dict) else None
-            if not isinstance(owner_uid, int) or not isinstance(group_gid, int) or (owner_uid, group_gid) in answered:
-                return _unavailable_state()
-            private = integrity._owner_is_only_group_member(owner_uid, group_gid)
-            answers.append({"owner_uid": owner_uid, "group_gid": group_gid, "private": private is True})
-    return _unavailable_state()
+    wire["request_id"] = f"codex-hook-manifest-verify-{uuid4().hex}"
+    payload = _ask(wire, home)
+    if payload is None:
+        return _unavailable_state()
+    state = payload.get("state")
+    if payload.get("private_group_questions") != [] or not isinstance(state, dict):
+        return _unavailable_state()
+    if set(state) != set(_unavailable_state()):
+        return _unavailable_state()
+    return dict(state)
 
 
 def _request(

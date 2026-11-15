@@ -200,12 +200,15 @@ mod codex_hook_bridge_direct_resident;
 mod codex_hook_bridge_transport;
 mod codex_hook_bridge_trust_files;
 mod codex_hook_file_identity_op;
+mod codex_hook_file_integrity_op;
 mod codex_hook_identity;
 mod codex_hook_key;
 mod codex_hook_manifest_auth;
 mod codex_hook_manifest_build;
 mod codex_hook_manifest_iso_time;
 mod codex_hook_manifest_verify_op;
+#[cfg(unix)]
+mod codex_hook_private_group;
 mod codex_hook_response;
 mod codex_hook_trust;
 mod codex_hooks;

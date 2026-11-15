@@ -308,29 +308,21 @@ fn a_group_writable_config_turns_on_whether_its_group_is_private() {
     let fixture = Fixture::new();
     set_mode(&fixture.config, 0o660);
     let config = facts(&fixture.config);
-    let mut request = fixture.request();
-    let answer = evaluate_request(&request);
-    assert_eq!(answer["state"]["integrity_status"], "valid");
-    assert_eq!(
-        answer["private_group_questions"],
-        json!([{ "owner_uid": config.uid, "group_gid": config.gid }])
+    let request = fixture.request();
+    let private = crate::codex_hook_bridge_trust_files::private_group(
+        &json!({ "owner_uid": config.uid, "group_gid": config.gid }),
     );
-
-    request.private_groups = vec![guard_contracts::CodexHookPrivateGroupAnswerV1 {
-        owner_uid: config.uid,
-        group_gid: config.gid,
-        private: false,
-    }];
-    expect(
-        &request,
-        "codex_hook_config_target_permissions_unsafe",
-        "tampered",
-    );
-
-    request.private_groups[0].private = true;
     let answer = evaluate_request(&request);
-    assert_eq!(answer["state"]["integrity_status"], "valid");
     assert_eq!(answer["private_group_questions"], json!([]));
+    if private {
+        assert_eq!(answer["state"]["integrity_status"], "valid");
+    } else {
+        expect(
+            &request,
+            "codex_hook_config_target_permissions_unsafe",
+            "tampered",
+        );
+    }
 }
 
 #[test]

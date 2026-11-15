@@ -19,10 +19,9 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use guard_policy_snapshot::local_authority_integrity::sign_local_authority_payload;
 use serde_json::{json, Map, Value};
 
-use crate::codex_hook_bridge_trust_files::{canonical, current_uid, executable, private_group};
-use crate::codex_hook_file_identity_op::{
-    open_regular, permission_rules, sha256_file, IdentityAsk,
-};
+use crate::codex_hook_bridge_trust_files::{canonical, current_uid, executable};
+use crate::codex_hook_file_identity_op::sha256_file;
+use crate::codex_hook_file_integrity_op::admit;
 
 const SCHEMA_VERSION: i64 = 2;
 const PURPOSE: &str = "codex-managed-hook-manifest";
@@ -199,32 +198,7 @@ pub(crate) fn describe_regular(
     package_roots: &[PathBuf],
 ) -> Result<Value, String> {
     let canonical_path = canonical(path);
-    let named = fs::symlink_metadata(&canonical_path).map_err(|_| refused(role, "missing"))?;
-    if named.file_type().is_symlink() || !named.file_type().is_file() {
-        return Err(refused(role, "not_regular"));
-    }
-    let (facts, file) =
-        open_regular(&canonical_path).ok_or_else(|| refused(role, "not_regular"))?;
-    let ask = IdentityAsk {
-        posix: cfg!(unix),
-        current_uid: current_uid(),
-        canonical_path: None,
-        installed_python_package_file: package_roots.iter().any(|root| {
-            canonical_path
-                .strip_prefix(root)
-                .is_ok_and(|rest| rest.components().next().is_some())
-        }),
-    };
-    let unsafe_group =
-        |question: &Option<Value>| question.as_ref().is_some_and(|q| !private_group(q));
-    match permission_rules(&ask, role, &facts, executable_required) {
-        Ok(question) if unsafe_group(&question) => return Err(refused(role, "permissions_unsafe")),
-        Ok(_) => {}
-        Err((_, question)) if unsafe_group(&question) => {
-            return Err(refused(role, "permissions_unsafe"))
-        }
-        Err((kind, _)) => return Err(refused(role, kind)),
-    }
+    let (facts, file) = admit(&canonical_path, role, executable_required, package_roots)?;
     let digest = sha256_file(file, facts.size).ok_or_else(|| refused(role, "hash_mismatch"))?;
     Ok(json!({
         "executable_required": executable_required,

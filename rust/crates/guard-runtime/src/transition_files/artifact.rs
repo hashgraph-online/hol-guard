@@ -102,29 +102,18 @@ fn trusted_artifact(target: &Path, role: &str, ask: &Ask) -> Step<fs::Metadata> 
         posix: cfg!(unix),
         current_uid: current_uid(),
         canonical_path: None,
-        installed_python_package_file: ask.package_files.iter().any(|file| file == target),
+        installed_python_package_file: crate::codex_hook_bridge_trust_files::under_package_root(
+            target,
+            &ask.package_roots,
+        ),
     };
     let facts = FileFacts::of(target, &metadata);
     match permission_rules(&identity_ask, role, &facts, false) {
         Err(_) => return Err(refused()),
         Ok(None) => {}
         Ok(Some(question)) => {
-            let number = |key: &str| {
-                question[key]
-                    .as_u64()
-                    .and_then(|value| u32::try_from(value).ok())
-                    .unwrap_or_default()
-            };
-            let (owner_uid, group_gid) = (number("owner_uid"), number("group_gid"));
-            match ask.private_group(owner_uid, group_gid) {
-                Some(true) => {}
-                Some(false) => return Err(refused()),
-                None => {
-                    return Err(Fault::PrivateGroup {
-                        owner_uid,
-                        group_gid,
-                    })
-                }
+            if !crate::codex_hook_bridge_trust_files::private_group(&question) {
+                return Err(refused());
             }
         }
     }
