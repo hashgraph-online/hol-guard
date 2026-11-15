@@ -12,7 +12,8 @@ from rich.console import Console
 
 from codex_plugin_scanner.guard.cli.render import _render_dashboard
 from codex_plugin_scanner.guard.dashboard_launcher import DashboardLaunchResult, open_dashboard
-from codex_plugin_scanner.guard.native_daemon_manage import _daemon_url_from_answer, daemon_failure_code
+from codex_plugin_scanner.guard.native_daemon_failure import daemon_failure_code
+from codex_plugin_scanner.guard.native_daemon_manage import _daemon_url_from_answer
 
 
 def _raised(answer: dict[str, object] | None, deadline: float) -> BaseException:

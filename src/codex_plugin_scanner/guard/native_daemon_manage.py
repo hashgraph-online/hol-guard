@@ -23,6 +23,8 @@ from ..version import __version__
 from .fork_safety import forget_in_child
 from .live_process_identity import process_start_token as _process_start_marker
 from .mdm.file_lock import release_file_lock
+from .native_daemon_failure import NATIVE_RUNTIME_UNAVAILABLE
+from .native_daemon_failure import with_failure_code as coded
 from .private_file_io import read_private_regular_text
 
 GUARD_DAEMON_COMPATIBILITY_VERSION = 2
@@ -397,7 +399,7 @@ def _ensure_request_extra(
 
     serve_executable = native_serve_executable(guard_home) if executable is None else None
     if executable is None and serve_executable is None:
-        raise RuntimeError("Guard daemon requires the native runtime.")
+        raise coded(RuntimeError("Guard daemon requires the native runtime."), NATIVE_RUNTIME_UNAVAILABLE)
     if executable is not None:
         launch_executable = Path(executable)
         if not launch_executable.is_absolute() or not launch_executable.is_file():
@@ -445,30 +447,11 @@ class GuardDaemonStillStartingError(RuntimeError):
     """The daemon accepted the start but has not answered yet."""
 
 
-def daemon_failure_code(error: BaseException) -> str:
-    """The native `daemon-manage` failure code carried by ``error``, or a code for its type."""
-
-    code = getattr(error, "guard_failure_code", None)
-    if isinstance(code, str) and code:
-        return code
-    if isinstance(error, TimeoutError):
-        return "daemon_start_timeout"
-    if isinstance(error, ValueError):
-        return "daemon_launch_config_invalid"
-    return "daemon_unavailable"
-
-
-def _with_code(error: Exception, code: object) -> Exception:
-    if isinstance(code, str) and code:
-        error.guard_failure_code = code  # type: ignore[attr-defined]
-    return error
-
-
 def _daemon_url_from_answer(answer: Mapping[str, object] | None, deadline: float) -> str:
     if answer is None:
         if time.monotonic() >= deadline:
-            raise _with_code(TimeoutError("Guard daemon operation deadline exceeded."), "daemon_start_timeout")
-        raise _with_code(RuntimeError("Guard daemon start requires the native runtime."), "native_runtime_unavailable")
+            raise coded(TimeoutError("Guard daemon operation deadline exceeded."), "daemon_start_timeout")
+        raise coded(RuntimeError("Guard daemon start requires the native runtime."), NATIVE_RUNTIME_UNAVAILABLE)
     url = answer.get("url")
     if isinstance(url, str) and url:
         return url
@@ -476,11 +459,11 @@ def _daemon_url_from_answer(answer: Mapping[str, object] | None, deadline: float
     text = message if isinstance(message, str) and message else "Guard approval center did not start."
     code = answer.get("code")
     if answer.get("kind") == "value":
-        raise _with_code(ValueError(text), code)
+        raise coded(ValueError(text), code)
     if answer.get("kind") == "timeout":
         # Another launcher holds the start lock: the daemon is still starting.
-        raise _with_code(GuardDaemonStillStartingError(text), code or "daemon_still_starting")
-    raise _with_code(RuntimeError(text), code)
+        raise coded(GuardDaemonStillStartingError(text), code or "daemon_still_starting")
+    raise coded(RuntimeError(text), code)
 
 
 # --- start, recovery and retirement --------------------------------------------------------------
