@@ -312,6 +312,7 @@ pub mod pretool_temp_checkout_search;
 pub mod pretool_temporary_writes;
 pub mod pretool_temporary_writes_windows;
 pub mod pretool_unmatched_read_globs;
+pub mod pretool_version_manager_bin_listing;
 pub mod pretool_version_printenv;
 pub mod pretool_wait_loop_tails;
 pub mod pretool_windows_agent_root_listing;
