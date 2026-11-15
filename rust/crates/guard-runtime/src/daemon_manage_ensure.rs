@@ -74,8 +74,14 @@ pub(super) enum Failure {
 impl Failure {
     pub(super) fn reply(self) -> Value {
         match self {
-            Self::Timeout(message) => json!({"error": message, "kind": "timeout"}),
-            Self::Runtime(message) => json!({"error": message, "kind": "runtime"}),
+            Self::Timeout(message) => {
+                let code = super::failure::code(true, &message);
+                json!({"error": message, "kind": "timeout", "code": code})
+            }
+            Self::Runtime(message) => {
+                let code = super::failure::code(false, &message);
+                json!({"error": message, "kind": "runtime", "code": code})
+            }
         }
     }
 }
@@ -296,13 +302,17 @@ fn locked(context: &Context<'_>) -> Result<String, Failure> {
         retire::reap_orphaned_workers(caller, deadline);
     }
     orphans::retire_unadopted(caller, deadline);
-    for port in candidate_ports(context) {
+    let ports = candidate_ports(context);
+    for port in &ports {
         if deadline.passed() {
             break;
         }
-        if let Some(url) = launch_once(context, port)? {
+        if let Some(url) = launch_once(context, *port)? {
             return Ok(url);
         }
+    }
+    if super::failure::all_ports_in_use(&ports) {
+        return Err(runtime(&super::failure::ports_in_use_message(&ports)));
     }
     Err(runtime(&format!(
         "Guard approval center did not start. Expected state file at {}.",

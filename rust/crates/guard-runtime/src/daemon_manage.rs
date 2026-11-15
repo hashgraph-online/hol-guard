@@ -9,7 +9,7 @@
 //! - `repair_locator`: remove the locator and any untrusted daemon state;
 //!   answers `{"repaired": true, "cleared": [...]}` or `{"error": code}`.
 //! - `ensure`: reuse, adopt or launch the home's daemon; answers
-//!   `{"url": url}` or `{"error": message, "kind": "timeout"|"runtime"}`.
+//!   `{"url": url}` or `{"error": message, "kind": "timeout"|"runtime", "code": code}`.
 
 use std::collections::BTreeMap;
 use std::fs;
@@ -24,6 +24,8 @@ use crate::daemon_policy_authority::load_authenticated_daemon_identity;
 
 #[path = "daemon_manage_ensure.rs"]
 mod ensure;
+#[path = "daemon_manage_failure.rs"]
+mod failure;
 #[path = "daemon_manage_host.rs"]
 mod host;
 #[path = "daemon_manage_live_probe.rs"]
