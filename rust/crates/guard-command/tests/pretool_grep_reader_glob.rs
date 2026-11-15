@@ -22,7 +22,19 @@ fn write(path: PathBuf, text: &str) {
 }
 
 fn decision(harness: &str, command: &str, home: &Path) -> String {
+    decision_with(harness, command, home, home)
+}
+
+/// `shell_home` is the HOME the shell expands `~` from, stamped the way a
+/// harness hook stamps it.
+fn decision_with(harness: &str, command: &str, home: &Path, shell_home: &Path) -> String {
     let cwd = home.join("work");
+    let environment = guard_contracts::GuardExecutionEnvironmentV1 {
+        path: "/usr/bin:/bin".to_owned(),
+        environment_digest: "0".repeat(64),
+        home: Some(shell_home.to_str().unwrap().to_owned()),
+        ..Default::default()
+    };
     evaluate_pre_tool_envelope_with_execution_context(
         harness,
         "PreToolUse",
@@ -47,7 +59,7 @@ fn decision(harness: &str, command: &str, home: &Path) -> String {
             psql_environment: Default::default(),
             creates_nothing: false,
         },
-        None,
+        Some(&environment),
     )
     .decision
 }
@@ -86,6 +98,24 @@ fn grep_over_a_file_glob_outside_a_repository_reads_like_cat() {
                 "{harness}: {allowed}"
             );
         }
+        // The shell expands `~` from its own `HOME`, so a `~` pattern measured
+        // in a different declared home proves nothing; the absolute spelling
+        // still does.
+        assert_ne!(
+            decision_with(harness, "grep -l TODO ~/scratch/tool/*.py", &home, &root),
+            "allow",
+            "{harness}: ~ with a different shell home"
+        );
+        assert_eq!(
+            decision_with(
+                harness,
+                &format!("grep -l TODO {absolute}/*.py"),
+                &home,
+                &root
+            ),
+            "allow",
+            "{harness}: absolute pattern with a different shell home"
+        );
         for denied in [
             // `*` under dotglob would also read `.env`.
             "grep -l x ~/scratch/mixed/*",
