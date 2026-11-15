@@ -38,8 +38,9 @@ twice (`\\\\n` shows as `\\n`).";
 const DOCTESTS: &str = "\nRun its doctests with `python -m pytest --doctest-modules {path}`: \
 `python -m doctest` loads the file outside its package, so its relative imports fail.";
 const DOCTEST: &str = "\nRun just its doctest with `{command}`. If an example you added fails, \
-write the value it prints under `Got:` into that example. That run is the check an added \
-example needs, and the edit's own reply confirms the edit, so the file need not be read again.";
+write the value it prints under `Got:` into that example and run it again: it stops at the first \
+failure. A passing run is the check an added example needs, and the edit's own reply confirms \
+the edit, so the file need not be read again.";
 const DOCTEST_AGAIN: &str = "\nRun just its doctest with `{command}`.";
 const OUTSIDE: &str = " `python -m doctest` would load the file outside its package, where its \
 relative imports fail.";
