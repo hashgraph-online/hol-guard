@@ -146,3 +146,21 @@ def test_a_shorter_fence_inside_a_longer_one_does_not_close_it():
     findings = public_claims.check_markdown("synthetic.md", text)
 
     assert [(finding.line, finding.claim) for finding in findings] == [(6, "complete protection")]
+
+
+def test_a_negation_wrapped_onto_the_previous_line_still_governs_the_claim():
+    text = "Guard does not\nprovide complete protection.\n"
+
+    assert public_claims.check_markdown("synthetic.md", text) == []
+
+
+def test_a_limit_wrapped_across_lines_still_bounds_the_claim():
+    text = "Guard offers complete protection for shell tools. It does\nnot cover hosted agents.\n"
+
+    assert public_claims.check_markdown("synthetic.md", text) == []
+
+
+def test_a_list_item_ends_the_sentence_a_negation_sits_in():
+    text = "Guard does not\n- complete protection\n"
+
+    assert [f.claim for f in public_claims.check_markdown("synthetic.md", text)] == ["complete protection"]

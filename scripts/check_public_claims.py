@@ -38,12 +38,12 @@ LIMIT = re.compile(
     r"harness-claims(?:\.md|\.v1\.json)?\b"
     r"|harness-support\.md"
     r"|/guard/security/(?:coverage|non-coverage)\b"
-    r"|\b(?:do|does)(?: not|n't) (?:cover|claim|protect|stop|see|count|prove)\b"
-    r"|\bnot (?:covered|universal)\b"
-    r"|\bblind spots?\b"
+    r"|\b(?:do|does)(?:\s+not|n't)\s+(?:cover|claim|protect|stop|see|count|prove)\b"
+    r"|\bnot\s+(?:covered|universal)\b"
+    r"|\bblind\s+spots?\b"
     r"|\blimitations?\b"
-    r"|\bfails? open\b"
-    r"|\bobserve[- ]only\b",
+    r"|\bfails?\s+open\b"
+    r"|\bobserve(?:-|\s+)only\b",
     re.IGNORECASE,
 )
 # A negation counts only when it governs the claim: it sits right before the
@@ -56,6 +56,10 @@ NEGATED_CLAIM = re.compile(
     re.IGNORECASE,
 )
 # "no blind spots" and "without limitations" deny a limit; they do not state one.
+# A sentence ends at terminal punctuation or where a list item, table row,
+# heading or quote starts on a new line. A plain line wrap inside a sentence
+# does not end it, so a negation wrapped onto the previous line still counts.
+SENTENCE_BOUNDARY = re.compile(r"[.!?]|\n\s*(?:[-*+|#>]|\d+[.)])\s")
 NEGATED_LIMIT = re.compile(r"\b(?:no|without|zero|free\s+of)\s+(?:\w+\s+)?$", re.IGNORECASE)
 FOLLOWING_PROSE_BLOCKS = 2
 
@@ -162,8 +166,9 @@ def _blocks(text: str) -> list[Block]:
 def _claims(text: str) -> list[tuple[int, str]]:
     found: list[tuple[int, str]] = []
     for match in CLAIM.finditer(text):
-        sentence_start = max(text.rfind(".", 0, match.start()), text.rfind("\n", 0, match.start()))
-        if NEGATED_CLAIM.search(text[sentence_start + 1 : match.start()]):
+        boundaries = list(SENTENCE_BOUNDARY.finditer(text, 0, match.start()))
+        sentence_start = boundaries[-1].end() if boundaries else 0
+        if NEGATED_CLAIM.search(text[sentence_start : match.start()]):
             continue
         found.append((text.count("\n", 0, match.start()), match.group(0)))
     return found
