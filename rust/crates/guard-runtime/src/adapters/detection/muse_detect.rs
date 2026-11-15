@@ -45,7 +45,8 @@ pub(crate) fn guard_managed(command: &str) -> bool {
             && command.contains("--harness', 'muse'"))
         || (command.contains("bounded_cli_hook_bridge")
             && normalized.contains("\"harness\":\"muse\""))
-        || (command.contains("__guard-bounded-hook") && normalized.contains("\"harness\":\"muse\""))
+        || ((command.contains("__guard-bounded-hook") || command.contains("bounded-hook-bridge"))
+            && normalized.contains("\"harness\":\"muse\""))
         || normalized
             .replace('\\', "/")
             .contains("managed/bounded-hooks/muse.py")

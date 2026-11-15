@@ -758,7 +758,6 @@ def test_openclaw_complete_plan_recovers_overlay_hook_manifest_and_launchers(tra
 def test_grok_plan_restores_config_hooks_state_and_backup_lifetime(transition, previous_exists):
     from codex_plugin_scanner.guard.adapters import get_adapter
     from codex_plugin_scanner.guard.adapters.base import HarnessContext
-    from codex_plugin_scanner.guard.adapters.isolated_hook_python import isolated_cursor_hook_python
 
     runtime, plan, _, _ = transition
     ctx = HarnessContext(home_dir=runtime.home.parent, workspace_dir=None, guard_home=runtime.home)
@@ -772,7 +771,7 @@ def test_grok_plan_restores_config_hooks_state_and_backup_lifetime(transition, p
     backup = ctx.guard_home / "managed" / "grok" / "config.toml.backup"
     previous_backup = backup.stat() if backup.exists() else None
     prepared = adapter.prepare_install(replace(ctx, workspace_dir=ctx.home_dir / "candidate-workspace"))
-    assert len(prepared.files) == (11 if isolated_cursor_hook_python() is not None else 10)
+    assert len(prepared.files) == 10
     assert config.read_bytes() == next(change.before for change in prepared.files if change.path == config)
     plan = replace(plan, files=(*plan.files, *prepared.files))
     begin(runtime, plan)
@@ -864,41 +863,6 @@ def test_pi_family_plan_restores_extension_settings_and_user_entries(transition,
     assert payload["extensions"] == ["user-extension.ts", "npm:user-extension", str(extension)]
     assert f'"--harness", "{harness}"' in extension.read_text()
     runtime.restore_files(plan.operation_id, first_cause=f"failure after {harness} rebind")
-    for change in prepared.files:
-        if change.before is None:
-            assert not change.path.exists()
-        else:
-            assert change.path.read_bytes() == change.before
-            assert change.path.stat().st_mode & 0o777 == change.before_mode
-
-
-@pytest.mark.parametrize("helper_exists", [False, True])
-def test_frozen_grok_helper_participates_in_signed_inverse(transition, monkeypatch, helper_exists):
-    from codex_plugin_scanner.guard.adapters import bounded_cli_hook_bridge as bridge
-    from codex_plugin_scanner.guard.adapters import get_adapter
-    from codex_plugin_scanner.guard.adapters.base import HarnessContext
-
-    harness = "grok"
-    runtime, plan, _, _ = transition
-    ctx = HarnessContext(home_dir=runtime.home.parent, workspace_dir=None, guard_home=runtime.home)
-    helper = ctx.guard_home / f"managed/bounded-hooks/{harness}.py"
-    if helper_exists:
-        helper.parent.mkdir(parents=True)
-        helper.write_bytes(b"previous helper generation")
-        helper.chmod(0o640)
-    monkeypatch.setattr(bridge.sys, "frozen", True, raising=False)
-    monkeypatch.setattr(bridge, "isolated_cursor_hook_python", lambda: sys.executable)
-    monkeypatch.setattr(bridge, "_trusted_desktop_hook_proxy_command", lambda *args: None)
-    prepared = get_adapter(harness).prepare_install(ctx)
-    assert helper.exists() == helper_exists
-    if helper_exists:
-        assert helper.read_bytes() == b"previous helper generation"
-    plan = replace(plan, files=(*plan.files, *prepared.files))
-    begin(runtime, plan)
-    runtime.publish(plan.operation_id, "AuthorizedForExactTransition")
-    assert helper.stat().st_mode & 0o777 == 0o600
-    assert helper.read_bytes() != b"previous helper generation"
-    runtime.restore_files(plan.operation_id, first_cause="failure after frozen helper publication")
     for change in prepared.files:
         if change.before is None:
             assert not change.path.exists()
@@ -1016,8 +980,10 @@ def test_copilot_plan_restores_native_bindings_and_preserves_authority(
         from codex_plugin_scanner.guard.adapters import bounded_cli_hook_bridge as bridge
 
         monkeypatch.setattr(bridge.sys, "frozen", True, raising=False)
-        monkeypatch.setattr(bridge, "isolated_cursor_hook_python", lambda: sys.executable)
-        monkeypatch.setattr(bridge, "_trusted_desktop_hook_proxy_command", lambda *args: None)
+        monkeypatch.setattr(
+            bridge, "native_bridge_executable", lambda *_args, **_kwargs: runtime.home.parent / "hol-guard-runtime"
+        )
+        monkeypatch.setattr(bridge, "_trusted_desktop_hook_proxy_command", lambda *_args, **_kwargs: None)
     prepared = adapter.prepare_install(ctx)
     # A frozen Guard hands the hook to its runtime and plans no helper script.
     assert len(prepared.files) == (12 if workspace_enabled else 7)

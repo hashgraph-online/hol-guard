@@ -44,7 +44,6 @@ def _offer_native(monkeypatch: pytest.MonkeyPatch, runtime: Path) -> None:
     def executable(feature: str, *, guard_home: Path | None = None) -> Path | None:
         return runtime if feature == NATIVE_BOUNDED_HOOK_FEATURE else None
 
-    monkeypatch.delenv("HOL_GUARD_BOUNDED_HOOK_BRIDGE", raising=False)
     monkeypatch.setattr(native_hook_bridge, "native_hook_bridge_executable", executable)
 
 
@@ -88,8 +87,8 @@ def test_plugin_reviews_through_the_native_bridge(tmp_path: Path, monkeypatch: p
 
     argv = _hook_argv(Path(str(manifest["managed_plugin_path"])).read_text(encoding="utf-8"))
     assert argv[:2] == [str(runtime), NATIVE_BOUNDED_HOOK_COMMAND]
-    assert argv[3:5] == ["-I", "-c"]
-    config = json.loads(argv[6])
+    assert len(argv) == 3
+    config = json.loads(argv[2])
     assert config["harness"] == "cline"
     assert config["guard_home"] == str(context.guard_home)
     assert config["timeout_seconds"] == 8

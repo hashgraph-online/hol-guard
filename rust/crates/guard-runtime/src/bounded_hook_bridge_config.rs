@@ -30,9 +30,12 @@ pub(crate) struct BridgeConfig {
 
 /// The config argument of `[python, "-I", "-c", bootstrap, config]`, or of
 /// a frozen Guard's `[guard, "__guard-bounded-hook", config]`, with ZCode's
-/// trailing `# HOL_GUARD_MANAGED_ZCODE` when a shell kept it.
+/// trailing `# HOL_GUARD_MANAGED_ZCODE` when a shell kept it. An install
+/// that names the native runtime directly writes the config alone.
 pub(crate) fn config_argument(python_argv: &[String]) -> Option<&str> {
     let (index, marked) = match python_argv {
+        [_] => (0, None),
+        [_, hash, marker] if hash == "#" => (0, Some((hash, marker))),
         [_, isolated, code, _, _] if isolated == "-I" && code == "-c" => (4, None),
         [_, isolated, code, _, _, hash, marker] if isolated == "-I" && code == "-c" => {
             (4, Some((hash, marker)))
@@ -46,10 +49,21 @@ pub(crate) fn config_argument(python_argv: &[String]) -> Option<&str> {
 }
 
 /// Whether `python_argv` names a frozen Guard rather than an interpreter.
+/// A config written alone says which launcher its recovery uses.
 pub(super) fn frozen_launch(python_argv: &[String]) -> bool {
-    python_argv
-        .get(1)
-        .is_some_and(|command| command == FROZEN_COMMAND)
+    match python_argv {
+        [config] => config_names_frozen(config),
+        [config, hash, _] if hash == "#" => config_names_frozen(config),
+        _ => python_argv
+            .get(1)
+            .is_some_and(|command| command == FROZEN_COMMAND),
+    }
+}
+
+fn config_names_frozen(argument: &str) -> bool {
+    pyjson::parse_mapping_lone_surrogates(argument)
+        .ok()
+        .is_some_and(|parsed| matches!(parsed.value.get("frozen_launcher"), Some(PyVal::Bool(true))))
 }
 
 pub(crate) fn positive_seconds(value: Option<&PyVal>) -> Option<Duration> {

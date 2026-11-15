@@ -70,7 +70,7 @@ pub(super) fn run() -> Result<(), String> {
             std::process::exit(codex_hook_bridge::run(python_argv))
         }
         [command, python_argv @ ..]
-            if command == bounded_hook_bridge::BRIDGE_COMMAND && python_argv.len() >= 2 =>
+            if command == bounded_hook_bridge::BRIDGE_COMMAND && !python_argv.is_empty() =>
         {
             std::process::exit(bounded_hook_bridge::run(python_argv))
         }

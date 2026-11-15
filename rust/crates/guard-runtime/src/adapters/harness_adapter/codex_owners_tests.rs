@@ -270,6 +270,8 @@ fn a_native_only_launcher_binds_when_its_runtime_is_owned() {
         answer["binds"].as_bool().unwrap()
     };
     let packaged = install.package_root.join("_native/hol-guard-runtime");
+    std::fs::create_dir_all(packaged.parent().unwrap()).unwrap();
+    std::fs::write(&packaged, "").unwrap();
     assert!(binds(native_only(&install.native)));
     assert!(binds(native_only(&packaged)));
     assert!(!binds(native_only(std::path::Path::new(

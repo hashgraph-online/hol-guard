@@ -1,4 +1,4 @@
-"""The Python side of the native bounded hook bridge: install argv and detection."""
+"""The bounded hook install names the native runtime, and only one that answers the harness."""
 
 from __future__ import annotations
 
@@ -16,7 +16,6 @@ from codex_plugin_scanner.guard.adapters.bounded_cli_hook_native import (
     NATIVE_BOUNDED_HOOK_COMMAND,
     NATIVE_BOUNDED_HOOK_FEATURE,
     NATIVE_MUSE_HOOK_FEATURE,
-    bounded_python_argv,
 )
 from tests.cline_worker_config import worker_config
 
@@ -61,7 +60,6 @@ def _command(tmp_path: Path, harness: str) -> tuple[str, ...]:
     )
 
 
-@pytest.mark.native_bounded_hook_bridge
 @pytest.mark.parametrize("harness", _NATIVE_HARNESSES)
 def test_hook_uses_the_native_bridge_when_the_runtime_offers_it(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, harness: str
@@ -72,60 +70,28 @@ def test_hook_uses_the_native_bridge_when_the_runtime_offers_it(
     argv = _command(tmp_path, harness)
 
     assert argv[:2] == (str(runtime), NATIVE_BOUNDED_HOOK_COMMAND)
-    assert argv[2:5] == (sys.executable, "-I", "-c")
-    assert "bounded_cli_hook_bridge" in argv[5]
-    config = json.loads(argv[6])
+    assert len(argv) == 3
+    config = json.loads(argv[2])
     assert config["harness"] == harness
     # The native bridge derives the daemon-start command from the launcher.
     assert "start_command" not in config
     assert config["python_executable"] == sys.executable
-    assert bounded_python_argv(list(argv)) == list(argv[2:])
 
 
-@pytest.mark.native_bounded_hook_bridge
-def test_other_harnesses_keep_the_python_bridge(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_other_harnesses_have_no_bounded_hook(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     _offer_native(monkeypatch, tmp_path / "hol-guard-runtime", (NATIVE_BOUNDED_HOOK_FEATURE,))
 
-    argv = _command(tmp_path, "claude")
+    with pytest.raises(RuntimeError, match="hol-guard repair"):
+        _command(tmp_path, "claude")
 
-    assert argv[:2] == (sys.executable, "-I")
 
-
-@pytest.mark.native_bounded_hook_bridge
-def test_hook_keeps_the_python_bridge_without_the_native_feature(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_a_runtime_without_the_native_feature_asks_for_repair(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     _offer_native(monkeypatch, tmp_path / "hol-guard-runtime", ("codex-hook-bridge-v1",))
 
-    argv = _command(tmp_path, "copilot")
-
-    assert argv[:2] == (sys.executable, "-I")
-
-
-@pytest.mark.native_bounded_hook_bridge
-def test_python_bridge_pin_keeps_the_python_argv(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("HOL_GUARD_BOUNDED_HOOK_BRIDGE", "python")
-    _offer_native(monkeypatch, tmp_path / "hol-guard-runtime", (NATIVE_BOUNDED_HOOK_FEATURE,))
-
-    argv = _command(tmp_path, "copilot")
-
-    assert argv[:2] == (sys.executable, "-I")
+    with pytest.raises(RuntimeError, match="hol-guard repair"):
+        _command(tmp_path, "copilot")
 
 
-@pytest.mark.parametrize(
-    "argv",
-    [
-        [sys.executable, "-I", "-c", "code", "{}"],
-        ["", NATIVE_BOUNDED_HOOK_COMMAND, sys.executable, "-I"],
-        ["/runtime", "codex-hook-bridge", sys.executable, "-I"],
-        ["/runtime", NATIVE_BOUNDED_HOOK_COMMAND],
-    ],
-)
-def test_only_a_native_prefix_is_stripped(argv: list[object]) -> None:
-    assert bounded_python_argv(argv) == argv
-
-
-@pytest.mark.native_bounded_hook_bridge
 @_POSIX_ONLY
 def test_native_copilot_devin_and_hermes_commands_stay_managed(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     _offer_native(monkeypatch, tmp_path / "hol guard runtime", (NATIVE_BOUNDED_HOOK_FEATURE,))
@@ -136,12 +102,11 @@ def test_native_copilot_devin_and_hermes_commands_stay_managed(tmp_path: Path, m
     # The Devin install recognizes its own native command by this verb and harness field.
     assert NATIVE_BOUNDED_HOOK_COMMAND in devin_command
     assert '"harness":"devin"' in devin_command
-    # The Hermes install recognizes its own native command by the inline bridge bootstrap.
     hermes_tokens = shlex.split(shlex.join(_command(tmp_path, "hermes")))
-    assert "bounded_cli_hook_bridge" in hermes_tokens[hermes_tokens.index("-c") + 1]
+    assert hermes_tokens[1] == NATIVE_BOUNDED_HOOK_COMMAND
+    assert json.loads(hermes_tokens[2])["harness"] == "hermes"
 
 
-@pytest.mark.native_bounded_hook_bridge
 @_POSIX_ONLY
 def test_cline_worker_runs_the_native_bridge_once_per_payload(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     runtime = tmp_path / "hol-guard-runtime"
@@ -160,11 +125,11 @@ def test_cline_worker_runs_the_native_bridge_once_per_payload(tmp_path: Path, mo
     assert worker["guard"] == list(argv)
 
 
-@pytest.mark.native_bounded_hook_bridge
 def test_muse_uses_the_native_bridge_only_with_its_own_feature(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     runtime = tmp_path / "hol-guard-runtime"
     _offer_native(monkeypatch, runtime, (NATIVE_BOUNDED_HOOK_FEATURE,))
-    assert _command(tmp_path, "muse")[:2] == (sys.executable, "-I")
+    with pytest.raises(RuntimeError, match="hol-guard repair"):
+        _command(tmp_path, "muse")
 
     _offer_native(monkeypatch, runtime, (NATIVE_MUSE_HOOK_FEATURE,))
     argv = _command(tmp_path, "muse")

@@ -23,10 +23,10 @@ _ACTIONS = [
 def _native_answers(monkeypatch: pytest.MonkeyPatch) -> None:
     """Fail the test when Python, not the runtime, writes the answer."""
 
-    def python_answer(**_kwargs: object) -> int:
+    def python_answer(_harness: str) -> int:
         raise AssertionError("the native runtime must answer this hook")
 
-    monkeypatch.setattr(bridge, "_emit_failure", python_answer)
+    monkeypatch.setattr(bridge, "_refuse", python_answer)
 
 
 @pytest.mark.parametrize("harness", _HARNESSES)

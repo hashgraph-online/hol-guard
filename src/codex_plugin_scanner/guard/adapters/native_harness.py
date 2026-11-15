@@ -260,7 +260,7 @@ class NativeHarnessAdapter(HarnessAdapter):
         }
         return native_runner_authority(_KIND, request)
 
-    def _hook_argv(self, context: HarnessContext, hook_files: list[Any] | None = None) -> list[str]:
+    def _hook_argv(self, context: HarnessContext) -> list[str]:
         from .bounded_cli_hook_bridge import bounded_cli_hook_command
 
         spec = self._ask("hook_spec", context)
@@ -272,12 +272,11 @@ class NativeHarnessAdapter(HarnessAdapter):
                 cli_args=[str(part) for part in spec["cli_args"]],
                 harness=self.harness,
                 timeout_seconds=int(spec["timeout_seconds"]),
-                prepared_files=hook_files,
             )
         )
 
     def prepare_install(self, context: HarnessContext) -> PreparedHarnessInstall:
-        from ..runtime_transition import TransitionError, TransitionFile
+        from ..runtime_transition import TransitionError
         from ..shims import prepare_guard_shim
 
         mode = self._spec.get("install")
@@ -287,15 +286,19 @@ class NativeHarnessAdapter(HarnessAdapter):
         if mode == "shim":
             manifest = {"harness": self.harness, "active": True, "config_path": shim.manifest["shim_path"]}
             return PreparedHarnessInstall(shim.files, {**manifest, **shim.manifest})
-        hook_files: list[TransitionFile] = []
         fields: dict[str, object] = {"shim": json.dumps(shim.manifest)}
         if self._spec.get("hook") is not None:
-            fields["hook_argv"] = self._hook_argv(context, hook_files)
+            fields["hook_argv"] = self._hook_argv(context)
         if self._spec.get("retired_hooks"):
             fields["retired_commands"] = self._retired_hooks(context, fields["hook_argv"])
         answer = self._ask("prepare_install", context, **fields)
         files = planned_files(answer)
-        return PreparedHarnessInstall((*shim.files, *hook_files, *files), json.loads(_text(answer, "manifest")))
+        return PreparedHarnessInstall((*shim.files, *files), json.loads(_text(answer, "manifest")))
+
+    def current_hook_command(self, context: HarnessContext) -> str:
+        """The hook command an install would write now, as the harness config spells it."""
+
+        return _text(self._ask("hook_candidates", context, hook_argv=self._hook_argv(context)), "hook_command")
 
     def _retired_hooks(self, context: HarnessContext, hook_argv: object) -> list[str]:
         """Generated hook clients the config names whose client is gone; the CLI's validator decides."""

@@ -232,39 +232,6 @@ class TestMuseInstallUninstall:
         # the approval is still open and the call falls through unjudged.
         assert _managed_timeout("PreToolUse") > ask("hook_spec", ctx, harness="muse")["timeout_seconds"]
 
-    def test_update_refresh_keeps_the_installed_bridge_timeout(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        from codex_plugin_scanner.guard.adapters.bounded_cli_hook_bridge import (
-            _render_bounded_hook_script,
-            bounded_hook_script_path,
-        )
-        from codex_plugin_scanner.guard.cli.update_bounded_hook_refresh import refresh_bounded_hook_clients
-        from codex_plugin_scanner.guard.store import GuardStore
-
-        ctx = _ctx(tmp_path)
-        self._patch_shims(monkeypatch, ctx)
-        get_adapter("muse").install(ctx)
-        script_path = bounded_hook_script_path(ctx.guard_home, "muse")
-        assert script_path is not None
-        # A packaged install points the hook at this stable client; write the
-        # body install rendered so the refresh has a current client to keep.
-        installed = _render_bounded_hook_script(
-            guard_home=ctx.guard_home,
-            harness="muse",
-            timeout_seconds=ask("hook_spec", ctx, harness="muse")["timeout_seconds"],
-        )
-        script_path.parent.mkdir(parents=True, exist_ok=True)
-        script_path.write_text(installed, encoding="utf-8")
-        store = GuardStore(ctx.guard_home)
-        store.set_managed_install("muse", True, None, {"harness": "muse"}, "2026-10-08T00:00:00+00:00")
-
-        refreshed, warnings = refresh_bounded_hook_clients(context=ctx, store=store)
-
-        assert warnings == []
-        assert refreshed == []
-        assert script_path.read_text(encoding="utf-8") == installed
-
     def test_install_refuses_a_non_list_hooks_event_value(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:

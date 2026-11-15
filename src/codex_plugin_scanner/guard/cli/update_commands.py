@@ -2972,7 +2972,9 @@ def _repair_supported_harnesses_in_process(
     if cursor_warning is not None:
         repair_notes.append(cursor_warning)
     append_grok_repair(repaired_installs, repair_notes, context=context, store=store, workspace=workspace, now=now)
-    refreshed_clients, refresh_warnings = refresh_bounded_hook_clients(context=context, store=store)
+    refreshed_clients, refresh_warnings = refresh_bounded_hook_clients(
+        context=context, store=store, workspace=workspace, now=now
+    )
     repaired_installs.extend(refreshed_clients)
     repair_notes.extend(refresh_warnings)
     legacy_omp_migration, legacy_omp_warning = _migrate_legacy_omp_install(

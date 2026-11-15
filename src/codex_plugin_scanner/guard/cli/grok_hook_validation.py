@@ -27,23 +27,32 @@ def _arguments(command: str) -> tuple[str, ...]:
 
 
 def _native_client(args: tuple[str, ...], *, trusted: bool, guard_home: Path | None = None) -> tuple[str, ...] | None:
-    """The generated client argv inside a native runtime prefix.
+    """Split a native runtime launch into its own argv.
 
-    Returns ``args`` unchanged without a prefix and None for a prefix that is
-    not this host's validated native runtime when ``trusted`` is required. A
-    frozen build's runtime is its durable copy under ``guard_home``.
+    ``[runtime, "bounded-hook-bridge", config]`` is the form Guard installs now
+    and comes back unchanged. Older installs wrapped a Python client in the
+    runtime; those come back as the client argv. Returns ``args`` unchanged
+    without a runtime and None for a runtime that is not this host's validated
+    native runtime when ``trusted`` is required. A frozen build's runtime is
+    its durable copy under ``guard_home``.
     """
     from ..adapters.bounded_cli_hook_native import NATIVE_BOUNDED_HOOK_COMMAND, native_bridge_executable
 
     if len(args) < 2 or args[1] != NATIVE_BOUNDED_HOOK_COMMAND:
         return args
-    if len(args) != 6 or args[3] != "-I" or not Path(args[0]).is_absolute():
+    if len(args) not in {3, 6} or (len(args) == 6 and args[3] != "-I") or not Path(args[0]).is_absolute():
         return None
     if trusted:
         runtime = native_bridge_executable("grok", guard_home=guard_home)
         if runtime is None or Path(args[0]).resolve() != runtime.resolve():
             return None
-    return args[2:]
+    return args if len(args) == 3 else args[2:]
+
+
+def _native_launch(args: tuple[str, ...]) -> bool:
+    from ..adapters.bounded_cli_hook_native import NATIVE_BOUNDED_HOOK_COMMAND
+
+    return len(args) == 3 and args[1] == NATIVE_BOUNDED_HOOK_COMMAND
 
 
 def _config(text: str, executable: str, *, frozen: bool, context: HarnessContext | None) -> dict[str, object] | None:
@@ -112,35 +121,12 @@ def is_grok_hook_command(command: str, context: HarnessContext | None = None) ->
             return False
         if len(args) == 10:
             return _desktop_proxy(args, context)
-        if len(args) in {3, 4} and args[1] == "-I":
-            return _isolated_stdlib_client(args, context)
-        if len(args) == 3 and args[1] == "__guard-bounded-hook":
-            expected = Path(prune_safe_cli_executable(sys.executable)).resolve()
-            return (
-                bool(getattr(sys, "frozen", False))
-                and Path(args[0]).is_absolute()
-                and Path(args[0]).resolve() == expected
-                and _config(args[2], args[0], frozen=True, context=context) is not None
-            )
-        if len(args) != 5 or args[1:3] != ("-I", "-c"):
+        if not _native_launch(args):
             return False
-        config = _config(args[4], args[0], frozen=False, context=context)
-        if (
-            config is None
-            or not Path(args[0]).is_absolute()
-            or Path(args[0]).resolve() != Path(sys.executable).resolve()
-        ):
-            return False
-        package_root = Path(__file__).resolve().parents[3]
-        if config["package_root"] != str(package_root):
-            return False
-        bootstrap = (
-            "import sys;"
-            f"sys.path.insert(0,{str(package_root)!r});"
-            "from codex_plugin_scanner.guard.adapters.bounded_cli_hook_bridge import main_from_argv;"
-            "raise SystemExit(main_from_argv(sys.argv[1:]))"
-        )
-        return args[3] == bootstrap
+        frozen = bool(getattr(sys, "frozen", False))
+        executable = prune_safe_cli_executable(sys.executable) if frozen else sys.executable
+        config = _config(args[2], executable, frozen=frozen, context=context)
+        return config is not None and (frozen or config["package_root"] == str(Path(__file__).resolve().parents[3]))
     except (OSError, ValueError, TypeError, RuntimeError):
         return False
 
@@ -166,9 +152,7 @@ def is_missing_grok_hook_command(command: str, replacement: str) -> bool:
             serialized = args[3]
         elif old_client:
             return None
-        elif len(args) == 5 and args[1:3] == ("-I", "-c"):
-            serialized = args[4]
-        elif len(args) == 3 and args[1] == "__guard-bounded-hook":
+        elif _native_launch(args):
             serialized = args[2]
         elif len(args) == 10 and _desktop_proxy(args, None):
             serialized = args[7]
@@ -186,18 +170,6 @@ def is_missing_grok_hook_command(command: str, replacement: str) -> bool:
         expected = Path(cast(str, config["guard_home"])) / "managed" / "bounded-hooks" / "grok.py"
         if script is not None and (not script.is_absolute() or script != expected):
             return None
-        if len(args) == 5:
-            package = cast(str, config["package_root"])
-            bootstrap = (
-                "import sys;"
-                f"sys.path.insert(0,{package!r});"
-                "from codex_plugin_scanner.guard.adapters.bounded_cli_hook_bridge import main_from_argv;"
-                "raise SystemExit(main_from_argv(sys.argv[1:]))"
-            )
-            if args[3] != bootstrap or executable != args[0] or raw["frozen_launcher"]:
-                return None
-        if len(args) == 3 and (executable != args[0] or not raw["frozen_launcher"]):
-            return None
         cli_args = cast(list[str], config["cli_args"])
         options = dict(zip(cli_args[2:-1:2], cli_args[3:-1:2], strict=True))
         scope = {"--home": str(Path(options.get("--home", str(Path.home()))).resolve())}
@@ -209,47 +181,4 @@ def is_missing_grok_hook_command(command: str, replacement: str) -> bool:
         old, new = binding(command, old_client=True), binding(replacement, old_client=False)
         return bool(old and new and old[0] is not None and old[1] == new[1] and not old[0].exists())
     except (OSError, ValueError, TypeError, RuntimeError):
-        return False
-
-
-def _isolated_stdlib_client(args: tuple[str, ...], context: HarnessContext | None) -> bool:
-    """Accept the managed stdlib client that posts to the running daemon."""
-    from ..adapters.bounded_cli_hook_bridge import bounded_hook_script_path
-    from ..adapters.isolated_hook_python import isolated_cursor_hook_python
-
-    interpreter = isolated_cursor_hook_python()
-    if interpreter is None:
-        return False
-    try:
-        script = Path(args[2]).resolve()
-        if (
-            not Path(args[0]).is_absolute()
-            or Path(args[0]).resolve() != Path(interpreter).resolve()
-            or script.name != "grok.py"
-            or "managed/bounded-hooks" not in script.as_posix()
-            or not script.is_file()
-        ):
-            return False
-        if context is None and len(args) == 3:
-            return True
-        if len(args) == 4:
-            config = json.loads(args[3])
-            if not isinstance(config, dict) or not isinstance(config.get("frozen_launcher"), bool):
-                return False
-            executable = config.get("python_executable")
-            if not isinstance(executable, str) or not Path(executable).is_absolute():
-                return False
-            if _config(args[3], executable, frozen=config["frozen_launcher"], context=context) is None:
-                return False
-            if Path(config["guard_home"]).resolve() != script.parent.parent.parent.resolve():
-                return False
-        elif context is not None and (
-            context.workspace_dir is not None or context.home_dir.resolve() != Path.home().resolve()
-        ):
-            return False
-        if context is None:
-            return True
-        expected_script = bounded_hook_script_path(context.guard_home, "grok")
-        return expected_script is not None and script == expected_script.resolve()
-    except OSError:
         return False

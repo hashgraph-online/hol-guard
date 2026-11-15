@@ -198,3 +198,14 @@ fn malformed_requests_are_refused() {
         assert_eq!(dispatch(&request), Err(ERR_INVALID), "{request}");
     }
 }
+
+#[test]
+fn an_older_native_runtime_command_is_replaced() {
+    let old = r#"/opt/guard/hol-guard-runtime bounded-hook-bridge '{"harness":"hermes","timeout_seconds":20}'"#;
+    let other = r#"/opt/guard/hol-guard-runtime bounded-hook-bridge '{"harness":"kimi"}'"#;
+    let entries = json!([{"command": old}, {"command": other}]);
+    assert_eq!(
+        plan(entries, Some(COMMAND)),
+        json!({"keep": [1], "removed": [old]})
+    );
+}

@@ -163,19 +163,13 @@ def _fresh_native_answer_caches(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 @pytest.fixture(autouse=True)
-def _python_bounded_hook_bridge(request: pytest.FixtureRequest, monkeypatch: pytest.MonkeyPatch) -> None:
-    """Install bounded CLI hooks with the Python bridge argv unless a test opts in.
+def _python_cursor_hook_bridge(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Install Cursor hooks with the Python bridge argv.
 
-    Copilot, Kimi, Devin, ZCode, OpenClaw and Cursor install tests pin the
-    Python bridge contract. Tests marked ``native_bounded_hook_bridge`` keep the
-    native runtime selection.
+    Subprocess installers copy os.environ and do not see a monkeypatched
+    function, so the launcher reads this value as the Python bridge pin.
     """
 
-    if request.node.get_closest_marker("native_bounded_hook_bridge") is not None:
-        return
-    # Subprocess installers copy os.environ and do not see a monkeypatched
-    # function. The launcher treats this value as the Python bridge pin.
-    monkeypatch.setenv("HOL_GUARD_BOUNDED_HOOK_BRIDGE", "python")
     monkeypatch.setenv("HOL_GUARD_CURSOR_HOOK_BRIDGE", "python")
 
 

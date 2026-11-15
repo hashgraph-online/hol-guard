@@ -9,7 +9,6 @@ import pytest
 
 from codex_plugin_scanner.guard.adapters import list_adapters
 from codex_plugin_scanner.guard.adapters.base import HarnessAdapter, HarnessContext
-from codex_plugin_scanner.guard.adapters.isolated_hook_python import isolated_cursor_hook_python
 from codex_plugin_scanner.guard.codex_install_transaction import require_codex_install_owner
 from codex_plugin_scanner.guard.runtime_transition import TransitionError
 
@@ -109,7 +108,7 @@ def test_install_preparation_is_complete_or_explicitly_unavailable(tmp_path: Pat
             "claude-code": 3,
             "kimi": 3,
             "openclaw": 5,
-            "grok": 11 if isolated_cursor_hook_python() is not None else 10,
+            "grok": 10,
             "zcode": 5,
             "pi": 4,
             "omp": 4,
@@ -127,26 +126,7 @@ def test_install_preparation_is_complete_or_explicitly_unavailable(tmp_path: Pat
     assert not ctx.guard_home.exists()
 
 
-def test_frozen_grok_preparation_includes_helper_without_publishing(tmp_path, monkeypatch):
-    from codex_plugin_scanner.guard.adapters import bounded_cli_hook_bridge as bridge
-    from codex_plugin_scanner.guard.adapters import get_adapter
-
-    harness = "grok"
-    ctx = context(tmp_path)
-    monkeypatch.setattr(bridge.sys, "frozen", True, raising=False)
-    monkeypatch.setattr(bridge, "isolated_cursor_hook_python", lambda: sys.executable)
-    monkeypatch.setattr(bridge, "_trusted_desktop_hook_proxy_command", lambda *args: None)
-    prepared = get_adapter(harness).prepare_install(ctx)
-    assert len(prepared.files) == 11
-    helper = next(change for change in prepared.files if change.path.suffix == ".py")
-    assert helper.path == ctx.guard_home / f"managed/bounded-hooks/{harness}.py"
-    assert helper.no_follow
-    assert helper.before is None and helper.after is not None
-    assert helper.after_mode == 0o600
-    assert not ctx.guard_home.exists()
-
-
-@pytest.mark.parametrize("harness,expected", [("kimi", 3), ("zcode", 5), ("devin", 5)])
+@pytest.mark.parametrize("harness,expected", [("kimi", 3), ("zcode", 5), ("devin", 5), ("grok", 10)])
 def test_frozen_preparation_hands_the_hook_to_the_runtime(tmp_path, monkeypatch, harness, expected):
     """A frozen Guard writes no helper script; its runtime's durable copy answers the hook."""
     from codex_plugin_scanner.guard.adapters import bounded_cli_hook_bridge as bridge
@@ -154,8 +134,8 @@ def test_frozen_preparation_hands_the_hook_to_the_runtime(tmp_path, monkeypatch,
 
     ctx = context(tmp_path)
     monkeypatch.setattr(bridge.sys, "frozen", True, raising=False)
-    monkeypatch.setattr(bridge, "isolated_cursor_hook_python", lambda: sys.executable)
-    monkeypatch.setattr(bridge, "_trusted_desktop_hook_proxy_command", lambda *args: None)
+    monkeypatch.setattr(bridge, "native_bridge_executable", lambda *_args, **_kwargs: tmp_path / "hol-guard-runtime")
+    monkeypatch.setattr(bridge, "_trusted_desktop_hook_proxy_command", lambda *_args, **_kwargs: None)
     prepared = get_adapter(harness).prepare_install(ctx)
     assert len(prepared.files) == expected
     assert not any(change.path.suffix == ".py" for change in prepared.files)
@@ -209,8 +189,8 @@ def test_frozen_copilot_preparation_plans_no_helper_and_publishes_nothing(
         guard_home=ctx.guard_home,
     )
     monkeypatch.setattr(bridge.sys, "frozen", True, raising=False)
-    monkeypatch.setattr(bridge, "isolated_cursor_hook_python", lambda: sys.executable)
-    monkeypatch.setattr(bridge, "_trusted_desktop_hook_proxy_command", lambda *args: None)
+    monkeypatch.setattr(bridge, "native_bridge_executable", lambda *_args, **_kwargs: tmp_path / "hol-guard-runtime")
+    monkeypatch.setattr(bridge, "_trusted_desktop_hook_proxy_command", lambda *_args, **_kwargs: None)
     prepared = CopilotHarnessAdapter().prepare_install(ctx)
     assert len(prepared.files) == (12 if workspace_enabled else 7)
     assert not any(change.path.suffix == ".py" for change in prepared.files)
