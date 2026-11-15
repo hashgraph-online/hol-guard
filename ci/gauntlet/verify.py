@@ -25,6 +25,7 @@ from .interruptions import (
     summarize_interruptions,
 )
 from .latency import summarize_hook_latency
+from .release_budgets import release_budgets
 from .source_identity import source_identity, validate_identity
 from .transport import reconcile_rounds
 
@@ -463,6 +464,11 @@ def verify_report(
         stale = stale_gaps(gap_report)
         if stale:
             raise ValueError("known gaps now pass and must be removed: " + ", ".join(stale))
+    budgets = release_budgets(
+        [{"id": s.id, **r} for s, r in zip(expected, results, strict=True)], interruptions, latency, gap_report
+    )
+    if "release_budgets" in report and report["release_budgets"] != budgets:
+        raise ValueError("claimed release budgets do not match observed evidence")
     return {
         "verified": True,
         "candidate_sha": expected_sha,
@@ -472,6 +478,7 @@ def verify_report(
         "actual_tool_calls": sum(result["tool_calls"] for result in results),
         "merge_qualified": report["merge_qualified"],
         "hook_latency": latency,
+        "release_budgets": budgets,
         "hook_latency_reported": "hook_latency" in report and not missing_latency_cases,
         "cases_missing_latency_report": missing_latency_cases,
     }
