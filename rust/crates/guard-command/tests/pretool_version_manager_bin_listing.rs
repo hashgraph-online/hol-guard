@@ -34,7 +34,28 @@ fn decision_with_home_match(
     home: &Path,
     shell_home_matches: bool,
 ) -> String {
+    use sha2::{Digest, Sha256};
     let cwd = home.join("work");
+    // The production evaluator reconstructs PathContext from a stamped
+    // execution environment; the caller's bare shell_home_matches field is
+    // not authoritative. Stamp a full, valid environment for this test.
+    let shell_home = if shell_home_matches {
+        home.to_path_buf()
+    } else {
+        home.parent().unwrap().join("different-home")
+    };
+    let path = std::env::var("PATH").unwrap_or_default();
+    let environment = std::collections::BTreeMap::from([
+        ("HOME", shell_home.to_string_lossy().into_owned()),
+        ("PATH", path.clone()),
+    ]);
+    let execution = guard_contracts::GuardExecutionEnvironmentV1 {
+        path,
+        environment_names: environment.keys().map(|name| (*name).to_owned()).collect(),
+        environment_digest: hex::encode(Sha256::digest(serde_json::to_vec(&environment).unwrap())),
+        home: Some(shell_home.to_string_lossy().into_owned()),
+        ..Default::default()
+    };
     evaluate_pre_tool_envelope_with_execution_context(
         harness,
         "PreToolUse",
@@ -59,7 +80,7 @@ fn decision_with_home_match(
             psql_environment: Default::default(),
             creates_nothing: false,
         },
-        None,
+        Some(&execution),
     )
     .decision
 }
