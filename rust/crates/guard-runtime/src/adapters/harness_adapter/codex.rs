@@ -15,7 +15,8 @@ use sha2::{Digest, Sha256};
 
 use super::files::{self, Doc};
 use super::{
-    codex_files, codex_merge, codex_servers, common, hook_render, path_answer, path_text, Ctx,
+    codex_files, codex_merge, codex_servers, codex_uninstall, common, hook_render, path_answer,
+    path_text, Ctx,
     Failure, Spec, Step,
 };
 use crate::claude_hook_bridge_recovery::frozen_recovery_command;
@@ -75,6 +76,7 @@ pub(super) fn dispatch(
         "migrate" | "readback" | "subset" => codex_merge::dispatch(op, fields),
         "alternate_cleanup" => codex_servers::alternate_cleanup(fields),
         "managed_mcp" => codex_servers::managed_mcp(fields),
+        "uninstall_restore" => codex_uninstall::uninstall_restore(fields),
         _ => common(spec, op, ctx),
     }
 }

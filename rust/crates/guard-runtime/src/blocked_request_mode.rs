@@ -129,7 +129,8 @@ const SAFE_ALTERNATIVE_GUIDANCE: &str = "This action remains blocked. Continue w
      the task, explain the limitation.";
 /// `_APPROVAL_WAIT`.
 const APPROVAL_WAIT: &str = "It is waiting for the user to approve it in the HOL Guard inbox \
-     (`hol-guard approvals`). Do not retry the same action until it is approved; continue with \
+     (`hol-guard approvals`). Allow once lets this exact action run one time; Always allow keeps \
+     allowing it until the user removes that choice. Do not retry the same action until it is approved; continue with \
      other work meanwhile.";
 /// `_NOT_QUEUED`.
 const NOT_QUEUED: &str = "No approval is waiting in HOL Guard for this action. Do not retry the \
@@ -235,13 +236,13 @@ fn reason_code_hint(reason_code: &str) -> &'static str {
              or target one specific path."
         }
         "native_package_review" => {
-            "Package installs download code from a registry, so Guard reviews them. An install \
-             that only restores the committed lockfile and runs no scripts (`bun install \
-             --frozen-lockfile --ignore-scripts`, `pnpm install --frozen-lockfile \
+            "Package installs download code from a registry, so Guard reviews them. For npm, pnpm \
+             and bun, an install that only restores the committed lockfile and runs no scripts \
+             (`bun install --frozen-lockfile --ignore-scripts`, `pnpm install --frozen-lockfile \
              --ignore-scripts --ignore-pnpmfile` or `npm ci --ignore-scripts`) can proceed once \
-             Guard has checked \
-             the lockfile and settings. If this was already that form, reuse dependencies that \
-             are already installed where you can."
+             Guard has checked the lockfile and settings; if this was already that form, reuse \
+             dependencies that are already installed where you can. Other package managers, such \
+             as pip, uv or cargo, have no form Guard passes without review."
         }
         // Cloud gave no verdict, so the lockfile-only advice above would be paused the same way.
         "native_package_cloud_unavailable" => {
@@ -384,6 +385,28 @@ mod tests {
     }
 
     #[test]
+    fn a_waiting_review_says_what_each_approval_choice_covers() {
+        let scope = "Allow once lets this exact action run one time; Always allow keeps allowing \
+             it until the user removes that choice.";
+        // The two choices are named only where a one-time approval lets the retry run.
+        for (queued, reuses, exact, named) in [
+            (true, true, false, true),
+            (true, false, true, false),
+            (true, false, false, false),
+            (false, true, true, false),
+        ] {
+            let text = safe_alternative_reason_with_retry(
+                "Needs review.",
+                Some("native_network_review"),
+                Some(queued),
+                reuses,
+                exact,
+            );
+            assert_eq!(text.contains(scope), named, "{text}");
+        }
+    }
+
+    #[test]
     fn a_direct_read_review_leaves_out_the_search_advice() {
         let read = "HOL Guard requires review before this file read can execute. `src/lib/auth` \
              is named like a credential store, so Guard holds a read of it.";
@@ -418,6 +441,16 @@ mod tests {
     /// or the advice sends the agent straight back into the same review. The
     /// pnpm form needs `--ignore-pnpmfile` as well, because a `.pnpmfile.cjs`
     /// hook runs its own code during the install.
+    #[test]
+    fn the_install_hint_names_the_managers_its_lockfile_forms_cover() {
+        let hint = reason_code_hint("native_package_review");
+        assert!(hint.contains("For npm, pnpm and bun, an install"), "{hint}");
+        assert!(
+            hint.contains("Other package managers, such as pip, uv or cargo, have no form"),
+            "{hint}"
+        );
+    }
+
     #[test]
     fn every_install_form_the_hint_names_is_one_guard_proves_script_free() {
         let hint = reason_code_hint("native_package_review");

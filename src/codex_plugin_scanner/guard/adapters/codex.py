@@ -98,6 +98,7 @@ from .codex_remote_control import (
     guarded_codex_launch_command_candidates,
     guarded_codex_launch_command_from_prefix,
 )
+from .codex_uninstall_restore import follow_hook_state, render_without_guard
 from .mcp_relay_native import mcp_proxy_launch, python_proxy_launch
 from .mcp_servers import (
     ManagedMcpServer,
@@ -1277,9 +1278,17 @@ class CodexHarnessAdapter(NativeHarnessAdapter):
         backup = _snapshot(backup_path)
         files: list[TransitionFile] = []
         if backup is not None:
-            files.append(
-                TransitionFile(target, current, backup or None, before_mode=mode_of(target, current), no_follow=True)
-            )
+            after = backup or None
+            if current is not None:
+                after = render_without_guard(
+                    context,
+                    target,
+                    current,
+                    backup.decode("utf-8"),
+                    owned,
+                    hooks_json_path=self._hooks_path(context),
+                )
+            files.append(TransitionFile(target, current, after, before_mode=mode_of(target, current), no_follow=True))
             files.append(
                 TransitionFile(
                     backup_path,
@@ -1296,6 +1305,7 @@ class CodexHarnessAdapter(NativeHarnessAdapter):
             if owned and isinstance(hooks, dict):
                 cleaned, removed = _remove_manifest_bound_hook_events(hooks, owned)
                 if removed:
+                    follow_hook_state(hooks, cleaned, target)
                     if cleaned:
                         payload["hooks"] = cleaned
                     else:

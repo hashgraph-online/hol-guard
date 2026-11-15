@@ -189,3 +189,129 @@ fn cursor_rejects_a_missing_hook_script() {
     let answer = ask(&home, "frozen_hook_script", &fields).unwrap();
     assert_eq!(answer["accepted"], false);
 }
+
+#[test]
+fn cursor_install_then_uninstall_returns_the_users_hooks_file() {
+    let home = Home::new();
+    let hooks = home.home().join(".cursor").join("hooks.json");
+    let original = json!({
+        "version": 1,
+        "hooks": {
+            "stop": [{"command": "./other-tool.sh"}],
+            "beforeShellExecution": [{"command": "./audit.sh", "timeout": 5}]
+        },
+        "futureKey": {"nested": ["kept", 1, true, null]},
+        "unicode": "caf\u{e9} \u{2014} \u{1f512}"
+    });
+    write(&hooks, &serde_json::to_string_pretty(&original).unwrap());
+    let answer = run(&home, "install", bridge()).unwrap();
+    for change in answer["files"].as_array().unwrap() {
+        let path = Path::new(change["path"].as_str().unwrap());
+        if change["after"].is_string() {
+            write(path, &after(change));
+        }
+    }
+    let installed = fs::read_to_string(&hooks).unwrap();
+    assert!(
+        installed.contains("hol-guard-cursor-hook.py"),
+        "install added nothing"
+    );
+    run(&home, "uninstall", bridge()).unwrap();
+    let cleaned: Value = serde_json::from_str(&fs::read_to_string(&hooks).unwrap()).unwrap();
+    assert_eq!(cleaned, original);
+}
+
+#[test]
+fn cursor_uninstall_keeps_a_hook_the_user_added_after_install() {
+    let home = Home::new();
+    let hooks = home.home().join(".cursor").join("hooks.json");
+    write(
+        &hooks,
+        r#"{"version": 1, "hooks": {"stop": [{"command": "./other-tool.sh"}]}}"#,
+    );
+    let answer = run(&home, "install", bridge()).unwrap();
+    for change in answer["files"].as_array().unwrap() {
+        if change["after"].is_string() {
+            write(Path::new(change["path"].as_str().unwrap()), &after(change));
+        }
+    }
+    let mut edited: Value = serde_json::from_str(&fs::read_to_string(&hooks).unwrap()).unwrap();
+    edited["hooks"]["stop"]
+        .as_array_mut()
+        .unwrap()
+        .push(json!({"command": "./added-later.sh"}));
+    write(&hooks, &serde_json::to_string_pretty(&edited).unwrap());
+    run(&home, "uninstall", bridge()).unwrap();
+    let cleaned: Value = serde_json::from_str(&fs::read_to_string(&hooks).unwrap()).unwrap();
+    assert_eq!(
+        cleaned,
+        json!({"version": 1, "hooks": {"stop": [
+            {"command": "./other-tool.sh"},
+            {"command": "./added-later.sh"}
+        ]}})
+    );
+}
+
+/// When Guard's entries are the only hooks, uninstall keeps the file for the
+/// user's other top-level keys instead of deleting it.
+#[test]
+fn cursor_uninstall_keeps_top_level_keys_when_guard_held_the_only_hooks() {
+    let home = Home::new();
+    let hooks = home.home().join(".cursor").join("hooks.json");
+    write(
+        &hooks,
+        r#"{"version": 1, "hooks": {}, "futureKey": "keep"}"#,
+    );
+    let answer = run(&home, "install", bridge()).unwrap();
+    for change in answer["files"].as_array().unwrap() {
+        if change["after"].is_string() {
+            write(Path::new(change["path"].as_str().unwrap()), &after(change));
+        }
+    }
+    let mut edited: Value = serde_json::from_str(&fs::read_to_string(&hooks).unwrap()).unwrap();
+    edited["addedLater"] = json!(true);
+    write(&hooks, &serde_json::to_string_pretty(&edited).unwrap());
+    run(&home, "uninstall", bridge()).unwrap();
+    let cleaned: Value = serde_json::from_str(&fs::read_to_string(&hooks).unwrap()).unwrap();
+    assert_eq!(
+        cleaned,
+        json!({"version": 1, "hooks": {}, "futureKey": "keep", "addedLater": true})
+    );
+}
+
+/// A hooks file with no hooks of its own comes back byte for byte.
+#[test]
+fn cursor_uninstall_restores_a_file_that_had_no_hooks_of_its_own() {
+    let home = Home::new();
+    let hooks = home.home().join(".cursor").join("hooks.json");
+    let original = "{\n  \"version\": 1,\n  \"hooks\": {}\n}\n";
+    write(&hooks, original);
+    let answer = run(&home, "install", bridge()).unwrap();
+    for change in answer["files"].as_array().unwrap() {
+        if change["after"].is_string() {
+            write(Path::new(change["path"].as_str().unwrap()), &after(change));
+        }
+    }
+    assert_ne!(fs::read_to_string(&hooks).unwrap(), original);
+    run(&home, "uninstall", bridge()).unwrap();
+    assert_eq!(fs::read_to_string(&hooks).unwrap(), original);
+}
+
+#[test]
+fn cursor_uninstall_keeps_a_file_whose_guard_hooks_are_already_gone() {
+    let home = Home::new();
+    let hooks = home.home().join(".cursor").join("hooks.json");
+    write(&hooks, "{\n  \"version\": 1,\n  \"hooks\": {}\n}\n");
+    let answer = run(&home, "install", bridge()).unwrap();
+    for change in answer["files"].as_array().unwrap() {
+        if change["after"].is_string() {
+            write(Path::new(change["path"].as_str().unwrap()), &after(change));
+        }
+    }
+    // The user removed Guard's entries by hand and added a hook of their own.
+    let edited =
+        "{\n  \"version\": 1,\n  \"hooks\": {\"stop\": [{\"command\": \"./later.sh\"}]}\n}\n";
+    write(&hooks, edited);
+    run(&home, "uninstall", bridge()).unwrap();
+    assert_eq!(fs::read_to_string(&hooks).unwrap(), edited);
+}

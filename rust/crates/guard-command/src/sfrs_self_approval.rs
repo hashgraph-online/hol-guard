@@ -7,6 +7,14 @@
 use crate::codex_output_py::{is_py_space, shlex_split, PyPath};
 use crate::sfrs_shlex::{split_with, COMMAND_LEXER};
 
+#[path = "sfrs_self_approval_route.rs"]
+mod route;
+#[cfg(test)]
+#[path = "sfrs_self_approval_route_tests.rs"]
+mod route_tests;
+
+pub(crate) use route::names_guard_approval_route;
+
 pub(crate) const SELF_APPROVAL_ACTION_CLASS: &str = "Guard approval self-authorization command";
 pub(crate) const SELF_APPROVAL_REASON: &str = "Guard blocks AI agents from approving or weakening Guard approval state from inside a protected shell. Review the original request in the local approval center or native harness prompt.";
 
@@ -37,9 +45,14 @@ const AGENT_ENV_MARKERS: [&str; 10] = [
     "CODEX_SANDBOX",
 ];
 
-/// `is_guard_approval_mutation_command`.
+/// `is_guard_approval_mutation_command`: the Guard CLI approval mutations,
+/// and any command that names a Guard approval-writing route on a loopback
+/// address, whatever client sends the request.
 pub(crate) fn is_guard_approval_mutation_command(command_text: &str) -> bool {
     let parts = split_shell_parts(command_text);
+    if names_guard_approval_route(command_text, &parts) {
+        return true;
+    }
     if parts.is_empty() {
         return false;
     }

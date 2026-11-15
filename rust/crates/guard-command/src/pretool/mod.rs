@@ -181,6 +181,7 @@ mod guard_home_option;
 mod guard_names;
 mod helm_usage;
 pub(crate) mod help_probes;
+mod home_program_metadata;
 mod hook_neutering;
 mod installed_program_path;
 mod list_wrapper;
@@ -232,6 +233,7 @@ pub(crate) use restricted_test_commands::{manager_local_bin_arguments, manager_s
 mod rust_toolchain;
 mod rustfmt_writes;
 mod safe_links;
+pub(crate) use safe_links::{every_removal_temporary, temporary_removal_segments};
 pub(crate) mod safe_reads;
 mod safe_scalar;
 mod safe_writes;
