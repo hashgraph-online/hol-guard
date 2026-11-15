@@ -65,6 +65,10 @@ fn a_builtin_named_in_a_quoted_filter_does_not_stop_the_unroll() {
                 "for f in a.json b.json; do grep -c 'read f' \"$f\"; done".to_owned(),
                 true,
             ),
+            (
+                "for f in a.json b.json; do grep -c 'f$' \"$f\"; done".to_owned(),
+                true,
+            ),
             // A builtin the shell runs still rebinds the loop variable.
             (
                 "for f in a.json; do 're'ad f < names.txt; cat \"$f\"; done".to_owned(),
@@ -72,6 +76,10 @@ fn a_builtin_named_in_a_quoted_filter_does_not_stop_the_unroll() {
             ),
             (
                 "for f in a.json; do eval 'f=../.ssh/id_ed25519'; cat \"$f\"; done".to_owned(),
+                false,
+            ),
+            (
+                "for f in a.json; do trap 'read f < names.txt' DEBUG; cat \"$f\"; done".to_owned(),
                 false,
             ),
             (
