@@ -415,6 +415,25 @@ assert(
     scopeChoiceWithDuration(exactOnce, true).policyImpact.startsWith("Adds a saved allow"),
   "T-AS-31: Always allow on the exact action shows saved terms",
 );
+assert(
+  exactOnce !== undefined &&
+    scopeChoiceWithDuration(exactOnce, true).label === "Always allow exact action" &&
+    !scopeChoiceWithDuration(exactOnce, true).description.includes("Nothing is saved"),
+  "T-AS-34: Always allow on the exact action relabels the choice and drops the one-time description",
+);
+const exactBlock = BLOCK_SCOPE_CHOICES.find((item) => item.value === "artifact");
+assert(
+  exactBlock !== undefined &&
+    exactBlock.expiry.startsWith("15 minutes") &&
+    exactBlock.policyImpact.startsWith("Nothing is saved"),
+  "T-AS-35: blocking the exact action lasts 15 minutes and saves nothing",
+);
+for (const choice of [...DEFAULT_SCOPE_CHOICES, ...BLOCK_SCOPE_CHOICES].filter((item) => item.value === "publisher")) {
+  assert(
+    choice.expiry.includes("changed command from this source still matches"),
+    "T-AS-36: a source decision says a changed command still matches",
+  );
+}
 
 const broaderMarkup = renderToStaticMarkup(
   createElement(ReviewScopeControls, {

@@ -17,6 +17,9 @@ export type ApprovalScopeChoice = {
 };
 
 const SAVED_EXPIRY = "Until you remove it, or until the action itself changes.";
+const SOURCE_EXPIRY = "Until you remove it. A changed command from this source still matches.";
+/** Mirrors `ONCE_TTL_MICROS` in the Rust resolution plan. */
+const ONCE_MINUTES = 15;
 
 /**
  * The exact-action choice becomes a saved decision when the user picks
@@ -31,6 +34,8 @@ export function scopeChoiceWithDuration(
   }
   return {
     ...choice,
+    label: "Always allow exact action",
+    description: "Save this exact action. Guard skips review for it until the command changes.",
     appliesTo: "This exact action.",
     expiry: SAVED_EXPIRY,
     policyImpact: "Adds a saved allow for this exact action. A changed command still asks.",
@@ -65,7 +70,7 @@ export const DEFAULT_SCOPE_CHOICES: ApprovalScopeChoice[] = [
     description:
       "Allow only this exact action this time. Guard will ask again for anything different. Nothing is saved.",
     appliesTo: "This exact action, in this session.",
-    expiry: "Covers the agent's next identical retry, then ends. An unused approval lapses.",
+    expiry: `Covers the agent's identical retry within ${ONCE_MINUTES} minutes, then ends.`,
     policyImpact: "Nothing is saved. Guard's policy does not change.",
   },
   {
@@ -83,7 +88,7 @@ export const DEFAULT_SCOPE_CHOICES: ApprovalScopeChoice[] = [
     description:
       "Save this decision for all actions from the same source. Matching actions skip review in any project.",
     appliesTo: "Matching actions from this source, in every project.",
-    expiry: SAVED_EXPIRY,
+    expiry: SOURCE_EXPIRY,
     policyImpact: "Adds a saved allow for this source on this machine.",
   },
   {
@@ -112,8 +117,8 @@ export const BLOCK_SCOPE_CHOICES: ApprovalScopeChoice[] = [
     label: "Block this action",
     description: "Block only this exact action. Other actions still follow their current Guard policy.",
     appliesTo: "This exact action.",
-    expiry: SAVED_EXPIRY,
-    policyImpact: "Adds a saved block. Other actions keep their current policy.",
+    expiry: `${ONCE_MINUTES} minutes for this exact action. After that, Guard asks again.`,
+    policyImpact: "Nothing is saved. Guard's policy does not change.",
   },
   {
     value: "workspace",
@@ -128,7 +133,7 @@ export const BLOCK_SCOPE_CHOICES: ApprovalScopeChoice[] = [
     label: "Block this source",
     description: "Block matching actions from this source.",
     appliesTo: "Matching actions from this source.",
-    expiry: SAVED_EXPIRY,
+    expiry: SOURCE_EXPIRY,
     policyImpact: "Adds a saved block for this source on this machine.",
   },
   {
