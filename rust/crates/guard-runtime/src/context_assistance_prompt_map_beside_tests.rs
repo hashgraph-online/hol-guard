@@ -398,3 +398,20 @@ def __init__(self, size):\n{doc}        self.__size = size\n"
         "{text}"
     );
 }
+
+#[test]
+fn a_decorated_short_constructor_stays_whole_in_claude_code() {
+    let code = "class Box:\n    def fill(self, x):\n        return x\n\n    \
+@validate\n    def __init__(self, size):\n        self.__size = size\n";
+    let list = files(&[("src/pkg/box.py", code)]);
+    let terms = looking_for(&[("fill", true, 1), ("init", true, 1)]);
+    let claude = Asked {
+        reads_first: true,
+        ..Asked::default()
+    };
+    let text = map(&list, &terms, &claude, later()).unwrap().text;
+    assert!(
+        text.contains("    def __init__(self, size):\n        self.__size"),
+        "{text}"
+    );
+}

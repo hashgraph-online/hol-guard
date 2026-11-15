@@ -45,25 +45,32 @@ pub(super) fn end_note(
     before: usize,
     session: Option<&Session>,
 ) {
-    let ending = match harness {
-        "claude-code" => BATCHING,
-        "codex" => ACT_ON_IT,
-        "omp" => SKIP_THE_LIST,
-        _ => return,
+    let Some(ending) = ending_for(harness) else {
+        return;
     };
-    let hint = seen::hint();
-    let add = context_len(response) > before
-        && !session.is_some_and(|session| seen::earlier(session).contains(&hint));
-    if harness == "claude-code" {
-        fit(response, if add { ending.len() + 2 } else { 0 });
-    }
-    if !add {
+    if !adds_hint(response, before, session) {
         return;
     }
     add_context(response, ending);
     if let Some(session) = session {
-        seen::remember(session, &[hint]);
+        seen::remember(session, &[seen::hint()]);
     }
+}
+
+fn ending_for(harness: &str) -> Option<&'static str> {
+    match harness {
+        "claude-code" => Some(BATCHING),
+        "codex" => Some(ACT_ON_IT),
+        "omp" => Some(SKIP_THE_LIST),
+        _ => None,
+    }
+}
+
+/// Whether `end_note` adds the hint: Guard added to this prompt, and the
+/// session has not had it yet.
+fn adds_hint(response: &Value, before: usize, session: Option<&Session>) -> bool {
+    context_len(response) > before
+        && !session.is_some_and(|session| seen::earlier(session).contains(&seen::hint()))
 }
 
 /// Claude Code saves hook context longer than 10,000 characters to a file
@@ -72,18 +79,45 @@ pub(super) fn end_note(
 const CLAUDE_MAX_CHARS: usize = 9_500;
 const CUT: &str = "(The rest of this note was cut to fit.)";
 
-fn fit(response: &mut Value, reserve: usize) {
+/// Cuts a Claude Code note to fit, leaving room for the hint `end_note`
+/// adds. Code cut off is forgotten, so a later prompt can show it again, and
+/// files left with nothing shown leave `shown`.
+pub(super) fn fit_note(
+    response: &mut Value,
+    harness: &str,
+    before: usize,
+    session: Option<&Session>,
+    shown: &mut Vec<String>,
+) {
+    if harness != "claude-code" {
+        return;
+    }
+    let reserve = if adds_hint(response, before, session) {
+        BATCHING.len() + 2
+    } else {
+        0
+    };
     let Some(text) = response.pointer_mut("/hookSpecificOutput/additionalContext") else {
         return;
     };
     let max = CLAUDE_MAX_CHARS.saturating_sub(reserve);
-    if let Some(kept) = text.as_str().and_then(|text| cut(text, max)) {
-        *text = Value::String(kept);
+    let Some((kept, gone)) = text.as_str().and_then(|text| cut(text, max)) else {
+        return;
+    };
+    if let Some(session) = session {
+        seen::forget(session, |span| {
+            let at = format!("{}:{}-{}", span.path, span.start, span.end);
+            gone.contains(&at) && !kept.contains(&at)
+        });
     }
+    shown.retain(|path| kept.contains(path.as_str()));
+    *text = Value::String(kept);
 }
 
-/// `text` cut to at most `max` characters, or `None` when it fits.
-fn cut(text: &str, max: usize) -> Option<String> {
+/// `text` cut to at most `max` characters and the part cut off, or `None`
+/// when it fits. A code block still open at the cut goes whole, with the
+/// line naming it.
+fn cut(text: &str, max: usize) -> Option<(String, String)> {
     if text.chars().count() <= max {
         return None;
     }
@@ -92,12 +126,29 @@ fn cut(text: &str, max: usize) -> Option<String> {
         .char_indices()
         .nth(room)
         .map_or(text.len(), |(at, _)| at);
-    let mut kept = &text[..text[..end].rfind('\n').unwrap_or(0)];
-    if kept.matches("```").count() % 2 == 1 {
-        let open = kept.rfind("```").unwrap_or(0);
-        kept = &kept[..kept[..open].rfind('\n').unwrap_or(0)];
+    let mut at = text[..end].rfind('\n').unwrap_or(0);
+    if let Some(open) = open_fence(&text[..at]) {
+        at = text[..open].trim_end_matches('\n').rfind('\n').unwrap_or(0);
     }
-    Some(format!("{kept}\n{CUT}"))
+    Some((format!("{}\n{CUT}", &text[..at]), text[at..].to_owned()))
+}
+
+/// Where the code block still open at the end of `text` starts. A block
+/// closes only on a fence line at least as long as the one that opened it,
+/// so code holding a shorter fence stays inside.
+fn open_fence(text: &str) -> Option<usize> {
+    let mut open: Option<(usize, usize)> = None;
+    let mut at = 0;
+    for line in text.split_inclusive('\n') {
+        let ticks = line.trim_start().chars().take_while(|c| *c == '`').count();
+        match open {
+            None if ticks >= 3 => open = Some((at, ticks)),
+            Some((_, width)) if ticks >= width && line.trim().len() == ticks => open = None,
+            _ => {}
+        }
+        at += line.len();
+    }
+    open.map(|(start, _)| start)
 }
 
 /// The session a prompt belongs to, found the way `attach` finds it.

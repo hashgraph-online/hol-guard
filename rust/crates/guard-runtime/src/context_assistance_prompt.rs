@@ -31,7 +31,7 @@ use excerpts::render;
 use excerpts::{fence_for, language};
 #[path = "context_assistance_prompt_ending.rs"]
 mod ending;
-use ending::{end_note, prompt_session};
+use ending::{end_note, fit_note, prompt_session};
 #[path = "context_assistance_prompt_lookup.rs"]
 mod lookup;
 #[path = "context_assistance_prompt_map.rs"]
@@ -117,10 +117,11 @@ pub(crate) fn harness_response(
         let before = context_len(&response);
         let mut shown = Vec::new();
         attach(&mut response, envelope, harness, store, started, &mut shown);
+        let session = prompt_session(envelope, harness, store);
+        fit_note(&mut response, harness, before, session.as_ref(), &mut shown);
         let added = context_len(&response).saturating_sub(before);
         let payload = &envelope.raw_payload;
         savings::noted(store.guard_home(), payload, harness, added, shown);
-        let session = prompt_session(envelope, harness, store);
         end_note(&mut response, harness, before, session.as_ref());
         if harness == "kimi" {
             kimi_message(&mut response);
