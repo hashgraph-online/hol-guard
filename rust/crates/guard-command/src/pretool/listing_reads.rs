@@ -270,13 +270,9 @@ fn expanded_path(value: &str, context: super::PathContext<'_>) -> Option<std::pa
 /// Upper bound on the entries a leaf glob's directory may hold.
 const MAX_LEAF_ENTRIES: usize = 4096;
 
-/// `ls /tmp/pg-run/.s.PGSQL*`: a last-component pattern below a literal
-/// directory `ls` may list by name, that no other user can add entries to, and
-/// that is not home, whose every folder it would list. It prints only names,
-/// as listing the directory would. Every entry it could match under any shell
-/// option (`dotglob`, `nocaseglob`) is screened: a directory match has its
-/// entries listed, so it needs the listing proof, and any other match must
-/// clear the sensitive-path and credential-name screens.
+/// A leaf glob under an owner-controlled, listable non-home directory.
+/// Each match is screened, including hidden entries under permissive shell
+/// options; a directory match requires its own listing proof.
 fn leaf_glob_operand(value: &str, context: super::PathContext<'_>) -> bool {
     // Windows spells the home path with `\`, so there it is a separator.
     let separator = |c: char| c == '/' || (c == '\\' && cfg!(windows));
@@ -293,8 +289,7 @@ fn leaf_glob_operand(value: &str, context: super::PathContext<'_>) -> bool {
         // Reject both rather than trusting the leaf-only proof.
         || pattern.contains(['#', '^', '~'])
         || pattern.contains("**")
-        // A trailing wildcard can always spell a credential name, so the
-        // pattern only screens its fixed path; every match is screened below.
+        // The fixed directory and every wildcard match need screening.
         || super::sensitive_path_argument(value)
         || super::sensitive_read_path_argument(directory)
     {
@@ -326,17 +321,19 @@ fn leaf_glob_operand(value: &str, context: super::PathContext<'_>) -> bool {
     if pattern.starts_with(['.', '[']) && (candidate(".") || candidate("..")) {
         return false;
     }
-    let home = context.home_dir.map(std::path::PathBuf::from);
-    let Some(base) = expanded_path(directory, context).filter(|b| home.as_ref() != Some(b)) else {
+    let Some(base) = expanded_path(directory, context) else { return false; };
+    let Ok(canonical_base) = std::fs::canonicalize(&base) else { return false; };
+    if context.home_dir.is_some_and(|h| {
+        !std::fs::canonicalize(h).is_ok_and(|home| home != canonical_base)
+    }) {
         return false;
-    };
+    }
     // The shell expands after this screen, and anyone may plant a matching link
     // in a world-writable directory (`/tmp`) meanwhile, so a pattern below one stays reviewed.
     if super::listing_temporary::writable_by_anyone(&base) {
         return false;
     }
     // In an owner-only temporary directory, screen each matching entry.
-    // Listing the whole directory may still require review.
     if !safe_reads::safe_listing_arguments(&[directory.to_owned()], context)
         && !super::listing_temporary::temporary_glob_directory(&base, context)
     {
@@ -372,7 +369,9 @@ fn leaf_glob_operand(value: &str, context: super::PathContext<'_>) -> bool {
             !super::sensitive_read_path_argument(text)
                 && !search::key_file_name(&name)
                 && std::fs::canonicalize(&path).is_ok_and(|canonical| {
-                    super::read_paths::resolved_location_allowed(
+                    canonical.file_name().and_then(|n| n.to_str())
+                        .is_some_and(|name| !search::key_file_name(name))
+                        && super::read_paths::resolved_location_allowed(
                         &canonical,
                         context.home_dir,
                         context.cwd,
