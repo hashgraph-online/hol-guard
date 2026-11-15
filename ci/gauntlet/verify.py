@@ -302,7 +302,9 @@ def verify_contained_report(
     }
 
 
-def _reconcile_case_retries(report: dict[str, Any], directory: Path, expected: Sequence[Scenario]) -> None:
+def _reconcile_case_retries(
+    report: dict[str, Any], directory: Path, expected: Sequence[Scenario]
+) -> list[dict[str, Any]]:
     """Judge every superseded attempt the report declares, with this verifier's own judge.
 
     The runner that decided to grant a re-run is candidate code. A reader that only
@@ -314,8 +316,12 @@ def _reconcile_case_retries(report: dict[str, Any], directory: Path, expected: S
     runner. The file name binds to its own entry, so one case's history cannot point
     at another case's evidence, and the digest still binds the bytes. The outcome and
     reason the history row shows readers must be the ones judged here.
+
+    Returns the hook observations of every superseded attempt, so the release
+    budget counts a failed hook call even when a re-run later passed.
     """
     by_id = {scenario.id: scenario for scenario in expected}
+    observations: list[dict[str, Any]] = []
     for entry in report.get("case_retries") or []:
         if not isinstance(entry, dict) or entry.get("id") not in by_id:
             raise ValueError("a superseded attempt names a scenario outside this profile")
@@ -338,6 +344,8 @@ def _reconcile_case_retries(report: dict[str, Any], directory: Path, expected: S
             raise ValueError("a superseded attempt's declared outcome does not match its evidence")
         if not retry_eligible(result):
             raise ValueError("a superseded attempt was never eligible for a re-run")
+        observations.extend(case.get("guard_observations") or [])
+    return observations
 
 
 def verify_report(
@@ -443,7 +451,7 @@ def verify_report(
         if result["outcome"] != "pass":
             raise ValueError("a required scenario did not pass")
         results.append(result)
-    _reconcile_case_retries(report, directory, expected)
+    superseded_observations = _reconcile_case_retries(report, directory, expected)
     latency = summarize_hook_latency(observations)
     if "hook_latency" in report and report["hook_latency"] != latency:
         raise ValueError("claimed aggregate hook latency does not match observed evidence")
@@ -465,9 +473,12 @@ def verify_report(
         if stale:
             raise ValueError("known gaps now pass and must be removed: " + ", ".join(stale))
     budgets = release_budgets(
-        [{"id": s.id, **r} for s, r in zip(expected, results, strict=True)], interruptions, latency, gap_report
+        [{"id": s.id, **r} for s, r in zip(expected, results, strict=True)],
+        interruptions,
+        summarize_hook_latency(observations + superseded_observations),
+        gap_report,
     )
-    if "release_budgets" in report and report["release_budgets"] != budgets:
+    if report.get("release_budgets") != budgets:
         raise ValueError("claimed release budgets do not match observed evidence")
     return {
         "verified": True,

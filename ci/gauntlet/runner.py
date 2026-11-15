@@ -67,7 +67,7 @@ from .native_tools import CREDENTIAL_REPORT_CASE, TASK_SCHEMA_CASE, cleanup_priv
 from .observed_extension import generate_observed_extension
 from .parallel import HostSlots, Lease, LoadGate, run_scheduled, validate_jobs
 from .provider import InferenceRelay, LoopbackCollector
-from .release_budgets import release_budgets
+from .release_budgets import attempt_observations, release_budgets
 from .review_fixtures import GITHUB_ENABLED_CASES, GITHUB_STUB_CASES, WORKTREE_CASES, configure_github_review_controls
 from .runtime_cases import stage_runtime_cases
 from .script_cases import stage_script_cases
@@ -695,7 +695,9 @@ def run_suite(
     report["release_budgets"] = release_budgets(
         report["cases"],
         report["interruptions"],
-        report.get("hook_latency") or summarize_hook_latency([]),
+        summarize_hook_latency(
+            attempt_observations(output, [row["id"] for row in report["cases"]], report.get("case_retries") or [])
+        ),
         report["known_gaps"],
     )
     report["pass"] = (
