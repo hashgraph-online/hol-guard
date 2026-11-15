@@ -431,7 +431,7 @@ fn entered_checkout(
         if segment.pipeline_index != 0 || !is(segment, &["git"]) {
             continue;
         }
-        let Some((_, destination, _)) = super::planned_checkout(segment, context) else {
+        let Some((spec, destination, chdir)) = super::planned_checkout(segment, context) else {
             continue;
         };
         // After the `cd` the shell looks up `git` and `gh` again, and a
@@ -452,9 +452,34 @@ fn entered_checkout(
         // A later pipeline stage reads only what the step before it prints:
         // a bounded `head`, `tail` or `wc` with no path of its own.
         // A permitted action must also have a shape whose meaning the `cd`
-        // cannot change (see `chain_route::permitted_step_shape`).
+        // cannot change (see `chain_route::permitted_step_shape`). A bare
+        // word it takes is judged against the shell's directory but opened in
+        // the checkout, so it must name nothing the checkout holds: no entry
+        // of the tree the add checks out, which every step before it left
+        // unchanged. Anything before the add may move that reference.
         let permitted_action = |index: usize, later: &CommandSegmentV1| {
-            super::chain_route::permitted_step_shape(later) && permitted(index)
+            if !super::chain_route::permitted_step_shape(later) || !permitted(index) {
+                return false;
+            }
+            let names = super::chain_route::bare_names(later);
+            if names.is_empty() {
+                return true;
+            }
+            add == 0
+                && model.segments[after + 1..index]
+                    .iter()
+                    .all(|step| !super::super::tree_writers::may_rewrite_tree(step))
+                && super::super::git_worktree::tree_names_any(
+                    segment.executable.as_deref().unwrap_or("git"),
+                    &spec.leading,
+                    spec.reference.unwrap_or("HEAD"),
+                    &names,
+                    super::super::PathContext {
+                        cwd: chdir.as_deref().or(context.cwd),
+                        ..context
+                    },
+                    execution_environment,
+                ) == Some(false)
         };
         let rest_is_git = model.segments[after + 1..]
             .iter()

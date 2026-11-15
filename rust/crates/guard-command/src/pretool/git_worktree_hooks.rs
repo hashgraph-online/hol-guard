@@ -131,3 +131,32 @@ pub(super) fn hooks_are_inert(
         .iter()
         .all(|hook| hook_file_inert(&path.join(hook), hook, husky_directory_reached))
 }
+
+/// Whether any of `names` is an entry at the root of the tree `reference`
+/// names, in the repository the add's directory belongs to. Pathspecs are
+/// read literally, so a name never widens into a pattern. `None` is doubt.
+pub(in crate::pretool) fn tree_names_any(
+    executable: &str,
+    leading: &[String],
+    reference: &str,
+    names: &[&str],
+    context: super::super::PathContext<'_>,
+    execution_environment: Option<&guard_contracts::GuardExecutionEnvironmentV1>,
+) -> Option<bool> {
+    let (base, _, _, _) = super::prepared_git_command(executable, context, execution_environment)?;
+    let deadline = Instant::now() + super::super::git_probe::PROBE_BUDGET;
+    let mut arguments = vec![
+        "--no-pager",
+        "--literal-pathspecs",
+        "ls-tree",
+        "-z",
+        "--full-tree",
+        "--name-only",
+        reference,
+        "--",
+    ];
+    arguments.extend(names);
+    let (status, output) =
+        git_query_with_args(&base, leading, &arguments, deadline, WORKTREE_PROBE_LIMIT)?;
+    status.success().then(|| !output.is_empty())
+}

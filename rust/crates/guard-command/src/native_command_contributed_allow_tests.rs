@@ -190,6 +190,8 @@ fn repository() -> (Fixture, PathBuf, PathBuf) {
             .env_remove("GIT_WORK_TREE")
             .env_remove("GIT_INDEX_FILE")
             .env_remove("GIT_COMMON_DIR")
+            .env_remove("GIT_OBJECT_DIRECTORY")
+            .env_remove("GIT_ALTERNATE_OBJECT_DIRECTORIES")
             .args(arguments)
             .status()
             .unwrap()
@@ -340,6 +342,10 @@ fn a_permitted_action_the_entry_could_change_keeps_its_review() {
         "ollama rm ~/stale-model",
         "OLLAMA_HOST=127.0.0.1:9 ollama rm stale-model",
         "ollama rm stale-model > removed.txt",
+        // A bare name the new checkout holds: alone it names nothing here,
+        // after the `cd` it names the checked-out file.
+        "ollama rm README.md",
+        "ollama rm --name=README.md",
     ] {
         let alone = evaluate_in(&home, &repository, &allowed, step);
         assert_eq!(
@@ -348,6 +354,29 @@ fn a_permitted_action_the_entry_could_change_keeps_its_review() {
             alone.reason_code
         );
         let command = format!("{ADD} && cd ../ext-wt && {step} && git status --short");
+        let result = evaluate_in(&home, &repository, &allowed, &command);
+        assert_ne!(
+            result.minimum_action, "allow",
+            "{command}: {}",
+            result.reason_code
+        );
+    }
+}
+
+/// A bare name the checkout does not hold keeps the entry allowed, and a
+/// step before it that can rewrite the checkout, in any letter case, takes
+/// that proof away.
+#[test]
+fn a_bare_name_counts_only_against_the_unchanged_checkout() {
+    let (_fixture, home, repository) = repository();
+    let allowed = ollama_and_git();
+    let command = format!("{ADD} && cd ../ext-wt && ollama rm stale-model && git status --short");
+    let result = evaluate_in(&home, &repository, &allowed, &command);
+    assert_eq!(result.minimum_action, "allow", "{}", result.reason_code);
+    for step in ["CHMOD -R 777 .", "Touch stale-model"] {
+        let command = format!(
+            "{ADD} && cd ../ext-wt && {step} && ollama rm stale-model && git status --short"
+        );
         let result = evaluate_in(&home, &repository, &allowed, &command);
         assert_ne!(
             result.minimum_action, "allow",
