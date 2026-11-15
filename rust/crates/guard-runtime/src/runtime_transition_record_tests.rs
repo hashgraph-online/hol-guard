@@ -1,0 +1,244 @@
+use std::fs;
+use std::os::unix::fs::PermissionsExt;
+use std::path::PathBuf;
+
+use base64ct::{Base64UrlUnpadded, Encoding};
+use serde_json::{json, Value};
+
+use super::run_command;
+
+const OPERATION: &str = "0b1c2d3e-4f50-4617-8293-a4b5c6d7e8f9";
+
+struct Home {
+    _root: tempfile::TempDir,
+    path: PathBuf,
+}
+
+fn home() -> Home {
+    let root = tempfile::tempdir().expect("root");
+    let path = fs::canonicalize(root.path())
+        .expect("canonical")
+        .join("guard");
+    fs::create_dir_all(&path).expect("home");
+    Home { _root: root, path }
+}
+
+fn ask(home: &Home, op: &str, extra: Value) -> Value {
+    let mut request = json!({
+        "schema": "runtime-transition-record.v1",
+        "op": op,
+        "guard_home": home.path.to_str(),
+        "integrity_key_b64": Base64UrlUnpadded::encode_string(&[9_u8; 32]),
+        "integrity_key_id": "k1",
+    });
+    for (key, value) in extra.as_object().expect("extra") {
+        request[key] = value.clone();
+    }
+    let bytes = serde_json::to_vec(&request).expect("request");
+    serde_json::from_slice(&run_command(bytes.as_slice()).expect("answer")).expect("json")
+}
+
+fn identity(path: &str) -> Value {
+    json!({
+        "version": "1.0.0",
+        "source_commit": "abc",
+        "target": "aarch64-apple-darwin",
+        "format": "macho",
+        "sha256": "a".repeat(64),
+        "path": path,
+        "generation": "g1",
+    })
+}
+
+fn record(home: &Home) -> Value {
+    json!({
+        "schema": "hol-guard.runtime-transition.v1",
+        "guard_home": home.path.to_str(),
+        "operation_id": OPERATION,
+        "files": [{
+            "path": home.path.join("bin").join("hol-guard").to_str(),
+            "before": null,
+            "after": "b".repeat(64),
+            "before_mode": 0o755,
+            "after_mode": 0o755,
+            "kind": "binding",
+        }],
+        "managed_installs": [],
+        "candidate": identity("/opt/guard/new"),
+        "predecessor": identity("/opt/guard/old"),
+        "deadline_epoch": 1.5,
+        "deadline_monotonic": 2.0,
+        "forward_expires_epoch": 3,
+        "forward_expires_monotonic": 4.25,
+    })
+}
+
+fn journal(home: &Home) -> PathBuf {
+    home.path.join("managed").join("runtime-transition.json")
+}
+
+#[test]
+fn a_written_record_reads_back_without_its_signature() {
+    let home = home();
+    let payload = record(&home);
+    assert_eq!(
+        ask(&home, "write", json!({"payload": payload})),
+        json!({"ok": true})
+    );
+    let mode = fs::metadata(journal(&home))
+        .expect("journal")
+        .permissions()
+        .mode();
+    assert_eq!(mode & 0o777, 0o600);
+    let text = fs::read_to_string(journal(&home)).expect("text");
+    assert!(text.ends_with("}\n") && text.contains("\"authentication\""));
+    let answer = ask(&home, "read", json!({"operation_id": OPERATION}));
+    assert_eq!(answer["payload"], payload);
+}
+
+#[test]
+fn a_changed_record_or_another_key_is_unauthenticated() {
+    let home = home();
+    ask(&home, "write", json!({"payload": record(&home)}));
+    let other_key = json!({
+        "operation_id": OPERATION,
+        "integrity_key_b64": Base64UrlUnpadded::encode_string(&[8_u8; 32]),
+    });
+    assert_eq!(
+        ask(&home, "read", other_key)["error"],
+        "record_unauthenticated"
+    );
+    let text = fs::read_to_string(journal(&home)).expect("text");
+    fs::write(journal(&home), text.replace("1.5", "9.5")).expect("tamper");
+    let answer = ask(&home, "read", json!({"operation_id": OPERATION}));
+    assert_eq!(answer["error"], "record_unauthenticated");
+    fs::write(journal(&home), "{not json").expect("garbage");
+    let answer = ask(&home, "read", json!({"operation_id": OPERATION}));
+    assert_eq!(answer["error"], "record_invalid");
+}
+
+#[test]
+fn a_record_for_another_operation_or_home_is_refused() {
+    let home = home();
+    ask(&home, "write", json!({"payload": record(&home)}));
+    let other = json!({"operation_id": "ffffffff-4f50-4617-8293-a4b5c6d7e8f9"});
+    assert_eq!(ask(&home, "read", other)["error"], "operation_superseded");
+    let mut payload = record(&home);
+    payload["guard_home"] = json!("/elsewhere");
+    ask(&home, "write", json!({"payload": payload}));
+    let answer = ask(&home, "read", json!({"operation_id": OPERATION}));
+    assert_eq!(answer["error"], "record_context_mismatch");
+}
+
+#[test]
+fn a_signed_record_with_a_bad_shape_is_still_refused() {
+    let home = home();
+    let mut payload = record(&home);
+    payload["files"][0]["after_mode"] = json!(0o777);
+    ask(&home, "write", json!({"payload": payload}));
+    let answer = ask(&home, "read", json!({"operation_id": OPERATION}));
+    assert_eq!(answer["error"], "file_mode_invalid");
+    assert!(answer["detail"]
+        .as_str()
+        .is_some_and(|path| path.ends_with("hol-guard")));
+    let mut payload = record(&home);
+    payload["files"] = json!([]);
+    ask(&home, "write", json!({"payload": payload}));
+    let answer = ask(&home, "read", json!({"operation_id": OPERATION}));
+    assert_eq!(answer["error"], "plan_invalid");
+}
+
+#[test]
+fn a_missing_record_or_key_is_reported_plainly() {
+    let home = home();
+    let answer = ask(&home, "read", json!({"operation_id": OPERATION}));
+    assert_eq!(answer["error"], "record_unavailable");
+    let answer = ask(
+        &home,
+        "write",
+        json!({"payload": record(&home), "integrity_key_b64": null}),
+    );
+    assert_eq!(answer["error"], "signing_authority_unavailable");
+    assert!(!journal(&home).exists());
+}
+
+#[test]
+fn retire_keeps_one_readable_previous_record() {
+    let home = home();
+    ask(&home, "write", json!({"payload": record(&home)}));
+    assert_eq!(ask(&home, "retire", json!({})), json!({"ok": true}));
+    assert!(!journal(&home).exists());
+    let answer = ask(
+        &home,
+        "read",
+        json!({"operation_id": OPERATION, "previous": true}),
+    );
+    assert_eq!(answer["payload"]["operation_id"], OPERATION);
+    let previous = journal(&home).with_file_name("runtime-transition.previous.json");
+    fs::set_permissions(&previous, fs::Permissions::from_mode(0o666)).expect("mode");
+    ask(&home, "write", json!({"payload": record(&home)}));
+    assert_eq!(
+        ask(&home, "retire", json!({}))["error"],
+        "previous_record_unsafe"
+    );
+    assert!(journal(&home).exists());
+}
+
+fn refusal(home: &Home, operation: &str) -> Value {
+    ask(
+        home,
+        "refusal_write",
+        json!({
+            "operation_id": operation,
+            "artifact_generation": "c".repeat(64),
+            "reason_code": "approval_denied",
+            "deadline_seconds": 5.0,
+        }),
+    )
+}
+
+#[test]
+fn a_refusal_receipt_is_written_once_and_reads_back() {
+    let home = home();
+    assert_eq!(refusal(&home, OPERATION), json!({"ok": true}));
+    let directory = home.path.join("managed").join("runtime-refusals");
+    let mode = fs::metadata(&directory).expect("dir").permissions().mode();
+    assert_eq!(mode & 0o777, 0o700);
+    let answer = ask(&home, "refusal_read", json!({"operation_id": OPERATION}));
+    assert_eq!(
+        answer,
+        json!({"artifact_generation": "c".repeat(64), "reason_code": "approval_denied"})
+    );
+    assert_eq!(refusal(&home, OPERATION)["error"], "refusal_exists");
+    let upper = OPERATION.to_uppercase();
+    assert_eq!(refusal(&home, &upper)["error"], "operation_id_invalid");
+}
+
+#[test]
+fn a_pending_transition_blocks_refusal_receipts() {
+    let home = home();
+    ask(&home, "write", json!({"payload": record(&home)}));
+    assert_eq!(refusal(&home, OPERATION)["error"], "pending_transition");
+    let answer = ask(&home, "refusal_read", json!({"operation_id": OPERATION}));
+    assert_eq!(answer["error"], "pending_transition");
+}
+
+#[test]
+fn a_shared_refusal_directory_is_refused() {
+    let home = home();
+    let directory = home.path.join("managed").join("runtime-refusals");
+    fs::create_dir_all(&directory).expect("dir");
+    fs::set_permissions(&directory, fs::Permissions::from_mode(0o755)).expect("mode");
+    assert_eq!(
+        refusal(&home, OPERATION)["error"],
+        "refusal_directory_unsafe"
+    );
+}
+
+#[test]
+fn an_unknown_request_is_refused() {
+    let answer: Value =
+        serde_json::from_slice(&run_command(&b"{\"schema\":\"x\"}"[..]).expect("answer"))
+            .expect("json");
+    assert_eq!(answer["error"], "invalid");
+}

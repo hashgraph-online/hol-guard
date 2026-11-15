@@ -414,7 +414,8 @@
           "src/codex_plugin_scanner/guard/runtime_transition_admission.py",
           "src/codex_plugin_scanner/guard/runtime_transition_legacy_receipt.py",
           "src/codex_plugin_scanner/guard/runtime_transition.py",
-          "src/codex_plugin_scanner/guard/runtime_transition_modes.py"
+          "src/codex_plugin_scanner/guard/runtime_transition_modes.py",
+          "src/codex_plugin_scanner/guard/runtime_transition_record.py"
         ]
       },
       {

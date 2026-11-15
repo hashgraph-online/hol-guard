@@ -2523,6 +2523,38 @@
    "body": "5bf21e38ad03"
   },
   {
+   "verdict": "posix-primitive",
+   "note": "Fsyncing a directory to make a rename or create durable is a POSIX primitive with no Windows counterpart, and the Python `fsync_directory` this replaces is a no-op there too; the record file itself is synced before it is published.",
+   "file": "rust/crates/guard-runtime/src/runtime_transition_record.rs",
+   "item": "fn sync_directory -- non-Unix block",
+   "cfg": "not(unix)",
+   "body": "b24473fc2790"
+  },
+  {
+   "verdict": "windows-equivalent",
+   "note": "Windows records carry no numeric owner, exactly as the Python writer records `None` there; a missing owner is accepted only off Unix, so a Unix record cannot drop the pin.",
+   "file": "rust/crates/guard-runtime/src/runtime_transition_record_shape.rs",
+   "item": "fn trusted_owner -- cfg! expression",
+   "cfg": "unix",
+   "body": "e47e85428072"
+  },
+  {
+   "verdict": "windows-equivalent",
+   "note": "Ports `os.name != \"nt\" and owner not in {0, os.geteuid()}`: Python skips the owner comparison on Windows, where ownership is an ACL rather than a uid, and the file stays pinned by digest and size.",
+   "file": "rust/crates/guard-runtime/src/runtime_transition_record_shape.rs",
+   "item": "fn owner_matches(_owner: i128) -> bool",
+   "cfg": "not(unix)",
+   "body": "7164d60ebccf"
+  },
+  {
+   "verdict": "windows-equivalent",
+   "note": "Ports `_unsafe_file_mode`: Windows has no group or world write bits, so Python applies the mode mask only off Windows; write access there is an ACL property the journal never records.",
+   "file": "rust/crates/guard-runtime/src/runtime_transition_record_shape.rs",
+   "item": "fn unsafe_mode -- cfg! expression",
+   "cfg": "unix",
+   "body": "945ea068fd97"
+  },
+  {
    "file": "rust/crates/guard-runtime/src/shell_request_inspection_host.rs",
    "item": "fn current_uid -- non-Unix block",
    "verdict": "posix-primitive",

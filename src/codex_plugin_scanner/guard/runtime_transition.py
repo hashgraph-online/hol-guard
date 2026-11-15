@@ -11,7 +11,6 @@ import hashlib
 import json
 import math
 import os
-import stat
 import time
 import uuid
 from collections.abc import Callable, Mapping, Sequence
@@ -23,18 +22,12 @@ from pathlib import Path
 from typing import Protocol, cast
 
 from .approval_gate import ApprovalGateGrant, public_config, validate_grant
-from .codex_hook_integrity import atomic_write_bytes, canonical_manifest_bytes
+from .codex_hook_integrity import canonical_manifest_bytes
 from .codex_hook_recovery import _decode, _encode, _snapshot
 from .codex_install_transaction import require_codex_install_owner
-from .durable_io import fsync_directory
 from .live_process_identity import current_process_identity
-from .local_authority_integrity import (
-    LOCAL_AUTHORITY_INTEGRITY_UNAVAILABLE,
-    sign_local_authority_payload,
-    verify_local_authority_payload,
-)
-from .private_file_io import read_private_regular_text
 from .runtime_transition_modes import normalized_after_mode, publishes_user_file, recorded_noop
+from .runtime_transition_record import TransitionRecordRefusedError, record_request
 from .sqlite_tuning import sqlite_operation_deadline
 
 _PURPOSE = "guard-runtime-transition-inverse"
@@ -615,174 +608,57 @@ class RuntimeTransition:
             raise TransitionError("operation_id_invalid") from error
         return self.home / "managed" / "runtime-refusals" / f"{operation_id}.json"
 
+    def _optional_key(self) -> tuple[bytes, str] | None:
+        try:
+            return self._key()
+        except TransitionError:
+            return None
+
+    def _native(self, op: str, key: tuple[bytes, str] | None, **fields: object) -> dict[str, object]:
+        try:
+            return record_request(op, self.home, key, **fields)
+        except TransitionRecordRefusedError as error:
+            raise TransitionError(error.reason, error.detail) from error
+
     def record_approval_refusal(self, plan: TransitionPlan, reason: str, *, deadline_monotonic: float) -> None:
         """Record only a refusal before begin; this is never a forward grant."""
         require_codex_install_owner(self.home)
-        if (
-            plan.guard_home != self.home
-            or not reason
-            or len(reason) > 128
-            or not reason.isascii()
-            or any(not (character.isalnum() or character == "_") for character in reason)
-        ):
+        if plan.guard_home != self.home:
             raise TransitionError("refusal_context_invalid")
         if time.monotonic() >= deadline_monotonic:
             raise TransitionError("deadline_exceeded")
-        # Any existing journal, including an unreadable/foreign one, prevents
-        # this assertion. The shared home owner excludes a concurrent begin.
-        if self.path.exists() or self.path.is_symlink():
-            raise TransitionError("pending_transition")
-        path = self._refusal_path(plan.operation_id)
-        key, key_id = self._key()
-        payload: dict[str, object] = {
-            "schema": _REFUSAL_SCHEMA,
-            "guard_home": str(self.home),
-            "operation_id": plan.operation_id,
-            "artifact_generation": _artifact_identity(plan.candidate)["generation"],
-            "reason_code": reason,
-        }
-        signed = dict(payload)
-        signed["authentication"] = sign_local_authority_payload(
-            payload,
-            key=key,
-            key_id=key_id,
-            purpose=_REFUSAL_PURPOSE,
-            signed_at=plan.operation_id,
+        # The runtime refuses while any journal exists, and writes the signed
+        # receipt create-only. The shared home owner excludes a concurrent begin.
+        self._native(
+            "refusal_write",
+            self._optional_key(),
+            operation_id=plan.operation_id,
+            artifact_generation=_artifact_identity(plan.candidate)["generation"],
+            reason_code=reason,
+            deadline=deadline_monotonic,
         )
-        encoded = canonical_manifest_bytes(signed) + b"\n"
-        if len(encoded) > 4096:
-            raise TransitionError("refusal_capacity")
-        path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
-        metadata = path.parent.lstat()
-        if (
-            path.parent.resolve(strict=True) != path.parent
-            or not stat.S_ISDIR(metadata.st_mode)
-            or stat.S_ISLNK(metadata.st_mode)
-            or (os.name != "nt" and (metadata.st_uid != os.getuid() or metadata.st_mode & 0o077))
-        ):
-            raise TransitionError("refusal_directory_unsafe")
-        # Bound retained evidence; never evict a refusal to authorize reuse.
-        with os.scandir(path.parent) as entries:
-            if sum(1 for _, _entry in zip(range(129), entries, strict=False)) >= 128:
-                raise TransitionError("refusal_capacity")
-        if time.monotonic() >= deadline_monotonic:
-            raise TransitionError("deadline_exceeded")
-        descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0), 0o600)
-        try:
-            offset = 0
-            while offset < len(encoded):
-                if time.monotonic() >= deadline_monotonic:
-                    raise TransitionError("deadline_exceeded")
-                written = os.write(descriptor, encoded[offset:])
-                if written <= 0:
-                    raise TransitionError("refusal_write_failed")
-                offset += written
-            os.fsync(descriptor)
-        finally:
-            os.close(descriptor)
-        fsync_directory(path.parent)
 
     def refusal_status(self, operation_id: str) -> TransitionStatus:
         require_codex_install_owner(self.home)
-        if self.path.exists() or self.path.is_symlink():
-            raise TransitionError("pending_transition")
-        path = self._refusal_path(operation_id)
-        raw = read_private_regular_text(path, max_bytes=4096)
-        if raw is None:
-            raise TransitionError("record_unavailable")
-        try:
-            payload = json.loads(raw)
-        except json.JSONDecodeError as error:
-            raise TransitionError("refusal_invalid") from error
-        if not isinstance(payload, dict):
-            raise TransitionError("refusal_invalid")
-        integrity = payload.pop("authentication", None)
-        key, key_id = self._key()
-        if (
-            not isinstance(integrity, dict)
-            or verify_local_authority_payload(
-                payload, integrity, key=key, key_id=key_id, purpose=_REFUSAL_PURPOSE
-            ).status
-            != "valid"
-        ):
-            raise TransitionError("refusal_unauthenticated")
-        generation, reason = payload.get("artifact_generation"), payload.get("reason_code")
-        if (
-            set(payload) != {"schema", "guard_home", "operation_id", "artifact_generation", "reason_code"}
-            or payload.get("schema") != _REFUSAL_SCHEMA
-            or payload.get("guard_home") != str(self.home)
-            or payload.get("operation_id") != operation_id
-            or not isinstance(generation, str)
-            or len(generation) != 64
-            or any(character not in "0123456789abcdef" for character in generation)
-            or not isinstance(reason, str)
-            or not reason
-            or len(reason) > 128
-            or not reason.isascii()
-            or any(not (character.isalnum() or character == "_") for character in reason)
-        ):
+        answer = self._native("refusal_read", self._optional_key(), operation_id=operation_id)
+        reason, generation = answer.get("reason_code"), answer.get("artifact_generation")
+        if not isinstance(reason, str) or not isinstance(generation, str):
             raise TransitionError("refusal_context_invalid")
         return TransitionStatus(operation_id, "NotStarted", reason, (), generation)
 
     def _write(self, payload: dict[str, object], *, deadline: float | None = None) -> None:
         require_codex_install_owner(self.home)
-        key, key_id = self._key()
-        signed = dict(payload)
-        try:
-            signed["authentication"] = sign_local_authority_payload(
-                payload,
-                key=key,
-                key_id=key_id,
-                purpose=_PURPOSE,
-                signed_at=str(payload["operation_id"]),
-                deadline=deadline,
-            )
-        except RuntimeError as error:
-            if deadline is not None and time.monotonic() >= deadline:
-                raise TransitionError("deadline_exceeded") from error
-            raise TransitionError(LOCAL_AUTHORITY_INTEGRITY_UNAVAILABLE) from error
-        if deadline is not None and time.monotonic() >= deadline:
-            raise TransitionError("deadline_exceeded")
-        encoded = canonical_manifest_bytes(signed) + b"\n"
-        if len(encoded) > _MAX_RECORD:
-            raise TransitionError("record_too_large")
-        atomic_write_bytes(self.path, encoded, mode=0o600, private=True)
+        self._native("write", self._key(), payload=payload, deadline=deadline)
 
     def _read(self, operation_id: str) -> dict[str, object]:
-        return self._read_record(operation_id, self.path)
+        return self._read_record(operation_id, previous=False)
 
-    def _read_record(self, operation_id: str, path: Path) -> dict[str, object]:
+    def _read_record(self, operation_id: str, *, previous: bool) -> dict[str, object]:
         require_codex_install_owner(self.home)
-        raw = read_private_regular_text(path, max_bytes=_MAX_RECORD)
-        if raw is None:
-            raise TransitionError("record_unavailable")
-        try:
-            payload = json.loads(raw)
-        except json.JSONDecodeError as exc:
-            raise TransitionError("record_invalid") from exc
+        answer = self._native("read", self._optional_key(), operation_id=operation_id, previous=previous)
+        payload = answer.get("payload")
         if not isinstance(payload, dict):
             raise TransitionError("record_invalid")
-        integrity = payload.pop("authentication", None)
-        key, key_id = self._key()
-        if (
-            not isinstance(integrity, dict)
-            or verify_local_authority_payload(payload, integrity, key=key, key_id=key_id, purpose=_PURPOSE).status
-            != "valid"
-        ):
-            raise TransitionError("record_unauthenticated")
-        if payload.get("schema") != _SCHEMA or payload.get("guard_home") != str(self.home):
-            raise TransitionError("record_context_mismatch")
-        if payload.get("operation_id") != operation_id:
-            raise TransitionError("operation_superseded")
-        if not _record_files(payload):
-            raise TransitionError("plan_invalid")
-        _record_installs(payload)
-        _native_runtime_bindings(payload)
-        _record_objects(payload, "recovery_causes", maximum=8)
-        for name in ("candidate", "predecessor"):
-            _artifact_identity(payload.get(name))
-        for name in ("deadline_epoch", "deadline_monotonic", "forward_expires_epoch", "forward_expires_monotonic"):
-            _record_number(payload, name)
         return payload
 
     def begin(
@@ -907,7 +783,7 @@ class RuntimeTransition:
         require_codex_install_owner(self.home)
         if self.path.exists() or self.path.is_symlink():
             raise TransitionError("pending_transition")
-        payload = self._read_record(operation_id, self.path.with_name("runtime-transition.previous.json"))
+        payload = self._read_record(operation_id, previous=True)
         if payload["phase"] not in {"Committed", "FailedWithVerifiedRollback"}:
             raise TransitionError("nonterminal_transition")
         return TransitionStatus(
@@ -1268,11 +1144,5 @@ class RuntimeTransition:
             raise TransitionError("nonterminal_transition")
         self._compare(payload, "after" if phase == "Committed" else "before")
         self._compare_installs(payload, "after" if phase == "Committed" else "before")
-        previous = self.path.with_name("runtime-transition.previous.json")
-        if (previous.exists() or previous.is_symlink()) and read_private_regular_text(
-            previous, max_bytes=_MAX_RECORD
-        ) is None:
-            raise TransitionError("previous_record_unsafe")
         # Keep one private terminal receipt; never delete a pending operation.
-        os.replace(self.path, previous)
-        fsync_directory(previous.parent)
+        self._native("retire", None)

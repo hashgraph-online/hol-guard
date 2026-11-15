@@ -37,7 +37,7 @@ use sha2::{Digest, Sha256};
 #[path = "codex_hook_authority_open.rs"]
 mod opening;
 #[path = "codex_hook_authority_json.rs"]
-mod python_json;
+pub(crate) mod python_json;
 
 use opening::*;
 use python_json::{parse_python_json, python_canonical_json};

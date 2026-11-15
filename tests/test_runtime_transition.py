@@ -1804,21 +1804,23 @@ def test_transition_begin_dependency_wait_consumes_original_coordinator_deadline
     assert bindings.read_bytes() == b"previous hooks" and pointer.read_bytes() == b"previous pointer"
 
 
-@pytest.mark.parametrize(
-    "expired,reason", [(True, "deadline_exceeded"), (False, "local_authority_integrity_runtime_unavailable")]
-)
-def test_transition_begin_reports_a_signer_failure_as_a_stable_reason(transition, monkeypatch, expired, reason):
+@pytest.mark.parametrize("expired,reason", [(True, "deadline_exceeded"), (False, "runtime_unavailable")])
+def test_transition_begin_reports_a_missing_journal_writer_as_a_stable_reason(transition, monkeypatch, expired, reason):
     from codex_plugin_scanner.guard import runtime_transition as module
+    from codex_plugin_scanner.guard.mdm import runtime_request
 
     runtime, plan, bindings, pointer = transition
     deadline = time.monotonic() + 60
+    answer = runtime_request.runtime_answer
 
-    def unavailable(*_args, **_kwargs):
+    def unavailable(feature, *args, **kwargs):
+        if feature != "native-runtime-transition-record-v1":
+            return answer(feature, *args, **kwargs)
         if expired:
             monkeypatch.setattr(module.time, "monotonic", lambda: deadline + 1)
-        raise RuntimeError("local authority signing requires the native runtime")
+        return None
 
-    monkeypatch.setattr(module, "sign_local_authority_payload", unavailable)
+    monkeypatch.setattr(runtime_request, "runtime_answer", unavailable)
     with pytest.raises(TransitionError) as caught:
         runtime.begin(plan, authority_home=plan.guard_home, grant=None, deadline_monotonic=deadline)
     assert caught.value.reason == reason
