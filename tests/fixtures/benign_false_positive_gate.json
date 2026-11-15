@@ -29885,6 +29885,40 @@
       "expect": "not_allow"
     },
     {
+      "id": "stat-and-file-of-installed-home-program",
+      "fix_area": "read",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "stat ${HOME}/.local/bin/run-queued; file ${HOME}/.local/bin/run-queued"
+      },
+      "cwd": "org",
+      "expect": "allow"
+    },
+    {
+      "id": "neg-stat-installed-home-program-beside-ssh-key",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "stat ${HOME}/.local/bin/run-queued ${HOME}/.ssh/id_rsa"
+      },
+      "cwd": "org",
+      "expect": "not_allow"
+    },
+    {
       "id": "neg-file-ssh-key",
       "fix_area": "negative",
       "harnesses": [

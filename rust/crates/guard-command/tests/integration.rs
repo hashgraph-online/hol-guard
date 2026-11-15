@@ -222,6 +222,7 @@ pub mod pretool_ls_documentation_glob_names;
 pub mod pretool_ls_temporary_operands;
 pub mod pretool_manager_exec_local_bin;
 pub mod pretool_metadata_predicate_reads;
+pub mod pretool_home_program_metadata;
 pub mod pretool_metadata_reads;
 pub mod pretool_missing_worktree_paths;
 pub mod pretool_mkdir_existing_temporary;

@@ -182,6 +182,7 @@ mod guard_names;
 mod helm_usage;
 pub(crate) mod help_probes;
 mod hook_neutering;
+mod home_program_metadata;
 mod installed_program_path;
 mod list_wrapper;
 mod listing_reads;
