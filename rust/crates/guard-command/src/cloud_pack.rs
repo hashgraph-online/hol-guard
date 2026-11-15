@@ -323,6 +323,11 @@ pub struct FactSpec {
     pub sql: Option<crate::cloud_pack_sql::SqlSpec>,
     /// A read action in this pack the gateway may run to learn the volume.
     pub count_readback: Option<String>,
+    /// A read action in this pack, called with the same arguments, that finds
+    /// what a write left behind. The gateway runs it only for a write whose
+    /// outcome it does not know, and never resends the write.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reconcile_read: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

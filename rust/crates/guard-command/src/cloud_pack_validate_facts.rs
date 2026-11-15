@@ -69,6 +69,16 @@ pub(crate) fn validate_facts(
             return Err("cloud_pack_readback_invalid");
         }
     }
+    if let Some(reconcile) = &facts.reconcile_read {
+        let target = pack
+            .action(reconcile)
+            .ok_or("cloud_pack_reconcile_read_invalid")?;
+        if action.safety.effect == crate::cloud_action_binding::ActionEffect::Read
+            || target.safety.effect != crate::cloud_action_binding::ActionEffect::Read
+        {
+            return Err("cloud_pack_reconcile_read_invalid");
+        }
+    }
     Ok(())
 }
 
