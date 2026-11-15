@@ -105,3 +105,25 @@ pub(super) fn nested_temporary_directory(value: &str, context: PathContext<'_>) 
 pub(super) fn nested_temporary_directory(_value: &str, _context: PathContext<'_>) -> bool {
     false
 }
+
+/// Whether `parent` sits in the temporary `root` with every folder between
+/// them, `parent` included, owned by `owner` and closed to other writers.
+///
+/// A folder another user may write to lets that user rename the folder below
+/// it aside and put a link in its place after the check and before the
+/// command runs, so a write or removal meant for scratch would land wherever
+/// the link points. `root` itself is the shared temporary root, which the
+/// sticky bit already guards.
+#[cfg(unix)]
+pub(super) fn private_chain(root: &Path, parent: &Path, owner: u32) -> bool {
+    use std::os::unix::fs::MetadataExt;
+    parent.starts_with(root)
+        && parent
+            .ancestors()
+            .take_while(|folder| *folder != root)
+            .all(|folder| {
+                folder.symlink_metadata().is_ok_and(|metadata| {
+                    metadata.is_dir() && metadata.uid() == owner && metadata.mode() & 0o022 == 0
+                })
+            })
+}

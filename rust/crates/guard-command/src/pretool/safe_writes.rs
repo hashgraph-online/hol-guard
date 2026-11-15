@@ -365,11 +365,7 @@ fn bounded_temporary_target(value: &str, context: super::PathContext<'_>, direct
         .iter()
         .filter_map(|root| std::fs::canonicalize(root).ok())
         .chain(darwin_temp)
-        .any(|root| {
-            parent.starts_with(&root)
-                && (parent == root
-                    || (parent_metadata.uid() == owner && parent_metadata.mode() & 0o022 == 0))
-        });
+        .any(|root| temporary_directories::private_chain(&root, &parent, owner));
     if !in_scope || !parent_metadata.is_dir() {
         return false;
     }

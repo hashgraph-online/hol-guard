@@ -264,8 +264,12 @@ fn removable_regular_file(value: &str, context: super::PathContext<'_>) -> bool 
 /// clears to write the same path. `rm` then deletes only the user's own
 /// scratch file, or nothing. A link, a directory, a hard-linked file and
 /// another user's file keep their review.
+///
+/// Unix only: the Windows temporary screen admits a different root, and this
+/// change leaves Windows removals as they were.
 fn removable_temporary_file(value: &str, context: super::PathContext<'_>) -> bool {
-    std::path::Path::new(value).is_absolute()
+    cfg!(unix)
+        && std::path::Path::new(value).is_absolute()
         && super::safe_writes::bounded_temporary_copy_target(value, context)
 }
 

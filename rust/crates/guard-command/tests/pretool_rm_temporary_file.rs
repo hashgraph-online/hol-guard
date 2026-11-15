@@ -51,11 +51,29 @@ fn fixture(name: &str) -> Fixture {
     directory(&scratch, 0o755);
     directory(&scratch.join("out"), 0o700);
     directory(&scratch.join("shared"), 0o777);
-    for file in ["probe.txt", "probe.patch", "shared/left.txt"] {
+    directory(&scratch.join("shared/run"), 0o700);
+    for file in [
+        "probe.txt",
+        "probe.patch",
+        "shared/left.txt",
+        "shared/run/notes.txt",
+        "out/original.txt",
+    ] {
         std::fs::write(scratch.join(file), "x\n").unwrap();
     }
-    std::fs::hard_link(home.join("notes.txt"), scratch.join("alias.txt")).unwrap();
-    std::fs::write(&loose, "x\n").unwrap();
+    // Both names stay on the temporary filesystem, which may not be the one
+    // holding the checkout.
+    std::fs::hard_link(scratch.join("out/original.txt"), scratch.join("alias.txt")).unwrap();
+    // A predictable name directly in /tmp: never follow a link already there.
+    std::io::Write::write_all(
+        &mut std::fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&loose)
+            .unwrap(),
+        b"x\n",
+    )
+    .unwrap();
     Fixture {
         root,
         home: std::fs::canonicalize(home).unwrap(),
@@ -108,7 +126,11 @@ fn rm_of_a_temporary_path_the_user_does_not_solely_own_keeps_its_review() {
     for command in [
         // Anyone may write to the folder holding it.
         format!("rm {scratch}/shared/left.txt"),
-        // A second name for a home file.
+        // A private folder below one anyone may write to: another user can
+        // swap the private folder for a link before `rm` runs.
+        format!("rm {scratch}/shared/run/notes.txt"),
+        format!("touch {scratch}/shared/run/new.txt"),
+        // A second name for another file.
         format!("rm {scratch}/alias.txt"),
         // A folder, and a recursive removal.
         format!("rm {scratch}/out"),
@@ -181,6 +203,7 @@ fn a_temporary_file_removal_settles_the_destructive_shell_rule() {
     }
     for command in [
         format!("rm {scratch}/shared/left.txt"),
+        format!("rm {scratch}/shared/run/notes.txt"),
         format!("rm {scratch}/alias.txt"),
         format!("rm {scratch}/out"),
         format!("rm -rf {scratch}"),
