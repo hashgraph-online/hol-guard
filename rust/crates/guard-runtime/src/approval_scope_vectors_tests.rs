@@ -54,6 +54,7 @@ fn contracts_match_the_retired_python() {
     let cases = vectors["cases"].as_array().expect("cases");
     assert!(cases.len() > 5000);
     let (mut global, mut workspace, mut persist, mut task) = (0, 0, 0, 0);
+    let mut exact_default_beside_project = 0;
     for (index, case) in cases.iter().enumerate() {
         let expected = &case["expected"];
         let item = item_for(&case["request"], &expected["workspace_target"]);
@@ -87,8 +88,25 @@ fn contracts_match_the_retired_python() {
         );
         persist += usize::from(contract["exact_action_persistence_eligible"] == json!(true));
         task += usize::from(contract["task_capability_eligibility"]["eligible"] == json!(true));
+        if allow
+            .as_array()
+            .is_some_and(|a| a.contains(&json!("artifact")))
+        {
+            assert_eq!(
+                contract["recommended_scope_by_action"]["allow"],
+                json!("artifact"),
+                "the exact action is the default allow scope, case {index}"
+            );
+            exact_default_beside_project += usize::from(
+                allow
+                    .as_array()
+                    .is_some_and(|a| a.contains(&json!("workspace"))),
+            );
+        }
     }
     assert!(global > 20 && workspace > 200 && persist > 100 && task > 100);
+    // A project scope is offered in these cases, yet the exact action stays preselected.
+    assert!(exact_default_beside_project > 200);
 }
 
 #[test]
