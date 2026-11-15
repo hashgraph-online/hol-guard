@@ -85,6 +85,7 @@ pub mod pretool_cwd_compounds;
 pub mod pretool_data_heredocs;
 pub mod pretool_dd_reads;
 pub mod pretool_digest_reads;
+pub mod pretool_dns_lookups;
 pub mod pretool_docker_builder_listings;
 pub mod pretool_docker_start;
 pub mod pretool_doctl_reads;
