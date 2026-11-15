@@ -6,6 +6,7 @@ use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 
 struct Fixture {
+    root: PathBuf,
     home: PathBuf,
     workspace: PathBuf,
     scratch: PathBuf,
@@ -14,6 +15,7 @@ struct Fixture {
 impl Drop for Fixture {
     fn drop(&mut self) {
         let _ = std::fs::remove_dir_all(&self.scratch);
+        let _ = std::fs::remove_dir_all(&self.root);
     }
 }
 
@@ -29,6 +31,7 @@ fn fixture(name: &str) -> Fixture {
     let root = Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../target/pretool-mkdir-existing-temporary")
         .join(format!("{name}-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&root);
     let home = root.join("home");
     let workspace = home.join("project");
     std::fs::create_dir_all(&workspace).unwrap();
@@ -44,6 +47,7 @@ fn fixture(name: &str) -> Fixture {
     std::fs::write(scratch.join("notes.txt"), "notes\n").unwrap();
     std::os::unix::fs::symlink(home.join(".ssh"), scratch.join("keys")).unwrap();
     Fixture {
+        root,
         home: std::fs::canonicalize(home).unwrap(),
         workspace: std::fs::canonicalize(workspace).unwrap(),
         scratch,
