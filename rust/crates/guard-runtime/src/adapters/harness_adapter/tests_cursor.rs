@@ -284,3 +284,21 @@ fn cursor_uninstall_keeps_top_level_keys_when_guard_held_the_only_hooks() {
         json!({"version": 1, "hooks": {}, "futureKey": "keep", "addedLater": true})
     );
 }
+
+/// A hooks file with no hooks of its own comes back byte for byte.
+#[test]
+fn cursor_uninstall_restores_a_file_that_had_no_hooks_of_its_own() {
+    let home = Home::new();
+    let hooks = home.home().join(".cursor").join("hooks.json");
+    let original = "{\n  \"version\": 1,\n  \"hooks\": {}\n}\n";
+    write(&hooks, original);
+    let answer = run(&home, "install", bridge()).unwrap();
+    for change in answer["files"].as_array().unwrap() {
+        if change["after"].is_string() {
+            write(Path::new(change["path"].as_str().unwrap()), &after(change));
+        }
+    }
+    assert_ne!(fs::read_to_string(&hooks).unwrap(), original);
+    run(&home, "uninstall", bridge()).unwrap();
+    assert_eq!(fs::read_to_string(&hooks).unwrap(), original);
+}

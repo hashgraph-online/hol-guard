@@ -24,7 +24,8 @@ pub(super) fn uninstall(ask: &Ask) -> Step<Doc> {
     // Strip Guard's own entries first: the file may hold hooks the user added
     // after install, which a restore of the pre-install backup would discard.
     // The backup is the fallback when Guard's entries cannot be found.
-    let mut restored = ctx.absolute(&hooks).is_file() && remove_managed(ask, &hooks, &script)?;
+    let mut restored =
+        ctx.absolute(&hooks).is_file() && remove_managed(ask, &hooks, &script, &backup)?;
     if !restored {
         restored = restore(ctx, &backup, &hooks, "The Cursor hooks backup")?;
     }
@@ -53,7 +54,9 @@ pub(super) fn uninstall(ask: &Ask) -> Step<Doc> {
 }
 
 /// `_remove_managed_hook_entries`: whether Guard's entries were removed.
-fn remove_managed(ask: &Ask, hooks: &Path, script: &Path) -> Step<bool> {
+/// When nothing but Guard's hooks remain, the pre-install backup (if any)
+/// is the user's file and is restored in place of deleting it.
+fn remove_managed(ask: &Ask, hooks: &Path, script: &Path, backup: &Path) -> Step<bool> {
     let ctx = ask.ctx;
     let Ok(text) = std::fs::read_to_string(ctx.absolute(hooks)) else {
         return Ok(false);
@@ -66,6 +69,9 @@ fn remove_managed(ask: &Ask, hooks: &Path, script: &Path) -> Step<bool> {
         return Ok(false);
     }
     match cleaned {
+        None if ctx.absolute(backup).is_file() => {
+            return restore(ctx, backup, hooks, "The Cursor hooks backup");
+        }
         None => unlink(ctx, hooks)?,
         Some(cleaned) => write_authorized(ctx, hooks, &rendered(&cleaned)?)?,
     }
