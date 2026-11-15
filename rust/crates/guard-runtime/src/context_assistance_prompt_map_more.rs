@@ -145,11 +145,14 @@ pub(super) fn tests(
         let tests: Vec<usize> = (named.iter().copied())
             .filter(|&at| !above(at).any(|outer| test(outer) && !file.container(outer)))
             .collect();
-        // A test class counts by the tests inside it, or by its own body when they are inherited.
+        // A test class counts by its tests, or by its own body when it inherits
+        // them and is not inside a test; in file order, so the last is last.
         let holds: BTreeSet<usize> = tests.iter().flat_map(|&at| above(at)).collect();
-        let heir = |at: &usize| !test(*at) && inheriting_test_class(file.opening(*at));
-        let heirs = (0..file.sections.len()).filter(|at| !holds.contains(at) && heir(at));
-        for at in (tests.iter().copied().filter(|at| !holds.contains(at))).chain(heirs) {
+        let heir = |at: usize| {
+            !test(at) && !above(at).any(&test) && inheriting_test_class(file.opening(at))
+        };
+        let unheld = (0..file.sections.len()).filter(|&at| !holds.contains(&at));
+        for at in unheld.filter(|&at| tests.binary_search(&at).is_ok() || heir(at)) {
             let section = &file.sections[at];
             let body = file
                 .lines
@@ -183,11 +186,8 @@ pub(super) fn tests(
         let own: Vec<&(&File, usize, f64)> = (scored.iter())
             .filter(|(of, _, _)| std::ptr::eq(*of, file))
             .collect();
-        let Some(best) = own
-            .iter()
-            .map(|(_, _, score)| *score)
-            .max_by(f64::total_cmp)
-        else {
+        let scores = own.iter().map(|(_, _, score)| *score);
+        let Some(best) = scores.max_by(f64::total_cmp) else {
             continue;
         };
         let mut near: Vec<(&File, usize, f64)> = (own.iter().map(|test| **test))

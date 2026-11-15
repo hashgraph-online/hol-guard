@@ -297,3 +297,39 @@ def mru_cache(maxsize=128):\n    raise NotImplementedError\n";
         "{mapped}"
     );
 }
+
+/// A class inside a test is part of that test, not one of its own, and the
+/// last related test is the last in the file whichever way it counts.
+#[test]
+fn a_class_inside_a_test_is_not_listed_and_the_last_test_is_last_in_the_file() {
+    let func = "def mru_cache(maxsize=128):\n    raise NotImplementedError\n";
+    let tests = [
+        "import unittest\n\n",
+        "class DecoratorTestMixin:",
+        "    def test_decorator(self):",
+        "        self.assertEqual(self.DECORATOR(2), 1)\n\n",
+        "class MRUDecoratorTest(unittest.TestCase, DecoratorTestMixin):",
+        "    DECORATOR = staticmethod(func.mru_cache)\n\n",
+        "def test_factory():",
+        "    class LocalTest(unittest.TestCase):",
+        "        DECORATOR = staticmethod(func.mru_cache)\n\n",
+        "def test_mru():",
+        "    assert func.mru_cache(2)\n",
+    ]
+    .join("\n");
+    let mapped = map(
+        &files(&[
+            ("src/func.py", func),
+            ("tests/test_func.py", tests.as_str()),
+        ]),
+        &looking_for(&[("mrucache", true, 1)]),
+        &Asked::default(),
+        later(),
+    )
+    .unwrap()
+    .text;
+    assert!(
+        mapped.contains("tests/test_func.py: 3 related tests, last test_mru "),
+        "{mapped}"
+    );
+}
