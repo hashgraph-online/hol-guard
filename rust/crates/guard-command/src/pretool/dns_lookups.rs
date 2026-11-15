@@ -16,6 +16,8 @@
 //!   a key (`-y`), pick a port or a source address (`-p`, `-b`,
 //!   `nslookup -port=`), list a whole zone (`host -l`), and every option not
 //!   listed below.
+//! - a `dig` that may read a `~/.digrc` (one exists, or the home is unknown)
+//!   without `-r`, and zone transfers (`AXFR`, `IXFR`).
 //! - `nslookup` or `host` without a name: `nslookup` then reads commands from
 //!   standard input.
 
@@ -34,9 +36,11 @@ enum Word {
 }
 
 /// Whether `program`'s `arguments` form a plain lookup of fixed names.
-pub(super) fn safe_lookup_arguments(program: &str, arguments: &[String]) -> bool {
+/// `dig` also reads options from `~/.digrc`, which can name a batch or key
+/// file, so it passes only with `-r` or when `rc_absent` says there is none.
+pub(super) fn safe_lookup_arguments(program: &str, arguments: &[String], rc_absent: bool) -> bool {
     let mut operands = 0;
-    let mut dig_no_rc = false;
+    let mut dig_no_rc = rc_absent;
     let mut index = 0;
     while index < arguments.len() {
         let argument = arguments[index].as_str();
@@ -67,11 +71,15 @@ pub(super) fn safe_lookup_arguments(program: &str, arguments: &[String]) -> bool
                     return false;
                 }
                 operands += 1;
-            },
+            }
             None => return false,
         }
     }
-    (program != "dig" || dig_no_rc) && (program == "dig" || (1..=2).contains(&operands))
+    if program == "dig" {
+        dig_no_rc
+    } else {
+        (1..=2).contains(&operands)
+    }
 }
 
 fn dig_word(argument: &str) -> Option<Word> {
