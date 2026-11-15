@@ -115,8 +115,9 @@ impl Call<'_> {
     }
 }
 
-/// `jq <filter> <file>` reads one bounded file through the same filter
-/// grammar the stdin form admits. `jq -n <filter>` reads no input at all.
+/// `jq <filter> <file>...` reads bounded files through the same filter
+/// grammar the stdin form admits, one after another, as `cat a b | jq` would
+/// feed them. `jq -n <filter>` reads no input at all.
 pub(in crate::pretool) fn safe_jq_file_arguments(
     arguments: &[String],
     context: super::super::PathContext<'_>,
@@ -126,8 +127,9 @@ pub(in crate::pretool) fn safe_jq_file_arguments(
     };
     let input = match call.operands {
         [] => call.null_input,
-        [file] => !file.starts_with('-') && command_read_target(file, context, false),
-        _ => false,
+        files => files
+            .iter()
+            .all(|file| !file.starts_with('-') && command_read_target(file, context, false)),
     };
     input && call.bindings_readable(context) && call.filter_safe(arguments)
 }
@@ -140,7 +142,8 @@ pub(in crate::pretool) fn jq_filter_position(
     piped_input: bool,
 ) -> Option<usize> {
     let call = call(arguments)?;
-    (call.operands.len() <= usize::from(!piped_input) && call.filter_safe(arguments))
+    // Piped jq reads standard input only while no file operand names input.
+    ((!piped_input || call.operands.is_empty()) && call.filter_safe(arguments))
         .then_some(call.filter)
 }
 
