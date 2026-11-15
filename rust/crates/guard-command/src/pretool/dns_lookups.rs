@@ -134,8 +134,12 @@ fn nslookup_word(argument: &str) -> Option<Word> {
         return Some(Word::Flag);
     }
     let (name, value) = option.split_once('=')?;
-    (VALUES.contains(&name) && plain_word(value) && !is_zone_transfer(value))
-        .then_some(Word::Attached)
+    let screen = if matches!(name, "type" | "ty" | "querytype" | "query" | "q") {
+        record_type
+    } else {
+        plain_word
+    };
+    (VALUES.contains(&name) && screen(value) && !is_zone_transfer(value)).then_some(Word::Attached)
 }
 
 /// A single-letter option from `flags` or `values`, or a name operand.
@@ -159,28 +163,77 @@ fn short_option(argument: &str, flags: &str, values: &str) -> Option<Word> {
 }
 
 /// How the value of a short option is screened: a reverse lookup (`-x`) or
-/// a query name (`-q`) is a host name, everything else a plain word.
+/// a query name (`-q`) is a host name, a type (`-t`) a record type, and
+/// everything else a plain word.
 fn value_screen(option: &str) -> fn(&str) -> bool {
     if option.starts_with("-x") || option.starts_with("-q") {
         host_name
+    } else if option.starts_with("-t") {
+        record_type
     } else {
         plain_word
     }
 }
 
-/// A `dig` query option: `+short`, `+noall`, `+time=2`. None of them reads
-/// or writes a file.
+/// A `dig` query option from a fixed list: display and transport choices
+/// such as `+short`, `+noall`, `+answer` or `+time=2`. Options that change
+/// the operation (`+opcode=`) or put extra data in the query (`+ednsopt=`,
+/// `+subnet=`, `+cookie=`) are not on it, nor is any abbreviation.
 fn query_option(option: &str) -> bool {
-    let (name, value) = option.split_once('=').unwrap_or((option, "x"));
-    !name.is_empty()
-        && name.len() <= 24
-        && name.bytes().all(|byte| byte.is_ascii_lowercase())
-        && plain_word(value)
+    const SWITCHES: [&str; 24] = [
+        "short",
+        "all",
+        "answer",
+        "authority",
+        "additional",
+        "question",
+        "comments",
+        "cmd",
+        "stats",
+        "multiline",
+        "rrcomments",
+        "ttlid",
+        "ttlunits",
+        "class",
+        "identify",
+        "tcp",
+        "vc",
+        "recurse",
+        "search",
+        "dnssec",
+        "trace",
+        "nssearch",
+        "onesoa",
+        "fail",
+    ];
+    const NUMBERS: [&str; 6] = ["time", "tries", "retry", "ndots", "bufsize", "edns"];
+    match option.split_once('=') {
+        Some((name, value)) => {
+            NUMBERS.contains(&name)
+                && (1..=5).contains(&value.len())
+                && value.bytes().all(|byte| byte.is_ascii_digit())
+        }
+        None => SWITCHES.contains(&option.strip_prefix("no").unwrap_or(option)),
+    }
 }
 
-/// Zone transfers are deliberately outside the fixed-record lookup proof.
+/// Zone transfers are deliberately outside the fixed-record lookup proof,
+/// in any spelling: `AXFR`, `IXFR`, `ixfr=<serial>` and the generic
+/// `TYPE<number>` form, which is how `TYPE252` names AXFR.
 fn is_zone_transfer(value: &str) -> bool {
-    value.eq_ignore_ascii_case("AXFR") || value.eq_ignore_ascii_case("IXFR")
+    let lower = value.to_ascii_lowercase();
+    lower == "axfr"
+        || lower == "ixfr"
+        || lower.starts_with("ixfr=")
+        || lower
+            .strip_prefix("type")
+            .is_some_and(|number| !number.is_empty() && number.bytes().all(|b| b.is_ascii_digit()))
+}
+
+/// A record type for `-t` or `-type=`: a plain word that is not a bare
+/// number, since a number can name a zone transfer too.
+fn record_type(value: &str) -> bool {
+    plain_word(value) && !value.bytes().all(|byte| byte.is_ascii_digit())
 }
 
 /// A record type, a class, a count or a number of seconds.

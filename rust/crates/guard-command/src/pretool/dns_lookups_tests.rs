@@ -26,6 +26,7 @@ fn lookups_of_a_fixed_name_are_admitted() {
         "dig -x 93.184.216.34",
         "dig -x 2606:2800:220:1:248:1893:25c8:1946",
         "dig +time=2 +tries=1 example.com.",
+        "dig +noall +answer +nocomments +nostats example.com",
         "dig _dmarc.example.com TXT",
         "host example.com",
         "host -t mx example.com",
@@ -67,6 +68,18 @@ fn file_key_port_and_stdin_forms_keep_their_review() {
         "host -t AXFR example.com",
         "host -tIXFR example.com",
         "nslookup -type=AXFR example.com",
+        "dig -r @127.0.0.1 example.com -t TYPE252",
+        "dig example.com type251",
+        "dig -t ixfr=2024010101 example.com",
+        "host -t 252 example.com",
+        "nslookup -type=252 example.com",
+        // Options that change the operation or carry data.
+        "dig -r @127.0.0.1 example.com SOA +opcode=NOTIFY +aaflag",
+        "dig +ednsopt=65001:6869 example.com",
+        "dig +subnet=10.0.0.0/8 example.com",
+        "dig +cookie=0123456789abcdef example.com",
+        "dig +sh example.com",
+        "dig +time=x example.com",
     ] {
         assert!(!safe(command), "{command}");
     }
