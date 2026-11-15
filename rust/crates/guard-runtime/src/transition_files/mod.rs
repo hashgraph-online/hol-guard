@@ -28,8 +28,11 @@ mod publication_files;
 mod publication_generation;
 mod publication_io;
 mod publication_receipt;
+mod publication_target;
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+mod tests_publication_target;
 
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};

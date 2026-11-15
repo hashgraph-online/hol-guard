@@ -197,7 +197,7 @@ pub(super) fn snapshot(call: &mut Call<'_>) -> Step<Value> {
     Ok(json!({ "before": before }))
 }
 
-fn package_roots(args: &Map<String, Value>) -> Step<Vec<String>> {
+pub(super) fn package_roots(args: &Map<String, Value>) -> Step<Vec<String>> {
     match args.get("package_roots") {
         None => Ok(Vec::new()),
         Some(Value::Array(items)) => items

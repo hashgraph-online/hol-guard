@@ -12,6 +12,7 @@ from __future__ import annotations
 import base64
 import hashlib
 import json
+import os
 import sys
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, replace
@@ -28,13 +29,11 @@ from ..aibom_detection import (
 from ..codex_config import _restore_native, _Wire, dump_toml, read_toml_payload
 from ..codex_hook_command_line import short_path_facts
 from ..codex_hook_compatibility import NATIVE_CODEX_HOOK_FEATURE, python_bridge_argv
-from ..codex_hook_file_integrity import validate_regular_file
 from ..codex_hook_integrity import (
     atomic_write_text,
     canonical_manifest_bytes,
     hook_authority_receipt_path,
     hook_manifest_path,
-    hook_secret_path,
     remove_hook_secret_if_unused,
 )
 from ..codex_hook_manifest import (
@@ -1159,37 +1158,19 @@ class CodexHarnessAdapter(NativeHarnessAdapter):
         prepares the generation in place of rendering ``payload``, with the
         files written ahead of it.
         """
+        from ..codex_hook_rollback import _identity as rollback_identity_value
+        from ..native_transition_files import publication as publication_op
         from ..runtime_transition import TransitionError
 
-        if hook_publication_pending(context.guard_home):
-            raise RuntimeError("Codex hook publication must be recovered before preparing another generation.")
-        secret_path = hook_secret_path(context.guard_home)
-        original_secret_present = secret_path.exists() or secret_path.is_symlink()
+        # The runtime refuses a pending publication and snapshots the config.
+        target = publication_op("target", context.guard_home, config=os.path.abspath(config_path.expanduser()))
+        if not isinstance(target, dict):
+            raise TransitionError("native_transition_invalid")
+        original_secret_present = target.get("key_present") is True
+        original_config_identity = rollback_identity_value(target.get("identity"))
+        before = target.get("before")
+        original_config = None if before is None else base64.b64decode(str(before))
         prepared = False
-        if config_path.exists() or config_path.is_symlink():
-            validate_regular_file(config_path, role="config_target", executable_required=False)
-        try:
-            original_config_identity = rollback_file_identity(config_path)
-        except RuntimeError as error:
-            raise RuntimeError(
-                "codex_hook_config_invalid: Codex configuration must be a single-link regular file."
-            ) from error
-        if config_path.exists() or config_path.is_symlink():
-            original_config = config_path.read_bytes()
-            try:
-                _ = original_config.decode("utf-8")
-            except UnicodeDecodeError as error:
-                raise RuntimeError("codex_hook_config_invalid: Codex configuration is not valid UTF-8.") from error
-        else:
-            original_config = None
-        try:
-            second_snapshot_identity = rollback_file_identity(config_path)
-        except RuntimeError as error:
-            raise RuntimeError(
-                "codex_hook_config_invalid: Codex configuration became an invalid target during its snapshot."
-            ) from error
-        if second_snapshot_identity != original_config_identity:
-            raise RuntimeError("codex_hook_config_invalid: Codex configuration changed during its snapshot.")
         rendered_config = b""
         written_config_identity: tuple[int, int, int, int, int] | None = None
 

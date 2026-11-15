@@ -263,6 +263,7 @@ fn answer(op: &str, call: &mut Call<'_>) -> Step<Value> {
         "publication_receipt_build" => publication_receipt::build(call),
         "publication_generation" => super::publication_generation::generation(call),
         "publication_generation_before" => super::publication_generation::snapshot(call),
+        "publication_target" => super::publication_target::target(call),
         "publication_remove" => remove_record(&call.home()?).map(|()| Value::Null),
         "publication_prepare" => publication::prepare(call),
         "publication_assert_repair" => publication::assert_repair(call),

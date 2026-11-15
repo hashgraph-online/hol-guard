@@ -56,6 +56,7 @@ fn a_config_without_guard_entries_stays_as_it_is() {
     assert_eq!(files[0]["before"], files[0]["after"], "{answer}");
 }
 
+#[cfg(unix)]
 fn change_fields(home: &Home, text: &str, mode: u32) -> Value {
     use std::os::unix::fs::PermissionsExt as _;
     let mut request = fields(home, None);
