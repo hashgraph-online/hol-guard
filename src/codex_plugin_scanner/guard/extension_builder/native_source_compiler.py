@@ -187,6 +187,15 @@ def _packaged_program_digest() -> str:
     return _hex(value.get("program_digest"), length=_SHA64, field="base program digest")
 
 
+def _matches_installed_version(package_version: object) -> bool:
+    """Whether the installed distribution, when there is one, carries this version."""
+    try:
+        installed_version = metadata.version("hol-guard")
+    except metadata.PackageNotFoundError:
+        return True
+    return installed_version == package_version
+
+
 def _verify_manifest(path: Path) -> dict[str, object]:
     manifest = _manifest(path)
     if manifest.get("schema") != "hol-guard-native-source-compiler.v2":
@@ -198,11 +207,7 @@ def _verify_manifest(path: Path) -> dict[str, object]:
     package_version = manifest.get("package_version")
     if not isinstance(package_version, str) or not package_version.strip():
         raise NativeSourceCompilerError("source compiler manifest package version is invalid")
-    try:
-        installed_version = metadata.version("hol-guard")
-    except metadata.PackageNotFoundError:
-        installed_version = None
-    if installed_version is not None and installed_version != package_version:
+    if not _matches_installed_version(package_version):
         raise NativeSourceCompilerError("source compiler package version does not match the installed package")
     target = manifest.get("target")
     platform_tag = manifest.get("platform_tag")

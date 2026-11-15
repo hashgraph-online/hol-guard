@@ -94,3 +94,14 @@ def test_source_compiler_calls_share_one_verification_while_the_package_is_uncha
     (native / transport._MANIFEST_NAME).write_text('{"changed": true}')
     transport.run_source_compiler("schema")
     assert len(verifications) == 2
+
+
+def test_a_changed_installed_version_forces_a_full_verification(package, monkeypatch):
+    _native, verifications = package
+    versions = iter(["1.0.0", "2.0.0"])
+    monkeypatch.setattr(transport, "_matches_installed_version", lambda version: next(versions) == "1.0.0")
+    run()
+    run()
+    assert len(verifications) == 1
+    run()
+    assert len(verifications) == 2

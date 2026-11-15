@@ -76,7 +76,14 @@ def verified_packaged_runtime():
     global _verified
     identity = _packaged_identity()
     known = _verified
-    if identity is not None and known is not None and known[0] == identity:
+    # The package version lives outside the four files, so a hit rechecks it
+    # as a full verification would.
+    if (
+        identity is not None
+        and known is not None
+        and known[0] == identity
+        and transport._matches_installed_version(known[3].get("package_version"))
+    ):
         with native_executable_root.reused_executable(known[1], known[2]) as kept:
             if kept is not None:
                 yield dict(known[3]), kept
