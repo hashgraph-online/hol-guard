@@ -54,6 +54,9 @@ fn short_jq_and_template_aliases_match_their_long_forms() {
         ".[] | @base64",
         ".[] | select(.email | endswith(\"@example.com\")) | .login",
         ".workflow_runs[] | (.conclusion // \"\") as $c | select($c != \"success\") | .id",
+        // An `@` in a string's text is text, interpolated or not.
+        ".[] | \"\\(.number) \\(.author.login)@\\(.head.repo)\"",
+        ".[] | \"\\(.number)@\\(.ref | @base64) \\(\"a@b\")\"",
     ] {
         let arguments = vec![endpoint.to_owned(), "--jq".to_owned(), format.to_owned()];
         assert_eq!(classify(&arguments), Some(vec!["read_remote"]), "{format}");
@@ -70,6 +73,11 @@ fn short_jq_and_template_aliases_match_their_long_forms() {
         vec!["-q", "@text \"id\""],
         vec!["--jq", "@json2"],
         vec!["-q", ".[] | \"\\(@sh \"x\")\""],
+        vec!["-q", ".[] | \"\\(.a)@x \\(. | @sh)\""],
+        vec!["-q", ".[] | \"\\(\"q\" | @text \"\\(.a)\")\""],
+        // A comment's `)` or quote is text to jq, so it cannot hide a format.
+        vec!["-q", ".[] | \"\\(.title # )\n | @sh)\""],
+        vec!["-q", ".a # \"\n| @sh \"x\""],
     ] {
         let mut arguments = vec![endpoint.to_owned()];
         arguments.extend(unsafe_filter.iter().map(|value| (*value).to_owned()));
@@ -88,6 +96,23 @@ fn short_jq_and_template_aliases_match_their_long_forms() {
             .map(String::from)
             .collect();
         let text = format!("gh api {endpoint} --jq {filter}");
+        assert_eq!(
+            super::super::classify(&arguments, &text).is_some(),
+            read,
+            "{filter}"
+        );
+    }
+    // `gh pr list --jq` takes the same screen.
+    for (filter, read) in [
+        (".[] | \"\\(.number)@\\(.author.login)\"", true),
+        (".[] | \"\\(.number)@\\(. | @sh)\"", false),
+        (".[] | \"\\(. # )\n| @sh )\"", false),
+    ] {
+        let arguments: Vec<String> = ["pr", "list", "--json", "number,author", "--jq", filter]
+            .into_iter()
+            .map(String::from)
+            .collect();
+        let text = format!("gh pr list --json number,author --jq '{filter}'");
         assert_eq!(
             super::super::classify(&arguments, &text).is_some(),
             read,

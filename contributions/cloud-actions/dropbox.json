@@ -21,6 +21,14 @@
       "sharing.write"
     ]
   },
+  "transports": {
+    "partner": [
+      {
+        "partner": "composio",
+        "toolkit": "dropbox"
+      }
+    ]
+  },
   "actions": [
     {
       "actionId": "dropbox.files.list_folder",

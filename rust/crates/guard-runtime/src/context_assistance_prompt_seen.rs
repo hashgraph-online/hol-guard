@@ -115,6 +115,17 @@ pub(super) fn remember(session: &Session, shown: &[Span]) {
     sessions.push_back((session.clone(), spans));
 }
 
+/// Drops from `session` the excerpts `gone` matches, such as code cut from
+/// a note before the agent saw it.
+pub(super) fn forget(session: &Session, gone: impl Fn(&Span) -> bool) {
+    let Ok(mut sessions) = sessions().lock() else {
+        return;
+    };
+    if let Some((_, spans)) = sessions.iter_mut().find(|(known, _)| known == session) {
+        spans.retain(|span| !gone(span));
+    }
+}
+
 #[cfg(test)]
 #[path = "context_assistance_prompt_seen_tests.rs"]
 mod tests;
