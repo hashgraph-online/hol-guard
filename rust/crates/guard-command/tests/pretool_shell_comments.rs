@@ -69,6 +69,7 @@ fn a_hash_that_opens_no_comment_keeps_the_step_after_it() {
         "(( 1 # 2 )); rm -f data.json",
         "ls \u{a0}#; rm -f data.json",
         "echo ok\r#; rm -f data.json",
+        "echo #x '\nrm -f data.json\n#x '",
     ] {
         assert_ne!(action(&root, command), "allow", "{command:?}");
     }

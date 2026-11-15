@@ -405,6 +405,8 @@ fn word_start_comments_are_blanked_in_place() {
         ("ls|# x\nwc", "ls|   \nwc"),
         ("ls\t# x", "ls\t   "),
         ("ls #\npwd", "ls  \npwd"),
+        ("echo #x '\nrm y\n#x '", "echo     \nrm y\n    "),
+        ("ls #x\"y\nrm y", "ls     \nrm y"),
     ] {
         let masked = mask_shell_comments(command);
         assert_eq!(masked, expected, "{command:?}");

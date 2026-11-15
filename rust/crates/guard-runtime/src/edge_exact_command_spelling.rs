@@ -8,11 +8,9 @@
 //! module lists the texts a rule author would have written for each program
 //! the line runs, so the rule applies to all of them.
 //!
-//! The list only ever adds texts to look up. Each one is the program and
-//! arguments of a step the shell runs, so a rule can only match a step that
-//! runs the command it names. The list has no length cap: a cap let a line
-//! padded with harmless steps push the ruled step off the end. The command's
-//! byte limit bounds it instead.
+//! The list only ever adds texts to look up, each the program and arguments
+//! of a step the shell runs. The command's byte limit bounds it; a length cap
+//! let a line padded with harmless steps push the ruled step off the end.
 
 use std::collections::HashSet;
 
@@ -80,10 +78,23 @@ fn visit(text: &str, depth: usize, out: &mut Spellings, seen: &mut HashSet<Strin
         extraction_provenance: "guard-shell".into(),
     });
     match parsed {
-        Ok(model) if model.confidence == "exact" && !model.segments.is_empty() && !commented => {
+        Ok(model) if model.confidence == "exact" && !model.segments.is_empty() => {
+            // The parser blanks a `#` comment, which a shell with comments off
+            // runs as text. Those steps are added when their quotes close.
+            if commented {
+                let (plain, closed) = steps(text, true, false);
+                for step in plain.iter().filter(|step| closed && *step != text.trim()) {
+                    out.push(seen, collapse(step));
+                    visit(step, depth + 1, out, seen);
+                }
+            }
             for segment in &model.segments {
-                for spelling in segment_spellings(segment) {
-                    out.push(seen, spelling);
+                // Bash reads a word that starts with `#` as a comment's start.
+                let cut = segment.arguments.iter().position(|w| w.starts_with('#'));
+                for end in [segment.arguments.len()].into_iter().chain(cut) {
+                    for spelling in segment_spellings(segment, &segment.arguments[..end]) {
+                        out.push(seen, spelling);
+                    }
                 }
                 out.push(seen, collapse(&segment.text));
                 out.push(seen, bare_step(&collapse(&segment.text)));
@@ -101,9 +112,7 @@ fn visit(text: &str, depth: usize, out: &mut Spellings, seen: &mut HashSet<Strin
         }
         _ => {
             // The parser does not model groups such as `(npm publish)` or
-            // heredocs, and blanks a `#` comment that a shell with comments
-            // off reads as text. Each step outside quotes and heredoc bodies
-            // is read on its own instead.
+            // heredocs. Each step outside quotes and heredoc bodies is read.
             let words = guard_command::rich_command_model_api::shell_tokens_without_redirects(
                 text.trim(),
                 0,
@@ -126,8 +135,7 @@ fn visit(text: &str, depth: usize, out: &mut Spellings, seen: &mut HashSet<Strin
             // Bash reads `((` as arithmetic only when it parses as one, and
             // runs `((npm publish); true)` as nested groups. Every reading,
             // with `#` comments and without, is listed; an extra text only
-            // adds a match. A shell can mix the two readings on one line, so
-            // the line is read through only when both close their quotes.
+            // adds a match. The line is complete only when both close.
             let (mut found, closed) = steps(text, true, true);
             let (plain, plain_closed) = steps(text, true, false);
             out.complete &= closed && plain_closed;
@@ -146,8 +154,7 @@ fn visit(text: &str, depth: usize, out: &mut Spellings, seen: &mut HashSet<Strin
             }
             for step in found {
                 out.push(seen, collapse(&step));
-                // `(( i++ ))` read as groups lists itself; reading it again
-                // would only repeat this pass.
+                // `(( i++ ))` read as groups lists itself; skip a repeat pass.
                 if step != text.trim() {
                     visit(&step, depth + 1, out, seen);
                 }
@@ -157,8 +164,8 @@ fn visit(text: &str, depth: usize, out: &mut Spellings, seen: &mut HashSet<Strin
 }
 
 /// `program arg …` with the program's file name, quoted the ways a person
-/// writes a word that needs quotes.
-fn segment_spellings(segment: &CommandSegmentV1) -> Vec<String> {
+/// writes a word that needs quotes. `Spellings::push` drops a repeat.
+fn segment_spellings(segment: &CommandSegmentV1, arguments: &[String]) -> Vec<String> {
     let Some(executable) = segment.executable.as_deref() else {
         return Vec::new();
     };
@@ -168,17 +175,11 @@ fn segment_spellings(segment: &CommandSegmentV1) -> Vec<String> {
     }
     let join = |quote: fn(&str) -> String| {
         std::iter::once(program.to_owned())
-            .chain(segment.arguments.iter().map(|word| quote(word.as_str())))
+            .chain(arguments.iter().map(|word| quote(word.as_str())))
             .collect::<Vec<_>>()
             .join(" ")
     };
-    let single = join(single_quoted);
-    let double = join(double_quoted);
-    if single == double {
-        vec![single]
-    } else {
-        vec![single, double]
-    }
+    vec![join(single_quoted), join(double_quoted)]
 }
 
 /// What an inline shell runs from its arguments.
@@ -256,10 +257,9 @@ fn double_quoted(word: &str) -> String {
 }
 
 /// The steps of `text` split at `;`, `&`, `|`, parentheses and line breaks
-/// outside quotes, each without the keyword or brace that opens it and
-/// without its redirections. Heredoc bodies are skipped up to their closing
-/// line; a body that never closes is read as steps, so nothing after an
-/// unclosed `<<` is hidden.
+/// outside quotes, without the keyword or brace that opens each or its
+/// redirections. Heredoc bodies are skipped to their closing line; a body that
+/// never closes is read as steps, so nothing after an unclosed `<<` hides.
 fn steps(text: &str, read_arithmetic: bool, read_comments: bool) -> (Vec<String>, bool) {
     let chars: Vec<char> = text.chars().collect();
     let mut steps = Vec::new();
