@@ -258,3 +258,45 @@ fn every_enforced_event_name_resolves_to_a_refusing_envelope_family() {
         );
     }
 }
+
+/// Where the host itself lets an action through when the hook crashes or
+/// times out, Guard's refusing envelope cannot help. Such a row must say so
+/// publicly and must never claim live block proof; adapters with no concrete
+/// hook contract (Kimi, ZCode) must stay unsupported.
+#[test]
+fn a_host_that_fails_open_is_disclosed_and_never_claims_live_block_proof() {
+    let contract: Value = serde_json::from_str(HARNESS_CONTRACTS).unwrap();
+    let mut fail_open = 0;
+    for row in contract["contracts"].as_array().unwrap() {
+        let harness = row["harness"].as_str().unwrap();
+        for event in row["capability_events"].as_array().into_iter().flatten() {
+            let name = event["event"].as_str().unwrap();
+            let state = event["claim"]["state"].as_str().unwrap();
+            let failure = event["failure_behavior"].as_str().unwrap();
+            if failure == "fail_open" {
+                fail_open += 1;
+                let disclosure = format!(
+                    "{} {}",
+                    event["error_behavior"].as_str().unwrap_or_default(),
+                    event["known_blind_spots"]
+                )
+                .to_lowercase();
+                assert!(
+                    disclosure.contains("fail") || disclosure.contains("continue"),
+                    "{harness} {name} fails open without saying so"
+                );
+                assert_ne!(
+                    state, "live_block_proven",
+                    "{harness} {name} fails open yet claims live block proof"
+                );
+            }
+            if matches!(harness, "kimi" | "zcode") {
+                assert!(
+                    matches!(state, "unsupported" | "observe_only") && failure != "fail_closed",
+                    "{harness} {name} claims enforcement without a host hook contract"
+                );
+            }
+        }
+    }
+    assert!(fail_open >= 1, "the contract lost its fail-open rows");
+}
