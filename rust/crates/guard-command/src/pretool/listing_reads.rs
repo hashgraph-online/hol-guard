@@ -290,9 +290,8 @@ fn leaf_glob_operand(value: &str, context: super::PathContext<'_>) -> bool {
         || value.contains(['$', '`', '|', ';', '&', '<', '>', '\n', '\r', '\0'])
         || (value.contains('\\') && !cfg!(windows))
         || value.contains(['{', '}', '(', ')', '!'])
-        // zsh `EXTENDED_GLOB` reads `#`, `^` and `~` as operators (`*fact#ory*`
-        // can match `.factory`), and a globstar `**` names nested entries this
-        // leaf screen never reads. The glob path refuses them too.
+        // zsh extended globs can reach hidden names; `**` reaches unchecked nested paths.
+        // Reject both rather than trusting the leaf-only proof.
         || pattern.contains(['#', '^', '~'])
         || pattern.contains("**")
         // A trailing wildcard can always spell a credential name, so the
@@ -307,8 +306,7 @@ fn leaf_glob_operand(value: &str, context: super::PathContext<'_>) -> bool {
     // names it can expand to and not by every sibling, such as a hidden
     // `.factory` beside it. That match is byte-wise, so a name that is not
     // ASCII uses a looser match that holds under any locale. A bracket class
-    // falls back to the literal text before the first wildcard and after the
-    // last one.
+    // uses the literal prefix and suffix around the wildcards.
     let lowered = pattern.to_ascii_lowercase();
     let prefix = &lowered[..lowered.find(['*', '?', '[']).unwrap_or(lowered.len())];
     let suffix = &lowered[lowered.rfind(['*', '?', ']']).map_or(0, |at| at + 1)..];
@@ -337,9 +335,8 @@ fn leaf_glob_operand(value: &str, context: super::PathContext<'_>) -> bool {
     if super::listing_temporary::writable_by_anyone(&base) {
         return false;
     }
-    // The listing names the matches, not their directory, so an owner-only
-    // temporary directory answers for a pattern below it (`ls /tmp/tmp.ab12/pg*`)
-    // although listing it whole may stay reviewed. Each match is screened below.
+    // In an owner-only temporary directory, screen each matching entry.
+    // Listing the whole directory may still require review.
     if !safe_reads::safe_listing_arguments(&[directory.to_owned()], context)
         && !super::listing_temporary::temporary_glob_directory(&base, context)
     {
