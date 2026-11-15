@@ -23,6 +23,17 @@ fn write(path: PathBuf, text: &str) {
 }
 
 fn decision(harness: &str, command: &str, home: &Path) -> String {
+    decision_with_home_match(harness, command, home, true)
+}
+
+// Match the caller's verified execution environment without rewriting the
+// process-wide HOME (the test suite runs cases concurrently).
+fn decision_with_home_match(
+    harness: &str,
+    command: &str,
+    home: &Path,
+    shell_home_matches: bool,
+) -> String {
     let cwd = home.join("work");
     evaluate_pre_tool_envelope_with_execution_context(
         harness,
@@ -40,7 +51,7 @@ fn decision(harness: &str, command: &str, home: &Path) -> String {
             npm_config_inert: false,
             pip_config_inert: false,
             python_environment_inert: false,
-            shell_home_matches: false,
+            shell_home_matches,
             ripgrep_config_absent: false,
             gem_config_absent: false,
             http_config_absent: false,
@@ -123,5 +134,53 @@ fn a_version_managers_bin_lists_metadata_only() {
                 "{harness}: {denied}"
             );
         }
+    }
+}
+
+/// A stamped HOME mismatch must never let a harmless declared-home filename
+/// prove a different file that the shell actually expands from '~/'.  An
+/// absolute operand is not affected by this mismatch.
+#[test]
+fn tilde_bin_probe_is_not_allowed_when_shell_home_differs() {
+    let root = fixture("tilde-home-mismatch");
+    let declared_home = root.join("home");
+    let shell_home = root.join("different-home");
+    let trusted = declared_home.join(".nvm/versions/node/v24.1.0/bin/node");
+    write(trusted.clone(), "safe runtime fixture");
+    let secret = shell_home.join("credentials.json");
+    write(secret.clone(), "SYNTHETIC_FIXTURE_ONLY");
+    let shell_path = shell_home.join(".nvm/versions/node/v24.1.0/bin/node");
+    std::fs::create_dir_all(shell_path.parent().unwrap()).unwrap();
+    std::os::unix::fs::symlink(&secret, shell_path).unwrap();
+
+    let tilde = "ls -la ~/.nvm/versions/node/v24.1.0/bin/node";
+    // Prove that the real shell names a different path than Guard's declared
+    // home. No actual credential file is read or copied.
+    let result = std::process::Command::new("sh")
+        .arg("-c")
+        .arg(tilde)
+        .env("HOME", &shell_home)
+        .output()
+        .unwrap();
+    assert!(result.status.success());
+    assert!(String::from_utf8_lossy(&result.stdout).contains("credentials.json"));
+
+    for harness in HARNESSES {
+        assert_ne!(
+            decision_with_home_match(harness, tilde, &declared_home, false),
+            "allow",
+            "{harness}: a mismatched shell HOME must retain review"
+        );
+        assert_eq!(
+            decision_with_home_match(harness, tilde, &declared_home, true),
+            "allow",
+            "{harness}: a verified matching HOME should preserve the safe allow"
+        );
+        let absolute = format!("ls -la {}", trusted.display());
+        assert_eq!(
+            decision_with_home_match(harness, &absolute, &declared_home, false),
+            "allow",
+            "{harness}: an absolute, safe bin path is independent of tilde"
+        );
     }
 }
