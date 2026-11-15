@@ -42,13 +42,8 @@ pub(in crate::pretool) fn bounded_directory_read_tool_target(
 /// a pattern is not modeled because the tool's own reading of each is not
 /// known.
 fn grok_list_dir_target(value: &str, home_dir: Option<&str>, cwd: Option<&str>) -> bool {
-    !value.is_empty()
-        && value.len() <= 4096
-        && value.trim() == value
+    plain_path_spelling(value)
         && !value.starts_with('~')
-        && !value.contains([
-            '$', '`', '|', ';', '&', '<', '>', '\n', '\r', '\0', '*', '?', '[', ']', '{', '}',
-        ])
         && !value.split(['/', '\\']).any(|part| part == "..")
         && literal_path(value)
         && super::super::bounded_read_target(value, home_dir, cwd, true)
@@ -96,3 +91,16 @@ mod tests;
 #[cfg(test)]
 #[path = "grok_read_tools_tests.rs"]
 mod grok_tests;
+
+/// A path spelled with nothing a shell or a pattern would read: not empty, at
+/// most 4096 bytes, no surrounding space and no substitution, operator, line
+/// break, glob or brace character. OMP's `read` of a directory and Grok's
+/// `list_dir` share this screen.
+pub(super) fn plain_path_spelling(value: &str) -> bool {
+    !value.is_empty()
+        && value.len() <= 4096
+        && value.trim() == value
+        && !value.contains([
+            '$', '`', '|', ';', '&', '<', '>', '\n', '\r', '\0', '*', '?', '[', ']', '{', '}',
+        ])
+}
