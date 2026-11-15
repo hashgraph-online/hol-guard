@@ -4,8 +4,17 @@
 /// with an unquoted `#`. A quoted or escaped `#` is text. The nth earlier
 /// word whose first character is `#` once quotes are removed is the nth
 /// argument that starts with one, so the cut lands after them. `Err` means
-/// the words could not be lined up with the arguments.
+/// the words could not be lined up with the arguments, or that the text holds
+/// what this reading does not model: `$'...'` and `$"..."` quotes, whose
+/// escapes can hide a quote or spell `#`, and a `#` right after `;|&()<>`,
+/// where bash starts a comment without whitespace.
 pub(super) fn comment_cut(text: &str, arguments: &[String]) -> Result<Option<usize>, ()> {
+    let glued = |m: char| text.contains(&format!("{m}#"));
+    if text.contains('#')
+        && (text.contains("$'") || text.contains("$\"") || ";|&()<>".chars().any(glued))
+    {
+        return Err(());
+    }
     let words = words(text);
     let Some(comment) = words.iter().position(|w| w.starts_with('#')) else {
         return Ok(None);
@@ -30,17 +39,6 @@ fn lead(word: &str) -> Result<Option<char>, ()> {
     }
     let mut chars = rest.chars();
     let first = match chars.next() {
-        Some('$') if rest[1..].starts_with('\'') => {
-            chars.next();
-            match chars.next() {
-                Some('\\') => return Err(()),
-                other => other,
-            }
-        }
-        Some('$') if rest[1..].starts_with('"') => {
-            chars.next();
-            double_quoted(chars.next(), chars.next())?
-        }
         Some('\'') => chars.next(),
         Some('"') => double_quoted(chars.next(), chars.next())?,
         Some('\\') => match chars.next() {

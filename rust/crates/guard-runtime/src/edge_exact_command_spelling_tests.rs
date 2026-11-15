@@ -242,6 +242,16 @@ fn a_comment_cut_reads_each_word_as_bash_unquotes_it() {
     assert!(spellings("git show '$#release' #note").complete);
     // Empty quotes vanish, so `''#a` is the argument `#a` and not a comment.
     assert!(has("npm publish ''#a #b", "npm publish '#a'"));
-    // An escape inside ANSI-C quotes can spell `#`; the line is not read through.
-    assert!(!spellings("npm publish $'\\x23a' #b").complete);
+    // An escape inside ANSI-C quotes can spell `#` or hide a quote, and an
+    // empty `$''` vanishes; none of these lines is read through.
+    for command in [
+        "npm publish $'\\x23a' #b",
+        "git show $'#a\\'b' #note",
+        "npm publish $''#a #b",
+    ] {
+        assert!(!spellings(command).complete, "{command:?}");
+    }
+    // Bash starts a comment at a `#` glued to `;|&()<>`.
+    assert!(has("npm publish x;#b", "npm publish x"));
+    assert!(has("npm publish x&&#b", "npm publish x"));
 }
