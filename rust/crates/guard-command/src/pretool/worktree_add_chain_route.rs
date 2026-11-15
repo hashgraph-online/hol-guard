@@ -327,7 +327,7 @@ fn new_branch_name(name: &str) -> bool {
 }
 
 /// A `mkdir` the write screens admit that creates nothing in or below the
-/// new checkout. The screens read the disk before the add runs, so a
+/// new checkout, for every folder it names. The screens read the disk before the add runs, so a
 /// tracked symlink the checkout brings (`notes -> ~/.ssh`) could otherwise
 /// lead `mkdir -p` out of it.
 pub(super) fn proven_mkdir(
@@ -348,10 +348,15 @@ pub(super) fn proven_mkdir(
             &segment.arguments,
             context,
         )
-        && segment
-            .arguments
-            .last()
-            .is_some_and(|target| created_outside(target, destination, context))
+        && {
+            let mut targets = segment
+                .arguments
+                .iter()
+                .filter(|argument| !argument.starts_with('-'))
+                .peekable();
+            targets.peek().is_some()
+                && targets.all(|target| created_outside(target, destination, context))
+        }
 }
 
 /// Whether `target` resolves outside `destination`: through the deepest

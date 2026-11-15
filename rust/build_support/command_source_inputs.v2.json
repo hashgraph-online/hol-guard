@@ -531,6 +531,7 @@
       "src/pretool/manager_usage.rs",
       "src/pretool/loopback_ports.rs",
       "src/pretool/metadata_reads.rs",
+      "src/pretool/mkdir_targets.rs",
       "src/pretool/mod.rs",
       "src/pretool/name_pattern_text.rs",
       "src/pretool/npm_environment.rs",
