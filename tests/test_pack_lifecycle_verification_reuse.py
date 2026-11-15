@@ -34,6 +34,8 @@ def package(monkeypatch, tmp_path):
 
     monkeypatch.setattr(transport, "_verify_manifest", verify_manifest)
     monkeypatch.setattr(transport, "_verify_compiler", verify_compiler)
+    # The stub manifest names no package version; the installed-version check has its own test.
+    monkeypatch.setattr(transport, "_matches_installed_version", lambda version: True)
     yield native, verifications
     native_executable_root.release_copies()
 
