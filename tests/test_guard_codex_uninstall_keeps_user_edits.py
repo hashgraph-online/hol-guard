@@ -63,3 +63,30 @@ def test_guard_uninstall_codex_deletes_a_config_install_created(tmp_path: Path, 
     _guard(capsys, "uninstall", "codex", "--home", str(home_dir), "--workspace", str(workspace_dir))
 
     assert not (home_dir / ".codex" / "config.toml").exists()
+
+
+def test_guard_uninstall_codex_moves_the_trust_of_a_hook_the_user_added(tmp_path: Path, capsys) -> None:
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    workspace_dir.mkdir(parents=True)
+    config_path = home_dir / ".codex" / "config.toml"
+    config_path.parent.mkdir(parents=True)
+    config_path.write_text(dump_toml({"model": "o3"}), encoding="utf-8")
+
+    _guard(capsys, "install", "codex", "--home", str(home_dir), "--workspace", str(workspace_dir))
+    installed_bytes = config_path.read_bytes()
+    installed = tomllib.loads(installed_bytes.decode("utf-8"))
+    guard_groups = len(installed["hooks"]["PreToolUse"])
+    mine = {"matcher": "Bash", "hooks": [{"type": "command", "command": "echo mine"}]}
+    installed["hooks"]["PreToolUse"].append(mine)
+    prefix = f"{config_path.resolve()}:pre_tool_use"
+    trust = {"enabled": True, "trusted_hash": "sha256:" + "b" * 64}
+    installed["hooks"].setdefault("state", {})[f"{prefix}:{guard_groups}:0"] = trust
+    config_path.write_text(dump_toml(installed, original=installed_bytes), encoding="utf-8")
+
+    _guard(capsys, "uninstall", "codex", "--home", str(home_dir), "--workspace", str(workspace_dir))
+
+    restored = tomllib.loads(config_path.read_text(encoding="utf-8"))
+    assert restored["model"] == "o3"
+    assert restored["hooks"]["PreToolUse"] == [mine]
+    assert restored["hooks"]["state"] == {f"{prefix}:0:0": trust}

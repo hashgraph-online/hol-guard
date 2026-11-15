@@ -99,9 +99,6 @@ fn restore_proxied_servers(rendered: &mut Entries, backup: &Entries) {
         .filter(|(_, server)| launches_through_guard(server))
         .map(|(name, _)| name.clone())
         .collect();
-    if proxied.is_empty() {
-        return;
-    }
     for name in &proxied {
         match before.and_then(|before| get(before, name)) {
             Some(entry) if !launches_through_guard(entry) => set(servers, name, entry.clone()),
@@ -110,7 +107,9 @@ fn restore_proxied_servers(rendered: &mut Entries, backup: &Entries) {
             }
         }
     }
-    if servers.is_empty() && before.is_none_or(<[_]>::is_empty) {
+    // Install writes an `mcp_servers` table even when it manages no server,
+    // so an empty one goes unless the backup had it too.
+    if servers.is_empty() && before.is_none() {
         pop(rendered, "mcp_servers");
     }
 }

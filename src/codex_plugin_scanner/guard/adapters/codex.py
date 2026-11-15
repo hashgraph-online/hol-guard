@@ -118,6 +118,7 @@ from .codex_remote_control import (
     guarded_codex_launch_command_candidates,
     guarded_codex_launch_command_from_prefix,
 )
+from .codex_uninstall_restore import follow_hook_state, restore_without_guard
 from .mcp_relay_native import mcp_proxy_launch, python_proxy_launch
 from .mcp_servers import (
     ManagedMcpServer,
@@ -1499,7 +1500,7 @@ class CodexHarnessAdapter(NativeHarnessAdapter):
         if backup_path.is_file():
             original_text = backup_path.read_text(encoding="utf-8")
             if target_config_path.is_file():
-                self._restore_without_guard(context, target_config_path, original_text, owned_bindings)
+                restore_without_guard(context, target_config_path, original_text, owned_bindings)
             elif original_text:
                 atomic_write_text(target_config_path, original_text, mode=0o600)
             backup_path.unlink()
@@ -1510,6 +1511,7 @@ class CodexHarnessAdapter(NativeHarnessAdapter):
             if isinstance(target_hooks, dict):
                 cleaned_hooks, managed_removed = _remove_manifest_bound_hook_events(target_hooks, owned_bindings)
                 if managed_removed:
+                    follow_hook_state(target_hooks, cleaned_hooks, target_config_path)
                     if cleaned_hooks:
                         target_payload["hooks"] = cleaned_hooks
                     else:
@@ -1533,44 +1535,6 @@ class CodexHarnessAdapter(NativeHarnessAdapter):
         return _install_manifest(
             context, "uninstall", shim_manifest, hooks_path=str(hooks_path), backup_path=str(backup_path)
         )
-
-    @staticmethod
-    def _restore_without_guard(
-        context: HarnessContext,
-        config_path: Path,
-        original_text: str,
-        owned_bindings: Sequence[Mapping[str, object]],
-    ) -> None:
-        """Undo the install's changes to the config and keep the user's later ones.
-
-        The native runtime decides what to put back; this reads and writes.
-        """
-
-        current_bytes = read_config_bytes(config_path)
-        current = parse_toml_object(current_bytes, path=config_path, label="Codex config file")
-        backup = (
-            parse_toml_object(original_text.encode("utf-8"), path=config_path, label="Codex config backup")
-            if original_text
-            else None
-        )
-        hooks = current.get("hooks")
-        cleaned = _strip_owned_hooks(context, hooks, owned_bindings) if isinstance(hooks, dict) else None
-        wire = _Wire(current, *(part for part in (backup, cleaned) if part is not None))
-        answer = _codex(
-            "uninstall_restore",
-            context,
-            payload=wire.text(current),
-            backup=None if backup is None else wire.text(backup),
-            hooks=None if cleaned is None else wire.text(cleaned),
-            tokens=wire.meanings,
-        )
-        if answer.get("delete") is True:
-            config_path.unlink()
-        elif answer.get("changed") is True:
-            rendered = wire.decode(_reply_text(answer, "rendered"))
-            # Nothing changed since install: put back the user's exact bytes.
-            text = original_text if rendered == backup else dump_toml(rendered, original=current_bytes)
-            atomic_write_text(config_path, text, mode=0o600)
 
     def diagnostics(self, context: HarnessContext) -> dict[str, object]:
         payload = super().diagnostics(context)

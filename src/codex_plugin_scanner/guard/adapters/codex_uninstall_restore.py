@@ -1,0 +1,72 @@
+"""Codex uninstall: undo the install's changes to the config and keep the user's later ones.
+
+The native ``uninstall_restore`` harness-adapter op decides what to put back.
+This module reads the two payloads, strips Guard's hooks with the adapter's
+existing helper, carries each remaining hook's saved state to its new
+position, and writes the answer.
+"""
+
+from __future__ import annotations
+
+from collections.abc import Mapping, Sequence
+from pathlib import Path
+
+from ..codex_config import dump_toml, read_config_bytes
+from ..codex_hook_integrity import atomic_write_text
+from ..codex_hook_sources import parse_toml_object
+from ..codex_hook_trust import remap_hook_state
+from .base import HarnessContext
+
+
+def follow_hook_state(before: Mapping[str, object], cleaned: dict[str, object], config_path: Path) -> None:
+    """Move ``[hooks.state]`` with the hooks that stay once Guard's groups are gone.
+
+    Codex keys hook state by position, so removing Guard's groups moves every
+    later hook up. Without this, a hook the user trusted would keep its trusted
+    hash at its old key and Codex would skip it. State left only for removed
+    handlers is dropped, and an emptied table goes with it.
+    """
+
+    remap_hook_state(before, cleaned, config_path)
+    if cleaned.get("state") == {}:
+        cleaned.pop("state")
+
+
+def restore_without_guard(
+    context: HarnessContext,
+    config_path: Path,
+    original_text: str,
+    owned_bindings: Sequence[Mapping[str, object]],
+) -> None:
+    """Write the config back without what the install added, keeping every later edit."""
+
+    from .codex import _codex, _reply_text, _strip_owned_hooks, _Wire
+
+    current_bytes = read_config_bytes(config_path)
+    current = parse_toml_object(current_bytes, path=config_path, label="Codex config file")
+    backup = (
+        parse_toml_object(original_text.encode("utf-8"), path=config_path, label="Codex config backup")
+        if original_text
+        else None
+    )
+    hooks = current.get("hooks")
+    cleaned: dict[str, object] | None = None
+    if isinstance(hooks, dict):
+        cleaned = _strip_owned_hooks(context, hooks, owned_bindings)
+        follow_hook_state(hooks, cleaned, config_path)
+    wire = _Wire(current, *(part for part in (backup, cleaned) if part is not None))
+    answer = _codex(
+        "uninstall_restore",
+        context,
+        payload=wire.text(current),
+        backup=None if backup is None else wire.text(backup),
+        hooks=None if cleaned is None else wire.text(cleaned),
+        tokens=wire.meanings,
+    )
+    if answer.get("delete") is True:
+        config_path.unlink()
+    elif answer.get("changed") is True:
+        rendered = wire.decode(_reply_text(answer, "rendered"))
+        # Nothing changed since install: put back the user's exact bytes.
+        text = original_text if rendered == backup else dump_toml(rendered, original=current_bytes)
+        atomic_write_text(config_path, text, mode=0o600)

@@ -95,3 +95,19 @@ fn a_config_guard_never_touched_is_unchanged() {
     assert_eq!(answer["delete"], false);
     assert_eq!(rendered(&answer), current);
 }
+
+#[test]
+fn an_empty_server_table_install_wrote_goes_unless_the_backup_had_one() {
+    let installed = json!({
+        "features": {"hooks": true},
+        "hooks": {"PreToolUse": [group("guard", 30)]},
+        "mcp_servers": {},
+    });
+    let created = restore(&installed, None, Some(&json!({})));
+    assert_eq!(rendered(&created), json!({}));
+    assert_eq!(created["delete"], true);
+
+    let kept = restore(&installed, Some(&json!({"mcp_servers": {}})), Some(&json!({})));
+    assert_eq!(rendered(&kept), json!({"mcp_servers": {}}));
+    assert_eq!(kept["delete"], false);
+}
