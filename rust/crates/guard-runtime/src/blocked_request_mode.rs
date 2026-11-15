@@ -268,6 +268,23 @@ fn reason_code_hint(reason_code: &str) -> &'static str {
     }
 }
 
+/// `matched_rule(reason_code)`: names the native rule that held the action,
+/// so the agent can tell holds apart. Only a plain rule identifier is named;
+/// `unknown` and anything else say nothing.
+fn matched_rule(reason_code: Option<&str>) -> String {
+    let code = reason_code.unwrap_or_default();
+    if code == "unknown"
+        || code.is_empty()
+        || code.len() > 64
+        || !code
+            .bytes()
+            .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == b'_')
+    {
+        return String::new();
+    }
+    format!("Guard rule: `{code}`.")
+}
+
 /// `safe_alternative_reason(reason, reason_code=..., approval_queued=...)`.
 pub(crate) fn safe_alternative_reason(
     reason: &str,
@@ -308,7 +325,8 @@ pub(crate) fn safe_alternative_reason_with_retry(
     } else {
         reason.to_owned()
     };
-    [reason.as_str(), hint, wait]
+    let rule = matched_rule(reason_code);
+    [reason.as_str(), hint, rule.as_str(), wait]
         .into_iter()
         .filter(|part| !part.is_empty())
         .collect::<Vec<_>>()
@@ -403,6 +421,17 @@ mod tests {
                 exact,
             );
             assert_eq!(text.contains(scope), named, "{text}");
+        }
+    }
+
+    #[test]
+    fn the_hold_names_only_a_plain_rule_identifier() {
+        let named = safe_alternative_reason("Held.", Some("native_network_review"), Some(true));
+        assert!(named.contains("Guard rule: `native_network_review`."), "{named}");
+        let long = "x".repeat(65);
+        for code in ["unknown", "", "Native-Rule", "a`b", long.as_str()] {
+            let text = safe_alternative_reason("Held.", Some(code), Some(true));
+            assert!(!text.contains("Guard rule:"), "{text}");
         }
     }
 
