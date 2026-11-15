@@ -86,9 +86,15 @@ fn refused(pack: Value) -> (&'static str, String) {
 #[test]
 fn a_pack_without_connection_values_serializes_and_digests_as_before() {
     for text in crate::cloud_pack_explain::SHIPPED_SOURCES {
+        let source: Value = serde_json::from_str(text).unwrap();
         let pack = parse_pack(text.as_bytes()).unwrap();
         let value = serde_json::to_value(&pack).unwrap();
-        assert!(value.get("connection").is_none(), "{}", pack.provider.id);
+        assert_eq!(
+            value.get("connection").is_some(),
+            source.get("connection").is_some(),
+            "{}",
+            pack.provider.id
+        );
     }
     let plain = pack_from_value(outlook_value()).unwrap();
     let mut stripped = pathed();

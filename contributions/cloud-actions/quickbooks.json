@@ -17,6 +17,23 @@
       "com.intuit.quickbooks.accounting"
     ]
   },
+  "connection": {
+    "values": {
+      "realm_id": {
+        "title": "QuickBooks company id",
+        "pattern": "^[0-9]{1,20}$",
+        "maxLength": 20
+      }
+    }
+  },
+  "transports": {
+    "partner": [
+      {
+        "partner": "composio",
+        "toolkit": "quickbooks"
+      }
+    ]
+  },
   "actions": [
     {
       "actionId": "quickbooks.invoices.get",
@@ -45,12 +62,6 @@
         }
       },
       "arguments": {
-        "realm_id": {
-          "type": "string",
-          "required": true,
-          "maxLength": 20,
-          "pattern": "^[0-9]{1,20}$"
-        },
         "invoice_id": {
           "type": "string",
           "required": true,
@@ -168,8 +179,10 @@
         {
           "name": "reads one invoice",
           "kind": "safe",
+          "connection": {
+            "realm_id": "9341453050206514"
+          },
           "arguments": {
-            "realm_id": "9341453050206514",
             "invoice_id": "130"
           },
           "expect": {
@@ -208,8 +221,10 @@
         {
           "name": "refuses an invoice id with a path",
           "kind": "risky",
+          "connection": {
+            "realm_id": "9341453050206514"
+          },
           "arguments": {
-            "realm_id": "9341453050206514",
             "invoice_id": "130/send"
           },
           "expect": {
@@ -253,12 +268,6 @@
         }
       },
       "arguments": {
-        "realm_id": {
-          "type": "string",
-          "required": true,
-          "maxLength": 20,
-          "pattern": "^[0-9]{1,20}$"
-        },
         "invoice_id": {
           "type": "string",
           "required": true,
@@ -366,8 +375,10 @@
         {
           "name": "emails an invoice to the customer",
           "kind": "safe",
+          "connection": {
+            "realm_id": "9341453050206514"
+          },
           "arguments": {
-            "realm_id": "9341453050206514",
             "invoice_id": "130",
             "send_to": "billing@example.org"
           },
@@ -397,8 +408,10 @@
         {
           "name": "refuses two addresses",
           "kind": "risky",
+          "connection": {
+            "realm_id": "9341453050206514"
+          },
           "arguments": {
-            "realm_id": "9341453050206514",
             "invoice_id": "130",
             "send_to": "a@example.org,b@example.net"
           },
@@ -457,12 +470,6 @@
         }
       },
       "arguments": {
-        "realm_id": {
-          "type": "string",
-          "required": true,
-          "maxLength": 20,
-          "pattern": "^[0-9]{1,20}$"
-        },
         "invoice_id": {
           "type": "string",
           "required": true,
@@ -557,8 +564,10 @@
         {
           "name": "voids one invoice",
           "kind": "safe",
+          "connection": {
+            "realm_id": "9341453050206514"
+          },
           "arguments": {
-            "realm_id": "9341453050206514",
             "invoice_id": "130",
             "sync_token": "2"
           },
@@ -596,8 +605,10 @@
         {
           "name": "refuses a sync token that is not a number",
           "kind": "risky",
+          "connection": {
+            "realm_id": "9341453050206514"
+          },
           "arguments": {
-            "realm_id": "9341453050206514",
             "invoice_id": "130",
             "sync_token": "-1"
           },
@@ -656,12 +667,6 @@
         }
       },
       "arguments": {
-        "realm_id": {
-          "type": "string",
-          "required": true,
-          "maxLength": 20,
-          "pattern": "^[0-9]{1,20}$"
-        },
         "invoice_id": {
           "type": "string",
           "required": true,
@@ -755,9 +760,11 @@
       "fixtures": [
         {
           "name": "deletes one invoice",
-          "kind": "risky",
+          "kind": "safe",
+          "connection": {
+            "realm_id": "9341453050206514"
+          },
           "arguments": {
-            "realm_id": "9341453050206514",
             "invoice_id": "130",
             "sync_token": "2"
           },
@@ -798,15 +805,17 @@
           }
         },
         {
-          "name": "refuses a realm id with letters",
-          "kind": "safe",
+          "name": "refuses a company id with letters from the connection",
+          "kind": "risky",
+          "connection": {
+            "realm_id": "abc"
+          },
           "arguments": {
-            "realm_id": "abc",
             "invoice_id": "130",
             "sync_token": "2"
           },
           "expect": {
-            "error": "invalid_argument"
+            "error": "connection_value_invalid"
           }
         }
       ]

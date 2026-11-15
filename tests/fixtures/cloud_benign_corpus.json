@@ -5367,10 +5367,12 @@
       "task": "read an invoice",
       "actionId": "quickbooks.invoices.get",
       "arguments": {
-        "realm_id": "9341453050206514",
         "invoice_id": "130"
       },
-      "expect": "allow"
+      "expect": "allow",
+      "connection": {
+        "realm_id": "9341453050206514"
+      }
     },
     {
       "id": "b442",

@@ -19,6 +19,14 @@
       "schema.bases:read"
     ]
   },
+  "transports": {
+    "partner": [
+      {
+        "partner": "composio",
+        "toolkit": "airtable"
+      }
+    ]
+  },
   "actions": [
     {
       "actionId": "airtable.records.list",

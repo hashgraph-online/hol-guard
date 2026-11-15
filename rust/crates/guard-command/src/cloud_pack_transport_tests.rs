@@ -200,14 +200,24 @@ fn shipped_packs_name_only_verified_broker_toolkits() {
     }
     brokered.sort();
     let expected = [
+        ("airtable", "airtable"),
+        ("calendly", "calendly"),
+        ("clickup", "clickup"),
         ("discord", "discordbot"),
         ("dropbox", "dropbox"),
         ("figma", "figma"),
         ("hubspot", "hubspot"),
+        ("intercom", "intercom"),
         ("linear", "linear"),
+        ("mailchimp", "mailchimp"),
+        ("monday", "monday"),
         ("onedrive", "one_drive"),
         ("outlook", "outlook"),
+        ("quickbooks", "quickbooks"),
         ("teams", "microsoft_teams"),
+        ("trello", "trello"),
+        ("zendesk", "zendesk"),
+        ("zoom", "zoom"),
     ];
     let expected: Vec<_> = expected
         .iter()

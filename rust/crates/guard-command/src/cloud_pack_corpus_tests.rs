@@ -15,7 +15,7 @@ use serde_json::{json, Value};
 use crate::cloud_action_inspect::{inspect, INSPECT_REQUEST_SCHEMA};
 use crate::cloud_pack::{parse_pack, CloudActionPack, Executor, PackAction};
 use crate::cloud_pack_facts::extract;
-use crate::cloud_pack_request::{check_arguments, render};
+use crate::cloud_pack_request::{check_arguments, render_connected};
 use crate::cloud_policy_pack::{shipped, FactCall, Preset};
 use crate::effect_decision::GuardAction;
 
@@ -72,14 +72,14 @@ fn packs() -> Vec<CloudActionPack> {
         .collect()
 }
 
-fn find<'a>(packs: &'a [CloudActionPack], id: &str) -> (&'a str, &'a PackAction) {
+fn find<'a>(packs: &'a [CloudActionPack], id: &str) -> (&'a CloudActionPack, &'a PackAction) {
     packs
         .iter()
         .find_map(|pack| {
             pack.actions
                 .iter()
                 .find(|action| action.action_id == id)
-                .map(|action| (pack.provider.id.as_str(), action))
+                .map(|action| (pack, action))
         })
         .unwrap_or_else(|| panic!("no shipped action {id}"))
 }
@@ -130,16 +130,23 @@ fn session(case: &Value) -> Option<SessionFlowV2> {
 /// The decision for one case, or [`REFUSED`] when the pack refuses its
 /// arguments before any decision is made.
 fn decide(packs: &[CloudActionPack], case: &Value) -> String {
-    let (provider, action) = find(packs, case["actionId"].as_str().unwrap());
+    let (pack, action) = find(packs, case["actionId"].as_str().unwrap());
+    let provider = pack.provider.id.as_str();
     let mut arguments = case["arguments"].clone();
     fill_secrets(&mut arguments);
     let Ok(record) = check_arguments(action, &arguments) else {
         return REFUSED.to_string();
     };
     // A remote MCP call has no HTTP request to render; its arguments were
-    // checked above.
+    // checked above. Values the connection holds, such as a company id,
+    // come from the case's connection, never from the arguments.
     let http = matches!(action.executor, Executor::DeclarativeHttp { .. });
-    if http && render(action, &arguments).is_err() {
+    let values = case
+        .get("connection")
+        .and_then(Value::as_object)
+        .cloned()
+        .unwrap_or_default();
+    if http && render_connected(pack.connection.as_ref(), action, &arguments, &values).is_err() {
         return REFUSED.to_string();
     }
     let facts = with_findings(
