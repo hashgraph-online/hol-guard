@@ -1133,6 +1133,10 @@
         "countReadback": {
           "type": "string",
           "maxLength": 128
+        },
+        "reconcileRead": {
+          "type": "string",
+          "maxLength": 128
         }
       }
     },

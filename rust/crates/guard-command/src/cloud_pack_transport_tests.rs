@@ -7,8 +7,15 @@ use serde_json::{json, Value};
 
 const OUTLOOK: &str = include_str!("../../../../contributions/cloud-actions/outlook.json");
 
+/// The shipped Outlook pack with its own `transports` block removed.
 fn outlook_value() -> Value {
-    serde_json::from_str(OUTLOOK).unwrap()
+    let mut pack: Value = serde_json::from_str(OUTLOOK).unwrap();
+    pack.as_object_mut().unwrap().remove("transports");
+    pack
+}
+
+fn plain() -> CloudActionPack {
+    pack_from_value(outlook_value()).unwrap()
 }
 
 fn with_transports(transports: Value) -> Value {
@@ -32,12 +39,17 @@ fn refused(transports: Value) -> (&'static str, String) {
 #[test]
 fn a_pack_without_transports_serializes_and_digests_as_before() {
     for text in crate::cloud_pack_explain::SHIPPED_SOURCES {
+        let source: Value = serde_json::from_str(text).unwrap();
         let pack = parse_pack(text.as_bytes()).unwrap();
-        assert!(pack.transports.is_none());
         let value = serde_json::to_value(&pack).unwrap();
-        assert!(value.get("transports").is_none(), "{}", pack.provider.id);
+        assert_eq!(
+            value.get("transports").is_some(),
+            source.get("transports").is_some(),
+            "{}",
+            pack.provider.id
+        );
     }
-    let plain = parse_pack(OUTLOOK.as_bytes()).unwrap();
+    let plain = plain();
     assert_ne!(
         pack_digest(&plain).unwrap(),
         pack_digest(&brokered()).unwrap()
@@ -54,10 +66,7 @@ fn a_pack_without_transports_serializes_and_digests_as_before() {
 fn a_declared_partner_toolkit_is_read_back() {
     let pack = brokered();
     assert_eq!(partner_toolkit(&pack, Partner::Composio), Some("outlook"));
-    assert_eq!(
-        partner_toolkit(&parse_pack(OUTLOOK.as_bytes()).unwrap(), Partner::Composio),
-        None
-    );
+    assert_eq!(partner_toolkit(&plain(), Partner::Composio), None);
 }
 
 #[test]
@@ -129,7 +138,7 @@ fn toolkit_slugs_are_strict() {
 
 #[test]
 fn adding_a_transport_widens_and_removing_one_does_not() {
-    let plain = parse_pack(OUTLOOK.as_bytes()).unwrap();
+    let plain = plain();
     let pack = brokered();
     let added = diff(&plain, &pack).unwrap();
     assert!(added.widening);
@@ -147,7 +156,7 @@ fn adding_a_transport_widens_and_removing_one_does_not() {
 
 #[test]
 fn a_brokered_pack_renders_the_same_absolute_request_with_no_credential() {
-    let plain = parse_pack(OUTLOOK.as_bytes()).unwrap();
+    let plain = plain();
     let pack = brokered();
     let arguments = json!({"folder": "inbox", "top": 10});
     let direct = render(plain.action("outlook.messages.list").unwrap(), &arguments).unwrap();
@@ -178,4 +187,27 @@ fn a_pack_with_a_non_http_action_cannot_be_brokered() {
         (error.code, error.pointer.as_str()),
         ("cloud_pack_transports_invalid", "/transports")
     );
+}
+
+#[test]
+fn shipped_packs_name_only_verified_broker_toolkits() {
+    let mut brokered = Vec::new();
+    for text in crate::cloud_pack_explain::SHIPPED_SOURCES {
+        let pack = parse_pack(text.as_bytes()).unwrap();
+        if let Some(toolkit) = partner_toolkit(&pack, Partner::Composio) {
+            brokered.push((pack.provider.id.clone(), toolkit.to_string()));
+        }
+    }
+    brokered.sort();
+    let expected = [
+        ("dropbox", "dropbox"),
+        ("onedrive", "one_drive"),
+        ("outlook", "outlook"),
+        ("teams", "microsoft_teams"),
+    ];
+    let expected: Vec<_> = expected
+        .iter()
+        .map(|(id, toolkit)| (id.to_string(), toolkit.to_string()))
+        .collect();
+    assert_eq!(brokered, expected);
 }

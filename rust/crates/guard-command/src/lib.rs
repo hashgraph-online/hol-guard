@@ -90,6 +90,8 @@ mod cloud_pack_money;
 #[cfg(test)]
 mod cloud_pack_money_tests;
 pub mod cloud_pack_pattern;
+#[cfg(test)]
+mod cloud_pack_reconcile_tests;
 pub mod cloud_pack_request;
 pub mod cloud_pack_response;
 #[cfg(test)]
