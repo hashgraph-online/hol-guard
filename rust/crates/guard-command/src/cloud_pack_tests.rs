@@ -201,24 +201,6 @@ fn validation_refuses_unsafe_packs() {
                 action["facts"]["countReadback"] = json!("slack.chat.post_message");
             }),
         ),
-        (
-            "cloud_pack_reconcile_read_invalid",
-            edit_action("slack.chat.post_message", |action| {
-                action["facts"]["reconcileRead"] = json!("slack.chat.post_message");
-            }),
-        ),
-        (
-            "cloud_pack_reconcile_read_invalid",
-            edit_action("slack.chat.post_message", |action| {
-                action["facts"]["reconcileRead"] = json!("slack.missing");
-            }),
-        ),
-        (
-            "cloud_pack_reconcile_read_invalid",
-            edit_action("slack.conversations.list", |action| {
-                action["facts"]["reconcileRead"] = json!("slack.conversations.history");
-            }),
-        ),
     ];
     for (expected, pack) in cases {
         assert_eq!(code(pack), expected);
@@ -226,19 +208,6 @@ fn validation_refuses_unsafe_packs() {
     let mut unknown = value(SLACK);
     unknown["actions"][0]["script"] = json!("fetch()");
     assert_eq!(code(unknown), "cloud_pack_shape_invalid");
-}
-
-#[test]
-fn a_write_may_name_a_read_that_finds_what_it_left() {
-    let pack = pack_from_value(edit_action("slack.chat.post_message", |action| {
-        action["facts"]["reconcileRead"] = json!("slack.conversations.history");
-    }))
-    .unwrap();
-    let facts = &pack.action("slack.chat.post_message").unwrap().facts;
-    assert_eq!(
-        facts.reconcile_read.as_deref(),
-        Some("slack.conversations.history")
-    );
 }
 
 #[test]

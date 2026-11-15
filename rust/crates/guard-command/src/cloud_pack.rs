@@ -324,7 +324,8 @@ pub struct FactSpec {
     /// A read action in this pack the gateway may run to learn the volume.
     pub count_readback: Option<String>,
     /// A read action in this pack, called with the same arguments, that finds
-    /// what a write left behind. The gateway runs it only for a write whose
+    /// what a write left behind. It must accept every argument the write
+    /// carries under the same bounds and require none the write may omit. The gateway runs it only for a write whose
     /// outcome it does not know, and never resends the write.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub reconcile_read: Option<String>,
